@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 -- |
@@ -33,7 +34,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Integral                       ()
 
-import Prelude                                                      ( ($), undefined )
+import Prelude                                                      ( ($), undefined, otherwise )
 import qualified Data.Bits                                          as B
 
 
@@ -113,14 +114,25 @@ class Eq a => Bits a where
   shiftL        :: Exp a -> Exp Int -> Exp a
   shiftL x i = x `shift` i
 
-  -- | Shift the first argument right by the specified number of bits. The
-  -- result is undefined for negative shift amounts and shift amounts greater or
-  -- equal to the 'bitSize'.
+  -- | Shift the argument left by the specified number of bits. The result is
+  -- undefined for negative shift amounts and shift amounts greater or equal to
+  -- the 'finiteBitSize'.
+  unsafeShiftL  :: Exp a -> Exp Int -> Exp a
+  unsafeShiftL = shiftL
+
+  -- | Shift the first argument right by the specified number of bits (which
+  -- must be non-negative).
   --
   -- Right shifts perform sign extension on signed number types; i.e. they fill
-  -- the top bits with 1 if the @x@ is negative and with 0 otherwise.
+  -- the top bits with 1 if @x@ is negative and with 0 otherwise.
   shiftR        :: Exp a -> Exp Int -> Exp a
   shiftR x i = x `shift` (-i)
+
+  -- | Shift the first argument right by the specified number of bits. The
+  -- result is undefined for negative shift amounts and shift amounts greater or
+  -- equal to the 'finiteBitSize'.
+  unsafeShiftR  :: Exp a -> Exp Int -> Exp a
+  unsafeShiftR = shiftR
 
   -- | Rotate the argument left by the specified number of bits (which must be
   -- non-negative).
@@ -145,352 +157,394 @@ class Bits b => FiniteBits b where
 -- ------------------
 
 instance Bits Bool where
-  (.&.)       = (&&*)
-  (.|.)       = (||*)
-  xor         = (/=*)
-  complement  = not
-  shift x i   = cond (i ==* 0) x (constant False)
-  testBit x i = cond (i ==* 0) x (constant False)
-  rotate x _  = x
-  bit i       = i ==* 0
-  isSigned    = isSignedDefault
-  popCount x  = cond x 1 0
+  (.&.)        = (&&*)
+  (.|.)        = (||*)
+  xor          = (/=*)
+  complement   = not
+  shift x i    = cond (i ==* 0) x (constant False)
+  testBit x i  = cond (i ==* 0) x (constant False)
+  rotate x _   = x
+  bit i        = i ==* 0
+  isSigned     = isSignedDefault
+  popCount x   = cond x 1 0
 
 instance Bits Int where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Int8 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Int16 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Int32 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Int64 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Word where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Word8 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Word16 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Word32 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits Word64 where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CInt where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CUInt where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CLong where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CULong where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CLLong where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CULLong where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CShort where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 instance Bits CUShort where
-  (.&.)       = mkBAnd
-  (.|.)       = mkBOr
-  xor         = mkBXor
-  complement  = mkBNot
-  bit         = bitDefault
-  testBit     = testBitDefault
-  shift       = shiftDefault
-  shiftL      = shiftLDefault
-  shiftR      = shiftRDefault
-  rotate      = rotateDefault
-  rotateL     = rotateLDefault
-  rotateR     = rotateRDefault
-  isSigned    = isSignedDefault
-  popCount    = popCountDefault
+  (.&.)        = mkBAnd
+  (.|.)        = mkBOr
+  xor          = mkBXor
+  complement   = mkBNot
+  bit          = bitDefault
+  testBit      = testBitDefault
+  shift        = shiftDefault
+  shiftL       = shiftLDefault
+  shiftR       = shiftRDefault
+  unsafeShiftL = mkBShiftL
+  unsafeShiftR = mkBShiftR
+  rotate       = rotateDefault
+  rotateL      = rotateLDefault
+  rotateR      = rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = popCountDefault
 
 -- instance Bits CChar where
---   (.&.)       = mkBAnd
---   (.|.)       = mkBOr
---   xor         = mkBXor
---   complement  = mkBNot
---   bit         = bitDefault
---   testBit     = testBitDefault
---   shift       = shiftDefault
---   shiftL      = shiftLDefault
---   shiftR      = shiftRDefault
---   rotate      = rotateDefault
---   rotateL     = rotateLDefault
---   rotateR     = rotateRDefault
---   isSigned    = isSignedDefault
---   popCount    = popCountDefault
+--   (.&.)        = mkBAnd
+--   (.|.)        = mkBOr
+--   xor          = mkBXor
+--   complement   = mkBNot
+--   bit          = bitDefault
+--   testBit      = testBitDefault
+--   shift        = shiftDefault
+--   shiftL       = shiftLDefault
+--   shiftR       = shiftRDefault
+--   unsafeShiftL = mkBShiftL
+--   unsafeShiftR = mkBShiftR
+--   rotate       = rotateDefault
+--   rotateL      = rotateLDefault
+--   rotateR      = rotateRDefault
+--   isSigned     = isSignedDefault
+--   popCount     = popCountDefault
 
 -- instance Bits CUChar where
---   (.&.)       = mkBAnd
---   (.|.)       = mkBOr
---   xor         = mkBXor
---   complement  = mkBNot
---   bit         = bitDefault
---   testBit     = testBitDefault
---   shift       = shiftDefault
---   shiftL      = shiftLDefault
---   shiftR      = shiftRDefault
---   rotate      = rotateDefault
---   rotateL     = rotateLDefault
---   rotateR     = rotateRDefault
---   isSigned    = isSignedDefault
---   popCount    = popCountDefault
+--   (.&.)        = mkBAnd
+--   (.|.)        = mkBOr
+--   xor          = mkBXor
+--   complement   = mkBNot
+--   bit          = bitDefault
+--   testBit      = testBitDefault
+--   shift        = shiftDefault
+--   shiftL       = shiftLDefault
+--   shiftR       = shiftRDefault
+--   unsafeShiftL = mkBShiftL
+--   unsafeShiftR = mkBShiftR
+--   rotate       = rotateDefault
+--   rotateL      = rotateLDefault
+--   rotateR      = rotateRDefault
+--   isSigned     = isSignedDefault
+--   popCount     = popCountDefault
 
 -- instance Bits CSChar where
---   (.&.)       = mkBAnd
---   (.|.)       = mkBOr
---   xor         = mkBXor
---   complement  = mkBNot
---   bit         = bitDefault
---   testBit     = testBitDefault
---   shift       = shiftDefault
---   shiftL      = shiftLDefault
---   shiftR      = shiftRDefault
---   rotate      = rotateDefault
---   rotateL     = rotateLDefault
---   rotateR     = rotateRDefault
---   isSigned    = isSignedDefault
---   popCount    = popCountDefault
+--   (.&.)        = mkBAnd
+--   (.|.)        = mkBOr
+--   xor          = mkBXor
+--   complement   = mkBNot
+--   bit          = bitDefault
+--   testBit      = testBitDefault
+--   shift        = shiftDefault
+--   shiftL       = shiftLDefault
+--   shiftR       = shiftRDefault
+--   unsafeShiftL = mkBShiftL
+--   unsafeShiftR = mkBShiftR
+--   rotate       = rotateDefault
+--   rotateL      = rotateLDefault
+--   rotateR      = rotateRDefault
+--   isSigned     = isSignedDefault
+--   popCount     = popCountDefault
 
 
 -- Instances for FiniteBits
@@ -567,27 +621,71 @@ bitDefault x = constant 1 `shiftL` x
 testBitDefault :: (Elt t, IsIntegral t, Bits t) => Exp t -> Exp Int -> Exp Bool
 testBitDefault x i = (x .&. bit i) /=* constant 0
 
-shiftDefault :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftDefault :: (Elt t, FiniteBits t, IsIntegral t, B.Bits t) => Exp t -> Exp Int -> Exp t
 shiftDefault x i
-  = cond (i ==* 0) x
-  $ cond (i <*  0) (x `mkBShiftR` (-1))
-                   (x `mkBShiftL` i)
+  = cond (i >=* 0) (shiftLDefault x i)
+                   (shiftRDefault x (-i))
 
-shiftLDefault :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftLDefault :: (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftLDefault x i
-  = cond (i ==* 0) x
+  = cond (i >=* finiteBitSize x) (constant 0)
   $ mkBShiftL x i
 
-shiftRDefault :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shiftRDefault x i
-  = cond (i ==* 0) x
+shiftRDefault :: forall t. (Elt t, B.Bits t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftRDefault
+  | B.isSigned (undefined::t) = shiftRADefault
+  | otherwise                 = shiftRLDefault
+
+-- Shift the argument right (signed)
+shiftRADefault :: (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftRADefault x i
+  = cond (i >=* finiteBitSize x) (cond (mkLt x (constant 0)) (constant (-1)) (constant 0))
   $ mkBShiftR x i
 
-rotateDefault :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotateDefault x i
-  = cond (i ==* 0) x
-  $ cond (i <*  0) (x `mkBRotateR` (-1))
-                   (x `mkBRotateL` i)
+-- Shift the argument right (unsigned)
+shiftRLDefault :: (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftRLDefault x i
+  = cond (i >=* finiteBitSize x) (constant 0)
+  $ mkBShiftR x i
+
+rotateDefault :: forall t. (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+rotateDefault =
+  case (integralType :: IntegralType t) of
+    TypeInt{}     -> rotateDefault' (undefined::Word)
+    TypeInt8{}    -> rotateDefault' (undefined::Word8)
+    TypeInt16{}   -> rotateDefault' (undefined::Word16)
+    TypeInt32{}   -> rotateDefault' (undefined::Word32)
+    TypeInt64{}   -> rotateDefault' (undefined::Word64)
+    TypeWord{}    -> rotateDefault' (undefined::Word)
+    TypeWord8{}   -> rotateDefault' (undefined::Word8)
+    TypeWord16{}  -> rotateDefault' (undefined::Word16)
+    TypeWord32{}  -> rotateDefault' (undefined::Word32)
+    TypeWord64{}  -> rotateDefault' (undefined::Word64)
+    TypeCShort{}  -> rotateDefault' (undefined::CUShort)
+    TypeCUShort{} -> rotateDefault' (undefined::CUShort)
+    TypeCInt{}    -> rotateDefault' (undefined::CUInt)
+    TypeCUInt{}   -> rotateDefault' (undefined::CUInt)
+    TypeCLong{}   -> rotateDefault' (undefined::CULong)
+    TypeCULong{}  -> rotateDefault' (undefined::CULong)
+    TypeCLLong{}  -> rotateDefault' (undefined::CULLong)
+    TypeCULLong{} -> rotateDefault' (undefined::CULLong)
+
+rotateDefault'
+    :: forall i w. (Elt i, Elt w, FiniteBits i, IsIntegral i, IsIntegral w, BitSizeEq i w, BitSizeEq w i)
+    => w {- dummy -}
+    -> Exp i
+    -> Exp Int
+    -> Exp i
+rotateDefault' _ x i
+  = cond (i' ==* 0) x
+  $ w2i ((x' `mkBShiftL` i') `mkBOr` (x' `mkBShiftR` (wsib - i')))
+  where
+    w2i  = mkBitcast :: Exp w -> Exp i
+    i2w  = mkBitcast :: Exp i -> Exp w
+    --
+    x'   = i2w x
+    i'   = i `mkBAnd` (wsib - 1)
+    wsib = finiteBitSize x
 
 rotateLDefault :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 rotateLDefault x i
