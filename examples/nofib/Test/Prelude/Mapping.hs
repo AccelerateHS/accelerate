@@ -165,10 +165,12 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "(.&.)"        (test (A..&.) (P..&.))
           , testProperty "(.|.)"        (test (A..|.) (P..|.))
           , testProperty "xor"          (test A.xor P.xor)
-          , testProperty "shiftL"       (testSR A.shiftL P.shiftL)
-          , testProperty "shiftR"       (testSR A.shiftR P.shiftR)
-          , testProperty "rotateL"      (testSR A.rotateL P.rotateL)
-          , testProperty "rotateR"      (testSR A.rotateR P.rotateR)
+          , testProperty "shift"        (testSR  A.shift P.shift)
+          , testProperty "shiftL"       (testSR' A.shiftL P.shiftL)
+          , testProperty "shiftR"       (testSR' A.shiftR P.shiftR)
+          , testProperty "rotate"       (testSR  A.rotate P.rotate)
+          , testProperty "rotateL"      (testSR' A.rotateL P.rotateL)
+          , testProperty "rotateR"      (testSR' A.rotateR P.rotateR)
 
             -- relational and equality operators
           , testProperty "(<)"          (testAB (A.<*) (<))
@@ -185,7 +187,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
             test'       = mkTest a a (undefined::(a,a)) sh
             testAB      = mkTest a a (undefined::Bool) sh
 
-            testSR f g  = forAll arbitrary $ \xs ->
+            testSR      = mkTest a (undefined::Int) a sh
+            testSR' f g = forAll arbitrary $ \xs ->
                           requiring (>= 0) $ \ys ->
                             mkTest a (undefined::Int) a sh f g xs ys
 
