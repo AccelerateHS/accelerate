@@ -178,8 +178,6 @@ commutes f x env = case f of
   PrimNEq _     -> swizzle x
   PrimMax _     -> swizzle x
   PrimMin _     -> swizzle x
-  PrimLAnd      -> swizzle x
-  PrimLOr       -> swizzle x
   _             -> Nothing
   where
     swizzle :: PreOpenExp acc env aenv (b,b) -> Maybe (PreOpenExp acc env aenv (b,b))
