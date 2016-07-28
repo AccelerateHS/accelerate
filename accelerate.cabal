@@ -26,48 +26,50 @@ Description:
   online-compiled for performance - for example, using
   @Data.Array.Accelerate.CUDA@ it may be on-the-fly off-loaded to the GPU.
   .
-  [/Available backends/]
-  .
-  Currently, there are two backends:
-  .
-    1. An interpreter that serves as a reference implementation of the intended
-       semantics of the language, which is included in this package.
-  .
-    2. A CUDA backend generating code for CUDA-capable NVIDIA GPUs:
-       <http://hackage.haskell.org/package/accelerate-cuda>
-  .
-  Several experimental and/or incomplete backends also exist. If you are
-  particularly interested in any of these, especially with helping to finish
-  them, please contact us.
-  .
-    1. Cilk\/ICC and OpenCL: <https://github.com/AccelerateHS/accelerate-backend-kit>
-  .
-    2. Another OpenCL backend: <https://github.com/HIPERFIT/accelerate-opencl>
-  .
-    3. A backend to the Repa array library: <https://github.com/blambo/accelerate-repa>
-  .
-    4. An infrastructure for generating LLVM code, with backends targeting
-       multicore CPUs and NVIDIA GPUs: <https://github.com/AccelerateHS/accelerate-llvm/>
-  .
   [/Additional components/]
   .
-  The following support packages are available:
+  The following supported add-ons are available as separate packages. Install
+  them from Hackage with @cabal install \<package\>@
   .
-    1. @accelerate-cuda@: A high-performance parallel backend targeting
-       CUDA-enabled NVIDIA GPUs. Requires the NVIDIA CUDA SDK and, for full
-       functionality, hardware with compute capability 1.1 or greater. See the
-       table on Wikipedia for supported GPUs:
-       <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
+    * @accelerate-cuda@: Backend targeting CUDA-enabled NVIDIA GPUs. Requires
+      the NVIDIA CUDA SDK and, for full functionality, hardware with compute
+      compatibility 1.1 or greater. See the following table for supported GPUs:
+      <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
   .
-    2. @accelerate-examples@: Computational kernels and applications showcasing
-       /Accelerate/, as well as performance and regression tests.
+    * @accelerate-examples@: Computational kernels and applications showcasing
+      the use of Accelerate as well as a regression test suite, supporting
+      function and performance testing.
   .
-    3. @accelerate-io@: Fast conversion between /Accelerate/ arrays and other
-       formats, including 'vector' and 'repa'.
+    * @accelerate-io@: Fast conversions between Accelerate arrays and other
+      array formats (including vector and repa).
   .
-    4. @accelerate-fft@: Computation of Discrete Fourier Transforms.
+    * @accelerate-fft@: Discrete Fourier transforms, with optimised
+      implementation for the CUDA backend.
   .
-  Install them from Hackage with @cabal install PACKAGE@
+  The following components are experimental and/or incomplete. Please contact us if
+  you are interested in helping to work on or test them!
+  .
+    * @accelerate-llvm@: A framework for constructing backends targeting LLVM
+      IR, with concrete backends for multicore CPUs and NVIDIA GPUs.
+  .
+  Additionally, the following libraries can be used with Accelerate:
+  .
+    * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV,
+      and HSL).
+  .
+    * @gloss-accelerate@: Generate gloss pictures from Accelerate.
+  .
+    * @gloss-raster-accelerate@: Parallel rendering of raster images and
+      animations.
+  .
+    * @lens-accelerate@: Lens operators for Accelerate types.
+  .
+    * @linear-accelerate@: Linear vector spaces in Accelerate.
+  .
+    * @mwc-random-accelerate@: Generate Accelerate arrays filled with high
+      quality pseudorandom numbers.
+  .
+    * @numeric-prelude-accelerate@: Lifting numeric-prelude to Accelerate.
   .
   [/Examples and documentation/]
   .

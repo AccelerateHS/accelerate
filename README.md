@@ -56,7 +56,7 @@ Package accelerate is available from
 Additional components
 ---------------------
 
-The following supported addons are available as separate packages:
+The following supported add-ons are available as separate packages:
 
   * [accelerate-cuda][accelerate-cuda]: Backend targeting CUDA-enabled NVIDA GPUs — requires the NVIDIA CUDA SDK and hardware with compute capability 1.2 or greater (see the [table on Wikipedia][wiki-cc])
   * [accelerate-examples][accelerate-examples]: Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
