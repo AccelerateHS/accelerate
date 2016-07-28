@@ -140,22 +140,69 @@ Extra-source-files:     changelog.md
 Flag debug
   Default:              False
   Description:
-    Enable tracing message flags. These are read from the command-line
-    arguments, which is convenient but may cause problems interacting with the
-    user program, so are disabled by default. The available options are:
+    Enable debug tracing messages. The following options are read from the
+    environment variable @ACCELERATE_FLAGS@, and via the command-line as:
     .
-    * -ddump-sharing: print sharing recovery information
+      > ./program +ACC ... -ACC
     .
-    * -ddump-simpl-stats: dump statistics counts from the simplifier phase
+    Note that a backend may not implement (or be applicable to) all options.
     .
-    * -ddump-simpl-iterations: dump the program after each iteration of the simplifier
+    The following flags control phases of the compiler. The are enabled with
+    @-f\<flag\>@ and can be reveresed with @-fno-\<flag\>@:
     .
-    * -ddump-dot: write the program DAG to file in Graphviz dot format
+      * @acc-sharing@: Enable sharing recovery of array expressions (True).
     .
-    * -ddump-simpl-dot: write the program DAG to file in Graphviz dot format,
-    .                   but elide the scalar expressions
+      * @exp-sharing@: Enable sharing recovery of scalar expressions (True).
     .
-    * -dverbose: other, uncategorised messages
+      * @fusion@: Enable array fusion (True).
+    .
+      * @simplify@: Enable program simplification phase (True).
+    .
+      * @flush-cache@: Clear any persistent caches on program startup (False).
+    .
+      * @fast-math@: Allow algebraically equivalent transformations which may
+        change floating point results (e.g., reassociate) (True).
+    .
+    The following options control debug message output, and are enabled with
+    @-d\<flag\>@.
+    .
+      * @verbose@: Be extra chatty.
+    .
+      * @dump-sharing@: Print information related to sharing recovery.
+    .
+      * @dump-simpl-stats@: Print statistics related to fusion & simplification.
+    .
+      * @dump-simpl-iterations@: Print the output from each simplifier
+        iteration.
+    .
+      * @dump-vectorisation@: Print information related to the vectoriser.
+    .
+      * @dump-dot@: Generate a representation of the program graph in Graphviz
+        DOT format.
+    .
+      * @dump-simpl-dot@: Generate a more compact representation of the program
+        graph in Graphviz DOT format. In particular, scalar expressions are
+        elided.
+    .
+      * @dump-gc@: Print information related to the Accelerate garbage
+        collector.
+    .
+      * @dump-gc-stats@: Print aggregate garbage collection information at the
+        end of program execution.
+    .
+      * @dubug-cc@: Include debug symbols in the generated and compiled kernels.
+    .
+      * @dump-cc@: Print information related to kernel code
+        generation/compilation. Print the generated code if @verbose@.
+    .
+      * @dump-asm@: Print information related to kernel assembly. Print the
+        assembled code if @verbose@.
+    .
+      * @dump-exec@: Print information related to program execution.
+    .
+      * @dump-sched@: Print information related to execution scheduling.
+    .
+
     .
 
 Flag bounds-checks
