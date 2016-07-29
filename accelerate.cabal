@@ -273,6 +273,7 @@ Library
         Data.Array.Accelerate.Type
 
   Other-modules:
+        Data.Atomic
         Data.Array.Accelerate.Array.Lifted
         Data.Array.Accelerate.Array.Remote.Nursery
         Data.Array.Accelerate.Classes
@@ -309,6 +310,7 @@ Library
         Data.Array.Accelerate.Trafo.Substitution
         Data.Array.Accelerate.Trafo.Vectorise
 
+  c-sources:            cbits/atomic.c
 
   if flag(debug)
     cpp-options:        -DACCELERATE_DEBUG
