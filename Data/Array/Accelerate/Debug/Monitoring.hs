@@ -72,14 +72,16 @@ initAccMetrics :: IO Store
 initAccMetrics = do
   store <- newStore
 
-  registerRate    "acc.load.llvm_native"         (calculateProcessorLoad _active_ns_llvm_native) store
-  registerRate    "acc.load.llvm_ptx"            (calculateProcessorLoad _active_ns_llvm_ptx)    store
-  registerRate    "acc.load.cuda"                (calculateProcessorLoad _active_ns_cuda)        store
-  registerCounter "acc.gc.bytes_allocated"       (Counter.read _bytesAllocated)                  store
-  registerGauge   "acc.gc.current_bytes_active"  (Gauge.read   _bytesActive)                     store
-  registerGauge   "acc.gc.current_bytes_nursery" (Gauge.read   _bytesNursery)                    store
-  registerCounter "acc.gc.num_gcs"               (Counter.read _numMajorGC)                      store
-  registerCounter "acc.gc.num_lru_evict"         (Counter.read _numEvictions)                    store
+  registerRate    "acc.load.llvm_native"            (calculateProcessorLoad _active_ns_llvm_native) store
+  registerRate    "acc.load.llvm_ptx"               (calculateProcessorLoad _active_ns_llvm_ptx)    store
+  registerRate    "acc.load.cuda"                   (calculateProcessorLoad _active_ns_cuda)        store
+  registerCounter "acc.gc.bytes_allocated"          (Counter.read _bytesAllocated)                  store
+  registerCounter "acc.gc.bytes_copied_to_remote"   (Counter.read _bytesCopiedToRemote)             store
+  registerCounter "acc.gc.bytes_copied_from_remote" (Counter.read _bytesCopiedFromRemote)           store
+  registerGauge   "acc.gc.current_bytes_active"     (Gauge.read   _bytesActive)                     store
+  registerGauge   "acc.gc.current_bytes_nursery"    (Gauge.read   _bytesNursery)                    store
+  registerCounter "acc.gc.num_gcs"                  (Counter.read _numMajorGC)                      store
+  registerCounter "acc.gc.num_lru_evict"            (Counter.read _numEvictions)                    store
 
   return store
 
@@ -261,6 +263,18 @@ _active_ns_cuda = unsafePerformIO (Atomic.new 0)
 {-# NOINLINE _bytesAllocated #-}
 _bytesAllocated :: Counter
 _bytesAllocated = unsafePerformIO Counter.new
+
+-- Total number of bytes copied from the host to the remote memory space
+--
+{-# NOINLINE _bytesCopiedToRemote #-}
+_bytesCopiedToRemote :: Counter
+_bytesCopiedToRemote = unsafePerformIO Counter.new
+
+-- Total number of bytes copied from the remote memory space back to the device
+--
+{-# NOINLINE _bytesCopiedFromRemote #-}
+_bytesCopiedFromRemote :: Counter
+_bytesCopiedFromRemote = unsafePerformIO Counter.new
 
 -- Current working remote memory size
 --
