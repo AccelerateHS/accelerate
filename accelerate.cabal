@@ -349,6 +349,7 @@ Library
     cpp-options:        -DACCELERATE_MONITORING
     build-depends:
           ekg-core                      >= 0.1
+        , text                          >= 1.0
         , time                          >= 1.4
 
   if flag(bounds-checks)

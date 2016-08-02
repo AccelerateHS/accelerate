@@ -37,6 +37,7 @@ import qualified System.Metrics.Gauge                               as Gauge
 
 import Control.Monad
 import Data.IORef
+import Data.Text                                                    ( Text )
 import Data.Time.Clock
 import System.IO.Unsafe
 import qualified Data.HashMap.Strict                                as Map
@@ -69,25 +70,27 @@ initAccMetrics = error "Data.Array.Accelerate: Monitoring is disabled. Install w
 #else
 initAccMetrics :: IO Store
 initAccMetrics = do
-  store     <- newStore
-  now       <- getCurrentTime
+  store <- newStore
 
-  ps_native <- newIORef (ES now 0 0)
-  ps_ptx    <- newIORef (ES now 0 0)
-  ps_cuda   <- newIORef (ES now 0 0)
-
-  -- Abusing 'registerGroup' to do some calculation on every wake-up
-  registerGroup (Map.singleton "acc.load.llvm_native" Gauge) (calculateProcessorLoad ps_native _active_ns_llvm_native) store
-  registerGroup (Map.singleton "acc.load.llvm_ptx"    Gauge) (calculateProcessorLoad ps_ptx    _active_ns_llvm_ptx)    store
-  registerGroup (Map.singleton "acc.load.cuda"        Gauge) (calculateProcessorLoad ps_cuda   _active_ns_cuda)        store
-
-  registerCounter "acc.gc.bytes_allocated"       (Counter.read _bytesAllocated) store
-  registerGauge   "acc.gc.current_bytes_active"  (Gauge.read   _bytesActive)    store
-  registerGauge   "acc.gc.current_bytes_nursery" (Gauge.read   _bytesNursery)   store
-  registerCounter "acc.gc.num_gcs"               (Counter.read _numMajorGC)     store
-  registerCounter "acc.gc.num_lru_evict"         (Counter.read _numEvictions)   store
+  registerRate    "acc.load.llvm_native"         (calculateProcessorLoad _active_ns_llvm_native) store
+  registerRate    "acc.load.llvm_ptx"            (calculateProcessorLoad _active_ns_llvm_ptx)    store
+  registerRate    "acc.load.cuda"                (calculateProcessorLoad _active_ns_cuda)        store
+  registerCounter "acc.gc.bytes_allocated"       (Counter.read _bytesAllocated)                  store
+  registerGauge   "acc.gc.current_bytes_active"  (Gauge.read   _bytesActive)                     store
+  registerGauge   "acc.gc.current_bytes_nursery" (Gauge.read   _bytesNursery)                    store
+  registerCounter "acc.gc.num_gcs"               (Counter.read _numMajorGC)                      store
+  registerCounter "acc.gc.num_lru_evict"         (Counter.read _numEvictions)                    store
 
   return store
+
+
+-- Abusing 'registerGroup' to perform the rate calculation on every wake-up.
+--
+registerRate :: Text -> (IORef EMAState -> IO Int64) -> Store -> IO ()
+registerRate name sample store = do
+  now <- getCurrentTime
+  st  <- newIORef (ES now 0 0)
+  registerGroup (Map.singleton name Gauge) (sample st) store
 #endif
 
 
@@ -178,8 +181,8 @@ data EMAState = ES
 
 -- Estimate the load on the processor as a moving exponential average
 --
-calculateProcessorLoad :: IORef EMAState -> Atomic -> IO Int64
-calculateProcessorLoad !ref !var = do
+calculateProcessorLoad :: Atomic -> IORef EMAState -> IO Int64
+calculateProcessorLoad !var !ref = do
   ES{..} <- readIORef ref
   time   <- getCurrentTime
   sample <- Atomic.and var 0
