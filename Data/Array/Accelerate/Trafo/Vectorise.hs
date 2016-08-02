@@ -232,9 +232,17 @@ liftOpenAfun1 :: forall aenv aenv' a b.
               -> Context () aenv () aenv'
               -> OpenAfun aenv  (a -> b)
               -> OpenAfun aenv' (Nested a -> Nested b)
-liftOpenAfun1 strength ctx (Alam (Abody f))
-  | trace "liftOpenAfun1" ("Starting " ++ show strength ++ " vectorisation") True
-  = case vectoriseOpenAcc Conservative (PushLAccC ctx) (liftedSize avar0) f of
+liftOpenAfun1 = liftPreOpenAfun1 vectoriseOpenAcc
+
+liftPreOpenAfun1 :: forall acc aenv aenv' a b. Kit acc
+                 => VectoriseAcc acc
+                 -> Strength
+                 -> Context () aenv () aenv'
+                 -> PreOpenAfun acc aenv  (a -> b)
+                 -> PreOpenAfun acc aenv' (Nested a -> Nested b)
+liftPreOpenAfun1 liftAcc strength ctx (Alam (Abody f))
+  | trace "liftPreOpenAfun1" ("Starting " ++ show strength ++ " vectorisation") True
+  = case liftAcc Conservative (PushLAccC ctx) (liftedSize avar0) f of
       -- In the case that the body of the function does not depend on its argument,
       -- conservative vectorisation will return the unmodified body. In this,
       -- we just need to replicate the result.
@@ -242,7 +250,7 @@ liftOpenAfun1 strength ctx (Alam (Abody f))
                     -> Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
       -- Otherwise, we have the lifted body.
       LiftedAcc  a' -> Alam . Abody $ a'
-liftOpenAfun1 _ _ _
+liftPreOpenAfun1 _ _ _ _
   = error "Unreachable"
 
 -- |Lift a binary open array function
@@ -558,6 +566,9 @@ liftPreOpenAcc vectAcc strength ctx size acc
              -> LiftedAcc   acc aenv' t
     foreignL ff afun (cvtA -> AvoidedAcc as)
       = AvoidedAcc $ inject $ Aforeign ff afun as
+    foreignL ff afun (cvtA -> LiftedAcc a)
+      | Just (VectorisedForeign ff') <- isVectorised ff
+      = LiftedAcc (inject $ Aforeign ff' (liftPreOpenAfun1 vectAcc strength EmptyC afun) a)
     foreignL _  _    _
       = error $ nestedError "first" "foreign"
 

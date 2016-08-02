@@ -23,7 +23,7 @@
 
 module Data.Array.Accelerate.Array.Lifted (
 
-  Nested(..), NestedTupleRepr, Segments
+  Nested(..), NestedTupleRepr, Segments, VectorisedForeign(..), isVectorised,
 
 ) where
 
@@ -121,3 +121,11 @@ instance Arrays a => Arrays (Nested a) where
 
 arraysP :: Proxy Arrays
 arraysP = Proxy
+
+data VectorisedForeign a b = forall f.  Foreign f => VectorisedForeign (f (Nested a) (Nested b))
+
+instance Foreign VectorisedForeign where
+  strForeign (VectorisedForeign f) = strForeign f
+
+isVectorised :: (Typeable as, Typeable bs, Foreign f) => f as bs -> Maybe (VectorisedForeign as bs)
+isVectorised = cast
