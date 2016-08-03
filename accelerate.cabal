@@ -203,6 +203,35 @@ Flag debug
       * @dump-sched@: Print information related to execution scheduling.
     .
 
+Flag ekg
+  Default:              False
+  Description:
+    Enable hooks for monitoring the running application using EKG. Implies
+    @debug@ mode. In order to view the metrics, your application will need to
+    initialise the EKG server like so:
+    .
+    > import Data.Array.Accelerate.Debug
+    >
+    > import System.Metrics
+    > import System.Remote.Monitoring
+    >
+    > main :: IO ()
+    > main = do
+    >   store  <- initAccMetrics
+    >   registerGcMetrics store      -- optional
+    >
+    >   server <- forkServerWith store "localhost" 8000
+    >
+    >   ...
+    .
+    Note that, as with any program utilising EKG, in order to collect Haskell GC
+    statistics collection, you must either run the program with:
+    .
+    > +RTS -T -RTS
+    .
+    or compile it with:
+    .
+    > -with-rtsopts=-T
     .
 
 Flag bounds-checks
@@ -273,6 +302,7 @@ Library
         Data.Array.Accelerate.Type
 
   Other-modules:
+        Data.Atomic
         Data.Array.Accelerate.Array.Lifted
         Data.Array.Accelerate.Array.Remote.Nursery
         Data.Array.Accelerate.Classes
@@ -290,6 +320,7 @@ Library
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
         Data.Array.Accelerate.Debug.Flags
+        Data.Array.Accelerate.Debug.Monitoring
         Data.Array.Accelerate.Debug.Stats
         Data.Array.Accelerate.Debug.Trace
         Data.Array.Accelerate.Language
@@ -309,9 +340,17 @@ Library
         Data.Array.Accelerate.Trafo.Substitution
         Data.Array.Accelerate.Trafo.Vectorise
 
+  c-sources:            cbits/atomic.c
 
-  if flag(debug)
+  if flag(debug) || flag(ekg)
     cpp-options:        -DACCELERATE_DEBUG
+
+  if flag(ekg)
+    cpp-options:        -DACCELERATE_MONITORING
+    build-depends:
+          ekg-core                      >= 0.1
+        , text                          >= 1.0
+        , time                          >= 1.4
 
   if flag(bounds-checks)
     cpp-options:        -DACCELERATE_BOUNDS_CHECKS

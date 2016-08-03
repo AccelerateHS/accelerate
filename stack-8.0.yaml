@@ -15,6 +15,7 @@ flags:
     unsafe-checks: false
     bounds-checks: true
     debug: false
+    ekg: false
     internal-checks: false
 
 # Extra package databases containing global packages
