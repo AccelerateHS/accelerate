@@ -8,17 +8,17 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 868c372012cccdf453f5653ecfa40f11545e0150
+    commit: 8c3c9cee1f73dc9732f28f44452c434f41261823
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: f70211c167db0dfb70375e82f69273a6354e6ede
+    commit: d175b59d3879ba66bd6b2c8231b336ca6ff5553d
   extra-dep: true
 
 - location:
-    git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 7fde958be5493b9984ac90b3b95ec5680b196a5b
+    git:    https://github.com/AccelerateHS/accelerate-llvm.git
+    commit: c79479016df55f78f79a180ce548f276f6b5da88
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -26,23 +26,28 @@ packages:
     - 'accelerate-llvm-ptx'
 
 - location:
-    git:    https://github.com/tmcdonell/accelerate-io.git
-    commit: 968575fd1ab7306cc21ca273cdca02e516aae4c2
+    git:    https://github.com/AccelerateHS/accelerate-io.git
+    commit: 4e3637469972993a4b160af39b00ea7a7ec6f1e2
   extra-dep: true
 
 - location:
-    git:    https://github.com/tmcdonell/accelerate-fft.git
+    git:    https://github.com/AccelerateHS/accelerate-fft.git
     commit: cede00c627ce3c82d6076134c2928a1bd2bc028f
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/cuda.git
-    commit: d4ce36da07f510b7fcc994f86557af7d6b16c8f2
+    commit: 11f924e08a3d42043826aa87081aa66d834c09e7
   extra-dep: true
 
 - location:
-    git:    https://github.com/tmcdonell/cufft.git
-    commit: 370e9945cbc1e5f6c113c849f6b16ae04475110d
+    git:    https://github.com/tmcdonell/nvvm.git
+    commit: 0dcc67e35e690d1eaaebceaf8deb86a39d486d6c
+  extra-dep: true
+
+- location:
+    git:    https://github.com/robeverest/cufft.git
+    commit: 3a793a1dfdc205867d38d90303356832a11c0718
   extra-dep: true
 
 - location:

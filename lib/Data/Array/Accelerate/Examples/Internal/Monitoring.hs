@@ -22,7 +22,10 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import System.Remote.Monitoring
+import System.Metrics
 import Text.Printf
+
+import Data.Array.Accelerate.Debug
 #endif
 
 
@@ -33,7 +36,9 @@ import Text.Printf
 beginMonitoring :: IO ()
 #ifdef ACCELERATE_ENABLE_EKG
 beginMonitoring = do
-  r <- withAsync (forkServer "localhost" 8000 >> threadDelay 10000) waitCatch
+  store <- initAccMetrics
+  registerGcMetrics store
+  r     <- withAsync (forkServerWith store "localhost" 8000 >> threadDelay 10000) waitCatch
   case r of
     Right _ -> printf "EKG monitor started at: http://localhost:8000\n"
     Left _  -> printf "Failed to start EKG monitor\n"
