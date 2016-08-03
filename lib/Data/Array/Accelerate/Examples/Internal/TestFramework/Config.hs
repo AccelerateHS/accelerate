@@ -36,4 +36,3 @@ defaultConfig b = set ropt_threads (concurrentBackends b) mempty
 defaultOptions :: [OptDescr SuppliedRunnerOptions]
 defaultOptions = optionsDescription
 
-

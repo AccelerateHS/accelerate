@@ -278,7 +278,7 @@ parseArgs programOptions programConfig header footer = do
   --
   (c4,u4)       <- case getOpt' Permute testframeworkOptions u3 of
       (opts,_,u,[]) | Just os <- sequence opts
-                    -> return (mconcat os, u)
+                    -> return (mconcat (TestFramework.defaultConfig (_optBackend c2) : os), u)
       (_,_,_,err)   -> error  (helpMsg err)
 
   -- Show the help message if that was requested. This is done last so that the
