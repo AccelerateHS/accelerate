@@ -22,6 +22,9 @@ module Data.Array.Accelerate.Debug (
   dumpGraph,
   dumpSimplStats,
 
+  monitoringIsEnabled,
+  debuggingIsEnabled,
+
 ) where
 
 import Data.Array.Accelerate.Debug.Flags                as Debug
@@ -47,6 +50,21 @@ import System.Win32.Process                             ( ProcessId )
 #else
 #error "I don't know what operating system I am"
 #endif
+#endif
+
+
+debuggingIsEnabled :: Bool
+#if ACCELERATE_DEBUG
+debuggingIsEnabled = True
+#else
+debuggingIsEnabled = False
+#endif
+
+monitoringIsEnabled :: Bool
+#if ACCELERATE_MONITORING
+monitoringIsEnabled = True
+#else
+monitoringIsEnabled = False
 #endif
 
 
