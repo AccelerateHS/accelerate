@@ -243,7 +243,7 @@ Executable accelerate-nofib
                         Test.Spectral.RadixSort
                         Test.Spectral.SMVM
 
-  ghc-options:          -Wall -O2
+  ghc-options:          -Wall
                         -threaded
                         -fpedantic-bottoms
                         -fno-full-laziness
@@ -295,7 +295,7 @@ Executable accelerate-smvm
                         MatrixMarket
                         SMVM
 
-  ghc-options:          -O2 -Wall -threaded -rtsopts -eventlog
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if impl(ghc >= 7.6)
@@ -328,7 +328,7 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-options:          -O2 -Wall -threaded -rtsopts -eventlog
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(ekg)
@@ -392,7 +392,7 @@ Executable accelerate-mandelbrot
                         Mandel
                         World
 
-  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(ekg)
@@ -422,7 +422,7 @@ Executable accelerate-fluid
                         Type
                         World
 
-  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(ekg)
@@ -464,7 +464,7 @@ Executable accelerate-nbody
                         Solver.Naive2
                         Test
 
-  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(ekg)
@@ -494,7 +494,7 @@ Executable accelerate-smoothlife
                         Random.Splat
                         SmoothLife
 
-  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(cuda)
@@ -528,7 +528,7 @@ Executable accelerate-hashcat
                         Digest
                         MD5
 
-  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(ekg)
@@ -557,7 +557,7 @@ Executable accelerate-fft
                         HighPass
                         FFT
 
-  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(ekg)
@@ -589,7 +589,7 @@ Executable accelerate-pagerank
                         Rank
                         Step
 
-  ghc-options:          -rtsopts -threaded -O2
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -638,7 +638,7 @@ Executable accelerate-ray
                         gloss-accelerate                >= 0.2,
                         gloss-raster-accelerate         >= 0.2
 
-  ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
   if flag(ekg)
@@ -671,7 +671,7 @@ Executable accelerate-kmeans
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
 
-  ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
 
 
