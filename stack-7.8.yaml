@@ -77,7 +77,7 @@ packages:
 
 extra-deps:
 - 'atomic-primops-0.8.0.4'
-- 'base-orphans-0.5.4'
+- 'base-orphans-0.4.5'
 - 'bytestring-lexing-0.5.0.2'
 - 'chaselev-deque-0.5.0.5'
 - 'ekg-0.4.0.10'
@@ -99,7 +99,7 @@ extra-deps:
 - 'primitive-0.6.1.0'
 - 'SafeSemaphore-0.10.1'
 - 'transformers-0.4.3.0'
-- 'transformers-compat-0.5.1.4'
+- 'transformers-compat-0.4.0.4'
 - 'unique-0'
 - 'vector-th-unbox-0.2.1.6'
 
