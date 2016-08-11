@@ -24,11 +24,15 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Data.Array.Accelerate.Classes.Real
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.Fractional
+import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Real
+import Data.Array.Accelerate.Classes.ToFloating
 
 import Text.Printf
-import Prelude                                                      ( String, error )
+import Prelude                                                      ( ($), String, error )
 import qualified Prelude                                            as P
 
 
@@ -45,7 +49,7 @@ class (Real a, Fractional a) => RealFrac a where
   --
   -- The default definitions of the 'ceiling', 'floor', 'truncate'
   -- and 'round' functions are in terms of 'properFraction'.
-  -- properFraction :: (Elt b, IsIntegral b) => Exp a -> (Exp b, Exp a)
+  properFraction :: (Num b, ToFloating b a, IsIntegral b) => Exp a -> (Exp b, Exp a)
 
   -- The function 'splitFraction' takes a real fractional number @x@ and
   -- returns a pair @(n,f)@ such that @x = n+f@, and:
@@ -78,34 +82,54 @@ class (Real a, Fractional a) => RealFrac a where
 
 
 instance RealFrac Float where
-  truncate = mkTruncate
-  round    = mkRound
-  ceiling  = mkCeiling
-  floor    = mkFloor
+  properFraction  = defaultProperFraction
+  truncate        = mkTruncate
+  round           = mkRound
+  ceiling         = mkCeiling
+  floor           = mkFloor
 
 instance RealFrac Double where
-  truncate = mkTruncate
-  round    = mkRound
-  ceiling  = mkCeiling
-  floor    = mkFloor
+  properFraction  = defaultProperFraction
+  truncate        = mkTruncate
+  round           = mkRound
+  ceiling         = mkCeiling
+  floor           = mkFloor
 
 instance RealFrac CFloat where
-  truncate = mkTruncate
-  round    = mkRound
-  ceiling  = mkCeiling
-  floor    = mkFloor
+  properFraction  = defaultProperFraction
+  truncate        = mkTruncate
+  round           = mkRound
+  ceiling         = mkCeiling
+  floor           = mkFloor
 
 instance RealFrac CDouble where
-  truncate = mkTruncate
-  round    = mkRound
-  ceiling  = mkCeiling
-  floor    = mkFloor
+  properFraction  = defaultProperFraction
+  truncate        = mkTruncate
+  round           = mkRound
+  ceiling         = mkCeiling
+  floor           = mkFloor
+
+
+-- Must test for ±0.0 to avoid returning -0.0 in the second component of the
+-- pair. Unfortunately the branching costs a lot of performance.
+--
+defaultProperFraction
+    :: (ToFloating a b, RealFrac b, IsIntegral a, Num a, Floating b)
+    => Exp b
+    -> (Exp a, Exp b)
+defaultProperFraction x =
+  untup2 $ Exp
+         $ Cond (x ==* 0) (tup2 (0, 0))
+                          (tup2 (n, f))
+  where
+    n = truncate x
+    f = x - toFloating n
 
 
 -- To satisfy superclass constraints
 --
 instance RealFrac a => P.RealFrac (Exp a) where
-  properFraction = error "Prelude.properFraction applied to EDSL types"
+  properFraction = preludeError "properFraction"
   truncate       = preludeError "truncate"
   round          = preludeError "round"
   ceiling        = preludeError "ceiling"
