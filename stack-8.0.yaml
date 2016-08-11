@@ -65,6 +65,16 @@ packages:
     commit: b8d88a99e2d015c9acddefa41a2ffa9955ac5a08
   extra-dep: true
 
+- location:
+    git:    https://github.com/tmcdonell/linear-accelerate.git
+    commit: ef2816690dea99ce95da844d81dd4aa1b2328f50
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/lens-accelerate.git
+    commit: c119c9c32d4fbf0d53b8eb906de03fa22ede2e87
+  extra-dep: true
+
 extra-deps:
 - 'binary-0.8.4.0'
 - 'bmp-1.2.6.1'
@@ -84,25 +94,26 @@ flags:
   llvm-general:
     shared-llvm: true
   accelerate-examples:
-    cuda: true
-    llvm-cpu: false
-    llvm-gpu: false
-    gui: true
-    ekg: false
-    codespeed: false
-    nofib: true
-    smvm: true
-    crystal: true
-    canny: true
+    cuda:       true
+    llvm-cpu:   false
+    llvm-gpu:   false
+    gui:        true
+    ekg:        false
+    codespeed:  false
+    nofib:      true
+    smvm:       true
+    crystal:    true
+    tunnel:     true
+    canny:      true
     mandelbrot: true
-    fluid: true
-    nbody: true
+    fluid:      true
+    nbody:      true
     smoothlife: true
-    hashcat: true
-    fft: true
-    pagerank: true
-    ray: true
-    kmeans: true
+    hashcat:    true
+    fft:        true
+    pagerank:   true
+    ray:        true
+    kmeans:     true
 
 # Extra package databases containing global packages
 extra-package-dbs: []

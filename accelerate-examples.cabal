@@ -74,6 +74,10 @@ Flag crystal
   Description:          A visualisation of a sum of waves in a plane
   Default:              True
 
+Flag tunnel
+  Description:          The slit-scan effect creating a Doctor Who time vortex
+  Default:              True
+
 Flag canny
   Description:          Canny edge detection benchmark
   Default:              True
@@ -343,6 +347,31 @@ Executable accelerate-crystal
                         colour-accelerate               >= 0.1,
                         fclabels                        >= 2.0,
                         gloss-raster-accelerate         >= 0.2
+
+-- The slit-scan effect creating a Doctor Who time vortex
+-- ------------------------------------------------------
+
+Executable accelerate-tunnel
+  hs-source-dirs:       examples/tunnel
+  Main-is:              Main.hs
+  other-modules:        Config
+
+  ghc-options:          -Wall -threaded -rtsopts -eventlog
+  ghc-prof-options:     -auto-all
+
+  if flag(ekg)
+    ghc-options:        -with-rtsopts=-T
+
+  if !flag(tunnel)
+    buildable:          False
+  else
+    build-depends:      accelerate                      == 2.0.*,
+                        accelerate-examples             == 2.0.*,
+                        base                            >= 4.7,
+                        fclabels                        >= 2.0,
+                        gloss-raster-accelerate         >= 0.2,
+                        lens-accelerate                 >= 0.1,
+                        linear-accelerate               >= 0.3
 
 
 -- Image edge detection
