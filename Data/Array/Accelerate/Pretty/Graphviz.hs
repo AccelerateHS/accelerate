@@ -219,6 +219,10 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
           loop                            = wrap $ hang "awhile" 2 (sep [ text p', text f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
+    Aforeign ff _afun x     -> do
+      x' <- prettyDelayedOpenAcc detail parens aenv x
+      return $ apply ("aforeign " ++ strForeign ff) x'
+
     Atuple atup             -> prettyDelayedAtuple detail wrap aenv atup
     Aprj ix atup            -> do
       ident                     <- mkNodeId atop
@@ -246,11 +250,10 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppD xs ]
     Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppM dfts, ppF p, ppD xs ]
     Backpermute sh p xs     -> "backpermute" .$ [ ppSh sh, ppF p, ppD xs ]
-    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (text (strForeign ff)) []), {- ppAf afun, -} ppM xs ]
     Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB xs bndy, ppM xs ]
     Stencil2 sten bndy1 acc1 bndy2 acc2
                             -> "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppM acc1,
-                                                               ppB acc2 bndy2, ppM acc2 ]
+                                                            ppB acc2 bndy2, ppM acc2 ]
     Collect{}               -> error "Collect"
 
   where
