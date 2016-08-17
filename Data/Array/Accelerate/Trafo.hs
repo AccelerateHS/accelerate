@@ -31,6 +31,9 @@ module Data.Array.Accelerate.Trafo (
   -- * Substitution
   module Data.Array.Accelerate.Trafo.Substitution,
 
+  -- * Term equality
+  Match(..), (:=:)(..),
+
 ) where
 
 import Data.Typeable
