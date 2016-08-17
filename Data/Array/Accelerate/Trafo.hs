@@ -22,7 +22,7 @@ module Data.Array.Accelerate.Trafo (
 
   convertAcc,  convertAccWith,
   convertAfun, convertAfunWith,
-  convertSeq, convertSeqWith,
+  convertSeq,  convertSeqWith,
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
