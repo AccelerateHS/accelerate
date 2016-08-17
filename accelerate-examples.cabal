@@ -209,6 +209,7 @@ Executable accelerate-nofib
                         examples/smvm
 
   other-modules:        Config
+                        SMVM
                         QuickCheck.Arbitrary.Array
                         QuickCheck.Arbitrary.Shape
                         Test.Base
