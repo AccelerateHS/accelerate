@@ -9,6 +9,7 @@ module Config where
 
 import Data.Label
 import Data.Maybe
+import Data.Bits
 import System.Console.GetOpt
 
 
@@ -36,8 +37,8 @@ defaults = Config
   {
     _configDouble       = True
   , _configFloat        = False
-  , _configInt64        = False
-  , _configInt32        = True
+  , _configInt64        = $( [e| finiteBitSize (undefined::Int) == 64 |] )
+  , _configInt32        = $( [e| finiteBitSize (undefined::Int) == 32 |] )
   , _configInt16        = False
   , _configInt8         = False
   , _configWord64       = False
