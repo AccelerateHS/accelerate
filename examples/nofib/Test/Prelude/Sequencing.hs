@@ -41,17 +41,14 @@ iota' n = generate (index1 (the n)) unindex1
 --iotaChunk :: Int -> Int -> Acc (Array (Z :. Int :. Int) Int)
 --iotaChunk n b = reshape (constant (Z :. b :. n)) $ generate (index1 (constant (n * b))) unindex1
 
-idSequence
-    :: forall sh a. (Shape sh, Slice sh, Elt a)
-    => Acc (Array (sh :. Int) a)
-    -> Acc (Array (sh :. Int) a)
-idSequence = error "idSequence is currently disabled"
-{--
-idSequence xs
-  = reshape (A.shape xs) . asnd . collect
-  . fromSeq
-  $ toSeq Divide xs
---}
+-- idSequence
+--     :: forall sh a. (Shape sh, Slice sh, Elt a)
+--     => Acc (Array (sh :. Int) a)
+--     -> Acc (Array (sh :. Int) a)
+-- idSequence xs
+--   = reshape (A.shape xs) . asnd . collect
+--   . fromSeq
+--   $ toSeq Divide xs
 
 idSequenceRef :: (Shape sh, Elt a) => (Array (sh :. Int) a) -> (Array (sh :. Int) a)
 idSequenceRef = id
@@ -197,16 +194,17 @@ chunking1Ref n = fromList Z [x]
 test_sequences :: Backend -> Config -> Test
 test_sequences backend opt = testGroup "sequences"
   [ testGroup "id" $ catMaybes
-    [ testIdSequence configInt8   (undefined :: Int8)
-    , testIdSequence configInt16  (undefined :: Int16)
-    , testIdSequence configInt32  (undefined :: Int32)
-    , testIdSequence configInt64  (undefined :: Int64)
-    , testIdSequence configWord8  (undefined :: Word8)
-    , testIdSequence configWord16 (undefined :: Word16)
-    , testIdSequence configWord32 (undefined :: Word32)
-    , testIdSequence configWord64 (undefined :: Word64)
-    , testIdSequence configFloat  (undefined :: Float)
-    , testIdSequence configDouble (undefined :: Double)
+    [
+    --   testIdSequence configInt8   (undefined :: Int8)
+    -- , testIdSequence configInt16  (undefined :: Int16)
+    -- , testIdSequence configInt32  (undefined :: Int32)
+    -- , testIdSequence configInt64  (undefined :: Int64)
+    -- , testIdSequence configWord8  (undefined :: Word8)
+    -- , testIdSequence configWord16 (undefined :: Word16)
+    -- , testIdSequence configWord32 (undefined :: Word32)
+    -- , testIdSequence configWord64 (undefined :: Word64)
+    -- , testIdSequence configFloat  (undefined :: Float)
+    -- , testIdSequence configDouble (undefined :: Double)
     ]
   , testGroup "sum_max" $ catMaybes
     [ testSumMaxSequence configInt8   (undefined :: Int8)
@@ -250,21 +248,21 @@ test_sequences backend opt = testGroup "sequences"
     ]
   ]
   where
-    testIdSequence
-        :: forall a. (Similar a, A.Num a, Arbitrary a)
-        => (Config :-> Bool)
-        -> a
-        -> Maybe Test
-    testIdSequence ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim1
-          , testDim dim2
-          ]
-      where
-        testDim :: forall sh. (sh ~ FullShape sh, Slice sh, Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array (sh :. Int) a)) => (sh :. Int) -> Test
-        testDim sh = testProperty ("DIM" P.++ show (rank sh))
-          ((\ xs -> run1 backend idSequence xs ~?= idSequenceRef xs) :: Array (sh :. Int) a -> Property)
+    -- testIdSequence
+    --     :: forall a. (Similar a, A.Num a, Arbitrary a)
+    --     => (Config :-> Bool)
+    --     -> a
+    --     -> Maybe Test
+    -- testIdSequence ok _
+    --   | P.not (get ok opt)      = Nothing
+    --   | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
+    --       [ testDim dim1
+    --       , testDim dim2
+    --       ]
+    --   where
+    --     testDim :: forall sh. (sh ~ FullShape sh, Slice sh, Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array (sh :. Int) a)) => (sh :. Int) -> Test
+    --     testDim sh = testProperty ("DIM" P.++ show (rank sh))
+    --       ((\ xs -> run1 backend idSequence xs ~?= idSequenceRef xs) :: Array (sh :. Int) a -> Property)
 
 
     testSumMaxSequence
