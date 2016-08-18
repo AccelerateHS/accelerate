@@ -443,8 +443,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Scanr1 f a          -> embed  (into  Scanr1        (cvtF f)) a
     Scanr' f z a        -> embed  (into2 Scanr'        (cvtF f) (cvtE z)) a
     Permute f d p a     -> embed2 (into2 permute       (cvtF f) (cvtF p)) d a
-    Stencil f x a       -> embed  (into (stencil x)    (cvtF f)) a
-    Stencil2 f x a y b  -> embed2 (into (stencil2 x y) (cvtF f)) a b
+    Stencil f x a       -> lift   (into (stencil x)    (cvtF f)) a
+    Stencil2 f x a y b  -> lift2  (into (stencil2 x y) (cvtF f)) a b
 
   where
     -- If fusion is not enabled, force terms to the manifest representation
@@ -523,6 +523,19 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
            -> Embed acc aenv cs
     embed2 = trav2 id id
 
+    lift :: (Arrays as, Arrays bs)
+         => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
+         ->       acc aenv as
+         -> Embed acc aenv bs
+    lift = trav1 bind
+
+    lift2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
+          => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
+          ->       acc aenv as
+          ->       acc aenv bs
+          -> Embed acc aenv cs
+    lift2 = trav2 bind bind
+
     trav1 :: (Arrays as, Arrays bs)
           => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
           -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
@@ -554,10 +567,13 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- > let a' = map f a
     -- > in  stencil s a'
     --
-    -- bind :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
-    -- bind (Embed env cc)
-    --   | Done{} <- cc = Embed env                                  cc
-    --   | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
+    -- This is required for the LLVM backend's default implementation of
+    -- stencil operations.
+    --
+    bind :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
+    bind (Embed env cc)
+      | Done{} <- cc = Embed env                                  cc
+      | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
     -- Move additional bindings for producer outside of sequence, so
     -- that producers may fuse with their arguments, resulting in
@@ -566,6 +582,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
              -> Embed acc aenv arrs
     collectD s | ExtendSeq env s' <- embedSeq embedAcc s
                = Embed (env `PushEnv` inject (Collect s')) (Done ZeroIdx)
+
 
 -- Move additional bindings for producer outside of sequence, so
 -- that producers may fuse with their arguments, resulting in
