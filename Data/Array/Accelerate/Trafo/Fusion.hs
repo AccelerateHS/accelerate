@@ -432,19 +432,19 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- node, so that the producer can be directly embedded into the consumer
     -- during the code generation phase.
     --
-    Fold f z a          -> embed     (into2 Fold          (cvtF f) (cvtE z)) a
-    Fold1 f a           -> embed     (into  Fold1         (cvtF f)) a
-    FoldSeg f z a s     -> embed2    (into2 FoldSeg       (cvtF f) (cvtE z)) a s
-    Fold1Seg f a s      -> embed2    (into  Fold1Seg      (cvtF f)) a s
-    Scanl f z a         -> embed     (into2 Scanl         (cvtF f) (cvtE z)) a
-    Scanl1 f a          -> embed     (into  Scanl1        (cvtF f)) a
-    Scanl' f z a        -> embed     (into2 Scanl'        (cvtF f) (cvtE z)) a
-    Scanr f z a         -> embed     (into2 Scanr         (cvtF f) (cvtE z)) a
-    Scanr1 f a          -> embed     (into  Scanr1        (cvtF f)) a
-    Scanr' f z a        -> embed     (into2 Scanr'        (cvtF f) (cvtE z)) a
-    Permute f d p a     -> permuteD  (into2 permute       (cvtF f) (cvtF p)) d a
-    Stencil f x a       -> stencilD  (into (stencil x)    (cvtF f)) a
-    Stencil2 f x a y b  -> stencil2D (into (stencil2 x y) (cvtF f)) a b
+    Fold f z a          -> embed  (into2 Fold          (cvtF f) (cvtE z)) a
+    Fold1 f a           -> embed  (into  Fold1         (cvtF f)) a
+    FoldSeg f z a s     -> embed2 (into2 FoldSeg       (cvtF f) (cvtE z)) a s
+    Fold1Seg f a s      -> embed2 (into  Fold1Seg      (cvtF f)) a s
+    Scanl f z a         -> embed  (into2 Scanl         (cvtF f) (cvtE z)) a
+    Scanl1 f a          -> embed  (into  Scanl1        (cvtF f)) a
+    Scanl' f z a        -> embed  (into2 Scanl'        (cvtF f) (cvtE z)) a
+    Scanr f z a         -> embed  (into2 Scanr         (cvtF f) (cvtE z)) a
+    Scanr1 f a          -> embed  (into  Scanr1        (cvtF f)) a
+    Scanr' f z a        -> embed  (into2 Scanr'        (cvtF f) (cvtE z)) a
+    Permute f d p a     -> embed2 (into2 permute       (cvtF f) (cvtF p)) d a
+    Stencil f x a       -> embed  (into (stencil x)    (cvtF f)) a
+    Stencil2 f x a y b  -> embed2 (into (stencil2 x y) (cvtF f)) a b
 
   where
     -- If fusion is not enabled, force terms to the manifest representation
@@ -470,39 +470,6 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     permute f p d a     = Permute f d p a
     stencil x f a       = Stencil f x a
     stencil2 x y f a b  = Stencil2 f x a y b
-
-    -- Helper functions for operations which require their argument arrays
-    -- to be manifest. Without this we can get sequences like:
-    --
-    -- > stencil s (map f a)
-    --
-    -- rather than:
-    --
-    -- > let a' = map f a
-    -- > in  stencil s a'
-    --
-    -- This way we retain the invariant that every time we expect
-    -- a manifest array it will be in the form of an environment index.
-    --
-    stencilD :: (Arrays as, Arrays bs)
-             => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
-             -> acc aenv as
-             -> Embed acc aenv bs
-    stencilD = trav1 bind
-
-    stencil2D :: (Arrays as, Arrays bs, Arrays cs)
-              => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
-              ->       acc aenv as
-              ->       acc aenv bs
-              -> Embed acc aenv cs
-    stencil2D = trav2 bind bind
-
-    permuteD :: (Arrays as, Arrays bs, Arrays cs)
-              => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
-              ->       acc aenv as
-              ->       acc aenv bs
-              -> Embed acc aenv cs
-    permuteD = trav2 bind id
 
     -- Conversions for closed scalar functions and expressions. This just
     -- applies scalar simplifications.
@@ -577,10 +544,20 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       , acc0    <- inject . compute' $ cc0
       = Embed (env `PushEnv` inject (op env acc1 acc0)) (Done ZeroIdx)
 
-    bind :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
-    bind (Embed env cc)
-      | Done{} <- cc = Embed env                                  cc
-      | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
+    -- Helper functions to lift out and let-bind a manifest array. That is,
+    -- instead of the sequence
+    --
+    -- > stencil s (map f a)
+    --
+    -- we get:
+    --
+    -- > let a' = map f a
+    -- > in  stencil s a'
+    --
+    -- bind :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
+    -- bind (Embed env cc)
+    --   | Done{} <- cc = Embed env                                  cc
+    --   | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
     -- Move additional bindings for producer outside of sequence, so
     -- that producers may fuse with their arguments, resulting in
