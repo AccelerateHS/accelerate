@@ -778,11 +778,11 @@ gcd :: Integral a => Exp a -> Exp a -> Exp a
 gcd x y = gcd' (abs x) (abs y)
   where
     gcd' :: Integral a => Exp a -> Exp a -> Exp a
-    gcd' x y =
+    gcd' u v =
       let (r,_) = untup2
                 $ while (\(untup2 -> (_,b)) -> b /=* 0)
                         (\(untup2 -> (a,b)) -> tup2 (b, a `rem` b))
-                        (tup2 (x,y))
+                        (tup2 (u,v))
       in r
 
 
