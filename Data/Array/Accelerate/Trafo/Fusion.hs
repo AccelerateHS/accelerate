@@ -869,27 +869,60 @@ generateD sh f
   $ Embed BaseEnv (Yield sh f)
 
 
--- Fuse a unary function into a delayed array.
---
--- As a special case, if we are unzipping a manifest array then force the term
--- to be computed; a backend will be able to execute this in constant time.
+-- Fuse a unary function into a delayed array. Also looks for unzips which can
+-- be executed in constant time; SEE [unzipD]
 --
 mapD :: (Kit acc, Shape sh, Elt b)
      => PreFun acc aenv (a -> b)
      -> Embed  acc aenv (Array sh a)
      -> Embed  acc aenv (Array sh b)
+mapD f (unzipD f -> Just a) = a
 mapD f (Embed env cc)
-  | Done v                           <- cc
-  , Lam (Body (Prj _ (Var ZeroIdx))) <- f
-  = Stats.ruleFired "unzipD"
-  $ Embed (env `PushEnv` inject (Map (sink env f) (avarIn v))) (Done ZeroIdx)
-
-  | otherwise
   = Stats.ruleFired "mapD"
   $ Embed env (go cc)
   where
     go (step  -> Just (Step sh ix g v)) = Step sh ix (sink env f `compose` g) v
     go (yield -> Yield sh g)            = Yield sh (sink env f `compose` g)
+
+
+-- If we are unzipping a manifest array then force the term to be computed;
+-- a backend will be able to execute this in constant time. This operations
+-- looks for the right terms recursively, splitting operations such as:
+--
+-- > map (\x -> fst . fst ... x) arr
+--
+-- into multiple stages so that they can all be executed in constant time:
+--
+-- > map fst . map fst ... arr
+--
+-- Note that this is a speculative operation, since we could dig under several
+-- levels of projection before discovering that the operation can not be
+-- unzipped. This should be fine though because digging through the terms is
+-- relatively cheap; no environment changing operations are required.
+--
+unzipD
+    :: (Kit acc, Shape sh, Elt b)
+    => PreFun acc aenv (a -> b)
+    -> Embed  acc aenv (Array sh a)
+    -> Maybe (Embed acc aenv (Array sh b))
+unzipD f (Embed env (Done v))
+  | Lam (Body (Prj tix (Var ZeroIdx))) <- f
+  = Stats.ruleFired "unzipD"
+  $ let f' = Lam (Body (Prj tix (Var ZeroIdx)))
+        a' = avarIn v
+    in
+    Just $ Embed (env `PushEnv` inject (Map f' a')) (Done ZeroIdx)
+
+  | Lam (Body (Prj tix p@Prj{}))       <- f
+  , Just (Embed env' (Done v'))        <- unzipD (Lam (Body p)) (Embed env (Done v))
+  = Stats.ruleFired "unzipD"
+  $ let f' = Lam (Body (Prj tix (Var ZeroIdx)))
+        a' = avarIn v'
+    in
+    Just $ Embed (env' `PushEnv` inject (Map f' a')) (Done ZeroIdx)
+
+unzipD _ _
+  = Nothing
 
 
 -- Fuse an index space transformation function that specifies where elements in
