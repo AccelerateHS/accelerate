@@ -333,29 +333,19 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
     -- When does the cost of re-computation outweigh that of memory access? For
     -- the moment only do the substitution on a single use of the bound array
     -- into the use site, but it is likely advantageous to be far more
-    -- aggressive here. SEE: [Sharing vs. Fusion]
+    -- aggressive here.
     --
-    -- As a special case, look for the definition of 'unzip' applied to manifest
-    -- data, which is defined in the prelude as a map projecting out the
-    -- appropriate element.
+    -- SEE: [Sharing vs. Fusion]
     --
     elimOpenAcc :: ElimAcc OpenAcc
-    elimOpenAcc bnd body
-      | Map f a                 <- extract bnd
-      , Avar _                  <- extract a
-      , Lam (Body (Prj _ _))    <- f
-      = Stats.ruleFired "unzipD" True
-
-      | count False ZeroIdx body <= lIMIT
-      = True
-
-      | otherwise
-      = False
+    elimOpenAcc _bnd body
+      | count False ZeroIdx body <= lIMIT = True
+      | otherwise                         = False
       where
         lIMIT = 1
 
         count :: UsesOfAcc OpenAcc
-        count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
+        count no ix (OpenAcc pacc) = usesOfPreAcc no count ix pacc
 
 
 embedPreAcc
@@ -407,13 +397,13 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     --
     Generate sh f       -> generateD (cvtE sh) (cvtF f)
 
-    Map f a             -> fuse  (into  mapD              (cvtF f)) a
-    ZipWith f a b       -> fuse2 (into  zipWithD          (cvtF f)) a b
-    Transform sh p f a  -> fuse  (into3 transformD        (cvtE sh) (cvtF p) (cvtF f)) a
+    Map f a             -> mapD (cvtF f) (embedAcc a)
+    ZipWith f a b       -> fuse2 (into zipWithD (cvtF f)) a b
+    Transform sh p f a  -> transformD (cvtE sh) (cvtF p) (cvtF f) (embedAcc a)
 
-    Backpermute sl p a  -> fuse  (into2 backpermuteD      (cvtE sl) (cvtF p)) a
-    Slice slix a sl     -> fuse  (into  (sliceD slix)     (cvtE sl)) a
-    Replicate slix sh a -> fuse  (into  (replicateD slix) (cvtE sh)) a
+    Backpermute sl p a  -> fuse (into2 backpermuteD      (cvtE sl) (cvtF p)) a
+    Slice slix a sl     -> fuse (into  (sliceD slix)     (cvtE sl)) a
+    Replicate slix sh a -> fuse (into  (replicateD slix) (cvtE sh)) a
     Reshape sl a        -> reshapeD (embedAcc a) (cvtE sl)
 
     -- Consumers
@@ -488,10 +478,6 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     into2 :: (Sink f1, Sink f2)
           => (f1 env' a -> f2 env' b -> c) -> f1 env a -> f2 env b -> Extend acc env env' -> c
     into2 op a b env = op (sink env a) (sink env b)
-
-    into3 :: (Sink f1, Sink f2, Sink f3)
-          => (f1 env' a -> f2 env' b -> f3 env' c -> d) -> f1 env a -> f2 env b -> f3 env c -> Extend acc env env' -> d
-    into3 op a b c env = op (sink env a) (sink env b) (sink env c)
 
     fuse :: Arrays as
          => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
@@ -575,13 +561,12 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | Done{} <- cc = Embed env                                  cc
       | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
-    -- Move additional bindings for producer outside of sequence, so
-    -- that producers may fuse with their arguments, resulting in
-    -- actual sequencing.
+    -- Move additional bindings for producers outside of the sequence, so that
+    -- producers may fuse with their arguments resulting in actual sequencing
     collectD :: PreOpenSeq acc aenv () arrs
              -> Embed acc aenv arrs
-    collectD s | ExtendSeq env s' <- embedSeq embedAcc s
-               = Embed (env `PushEnv` inject (Collect s')) (Done ZeroIdx)
+    collectD (embedSeq embedAcc -> ExtendSeq env s')
+      = Embed (env `PushEnv` inject (Collect s')) (Done ZeroIdx)
 
 
 -- Move additional bindings for producer outside of sequence, so
@@ -886,14 +871,25 @@ generateD sh f
 
 -- Fuse a unary function into a delayed array.
 --
-mapD :: (Kit acc, Elt b)
-     => PreFun     acc aenv (a -> b)
-     -> Cunctation acc aenv (Array sh a)
-     -> Cunctation acc aenv (Array sh b)
-mapD f = Stats.ruleFired "mapD" . go
+-- As a special case, if we are unzipping a manifest array then force the term
+-- to be computed; a backend will be able to execute this in constant time.
+--
+mapD :: (Kit acc, Shape sh, Elt b)
+     => PreFun acc aenv (a -> b)
+     -> Embed  acc aenv (Array sh a)
+     -> Embed  acc aenv (Array sh b)
+mapD f (Embed env cc)
+  | Done v                           <- cc
+  , Lam (Body (Prj _ (Var ZeroIdx))) <- f
+  = Stats.ruleFired "unzipD"
+  $ Embed (env `PushEnv` inject (Map (sink env f) (avarIn v))) (Done ZeroIdx)
+
+  | otherwise
+  = Stats.ruleFired "mapD"
+  $ Embed env (go cc)
   where
-    go (step  -> Just (Step sh ix g v)) = Step sh ix (f `compose` g) v
-    go (yield -> Yield sh g)            = Yield sh (f `compose` g)
+    go (step  -> Just (Step sh ix g v)) = Step sh ix (sink env f `compose` g) v
+    go (yield -> Yield sh g)            = Yield sh (sink env f `compose` g)
 
 
 -- Fuse an index space transformation function that specifies where elements in
@@ -907,23 +903,33 @@ backpermuteD
     -> Cunctation acc aenv (Array sh' e)
 backpermuteD sh' p = Stats.ruleFired "backpermuteD" . go
   where
-    go (step  -> Just (Step _ q f v))   = Step sh' (q `compose` p) f v
-    go (yield -> Yield _ g)             = Yield sh' (g `compose` p)
+    go (step  -> Just (Step _ q f v)) = Step sh' (q `compose` p) f v
+    go (yield -> Yield _ g)           = Yield sh' (g `compose` p)
 
 
 -- Transform as a combined map and backwards permutation
 --
 transformD
-    :: (Kit acc, Shape sh', Elt b)
-    => PreExp     acc aenv sh'
-    -> PreFun     acc aenv (sh' -> sh)
-    -> PreFun     acc aenv (a   -> b)
-    -> Cunctation acc aenv (Array sh  a)
-    -> Cunctation acc aenv (Array sh' b)
+    :: (Kit acc, Shape sh, Shape sh', Elt b)
+    => PreExp acc aenv sh'
+    -> PreFun acc aenv (sh' -> sh)
+    -> PreFun acc aenv (a   -> b)
+    -> Embed  acc aenv (Array sh  a)
+    -> Embed  acc aenv (Array sh' b)
 transformD sh' p f
   = Stats.ruleFired "transformD"
-  . backpermuteD sh' p
+  . fuse (into2 backpermuteD sh' p)
   . mapD f
+  where
+    fuse :: Arrays as
+         => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
+         -> Embed acc aenv as
+         -> Embed acc aenv bs
+    fuse op (Embed env cc) = Embed env (op env cc)
+
+    into2 :: (Sink f1, Sink f2)
+          => (f1 env' a -> f2 env' b -> c) -> f1 env a -> f2 env b -> Extend acc env env' -> c
+    into2 op a b env = op (sink env a) (sink env b)
 
 
 -- Replicate as a backwards permutation
