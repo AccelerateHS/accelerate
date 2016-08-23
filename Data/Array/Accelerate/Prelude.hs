@@ -108,7 +108,7 @@ module Data.Array.Accelerate.Prelude (
 -- avoid clashes with Prelude functions
 --
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), undefined, const, id )
+import Prelude                                                      ( (.), ($), const, id )
 import qualified Prelude                                            as P
 
 -- friends
@@ -756,7 +756,7 @@ scanlSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral 
          -> Acc (Vector a)
          -> Acc (Segments i)
          -> Acc (Vector a)
-scanlSeg f z vec seg = scanl1Seg f vec' seg'
+scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg' )
   where
     -- Segmented exclusive scan is implemented by first injecting the seed
     -- element at the head of each segment, and then performing a segmented
@@ -793,12 +793,13 @@ scanl'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, 
           -> Acc (Vector a)
           -> Acc (Segments i)
           -> Acc (Vector a, Vector a)
-scanl'Seg f z vec seg = result
+scanl'Seg f z vec seg = null vec' ?| ( nothing, result )
   where
     -- Returned the result combined, so that the sub-calculations are shared
     -- should the user require both results.
     --
     result      = lift (body, sums)
+    nothing     = lift (emptyArray, emptyArray)
 
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -883,13 +884,15 @@ scanrSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral 
          -> Acc (Vector a)
          -> Acc (Segments i)
          -> Acc (Vector a)
-scanrSeg f z vec seg = scanr1Seg f vec' seg'
+scanrSeg f z vec seg = null flags ?| ( fill (shape seg) z, scanr1Seg f vec' seg' )
   where
     -- Using technique described for 'scanlSeg', where we intersperse the array
     -- with the seed element at the start of each segment, and then perform an
     -- inclusive segmented scan.
     --
-    inc         = scanl1 (+) (mkHeadFlags seg)
+    flags       = mkHeadFlags seg
+    inc         = scanl1 (+) flags
+
     seg'        = map (+1) seg
     vec'        = permute const
                           (fill (index1 $ size vec + size seg) z)
@@ -905,11 +908,13 @@ scanr'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, 
           -> Acc (Vector a)
           -> Acc (Segments i)
           -> Acc (Vector a, Vector a)
-scanr'Seg f z vec seg = result
+scanr'Seg f z vec seg = null vec' ?| ( nothing, result )
   where
     -- Using technique described for scanl'Seg
     --
     result      = lift (body, sums)
+    nothing     = lift (emptyArray, emptyArray)
+
     vec'        = scanrSeg f z vec seg
 
     -- reduction values
@@ -1384,7 +1389,7 @@ compute = id >-> id
 -- See also: 'ifThenElse'.
 --
 infix 0 ?|
-(?|) :: (Arrays a) => Exp Bool -> (Acc a, Acc a) -> Acc a
+(?|) :: Arrays a => Exp Bool -> (Acc a, Acc a) -> Acc a
 c ?| (t, e) = acond c t e
 
 -- | An infix version of 'cond'. If the predicate evaluates to 'True', the first
@@ -1568,10 +1573,10 @@ length = unindex1 . shape
 -- --------------------------------------
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = use (newArray empty undefined)
+emptyArray = use (fromList empty [])
 
--- | Reduce a sequence by appending all the shapes and all the
--- elements in two seperate vectors.
+-- | Reduce a sequence by appending all the shapes and all the elements in two
+-- separate vectors.
 --
 fromSeq :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix, Vector a)
 fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
