@@ -108,7 +108,7 @@ module Data.Array.Accelerate.Prelude (
 -- avoid clashes with Prelude functions
 --
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), const, id )
+import Prelude                                                      ( (.), ($), const, id, flip )
 import qualified Prelude                                            as P
 
 -- friends
@@ -838,7 +838,16 @@ scanl'Seg f z vec seg = null vec' ?| ( nothing, result )
                               vec'
 
 
--- |Segmented version of 'scanl1'.
+-- | Segmented version of 'scanl1'.
+--
+-- As with 'scanl1', the total number of elements considered, in this case given
+-- by the 'sum' of segment descriptor, must not be zero. The input vector must
+-- contain at least this many elements.
+--
+-- Zero length segments are allowed, and the behaviour is as if those entries
+-- were not present in the segment descriptor; that is:
+--
+-- > scanl1Seg f xs [n,0,0] == scanl1Seg f xs [n]   where n /= 0
 --
 scanl1Seg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
           => (Exp a -> Exp a -> Exp a)
@@ -939,8 +948,9 @@ scanr1Seg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral
 scanr1Seg f vec seg
   = P.snd
   . unzip
-  . scanr1 (segmented f)
+  . scanr1 (flip (segmented f))
   $ zip (mkTailFlags seg) vec
+
 
 -- |Segmented version of 'prescanr'.
 --

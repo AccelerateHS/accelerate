@@ -471,8 +471,8 @@ scanrOp f z (Delayed (Z :. n) _ ain)
 
       let write (Z:.0) = unsafeWriteArrayData aout n (fromElt z)
           write (Z:.i) = do
-            x <- unsafeReadArrayData aout (n-i+1)
-            y <- return . fromElt $  ain  (n-i)
+            x <- return . fromElt $  ain  (n-i)
+            y <- unsafeReadArrayData aout (n-i+1)
             unsafeWriteArrayData aout (n-i) (f' x y)
 
       iter sh' write (>>) (return ())
@@ -494,8 +494,8 @@ scanr1Op f (Delayed sh@(Z :. n) _ ain)
 
       let write (Z:.0) = unsafeWriteArrayData aout (n-1) (fromElt $ ain (n-1))
           write (Z:.i) = do
-            x <- unsafeReadArrayData aout (n-i)
-            y <- return . fromElt $  ain  (n-i-1)
+            x <- return . fromElt $  ain  (n-i-1)
+            y <- unsafeReadArrayData aout (n-i)
             unsafeWriteArrayData aout (n-i-1) (f' x y)
 
       iter1 sh write (>>)
