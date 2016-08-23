@@ -54,12 +54,12 @@ test_prefixsum backend opt = testGroup "prefix sum" $ catMaybes
           , testProperty "scanr'"       (test_scanr' :: Vector e -> Property)
           , testProperty "scanr1"       (test_scanr1 :: Vector e -> Property)
           --
-          , testProperty "scanl1Seg"    (test_scanl1seg :: Vector e -> Property)
-          , testProperty "scanr1Seg"    (test_scanr1seg :: Vector e -> Property)
-          , testProperty "scanlSeg"     (test_scanlseg  :: Vector e -> Property)
-          , testProperty "scanrSeg"     (test_scanrseg  :: Vector e -> Property)
-          , testProperty "scanl'Seg"    (test_scanl'seg :: Vector e -> Property)
-          , testProperty "scanr'Seg"    (test_scanr'seg :: Vector e -> Property)
+          , testProperty "scanl1Seg"    (test_scanl1seg (undefined::Vector e))
+          , testProperty "scanr1Seg"    (test_scanr1seg (undefined::Vector e))
+          , testProperty "scanlSeg"     (test_scanlseg  (undefined::Vector e))
+          , testProperty "scanrSeg"     (test_scanrseg  (undefined::Vector e))
+          , testProperty "scanl'Seg"    (test_scanl'seg (undefined::Vector e))
+          , testProperty "scanr'Seg"    (test_scanr'seg (undefined::Vector e))
           ]
 
     -- left scan
