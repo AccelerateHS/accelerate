@@ -353,7 +353,8 @@ fold1Op
     -> Delayed (Array (sh :. Int) e)
     -> Array sh e
 fold1Op f (Delayed (sh :. n) arr _)
-  = newArray sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
+  = $boundsCheck "fold1" "empty array" (n > 0)
+  $ newArray sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
 
 
 foldSegOp
@@ -386,7 +387,8 @@ fold1SegOp f (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
   $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
                        end   = fromIntegral $ offset ! (Z :. ix+1)
                    in
-                   iter1 (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f
+                   $boundsCheck "fold1Seg" "empty segment" (end > start)
+                   $ iter1 (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f
   where
     offset      = scanlOp (+) 0 seg
 
@@ -397,7 +399,8 @@ scanl1Op
     -> Delayed (Vector e)
     -> Vector e
 scanl1Op f (Delayed sh@(Z :. n) _ ain)
-  = adata `seq` Array (fromElt sh) adata
+  = $boundsCheck "scanl1" "empty array" (n > 0)
+  $ adata `seq` Array (fromElt sh) adata
   where
     f'          = sinkFromElt2 f
     --
@@ -485,7 +488,8 @@ scanr1Op
     -> Delayed (Vector e)
     -> Vector e
 scanr1Op f (Delayed sh@(Z :. n) _ ain)
-  = adata `seq` Array (fromElt sh) adata
+  = $boundsCheck "scanr1" "empty array" (n > 0)
+  $ adata `seq` Array (fromElt sh) adata
   where
     f'          = sinkFromElt2 f
     --
@@ -1209,7 +1213,9 @@ w !# i
   | j <- i - wpos w
   , j >= 0
   = cdrop j (chunk w)
-  | otherwise = error $ "Window indexed before position. wpos = " ++ show (wpos w) ++ " i = " ++ show i
+  --
+  | otherwise
+  = error $ "Window indexed before position. wpos = " ++ show (wpos w) ++ " i = " ++ show i
 
 -- Move the give window by supplying the next chunk.
 --
@@ -1550,3 +1556,4 @@ dropOp i v   -- TODO
 
 offsetsOp :: Shape sh => Segments sh -> (Vector Int, Scalar Int)
 offsetsOp segs = scanl'Op (+) 0 $ delayArray (mapOp size (delayArray segs))
+
