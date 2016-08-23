@@ -793,13 +793,14 @@ scanl'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, 
           -> Acc (Vector a)
           -> Acc (Segments i)
           -> Acc (Vector a, Vector a)
-scanl'Seg f z vec seg = null vec' ?| ( nothing, result )
+scanl'Seg f z vec seg = result
   where
     -- Returned the result combined, so that the sub-calculations are shared
     -- should the user require both results.
     --
-    result      = lift (body, sums)
-    nothing     = lift (emptyArray, emptyArray)
+    result      = lift ( null vec  ?| (emptyArray, body)
+                       , null vec' ?| (emptyArray, sums)
+                       )
 
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -917,12 +918,13 @@ scanr'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, 
           -> Acc (Vector a)
           -> Acc (Segments i)
           -> Acc (Vector a, Vector a)
-scanr'Seg f z vec seg = null vec' ?| ( nothing, result )
+scanr'Seg f z vec seg = result
   where
     -- Using technique described for scanl'Seg
     --
-    result      = lift (body, sums)
-    nothing     = lift (emptyArray, emptyArray)
+    result      = lift ( null vec  ?| (emptyArray, body)
+                       , null vec' ?| (emptyArray, sums)
+                       )
 
     vec'        = scanrSeg f z vec seg
 
