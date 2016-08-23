@@ -6,7 +6,7 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Prelude.Sequencing (
+module Test.Prelude.Sequences (
 
   test_sequences
 
@@ -21,7 +21,6 @@ import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck                                          hiding ( generate, collect )
 
 import Config
-import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate.Examples.Internal
 import Data.Array.Accelerate                                    as A
@@ -50,8 +49,8 @@ iota' n = generate (index1 (the n)) unindex1
 --   . fromSeq
 --   $ toSeq Divide xs
 
-idSequenceRef :: (Shape sh, Elt a) => (Array (sh :. Int) a) -> (Array (sh :. Int) a)
-idSequenceRef = id
+-- idSequenceRef :: (Shape sh, Elt a) => (Array (sh :. Int) a) -> (Array (sh :. Int) a)
+-- idSequenceRef = id
 
 sumMaxSequence :: (A.Num a, A.Ord a, A.Bounded a) => Acc (Vector a) -> Acc (Scalar a, Scalar a)
 sumMaxSequence xs = collect $

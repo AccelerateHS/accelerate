@@ -4,7 +4,7 @@ module Test.Foreign.CUDA
   where
 
 import Config
-import Test.Prelude.Mapping
+import QuickCheck.Arbitrary.Array                               ()
 
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
@@ -33,4 +33,11 @@ test_cuda backend _conf = testGroup "CUDA"
                        ~?= mapRef (\(x,y,z) -> x * y + z) xs
           where
             fmaf v = let (x,y,z) = unlift v in x * y + z
+
+
+mapRef :: (Shape sh, Elt b) => (a -> b) -> Array sh a -> Array sh b
+mapRef f xs
+  = fromList (arrayShape xs)
+  $ P.map f
+  $ toList xs
 
