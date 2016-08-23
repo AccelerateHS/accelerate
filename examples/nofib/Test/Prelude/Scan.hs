@@ -4,9 +4,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Prelude.PrefixSum (
+module Test.Prelude.Scan (
 
-  test_prefixsum,
+  test_scan,
 
 ) where
 
@@ -26,11 +26,11 @@ import Data.Array.Accelerate.Examples.Internal                  as A
 
 
 --
--- prefix sum ------------------------------------------------------------------
+-- scan ------------------------------------------------------------------------
 --
 
-test_prefixsum :: Backend -> Config -> Test
-test_prefixsum backend opt = testGroup "prefix sum" $ catMaybes
+test_scan :: Backend -> Config -> Test
+test_scan backend opt = testGroup "scan" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)

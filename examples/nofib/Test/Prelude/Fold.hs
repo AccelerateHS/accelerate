@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Prelude.Reduction (
+module Test.Prelude.Fold (
 
   test_fold,
   test_foldAll,

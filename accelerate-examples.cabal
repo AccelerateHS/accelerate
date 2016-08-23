@@ -234,14 +234,16 @@ Executable accelerate-nofib
                         Test.Issues.Issue185
                         Test.Issues.Issue187
                         Test.Prelude
+                        Test.Prelude.Backpermute
                         Test.Prelude.Filter
-                        Test.Prelude.IndexSpace
-                        Test.Prelude.Mapping
-                        Test.Prelude.PrefixSum
-                        Test.Prelude.Reduction
+                        Test.Prelude.Fold
+                        Test.Prelude.Map
+                        Test.Prelude.Permute
                         Test.Prelude.Replicate
+                        Test.Prelude.Scan
+                        Test.Prelude.Sequences
                         Test.Prelude.Stencil
-                        Test.Prelude.Sequencing
+                        Test.Prelude.ZipWith
                         Test.Sharing
                         Test.Spectral
                         Test.Spectral.BlackScholes
