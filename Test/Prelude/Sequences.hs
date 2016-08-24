@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
@@ -190,8 +191,23 @@ chunking1Ref :: Int -> Scalar Int
 chunking1Ref n = fromList Z [x]
   where x = P.sum [ P.sum [0..i-1] - P.product [0..n-i-1] | i <- [0..n-1] ]
 
+
 test_sequences :: Backend -> Config -> Test
-test_sequences backend opt = testGroup "sequences"
+test_sequences backend opt
+  = testGroup "sequences"
+  $ if backend `elem` supportedBackends
+      then test_sequences' backend opt
+      else []
+  where
+    supportedBackends =
+      [ Interpreter
+#ifdef ACCELERATE_CUDA_BACKEND
+      , CUDA
+#endif
+      ]
+
+test_sequences' :: Backend -> Config -> [Test]
+test_sequences' backend opt =
   [ testGroup "id" $ catMaybes
     [
     --   testIdSequence configInt8   (undefined :: Int8)
