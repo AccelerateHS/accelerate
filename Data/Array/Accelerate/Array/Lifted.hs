@@ -123,6 +123,7 @@ arraysP :: Proxy Arrays
 arraysP = Proxy
 
 data VectorisedForeign a b = forall f.  Foreign f => VectorisedForeign (f (Nested a) (Nested b))
+  deriving Typeable
 
 instance Foreign VectorisedForeign where
   strForeign (VectorisedForeign f) = strForeign f
