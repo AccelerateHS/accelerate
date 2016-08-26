@@ -2830,11 +2830,11 @@ vectoriseOpenSeq strength ctx seq =
     cvtC :: NaturalConsumer OpenAcc aenv t -> Maybe (OpenChunkedSeq aenv' t)
     cvtC c =
       case c of
-        FoldBatch f f' a x -> foldBatch <$> pure (cvtAF f) <*> cvtAF' f' <*> cvtA' a <*> pure (cvtA x)
+        FoldBatch f f' a x -> foldBatch <$> pure (cvtAF'' f) <*> cvtAF' f' <*> cvtA' a <*> pure (cvtA x)
         Stuple t           -> Consumer . Stuple <$> cvtCT t
 
     foldBatch :: forall a b s. (Arrays a, Arrays b, Arrays s)
-              => OpenAfun aenv' (Nested s -> Nested a -> Nested b)
+              => OpenAfun aenv' (s -> Nested a -> Nested b)
               -> OpenAfun aenv' (s -> Nested b -> s)
               -> OpenAcc  aenv' s
               -> OpenAfun aenv' (Scalar Int -> Nested a)
@@ -2844,7 +2844,7 @@ vectoriseOpenSeq strength ctx seq =
         f'' = Alam . Alam . Abody
             $ repack
             $^ Alet (apply (weakenA2 x) $^ Unit (sndE (the avar1)))
-            $ weakenA3 f' `partApply` avar1 `apply` (weakenA3 f `partApply` replicateC (unit (sndE (the avar2))) avar1 `apply` avar0)
+            $ weakenA3 f' `partApply` avar1 `apply` (weakenA3 f `partApply` avar1 `apply` avar0)
         repack a = OpenAcc $ Alet a
                  $ atup avar0 avar0
 
@@ -2880,6 +2880,13 @@ vectoriseOpenSeq strength ctx seq =
       case rebuildToLift ctx t of
         Nothing -> $internalError "vectoriseOpenSeq" "Sequence invariant array function depends on sequence elements"
         Just t' -> Just t'
+
+    cvtAF'' :: forall a b c. OpenAfun aenv (a -> b -> c) -> OpenAfun aenv' (a -> Nested b -> Nested c)
+    cvtAF'' (Alam (Alam (Abody f)))
+      = case vectoriseOpenAcc Conservative (PushLAccC . PushAccC $ ctx) (liftedSize avar0) f of
+          AvoidedAcc a' | Size b s <- liftedSize avar0
+                        -> Alam . Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
+          LiftedAcc  a' -> Alam . Alam . Abody $ a'
 
     -- untup :: OpenAfun aenv t -> OpenAfun aenv t
     -- untup = untupleAfun BaseReducedMap
