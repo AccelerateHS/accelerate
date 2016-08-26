@@ -180,6 +180,7 @@ module Data.Array.Accelerate (
   -- ** Foreign
   L.foreignAcc, L.foreignAcc2, L.foreignAcc3,
   L.foreignExp, L.foreignExp2, L.foreignExp3,
+  L.VectorisedForeign(..),
 
   -- ---------------------------------------------------------------------------
 

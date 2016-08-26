@@ -82,6 +82,7 @@ module Data.Array.Accelerate.Language (
   -- * Foreign functions
   foreignAcc, foreignAcc2, foreignAcc3,
   foreignExp, foreignExp2, foreignExp3,
+  VectorisedForeign(..),
 
   -- * Pipelining
   (>->),
@@ -132,7 +133,7 @@ import Text.Printf
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union, toSlice)
-import Data.Array.Accelerate.Array.Lifted               ( Nested )
+import Data.Array.Accelerate.Array.Lifted               ( Nested, VectorisedForeign(..) )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
