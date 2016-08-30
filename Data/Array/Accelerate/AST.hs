@@ -245,11 +245,11 @@ data PreOpenAcc acc aenv a where
   -- Apply a backend-specific foreign function to an array, with a pure
   -- Accelerate version for use with other backends. The functions must be
   -- closed.
-  Aforeign    :: (Arrays arrs, Arrays a, Foreign f)
-              => f arrs a                                       -- The foreign function for a given backend
-              -> PreAfun      acc      (arrs -> a)              -- A pure accelerate version
-              -> acc              aenv arrs                     -- Arguments to the function
-              -> PreOpenAcc   acc aenv a
+  Aforeign    :: (Arrays as, Arrays bs, Foreign asm)
+              => asm                   (as -> bs)               -- The foreign function for a given backend
+              -> PreAfun      acc      (as -> bs)               -- Fallback implementation(s)
+              -> acc              aenv as                       -- Arguments to the function
+              -> PreOpenAcc   acc aenv bs
 
   -- If-then-else for array-level computations
   Acond       :: Arrays arrs
@@ -837,8 +837,8 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv t
 
   -- Apply a backend-specific foreign function
-  Foreign       :: (Foreign f, Elt x, Elt y)
-                => f x y
+  Foreign       :: (Foreign asm, Elt x, Elt y)
+                => asm           (x -> y)
                 -> PreFun acc () (x -> y)
                 -> PreOpenExp acc env aenv x
                 -> PreOpenExp acc env aenv y

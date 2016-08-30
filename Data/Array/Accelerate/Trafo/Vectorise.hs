@@ -598,11 +598,11 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                    -> liftedAcc $ inject $ Apply lft (replicateA a1' size)
                     a1'            -> liftedAcc $ inject $ Apply lft (lifted a1')
 
-    foreignL :: (Arrays arrs, Arrays t, Foreign f)
-             => f arrs t
-             -> PreAfun     acc            (arrs -> t)
-             -> acc             aenv  arrs
-             -> LiftedAcc   acc aenv' t
+    foreignL :: (Arrays as, Arrays bs, Foreign asm)
+             => asm                   (as -> bs)
+             -> PreAfun     acc       (as -> bs)
+             -> acc             aenv  as
+             -> LiftedAcc   acc aenv' bs
     foreignL ff afun (cvtA -> AvoidedAcc as)
       = AvoidedAcc $ inject $ Aforeign ff afun as
     foreignL _  _    _

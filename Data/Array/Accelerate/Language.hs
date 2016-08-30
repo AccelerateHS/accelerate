@@ -76,8 +76,8 @@ module Data.Array.Accelerate.Language (
   Stencil3x5x5, Stencil5x5x5,
 
   -- * Foreign functions
-  foreignAcc, foreignAcc2, foreignAcc3,
-  foreignExp, foreignExp2, foreignExp3,
+  foreignAcc,
+  foreignExp,
 
   -- * Pipelining
   (>->),
@@ -557,65 +557,44 @@ collect = Acc . Collect
 -- Foreign function calling
 -- ------------------------
 
--- | Call a foreign function. The form the function takes is dependent on the backend being used.
--- The arguments are passed as either a single array or as a tuple of arrays. In addition a pure
--- Accelerate version of the function needs to be provided to support backends other than the one
--- being targeted.
-foreignAcc :: (Arrays acc, Arrays res, Foreign ff)
-           => ff acc res
-           -> (Acc acc -> Acc res)
-           -> Acc acc
-           -> Acc res
+-- | Call a foreign array function.
+--
+-- The form the first argument takes is dependent on the backend being targeted.
+-- Note that the foreign function only has access to the input array(s) passed
+-- in as its argument.
+--
+-- In case the operation is being executed on a backend which does not support
+-- this foreign implementation, the fallback implementation is used instead,
+-- which itself could be a foreign implementation for a (presumably) different
+-- backend, or an implementation of pure Accelerate. In this way, multiple
+-- foreign implementations can be supplied, and will be tested for suitability
+-- against the target backend in sequence.
+--
+foreignAcc
+    :: (Arrays as, Arrays bs, Foreign asm)
+    => asm (as -> bs)
+    -> (Acc as -> Acc bs)
+    -> Acc as
+    -> Acc bs
 foreignAcc = Acc $$$ Aforeign
 
--- | Call a foreign function with foreign implementations for two different backends.
-foreignAcc2 :: (Arrays acc, Arrays res, Foreign ff1, Foreign ff2)
-            => ff1 acc res
-            -> ff2 acc res
-            -> (Acc acc -> Acc res)
-            -> Acc acc
-            -> Acc res
-foreignAcc2 ff1 = Acc $$$ Aforeign ff1 $$ Acc $$$ Aforeign
-
--- | Call a foreign function with foreign implementations for three different backends.
-foreignAcc3 :: (Arrays acc, Arrays res, Foreign ff1, Foreign ff2, Foreign ff3)
-            => ff1 acc res
-            -> ff2 acc res
-            -> ff3 acc res
-            -> (Acc acc -> Acc res)
-            -> Acc acc
-            -> Acc res
-foreignAcc3 ff1 ff2 = Acc $$$ Aforeign ff1 $$ Acc $$$ Aforeign ff2 $$ Acc $$$ Aforeign
-
--- | Call a foreign expression function. The form the function takes is dependent on the
--- backend being used. The arguments are passed as either a single scalar element or as a
--- tuple of elements. In addition a pure Accelerate version of the function needs to be
--- provided to support backends other than the one being targeted.
-foreignExp :: (Elt e, Elt res, Foreign ff)
-           => ff e res
-           -> (Exp e -> Exp res)
-           -> Exp e
-           -> Exp res
+-- | Call a foreign scalar expression.
+--
+-- The form of the first argument is dependent on the backend being targeted.
+-- Note that the foreign function only has access to the input element(s) passed
+-- in as its first argument.
+--
+-- As with 'foreignAcc', the fallback implementation itself may be a (sequence
+-- of) foreign implementation(s) for a different backend(s), or implemented
+-- purely in Accelerate.
+--
+foreignExp
+    :: (Elt x, Elt y, Foreign asm)
+    => asm (x -> y)
+    -> (Exp x -> Exp y)
+    -> Exp x
+    -> Exp y
 foreignExp = Exp $$$ Foreign
-
--- | Call a foreign function with foreign implementations for two different backends.
-foreignExp2 :: (Elt e, Elt res, Foreign ff1, Foreign ff2)
-            => ff1 e res
-            -> ff2 e res
-            -> (Exp e -> Exp res)
-            -> Exp e
-            -> Exp res
-foreignExp2 ff1 = Exp $$$ Foreign ff1 $$ Exp $$$ Foreign
-
--- | Call a foreign function with foreign implementations for three different backends.
-foreignExp3 :: (Elt e, Elt res, Foreign ff1, Foreign ff2, Foreign ff3)
-            => ff1 e res
-            -> ff2 e res
-            -> ff3 e res
-            -> (Exp e -> Exp res)
-            -> Exp e
-            -> Exp res
-foreignExp3 ff1 ff2 = Exp $$$ Foreign ff1 $$ Exp $$$ Foreign ff2 $$ Exp $$$ Foreign
 
 
 -- Composition of array computations

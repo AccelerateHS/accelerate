@@ -108,11 +108,11 @@ data PreAcc acc seq exp as where
                 -> acc as
                 -> PreAcc acc seq exp cs
 
-  Aforeign      :: (Arrays arrs, Arrays a, Foreign f)
-                => f arrs a
-                -> (Acc arrs -> Acc a)
-                -> acc arrs
-                -> PreAcc acc seq exp a
+  Aforeign      :: (Arrays as, Arrays bs, Foreign asm)
+                => asm (as -> bs)
+                -> (Acc as -> Acc bs)
+                -> acc as
+                -> PreAcc acc seq exp bs
 
   Acond         :: Arrays as
                 => exp Bool
@@ -487,8 +487,8 @@ data PreExp acc seq exp t where
                 -> exp sh
                 -> PreExp acc seq exp sh
 
-  Foreign       :: (Elt x, Elt y, Foreign f)
-                => f x y
+  Foreign       :: (Elt x, Elt y, Foreign asm)
+                => asm (x -> y)
                 -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
                 -> exp x
                 -> PreExp acc seq exp y
