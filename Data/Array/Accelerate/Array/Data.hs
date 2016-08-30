@@ -1,9 +1,11 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
@@ -52,7 +54,7 @@ import Control.Applicative
 import Control.Monad
 import Data.Bits
 import Data.IORef
-import Data.Typeable                            ( Typeable )
+import Data.Typeable                                                ( Typeable )
 import Foreign.C.Types
 import Foreign.ForeignPtr
 import Foreign.Ptr
@@ -61,6 +63,10 @@ import Language.Haskell.TH
 import System.IO.Unsafe
 import Text.Printf
 import Prelude
+
+import GHC.Base                                                     ( Int(..), IO(..), unsafeCoerce#, newAlignedPinnedByteArray#, byteArrayContents# )
+import GHC.ForeignPtr                                               ( ForeignPtr(..), ForeignPtrContents(..) )
+
 
 -- Determine the underlying type of a Haskell CLong or CULong.
 --
@@ -785,5 +791,18 @@ registerForeignPtrAllocator new = do
 
 {-# NOINLINE __mallocForeignPtrBytes #-}
 __mallocForeignPtrBytes :: IORef (Int -> IO (ForeignPtr Word8))
-__mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocForeignPtrBytes
+__mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocPlainForeignPtrBytesAligned
+
+-- | Allocate the given number of bytes with 16-byte alignment. This is
+-- essential for SIMD instructions.
+--
+-- Additionally, we return a plain ForeignPtr, which unlike a regular ForeignPtr
+-- created with 'mallocForeignPtr' carries no finalisers. It is an error to try
+-- to add a finaliser to the plain ForeignPtr. For our purposes this is fine,
+-- since in Accelerate finalisers are handled using Lifetime
+--
+mallocPlainForeignPtrBytesAligned :: Int -> IO (ForeignPtr a)
+mallocPlainForeignPtrBytesAligned (I# size) = IO $ \s ->
+  case newAlignedPinnedByteArray# size 16# s of
+    (# s', mbarr# #) -> (# s', ForeignPtr (byteArrayContents# (unsafeCoerce# mbarr#)) (PlainPtr mbarr#) #)
 
