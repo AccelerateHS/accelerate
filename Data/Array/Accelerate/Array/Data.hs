@@ -41,6 +41,7 @@ module Data.Array.Accelerate.Array.Data (
 
 -- friends
 import Data.Array.Accelerate.Array.Unique
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Debug.Flags
@@ -762,12 +763,13 @@ unsafeWriteArray ua i e =
 --
 {-# INLINE newArrayData' #-}
 newArrayData' :: forall e. Storable e => Int -> IO (UniqueArray e)
-newArrayData' size =
-  newUniqueArray <=< unsafeInterleaveIO $ do
-    new <- readIORef __mallocForeignPtrBytes
-    ptr <- new (size * sizeOf (undefined :: e))
-    traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" size (show ptr)
-    return (castForeignPtr ptr)
+newArrayData' size
+  = $internalCheck "newArrayData" "size must be >= 0" (size >= 0)
+  $ newUniqueArray <=< unsafeInterleaveIO $ do
+      new <- readIORef __mallocForeignPtrBytes
+      ptr <- new (size * sizeOf (undefined :: e))
+      traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" size (show ptr)
+      return (castForeignPtr ptr)
 
 -- | Register the given function as the callback to use to allocate new array
 -- data on the host containing the specified number of bytes. The returned array
