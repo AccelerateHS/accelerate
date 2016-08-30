@@ -176,8 +176,8 @@ module Data.Array.Accelerate (
   Stencil3x5x5, Stencil5x5x5,
 
   -- ** Foreign
-  foreignAcc, foreignAcc2, foreignAcc3,
-  foreignExp, foreignExp2, foreignExp3,
+  foreignAcc,
+  foreignExp,
 
   -- ---------------------------------------------------------------------------
   -- * The /Accelerate/ Expression Language

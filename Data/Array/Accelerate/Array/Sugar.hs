@@ -563,11 +563,11 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 -- By default it has no instances. If a backend wishes to have an FFI it must
 -- provide an instance.
 --
-class Typeable f => Foreign (f :: * -> * -> *) where
+class Typeable asm => Foreign asm where
 
   -- Backends should be able to produce a string representation of the foreign
   -- function for pretty printing, typically the name of the function.
-  strForeign :: f args results -> String
+  strForeign :: asm args -> String
 
 
 -- Surface arrays
