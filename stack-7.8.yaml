@@ -107,6 +107,10 @@ extra-deps:
 flags:
   llvm-general:
     shared-llvm: true
+  accelerate-fft:
+    cuda:     true
+    llvm-cpu: false
+    llvm-gpu: true
 
 # Extra package databases containing global packages
 extra-package-dbs: []

@@ -39,11 +39,11 @@ smoothlife conf opts aa
   where
     -- A simulation step
     --
-    aaf         = fft2D' Forward size size (complex aa)
+    aaf         = fft2D' Forward sh (complex aa)
     nf          = A.zipWith (*) aaf (use krf')
     mf          = A.zipWith (*) aaf (use kdf')
-    n           = A.map (\x -> real x / kflr'') (fft2D' Inverse size size nf)
-    m           = A.map (\x -> real x / kfld'') (fft2D' Inverse size size mf)
+    n           = A.map (\x -> real x / kflr'') (fft2D' Inverse sh nf)
+    m           = A.map (\x -> real x / kfld'') (fft2D' Inverse sh mf)
     aa'         = snm conf sn sm b1 b2 d1 d2 n m
     aa''        = clamp $ A.zipWith timestepMode aa' aa
 
@@ -59,17 +59,17 @@ smoothlife conf opts aa
     timestepMode f g = timestepModes f g P.!! get configTimestepMode conf
 
     size        = get configWindowSize conf
-    sh          = constant (Z:.size:.size)
+    sh          = Z:.size:.size
 
     -- initial state
     --
     kflr        = A.sum kr
     kfld        = A.sum kd
-    krf         = fft2D' Forward size size (shift2D (complex kr))
-    kdf         = fft2D' Forward size size (shift2D (complex kd))
+    krf         = fft2D' Forward sh (shift2D (complex kr))
+    kdf         = fft2D' Forward sh (shift2D (complex kd))
 
-    kd          = A.generate sh (\ix -> 1 - linear (radius ix) ri b)
-    kr          = A.generate sh (\ix -> let r = radius ix
+    kd          = A.generate (constant sh) (\ix -> 1 - linear (radius ix) ri b)
+    kr          = A.generate (constant sh) (\ix -> let r = radius ix
                                         in  linear r ri b * (1 - linear r ra b))
 
     kflr''      = constant (kflr' `A.indexArray` Z)
@@ -168,3 +168,4 @@ getSigmoidFunction f x a ea
       = x' A.<* a'-ea'/2.0 ? ( 0.0
       , x' A.>* a'+ea'/2.0 ? ( 1.0
       , f' x' a' ea' ))
+

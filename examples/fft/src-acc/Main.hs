@@ -30,7 +30,6 @@ main
 
         -- Read in the image file
         img   <- either (error . show) id `fmap` A.readImageFromBMP fileIn
-        let Z :. height :. width = A.arrayShape img
 
         -- Set up the operations
         let (file,bmp)  = splitExtension fileOut
@@ -42,18 +41,20 @@ main
             clip        = get configClip conf
             backend     = get optBackend opts
 
+            sh          = A.arrayShape img
+
             -- Write out the images to file
             --
-            highpass     = run backend $ highpassFFT width height cutoff (use img)
-            (mag, phase) = run backend $ imageFFT    width height clip   (use img)
+            highpass     = run backend $ highpassFFT sh cutoff (use img)
+            (mag, phase) = run backend $ imageFFT    sh clip   (use img)
 
         writeImageToBMP fileHP    highpass
         writeImageToBMP fileMag   mag
         writeImageToBMP filePhase phase
 
         runBenchmarks opts (P.drop 2 rest)
-          [ bench "highpass" $ whnf (run1 backend (highpassFFT width height cutoff)) img
-          , bench "fft"      $ whnf (run1 backend (imageFFT    width height clip))   img
+          [ bench "highpass" $ whnf (run1 backend (highpassFFT sh cutoff)) img
+          , bench "fft"      $ whnf (run1 backend (imageFFT    sh clip))   img
           ]
 
 

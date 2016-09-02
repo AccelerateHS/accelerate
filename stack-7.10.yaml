@@ -90,14 +90,14 @@ flags:
   llvm-general:
     shared-llvm: true
   accelerate:
-    debug: true
+    debug: false
     ekg:   true
   accelerate-cuda:
-    debug: true
+    debug: false
   accelerate-llvm-native:
-    debug: true
+    debug: false
   accelerate-llvm-ptx:
-    debug: true
+    debug: false
     nvvm:  false
   accelerate-fft:
     cuda:     true
@@ -107,23 +107,23 @@ flags:
     cuda:       true
     llvm-cpu:   true
     llvm-gpu:   true
-    gui:        false
-    ekg:        false
+    gui:        true
+    ekg:        true
     codespeed:  false
     nofib:      true
-    smvm:       false
-    crystal:    false
-    tunnel:     false
-    canny:      false
-    mandelbrot: false
-    fluid:      false
-    nbody:      false
-    smoothlife: false
-    hashcat:    false
-    fft:        false
-    pagerank:   false
-    ray:        false
-    kmeans:     false
+    smvm:       true
+    crystal:    true
+    tunnel:     true
+    canny:      true
+    mandelbrot: true
+    fluid:      true
+    nbody:      true
+    smoothlife: true
+    hashcat:    true
+    fft:        true
+    pagerank:   true
+    ray:        true
+    kmeans:     true
 
 # Extra package databases containing global packages
 extra-package-dbs: []

@@ -11,8 +11,8 @@ import Data.Array.Accelerate.Math.FFT                   as A
 import Data.Array.Accelerate.Math.DFT.Centre            as A
 
 
-imageFFT :: Int -> Int -> Int -> Acc (Array DIM2 RGBA32) -> Acc (Array DIM2 RGBA32, Array DIM2 RGBA32)
-imageFFT width height cutoff img = lift (arrMag, arrPhase)
+imageFFT :: DIM2 -> Int -> Acc (Array DIM2 RGBA32) -> Acc (Array DIM2 RGBA32, Array DIM2 RGBA32)
+imageFFT sh cutoff img = lift (arrMag, arrPhase)
   where
     -- Load in the image luminance
     arrComplex :: Acc (Array DIM2 (Complex Float))
@@ -24,7 +24,7 @@ imageFFT width height cutoff img = lift (arrMag, arrPhase)
     arrCentered = centre2D arrComplex
 
     -- Do the transform
-    arrFreq     = fft2D' Forward width height arrCentered
+    arrFreq     = fft2D' Forward sh arrCentered
 
     -- Clip the magnitude of the transformed array
     clipMag     = the (unit (constant (P.fromIntegral cutoff)))

@@ -93,6 +93,13 @@ extra-deps:
 flags:
   llvm-general:
     shared-llvm: true
+  accelerate:
+    debug: false
+    ekg:   true
+  accelerate-fft:
+    cuda:     true
+    llvm-cpu: false
+    llvm-gpu: false
   accelerate-fft:
     cuda:     true
     llvm-cpu: false
@@ -102,7 +109,7 @@ flags:
     llvm-cpu:   false
     llvm-gpu:   false
     gui:        true
-    ekg:        false
+    ekg:        true
     codespeed:  false
     nofib:      true
     smvm:       true
