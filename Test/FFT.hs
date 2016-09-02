@@ -120,16 +120,14 @@ test_fft backend opt = testGroup "fft" $ catMaybes
             ]
             where
               test_fft_ifft (PowerOf2Array xs) =
-                arraySize (arrayShape xs) > 0 ==>
-                  let Z :. n = arrayShape xs
-                  in
-                  run1 backend (fft1D' Inverse n . fft1D' Forward n) xs ~?= xs
+                let sh = arrayShape xs
+                in  arraySize sh > 0 ==>
+                      run backend (fft1D' Inverse sh . fft1D' Forward sh $ use xs) ~?= xs
 
               test_fft_dft (PowerOf2Array xs) =
-                arraySize (arrayShape xs) > 0 ==>
-                  let Z :. n = arrayShape xs
-                  in
-                  run1 backend (fft1D' Forward n) xs ~?= run1 backend dft xs
+                let sh = (arrayShape xs)
+                in  arraySize sh > 0 ==>
+                      run backend (fft1D' Forward sh (use xs)) ~?= run1 backend dft xs
 
         testDIM2 :: Test
         testDIM2 =
@@ -139,16 +137,15 @@ test_fft backend opt = testGroup "fft" $ catMaybes
             ]
             where
               test_trans (PowerOf2Array xs) =
-                arraySize (arrayShape xs) > 0 ==>
-                  let Z :. h :. w = arrayShape xs
-                  in     run1 backend (A.transpose . fft2D' Forward w h) xs
-                     ~?= run1 backend (fft2D' Forward h w . A.transpose) xs
+                let sh = arrayShape xs
+                in  arraySize sh > 0 ==>
+                      run backend (A.transpose . fft2D' Forward sh $ use xs)
+                  ~?= run backend (fft2D' Forward sh . A.transpose $ use xs)
 
               test_fft_ifft (PowerOf2Array xs) =
-                arraySize (arrayShape xs) > 0 ==>
-                  let Z :. h :. w = arrayShape xs
-                  in
-                  run1 backend (fft2D' Inverse w h . fft2D' Forward w h) xs ~?= xs
+                let sh = arrayShape xs
+                in  arraySize (arrayShape xs) > 0 ==>
+                      run backend (fft2D' Inverse sh . fft2D' Forward sh $ use xs) ~?= xs
 
         testDIM3 :: Test
         testDIM3 =
@@ -157,10 +154,9 @@ test_fft backend opt = testGroup "fft" $ catMaybes
             ]
             where
               test_fft_ifft (PowerOf2Array xs) =
-                arraySize (arrayShape xs) > 0 ==>
-                  let Z :. d :. h :. w = arrayShape xs
-                  in
-                  run1 backend (fft3D' Inverse w h d . fft3D' Forward w h d) xs ~?= xs
+                let sh = arrayShape xs
+                in  arraySize (arrayShape xs) > 0 ==>
+                      run backend (fft3D' Inverse sh . fft3D' Forward sh $ use xs) ~?= xs
 
 
     -- test_dft_fft :: (Similar a, P.RealFloat a, A.RealFloat a, A.IsFloating a, A.FromIntegral Int a) => PowerOf2Array (Complex a) -> Property
