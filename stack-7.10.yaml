@@ -32,7 +32,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: a2a5b2d8a6eff0107bed7abdf3f31d287a8d8dde
+    commit: 47cc922e39eae49ef7f41dcaf4f64de01d3dd16d
   extra-dep: true
 
 - location:
