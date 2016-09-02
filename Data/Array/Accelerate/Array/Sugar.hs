@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
@@ -10,6 +11,10 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+#if __GLASGOW_HASKELL__ <= 708
+{-# LANGUAGE OverlappingInstances  #-}
+{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
+#endif
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
@@ -1211,7 +1216,11 @@ instance Show (Array DIM2 e) where
           width = maximum . map length
           pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
 
-instance Show (Array (sh :. a :. b :. c) e) where
+-- Use an OVERLAPPABLE instance because GHC can't determine that with the above
+-- specialisations, a DIM3+ instance covers all possibilities. This is
+-- problematic for operations which want a 'Show (Array sh e)' constraint.
+--
+instance {-# OVERLAPPABLE #-} Show (Array sh e) where
   show arr@Array{}
     = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
 
