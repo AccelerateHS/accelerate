@@ -58,8 +58,9 @@ module Data.Array.Accelerate.Array.Sugar (
 
 -- standard library
 import Control.DeepSeq
-import Data.Typeable
 import Data.Array.IArray                                        ( IArray )
+import Data.List                                                ( intercalate, transpose )
+import Data.Typeable
 import qualified Data.Array.IArray                              as IArray
 
 import GHC.Exts                                                 ( IsList )
@@ -1168,26 +1169,19 @@ toList (Array sh adata) = go 0
     go !i | i >= n      = []
           | otherwise   = toElt (adata `unsafeIndexArrayData` i) : go (i+1)
 
--- Convert an array to a string
---
-instance Show (Array sh e) where
-  show arr@Array{}
-    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
-
 instance Elt e => IsList (Vector e) where
   type Item (Vector e) = e
   toList         = toList
   fromListN n xs = fromList (Z:.n) xs
   fromList xs    = GHC.fromListN (length xs) xs
 
-{--
--- Specialised Show instances for dimensions zero, one, and two. Requires
--- overlapping instances.
+-- Convert an array to a string, with specialised instances for dimensions zero,
+-- one, and two.
 --
 -- TODO:
---   * Formatting of the matrix should be better, such as aligning the columns?
---   * Make matrix formatting optional? It is more difficult to copy/paste the
+--   * Make special formatting optional? It is more difficult to copy/paste the
 --     result, for example.
+--   * The AST pretty printer does not use these instances
 --
 instance Show (Scalar e) where
   show arr@Array{}
@@ -1199,16 +1193,27 @@ instance Show (Vector e) where
 
 instance Show (Array DIM2 e) where
   show arr@Array{}
-    = "Array (" ++ showShape (shape arr) ++ ") \n " ++ showMat (toMatrix (toList arr))
+    = "Matrix (" ++ showShape (shape arr) ++ ") \n  " ++ showMat (toMatrix (toList arr))
     where
-      showRow xs        = intercalate "," (map show xs)
-      showMat mat       = "[" ++ intercalate "\n ," (map showRow mat) ++ "]"
-
       Z :. _ :. cols    = shape arr
       toMatrix []       = []
       toMatrix xs       = let (r,rs) = splitAt cols xs
                           in  r : toMatrix rs
---}
+
+      showMat           = ppMat . map (map show)
+
+      ppRow row         = intercalate "," row
+      ppMat mat         = "[" ++ intercalate "\n  ," (map ppRow (ppColumns mat)) ++ "]"
+      ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
+        where
+          extra = 0
+          width = maximum . map length
+          pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
+
+instance Show (Array (sh :. a :. b :. c) e) where
+  show arr@Array{}
+    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
 
 -- | Nicely format a shape as a string
 --
