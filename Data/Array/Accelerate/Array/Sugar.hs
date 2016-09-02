@@ -1180,7 +1180,8 @@ instance Elt e => IsList (Vector e) where
 --
 -- TODO:
 --   * Make special formatting optional? It is more difficult to copy/paste the
---     result, for example.
+--     result, for example. Also it does not look good if the matrix row does
+--     not fit on a single line.
 --   * The AST pretty printer does not use these instances
 --
 instance Show (Scalar e) where
@@ -1202,11 +1203,11 @@ instance Show (Array DIM2 e) where
 
       showMat           = ppMat . map (map show)
 
-      ppRow row         = intercalate "," row
-      ppMat mat         = "[" ++ intercalate "\n  ," (map ppRow (ppColumns mat)) ++ "]"
+      ppRow row         = concatMap (++",") row
+      ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
       ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
         where
-          extra = 0
+          extra = 1
           width = maximum . map length
           pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
 
