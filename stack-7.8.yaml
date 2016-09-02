@@ -84,6 +84,7 @@ extra-deps:
 - 'ekg-core-0.1.1.1'
 - 'ekg-json-0.1.0.2'
 - 'exceptions-0.8.2.1'
+- 'file-embed-0.0.10'
 - 'gloss-1.9.2.1'
 - 'gloss-rendering-1.9.2.1'
 - 'GLURaw-1.4.0.2'
