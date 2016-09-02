@@ -1216,11 +1216,14 @@ instance Show (Array DIM2 e) where
           width = maximum . map length
           pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
 
--- Use an OVERLAPPABLE instance because GHC can't determine that with the above
--- specialisations, a DIM3+ instance covers all possibilities. This is
+-- This is a bit unfortunate, but we need to use an INCOHERENT instance because
+-- GHC can't determine that with the above specialisations, a DIM3+ instance
+-- covers all remaining possibilities, and lacking a general instance is
 -- problematic for operations which want a 'Show (Array sh e)' constraint.
+-- Furthermore, those clients are likely to pick this instance, rather than the
+-- more specific ones above.
 --
-instance {-# OVERLAPPABLE #-} Show (Array sh e) where
+instance {-# INCOHERENT #-} Show (Array sh e) where
   show arr@Array{}
     = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
 
