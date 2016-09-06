@@ -63,13 +63,15 @@ test_map backend opt = testGroup "map" $ catMaybes
           , testProperty "signum"       (test signum signum)
 
             -- operators on Integral & Bits
-          , testProperty "complement"   (test A.complement P.complement)
+          , testProperty "complement"   (test  A.complement P.complement)
+          , testProperty "popCount"     (testI A.popCount   P.popCount)
 
             -- conversions
           , testProperty "fromIntegral" (testF A.fromIntegral P.fromIntegral)
           ]
           where
             test  = mkTest a a sh
+            testI = mkTest a (undefined::Int)   sh
             testF = mkTest a (undefined::Float) sh
 
     testFloatingElt :: forall a. (P.Floating a, P.RealFloat a, A.Floating a, A.RealFloat a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
