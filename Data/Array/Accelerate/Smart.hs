@@ -62,7 +62,7 @@ module Data.Array.Accelerate.Smart (
   mkLAnd, mkLOr, mkLNot, mkIsNaN,
 
   -- * Smart constructors for type coercion functions
-  mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast,
+  mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast, mkUnsafeCoerce,
 
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
@@ -1531,7 +1531,10 @@ mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b
 
 mkBitcast :: (Elt a, Elt b, IsScalar a, IsScalar b, BitSizeEq a b) => Exp a -> Exp b
-mkBitcast x = Exp $ PrimCoerce scalarType scalarType `PrimApp` x
+mkBitcast = mkUnsafeCoerce
+
+mkUnsafeCoerce :: (Elt a, Elt b, IsScalar a, IsScalar b) => Exp a -> Exp b
+mkUnsafeCoerce x = Exp $ PrimCoerce scalarType scalarType `PrimApp` x
 
 
 -- Auxiliary functions

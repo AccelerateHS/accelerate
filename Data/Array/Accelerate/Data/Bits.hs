@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Bits
 -- Copyright   : [2016] Manuel M T Chakravarty, Gabriele Keller
@@ -24,7 +25,6 @@ module Data.Array.Accelerate.Data.Bits (
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -34,7 +34,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Integral                       ()
 
-import Prelude                                                      ( ($), undefined, otherwise )
+import Prelude                                                      ( ($), (.), undefined, otherwise )
 import qualified Data.Bits                                          as B
 
 
@@ -166,7 +166,7 @@ instance Bits Bool where
   rotate x _   = x
   bit i        = i ==* 0
   isSigned     = isSignedDefault
-  popCount x   = cond x 1 0
+  popCount     = mkBoolToInt
 
 instance Bits Int where
   (.&.)        = mkBAnd
@@ -202,7 +202,7 @@ instance Bits Int8 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt8 . bitcast
 
 instance Bits Int16 where
   (.&.)        = mkBAnd
@@ -220,7 +220,7 @@ instance Bits Int16 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt16 . bitcast
 
 instance Bits Int32 where
   (.&.)        = mkBAnd
@@ -238,7 +238,7 @@ instance Bits Int32 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt32 . bitcast
 
 instance Bits Int64 where
   (.&.)        = mkBAnd
@@ -256,7 +256,7 @@ instance Bits Int64 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt64 . bitcast
 
 instance Bits Word where
   (.&.)        = mkBAnd
@@ -292,7 +292,7 @@ instance Bits Word8 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt8
 
 instance Bits Word16 where
   (.&.)        = mkBAnd
@@ -310,7 +310,7 @@ instance Bits Word16 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt16
 
 instance Bits Word32 where
   (.&.)        = mkBAnd
@@ -328,7 +328,7 @@ instance Bits Word32 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt32
 
 instance Bits Word64 where
   (.&.)        = mkBAnd
@@ -346,7 +346,7 @@ instance Bits Word64 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = popCnt64
 
 instance Bits CInt where
   (.&.)        = mkBAnd
@@ -700,6 +700,54 @@ rotateRDefault x i
 isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
 isSignedDefault _ = constant (B.isSigned (undefined::b))
 
-popCountDefault :: (Bits a, Num a) => Exp a -> Exp Int
-popCountDefault = $internalError "Bits.popCount" "Not implemented yet"
+popCountDefault :: forall a. (B.FiniteBits a, IsScalar a, Bits a, Num a) => Exp a -> Exp Int
+popCountDefault =
+  $( [e| case B.finiteBitSize (undefined::a) of
+           8  -> popCnt8  . mkUnsafeCoerce
+           16 -> popCnt16 . mkUnsafeCoerce
+           32 -> popCnt32 . mkUnsafeCoerce
+           64 -> popCnt64 . mkUnsafeCoerce
+           _  -> popCountKernighan |] )
+
+-- http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
+popCountKernighan :: (Bits a, Num a) => Exp a -> Exp Int
+popCountKernighan x = r
+  where
+    (r,_) = untup2
+          $ while (\(untup2 -> (_,v)) -> v /=* 0)
+                  (\(untup2 -> (c,v)) -> tup2 (c+1, v .&. (v-1)))
+                  (tup2 (0,x))
+
+-- http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+popCnt8 :: Exp Word8 -> Exp Int
+popCnt8 v1 = mkFromIntegral c
+  where
+    v2 = v1 - ((v1 `unsafeShiftR` 1) .&. 0x55)
+    v3 = (v2 .&. 0x33) + ((v2 `unsafeShiftR` 2) .&. 0x33)
+    v4 = (v3 + (v3 `unsafeShiftR` 4)) .&. 0x0F
+    c  = v4 * 0x01
+
+popCnt16 :: Exp Word16 -> Exp Int
+popCnt16 v1 = mkFromIntegral c
+  where
+    v2 = v1 - ((v1 `unsafeShiftR` 1) .&. 0x5555)
+    v3 = (v2 .&. 0x3333) + ((v2 `unsafeShiftR` 2) .&. 0x3333)
+    v4 = (v3 + (v3 `unsafeShiftR` 4)) .&. 0x0F0F
+    c  = (v4 * 0x0101) `unsafeShiftR` 8
+
+popCnt32 :: Exp Word32 -> Exp Int
+popCnt32 v1 = mkFromIntegral c
+  where
+    v2 = v1 - ((v1 `unsafeShiftR` 1) .&. 0x55555555)
+    v3 = (v2 .&. 0x33333333) + ((v2 `unsafeShiftR` 2) .&. 0x33333333)
+    v4 = (v3 + (v3 `unsafeShiftR` 4)) .&. 0x0F0F0F0F
+    c  = (v4 * 0x01010101) `unsafeShiftR` 24
+
+popCnt64 :: Exp Word64 -> Exp Int
+popCnt64 v1 = mkFromIntegral c
+  where
+    v2 = v1 - ((v1 `unsafeShiftR` 1) .&. 0x5555555555555555)
+    v3 = (v2 .&. 0x3333333333333333) + ((v2 `unsafeShiftR` 2) .&. 0x3333333333333333)
+    v4 = (v3 + (v3 `unsafeShiftR` 4)) .&. 0X0F0F0F0F0F0F0F0F
+    c  = (v4 * 0x0101010101010101) `unsafeShiftR` 56
 
