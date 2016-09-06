@@ -8,12 +8,12 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 6ee059a917ae925ef0c22467f7b478c4a9fb21a1
+    commit: 977e225b013424c0adb1105f66563ec16ee274f8
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: 7500ac64a0e3067263f294d69dd713d5cdd793b8
+    commit: ee9c4c13e9ef5d364f476f97c5ced05645d0a919
   extra-dep: true
 
 - location:
