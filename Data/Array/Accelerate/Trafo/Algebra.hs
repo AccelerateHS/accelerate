@@ -2,6 +2,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
@@ -25,6 +26,7 @@ module Data.Array.Accelerate.Trafo.Algebra (
 
 import Prelude                                          hiding ( exp )
 import Data.Maybe                                       ( fromMaybe )
+import Data.Monoid
 import Data.Bits
 import Data.Char
 import GHC.Float                                        ( float2Double, double2Float )
@@ -84,7 +86,7 @@ evalPrimApp
     => Gamma acc env env aenv
     -> PrimFun (a -> r)
     -> PreOpenExp acc env aenv a
-    -> PreOpenExp acc env aenv r
+    -> (Any, PreOpenExp acc env aenv r)
 evalPrimApp env f x
   -- First attempt to move constant values towards the left
   | Just r      <- commutes f x env     = evalPrimApp env f r
@@ -92,7 +94,7 @@ evalPrimApp env f x
 
   -- Now attempt to evaluate any expressions
   | otherwise
-  = fromMaybe (PrimApp f x)
+  = maybe (Any False, PrimApp f x) (Any True,)
   $ case f of
       PrimAdd ty                -> evalAdd ty x env
       PrimSub ty                -> evalSub ty x env
@@ -317,7 +319,7 @@ evalSub' ty (untup2 -> Just (x,y)) env
   | Nothing     <- propagate env x
   , Just b      <- propagate env y
   = Stats.ruleFired "-y+x"
-  $ Just $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
+  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
   | Just REFL   <- match x y
   = Stats.ruleFired "x-x"

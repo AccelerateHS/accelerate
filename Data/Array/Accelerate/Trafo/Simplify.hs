@@ -230,7 +230,10 @@ simplifyOpenExp env = first getAny . cvtE
       FromIndex sh ix           -> fromIndex (cvtE sh) (cvtE ix)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
-      PrimApp f x               -> evalPrimApp env f <$> cvtE x
+      PrimApp f x               -> (u<>v, fx)
+        where
+          (u, x') = cvtE x
+          (v, fx) = evalPrimApp env f x'
       Index a sh                -> Index a <$> cvtE sh
       LinearIndex a i           -> LinearIndex a <$> cvtE i
       Shape a                   -> pure $ Shape a
