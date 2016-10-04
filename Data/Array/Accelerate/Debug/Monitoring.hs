@@ -66,7 +66,7 @@ import Prelude
 --
 #ifndef ACCELERATE_MONITORING
 initAccMetrics :: IO a
-initAccMetrics = error "Data.Array.Accelerate: Monitoring is disabled. Install with -fekg to enable it."
+initAccMetrics = error "Data.Array.Accelerate: Monitoring is disabled. Reinstall package 'accelerate' with '-fekg' to enable it."
 #else
 initAccMetrics :: IO Store
 initAccMetrics = do

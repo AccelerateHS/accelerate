@@ -226,7 +226,7 @@ getUpdateArgs = do
   setProgArgv (prog : before ++ after)
 #else
   M.unless (null flags)
-    $ error "Data.Array.Accelerate: Debugging options are disabled. Install with -fdebug to enable them."
+    $ error "Data.Array.Accelerate: Debugging options are disabled. Reinstall package 'accelerate' with '-fdebug' to enable them."
 #endif
   return flags
 
