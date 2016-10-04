@@ -390,8 +390,6 @@ Executable accelerate-canny
   ghc-options:          -Wall
                         -threaded
                         -Odph
-                        -fllvm
-                        -optlo-O3
                         -eventlog
                         -rtsopts
 
