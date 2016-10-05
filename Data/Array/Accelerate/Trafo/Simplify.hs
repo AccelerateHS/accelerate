@@ -206,9 +206,9 @@ simplifyOpenExp env = first getAny . cvtE
     cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
-        | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        -- | Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | otherwise                                              -> Let <$> bnd' <*> body'
+        -- Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | Just reduct <- localCSE env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | otherwise                                          -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
           env'  = PushExp env (snd bnd')
