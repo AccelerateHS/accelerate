@@ -347,8 +347,8 @@ usesOfExp idx = countE
 type UsesOfAcc acc = forall aenv s t. Bool -> Idx aenv s -> acc aenv t -> Int
 
 usesOfPreAcc
-    :: forall acc aenv s t. Kit acc
-    => Bool
+    :: forall acc aenv s t.
+       Bool
     -> UsesOfAcc  acc
     -> Idx            aenv s
     -> PreOpenAcc acc aenv t
@@ -457,8 +457,7 @@ usesOfPreAcc withShape countAcc idx = count
         | otherwise             -> 0
       Foreign _ _ e             -> countE e
 
-    countAF :: Kit acc
-            => PreOpenAfun acc aenv' f
+    countAF :: PreOpenAfun acc aenv' f
             -> Idx aenv' s
             -> Int
     countAF (Alam f)  v = countAF f (SuccIdx v)

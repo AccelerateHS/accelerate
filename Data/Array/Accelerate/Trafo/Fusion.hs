@@ -954,8 +954,7 @@ transformD sh' p f
   . fuse (into2 backpermuteD sh' p)
   . mapD f
   where
-    fuse :: Arrays as
-         => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
+    fuse :: (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
          -> Embed acc aenv as
          -> Embed acc aenv bs
     fuse op (Embed env cc) = Embed env (op env cc)
@@ -972,7 +971,7 @@ transformD sh' p f
 --       expensive and/or `sh` is large.
 --
 replicateD
-    :: (Kit acc, Shape sh, Shape sl, Elt slix, Elt e)
+    :: (Kit acc, Shape sh, Shape sl, Elt slix)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> PreExp     acc aenv slix
     -> Cunctation acc aenv (Array sl e)
@@ -985,7 +984,7 @@ replicateD sliceIndex slix cc
 -- Dimensional slice as a backwards permutation
 --
 sliceD
-    :: (Kit acc, Shape sh, Shape sl, Elt slix, Elt e)
+    :: (Kit acc, Shape sh, Shape sl, Elt slix)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> PreExp     acc aenv slix
     -> Cunctation acc aenv (Array sh e)
@@ -1206,7 +1205,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     -- extra type variables, and ensures we don't do extra work manipulating the
     -- body when not necessary (which can lead to a complexity blowup).
     --
-    eliminate :: forall aenv aenv' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
+    eliminate :: forall aenv aenv' sh e brrs. (Shape sh, Elt e, Arrays brrs)
               => Extend     acc aenv aenv'
               -> Cunctation acc      aenv' (Array sh e)
               ->            acc     (aenv', Array sh e) brrs
@@ -1235,7 +1234,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     --       moment we are just hoping CSE in the simplifier phase does good
     --       things, but that is limited in what it looks for.
     --
-    replaceE :: forall env aenv sh e t. (Kit acc, Shape sh, Elt e)
+    replaceE :: forall env aenv sh e t. (Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
              -> PreOpenExp acc env aenv t
              -> PreOpenExp acc env aenv t
@@ -1289,7 +1288,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtT NilTup        = NilTup
         cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
 
-    replaceF :: forall env aenv sh e t. (Kit acc, Shape sh, Elt e)
+    replaceF :: forall env aenv sh e t. (Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
              -> PreOpenFun acc env aenv t
              -> PreOpenFun acc env aenv t
@@ -1298,7 +1297,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Body e          -> Body (replaceE sh' f' avar e)
         Lam f           -> Lam  (replaceF (weakenE SuccIdx sh') (weakenE SuccIdx f') avar f)
 
-    replaceA :: forall aenv sh e a. (Kit acc, Shape sh, Elt e)
+    replaceA :: forall aenv sh e a. (Shape sh, Elt e)
              => PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
              -> PreOpenAcc acc aenv a
              -> PreOpenAcc acc aenv a

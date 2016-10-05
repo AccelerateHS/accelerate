@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
@@ -81,7 +82,7 @@ instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
 -- memory because there are insufficient registers available. We sidestep this
 -- tricky and target-dependent issue by, for now, simply ignoring it.
 --
-localCSE :: (Kit acc, Elt a, Elt b)
+localCSE :: (Kit acc, Elt a)
          => Gamma      acc env env aenv
          -> PreOpenExp acc env     aenv a
          -> PreOpenExp acc (env,a) aenv b
@@ -105,6 +106,7 @@ globalCSE env exp
   | otherwise                    = Nothing
 
 
+{--
 -- Compared to regular Haskell, the scalar expression language of Accelerate is
 -- rather limited in order to meet the restrictions of what can be efficiently
 -- implemented on specialised hardware, such as GPUs. For example, to avoid
@@ -138,9 +140,6 @@ recoverLoops
     -> PreOpenExp acc env     aenv a
     -> PreOpenExp acc (env,a) aenv b
     -> Maybe (PreOpenExp acc env aenv b)
-recoverLoops _ _ _
-  = Nothing
-{--
 recoverLoops _ bnd e3
   -- To introduce scaler loops, we look for expressions of the form:
   --
@@ -208,7 +207,7 @@ simplifyOpenExp env = first getAny . cvtE
     cvtE exp = case exp of
       Let bnd body
         | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        -- | Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
         | otherwise                                              -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
@@ -330,7 +329,9 @@ simplifyOpenExp env = first getAny . cvtE
         prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s
         prjT ZeroTupIdx       (SnocTup _ v) = v
         prjT (SuccTupIdx idx) (SnocTup t _) = prjT idx t
+#if __GLASGOW_HASKELL__ < 800
         prjT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
+#endif
 
         prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env' aenv s
         prjC ZeroTupIdx       (_,   v) = Const (fromElt v)

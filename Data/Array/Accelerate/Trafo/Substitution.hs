@@ -75,7 +75,7 @@ infixr `substitute`
 -- | Replace the first variable with the given expression. The environment
 -- shrinks.
 --
-inline :: (RebuildableAcc acc, Elt t)
+inline :: RebuildableAcc acc
        => PreOpenExp acc (env, s) aenv t
        -> PreOpenExp acc env      aenv s
        -> PreOpenExp acc env      aenv t

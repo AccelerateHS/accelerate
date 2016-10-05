@@ -2,7 +2,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
-#ifndef ACCELERATE_DEBUG
+#ifdef ACCELERATE_DEBUG
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+#else
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-}
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}

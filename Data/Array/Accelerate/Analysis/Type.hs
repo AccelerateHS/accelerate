@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -83,27 +84,39 @@ preAccType k pacc =
     --
     Avar _              -> case arrays (undefined :: (Array sh e)) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "When I get sad, I stop being sad and be AWESOME instead."
+#endif
 
     Apply _ _           -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "TRUE STORY."
+#endif
 
     Atuple _            -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "I made you a cookie, but I eated it."
+#endif
 
     Aprj _ _            -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "Hey look! even the leaves are falling for you."
+#endif
 
     Aforeign _ _ _      -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "Who on earth wrote all these weird error messages?"
+#endif
 
     Collect _           -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "Something funny"
+#endif
 
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc

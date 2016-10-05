@@ -37,7 +37,7 @@ convertSegments = cvtA
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
     cvtAfun = convertSegmentsAfun
 
-    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE :: Exp aenv t -> Exp aenv t
     cvtE = id
 
     cvtF :: Fun aenv t -> Fun aenv t
@@ -136,7 +136,7 @@ convertSegmentsSeq seq =
     cvtCT NilAtup        = NilAtup
     cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
 
-    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE :: Exp aenv t -> Exp aenv t
     cvtE = id
 
     cvtF :: Fun aenv t -> Fun aenv t

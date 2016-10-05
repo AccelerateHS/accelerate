@@ -615,40 +615,40 @@ instance FiniteBits CUShort where
 -- Default implementations
 -- -----------------------
 
-bitDefault :: (Elt t, IsIntegral t, Bits t) => Exp Int -> Exp t
+bitDefault :: (IsIntegral t, Bits t) => Exp Int -> Exp t
 bitDefault x = constant 1 `shiftL` x
 
-testBitDefault :: (Elt t, IsIntegral t, Bits t) => Exp t -> Exp Int -> Exp Bool
+testBitDefault :: (IsIntegral t, Bits t) => Exp t -> Exp Int -> Exp Bool
 testBitDefault x i = (x .&. bit i) /=* constant 0
 
-shiftDefault :: (Elt t, FiniteBits t, IsIntegral t, B.Bits t) => Exp t -> Exp Int -> Exp t
+shiftDefault :: (FiniteBits t, IsIntegral t, B.Bits t) => Exp t -> Exp Int -> Exp t
 shiftDefault x i
   = cond (i >=* 0) (shiftLDefault x i)
                    (shiftRDefault x (-i))
 
-shiftLDefault :: (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftLDefault :: (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftLDefault x i
   = cond (i >=* finiteBitSize x) (constant 0)
   $ mkBShiftL x i
 
-shiftRDefault :: forall t. (Elt t, B.Bits t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftRDefault :: forall t. (B.Bits t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftRDefault
   | B.isSigned (undefined::t) = shiftRADefault
   | otherwise                 = shiftRLDefault
 
 -- Shift the argument right (signed)
-shiftRADefault :: (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftRADefault :: (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftRADefault x i
   = cond (i >=* finiteBitSize x) (cond (mkLt x (constant 0)) (constant (-1)) (constant 0))
   $ mkBShiftR x i
 
 -- Shift the argument right (unsigned)
-shiftRLDefault :: (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftRLDefault :: (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftRLDefault x i
   = cond (i >=* finiteBitSize x) (constant 0)
   $ mkBShiftR x i
 
-rotateDefault :: forall t. (Elt t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+rotateDefault :: forall t. (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 rotateDefault =
   case (integralType :: IntegralType t) of
     TypeInt{}     -> rotateDefault' (undefined::Word)
@@ -671,7 +671,7 @@ rotateDefault =
     TypeCULLong{} -> rotateDefault' (undefined::CULLong)
 
 rotateDefault'
-    :: forall i w. (Elt i, Elt w, FiniteBits i, IsIntegral i, IsIntegral w, BitSizeEq i w, BitSizeEq w i)
+    :: forall i w. (Elt w, FiniteBits i, IsIntegral i, IsIntegral w, BitSizeEq i w, BitSizeEq w i)
     => w {- dummy -}
     -> Exp i
     -> Exp Int

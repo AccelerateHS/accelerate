@@ -668,28 +668,28 @@ or = foldAll (||*) (constant False)
 
 -- | Compute the sum of elements
 --
-sum :: (Shape sh, Elt e, Num e)
+sum :: (Shape sh, Num e)
     => Acc (Array sh e)
     -> Acc (Scalar e)
 sum = foldAll (+) 0
 
 -- | Compute the product of the elements
 --
-product :: (Shape sh, Elt e, Num e)
+product :: (Shape sh, Num e)
         => Acc (Array sh e)
         -> Acc (Scalar e)
 product = foldAll (*) 1
 
 -- | Yield the minimum element of an array. The array must not be empty.
 --
-minimum :: (Shape sh, Elt e, Ord e)
+minimum :: (Shape sh, Ord e)
         => Acc (Array sh e)
         -> Acc (Scalar e)
 minimum = fold1All min
 
 -- | Yield the maximum element of an array. The array must not be empty.
 --
-maximum :: (Shape sh, Elt e, Ord e)
+maximum :: (Shape sh, Ord e)
         => Acc (Array sh e)
         -> Acc (Scalar e)
 maximum = fold1All max
@@ -750,7 +750,7 @@ postscanr f e = map (`f` e) . scanr1 f
 
 -- |Segmented version of 'scanl'
 --
-scanlSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+scanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -787,7 +787,7 @@ scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
 --
-scanl'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+scanl'Seg :: forall a i. (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
@@ -850,7 +850,7 @@ scanl'Seg f z vec seg = result
 --
 -- > scanl1Seg f xs [n,0,0] == scanl1Seg f xs [n]   where n /= 0
 --
-scanl1Seg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+scanl1Seg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
           => (Exp a -> Exp a -> Exp a)
           -> Acc (Vector a)
           -> Acc (Segments i)
@@ -863,7 +863,7 @@ scanl1Seg f vec seg
 
 -- |Segmented version of 'prescanl'.
 --
-prescanlSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+prescanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
             => (Exp a -> Exp a -> Exp a)
             -> Exp a
             -> Acc (Vector a)
@@ -876,7 +876,7 @@ prescanlSeg f e vec seg
 
 -- |Segmented version of 'postscanl'.
 --
-postscanlSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+postscanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
              => (Exp a -> Exp a -> Exp a)
              -> Exp a
              -> Acc (Vector a)
@@ -888,7 +888,7 @@ postscanlSeg f e vec seg
 
 -- |Segmented version of 'scanr'.
 --
-scanrSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+scanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -912,7 +912,7 @@ scanrSeg f z vec seg = null flags ?| ( fill (shape seg) z, scanr1Seg f vec' seg'
 
 -- | Segmented version of 'scanr''.
 --
-scanr'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+scanr'Seg :: forall a i. (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
@@ -942,7 +942,7 @@ scanr'Seg f z vec seg = result
 
 -- |Segmented version of 'scanr1'.
 --
-scanr1Seg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+scanr1Seg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
           => (Exp a -> Exp a -> Exp a)
           -> Acc (Vector a)
           -> Acc (Segments i)
@@ -956,7 +956,7 @@ scanr1Seg f vec seg
 
 -- |Segmented version of 'prescanr'.
 --
-prescanrSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+prescanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
             => (Exp a -> Exp a -> Exp a)
             -> Exp a
             -> Acc (Vector a)
@@ -969,7 +969,7 @@ prescanrSeg f e vec seg
 
 -- |Segmented version of 'postscanr'.
 --
-postscanrSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
+postscanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
              => (Exp a -> Exp a -> Exp a)
              -> Exp a
              -> Acc (Vector a)
@@ -991,7 +991,7 @@ postscanrSeg f e vec seg
 -- data is used by exclusive segmented scan.
 --
 mkHeadFlags
-    :: (Elt i, Integral i, FromIntegral i Int)
+    :: (Integral i, FromIntegral i Int)
     => Acc (Segments i)
     -> Acc (Segments i)
 mkHeadFlags seg
@@ -1006,7 +1006,7 @@ mkHeadFlags seg
 -- flag is placed at the last place in each segment.
 --
 mkTailFlags
-    :: (Elt i, Integral i, FromIntegral i Int)
+    :: (Integral i, FromIntegral i Int)
     => Acc (Segments i)
     -> Acc (Segments i)
 mkTailFlags seg
@@ -1022,7 +1022,7 @@ mkTailFlags seg
 -- procedure of Sengupta et. al.
 --
 segmented
-    :: (Elt e, Elt i, Num i, Bits i)
+    :: (Elt e, Num i, Bits i)
     => (Exp e -> Exp e -> Exp e)
     -> Exp (i, e)
     -> Exp (i, e)
@@ -1044,10 +1044,10 @@ segmented f a b =
 -- back to concrete Int. However, don't put these generalised forms into the
 -- base library, because it results in too many ambiguity errors.
 --
-index1' ::  (Elt i, Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
+index1' ::  (Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
 index1' i = lift (Z :. fromIntegral i)
 
-unindex1' :: (Elt i, Num i, FromIntegral Int i) => Exp DIM1 -> Exp i
+unindex1' :: FromIntegral Int i => Exp DIM1 -> Exp i
 unindex1' ix = let Z :. i = unlift ix in fromIntegral i
 
 
@@ -1072,7 +1072,7 @@ fill sh c = generate sh (const c)
 --   row-major order).
 --
 enumFromN
-    :: (Shape sh, Elt e, Num e, FromIntegral Int e)
+    :: (Shape sh, Num e, FromIntegral Int e)
     => Exp sh
     -> Exp e
     -> Acc (Array sh e)
@@ -1082,7 +1082,7 @@ enumFromN sh x = enumFromStepN sh x 1
 -- @x+y+y@ etc. (in row-major order).
 --
 enumFromStepN
-    :: (Shape sh, Elt e, Num e, FromIntegral Int e)
+    :: (Shape sh, Num e, FromIntegral Int e)
     => Exp sh
     -> Exp e              -- ^ x: start
     -> Exp e              -- ^ y: step

@@ -729,8 +729,7 @@ fromBool False = 0
 --
 {-# INLINE runArrayData #-}
 runArrayData
-    :: ArrayElt e
-    => IO (MutableArrayData e, e)
+    :: IO (MutableArrayData e, e)
     -> (ArrayData e, e)
 runArrayData st = unsafePerformIO $ do
   (mad, r) <- st

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -25,12 +26,12 @@ module Data.Array.Accelerate.Trafo.Algebra (
 ) where
 
 import Prelude                                          hiding ( exp )
-import Data.Maybe                                       ( fromMaybe )
-import Data.Monoid
 import Data.Bits
 import Data.Char
+import Data.Monoid
 import GHC.Float                                        ( float2Double, double2Float )
 import Text.PrettyPrint
+import Unsafe.Coerce
 import qualified Prelude                                as P
 
 -- friends
@@ -76,7 +77,9 @@ propagate env = cvtE
     cvtT :: TupleIdx t e -> Tuple (PreOpenExp acc env aenv) t -> Maybe e
     cvtT ZeroTupIdx       (SnocTup _   e) = cvtE e
     cvtT (SuccTupIdx idx) (SnocTup tup _) = cvtT idx tup
+#if __GLASGOW_HASKELL__ < 800
     cvtT _                _               = error "hey what's the head angle on that thing?"
+#endif
 
 
 -- Attempt to evaluate primitive function applications
@@ -165,7 +168,7 @@ evalPrimApp env f x
 -- to the left of the operator. Returning Nothing indicates no change is made.
 --
 commutes
-    :: forall acc env aenv a r. (Kit acc, Elt a, Elt r)
+    :: forall acc env aenv a r. Kit acc
     => PrimFun (a -> r)
     -> PreOpenExp acc env aenv a
     -> Gamma acc env env aenv
@@ -384,7 +387,7 @@ evalQuotRem _ _ _
 evalIDiv :: Elt a => IntegralType a -> (a,a) :-> a
 evalIDiv ty | IntegralDict <- integralDict ty = evalIDiv'
 
-evalIDiv' :: (Elt a, Integral a, Eq a) => (a,a) :-> a
+evalIDiv' :: (Elt a, Integral a) => (a,a) :-> a
 evalIDiv' (untup2 -> Just (x,y)) env
   | Just 1      <- propagate env y
   = Stats.ruleFired "x`div`1" $ Just x
@@ -523,27 +526,27 @@ evalLogBase ty | FloatingDict <- floatingDict ty = eval2 logBase
 evalAtan2 :: Elt a => FloatingType a -> (a,a) :-> a
 evalAtan2 ty | FloatingDict <- floatingDict ty = eval2 atan2
 
-evalTruncate :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalTruncate :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalTruncate ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 truncate
 
-evalRound :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalRound :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalRound ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 round
 
-evalFloor :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalFloor :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalFloor ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 floor
 
-evalCeiling :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalCeiling :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalCeiling ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 ceiling
 
-evalIsNaN :: Elt a => FloatingType a -> a :-> Bool
+evalIsNaN :: FloatingType a -> a :-> Bool
 evalIsNaN ty | FloatingDict <- floatingDict ty = eval1 isNaN
 
 
@@ -656,7 +659,7 @@ evalToFloating (FloatingNumType ta) tb x env
   , FloatingDict <- floatingDict tb = eval1 realToFrac x env
 
 evalCoerce :: Elt b => ScalarType a -> ScalarType b -> a :-> b
-evalCoerce _ _ _ _ = Nothing
+evalCoerce _ _ = eval1 unsafeCoerce
 
 
 -- Scalar primitives

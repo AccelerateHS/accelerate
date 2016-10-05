@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -107,12 +108,14 @@ import Data.List
 import Data.Typeable
 
 -- friends
-import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Lifted               ( Vector' )
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
+#if __GLASGOW_HASKELL__ < 800
+import Data.Array.Accelerate.Error
+#endif
 
 
 -- Typed de Bruijn indices
@@ -159,14 +162,18 @@ data ValElt env where
 prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
+#if __GLASGOW_HASKELL__ < 800
 prj _             _            = $internalError "prj" "inconsistent valuation"
+#endif
 
 -- Projection of a value from a valuation of array elements using a de Bruijn index
 --
 prjElt :: Idx env t -> ValElt env -> t
 prjElt ZeroIdx       (PushElt _   v) = Sugar.toElt v
 prjElt (SuccIdx idx) (PushElt val _) = prjElt idx val
+#if __GLASGOW_HASKELL__ < 800
 prjElt _             _               = $internalError "prjElt" "inconsistent valuation"
+#endif
 
 -- Array expressions
 -- -----------------

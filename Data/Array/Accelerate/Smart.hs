@@ -799,39 +799,39 @@ class (Elt (StencilRepr sh stencil), AST.Stencil sh a (StencilRepr sh stencil))
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e) where
   type StencilRepr DIM1 (Exp e, Exp e, Exp e)
     = (e, e, e)
-  stencilPrj _ _ s = (Exp $ Prj tib s,
-                      Exp $ Prj tia s,
+  stencilPrj _ _ s = (Exp $ Prj tix2 s,
+                      Exp $ Prj tix1 s,
                       Exp $ Prj tix0 s)
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
     = (e, e, e, e, e)
-  stencilPrj _ _ s = (Exp $ Prj tid s,
-                      Exp $ Prj tic s,
-                      Exp $ Prj tib s,
-                      Exp $ Prj tia s,
+  stencilPrj _ _ s = (Exp $ Prj tix4 s,
+                      Exp $ Prj tix3 s,
+                      Exp $ Prj tix2 s,
+                      Exp $ Prj tix1 s,
                       Exp $ Prj tix0 s)
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
     = (e, e, e, e, e, e, e)
-  stencilPrj _ _ s = (Exp $ Prj tif s,
-                      Exp $ Prj tie s,
-                      Exp $ Prj tid s,
-                      Exp $ Prj tic s,
-                      Exp $ Prj tib s,
-                      Exp $ Prj tia s,
+  stencilPrj _ _ s = (Exp $ Prj tix6 s,
+                      Exp $ Prj tix5 s,
+                      Exp $ Prj tix4 s,
+                      Exp $ Prj tix3 s,
+                      Exp $ Prj tix2 s,
+                      Exp $ Prj tix1 s,
                       Exp $ Prj tix0 s)
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
   where
   type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
     = (e, e, e, e, e, e, e, e, e)
-  stencilPrj _ _ s = (Exp $ Prj tih s,
-                      Exp $ Prj tig s,
-                      Exp $ Prj tif s,
-                      Exp $ Prj tie s,
-                      Exp $ Prj tid s,
-                      Exp $ Prj tic s,
-                      Exp $ Prj tib s,
-                      Exp $ Prj tia s,
+  stencilPrj _ _ s = (Exp $ Prj tix8 s,
+                      Exp $ Prj tix7 s,
+                      Exp $ Prj tix6 s,
+                      Exp $ Prj tix5 s,
+                      Exp $ Prj tix4 s,
+                      Exp $ Prj tix3 s,
+                      Exp $ Prj tix2 s,
+                      Exp $ Prj tix1 s,
                       Exp $ Prj tix0 s)
 
 -- DIM(n+1)
@@ -840,8 +840,8 @@ instance (Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row2, row1, row0) where
   type StencilRepr (sh:.Int:.Int) (row2, row1, row0)
     = (StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row0)
-  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tib s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tia s),
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix2 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix1 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix0 s))
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -851,10 +851,10 @@ instance (Stencil (sh:.Int) a row1,
   type StencilRepr (sh:.Int:.Int) (row1, row2, row3, row4, row5)
     = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
        StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5)
-  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tid s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tic s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tib s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tia s),
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix4 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix3 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix2 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix1 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix0 s))
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -868,12 +868,12 @@ instance (Stencil (sh:.Int) a row1,
     = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
        StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5, StencilRepr (sh:.Int) row6,
        StencilRepr (sh:.Int) row7)
-  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tif s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tie s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tid s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tic s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tib s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tia s),
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix6 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix5 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix4 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix3 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix2 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix1 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix0 s))
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -889,36 +889,44 @@ instance (Stencil (sh:.Int) a row1,
     = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
        StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5, StencilRepr (sh:.Int) row6,
        StencilRepr (sh:.Int) row7, StencilRepr (sh:.Int) row8, StencilRepr (sh:.Int) row9)
-  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tih s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tig s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tif s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tie s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tid s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tic s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tib s),
-                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tia s),
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix8 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix7 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix6 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix5 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix4 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix3 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix2 s),
+                      stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix1 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix0 s))
 
 -- Auxiliary tuple index constants
 --
-tix0 :: Elt s => TupleIdx (t, s) s
+tix0 :: TupleIdx (t, s0) s0
 tix0 = ZeroTupIdx
-tia :: Elt s => TupleIdx ((t, s), s1) s
-tia = SuccTupIdx tix0
-tib :: Elt s => TupleIdx (((t, s), s1), s2) s
-tib = SuccTupIdx tia
-tic :: Elt s => TupleIdx ((((t, s), s1), s2), s3) s
-tic = SuccTupIdx tib
-tid :: Elt s => TupleIdx (((((t, s), s1), s2), s3), s4) s
-tid = SuccTupIdx tic
-tie :: Elt s => TupleIdx ((((((t, s), s1), s2), s3), s4), s5) s
-tie = SuccTupIdx tid
-tif :: Elt s => TupleIdx (((((((t, s), s1), s2), s3), s4), s5), s6) s
-tif = SuccTupIdx tie
-tig :: Elt s => TupleIdx ((((((((t, s), s1), s2), s3), s4), s5), s6), s7) s
-tig = SuccTupIdx tif
-tih :: Elt s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
-tih = SuccTupIdx tig
+
+tix1 :: TupleIdx ((t, s1), s0) s1
+tix1 = SuccTupIdx tix0
+
+tix2 :: TupleIdx (((t, s2), s1), s0) s2
+tix2 = SuccTupIdx tix1
+
+tix3 :: TupleIdx ((((t, s3), s2), s1), s0) s3
+tix3 = SuccTupIdx tix2
+
+tix4 :: TupleIdx (((((t, s4), s3), s2), s1), s0) s4
+tix4 = SuccTupIdx tix3
+
+tix5 :: TupleIdx ((((((t, s5), s4), s3), s2), s1), s0) s5
+tix5 = SuccTupIdx tix4
+
+tix6 :: TupleIdx (((((((t, s6), s5), s4), s3), s2), s1), s0) s6
+tix6 = SuccTupIdx tix5
+
+tix7 :: TupleIdx ((((((((t, s7), s6), s5), s4), s3), s2), s1), s0) s7
+tix7 = SuccTupIdx tix6
+
+tix8 :: TupleIdx (((((((((t, s8), s7), s6), s5), s4), s3), s2), s1), s0) s8
+tix8 = SuccTupIdx tix7
 
 -- Smart constructors for array tuples in sequence computations
 -- ---------------------------------------------------
@@ -1530,6 +1538,7 @@ mkToFloating x = Exp $ PrimToFloating numType floatingType `PrimApp` x
 mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b
 
+-- NOTE: BitSizeEq constraint is used to make this version "safe"
 mkBitcast :: (Elt a, Elt b, IsScalar a, IsScalar b, BitSizeEq a b) => Exp a -> Exp b
 mkBitcast = mkUnsafeCoerce
 

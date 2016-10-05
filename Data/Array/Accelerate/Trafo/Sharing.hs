@@ -366,7 +366,7 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
         ScanSeq fun e x             -> producer $ AST.ScanSeq (cvtF2 fun) (cvtE e) (asIdx x)
         _                           -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where
-        producer :: (bnd ~ [a], Arrays a)
+        producer :: Arrays a
                  => AST.Producer AST.OpenAcc aenv senv a
                  -> AST.PreOpenSeq AST.OpenAcc aenv senv body
         producer p = AST.Producer p $ convertSharingSeq config alyt slyt' aenv (sa:senv) body
@@ -1768,7 +1768,7 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
           -- NB: This function can only be used in the case alternatives below; outside of the
           --     case we cannot discharge the 'Arrays arrs' constraint.
           --
-          let producer :: (arrs ~ [a], Typeable a, Arrays a)
+          let producer :: (arrs ~ [a], Arrays a)
                        => IO (PreSeq UnscopedAcc UnscopedSeq RootExp arrs, Int)
                        -> IO (UnscopedSeq arrs, Int)
               producer newSeq
@@ -2187,8 +2187,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      reconstruct (Collect seq') accCount1
 
       where
-        travEA :: Arrays arrs
-               => (ScopedExp e -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
+        travEA :: (ScopedExp e -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                -> RootExp e
                -> UnscopedAcc arrs'
                -> (ScopedAcc arrs, NodeCounts)
@@ -2197,7 +2196,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (e'  , accCount1) = scopesExp e
             (acc', accCount2) = scopesAcc acc
 
-        travF2A :: (Elt a, Elt b, Arrays arrs)
+        travF2A :: (Elt a, Elt b)
                 => ((Exp a -> Exp b -> ScopedExp c) -> ScopedAcc arrs'
                     -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                 -> (Exp a -> Exp b -> RootExp c)
@@ -2208,7 +2207,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (f'  , accCount1) = scopesFun2 f
             (acc', accCount2) = scopesAcc  acc
 
-        travF2EA :: (Elt a, Elt b, Arrays arrs)
+        travF2EA :: (Elt a, Elt b)
                  => ((Exp a -> Exp b -> ScopedExp c) -> ScopedExp e
                      -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                  -> (Exp a -> Exp b -> RootExp c)
@@ -2221,7 +2220,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (e'  , accCount2) = scopesExp  e
             (acc', accCount3) = scopesAcc  acc
 
-        travF2A2 :: (Elt a, Elt b, Arrays arrs)
+        travF2A2 :: (Elt a, Elt b)
                  => ((Exp a -> Exp b -> ScopedExp c) -> ScopedAcc arrs1
                      -> ScopedAcc arrs2 -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                  -> (Exp a -> Exp b -> RootExp c)
@@ -2243,8 +2242,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                     in
                                     (SnocAtup tup' a', accCountT +++ accCountA)
 
-        travA :: Arrays arrs
-              => (ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
+        travA :: (ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
               -> UnscopedAcc arrs'
               -> (ScopedAcc arrs, NodeCounts)
         travA c acc = reconstruct (c acc') accCount
@@ -2268,8 +2266,8 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         -- In either case, any completed 'NodeCounts' are injected as bindings using 'AletSharing'
         -- node.
         --
-        reconstruct :: Arrays arrs
-                    => PreAcc ScopedAcc ScopedSeq ScopedExp arrs -> NodeCounts
+        reconstruct :: PreAcc ScopedAcc ScopedSeq ScopedExp arrs
+                    -> NodeCounts
                     -> (ScopedAcc arrs, NodeCounts)
         reconstruct newAcc@(Atag _) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
@@ -2742,7 +2740,9 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
       where
         -- All producers must be replaced by sharing variables
         --
-        producer :: (t ~ [a], Typeable a, Arrays a) => PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
+        producer :: (t ~ [a], Arrays a)
+                 => PreSeq ScopedAcc ScopedSeq ScopedExp t
+                 -> NodeCounts
                  -> (ScopedSeq t, NodeCounts)
         producer newSeq subCount
           = let allCount = StableSharingSeq sn (SeqSharing sn newSeq) `insertSeqNode` subCount
@@ -2752,7 +2752,8 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
 
         -- Consumers cannot be shared.
         --
-        consumer :: PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
+        consumer :: PreSeq ScopedAcc ScopedSeq ScopedExp t
+                 -> NodeCounts
                  -> (ScopedSeq t, NodeCounts)
         consumer newSeq subCount
           = tracePure "Consumer" (show subCount)

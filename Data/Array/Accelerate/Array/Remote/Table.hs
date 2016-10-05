@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -415,7 +416,9 @@ makeWeakArrayData ad c mf = mw arrayElt ad
     mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua mf
     mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua mf
     mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua mf
+#if __GLASGOW_HASKELL__ < 800
     mw _                _               = error "Base eight is just like base ten really - if you're missing two fingers."
+#endif
 
     mkWeak' :: UniqueArray a -> Maybe (IO ()) -> IO (Weak c)
     mkWeak' ua Nothing  = mkWeak (uniqueArrayData ua) c

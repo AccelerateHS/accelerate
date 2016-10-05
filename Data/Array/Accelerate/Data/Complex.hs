@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -139,7 +140,7 @@ instance (A.FromIntegral a b, A.Num b) => A.FromIntegral a (Complex b) where
 
 -- | The non-negative magnitude of a complex number
 --
-magnitude :: (Elt a, RealFloat a) => Exp (Complex a) -> Exp a
+magnitude :: RealFloat a => Exp (Complex a) -> Exp a
 magnitude c =
   let r :+ i    = unlift c
   in sqrt (r*r + i*i)
@@ -147,7 +148,7 @@ magnitude c =
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
-phase :: (Elt a, RealFloat a) => Exp (Complex a) -> Exp a
+phase :: RealFloat a => Exp (Complex a) -> Exp a
 phase c =
   let x :+ y    = unlift c
   in atan2 y x
@@ -156,18 +157,26 @@ phase c =
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
-polar :: (Elt a, RealFloat a) => Exp (Complex a) -> Exp (a,a)
+polar :: RealFloat a => Exp (Complex a) -> Exp (a,a)
 polar z =  lift (magnitude z, phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-mkPolar :: forall a. (Elt a, RealFloat a) => Exp a -> Exp a -> Exp (Complex a)
+#if __GLASGOW_HASKELL__ <= 708
+mkPolar :: forall a. RealFloat a => Exp a -> Exp a -> Exp (Complex a)
+#else
+mkPolar :: forall a. Floating a  => Exp a -> Exp a -> Exp (Complex a)
+#endif
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-cis :: forall a. (Elt a, RealFloat a) => Exp a -> Exp (Complex a)
+#if __GLASGOW_HASKELL__ <= 708
+cis :: forall a. RealFloat a => Exp a -> Exp (Complex a)
+#else
+cis :: forall a. Floating a  => Exp a -> Exp (Complex a)
+#endif
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
@@ -188,6 +197,6 @@ imag c =
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: (Elt a, Num a) => Exp (Complex a) -> Exp (Complex a)
+conjugate :: Num a => Exp (Complex a) -> Exp (Complex a)
 conjugate z = lift $ real z :+ (- imag z)
 

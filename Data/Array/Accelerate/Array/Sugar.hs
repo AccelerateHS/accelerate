@@ -17,10 +17,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
 --               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
---               [2013..2014] Robert Clifton-Everest
+--               [2009..2016] Trevor L. McDonell
+--               [2013..2016] Robert Clifton-Everest
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
@@ -552,13 +552,10 @@ sinkFromElt2 :: (Elt a, Elt b, Elt c)
 {-# INLINE sinkFromElt2 #-}
 sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 
-{-# RULES
-
-"fromElt/toElt" forall e.
-  fromElt (toElt e) = e
-
-"toElt/fromElt" forall e.
-  toElt (fromElt e) = e #-}
+-- {-# RULES
+-- "fromElt/toElt" forall e. fromElt (toElt e) = e
+-- "toElt/fromElt" forall e. toElt (fromElt e) = e
+-- #-}
 
 
 -- Foreign functions
@@ -751,13 +748,10 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromArr o)
 
 
-{-# RULES
-
-"fromArr/toArr" forall a.
-  fromArr (toArr a) = a
-
-"toArr/fromArr" forall a.
-  toArr (fromArr a) = a #-}
+-- {-# RULES
+-- "fromArr/toArr" forall a. fromArr (toArr a) = a
+-- "toArr/fromArr" forall a. toArr (fromArr a) = a
+-- #-}
 
 
 -- Tuple representation
@@ -1134,7 +1128,7 @@ fromIArray iarr = newArray sh (\ix -> iarr IArray.! fromIxShapeRepr ix)
 
 -- | Convert an accelerated array to an 'IArray'.
 --
-toIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
+toIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix)
          => Array sh e -> a ix e
 toIArray arr = IArray.array bnds [(ix, arr ! toIxShapeRepr ix) | ix <- IArray.range bnds]
   where

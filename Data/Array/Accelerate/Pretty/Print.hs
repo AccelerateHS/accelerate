@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
@@ -301,7 +302,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     ppE  = prettyPreOpenExp prettyAcc parens env aenv
     ppE' = prettyPreOpenExp prettyAcc noParens env aenv
 
-    ppSh :: Shape sh => PreOpenExp acc env aenv sh -> Doc
+    ppSh :: PreOpenExp acc env aenv sh -> Doc
     ppSh = parens . ppE'
 
     ppF :: PreOpenFun acc env aenv f -> Doc
@@ -552,8 +553,9 @@ sizeEnv (Push env _) = 1 + sizeEnv env
 prj :: Idx env t -> Val env -> Doc
 prj ZeroIdx      (Push _ v)   = v
 prj (SuccIdx ix) (Push env _) = prj ix env
+#if __GLASGOW_HASKELL__ < 800
 prj _            _            = error "inconsistent valuation"
-
+#endif
 
 
 -- Auxiliary operations

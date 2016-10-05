@@ -430,25 +430,25 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 --  array, a boundary condition determines the contents of the out-of-bounds neighbourhood
 --  positions.
 --
-stencil :: (Shape ix, Elt a, Elt b, Stencil ix a stencil)
-        => (stencil -> Exp b)                 -- ^stencil function
-        -> Boundary a                         -- ^boundary condition
-        -> Acc (Array ix a)                   -- ^source array
-        -> Acc (Array ix b)                   -- ^destination array
+stencil
+    :: (Stencil sh a stencil, Elt b)
+    => (stencil -> Exp b)                     -- ^ stencil function
+    -> Boundary a                             -- ^ boundary condition
+    -> Acc (Array sh a)                       -- ^ source array
+    -> Acc (Array sh b)                       -- ^ destination array
 stencil = Acc $$$ Stencil
 
 -- | Map a binary stencil of an array.  The extent of the resulting array is the
 -- intersection of the extents of the two source arrays.
 --
-stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
-             Stencil ix a stencil1,
-             Stencil ix b stencil2)
-        => (stencil1 -> stencil2 -> Exp c)    -- ^binary stencil function
-        -> Boundary a                         -- ^boundary condition #1
-        -> Acc (Array ix a)                   -- ^source array #1
-        -> Boundary b                         -- ^boundary condition #2
-        -> Acc (Array ix b)                   -- ^source array #2
-        -> Acc (Array ix c)                   -- ^destination array
+stencil2
+    :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
+    => (stencil1 -> stencil2 -> Exp c)        -- ^ binary stencil function
+    -> Boundary a                             -- ^ boundary condition #1
+    -> Acc (Array sh a)                       -- ^ source array #1
+    -> Boundary b                             -- ^ boundary condition #2
+    -> Acc (Array sh b)                       -- ^ source array #2
+    -> Acc (Array sh c)                       -- ^ destination array
 stencil2 = Acc $$$$$ Stencil2
 
 

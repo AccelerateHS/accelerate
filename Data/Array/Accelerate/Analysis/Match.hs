@@ -676,7 +676,7 @@ matchSliceExtend _ _
 
 -- Primitive constants and functions
 --
-matchPrimConst :: (Elt s, Elt t) => PrimConst s -> PrimConst t -> Maybe (s :=: t)
+matchPrimConst :: PrimConst s -> PrimConst t -> Maybe (s :=: t)
 matchPrimConst (PrimMinBound s) (PrimMinBound t) = matchBoundedType s t
 matchPrimConst (PrimMaxBound s) (PrimMaxBound t) = matchBoundedType s t
 matchPrimConst (PrimPi s)       (PrimPi t)       = matchFloatingType s t
@@ -685,7 +685,7 @@ matchPrimConst _                _                = Nothing
 
 -- Covariant function matching
 --
-matchPrimFun :: (Elt s, Elt t) => PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :=: t)
+matchPrimFun :: PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :=: t)
 matchPrimFun (PrimAdd _)            (PrimAdd _)            = Just REFL
 matchPrimFun (PrimSub _)            (PrimSub _)            = Just REFL
 matchPrimFun (PrimMul _)            (PrimMul _)            = Just REFL
@@ -753,7 +753,7 @@ matchPrimFun _                      _                      = Nothing
 
 -- Contravariant function matching
 --
-matchPrimFun' :: (Elt s, Elt t) => PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :=: t)
+matchPrimFun' :: PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :=: t)
 matchPrimFun' (PrimAdd _)            (PrimAdd _)            = Just REFL
 matchPrimFun' (PrimSub _)            (PrimSub _)            = Just REFL
 matchPrimFun' (PrimMul _)            (PrimMul _)            = Just REFL

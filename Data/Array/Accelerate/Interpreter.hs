@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
@@ -232,7 +233,7 @@ generateOp = newArray
 
 
 transformOp
-    :: (Shape sh, Shape sh', Elt b)
+    :: (Shape sh', Elt b)
     => sh'
     -> (sh' -> sh)
     -> (a -> b)
@@ -300,7 +301,7 @@ sliceOp slice arr slix
         in  $indexCheck "slice" i sz $ (sl', \ix -> (f' ix, i))
 
 
-mapOp :: (Shape sh, Elt a, Elt b)
+mapOp :: (Shape sh, Elt b)
       => (a -> b)
       -> Delayed (Array sh a)
       -> Array sh b
@@ -309,7 +310,7 @@ mapOp f (Delayed sh xs _)
 
 
 zipWithOp
-    :: (Shape sh, Elt a, Elt b, Elt c)
+    :: (Shape sh, Elt c)
     => (a -> b -> c)
     -> Delayed (Array sh a)
     -> Delayed (Array sh b)
@@ -358,7 +359,7 @@ fold1Op f (Delayed (sh :. n) arr _)
 
 
 foldSegOp
-    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
+    :: forall sh e i. (Elt e, Elt i, IsIntegral i)
     => (e -> e -> e)
     -> e
     -> Delayed (Array (sh :. Int) e)
@@ -571,7 +572,7 @@ permuteOp f def@(Array _ adef) p (Delayed sh _ ain)
 
 
 backpermuteOp
-    :: (Shape sh, Shape sh', Elt e)
+    :: (Shape sh', Elt e)
     => sh'
     -> (sh' -> sh)
     -> Delayed (Array sh e)
@@ -581,7 +582,7 @@ backpermuteOp sh' p (Delayed _ arr _)
 
 
 stencilOp
-    :: (Elt a, Elt b, Stencil sh a stencil)
+    :: (Stencil sh a stencil, Elt b)
     => (stencil -> b)
     -> Boundary (EltRepr a)
     -> Array sh a
@@ -599,7 +600,7 @@ stencilOp stencil boundary arr
 
 
 stencil2Op
-    :: (Elt a, Elt b, Elt c, Stencil sh a stencil1, Stencil sh b stencil2)
+    :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> c)
     -> Boundary (EltRepr a)
     -> Array sh a
@@ -1254,7 +1255,9 @@ data Val' senv where
 prj' :: Idx senv t -> Val' senv -> Window t
 prj' ZeroIdx       (Push' _   v) = v
 prj' (SuccIdx idx) (Push' val _) = prj' idx val
+#if __GLASGOW_HASKELL__ < 800
 prj' _             _             = $internalError "prj" "inconsistent valuation"
+#endif
 
 -- Projection of a chunk from a window valuation using a sequence
 -- cursor.

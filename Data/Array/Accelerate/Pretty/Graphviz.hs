@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE OverloadedStrings    #-}
@@ -80,7 +81,9 @@ avalToVal (Apush aenv _ v) = Push (avalToVal aenv) (text v)
 aprj :: Idx aenv t -> Aval aenv -> (NodeId, Label)        -- TLM: (Vertex, Label) ??
 aprj ZeroIdx      (Apush _    n v) = (n,v)
 aprj (SuccIdx ix) (Apush aenv _ _) = aprj ix aenv
-aprj _            _                = error "inconsistent valuation"
+#if __GLASGOW_HASKELL__ < 800
+aprj _            _                = $internalError "aprj" "inconsistent valuation"
+#endif
 
 
 -- Graph construction
