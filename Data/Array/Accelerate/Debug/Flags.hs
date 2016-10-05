@@ -3,7 +3,9 @@
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
 #ifdef ACCELERATE_DEBUG
+#if __GLASGOW_HASKELL >= 800
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+#endif
 #else
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-}
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
