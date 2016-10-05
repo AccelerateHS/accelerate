@@ -83,10 +83,13 @@ instance Kit OpenAcc where
   inject                 = OpenAcc
   extract (OpenAcc pacc) = pacc
   fromOpenAcc            = id
-
-  matchAcc      = matchOpenAcc
-  hashAcc       = hashOpenAcc
-  prettyAcc     = prettyOpenAcc
+  --
+  {-# INLINEABLE hashAcc   #-}
+  {-# INLINEABLE matchAcc  #-}
+  {-# INLINEABLE prettyAcc #-}
+  hashAcc                = hashOpenAcc
+  matchAcc               = matchOpenAcc
+  prettyAcc              = prettyOpenAcc
 
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
 avarIn = inject  . Avar
@@ -105,18 +108,23 @@ class Match f where
   match :: f s -> f t -> Maybe (s :=: t)
 
 instance Match (Idx env) where
+  {-# INLINEABLE match #-}
   match = matchIdx
 
 instance Kit acc => Match (PreOpenExp acc env aenv) where
+  {-# INLINEABLE match #-}
   match = matchPreOpenExp matchAcc hashAcc
 
 instance Kit acc => Match (PreOpenFun acc env aenv) where
+  {-# INLINEABLE match #-}
   match = matchPreOpenFun matchAcc hashAcc
 
 instance Kit acc => Match (PreOpenAcc acc aenv) where
+  {-# INLINEABLE match #-}
   match = matchPreOpenAcc matchAcc hashAcc
 
 instance {-# INCOHERENT #-} Kit acc => Match (acc aenv) where
+  {-# INLINEABLE match #-}
   match = matchAcc
 
 
@@ -154,13 +162,14 @@ data DelayedOpenAcc aenv a where
 
 instance Rebuildable DelayedOpenAcc where
   type AccClo DelayedOpenAcc = DelayedOpenAcc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial v acc = case acc of
-    Manifest pacc -> Manifest <$> (rebuildPartial v pacc)
-    Delayed{..}   -> Delayed <$> (rebuildPartial v extentD)
-                             <*> (rebuildPartial v indexD)
-                             <*> (rebuildPartial v linearIndexD)
+    Manifest pacc -> Manifest <$> rebuildPartial v pacc
+    Delayed{..}   -> Delayed  <$> rebuildPartial v extentD
+                              <*> rebuildPartial v indexD
+                              <*> rebuildPartial v linearIndexD
 
-instance Sink DelayedOpenAcc where
+instance Sink DelayedOpenAcc
 
 instance Kit DelayedOpenAcc where
   inject                  = Manifest
@@ -168,8 +177,11 @@ instance Kit DelayedOpenAcc where
   extract Delayed{}       = error "DelayedAcc.extract"
   fromOpenAcc             = error "DelayedAcc.fromOpenAcc"
   --
-  matchAcc                = matchDelayed
+  {-# INLINEABLE hashAcc   #-}
+  {-# INLINEABLE matchAcc  #-}
+  {-# INLINEABLE prettyAcc #-}
   hashAcc                 = hashDelayed
+  matchAcc                = matchDelayed
   prettyAcc               = prettyDelayed
 
 

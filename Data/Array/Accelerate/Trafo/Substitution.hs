@@ -1,5 +1,4 @@
 {-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE DefaultSignatures   #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -122,15 +121,13 @@ instance Functor Identity where
   fmap f (Identity a) = Identity (f a)
 
 instance Applicative Identity where
-  (Identity f) <*> (Identity a) = Identity (f a)
-  pure a = Identity a
+  Identity f <*> Identity a = Identity (f a)
+  pure a                    = Identity a
 
 -- A class for rebuilding terms.
 --
--- Minimal complete definition is 'AccClo' and rebuild'.
---
 class Rebuildable f where
-
+  {-# MINIMAL rebuildPartial #-}
   type AccClo f :: (* -> * -> *)
 
   rebuildPartial :: (Applicative f', SyntacticAcc fa)
@@ -138,6 +135,7 @@ class Rebuildable f where
                  -> f aenv  a
                  -> f' (f aenv' a)
 
+  {-# INLINEABLE rebuildA #-}
   rebuildA :: (SyntacticAcc fa)
               => (forall a'. Arrays a' => Idx aenv a' -> fa (AccClo f) aenv' a')
               -> f aenv  a
@@ -146,15 +144,14 @@ class Rebuildable f where
 
 -- A class for rebuilding scalar terms.
 --
--- Minimal complete definition is 'AccClo' and rebuild'.
---
 class RebuildableExp f where
-
+  {-# MINIMAL rebuildPartialE #-}
   rebuildPartialE :: (Applicative f', SyntacticExp fe)
                   => (forall e'. Elt e' => Idx env e' -> f' (fe (AccClo (f env)) env' aenv e'))
                   -> f env aenv  e
                   -> f' (f env' aenv e)
 
+  {-# INLINABLE rebuildE #-}
   rebuildE :: SyntacticExp fe
            => (forall e'. Elt e' => Idx env e' -> fe (AccClo (f env)) env' aenv e')
            -> f env aenv  e
@@ -169,18 +166,22 @@ type RebuildableAcc acc = (Rebuildable acc, AccClo acc ~ acc)
 --
 instance RebuildableAcc acc => Rebuildable (PreOpenExp acc env) where
   type AccClo (PreOpenExp acc env) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildPreOpenExp rebuildPartial (pure . IE)
 
 instance RebuildableAcc acc => Rebuildable (PreOpenFun acc env) where
   type AccClo (PreOpenFun acc env) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildFun rebuildPartial (pure . IE)
 
 instance RebuildableAcc acc => Rebuildable (PreOpenAcc acc) where
   type AccClo (PreOpenAcc acc) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildPreOpenAcc rebuildPartial
 
 instance RebuildableAcc acc => Rebuildable (PreOpenAfun acc) where
   type AccClo (PreOpenAfun acc) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildAfun rebuildPartial
 
 -- Tuples have to be handled specially.
@@ -188,16 +189,20 @@ newtype RebuildTup acc env aenv t = RebuildTup { unRTup :: Tuple (PreOpenExp acc
 
 instance RebuildableAcc acc => Rebuildable (RebuildTup acc env) where
   type AccClo (RebuildTup acc env) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial v t = RebuildTup <$> rebuildTup rebuildPartial (pure . IE) v (unRTup t)
 
 instance Rebuildable OpenAcc where
   type AccClo OpenAcc = OpenAcc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildOpenAcc
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenExp acc) where
+  {-# INLINEABLE rebuildPartialE #-}
   rebuildPartialE v = rebuildPreOpenExp rebuildPartial v (pure . IA)
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
+  {-# INLINEABLE rebuildPartialE #-}
   rebuildPartialE v = rebuildFun rebuildPartial v (pure . IA)
 
 -- NOTE: [Weakening]
@@ -220,21 +225,44 @@ type env :> env' = forall t'. Idx env t' -> Idx env' t'
 
 class Sink f where
   weaken :: env :> env' -> f env t -> f env' t
-  default weaken :: Rebuildable f => env :> env' -> f env t -> f env' t
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
-instance Sink Idx where
-  weaken k = k
+  -- TLM: We can't use this default instance because it doesn't lead to
+  --      specialised code. Perhaps the INLINEABLE pragma is ignored: GHC bug?
+  --
+  -- {-# INLINEABLE weaken #-}
+  -- default weaken :: Rebuildable f => env :> env' -> f env t -> f env' t
+  -- weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
 --instance Rebuildable f => Sink f where -- undecidable, incoherent
 --  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
+instance Sink Idx where
+  {-# INLINEABLE weaken #-}
+  weaken k = k
+
 instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
 instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
 instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
 instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
 instance RebuildableAcc acc => Sink (RebuildTup acc env) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
 instance Sink OpenAcc where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
 -- This rewrite rule is disabled because 'weaken' is now part of a type class.
 -- As such, we cannot attach a NOINLINE pragma because it has many definitions.
@@ -245,11 +273,20 @@ instance Sink OpenAcc where
 
 class SinkExp f where
   weakenE :: env :> env' -> f env aenv t -> f env' aenv t
-  default weakenE :: RebuildableExp f => env :> env' -> f env aenv t -> f env' aenv t
-  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+
+  -- See comment in 'weaken'
+  --
+  -- {-# INLINEABLE weakenE #-}
+  -- default weakenE :: RebuildableExp f => env :> env' -> f env aenv t -> f env' aenv t
+  -- weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
 
 instance RebuildableAcc acc => SinkExp (PreOpenExp acc) where
+  {-# INLINEABLE weakenE #-}
+  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+
 instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
+  {-# INLINEABLE weakenE #-}
+  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
 
 -- See above for why this is disabled.
 -- {-# RULES
@@ -268,9 +305,11 @@ instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
 -- The type of partially shifting terms from one context into another.
 type env :?> env' = forall t'. Idx env t' -> Maybe (Idx env' t')
 
+{-# INLINEABLE strengthen #-}
 strengthen :: Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
 strengthen k = rebuildPartial (fmap IA . k)
 
+{-# INLINEABLE strengthenE #-}
 strengthenE :: RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
 strengthenE k = rebuildPartialE (fmap IE . k)
 
@@ -303,6 +342,7 @@ instance SyntacticExp PreOpenExp where
   weakenExp k    = runIdentity . rebuildPreOpenExp k (Identity . weakenExp k . IE) (Identity . IA)
   weakenExpAcc k = runIdentity . rebuildPreOpenExp k (Identity . IE) (Identity . weakenAcc k . IA)
 
+{-# INLINEABLE shiftE #-}
 shiftE
     :: (Applicative f, SyntacticExp fe, Elt t)
     => RebuildAcc acc
@@ -312,6 +352,7 @@ shiftE
 shiftE _ _ ZeroIdx      = pure $ varIn ZeroIdx
 shiftE k v (SuccIdx ix) = weakenExp k <$> (v ix)
 
+{-# INLINEABLE rebuildPreOpenExp #-}
 rebuildPreOpenExp
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
@@ -347,6 +388,7 @@ rebuildPreOpenExp k v av exp =
     Union s t           -> Union        <$> rebuildPreOpenExp k v av s  <*> rebuildPreOpenExp k v av t
     Foreign ff f e      -> Foreign ff f <$> rebuildPreOpenExp k v av e
 
+{-# INLINEABLE rebuildTup #-}
 rebuildTup
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
@@ -359,6 +401,7 @@ rebuildTup k v av tup =
     NilTup      -> pure NilTup
     SnocTup t e -> SnocTup <$> rebuildTup k v av t <*> rebuildPreOpenExp k v av e
 
+{-# INLINEABLE rebuildFun #-}
 rebuildFun
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
@@ -397,6 +440,7 @@ instance SyntacticAcc PreOpenAcc where
   accOut        = id
   weakenAcc k   = runIdentity . rebuildPreOpenAcc k (Identity . weakenAcc k . IA)
 
+{-# INLINEABLE shiftA #-}
 shiftA
     :: (Applicative f, SyntacticAcc fa, Arrays t)
     => RebuildAcc acc
@@ -406,6 +450,7 @@ shiftA
 shiftA _ _ ZeroIdx      = pure $ avarIn ZeroIdx
 shiftA k v (SuccIdx ix) = weakenAcc k <$> v ix
 
+{-# INLINEABLE rebuildPreOpenAcc #-}
 rebuildPreOpenAcc
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -447,6 +492,7 @@ rebuildPreOpenAcc k av acc =
     Collect seq             -> Collect      <$> rebuildSeq k av seq
     Aforeign ff afun as     -> Aforeign ff afun <$> k av as
 
+{-# INLINEABLE rebuildAfun #-}
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -458,6 +504,7 @@ rebuildAfun k av afun =
     Abody b     -> Abody <$> k av b
     Alam f      -> Alam  <$> rebuildAfun k (shiftA k av) f
 
+{-# INLINEABLE rebuildAtup #-}
 rebuildAtup
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -469,6 +516,7 @@ rebuildAtup k av atup =
     NilAtup      -> pure NilAtup
     SnocAtup t a -> SnocAtup <$> rebuildAtup k av t <*> k av a
 
+{-# INLINEABLE rebuildSeq #-}
 rebuildSeq
     :: (SyntacticAcc fa, Applicative f)
     => RebuildAcc acc
@@ -481,6 +529,7 @@ rebuildSeq k v seq =
     Consumer c   -> Consumer <$> (rebuildC k v c)
     Reify ix     -> pure $ Reify ix
 
+{-# INLINEABLE rebuildP #-}
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
@@ -495,6 +544,7 @@ rebuildP k v p =
     ZipWithSeq f x y     -> ZipWithSeq <$> rebuildAfun k v f <*> pure x <*> pure y
     ScanSeq f e x        -> ScanSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
 
+{-# INLINEABLE rebuildC #-}
 rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
@@ -512,6 +562,7 @@ rebuildC k v c =
 
 -- For OpenAcc
 
+{-# INLINEABLE rebuildOpenAcc #-}
 rebuildOpenAcc
     :: (Applicative f, SyntacticAcc fa)
     => (forall t'. Arrays t' => Idx aenv t' -> f (fa OpenAcc aenv' t'))

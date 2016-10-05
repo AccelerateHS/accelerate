@@ -72,6 +72,7 @@ type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :=: t)
 -- Compute the congruence of two array computations. The nodes are congruent if
 -- they have the same operator and their operands are congruent.
 --
+{-# INLINEABLE matchOpenAcc #-}
 matchOpenAcc :: OpenAcc aenv s -> OpenAcc aenv t -> Maybe (s :=: t)
 matchOpenAcc (OpenAcc acc1) (OpenAcc acc2) =
   matchPreOpenAcc matchOpenAcc hashOpenAcc acc1 acc2
