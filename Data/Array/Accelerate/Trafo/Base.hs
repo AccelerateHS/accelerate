@@ -169,7 +169,8 @@ instance Rebuildable DelayedOpenAcc where
                               <*> rebuildPartial v indexD
                               <*> rebuildPartial v linearIndexD
 
-instance Sink DelayedOpenAcc
+instance Sink DelayedOpenAcc where
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
 instance Kit DelayedOpenAcc where
   inject                  = Manifest
