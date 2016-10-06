@@ -771,9 +771,10 @@ newArrayData' :: forall e. Storable e => Int -> IO (UniqueArray e)
 newArrayData' size
   = $internalCheck "newArrayData" "size must be >= 0" (size >= 0)
   $ newUniqueArray <=< unsafeInterleaveIO $ do
+      let bytes = size * sizeOf (undefined :: e)
       new <- readIORef __mallocForeignPtrBytes
-      ptr <- new (size * sizeOf (undefined :: e))
-      traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" size (show ptr)
+      ptr <- new bytes
+      traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" bytes (show ptr)
       return (castForeignPtr ptr)
 
 -- | Register the given function as the callback to use to allocate new array
