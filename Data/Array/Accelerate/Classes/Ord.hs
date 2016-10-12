@@ -476,14 +476,18 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g, Ord h, Ord i, Ord j, 
 -- signatures as the return type is fixed to 'Bool'. This instance is provided
 -- to provide a useful error message.
 --
+-- Note that 'min' and 'max' are implementable, so we do hook those into the
+-- accelerate instances defined here. This allows us to use operations such as
+-- 'Prelude.minimum' and 'Prelude.maximum'.
+--
 instance Ord a => P.Ord (Exp a) where
   compare = error "Prelude.Ord.compare applied to EDSL types"
   (<)     = preludeError "Ord.<"  "(<*)"
   (<=)    = preludeError "Ord.<=" "(<=*)"
   (>)     = preludeError "Ord.>"  "(>*)"
   (>=)    = preludeError "Ord.>=" "(>=*)"
-  min     = preludeError "Ord.min" "Accelerate.min"
-  max     = preludeError "Ord.max" "Accelerate.max"
+  min     = min
+  max     = max
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use %s instead" x y)
