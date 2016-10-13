@@ -464,9 +464,11 @@ iterate
 iterate ppr f = fix 1 . setup
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
-    -- excessive run times, we set this value very low.
+    -- excessive run times, we (should) set this value very low.
     --
-    lIMIT       = 5
+    -- TODO: make this tunable via debug flags.
+    --
+    lIMIT       = 25
 
     simplify'   = Stats.simplifierDone . f
     setup x     = Stats.trace Stats.dump_simpl_iterations (printf "simplifier begin:\n%s\n" (ppr x))
@@ -474,7 +476,7 @@ iterate ppr f = fix 1 . setup
 
     fix :: Int -> f a -> f a
     fix i x0
-      | i > lIMIT       = $internalWarning "iterate" "iteration limit reached" (x0 ==^ f x0) x0
+      | i > lIMIT       = $internalWarning "simplify" "iteration limit reached" (not (x0 ==^ f x0)) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2
