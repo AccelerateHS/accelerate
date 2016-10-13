@@ -83,14 +83,10 @@ trace _ _ expr = expr
 --
 traceIO :: Mode -> String -> IO ()
 #ifdef ACCELERATE_DEBUG
-traceIO f msg = do
-  when f $ do
-    psec        <- getCPUTime
-    let secs    = fromIntegral psec * 1E-12 :: Double
-    D.traceIO   $ showFFloat (Just 3) secs (':':msg)
+traceIO f msg = when f $ putTraceMsg msg
 #else
 {-# INLINE traceIO #-}
-traceIO _ _ = return ()
+traceIO _ _   = return ()
 #endif
 
 
@@ -107,6 +103,19 @@ traceEvent f msg expr = unsafePerformIO $ do
 #else
 {-# INLINE traceEvent #-}
 traceEvent _ _ expr = expr
+#endif
+
+
+-- | Print a message prefixed with the current CPU time.
+--
+putTraceMsg :: String -> IO ()
+#ifdef ACCELERATE_DEBUG
+putTraceMsg msg = do
+  psec        <- getCPUTime
+  let secs    = fromIntegral psec * 1E-12 :: Double
+  D.traceIO   $ showFFloat (Just 3) secs (':':msg)
+#else
+putTraceMsg _   = return ()
 #endif
 
 
