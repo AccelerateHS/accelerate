@@ -263,6 +263,7 @@ Library
         , mtl                           >= 2.0
         , pretty                        >= 1.0
         , template-haskell
+        , time                          >= 1.4
         , transformers                  >= 0.3
         , unique
         , unordered-containers          >= 0.2
@@ -322,6 +323,7 @@ Library
         Data.Array.Accelerate.Debug.Flags
         Data.Array.Accelerate.Debug.Monitoring
         Data.Array.Accelerate.Debug.Stats
+        Data.Array.Accelerate.Debug.Timed
         Data.Array.Accelerate.Debug.Trace
         Data.Array.Accelerate.Language
         Data.Array.Accelerate.Lift

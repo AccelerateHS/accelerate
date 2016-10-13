@@ -28,8 +28,9 @@ module Data.Array.Accelerate.Debug (
 ) where
 
 import Data.Array.Accelerate.Debug.Flags                as Debug
-import Data.Array.Accelerate.Debug.Stats                as Debug
 import Data.Array.Accelerate.Debug.Monitoring           as Debug
+import Data.Array.Accelerate.Debug.Stats                as Debug
+import Data.Array.Accelerate.Debug.Timed                as Debug
 import Data.Array.Accelerate.Debug.Trace                as Debug
 
 import Data.Array.Accelerate.Pretty.Graphviz
