@@ -83,8 +83,8 @@ timed_gc fmt action = do
 
   putTraceMsg . fmt $ intercalate "\n"
     [ elapsed totalWall totalCPU
-    , printf "    %s allocated on the heap" (showFFloatSIBase (Just 0) 1024 allocated "B")
-    , printf "    %s copied during GC (%d collections)" (showFFloatSIBase (Just 0) 1024 copied "B") (numGcs gc1 - numGcs gc0)
+    , printf "    %s allocated on the heap" (showFFloatSIBase (Just 1) 1024 allocated "B")
+    , printf "    %s copied during GC (%d collections)" (showFFloatSIBase (Just 1) 1024 copied "B") (numGcs gc1 - numGcs gc0)
     , printf "    MUT: %s" (elapsed mutatorWall mutatorCPU)
     , printf "    GC:  %s" (elapsed gcWall gcCPU)
     ]
