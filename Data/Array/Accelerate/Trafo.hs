@@ -36,7 +36,9 @@ module Data.Array.Accelerate.Trafo (
 
 ) where
 
+import Control.DeepSeq
 import Data.Typeable
+import Text.Printf
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
@@ -119,10 +121,10 @@ convertAcc = convertAccWith phases
 
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
-  = Fusion.convertAcc enableAccFusion
-  $ Vectorise.vectoriseSeqAcc `when` vectoriseSequences
-  $ Rewrite.convertSegments `when` convertOffsetOfSegment
-  $ Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
+  = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
+  $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
+  $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` convertOffsetOfSegment
+  $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
 
@@ -134,10 +136,10 @@ convertAfun = convertAfunWith phases
 
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
-  = Fusion.convertAfun enableAccFusion
-  $ Vectorise.vectoriseSeqAfun `when` vectoriseSequences
-  $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
+  = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
+  $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
+  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
+  $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
 
@@ -146,8 +148,8 @@ convertAfunWith Phase{..} acc
 --
 convertExp :: Elt e => Exp e -> AST.Exp () e
 convertExp
-  = Rewrite.simplify
-  . Sharing.convertExp (recoverExpSharing phases)
+  = phase "exp-simplify"      Rewrite.simplify
+  . phase "sharing-recovery" (Sharing.convertExp (recoverExpSharing phases))
 
 
 -- | Convert closed scalar functions, incorporating sharing observation and
@@ -155,8 +157,8 @@ convertExp
 --
 convertFun :: Function f => f -> AST.Fun () (FunctionR f)
 convertFun
-  = Rewrite.simplify
-  . Sharing.convertFun (recoverExpSharing phases)
+  = phase "exp-simplify"      Rewrite.simplify
+  . phase "sharing-recovery" (Sharing.convertFun (recoverExpSharing phases))
 
 -- | Convert a closed sequence computation, incorporating sharing observation and
 --   optimisation.
@@ -166,10 +168,10 @@ convertSeq = convertSeqWith phases
 
 convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
 convertSeqWith Phase{..} s
-  = Fusion.convertSeq enableAccFusion
-  $ Vectorise.vectoriseSeq `when` vectoriseSequences
-  $ Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
-  $ Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
+  = phase "array-fusion"           (Fusion.convertSeq enableAccFusion)
+  $ phase "vectorise-sequences"    Vectorise.vectoriseSeq     `when` vectoriseSequences
+  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
+  $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
 
 
@@ -190,6 +192,7 @@ instance Function (Exp a -> f) => Show (Exp a -> f) where
 
 -- instance Typeable a => Show (Seq a) where
 --   show = withSimplStats . show . convertSeq
+
 
 -- Debugging
 -- ---------
@@ -214,5 +217,19 @@ withSimplStats x = unsafePerformIO $ do
              return x
 #else
 withSimplStats x = x
+#endif
+
+-- Execute a phase of the compiler and (possibly) print some timing/gc
+-- statistics.
+--
+phase :: NFData b => String -> (a -> b) -> a -> b
+#ifdef ACCELERATE_DEBUG
+phase n f x = unsafePerformIO $ do
+  enabled <- queryFlag dump_phases
+  if not enabled
+    then return (f x)
+    else timed dump_phases (printf "phase %s: %s" n) (return $!! f x)
+#else
+phase _ f x = f x
 #endif
 

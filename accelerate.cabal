@@ -168,6 +168,9 @@ Flag debug
     .
       * @verbose@: Be extra chatty.
     .
+      * @dump-phases@: Print timing information about each phase of the compiler.
+        Enable GC stats (@+RTS -t@ or otherwise) for memory usage information.
+    .
       * @dump-sharing@: Print information related to sharing recovery.
     .
       * @dump-simpl-stats@: Print statistics related to fusion & simplification.

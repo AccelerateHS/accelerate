@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Debug.Flags (
 
   Flags, Mode,
   acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
-  dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
+  dump_phases, dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
   dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm,
   dump_exec, dump_sched,
 
@@ -85,6 +85,7 @@ fclabels [d|
     , verbose                   :: !Bool                -- be very chatty
 
       -- optimisation and simplification
+    , dump_phases               :: !Bool                -- print information about each phase of the compiler
     , dump_sharing              :: !Bool                -- sharing recovery phase
     , dump_simpl_stats          :: !Bool                -- statistics form fusion/simplification
     , dump_simpl_iterations     :: !Bool                -- output from each simplifier iteration
@@ -136,6 +137,7 @@ fflags =
 dflags :: [FlagSpec (Bool -> Flags -> Flags)]
 dflags =
   [ Option "verbose"                    (set verbose)
+  , Option "dump-phases"                (set dump_phases)
   , Option "dump-sharing"               (set dump_sharing)
   , Option "dump-simpl-stats"           (set dump_simpl_stats)
   , Option "dump-simpl-iterations"      (set dump_simpl_iterations)
@@ -193,7 +195,7 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def def def
+    defaults            = Flags def def def def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
     parse1 opts this    =
