@@ -49,6 +49,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
 -- standard library
 import Control.Applicative
+import Control.DeepSeq
 import Data.Hashable
 import Text.PrettyPrint
 import Prelude                                          hiding ( until )
@@ -185,6 +186,14 @@ instance Kit DelayedOpenAcc where
   matchAcc                = matchDelayed
   prettyAcc               = prettyDelayed
 
+instance NFData (DelayedOpenAfun aenv t) where
+  rnf = rnfPreOpenAfun rnfDelayedOpenAcc
+
+instance NFData (DelayedOpenAcc aenv t) where
+  rnf = rnfDelayedOpenAcc
+
+instance NFData (DelayedSeq t) where
+  rnf = rnfDelayedSeq
 
 hashDelayed :: HashAcc DelayedOpenAcc
 hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
@@ -205,6 +214,20 @@ matchDelayed (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
 
 matchDelayed _ _
   = Nothing
+
+rnfDelayedOpenAcc :: DelayedOpenAcc aenv t -> ()
+rnfDelayedOpenAcc (Manifest pacc)    = rnfPreOpenAcc rnfDelayedOpenAcc pacc
+rnfDelayedOpenAcc (Delayed sh ix lx) = rnfPreOpenExp rnfDelayedOpenAcc sh
+                                 `seq` rnfPreOpenFun rnfDelayedOpenAcc ix
+                                 `seq` rnfPreOpenFun rnfDelayedOpenAcc lx
+
+rnfDelayedSeq :: DelayedSeq t -> ()
+rnfDelayedSeq (DelayedSeq env s) = rnfExtend rnfDelayedOpenAcc env
+                             `seq` rnfPreOpenSeq rnfDelayedOpenAcc s
+
+rnfExtend :: NFDataAcc acc -> Extend acc aenv aenv' -> ()
+rnfExtend _    BaseEnv         = ()
+rnfExtend rnfA (PushEnv env a) = rnfExtend rnfA env `seq` rnfA a
 
 
 -- Note: If we detect that the delayed array is simply accessing an array
