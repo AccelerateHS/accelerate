@@ -19,14 +19,18 @@ module Data.Array.Accelerate.Debug.Timed (
 import Data.Array.Accelerate.Debug.Trace
 import Data.Array.Accelerate.Debug.Flags
 
-import Control.Monad.Trans                              ( MonadIO, liftIO )
+import Control.Monad.Trans                              ( MonadIO )
+import Text.Printf
+
+#if ACCELERATE_DEBUG
+import Control.Monad.Trans                              ( liftIO )
 import Data.Int
 import Data.List
 import Data.Time.Clock
 import System.CPUTime
-import Text.Printf
 
 import GHC.Stats
+#endif
 
 
 -- | Execute an action and time the results. If GC stats have been enabled (with

@@ -38,7 +38,6 @@ module Data.Array.Accelerate.Trafo (
 
 import Control.DeepSeq
 import Data.Typeable
-import Text.Printf
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
@@ -55,6 +54,7 @@ import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
 #ifdef ACCELERATE_DEBUG
+import Text.Printf
 import System.IO.Unsafe
 import Data.Array.Accelerate.Debug                      hiding ( when )
 import qualified Data.Array.Accelerate.Debug            as Debug
