@@ -223,7 +223,7 @@ phase :: NFData b => String -> (a -> b) -> a -> b
 phase n f x = unsafePerformIO $ do
   enabled <- queryFlag dump_phases
   if enabled
-    then timed dump_phases (printf "phase %s: %s" n) (return $!! f x)
+    then timed dump_phases (\wall cpu -> printf "phase %s: %s" n (elapsed wall cpu)) (return $!! f x)
     else return (f x)
 #else
 phase _ f x = f x

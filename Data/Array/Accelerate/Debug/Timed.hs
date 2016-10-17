@@ -12,6 +12,7 @@
 module Data.Array.Accelerate.Debug.Timed (
 
   timed,
+  elapsed,
 
 ) where
 
@@ -33,7 +34,7 @@ import GHC.Stats
 -- otherwise only timing information is shown.
 --
 {-# INLINEABLE timed #-}
-timed :: MonadIO m => Mode -> ShowS -> m a -> m a
+timed :: MonadIO m => Mode -> (Double -> Double -> String) -> m a -> m a
 #ifdef ACCELERATE_DEBUG
 timed mode fmt action = do
   enabled <- liftIO $ queryFlag mode
@@ -50,7 +51,7 @@ timed _ _ action = action
 #endif
 
 #ifdef ACCELERATE_DEBUG
-timed_simpl :: MonadIO m => ShowS -> m a -> m a
+timed_simpl :: MonadIO m => (Double -> Double -> String) -> m a -> m a
 timed_simpl fmt action = do
   wall0 <- liftIO getCurrentTime
   cpu0  <- liftIO getCPUTime
@@ -61,11 +62,11 @@ timed_simpl fmt action = do
   let wallTime = realToFrac (diffUTCTime wall1 wall0)
       cpuTime  = fromIntegral (cpu1 - cpu0) * 1E-12
   --
-  liftIO $ putTraceMsg (fmt (elapsed wallTime cpuTime))
+  liftIO $ putTraceMsg (fmt wallTime cpuTime)
   return res
 
 
-timed_gc :: MonadIO m => ShowS -> m a -> m a
+timed_gc :: MonadIO m => (Double -> Double -> String) -> m a -> m a
 timed_gc fmt action = do
   gc0 <- liftIO getGCStats
   res <- action
@@ -83,8 +84,8 @@ timed_gc fmt action = do
       gcWall      = gcWallSeconds gc1 - gcWallSeconds gc0
       gcCPU       = gcCpuSeconds gc1 - gcCpuSeconds gc0
 
-  liftIO . putTraceMsg . fmt $ intercalate "\n"
-    [ elapsed totalWall totalCPU
+  liftIO . putTraceMsg $ intercalate "\n"
+    [ fmt totalWall totalCPU
     , printf "    %s allocated on the heap" (showFFloatSIBase (Just 1) 1024 allocated "B")
     , printf "    %s copied during GC (%d collections)" (showFFloatSIBase (Just 1) 1024 copied "B") (numGcs gc1 - numGcs gc0)
     , printf "    MUT: %s" (elapsed mutatorWall mutatorCPU)
@@ -92,12 +93,11 @@ timed_gc fmt action = do
     ]
   --
   return res
-
+#endif
 
 elapsed :: Double -> Double -> String
 elapsed wallTime cpuTime =
   printf "%s (wall), %s (cpu)"
     (showFFloatSIBase (Just 3) 1000 wallTime "s")
     (showFFloatSIBase (Just 3) 1000 cpuTime  "s")
-#endif
 
