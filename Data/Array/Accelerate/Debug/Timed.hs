@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Debug.Timed (
 import Data.Array.Accelerate.Debug.Trace
 import Data.Array.Accelerate.Debug.Flags
 
+import Control.Monad.Trans                              ( MonadIO, liftIO )
 import Data.Int
 import Data.List
 import Data.Time.Clock
@@ -31,13 +32,14 @@ import GHC.Stats
 -- @+RTS -t@ for example) then timing and memory usage information is displayed,
 -- otherwise only timing information is shown.
 --
-timed :: Mode -> ShowS -> IO a -> IO a
+{-# INLINEABLE timed #-}
+timed :: MonadIO m => Mode -> ShowS -> m a -> m a
 #ifdef ACCELERATE_DEBUG
 timed mode fmt action = do
-  enabled <- queryFlag mode
+  enabled <- liftIO $ queryFlag mode
   if enabled
     then do
-      with_gc <- getGCStatsEnabled
+      with_gc <- liftIO getGCStatsEnabled
       if with_gc
         then timed_gc    fmt action
         else timed_simpl fmt action
@@ -47,27 +49,27 @@ timed mode fmt action = do
 timed _ _ action = action
 #endif
 
-
-timed_simpl :: ShowS -> IO a -> IO a
+#ifdef ACCELERATE_DEBUG
+timed_simpl :: MonadIO m => ShowS -> m a -> m a
 timed_simpl fmt action = do
-  wall0 <- getCurrentTime
-  cpu0  <- getCPUTime
+  wall0 <- liftIO getCurrentTime
+  cpu0  <- liftIO getCPUTime
   res   <- action
-  wall1 <- getCurrentTime
-  cpu1  <- getCPUTime
+  wall1 <- liftIO getCurrentTime
+  cpu1  <- liftIO getCPUTime
   --
   let wallTime = realToFrac (diffUTCTime wall1 wall0)
       cpuTime  = fromIntegral (cpu1 - cpu0) * 1E-12
   --
-  putTraceMsg (fmt (elapsed wallTime cpuTime))
+  liftIO $ putTraceMsg (fmt (elapsed wallTime cpuTime))
   return res
 
 
-timed_gc :: ShowS -> IO a -> IO a
+timed_gc :: MonadIO m => ShowS -> m a -> m a
 timed_gc fmt action = do
-  gc0 <- getGCStats
+  gc0 <- liftIO getGCStats
   res <- action
-  gc1 <- getGCStats
+  gc1 <- liftIO getGCStats
   --
   let toDouble :: Int64 -> Double
       toDouble    = fromIntegral
@@ -81,7 +83,7 @@ timed_gc fmt action = do
       gcWall      = gcWallSeconds gc1 - gcWallSeconds gc0
       gcCPU       = gcCpuSeconds gc1 - gcCpuSeconds gc0
 
-  putTraceMsg . fmt $ intercalate "\n"
+  liftIO . putTraceMsg . fmt $ intercalate "\n"
     [ elapsed totalWall totalCPU
     , printf "    %s allocated on the heap" (showFFloatSIBase (Just 1) 1024 allocated "B")
     , printf "    %s copied during GC (%d collections)" (showFFloatSIBase (Just 1) 1024 copied "B") (numGcs gc1 - numGcs gc0)
@@ -97,4 +99,5 @@ elapsed wallTime cpuTime =
   printf "%s (wall), %s (cpu)"
     (showFFloatSIBase (Just 3) 1000 wallTime "s")
     (showFFloatSIBase (Just 3) 1000 cpuTime  "s")
+#endif
 

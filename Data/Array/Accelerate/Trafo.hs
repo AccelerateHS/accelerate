@@ -57,6 +57,7 @@ import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe
 import Data.Array.Accelerate.Debug                      hiding ( when )
+import qualified Data.Array.Accelerate.Debug            as Debug
 #endif
 
 
@@ -208,13 +209,8 @@ instance Function (Exp a -> f) => Show (Exp a -> f) where
 withSimplStats :: String -> String
 #ifdef ACCELERATE_DEBUG
 withSimplStats x = unsafePerformIO $ do
-  enabled <- queryFlag dump_simpl_stats
-  if not enabled
-     then return x
-     else do resetSimplCount
-             stats <- length x `seq` simplCount
-             traceIO dump_simpl_stats (show stats)
-             return x
+  Debug.when dump_simpl_stats $ x `deepseq` dumpSimplStats
+  return x
 #else
 withSimplStats x = x
 #endif
@@ -226,9 +222,9 @@ phase :: NFData b => String -> (a -> b) -> a -> b
 #ifdef ACCELERATE_DEBUG
 phase n f x = unsafePerformIO $ do
   enabled <- queryFlag dump_phases
-  if not enabled
-    then return (f x)
-    else timed dump_phases (printf "phase %s: %s" n) (return $!! f x)
+  if enabled
+    then timed dump_phases (printf "phase %s: %s" n) (return $!! f x)
+    else return (f x)
 #else
 phase _ f x = f x
 #endif

@@ -71,13 +71,13 @@ monitoringIsEnabled = False
 
 -- | Display simplifier statistics. The counts are reset afterwards.
 --
-{-# SPECIALISE dumpSimplStats :: IO () #-}
+{-# INLINEABLE dumpSimplStats #-}
 dumpSimplStats :: MonadIO m => m ()
 #if ACCELERATE_DEBUG
-dumpSimplStats =
-  liftIO $ do
+dumpSimplStats = do
+  liftIO $ Debug.when dump_simpl_stats $ do
     stats <- simplCount
-    traceIO dump_simpl_stats (show stats)
+    putTraceMsg (show stats)
     resetSimplCount
 #else
 dumpSimplStats = return ()
@@ -87,7 +87,7 @@ dumpSimplStats = return ()
 -- | Write a representation of the given input (a closed array expression or
 -- function) to file in Graphviz dot format in the temporary directory.
 --
-{-# SPECIALISE dumpGraph :: PrettyGraph g => g -> IO () #-}
+{-# INLINEABLE dumpGraph #-}
 dumpGraph :: (MonadIO m, PrettyGraph g) => g -> m ()
 #if ACCELERATE_DEBUG
 dumpGraph g =
