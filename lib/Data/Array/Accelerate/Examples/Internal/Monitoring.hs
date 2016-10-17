@@ -1,5 +1,4 @@
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 -- |
 -- Module:      : Data.Array.Accelerate.Examples.Internal.Monitoring
 -- Copyright    : [2014] Trevor L. McDonell
@@ -17,16 +16,7 @@ module Data.Array.Accelerate.Examples.Internal.Monitoring (
 
 ) where
 
-#ifdef ACCELERATE_ENABLE_EKG
-import Control.Concurrent
-import Control.Concurrent.Async
-import Control.Exception
-import System.Remote.Monitoring
-import System.Metrics
-import Text.Printf
-
-import Data.Array.Accelerate.Debug
-#endif
+import qualified Data.Array.Accelerate.Debug                        as Debug
 
 
 -- | Launch a monitoring server that will collect statistics on the running
@@ -34,15 +24,12 @@ import Data.Array.Accelerate.Debug
 -- program will need to be run with the RTS option -T.
 --
 beginMonitoring :: IO ()
+beginMonitoring =
 #ifdef ACCELERATE_ENABLE_EKG
-beginMonitoring = do
-  store <- initAccMetrics
-  registerGcMetrics store
-  r     <- withAsync (forkServerWith store "localhost" 8000 >> threadDelay 10000) waitCatch
-  case r of
-    Right _ -> printf "EKG monitor started at: http://localhost:8000\n"
-    Left _  -> printf "Failed to start EKG monitor\n"
+  if Debug.monitoringIsEnabled
+    then Debug.beginMonitoring
+    else putStrLn "Monitoring is not enabled. Recompile package 'accelerate' with flag '-fekg'"
 #else
-beginMonitoring = return ()
+  return ()
 #endif
 
