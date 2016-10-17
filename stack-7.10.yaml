@@ -8,17 +8,17 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 7f419367b303af021fb4b7d29bc296f04b462e31
+    commit: 3d6d22693821eb3da29bffded270db27d65ba158
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: ee9c4c13e9ef5d364f476f97c5ced05645d0a919
+    commit: d5c94d0a3876f10f69fa6297cb0f380215a31ed9
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 75b191362a917674e00e1bcd08dfc7c49da4ea23
+    commit: 1d3dde832f1623d14b6edffe146a17e345fed7f1
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -27,22 +27,12 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-io.git
-    commit: 4e3637469972993a4b160af39b00ea7a7ec6f1e2
+    commit: 2bb4dabcb33839e972dc8e678c80a65046333807
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: 47cc922e39eae49ef7f41dcaf4f64de01d3dd16d
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/cuda.git
-    commit: bfa5b024fbf10a312f58c5d46d766d6bd2d01e04
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/nvvm.git
-    commit: 0dcc67e35e690d1eaaebceaf8deb86a39d486d6c
+    commit: 9c2e0996979c56ad540fa29970c4dd2f15de99ff
   extra-dep: true
 
 - location:
@@ -52,37 +42,39 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/gloss-accelerate.git
-    commit: 0cfc66ee09b50d5ed2eaa6fb5df68dc720e3a7dd
+    commit: 5666cdb78513f3e7baa3519c01c0da719e8768a8
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/gloss-raster-accelerate.git
-    commit: b3e7eefa07e581d31581f384eef7f80d3895b96c
+    commit: 65333a10aeb2b2685ef906fc2444a6768badabf6
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: b8d88a99e2d015c9acddefa41a2ffa9955ac5a08
+    commit: 167b6dc58383a4aa8fef17c2dab09f2fa6d13fa5
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: ef2816690dea99ce95da844d81dd4aa1b2328f50
+    commit: 665e2f6fd6da4fd47edbfe8e56ebce0e697c95ed
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/lens-accelerate.git
-    commit: c119c9c32d4fbf0d53b8eb906de03fa22ede2e87
+    commit: 00415bf19d76446685053222f90843f75ad6f94b
   extra-dep: true
 
 extra-deps:
 - 'chaselev-deque-0.5.0.5'
+- 'cuda-0.7.5.0'
 - 'gloss-1.10.1.1'
 - 'gloss-rendering-1.10.1.1'
 - 'libffi-0.1'
 - 'llvm-general-3.5.1.2'
 - 'llvm-general-pure-3.5.1.0'
 - 'normaldistribution-1.1.0.3'
+- 'nvvm-0.7.5.0'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps
