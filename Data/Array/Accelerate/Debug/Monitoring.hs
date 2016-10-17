@@ -15,6 +15,7 @@
 
 module Data.Array.Accelerate.Debug.Monitoring (
 
+  beginMonitoring,
   initAccMetrics,
 
   Processor(..),
@@ -35,16 +36,38 @@ import System.Metrics.Gauge                                         ( Gauge )
 import qualified System.Metrics.Counter                             as Counter
 import qualified System.Metrics.Gauge                               as Gauge
 
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Monad
 import Data.IORef
 import Data.Text                                                    ( Text )
 import Data.Time.Clock
 import System.IO.Unsafe
+import System.Remote.Monitoring
+import Text.Printf
 import qualified Data.HashMap.Strict                                as Map
 #endif
 
 import Data.Int
 import Prelude
+
+
+-- | Launch a monitoring server that will collect statistics on the running
+-- application. This should be called as soon as the application starts. The
+-- program will need to be run with the RTS option -T.
+--
+beginMonitoring :: IO ()
+#ifdef ACCELERATE_MONITORING
+beginMonitoring = do
+  store <- initAccMetrics
+  registerGcMetrics store
+  r     <- withAsync (forkServerWith store "localhost" 8000 >> threadDelay 10000) waitCatch
+  case r of
+    Right _ -> printf "EKG monitor started at: http://localhost:8000\n"
+    Left _  -> printf "Failed to start EKG monitor\n"
+#else
+beginMonitoring = return ()
+#endif
 
 
 -- | Initialise and return the Accelerate monitoring store. To enable monitoring

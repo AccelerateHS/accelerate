@@ -353,7 +353,9 @@ Library
   if flag(ekg)
     cpp-options:        -DACCELERATE_MONITORING
     build-depends:
-          ekg-core                      >= 0.1
+          async                         >= 2.0
+        , ekg                           >= 0.1
+        , ekg-core                      >= 0.1
         , text                          >= 1.0
         , time                          >= 1.4
 
