@@ -141,7 +141,7 @@ data FloatingType a where
 -- |Non-numeric types supported in array computations.
 --
 data NonNumType a where
-  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to CInt
+  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to Word8
   TypeChar    :: NonNumDict Char      -> NonNumType Char
   TypeCChar   :: NonNumDict CChar     -> NonNumType CChar
   TypeCSChar  :: NonNumDict CSChar    -> NonNumType CSChar
