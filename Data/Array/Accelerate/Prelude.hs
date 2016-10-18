@@ -107,11 +107,13 @@ module Data.Array.Accelerate.Prelude (
 
 -- avoid clashes with Prelude functions
 --
+import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), const, id, flip )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined )
 import qualified Prelude                                            as P
 
 -- friends
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
@@ -1056,8 +1058,13 @@ unindex1' ix = let Z :. i = unlift ix in fromIntegral i
 
 -- | Flattens a given array of arbitrary dimension.
 --
-flatten :: (Shape ix, Elt a) => Acc (Array ix a) -> Acc (Vector a)
-flatten a = reshape (index1 $ size a) a
+flatten :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Vector e)
+flatten a
+  | Just REFL <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::DIM1))
+  , Just a'   <- gcast a
+  = a'
+flatten a
+  = reshape (index1 $ size a) a
 
 
 -- Enumeration and filling
