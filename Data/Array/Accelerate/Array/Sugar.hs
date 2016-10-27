@@ -1194,14 +1194,15 @@ instance Show (Vector e) where
 
 instance Show (Array DIM2 e) where
   show arr@Array{}
-    = "Matrix (" ++ showShape (shape arr) ++ ") \n  " ++ showMat (toMatrix (toList arr))
+    = "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat (toMatrix (toList arr))
     where
       Z :. _ :. cols    = shape arr
       toMatrix []       = []
       toMatrix xs       = let (r,rs) = splitAt cols xs
                           in  r : toMatrix rs
 
-      showMat           = ppMat . map (map show)
+      showMat []        = "[]"
+      showMat mat       = "\n  " ++ ppMat (map (map show) mat)
 
       ppRow row         = concatMap (++",") row
       ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
