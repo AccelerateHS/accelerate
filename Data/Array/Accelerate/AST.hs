@@ -380,46 +380,46 @@ data PreOpenAcc acc aenv a where
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*
   -- function and an initial element (which does not need to be the neutral of the
   -- associative operations)
-  Scanl       :: Elt e
+  Scanl       :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
     -- FIXME: Make the scans rank-polymorphic?
 
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
-  Scanl'      :: Elt e
+  Scanl'      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
 
   -- Haskell-style scan without an initial value
-  Scanl1      :: Elt e
+  Scanl1      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Right-to-left version of 'Scanl'
-  Scanr       :: Elt e
+  Scanr       :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Right-to-left version of 'Scanl\''
-  Scanr'      :: Elt e
+  Scanr'      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
 
   -- Right-to-left version of 'Scanl1'
-  Scanr1      :: Elt e
+  Scanr1      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Generalised forward permutation is characterised by a permutation function
   -- that determines for each element of the source array where it should go in

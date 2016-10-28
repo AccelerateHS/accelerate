@@ -706,22 +706,22 @@ maximum = fold1All max
 --
 -- > prescanl f e = Prelude.fst . scanl' f e
 --
-prescanl :: Elt a
+prescanl :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Vector a)
+         -> Acc (Array (sh:.Int) a)
+         -> Acc (Array (sh:.Int) a)
 prescanl f e = P.fst . scanl' f e
 
 -- |Left-to-right postscan, a variant of 'scanl1' with an initial value.  Denotationally, we have
 --
 -- > postscanl f e = map (e `f`) . scanl1 f
 --
-postscanl :: Elt a
+postscanl :: (Shape sh, Elt a)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Vector a)
+          -> Acc (Array (sh:.Int) a)
+          -> Acc (Array (sh:.Int) a)
 postscanl f e = map (e `f`) . scanl1 f
 
 -- |Right-to-left prescan (aka exclusive scan).  As for 'scan', the first argument must be an
@@ -729,22 +729,22 @@ postscanl f e = map (e `f`) . scanl1 f
 --
 -- > prescanr f e = Prelude.fst . scanr' f e
 --
-prescanr :: Elt a
+prescanr :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Vector a)
+         -> Acc (Array (sh:.Int) a)
+         -> Acc (Array (sh:.Int) a)
 prescanr f e = P.fst . scanr' f e
 
 -- |Right-to-left postscan, a variant of 'scanr1' with an initial value.  Denotationally, we have
 --
 -- > postscanr f e = map (e `f`) . scanr1 f
 --
-postscanr :: Elt a
+postscanr :: (Shape sh, Elt a)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Vector a)
+          -> Acc (Array (sh:.Int) a)
+          -> Acc (Array (sh:.Int) a)
 postscanr f e = map (`f` e) . scanr1 f
 
 

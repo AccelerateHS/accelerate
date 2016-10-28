@@ -295,69 +295,69 @@ fold1Seg = Acc $$$ Fold1Seg
 -- Scan functions
 -- --------------
 
--- | Data.List style left-to-right scan, but with the additional restriction
--- that the first argument needs to be an /associative/ function to enable an
--- efficient parallel implementation. The initial value (second argument) may be
--- arbitrary.
+-- | Data.List style left-to-right scan along the innermost dimension of an
+-- arbitrary rank array. The first argument needs to be an /associative/
+-- function to enable efficient parallel implementation. The initial value
+-- (second argument) may be arbitrary.
 --
-scanl :: Elt a
+scanl :: (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Exp a
-      -> Acc (Vector a)
-      -> Acc (Vector a)
+      -> Acc (Array (sh:.Int) a)
+      -> Acc (Array (sh:.Int) a)
 scanl = Acc $$$ Scanl
 
 -- | Variant of 'scanl', where the final result of the reduction is returned
--- separately. Denotationally, we have
+-- separately. Denotationally, we have:
 --
 -- > scanl' f e arr = (init res, unit (res!len))
 -- >   where
 -- >     len = shape arr
 -- >     res = scanl f e arr
 --
-scanl' :: Elt a
+scanl' :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
-       -> Acc (Vector a)
-       -> (Acc (Vector a), Acc (Scalar a))
+       -> Acc (Array (sh:.Int) a)
+       -> (Acc (Array (sh:.Int) a), Acc (Array sh a))
 scanl' = unatup2 . Acc $$$ Scanl'
 
--- | Data.List style left-to-right scan without an initial value (aka inclusive
--- scan).  Again, the first argument needs to be an /associative/ function.
--- Denotationally, we have
+-- | Data.List style left-to-right scan along the non-empty innermost dimension
+-- without an initial value (aka inclusive scan). Again, the first argument
+-- needs to be an /associative/ function. Denotationally, we have:
 --
 -- > scanl1 f e arr = tail (scanl f e arr)
 --
-scanl1 :: Elt a
+scanl1 :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
-       -> Acc (Vector a)
-       -> Acc (Vector a)
+       -> Acc (Array (sh:.Int) a)
+       -> Acc (Array (sh:.Int) a)
 scanl1 = Acc $$ Scanl1
 
 -- | Right-to-left variant of 'scanl'.
 --
-scanr :: Elt a
+scanr :: (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Exp a
-      -> Acc (Vector a)
-      -> Acc (Vector a)
+      -> Acc (Array (sh:.Int) a)
+      -> Acc (Array (sh:.Int) a)
 scanr = Acc $$$ Scanr
 
 -- | Right-to-left variant of 'scanl''.
 --
-scanr' :: Elt a
+scanr' :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
-       -> Acc (Vector a)
-       -> (Acc (Vector a), Acc (Scalar a))
+       -> Acc (Array (sh:.Int) a)
+       -> (Acc (Array (sh:.Int) a), Acc (Array sh a))
 scanr' = unatup2 . Acc $$$ Scanr'
 
 -- | Right-to-left variant of 'scanl1'.
 --
-scanr1 :: Elt a
+scanr1 :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
-       -> Acc (Vector a)
-       -> Acc (Vector a)
+       -> Acc (Array (sh:.Int) a)
+       -> Acc (Array (sh:.Int) a)
 scanr1 = Acc $$ Scanr1
 
 -- Permutations

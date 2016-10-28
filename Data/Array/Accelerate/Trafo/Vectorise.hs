@@ -911,11 +911,13 @@ liftPreOpenAcc vectAcc strength ctx size acc
     fold1SegL _ _ _
       = error $ nestedError "first" "foldSeg"
 
-    scanl1L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanl1L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanl1L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
+      = error "TODO: vectorise scanl1L"
+{--
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -925,15 +927,18 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = liftedAcc
       $^ bind b1
       $  extract $ scanl1Lift f (sink b1 (lifted a))
+--}
     scanl1L _ _
       = error $ nestedError "first" "scanl1"
 
-    scanlL :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanlL :: forall sh e. (Shape sh, Elt e)
+           => PreFun acc  aenv  (e -> e -> e)
+           -> PreExp acc  aenv  e
+           -> acc            aenv  (Array (sh:.Int) e)
+           -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanlL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+      = error "TODO: vectorise scanlL"
+{--
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -945,15 +950,18 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $^ bind b1
       $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
       $  scanlLift (weakenA1 f) (the avar0) (weakenA1 $ sink b1 $ lifted a)
+--}
     scanlL _ _ _
       = error $ nestedError "first or second" "scanl"
 
-    scanl'L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e, Scalar e)
+    scanl'L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> PreExp acc  aenv  e
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e, Array sh e)
     scanl'L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+      = error "TODO: vectorise scanl'"
+{--
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -990,14 +998,17 @@ liftPreOpenAcc vectAcc strength ctx size acc
             avar3
             avar2
             avar0
+--}
     scanl'L _ _ _
       = error $ nestedError "first or second" "scanl"
 
-    scanr1L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanr1L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanr1L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
+      = error "TODO: vectorise scanr1"
+{--
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -1007,15 +1018,18 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = liftedAcc
       $^ bind b1
       $  extract $ scanr1Lift f (sink b1 (lifted a))
+--}
     scanr1L _ _
       = error $ nestedError "first" "scanr1"
 
-    scanrL :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanrL :: forall sh e. (Shape sh, Elt e)
+           => PreFun acc  aenv  (e -> e -> e)
+           -> PreExp acc  aenv  e
+           -> acc            aenv  (Array (sh:.Int) e)
+           -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanrL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+      = error "TODO: vectorise scanr"
+{--
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -1027,15 +1041,18 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $^ bind b1
       $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
       $  scanrLift (weakenA1 f) (the avar0) (weakenA1 $ sink b1 (lifted a))
+--}
     scanrL _ _ _
       = error $ nestedError "first or second" "scanr"
 
-    scanr'L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e, Scalar e)
+    scanr'L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> PreExp acc  aenv  e
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e, Array sh e)
     scanr'L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+      = error "TODO: vectorise scanr'"
+{--
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -1069,6 +1086,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
             avar3
             avar2
             avar0
+--}
     scanr'L _ _ _
       = error $ nestedError "first or second" "scanr'"
 

@@ -395,100 +395,113 @@ fold1SegOp f (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
 
 
 scanl1Op
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
-    -> Delayed (Vector e)
-    -> Vector e
-scanl1Op f (Delayed sh@(Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanl1Op f (Delayed sh@(_ :. n) ain _)
   = $boundsCheck "scanl1" "empty array" (n > 0)
   $ adata `seq` Array (fromElt sh) adata
   where
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData n
+      aout <- newArrayData (size sh)
 
-      let write (Z:.0) = unsafeWriteArrayData aout 0 (fromElt $ ain 0)
-          write (Z:.i) = do
-            x <- unsafeReadArrayData aout (i-1)
-            y <- return . fromElt $  ain  i
-            unsafeWriteArrayData aout i (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh (sz:.0)) (fromElt (ain (sz:.0)))
+          write (sz:.i) = do
+            x <- unsafeReadArrayData aout (toIndex sh (sz:.i-1))
+            y <- return $ fromElt (ain (sz:.i))
+            unsafeWriteArrayData aout (toIndex sh (sz:.i)) (f' x y)
 
       iter1 sh write (>>)
       return (aout, undefined)
 
 
 scanlOp
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> Vector e
-scanlOp f z (Delayed (Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanlOp f z (Delayed (sh :. n) ain _)
   = adata `seq` Array (fromElt sh') adata
   where
-    sh'         = Z :. n+1
+    sh'         = sh :. n+1
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData (n+1)
+      aout <- newArrayData (size sh')
 
-      let write (Z:.0) = unsafeWriteArrayData aout 0 (fromElt z)
-          write (Z:.i) = do
-            x <- unsafeReadArrayData aout (i-1)
-            y <- return . fromElt $  ain  (i-1)
-            unsafeWriteArrayData aout i (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh' (sz:.0)) (fromElt z)
+          write (sz:.i) = do
+            x <- unsafeReadArrayData aout (toIndex sh' (sz:.i-1))
+            y <- return $ fromElt (ain (sz:.i-1))
+            unsafeWriteArrayData aout (toIndex sh' (sz:.i)) (f' x y)
 
       iter sh' write (>>) (return ())
       return (aout, undefined)
 
 
 scanl'Op
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> (Vector e, Scalar e)
-scanl'Op f z (scanlOp f z -> arr)
-  = let
-        arr'    = case arr of Array _ adata -> Array ((), n-1) adata
-        sum     = unitOp (arr ! (Z:.n-1))
-        n       = size (shape arr)
-    in
-    (arr', sum)
+    -> Delayed (Array (sh:.Int) e)
+    -> (Array (sh:.Int) e, Array sh e)
+scanl'Op f z (Delayed (sh :. n) ain _)
+  = aout `seq` asum `seq` ( Array (fromElt (sh:.n)) aout
+                          , Array (fromElt sh)      asum )
+  where
+    f'          = sinkFromElt2 f
+    --
+    (AD_Pair aout asum, _) = runArrayData $ do
+      aout <- newArrayData (size (sh:.n))
+      asum <- newArrayData (size sh)
+
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.0)) (fromElt z)
+          write (sz:.i) = do
+            x <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.i-1))
+            y <- return $ fromElt (ain (sz:.i-1))
+            if i == n
+              then unsafeWriteArrayData asum (toIndex sh      sz)      (f' x y)
+              else unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.i)) (f' x y)
+
+      iter (sh:.n+1) write (>>) (return ())
+      return (AD_Pair aout asum, undefined)
 
 
 scanrOp
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> Vector e
-scanrOp f z (Delayed (Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanrOp f z (Delayed (sz :. n) ain _)
   = adata `seq` Array (fromElt sh') adata
   where
-    sh'         = Z :. n+1
+    sh'         = sz :. n+1
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData (n+1)
+      aout <- newArrayData (size sh')
 
-      let write (Z:.0) = unsafeWriteArrayData aout n (fromElt z)
-          write (Z:.i) = do
-            x <- return . fromElt $  ain  (n-i)
-            y <- unsafeReadArrayData aout (n-i+1)
-            unsafeWriteArrayData aout (n-i) (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh' (sz:.n)) (fromElt z)
+          write (sz:.i) = do
+            x <- return $ fromElt (ain (sz:.n-i))
+            y <- unsafeReadArrayData aout (toIndex sh' (sz:.n-i+1))
+            unsafeWriteArrayData aout (toIndex sh' (sz:.n-i)) (f' x y)
 
       iter sh' write (>>) (return ())
       return (aout, undefined)
 
 
 scanr1Op
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
-    -> Delayed (Vector e)
-    -> Vector e
-scanr1Op f (Delayed sh@(Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanr1Op f (Delayed sh@(_ :. n) ain _)
   = $boundsCheck "scanr1" "empty array" (n > 0)
   $ adata `seq` Array (fromElt sh) adata
   where
@@ -497,37 +510,42 @@ scanr1Op f (Delayed sh@(Z :. n) _ ain)
     (adata, _)  = runArrayData $ do
       aout <- newArrayData n
 
-      let write (Z:.0) = unsafeWriteArrayData aout (n-1) (fromElt $ ain (n-1))
-          write (Z:.i) = do
-            x <- return . fromElt $  ain  (n-i-1)
-            y <- unsafeReadArrayData aout (n-i)
-            unsafeWriteArrayData aout (n-i-1) (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh (sz:.n-1)) (fromElt (ain (sz:.n-1)))
+          write (sz:.i) = do
+            x <- return $ fromElt (ain (sz:.n-i-1))
+            y <- unsafeReadArrayData aout (toIndex sh (sz:.n-i))
+            unsafeWriteArrayData aout (toIndex sh (sz:.n-i-1)) (f' x y)
 
       iter1 sh write (>>)
       return (aout, undefined)
 
 
 scanr'Op
-    :: forall e. Elt e
+    :: forall sh e. (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> (Vector e, Scalar e)
-scanr'Op f z (Delayed (Z :. n) _ ain)
-  = (Array ((),n) adata, unitOp (toElt asum))
+    -> Delayed (Array (sh:.Int) e)
+    -> (Array (sh:.Int) e, Array sh e)
+scanr'Op f z (Delayed (sh :. n) ain _)
+  = aout `seq` asum `seq` ( Array (fromElt (sh:.n)) aout
+                          , Array (fromElt sh)      asum )
   where
-    f' x y      = sinkFromElt2 f (fromElt x) y
+    f'          = sinkFromElt2 f
     --
-    (adata, asum) = runArrayData $ do
-      aout <- newArrayData n
+    (AD_Pair aout asum, _) = runArrayData $ do
+      aout <- newArrayData (size (sh:.n))
+      asum <- newArrayData (size sh)
 
-      let trav i !y | i < 0     = return y
-          trav i y              = do
-            unsafeWriteArrayData aout i y
-            trav (i-1) (f' (ain i) y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-1)) (fromElt z)
+          write (sz:.i) = do
+            x <- return $ fromElt (ain (sz:.n-i))
+            y <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.n-i))
+            if i == n
+              then unsafeWriteArrayData asum (toIndex sh      sz)          (f' x y)
+              else unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-i-1)) (f' x y)
 
-      final <- trav (n-1) (fromElt z)
-      return (aout, final)
+      iter (sh:.n+1) write (>>) (return ())
+      return (AD_Pair aout asum, undefined)
 
 
 permuteOp

@@ -198,39 +198,39 @@ data PreAcc acc seq exp as where
                 -> acc (Segments i)
                 -> PreAcc acc seq exp (Array (sh:.Int) e)
 
-  Scanl         :: Elt e
+  Scanl         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
-  Scanl'        :: Elt e
+  Scanl'        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e, Scalar e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e, Array sh e)
 
-  Scanl1        :: Elt e
+  Scanl1        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
-  Scanr         :: Elt e
-                => (Exp e -> Exp e -> exp e)
-                -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
-
-  Scanr'        :: Elt e
+  Scanr         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e, Scalar e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
-  Scanr1        :: Elt e
+  Scanr'        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
+                -> exp e
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e, Array sh e)
+
+  Scanr1        :: (Shape sh, Elt e)
+                => (Exp e -> Exp e -> exp e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
   Permute       :: (Shape sh, Shape sh', Elt e)
                 => (Exp e -> Exp e -> exp e)
