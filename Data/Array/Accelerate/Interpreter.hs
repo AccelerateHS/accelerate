@@ -508,7 +508,7 @@ scanr1Op f (Delayed sh@(_ :. n) ain _)
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData n
+      aout <- newArrayData (size sh)
 
       let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh (sz:.n-1)) (fromElt (ain (sz:.n-1)))
           write (sz:.i) = do
