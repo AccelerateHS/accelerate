@@ -753,14 +753,18 @@ postscanr f e = map (`f` e) . scanr1 f
 
 -- |Segmented version of 'scanl'
 --
-scanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Segments i)
-         -> Acc (Vector a)
-scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg' )
+scanlSeg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanlSeg f z arr seg = null flags ?| ( zs , scanl1Seg f arr' seg' )
   where
+    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
+    zs          = fill (lift (sh :. length seg)) z
+
     -- Segmented exclusive scan is implemented by first injecting the seed
     -- element at the head of each segment, and then performing a segmented
     -- inclusive scan.
@@ -770,10 +774,11 @@ scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg
     -- start of a segment.
     --
     seg'        = map (+1) seg
-    vec'        = permute const
-                          (fill (index1 $ size vec + size seg) z)
-                          (\ix -> index1' $ unindex1' ix + inc ! ix)
-                          vec
+    arr'        = permute const
+                          (fill (lift (sh :. sz + length seg)) z)
+                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
+                                  in  lift (sx :. i + fromIntegral (inc ! index1 i)))
+                          arr
 
     -- Each element in the segments must be shifted to the right one additional
     -- place for each successive segment, to make room for the seed element.
@@ -784,27 +789,22 @@ scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg
     inc         = scanl1 (+) flags
 
 
--- |Segmented version of 'scanl''
+-- |Segmented version of 'scanl'' along the innermost dimension of an array.
 --
 -- The first element of the resulting tuple is a vector of scanned values. The
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
 --
-scanl'Seg :: forall a i. (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-          => (Exp a -> Exp a -> Exp a)
-          -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a, Vector a)
-scanl'Seg f z vec seg = result
+scanl'Seg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> (Acc (Array (sh:.Int) e), Acc (Array (sh:.Int) e))
+scanl'Seg f z arr seg = ( null arr  ?| (emptyArray, body)
+                        , null arr' ?| (emptyArray, sums) )
   where
-    -- Returned the result combined, so that the sub-calculations are shared
-    -- should the user require both results.
-    --
-    result      = lift ( null vec  ?| (emptyArray, body)
-                       , null vec' ?| (emptyArray, sums)
-                       )
-
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
     --
@@ -814,35 +814,41 @@ scanl'Seg f z vec seg = result
     --      by sharing _observation_. Perhaps a global CSE-style pass would be
     --      beneficial.
     --
-    vec'        = scanlSeg f z vec seg
+    arr'        = scanlSeg f z arr seg
 
     -- Extract the final reduction value for each segment, which is at the last
     -- index of each segment.
     --
     seg'        = map (+1) seg
     tails       = zipWith (+) seg . P.fst $ scanl' (+) 0 seg'
-    sums        = backpermute (shape seg) (\ix -> index1' $ tails ! ix) vec'
+    sums        = backpermute
+                    (lift (indexTail (shape arr') :. length seg))
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. fromIntegral (tails ! index1 i)))
+                    arr'
 
     -- Slice out the body of each segment.
     --
     -- Build a head-flags representation based on the original segment
     -- descriptor. This contains the target length of each of the body segments,
-    -- which is one fewer element than the actual bodies stored in vec'. Thus,
+    -- which is one fewer element than the actual bodies stored in arr'. Thus,
     -- the flags align with the last element of each body section, and when
     -- scanned, this element will be incremented over.
     --
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
-                $ permute (+) (fill (index1 $ size vec + 1) 0)
+                $ permute (+) (fill (index1 $ size arr + 1) 0)
                               (\ix -> index1' $ offset ! ix)
                               (fill (shape seg) (1 :: Exp i))
 
-    body        = backpermute (shape vec)
-                              (\ix -> index1' $ unindex1' ix + inc ! ix)
-                              vec'
+    body        = backpermute
+                    (shape arr)
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                              arr'
 
 
--- | Segmented version of 'scanl1'.
+-- | Segmented version of 'scanl1' along the innermost dimension.
 --
 -- As with 'scanl1', the total number of elements considered, in this case given
 -- by the 'sum' of segment descriptor, must not be zero. The input vector must
@@ -853,52 +859,58 @@ scanl'Seg f z vec seg = result
 --
 -- > scanl1Seg f xs [n,0,0] == scanl1Seg f xs [n]   where n /= 0
 --
-scanl1Seg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-          => (Exp a -> Exp a -> Exp a)
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a)
-scanl1Seg f vec seg
+scanl1Seg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanl1Seg f arr seg
   = P.snd
   . unzip
   . scanl1 (segmented f)
-  $ zip (mkHeadFlags seg) vec
+  $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkHeadFlags seg)) arr
 
 -- |Segmented version of 'prescanl'.
 --
-prescanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-            => (Exp a -> Exp a -> Exp a)
-            -> Exp a
-            -> Acc (Vector a)
-            -> Acc (Segments i)
-            -> Acc (Vector a)
+prescanlSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 prescanlSeg f e vec seg
   = P.fst
-  . unatup2
   $ scanl'Seg f e vec seg
 
 -- |Segmented version of 'postscanl'.
 --
-postscanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-             => (Exp a -> Exp a -> Exp a)
-             -> Exp a
-             -> Acc (Vector a)
-             -> Acc (Segments i)
-             -> Acc (Vector a)
+postscanlSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 postscanlSeg f e vec seg
   = map (f e)
   $ scanl1Seg f vec seg
 
 -- |Segmented version of 'scanr'.
 --
-scanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Segments i)
-         -> Acc (Vector a)
-scanrSeg f z vec seg = null flags ?| ( fill (shape seg) z, scanr1Seg f vec' seg' )
+scanrSeg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanrSeg f z arr seg = null flags ?| ( zs, scanr1Seg f arr' seg' )
   where
+    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
+    zs          = fill (lift (sh :. length seg)) z
+
     -- Using technique described for 'scanlSeg', where we intersperse the array
     -- with the seed element at the start of each segment, and then perform an
     -- inclusive segmented scan.
@@ -907,77 +919,83 @@ scanrSeg f z vec seg = null flags ?| ( fill (shape seg) z, scanr1Seg f vec' seg'
     inc         = scanl1 (+) flags
 
     seg'        = map (+1) seg
-    vec'        = permute const
-                          (fill (index1 $ size vec + size seg) z)
-                          (\ix -> index1' $ unindex1' ix + inc ! ix - 1)
-                          vec
+    arr'        = permute const
+                          (fill (lift (sh :. sz + length seg)) z)
+                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
+                                  in  lift (sx :. i + fromIntegral (inc ! index1 i) - 1))
+                          arr
 
 
 -- | Segmented version of 'scanr''.
 --
-scanr'Seg :: forall a i. (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-          => (Exp a -> Exp a -> Exp a)
-          -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a, Vector a)
-scanr'Seg f z vec seg = result
+scanr'Seg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> (Acc (Array (sh:.Int) e), Acc (Array (sh:.Int) e))
+scanr'Seg f z arr seg = ( null arr  ?| (emptyArray, body)
+                        , null arr' ?| (emptyArray, sums) )
   where
     -- Using technique described for scanl'Seg
     --
-    result      = lift ( null vec  ?| (emptyArray, body)
-                       , null vec' ?| (emptyArray, sums)
-                       )
-
-    vec'        = scanrSeg f z vec seg
+    arr'        = scanrSeg f z arr seg
 
     -- reduction values
     seg'        = map (+1) seg
     heads       = P.fst $ scanl' (+) 0 seg'
-    sums        = backpermute (shape seg) (\ix -> index1' $ heads ! ix) vec'
+    sums        = backpermute
+                    (lift (indexTail (shape arr') :. length seg))
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. fromIntegral (heads ! index1 i)))
+                    arr'
 
     -- body segments
     inc         = scanl1 (+) $ mkHeadFlags seg
-    body        = backpermute (shape vec)
-                              (\ix -> index1' $ unindex1' ix + inc ! ix)
-                              vec'
+    body        = backpermute (shape arr)
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                    arr'
 
 
 -- |Segmented version of 'scanr1'.
 --
-scanr1Seg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-          => (Exp a -> Exp a -> Exp a)
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a)
-scanr1Seg f vec seg
+scanr1Seg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanr1Seg f arr seg
   = P.snd
   . unzip
   . scanr1 (flip (segmented f))
-  $ zip (mkTailFlags seg) vec
+  $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkTailFlags seg)) arr
 
 
 -- |Segmented version of 'prescanr'.
 --
-prescanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-            => (Exp a -> Exp a -> Exp a)
-            -> Exp a
-            -> Acc (Vector a)
-            -> Acc (Segments i)
-            -> Acc (Vector a)
+prescanrSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 prescanrSeg f e vec seg
   = P.fst
-  . unatup2
   $ scanr'Seg f e vec seg
 
 -- |Segmented version of 'postscanr'.
 --
-postscanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-             => (Exp a -> Exp a -> Exp a)
-             -> Exp a
-             -> Acc (Vector a)
-             -> Acc (Segments i)
-             -> Acc (Vector a)
+postscanrSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 postscanrSeg f e vec seg
   = map (f e)
   $ scanr1Seg f vec seg
@@ -1049,9 +1067,6 @@ segmented f a b =
 --
 index1' ::  (Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
 index1' i = lift (Z :. fromIntegral i)
-
-unindex1' :: FromIntegral Int i => Exp DIM1 -> Exp i
-unindex1' ix = let Z :. i = unlift ix in fromIntegral i
 
 
 -- Reshaping of arrays
