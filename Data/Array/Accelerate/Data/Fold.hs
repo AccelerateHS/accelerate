@@ -33,7 +33,7 @@ import Data.Array.Accelerate                                        hiding ( fol
 import Data.Array.Accelerate.Data.Monoid
 import qualified Data.Array.Accelerate                              as A
 
-import Control.Applicative
+import Control.Applicative                                          as P
 import Prelude                                                      hiding ( sum, product, length )
 import qualified Prelude                                            as P
 
@@ -60,8 +60,8 @@ import qualified Prelude                                            as P
 --
 data Fold i o where
   Fold :: (Elt w, Monoid (Exp w))
-       => (i -> Exp w)              -- ^ transform input element into internal monoid type
-       -> (Exp w -> o)              -- ^ summarise the reduction to retrieve the final result
+       => (i -> Exp w)              -- transform input element into internal monoid type
+       -> (Exp w -> o)              -- summarise the reduction to retrieve the final result
        -> Fold i o
 
 -- | Apply a 'Fold' to an array.
