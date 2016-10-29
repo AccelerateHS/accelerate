@@ -801,9 +801,9 @@ scanl'Seg
     -> Exp e
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
-    -> (Acc (Array (sh:.Int) e), Acc (Array (sh:.Int) e))
-scanl'Seg f z arr seg = ( null arr  ?| (emptyArray, body)
-                        , null arr' ?| (emptyArray, sums) )
+    -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
+scanl'Seg f z arr seg = lift ( null arr  ?| (emptyArray, body)
+                             , null arr' ?| (emptyArray, sums) )
   where
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -881,7 +881,7 @@ prescanlSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 prescanlSeg f e vec seg
-  = P.fst
+  = afst
   $ scanl'Seg f e vec seg
 
 -- |Segmented version of 'postscanl'.
@@ -934,9 +934,9 @@ scanr'Seg
     -> Exp e
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
-    -> (Acc (Array (sh:.Int) e), Acc (Array (sh:.Int) e))
-scanr'Seg f z arr seg = ( null arr  ?| (emptyArray, body)
-                        , null arr' ?| (emptyArray, sums) )
+    -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
+scanr'Seg f z arr seg = lift ( null arr  ?| (emptyArray, body)
+                             , null arr' ?| (emptyArray, sums) )
   where
     -- Using technique described for scanl'Seg
     --
@@ -984,7 +984,7 @@ prescanrSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 prescanrSeg f e vec seg
-  = P.fst
+  = afst
   $ scanr'Seg f e vec seg
 
 -- |Segmented version of 'postscanr'.

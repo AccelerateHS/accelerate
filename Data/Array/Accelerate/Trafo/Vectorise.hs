@@ -1840,7 +1840,7 @@ enumSegLinear segs = enum_s
     sizes  = S.map S.shapeSize segs
     ones   = S.fill (S.shape segs) (1 :: S.Exp Int)
     ones_s = replicateSeg segs ones
-    enum_s = P.fst $ S.scanl'Seg (+) 0 ones_s sizes
+    enum_s = S.afst $ S.scanl'Seg (+) 0 ones_s sizes
 
 enumSeg
     :: forall sh. Shape sh
