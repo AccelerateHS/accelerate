@@ -71,7 +71,7 @@ instance A.Num a => P.Num (Exp (Sum a)) where
   negate          = lift1 (negate :: Sum (Exp a) -> Sum (Exp a))
   signum          = lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
   abs             = lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
-  fromInteger x   = lift (fromInteger x :: Sum (Exp a))
+  fromInteger x   = lift (P.fromInteger x :: Sum (Exp a))
 
 instance A.Eq a => A.Eq (Sum a) where
   (==*) = lift2 ((==*) `on` getSum)
@@ -120,7 +120,7 @@ instance A.Num a => P.Num (Exp (Product a)) where
   negate          = lift1 (negate :: Product (Exp a) -> Product (Exp a))
   signum          = lift1 (signum :: Product (Exp a) -> Product (Exp a))
   abs             = lift1 (signum :: Product (Exp a) -> Product (Exp a))
-  fromInteger x   = lift (fromInteger x :: Product (Exp a))
+  fromInteger x   = lift (P.fromInteger x :: Product (Exp a))
 
 instance A.Eq a => A.Eq (Product a) where
   (==*) = lift2 ((==*) `on` getProduct)
