@@ -1,10 +1,8 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Monoid
@@ -20,6 +18,8 @@
 
 module Data.Array.Accelerate.Data.Monoid (
 
+  Monoid(..), (<>),
+
   Sum(..),
   Product(..),
 
@@ -32,7 +32,7 @@ import Data.Array.Accelerate.Product                                as A
 import Data.Array.Accelerate.Array.Sugar                            as A
 
 import Data.Function
-import Data.Monoid
+import Data.Monoid                                                  hiding ( mconcat )
 import Prelude                                                      ( (.), ($) )
 import qualified Prelude                                            as P
 
@@ -133,4 +133,40 @@ instance A.Ord a => A.Ord (Product a) where
   (>=*)   = lift2 ((>=*) `on` getProduct)
   min x y = lift . Product $ lift2 (min `on` getProduct) x y
   max x y = lift . Product $ lift2 (max `on` getProduct) x y
+
+
+-- Instances for unit and tuples
+-- -----------------------------
+
+instance Monoid (Exp ()) where
+  mempty      = constant ()
+  mappend _ _ = constant ()
+
+instance (Elt a, Elt b, Monoid (Exp a), Monoid (Exp b)) => Monoid (Exp (a,b)) where
+  mempty      = lift (mempty :: Exp a, mempty :: Exp b)
+  mappend x y = let (a1,b1) = unlift x  :: (Exp a, Exp b)
+                    (a2,b2) = unlift y
+                in
+                lift (a1<>a2, b1<>b2)
+
+instance (Elt a, Elt b, Elt c, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c)) => Monoid (Exp (a,b,c)) where
+  mempty      = lift (mempty :: Exp a, mempty :: Exp b, mempty :: Exp c)
+  mappend x y = let (a1,b1,c1) = unlift x  :: (Exp a, Exp b, Exp c)
+                    (a2,b2,c2) = unlift y
+                in
+                lift (a1<>a2, b1<>b2, c1<>c2)
+
+instance (Elt a, Elt b, Elt c, Elt d, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d)) => Monoid (Exp (a,b,c,d)) where
+  mempty      = lift (mempty :: Exp a, mempty :: Exp b, mempty :: Exp c, mempty :: Exp d)
+  mappend x y = let (a1,b1,c1,d1) = unlift x  :: (Exp a, Exp b, Exp c, Exp d)
+                    (a2,b2,c2,d2) = unlift y
+                in
+                lift (a1<>a2, b1<>b2, c1<>c2, d1<>d2)
+
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d), Monoid (Exp e)) => Monoid (Exp (a,b,c,d,e)) where
+  mempty      = lift (mempty :: Exp a, mempty :: Exp b, mempty :: Exp c, mempty :: Exp d, mempty :: Exp e)
+  mappend x y = let (a1,b1,c1,d1,e1) = unlift x  :: (Exp a, Exp b, Exp c, Exp d, Exp e)
+                    (a2,b2,c2,d2,e2) = unlift y
+                in
+                lift (a1<>a2, b1<>b2, c1<>c2, d1<>d2, e1<>e2)
 
