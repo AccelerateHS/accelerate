@@ -115,7 +115,7 @@ import qualified Prelude                                            as P
 
 -- friends
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect, toIndex, fromIndex )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -1141,28 +1141,62 @@ infixr 5 ++
 -- Filtering
 -- ---------
 
--- | Drop elements that do not satisfy the predicate
+-- | Drop elements that do not satisfy the predicate. Returns the elements which
+-- pass the predicate, together with a segment descriptor indicating how many
+-- elements along each outer dimension were valid.
 --
-filter :: Elt a
-       => (Exp a -> Exp Bool)
-       -> Acc (Vector a)
-       -> Acc (Vector a)
+-- >>> let vec = fromList (Z :. 10) [1..10] :: Vector Int
+-- >>> vec
+-- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
+--
+-- >>> run $ filter even (use vec)
+-- (Vector (Z :. 5) [2,4,6,8,10], Scalar Z [5])
+--
+-- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
+-- >>> mat
+-- Matrix (Z :. 4 :. 10)
+--   [ 1, 2, 3, 4,  5,  6,  7,  8,  9, 10,
+--     1, 1, 1, 1,  1,  2,  2,  2,  2,  2,
+--     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+--     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
+--
+-- >>> run $ filter odd (use mat)
+-- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19], Vector (Z :. 4) [5,5,0,10])
+--
+filter :: forall sh e. (Shape sh, Slice sh, Elt e)
+       => (Exp e -> Exp Bool)
+       -> Acc (Array (sh:.Int) e)
+       -> Acc (Vector e, Array sh Int)
 filter p arr
-  = let flags            = map (boolToInt . p) arr
-        (targetIdx, len) = scanl' (+) 0 flags
-        arr'             = backpermute (index1 $ the len) id arr
+  = let
+        sz              = indexTail (shape arr)
+        keep            = map p arr
+        (target, len)   = scanl' (+) 0 (map boolToInt keep)
+        (offset, valid) = scanl' (+) 0 (flatten len)
+        --
+        prj ix          =
+          keep!ix ? ( index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
+                    , ignore
+                    )
+        dummy           = backpermute (index1 (the valid)) id (flatten arr)
+        result          = permute const dummy prj arr
+
+        -- FIXME: This is abusing 'permute' in that the first two arguments are
+        --        only justified because we know the permutation function will
+        --        write to each location in the target exactly once.
+        --
+        --        Instead, we should have a primitive that directly encodes the
+        --        compaction pattern of the permutation function.
     in
-    permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, index1 $ targetIdx!ix)) arr
-    -- FIXME: This is abusing 'permute' in that the first two arguments are
-    --        only justified because we know the permutation function will
-    --        write to each location in the target exactly once.
-    --        Instead, we should have a primitive that directly encodes the
-    --        compaction pattern of the permutation function.
+    null arr ?|
+      ( {- then -} lift (emptyArray, fill sz 0)
+      , {- else -} lift (result, len)
+      )
 
 {-# NOINLINE filter #-}
 {-# RULES
   "ACC filter/filter" forall f g arr.
-    filter f (filter g arr) = filter (\x -> g x &&* f x) arr
+    filter f (afst (filter g arr)) = filter (\x -> g x &&* f x) arr
  #-}
 
 
