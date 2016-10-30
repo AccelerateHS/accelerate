@@ -111,7 +111,7 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined, fail )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, fromInteger, flip, undefined, fail )
 import qualified Prelude                                            as P
 
 -- friends
