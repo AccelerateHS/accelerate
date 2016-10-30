@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -110,7 +111,7 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined, fail )
 import qualified Prelude                                            as P
 
 -- friends
@@ -1076,9 +1077,8 @@ index1' i = lift (Z :. fromIntegral i)
 --
 flatten :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Vector e)
 flatten a
-  | Just REFL <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::DIM1))
-  , Just a'   <- gcast a
-  = a'
+  | Just REFL <- matchShapeType (undefined::sh) (undefined::DIM1)
+  = a
 flatten a
   = reshape (index1 $ size a) a
 
@@ -1168,30 +1168,47 @@ filter :: forall sh e. (Shape sh, Slice sh, Elt e)
        -> Acc (Array (sh:.Int) e)
        -> Acc (Vector e, Array sh Int)
 filter p arr
+  -- Optimise 1-dimensional arrays, where we can avoid additional computations
+  -- for the offset indices.
+  | Just REFL <- matchShapeType (undefined::sh) (undefined::Z)
+  = let
+        keep            = map p arr
+        (target, len)   = scanl' (+) 0 (map boolToInt keep)
+        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
+        dummy           = backpermute (index1 (the len)) id arr
+        result          = permute const dummy prj arr
+    in
+    if null arr
+      then lift (emptyArray, fill (constant Z) 0)
+      else lift (result, len)
+
+filter p arr
   = let
         sz              = indexTail (shape arr)
         keep            = map p arr
         (target, len)   = scanl' (+) 0 (map boolToInt keep)
         (offset, valid) = scanl' (+) 0 (flatten len)
-        --
-        prj ix          =
-          keep!ix ? ( index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
-                    , ignore
-                    )
+        prj ix          = if keep!ix
+                            then index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
+                            else ignore
         dummy           = backpermute (index1 (the valid)) id (flatten arr)
         result          = permute const dummy prj arr
-
-        -- FIXME: This is abusing 'permute' in that the first two arguments are
-        --        only justified because we know the permutation function will
-        --        write to each location in the target exactly once.
-        --
-        --        Instead, we should have a primitive that directly encodes the
-        --        compaction pattern of the permutation function.
     in
-    null arr ?|
-      ( {- then -} lift (emptyArray, fill sz 0)
-      , {- else -} lift (result, len)
-      )
+    if null arr
+      then lift (emptyArray, fill sz 0)
+      else lift (result, len)
+
+-- FIXME: [Permute in the filter operation]
+--
+-- This is abusing 'permute' in that the first two arguments, the combination
+-- function and array of default values, are only justified because we know the
+-- permutation function will write to each location in the target exactly once.
+--
+-- Instead, we should have a primitive that directly encodes the compaction
+-- pattern of the permutation function. This may be more efficient to compute,
+-- and avoids the computation of the defaults array, which is ultimately wasted
+-- work.
+--
 
 {-# NOINLINE filter #-}
 {-# RULES
@@ -1638,6 +1655,7 @@ null arr = size arr ==* 0
 length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
 
+
 -- Sequence operations
 -- --------------------------------------
 
@@ -1683,4 +1701,16 @@ toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
 -- the given scalar function at each index.
 generateSeq :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
 generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
+
+
+-- Utilities
+-- ---------
+
+matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :=: t)
+matchShapeType _ _
+  | Just REFL <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
+  = gcast REFL
+
+matchShapeType _ _
+  = Nothing
 
