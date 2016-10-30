@@ -22,7 +22,7 @@
 
 module Data.Array.Accelerate.Data.Fold (
 
-  Fold(..), fold,
+  Fold(..), runFold,
 
   sum, product, length,
   combine2, combine3, combine4, combine5
@@ -66,8 +66,8 @@ data Fold i o where
 
 -- | Apply a 'Fold' to an array.
 --
-fold :: (Shape sh, Elt i, Elt o) => Fold (Exp i) (Exp o) -> Acc (Array (sh:.Int) i) -> Acc (Array sh o)
-fold (Fold tally summarise) is
+runFold :: (Shape sh, Elt i, Elt o) => Fold (Exp i) (Exp o) -> Acc (Array (sh:.Int) i) -> Acc (Array sh o)
+runFold (Fold tally summarise) is
   = A.map summarise
   $ A.fold (<>) mempty
   $ A.map tally is
