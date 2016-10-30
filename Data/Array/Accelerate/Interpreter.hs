@@ -459,7 +459,9 @@ scanl'Op f z (Delayed (sh :. n) ain _)
       aout <- newArrayData (size (sh:.n))
       asum <- newArrayData (size sh)
 
-      let write (sz:.0) = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.0)) (fromElt z)
+      let write (sz:.0)
+            | n == 0    = unsafeWriteArrayData asum (toIndex sh sz) (fromElt z)
+            | otherwise = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.0)) (fromElt z)
           write (sz:.i) = do
             x <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.i-1))
             y <- return $ fromElt (ain (sz:.i-1))
@@ -536,7 +538,10 @@ scanr'Op f z (Delayed (sh :. n) ain _)
       aout <- newArrayData (size (sh:.n))
       asum <- newArrayData (size sh)
 
-      let write (sz:.0) = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-1)) (fromElt z)
+      let write (sz:.0)
+            | n == 0    = unsafeWriteArrayData asum (toIndex sh sz) (fromElt z)
+            | otherwise = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-1)) (fromElt z)
+
           write (sz:.i) = do
             x <- return $ fromElt (ain (sz:.n-i))
             y <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.n-i))
