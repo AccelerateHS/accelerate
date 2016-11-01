@@ -13,19 +13,16 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- Combine folds in 'Applicative' style to generate multiple results with
--- a single pass over the array. Based on Max Rabkin's "Beautiful Folding" and
--- talks by Gabriel Gonzalez [2].
+-- a single pass over the array. Based on Max Rabkin's "Beautiful Folding" [1]
+-- and talks by Gabriel Gonzalez [2].
 --
--- [1] <http://squing.blogspot.com/2008/11/beautiful-folding.html>
--- [2] <https://www.youtube.com/watch?v=6a5Ti0r8Q2s>
+--  1. <http://squing.blogspot.com/2008/11/beautiful-folding.html>
+--  2. <https://www.youtube.com/watch?v=6a5Ti0r8Q2s>
 --
 
 module Data.Array.Accelerate.Data.Fold (
 
   Fold(..), runFold,
-
-  sum, product, length,
-  combine2, combine3, combine4, combine5
 
 ) where
 
@@ -39,14 +36,22 @@ import qualified Prelude                                            as P
 
 
 -- | 'Fold' describes how to process data of some 'i'nput type into some
--- 'o'utput type, via a reduction using some intermediate Monoid 'w'.
+-- 'o'utput type, via a reduction using some intermediate Monoid 'w'. For
+-- example, both 'sum' and 'length' below use the 'Sum' monoid:
+--
+-- >>> let sum = Fold (lift . Sum) (getSum . unlift)
+-- >>> let length = Fold (\_ -> 1) (getSum . unlift)
 --
 -- The key is that 'Fold's can be combined using 'Applicative' in order to
--- produce multiple outputs from a _single_ reduction of the array. For example:
+-- produce multiple outputs from a /single/ reduction of the array. For example:
 --
 -- >>> let average = (/) <$> sum <*> length
 --
--- Because 'Fold' also has some numeric instances, this can also be defined as:
+-- This computes both the sum of the array as well as its length in a single
+-- traversal, then combines both results to compute the average.
+--
+-- Because 'Fold' has some numeric instances, this can also be defined more
+-- succinctly as:
 --
 -- >>> let average = sum / length
 --
@@ -56,7 +61,7 @@ import qualified Prelude                                            as P
 -- >>> let standardDeviation = sqrt ((sumOfSquares / length) - (sum / length) ^ 2)
 --
 -- These will all execute with a single reduction kernel and a single map to
--- summarise the results.
+-- summarise (combine) the results.
 --
 data Fold i o where
   Fold :: (Elt w, Monoid (Exp w))
@@ -66,34 +71,38 @@ data Fold i o where
 
 -- | Apply a 'Fold' to an array.
 --
-runFold :: (Shape sh, Elt i, Elt o) => Fold (Exp i) (Exp o) -> Acc (Array (sh:.Int) i) -> Acc (Array sh o)
+runFold
+    :: (Shape sh, Elt i, Elt o)
+    => Fold (Exp i) (Exp o)
+    -> Acc (Array (sh:.Int) i)
+    -> Acc (Array sh o)
 runFold (Fold tally summarise) is
   = A.map summarise
   $ A.fold (<>) mempty
   $ A.map tally is
 
 
-sum :: A.Num e => Fold (Exp e) (Exp e)
-sum = Fold (lift . Sum) (getSum . unlift)
+-- sum :: A.Num e => Fold (Exp e) (Exp e)
+-- sum = Fold (lift . Sum) (getSum . unlift)
 
-product :: A.Num e => Fold (Exp e) (Exp e)
-product = Fold (lift . Product) (getProduct . unlift)
+-- product :: A.Num e => Fold (Exp e) (Exp e)
+-- product = Fold (lift . Product) (getProduct . unlift)
 
-length :: A.Num i => Fold (Exp e) (Exp i)
-length = Fold (\_ -> 1) (getSum . unlift)
+-- length :: A.Num i => Fold (Exp e) (Exp i)
+-- length = Fold (\_ -> 1) (getSum . unlift)
 
 
-combine2 :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a,b)
-combine2 a b = lift (a,b)
+-- combine2 :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a,b)
+-- combine2 a b = lift (a,b)
 
-combine3 :: (Elt a, Elt b, Elt c) => Exp a -> Exp b -> Exp c -> Exp (a,b,c)
-combine3 a b c = lift (a,b,c)
+-- combine3 :: (Elt a, Elt b, Elt c) => Exp a -> Exp b -> Exp c -> Exp (a,b,c)
+-- combine3 a b c = lift (a,b,c)
 
-combine4 :: (Elt a, Elt b, Elt c, Elt d) => Exp a -> Exp b -> Exp c -> Exp d -> Exp (a,b,c,d)
-combine4 a b c d = lift (a,b,c,d)
+-- combine4 :: (Elt a, Elt b, Elt c, Elt d) => Exp a -> Exp b -> Exp c -> Exp d -> Exp (a,b,c,d)
+-- combine4 a b c d = lift (a,b,c,d)
 
-combine5 :: (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp (a,b,c,d,e)
-combine5 a b c d e = lift (a,b,c,d,e)
+-- combine5 :: (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp (a,b,c,d,e)
+-- combine5 a b c d e = lift (a,b,c,d,e)
 
 
 -- Instances for 'Fold'
