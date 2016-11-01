@@ -37,7 +37,6 @@ import Prelude                                          hiding ( exp, iterate )
 import Data.Array.Accelerate.AST                        hiding ( prj )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Shrink
@@ -152,8 +151,8 @@ recoverLoops _ bnd e3
   --   iterate[2] (\y -> e2) e1
   --
   | Let e1 e2           <- bnd
-  , Just REFL           <- matchEnvTop e2 e3
-  , Just REFL           <- match e2 e3
+  , Just Refl           <- matchEnvTop e2 e3
+  , Just Refl           <- match e2 e3
   = Stats.ruleFired "loop recovery/intro" . Just
   $ Iterate (constant 2) e2 e1
 
@@ -166,7 +165,7 @@ recoverLoops _ bnd e3
   -- iteration with the trip count increased by one.
   --
   | Iterate n f e1      <- bnd
-  , Just REFL           <- match f e3
+  , Just Refl           <- match f e3
   = Stats.ruleFired "loop recovery/merge" . Just
   $ Iterate (constant 1 `plus` n) f e1
 
@@ -184,7 +183,7 @@ recoverLoops _ bnd e3
                 => PreOpenExp acc (env,s) aenv f
                 -> PreOpenExp acc (env,t) aenv g
                 -> Maybe (s :=: t)
-    matchEnvTop _ _ = gcast REFL
+    matchEnvTop _ _ = gcast Refl
 --}
 
 
@@ -306,7 +305,7 @@ simplifyOpenExp env = first getAny . cvtE
     cond p@(_,p') t@(_,t') e@(_,e')
       | Const True  <- p'        = Stats.knownBranch "True"      (yes t')
       | Const False <- p'        = Stats.knownBranch "False"     (yes e')
-      | Just REFL <- match t' e' = Stats.knownBranch "redundant" (yes e')
+      | Just Refl <- match t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                = Cond <$> p <*> t <*> e
 
     -- If we are projecting elements from a tuple structure or tuple of constant
@@ -372,7 +371,7 @@ simplifyOpenExp env = first getAny . cvtE
       , Just sh'        <- gcast sz'
       = Stats.ruleFired "Z:.indexHead" $ yes sh'
     indexCons (_,IndexTail sl') (_,IndexHead sz')
-      | Just REFL       <- match sl' sz'
+      | Just Refl       <- match sl' sz'
       = Stats.ruleFired "indexTail:.indexHead" $ yes sl'
     indexCons sl sz
       = IndexCons <$> sl <*> sz
@@ -395,12 +394,12 @@ simplifyOpenExp env = first getAny . cvtE
 
     toIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
     toIndex  (_,sh) (_,FromIndex sh' ix)
-      | Just REFL <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
+      | Just Refl <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
     toIndex sh ix                 = ToIndex <$> sh <*> ix
 
     fromIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
     fromIndex  (_,sh) (_,ToIndex sh' ix)
-      | Just REFL <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
+      | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
     fromIndex sh ix               = FromIndex <$> sh <*> ix
 
     first :: (a -> a') -> (a,b) -> (a',b)

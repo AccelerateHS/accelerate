@@ -303,7 +303,7 @@ usesOfExp idx = countE
     countE :: PreOpenExp acc env aenv e -> Int
     countE exp = case exp of
       Var this
-        | Just REFL <- match this idx   -> 1
+        | Just Refl <- match this idx   -> 1
         | otherwise                     -> 0
       --
       Let bnd body              -> countE bnd + usesOfExp (SuccIdx idx) body
@@ -357,7 +357,7 @@ usesOfPreAcc withShape countAcc idx = count
   where
     countIdx :: Idx aenv a -> Int
     countIdx this
-        | Just REFL <- match this idx   = 1
+        | Just Refl <- match this idx   = 1
         | otherwise                     = 0
 
     count :: PreOpenAcc acc aenv a -> Int

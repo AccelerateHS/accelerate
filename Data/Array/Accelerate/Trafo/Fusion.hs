@@ -126,8 +126,8 @@ delayed fuseAcc (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
     Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
     Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
     Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
-      | Just REFL <- match sh (arrayShape v)
-      , Just REFL <- isIdentity p
+      | Just Refl <- match sh (arrayShape v)
+      , Just Refl <- isIdentity p
       -> Delayed sh (f `compose` indexArray v) (f `compose` linearIndex v)
 
       | f'        <- f `compose` indexArray v `compose` p
@@ -843,12 +843,12 @@ compute' cc = case simplify cc of
   Done v                                        -> Avar v
   Yield sh f                                    -> Generate sh f
   Step sh p f v
-    | Just REFL <- match sh (arrayShape v)
-    , Just REFL <- isIdentity p
-    , Just REFL <- isIdentity f                 -> Avar v
-    | Just REFL <- match sh (arrayShape v)
-    , Just REFL <- isIdentity p                 -> Map f (avarIn v)
-    | Just REFL <- isIdentity f                 -> Backpermute sh p (avarIn v)
+    | Just Refl <- match sh (arrayShape v)
+    , Just Refl <- isIdentity p
+    , Just Refl <- isIdentity f                 -> Avar v
+    | Just Refl <- match sh (arrayShape v)
+    , Just Refl <- isIdentity p                 -> Map f (avarIn v)
+    | Just Refl <- isIdentity f                 -> Backpermute sh p (avarIn v)
     | otherwise                                 -> Transform sh p f (avarIn v)
 
 
@@ -1032,8 +1032,8 @@ zipWithD f cc1 cc0
   --
   | Just (Step sh1 p1 f1 v1)    <- step cc1
   , Just (Step sh0 p0 f0 v0)    <- step cc0
-  , Just REFL                   <- match v1 v0
-  , Just REFL                   <- match p1 p0
+  , Just Refl                   <- match v1 v0
+  , Just Refl                   <- match p1 p0
   = Stats.ruleFired "zipWithD/step"
   $ Step (sh1 `Intersect` sh0) p0 (combine f f1 f0) v0
 
@@ -1264,16 +1264,16 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
 
         Shape a
-          | Just REFL <- match a a'     -> Stats.substitution "replaceE/shape" sh'
+          | Just Refl <- match a a'     -> Stats.substitution "replaceE/shape" sh'
           | otherwise                   -> exp
 
         Index a sh
-          | Just REFL    <- match a a'
+          | Just Refl    <- match a a'
           , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" . cvtE $ Let sh b
           | otherwise                   -> Index a (cvtE sh)
 
         LinearIndex a i
-          | Just REFL    <- match a a'
+          | Just Refl    <- match a a'
           , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" . cvtE $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
           | otherwise                   -> LinearIndex a (cvtE i)
 
@@ -1304,7 +1304,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     replaceA sh' f' avar pacc =
       case pacc of
         Avar v
-          | Just REFL <- match v avar   -> Avar avar
+          | Just Refl <- match v avar   -> Avar avar
           | otherwise                   -> Avar v
 
         Alet bnd body                   ->
@@ -1441,7 +1441,7 @@ acondD :: (Kit acc, Arrays arrs)
 acondD embedAcc p t e
   | Const True  <- p        = Stats.knownBranch "True"      $ embedAcc t
   | Const False <- p        = Stats.knownBranch "False"     $ embedAcc e
-  | Just REFL <- match t e  = Stats.knownBranch "redundant" $ embedAcc e
+  | Just Refl <- match t e  = Stats.knownBranch "redundant" $ embedAcc e
   | otherwise               = done $ Acond p (computeAcc (embedAcc t))
                                              (computeAcc (embedAcc e))
 
@@ -1482,9 +1482,9 @@ data ExtendProducer acc aenv senv arrs where
 -- Scalar expressions
 -- ------------------
 
-isIdentity :: PreFun acc aenv (a -> b) -> Maybe (a :=: b)
+isIdentity :: PreFun acc aenv (a -> b) -> Maybe (a :~: b)
 isIdentity f
-  | Lam (Body (Var ZeroIdx)) <- f       = Just REFL
+  | Lam (Body (Var ZeroIdx)) <- f       = Just Refl
   | otherwise                           = Nothing
 
 identity :: Elt a => PreOpenFun acc env aenv (a -> a)
@@ -1501,7 +1501,7 @@ reindex :: (Kit acc, Shape sh, Shape sh')
         -> PreOpenExp acc env aenv sh
         -> PreOpenFun acc env aenv (sh -> sh')
 reindex sh' sh
-  | Just REFL <- match sh sh'   = identity
+  | Just Refl <- match sh sh'   = identity
   | otherwise                   = fromIndex sh' `compose` toIndex sh
 
 extend :: (Kit acc, Shape sh, Shape sl, Elt slix)

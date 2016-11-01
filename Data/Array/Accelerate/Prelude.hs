@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -1060,7 +1061,7 @@ unindex1' ix = let Z :. i = unlift ix in fromIntegral i
 --
 flatten :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Vector e)
 flatten a
-  | Just REFL <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::DIM1))
+  | Just Refl <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::DIM1))
   , Just a'   <- gcast a
   = a'
 flatten a
