@@ -247,6 +247,9 @@ zipWith = Acc $$$ ZipWith
 -- first argument needs to be an /associative/ function to enable an efficient
 -- parallel implementation.
 --
+-- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
+-- compute multiple results from a single reduction.
+--
 fold :: (Shape ix, Elt a)
      => (Exp a -> Exp a -> Exp a)
      -> Exp a
