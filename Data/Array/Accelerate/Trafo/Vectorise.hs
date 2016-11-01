@@ -2359,7 +2359,7 @@ rebindIndex (Abody b) ix
   where
     ixt :: forall aenv a s. Idx aenv a -> Idx aenv s -> Idx (aenv,a) s
     ixt ix ix'
-      | Just REFL <- matchIdx ix ix' = ZeroIdx
+      | Just Refl <- matchIdx ix ix' = ZeroIdx
       | otherwise                    = SuccIdx ix'
 
 -- Utility functions

@@ -28,7 +28,7 @@
 module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
-  Kit(..), Match(..), (:=:)(REFL),
+  Kit(..), Match(..), (:~:)(..),
   avarIn, kmap, fromOpenAfun,
 
   -- Delayed Arrays
@@ -51,6 +51,7 @@ module Data.Array.Accelerate.Trafo.Base (
 import Control.Applicative
 import Control.DeepSeq
 import Data.Hashable
+import Data.Type.Equality
 import Text.PrettyPrint
 import Prelude                                          hiding ( until )
 
@@ -106,7 +107,7 @@ fromOpenAfun (Alam f)  = Alam  $ fromOpenAfun f
 -- to the existentially quantified terms in the positive case.
 --
 class Match f where
-  match :: f s -> f t -> Maybe (s :=: t)
+  match :: f s -> f t -> Maybe (s :~: t)
 
 instance Match (Idx env) where
   {-# INLINEABLE match #-}
@@ -207,10 +208,10 @@ matchDelayed (Manifest pacc1) (Manifest pacc2)
   = matchPreOpenAcc matchAcc hashAcc pacc1 pacc2
 
 matchDelayed (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
-  | Just REFL   <- matchPreOpenExp matchAcc hashAcc sh1 sh2
-  , Just REFL   <- matchPreOpenFun matchAcc hashAcc ix1 ix2
-  , Just REFL   <- matchPreOpenFun matchAcc hashAcc lx1 lx2
-  = Just REFL
+  | Just Refl <- matchPreOpenExp matchAcc hashAcc sh1 sh2
+  , Just Refl <- matchPreOpenFun matchAcc hashAcc ix1 ix2
+  , Just Refl <- matchPreOpenFun matchAcc hashAcc lx1 lx2
+  = Just Refl
 
 matchDelayed _ _
   = Nothing
@@ -244,7 +245,7 @@ prettyDelayed wrap aenv acc = case acc of
   Manifest pacc         -> prettyPreOpenAcc prettyDelayed wrap aenv pacc
   Delayed sh f _
     | Shape a           <- sh
-    , Just REFL         <- match f (Lam (Body (Index a (Var ZeroIdx))))
+    , Just Refl         <- match f (Lam (Body (Index a (Var ZeroIdx))))
     -> prettyDelayed wrap aenv a
 
     | otherwise
@@ -310,7 +311,7 @@ sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
 lookupExp :: Kit acc => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Maybe (Idx env' t)
 lookupExp EmptyExp        _ = Nothing
 lookupExp (PushExp env e) x
-  | Just REFL <- match e x  = Just ZeroIdx
+  | Just Refl <- match e x  = Just ZeroIdx
   | otherwise               = SuccIdx `fmap` lookupExp env x
 
 

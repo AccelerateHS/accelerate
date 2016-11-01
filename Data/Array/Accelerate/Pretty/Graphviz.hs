@@ -306,7 +306,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       return $ PDoc (text v) [Vertex ident Nothing]
     ppA (Delayed sh f _)
       | Shape a    <- sh                                             -- identical shape
-      , Just REFL  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
+      , Just Refl  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
       = ppA a
     ppA (Delayed sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
