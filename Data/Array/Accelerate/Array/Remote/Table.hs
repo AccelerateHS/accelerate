@@ -219,8 +219,9 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
 --
 free :: (RemoteMemory m, PrimElt a b)
      => proxy m
-     ->  MemoryTable (RemotePtr m)
-     -> ArrayData a -> IO ()
+     -> MemoryTable (RemotePtr m)
+     -> ArrayData a
+     -> IO ()
 free proxy mt !arr = do
   sa <- makeStableArray arr
   freeStable proxy mt sa
