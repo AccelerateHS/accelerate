@@ -51,7 +51,7 @@ import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
-import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
+-- import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
 #ifdef ACCELERATE_DEBUG
 import Text.Printf
@@ -123,7 +123,7 @@ convertAcc = convertAccWith phases
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
-  $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
+  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
@@ -138,7 +138,7 @@ convertAfun = convertAfunWith phases
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
-  $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
+  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
@@ -170,7 +170,7 @@ convertSeq = convertSeqWith phases
 convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
 convertSeqWith Phase{..} s
   = phase "array-fusion"           (Fusion.convertSeq enableAccFusion)
-  $ phase "vectorise-sequences"    Vectorise.vectoriseSeq     `when` vectoriseSequences
+  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeq     `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s

@@ -343,7 +343,7 @@ Library
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
         Data.Array.Accelerate.Trafo.Substitution
-        Data.Array.Accelerate.Trafo.Vectorise
+        -- Data.Array.Accelerate.Trafo.Vectorise
 
   c-sources:            cbits/atomic.c
 
