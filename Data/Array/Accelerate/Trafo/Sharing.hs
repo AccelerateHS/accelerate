@@ -1876,7 +1876,7 @@ instance Show NodeName where
 
 data NodeCount = AccNodeCount StableSharingAcc Int
                | ExpNodeCount StableSharingExp Int
-               -- | SeqNodeCount StableSharingSeq Int
+               -- SeqNodeCount StableSharingSeq Int
                deriving Show
 
 -- Empty node counts

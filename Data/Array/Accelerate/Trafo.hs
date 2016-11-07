@@ -86,7 +86,7 @@ data Phase = Phase
     -- | Convert segment length arrays into segment offset arrays?
   , convertOffsetOfSegment      :: Bool
 
-    -- | Vectorise maps and zipwiths in sequence computations to
+    --   Vectorise maps and zipwiths in sequence computations to
     --   enable chunked execution?
   -- , vectoriseSequences          :: Bool
   }
@@ -123,7 +123,7 @@ convertAcc = convertAccWith phases
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
-  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
+  -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
@@ -138,7 +138,7 @@ convertAfun = convertAfunWith phases
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
-  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
+  -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc

@@ -112,11 +112,13 @@ preAccType k pacc =
                              _            -> error "Who on earth wrote all these weird error messages?"
 #endif
 
-    -- Collect _           -> case arrays (undefined :: Array sh e) of
-    --                          ArraysRarray -> eltType (undefined::e)
--- #if __GLASGOW_HASKELL__ < 800
-    --                          _            -> error "rob you are terrible at this game"
--- #endif
+{--
+    Collect _           -> case arrays (undefined :: Array sh e) of
+                             ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
+                             _            -> error "rob you are terrible at this game"
+#endif
+--}
 
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc
