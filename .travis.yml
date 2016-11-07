@@ -5,7 +5,7 @@
 #
 language: generic
 dist: trusty
-sudo: false
+sudo: required
 
 cache:
   directories:
@@ -21,9 +21,9 @@ matrix:
       compiler: "GHC 7.10"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
 
-    - env: GHC=8.0.1 CABAL=1.24
+    - env: GHC=8.0.1 CABAL=1.22
       compiler: "GHC 8.0"
-      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
 
     - env: GHC=head CABAL=head
       compiler: "GHC HEAD"
