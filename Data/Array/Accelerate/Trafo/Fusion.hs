@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- ** Conversion
-  convertAcc, convertAfun, convertSeq,
+  convertAcc, convertAfun,
 
 ) where
 
@@ -80,15 +80,15 @@ convertAcc fuseAcc = withSimplStats . convertOpenAcc fuseAcc
 convertAfun :: Bool -> Afun f -> DelayedAfun f
 convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
 
--- | Apply the fusion transformation to the array computations embedded
---   in a sequence computation.
-convertSeq :: Bool -> Seq a -> DelayedSeq a
-convertSeq fuseAcc (embedSeq (embedOpenAcc fuseAcc) -> ExtendSeq aenv s)
-  = withSimplStats (DelayedSeq (cvtE aenv) (convertOpenSeq fuseAcc s))
-  where
-    cvtE :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
-    cvtE BaseEnv                                          = BaseEnv
-    cvtE (PushEnv env a) | a' <- convertOpenAcc fuseAcc a = PushEnv (cvtE env) a'
+-- -- | Apply the fusion transformation to the array computations embedded
+-- --   in a sequence computation.
+-- convertSeq :: Bool -> Seq a -> DelayedSeq a
+-- convertSeq fuseAcc (embedSeq (embedOpenAcc fuseAcc) -> ExtendSeq aenv s)
+--   = withSimplStats (DelayedSeq (cvtE aenv) (convertOpenSeq fuseAcc s))
+--   where
+--     cvtE :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
+--     cvtE BaseEnv                                          = BaseEnv
+--     cvtE (PushEnv env a) | a' <- convertOpenAcc fuseAcc a = PushEnv (cvtE env) a'
 
 withSimplStats :: a -> a
 #ifdef ACCELERATE_DEBUG
@@ -199,7 +199,7 @@ manifest fuseAcc (OpenAcc pacc) =
     Permute f d p a         -> Permute  (cvtF f) (manifest fuseAcc d) (cvtF p) (delayed fuseAcc a)
     Stencil f x a           -> Stencil  (cvtF f) x (manifest fuseAcc a)
     Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
-    Collect s               -> Collect  (cvtS s)
+    -- Collect s               -> Collect  (cvtS s)
 
     where
       -- Flatten needless let-binds, which can be introduced by the conversion to
@@ -221,8 +221,8 @@ manifest fuseAcc (OpenAcc pacc) =
       cvtAF (Alam f)  = Alam  (cvtAF f)
       cvtAF (Abody b) = Abody (manifest fuseAcc b)
 
-      cvtS :: PreOpenSeq OpenAcc aenv senv s -> PreOpenSeq DelayedOpenAcc aenv senv s
-      cvtS = convertOpenSeq fuseAcc
+      -- cvtS :: PreOpenSeq OpenAcc aenv senv s -> PreOpenSeq DelayedOpenAcc aenv senv s
+      -- cvtS = convertOpenSeq fuseAcc
 
       -- Conversions for closed scalar functions and expressions
       --
@@ -280,6 +280,7 @@ convertOpenAfun :: Bool -> OpenAfun aenv f -> DelayedOpenAfun aenv f
 convertOpenAfun c (Alam  f) = Alam  (convertOpenAfun c f)
 convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
 
+{--
 convertOpenSeq :: Bool -> PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOpenAcc aenv senv a
 convertOpenSeq fuseAcc s =
   case s of
@@ -316,6 +317,7 @@ convertOpenSeq fuseAcc s =
     cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
     cvtF (Lam f)  = Lam (cvtF f)
     cvtF (Body b) = Body (cvtE b)
+--}
 
 
 -- | Apply the fusion transformation to the AST to combine and simplify terms.
@@ -375,7 +377,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Collect s           -> collectD s
+    -- Collect s           -> collectD s
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -561,14 +563,15 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | Done{} <- cc = Embed env                                  cc
       | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
-    -- Move additional bindings for producers outside of the sequence, so that
-    -- producers may fuse with their arguments resulting in actual sequencing
-    collectD :: PreOpenSeq acc aenv () arrs
-             -> Embed acc aenv arrs
-    collectD (embedSeq embedAcc -> ExtendSeq env s')
-      = Embed (env `PushEnv` inject (Collect s')) (Done ZeroIdx)
+    -- -- Move additional bindings for producers outside of the sequence, so that
+    -- -- producers may fuse with their arguments resulting in actual sequencing
+    -- collectD :: PreOpenSeq acc aenv () arrs
+    --          -> Embed acc aenv arrs
+    -- collectD (embedSeq embedAcc -> ExtendSeq env s')
+    --   = Embed (env `PushEnv` inject (Collect s')) (Done ZeroIdx)
 
 
+{--
 -- Move additional bindings for producer outside of sequence, so
 -- that producers may fuse with their arguments, resulting in
 -- actual sequencing.
@@ -632,6 +635,22 @@ embedSeq embedAcc s
     cvtAF :: PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
     cvtAF (Alam  f) = Alam  (cvtAF f)
     cvtAF (Abody a) = Abody (cvtA a)
+
+
+-- A sequence with additional bindings
+data ExtendSeq acc aenv senv arrs where
+  ExtendSeq :: forall acc aenv aenv' senv arrs.
+                Extend acc aenv aenv'
+             -> PreOpenSeq acc aenv' senv arrs
+             -> ExtendSeq acc aenv senv arrs
+
+-- A producer with additional bindings
+data ExtendProducer acc aenv senv arrs where
+  ExtendProducer :: forall acc aenv aenv' senv arrs.
+                    Extend acc aenv aenv'
+                 -> Producer acc aenv' senv arrs
+                 -> ExtendProducer acc aenv senv arrs
+--}
 
 
 -- Internal representation
@@ -772,11 +791,18 @@ accType _ = arrays (undefined :: a)
 -- Environment manipulation
 -- ========================
 
+instance Kit acc => Sink (Cunctation acc) where
+  weaken k cc = case cc of
+    Done v              -> Done (weaken k v)
+    Step sh p f v       -> Step (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
+    Yield sh f          -> Yield (weaken k sh) (weaken k f)
+
 -- prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
 -- prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
 -- prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
 -- prjExtend _               _             = $internalError "prjExtend" "inconsistent valuation"
 
+{--
 -- Rearrange type arguments to fit with Sink type class.
 newtype SinkSeq acc senv aenv a = SinkSeq { unSinkSeq :: PreOpenSeq acc aenv senv a }
 
@@ -817,14 +843,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
                 wk (SnocAtup t c) = wk t `SnocAtup` weakenC c
             in
             Stuple (wk t)
-
-
-instance Kit acc => Sink (Cunctation acc) where
-  weaken k cc = case cc of
-    Done v              -> Done (weaken k v)
-    Step sh p f v       -> Step (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
-    Yield sh f          -> Yield (weaken k sh) (weaken k f)
-
+--}
 
 -- Array fusion of a de Bruijn computation AST
 -- ===========================================
@@ -1342,12 +1361,36 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Collect seq             -> Collect (cvtSeq seq)
+        -- Collect seq             -> Collect (cvtSeq seq)
 
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
 
+        cvtE :: PreExp acc aenv s -> PreExp acc aenv s
+        cvtE = replaceE sh' f' avar
+
+        cvtF :: PreFun acc aenv s -> PreFun acc aenv s
+        cvtF = replaceF sh' f' avar
+
+        cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
+        cvtAT NilAtup          = NilAtup
+        cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
+
+        cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
+        cvtAF = cvt sh' f' avar
+          where
+            cvt :: forall aenv a.
+                   PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
+                -> PreOpenAfun acc aenv a
+                -> PreOpenAfun acc aenv a
+            cvt sh'' f'' avar' (Abody a) = Abody $ kmap (replaceA sh'' f'' avar') a
+            cvt sh'' f'' avar' (Alam af) = Alam  $ cvt (weaken SuccIdx sh'')
+                                                       (weaken SuccIdx f'')
+                                                       (SuccIdx avar')
+                                                       af
+
+{--
         cvtSeq :: PreOpenSeq acc aenv senv s -> PreOpenSeq acc aenv senv s
         cvtSeq s =
           case s of
@@ -1375,29 +1418,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv senv) t
         cvtCT NilAtup        = NilAtup
         cvtCT (SnocAtup t c) = cvtCT t `SnocAtup` cvtC c
-
-        cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
-        cvtAF = cvt sh' f' avar
-          where
-            cvt :: forall aenv a.
-                   PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
-                -> PreOpenAfun acc aenv a
-                -> PreOpenAfun acc aenv a
-            cvt sh'' f'' avar' (Abody a) = Abody $ kmap (replaceA sh'' f'' avar') a
-            cvt sh'' f'' avar' (Alam af) = Alam $ cvt (weaken SuccIdx sh'')
-                                                      (weaken SuccIdx f'')
-                                                      (SuccIdx avar')
-                                                      af
-
-        cvtE :: PreExp acc aenv s -> PreExp acc aenv s
-        cvtE = replaceE sh' f' avar
-
-        cvtF :: PreFun acc aenv s -> PreFun acc aenv s
-        cvtF = replaceF sh' f' avar
-
-        cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
-        cvtAT NilAtup          = NilAtup
-        cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
+--}
 
 
 -- The apply operator, or (>->) in the surface language. This eliminates
@@ -1465,19 +1486,6 @@ aprjD embedAcc ix a
     aprjAT ZeroTupIdx      (SnocAtup _ a) = a
     aprjAT (SuccTupIdx ix) (SnocAtup t _) = aprjAT ix t
 
--- A sequence with additional bindings
-data ExtendSeq acc aenv senv arrs where
-  ExtendSeq :: forall acc aenv aenv' senv arrs.
-                Extend acc aenv aenv'
-             -> PreOpenSeq acc aenv' senv arrs
-             -> ExtendSeq acc aenv senv arrs
-
--- A producer with additional bindings
-data ExtendProducer acc aenv senv arrs where
-  ExtendProducer :: forall acc aenv aenv' senv arrs.
-                    Extend acc aenv aenv'
-                 -> Producer acc aenv' senv arrs
-                 -> ExtendProducer acc aenv senv arrs
 
 -- Scalar expressions
 -- ------------------

@@ -102,7 +102,7 @@ module Data.Array.Accelerate.Prelude (
   the, null, length,
 
   -- * Sequence operations
-  fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
+  -- fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
 
 ) where
 
@@ -1589,11 +1589,10 @@ null arr = size arr ==* 0
 length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
 
+
+{--
 -- Sequence operations
 -- --------------------------------------
-
-emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = use (fromList empty [])
 
 -- | Reduce a sequence by appending all the shapes and all the elements in two
 -- separate vectors.
@@ -1634,4 +1633,11 @@ toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
 -- the given scalar function at each index.
 generateSeq :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
 generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
+--}
+
+-- Utilities
+-- ---------
+
+emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
+emptyArray = use (fromList empty [])
 

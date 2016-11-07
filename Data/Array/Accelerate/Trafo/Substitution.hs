@@ -450,6 +450,14 @@ shiftA
 shiftA _ _ ZeroIdx      = pure $ avarIn ZeroIdx
 shiftA k v (SuccIdx ix) = weakenAcc k <$> v ix
 
+{-# INLINEABLE rebuildOpenAcc #-}
+rebuildOpenAcc
+    :: (Applicative f, SyntacticAcc fa)
+    => (forall t'. Arrays t' => Idx aenv t' -> f (fa OpenAcc aenv' t'))
+    -> OpenAcc aenv  t
+    -> f (OpenAcc aenv' t)
+rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc av acc
+
 {-# INLINEABLE rebuildPreOpenAcc #-}
 rebuildPreOpenAcc
     :: (Applicative f, SyntacticAcc fa)
@@ -489,7 +497,7 @@ rebuildPreOpenAcc k av acc =
     Backpermute sh f a      -> Backpermute  <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
     Stencil f b a           -> Stencil      <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
     Stencil2 f b1 a1 b2 a2  -> Stencil2     <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
-    Collect seq             -> Collect      <$> rebuildSeq k av seq
+    -- Collect seq             -> Collect      <$> rebuildSeq k av seq
     Aforeign ff afun as     -> Aforeign ff afun <$> k av as
 
 {-# INLINEABLE rebuildAfun #-}
@@ -516,6 +524,7 @@ rebuildAtup k av atup =
     NilAtup      -> pure NilAtup
     SnocAtup t a -> SnocAtup <$> rebuildAtup k av t <*> k av a
 
+{--
 {-# INLINEABLE rebuildSeq #-}
 rebuildSeq
     :: (SyntacticAcc fa, Applicative f)
@@ -559,14 +568,5 @@ rebuildC k v c =
     rebuildT :: Atuple (Consumer acc aenv senv) t -> f (Atuple (Consumer acc aenv' senv) t)
     rebuildT NilAtup        = pure NilAtup
     rebuildT (SnocAtup t s) = SnocAtup <$> (rebuildT t) <*> (rebuildC k v s)
-
--- For OpenAcc
-
-{-# INLINEABLE rebuildOpenAcc #-}
-rebuildOpenAcc
-    :: (Applicative f, SyntacticAcc fa)
-    => (forall t'. Arrays t' => Idx aenv t' -> f (fa OpenAcc aenv' t'))
-    -> OpenAcc aenv  t
-    -> f (OpenAcc aenv' t)
-rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc av acc
+--}
 

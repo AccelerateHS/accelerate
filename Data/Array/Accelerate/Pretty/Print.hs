@@ -31,7 +31,7 @@ module Data.Array.Accelerate.Pretty.Print (
   PrettyAcc,
   prettyPreOpenAcc,
   prettyPreOpenAfun,
-  prettyPreOpenSeq,
+  -- prettyPreOpenSeq,
   prettyPreExp, prettyPreOpenExp,
   prettyPreFun, prettyPreOpenFun,
   prettyPrim,
@@ -52,7 +52,6 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar                hiding ( tuple )
-import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
 import Data.Array.Accelerate.Type
@@ -178,11 +177,12 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
 
-    pp (Collect s)              = wrap $ hang (text "collect") 2
-                                       $ encloseSep lbrace rbrace semi
-                                       $ prettyPreOpenSeq prettyAcc wrap aenv Empty s
+    -- pp (Collect s)              = wrap $ hang (text "collect") 2
+    --                                    $ encloseSep lbrace rbrace semi
+    --                                    $ prettyPreOpenSeq prettyAcc wrap aenv Empty s
 
 
+{--
 -- Pretty print a computation over sequences
 --
 prettyPreOpenSeq
@@ -243,6 +243,7 @@ prettyPreOpenSeq prettyAcc wrap aenv senv seq =
     prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
     prettyT NilAtup        = []
     prettyT (SnocAtup t c) = prettyT t ++ [prettyC c]
+--}
 
 
 -- Pretty print a function over array computations.

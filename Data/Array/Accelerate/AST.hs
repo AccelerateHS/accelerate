@@ -93,8 +93,8 @@ module Data.Array.Accelerate.AST (
   Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
-  PreOpenSeq(..), Seq,
-  Producer(..), Consumer(..),
+  -- PreOpenSeq(..), Seq,
+  -- Producer(..), Consumer(..),
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
@@ -102,7 +102,7 @@ module Data.Array.Accelerate.AST (
 
   -- NFData
   NFDataAcc,
-  rnfPreOpenAfun, rnfPreOpenAcc, rnfPreOpenSeq, rnfPreOpenFun, rnfPreOpenExp,
+  rnfPreOpenAfun, rnfPreOpenAcc, rnfPreOpenFun, rnfPreOpenExp,
 
   -- debugging
   showPreAccOp, showPreExpOp,
@@ -117,7 +117,6 @@ import Control.DeepSeq
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Lifted               ( Vector' )
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 #if __GLASGOW_HASKELL__ < 800
@@ -202,6 +201,18 @@ type PreAfun acc = PreOpenAfun acc ()
 -- |Vanilla array-computation function without free array variables
 --
 type Afun = OpenAfun ()
+
+-- Vanilla open array computations
+--
+newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
+
+-- |Closed array expression aka an array program
+--
+type Acc = OpenAcc ()
+
+deriving instance Typeable PreOpenAcc
+deriving instance Typeable OpenAcc
+
 
 -- |Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
@@ -477,17 +488,11 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv (Array sh e')
 
   -- A sequence of operations.
-  Collect     :: Arrays arrs
-              => PreOpenSeq acc aenv () arrs
-              -> PreOpenAcc acc aenv arrs
+  -- Collect     :: Arrays arrs
+  --             => PreOpenSeq acc aenv () arrs
+  --             -> PreOpenAcc acc aenv arrs
 
--- Vanilla open array computations
---
-newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
-
--- deriving instance Typeable PreOpenAcc
-deriving instance Typeable OpenAcc
-
+{--
 data PreOpenSeq acc aenv senv arrs where
   Producer :: Arrays a
            => Producer acc aenv senv a
@@ -578,7 +583,7 @@ data Consumer acc aenv senv a where
   -- as the companion operator:
   --
   --   Forall b sh1 a1 sh2 a2.
---       f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+  --     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
   --
   -- It is common to ignore the shape vectors, yielding the usual
   -- semi-associativity law:
@@ -602,10 +607,7 @@ data Consumer acc aenv senv a where
 -- |Closed sequence computation
 --
 type Seq = PreOpenSeq OpenAcc () ()
-
--- |Closed array expression aka an array program
---
-type Acc = OpenAcc ()
+--}
 
 
 -- |Operations on stencils.
@@ -831,6 +833,18 @@ type PreFun acc = PreOpenFun acc ()
 --
 type Fun = OpenFun ()
 
+-- |Vanilla open expression
+--
+type OpenExp = PreOpenExp OpenAcc
+
+-- |Parametrised expression without free scalar variables
+--
+type PreExp acc = PreOpenExp acc ()
+
+-- |Vanilla expression without free scalar variables
+--
+type Exp = OpenExp ()
+
 -- |Parametrised open expressions using de Bruijn indices for variables ranging over tuples
 -- of scalars and arrays of tuples.  All code, except Cond, is evaluated eagerly.  N-tuples are
 -- represented as nested pairs.
@@ -975,19 +989,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv dim
 
 
--- |Vanilla open expression
---
-type OpenExp = PreOpenExp OpenAcc
-
--- |Parametrised expression without free scalar variables
---
-type PreExp acc = PreOpenExp acc ()
-
--- |Vanilla expression without free scalar variables
---
-type Exp = OpenExp ()
-
--- |Primitive GPU constants
+-- |Primitive constant values
 --
 data PrimConst ty where
 
@@ -1120,8 +1122,8 @@ instance NFData (OpenAfun aenv f) where
 instance NFData (OpenAcc aenv t) where
   rnf = rnfOpenAcc
 
-instance NFData (Seq t) where
-  rnf = rnfPreOpenSeq rnfOpenAcc
+-- instance NFData (Seq t) where
+--   rnf = rnfPreOpenSeq rnfOpenAcc
 
 instance NFData (OpenExp env aenv t) where
   rnf = rnfPreOpenExp rnfOpenAcc
@@ -1165,8 +1167,8 @@ rnfPreOpenAcc rnfA pacc =
       rnfF :: PreOpenFun acc env' aenv' t' -> ()
       rnfF = rnfPreOpenFun rnfA
 
-      rnfS :: PreOpenSeq acc aenv' senv' t' -> ()
-      rnfS = rnfPreOpenSeq rnfA
+      -- rnfS :: PreOpenSeq acc aenv' senv' t' -> ()
+      -- rnfS = rnfPreOpenSeq rnfA
 
       rnfB :: forall aenv' sh e. Elt e => acc aenv' (Array sh e) -> Boundary (EltRepr e) -> ()
       rnfB _ = rnfBoundary (eltType (undefined::e))
@@ -1203,7 +1205,7 @@ rnfPreOpenAcc rnfA pacc =
     Backpermute sh f a        -> rnfE sh `seq` rnfF f `seq` rnfA a
     Stencil f b a             -> rnfF f `seq` rnfB a b `seq` rnfA a
     Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB a1 b1 `seq` rnfB a2 b2 `seq` rnfA a1 `seq` rnfA a2
-    Collect s                 -> rnfS s
+    -- Collect s                 -> rnfS s
 
 
 rnfAtuple :: NFDataAcc acc -> Atuple (acc aenv) t -> ()
@@ -1222,6 +1224,7 @@ rnfBoundary _ Wrap         = ()
 rnfBoundary t (Constant c) = rnfConst t c
 
 
+{--
 -- Sequence expressions
 -- --------------------
 
@@ -1286,7 +1289,7 @@ rnfSeqConsumer rnfA topSeq =
 rnfStuple :: NFDataAcc acc -> Atuple (Consumer acc aenv senv) t -> ()
 rnfStuple _    NilAtup          = ()
 rnfStuple rnfA (SnocAtup tup c) = rnfStuple rnfA tup `seq` rnfSeqConsumer rnfA c
-
+--}
 
 -- Scalar expressions
 -- ------------------
@@ -1495,7 +1498,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Collect{}          = "Collect"
+-- showPreAccOp Collect{}          = "Collect"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

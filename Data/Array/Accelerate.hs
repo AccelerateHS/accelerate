@@ -49,7 +49,7 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  Acc, Seq, Arrays, Array, Scalar, Vector, Segments,
+  Acc, Arrays, Array, Scalar, Vector, Segments,
 
   -- ** Array element types
   Elt,
@@ -153,18 +153,18 @@ module Data.Array.Accelerate (
   -- ** Stencil
   stencil, stencil2,
 
-  -- ** Sequence elimination
-  collect,
+  -- -- ** Sequence elimination
+  -- collect,
 
-  -- ** Sequence producers
-  streamIn, toSeq, generateSeq,
+  -- -- ** Sequence producers
+  -- streamIn, toSeq, generateSeq,
 
-  -- ** Sequence transducers
-  mapSeq, zipWithSeq, scanSeq,
+  -- -- ** Sequence transducers
+  -- mapSeq, zipWithSeq, scanSeq,
 
-  -- ** Sequence consumers
-  foldSeq, foldSeqFlatten, fromSeq, fromSeqElems, fromSeqShapes,
-  toSeqInner, toSeqOuter2, toSeqOuter3,
+  -- -- ** Sequence consumers
+  -- foldSeq, foldSeqFlatten, fromSeq, fromSeqElems, fromSeqShapes,
+  -- toSeqInner, toSeqOuter2, toSeqOuter3,
 
   -- *** Specification
   Stencil, Boundary(..),
