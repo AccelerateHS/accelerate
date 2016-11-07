@@ -34,7 +34,6 @@ import Data.Array.Accelerate.Array.Sugar                            as A
 
 import Data.Function
 import Data.Monoid                                                  hiding ( mconcat )
-import Prelude                                                      ( (.), ($) )
 import qualified Prelude                                            as P
 
 
@@ -99,9 +98,9 @@ instance Elt a => Elt (Product a) where
 
 instance Elt a => IsProduct Elt (Product a) where
   type ProdRepr (Product a) = ((), a)
-  toProd _ ((),a)    = Product a
+  toProd _ ((),a)        = Product a
   fromProd _ (Product a) = ((),a)
-  prod _ _           = ProdRsnoc ProdRunit
+  prod _ _               = ProdRsnoc ProdRunit
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   type Plain (Product a) = Product (Plain a)
