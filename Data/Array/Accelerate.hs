@@ -60,7 +60,7 @@ module Data.Array.Accelerate (
   -- end-of-list token, `Z`, occurs on the left. For example, the type of a
   -- rank-2 array index is @Z :. Int :. Int@.
   --
-  Z(..), (:.)(..), Shape, All(..), Any(..), Split(..), Divide(..), Slice(..), Division(..),
+  Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..), -- Split(..), Divide(..), Division(..),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- ** Accessors
