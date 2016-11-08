@@ -276,7 +276,7 @@ module Data.Array.Accelerate (
   (&&*), (||*), not,
 
   -- *** Numeric operations
-  subtract, even, odd, gcd, lcm,
+  subtract, even, odd, gcd, lcm, (^), (^^),
 
   -- *** Shape manipulation
   index0, index1, unindex1, index2, unindex2, index3, unindex3,
