@@ -262,8 +262,8 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just Refl
 
-    match (Collect s1) (Collect s2)
-      = matchSeq matchAcc hashAcc s1 s2
+    -- match (Collect s1) (Collect s2)
+    --   = matchSeq matchAcc hashAcc s1 s2
 
     match _ _
       = Nothing
@@ -321,6 +321,7 @@ matchBoundary _  Mirror       Mirror       = True
 matchBoundary _  _            _            = False
 
 
+{--
 -- Match sequences
 --
 matchSeq
@@ -396,6 +397,7 @@ matchSeq m h = match
       = gcast Refl
     matchC _ _
       = Nothing
+--}
 
 -- Match arrays
 --
@@ -973,6 +975,7 @@ type HashAcc acc = forall aenv a. acc aenv a -> Int
 hashOpenAcc :: OpenAcc aenv arrs -> Int
 hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 
+{--
 hashPreOpenSeq :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSeq acc aenv senv arrs -> Int
 hashPreOpenSeq hashAcc s =
   let
@@ -1015,6 +1018,7 @@ hashPreOpenSeq hashAcc s =
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
     Consumer   c    -> hash "Consumer"   `hashC` c
     Reify      ix   -> hash "Reify"      `hashVar` ix
+--}
 
 
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
@@ -1029,8 +1033,8 @@ hashPreOpenAcc hashAcc pacc =
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
-    hashS :: Int -> PreOpenSeq acc aenv senv arrs -> Int
-    hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
+    -- hashS :: Int -> PreOpenSeq acc aenv senv arrs -> Int
+    -- hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
@@ -1064,7 +1068,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Collect s                   -> hash "Seq"           `hashS` s
+    -- Collect s                   -> hash "Seq"           `hashS` s
 
 
 hashArrays :: ArraysR a -> a -> Int

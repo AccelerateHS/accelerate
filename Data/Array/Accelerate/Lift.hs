@@ -124,12 +124,12 @@ instance Lift Acc (Acc a) where
 instance Unlift Acc (Acc a) where
   unlift = id
 
-instance Lift Seq (Seq a) where
-  type Plain (Seq a) = a
-  lift = id
+-- instance Lift Seq (Seq a) where
+--   type Plain (Seq a) = a
+--   lift = id
 
-instance Unlift Seq (Seq a) where
-  unlift = id
+-- instance Unlift Seq (Seq a) where
+--   unlift = id
 
 
 -- instances for indices
@@ -628,7 +628,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o) where
   unlift = unatup15
 
-
+{--
 -- Instances for Seq
 
 instance (Lift Seq a, Lift Seq b, Arrays (Plain a), Arrays (Plain b)) => Lift Seq (a, b) where
@@ -744,4 +744,5 @@ instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f
     = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n, Plain o)
   lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
     = stup15 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n, lift o)
+--}
 

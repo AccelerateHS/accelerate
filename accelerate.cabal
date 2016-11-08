@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                2.0.0.0
+Version:                1.0.0.0
 Cabal-version:          >= 1.8
 Tested-with:            GHC >= 7.8
 Build-type:             Simple
@@ -349,7 +349,7 @@ Library
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
         Data.Array.Accelerate.Trafo.Substitution
-        Data.Array.Accelerate.Trafo.Vectorise
+        -- Data.Array.Accelerate.Trafo.Vectorise
 
   c-sources:            cbits/atomic.c
 

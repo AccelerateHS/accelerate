@@ -89,7 +89,7 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Collect s                 -> Collect (convertSegmentsSeq s)
+      -- Collect s                 -> Collect (convertSegmentsSeq s)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
@@ -108,6 +108,7 @@ convertSegmentsAfun afun =
     Abody b     -> Abody (convertSegments b)
     Alam f      -> Alam  (convertSegmentsAfun f)
 
+{--
 convertSegmentsSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq OpenAcc aenv senv a
 convertSegmentsSeq seq =
   case seq of
@@ -147,4 +148,5 @@ convertSegmentsSeq seq =
 
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
     cvtAfun = convertSegmentsAfun
+--}
 

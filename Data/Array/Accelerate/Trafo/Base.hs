@@ -35,7 +35,7 @@ module Data.Array.Accelerate.Trafo.Base (
   DelayedAcc,  DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
-  DelayedSeq(..), DelayedOpenSeq,
+  -- DelayedSeq(..), DelayedOpenSeq,
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
@@ -143,15 +143,15 @@ type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
 type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
 
-data DelayedSeq t where
-  DelayedSeq :: Extend DelayedOpenAcc () aenv
-             -> DelayedOpenSeq aenv () t
-             -> DelayedSeq t
+-- data DelayedSeq t where
+--   DelayedSeq :: Extend DelayedOpenAcc () aenv
+--              -> DelayedOpenSeq aenv () t
+--              -> DelayedSeq t
 
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
 type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
-type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
+-- type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
 
 data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
@@ -193,8 +193,8 @@ instance NFData (DelayedOpenAfun aenv t) where
 instance NFData (DelayedOpenAcc aenv t) where
   rnf = rnfDelayedOpenAcc
 
-instance NFData (DelayedSeq t) where
-  rnf = rnfDelayedSeq
+-- instance NFData (DelayedSeq t) where
+--   rnf = rnfDelayedSeq
 
 hashDelayed :: HashAcc DelayedOpenAcc
 hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
@@ -222,6 +222,7 @@ rnfDelayedOpenAcc (Delayed sh ix lx) = rnfPreOpenExp rnfDelayedOpenAcc sh
                                  `seq` rnfPreOpenFun rnfDelayedOpenAcc ix
                                  `seq` rnfPreOpenFun rnfDelayedOpenAcc lx
 
+{--
 rnfDelayedSeq :: DelayedSeq t -> ()
 rnfDelayedSeq (DelayedSeq env s) = rnfExtend rnfDelayedOpenAcc env
                              `seq` rnfPreOpenSeq rnfDelayedOpenAcc s
@@ -229,6 +230,7 @@ rnfDelayedSeq (DelayedSeq env s) = rnfExtend rnfDelayedOpenAcc env
 rnfExtend :: NFDataAcc acc -> Extend acc aenv aenv' -> ()
 rnfExtend _    BaseEnv         = ()
 rnfExtend rnfA (PushEnv env a) = rnfExtend rnfA env `seq` rnfA a
+--}
 
 
 -- Note: If we detect that the delayed array is simply accessing an array

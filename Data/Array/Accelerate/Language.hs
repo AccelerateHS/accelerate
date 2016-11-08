@@ -25,7 +25,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array and scalar expressions
-  Acc, Seq, Exp,                            -- re-exporting from 'Smart'
+  Acc, Exp,                                 -- re-exporting from 'Smart'
 
   -- * Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
@@ -42,17 +42,17 @@ module Data.Array.Accelerate.Language (
   -- * Map-like functions
   map, zipWith,
 
-  -- * Sequence collection
-  collect,
+  -- -- * Sequence collection
+  -- collect,
 
-  -- * Sequence producers
-  streamIn, toSeq,
+  -- -- * Sequence producers
+  -- streamIn, toSeq,
 
-  -- * Sequence transducers
-  mapSeq, zipWithSeq, scanSeq,
+  -- -- * Sequence transducers
+  -- mapSeq, zipWithSeq, scanSeq,
 
-  -- * Sequence consumers
-  foldSeq, foldSeqFlatten,
+  -- -- * Sequence consumers
+  -- foldSeq, foldSeqFlatten,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -455,6 +455,7 @@ stencil2
 stencil2 = Acc $$$$$ Stencil2
 
 
+{--
 -- Sequence operations
 -- ------------------
 
@@ -556,6 +557,7 @@ foldSeqFlatten = Seq $$$ FoldSeqFlatten
 
 collect :: Arrays arrs => Seq arrs -> Acc arrs
 collect = Acc . Collect
+--}
 
 -- Foreign function calling
 -- ------------------------
