@@ -114,7 +114,7 @@ instance (Similar e, P.RealFloat e) => Similar (Complex e) where
 -- relTol :: (Fractional a, Ord a) => a -> a -> a -> Bool
 -- relTol epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
 
-{-# INLINE absRelTol #-}
+{-# INLINEABLE absRelTol #-}
 absRelTol :: (P.RealFloat a, P.Ord a) => a -> a -> a -> a -> Bool
 absRelTol epsilonAbs epsilonRel u v
   |  P.isInfinite u
