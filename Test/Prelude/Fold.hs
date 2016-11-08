@@ -189,26 +189,26 @@ foldAllRef :: Elt e => (e -> e -> e) -> e -> Array sh e -> Array Z e
 foldAllRef f z
   = A.fromList Z
   . return
-  . foldl f z
+  . foldl' f z
   . A.toList
 
 fold1AllRef :: Elt e => (e -> e -> e) -> Array sh e -> Array Z e
 fold1AllRef f
   = A.fromList Z
   . return
-  . foldl1 f
+  . foldl1' f
   . A.toList
 
 foldRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Array sh e
 foldRef f z arr =
   let (sh :. n) = arrayShape arr
       sh'       = listToShape . P.map (P.max 1) . shapeToList $ sh
-  in  fromList sh' [ foldl f z sub | sub <- splitEvery n (toList arr) ]
+  in  fromList sh' [ foldl' f z sub | sub <- splitEvery n (toList arr) ]
 
 fold1Ref :: (Shape sh, Elt e) => (e -> e -> e) -> Array (sh :. Int) e -> Array sh e
 fold1Ref f arr =
   let (sh :. n) = arrayShape arr
-  in  fromList sh [ foldl1 f sub | sub <- splitEvery n (toList arr) ]
+  in  fromList sh [ foldl1' f sub | sub <- splitEvery n (toList arr) ]
 
 foldSegRef :: (Shape sh, Elt e, Elt i, P.Integral i) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
 foldSegRef f z arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
