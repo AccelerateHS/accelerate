@@ -6,7 +6,7 @@
 #
 language: generic
 dist: trusty
-sudo: false
+sudo: required
 
 cache:
   timeout: 600
@@ -17,7 +17,7 @@ cache:
 
 matrix:
   include:
-    - env: GHC=7.8.4 CABAL=1.18 LLVM=3.4.2
+    - env: GHC=7.8.4 CABAL=1.18 LLVM=3.5.2
       compiler: "GHC 7.8"
       addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, libfftw3-dev, freeglut3-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
 
@@ -27,15 +27,38 @@ matrix:
 
     - env: GHC=8.0.1 CABAL=1.24 LLVM=3.8.1
       compiler: "GHC 8.0"
-      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, libfftw3-dev, freeglut3-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
+      addons:
+        apt:
+          sources:
+            - hvr-ghc
+            - ubuntu-toolchain-r-test
+            - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-3.8 main'
+              key_url: 'http://apt.llvm.org/llvm-snapshot.gpg.key'
+          packages:
+            - nvidia-cuda-toolkit
+            - g++-4.8
+            - llvm-3.8-dev
+            - libgmp-dev
+            - libfftw3-dev
+            - freeglut3-dev
+            - cabal-install-1.24
+            - happy-1.19.5
+            - alex-3.1.7
 
   fast_finish: true
 
 before_install:
   - export PATH=/opt/cabal/$CABAL/bin:/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:$HOME/.cabal/bin:$PATH
-  - export UPGRADE_CABAL=1
+  - |
+      case ${GHC} in
+        7.8.*) export UPGRADE_CABAL=1 ;;
+      esac
+  - |
+      case ${LLVM} in
+        3.5.*) source .travis/install-llvm-trusty.sh ;;
+      esac
   - source .travis/install-stack.sh
-  - source .travis/install-llvm-trusty.sh
+  - source .travis/update-ghc-settings.sh
 
 install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
@@ -47,7 +70,7 @@ install:
       if [ ${GHC} == head -o ! -e stack.yaml ]; then
         travis_retry cabal install --only-dependencies
       else
-        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps
+        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps --dry-run
       fi
 
 script:
@@ -56,7 +79,7 @@ script:
         cabal install
         cabal haddock
       else
-        stack build --no-terminal --haddock --no-haddock-deps
+        stack build --no-terminal --haddock --no-haddock-deps --dry-run
       fi
 
 after_success:
