@@ -595,7 +595,7 @@ Executable accelerate-fft
     buildable:          False
   else
     build-depends:
-        , base                            >= 4.7 && <= 4.9
+          base                            >= 4.7 && <= 4.9
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , accelerate-fft                  == 1.0.*
