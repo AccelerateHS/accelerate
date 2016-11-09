@@ -125,7 +125,7 @@ Flag kmeans
 Library
   hs-source-dirs:       lib
   Build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , ansi-wl-pprint                  >= 0.6
         , containers                      >= 0.5
@@ -280,7 +280,7 @@ Executable accelerate-nofib
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , accelerate-fft                  == 1.0.*
@@ -317,7 +317,7 @@ Executable accelerate-smvm
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , attoparsec                      >= 0.10
@@ -348,7 +348,7 @@ Executable accelerate-crystal
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , colour-accelerate               >= 0.1
@@ -374,7 +374,7 @@ Executable accelerate-tunnel
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , fclabels                        >= 2.0
@@ -401,7 +401,7 @@ Executable accelerate-canny
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , accelerate-io                   == 1.0.*
@@ -430,7 +430,7 @@ Executable accelerate-mandelbrot
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , colour-accelerate               >= 0.1
@@ -457,7 +457,7 @@ Executable accelerate-fluid
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , accelerate-io                   == 1.0.*
@@ -501,7 +501,7 @@ Executable accelerate-nbody
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , fclabels                        >= 2.0
@@ -537,7 +537,7 @@ Executable accelerate-smoothlife
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , accelerate-fft                  == 1.0.*
@@ -566,7 +566,7 @@ Executable accelerate-hashcat
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , bytestring                      >= 0.9
@@ -595,7 +595,7 @@ Executable accelerate-fft
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , accelerate-fft                  == 1.0.*
@@ -629,7 +629,7 @@ Executable accelerate-pagerank
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , accelerate-io                   == 1.0.*
@@ -669,7 +669,7 @@ Executable accelerate-ray
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , colour-accelerate               >= 0.1
@@ -697,7 +697,7 @@ Executable accelerate-kmeans
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && <= 4.9
+          base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , binary                          >= 0.7
