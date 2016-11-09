@@ -45,7 +45,7 @@ rank backend noSeq steps chunkSize pagesPath titlesPath
         start <- getCPUTime
         pageRank backend noSeq steps chunkSize pageCount from to (arrayize sizes) titlesPath ranks
         end   <- getCPUTime
-        putStrLn $ "Time taken: " P.++ show (P.fromIntegral (end - start) / (10^12)) P.++ " secs"
+        putStrLn $ "Time taken: " P.++ show (P.fromIntegral (end - start) / (10 P.^ 12)) P.++ " secs"
         return ()
 
 -- | Construct the initial ranks vector.

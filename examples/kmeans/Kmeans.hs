@@ -67,7 +67,7 @@ distance u v =
   let (x1,y1) = unlift u
       (x2,y2) = unlift v
   in
-  (x1-x2)^(2::Int) + (y1-y2)^(2::Int)
+  (x1-x2) P.^ (2::Int) + (y1-y2) P.^ (2::Int)
 
 
 -- For each of the given points, return the cluster Id that that that point is
@@ -223,6 +223,6 @@ inf = P.encodeFloat m n
     b           = P.floatRadix a
     e           = P.floatDigits a
     (_, e')     = P.floatRange a
-    m           = b ^ e - 1
+    m           = b P.^ e - 1
     n           = e' - e
 

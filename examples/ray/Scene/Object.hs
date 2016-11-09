@@ -104,7 +104,7 @@ infinity = constant (P.encodeFloat m n)
     b           = P.floatRadix a
     e           = P.floatDigits a
     (_, e')     = P.floatRange a
-    m           = b ^ e - 1
+    m           = b P.^ e - 1
     n           = e' - e
 
 

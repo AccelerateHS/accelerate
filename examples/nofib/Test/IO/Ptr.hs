@@ -90,7 +90,7 @@ toPtrInt64 = do
 
 fromArrayInt32 :: IO ()
 fromArrayInt32 = do
-  let n = 5^(3::Int)
+  let n = 5 P.^ (3::Int)
       arr :: Array DIM3 Int32
       arr = fromList (Z:.5:.5:.5) [2*x | x <- [0..n-1]]
   --
