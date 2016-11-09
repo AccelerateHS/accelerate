@@ -1,5 +1,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
@@ -21,12 +23,13 @@ import Test.QuickCheck
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Data.Array.Accelerate                                    as A hiding (indexHead, indexTail)
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import Data.Array.Accelerate.Examples.Internal                  as A
-import qualified Data.Array.Accelerate.Array.Representation     as R
 
 import Config
 import Test.Base
+import System.Random
 import QuickCheck.Arbitrary.Array
 
 
@@ -52,7 +55,7 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e, Random e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -61,34 +64,42 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Arbitrary (Array sh e)) => sh -> Test
+        testDim :: forall sh. (Shape sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array sh e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array sh e -> e -> Property)
-          , testProperty "non-commutative" (test_mss  :: Array sh e -> Property)
+          , testProperty "non-commutative" (test_mss  :: sh -> e -> Property)
           , testProperty "minimum"         (test_min  :: Array sh e -> Property)
           , testProperty "maximum"         (test_max  :: Array sh e -> Property)
           ]
-    --
-    -- The tests
-    --
-    test_min xs
-      =   arraySize (arrayShape xs) > 0
-      ==> run backend (A.fold1All A.min (use xs)) ~?= fold1AllRef P.min xs
+          where
+            --
+            -- The tests
+            --
+            test_min :: Array sh e -> Property
+            test_min xs
+              =   arraySize (arrayShape xs) > 0
+              ==> run backend (A.fold1All A.min (use xs)) ~?= fold1AllRef P.min xs
 
-    test_max xs
-      =   arraySize (arrayShape xs) > 0
-      ==> run backend (A.fold1All A.max (use xs)) ~?= fold1AllRef P.max xs
+            test_max :: Array sh e -> Property
+            test_max xs
+              =   arraySize (arrayShape xs) > 0
+              ==> run backend (A.fold1All A.max (use xs)) ~?= fold1AllRef P.max xs
 
-    test_sum xs         = run backend (A.foldAll (+) 0 (use xs)) ~?= foldAllRef (+) 0 xs
-    test_sum' xs z      =
-      let z' = unit (constant z)
-      in  run backend (A.foldAll (+) (the z') (use xs)) ~?= foldAllRef (+) z xs
+            test_sum :: Array sh e -> Property
+            test_sum xs = run backend (A.foldAll (+) 0 (use xs)) ~?= foldAllRef (+) 0 xs
 
-    test_mss (flattenArray -> xs)
-      =   indexHead (arrayShape xs) > 0
-      ==> run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
+            test_sum' :: Array sh e -> e -> Property
+            test_sum' xs z =
+              let z' = unit (constant z)
+              in  run backend (A.foldAll (+) (the z') (use xs)) ~?= foldAllRef (+) z xs
+
+            test_mss :: sh -> e -> Property
+            test_mss (arraySize -> n) _
+              =   n > 0
+              ==> forAll (arbitraryArrayOf (Z:.n) smallArbitrary) $ \(xs :: Vector e) ->
+                    run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
 
 
 -- multidimensional fold
@@ -108,7 +119,7 @@ test_fold backend opt = testGroup "fold" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e, Random e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -116,34 +127,42 @@ test_fold backend opt = testGroup "fold" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary (sh :. Int), Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array (sh :. Int) e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array (sh :. Int) e -> e -> Property)
-          , testProperty "non-commutative" (test_mss  :: Array (sh :. Int) e -> Property)
+          , testProperty "non-commutative" (test_mss  :: (sh :. Int) -> e -> Property)
           , testProperty "minimum"         (test_min  :: Array (sh :. Int) e -> Property)
           , testProperty "maximum"         (test_max  :: Array (sh :. Int) e -> Property)
           ]
-    --
-    -- The tests
-    --
-    test_min xs
-      =   indexHead (arrayShape xs) > 0
-      ==> run backend (A.fold1 A.min (use xs)) ~?= fold1Ref P.min xs
+          where
+            --
+            -- The tests
+            --
+            test_min :: Array (sh:.Int) e -> Property
+            test_min xs
+              =   indexHead (arrayShape xs) > 0
+              ==> run backend (A.fold1 A.min (use xs)) ~?= fold1Ref P.min xs
 
-    test_max xs
-      =   indexHead (arrayShape xs) > 0
-      ==> run backend (A.fold1 A.max (use xs)) ~?= fold1Ref P.max xs
+            test_max :: Array (sh:.Int) e -> Property
+            test_max xs
+              =   indexHead (arrayShape xs) > 0
+              ==> run backend (A.fold1 A.max (use xs)) ~?= fold1Ref P.max xs
 
-    test_sum xs         = run backend (A.fold (+) 0 (use xs)) ~?= foldRef (+) 0 xs
-    test_sum' xs z      =
-      let z' = unit (constant z)
-      in  run backend (A.fold (+) (the z') (use xs)) ~?= foldRef (+) z xs
+            test_sum :: Array (sh:.Int) e -> Property
+            test_sum xs = run backend (A.fold (+) 0 (use xs)) ~?= foldRef (+) 0 xs
 
-    test_mss xs
-      =   indexHead (arrayShape xs) > 0
-      ==> run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
+            test_sum' :: Array (sh:.Int) e -> e -> Property
+            test_sum' xs z =
+              let z' = unit (constant z)
+              in  run backend (A.fold (+) (the z') (use xs)) ~?= foldRef (+) z xs
+
+            test_mss :: (sh:.Int) -> e -> Property
+            test_mss sz _
+              =   indexHead sz > 0
+              ==> forAll (arbitraryArrayOf sz smallArbitrary) $ \(xs :: Array (sh:.Int) e) ->
+                    run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
 
 
 -- segmented fold
@@ -266,11 +285,30 @@ maximumSegmentSumRef arr = fromList sh [ go 0 0 sub | sub <- splitEvery n (toLis
     --
     go _ v []     = v
     go u v (x:xs) =
-      let u' = x `P.max` (u+x)
+      let u' = 0 `P.max` (u+x)
           v' = v `P.max` u'
       in
       go u' v' xs
 
-flattenArray :: (Shape sh, Elt e) => Array sh e -> Vector e
-flattenArray (Array sh adata) = Array ((), R.size sh) adata
+
+smallArbitrary :: forall e. (P.Num e, Elt e, Arbitrary e, Random e) => Gen e
+smallArbitrary
+  | SingleTuple t <- eltType (undefined::e)
+  , NumScalarType s <- t
+  , IntegralNumType i <- s
+  = case i of
+      TypeInt{}     -> choose (-100,100)
+      TypeInt8{}    -> choose (-1,1)
+      TypeInt16{}   -> choose (-10,10)
+      TypeInt32{}   -> choose (-1000,1000)
+      TypeInt64{}   -> choose (-10000,10000)
+      TypeWord{}    -> choose (0,1000)
+      TypeWord8{}   -> choose (0,1)
+      TypeWord16{}  -> choose (0,10)
+      TypeWord32{}  -> choose (0,1000)
+      TypeWord64{}  -> choose (0,10000)
+      _             -> arbitrary
+
+  | otherwise
+  = arbitrary
 
