@@ -231,6 +231,7 @@ Executable accelerate-nofib
         Test.IO.Ptr
         Test.IO.Vector
         Test.Issues
+        Test.Issues.Issue93
         Test.Issues.Issue102
         Test.Issues.Issue114
         Test.Issues.Issue119
@@ -240,7 +241,7 @@ Executable accelerate-nofib
         Test.Issues.Issue184
         Test.Issues.Issue185
         Test.Issues.Issue187
-        Test.Issues.Issue93
+        Test.Issues.Issue228
         Test.Prelude
         Test.Prelude.Backpermute
         Test.Prelude.Filter
