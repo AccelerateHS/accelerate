@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 module Test.Prelude.Fold (
 
@@ -22,6 +23,7 @@ import Test.Framework.Providers.QuickCheck2
 import Data.Array.Accelerate                                    as A hiding (indexHead, indexTail)
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import Data.Array.Accelerate.Examples.Internal                  as A
+import qualified Data.Array.Accelerate.Array.Representation     as R
 
 import Config
 import Test.Base
@@ -59,11 +61,12 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
+        testDim :: forall sh. (Shape sh, Arbitrary (Array sh e)) => sh -> Test
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array sh e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array sh e -> e -> Property)
+          , testProperty "non-commutative" (test_mss  :: Array sh e -> Property)
           , testProperty "minimum"         (test_min  :: Array sh e -> Property)
           , testProperty "maximum"         (test_max  :: Array sh e -> Property)
           ]
@@ -83,6 +86,9 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
       let z' = unit (constant z)
       in  run backend (A.foldAll (+) (the z') (use xs)) ~?= foldAllRef (+) z xs
 
+    test_mss (flattenArray -> xs)
+      =   indexHead (arrayShape xs) > 0
+      ==> run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
 
 
 -- multidimensional fold
@@ -110,11 +116,12 @@ test_fold backend opt = testGroup "fold" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array (sh :. Int) e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array (sh :. Int) e -> e -> Property)
+          , testProperty "non-commutative" (test_mss  :: Array (sh :. Int) e -> Property)
           , testProperty "minimum"         (test_min  :: Array (sh :. Int) e -> Property)
           , testProperty "maximum"         (test_max  :: Array (sh :. Int) e -> Property)
           ]
@@ -133,6 +140,10 @@ test_fold backend opt = testGroup "fold" $ catMaybes
     test_sum' xs z      =
       let z' = unit (constant z)
       in  run backend (A.fold (+) (the z') (use xs)) ~?= foldRef (+) z xs
+
+    test_mss xs
+      =   indexHead (arrayShape xs) > 0
+      ==> run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
 
 
 -- segmented fold
@@ -160,7 +171,7 @@ test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh) => (sh:.Int) -> Test
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"
@@ -210,7 +221,7 @@ fold1Ref f arr =
   let (sh :. n) = arrayShape arr
   in  fromList sh [ foldl1' f sub | sub <- splitEvery n (toList arr) ]
 
-foldSegRef :: (Shape sh, Elt e, Elt i, P.Integral i) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
+foldSegRef :: (Shape sh, Elt e, P.Integral i) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
 foldSegRef f z arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
   where
     (sh :. n)   = arrayShape arr
@@ -218,11 +229,48 @@ foldSegRef f z arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- spl
     seg'        = toList seg
     foldseg xs  = P.map (foldl' f z) (splitPlaces seg' xs)
 
-fold1SegRef :: (Shape sh, Elt e, Elt i, P.Integral i) => (e -> e -> e) -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
+fold1SegRef :: (Shape sh, Elt e, P.Integral i) => (e -> e -> e) -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
 fold1SegRef f arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
   where
     (sh :. n)   = arrayShape arr
     (Z  :. sz)  = arrayShape seg
     seg'        = toList seg
     foldseg xs  = P.map (foldl1' f) (splitPlaces seg' xs)
+
+maximumSegmentSum :: forall sh e. (Shape sh, A.Num e, A.Ord e) => Acc (Array (sh :. Int) e) -> Acc (Array sh e)
+maximumSegmentSum
+  = A.map (\v -> let (x,_,_,_) = unlift v :: (Exp e, Exp e, Exp e, Exp e) in x)
+  . A.fold1 f
+  . A.map g
+  where
+    f :: (A.Num a, A.Ord a) => Exp (a,a,a,a) -> Exp (a,a,a,a) -> Exp (a,a,a,a)
+    f x y =
+      let (mssx, misx, mcsx, tsx) = unlift x
+          (mssy, misy, mcsy, tsy) = unlift y
+      in
+      lift ( mssx `A.max` (mssy `A.max` (mcsx+misy))
+           , misx `A.max` (tsx+misy)
+           , mcsy `A.max` (mcsx+tsy)
+           , tsx+tsy
+           )
+
+    g :: (A.Num a, A.Ord a) => Exp a -> Exp (a,a,a,a)
+    g x = let y = A.max x 0
+          in  lift (y,y,y,x)
+
+
+maximumSegmentSumRef :: (P.Num e, P.Ord e, Shape sh, Elt e) => Array (sh :. Int) e -> Array sh e
+maximumSegmentSumRef arr = fromList sh [ go 0 0 sub | sub <- splitEvery n (toList arr) ]
+  where
+    sh :. n       = arrayShape arr
+    --
+    go _ v []     = v
+    go u v (x:xs) =
+      let u' = x `P.max` (u+x)
+          v' = v `P.max` u'
+      in
+      go u' v' xs
+
+flattenArray :: (Shape sh, Elt e) => Array sh e -> Vector e
+flattenArray (Array sh adata) = Array ((), R.size sh) adata
 
