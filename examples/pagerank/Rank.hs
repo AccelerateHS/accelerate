@@ -87,7 +87,8 @@ pageRank backend noSeq maxIters chunkSize pageCount from to sizes titlesFile ran
                 putStrLn $ "* Step " P.++ show i
 
                 -- Run a step of the algorithm.
-                let ranks1 = if noSeq then stepInChunks ranks zeroes 0 else stepInSeq ranks
+                -- let ranks1 = if noSeq then stepInChunks ranks zeros 0 else stepInSeq ranks
+                let ranks1 = stepInChunks ranks zeros 0
                 let ranks2 = addDangles (ranks1, sizes)
 
                 -- Sum up the ranks for all the pages,
@@ -110,15 +111,15 @@ pageRank backend noSeq maxIters chunkSize pageCount from to sizes titlesFile ran
 
           in A.map (+ A.the dangleContrib) ranks
 
-        stepInSeq :: A.Vector Rank -> A.Vector Rank
-        stepInSeq =
-          let !pages  = A.fromVectors (Z:.S.length from) (((), from), to)
-          in run1 backend (stepRankSeq pages (use sizes))
+        -- stepInSeq :: A.Vector Rank -> A.Vector Rank
+        -- stepInSeq =
+        --   let !pages  = A.fromVectors (Z:.S.length from) (((), from), to)
+        --   in run1 backend (stepRankSeq pages (use sizes))
 
         edgeCount = S.length from
 
-        zeroes :: Vector Rank
-        zeroes = run backend $ A.fill (A.lift $ Z :. pageCount) 0
+        zeros :: Vector Rank
+        zeros = run backend $ A.fill (A.lift $ Z :. pageCount) 0
 
         stepInChunks !ranks !parRanks !start
           | start >= edgeCount

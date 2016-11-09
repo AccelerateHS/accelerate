@@ -1,6 +1,9 @@
-module Step
-        (stepRankSeq, stepRank, Update, PageGraph)
-where
+
+module Step (
+
+  stepRank, Update, PageGraph
+
+) where
 
 import Page
 import Progress
@@ -33,6 +36,7 @@ addUpdates parRanks updates
         (to, contr) = A.unzip updates
    in A.permute (+) parRanks (index1 . A.fromIntegral . (to !)) contr
 
+{--
 stepRankSeq :: PageGraph
             -> Acc (Vector Int)  -- Sizes.
             -> Acc (Vector Rank) -- Initial ranks.
@@ -50,6 +54,7 @@ stepRankSeq p sizes ranks
      $ A.foldSeqFlatten addUpdates' zeroes
      $ A.mapSeq (A.map (contribution sizes ranks))
          (A.toSeq (Z :. Split) (use p))
+--}
 
 -- | Perform one iteration step for the internal Page Rank algorithm.
 stepRank
@@ -73,3 +78,4 @@ stepRank links sizes ranks parRanks
         ranks' = A.permute (+) parRanks (\ix -> let (_, to) = unlift $ links ! ix :: (Exp PageId, Exp PageId)
                                               in index1 (A.fromIntegral to)) contribution
         in ranks'
+

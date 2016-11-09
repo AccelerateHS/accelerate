@@ -249,7 +249,7 @@ Executable accelerate-nofib
         Test.Prelude.Permute
         Test.Prelude.Replicate
         Test.Prelude.Scan
-        Test.Prelude.Sequences
+        -- Test.Prelude.Sequences
         Test.Prelude.Stencil
         Test.Prelude.ZipWith
         Test.Sharing
