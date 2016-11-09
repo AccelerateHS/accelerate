@@ -1,24 +1,24 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-7.2
+resolver: lts-7.8
 
 packages:
 - '.'
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 3d6d22693821eb3da29bffded270db27d65ba158
+    commit: 2e914a46f29a0620d87cac78f3c03dd7927d09c8
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: d5c94d0a3876f10f69fa6297cb0f380215a31ed9
+    commit: 3ff507ce7e76312187a18ccd78d25679620c9d59
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 1d3dde832f1623d14b6edffe146a17e345fed7f1
+    commit: 932e4ff0cb7d77fccd6d44580646cec9fb8d0083
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -27,17 +27,12 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-io.git
-    commit: 2bb4dabcb33839e972dc8e678c80a65046333807
+    commit: ae41a4f55062b12153ea6d872487a0aa336a9a77
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: 9c2e0996979c56ad540fa29970c4dd2f15de99ff
-  extra-dep: true
-
-- location:
-    git:    https://github.com/robeverest/cufft.git
-    commit: 3a793a1dfdc205867d38d90303356832a11c0718
+    commit: 0f5c90f70b0bdf33bebe7dc446c367e4168a23e5
   extra-dep: true
 
 - location:
@@ -75,10 +70,11 @@ packages:
 
 extra-deps:
 - 'chaselev-deque-0.5.0.5'
-- 'cuda-0.7.5.0'
+- 'cuda-0.7.5.1'
+- 'cufft-0.7.5.0'
 - 'libffi-0.1'
 - 'normaldistribution-1.1.0.3'
-- 'nvvm-0.7.5.0'
+- 'nvvm-0.7.5.1'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps
