@@ -49,7 +49,7 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  Acc, Seq, Arrays, Array, Scalar, Vector, Segments,
+  Acc, Arrays, Array, Scalar, Vector, Segments,
 
   -- ** Array element types
   Elt,
@@ -60,7 +60,7 @@ module Data.Array.Accelerate (
   -- end-of-list token, `Z`, occurs on the left. For example, the type of a
   -- rank-2 array index is @Z :. Int :. Int@.
   --
-  Z(..), (:.)(..), Shape, All(..), Any(..), Split(..), Divide(..), Slice(..), Division(..),
+  Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..), -- Split(..), Divide(..), Division(..),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- ** Accessors
@@ -153,18 +153,18 @@ module Data.Array.Accelerate (
   -- ** Stencil
   stencil, stencil2,
 
-  -- ** Sequence elimination
-  collect,
+  -- -- ** Sequence elimination
+  -- collect,
 
-  -- ** Sequence producers
-  streamIn, toSeq, generateSeq,
+  -- -- ** Sequence producers
+  -- streamIn, toSeq, generateSeq,
 
-  -- ** Sequence transducers
-  mapSeq, zipWithSeq, scanSeq,
+  -- -- ** Sequence transducers
+  -- mapSeq, zipWithSeq, scanSeq,
 
-  -- ** Sequence consumers
-  foldSeq, foldSeqFlatten, fromSeq, fromSeqElems, fromSeqShapes,
-  toSeqInner, toSeqOuter2, toSeqOuter3,
+  -- -- ** Sequence consumers
+  -- foldSeq, foldSeqFlatten, fromSeq, fromSeqElems, fromSeqShapes,
+  -- toSeqInner, toSeqOuter2, toSeqOuter3,
 
   -- *** Specification
   Stencil, Boundary(..),
@@ -276,7 +276,7 @@ module Data.Array.Accelerate (
   (&&*), (||*), not,
 
   -- *** Numeric operations
-  subtract, even, odd, gcd, lcm,
+  subtract, even, odd, gcd, lcm, (^), (^^),
 
   -- *** Shape manipulation
   index0, index1, unindex1, index2, unindex2, index3, unindex3,
@@ -322,7 +322,7 @@ import Data.Array.Accelerate.Trafo                                  () -- show i
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
--- re-exported from D.A.A.Classes.Num but not found ??
+-- re-exported from D.A.A.Classes.Num but not found (GHC<8 bug)
 import Prelude                                                      ( (.), ($), undefined, error, fromInteger )
 
 

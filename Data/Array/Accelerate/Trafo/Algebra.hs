@@ -237,10 +237,10 @@ associates fun exp = case fun of
 
     swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> PreOpenExp acc env aenv a -> [PrimFun (a -> r)] -> Maybe (PreOpenExp acc env aenv r)
     swizzle f x lvl
-      | Just REFL       <- matches f ops
+      | Just Refl       <- matches f ops
       , Just (a,bc)     <- untup2 x
       , PrimApp g y     <- bc
-      , Just REFL       <- matches g lvl
+      , Just Refl       <- matches g lvl
       , Just (b,c)      <- untup2 y
       = Stats.ruleFired (pprFun "associates" f)
       $ Just $ PrimApp g (tup2 (PrimApp f (tup2 (a,b)), c))
@@ -251,8 +251,8 @@ associates fun exp = case fun of
     matches :: (Elt s, Elt t) => PrimFun (s -> a) -> [PrimFun (t -> a)] -> Maybe (s :=: t)
     matches _ []        = Nothing
     matches f (x:xs)
-      | Just REFL       <- matchPrimFun' f x
-      = Just REFL
+      | Just Refl       <- matchPrimFun' f x
+      = Just Refl
 
       | otherwise
       = matches f xs
@@ -324,7 +324,7 @@ evalSub' ty (untup2 -> Just (x,y)) env
   = Stats.ruleFired "-y+x"
   $ Just . snd $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
-  | Just REFL   <- match x y
+  | Just Refl   <- match x y
   = Stats.ruleFired "x-x"
   $ Just $ Const (fromElt (0::a))
 

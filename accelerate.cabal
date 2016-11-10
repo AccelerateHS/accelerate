@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                2.0.0.0
+Version:                1.0.0.0
 Cabal-version:          >= 1.8
 Tested-with:            GHC >= 7.8
 Build-type:             Simple
@@ -116,6 +116,10 @@ Description:
     * "Data.Array.Accelerate.Data.Bits"
   .
     * "Data.Array.Accelerate.Data.Complex"
+  .
+    * "Data.Array.Accelerate.Data.Fold"
+  .
+    * "Data.Array.Accelerate.Data.Monoid"
   .
 
 License:                BSD3
@@ -279,6 +283,8 @@ Library
         -- Prelude-like
         Data.Array.Accelerate.Data.Bits
         Data.Array.Accelerate.Data.Complex
+        Data.Array.Accelerate.Data.Fold
+        Data.Array.Accelerate.Data.Monoid
 
         -- For backend development
         Data.Array.Accelerate.AST

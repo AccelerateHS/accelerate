@@ -41,7 +41,7 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run, run1, streamOut,
+  Arrays, run, run1,
 
   -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj
@@ -58,7 +58,6 @@ import Prelude                                          hiding ( sum )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
@@ -89,12 +88,12 @@ run1 afun
     in  evalOpenAfun f Empty
 
 
--- | Stream a lazily read list of input arrays through the given program,
--- collecting results as we go
---
-streamOut :: Arrays a => Sugar.Seq [a] -> [a]
-streamOut seq = let seq' = convertSeqWith config seq
-                in evalDelayedSeq defaultSeqConfig seq'
+-- -- | Stream a lazily read list of input arrays through the given program,
+-- -- collecting results as we go
+-- --
+-- streamOut :: Arrays a => Sugar.Seq [a] -> [a]
+-- streamOut seq = let seq' = convertSeqWith config seq
+--                 in evalDelayedSeq defaultSeqConfig seq'
 
 
 config :: Phase
@@ -105,7 +104,7 @@ config =  Phase
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
-  , vectoriseSequences     = True
+  -- , vectoriseSequences     = True
   }
 
 
@@ -180,7 +179,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
     Use arr                     -> toArr arr
     Unit e                      -> unitOp (evalE e)
-    Collect s                   -> evalSeq defaultSeqConfig s aenv
+    -- Collect s                   -> evalSeq defaultSeqConfig s aenv
 
     -- Producers
     -- ---------
@@ -318,20 +317,20 @@ zipWithOp
 zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
   = newArray (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
 
-zipWith'Op
-    :: (Shape sh, Elt a)
-    => (a -> a -> a)
-    -> Delayed (Array sh a)
-    -> Delayed (Array sh a)
-    -> Array sh a
-zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
-  = newArray (shx `union` shy) (\ix -> if ix `outside` shx
-                                       then ys ix
-                                       else if ix `outside` shy
-                                       then xs ix
-                                       else f (xs ix) (ys ix))
-  where
-    a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
+-- zipWith'Op
+--     :: (Shape sh, Elt a)
+--     => (a -> a -> a)
+--     -> Delayed (Array sh a)
+--     -> Delayed (Array sh a)
+--     -> Array sh a
+-- zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
+--   = newArray (shx `union` shy) (\ix -> if ix `outside` shx
+--                                        then ys ix
+--                                        else if ix `outside` shy
+--                                        then xs ix
+--                                        else f (xs ix) (ys ix))
+--   where
+--     a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
 
 
 foldOp
@@ -648,16 +647,16 @@ stencil2Op stencil boundary1 arr1 boundary2 arr2
         Left v    -> toElt v
         Right ix' -> arr2 ! ix'
 
-toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
-        => SliceIndex (EltRepr slix)
-                      (EltRepr sl)
-                      co
-                      (EltRepr dim)
-        -> proxy slix
-        -> Array dim e
-        -> [Array sl e]
-toSeqOp sliceIndex _ arr = map (sliceOp sliceIndex arr :: slix -> Array sl e)
-                               (enumSlices sliceIndex (shape arr))
+-- toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
+--         => SliceIndex (EltRepr slix)
+--                       (EltRepr sl)
+--                       co
+--                       (EltRepr dim)
+--         -> proxy slix
+--         -> Array dim e
+--         -> [Array sl e]
+-- toSeqOp sliceIndex _ arr = map (sliceOp sliceIndex arr :: slix -> Array sl e)
+--                                (enumSlices sliceIndex (shape arr))
 
 -- Scalar expression evaluation
 -- ----------------------------
@@ -1132,7 +1131,7 @@ evalMin (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty =
 evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry min
 
 
-
+{--
 -- Sequence evaluation
 -- ---------------
 
@@ -1369,6 +1368,7 @@ minCursor s = travS s 0
         ExecFold _ _ _ cu -> k cu i
         ExecStuple t      -> travT t i
 
+
 evalDelayedSeq :: SeqConfig
                -> DelayedSeq arrs
                -> arrs
@@ -1582,4 +1582,5 @@ dropOp i v   -- TODO
 
 offsetsOp :: Shape sh => Segments sh -> (Vector Int, Scalar Int)
 offsetsOp segs = scanl'Op (+) 0 $ delayArray (mapOp size (delayArray segs))
+--}
 

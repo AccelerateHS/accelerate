@@ -46,7 +46,7 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( ($), (^), undefined, fromInteger )
+import Prelude                                                      ( ($), undefined, fromInteger )
 import Data.Complex                                                 ( Complex(..) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
@@ -97,7 +97,7 @@ instance A.RealFloat a => P.Fractional (Exp (Complex a)) where
   c / c'
     = let x  :+ y       = unlift c
           x' :+ y'      = unlift c'     :: Complex (Exp a)
-          den           = x'^(2 :: Int) + y'^(2 :: Int)
+          den           = x' P.^ (2 :: Int) + y' P.^ (2 :: Int)
           re            = (x * x' + y * y') / den
           im            = (y * x' - x * y') / den
       in

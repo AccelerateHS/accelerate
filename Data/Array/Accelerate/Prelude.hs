@@ -103,7 +103,7 @@ module Data.Array.Accelerate.Prelude (
   the, null, length,
 
   -- * Sequence operations
-  fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
+  -- fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
 
 ) where
 
@@ -1077,7 +1077,7 @@ index1' i = lift (Z :. fromIntegral i)
 --
 flatten :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Vector e)
 flatten a
-  | Just REFL <- matchShapeType (undefined::sh) (undefined::DIM1)
+  | Just Refl <- matchShapeType (undefined::sh) (undefined::DIM1)
   = a
 flatten a
   = reshape (index1 $ size a) a
@@ -1170,7 +1170,7 @@ filter :: forall sh e. (Shape sh, Slice sh, Elt e)
 filter p arr
   -- Optimise 1-dimensional arrays, where we can avoid additional computations
   -- for the offset indices.
-  | Just REFL <- matchShapeType (undefined::sh) (undefined::Z)
+  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
   = let
         keep            = map p arr
         (target, len)   = scanl' (+) 0 (map boolToInt keep)
@@ -1656,11 +1656,9 @@ length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
 
 
+{--
 -- Sequence operations
 -- --------------------------------------
-
-emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = use (fromList empty [])
 
 -- | Reduce a sequence by appending all the shapes and all the elements in two
 -- separate vectors.
@@ -1701,15 +1699,22 @@ toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
 -- the given scalar function at each index.
 generateSeq :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
 generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
+--}
+
+-- Utilities
+-- ---------
+
+emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
+emptyArray = use (fromList empty [])
 
 
 -- Utilities
 -- ---------
 
-matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :=: t)
+matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
 matchShapeType _ _
-  | Just REFL <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
-  = gcast REFL
+  | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
+  = gcast Refl
 
 matchShapeType _ _
   = Nothing

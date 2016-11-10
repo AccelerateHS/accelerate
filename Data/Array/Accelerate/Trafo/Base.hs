@@ -28,14 +28,14 @@
 module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
-  Kit(..), Match(..), (:=:)(REFL),
+  Kit(..), Match(..), (:~:)(..),
   avarIn, kmap, fromOpenAfun,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
-  DelayedSeq(..), DelayedOpenSeq,
+  -- DelayedSeq(..), DelayedOpenSeq,
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
@@ -51,6 +51,7 @@ module Data.Array.Accelerate.Trafo.Base (
 import Control.Applicative
 import Control.DeepSeq
 import Data.Hashable
+import Data.Type.Equality
 import Text.PrettyPrint
 import Prelude                                          hiding ( until )
 
@@ -106,7 +107,7 @@ fromOpenAfun (Alam f)  = Alam  $ fromOpenAfun f
 -- to the existentially quantified terms in the positive case.
 --
 class Match f where
-  match :: f s -> f t -> Maybe (s :=: t)
+  match :: f s -> f t -> Maybe (s :~: t)
 
 instance Match (Idx env) where
   {-# INLINEABLE match #-}
@@ -142,15 +143,15 @@ type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
 type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
 
-data DelayedSeq t where
-  DelayedSeq :: Extend DelayedOpenAcc () aenv
-             -> DelayedOpenSeq aenv () t
-             -> DelayedSeq t
+-- data DelayedSeq t where
+--   DelayedSeq :: Extend DelayedOpenAcc () aenv
+--              -> DelayedOpenSeq aenv () t
+--              -> DelayedSeq t
 
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
 type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
-type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
+-- type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
 
 data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
@@ -192,8 +193,8 @@ instance NFData (DelayedOpenAfun aenv t) where
 instance NFData (DelayedOpenAcc aenv t) where
   rnf = rnfDelayedOpenAcc
 
-instance NFData (DelayedSeq t) where
-  rnf = rnfDelayedSeq
+-- instance NFData (DelayedSeq t) where
+--   rnf = rnfDelayedSeq
 
 hashDelayed :: HashAcc DelayedOpenAcc
 hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
@@ -207,10 +208,10 @@ matchDelayed (Manifest pacc1) (Manifest pacc2)
   = matchPreOpenAcc matchAcc hashAcc pacc1 pacc2
 
 matchDelayed (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
-  | Just REFL   <- matchPreOpenExp matchAcc hashAcc sh1 sh2
-  , Just REFL   <- matchPreOpenFun matchAcc hashAcc ix1 ix2
-  , Just REFL   <- matchPreOpenFun matchAcc hashAcc lx1 lx2
-  = Just REFL
+  | Just Refl <- matchPreOpenExp matchAcc hashAcc sh1 sh2
+  , Just Refl <- matchPreOpenFun matchAcc hashAcc ix1 ix2
+  , Just Refl <- matchPreOpenFun matchAcc hashAcc lx1 lx2
+  = Just Refl
 
 matchDelayed _ _
   = Nothing
@@ -221,6 +222,7 @@ rnfDelayedOpenAcc (Delayed sh ix lx) = rnfPreOpenExp rnfDelayedOpenAcc sh
                                  `seq` rnfPreOpenFun rnfDelayedOpenAcc ix
                                  `seq` rnfPreOpenFun rnfDelayedOpenAcc lx
 
+{--
 rnfDelayedSeq :: DelayedSeq t -> ()
 rnfDelayedSeq (DelayedSeq env s) = rnfExtend rnfDelayedOpenAcc env
                              `seq` rnfPreOpenSeq rnfDelayedOpenAcc s
@@ -228,6 +230,7 @@ rnfDelayedSeq (DelayedSeq env s) = rnfExtend rnfDelayedOpenAcc env
 rnfExtend :: NFDataAcc acc -> Extend acc aenv aenv' -> ()
 rnfExtend _    BaseEnv         = ()
 rnfExtend rnfA (PushEnv env a) = rnfExtend rnfA env `seq` rnfA a
+--}
 
 
 -- Note: If we detect that the delayed array is simply accessing an array
@@ -244,7 +247,7 @@ prettyDelayed wrap aenv acc = case acc of
   Manifest pacc         -> prettyPreOpenAcc prettyDelayed wrap aenv pacc
   Delayed sh f _
     | Shape a           <- sh
-    , Just REFL         <- match f (Lam (Body (Index a (Var ZeroIdx))))
+    , Just Refl         <- match f (Lam (Body (Index a (Var ZeroIdx))))
     -> prettyDelayed wrap aenv a
 
     | otherwise
@@ -310,7 +313,7 @@ sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
 lookupExp :: Kit acc => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Maybe (Idx env' t)
 lookupExp EmptyExp        _ = Nothing
 lookupExp (PushExp env e) x
-  | Just REFL <- match e x  = Just ZeroIdx
+  | Just Refl <- match e x  = Just ZeroIdx
   | otherwise               = SuccIdx `fmap` lookupExp env x
 
 

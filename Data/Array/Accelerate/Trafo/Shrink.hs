@@ -190,8 +190,9 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Collect s                 -> Collect (shrinkS s)
+      -- Collect s                 -> Collect (shrinkS s)
 
+{--
     shrinkS :: PreOpenSeq acc aenv' senv a -> PreOpenSeq acc aenv' senv a
     shrinkS seq =
       case seq of
@@ -219,6 +220,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkCT :: Atuple (Consumer acc aenv' senv) t -> Atuple (Consumer acc aenv' senv) t
     shrinkCT NilAtup        = NilAtup
     shrinkCT (SnocAtup t c) = SnocAtup (shrinkCT t) (shrinkC c)
+--}
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -303,7 +305,7 @@ usesOfExp idx = countE
     countE :: PreOpenExp acc env aenv e -> Int
     countE exp = case exp of
       Var this
-        | Just REFL <- match this idx   -> 1
+        | Just Refl <- match this idx   -> 1
         | otherwise                     -> 0
       --
       Let bnd body              -> countE bnd + usesOfExp (SuccIdx idx) body
@@ -357,7 +359,7 @@ usesOfPreAcc withShape countAcc idx = count
   where
     countIdx :: Idx aenv a -> Int
     countIdx this
-        | Just REFL <- match this idx   = 1
+        | Just Refl <- match this idx   = 1
         | otherwise                     = 0
 
     count :: PreOpenAcc acc aenv a -> Int
@@ -394,38 +396,7 @@ usesOfPreAcc withShape countAcc idx = count
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Collect s                 -> countS s
-
-    countS :: PreOpenSeq acc aenv senv arrs -> Int
-    countS seq =
-      case seq of
-        Producer p s -> countP p + countS s
-        Consumer c   -> countC c
-        Reify _      -> 0
-
-    countP :: Producer acc aenv senv arrs -> Int
-    countP p =
-      case p of
-        StreamIn _           -> 0
-        ToSeq _ _ a          -> countA a
-        MapSeq f _           -> countAF f idx
-        ChunkedMapSeq f _    -> countAF f idx
-        ZipWithSeq f _ _     -> countAF f idx
-        ScanSeq f e _        -> countF f + countE e
-
-    countC :: Consumer acc aenv senv arrs -> Int
-    countC c =
-      case c of
-        FoldSeq f e _        -> countF f + countE e
-        FoldSeqFlatten f a _ -> countAF f idx + countA a
-        Stuple t             -> countCT t
-
-    countCT :: Atuple (Consumer acc aenv senv) t' -> Int
-    countCT NilAtup        = 0
-    countCT (SnocAtup t c) = countCT t + countC c
-
-    countA :: acc aenv a -> Int
-    countA = countAcc withShape idx
+      -- Collect s                 -> countS s
 
     countE :: PreOpenExp acc env aenv e -> Int
     countE exp = case exp of
@@ -457,11 +428,14 @@ usesOfPreAcc withShape countAcc idx = count
         | otherwise             -> 0
       Foreign _ _ e             -> countE e
 
-    countAF :: PreOpenAfun acc aenv' f
-            -> Idx aenv' s
-            -> Int
-    countAF (Alam f)  v = countAF f (SuccIdx v)
-    countAF (Abody a) v = countAcc withShape v a
+    countA :: acc aenv a -> Int
+    countA = countAcc withShape idx
+
+    -- countAF :: PreOpenAfun acc aenv' f
+    --         -> Idx aenv' s
+    --         -> Int
+    -- countAF (Alam f)  v = countAF f (SuccIdx v)
+    -- countAF (Abody a) v = countAcc withShape v a
 
     countF :: PreOpenFun acc env aenv f -> Int
     countF (Lam  f) = countF f
@@ -474,4 +448,34 @@ usesOfPreAcc withShape countAcc idx = count
     countAT :: Atuple (acc aenv) a -> Int
     countAT NilAtup        = 0
     countAT (SnocAtup t a) = countAT t + countA a
+
+{--
+    countS :: PreOpenSeq acc aenv senv arrs -> Int
+    countS seq =
+      case seq of
+        Producer p s -> countP p + countS s
+        Consumer c   -> countC c
+        Reify _      -> 0
+
+    countP :: Producer acc aenv senv arrs -> Int
+    countP p =
+      case p of
+        StreamIn _           -> 0
+        ToSeq _ _ a          -> countA a
+        MapSeq f _           -> countAF f idx
+        ChunkedMapSeq f _    -> countAF f idx
+        ZipWithSeq f _ _     -> countAF f idx
+        ScanSeq f e _        -> countF f + countE e
+
+    countC :: Consumer acc aenv senv arrs -> Int
+    countC c =
+      case c of
+        FoldSeq f e _        -> countF f + countE e
+        FoldSeqFlatten f a _ -> countAF f idx + countA a
+        Stuple t             -> countCT t
+
+    countCT :: Atuple (Consumer acc aenv senv) t' -> Int
+    countCT NilAtup        = 0
+    countCT (SnocAtup t c) = countCT t + countC c
+--}
 

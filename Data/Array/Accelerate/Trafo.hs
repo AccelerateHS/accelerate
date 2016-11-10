@@ -22,17 +22,17 @@ module Data.Array.Accelerate.Trafo (
 
   convertAcc,  convertAccWith,
   convertAfun, convertAfunWith,
-  convertSeq,  convertSeqWith,
+  -- convertSeq,  convertSeqWith,
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
-  DelayedSeq(..), Extend(..),
+  -- DelayedSeq(..), Extend(..),
 
   -- * Substitution
   module Data.Array.Accelerate.Trafo.Substitution,
 
   -- * Term equality
-  Match(..), (:=:)(..),
+  Match(..), (:~:)(..),
 
 ) where
 
@@ -43,7 +43,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun, convertSeq ) -- to export types
+import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
@@ -86,9 +86,9 @@ data Phase = Phase
     -- | Convert segment length arrays into segment offset arrays?
   , convertOffsetOfSegment      :: Bool
 
-    -- | Vectorise maps and zipwiths in sequence computations to
+    --   Vectorise maps and zipwiths in sequence computations to
     --   enable chunked execution?
-  , vectoriseSequences          :: Bool
+  -- , vectoriseSequences          :: Bool
   }
 
 
@@ -103,7 +103,7 @@ phases =  Phase
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
-  , vectoriseSequences     = True
+  -- , vectoriseSequences     = True
   }
 
 when :: (a -> a) -> Bool -> a -> a
@@ -123,7 +123,7 @@ convertAcc = convertAccWith phases
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
-  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
+  -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
@@ -138,7 +138,7 @@ convertAfun = convertAfunWith phases
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
-  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
+  -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
@@ -161,6 +161,7 @@ convertFun
   = phase "exp-simplify"      Rewrite.simplify
   . phase "sharing-recovery" (Sharing.convertFun (recoverExpSharing phases))
 
+{--
 -- | Convert a closed sequence computation, incorporating sharing observation and
 --   optimisation.
 --
@@ -174,7 +175,7 @@ convertSeqWith Phase{..} s
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
-
+--}
 
 -- Pretty printing
 -- ---------------

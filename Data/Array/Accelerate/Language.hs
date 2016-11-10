@@ -1,8 +1,9 @@
-{-# LANGUAGE ConstraintKinds  #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies     #-}
-{-# LANGUAGE TypeOperators    #-}
-{-# LANGUAGE ViewPatterns     #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
@@ -25,7 +26,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array and scalar expressions
-  Acc, Seq, Exp,                            -- re-exporting from 'Smart'
+  Acc, Exp,                                 -- re-exporting from 'Smart'
 
   -- * Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
@@ -42,17 +43,17 @@ module Data.Array.Accelerate.Language (
   -- * Map-like functions
   map, zipWith,
 
-  -- * Sequence collection
-  collect,
+  -- -- * Sequence collection
+  -- collect,
 
-  -- * Sequence producers
-  streamIn, toSeq,
+  -- -- * Sequence producers
+  -- streamIn, toSeq,
 
-  -- * Sequence transducers
-  mapSeq, zipWithSeq, scanSeq,
+  -- -- * Sequence transducers
+  -- mapSeq, zipWithSeq, scanSeq,
 
-  -- * Sequence consumers
-  foldSeq, foldSeqFlatten,
+  -- -- * Sequence consumers
+  -- foldSeq, foldSeqFlatten,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -94,7 +95,7 @@ module Data.Array.Accelerate.Language (
   (!), (!!), shape, size, shapeSize,
 
   -- * Numeric functions
-  subtract, even, odd, gcd, lcm,
+  subtract, even, odd, gcd, lcm, (^), (^^),
 
   -- * Conversions
   ord, chr, boolToInt, bitcast,
@@ -246,6 +247,9 @@ zipWith = Acc $$$ ZipWith
 -- | Reduction of the innermost dimension of an array of arbitrary rank.  The
 -- first argument needs to be an /associative/ function to enable an efficient
 -- parallel implementation.
+--
+-- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
+-- compute multiple results from a single reduction.
 --
 fold :: (Shape ix, Elt a)
      => (Exp a -> Exp a -> Exp a)
@@ -452,6 +456,7 @@ stencil2
 stencil2 = Acc $$$$$ Stencil2
 
 
+{--
 -- Sequence operations
 -- ------------------
 
@@ -553,6 +558,7 @@ foldSeqFlatten = Seq $$$ FoldSeqFlatten
 
 collect :: Arrays arrs => Seq arrs -> Acc arrs
 collect = Acc . Collect
+--}
 
 -- Foreign function calling
 -- ------------------------
@@ -771,6 +777,42 @@ lcm :: Integral a => Exp a -> Exp a -> Exp a
 lcm x y
   = cond (x ==* 0 ||* y ==* 0) 0
   $ abs ((x `quot` (gcd x y)) * y)
+
+
+-- | Raise a number to a non-negative integral power
+--
+infixr 8 ^
+(^) :: forall a b. (Num a, Integral b) => Exp a -> Exp b -> Exp a
+x0 ^ y0 = cond (y0 <=* 0) 1 (f x0 y0)
+  where
+    f :: Exp a -> Exp b -> Exp a
+    f x y =
+      let (x',y') = untup2
+                  $ while (\(untup2 -> (_,v)) -> even v)
+                          (\(untup2 -> (u,v)) -> tup2 (u * u, v `quot` 2))
+                          (tup2 (x, y))
+      in
+      cond (y' ==* 1) x' (g (x'*x') ((y'-1) `quot` 2) x')
+
+    g :: Exp a -> Exp b -> Exp a -> Exp a
+    g x y z =
+      let (x',_,z') = untup3
+                    $ while (\(untup3 -> (_,v,_)) -> v /=* 1)
+                            (\(untup3 -> (u,v,w)) ->
+                              cond (even v) (tup3 (u*u, v     `quot` 2, w))
+                                            (tup3 (u*u, (v-1) `quot` 2, w*u)))
+                            (tup3 (x,y,z))
+      in
+      x' * z'
+
+-- | Raise a number to an integral power
+--
+infixr 8 ^^
+(^^) :: (Fractional a, Integral b) => Exp a -> Exp b -> Exp a
+x ^^ n
+  = cond (n >=* 0)
+  {- then -} (x ^ n)
+  {- else -} (recip (x ^ (negate n)))
 
 
 -- Conversions

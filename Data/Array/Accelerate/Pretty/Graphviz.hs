@@ -254,7 +254,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
                             -> "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                             ppB acc2 bndy2, ppA acc2 ]
     Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (text (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
-    Collect{}               -> error "Collect"
+    -- Collect{}               -> error "Collect"
 
   where
     (.$) :: String -> [Dot PDoc] -> Dot PNode
@@ -306,7 +306,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       return $ PDoc (text v) [Vertex ident Nothing]
     ppA (Delayed sh f _)
       | Shape a    <- sh                                             -- identical shape
-      , Just REFL  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
+      , Just Refl  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
       = ppA a
     ppA (Delayed sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
