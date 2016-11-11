@@ -33,6 +33,6 @@ Result from running with the above random data (plotted separately):
 
 
   [kmeans-wiki]:            https://en.wikipedia.org/wiki/K-means_clustering
-  [kmeans-img]:             https://github.com/AccelerateHS/accelerate-examples/raw/master/samples/kmeans.png
+  [kmeans-img]:             https://github.com/AccelerateHS/accelerate-examples/raw/master/samples/k-means.png
   [GenSamples.hs]:          https://github.com/AccelerateHS/accelerate-examples/blob/master/examples/kmeans/GenSamples.hs
 
