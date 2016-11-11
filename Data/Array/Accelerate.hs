@@ -197,7 +197,7 @@ module Data.Array.Accelerate (
   Integral, quot, rem, div, mod, quotRem, divMod,
   Fractional, (/), recip, fromRational,
   Floating, pi, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, exp, sqrt, log, (**), logBase,
-  RealFrac(..),
+  RealFrac(..), div', mod', divMod',
   RealFloat(..),
 
   -- *** Numeric conversion classes
