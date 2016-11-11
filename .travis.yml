@@ -13,7 +13,7 @@ cache:
   directories:
     - $HOME/.stack
     - $HOME/llvm
-    - .stack-work/install
+    # - .stack-work/install
 
 matrix:
   include:
@@ -70,7 +70,7 @@ install:
       if [ ${GHC} == head -o ! -e stack.yaml ]; then
         travis_retry cabal install --only-dependencies
       else
-        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps
+        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps --dry-run
       fi
 
 script:
@@ -79,7 +79,7 @@ script:
         cabal install
         cabal haddock
       else
-        stack build --no-terminal --haddock --no-haddock-deps
+        stack build --no-terminal --haddock --no-haddock-deps --dry-run
       fi
 
 after_success:
