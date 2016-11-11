@@ -1,3 +1,6 @@
+accelerate-hashcat
+==================
+
 The `accelerate-hashcat` program attempts to recover the plain text of an MD5
 hash by comparing the unknown to the hash of every entry in a given dictionary,
 which contains one word per line.
@@ -24,7 +27,8 @@ The program will also accept multiple unknowns to recover, either via multiple
 
 Of course, it is more fun if we don't know what what results to expect
 beforehand, in which case a dictionary of standard words won't get us too far.
-Luckily, the Internet is a playground...
+Luckily, the Internet is a
+[playground](https://wiki.skullsecurity.org/index.php?title=Passwords)...
 
     $ accelerate-hashcat -d rockyou.txt md5.txt
 
