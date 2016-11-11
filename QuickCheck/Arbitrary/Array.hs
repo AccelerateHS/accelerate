@@ -72,7 +72,7 @@ arbitraryArray sh = arbitraryArrayOf sh arbitrary
 -- Generate an array of the given shape using the supplied element generator
 -- function.
 --
-arbitraryArrayOf :: (Shape sh, Elt e, Arbitrary e) => sh -> Gen e -> Gen (Array sh e)
+arbitraryArrayOf :: (Shape sh, Elt e) => sh -> Gen e -> Gen (Array sh e)
 arbitraryArrayOf sh gen = Sugar.fromList sh `fmap` vectorOf (Sugar.size sh) gen
 
 {--
@@ -114,7 +114,7 @@ arbitrarySegmentedArray segs = do
 -- Generate a segment descriptor. Both the array and individual segments might
 -- be empty.
 --
-arbitrarySegments :: (Elt i, Integral i, Arbitrary i, Random i) => Gen (Segments i)
+arbitrarySegments :: (Elt i, Integral i, Random i) => Gen (Segments i)
 arbitrarySegments =
   sized $ \n -> do
     k <- choose (0,n)
@@ -122,7 +122,7 @@ arbitrarySegments =
 
 -- Generate a possibly empty segment descriptor, where each segment is non-empty
 --
-arbitrarySegments1 :: (Elt i, Integral i, Arbitrary i, Random i) => Gen (Segments i)
+arbitrarySegments1 :: (Elt i, Integral i, Random i) => Gen (Segments i)
 arbitrarySegments1 =
   sized $ \n -> do
     k <- choose (0,n)
@@ -132,7 +132,7 @@ arbitrarySegments1 =
 -- Generate an vector where every element in the array is unique. The maximum
 -- size is based on the current 'sized' parameter.
 --
-arbitraryUniqueVectorOf :: (Elt e, Arbitrary e, Ord e) => Gen e -> Gen (Array DIM1 e)
+arbitraryUniqueVectorOf :: (Elt e, Ord e) => Gen e -> Gen (Array DIM1 e)
 arbitraryUniqueVectorOf gen =
   sized $ \n -> do
     set <- fmap Set.fromList (vectorOf n gen)
@@ -147,7 +147,7 @@ arbitraryUniqueVectorOf gen =
 -- The matrix size is based on the current `sized` parameter.
 --
 arbitraryCSRMatrix
-    :: (Elt i, Integral i, Arbitrary i, Random i, Elt e, Arbitrary e)
+    :: (Elt i, Integral i, Random i, Elt e, Arbitrary e)
     => Gen ( Array DIM1 i, Array DIM1 (i,e), Int )
 arbitraryCSRMatrix =
   sized $ \cols -> do

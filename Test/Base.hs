@@ -9,10 +9,10 @@ import Data.Array.Accelerate.Array.Sugar
 
 -- Miscellaneous
 --
-indexHead :: Shape sh => (sh:.Int) -> Int
+indexHead :: sh:.Int -> Int
 indexHead (_ :. sz) = sz
 
-indexTail :: Shape sh => (sh:.Int) -> sh
+indexTail :: sh:.Int -> sh
 indexTail (sh :. _) = sh
 
 isEmptyArray :: Shape sh => Array sh e -> Bool

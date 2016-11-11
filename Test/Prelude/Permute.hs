@@ -84,7 +84,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
       , testDim dim2
       ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary (Array sh e)) => sh -> Test
         testDim sh = testProperty ("DIM" P.++ show (rank sh)) (push_fill :: Array sh e -> Property)
           where
             push_fill :: Array sh e -> Property
@@ -97,7 +97,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
     -- Test if the combining operation for forward permutation works, by
     -- building a histogram. Often tricky for parallel backends.
     --
-    test_histogram :: (P.Num e, A.Num e, Similar e, Arbitrary e, IArray UArray e) => (Exp e -> Exp Int) -> (e -> Int) -> Vector e -> Property
+    test_histogram :: (P.Num e, A.Num e, Similar e, IArray UArray e) => (Exp e -> Exp Int) -> (e -> Int) -> Vector e -> Property
     test_histogram f g xs =
       forAll (sized return) $
         \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
