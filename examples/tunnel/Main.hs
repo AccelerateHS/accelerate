@@ -113,9 +113,6 @@ v2OfPoint p =
   let (x,y) = xyOfPoint p
   in  lift (V2 x y)
 
-mod' :: Exp Float -> Exp Float -> Exp Float
-mod' n d = n - A.fromIntegral (A.floor (n/d) :: Exp Int) * d
-
 -- The time vortex
 --
 tunnel :: Exp Float -> Exp Point -> Exp Colour
