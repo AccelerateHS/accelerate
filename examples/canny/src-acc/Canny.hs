@@ -18,7 +18,7 @@ import Prelude                                          as P
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
-import Data.Array.Accelerate.Data.Colour.RGB
+import Data.Array.Accelerate.Data.Colour.RGB            hiding ( clamp )
 
 
 -- Canny algorithm -------------------------------------------------------------

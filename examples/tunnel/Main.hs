@@ -25,7 +25,6 @@ import Data.Array.Accelerate.Control.Lens                           ( (^.) )
 import Graphics.Gloss.Accelerate.Raster.Field                       hiding ( clamp )
 
 import Prelude                                                      ( IO, fmap )
-import qualified Prelude                                            as P
 
 
 -- Fractional part of a number

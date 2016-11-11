@@ -106,7 +106,7 @@ instance Similar Double  where (~=) = absRelTol 0.00005 0.005
 instance Similar CFloat  where (~=) = absRelTol 0.00005 0.005
 instance Similar CDouble where (~=) = absRelTol 0.00005 0.005
 
-instance (Similar e, P.RealFloat e) => Similar (Complex e) where
+instance Similar e => Similar (Complex e) where
   (r1 :+ i1) ~= (r2 :+ i2) = r1 ~= r2 && i1 ~= i2
 
 
@@ -115,7 +115,7 @@ instance (Similar e, P.RealFloat e) => Similar (Complex e) where
 -- relTol epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
 
 {-# INLINEABLE absRelTol #-}
-absRelTol :: (P.RealFloat a, P.Ord a) => a -> a -> a -> a -> Bool
+absRelTol :: P.RealFloat a => a -> a -> a -> a -> Bool
 absRelTol epsilonAbs epsilonRel u v
   |  P.isInfinite u
   && P.isInfinite v        = True
