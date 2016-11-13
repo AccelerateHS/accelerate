@@ -51,7 +51,7 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
     opts :: (P.Floating a, Random a) => Gen (a,a,a)
     opts = (,,) <$> choose (5,30) <*> choose (1,100) <*> choose (0.25,10)
 
-    run_blackscholes :: forall a. ( P.Floating a, A.Floating a, A.Ord a, Similar a, Storable a, Random a, Arbitrary a
+    run_blackscholes :: forall a. ( P.Floating a, A.Floating a, A.Ord a, Similar a, Storable a, Random a
                                   , BlockPtrs (EltRepr a) ~ Ptr a )
                      => BlackScholes a
                      -> Property

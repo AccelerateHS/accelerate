@@ -103,7 +103,7 @@ radixOfSigned i e = i ==* (passes' - 1) ? (radix' (e `xor` minBound), radix' e)
      radix' x = A.fromIntegral $ (x `A.shiftR` i) .&. 1
      passes'  = constant (passes (undefined :: e))
 
-radixOfUnsigned :: (Radix e, A.Bounded e, A.Integral e, A.FromIntegral e Int) => Exp Int -> Exp e -> Exp Int
+radixOfUnsigned :: (Radix e, A.Integral e, A.FromIntegral e Int) => Exp Int -> Exp e -> Exp Int
 radixOfUnsigned i e = A.fromIntegral $ (e `A.shiftR` i) .&. 1
 
 
