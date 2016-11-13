@@ -242,6 +242,9 @@ Executable accelerate-nofib
         Test.Issues.Issue185
         Test.Issues.Issue187
         Test.Issues.Issue228
+        Test.Issues.Issue255
+        Test.Issues.Issue287
+        Test.Issues.Issue288
         Test.Prelude
         Test.Prelude.Backpermute
         Test.Prelude.Filter
@@ -259,7 +262,7 @@ Executable accelerate-nofib
         Test.Spectral.RadixSort
         Test.Spectral.SMVM
 
-  ghc-options:          -Wall -threaded -fpedantic-bottoms -fno-full-laziness -fno-excess-precision -eventlog -rtsopts
+  ghc-options:          -Wall -threaded -fpedantic-bottoms -fno-full-laziness -fno-excess-precision -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
   ghc-prof-options:     -auto-all
 
   extra-libraries:      stdc++
@@ -305,8 +308,8 @@ Executable accelerate-smvm
   Main-is:              Main.hs
   other-modules:        Config Matrix MatrixMarket SMVM
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if impl(ghc >= 7.6)
     ghc-options:        -fsimpl-tick-factor=130
@@ -339,8 +342,8 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -365,8 +368,8 @@ Executable accelerate-tunnel
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -392,8 +395,8 @@ Executable accelerate-canny
   Main-is:              Main.hs
   other-modules:        Config Canny Wildfire
 
-  ghc-options:          -Wall -threaded -Odph -eventlog -rtsopts
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -Odph -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -421,8 +424,8 @@ Executable accelerate-mandelbrot
   Main-is:              Main.hs
   other-modules:        Config Mandel World
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -448,8 +451,8 @@ Executable accelerate-fluid
   hs-source-dirs:       examples/fluid/src-acc
   other-modules:        Config Event Fluid Type World
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -492,8 +495,8 @@ Executable accelerate-nbody
         Solver.Naive2
         Test
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -524,8 +527,8 @@ Executable accelerate-smoothlife
         Random.Splat
         SmoothLife
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
@@ -557,8 +560,8 @@ Executable accelerate-hashcat
   Main-is:              Main.hs
   other-modules:        Config Digest MD5
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -586,8 +589,8 @@ Executable accelerate-fft
   hs-source-dirs:       examples/fft/src-acc
   other-modules:        Config HighPass FFT
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -620,8 +623,8 @@ Executable accelerate-pagerank
         Rank
         Step
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -660,8 +663,8 @@ Executable accelerate-ray
         Scene.World
         Vec3
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -688,8 +691,8 @@ Executable accelerate-kmeans
   Main-is:              Main.hs
   other-modules:        Config Main Kmeans GenSamples
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T

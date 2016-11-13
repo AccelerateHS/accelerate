@@ -67,7 +67,7 @@ setPrecisionOfWorld f conf opts (World p _ z h v)
         limit   = get configLimit conf
         backend = get optBackend opts
 
-        render :: (P.Floating a, A.RealFloat a, A.Ord a, A.FromIntegral Int a) => Render a
+        render :: (P.Floating a, A.RealFloat a, A.FromIntegral Int a) => Render a
         render  = run1 backend
                 $ A.map (prettyRGBA (constant (P.fromIntegral limit)))
                 . mandelbrot width height limit

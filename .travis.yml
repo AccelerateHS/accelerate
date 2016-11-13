@@ -13,7 +13,7 @@ cache:
   directories:
     - $HOME/.stack
     - $HOME/llvm
-    - .stack-work/install
+    # - .stack-work/install
 
 matrix:
   include:

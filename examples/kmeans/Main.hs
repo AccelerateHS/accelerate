@@ -43,13 +43,13 @@ main = do
       initial = A.fromList (Z:.nclusters) initial'
 
       points :: Vector (Point Float)
-      points = A.fromList (Z:.npoints)   points'
+      points = A.fromList (Z:.npoints) points'
 
   -- Warm up first by printing the expected results
   --
   putStrLn $ "number of points: " P.++ show npoints
   putStrLn $ "final clusters:\n"  P.++
-    unlines (P.map show . A.toList $ solve initial)
+    unlines (P.map show (A.toList (solve initial)))
 
   -- Now benchmark
   --

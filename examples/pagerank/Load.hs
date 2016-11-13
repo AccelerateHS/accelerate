@@ -38,9 +38,9 @@ loadPages filePath maxPageId
          -- Slice out the pages we read from the buffer.
          | []       <- ls
          = do   printPosition True "  lines read : " 10000 ixLine
-                from'  <- V.freeze (VM.slice 0 ix from)
-                to'    <- V.freeze (VM.slice 0 ix to)
-                sizes' <- V.freeze sizes
+                from'  <- V.freeze (VM.slice 0 ml_ix ml_from)
+                to'    <- V.freeze (VM.slice 0 ml_ix ml_to)
+                sizes' <- V.freeze ml_sizes
 
                 return (from', to', sizes')
 

@@ -33,12 +33,12 @@ type sh :~> e = sh -> GenIO -> IO e
 
 -- | Uniformly distributed random variates.
 --
-uniform :: (Shape sh, Elt e, Variate e) => sh :~> e
+uniform :: Variate e => sh :~> e
 uniform _ = R.uniform
 
 -- | Uniformly distributed random variates in a given range.
 --
-uniformR :: (Shape sh, Elt e, Variate e) => (e, e) -> sh :~> e
+uniformR :: Variate e => (e, e) -> sh :~> e
 uniformR bounds _ = R.uniformR bounds
 
 

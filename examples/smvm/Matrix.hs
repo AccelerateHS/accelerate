@@ -69,7 +69,7 @@ randomVectorR r g n = V.replicateM n (uniformR r g)
 -- row format.
 --
 {-# INLINE csr #-}
-csr :: forall a. (Fractional a, Unbox a)
+csr :: forall a. Unbox a
     => (Int,Int)
     -> Int
     -> [(Int32,Int32,a)]

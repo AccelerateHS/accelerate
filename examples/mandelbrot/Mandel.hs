@@ -42,7 +42,7 @@ type Render a           = Scalar (View a) -> Bitmap
 -- This returns the iteration depth 'i' at divergence.
 --
 mandelbrot
-    :: forall a. (P.Floating a, A.RealFloat a, A.Ord a, A.FromIntegral Int a)
+    :: forall a. (P.Floating a, A.RealFloat a, A.FromIntegral Int a)
     => Int
     -> Int
     -> Int

@@ -131,7 +131,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
           in
           stencil2DRef pattern clamp xs
 
-    test_stencil2D3 :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Array DIM2 (a,a) -> Property
+    test_stencil2D3 :: (P.Num a, A.Num a, Similar a) => Array DIM2 (a,a) -> Property
     test_stencil2D3 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern :: forall a. A.Num a => Stencil3x3 (a,a) -> Exp a
