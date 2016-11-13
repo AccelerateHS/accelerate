@@ -761,10 +761,12 @@ scanlSeg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
-scanlSeg f z arr seg = null flags ?| ( zs , scanl1Seg f arr' seg' )
+scanlSeg f z arr seg =
+  if null arr ||* null flags
+    then fill (lift (sh:.sz + length seg)) z
+    else scanl1Seg f arr' seg'
   where
     sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
-    zs          = fill (lift (sh :. length seg)) z
 
     -- Segmented exclusive scan is implemented by first injecting the seed
     -- element at the head of each segment, and then performing a segmented
@@ -803,8 +805,7 @@ scanl'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanl'Seg f z arr seg = lift ( null arr  ?| (emptyArray, body)
-                             , null arr' ?| (emptyArray, sums) )
+scanl'Seg f z arr seg = lift (body, sums)
   where
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -907,10 +908,12 @@ scanrSeg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
-scanrSeg f z arr seg = null flags ?| ( zs, scanr1Seg f arr' seg' )
+scanrSeg f z arr seg =
+  if null arr ||* null flags
+    then fill (lift (sh :. sz + length seg)) z
+    else scanr1Seg f arr' seg'
   where
     sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
-    zs          = fill (lift (sh :. length seg)) z
 
     -- Using technique described for 'scanlSeg', where we intersperse the array
     -- with the seed element at the start of each segment, and then perform an
@@ -936,8 +939,7 @@ scanr'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanr'Seg f z arr seg = lift ( null arr  ?| (emptyArray, body)
-                             , null arr' ?| (emptyArray, sums) )
+scanr'Seg f z arr seg = lift (body, sums)
   where
     -- Using technique described for scanl'Seg
     --
