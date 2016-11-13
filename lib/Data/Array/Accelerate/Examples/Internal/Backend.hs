@@ -148,7 +148,7 @@ availableBackends optBackend =
 #ifdef ACCELERATE_CUDA_BACKEND
   , Option  [] [show CUDA]
             (NoArg (set optBackend CUDA))
-            "implementation for NVIDIA GPUs (parallel)"
+            "CUDA based implementation for NVIDIA GPUs (parallel)"
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
   , Option  [] [show Multi]
