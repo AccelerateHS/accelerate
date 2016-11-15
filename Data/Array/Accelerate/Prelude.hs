@@ -805,8 +805,10 @@ scanl'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanl'Seg f z arr seg = lift ( null arr  ?| (arr,  body)
-                             , null arr' ?| (arr', sums) )
+scanl'Seg f z arr seg =
+  if null arr
+    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
+    else lift (body, sums)
   where
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -940,8 +942,10 @@ scanr'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanr'Seg f z arr seg = lift ( null arr  ?| (arr,  body)
-                             , null arr' ?| (arr', sums) )
+scanr'Seg f z arr seg =
+  if null arr
+    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
+    else lift (body, sums)
   where
     -- Using technique described for scanl'Seg
     --
