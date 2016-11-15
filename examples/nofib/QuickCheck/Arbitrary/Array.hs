@@ -20,15 +20,9 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM0 e) where
   arbitrary  = arbitraryArray Z
   shrink arr = [ Sugar.fromList Z [x] | x <- shrink (arr ! Z) ]
 
-
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM1 e) where
   arbitrary  = arbitraryArray =<< sized arbitraryShape
-  shrink arr =
-    let (Z :. n)        = Sugar.shape arr
-        indices         = [ map (Z:.) (nub sz) | sz <- shrink [0 .. n-1] ]
-    in
-    [ Sugar.fromList (Z :. length sl) (map (arr!) sl) | sl <- indices ]
-
+  shrink arr = [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr) ]
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
   arbitrary  = arbitraryArray =<< sized arbitraryShape
