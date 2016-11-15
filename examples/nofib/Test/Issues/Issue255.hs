@@ -37,8 +37,6 @@ test_issue255 backend _conf =
     lIMIT     = 30 * 1000 * 1000  -- microseconds
     n         = 20 * 1024 * 1024 -- 160 * MiB (8 bytes per Double)
 
-    scalar e  = A.fromList Z [e]
-
     as :: [A.Vector Double]
     as = sums (A.fromList (Z:.n) (repeat 0)) (A.fromList (Z:.n) (repeat 1))
 
