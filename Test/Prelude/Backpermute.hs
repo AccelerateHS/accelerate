@@ -61,19 +61,17 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           ]
       where
         test_reverse :: Vector e -> Property
-        test_reverse xs   = run backend (reverseAcc xs)   ~?= reverseRef xs
+        test_reverse xs   = run1 backend A.reverse xs   ~?= reverseRef xs
 
         test_transpose :: Array DIM2 e -> Property
-        test_transpose xs = run backend (transposeAcc xs) ~?= transposeRef xs
+        test_transpose xs = run1 backend A.transpose xs ~?= transposeRef xs
 
         -- Reverse a vector
         --
-        reverseAcc xs = A.reverse (use xs)
         reverseRef xs = fromList (arrayShape xs) (P.reverse $ toList xs)
 
         -- Transpose a 2D matrix
         --
-        transposeAcc xs = A.transpose (use xs)
         transposeRef xs =
           let swap (Z:.x:.y)    = Z :. y :. x
           in  newArray (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))
@@ -83,31 +81,37 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
         test_init :: Vector e -> Property
         test_init xs =
           P.not (isEmptyArray xs)
-            ==> toList (run backend (A.init (A.use xs))) ~?= P.init (toList xs)
+            ==> toList (run1 backend A.init xs) ~?= P.init (toList xs)
 
         test_tail :: Vector e -> Property
         test_tail xs =
           P.not (isEmptyArray xs)
-            ==> toList (run backend (A.tail (A.use xs))) ~?= P.tail (toList xs)
+            ==> toList (run1 backend A.tail xs) ~?= P.tail (toList xs)
 
         test_drop :: Vector e -> Property
         test_drop xs =
           let n = arraySize (arrayShape xs)
           in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-                toList (run backend (A.drop (constant i) (use xs))) ~?= P.drop i (toList xs)
+                toList (run2 backend (\i' -> A.drop (the i')) (scalar i) xs)
+                ~?=
+                P.drop i (toList xs)
 
         test_take :: Vector e -> Property
         test_take xs =
           let n = arraySize (arrayShape xs)
           in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-                toList (run backend (A.take (constant i) (use xs))) ~?= P.take i (toList xs)
+                toList (run2 backend (\i' -> A.take (the i')) (scalar i) xs)
+                ~?=
+                P.take i (toList xs)
 
         test_slit :: Vector e -> Property
         test_slit xs =
           let n = arraySize (arrayShape xs)
           in  forAll (choose (0, 0 `P.max` (n-1)))   $ \i ->
               forAll (choose (0, 0 `P.max` (n-1-i))) $ \j ->
-                toList (run backend (A.slit (constant i) (constant j) (use xs))) ~?= P.take j (P.drop i (toList xs))
+                toList (run3 backend (\i' j' -> A.slit (the i') (the j')) (scalar i) (scalar j) xs)
+                ~?=
+                P.take j (P.drop i (toList xs))
 
         -- Gathering
         --
@@ -118,7 +122,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           in
           forAll arbitrary                              $ \(sh' :: DIM1) ->
           forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv          ->
-            toList (run backend (A.gather (use mapv) (use xs)))
+            toList (run2 backend A.gather mapv xs)
             ~?=
             [ xs `indexArray` (Z:.i) | i <- toList mapv ]
 
@@ -131,7 +135,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
           forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
           forAll (arbitraryArray sh')                   $ \defaultv ->
-            toList (run backend $ A.gatherIf (use mapv) (use maskv) A.even (use defaultv) (use xs))
+            toList (run4 backend (\p m d x -> A.gatherIf p m A.even d x) mapv maskv defaultv xs)
             ~?=
             gatherIfRef P.even mapv maskv defaultv xs
 
