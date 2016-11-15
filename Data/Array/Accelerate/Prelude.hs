@@ -805,7 +805,8 @@ scanl'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanl'Seg f z arr seg = lift (body, sums)
+scanl'Seg f z arr seg = lift ( null arr  ?| (arr,  body)
+                             , null arr' ?| (arr', sums) )
   where
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -847,7 +848,7 @@ scanl'Seg f z arr seg = lift (body, sums)
                     (shape arr)
                     (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
                             in  lift (sz :. i + fromIntegral (inc ! index1 i)))
-                              arr'
+                    arr'
 
 
 -- | Segmented version of 'scanl1' along the innermost dimension.
@@ -939,7 +940,8 @@ scanr'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanr'Seg f z arr seg = lift (body, sums)
+scanr'Seg f z arr seg = lift ( null arr  ?| (arr,  body)
+                             , null arr' ?| (arr', sums) )
   where
     -- Using technique described for scanl'Seg
     --
