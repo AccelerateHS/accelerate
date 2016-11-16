@@ -71,6 +71,6 @@ within :: Int -> Scalar Double -> Assertion
 within n arr = do
   r <- timeout n $ evaluate (indexArray arr Z `seq` ())
   case r of
-    Nothing -> assertFailure "no result returned: infinite loop?"
+    Nothing -> assertFailure "timeout: backend is too slow or memory manager stuck?"
     Just () -> return ()
 
