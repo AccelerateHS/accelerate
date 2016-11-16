@@ -8,7 +8,7 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/accelerate.git
-    commit: 71f517d2c98ef8c8562f3b93830903896db1716e
+    commit: a3a8ca524b18c480400da0134b3ec9a7f3bd306d
   extra-dep: true
 
 - location:
@@ -17,8 +17,8 @@ packages:
   extra-dep: true
 
 - location:
-    git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 932e4ff0cb7d77fccd6d44580646cec9fb8d0083
+    git:    https://github.com/tmcdonell/accelerate-llvm.git
+    commit: 8f5b421a4677c0d08099bff2876a6da0616d4d6c
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -92,9 +92,9 @@ flags:
     llvm-cpu: true
     llvm-gpu: true
   accelerate-examples:
-    cuda:       true
+    cuda:       false
     llvm-cpu:   true
-    llvm-gpu:   true
+    llvm-gpu:   false
     gui:        true
     ekg:        true
     codespeed:  false
