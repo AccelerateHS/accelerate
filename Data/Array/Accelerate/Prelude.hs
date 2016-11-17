@@ -781,7 +781,7 @@ scanlSeg f z arr seg =
                           (fill (lift (sh :. sz + length seg)) z)
                           (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
                                   in  lift (sx :. i + fromIntegral (inc ! index1 i)))
-                          arr
+                          (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
     -- place for each successive segment, to make room for the seed element.
@@ -846,8 +846,9 @@ scanl'Seg f z arr seg =
                               (\ix -> index1' $ offset ! ix)
                               (fill (shape seg) (1 :: Exp i))
 
+    len         = offset ! index1 (length offset - 1)
     body        = backpermute
-                    (shape arr)
+                    (lift (indexTail (shape arr) :. fromIntegral len))
                     (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
                             in  lift (sz :. i + fromIntegral (inc ! index1 i)))
                     arr'
@@ -930,7 +931,7 @@ scanrSeg f z arr seg =
                           (fill (lift (sh :. sz + length seg)) z)
                           (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
                                   in  lift (sx :. i + fromIntegral (inc ! index1 i) - 1))
-                          arr
+                          (drop (sz - length flags) arr)
 
 
 -- | Segmented version of 'scanr''.
@@ -961,8 +962,10 @@ scanr'Seg f z arr seg =
                     arr'
 
     -- body segments
-    inc         = scanl1 (+) $ mkHeadFlags seg
-    body        = backpermute (shape arr)
+    flags       = mkHeadFlags seg
+    inc         = scanl1 (+) flags
+    body        = backpermute
+                    (lift (indexTail (shape arr) :. indexHead (shape flags)))
                     (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
                             in  lift (sz :. i + fromIntegral (inc ! index1 i)))
                     arr'
