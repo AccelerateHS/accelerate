@@ -137,12 +137,41 @@ unit = Acc . Unit
 -- | Replicate an array across one or more dimensions as specified by the
 -- /generalised/ array index provided as the first argument.
 --
--- For example, assuming 'arr' is a vector (one-dimensional array),
+-- For example, given the following vector:
 --
--- > replicate (lift (Z :. (2::Int) :. All :. (3::Int))) arr
+-- >>> let vec = fromList (Z:.10) [0..]
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
 --
--- yields a three dimensional array, where 'arr' is replicated twice across the
--- first and three times across the third dimension.
+-- We can replicate these elements to form a two-dimensional array either by
+-- replicating those elements as new rows:
+--
+-- >>> replicate (lift (Z :. 4 :. All)) (use vec)
+-- Matrix (Z :. 4 :. 10)
+--   [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+--     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+--     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+--     0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+--
+-- ... or as columns:
+--
+-- >>> replicate (lift (Z :. All :. 4)) (use vec)
+-- Matrix (Z :. 10 :. 4)
+--   [ 0, 0, 0, 0,
+--     1, 1, 1, 1,
+--     2, 2, 2, 2,
+--     3, 3, 3, 3,
+--     4, 4, 4, 4,
+--     5, 5, 5, 5,
+--     6, 6, 6, 6,
+--     7, 7, 7, 7,
+--     8, 8, 8, 8,
+--     9, 9, 9, 9]
+--
+-- Replication along more than one dimension is also possible. Here we replicate
+-- twice across the first dimension and three times across the third dimension:
+--
+-- >>> replicate (lift (Z :. 2 :. All :. 3)) (use vec)
+-- Array (Z :. 2 :. 10 :. 3) [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9,0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9]
 --
 replicate :: (Slice slix, Elt e)
           => Exp slix
@@ -155,17 +184,18 @@ replicate = Acc $$ Replicate
 -- For example, the following will generate a one-dimensional array
 -- (`Vector`) of three floating point numbers:
 --
--- > generate (index1 3) (\_ -> 1.2)
+-- >>> generate (index1 3) (\_ -> 1.2)
+-- Vector (Z :. 3) [1.2,1.2,1.2]
 --
--- Or, equivalently:
+-- Or equivalently:
 --
--- > generate (constant (Z :. (3::Int))) (\_ -> 1.2)
+-- >>> fill (constant (Z :. 3)) 1.2
+-- Vector (Z :. 3) [1.2,1.2,1.2]
 --
--- Finally, the following will create an array equivalent to '[1..10]':
+-- The following will create a vector with the elements @[1..10]@:
 --
--- > generate (index1 10) $ \ ix ->
--- >          let (Z :. i) = unlift ix
--- >          in fromIntegral i
+-- >>> generate (index1 10) (\\ix -> unindex1 ix + 1)
+-- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
 -- [/NOTE:/]
 --
@@ -209,10 +239,23 @@ reshape = Acc $$ Reshape
 -- following will select a specific row and yield a one dimensional
 -- result:
 --
--- > slice mat (lift (Z :. (2::Int) :. All))
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- A fully specified index (with no `All`s) would return a single element (zero
+-- >>> slice (use mat) (lift (Z :. 2 :. All))
+-- Vector (Z :. 10) [20,21,22,23,24,25,26,27,28,29]
+--
+-- A fully specified index (with no `All`s) returns a single element (zero
 -- dimensional array).
+--
+-- >>> slice (use mat) (lift (Z :. 4 :. 2))
+-- Scalar Z [42]
 --
 slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
@@ -304,6 +347,16 @@ fold1Seg = Acc $$$ Fold1Seg
 -- function to enable efficient parallel implementation. The initial value
 -- (second argument) may be arbitrary.
 --
+-- >>> scanl (+) 10 (use $ fromList (Z :. 10) [0..])
+-- Array (Z :. 11) [10,10,11,13,16,20,25,31,38,46,55]
+--
+-- >>> scanl (+) 0 (use $ fromList (Z :. 4 :. 10) [0..])
+-- Matrix (Z :. 4 :. 11)
+--   [ 0,  0,  1,  3,   6,  10,  15,  21,  28,  36,  45,
+--     0, 10, 21, 33,  46,  60,  75,  91, 108, 126, 145,
+--     0, 20, 41, 63,  86, 110, 135, 161, 188, 216, 245,
+--     0, 30, 61, 93, 126, 160, 195, 231, 268, 306, 345]
+--
 scanl :: (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Exp a
@@ -311,13 +364,29 @@ scanl :: (Shape sh, Elt a)
       -> Acc (Array (sh:.Int) a)
 scanl = Acc $$$ Scanl
 
--- | Variant of 'scanl', where the final result of the reduction is returned
--- separately. Denotationally, we have:
+-- | Variant of 'scanl', where the last element (final reduction result) along
+-- each dimension is returned separately. Denotationally we have:
 --
 -- > scanl' f e arr = (init res, unit (res!len))
 -- >   where
 -- >     len = shape arr
 -- >     res = scanl f e arr
+--
+-- >>> let (res,sum) = A.scanl' (+) 0 (use $ fromList (Z:.10) [0..])
+-- >>> res
+-- Vector (Z :. 10) [0,0,1,3,6,10,15,21,28,36]
+-- >>> sum
+-- Scalar Z [45]
+--
+-- >>> let (res,sums) = scanl' (+) 0 (use $ fromList (Z:.4:.10) [0..])
+-- >>> res
+-- Matrix (Z :. 4 :. 10)
+--   [ 0,  0,  1,  3,   6,  10,  15,  21,  28,  36,
+--     0, 10, 21, 33,  46,  60,  75,  91, 108, 126,
+--     0, 20, 41, 63,  86, 110, 135, 161, 188, 216,
+--     0, 30, 61, 93, 126, 160, 195, 231, 268, 306]
+-- >>> sums
+-- Vector (Z :. 4) [45,145,245,345]
 --
 scanl' :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
@@ -326,11 +395,18 @@ scanl' :: (Shape sh, Elt a)
        -> (Acc (Array (sh:.Int) a), Acc (Array sh a))
 scanl' = unatup2 . Acc $$$ Scanl'
 
--- | Data.List style left-to-right scan along the non-empty innermost dimension
--- without an initial value (aka inclusive scan). Again, the first argument
--- needs to be an /associative/ function. Denotationally, we have:
+-- | Data.List style left-to-right scan along the innermost dimension without an
+-- initial value (aka inclusive scan). The array must not be empty. The first
+-- argument needs to be an /associative/ function. Denotationally, we have:
 --
 -- > scanl1 f e arr = tail (scanl f e arr)
+--
+-- >>> scanl (+) (use $ fromList (Z:.4:.10) [0..])
+-- Matrix (Z :. 4 :. 10)
+--   [  0,  1,  3,   6,  10,  15,  21,  28,  36,  45,
+--     10, 21, 33,  46,  60,  75,  91, 108, 126, 145,
+--     20, 41, 63,  86, 110, 135, 161, 188, 216, 245,
+--     30, 61, 93, 126, 160, 195, 231, 268, 306, 345]
 --
 scanl1 :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)

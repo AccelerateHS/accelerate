@@ -261,7 +261,7 @@ zipWith9 f as bs cs ds es fs gs hs is
              (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
 
 
--- | Zip two arrays with a function that also takes the elements' index
+-- | Zip two arrays with a function that also takes the element index
 --
 izipWith :: (Shape sh, Elt a, Elt b, Elt c)
          => (Exp sh -> Exp a -> Exp b -> Exp c)
@@ -272,7 +272,7 @@ izipWith f as bs
   = generate (shape as `intersect` shape bs)
              (\ix -> f ix (as ! ix) (bs ! ix))
 
--- | Zip three arrays with a function that also takes the elements index,
+-- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
 --
 izipWith3 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
@@ -285,7 +285,7 @@ izipWith3 f as bs cs
   = generate (shape as `intersect` shape bs `intersect` shape cs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix))
 
--- | Zip four arrays with the given function that also takes the elements index,
+-- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
@@ -300,7 +300,7 @@ izipWith4 f as bs cs ds
               shape cs `intersect` shape ds)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
 
--- | Zip five arrays with the given function that also takes the elements index,
+-- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
@@ -316,7 +316,7 @@ izipWith5 f as bs cs ds es
                        `intersect` shape ds `intersect` shape es)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
 
--- | Zip six arrays with the given function that also takes the elements index,
+-- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
@@ -334,7 +334,7 @@ izipWith6 f as bs cs ds es fs
                        `intersect` shape fs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
 
--- | Zip seven arrays with the given function that also takes the elements
+-- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
 --
 izipWith7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
@@ -353,7 +353,7 @@ izipWith7 f as bs cs ds es fs gs
                        `intersect` shape fs `intersect` shape gs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
 
--- | Zip eight arrays with the given function that also takes the elements
+-- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
 --
 izipWith8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
@@ -374,7 +374,7 @@ izipWith8 f as bs cs ds es fs gs hs
                        `intersect` shape hs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
 
--- | Zip nine arrays with the given function that also takes the elements index,
+-- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
@@ -397,8 +397,8 @@ izipWith9 f as bs cs ds es fs gs hs is
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
 
 
--- | Combine the elements of two arrays pairwise.  The shape of the result is
--- the intersection of the two argument shapes.
+-- | Combine the elements of two arrays pairwise. The shape of the result is the
+-- intersection of the two argument shapes.
 --
 zip :: (Shape sh, Elt a, Elt b)
     => Acc (Array sh a)
@@ -615,7 +615,17 @@ unzip9 xs = ( map get1 xs, map get2 xs, map get3 xs
 -- Reductions
 -- ----------
 
--- | Reduction of an array of arbitrary rank to a single scalar value.
+-- | Reduction of an array of arbitrary rank to a single scalar value. The first
+-- argument needs to be an /associative/ function to enable efficient parallel
+-- implementation.
+--
+-- >>> let vec = fromList (Z:.10) [0..]
+-- >>> foldAll (+) 42 (use vec)
+-- Scalar Z [87]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> foldAll (+) 0 (use mat)
+-- Scalar Z [1225]
 --
 foldAll :: (Shape sh, Elt a)
         => (Exp a -> Exp a -> Exp a)
@@ -625,7 +635,8 @@ foldAll :: (Shape sh, Elt a)
 foldAll f e arr = fold f e (flatten arr)
 
 -- | Variant of 'foldAll' that requires the reduced array to be non-empty and
--- doesn't need an default value.
+-- doesn't need an default value. The first argument must be an /associative/
+-- function.
 --
 fold1All :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
@@ -752,7 +763,29 @@ postscanr f e = map (`f` e) . scanr1 f
 -- Segmented scans
 -- ---------------
 
--- |Segmented version of 'scanl'
+-- | Segmented version of 'scanl' along the innermost dimension of an array. The
+-- innermost dimension must have at least as many elements as the sum of the
+-- segment descriptor.
+--
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanlSeg (+) 0 (use mat) (use seg)
+-- Matrix (Z :. 5 :. 12)
+--   [ 0,  0, 0,  1,  3,   6,  10, 0, 0,  5, 11,  18,
+--     0, 10, 0, 11, 23,  36,  50, 0, 0, 15, 31,  48,
+--     0, 20, 0, 21, 43,  66,  90, 0, 0, 25, 51,  78,
+--     0, 30, 0, 31, 63,  96, 130, 0, 0, 35, 71, 108,
+--     0, 40, 0, 41, 83, 126, 170, 0, 0, 45, 91, 138]
 --
 scanlSeg
     :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
@@ -792,11 +825,41 @@ scanlSeg f z arr seg =
     inc         = scanl1 (+) flags
 
 
--- |Segmented version of 'scanl'' along the innermost dimension of an array.
+-- | Segmented version of 'scanl'' along the innermost dimension of an array. The
+-- innermost dimension must have at least as many elements as the sum of the
+-- segment descriptor.
 --
 -- The first element of the resulting tuple is a vector of scanned values. The
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
+--
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let (res,sums) = scanl'Seg (+) 0 (use mat) (use seg)
+-- >>> res
+-- Matrix (Z :. 5 :. 8)
+--   [ 0, 0,  1,  3,   6, 0,  5, 11,
+--     0, 0, 11, 23,  36, 0, 15, 31,
+--     0, 0, 21, 43,  66, 0, 25, 51,
+--     0, 0, 31, 63,  96, 0, 35, 71,
+--     0, 0, 41, 83, 126, 0, 45, 91]
+-- >>> sums
+-- Matrix (Z :. 5 :. 4)
+--   [  0,  10, 0,  18,
+--     10,  50, 0,  48,
+--     20,  90, 0,  78,
+--     30, 130, 0, 108,
+--     40, 170, 0, 138]
 --
 scanl'Seg
     :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
@@ -865,6 +928,26 @@ scanl'Seg f z arr seg =
 --
 -- > scanl1Seg f xs [n,0,0] == scanl1Seg f xs [n]   where n /= 0
 --
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanl1Seg (+) (use mat) (use seg)
+-- Matrix (Z :. 5 :. 8)
+--   [  0,  1,  3,   6,  10,  5, 11,  18,
+--     10, 11, 23,  36,  50, 15, 31,  48,
+--     20, 21, 43,  66,  90, 25, 51,  78,
+--     30, 31, 63,  96, 130, 35, 71, 108,
+--     40, 41, 83, 126, 170, 45, 91, 138]
+--
 scanl1Seg
     :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
     => (Exp e -> Exp e -> Exp e)
@@ -903,7 +986,29 @@ postscanlSeg f e vec seg
   = map (f e)
   $ scanl1Seg f vec seg
 
--- |Segmented version of 'scanr'.
+-- | Segmented version of 'scanr' along the innermost dimension of an array. The
+-- innermost dimension must have at least as many elements as the sum of the
+-- segment descriptor.
+--
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanrSeg (+) 0 (use mat) (use seg)
+-- Matrix (Z :. 5 :. 12)
+--   [  2, 0,  18,  15, 11,  6, 0, 0,  24, 17,  9, 0,
+--     12, 0,  58,  45, 31, 16, 0, 0,  54, 37, 19, 0,
+--     22, 0,  98,  75, 51, 26, 0, 0,  84, 57, 29, 0,
+--     32, 0, 138, 105, 71, 36, 0, 0, 114, 77, 39, 0,
+--     42, 0, 178, 135, 91, 46, 0, 0, 144, 97, 49, 0]
 --
 scanrSeg
     :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
@@ -935,6 +1040,34 @@ scanrSeg f z arr seg =
 
 
 -- | Segmented version of 'scanr''.
+--
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let (res,sums) = scanr'Seg (+) 0 (use mat) (use seg)
+-- >>> res
+-- Matrix (Z :. 5 :. 8)
+--   [ 0,  15, 11,  6, 0, 17,  9, 0,
+--     0,  45, 31, 16, 0, 37, 19, 0,
+--     0,  75, 51, 26, 0, 57, 29, 0,
+--     0, 105, 71, 36, 0, 77, 39, 0,
+--     0, 135, 91, 46, 0, 97, 49, 0]
+-- >>> sums
+-- Matrix (Z :. 5 :. 4)
+--   [  2,  18, 0,  24,
+--     12,  58, 0,  54,
+--     22,  98, 0,  84,
+--     32, 138, 0, 114,
+--     42, 178, 0, 144]
 --
 scanr'Seg
     :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
@@ -971,7 +1104,27 @@ scanr'Seg f z arr seg =
                     arr'
 
 
--- |Segmented version of 'scanr1'.
+-- | Segmented version of 'scanr1'.
+--
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanr1Seg (+) (use mat) (use seg)
+-- Matrix (Z :. 5 :. 8)
+--   [  0,  10,   9,  7,  4,  18, 13,  7,
+--     10,  50,  39, 27, 14,  48, 33, 17,
+--     20,  90,  69, 47, 24,  78, 53, 27,
+--     30, 130,  99, 67, 34, 108, 73, 37,
+--     40, 170, 129, 87, 44, 138, 93, 47]
 --
 scanr1Seg
     :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
@@ -1129,8 +1282,39 @@ enumFromStepN sh x y
 -- Concatenation
 -- -------------
 
--- | Concatenate outermost component of two arrays. The extent of the lower
+-- | Concatenate innermost component of two arrays. The extent of the lower
 --   dimensional component is the intersection of the two arrays.
+--
+-- >>> let m1 = fromList (Z:.5:.10) [0..]
+-- >>> m1
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let m2 = fromList (Z:.10:.3) [0..]
+-- >>> m2
+-- Matrix (Z :. 10 :. 3)
+--   [  0,  1,  2,
+--      3,  4,  5,
+--      6,  7,  8,
+--      9, 10, 11,
+--     12, 13, 14,
+--     15, 16, 17,
+--     18, 19, 20,
+--     21, 22, 23,
+--     24, 25, 26,
+--     27, 28, 29]
+--
+-- >>> use m1 ++ use m2
+-- Matrix (Z :. 5 :. 13)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  0,  1,  2,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,  3,  4,  5,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,  6,  7,  8,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,  9, 10, 11,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 12, 13, 14]
 --
 infixr 5 ++
 (++) :: forall sh e. (Slice sh, Shape sh, Elt e)
@@ -1368,8 +1552,25 @@ transpose mat =
 -- Extracting sub-vectors
 -- ----------------------
 
--- | Yield the first @n@ elements in the outermost dimension of the array (plus
+-- | Yield the first @n@ elements in the innermost dimension of the array (plus
 -- all lower dimensional elements).
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> take 5 (use mat)
+-- Matrix (Z :. 5 :. 5)
+--   [  0,  1,  2,  3,  4,
+--     10, 11, 12, 13, 14,
+--     20, 21, 22, 23, 24,
+--     30, 31, 32, 33, 34,
+--     40, 41, 42, 43, 44]
 --
 take :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Exp Int
@@ -1382,8 +1583,25 @@ take n acc =
   backpermute (lift (sh :. n')) id acc
 
 
--- | Yield all but the first @n@ elements along the outermost dimension of the
+-- | Yield all but the first @n@ elements along the innermost dimension of the
 -- array (plus all lower dimensional elements).
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> drop 7 (use mat)
+-- Matrix (Z :. 5 :. 3)
+--   [  7,  8,  9,
+--     17, 18, 19,
+--     27, 28, 29,
+--     37, 38, 39,
+--     47, 48, 49]
 --
 drop :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Exp Int
@@ -1398,7 +1616,24 @@ drop n acc =
   backpermute (lift (sh :. 0 `max` (sz - n'))) index acc
 
 
--- | Yield all but the elements in the last index of the outermost dimension.
+-- | Yield all but the elements in the last index of the innermost dimension.
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> init (use mat)
+-- Matrix (Z :. 5 :. 9)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48]
 --
 init :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
@@ -1408,8 +1643,25 @@ init acc =
   in  backpermute (lift (sh :. sz `min` (sz - 1))) id acc
 
 
--- | Yield all but the first element of the input vector. The vector must not be
---   empty.
+-- | Yield all but the first element along the innermost dimension of an array.
+-- The innermost dimension must not be empty.
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> tail (use mat)
+-- Matrix (Z :. 5 :. 9)
+--   [  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
 tail :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
@@ -1422,7 +1674,7 @@ tail acc =
   backpermute (lift (sh :. 0 `max` (sz - 1))) index acc
 
 
--- | Yield a slit (slice) of the outermost indices of an array. Denotationally,
+-- | Yield a slit (slice) of the innermost indices of an array. Denotationally,
 -- we have:
 --
 -- > slit i n = take n . drop i

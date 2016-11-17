@@ -12,28 +12,37 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- This module defines an embedded language of array computations for
--- high-performance computing. Computations on multi-dimensional, regular
--- arrays are expressed in the form of parameterised collective operations
--- (such as maps, reductions, and permutations). These computations are online
--- compiled and executed on a range of architectures.
+-- high-performance computing. Computations on multi-dimensional, regular arrays
+-- are expressed in the form of parameterised collective operations (such as
+-- maps, reductions, and permutations). These computations are online compiled
+-- and can be executed on a range of architectures.
 --
 -- [/Abstract interface:/]
 --
--- The types representing array computations are only exported abstractly —
--- i.e., client code can generate array computations and submit them for
--- execution, but it cannot inspect these computations. This is to allow for
--- more flexibility for future extensions of this library.
+-- The types representing array computations are only exported abstractly;
+-- client code can generate array computations and submit them for execution,
+-- but it cannot inspect these computations. This is to allow for more
+-- flexibility for future extensions of this library.
 --
 -- [/Code execution:/]
 --
--- Access to the various backends is via a 'run' function in backend-specific
--- top level modules. Currently, we have the following:
+-- Several backends are available which can be used to evaluate accelerate
+-- programs:
 --
 -- * "Data.Array.Accelerate.Interpreter": simple interpreter in Haskell as a
 --   reference implementation defining the semantics of the Accelerate language
 --
--- * "Data.Array.Accelerate.CUDA": an implementation supporting parallel
---   execution on CUDA-capable NVIDIA GPUs
+-- * "Data.Array.Accelerate.LLVM.Native": implementation supporting parallel
+--   execution on multicore CPUs (e.g. x86)
+--   <http://hackage.haskell.org/package/accelerate-llvm-native>
+--
+-- * "Data.Array.Accelerate.LLVM.PTX": implementation supporting parallel
+--   execution on CUDA-capable NVIDIA GPUs.
+--   <http://hackage.haskell.org/package/accelerate-llvm-ptx>
+--
+-- * "Data.Array.Accelerate.CUDA": an older implementation supporting parallel
+--   execution on CUDA-capable NVIDIA GPUs. _NOTE: This backend is being deprecated in
+--   favour of @accelerate-llvm-ptx@._
 --
 -- [/Examples and documentation:/]
 --
@@ -43,6 +52,11 @@
 -- * The @accelerate-examples@ package demonstrates a range of computational
 --   kernels and several complete applications:
 --   <http://hackage.haskell.org/package/accelerate-examples>
+--
+-- * @lulesh-accelerate@ is an implementation of the LULESH (Livermore
+--   Unstructured Lagrangian Explicit Shock Hydrodynamics) application.
+--   <https://codesign.llnl.gov/lulesh.php>.
+--   <http://hackage.haskell.org/package/lulesh-accelerate>.
 --
 
 module Data.Array.Accelerate (
