@@ -768,6 +768,7 @@ postscanr f e = map (`f` e) . scanr1 f
 -- segment descriptor.
 --
 -- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
@@ -834,6 +835,7 @@ scanlSeg f z arr seg =
 -- the segment vector.
 --
 -- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
@@ -929,6 +931,7 @@ scanl'Seg f z arr seg =
 -- > scanl1Seg f xs [n,0,0] == scanl1Seg f xs [n]   where n /= 0
 --
 -- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
@@ -991,6 +994,7 @@ postscanlSeg f e vec seg
 -- segment descriptor.
 --
 -- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
@@ -1042,6 +1046,7 @@ scanrSeg f z arr seg =
 -- | Segmented version of 'scanr''.
 --
 -- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
@@ -1107,6 +1112,7 @@ scanr'Seg f z arr seg =
 -- | Segmented version of 'scanr1'.
 --
 -- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
