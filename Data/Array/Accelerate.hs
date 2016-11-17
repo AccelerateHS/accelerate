@@ -1,9 +1,8 @@
 -- |
 -- Module      : Data.Array.Accelerate
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
---               [2013..2014] Robert Clifton-Everest
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2016] Trevor L. McDonell
+--               [2013..2016] Robert Clifton-Everest
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
@@ -33,30 +32,106 @@
 --   reference implementation defining the semantics of the Accelerate language
 --
 -- * "Data.Array.Accelerate.LLVM.Native": implementation supporting parallel
---   execution on multicore CPUs (e.g. x86)
---   <http://hackage.haskell.org/package/accelerate-llvm-native>
+--   execution on multicore CPUs (e.g. x86).
+--   (<http://hackage.haskell.org/package/accelerate-llvm-native hackage>)
 --
 -- * "Data.Array.Accelerate.LLVM.PTX": implementation supporting parallel
 --   execution on CUDA-capable NVIDIA GPUs.
---   <http://hackage.haskell.org/package/accelerate-llvm-ptx>
+--   (<http://hackage.haskell.org/package/accelerate-llvm-ptx hackage>)
 --
 -- * "Data.Array.Accelerate.CUDA": an older implementation supporting parallel
---   execution on CUDA-capable NVIDIA GPUs. _NOTE: This backend is being deprecated in
---   favour of @accelerate-llvm-ptx@._
+--   execution on CUDA-capable NVIDIA GPUs.
+--   /__NOTE:__ This backend is being deprecated in favour of @accelerate-llvm-ptx@./
 --
 -- [/Examples and documentation:/]
 --
--- * A (draft) tutorial is available on the GitHub wiki:
---   <https://github.com/AccelerateHS/accelerate/wiki>
+-- * A (draft) tutorial is available on the
+-- <https://github.com/AccelerateHS/accelerate/wiki GitHub wiki>. Please help us
+-- complete it!
 --
 -- * The @accelerate-examples@ package demonstrates a range of computational
---   kernels and several complete applications:
---   <http://hackage.haskell.org/package/accelerate-examples>
+--   kernels and several complete applications (<http://hackage.haskell.org/package/accelerate-examples hackage>):
 --
--- * @lulesh-accelerate@ is an implementation of the LULESH (Livermore
---   Unstructured Lagrangian Explicit Shock Hydrodynamics) application.
---   <https://codesign.llnl.gov/lulesh.php>.
---   <http://hackage.haskell.org/package/lulesh-accelerate>.
+--      - Implementation of the <https://en.wikipedia.org/wiki/Canny_edge_detector canny edge detector>
+--      - Interactive <https://en.wikipedia.org/wiki/Mandelbrot_set Mandelbrot set> generator
+--      - <https://en.wikipedia.org/wiki/N-body N-body simulation> of gravitational attraction between large bodies
+--      - Implementation of the <https://en.wikipedia.org/wiki/Pagerank PageRank> algorithm
+--      - A simple, real-time, interactive <https://en.wikipedia.org/wiki/Ray_tracing ray tracer>.
+--      - A particle based simulation of stable fluid flows
+--      - A cellular automaton simulation
+--      - A "password recovery" tool, for dictionary attacks on MD5 hashes.
+--
+--      <<http://i.imgur.com/RwCzQVw.jpg accelerate-mandelbrot>>
+--      <<http://i.imgur.com/7ohhKm9.jpg accelerate-ray>>
+--
+-- * @lulesh-accelerate@ is an implementation of the Livermore Unstructured
+--   Lagrangian Explicit Shock Hydrodynamics (LULESH) application. LULESH
+--   is representative of typical hydrodynamics codes, although simplified and
+--   hard-coded to solve the Sedov blast problem on an unstructured hexahedron
+--   mesh.
+--
+--      - <https://codesign.llnl.gov/lulesh.php>.
+--      - <http://hackage.haskell.org/package/lulesh-accelerate>.
+--
+--      <<https://codesign.llnl.gov/images/sedov-3d-LLNL.png>>
+--
+-- [/Additional components:/]
+--
+-- * <https://hackage.haskell.org/package/accelerate-io accelerate-io>: Fast
+-- conversion between Accelerate arrays and other formats (e.g. Repa, Vector).
+--
+-- * <https://hackage.haskell.org/package/accelerate-fft accelerate-fft>: Fast
+-- Fourier transform, with FFI bindings to optimised implementations.
+--
+-- * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>:
+-- Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
+--
+-- * <https://hackage.haskell.org/package/gloss-accelerate gloss-accelerate>:
+-- Generate <https://hackage.haskell.org/package/gloss gloss> pictures from
+-- Accelerate.
+--
+-- * <https://hackage.haskell.org/package/gloss-raster-accelerate gloss-raster-accelerate>:
+-- Parallel rendering of raster images and animations.
+--
+-- * <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>:
+-- <https://hackage.haskell.org/package/lens Lens> operators for Accelerate
+-- types.
+--
+-- * <https://hackage.haskell.org/package/linear-accelerate linear-accelerate>:
+-- <https://hackage.haskell.org/package/linear Linear> vector space types for
+-- Accelerate.
+--
+-- * <https://hackage.haskell.org/package/mwc-random-accelerate mwc-random-accelerate>:
+-- Generate Accelerate arrays filled with high-quality pseudorandom numbers.
+--
+-- [/Contact:/]
+--
+-- * Mailing list for both use and development discussion:
+--
+--     * <mailto:accelerate-haskell@googlegroups.com>
+--     * http://groups.google.com/group/accelerate-haskell
+--
+-- * Bug reports: https://github.com/AccelerateHS/accelerate/issues
+--
+-- * Maintainers:
+--
+--     * Trevor L. McDonell: <mailto:tmcdonell@cse.unsw.edu.au>
+--     * Manuel M T Chakravarty: <mailto:chak@cse.unsw.edu.au>
+--
+-- [/NOTE:/]
+--
+-- Accelerate tends to stress GHC's garbage collector, so it helps to increase
+-- the default GC allocation sizes. This can be done when running an executable
+-- by specifying RTS options on the command line, for example:
+--
+-- > ./foo +RTS -A64M -n2M -RTS
+--
+-- You can make these settings the default by adding the following @ghc-options@
+-- to your @.cabal@ file or similar:
+--
+-- > ghc-options: -with-rtsopts=-n2M -with-rtsopts=-A64M
+--
+-- To specify RTS options you will also need to compile your program with @-rtsopts@.
 --
 
 module Data.Array.Accelerate (
@@ -106,10 +181,8 @@ module Data.Array.Accelerate (
   (?|), acond, awhile,
   IfThenElse(..),
 
-  -- *** Pipelining
-  (>->),
-
   -- *** Controlling execution
+  (>->),
   compute,
 
   -- ** Modifying Arrays
@@ -252,15 +325,34 @@ module Data.Array.Accelerate (
   -- and out of constructors such as tuples, respectively. Those expressions, at
   -- runtime, will become tuple dereferences. For example:
   --
-  -- > Exp (Z :. Int :. Int)
-  -- >     -> unlift    :: (Z :. Exp Int :. Exp Int)
-  -- >     -> lift      :: Exp (Z :. Int :. Int)
-  -- >     -> ...
+  -- >>> let sh = constant (Z :. 4 :. 10)   :: Exp DIM2
+  -- >>> let Z :. x :. y = unlift sh        :: Z :. Exp Int :. Exp Int
+  -- >>> let t = lift (x,y)                 :: Exp (Int, Int)
   --
-  -- > Acc (Scalar Int, Vector Float)
-  -- >     -> unlift    :: (Acc (Scalar Int), Acc (Vector Float))
-  -- >     -> lift      :: Acc (Scalar Int, Vector Float)
-  -- >     -> ...
+  -- >>> let r  = scanl' f z xs             :: (Acc (Vector Int), Acc (Scalar Int))
+  -- >>> let r' = lift r                    :: Acc (Vector Int, Scalar Int)
+  --
+  -- [/Note:/]
+  --
+  -- Use of 'lift' and (especially) 'unlift' is probably the most common source
+  -- of type errors when using Accelerate. GHC is not very good at determining
+  -- the type the [un]lifted expression should have, so it is often necessary to
+  -- add an explicit type signature.
+  --
+  -- For example, in the following GHC will complain that it can not determine
+  -- the type of 'y', even though we might expect that to be obvious (or for it
+  -- to not care):
+  --
+  -- > fst :: (Elt a, Elt b) => Exp (a,b) -> Exp a
+  -- > fst t = let (x,y) = unlift t in x
+  --
+  -- The fix is to instead add an explicit type signature. Note that this
+  -- requires the @ScopedTypeVariables@ extension and to bring the type
+  -- variables @a@ and @b@ into scope with @forall@:
+  --
+  -- > fst :: forall a b. (Elt a, Elt b) => Exp (a,b) -> Exp a
+  -- > fst t = let (x,y) = unlift t  :: (Exp a, Exp b)
+  -- >         in x
   --
   Lift(..), Unlift(..),
   lift1, lift2, lift3,

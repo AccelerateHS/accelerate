@@ -194,7 +194,7 @@ replicate = Acc $$ Replicate
 --
 -- The following will create a vector with the elements @[1..10]@:
 --
--- >>> generate (index1 10) (\\ix -> unindex1 ix + 1)
+-- >>> generate (index1 10) (\ix -> unindex1 ix + 1)
 -- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
 -- [/NOTE:/]
@@ -289,7 +289,54 @@ zipWith = Acc $$$ ZipWith
 
 -- | Reduction of the innermost dimension of an array of arbitrary rank.  The
 -- first argument needs to be an /associative/ function to enable an efficient
--- parallel implementation.
+-- parallel implementation. The initial element does not need to be an identity
+-- element of the combination function.
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> fold (+) 42 (use mat)
+-- Vector (Z :. 5) [87,187,287,387,487]
+--
+-- Reductions with non-commutative operators are supported. For example, the
+-- following computes the maximum segment sum problem along each innermost
+-- dimension of the array.
+--
+-- <https://en.wikipedia.org/wiki/Maximum_subarray_problem>
+--
+-- > maximumSegmentSum
+-- >     :: forall sh e. (Shape sh, Num e, Ord e)
+-- >     => Acc (Array (sh :. Int) e)
+-- >     -> Acc (Array sh e)
+-- > maximumSegmentSum
+-- >   = map (\v -> let (x,_,_,_) = unlift v :: (Exp e, Exp e, Exp e, Exp e) in x)
+-- >   . fold1 f
+-- >   . map g
+-- >   where
+-- >     f :: (Num a, Ord a) => Exp (a,a,a,a) -> Exp (a,a,a,a) -> Exp (a,a,a,a)
+-- >     f x y =
+-- >       let (mssx, misx, mcsx, tsx) = unlift x
+-- >           (mssy, misy, mcsy, tsy) = unlift y
+-- >       in
+-- >       lift ( mssx `max` (mssy `max` (mcsx+misy))
+-- >            , misx `max` (tsx+misy)
+-- >            , mcsy `max` (mcsx+tsy)
+-- >            , tsx+tsy
+-- >            )
+-- >
+-- >     g :: (Num a, Ord a) => Exp a -> Exp (a,a,a,a)
+-- >     g x = let y = max x 0
+-- >           in  lift (y,y,y,x)
+--
+-- >>> let vec = fromList (Z:.10) [-2,1,-3,4,-1,2,1,-5,4,0]
+-- >>> maximumSegmentSum (use vec)
+-- Scalar Z [6]
 --
 -- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
 -- compute multiple results from a single reduction.
@@ -303,7 +350,8 @@ fold = Acc $$$ Fold
 
 -- | Variant of 'fold' that requires the reduced array to be non-empty and
 -- doesn't need an default value.  The first argument needs to be an
--- /associative/ function to enable an efficient parallel implementation.
+-- /associative/ function to enable an efficient parallel implementation. The
+-- initial element does not need to be an identity element.
 --
 fold1 :: (Shape ix, Elt a)
       => (Exp a -> Exp a -> Exp a)
@@ -311,32 +359,51 @@ fold1 :: (Shape ix, Elt a)
       -> Acc (Array ix a)
 fold1 = Acc $$ Fold1
 
--- | Segmented reduction along the innermost dimension.  Performs one individual
--- reduction per segment of the source array.  These reductions proceed in
--- parallel.
+-- | Segmented reduction along the innermost dimension of an array. The segment
+-- descriptor specifies the lengths of the logical sub-arrays, each of which is
+-- reduced independently. The innermost dimension must contain at least as many
+-- elements as required by the segment descriptor (sum thereof).
 --
--- The source array must have at least rank 1.  The 'Segments' array determines
--- the lengths of the logical sub-arrays, each of which is folded separately.
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
 --
-foldSeg :: (Shape ix, Elt a, Elt i, IsIntegral i)
-        => (Exp a -> Exp a -> Exp a)
-        -> Exp a
-        -> Acc (Array (ix:.Int) a)
-        -> Acc (Segments i)
-        -> Acc (Array (ix:.Int) a)
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> foldSeg (+) 0 (use mat) (use seg)
+-- Matrix (Z :. 5 :. 4)
+--   [  0,  10, 0,  18,
+--     10,  50, 0,  48,
+--     20,  90, 0,  78,
+--     30, 130, 0, 108,
+--     40, 170, 0, 138]
+--
+foldSeg
+    :: (Shape ix, Elt a, Elt i, IsIntegral i)
+    => (Exp a -> Exp a -> Exp a)
+    -> Exp a
+    -> Acc (Array (ix:.Int) a)
+    -> Acc (Segments i)
+    -> Acc (Array (ix:.Int) a)
 foldSeg = Acc $$$$ FoldSeg
 
 -- | Variant of 'foldSeg' that requires /all/ segments of the reduced array to
--- be non-empty and doesn't need a default value.
+-- be non-empty and doesn't need a default value. The segment descriptor
+-- specifies the length of each of the logical sub-arrays.
 --
--- The source array must have at least rank 1. The 'Segments' array determines
--- the lengths of the logical sub-arrays, each of which is folded separately.
---
-fold1Seg :: (Shape ix, Elt a, Elt i, IsIntegral i)
-         => (Exp a -> Exp a -> Exp a)
-         -> Acc (Array (ix:.Int) a)
-         -> Acc (Segments i)
-         -> Acc (Array (ix:.Int) a)
+fold1Seg
+    :: (Shape ix, Elt a, Elt i, IsIntegral i)
+    => (Exp a -> Exp a -> Exp a)
+    -> Acc (Array (ix:.Int) a)
+    -> Acc (Segments i)
+    -> Acc (Array (ix:.Int) a)
 fold1Seg = Acc $$$ Fold1Seg
 
 -- Scan functions
@@ -372,7 +439,7 @@ scanl = Acc $$$ Scanl
 -- >     len = shape arr
 -- >     res = scanl f e arr
 --
--- >>> let (res,sum) = A.scanl' (+) 0 (use $ fromList (Z:.10) [0..])
+-- >>> let (res,sum) = scanl' (+) 0 (use $ fromList (Z:.10) [0..])
 -- >>> res
 -- Vector (Z :. 10) [0,0,1,3,6,10,15,21,28,36]
 -- >>> sum
@@ -452,23 +519,68 @@ scanr1 = Acc $$ Scanr1
 -- that are mapped to the magic value 'ignore' by the permutation function are
 -- dropped.
 --
-permute :: (Shape ix, Shape ix', Elt a)
-        => (Exp a -> Exp a -> Exp a)    -- ^combination function
-        -> Acc (Array ix' a)            -- ^array of default values
-        -> (Exp ix -> Exp ix')          -- ^permutation
-        -> Acc (Array ix  a)            -- ^array to be permuted
-        -> Acc (Array ix' a)
+-- For example, we can use 'permute' to compute the occurrence count (histogram)
+-- for an array of values in the range @[0,10)@:
+--
+-- > histogram :: Acc (Vector Int) -> Acc (Vector Int)
+-- > histogram xs =
+-- >   let zeros = fill (constant (Z:.10)) 0
+-- >       ones  = fill (shape xs)         1
+-- >   in
+-- >   permute (+) zeros (\ix -> index1 (xs!ix)) ones
+--
+-- >>> let xs = fromList (Z :. 20) [0,0,1,2,1,1,2,4,8,3,4,9,8,3,2,5,5,3,1,2]
+-- >>> histogram (use xs)
+-- Vector (Z :. 10) [2,4,4,3,2,2,0,0,2,1]
+--
+permute
+    :: (Shape ix, Shape ix', Elt a)
+    => (Exp a -> Exp a -> Exp a)        -- ^ combination function
+    -> Acc (Array ix' a)                -- ^ array of default values
+    -> (Exp ix -> Exp ix')              -- ^ permutation
+    -> Acc (Array ix  a)                -- ^ array to be permuted
+    -> Acc (Array ix' a)
 permute = Acc $$$$ Permute
 
 -- | Backward permutation specified by an index mapping from the destination
 -- array specifying which element of the source array to read.
 --
-backpermute :: (Shape ix, Shape ix', Elt a)
-            => Exp ix'                  -- ^shape of the result array
-            -> (Exp ix' -> Exp ix)      -- ^permutation
-            -> Acc (Array ix  a)        -- ^source array
-            -> Acc (Array ix' a)
+-- For example, backpermute can be used to transpose a matrix:
+--
+-- > swap :: Exp DIM2 -> Exp DIM2
+-- > swap = lift1 $ \(Z:.x:.y) -> Z:.y:.x
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let mat' = use mat
+-- >>> backpermute (swap (shape mat')) swap mat'
+-- Matrix (Z :. 10 :. 5)
+--   [ 0, 10, 20, 30, 40,
+--     1, 11, 21, 31, 41,
+--     2, 12, 22, 32, 42,
+--     3, 13, 23, 33, 43,
+--     4, 14, 24, 34, 44,
+--     5, 15, 25, 35, 45,
+--     6, 16, 26, 36, 46,
+--     7, 17, 27, 37, 47,
+--     8, 18, 28, 38, 48,
+--     9, 19, 29, 39, 49]
+--
+backpermute
+    :: (Shape ix, Shape ix', Elt a)
+    => Exp ix'                          -- ^ shape of the result array
+    -> (Exp ix' -> Exp ix)              -- ^ permutation
+    -> Acc (Array ix  a)                -- ^ source array
+    -> Acc (Array ix' a)
 backpermute = Acc $$$ Backpermute
+
 
 -- Stencil operations
 -- ------------------
@@ -682,11 +794,14 @@ foreignExp = Exp $$$ Foreign
 -- Composition of array computations
 -- ---------------------------------
 
--- | Pipelining of two array computations.
+-- | Pipelining of two array computations. The first argument will be fully
+-- evaluated before being passed to the second computation. This can be used to
+-- prevent the argument being fused into the function, for example.
 --
 -- Denotationally, we have
 --
--- > (acc1 >-> acc2) arrs = let tmp = acc1 arrs in acc2 tmp
+-- > (acc1 >-> acc2) arrs = let tmp = acc1 arrs
+-- >                        in  tmp `seq` acc2 tmp
 --
 infixl 1 >->
 (>->) :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)

@@ -617,7 +617,7 @@ unzip9 xs = ( map get1 xs, map get2 xs, map get3 xs
 
 -- | Reduction of an array of arbitrary rank to a single scalar value. The first
 -- argument needs to be an /associative/ function to enable efficient parallel
--- implementation.
+-- implementation. The initial element does not need to be an identity element.
 --
 -- >>> let vec = fromList (Z:.10) [0..]
 -- >>> foldAll (+) 42 (use vec)
@@ -713,10 +713,14 @@ maximum = fold1All max
 -- Composite scans
 -- ---------------
 
--- |Left-to-right prescan (aka exclusive scan).  As for 'scan', the first argument must be an
--- /associative/ function.  Denotationally, we have
+-- | Left-to-right prescan (aka exclusive scan).  As for 'scan', the first
+-- argument must be an /associative/ function.  Denotationally, we have
 --
 -- > prescanl f e = Prelude.fst . scanl' f e
+--
+-- >>> let vec = fromList (Z:.10) [1..10]
+-- >>> prescanl (+) 0 (use vec)
+-- Vector (Z :. 10) [0,0,1,3,6,10,15,21,28,36]
 --
 prescanl :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
@@ -725,9 +729,14 @@ prescanl :: (Shape sh, Elt a)
          -> Acc (Array (sh:.Int) a)
 prescanl f e = P.fst . scanl' f e
 
--- |Left-to-right postscan, a variant of 'scanl1' with an initial value.  Denotationally, we have
+-- | Left-to-right postscan, a variant of 'scanl1' with an initial value. As
+-- with 'scanl1', the array must not be empty. Denotationally, we have:
 --
 -- > postscanl f e = map (e `f`) . scanl1 f
+--
+-- >>> let vec = fromList (Z:.10) [1..10]
+-- >>> postscanl (+) 42 (use vec)
+-- Vector (Z :. 10) [42,43,45,48,52,57,63,70,78,87]
 --
 postscanl :: (Shape sh, Elt a)
           => (Exp a -> Exp a -> Exp a)
@@ -1264,6 +1273,14 @@ fill sh c = generate sh (const c)
 -- | Create an array of the given shape containing the values x, x+1, etc (in
 --   row-major order).
 --
+-- >>> enumFromN (constant (Z:.5:.10)) 0 :: Array DIM2 Int
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
 enumFromN
     :: (Shape sh, Num e, FromIntegral Int e)
     => Exp sh
@@ -1273,6 +1290,14 @@ enumFromN sh x = enumFromStepN sh x 1
 
 -- | Create an array of the given shape containing the values @x@, @x+y@,
 -- @x+y+y@ etc. (in row-major order).
+--
+-- >>> enumFromStepN (constant (Z:.5:.10)) 0 0.5 :: Array DIM2 Float
+-- Matrix (Z :. 5 :. 10)
+--   [  0.0,  0.5,  1.0,  1.5,  2.0,  2.5,  3.0,  3.5,  4.0,  4.5,
+--      5.0,  5.5,  6.0,  6.5,  7.0,  7.5,  8.0,  8.5,  9.0,  9.5,
+--     10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5,
+--     15.0, 15.5, 16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5,
+--     20.0, 20.5, 21.0, 21.5, 22.0, 22.5, 23.0, 23.5, 24.0, 24.5]
 --
 enumFromStepN
     :: (Shape sh, Num e, FromIntegral Int e)
@@ -1350,7 +1375,7 @@ infixr 5 ++
 -- >>> vec
 -- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
--- >>> run $ filter even (use vec)
+-- >>> filter even (use vec)
 -- (Vector (Z :. 5) [2,4,6,8,10], Scalar Z [5])
 --
 -- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
@@ -1361,7 +1386,7 @@ infixr 5 ++
 --     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
 --     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
 --
--- >>> run $ filter odd (use mat)
+-- >>> filter odd (use mat)
 -- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19], Vector (Z :. 4) [5,5,0,10])
 --
 filter :: forall sh e. (Shape sh, Slice sh, Elt e)
@@ -1704,10 +1729,15 @@ slit m n acc =
 -- ---------------------
 
 -- | Force an array expression to be evaluated, preventing it from fusing with
--- other operations.
+-- other operations. Forcing operations to be computed to memory, rather than
+-- being fused into their consuming function, can sometimes improve performance.
+-- For example, computing a matrix 'transpose' could provide better memory
+-- locality for the subsequent operation. Preventing fusion to split large
+-- operations into several simpler steps could also help by reducing register
+-- pressure.
 --
--- In the case of GPU execution, this also means that the operation is available
--- to be executed concurrently with other kernels. In particular, consider using
+-- Preventing fusion also means that the individual operations are available to
+-- be executed concurrently with other kernels. In particular, consider using
 -- this if you have a series of operations that are compute bound rather than
 -- memory bound.
 --
@@ -1716,20 +1746,20 @@ slit m n acc =
 -- > loop :: Exp Int -> Exp Int
 -- > loop ticks =
 -- >   let clockRate = 900000   -- kHz
--- >   in  A.while (\i -> i <* clockRate * ticks) (+1) 0
+-- >   in  while (\i -> i <* clockRate * ticks) (+1) 0
 -- >
 -- > test :: Acc (Vector Int)
 -- > test =
--- >   A.zip3
--- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
--- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
--- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
+-- >   zip3
+-- >     (compute $ map loop (use $ fromList (Z:.1) [10]))
+-- >     (compute $ map loop (use $ fromList (Z:.1) [10]))
+-- >     (compute $ map loop (use $ fromList (Z:.1) [10]))
 -- >
 --
 -- Without the use of 'compute', the operations are fused together and the three
 -- long-running loops are executed sequentially in a single kernel. Instead, the
--- individual kernels can now be executed concurrently, reducing overall runtime
--- (on hardware that supports concurrent kernel execution).
+-- individual operations can now be executed concurrently, reducing overall
+-- runtime (for backends which support this).
 --
 compute :: Arrays a => Acc a -> Acc a
 compute = id >-> id
