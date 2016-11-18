@@ -34,7 +34,7 @@ infix 4 ==*
 infix 4 /=*
 
 -- | Conjunction: True if both arguments are true. This is a short-circuit
--- operator, so the second argument will be evaluate only if the first is true.
+-- operator, so the second argument will be evaluated only if the first is true.
 --
 infixr 3 &&*
 (&&*) :: Exp Bool -> Exp Bool -> Exp Bool

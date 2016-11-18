@@ -14,9 +14,8 @@
 {-# OPTIONS_HADDOCK prune #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2016] Trevor L. McDonell
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
@@ -25,17 +24,19 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- This interpreter is meant to be a reference implementation of the semantics
--- of the embedded array language.  The emphasis is on defining the semantics
+-- of the embedded array language. The emphasis is on defining the semantics
 -- clearly, not on performance.
 --
--- /Surface types versus representation types/
+
+-- [/Surface types versus representation types:/]
 --
--- As a general rule, we perform all computations on representation types and we store all data
--- as values of representation types.  To guarantee the type safety of the interpreter, this
--- currently implies a lot of conversions between surface and representation types.  Optimising
--- the code by eliminating back and forth conversions is fine, but only where it doesn't
--- negatively affects clarity — after all, the main purpose of the interpreter is to serve as an
--- executable specification.
+-- As a general rule, we perform all computations on representation types and we
+-- store all data as values of representation types. To guarantee the type
+-- safety of the interpreter, this currently implies a lot of conversions
+-- between surface and representation types. Optimising the code by eliminating
+-- back and forth conversions is fine, but only where it doesn't negatively
+-- affects clarity---after all, the main purpose of the interpreter is to serve
+-- as an executable specification.
 --
 
 module Data.Array.Accelerate.Interpreter (

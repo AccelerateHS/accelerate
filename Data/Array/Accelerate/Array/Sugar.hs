@@ -247,7 +247,7 @@ toTuple = toProd (Proxy :: Proxy Elt)
 --  * 'Char'
 --  * 'Bool'
 --  * ()
---  * Shapes formed from 'Z' and ':.'
+--  * Shapes formed from 'Z' and (':.')
 --  * Nested tuples of all of these, currently up to 15-elements wide
 --
 -- Adding new instances for 'Elt' consists of explaining to Accelerate how to
@@ -822,7 +822,7 @@ tuple = prod (Proxy :: Proxy Elt)
 --  * 'Char'
 --  * 'Bool'
 --  * ()
---  * Shapes formed from 'Z' and ':.'.
+--  * Shapes formed from 'Z' and (':.')
 --  * Nested tuples of all of these, currently up to 15-elements wide.
 --
 -- If device and host memory are separate, arrays will be transferred to the

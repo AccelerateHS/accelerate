@@ -217,20 +217,20 @@ module Data.Array.Accelerate (
   init, tail, take, drop, slit,
 
   -- *** Permutations
-  permute, backpermute, ignore,
+  -- **** Forward permutation (scatter)
+  permute,
+  ignore,
+  scatter,
 
-  -- *** Specialised permutations
+  -- **** Backward permutation (gather)
+  backpermute,
+  gather,
+
+  -- **** Specialised permutations
   reverse, transpose,
 
-  -- ** Working with predicates
   -- *** Filtering
   filter,
-
-  -- *** Scatter
-  scatter, scatterIf,
-
-  -- *** Gather
-  gather,  gatherIf,
 
   -- ** Folding
   fold, fold1, foldAll, fold1All,
@@ -260,10 +260,6 @@ module Data.Array.Accelerate (
   Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
-
-  -- ** Foreign Function Interface (FFI)
-  foreignAcc,
-  foreignExp,
 
   -- -- ** Sequence operations
   -- collect,
@@ -305,17 +301,17 @@ module Data.Array.Accelerate (
 
   -- ** Lifting and Unlifting
 
-  -- | A value of type `Int` is a plain Haskell value (unlifted), whereas an
+  -- | A value of type 'Int' is a plain Haskell value (unlifted), whereas an
   -- @Exp Int@ is a /lifted/ value, that is, an integer lifted into the domain
-  -- of expressions (an abstract syntax tree in disguise). Both `Acc` and `Exp`
-  -- are /surface types/ into which values may be lifted. Lifting plain array
-  -- and scalar surface types is equivalent to 'use' and 'constant'
+  -- of embedded expressions (an abstract syntax tree in disguise). Both 'Acc'
+  -- and 'Exp' are /surface types/ into which values may be lifted. Lifting
+  -- plain array and scalar surface types is equivalent to 'use' and 'constant'
   -- respectively.
   --
-  -- In general an @Exp Int@ cannot be unlifted into an `Int`, because the
+  -- In general an @Exp Int@ cannot be unlifted into an 'Int', because the
   -- actual number will not be available until a later stage of execution (e.g.
-  -- during GPU execution, when `run` is called). Similarly an @Acc array@ can
-  -- not be unlifted to a vanilla `array`; you should instead `run` the
+  -- during GPU execution, when 'run' is called). Similarly an @Acc array@ can
+  -- not be unlifted to a vanilla 'array'; you should instead 'run' the
   -- expression with a specific backend to evaluate it.
   --
   -- Lifting and unlifting are also used to pack and unpack an expression into
@@ -384,6 +380,11 @@ module Data.Array.Accelerate (
   ord, chr, boolToInt, bitcast,
 
   -- ---------------------------------------------------------------------------
+  -- * Foreign Function Interface (FFI)
+  foreignAcc,
+  foreignExp,
+
+  -- ---------------------------------------------------------------------------
   -- * Plain arrays
   -- ** Operations
   arrayRank, arrayShape, arraySize, indexArray,
@@ -407,8 +408,7 @@ module Data.Array.Accelerate (
   (.), ($), error, undefined,
 
   -- ---------------------------------------------------------------------------
-  -- * Types
-  -- ** Primitive element types
+  -- Types
   Int, Int8, Int16, Int32, Int64,
   Word, Word8, Word16, Word32, Word64,
   Float, Double,
@@ -418,9 +418,7 @@ module Data.Array.Accelerate (
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
   CChar, CSChar, CUChar,
 
-  -- ** Type reifications
-  --
-  -- Avoid using these in your own functions wherever possible.
+  -- | Avoid using these in your own functions wherever possible.
   IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
 
 ) where

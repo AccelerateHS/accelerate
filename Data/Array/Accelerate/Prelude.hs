@@ -1449,17 +1449,18 @@ filter p arr
 -- Gather operations
 -- -----------------
 
--- | Gather elements from a source array at the given indices. For example:
+-- | Gather elements from a source array by reading values at the given indices.
 --
---  > input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
---  > from   = [1, 3, 7, 2, 5, 3]
---  >
---  > output = [9, 4, 1, 6, 2, 4]
+-- >>> let input = fromList (Z:.9) [1,9,6,4,4,2,0,1,2]
+-- >>> let from  = fromList (Z:.6) [1,3,7,2,5,3]
+-- >>> gather (use from) (use input)
+-- Vector (Z :. 6) [9,4,1,6,2,4]
 --
-gather :: (Shape sh, Elt e)
-       => Acc (Array sh Int)      -- ^ index of source at each index to gather
-       -> Acc (Vector e)          -- ^ source vector
-       -> Acc (Array sh e)        -- ^ output
+gather
+    :: (Shape sh, Elt e)
+    => Acc (Array sh Int)         -- ^ index of source at each index to gather
+    -> Acc (Vector e)             -- ^ source values
+    -> Acc (Array sh e)
 gather indices input = map (input !!) indices
   -- TLM NOTES:
   --  * (!!) has potential for later optimisation
@@ -1467,30 +1468,27 @@ gather indices input = map (input !!) indices
   --    intuition that 'Int' ~ 'DIM1'.
 
 
--- | Conditionally copy elements from source array to destination array according
---   to an index mapping. This is a backpermute operation where a 'from' vector
---   encodes the output to input index mapping. In addition, there is a 'mask'
---   vector, and an associated predication function, that specifies whether an
---   element will be copied. If not copied, the output array assumes the default
---   vector's value.
+-- | Conditionally copy elements from source array to destination array
+-- according to an index mapping.
 --
---   For example:
+-- In addition, the 'mask' vector and associated predication function specifies
+-- whether the element is copied or a default value is used instead.
 --
---  > default = [6, 6, 6, 6, 6, 6]
---  > from    = [1, 3, 7, 2, 5, 3]
---  > mask    = [3, 4, 9, 2, 7, 5]
---  > pred    = (>* 4)
---  > input   = [1, 9, 6, 4, 4, 2, 0, 1, 2]
---  >
---  > output  = [6, 6, 1, 6, 2, 4]
+-- >>> let defaults = fromList (Z :. 6) [6,6,6,6,6,6]
+-- >>> let from     = fromList (Z :. 6) [1,3,7,2,5,3]
+-- >>> let mask     = fromList (Z :. 6) [3,4,9,2,7,5]
+-- >>> let input    = fromList (Z :. 9) [1,9,6,4,4,2,0,1,2]
+-- >>> gatherIf (use from) (use mask) (>* 4) (use defaults) (use input)
+-- Vector (Z :. 6) [6,6,1,6,2,4]
 --
-gatherIf :: (Elt a, Elt b)
-         => Acc (Vector Int)      -- ^index mapping
-         -> Acc (Vector a)        -- ^mask
-         -> (Exp a -> Exp Bool)   -- ^predicate
-         -> Acc (Vector b)        -- ^default
-         -> Acc (Vector b)        -- ^input
-         -> Acc (Vector b)        -- ^output
+gatherIf
+    :: (Elt a, Elt b)
+    => Acc (Vector Int)           -- ^ source indices to gather from
+    -> Acc (Vector a)             -- ^ mask vector
+    -> (Exp a -> Exp Bool)        -- ^ predicate function
+    -> Acc (Vector b)             -- ^ default values
+    -> Acc (Vector b)             -- ^ source values
+    -> Acc (Vector b)
 gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
   where
     zf p g      = p ? (unlift g)
@@ -1501,63 +1499,50 @@ gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
 -- Scatter operations
 -- ------------------
 
--- | Copy elements from source array to destination array according to an index
---   mapping. This is a forward-permute operation where a 'to' vector encodes an
---   input to output index mapping. Output elements for indices that are not
---   mapped assume the default vector's value.
+-- | Overwrite elements of the destination by scattering the values of the
+-- source array according to the given index mapping.
 --
---   For example:
+-- Note that if the destination index appears more than once in the mapping the
+-- result is undefined.
 --
---  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---  > to      = [1, 3, 7, 2, 5, 8]
---  > input   = [1, 9, 6, 4, 4, 2, 5]
---  >
---  > output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
+-- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8]
+-- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5]
+-- >>> scatter (use to) (fill (constant (Z:.10)) 0) (use input)
+-- Vector (Z :. 10) [0,1,4,9,0,4,0,6,2,0]
 --
---   Note if the same index appears in the index mapping more than once, the
---   result is undefined. It does not makes sense for the 'to' vector to be
---   larger than the 'input' vector.
---
-scatter :: Elt e
-        => Acc (Vector Int)       -- ^index mapping
-        -> Acc (Vector e)         -- ^default
-        -> Acc (Vector e)         -- ^input
-        -> Acc (Vector e)         -- ^output
+scatter
+    :: Elt e
+    => Acc (Vector Int)           -- ^ destination indices to scatter into
+    -> Acc (Vector e)             -- ^ default values
+    -> Acc (Vector e)             -- ^ source values
+    -> Acc (Vector e)
 scatter to defaults input = permute const defaults pf input'
   where
     pf ix       = index1 (to ! ix)
     input'      = backpermute (shape to `intersect` shape input) id input
 
 
--- | Conditionally copy elements from source array to destination array according
---   to an index mapping. This is a forward-permute operation where a 'to'
---   vector encodes an input to output index mapping. In addition, there is a
---   'mask' vector, and an associated predicate function. The mapping will only
---   occur if the predicate function applied to the mask at that position
---   resolves to 'True'. If not copied, the output array assumes the default
---   vector's value.
+-- | Conditionally overwrite elements of the destination by scattering values of
+-- the source array according to a given index mapping, whenever the masking
+-- function resolves to 'True'.
 --
---   For example:
+-- Note that if the destination index appears more than once in the mapping the
+-- result is undefined.
 --
---  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---  > to      = [1, 3, 7, 2, 5, 8]
---  > mask    = [3, 4, 9, 2, 7, 5]
---  > pred    = (>* 4)
---  > input   = [1, 9, 6, 4, 4, 2, 5]
---  >
---  > output  = [0, 0, 0, 0, 0, 4, 0, 6, 2]
+-- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8]
+-- >>> let mask  = fromList (Z :. 6) [3,4,9,2,7,5]
+-- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5]
+-- >>> scatterIf (use to) (use mask) (>* 4) (fill (constant (Z:.10)) 0) (use input)
+-- Vector (Z :. 10) [0,0,0,0,0,4,0,6,2,0]
 --
---   Note if the same index appears in the mapping more than once, the result is
---   undefined. The 'to' and 'mask' vectors must be the same length. It does not
---   make sense for these to be larger than the 'input' vector.
---
-scatterIf :: (Elt e, Elt e')
-          => Acc (Vector Int)      -- ^index mapping
-          -> Acc (Vector e)        -- ^mask
-          -> (Exp e -> Exp Bool)   -- ^predicate
-          -> Acc (Vector e')       -- ^default
-          -> Acc (Vector e')       -- ^input
-          -> Acc (Vector e')       -- ^output
+scatterIf
+    :: (Elt e, Elt e')
+    => Acc (Vector Int)           -- ^ destination indices to scatter into
+    -> Acc (Vector e)             -- ^ mask vector
+    -> (Exp e -> Exp Bool)        -- ^ predicate function
+    -> Acc (Vector e')            -- ^ default values
+    -> Acc (Vector e')            -- ^ source values
+    -> Acc (Vector e')
 scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
     pf ix       = pred (maskV ! ix) ? ( index1 (to ! ix), ignore )
