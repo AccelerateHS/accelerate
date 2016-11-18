@@ -101,13 +101,14 @@ preAccType k pacc =
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Who on earth wrote all these weird error messages?"
 
-    Collect _ _         -> case arrays (undefined :: Array sh e) of
+    Collect _ _ _ _ _   -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Something funny"
 
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc
     Use a               -> arrayType a
+    Subarray _ _ a      -> arrayType a
     Unit _              -> eltType (undefined::e)
     Generate _ _        -> eltType (undefined::e)
     Transform _ _ _ _   -> eltType (undefined::e)
@@ -162,6 +163,7 @@ preExpType k e =
     IndexFull _ _ _   -> eltType (undefined::t)
     ToIndex _ _       -> eltType (undefined::t)
     FromIndex _ _     -> eltType (undefined::t)
+    ToSlice _ _ _     -> eltType (undefined::t)
     Cond _ t _        -> preExpType k t
     While _ _ _       -> eltType (undefined::t)
     PrimConst _       -> eltType (undefined::t)

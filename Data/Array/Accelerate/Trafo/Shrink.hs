@@ -4,6 +4,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
@@ -38,12 +39,6 @@ module Data.Array.Accelerate.Trafo.Shrink (
   UsesOfAcc, usesOfPreAcc, usesOfExp,
   Use(..), zeroUse, oneUse, allUse,
 
-  -- Dependency analysis
-  (::>)(..), Stronger(..), weakIn, weakOut,
-  DependenciesAcc, dependenciesOpenAcc,
-  dependenciesPreAcc, dependenciesAfun,
-  dependenciesProducer, dependenciesConsumer,
-
   -- Array access merging
   reduceAccessExp, reduceAccessFun, reduceAccessOpenAcc, reduceAccessPreAcc,
   reduceAccessAfun,
@@ -52,6 +47,7 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
 -- standard library
 import Data.Function                                    ( on )
+import Data.Maybe                                       ( fromMaybe )
 import Data.Monoid                                      hiding ( Last )
 import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, seq )
@@ -59,6 +55,7 @@ import Prelude                                          hiding ( exp, seq )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Sugar               hiding ( Any )
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product                   ( ProdR(..), TupleIdx(..) )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Substitution
@@ -209,7 +206,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Collect s cs              -> Collect (shrinkS s) (shrinkS <$> cs)
+      Collect min max i s cs    -> Collect (shrinkE min) (shrinkE <$> max) (shrinkE <$> i) (shrinkS s) (shrinkS <$> cs)
 
     shrinkS :: PreOpenSeq index acc aenv' a -> PreOpenSeq index acc aenv' a
     shrinkS seq =
@@ -221,18 +218,20 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkP :: Producer index acc aenv' a -> Producer index acc aenv' a
     shrinkP p =
       case p of
-        Pull src           -> Pull src
-        Subarrays sh arr   -> Subarrays (shrinkE sh) arr
-        Produce l f        -> Produce (shrinkE <$> l) (shrinkAF f)
-        MapBatch f f' a x  -> MapBatch (shrinkAF f) (shrinkAF f') (shrinkAcc a) (shrinkAcc x)
-        ProduceAccum l f a -> ProduceAccum (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
+        Pull src            -> Pull src
+        Subarrays sh arr    -> Subarrays (shrinkE sh) arr
+        Produce l f         -> Produce (shrinkE <$> l) (shrinkAF f)
+        -- MapBatch f c c' a x -> MapBatch (shrinkAF f) (shrinkAF c) (shrinkAF c') (shrinkAcc a) (shrinkAcc x)
+        ProduceAccum l f a  -> ProduceAccum (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
 
     shrinkC :: Consumer index acc aenv' a -> Consumer index acc aenv' a
     shrinkC c =
       case c of
-        FoldBatch f f' a x -> FoldBatch (shrinkAF f) (shrinkAF f') (shrinkAcc a) (shrinkAcc x)
-        Last a d           -> Last (shrinkAcc a) (shrinkAcc d)
-        Stuple t           -> Stuple (shrinkCT t)
+        FoldBatch f a x -> FoldBatch (shrinkAF f) (shrinkAcc a) (shrinkAcc x)
+        Last a d        -> Last (shrinkAcc a) (shrinkAcc d)
+        Elements x      -> Elements (shrinkAcc x)
+        Tabulate x      -> Tabulate (shrinkAcc x)
+        Stuple t        -> Stuple (shrinkCT t)
 
     shrinkCT :: Atuple (PreOpenSeq index acc aenv') t -> Atuple (PreOpenSeq index acc aenv') t
     shrinkCT NilAtup        = NilAtup
@@ -341,6 +340,8 @@ updateUseElt (UseEltTuple ut) ix = UseEltTuple . tup ut ix
     tup :: Tuple UseElt t -> TupleIdx t a -> UseElt a -> Tuple UseElt t
     tup (SnocTup t s) ZeroTupIdx      a = SnocTup t (s <+.> a)
     tup (SnocTup t s) (SuccTupIdx ix) a = SnocTup (tup t ix a) s
+    tup _             _               _ = error "Gentlemen, you can't fight in here!"
+updateUseElt _                _  = error "This is the war room!"
 
 -- A variable's components each occur `n` times in total.
 --
@@ -361,10 +362,12 @@ oneUseElt  = nUseElt 1
 instance Eq (UseElt a) where
   UseElt c1      == UseElt c2      = c1 == c2
   UseEltTuple t1 == UseEltTuple t2 = t1 == t2
+  _              == _              = error "Impossible usage"
 
 instance Eq (Tuple UseElt t) where
   NilTup        == NilTup        = True
   SnocTup t1 a1 == SnocTup t2 a2 = t1 == t2 && a1 == a2
+  _             == _             = error "Impossible usage"
 
 -- Check if a condition is try for the use of all components.
 --
@@ -565,7 +568,8 @@ usesOfPreAcc countAcc idx = count
       Backpermute sh f a        -> countE sh <+> countF f  <+> countA a
       Stencil f _ a             -> countF f  <+> countA a
       Stencil2 f _ a1 _ a2      -> countF f  <+> countA a1 <+> countA a2
-      Collect s cs              -> maybe (usesOfPreSeq countAcc idx s) (usesOfPreSeq countAcc idx) cs
+      Collect min max i s cs    -> foldl (<+>) zeroUse (map (fromMaybe zeroUse . fmap countE) [Just min,max,i])
+                                <+> maybe (usesOfPreSeq countAcc idx s) (usesOfPreSeq countAcc idx) cs
 
     countA :: acc aenv a -> Use s
     countA = countAcc idx
@@ -594,6 +598,7 @@ usesOfPreAcc countAcc idx = count
     prj :: Atuple k t' -> TupleIdx t' a -> k a
     prj (SnocAtup _ a) ZeroTupIdx      = a
     prj (SnocAtup t _) (SuccTupIdx ix) = prj t ix
+    prj NilAtup        _               = error "That'll do, pig. That'll do"
 
 prjChain :: Kit acc => Idx aenv s -> acc aenv t' -> Use t' -> Maybe (Use s)
 prjChain idx a u =
@@ -618,18 +623,20 @@ usesOfPreSeq countAcc idx seq =
     countP :: Producer index acc aenv arrs -> Use s
     countP p =
       case p of
-        Pull _             -> zeroUse
-        Subarrays sh _     -> countE sh
-        Produce l f        -> maybe zeroUse countE l <+> countAF f idx
-        MapBatch f f' a x  -> countAF f idx <+> countAF f' idx <+> countA a <+> countA x
-        ProduceAccum l f a -> maybe zeroUse countE l <+> countAF f idx <+> countA a
+        Pull _              -> zeroUse
+        Subarrays sh _      -> countE sh
+        Produce l f         -> maybe zeroUse countE l <+> countAF f idx
+        -- MapBatch f c c' a x -> countAF f idx <+> countAF c idx <+> countAF c' idx <+> countA a <+> countA x
+        ProduceAccum l f a  -> maybe zeroUse countE l <+> countAF f idx <+> countA a
 
     countC :: Consumer index acc aenv arrs -> Use s
     countC c =
       case c of
-        FoldBatch f f' a x -> countAF f idx <+> countAF f' idx <+> countA a <+> countA x
-        Last a d           -> countA a <+> countA d
-        Stuple t           -> countCT t
+        FoldBatch f a x -> countAF f idx <+> countA a <+> countA x
+        Last a d        -> countA a <+> countA d
+        Elements x      -> countA x
+        Tabulate x      -> countA x
+        Stuple t        -> countCT t
 
     countCT :: Atuple (PreOpenSeq index acc aenv) t' -> Use s
     countCT NilAtup        = zeroUse
@@ -705,214 +712,6 @@ usesOfExpA countAcc idx exp =
     countA :: acc aenv a -> Use t
     countA = countAcc idx
 
--- Given an array term in environment 'aenv', determine what variables, are
--- actually referenced. This yields a new environment,
---
-type DependenciesAcc acc = forall aenv t. acc aenv t -> Stronger aenv
-
--- A reified proof that aenv' is weaker than aenv.
---
-data aenv ::> aenv' where
-  WeakEmpty :: ()   ::> aenv
-  WeakBase  :: aenv ::> aenv
-  WeakIn    :: aenv ::> aenv' -> (aenv,a) ::> (aenv',a)
-  WeakOut   :: aenv ::> aenv' -> aenv     ::> (aenv', a)
-
--- Existentially captures a stronger environment than aenv
---
-data Stronger aenv where
-  Stronger :: aenv' ::> aenv -> Stronger aenv
-
-weakIn, weakOut :: Stronger aenv -> Stronger (aenv,a)
-weakIn  (Stronger v) = Stronger (WeakIn v)
-weakOut (Stronger v) = Stronger (WeakOut v)
-
-dropTop :: Stronger (aenv, a) -> Stronger aenv
-dropTop (Stronger WeakEmpty) = Stronger WeakEmpty
-dropTop (Stronger WeakBase) = Stronger WeakBase
-dropTop (Stronger (WeakIn rv)) = Stronger rv
-dropTop (Stronger (WeakOut rv)) = Stronger rv
-
-single :: Idx aenv t -> Stronger aenv
-single ZeroIdx = weakIn mempty
-single (SuccIdx ix) = weakOut (single ix)
-
-instance Monoid (Stronger env) where
-  mempty = Stronger WeakEmpty
-
-  mappend (Stronger WeakEmpty) (Stronger v) = Stronger v
-  mappend (Stronger v) (Stronger WeakEmpty) = Stronger v
-  mappend (Stronger WeakBase) (Stronger _)  = Stronger WeakBase
-  mappend (Stronger _) (Stronger WeakBase) = Stronger WeakBase
-  mappend (Stronger (WeakIn v)) (Stronger (WeakIn v')) = weakIn (Stronger v <> Stronger v')
-  mappend (Stronger (WeakIn v)) (Stronger (WeakOut v')) = weakIn (Stronger v <> Stronger v')
-  mappend (Stronger (WeakOut v)) (Stronger (WeakIn v')) = weakIn (Stronger v <> Stronger v')
-  mappend (Stronger (WeakOut v)) (Stronger (WeakOut v')) = weakOut (Stronger v <> Stronger v')
-
-dependenciesOpenAcc :: OpenAcc aenv t -> Stronger aenv
-dependenciesOpenAcc (OpenAcc acc) = dependenciesPreAcc dependenciesOpenAcc acc
-
-dependenciesPreAcc
-    :: forall acc aenv t. Kit acc
-    => DependenciesAcc  acc
-    -> PreOpenAcc acc aenv t
-    -> Stronger aenv
-dependenciesPreAcc depsAcc = deps
-  where
-    deps :: PreOpenAcc acc aenv a -> Stronger aenv
-    deps pacc = case pacc of
-      Avar this                 -> single this
-      --
-      Alet bnd body             -> depsAcc bnd <> dropTop (depsAcc body)
-      Atuple tup                -> depsAT tup
-      Aprj _ a                  -> depsAcc a
-      Apply f a                 -> depsAF f <> depsAcc a
-      Aforeign _ _ a            -> depsAcc a
-      Acond p t e               -> depsE p  <> depsAcc t <> depsAcc e
-      Awhile p f a              -> depsAF p <> depsAF f <> depsAcc a
-      Use _                     -> mempty
-      Subarray ix sh _          -> depsE ix <> depsE sh
-      Unit e                    -> depsE e
-      Reshape e a               -> depsE e  <> depsAcc a
-      Generate e f              -> depsE e  <> depsF f
-      Transform sh ix f a       -> depsE sh <> depsF ix <> depsF f  <> depsAcc a
-      Replicate _ sh a          -> depsE sh <> depsAcc a
-      Slice _ a sl              -> depsE sl <> depsAcc a
-      Map f a                   -> depsF f  <> depsAcc a
-      ZipWith f a1 a2           -> depsF f  <> depsAcc a1 <> depsAcc a2
-      Fold f z a                -> depsF f  <> depsE z  <> depsAcc a
-      Fold1 f a                 -> depsF f  <> depsAcc a
-      FoldSeg f z a s           -> depsF f  <> depsE z  <> depsAcc a  <> depsAcc s
-      Fold1Seg f a s            -> depsF f  <> depsAcc a  <> depsAcc s
-      Scanl f z a               -> depsF f  <> depsE z  <> depsAcc a
-      Scanl' f z a              -> depsF f  <> depsE z  <> depsAcc a
-      Scanl1 f a                -> depsF f  <> depsAcc a
-      Scanr f z a               -> depsF f  <> depsE z  <> depsAcc a
-      Scanr' f z a              -> depsF f  <> depsE z  <> depsAcc a
-      Scanr1 f a                -> depsF f  <> depsAcc a
-      Permute f1 a1 f2 a2       -> depsF f1 <> depsAcc a1 <> depsF f2 <> depsAcc a2
-      Backpermute sh f a        -> depsE sh <> depsF f  <> depsAcc a
-      Stencil f _ a             -> depsF f  <> depsAcc a
-      Stencil2 f _ a1 _ a2      -> depsF f  <> depsAcc a1 <> depsAcc a2
-      Collect s cs              -> dependenciesPreSeq depsAcc s  <> maybe mempty (dependenciesPreSeq depsAcc) cs
-
-    depsAF :: Kit acc
-           => PreOpenAfun acc aenv' f
-           -> Stronger aenv'
-    depsAF = dependenciesAfun depsAcc
-
-    depsF :: PreOpenFun acc env aenv f -> Stronger aenv
-    depsF (Lam  f) = depsF f
-    depsF (Body b) = depsE b
-
-    depsAT :: Atuple (acc aenv) a -> Stronger aenv
-    depsAT NilAtup        = mempty
-    depsAT (SnocAtup t a) = depsAT t <> depsAcc a
-
-    depsE :: PreOpenExp acc env aenv e -> Stronger aenv
-    depsE = dependenciesExp depsAcc
-
-dependenciesAfun :: DependenciesAcc acc
-                    -> PreOpenAfun acc aenv t
-                    -> Stronger aenv
-dependenciesAfun depsAcc (Alam f)  = dropTop (dependenciesAfun depsAcc f)
-dependenciesAfun depsAcc (Abody a) = depsAcc a
-
-dependenciesPreSeq :: forall acc index aenv t. Kit acc
-                   => DependenciesAcc acc
-                   -> PreOpenSeq index acc aenv t
-                   -> Stronger aenv
-dependenciesPreSeq depsAcc seq =
-  case seq of
-    Producer p s -> dependenciesProducer depsAcc p <> dropTop (dependenciesPreSeq depsAcc s)
-    Consumer c   -> dependenciesConsumer depsAcc c
-    Reify a      -> depsAcc a
-
-dependenciesProducer :: forall acc index aenv arrs. Kit acc
-                     => DependenciesAcc acc
-                     -> Producer index acc aenv arrs
-                     -> Stronger aenv
-dependenciesProducer depsAcc p =
-  case p of
-    Pull _             -> mempty
-    Subarrays sh _     -> depsE sh
-    Produce l f        -> maybe mempty depsE l <> depsAF f
-    MapBatch f f' a x  -> depsAF f <> depsAF f' <> depsAcc a <> depsAcc x
-    ProduceAccum l f a -> maybe mempty depsE l <> depsAF f <> depsAcc a
-  where
-    depsAF :: Kit acc
-            => PreOpenAfun acc aenv' f
-            -> Stronger aenv'
-    depsAF = dependenciesAfun depsAcc
-
-    depsE :: PreOpenExp acc env aenv e -> Stronger aenv
-    depsE = dependenciesExp depsAcc
-
-dependenciesConsumer :: forall acc index aenv arrs. Kit acc
-                     => DependenciesAcc acc
-                     -> Consumer index acc aenv arrs
-                     -> Stronger aenv
-dependenciesConsumer depsAcc c =
-  case c of
-    FoldBatch f f' a x -> depsAF f <> depsAF f' <> depsAcc a <> depsAcc x
-    Last a d           -> depsAcc a <> depsAcc d
-    Stuple t           -> depsCT t
-  where
-    depsCT :: Atuple (PreOpenSeq index acc aenv) t' -> Stronger aenv
-    depsCT NilAtup        = mempty
-    depsCT (SnocAtup t c) = depsCT t <> dependenciesPreSeq depsAcc c
-
-    depsAF :: Kit acc
-           => PreOpenAfun acc aenv' f
-           -> Stronger aenv'
-    depsAF = dependenciesAfun depsAcc
-
-dependenciesExp :: forall acc env aenv e.
-                   DependenciesAcc acc
-                -> PreOpenExp acc env aenv e
-                -> Stronger aenv
-dependenciesExp depsAcc exp =
-  case exp of
-    Let bnd body              -> depsE bnd <> depsE body
-    Var _                     -> mempty
-    Const _                   -> mempty
-    Tuple t                   -> depsT t
-    Prj _ e                   -> depsE e
-    IndexNil                  -> mempty
-    IndexCons sl sz           -> depsE sl <> depsE sz
-    IndexHead sh              -> depsE sh
-    IndexTail sh              -> depsE sh
-    IndexTrans sh             -> depsE sh
-    IndexSlice _ _ sh         -> depsE sh
-    IndexFull _ ix sl         -> depsE ix <> depsE sl
-    IndexAny                  -> mempty
-    ToIndex sh ix             -> depsE sh <> depsE ix
-    FromIndex sh i            -> depsE sh <> depsE i
-    ToSlice _ sh i            -> depsE sh <> depsE i
-    Cond p t e                -> depsE p  <> depsE t <> depsE e
-    While p f x               -> depsF p  <> depsF f <> depsE x
-    PrimConst _               -> mempty
-    PrimApp _ x               -> depsE x
-    Index a sh                -> depsAcc a <> depsE sh
-    LinearIndex a i           -> depsAcc a <> depsE i
-    ShapeSize sh              -> depsE sh
-    Intersect sh sz           -> depsE sh <> depsE sz
-    Union sh sz               -> depsE sh <> depsE sz
-    Shape a                   -> depsAcc a
-    Foreign _ _ e             -> depsE e
-
-  where
-    depsE :: PreOpenExp acc env' aenv e' -> Stronger aenv
-    depsE = dependenciesExp depsAcc
-
-    depsT :: Tuple (PreOpenExp acc env aenv) e' -> Stronger aenv
-    depsT NilTup        = mempty
-    depsT (SnocTup t e) = depsT t <> depsE e
-
-    depsF :: PreOpenFun acc env' aenv f -> Stronger aenv
-    depsF (Lam  f) = depsF f
-    depsF (Body b) = depsE b
-
 
 -- Find and merge common array accesses
 --
@@ -951,6 +750,8 @@ reduceAccessPreAcc reduceAcc idx pacc =
     ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
     Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)
     Fold1 f a                 -> Fold1 (cvtF f) (cvtA a)
+    FoldSeg f z a s           -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
+    Fold1Seg f a s            -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
     Scanl f z a               -> Scanl (cvtF f) (cvtE z) (cvtA a)
     Scanl' f z a              -> Scanl' (cvtF f) (cvtE z) (cvtA a)
     Scanl1 f a                -> Scanl1 (cvtF f) (cvtA a)
@@ -961,7 +762,7 @@ reduceAccessPreAcc reduceAcc idx pacc =
     Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
     Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
     Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-    Collect s cs              -> Collect (reduceAccessSeq reduceAcc idx s) (reduceAccessSeq reduceAcc idx <$> cs)
+    Collect min max i s cs    -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (reduceAccessSeq reduceAcc idx s) (reduceAccessSeq reduceAcc idx <$> cs)
 
   where
     cvtA :: acc aenv a' -> acc aenv a'
@@ -1006,16 +807,20 @@ reduceAccessSeq reduceAcc idx seq =
     cvtE = reduceAccessExp idx
 
     cvtP :: Producer index acc aenv a' -> Producer index acc aenv a'
-    cvtP (Pull src) = Pull src
+    cvtP (Pull src)           = Pull src
     cvtP (ProduceAccum l f a) = ProduceAccum (cvtE <$> l) (reduceAccessAfun reduceAcc idx f) (cvtA a)
+    cvtP _                    = stageError
 
     cvtC :: Consumer index acc aenv a' -> Consumer index acc aenv a'
     cvtC (Last a d) = Last (cvtA a) (cvtA d)
     cvtC (Stuple t) = Stuple (cvtT t)
+    cvtC _          = stageError
 
     cvtT :: Atuple (PreOpenSeq index acc aenv) t -> Atuple (PreOpenSeq index acc aenv) t
-    cvtT NilAtup = NilAtup
+    cvtT NilAtup        = NilAtup
     cvtT (SnocAtup t s) = SnocAtup (cvtT t) (reduceAccessSeq reduceAcc idx s)
+
+    stageError = $internalError "reduceAccessSeq" "Sequence AST is at an unexpected stage"
 
 reduceAccessExp :: (Kit acc, Shape sh, Elt e)
                 => Idx aenv (Array sh e)
@@ -1083,6 +888,7 @@ elimArrayAccess idx exp =
                      | otherwise
                      -> Right (Lam (Body (inline e (access sh))))
         Right b'     -> Right (Lam (Body b'))
+    cvtF _ = error "Impossible function"
 
     cvtE1 :: forall s t.
              (forall env. PreOpenExp acc env aenv s -> PreOpenExp acc env aenv t)

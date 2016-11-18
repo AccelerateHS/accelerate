@@ -479,7 +479,9 @@ rebuildPreOpenAcc k av acc =
     Stencil f b a       -> Stencil <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
-    Collect s cs        -> Collect <$> rebuildSeq k av s <*> sequenceA (rebuildSeq k av <$> cs)
+    Collect min max i s cs
+                        -> Collect <$> rebuildPreOpenExp k (pure . IE) av min <*> sequenceA (rebuildPreOpenExp k (pure . IE) av <$> max)
+                                   <*> sequenceA (rebuildPreOpenExp k (pure . IE) av <$> i) <*> rebuildSeq k av s <*> sequenceA (rebuildSeq k av <$> cs)
 
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
@@ -522,11 +524,11 @@ rebuildP :: (SyntacticAcc fa, Applicative f)
          -> f (Producer idx acc aenv' a)
 rebuildP k v p =
   case p of
-    Pull arrs          -> pure (Pull arrs)
-    Subarrays sh arr   -> Subarrays <$> rebuildPreOpenExp k (pure . IE) v sh <*> pure arr
-    Produce l f        -> Produce <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f
-    MapBatch f f' a x  -> MapBatch <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> k v a <*> k v x
-    ProduceAccum l f a -> ProduceAccum <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f <*> k v a
+    Pull arrs           -> pure (Pull arrs)
+    Subarrays sh arr    -> Subarrays <$> rebuildPreOpenExp k (pure . IE) v sh <*> pure arr
+    Produce l f         -> Produce <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f
+    -- MapBatch f c c' a x -> MapBatch <$> rebuildAfun k v f <*> rebuildAfun k v c <*> rebuildAfun k v c' <*> k v a <*> k v x
+    ProduceAccum l f a  -> ProduceAccum <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f <*> k v a
 
 rebuildC :: forall idx acc fa f aenv aenv' a. (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -535,9 +537,11 @@ rebuildC :: forall idx acc fa f aenv aenv' a. (SyntacticAcc fa, Applicative f)
          -> f (Consumer idx acc aenv' a)
 rebuildC k v c =
   case c of
-    FoldBatch f f' a x -> FoldBatch <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> k v a <*> k v x
-    Stuple t           -> Stuple <$> rebuildT t
-    Last a d           -> Last <$> k v a <*> k v d
+    FoldBatch f a x -> FoldBatch <$> rebuildAfun k v f <*> k v a <*> k v x
+    Stuple t        -> Stuple <$> rebuildT t
+    Last a d        -> Last <$> k v a <*> k v d
+    Elements x      -> Elements <$> k v x
+    Tabulate x      -> Tabulate <$> k v x
   where
     rebuildT :: Atuple (PreOpenSeq idx acc aenv) t -> f (Atuple (PreOpenSeq idx acc aenv') t)
     rebuildT NilAtup        = pure NilAtup

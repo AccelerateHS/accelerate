@@ -1,8 +1,10 @@
 {-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE IncoherentInstances  #-}
 {-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
@@ -25,7 +27,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:=:)(REFL),
-  avarIn, kmap, fromOpenAfun,
+  avarIn, kmap, fromOpenAfun, fromOpenExp, fromOpenFun,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -42,20 +44,27 @@ module Data.Array.Accelerate.Trafo.Base (
 
   subApply, inlineA,
 
+  -- Tuples
+  FreeProd, IsAtupleRepr,
+
 ) where
 
 -- standard library
-import Control.Applicative
+import Control.Applicative                              hiding ( Const )
 import Data.Hashable
-import Text.PrettyPrint
+import Data.Monoid
+import Data.Typeable
+import Text.PrettyPrint                                 hiding ( (<>) )
 import Prelude                                          hiding ( until )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( Val(..) )
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), Shape, Elt, IsAtuple, ArrRepr, ArraysR(..), ArraysFlavour(..), Tuple(..), )
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Product                    ( ProdRepr, IsProduct(..), ProdR(..) )
 import Data.Array.Accelerate.Pretty.Print
+import Data.Array.Accelerate.Trafo.Dependency
 import Data.Array.Accelerate.Trafo.Substitution
 
 import Data.Array.Accelerate.Debug.Stats                as Stats
@@ -68,22 +77,24 @@ import Data.Array.Accelerate.Debug.Stats                as Stats
 -- by the recursive closure.
 --
 class (RebuildableAcc acc, Sink acc) => Kit acc where
-  inject        :: PreOpenAcc acc aenv a -> acc aenv a
-  extract       :: acc aenv a -> PreOpenAcc acc aenv a
-  fromOpenAcc   :: OpenAcc aenv a -> acc aenv a
+  inject          :: PreOpenAcc acc aenv a -> acc aenv a
+  extract         :: acc aenv a -> PreOpenAcc acc aenv a
+  fromOpenAcc     :: OpenAcc aenv a -> acc aenv a
   --
-  matchAcc      :: MatchAcc acc
-  hashAcc       :: HashAcc acc
-  prettyAcc     :: PrettyAcc acc
+  matchAcc        :: MatchAcc acc
+  hashAcc         :: HashAcc acc
+  prettyAcc       :: PrettyAcc acc
+  dependenciesAcc :: DependenciesAcc acc
 
 instance Kit OpenAcc where
   inject                 = OpenAcc
   extract (OpenAcc pacc) = pacc
   fromOpenAcc            = id
 
-  matchAcc      = matchOpenAcc
-  hashAcc       = hashOpenAcc
-  prettyAcc     = prettyOpenAcc
+  matchAcc        = matchOpenAcc
+  hashAcc         = hashOpenAcc
+  prettyAcc       = prettyOpenAcc
+  dependenciesAcc = dependenciesOpenAcc
 
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
 avarIn = inject  . Avar
@@ -94,6 +105,59 @@ kmap f = inject . f . extract
 fromOpenAfun :: Kit acc => OpenAfun aenv f -> PreOpenAfun acc aenv f
 fromOpenAfun (Abody a) = Abody $ fromOpenAcc a
 fromOpenAfun (Alam f)  = Alam  $ fromOpenAfun f
+
+fromOpenExp :: Kit acc => OpenExp env aenv e -> PreOpenExp acc env aenv e
+fromOpenExp = cvtE
+  where
+    cvtA :: Kit acc => OpenAcc aenv t -> acc aenv t
+    cvtA = fromOpenAcc
+
+    cvtT :: Kit acc => Tuple (OpenExp env aenv) t -> Tuple (PreOpenExp acc env aenv) t
+    cvtT tup = case tup of
+      NilTup      -> NilTup
+      SnocTup t a -> cvtT t `SnocTup` cvtE a
+
+    cvtF :: Kit acc => OpenFun env aenv t -> PreOpenFun acc env aenv t
+    cvtF = fromOpenFun
+
+    cvtE :: Kit acc => OpenExp env aenv t -> PreOpenExp acc env aenv t
+    cvtE exp =
+      case exp of
+        Let bnd body            -> Let (cvtE bnd) (cvtE body)
+        Var ix                  -> Var ix
+        Const c                 -> Const c
+        Tuple tup               -> Tuple (cvtT tup)
+        Prj tup t               -> Prj tup (cvtE t)
+        IndexNil                -> IndexNil
+        IndexCons sh sz         -> IndexCons (cvtE sh) (cvtE sz)
+        IndexHead sh            -> IndexHead (cvtE sh)
+        IndexTail sh            -> IndexTail (cvtE sh)
+        IndexTrans sh           -> IndexTrans (cvtE sh)
+        IndexAny                -> IndexAny
+        IndexSlice x ix sh      -> IndexSlice x ix (cvtE sh)
+        IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
+        ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
+        FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
+        ToSlice x sh i          -> ToSlice x (cvtE sh) (cvtE i)
+        Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
+        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
+        PrimConst c             -> PrimConst c
+        PrimApp f x             -> PrimApp f (cvtE x)
+        Index a sh              -> Index (cvtA a) (cvtE sh)
+        LinearIndex a i         -> LinearIndex (cvtA a) (cvtE i)
+        Shape a                 -> Shape (cvtA a)
+        ShapeSize sh            -> ShapeSize (cvtE sh)
+        Intersect s t           -> Intersect (cvtE s) (cvtE t)
+        Union s t               -> Union (cvtE s) (cvtE t)
+        Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
+
+fromOpenFun :: Kit acc
+            => OpenFun env aenv t
+            -> PreOpenFun acc env aenv t
+fromOpenFun fun =
+  case fun of
+    Body b -> Body (fromOpenExp b)
+    Lam f  -> Lam (fromOpenFun f)
 
 -- A class for testing the equality of terms homogeneously, returning a witness
 -- to the existentially quantified terms in the positive case.
@@ -167,6 +231,7 @@ instance Kit DelayedOpenAcc where
   matchAcc                = matchDelayed
   hashAcc                 = hashDelayed
   prettyAcc               = prettyDelayed
+  dependenciesAcc         = dependenciesDelayed
 
 
 hashDelayed :: HashAcc DelayedOpenAcc
@@ -213,6 +278,10 @@ prettyDelayed wrap aenv acc = case acc of
                   , parens (prettyPreFun prettyDelayed aenv f)
                   ]
 
+dependenciesDelayed :: DependenciesAcc DelayedOpenAcc
+dependenciesDelayed acc = case acc of
+  Manifest pacc -> dependenciesPreAcc dependenciesDelayed pacc
+  Delayed sh f _ -> dependenciesExp dependenciesDelayed sh <> dependenciesFun dependenciesDelayed f
 
 -- Pretty print delayed sequences
 --
@@ -297,10 +366,10 @@ append x (PushEnv as a) = x `append` as `PushEnv` a
 --
 bind :: (Kit acc, Arrays a)
      => Extend acc aenv aenv'
-     -> PreOpenAcc acc aenv' a
-     -> PreOpenAcc acc aenv  a
+     -> acc aenv' a
+     -> acc aenv  a
 bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet a . inject
+bind (PushEnv env a) = bind env . inject . Alet a
 
 -- Sink a term from one array environment into another, where additional
 -- bindings have come into scope according to the witness and no old things have
@@ -358,3 +427,73 @@ subApply _                _ = error "subApply: inconsistent evaluation"
 --
 inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
 inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f
+
+-- Tuple manipulation
+-- ==================
+
+-- Note: [Tuple manipulation]
+--
+-- As a part of various transformations, we need to be able to transform tuples
+-- and other product types. Unfortunately, due to the way product types are
+-- represented in Accelerate, with a non injective relationship between surface
+-- types and representation types, this causes problems. Supposing we have a
+-- tuple like so
+--
+--   (a,b,c)
+--
+-- then suppose we want to pull b out of it, leaving us with (a,c). However,
+-- the only way we can inspect the structure of a product is via its
+-- representation type. That means we take
+--
+-- ((((),a),b),c)
+--
+-- and product (((),a),c). But what is the surface type corresponding to this
+-- representation type?
+--
+-- FreeProd is a product type that gives a surface type for any product
+-- representation type. That is, for all t, FreeProd (ProdRepr t) is a valid
+-- product type. Additionally, for all t', ProdRepr (FreeProd t') ~ t'. This
+-- gives us what we need in order to transform product types.
+--
+
+-- The free product. A surface product type for any given product representation
+-- tyoe.
+--
+data FreeProd t where
+  NilFreeProd  :: FreeProd ()
+  SnocFreeProd :: Arrays s => FreeProd t -> s -> FreeProd (t,s)
+  deriving ( Typeable )
+
+instance IsProduct Arrays (FreeProd ()) where
+  type ProdRepr (FreeProd ()) = ()
+  fromProd _ _ = ()
+  toProd _ _ = NilFreeProd
+  prod _ _ = ProdRunit
+
+instance (IsProduct Arrays (FreeProd t), Arrays s) => IsProduct Arrays (FreeProd (t,s)) where
+  type ProdRepr (FreeProd (t,s)) = (ProdRepr (FreeProd t), s)
+  fromProd cst (SnocFreeProd t s) = (fromProd cst t, s)
+  toProd cst (t,s) = SnocFreeProd (toProd cst t) s
+  prod cst _ = ProdRsnoc (prod cst (undefined :: FreeProd t))
+
+type instance ArrRepr (FreeProd (t,a)) = (ArrRepr (FreeProd t), ArrRepr a)
+type instance ArrRepr (FreeProd ())    = ((),())
+
+instance (IsAtuple (FreeProd t), Typeable t, Arrays (FreeProd t), Arrays a) => Arrays (FreeProd (t,a)) where
+  arrays  _ = arrays (undefined :: FreeProd t) `ArraysRpair` arrays (undefined :: a)
+  flavour _ = ArraysFtuple
+  --
+  toArr (t,a) = SnocFreeProd (toArr t) (toArr a)
+  fromArr (SnocFreeProd t a) = (fromArr t, fromArr a)
+
+instance Arrays (FreeProd ()) where
+  arrays  _ = ArraysRpair ArraysRunit ArraysRunit
+  flavour _ = ArraysFtuple
+  --
+  toArr   _ = NilFreeProd
+  fromArr _ = ((),())
+
+-- Unofortunately, the properties that hold for all array tuple representations
+-- GHCs typechecker cannot infer.
+--
+type IsAtupleRepr t = (Arrays (FreeProd t), Typeable t, IsAtuple (FreeProd t), t ~ ProdRepr (FreeProd t))

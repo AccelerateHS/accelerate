@@ -160,13 +160,10 @@ module Data.Array.Accelerate (
   P.toSeqInner, P.toSeqOuter,
 
   -- ** Sequence transducers
-  L.mapSeq, L.zipWithSeq, P.mapSeqE, P.zipWithSeqE, P.scanSeqE, L.mapBatch, P.zipSeq, P.unzipSeq,
+  L.mapSeq, L.zipWithSeq, P.mapSeqE, P.zipWithSeqE, P.zipSeq, P.unzipSeq,
 
   -- ** Sequence consumers
-  P.foldSeqE, P.foldSeqFlatten, P.fromSeq, P.concatElems, P.concatShapes, L.foldBatch, P.isIrregularSeq,
-
-  -- ** Batched sequencing
-  L.Nested, P.denest, P.denest3, P.nestedValues, P.nestedSize,
+  P.foldSeqE, P.fromSeq, L.elements, P.shapes, L.tabulate, L.foldBatch,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),
@@ -180,7 +177,7 @@ module Data.Array.Accelerate (
   -- ** Foreign
   L.foreignAcc, L.foreignAcc2, L.foreignAcc3,
   L.foreignExp, L.foreignExp2, L.foreignExp3,
-  L.VectorisedForeign(..),
+  L.VectorisedRegularForeign(..),
 
   -- ---------------------------------------------------------------------------
 

@@ -79,7 +79,6 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Lifted       ( Nested )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST                hiding (
@@ -266,6 +265,11 @@ data PreAcc acc seq exp as where
                 -> PreAcc acc seq exp arrs
 
 data PreSeq acc seq exp arrs where
+  -- Needed for conversion to de Bruijn form
+  Stag           :: Arrays t
+                 => Level                        -- environment size at defining occurrence
+                 -> PreSeq acc seq exp [t]
+
   StreamIn       :: Arrays a
                  => [a]
                  -> PreSeq acc seq exp [a]
@@ -291,23 +295,40 @@ data PreSeq acc seq exp arrs where
                  -> seq [b]
                  -> PreSeq acc seq exp [c]
 
-  MapBatch       :: (Arrays a, Arrays b, Arrays c, Arrays s)
-                 => (Acc s -> Acc a -> acc b)
-                 -> (Acc s -> Acc (Nested b) -> acc (s, Nested c))
-                 -> acc s
-                 -> seq [a]
-                 -> PreSeq acc seq exp [(s,c)]
+  -- MapBatch       :: (Arrays a, Arrays b, Arrays c, Arrays s)
+  --                => (Acc s -> Acc a -> acc b)
+  --                -> (Acc s -> Acc (Regular b) -> acc (s, Regular c))
+  --                -> (Acc s -> Acc (Irregular b) -> acc (s, Irregular c))
+  --                -> acc s
+  --                -> seq [a]
+  --                -> PreSeq acc seq exp [(s,c)]
 
-  FoldBatch      :: (Arrays a, Arrays b, Arrays s)
-                 => (Acc s -> Acc a -> acc b)
-                 -> (Acc s -> Acc (Nested b) -> acc s)
+  -- FIXME: The Seq argument to the reduction function is only that because
+  -- sequences are currently the only nested structure we have. It should really
+  -- be a nested array.
+  --
+  FoldBatch      :: (Arrays a, Arrays s, Arrays b)
+                 => (Acc s -> Seq [a] -> seq b)
+                 -> (Acc b -> acc s)
                  -> acc s
                  -> seq [a]
                  -> PreSeq acc seq exp s
 
   Stuple         :: (Arrays arrs, IsAtuple arrs)
-                 => Atuple (seq) (TupleRepr arrs)
+                 => Atuple seq (TupleRepr arrs)
                  -> PreSeq acc seq exp arrs
+
+  Elements       :: (Shape sh, Elt e)
+                 => seq [Array sh e]
+                 -> PreSeq acc seq exp (Vector e)
+
+  Tabulate       :: (Shape sh, Elt e)
+                 => seq [Array sh e]
+                 -> PreSeq acc seq exp (Array (sh:.Int) e)
+
+  AsSeq          :: (Arrays a)
+                 => acc a
+                 -> PreSeq acc seq exp a
 
 -- |Array-valued collective computations
 --
@@ -1542,14 +1563,18 @@ showPreAccOp Aforeign{}         = "Aforeign"
 showPreAccOp Collect{}          = "Collect"
 
 showPreSeqOp :: PreSeq acc seq exp arrs -> String
+showPreSeqOp Stag{}           = "Stag"
 showPreSeqOp StreamIn{}       = "StreamIn"
 showPreSeqOp Subarrays{}      = "Subarrays"
 showPreSeqOp Produce{}        = "Produce"
 showPreSeqOp MapSeq{}         = "MapSeq"
 showPreSeqOp ZipWithSeq{}     = "ZipWithSeq"
-showPreSeqOp MapBatch{}       = "MapBatch"
+-- showPreSeqOp MapBatch{}       = "MapBatch"
 showPreSeqOp FoldBatch{}      = "FoldBatch"
 showPreSeqOp Stuple{}         = "Stuple"
+showPreSeqOp Elements{}       = "Elements"
+showPreSeqOp Tabulate{}       = "Tabulate"
+showPreSeqOp AsSeq{}          = "AsSeq"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

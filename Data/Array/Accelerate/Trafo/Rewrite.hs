@@ -92,7 +92,7 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Collect s cs              -> Collect (convertSegmentsSeq s) (convertSegmentsSeq <$> cs)
+      Collect min max i s cs    -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (convertSegmentsSeq s) (convertSegmentsSeq <$> cs)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
@@ -128,18 +128,20 @@ convertSegmentsSeq seq =
     cvtP :: Producer index OpenAcc aenv a -> Producer index OpenAcc aenv a
     cvtP p =
       case p of
-        Pull src           -> Pull src
-        Subarrays sh arr   -> Subarrays (cvtE sh) arr
-        Produce l f        -> Produce (cvtE <$> l) (cvtAfun f)
-        MapBatch f f' a x  -> MapBatch (cvtAfun f) (cvtAfun f') (cvtA a) (cvtA x)
-        ProduceAccum l f a -> ProduceAccum (cvtE <$> l) (cvtAfun f) (cvtA a)
+        Pull src            -> Pull src
+        Subarrays sh arr    -> Subarrays (cvtE sh) arr
+        Produce l f         -> Produce (cvtE <$> l) (cvtAfun f)
+        -- MapBatch f c c' a x -> MapBatch (cvtAfun f) (cvtAfun c) (cvtAfun c') (cvtA a) (cvtA x)
+        ProduceAccum l f a  -> ProduceAccum (cvtE <$> l) (cvtAfun f) (cvtA a)
 
     cvtC :: Consumer index OpenAcc aenv a -> Consumer index OpenAcc aenv a
     cvtC c =
       case c of
-        FoldBatch f f' a x -> FoldBatch (cvtAfun f) (cvtAfun f') (cvtA a) (cvtA x)
-        Last a d           -> Last (cvtA a) (cvtA d)
-        Stuple t           -> Stuple (cvtCT t)
+        FoldBatch f a x -> FoldBatch (cvtAfun f) (cvtA a) (cvtA x)
+        Last a d        -> Last (cvtA a) (cvtA d)
+        Elements x      -> Elements (cvtA x)
+        Tabulate x      -> Tabulate (cvtA x)
+        Stuple t        -> Stuple (cvtCT t)
 
     cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv) t
     cvtCT NilAtup        = NilAtup

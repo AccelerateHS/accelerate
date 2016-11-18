@@ -32,33 +32,23 @@
 
 module Data.Array.Accelerate.Trafo.Vectorise (
 
-  vectoriseSeq,
-  vectoriseSeqAcc,
-  vectoriseSeqAfun,
-  reduceOpenSeq,
-  reduceStreamSeq,
-
-  liftOpenAfun1,
-  liftOpenAfun2,
-  Size,
-  Strength(..),
-  Context(..)
+  vectoriseAcc, vectoriseAfun, reduceStreamSeq,
 
 ) where
 
-import Prelude                                          hiding ( exp, replicate, concat )
+import Prelude                                          hiding ( exp, replicate, concat, maximum )
 import qualified Prelude                                as P
+import Data.Maybe                                       ( fromMaybe )
 import Data.Typeable
 import Control.Applicative                              hiding ( Const, empty )
 import Control.Monad                                    ( (>=>) )
-import Data.Maybe
 
 -- friends
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST                       hiding ( Empty )
 import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation      ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar               hiding ( Segments )
-import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Base                hiding ( PushExp )
 import Data.Array.Accelerate.Trafo.Fusion
 import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
@@ -70,74 +60,59 @@ import qualified Data.Array.Accelerate.Prelude          as S
 import qualified Data.Array.Accelerate.Language         as S
 import qualified Data.Array.Accelerate.Trafo.Sharing    as S
 
-import qualified Data.Array.Accelerate.Debug            as Debug
 import Data.Array.Accelerate.Error
 
--- |Encodes the relationship between the old environments and the new environments during the
--- lifting transform
+-- The lifted type relationship
+-- ----------------------------
 --
-data Context env aenv env' aenv' where
-  -- All environments are empty
-  EmptyC     :: Context () () () ()
 
-  -- An expression that has already been lifted
-  PushLExpC :: Elt e
-            => Context env aenv env' aenv'
-            -> Context (env, e) aenv env' (aenv', Vector' e)
+-- |Captures the relationship between a type and it's possible lifted
+-- alternatives. For example, the type @Array sh e@ has the lifted equivalent
+-- types @Array sh e@, @Regular (Array sh e)@, and @Irregular (Array sh e)@.
+--
+-- In the case of the product type @(a,b)@, the related types are the cartesian
+-- product of the related types of @a@ and the related types of @b@.
+--
+data LiftedType t t' where
+  UnitT       :: LiftedType ()           ()
+  LiftedUnitT :: (IsAtuple a, ProdRepr a ~ ((),Scalar Int)) => LiftedType () a
+  AvoidedT    :: LiftedType (Array sh e) (Array sh e)
+  RegularT    :: LiftedType (Array sh e) (Regular (Array sh e))
+  IrregularT  :: LiftedType (Array sh e) (Irregular (Array sh e))
+  TupleT      :: (IsProduct Arrays t, IsProduct Arrays t', ArrRepr t ~ (a,b))
+              => LiftedTupleType (TupleRepr t) (TupleRepr t')
+              -> LiftedType t t'
 
-  -- An unlifted expression
-  PushExpC  :: Elt e
-            => Context env aenv env' aenv'
-            -> Context (env, e) aenv (env',e) aenv'
+data LiftedTupleType t t' where
+  NilLtup  :: LiftedTupleType () ()
+  SnocLtup :: (Arrays a, Arrays a')
+           => LiftedTupleType t t'
+           -> LiftedType a a'
+           -> LiftedTupleType (t,a) (t',a')
 
-  -- A lifted array expression
-  PushLAccC :: Arrays t
-            => Context env aenv env' aenv'
-            -> Context env (aenv, t) env' (aenv', Nested t)
+-- |Encodes the relationship between the old environment and the lifted
+-- environment
+--
+data Context aenv aenv' where
+  BaseC     :: Context aenv aenv
 
-  -- An unlifted array expression
-  PushAccC  :: Arrays t
-            => Context env aenv env' aenv'
-            -> Context env (aenv, t) env' (aenv', t)
+  PushC     :: Arrays t'
+            => Context aenv aenv'
+            -> LiftedType t t'
+            -> Context (aenv, t) (aenv', t')
 
-
-data Strength = Aggressive | Conservative | HoistOnly | Nested deriving Show
-
-type VectoriseAcc acc = forall aenv aenv' t.
-                        Arrays t
-                     => Strength
-                     -> Context () aenv () aenv'
-                     -> Size acc aenv' Int
-                     -> acc aenv t
-                     -> LiftedAcc acc aenv' t
-
-data None sh = None sh
-  deriving (Typeable, Show, Eq)
-
-type instance EltRepr (None sh) = EltRepr sh
-
-instance Shape sh => Elt (None sh) where
-  eltType _         = eltType (undefined::sh)
-  fromElt (None sh) = fromElt sh
-  toElt sh          = None (toElt sh)
-
-instance Shape sh => Slice (None sh) where
-  type SliceShape   (None sh) = Z
-  type CoSliceShape (None sh) = sh
-  type FullShape    (None sh) = sh
-  sliceIndex _ = sliceNoneIndex (undefined :: sh)
-  toSlice sh i | AsSlice <- asSlice (Proxy :: Proxy sh)
-                         = None (toSlice sh i)
-
-instance Shape sh => IsProduct Elt (None sh) where
-  type ProdRepr (None sh) = ((),sh)
-  fromProd _ (None sh) = ((),sh)
-  toProd _ ((),sh)     = None sh
-  prod _ _ = ProdRsnoc ProdRunit
+  -- TODO: Environment splitting?
 
 -- Lifting terms
 -- ---------------
 --
+
+type VectoriseAcc acc = forall aenv aenv' t.
+                        Arrays t
+                     => Context aenv aenv'
+                     -> Size acc aenv' Int
+                     -> acc aenv t
+                     -> LiftedAcc acc aenv' t
 
 -- |The size parameter in the lifting transform.
 --
@@ -147,142 +122,290 @@ data Size acc aenv e where
 instance Kit acc => Sink (Size acc) where
   weaken k (Size b s) = Size (weaken k b) (weaken (newTop k) s)
 
-data LiftedAcc acc aenv t = AvoidedAcc (acc aenv t)
-                          | LiftedAcc (acc aenv (Nested t))
+-- The result of vectorisation. We get back a new term of type t' and a witness
+-- that t' is a lifted type of t.
+--
+data LiftedAcc acc aenv t where
+  LiftedAcc :: Arrays t' => LiftedType t t' -> acc aenv t' -> LiftedAcc acc aenv t
 
 instance RebuildableAcc acc => Rebuildable (LiftedAcc acc) where
   type AccClo (LiftedAcc acc) = acc
-  rebuildPartial v (AvoidedAcc a) = AvoidedAcc <$> rebuildPartial v a
-  rebuildPartial v (LiftedAcc  a) = LiftedAcc <$> rebuildPartial v a
+  rebuildPartial v (LiftedAcc ty a) = LiftedAcc ty <$> rebuildPartial v a
 
 instance Sink acc => Sink (LiftedAcc acc) where
-  weaken k (AvoidedAcc a) = AvoidedAcc (weaken k a)
-  weaken k (LiftedAcc a)  = LiftedAcc (weaken k a)
-
-data LiftedExp acc env aenv t where
-  AvoidedExp :: Extend acc aenv aenv'
-             -> PreOpenExp acc env aenv' t
-             -> LiftedExp acc env aenv t
-  LiftedExp  :: acc aenv (Vector' t)
-             -> LiftedExp acc env aenv t
-
-data AvoidedFun acc env aenv t where
-  AvoidedFun :: Extend acc aenv aenv'
-             -> PreOpenFun acc env aenv' t
-             -> AvoidedFun acc env aenv t
+  weaken k (LiftedAcc ty a) = LiftedAcc ty (weaken k a)
 
 type LiftedOpenAcc aenv t = LiftedAcc OpenAcc aenv t
 
-over :: (acc aenv t          -> acc' aenv' t')
-     -> (acc aenv (Nested t) -> acc' aenv' (Nested t'))
-     -> LiftedAcc acc  aenv t
-     -> LiftedAcc acc' aenv' t'
-over f _  (AvoidedAcc a) = AvoidedAcc (f a)
-over _ f' (LiftedAcc l)  = LiftedAcc (f' l)
+-- The result of vectorising a scalar expression. Due to the separate scalar
+-- environment, we have to be careful about avoiding vectorisation. As a
+-- consequenc of this, the transform will always yield a lifted version and
+-- maybe a lifted version.
+--
+data LiftedExp acc env aenv aenv' t where
+  LiftedExp  :: Maybe (PreOpenExp acc env aenv t)
+             -> acc aenv' (Vector t)
+             -> LiftedExp acc env aenv aenv' t
 
-injectL :: Kit acc => LiftedAcc (PreOpenAcc acc) aenv t -> LiftedAcc acc aenv t
-injectL = over inject inject
+withL :: (acc aenv (Array sh e) -> a)
+      -> (acc aenv (Regular (Array sh e))   -> a)
+      -> (acc aenv (Irregular (Array sh e)) -> a)
+      -> LiftedAcc acc aenv (Array sh e)
+      -> a
+withL f _ _ (LiftedAcc AvoidedT a)   = f a
+withL _ f _ (LiftedAcc RegularT l)   = f l
+withL _ _ f (LiftedAcc IrregularT l) = f l
+withL _ _ _ _                        = error "Absurd"
+
+withFL :: (Kit acc, Shape sh, Elt e)
+       => Size acc aenv Int
+       -> (acc aenv (Regular (Array sh e))   -> a)
+       -> (acc aenv (Irregular (Array sh e)) -> a)
+       -> LiftedAcc acc aenv (Array sh e)
+       -> a
+withFL size f _ (LiftedAcc AvoidedT a)   = f (replicateA size a)
+withFL _    f _ (LiftedAcc RegularT l)   = f l
+withFL _    _ f (LiftedAcc IrregularT l) = f l
+withFL _    _ _ _                        = error "Absurd"
+
+infixr 0 $*
+
+($*) :: Arrays t'
+     => (forall t. Arrays t => acc aenv t -> acc' aenv' t)
+     -> LiftedAcc acc aenv t'
+     -> LiftedAcc acc' aenv' t'
+f $* LiftedAcc t a = LiftedAcc t (f a)
+
+newtype TupleIdx' t aenv a = TupleIdx' (TupleIdx t a)
+
+mapAtuple :: (forall t. Arrays t => k t -> k' t)
+          -> Atuple k  t'
+          -> Atuple k' t'
+mapAtuple _ NilAtup = NilAtup
+mapAtuple f (SnocAtup t a) = SnocAtup (mapAtuple f t) (f a)
+
+appL :: (Shape sh', Elt e')
+     => (acc aenv (Array sh e)             -> acc' aenv' (Array sh' e'))
+     -> (acc aenv (Regular (Array sh e))   -> acc' aenv' (Regular (Array sh' e')))
+     -> (acc aenv (Irregular (Array sh e)) -> acc' aenv' (Irregular (Array sh' e')))
+     -> LiftedAcc acc  aenv  (Array sh e)
+     -> LiftedAcc acc' aenv' (Array sh' e')
+appL f g h = withL (LiftedAcc AvoidedT . f) (LiftedAcc RegularT . g) (LiftedAcc IrregularT . h)
+
+appFL :: (Kit acc, Shape sh', Elt e', Shape sh, Elt e)
+      => Size acc aenv Int
+      -> (acc aenv (Regular (Array sh e))   -> acc' aenv' (Regular (Array sh' e')))
+      -> (acc aenv (Irregular (Array sh e)) -> acc' aenv' (Irregular (Array sh' e')))
+      -> LiftedAcc acc  aenv  (Array sh e)
+      -> LiftedAcc acc' aenv' (Array sh' e')
+appFL size f g = withFL size (LiftedAcc RegularT . f) (LiftedAcc IrregularT . g)
+
+-- For any type a, generate a witness that a is a lifted type for a.
+--
+avoidedType :: forall a. Arrays a
+            => LiftedType a a
+avoidedType =
+  case flavour (undefined :: a) of
+    ArraysFunit -> UnitT
+    ArraysFarray -> AvoidedT
+    ArraysFtuple -> TupleT (tup (prod Proxy (undefined :: a)))
+  where
+    tup :: ProdR Arrays t -> LiftedTupleType t t
+    tup ProdRunit     = NilLtup
+    tup (ProdRsnoc t) = SnocLtup (tup t) avoidedType
+
+-- Same as for avoidedType, but this gives a witness that (Regular a) is a
+-- lifted type for a.
+--
+regularType :: forall a. Arrays a
+            => LiftedType a (Regular a)
+regularType =
+  case flavour (undefined :: a) of
+    ArraysFunit  -> LiftedUnitT
+    ArraysFarray -> RegularT
+    ArraysFtuple -> TupleT (tup (prod Proxy (undefined :: a)))
+  where
+    tup :: ProdR Arrays t -> LiftedTupleType t (RegularTupleRepr t)
+    tup ProdRunit     = NilLtup
+    tup (ProdRsnoc t) = SnocLtup (tup t) regularType
+
+-- Same as above, but for Irregular.
+--
+irregularType :: forall a. Arrays a
+              => LiftedType a (Irregular a)
+irregularType =
+  case flavour (undefined :: a) of
+    ArraysFunit  -> LiftedUnitT
+    ArraysFarray -> IrregularT
+    ArraysFtuple -> TupleT (tup (prod Proxy (undefined :: a)))
+  where
+    tup :: ProdR Arrays t -> LiftedTupleType t (IrregularTupleRepr t)
+    tup ProdRunit     = NilLtup
+    tup (ProdRsnoc t) = SnocLtup (tup t) irregularType
+
+freeProdT :: forall a b t t'. (IsAtuple t, IsAtupleRepr t', ArrRepr t ~ (a,b))
+          => LiftedTupleType (ProdRepr t) t'
+          -> LiftedType t (FreeProd t')
+freeProdT = TupleT
+
+-- Given that a is always a lifted type for a, making the type relation
+-- reflexive, we want to be able to check for the cases when this happens.
+-- IsIso captures when two types are actually the same.
+--
+-- Note that this is not quite the same as true type equality. The reason being
+-- that (TupleRepr a ~ TupleRepr b) does not imply (a ~ b) but it does allow for
+-- casting between the two.
+--
+data IsIso a a' where
+  IsoRefl  :: IsIso a a
+  IsoTuple :: (IsAtuple a, IsAtuple a')
+           => IsoTuple (TupleRepr a) (TupleRepr a')
+           -> IsIso a a'
+
+data IsoTuple t t' where
+  NilIso  :: IsoTuple () ()
+  SnocIso :: (Arrays a, Arrays a')
+          => IsoTuple t t'
+          -> IsIso a a'
+          -> IsoTuple (t,a) (t',a')
+
+isIso :: LiftedType a a' -> Maybe (IsIso a' a)
+isIso UnitT      = Just IsoRefl
+isIso AvoidedT   = Just IsoRefl
+isIso (TupleT t) = IsoTuple <$> isIsoTup t
+  where
+    isIsoTup :: LiftedTupleType t t' -> Maybe (IsoTuple t' t)
+    isIsoTup NilLtup = Just NilIso
+    isIsoTup (SnocLtup t' ty) = SnocIso <$> isIsoTup t' <*> isIso ty
+isIso _          = Nothing
+
+-- If we have two lifted types for 'a' we need to establish what the most
+-- general type their corresponding terms can be converted to. We can convert
+-- from avoided to regular, avoided to irregular, and regular to irregular but
+-- cannot do so in reverse. It is perhaps easiest to view the lifted typing
+-- relationship as a lattice and the join as the least upper bound.
+--
+data Join k a where
+  Join :: Arrays a'
+       => LiftedType a a'
+       -> k a'
+       -> k a'
+       -> Join k a
+
+data JoinTuple k t where
+  JoinTuple :: IsAtupleRepr t'
+            => LiftedTupleType t t'
+            -> Atuple k t'
+            -> Atuple k t'
+            -> JoinTuple k t
+
+join :: forall acc aenv a a' a''. (Arrays a, Arrays a', Arrays a'', Kit acc)
+     => Size acc aenv Int
+     -> LiftedType a a'
+     -> LiftedType a a''
+     -> acc aenv a'
+     -> acc aenv a''
+     -> Join (acc aenv) a
+join size l1 l2 a1 a2 =
+  case (l1,l2) of
+    (UnitT, l)                 -> Join l a2 a2
+    (l, UnitT)                 -> Join l a1 a1
+    (LiftedUnitT, LiftedUnitT) -> Join LiftedUnitT a1 a1
+    (AvoidedT, AvoidedT)       -> Join AvoidedT a1 a2
+    (AvoidedT, l)              -> join size RegularT l (replicateA size a1) a2
+    (l, AvoidedT)              -> join size l RegularT a1 (replicateA size a2)
+    (RegularT, RegularT)       -> Join RegularT a1 a2
+    (RegularT, l)              -> join size IrregularT l (sparsifyC a1) a2
+    (l, RegularT)              -> join size l IrregularT a1 (sparsifyC a2)
+    (IrregularT, IrregularT)   -> Join IrregularT a1 a2
+    (TupleT t1, TupleT t2)     | JoinTuple t a1' a2' <- joinT t1 t2 (asAtupleC a1) (asAtupleC a2)
+                               -> Join (freeProdT t) (inject (Atuple a1')) (inject (Atuple a2'))
+    _                          -> error "Impossible lifted type relation"
+  where
+    joinT :: LiftedTupleType t t'
+          -> LiftedTupleType t t''
+          -> Atuple (acc aenv) t'
+          -> Atuple (acc aenv) t''
+          -> JoinTuple (acc aenv) t
+    joinT NilLtup           NilLtup           NilAtup          NilAtup
+      = JoinTuple NilLtup NilAtup NilAtup
+    joinT (SnocLtup lt1 l1) (SnocLtup lt2 l2) (SnocAtup t1 a1) (SnocAtup t2 a2)
+      | Join l a1' a2' <- join size l1 l2 a1 a2
+      , JoinTuple lt t1' t2' <- joinT lt1 lt2 t1 t2
+      = JoinTuple (SnocLtup lt l) (SnocAtup t1' a1') (SnocAtup t2' a2')
+    joinT _                 _                  _               _
+      = error "Impossible lifted tuple type relation"
+
+-- |Vectorise any sequence computations embedded in the 'Acc' term.
+--
+vectoriseAcc :: Arrays t => Acc t -> Acc t
+vectoriseAcc (vectoriseOpenAcc BaseC (simpleSize (Const 1)) -> LiftedAcc ty a)
+  | Just iso <- isIso ty
+  = castAccC iso a
+vectoriseAcc _
+  = $internalError "vectoriseAcc" "Unexpected lifted result of vectorisation"
+
+-- |Vectorise any sequence computations embedded in the array function.
+--
+vectoriseAfun ::Afun t -> Afun t
+vectoriseAfun = vectoriseOpenAfun BaseC
+
+vectoriseOpenAfun :: Context aenv aenv' -> OpenAfun aenv t -> OpenAfun aenv' t
+vectoriseOpenAfun ctx (Abody a)
+  | LiftedAcc ty a'  <- vectoriseOpenAcc ctx (simpleSize (Const 1)) a
+  , Just iso         <- isIso ty
+  = Abody (castAccC iso a')
+  | otherwise
+  = $internalError "vectoriseAfun" "Unexpected lifted result of vectorisation"
+vectoriseOpenAfun ctx (Alam f)
+  = Alam (vectoriseOpenAfun (PushC ctx avoidedType) f)
 
 vectoriseOpenAcc :: Arrays t
-                 => Strength
-                 -> Context () aenv () aenv'
+                 => Context aenv aenv'
                  -> Size OpenAcc aenv' Int
                  -> OpenAcc aenv t
                  -> LiftedOpenAcc aenv' t
-vectoriseOpenAcc strength ctx size (OpenAcc a) = liftPreOpenAcc vectoriseOpenAcc strength ctx size a
+vectoriseOpenAcc ctx size (OpenAcc a) = liftPreOpenAcc vectoriseOpenAcc ctx size a
 
-liftedSize :: forall acc aenv t.
-              (Kit acc, Arrays t)
-           => acc aenv (Nested t)
-           -> Size acc aenv Int
-liftedSize a =
+
+
+-- irregularSize :: forall acc aenv t.
+--                  (Kit acc, Arrays t)
+--               => acc aenv (Irregular t)
+--               -> Size acc aenv Int
+-- irregularSize a =
+--   case flavour (undefined :: t) of
+--     ArraysFunit  -> Size (inject $ Aprj ZeroTupIdx a) $ the avar0
+--     ArraysFarray -> Size (segmentsSizeC (segmentsC a)) $ the avar0
+--     ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
+--   where
+--     fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv Int
+--     fromTup ProdRunit     = error "Unreachable"
+--     fromTup (ProdRsnoc _) = irregularSize $^ Aprj tupIx0 a
+
+regularSize :: forall acc aenv t.
+               (Kit acc, Arrays t)
+            => acc aenv (Regular t)
+            -> Size acc aenv Int
+regularSize a =
   case flavour (undefined :: t) of
     ArraysFunit  -> Size (inject $ Aprj ZeroTupIdx a) $ the avar0
-    ArraysFarray -> Size (nestedSizeC (segmentsC a)) $ the avar0
+    ArraysFarray -> Size (inject . Alet (unregularC a) $ unit (indexLastC (Shape avar0))) $ the avar0
     ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
   where
     fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv Int
     fromTup ProdRunit     = error "Unreachable"
-    fromTup (ProdRsnoc _) = liftedSize $^ Aprj tupIx0 a
+    fromTup (ProdRsnoc _) = regularSize $^ Aprj tupIx0 a
 
--- |Lift a unary open array function
---
-liftOpenAcc :: forall aenv aenv' a. Arrays a =>
-                 Strength
-              -> Context () aenv () aenv'
-              -> OpenAcc aenv   a
-              -> OpenAfun aenv' (Scalar Int -> Nested a)
-liftOpenAcc strength ctx (weaken SuccIdx -> acc)
-  | trace "liftOpenAcc" ("Starting " ++ show strength ++ " vectorisation") True
-  = case vectoriseOpenAcc Conservative (PushAccC ctx) (simpleSize (the avar0)) acc of
-      -- In the case that the body of the function does not depend on its argument,
-      -- conservative vectorisation will return the unmodified body. In this,
-      -- we just need to replicate the result.
-      AvoidedAcc a' | Size b s <- simpleSize (the avar0)
-                    -> Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
-      -- Otherwise, we have the lifted body.
-      LiftedAcc  a' -> Alam . Abody $ a'
-liftOpenAcc _ _ _
-  = error "Unreachable"
-
--- |Lift a unary open array function
---
-liftOpenAfun1 :: forall aenv aenv' a b.
-                 Strength
-              -> Context () aenv () aenv'
-              -> OpenAfun aenv  (a -> b)
-              -> OpenAfun aenv' (Nested a -> Nested b)
-liftOpenAfun1 = liftPreOpenAfun1 vectoriseOpenAcc
-
-liftPreOpenAfun1 :: forall acc aenv aenv' a b. Kit acc
-                 => VectoriseAcc acc
-                 -> Strength
-                 -> Context () aenv () aenv'
-                 -> PreOpenAfun acc aenv  (a -> b)
-                 -> PreOpenAfun acc aenv' (Nested a -> Nested b)
-liftPreOpenAfun1 liftAcc strength ctx (Alam (Abody f))
-  | trace "liftPreOpenAfun1" ("Starting " ++ show strength ++ " vectorisation") True
-  = case liftAcc Conservative (PushLAccC ctx) (liftedSize avar0) f of
-      -- In the case that the body of the function does not depend on its argument,
-      -- conservative vectorisation will return the unmodified body. In this,
-      -- we just need to replicate the result.
-      AvoidedAcc a' | Size b s <- liftedSize avar0
-                    -> Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
-      -- Otherwise, we have the lifted body.
-      LiftedAcc  a' -> Alam . Abody $ a'
-liftPreOpenAfun1 _ _ _ _
-  = error "Unreachable"
-
--- |Lift a binary open array function
---
-liftOpenAfun2 :: forall aenv aenv' a b c.
-                 Strength
-              -> Context () aenv () aenv'
-              -> OpenAfun aenv  (a -> b -> c)
-              -> OpenAfun aenv' (Nested a -> Nested b -> Nested c)
-liftOpenAfun2 strength ctx (Alam (Alam (Abody f)))
-  | trace "liftOpenAfun2" ("Starting " ++ show strength ++ " vectorisation") True
-  = case vectoriseOpenAcc Conservative (PushLAccC . PushLAccC $ ctx) (liftedSize avar0) f of
-      -- In the case that the body of the function does not depend on its argument,
-      -- conservative vectorisation will return the unmodified body. In this,
-      -- we just need to replicate the result.
-      AvoidedAcc a' | Size b s <- liftedSize avar0
-                    -> Alam . Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
-      -- Otherwise, we have the lifted body.
-      LiftedAcc  a' -> Alam . Alam . Abody $ a'
-liftOpenAfun2 _ _ _
-  = error "Unreachable"
-
--- |The core of the lifting transformation for array expression.
+-- |The core of the lifting transformation for array expressions.
 --
 liftPreOpenAcc :: forall acc aenv aenv' t. (Kit acc, Arrays t)
                => VectoriseAcc acc
-               -> Strength
-               -> Context () aenv () aenv'
+               -> Context aenv aenv'
                -> Size acc aenv' Int
                -> PreOpenAcc acc aenv t
                -> LiftedAcc acc aenv' t
-liftPreOpenAcc vectAcc strength ctx size acc
+liftPreOpenAcc vectAcc ctx size acc
   = case acc of
     Alet a b            -> aletL a b
     Avar ix             -> avarL ix
@@ -318,149 +441,63 @@ liftPreOpenAcc vectAcc strength ctx size acc
     Stencil f b a       -> stencilL f b a
     Stencil2 f b1 a1 b2 a2
                         -> stencil2L f b1 a1 b2 a2
-    Collect _ _           -> error "Nested sequence"
+    Collect min max i s _
+                        -> collectL min max i s
 
   where
+    avoidedAcc   :: Arrays a => acc aenv' a             -> LiftedAcc acc aenv' a
+    regularAcc   :: Arrays a => acc aenv' (Regular a)   -> LiftedAcc acc aenv' a
+    irregularAcc :: Arrays a => acc aenv' (Irregular a) -> LiftedAcc acc aenv' a
+    avoidedAcc   = LiftedAcc avoidedType
+    regularAcc   = LiftedAcc regularType
+    irregularAcc = LiftedAcc irregularType
+
     nestedError :: String -> String -> String
     nestedError place op = "Unexpect nested parallelism in " ++ place ++ " argument to " ++ op
 
-    hoistingOnlyError :: a
-    hoistingOnlyError = error "The vectorisation strength is set to hoisting only, but nested parallelism has been encountered"
-
-    avoidLifting | Conservative <- strength = True
-                 | HoistOnly    <- strength = True
-                 | otherwise                = False
-
     cvtA :: forall t. Arrays t => acc aenv t -> LiftedAcc acc aenv' t
-    cvtA a = vectAcc strength ctx size a
-
-    liftedAcc :: forall aenv t. acc aenv (Nested t) -> LiftedAcc acc aenv t
-    liftedAcc | HoistOnly <- strength
-              = hoistingOnlyError
-              | otherwise
-              = trace "liftPreOpenAcc" ("Lifting Acc term " ++ showPreAccOp acc) . LiftedAcc
-
-    liftE :: forall env env' aenv aenv' e. (Elt e)
-          => Context env aenv env' aenv'
-          -> Size acc aenv' Int
-          -> PreOpenExp acc env aenv e
-          -> PreOpenAcc acc aenv' (Vector' e)
-    liftE | HoistOnly <- strength
-          = hoistingOnlyError
-          | otherwise
-          = liftExp vectAcc strength
+    cvtA a = vectAcc ctx size a
 
     cvtE :: forall e. Elt e
          => PreExp acc aenv e
-         -> LiftedExp acc () aenv' e
-    cvtE e | avoidLifting
-           , Avoided (b,e') <- avoidE e
-           = AvoidedExp b e'
-           | otherwise
-           = trace "liftPreOpenAcc" ("Expression had to be lifted: " ++ showPreExpOp e)
-           $ LiftedExp $ inject $ liftE ctx size e
+         -> LiftedExp acc () aenv' aenv' e
+    cvtE e = liftExp vectAcc (ExpBase ctx) size e
 
-    cvtT :: forall t.
-            Atuple (acc aenv) t
-         -> Atuple (LiftedAcc acc aenv') t
-    cvtT NilAtup        = NilAtup
-    cvtT (SnocAtup t a) = SnocAtup (cvtT t) (cvtA a)
+    cvtE' :: forall e. Elt e
+          => PreExp acc aenv e
+          -> Maybe (PreExp acc aenv' e)
+    cvtE' (cvtE -> LiftedExp ae _) = ae
 
-    irregularTupleIdx :: forall t a. TupleIdx t a -> TupleIdx (NestedTupleRepr t) (Nested a)
-    irregularTupleIdx ZeroTupIdx = ZeroTupIdx
-    irregularTupleIdx (SuccTupIdx ix) = SuccTupIdx (irregularTupleIdx ix)
-
-    liftAfun1 :: forall a b. (Arrays a, Arrays b)
-              => PreOpenAfun acc aenv (a -> b)
-              -> ( PreOpenAfun acc aenv' (Nested a -> Nested b)
-                 , Maybe (PreOpenAfun acc aenv' (a -> b)))
-    liftAfun1 (Alam (Abody b))
-      = let
-          lft = case vectAcc strength (PushLAccC ctx) (liftedSize avar0) b of
-                  -- Result does not actually depend on the argument.
-                  AvoidedAcc b' -> Alam (Abody (replicateA b' (liftedSize avar0)))
-                  -- Result does depend on argument
-                  LiftedAcc  b' -> Alam (Abody b')
-          pln = case vectAcc strength (PushAccC ctx) (weakenA1 size) b of
-                  AvoidedAcc b' -> Just $ Alam (Abody b')
-                  LiftedAcc  _  -> Nothing
-        in (lft,pln)
-    liftAfun1 _ = error "Inconsistent"
+    liftedTupleIdx :: forall aenv t t' a. ProdR Arrays t'
+                   -> TupleIdx t a
+                   -> LiftedTupleType t t'
+                   -> LiftedAcc (TupleIdx' t') aenv a
+    liftedTupleIdx (ProdRsnoc _)  ZeroTupIdx      (SnocLtup _ a) = LiftedAcc a (TupleIdx' ZeroTupIdx)
+    liftedTupleIdx (ProdRsnoc pr) (SuccTupIdx ix) (SnocLtup t _) | LiftedAcc t' (TupleIdx' ix') <- liftedTupleIdx pr ix t
+                                                                 = LiftedAcc t' (TupleIdx' (SuccTupIdx ix'))
+    liftedTupleIdx _              _               _              = error "Absurd"
 
 
-    cvtF1 :: forall a b. (Elt a, Elt b)
-          => PreFun  acc  aenv  (a -> b)
-          -> ( PreOpenAfun acc aenv' (Vector a -> Vector b)
-             , Maybe (AvoidedFun acc () aenv' (a -> b)))
-    cvtF1 f@(Lam (Body e))
-      = let l = Alam (Abody (inject $ liftE (PushLExpC ctx) (sizeOfVector' avar0) e))
-        in case (avoidF f) of
-             Avoided (b, Lam (Body e')) | avoidLifting
-                                        -> (rewrap l, Just $ AvoidedFun b (Lam (Body e')))
-             _                          -> trace "liftPreOpenAcc" "Function had to be lifted"
-                                        $  (rewrap l, Nothing)
-        where
-          rewrap :: PreOpenAfun acc aenv' (Vector' a -> Vector' b) -> PreOpenAfun acc aenv' (Vector a -> Vector b)
-          rewrap f = Alam . Abody . asVectorC $ weakenA1 f `apply` asVector'C avar0
+    cvtF1 :: forall a b. PreFun acc aenv (a -> b)
+          -> ( Maybe (PreFun acc aenv' (a -> b))
+             , PreOpenAfun acc aenv' (Vector a -> Vector b) )
+    cvtF1 (Lam (Body (liftExp vectAcc (ExpPush (ExpBase ctx)) (sizeOfVector avar0) -> LiftedExp ab b)))
+      = (Lam . Body <$> ab, Alam (Abody b))
+    cvtF1 _ = $internalError "liftAcc" "Impossible"
 
-    cvtF1 _              = $internalError "cvtF1" "Inconsistent valuation"
+    cvtF2 :: forall a b c. PreFun acc aenv (a -> b -> c)
+          -> ( Maybe (PreFun acc aenv' (a -> b -> c))
+             , PreOpenAfun acc aenv' (Vector a -> Vector b -> Vector c) )
+    cvtF2 (Lam (Lam (Body (liftExp vectAcc (ExpPush (ExpPush (ExpBase ctx))) (sizeOfVector avar0) -> LiftedExp ab b))))
+      = (Lam . Lam . Body <$> ab, Alam (Alam (Abody b)))
+    cvtF2 _ = $internalError "liftAcc" "Impossible"
 
-    cvtF2 :: forall a b c. (Elt a, Elt b, Elt c)
-          => PreFun  acc  aenv  (a -> b -> c)
-          -> ( PreOpenAfun acc aenv' (Vector a -> Vector b -> Vector c)
-             , Maybe (AvoidedFun acc () aenv' (a -> b -> c)))
-    cvtF2 f@(Lam (Lam (Body e)))
-      = let l = Alam (Alam (Abody (inject $ liftE (PushLExpC (PushLExpC ctx))
-                                                  (sizeOfVector' avar0)
-                                                  e)))
-
-        in case (avoidF f) of
-             Avoided (b, Lam (Lam (Body e'))) | avoidLifting
-                                              -> (rewrap l, Just $ AvoidedFun b (Lam (Lam (Body e'))))
-             _                                -> trace "liftPreOpenAcc" "Function had to be lifted"
-                                              $  (rewrap l, Nothing)
-      where
-        rewrap :: PreOpenAfun acc aenv' (Vector' a -> Vector' b -> Vector' c)
-               -> PreOpenAfun acc aenv' (Vector a -> Vector b -> Vector c)
-        rewrap f = Alam . Alam . Abody . asVectorC $ weakenA2 f `partApply` asVector'C avar1 `apply` asVector'C avar0
-    cvtF2 _              = $internalError "cvtF2" "Inconsistent valuation"
-
-    unzip :: forall aenv a b sh.
-             (Elt a, Elt b, Shape sh)
-          => acc aenv (Array sh (a,b))
-          -> acc aenv (Array sh a, Array sh b)
-    unzip = fromHOAS (S.lift . S.unzip)
-
-    construct :: forall aenv e sh.
-                 (Elt e, Shape sh)
-              => acc aenv (Segments sh)
-              -> acc aenv (Vector e)
-              -> acc aenv (Nested (Array sh e))
-    construct segs vals
-      = inject
-      $ Atuple (SnocAtup (SnocAtup NilAtup segs) vals)
-
-    indexSnoc :: forall env aenv sh. (Shape sh, Slice sh)
-              => PreOpenExp acc env aenv sh
-              -> PreOpenExp acc env aenv Int
-              -> PreOpenExp acc env aenv (sh:.Int)
-    indexSnoc sh i = IndexTrans (IndexCons (IndexTrans sh) i)
-
-    indexInit :: forall env aenv sh. (Shape sh, Slice sh)
-              => PreOpenExp acc env aenv (sh:.Int)
-              -> PreOpenExp acc env aenv sh
-    indexInit = IndexTrans . IndexTail . IndexTrans
-
-    nonEmpty :: forall env aenv sh. Shape sh
-             => PreOpenExp acc env aenv sh
-             -> PreOpenExp acc env aenv sh
-    nonEmpty = Union (Const $ fromElt (listToShape (P.replicate (dim (undefined :: sh)) 1) :: sh))
-
-    times :: forall env aenv a. (IsNum a, Elt a)
-          => PreOpenExp acc env aenv a
-          -> PreOpenExp acc env aenv a
-          -> PreOpenExp acc env aenv a
-    times a b = PrimApp (PrimMul numType) (tup a b)
+    irregularC :: forall aenv e sh.
+                  (Elt e, Shape sh)
+               => acc aenv (Segments sh)
+               -> acc aenv (Vector e)
+               -> acc aenv (Irregular (Array sh e))
+    irregularC = fromHOAS2 irregular
 
     higher :: forall env aenv sh sh'. (Slice sh, Slice sh', Shape sh, Shape sh')
            => PreOpenFun acc env aenv (sh -> sh')
@@ -470,105 +507,113 @@ liftPreOpenAcc vectAcc strength ctx size acc
         ixt :: (env,sh) :> ((env,sh:.Int),sh)
         ixt ZeroIdx = ZeroIdx
         ixt (SuccIdx ix) = SuccIdx (SuccIdx ix)
+    higher _ = error "Absurd"
 
-    lifted :: forall t. Arrays t => LiftedAcc acc aenv' t -> acc aenv' (Nested t)
-    lifted (AvoidedAcc a)   = replicateA a size
-    lifted (LiftedAcc l)    = l
+    -- asRegular :: forall t. Arrays t => LiftedAcc acc aenv' t -> Maybe (acc aenv' (Regular t))
+    -- asRegular (LiftedAcc ty a) = cvt ty a
+    --   where
+    --     cvt :: forall t t'. (Arrays t, Arrays t') => LiftedType t t' -> acc aenv' t' -> Maybe (acc aenv' (Regular t))
+    --     cvt UnitT       = Just . replicateA size
+    --     cvt LiftedUnitT = Just .^ Atuple . SnocAtup NilAtup .^ Aprj tupIx0
+    --     cvt AvoidedT    = Just . replicateA size
+    --     cvt RegularT    = Just
+    --     cvt IrregularT  = const Nothing
+    --     cvt (TupleT t)  = fmap (inject . Atuple) . cvtT t . asAtupleC
+    --
+    --     cvtT :: forall t t'. LiftedTupleType t t' -> Atuple (acc aenv') t' -> Maybe (Atuple (acc aenv') (RegularTupleRepr t))
+    --     cvtT NilLtup NilAtup = Just NilAtup
+    --     cvtT (SnocLtup t ty) (SnocAtup t' a) = SnocAtup <$> cvtT t t' <*> cvt ty a
 
-    liftedE :: forall t. Elt t => LiftedExp acc () aenv' t -> acc aenv' (Vector' t)
-    liftedE (AvoidedExp b e) = inject . bind b . extract $ replicatedC (unitSize (sink b size)) (unit e)
-    liftedE (LiftedExp  e)   = e
+    asIrregular :: forall t. Arrays t => LiftedAcc acc aenv' t -> acc aenv' (Irregular t)
+    asIrregular (LiftedAcc ty a) = cvt ty a
+      where
+        cvt :: forall t t'. (Arrays t, Arrays t') => LiftedType t t' -> acc aenv' t' -> acc aenv' (Irregular t)
+        cvt UnitT       = sparsifyC . replicateA size
+        cvt LiftedUnitT = inject . Atuple . SnocAtup NilAtup .^ Aprj tupIx0
+        cvt AvoidedT    = sparsifyC . replicateA size
+        cvt RegularT    = sparsifyC
+        cvt IrregularT  = id
+        cvt (TupleT t)  = inject . Atuple . cvtT t . asAtupleC
 
-    -- Nested versions of combinators.
+        cvtT :: forall t t'. LiftedTupleType t t' -> Atuple (acc aenv') t' -> Atuple (acc aenv') (IrregularTupleRepr t)
+        cvtT NilLtup         NilAtup         = NilAtup
+        cvtT (SnocLtup t ty) (SnocAtup t' a) = SnocAtup (cvtT t t') (cvt ty a)
+        cvtT _               _               = error "Absurd"
+
+    liftedE :: forall t. Elt t => LiftedExp acc () aenv' aenv' t -> acc aenv' (Vector t)
+    liftedE (LiftedExp (Just e) _) = replicateE size e
+    liftedE (LiftedExp _        e) = e
+
+    -- Regular versions of combinators.
     -- ===================================
 
     aletL :: forall bnd. (Arrays bnd, Arrays t)
           => acc aenv bnd
           -> acc (aenv, bnd) t
           -> LiftedAcc acc aenv' t
-    aletL bnd body = injectL
-                   $ case (cvtA bnd) of
-                       AvoidedAcc a -> over (Alet a) (Alet a)
-                                    $ vectAcc strength (PushAccC ctx) (weakenA1 size) body
-                       a            -> over (Alet (lifted a)) (Alet (lifted a))
-                                    $ vectAcc strength (PushLAccC ctx) (weakenA1 size) body
+    aletL bnd body | LiftedAcc ty a <- cvtA bnd
+                   = inject . Alet a $* vectAcc (PushC ctx ty) (weakenA1 size) body
 
     avarL :: Arrays t
           => Idx aenv t
           -> LiftedAcc acc aenv' t
     avarL = cvtIx ctx
       where
-        cvtIx :: forall env aenv env' aenv'.
-                 Context env aenv env' aenv'
+        cvtIx :: forall aenv aenv'.
+                 Context aenv aenv'
               -> Idx aenv t
               -> LiftedAcc acc aenv' t
-        cvtIx (PushLExpC d) ix             = weakenA1 (cvtIx d ix)
-        --cvtIx (PushExpC  d)   ix           = weakenE1 (cvtIx d ix)
-        cvtIx (PushLAccC _)   ZeroIdx      = liftedAcc $ avar0
-        cvtIx (PushLAccC d)   (SuccIdx ix) = weakenA1 (cvtIx d ix)
-        cvtIx (PushAccC  _)   ZeroIdx      = AvoidedAcc avar0
-        cvtIx (PushAccC  d)   (SuccIdx ix) = weakenA1 (cvtIx d ix)
-        cvtIx _               _            = $internalError "liftExp" "Inconsistent valuation"
+        cvtIx BaseC        ix           = LiftedAcc avoidedType $^ Avar ix
+        cvtIx (PushC _ ty) ZeroIdx      = LiftedAcc ty avar0
+        cvtIx (PushC c _)  (SuccIdx ix) = weakenA1 (cvtIx c ix)
 
     atupleL :: (Arrays t, IsAtuple t)
             => Atuple (acc aenv) (TupleRepr t)
             -> LiftedAcc acc aenv' t
-    atupleL t = case atl (cvtT t) of
-                  Left (a,_)  -> AvoidedAcc (inject $ Atuple a)
-                  Right a     -> case flavour (undefined :: t) of
-                                   ArraysFunit  -> liftedAcc $^ Atuple (SnocAtup NilAtup (unitSize size))
-                                   ArraysFtuple -> liftedAcc $ inject $ Atuple a
-                                   _            -> error "Absurd"
+    atupleL t | LiftedAtuple ty t' <- cvtT (mapAtuple cvtA t)
+              , ArraysFtuple <- flavour (undefined :: t)
+              = LiftedAcc (freeProdT ty) $^ Atuple t'
       where
-        atl :: forall t.
-               Atuple (LiftedAcc acc aenv') t
-            -> Either (Atuple (acc aenv') t, Atuple (acc aenv') (NestedTupleRepr t))
-                      (Atuple (acc aenv') (NestedTupleRepr t))
-        atl NilAtup        = Left (NilAtup, NilAtup)
-        atl (SnocAtup t a) = case atl t of
-                               Left (av,li) | AvoidedAcc (a' :: acc aenv' a) <- a
-                                            -> Left (SnocAtup av a', SnocAtup li (replicateA a' size))
-                                            | LiftedAcc (a' :: acc aenv' (Nested a)) <- a
-                                            -> Right (SnocAtup li a')
-                               Right li     | LiftedAcc (a' :: acc aenv' (Nested a)) <- a
-                                            -> Right (SnocAtup li a')
-                                            | AvoidedAcc (a' :: acc aenv' a) <- a
-                                            -> Right (SnocAtup li (replicateA a' size))
-                               _            -> error "Unreachable code"
+        cvtT :: forall t. Atuple (LiftedAcc acc aenv') t -> LiftedAtuple acc aenv' t
+        cvtT NilAtup = LiftedAtuple NilLtup NilAtup
+        cvtT (SnocAtup t (LiftedAcc ty a))
+          | LiftedAtuple ty' t' <- cvtT t
+          = LiftedAtuple (SnocLtup ty' ty) (SnocAtup t' a)
+    atupleL _ = error "Absurd"
 
 
-    aprjL :: forall a arrs. (Arrays a, Arrays arrs, IsAtuple arrs, Arrays (Nested a))
+    aprjL :: forall a arrs. (Arrays a, Arrays arrs, IsAtuple arrs)
           => TupleIdx (TupleRepr arrs) a
           -> acc aenv arrs
           -> LiftedAcc acc aenv' a
-    aprjL tup a | ArraysFtuple <- flavour (undefined :: arrs)
-                = injectL $ over (Aprj tup) (Aprj (irregularTupleIdx tup)) (cvtA a)
+    aprjL tup a | LiftedAcc (TupleT t) a' <- cvtA a
+                , LiftedAcc ty (TupleIdx' tup') <- liftedTupleIdx (prod Proxy (dummy a')) tup t
+                = LiftedAcc ty $^ Aprj tup' a'
                 | otherwise = error "Absurd"
 
-    applyL :: forall a1 a2.
-              (Arrays a1, Arrays a2)
-           => PreOpenAfun acc aenv (a1 -> a2)
-           -> acc aenv a1
-           -> LiftedAcc acc aenv' a2
-    applyL f a1 | let (lft, pln) = liftAfun1 f
-                = case cvtA a1 of
-                    AvoidedAcc a1' |  avoidLifting
-                                   ,  Just f' <- pln
-                                   -> AvoidedAcc $ inject $ Apply f' a1'
-                                   |  otherwise
-                                   -> liftedAcc $ inject $ Apply lft (replicateA a1' size)
-                    a1'            -> liftedAcc $ inject $ Apply lft (lifted a1')
+    applyL :: forall a b.
+              (Arrays a, Arrays b)
+           => PreOpenAfun acc aenv (a -> b)
+           -> acc aenv a
+           -> LiftedAcc acc aenv' b
+    applyL (Alam (Abody b)) (cvtA -> LiftedAcc ty a)
+      = inject . flip Apply a . Alam . Abody $* vectAcc (PushC ctx ty) (weakenA1 size) b
+    applyL _                _
+      = error "Absurd"
 
     foreignL :: (Arrays arrs, Arrays t, Foreign f)
              => f arrs t
-             -> PreAfun     acc            (arrs -> t)
+             -> PreAfun     acc       (arrs -> t)
              -> acc             aenv  arrs
              -> LiftedAcc   acc aenv' t
-    foreignL ff afun (cvtA -> AvoidedAcc as)
-      = AvoidedAcc $ inject $ Aforeign ff afun as
-    foreignL ff afun (cvtA -> LiftedAcc a)
-      | Just (VectorisedForeign ff') <- isVectorised ff
-      = LiftedAcc (inject $ Aforeign ff' (liftPreOpenAfun1 vectAcc strength EmptyC afun) a)
+    foreignL ff afun (cvtA -> LiftedAcc ty as)
+      | Just iso <- isIso ty
+      = LiftedAcc avoidedType $ inject $ Aforeign ff afun (castAccC iso as)
+    foreignL ff (Alam (Abody afun)) (cvtA -> LiftedAcc RegularT a)
+      | Just (VectorisedRegularForeign ff') <- isVectorisedRegular ff
+      , LiftedAcc RegularT afun' <- vectAcc (BaseC `PushC` regularType) (regularSize avar0) afun
+      , ArraysFarray <- flavour (undefined :: t)
+      = regularAcc (inject $ Aforeign ff' (Alam . Abody $ afun') a)
     foreignL _  _    _
       = error $ nestedError "first" "foreign"
 
@@ -578,70 +623,67 @@ liftPreOpenAcc vectAcc strength ctx size acc
            -> acc aenv t
            -> LiftedAcc acc aenv' t
     acondL (cvtE -> p) (cvtA -> t) (cvtA -> e)
-      | avoidLifting
-      , AvoidedExp b p' <- p
-      , AvoidedAcc t'   <- t
-      , AvoidedAcc e'   <- e
-      = AvoidedAcc $ inject $ bind b $ Acond p' (sink b t') (sink b e')
-      | AvoidedExp b p' <- p
-      = liftedAcc $ inject $ bind b $ Acond p' (sink b (lifted t)) (sink b (lifted e))
+      | LiftedExp (Just p') _ <- p
+      , LiftedAcc ty  t' <- t
+      , LiftedAcc ty' e' <- e
+      , Join ty'' t'' e'' <- join size ty ty' t' e'
+      = LiftedAcc ty'' $^ Acond p' t'' e''
       | otherwise
-      = liftedAcc $ liftedCondC (asVectorC (liftedE p)) (lifted t) (lifted e)
+      = irregularAcc $ liftedCondC (liftedE p) (asIrregular t) (asIrregular e)
 
-    -- TODO: Try to find a way to clean this up
+    -- TODO: Reimplement this
     awhileL :: forall t. Arrays t
             => PreOpenAfun acc aenv (t -> Scalar Bool)
             -> PreOpenAfun acc aenv (t -> t)
             -> acc             aenv t
             -> LiftedAcc acc aenv' t
-    awhileL (liftAfun1 -> (pred_l, pred_p)) (liftAfun1 -> (iter_l, iter_p)) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      , Just pred_p'  <- pred_p
-      , Just iter_p'  <- iter_p
-      = AvoidedAcc $ inject $ Awhile pred_p' iter_p' a'
-      | otherwise
-      = liftedAcc
-      $^ Alet (lifted a)
-      $^ let
-           init' = inject $ Alet (valuesC $ weakenA1 pred_l `apply` avar0)
-                          $ atup3 avar1 avar0 (fromHOAS S.or avar0)
-
-           pred' = Alam $ Abody $ inject $ Aprj ZeroTupIdx avar0
-
-           iter' :: acc (aenv', s) (Nested t)
-                 -> acc (aenv', s) (Vector Bool)
-                 -> acc (aenv', s) (Scalar Bool)
-                 -> acc (aenv', s) (Nested t, Vector Bool, Scalar Bool)
-           iter' a f _ = let a' = liftedCondC f (weakenA1 iter_l `apply` a) a
-                             f' = fromHOAS2 (S.zipWith (S.&&*)) f (valuesC $ weakenA1 pred_l `apply` a')
-                             c' = fromHOAS S.or f'
-                         in atup3 a' f' c'
-
-           iter'' :: PreOpenAfun acc aenv' ((Nested t, Vector Bool, Scalar Bool)
-                  -> (Nested t, Vector Bool, Scalar Bool))
-           iter'' = Alam $ Abody $ iter' (inject $ Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx) avar0)
-                                         (inject $ Aprj (SuccTupIdx ZeroTupIdx) avar0)
-                                         (inject $ Aprj ZeroTupIdx avar0)
-
-         in Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx)
-         $^ Awhile pred'
-                   (weakenA1 iter'')
-                   init'
+    awhileL = error "Vectorisation of loops not currently supported"
+    -- awhileL (liftAfun1 -> (pred_l, pred_p)) (liftAfun1 -> (iter_l,iter_p)) (cvtA -> a)
+    --   | AvoidedAcc a' <- a
+    --   , Just pred_p'  <- pred_p
+    --   , Just iter_p'  <- iter_p
+    --   = AvoidedAcc $ inject $ Awhile pred_p' iter_p' a'
+    --   | otherwise
+    --   = IrregularAcc
+    --   $^ Alet (asIrregular a)
+    --   $^ let
+    --        init' = inject $ Alet (irregularValuesC $ weakenA1 pred_l `apply` avar0)
+    --                       $ atup3 avar1 avar0 (fromHOAS S.or avar0)
+    --
+    --        pred' = Alam $ Abody $ inject $ Aprj ZeroTupIdx avar0
+    --
+    --        iter' :: acc (aenv', s) (Irregular t)
+    --              -> acc (aenv', s) (Vector Bool)
+    --              -> acc (aenv', s) (Scalar Bool)
+    --              -> acc (aenv', s) (Irregular t, Vector Bool, Scalar Bool)
+    --        iter' a f _ = let a' = liftedCondC f (weakenA1 iter_l `apply` a) a
+    --                          f' = fromHOAS2 (S.zipWith (S.&&*)) f (irregularValuesC $ weakenA1 pred_l `apply` a')
+    --                          c' = fromHOAS S.or f'
+    --                      in atup3 a' f' c'
+    --
+    --        iter'' :: PreOpenAfun acc aenv' ((Irregular t, Vector Bool, Scalar Bool)
+    --               -> (Irregular t, Vector Bool, Scalar Bool))
+    --        iter'' = Alam $ Abody $ iter' (inject $ Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx) avar0)
+    --                                      (inject $ Aprj (SuccTupIdx ZeroTupIdx) avar0)
+    --                                      (inject $ Aprj ZeroTupIdx avar0)
+    --
+    --      in Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx)
+    --      $^ Awhile pred'
+    --                (weakenA1 iter'')
+    --                init'
 
     useL :: Arrays a
          => ArrRepr a
          -> LiftedAcc acc aenv' a
-    useL a = AvoidedAcc $ inject $ Use a
+    useL a = avoidedAcc $^ Use a
 
     unitL :: Elt e
           => PreExp acc aenv e
           -> LiftedAcc acc aenv' (Scalar e)
-    unitL e = case cvtE e of
-                AvoidedExp b e | avoidLifting
-                               -> AvoidedAcc $ inject $ bind b $ Unit e
-                a              -> liftedAcc
-                               $ liftedScalarC (asVectorC (liftedE a))
+    unitL (cvtE -> LiftedExp ae e)
+      = case ae of
+          Nothing -> regularAcc (regularC e)
+          Just e' -> avoidedAcc $^ Unit e'
 
     reshapeL :: forall sh sh' e.
                 (Shape sh, Shape sh', Elt e)
@@ -649,34 +691,41 @@ liftPreOpenAcc vectAcc strength ctx size acc
              -> acc aenv (Array sh' e)
              -> LiftedAcc acc aenv' (Array sh e)
     reshapeL (cvtE -> sh) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a'    <- a
-      , AvoidedExp b sh' <- sh
-      = AvoidedAcc $ inject $ (bind b $ Reshape sh' (sink b a'))
-      | avoidLifting
-      , AvoidedExp b sh' <- sh
-      = liftedAcc
-      $  regularC (unitSize size) (inject . bind b $ Unit sh') (valuesC (lifted a))
+      | LiftedAcc AvoidedT a'  <- a
+      , LiftedExp (Just sh') _ <- sh
+      = avoidedAcc $^ Reshape sh' a'
+      | LiftedExp (Just sh') _ <- sh
+      , LiftedAcc RegularT a'  <- a
+      , AsSlice <- asSlice sh'
+      = regularAcc
+      $  regularC
+      $^ Alet (unitSize size)
+      $^ Reshape (indexSnoc (weakenA1 sh') (the avar0)) (unregularC (weakenA1 a'))
       | otherwise
-      = liftedAcc $ liftedReshapeC (liftedE sh) (lifted a)
+      -- RCE: Should an invalid use of reshape always generate a runtime error?
+      = irregularAcc $ irregularReshapeC (liftedE sh) (asIrregular a)
 
 
     generateL :: forall sh e. (Elt e, Shape sh)
               => PreExp acc aenv sh
               -> PreFun acc aenv (sh -> e)
               -> LiftedAcc  acc aenv' (Array sh e)
-    generateL (cvtE -> e) (cvtF1 -> (f_l, f_a))
-      | avoidLifting
-      , Just (AvoidedFun b2 f) <- f_a
-      , AvoidedExp b1 e' <- e
-      = AvoidedAcc
-      $^ bind b2
-      $  Alet (sink b2 $ inject $ bind b1 $ Unit e')
-      $^ Generate (the avar0) (weakenA1 f)
+    generateL (cvtE -> sh) (cvtF1 -> (f_a, f_l))
+      | Just f <- f_a
+      , LiftedExp (Just sh') _ <- sh
+      = avoidedAcc
+      $^ Generate sh' f
+      | LiftedExp (Just sh') _ <- sh
+      , AsSlice <- asSlice sh'
+      = regularAcc
+      $^ Alet (unitSize size)
+      $  regularC
+      $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
+      $^ weakenA1 f_l `subApply` flattenC (inject $ Generate (indexSnoc (weakenA1 sh') (the avar0)) (fun1 indexInit))
       | otherwise
-      = liftedAcc
-      $^ Alet (segmentsFromExp e)
-      $ construct avar0
+      = irregularAcc
+      $^ Alet (segmentsFromExp sh)
+      $ irregularC avar0
                   (inject $ weakenA1 f_l `subApply` (inject . Map (fun1 $ Prj tupIx0) $ enumSegC avar0))
 
     replicateL :: forall sh sl slix e co.
@@ -689,12 +738,10 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> acc            aenv (Array sl e)
                -> LiftedAcc  acc aenv' (Array sh e)
     replicateL sl (cvtE -> slix) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a'      <- a
-      , AvoidedExp b slix' <- slix
-      = AvoidedAcc
-      $^ bind b
-      $  Replicate sl slix' (sink b a')
+      | LiftedAcc AvoidedT a'            <- a
+      , LiftedExp (Just slix') _ <- slix
+      = avoidedAcc
+      $^ Replicate sl slix' a'
     replicateL sl slix a
       = cvtA
       $^ Alet a
@@ -712,12 +759,10 @@ liftPreOpenAcc vectAcc strength ctx size acc
            -> PreExp     acc aenv slix
            -> LiftedAcc  acc aenv' (Array sl e)
     sliceL sl (cvtA -> a) (cvtE -> slix)
-      | avoidLifting
-      , AvoidedAcc a'      <- a
-      , AvoidedExp b slix' <- slix
-      = AvoidedAcc
-      $^ bind b
-      $  Slice sl (sink b a') slix'
+      | LiftedAcc AvoidedT a'            <- a
+      , LiftedExp (Just slix') _ <- slix
+      = avoidedAcc
+      $^ Slice sl a' slix'
     sliceL sl a slix
       = cvtA
       $^ Alet a
@@ -729,104 +774,80 @@ liftPreOpenAcc vectAcc strength ctx size acc
          => PreFun    acc  aenv  (e -> e')
          -> acc            aenv  (Array sh e)
          -> LiftedAcc acc  aenv' (Array sh e')
-    mapL (cvtF1 -> (f_l, f_a)) (cvtA -> a)
-      | avoidLifting
-      , Just (AvoidedFun b f) <- f_a
-      , AvoidedAcc a'         <- a
-      = AvoidedAcc
-      $^ bind b
-      $  Map f (sink b a')
-      | avoidLifting
-      , Just (AvoidedFun binds f) <- f_a
-      = liftedAcc
-      $^ bind binds
-      $  Alet (sink binds $ lifted a)
-      $  construct (segmentsC avar0)
-      $^ Map (weakenA1 f) (valuesC avar0)
+    mapL (cvtF1 -> (f_a, f_l)) (cvtA -> a)
+      | Just f <- f_a
+      = appL (inject . Map f)
+             (regularC .^ Map f . unregularC)
+             (\a' -> inject . Alet a'
+                  $ irregularC (segmentsC avar0)
+                  $^ Map (weakenA1 f) (irregularValuesC avar0))
+             a
       | otherwise
-      = liftedAcc
-      $^ Alet (lifted a)
-      $  construct (segmentsC avar0)
-      $  weakenA1 f_l `apply` valuesC avar0
-
+      = appFL size
+              (regularC . apply (generalizeRank f_l) . unregularC)
+              (\a' -> inject . Alet a'
+                   . irregularC (segmentsC avar0)
+                   $ weakenA1 f_l `apply` irregularValuesC avar0)
+              a
 
     zipWithL :: forall sh a b c. (Elt a, Elt b, Elt c, Shape sh)
              => PreFun     acc aenv  (a -> b -> c)
              -> acc            aenv  (Array sh a)
              -> acc            aenv  (Array sh b)
              -> LiftedAcc  acc aenv' (Array sh c)
-    zipWithL (cvtF2 -> (f_l, f_a)) (cvtA -> a) (cvtA -> b)
-      | avoidLifting
-      , Just (AvoidedFun binds f) <- f_a
-      , AvoidedAcc a'             <- a
-      , AvoidedAcc b'             <- b
-      = AvoidedAcc
-      $^ bind binds
-      $ ZipWith f (sink binds a') (sink binds b')
-      | Just (AvoidedFun b2 f) <- f_a
-      , AsSlice                <- asSlice (Proxy :: Proxy sh)
-      = liftedAcc
-      $^ bind b2
-      $  Alet (sink b2 (lifted a))
-      $^ Alet (weakenA1 $ sink b2 (lifted b))
-      $^ Alet (isIrregularSegsC (segmentsC avar0))
-      $^ Acond (the avar0) (inject
-        -- The array is irregular
-        $  Alet (liftedZipC avar2 avar1)
-        $^ Alet (unzip (valuesC avar0))
-        $  construct (segmentsC avar1)
-        $^ ZipWith (weakenA5 f) (fstA avar0) (sndA avar0)
-      ) (inject
-        -- The array is regular
-        $  Alet (weakenA3 . sink b2 $ unitSize size)
-        $^ Alet (regularShapeC (segmentsC avar3))
-        $^ Alet (regularShapeC (segmentsC avar3))
-        $ construct (regularSegsC avar2 (unit (Intersect (the avar0) (the avar1))))
-        $ flattenC
-        $^ ZipWith (weakenA6 f)
-            (inject $ Reshape (indexSnoc (the avar1) (the avar2)) (valuesC avar5))
-            (inject $ Reshape (indexSnoc (the avar0) (the avar2)) (valuesC avar4))
-      )
+    zipWithL (cvtF2 -> (f_a, f_l)) (cvtA -> a) (cvtA -> b)
+      | Just f <- f_a
+      = let
+           zipA a' = inject . ZipWith f a'
+           zipR a' = regularC .^ ZipWith f (unregularC a') . unregularC
+           zipIr a' b' =  inject
+                       .  Alet (liftedZipC a' b')
+                       .^ Alet (unzipC (irregularValuesC avar0))
+                       .  irregularC (segmentsC avar1)
+                       $^ ZipWith (weakenA2 f) (fstA avar0) (sndA avar0)
+        in withL (\a' -> withL (avoidedAcc . zipA  a')
+                                (regularAcc . zipR  (replicateA size a'))
+                                (irregularAcc . zipIr (sparsifyC (replicateA size a')))
+                                b)
+                  (\a' -> appFL size
+                                (zipR a')
+                                (zipIr (sparsifyC a'))
+                                b)
+                  (\a' -> irregularAcc $ zipIr a' (asIrregular b))
+                  a
       | otherwise
-      = liftedAcc
-      $^ Alet (liftedZipC (lifted a) (lifted b))
-      $^ Alet (unzip (valuesC avar0))
-      $  construct (segmentsC avar1)
-      $^ subApply2 (weakenA2 f_l) (fstA avar0) (sndA avar0)
+      = let
+          zipR  a' = regularC .^ subApply2 (generalizeRank2 f_l) (unregularC a') . unregularC
+          zipIr a' b' =  inject
+                      .  Alet (liftedZipC a' b')
+                      .^ Alet (unzipC (irregularValuesC avar0))
+                      .  irregularC (segmentsC avar1)
+                      $^ subApply2 (weakenA2 f_l) (fstA avar0) (sndA avar0)
+        in withFL size
+                  (\a' -> appFL size
+                                (zipR a')
+                                (zipIr (sparsifyC a'))
+                                b)
+                  (\a' -> irregularAcc $ zipIr a' (asIrregular b))
+                  a
 
     foldL :: forall sh e. (Elt e, Shape sh)
           => PreFun acc     aenv  (e -> e -> e)
           -> PreExp acc     aenv  e
           -> acc            aenv  (Array (sh:.Int) e)
           -> LiftedAcc  acc aenv' (Array sh e)
-    foldL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z') (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a'    <- a
-      = AvoidedAcc
-      $^ bind b1
-      $ Alet (sink b1 $^ bind b2 (Unit z'))
-      $^ Fold (weakenA1 f) (the avar0) (weakenA1 $ sink b1 a')
+    foldL (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | AsSlice <- asSlice (Proxy :: Proxy sh)
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 (lifted a))
-      $^ Alet (weakenA1 $ sink b1 $^ bind b2 $ Unit z')
-      $^ Alet (isIrregularSegsC (segmentsC avar1))
-      $^ Acond (the avar0) (inject
-        -- The array is irregular
-        $  Alet (makeFoldSegmentsC (segmentsC avar2))
-        $  construct (sndA avar0)
-        $^ FoldSeg (weakenA4 f) (the avar2) (valuesC avar3) (fstA avar0)
-      ) (inject
-        -- The array is regular
-        $  Alet (nestedSizeC (segmentsC avar2))
-        $^ Alet (regularShapeC (segmentsC avar3))
-        $^ Alet (inject $ Fold (weakenA5 f) (the avar3) $^ Reshape (index2 (ShapeSize (IndexTail (the avar0)) `times` the avar1)
-                                                                           (IndexHead (the avar0)))
-                                                                   (valuesC avar4))
-        $  construct (regularSegsC avar2 (unit . IndexTail $ the avar1))
-        $  avar0
-        )
+      = let
+          foldA = inject
+                . Fold f z
+          foldR = regularC .^ Fold f z . unregularC
+          foldIr a = inject
+                   .  Alet a
+                   .^ Alet (makeFoldSegmentsC (segmentsC avar0))
+                   .  irregularC (sndA avar0)
+                   $^ FoldSeg (weakenA2 f) (weakenA2 z) (irregularValuesC avar1) (fstA avar0)
+        in appL foldA foldR foldIr a
     foldL _ _ _
       = error $ nestedError "first or second" "fold"
 
@@ -834,56 +855,40 @@ liftPreOpenAcc vectAcc strength ctx size acc
            => PreFun acc  aenv  (e -> e -> e)
            -> acc            aenv  (Array (sh:.Int) e)
            -> LiftedAcc  acc aenv' (Array sh e)
-    fold1L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a'    <- a
-      = AvoidedAcc
-      $^ bind b1
-      $  Fold1 f (sink b1 a')
+    fold1L (cvtF2 -> (Just f,_)) (cvtA -> a)
       | AsSlice <- asSlice (Proxy :: Proxy sh)
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 (lifted a))
-      $^ Alet (isIrregularSegsC (segmentsC avar0))
-      $^ Acond (the avar0) (inject
-        -- The array is irregular
-        $  Alet (makeFoldSegmentsC (segmentsC avar1))
-        $  construct (sndA avar0)
-        $^ Fold1Seg (weakenA3 f) (valuesC avar2) (fstA avar0)
-      ) (inject
-        -- The array is regular
-        $  Alet (weakenA2 (sink b1 (unitSize size)))
-        $^ Alet (regularShapeC (segmentsC avar2))
-        $^ Alet (inject $ Fold1 (weakenA4 f) $^ Reshape (indexSnoc (the avar0) (the avar1)) (valuesC avar3))
-        $  construct (regularSegsC avar2 (unit . nonEmpty . indexInit $ the avar1))
-        $  flattenC avar0
-        )
+      = let
+          foldA = inject
+                . Fold1 f
+          foldR = regularC .^ Fold1 f . unregularC
+          foldIr a = inject
+                   .  Alet a
+                   .^ Alet (makeFoldSegmentsC (segmentsC avar0))
+                   .  irregularC (sndA avar0)
+                   $^ Fold1Seg (weakenA2 f) (irregularValuesC avar1) (fstA avar0)
+        in appL foldA foldR foldIr a
     fold1L _ _
       = error $ nestedError "first or second" "fold1"
 
+    -- TODO: Check this. Don't think it is correct.
     foldSegL :: forall sh e i. (Elt e, Shape sh, IsIntegral i, Elt i)
              => PreFun acc aenv (e -> e -> e)
              -> PreExp acc aenv e
              -> acc            aenv (Array (sh:.Int) e)
              -> acc            aenv (Sugar.Segments i)
              -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
-    foldSegL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a) (cvtA -> segs)
-      | avoidLifting
-      , AvoidedAcc a'    <- a
-      , AvoidedAcc segs' <- segs
-      = AvoidedAcc
-      $^ bind b1
-      $  Alet (sink b1 . inject . bind b2 $ Unit z)
-      $^ FoldSeg (weakenA1 f) (the avar0) (weakenA1 $ sink b1 a') (weakenA1 $ sink b1 segs')
+    foldSegL (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a) (cvtA -> segs)
+      | LiftedAcc AvoidedT a'    <- a
+      , LiftedAcc AvoidedT segs' <- segs
+      = avoidedAcc
+      $^ FoldSeg f z a' segs'
       | AsSlice <- asSlice (Proxy :: Proxy sh)
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 (lifted a))
-      $^ Alet (weakenA1 . sink b1 $ lifted segs)
+      = irregularAcc
+      $^ Alet (asIrregular a)
+      $^ Alet (weakenA1 $ asIrregular segs)
       $^ Alet (makeFoldSegSegmentsC (segmentsC avar1) avar0)
-      $  construct (fstA avar0)
-      $^ Alet (weakenA3 . sink b1 . inject . bind b2 $ Unit z)
-      $^ FoldSeg (weakenA4 f) (the avar0) (valuesC avar3) (sndA avar1)
+      $  irregularC (fstA avar0)
+      $^ FoldSeg (weakenA3 f) (weakenA3 z) (irregularValuesC avar2) (sndA avar0)
     foldSegL _ _ _ _
       = error $ nestedError "first or second" "foldSeg"
 
@@ -892,21 +897,18 @@ liftPreOpenAcc vectAcc strength ctx size acc
               -> acc            aenv (Array (sh:.Int) e)
               -> acc            aenv (Sugar.Segments i)
               -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
-    fold1SegL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a) (cvtA -> segs)
-      | avoidLifting
-      , AvoidedAcc a'    <- a
-      , AvoidedAcc segs' <- segs
-      = AvoidedAcc
-      $^ bind b1
-      $  Fold1Seg f (sink b1 a') (sink b1 segs')
+    fold1SegL (cvtF2 -> (Just f,_)) (cvtA -> a) (cvtA -> segs)
+      | LiftedAcc AvoidedT a'    <- a
+      , LiftedAcc AvoidedT segs' <- segs
+      = avoidedAcc
+      $^ Fold1Seg f a' segs'
       | AsSlice <- asSlice (Proxy :: Proxy sh)
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 (lifted a))
-      $^ Alet (weakenA1 . sink b1 $ lifted segs)
+      = irregularAcc
+      $^ Alet (asIrregular a)
+      $^ Alet (weakenA1 $ asIrregular segs)
       $^ Alet (makeFoldSegSegmentsC (segmentsC avar1) avar0)
-      $  construct (fstA avar0)
-      $^ Fold1Seg (weakenA3 f) (valuesC avar2) (sndA avar0)
+      $  irregularC (fstA avar0)
+      $^ Fold1Seg (weakenA3 f) (irregularValuesC avar2) (sndA avar0)
     fold1SegL _ _ _
       = error $ nestedError "first" "foldSeg"
 
@@ -914,16 +916,13 @@ liftPreOpenAcc vectAcc strength ctx size acc
                => PreFun acc  aenv  (e -> e -> e)
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanl1L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      = AvoidedAcc
-      $^ bind b1
-      $  Scanl1 f (sink b1 a')
+    scanl1L (cvtF2 -> (Just f,_)) (cvtA -> a)
+      | LiftedAcc AvoidedT a' <- a
+      = avoidedAcc
+      $^ Scanl1 f a'
       | otherwise
-      = liftedAcc
-      $^ bind b1
-      $  extract $ scanl1Lift f (sink b1 (lifted a))
+      = irregularAcc
+      $ scanl1Lift f (asIrregular a)
     scanl1L _ _
       = error $ nestedError "first" "scanl1"
 
@@ -932,18 +931,13 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanlL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      = AvoidedAcc
-      $^ bind b1
-      $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
-      $^ Scanl (weakenA1 f) (the avar0) (weakenA1 $ sink b1 a')
+    scanlL (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
+      | LiftedAcc AvoidedT a' <- a
+      = avoidedAcc
+      $^ Scanl f z a'
       | otherwise
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
-      $  scanlLift (weakenA1 f) (the avar0) (weakenA1 $ sink b1 $ lifted a)
+      = irregularAcc
+      $  scanlLift f z (asIrregular a)
     scanlL _ _ _
       = error $ nestedError "first or second" "scanl"
 
@@ -952,21 +946,16 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e, Scalar e)
-    scanl'L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      = AvoidedAcc
-      $^ bind b1
-      $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
-      $^ Scanl' (weakenA1 f) (the avar0) (weakenA1 $ sink b1 a')
+    scanl'L (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
+      | LiftedAcc AvoidedT a' <- a
+      = avoidedAcc
+      $^ Scanl' f z a'
       | otherwise
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 $ lifted a)
+      = irregularAcc
+      $^ Alet (asIrregular a)
       $^ Alet (S.map S.unindex1 `fromHOAS` shapesC (segmentsC avar0))
-      $^ Alet (valuesC avar1)
-      $^ Alet (weakenA3 $ sink b1 $ inject $ bind b2 $ Unit z)
-      $^ Alet (valuesC $ scanlLift (weakenA4 f) (the avar0) avar3)
+      $^ Alet (irregularValuesC avar1)
+      $^ Alet (irregularValuesC $ scanlLift (weakenA3 f) (weakenA3 z) avar2)
       $  fromHOAS3
             (\seg vec vec' ->
               let
@@ -984,10 +973,10 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                           (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
                                           vec'
               in S.Acc . S.Atuple
-               $ SnocAtup (SnocAtup NilAtup (liftedArray (segmentsFromShapes (S.map S.index1 seg')) body))
-                          (liftedScalar sums))
-            avar3
+               $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes (S.map S.index1 seg')) body))
+                          (sparsify $ regular sums))
             avar2
+            avar1
             avar0
     scanl'L _ _ _
       = error $ nestedError "first or second" "scanl"
@@ -996,16 +985,13 @@ liftPreOpenAcc vectAcc strength ctx size acc
                => PreFun acc  aenv  (e -> e -> e)
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanr1L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      = AvoidedAcc
-      $^ bind b1
-      $  Scanr1 f (sink b1 a')
+    scanr1L (cvtF2 -> (Just f,_)) (cvtA -> a)
+      | LiftedAcc AvoidedT a' <- a
+      = avoidedAcc
+      $^ Scanr1 f a'
       | otherwise
-      = liftedAcc
-      $^ bind b1
-      $  extract $ scanr1Lift f (sink b1 (lifted a))
+      = irregularAcc
+      $ scanr1Lift f (asIrregular a)
     scanr1L _ _
       = error $ nestedError "first" "scanr1"
 
@@ -1014,18 +1000,13 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanrL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      = AvoidedAcc
-      $^ bind b1
-      $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
-      $^ Scanr (weakenA1 f) (the avar0) (weakenA1 $ sink b1 a')
+    scanrL (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
+      | LiftedAcc AvoidedT a' <- a
+      = avoidedAcc
+      $^ Scanr f z a'
       | otherwise
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
-      $  scanrLift (weakenA1 f) (the avar0) (weakenA1 $ sink b1 (lifted a))
+      = irregularAcc
+      $ scanrLift f z (asIrregular a)
     scanrL _ _ _
       = error $ nestedError "first or second" "scanr"
 
@@ -1034,21 +1015,16 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e, Scalar e)
-    scanr'L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      = AvoidedAcc
-      $^ bind b1
-      $  Alet (sink b1 $ inject $ bind b2 $ Unit z)
-      $^ Scanr' (weakenA1 f) (the avar0) (weakenA1 $ sink b1 a')
+    scanr'L (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
+      | LiftedAcc AvoidedT a' <- a
+      = avoidedAcc
+      $^ Scanr' f z a'
       | otherwise
-      = liftedAcc
-      $^ bind b1
-      $  Alet (sink b1 (lifted a))
+      = irregularAcc
+      $^ Alet (asIrregular a)
       $^ Alet (segmentsC avar0)
-      $^ Alet (valuesC avar1)
-      $^ Alet (weakenA3 $ sink b1 $ inject $ bind b2 $ Unit z)
-      $^ Alet (valuesC $ scanrLift (weakenA4 f) (the avar0) avar3)
+      $^ Alet (irregularValuesC avar1)
+      $^ Alet (irregularValuesC $ scanrLift (weakenA3 f) (weakenA3 z) avar2)
       $  fromHOAS3
             (\seg vec vec' ->
               let
@@ -1063,10 +1039,10 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                             (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
                                             vec'
               in S.Acc . S.Atuple
-               $ SnocAtup (SnocAtup NilAtup (liftedArray (segmentsFromShapes (S.map S.index1 seg')) body))
-                          (liftedScalar sums))
-            avar3
+               $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes (S.map S.index1 seg')) body))
+                          (sparsify $ regular sums))
             avar2
+            avar1
             avar0
     scanr'L _ _ _
       = error $ nestedError "first or second" "scanr'"
@@ -1076,48 +1052,35 @@ liftPreOpenAcc vectAcc strength ctx size acc
                  -> PreFun acc  aenv  (sh' -> sh)
                  -> acc            aenv  (Array sh e)
                  -> LiftedAcc  acc aenv' (Array sh' e)
-    backpermuteL (cvtE -> sh) (cvtF1 -> (f_l, f_a)) (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      , AvoidedExp b1 sh' <- sh
-      , Just (AvoidedFun b2 f) <- f_a
-      =  AvoidedAcc
-      $^ bind b2
-      $  Alet (sink b2 $^ bind b1 (Unit sh'))
-      $^ Backpermute (the avar0) (weakenA1 f) (weakenA1 $ sink b2 a')
-      | Just (AvoidedFun b2 f) <- f_a
-      , LiftedExp sh'          <- sh
-      , AsSlice                <- asSlice (Proxy :: Proxy sh)
-      , AsSlice                <- asSlice (Proxy :: Proxy sh')
-      = liftedAcc
-      $^ bind b2
-      $  Alet (sink b2 (lifted a))
-      $^ Alet (isIrregularSegsC (segmentsC avar0))
-      $^ Acond (the avar0) (inject
-        -- The array is irregular
-        $  Alet (weakenA2 . sink b2 $ segmentsFromExp sh)
-        $^ Alet (liftedBackpermutePreC avar0)
-        $  construct avar1
-        $  liftedBackpermuteC (atup (fstA avar0) (inject $ Map (weakenA4 f) (sndA avar0)))
-                              (avar3)
-      ) (inject
-        -- The array is regular
-        $ Alet (weakenA2 . sink b2 $ unitSize size)
-        $^ Alet (weakenA3 . sink b2 $^ Aprj tupIx1 sh')
-        $ construct (regularSegsC avar1 avar0)
-        $ flattenC
-        $^ Backpermute (indexSnoc (the avar0) (the avar1)) (weakenA4 (higher f))
-        $^ Alet (regularShapeC (segmentsC avar3))
-        $^ Reshape (indexSnoc (the avar0) (the avar2)) (valuesC avar4)
-
-      )
+    backpermuteL (cvtE -> sh) (cvtF1 -> (f_a, f_l)) (cvtA -> a)
+      | LiftedAcc AvoidedT a'          <- a
+      , LiftedExp (Just sh') _ <- sh
+      , Just f                 <- f_a
+      =  avoidedAcc
+      $^ Backpermute sh' f a'
+      | Just f <- f_a
+      , LiftedExp (Just sh') _ <- sh
+      , AsSlice         <- asSlice (Proxy :: Proxy sh)
+      , AsSlice         <- asSlice (Proxy :: Proxy sh')
+      = let
+          reg a' = regularAcc . regularC
+                 $^ Alet (unregularC a')
+                 $^ Backpermute (indexSnoc (weakenA1 sh') (indexLastC (Shape avar0))) (higher (weakenA1 f)) avar0
+          ireg a' = regularAcc . regularC
+                   $^ Alet (unitSize size)
+                   $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
+                   $^ Alet (regularSegsC avar0 (weakenA1 $ unit sh'))
+                   $^ Alet (liftedBackpermutePreC avar0)
+                   $  liftedBackpermuteC (atup (fstA avar0) (inject $ Map (weakenA3 f) (sndA avar0)))
+                                         (weakenA3 a')
+        in withFL size reg ireg a
       | otherwise
-      =  liftedAcc
+      =  irregularAcc
       $^ Alet (segmentsFromExp sh)
       $^ Alet (liftedBackpermutePreC avar0)
-      $  construct avar1
+      $  irregularC avar1
       $  liftedBackpermuteC (atup (fstA avar0) (inject $ weakenA2 f_l `subApply` sndA avar0))
-                            (weakenA2 . lifted $ a)
+                            (weakenA2 . asIrregular $ a)
 
     permuteL :: (Shape sh, Shape sh', Elt e)
              => PreFun acc  aenv  (e -> e -> e)
@@ -1125,40 +1088,32 @@ liftPreOpenAcc vectAcc strength ctx size acc
              -> PreFun acc  aenv  (sh -> sh')
              -> acc            aenv  (Array sh  e)
              -> LiftedAcc  acc aenv' (Array sh' e)
-    permuteL (avoidFun -> Avoided (b1, comb))
-             (cvtA -> AvoidedAcc defs)
-             (avoidFun . sink b1 -> Avoided (b2, p))
-             (cvtA -> AvoidedAcc a)
-      | avoidLifting
-      , ExtendContext ctx1 b1' <- liftExtend vectAcc strength b1 ctx size
-      , ExtendContext ctx2 b2' <- liftExtend vectAcc strength b2 ctx1 (sink b1' $ size)
-      , Just comb' <- rebuildToLift ctx1 comb
-      , Just p'   <- rebuildToLift ctx2 p
-      =  AvoidedAcc
-      $^ bind b1'
-      $  bind b2'
-      $  Permute (sink b2' comb') (sink b2' . sink b1' $ defs) p' (sink b2' . sink b1' $ a)
-
-    -- Lifted version
-    permuteL (cvtF2 -> (_, Just (AvoidedFun b comb))) (cvtA -> defs) (cvtF1 -> (p_l,p_a)) (cvtA -> a)
-      =  trace "permuteL" ("Lifting permute: " ++ show (isJust p_a))
-      $  liftedAcc
-      $^ bind b
-      $  Alet (sink b $ lifted defs)
-      $^ Alet (weakenA1 . sink b $ lifted a)
+    permuteL (cvtF2 -> (Just comb, _))
+             (cvtA -> defs)
+             (cvtF1 -> (p_a, p_l))
+             (cvtA -> a)
+      | Just p           <- p_a
+      , LiftedAcc AvoidedT a'    <- a
+      , LiftedAcc AvoidedT defs' <- defs
+      =  avoidedAcc
+      $^ Permute comb defs' p a'
+      -- TODO: Regular permutation
+      |  otherwise
+      =  irregularAcc
+      $^ Alet (asIrregular defs)
+      $^ Alet (weakenA1 $ asIrregular a)
       $  let init     = avar0
              defaults = avar1
              shapes   = segmentsC init
              shapes'  = segmentsC defaults
              enums    = inject . Map (fun1 (Prj tupIx0)) . enumSegC $ shapes
-             ixs      = weakenA2 (sink b p_l) `subApply` enums
-             ixs'     = asOffsetsOfC (construct shapes $^ ixs) shapes'
+             ixs      = weakenA2 p_l `subApply` enums
+             ixs'     = asOffsetsOfC (irregularC shapes $^ ixs) shapes'
              vals     = Permute (weakenA2 $ comb)
-                                (valuesC defaults)
+                                (irregularValuesC defaults)
                                 (fun1 (ixs' `Index`))
-                                (valuesC init)
-          in construct shapes' $^ vals
-
+                                (irregularValuesC init)
+          in irregularC shapes' $^ vals
     permuteL _ _ _ _
       = error $ nestedError "first" "permute"
 
@@ -1167,10 +1122,9 @@ liftPreOpenAcc vectAcc strength ctx size acc
              -> Boundary                (EltRepr e)
              -> acc            aenv (Array sh e)
              -> LiftedAcc  acc aenv' (Array sh e')
-    stencilL (cvtF1 -> (_, Just (AvoidedFun b1 f))) b (cvtA -> AvoidedAcc a)
-      = AvoidedAcc
-      $^ bind b1
-      $  Stencil f b (sink b1 a)
+    stencilL (cvtF1 -> (Just f,_)) b (cvtA -> LiftedAcc AvoidedT a)
+      = avoidedAcc
+      $^ Stencil f b a
     stencilL _                                      _ _
       = error $ "Disallowed nested parallelism: Stencil operations must reside at the top level of "
              ++ "the program nesting and the stencil function contain no nested parallelism."
@@ -1183,44 +1137,62 @@ liftPreOpenAcc vectAcc strength ctx size acc
               -> Boundary                (EltRepr e2)
               -> acc            aenv (Array sh e2)
               -> LiftedAcc  acc aenv' (Array sh e')
-    stencil2L (cvtF2 -> (_, Just (AvoidedFun binds f)))
+    stencil2L (cvtF2 -> (Just f,_))
               b1
-              (cvtA -> AvoidedAcc a1)
+              (cvtA -> LiftedAcc AvoidedT a1)
               b2
-              (cvtA -> AvoidedAcc a2)
-      = AvoidedAcc
-      $^ bind binds
-      $  Stencil2 f b1 (sink binds a1) b2 (sink binds a2)
+              (cvtA -> LiftedAcc AvoidedT a2)
+      = avoidedAcc
+      $^ Stencil2 f b1 a1 b2 a2
     stencil2L _                                 _  _  _  _
       = error $ "Disallowed nested parallelism: Stencil operations must reside at the top level of "
              ++ "parallel nesting and the supplied stencil function contain no nested parallelism."
 
+    collectL :: Arrays arrs
+             => PreExp acc aenv Int
+             -> Maybe (PreExp acc aenv Int)
+             -> Maybe (PreExp acc aenv Int)
+             -> PreOpenNaturalSeq acc aenv arrs
+             -> LiftedAcc acc aenv' arrs
+    collectL min max i s
+      | Just s' <- strengthenUnder ctx (reduceOpenSeq s)
+      , Just cs <- vectoriseOpenSeq vectAcc ctx size s
+      = LiftedAcc avoidedType
+      $^ Alet (unitSize size)
+      $^ Collect (maximum (the avar0) (fromMaybe (Const 1) (weakenA1 <$> cvtE' min)))
+                 (weakenA1 <$> (cvtE' =<< max))
+                 (weakenA1 <$> (cvtE' =<< i))
+                 (weakenA1 $ fuseSeq s')
+                 (Just (weakenA1 $ fuseSeq cs))
+      | otherwise
+      = error "Nested sequence computation is not closed in its accumulators"
+
     scanl1Lift :: forall aenv e. Elt e
                => PreFun acc aenv (e -> e -> e)
-               -> acc aenv (Nested (Array DIM1 e))
-               -> acc aenv (Nested (Array DIM1 e))
+               -> acc aenv (Irregular (Array DIM1 e))
+               -> acc aenv (Irregular (Array DIM1 e))
     scanl1Lift f a
       = inject
       $  Alet a
-      $  construct (segmentsC avar0)
+      $  irregularC (segmentsC avar0)
       $  sndA
-      $  unzip
+      $  unzipC
       $^ Scanl1 (weakenA1 $ segmented f)
       $  let
-           flags :: forall aenv e. Elt e => acc (aenv, Nested (Array DIM1 e)) (Vector Int)
+           flags :: forall aenv e. Elt e => acc (aenv, Irregular (Array DIM1 e)) (Vector Int)
            flags = fromHOAS mkHeadFlags (segmentsC avar0)
-         in fromHOAS2 S.zip flags (valuesC avar0)
+         in fromHOAS2 S.zip flags (irregularValuesC avar0)
 
     scanlLift :: forall aenv e. Elt e
               => PreFun acc aenv (e -> e -> e)
               -> PreExp acc aenv e
-              -> acc            aenv (Nested (Array DIM1 e))
-              -> acc            aenv (Nested (Array DIM1 e))
+              -> acc aenv (Irregular (Array DIM1 e))
+              -> acc aenv (Irregular (Array DIM1 e))
     scanlLift f z a
       =  scanl1Lift f
       $^ Alet a
       $^ Alet (segmentsC avar0)
-      $^ Alet (valuesC avar1)
+      $^ Alet (irregularValuesC avar1)
       $^ Alet (weakenA3 $ inject $ Unit z)
       $  fromHOAS3
           (\seg vec z ->
@@ -1234,37 +1206,37 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                       vec
               flags       = mkHeadFlags seg
               inc         = S.scanl1 (+) flags
-             in liftedArray seg' vec')
+             in irregular seg' vec')
           avar2
           avar1
           avar0
 
     scanr1Lift :: forall aenv e. Elt e
                => PreFun acc aenv (e -> e -> e)
-               -> acc aenv (Nested (Array DIM1 e))
-               -> acc aenv (Nested (Array DIM1 e))
+               -> acc aenv (Irregular (Array DIM1 e))
+               -> acc aenv (Irregular (Array DIM1 e))
     scanr1Lift f a
       = inject
       $  Alet a
-      $  construct (segmentsC avar0)
+      $  irregularC (segmentsC avar0)
       $  sndA
-      $  unzip
+      $  unzipC
       $^ Scanr1 (weakenA1 $ segmented f)
       $  let
-           flags :: forall aenv e. Elt e => acc (aenv, Nested (Array DIM1 e)) (Vector Int)
+           flags :: forall aenv e. Elt e => acc (aenv, Irregular (Array DIM1 e)) (Vector Int)
            flags = fromHOAS mkTailFlags (segmentsC avar0)
-         in fromHOAS2 S.zip flags (valuesC avar0)
+         in fromHOAS2 S.zip flags (irregularValuesC avar0)
 
     scanrLift :: forall aenv e. Elt e
               => PreFun acc aenv (e -> e -> e)
               -> PreExp acc aenv e
-              -> acc            aenv (Nested (Array DIM1 e))
-              -> acc            aenv (Nested (Array DIM1 e))
+              -> acc            aenv (Irregular (Array DIM1 e))
+              -> acc            aenv (Irregular (Array DIM1 e))
     scanrLift f z a
       =  scanr1Lift f
       $^ Alet a
       $^ Alet (segmentsC avar0)
-      $^ Alet (valuesC avar1)
+      $^ Alet (irregularValuesC avar1)
       $^ Alet (weakenA3 $ inject $ Unit z)
       $  fromHOAS3
           (\seg vec z ->
@@ -1278,188 +1250,168 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                       vec
               flags       = mkHeadFlags seg
               inc         = S.scanl1 (+) flags
-             in liftedArray seg' vec')
+             in irregular seg' vec')
           avar2
           avar1
           avar0
 
     segmentsFromExp :: forall sh. Shape sh
-                    => LiftedExp acc () aenv' sh
+                    => LiftedExp acc () aenv' aenv' sh
                     -> acc aenv' (Segments sh)
-    segmentsFromExp (AvoidedExp b sh) = inject
-                                      $  Alet (unitSize size)
-                                      $^ Alet (weakenA1 . inject . bind b $ Unit sh)
-                                      $  regularSegsC avar1 avar0
-    segmentsFromExp (LiftedExp sh)    = asSegmentsC sh
+    segmentsFromExp (LiftedExp (Just sh) _)
+      = regularSegsC (unitSize size) (unit sh)
+    segmentsFromExp (LiftedExp _ sh)
+      = segmentsFromShapesC sh
 
-    avoidF :: PreFun acc aenv f
-           -> AvoidFun acc () aenv' f
-    avoidF (avoidFun -> Avoided (env, f))
-      | ExtendContext ctx' env' <- liftExtend vectAcc Conservative env ctx size
-      = case rebuildToLift ctx' f of
-          Just f' -> Avoided (env', f')
-          _       -> trace "liftPreOpenAcc" "Function contains no nested parallelism, but depends on lifted variables"
-                   $ Unavoided
-    avoidF _                              = Unavoided
-
-    avoidE :: PreExp acc aenv f
-           -> AvoidExp acc () aenv' f
-    avoidE (avoidExp -> Avoided (env, e)) | ExtendContext ctx' env' <- liftExtend vectAcc Conservative env ctx size
-                                          , Just e' <- rebuildToLift ctx' e
-                                          = Avoided (env', e')
-    avoidE _                              = Unavoided
-
-type Vector' e = (Scalar Bool, Scalar Int, Scalar e, Vector e)
+data ExpContext env aenv aenv' aenv'' where
+  ExpBase :: Context aenv aenv'
+          -> ExpContext () aenv aenv' aenv'
+  ExpPush :: ExpContext env aenv aenv' aenv''
+          -> ExpContext (env,e) aenv aenv' (aenv'', Vector e)
 
 -- |Performs the lifting transform on a given scalar expression.
 --
-liftExp :: forall acc env env' aenv aenv' e. Kit acc
+liftExp :: forall acc env aenv aenv' aenv'' e. (Kit acc, Elt e)
         => VectoriseAcc acc
-        -> Strength
-        -> Context env aenv env' aenv'
-        -> Size acc aenv' Int
-        -> PreOpenExp acc env       aenv  e
-        -> PreOpenAcc acc aenv' (Vector' e)
-liftExp vectAcc strength ctx size exp
-  = case exp of
-      Let bnd body              -> letL bnd body
-      Var ix                    -> varL ctx ix id id
-      Const c                   -> unlifted (Const c)
-      Tuple tup                 -> liftTuple vectAcc strength ctx size tup
-      Prj ix t                  -> mapVector' (Prj ix) (cvtE t)
-      IndexNil                  -> unlifted IndexNil
-      IndexAny                  -> unlifted IndexAny
-      IndexCons sh sz           -> zipWithVector' IndexCons (cvtE sh) (cvtE sz)
-      IndexHead sh              -> mapVector' IndexHead (cvtE sh)
-      IndexTail sh              -> mapVector' IndexTail (cvtE sh)
-      IndexTrans sh             -> mapVector' IndexTrans (cvtE sh)
-      IndexSlice x ix sh        -> mapVector' (IndexSlice x ix) (cvtE sh)
-      IndexFull x ix sl         -> zipWithVector' (IndexFull x) (cvtE ix) (cvtE sl)
-      ToIndex sh ix             -> zipWithVector' ToIndex (cvtE sh) (cvtE ix)
-      FromIndex sh ix           -> zipWithVector' FromIndex (cvtE sh) (cvtE ix)
-      ToSlice x sh i            -> zipWithVector' (ToSlice x) (cvtE sh) (cvtE i)
-      Cond p t e                -> condL p t e
-      While p it i              -> whileL p it i
-      PrimConst c               -> unlifted (PrimConst c)
-      PrimApp f x               -> mapVector' (PrimApp f) (cvtE x)
-      Index a sh                -> indexL a sh
-      LinearIndex a i           -> linearIndexL a i
-      Shape a                   -> shapeL a
-      ShapeSize sh              -> mapVector' ShapeSize (cvtE sh)
-      Intersect s t             -> zipWithVector' Intersect (cvtE s) (cvtE t)
-      Union s t                 -> zipWithVector' Union (cvtE s) (cvtE t)
-      Foreign ff f e            -> mapVector' (Foreign ff f) (cvtE e)
+        -> ExpContext env aenv aenv' aenv''
+        -> Size acc aenv'' Int
+        -> PreOpenExp acc env aenv e
+        -> LiftedExp acc env aenv' aenv'' e
+liftExp vectAcc ctx size exp
+  = relift $ case exp of
+      Let bnd body       -> letL bnd body
+      Var ix             -> varL ix
+      Const c            -> unlifted (Const c)
+      Tuple tup          -> cvtTuple tup
+      Prj ix t           -> cvtE1 (Prj ix) (cvtE t)
+      IndexNil           -> unlifted IndexNil
+      IndexAny           -> unlifted IndexAny
+      IndexCons sh sz    -> cvtE2 IndexCons (cvtE sh) (cvtE sz)
+      IndexHead sh       -> cvtE1 IndexHead (cvtE sh)
+      IndexTail sh       -> cvtE1 IndexTail (cvtE sh)
+      IndexTrans sh      -> cvtE1 IndexTrans (cvtE sh)
+      IndexSlice x ix sh -> cvtE1 (IndexSlice x ix) (cvtE sh)
+      IndexFull x ix sl  -> cvtE2 (IndexFull x) (cvtE ix) (cvtE sl)
+      ToIndex sh ix      -> cvtE2 ToIndex (cvtE sh) (cvtE ix)
+      FromIndex sh ix    -> cvtE2 FromIndex (cvtE sh) (cvtE ix)
+      ToSlice x sh i     -> cvtE2 (ToSlice x) (cvtE sh) (cvtE i)
+      Cond p t e         -> condL (cvtE p) (cvtE t) (cvtE e)
+      While p it i       -> whileL p it i
+      PrimConst c        -> unlifted (PrimConst c)
+      PrimApp f x        -> cvtE1 (PrimApp f) (cvtE x)
+      Index a sh         -> indexL a sh
+      LinearIndex a i    -> linearIndexL a i
+      Shape a            -> shapeL a
+      ShapeSize sh       -> cvtE1 ShapeSize (cvtE sh)
+      Intersect s t      -> cvtE2 Intersect (cvtE s) (cvtE t)
+      Union s t          -> cvtE2 Union (cvtE s) (cvtE t)
+      Foreign ff f e     -> cvtE1 (Foreign ff f) (cvtE e)
   where
-    avoidLifting :: Bool
-    avoidLifting | Conservative <- strength = True
-                 | HoistOnly    <- strength = True
-                 | otherwise                = False
+    relift :: Elt a
+           => LiftedExp acc env aenv' aenv'' a
+           -> LiftedExp acc env aenv' aenv'' a
+    relift (LiftedExp (Just e) _)
+      | Just e' <- strengthenE (const Nothing) e
+      = LiftedExp (Just e) (replicateE size (weaken (under ctx) e'))
+    relift le
+      = le
 
-    lifted :: forall t. Arrays t => LiftedAcc acc aenv' t -> acc aenv' (Nested t)
-    lifted (AvoidedAcc a)   = replicateA a size
-    lifted (LiftedAcc l)    = l
+    unlifted :: forall a. Elt a => (forall env aenv. PreOpenExp acc env aenv a) -> LiftedExp acc env aenv' aenv'' a
+    unlifted a = LiftedExp (Just a) (replicateE size a)
 
-    unlifted :: forall a. Elt a => PreExp acc aenv' a -> PreOpenAcc acc aenv' (Vector' a)
-    unlifted = extract . replicatedC (unitSize size) . unit
+    under :: forall env aenv aenv' aenv''.
+             ExpContext env aenv aenv' aenv''
+          -> aenv' :> aenv''
+    under (ExpBase _)   = id
+    under (ExpPush ctx) = SuccIdx . under ctx
 
-    mapVector' :: forall aenv' a b. (Elt a, Elt b)
-               => (forall env. PreOpenExp acc env aenv' a -> PreOpenExp acc env aenv' b)
-               -> acc aenv' (Vector' a)
-               -> PreOpenAcc acc aenv' (Vector' b)
-    mapVector' f v
-      = Alet v
-      $^ Alet (inject $ Aprj tupIx3 avar0)
-      $^ Acond (the avar0) (
-          asVector'C
-        $^ Map (weakenA2 $ fun1 f) (inject $ Aprj tupIx0 avar1)
-      ) (
-          inject
-        $ Alet (inject $ Aprj tupIx1 avar1)
-        $ replicatedC (inject $ Aprj tupIx2 avar2)
-        $^ Unit (weakenA3 (fun1 f) `subApplyE` the avar0)
-      )
+    cvtE1 :: forall aenv' aenv'' a b. (Elt a, Elt b)
+          => (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b)
+          -> LiftedExp acc env aenv' aenv'' a
+          -> LiftedExp acc env aenv' aenv'' b
+    cvtE1 f (LiftedExp ae e) = LiftedExp (f <$> ae) $^ Map (fun1 f) e
 
-    zipWithVector' :: (Elt a, Elt b, Elt c)
-                   => (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv c)
-                   -> acc aenv' (Vector' a)
-                   -> acc aenv' (Vector' b)
-                   -> PreOpenAcc acc aenv' (Vector' c)
-    zipWithVector' f v1 v2
-      = mapVector' (\ab -> Let ab (f (Prj tupIx1 var0) (Prj tupIx0 var0))) (zip v1 v2)
-      where
-        -- uncurry :: (Elt a, Elt b, Elt c)
-        --         => PreFun acc aenv (a -> b -> c)
-        --         -> PreFun acc aenv ((a,b) -> c)
-        -- uncurry f
-        --   = Lam . Body
-        --   $ Let (Prj tupIx1 var0)
-        --   $ Let (Prj tupIx0 var1)
-        --   $ subApplyE2 (weakenE3 f) var1 var0
-        -- uncurry _ = error "Absurd"
+    cvtE2 :: (Elt a, Elt b, Elt c)
+          => (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv c)
+          -> LiftedExp acc env aenv' aenv'' a
+          -> LiftedExp acc env aenv' aenv'' b
+          -> LiftedExp acc env aenv' aenv'' c
+    cvtE2 f (LiftedExp ae1 e1) (LiftedExp ae2 e2) = LiftedExp (f <$> ae1 <*> ae2) $^ ZipWith (fun2 f) e1 e2
 
-        zip = fromHOAS2 $ \v1 v2 ->
-                withVector' v1 (\c e -> withVector' v2
-                                 (\c' e' -> replicated (c `min` c') (S.lift (e, e')))
-                                 (asVector' . S.map (S.lift . (e,))))
-                               (\v1' -> asVector' $ S.zip v1' (asVector v2))
-
-    cvtE :: forall e. PreOpenExp acc env aenv e
-         -> acc aenv' (Vector' e)
-    cvtE exp' = inject $ liftExp vectAcc strength ctx size exp'
+    cvtE :: forall e. Elt e
+         => PreOpenExp acc env aenv e
+         -> LiftedExp acc env aenv' aenv'' e
+    cvtE exp' = liftExp vectAcc ctx size exp'
 
     cvtA :: forall sh' e'.
             (Elt e', Shape sh')
          => acc aenv (Array sh' e')
          -> LiftedAcc acc aenv' (Array sh' e')
-    cvtA a | EmbedContext ctx' wk <- embedContext ctx
-           = vectAcc strength ctx' size (weaken wk a)
+    cvtA (extract -> Avar ix) = cvtIx (arrayContext ctx) ix
+      where
+        arrayContext :: forall env aenv aenv' aenv''.
+                        ExpContext env aenv aenv' aenv''
+                     -> Context aenv aenv'
+        arrayContext (ExpBase ctx)  = ctx
+        arrayContext (ExpPush ctx') = arrayContext ctx'
+
+        cvtIx :: forall t aenv aenv'. Arrays t
+              => Context aenv aenv'
+              -> Idx aenv t
+              -> LiftedAcc acc aenv' t
+        cvtIx BaseC         ix           = LiftedAcc avoidedType $^ Avar ix
+        cvtIx (PushC _ ty)  ZeroIdx      = LiftedAcc ty avar0
+        cvtIx (PushC ctx _) (SuccIdx ix) = weakenA1 (cvtIx ctx ix)
+    cvtA _ = $internalError "liftExp" "Embedded array term"
+
 
     cvtF1 :: forall a b. PreOpenFun acc env aenv (a -> b)
-          -> PreOpenAfun acc aenv' (Vector a -> Vector b)
-    cvtF1 (Lam (Body f)) = rewrap . Alam . Abody
-                         $ inject
-                         $ liftExp vectAcc strength (PushLExpC ctx) (sizeOfVector' avar0) f
-      where
-        rewrap :: PreOpenAfun acc aenv' (Vector' a -> Vector' b) -> PreOpenAfun acc aenv' (Vector a -> Vector b)
-        rewrap f = Alam . Abody . asVectorC $ weakenA1 f `apply` asVector'C avar0
-    cvtF1 _              = $internalError "liftExp" "Inconsistent valuation"
+          -> ( Maybe (PreOpenFun acc env aenv' (a -> b))
+             , PreOpenAfun acc aenv'' (Vector a -> Vector b) )
+    cvtF1 (Lam (Body (liftExp vectAcc (ExpPush ctx) (weakenA1 size) -> LiftedExp ab b)))
+      = (Lam . Body <$> ab, Alam (Abody b))
+    cvtF1 _              = $internalError "liftExp" "Impossible"
 
     -- Lifted versions of operations
     -- ==============================
 
-    varL :: forall env aenv env'' aenv''. Elt e
-         => Context env aenv env'' aenv''
-         -> Idx env e
-         -> (forall e. Idx env''  e -> Idx env'  e)
-         -> (forall a. Idx aenv'' a -> Idx aenv' a)
-         -> PreOpenAcc acc aenv' (Vector' e)
-    varL (PushLExpC _) ZeroIdx      _    cvtA = Avar (cvtA ZeroIdx)
-    --varL (PushExpC _)  ZeroIdx      cvtE _    = replicateE size (Var $ cvtE ZeroIdx)
-    varL (PushExpC d)  (SuccIdx ix) cvtE cvtA = varL d ix (cvtE . SuccIdx) cvtA
-    varL (PushLExpC d) (SuccIdx ix) cvtE cvtA = varL d ix cvtE             (cvtA . SuccIdx)
-    varL (PushAccC d)  ix           cvtE cvtA = varL d ix cvtE             (cvtA . SuccIdx)
-    varL (PushLAccC d) ix           cvtE cvtA = varL d ix cvtE             (cvtA . SuccIdx)
-    varL _             _            _    _    = $internalError "liftExp" "Inconsistent valuation"
+    varL :: Elt e
+         => Idx env e
+         -> LiftedExp acc env aenv' aenv'' e
+    varL ix = LiftedExp (Just (Var ix)) (inject (Avar (varL' ctx ix)))
+      where
+        varL' :: forall env aenv aenv' aenv''.
+                 ExpContext env aenv aenv' aenv''
+              -> Idx env e
+              -> Idx aenv'' (Vector e)
+        varL' (ExpBase _) _ = error "Unreachable"
+        varL' (ExpPush _) ZeroIdx = ZeroIdx
+        varL' (ExpPush ctx) (SuccIdx ix) = SuccIdx (varL' ctx ix)
 
     letL :: forall bnd_t. (Elt e, Elt bnd_t)
-         => PreOpenExp acc env          aenv  bnd_t
-         -> PreOpenExp acc (env, bnd_t) aenv  e
-         -> PreOpenAcc acc aenv' (Vector' e)
-    letL bnd body = Alet bnd' (inject body')
-      where
-        bnd'  = cvtE bnd
+         => PreOpenExp acc env          aenv bnd_t
+         -> PreOpenExp acc (env, bnd_t) aenv e
+         -> LiftedExp acc env aenv' aenv'' e
+    letL (cvtE -> LiftedExp abnd bnd) (liftExp vectAcc (ExpPush ctx) (weakenA1 size) -> LiftedExp abody body)
+      = LiftedExp (Let <$> abnd <*> abody)
+                  (inject (Alet bnd body))
 
-        body' :: PreOpenAcc acc (aenv', Vector' bnd_t) (Vector' e)
-        body' = liftExp vectAcc strength (PushLExpC ctx) (weakenA1 size) body
-
+    -- Note:
+    -- Preserving the true semantics of an operation like `Cond` is tricky with
+    -- vectorisation. This particular implementation is safe provided there are
+    -- no array terms embedded in scalar expressions other than array variables.
+    -- For now this is true.
+    --
     condL :: Elt e
-          => PreOpenExp acc env     aenv  Bool
-          -> PreOpenExp acc env     aenv  e
-          -> PreOpenExp acc env     aenv  e
-          -> PreOpenAcc acc aenv' (Vector' e)
-    condL p t e = extract . asVector'C $^ ZipWith (fun2 decide) (asVectorC (cvtE p)) (inject $ ZipWith (fun2 tup) (asVectorC (cvtE t)) (asVectorC (cvtE e)))
-      where
-        decide p' ab = Cond p' (Prj (SuccTupIdx ZeroTupIdx) ab) (Prj ZeroTupIdx ab)
+          => LiftedExp acc env aenv' aenv'' Bool
+          -> LiftedExp acc env aenv' aenv'' e
+          -> LiftedExp acc env aenv' aenv'' e
+          -> LiftedExp acc env aenv' aenv'' e
+    condL (LiftedExp ap p) (LiftedExp at t) (LiftedExp ae e)
+      = LiftedExp (Cond <$> ap <*> at <*> ae)
+      $^ case (ap >>= strengthenE (const Nothing)) of
+           Just p' -> Acond (weaken (under ctx) p') t e
+           Nothing -> zipWith3 (fun3 Cond) p t e
 
     -- The lifted while is non-trivial. Here is an overview. We use '^' to denote lifting.
     --
@@ -1477,75 +1429,110 @@ liftExp vectAcc strength ctx size exp
     -- @
     --
     whileL :: Elt e
-           => PreOpenFun acc env     aenv  (e -> Bool)
-           -> PreOpenFun acc env     aenv  (e -> e)
-           -> PreOpenExp acc env     aenv  e
-           -> PreOpenAcc acc aenv' (Vector' e)
-    whileL p it i = extract . asVector'C $^ Aprj (SuccTupIdx ZeroTupIdx) (inject $ Awhile p' it' i')
+           => PreOpenFun acc env aenv (e -> Bool)
+           -> PreOpenFun acc env aenv (e -> e)
+           -> PreOpenExp acc env aenv e
+           -> LiftedExp  acc env aenv' aenv'' e
+    whileL (cvtF1 -> (ap, p)) (cvtF1 -> (ait, it)) (cvtE -> LiftedExp ai i)
+      =  LiftedExp (While <$> ap <*> ait <*> ai)
+      $^ Aprj (SuccTupIdx ZeroTupIdx) $^ Awhile p' it' i'
       where
-        p'  :: PreOpenAfun acc aenv' ((Vector e, Vector Bool) -> Scalar Bool)
+        p'  :: PreOpenAfun acc aenv'' ((Vector e, Vector Bool) -> Scalar Bool)
         p'  = Alam $ Abody $ let
                 flags     = sndA avar0
                 any     f = inject $ Fold or (Const False) f
                 or        = fun2 (PrimApp PrimLOr S.$$ tup)
               in any flags
 
-        it' :: PreOpenAfun acc aenv' ((Vector e, Vector Bool) -> (Vector e, Vector Bool))
+        it' :: PreOpenAfun acc aenv'' ((Vector e, Vector Bool) -> (Vector e, Vector Bool))
         it' = Alam $ Abody $ let
                 values  = fstA avar0
                 flags   = sndA avar0
                 values' = inject $ ZipWith (fun2 tup)
-                                           (inject $ weakenA1 (cvtF1 it) `subApply` values)
+                                           (inject $ weakenA1 it `subApply` values)
                                            flags
                 values'' = inject $ ZipWith (Lam $ Lam $ Body $ Cond (sndE $ var1)
                                                                      (fstE $ var1)
                                                                      var0)
                                             values'
                                             values
-                flags'   = inject $ (weakenA2) (cvtF1 p) `subApply` avar0
+                flags'   = inject $ weakenA2 p `subApply` avar0
               in inject $ Alet values'' (atup avar0 flags')
 
 
-        i'  :: acc aenv' (Vector e, Vector Bool)
-        i'  = asVectorC (cvtE i) `atup` inject (replicateE size (Const True))
+        i'  :: acc aenv'' (Vector e, Vector Bool)
+        i'  = i `atup` replicateE size (Const True)
 
-    indexL :: forall sh'. (Elt e, Shape sh')
-           => acc            aenv  (Array sh' e)
-           -> PreOpenExp acc env      aenv  sh'
-           -> PreOpenAcc acc aenv' (Vector' e)
-    indexL (cvtA -> a) (cvtE -> ix)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      =  Alet a'
-      $^ mapVector' (Index avar0) (weakenA1 ix)
-      | otherwise
-      =  extract
-      $  liftedIndexC (lifted a) ix
+    indexL :: (Elt e, Shape sh)
+           => acc            aenv  (Array sh e)
+           -> PreOpenExp acc env       aenv   sh
+           -> LiftedExp  acc env aenv' aenv'' e
+    indexL (cvtA -> LiftedAcc ty a) (cvtE -> LiftedExp aix ix)
+      | AvoidedT <- ty
+      = LiftedExp (Index <$> pure a <*> aix)
+                  (inject . Alet (weaken (under ctx) a) $^ Map (fun1 (Index avar0)) (weakenA1 ix))
+      | RegularT <- ty
+      = LiftedExp Nothing (liftedRegularIndexC (weaken (under ctx) a) ix)
+      | IrregularT <- ty
+      = LiftedExp Nothing (liftedIrregularIndexC (weaken (under ctx) a) ix)
+    indexL _ _
+      = error "Absurd"
 
     linearIndexL :: forall sh'. (Elt e, Shape sh')
                  => acc            aenv  (Array sh' e)
                  -> PreOpenExp acc env     aenv  Int
-                 -> PreOpenAcc acc aenv' (Vector' e)
-    linearIndexL (cvtA -> a) (cvtE -> ix)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      =  Alet a'
-      $^ mapVector' (LinearIndex avar0) (weakenA1 ix)
-      | otherwise
-      = extract $
-        liftedLinearIndexC (lifted a) ix
+                 -> LiftedExp acc env aenv' aenv'' e
+    linearIndexL (cvtA -> LiftedAcc ty a) (cvtE -> LiftedExp aix ix)
+      | AvoidedT <- ty
+      = LiftedExp (LinearIndex <$> pure a <*> aix)
+                  (inject . Alet (weaken (under ctx) a) $^ Map (fun1 (LinearIndex avar0)) (weakenA1 ix))
+      | RegularT <- ty
+      = LiftedExp Nothing (liftedRegularLinearIndexC (weaken (under ctx) a) ix)
+      | IrregularT <- ty
+      = LiftedExp Nothing (liftedIrregularLinearIndexC (weaken (under ctx) a) ix)
+    linearIndexL _ _
+      = error "Absurd"
 
-    shapeL :: forall e'. (Shape e, Elt e')
-           => acc            aenv  (Array e e')
-           -> PreOpenAcc acc aenv' (Vector' e)
-    shapeL (cvtA -> a)
-      | avoidLifting
-      , AvoidedAcc a' <- a
-      =  Alet a'
-      $ replicatedC (unitSize $ weakenA1 size) (unit $ Shape avar0)
-      | otherwise
-      = extract
-      $ shapes'C (segmentsC (lifted a))
+    shapeL :: (Shape sh, Elt e')
+           => acc aenv (Array sh e')
+           -> LiftedExp acc env aenv' aenv'' sh
+    shapeL (cvtA -> LiftedAcc ty a)
+      | AvoidedT <- ty
+      = LiftedExp (Just (Shape a)) (inject . Alet (weaken (under ctx) a) $ replicateE (weakenA1 size) (Shape avar0))
+      -- We can still avoid vectorisation if we depend on an array term that was
+      -- regularly vectorised.
+      | RegularT <- ty
+      , AsSlice <- asSlice (the (regularShapeC a))
+      = LiftedExp (Just (indexInit (Shape (unregularC a))))
+                  (inject . Alet (weaken (under ctx) a) $ replicateE (weakenA1 size) (indexInit (Shape (unregularC avar0))))
+      | IrregularT <- ty
+      = LiftedExp Nothing (shapesC (segmentsC (weaken (under ctx) a)))
+    shapeL _
+      = error "Absurd"
+
+    cvtTuple :: (IsTuple e, Elt e)
+             => Tuple (PreOpenExp acc env aenv) (TupleRepr e)
+             -> LiftedExp acc env aenv' aenv'' e
+    cvtTuple (cvtT -> (at, LiftedTuple aenv t))
+      =  LiftedExp (Tuple <$> at)
+      .  bind aenv
+      .^ Alet (unitSize (sink aenv $ size))
+      $^ Generate (index1 (the avar0)) (Lam . Body $ Tuple (weakenTup SuccIdx t))
+
+    cvtT :: forall t.
+            Tuple (PreOpenExp acc env aenv) t
+         -> ( Maybe (Tuple (PreOpenExp acc env aenv') t)
+            , LiftedTuple acc aenv'' t)
+    cvtT NilTup
+      = (Just NilTup, LiftedTuple BaseEnv NilTup)
+    cvtT (SnocTup t (cvtE -> LiftedExp ae e))
+      | (at, LiftedTuple aenv t') <- cvtT t
+      = (SnocTup <$> at <*> ae, LiftedTuple (PushEnv aenv (sink aenv e)) (SnocTup (weakenTup SuccIdx t') (Index avar0 var0)))
+
+    weakenTup :: forall env aenv aenv' t. aenv :> aenv'
+              -> Tuple (PreOpenExp acc env aenv) t
+              -> Tuple (PreOpenExp acc env aenv') t
+    weakenTup v = unRTup . weaken v . RebuildTup
 
     zipWith3 :: forall aenv a b c d. (Elt a, Elt b, Elt c, Elt d)
              => PreFun acc aenv (a -> b -> c -> d)
@@ -1570,302 +1557,36 @@ liftExp vectAcc strength ctx size exp
         ixt (SuccIdx (SuccIdx ZeroIdx))      = SuccIdx ZeroIdx
         ixt (SuccIdx (SuccIdx (SuccIdx ix))) = SuccIdx . SuccIdx . SuccIdx . SuccIdx $ ix
 
+data LiftedAtuple acc aenv t where
+  LiftedAtuple :: (IsAtupleRepr t')
+               => LiftedTupleType t t'
+               -> Atuple (acc aenv) t'
+               -> LiftedAtuple acc aenv t
+
+data LiftedTuple acc aenv t where
+  LiftedTuple :: Extend acc aenv aenv'
+              -> Tuple (PreOpenExp acc ((),DIM1) aenv') t
+              -> LiftedTuple acc aenv t
 
 
-type family VectorsOfTupleRepr t
-type instance VectorsOfTupleRepr ()    = ()
-type instance VectorsOfTupleRepr (t,e) = (VectorsOfTupleRepr t, Vector e)
-
-type family ExpandEnv env env'
-type instance ExpandEnv env ()        = env
-type instance ExpandEnv env (env', t) = ExpandEnv (env, t) env'
-
-type TupleEnv aenv t = ExpandEnv aenv (VectorsOfTupleRepr (TupleRepr t))
-
--- |Perform the lifting transform over a scalar tuple. We lift it as so:
---
--- @
--- (a1, a2,..., aN)^ =
---   let a1' = a1^
---       a2' = a2^
---       ...
---       aN' = aN^
---   in generate (\ix -> (a1' ! ix, a2' ! ix,..., aN' ! ix))
--- @
---
--- RCE: Ideally we would like to do this by lifting the tuple into a tuple of arrays.
--- Unfortunately this can't be done because the type system us unable to recognise that the
--- lifted tuple is an instance of IsTuple.
-liftTuple :: forall acc env aenv env' aenv' e.
-             (Elt e, Kit acc, IsTuple e)
-          => VectoriseAcc acc
-          -> Strength
-          -> Context env aenv env' aenv'
-          -> Size acc aenv' Int
-          -> Tuple (PreOpenExp acc env aenv) (TupleRepr e)
-          -> PreOpenAcc acc aenv' (Vector' e)
-liftTuple vectAcc strength ctx size t = extract . asVector'C $^ cvtT t (liftExp vectAcc strength ctx size) gen size
-  where
-    cvtT :: forall t aenv'.
-            Tuple (PreOpenExp acc env aenv) t
-         -> (forall e. PreOpenExp acc env aenv e -> PreOpenAcc acc aenv' (Vector' e))
-         -> (Size acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) Int -> PreOpenAcc acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) (Vector e))
-         -> Size acc aenv' Int
-         -> PreOpenAcc acc aenv'                                    (Vector e)
-    cvtT NilTup        _    arr size = arr size
-    cvtT(SnocTup t' e) lift arr size = Alet (asVectorC . inject $ lift e) (inject $ cvtT t' lift' arr (weakenA1 size))
-      where
-        lift' :: forall e e'. PreOpenExp acc env aenv e -> PreOpenAcc acc (aenv', Vector e') (Vector' e)
-        lift' = weakenA1 . lift
-
-    gen :: Size acc (TupleEnv aenv' e) Int -> PreOpenAcc acc (TupleEnv aenv' e) (Vector e)
-    gen (Size b s) = Alet b $^ Generate (index1 s) (weakenA1 $ Lam (Body (Tuple t')))
-      where
-        t' :: Tuple (PreOpenExp acc ((),DIM1) (TupleEnv aenv' e)) (TupleRepr e)
-        t' = weakenTup (ixt (undefined :: aenv') t) (mkTup t)
-          where
-            mkTup :: forall e c. Tuple c e
-                  -> Tuple (PreOpenExp acc ((),DIM1) (VectorsOfTupleRepr e)) e
-            mkTup NilTup          = NilTup
-            mkTup (SnocTup t'' _) = SnocTup (weakenTup SuccIdx (mkTup t'')) e'
-              where
-                e' :: forall s e'. e ~ (s,e') => PreOpenExp acc ((),DIM1) (VectorsOfTupleRepr e) e'
-                e' = Index avar0 var0
-
-    weakenTup :: forall env aenv aenv' e. aenv :> aenv'
-              -> Tuple (PreOpenExp acc env aenv) e
-              -> Tuple (PreOpenExp acc env aenv') e
-    weakenTup _ NilTup        = NilTup
-    weakenTup v (SnocTup t e) = SnocTup (weakenTup v t) (weaken v e)
-
-    tix :: forall t c env e. Tuple c t -> Idx env e -> Idx (ExpandEnv env (VectorsOfTupleRepr t)) e
-    tix NilTup ix        = ix
-    tix (SnocTup t (_:: c t')) ix = tix t ix'
-      where
-        ix' :: Idx (env, Vector t') e
-        ix' = SuccIdx ix
-
-    ixt :: forall t c env e.
-           env {- dummy -}
-        -> Tuple c t
-        -> Idx (VectorsOfTupleRepr t) e
-        -> Idx (ExpandEnv env (VectorsOfTupleRepr t)) e
-    ixt _   (SnocTup NilTup _) ZeroIdx      = ZeroIdx
-    ixt _   (SnocTup t      _) ZeroIdx      = tix t (ZeroIdx :: Idx (env, e) e)
-    ixt _   (SnocTup t      _) (SuccIdx ix) = ixt env' t ix
-      where
-        env' :: forall s e'. t ~ (s,e') => (env, Vector e')
-        env' = undefined -- dummy argumen
-    ixt _   _                  _            = error "liftTuple: Inconsistent valuation"
-
-data Avoid f acc env aenv e where
-  Avoided :: (Extend acc aenv aenv', f acc env aenv' e) -> Avoid f acc env aenv e
-  Unavoided :: Avoid f acc env aenv e
-
-type AvoidExp = Avoid PreOpenExp
-type AvoidFun = Avoid PreOpenFun
-
--- |Avoid vectorisation in the cases where it's not necessary, or impossible.
---
-avoidExp :: forall acc aenv env e. Kit acc
-         => PreOpenExp acc env aenv e
-         -> AvoidExp acc env aenv e
-avoidExp = cvtE
-  where
-    cvtE :: forall e env aenv. PreOpenExp acc env aenv e -> AvoidExp acc env aenv e
-    cvtE exp =
-      case exp of
-        Let a b             -> letA a b
-        Var ix              -> simple $ Var ix
-        Const c             -> simple $ Const c
-        Tuple tup           -> cvtT tup
-        Prj tup e           -> Prj tup `cvtE1` e
-        IndexNil            -> simple IndexNil
-        IndexCons sh sz     -> cvtE2 IndexCons sh sz
-        IndexHead sh        -> IndexHead `cvtE1` sh
-        IndexTail sh        -> IndexTail `cvtE1` sh
-        IndexTrans sh       -> IndexTrans `cvtE1` sh
-        IndexAny            -> simple IndexAny
-        IndexSlice x ix sh  -> IndexSlice x ix `cvtE1` sh
-        IndexFull x ix sl   -> cvtE2 (IndexFull x) ix sl
-        ToIndex sh ix       -> cvtE2 ToIndex sh ix
-        FromIndex sh ix     -> cvtE2 FromIndex sh ix
-        ToSlice x sh i      -> cvtE2 (ToSlice x) sh i
-        Cond p t e          -> cvtE3 Cond p t e
-        While p f x         -> whileA p f x
-        PrimConst c         -> simple $ PrimConst c
-        PrimApp f x         -> PrimApp f `cvtE1` x
-        Index a sh          -> cvtA1E1 Index a sh
-        LinearIndex a i     -> cvtA1E1 LinearIndex a i
-        Shape a             -> Shape `cvtA1` a
-        ShapeSize sh        -> ShapeSize `cvtE1` sh
-        Intersect s t       -> cvtE2 Intersect s t
-        Union s t           -> cvtE2 Union s t
-        Foreign ff f e      -> Foreign ff f `cvtE1` e
-
-    unavoided :: forall env aenv e f. String -> Avoid f acc env aenv e
-    unavoided op = trace "avoidExp" ("Unable to avoid expression: " ++ op) $ Unavoided
-
-    letA :: forall bnd_t e env aenv. (Elt e, Elt bnd_t)
-         => PreOpenExp acc env          aenv bnd_t
-         -> PreOpenExp acc (env, bnd_t) aenv e
-         -> AvoidExp acc env          aenv e
-    letA bnd body | Avoided (env , bnd' ) <- cvtE bnd
-                  , Avoided (env', body') <- cvtE (sink env body)
-                  = Avoided (append env env', Let (sink env' bnd') body')
-                  | otherwise
-                  = unavoided "let"
-
-    whileA :: forall e env aenv. Elt e
-           => PreOpenFun acc env aenv (e -> Bool)
-           -> PreOpenFun acc env aenv (e -> e)
-           -> PreOpenExp acc env aenv e
-           -> AvoidExp acc env aenv e
-    whileA (Lam (Body p)) (Lam (Body it)) i
-      | Avoided (env0,  p') <- cvtE p
-      , Avoided (env1, it') <- cvtE (sink env0 it)
-      , Avoided (env2,  i') <- cvtE (sink env1 $ sink env0 i)
-      = let
-          p''  = (sink env2 . sink env1) p'
-          it'' = sink env2 it'
-        in Avoided (env0 `append` env1 `append` env2, While (Lam $ Body p'') (Lam $ Body it'') i')
-    whileA _               _              _ = unavoided "while"
-
-
-    simple :: forall e env aenv.
-              PreOpenExp acc env aenv e
-           -> AvoidExp      acc env aenv e
-    simple e = Avoided (BaseEnv, e)
-
-    cvtE1 :: forall e a env aenv. (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv e)
-          -> PreOpenExp acc env aenv a
-          -> AvoidExp acc env aenv e
-    cvtE1 f (cvtE -> Avoided (env, a)) = Avoided (env, f a)
-    cvtE1 _ e                          = unavoided (showPreExpOp e)
-
-    cvtE2 :: forall e a b env aenv.
-             (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv e)
-          -> PreOpenExp acc env aenv a
-          -> PreOpenExp acc env aenv b
-          -> AvoidExp acc env aenv e
-    cvtE2 f (cvtE -> Avoided (env, a)) (cvtE . sink env -> Avoided (env', b))
-      = Avoided (env `append` env', f (sink env' a) b)
-    cvtE2 f _                               _
-      = unavoided (showPreExpOp (f undefined undefined))
-
-    cvtE3 :: forall e a b c env aenv.
-             (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv c -> PreOpenExp acc env aenv e)
-          -> PreOpenExp acc env aenv a
-          -> PreOpenExp acc env aenv b
-          -> PreOpenExp acc env aenv c
-          -> AvoidExp acc env aenv e
-    cvtE3 f (cvtE                        -> Avoided (env, a))
-            (cvtE . sink env             -> Avoided (env', b))
-            (cvtE . sink env' . sink env -> Avoided (env'', c))
-      = Avoided (env `append` env' `append` env'', f (sink env'' $ sink env' a) (sink env'' b) c)
-    cvtE3 f _ _ _ = unavoided (showPreExpOp (f undefined undefined undefined))
-
-    cvtT :: forall e env aenv. (IsTuple e, Elt e)
-         => Tuple (PreOpenExp acc env aenv) (TupleRepr e)
-         -> AvoidExp acc env aenv e
-    cvtT t | Avoided (env, RebuildTup t) <- cvtT' t = Avoided (env, Tuple t)
-      where
-        cvtT' :: forall e.
-                 Tuple (PreOpenExp acc env aenv) e
-              -> Avoid RebuildTup acc env aenv e
-        cvtT' NilTup        = Avoided (BaseEnv, (RebuildTup NilTup))
-        cvtT' (SnocTup t e) | Avoided (env, RebuildTup t') <- cvtT' t
-                            , Avoided (env', e') <- cvtE . sink env $ e
-                            = Avoided (env `append` env', RebuildTup (SnocTup (unRTup $ sink env' $ RebuildTup t') e'))
-        cvtT' _             = unavoided "tuple"
-    cvtT _ = unavoided "tuple"
-
-    cvtA1 :: forall a e env aenv. Arrays a
-          => (forall env aenv. acc aenv a -> PreOpenExp acc env aenv e)
-          -> acc aenv a
-          -> AvoidExp acc env aenv e
-    cvtA1 f a = Avoided (BaseEnv `PushEnv` a, f avar0)
-
-    cvtA1E1 :: forall a b e env aenv. Arrays a
-          => (forall env aenv. acc aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv e)
-          -> acc aenv a
-          -> PreOpenExp acc env aenv b
-          -> AvoidExp acc env aenv e
-    cvtA1E1 f a (cvtE -> Avoided (env, b))
-      = Avoided (env `PushEnv` sink env a, f avar0 (weakenA1 b))
-    cvtA1E1 f _ _
-      = unavoided (showPreExpOp (f undefined undefined))
-
-avoidFun :: Kit acc
-         => PreOpenFun acc env aenv f
-         -> AvoidFun acc env aenv f
-avoidFun (Lam f)  | Avoided (env, f') <- avoidFun f
-                  = Avoided (env, Lam f')
-avoidFun (Body f) | Avoided (env, f') <- avoidExp f
-                  = Avoided (env, Body f')
-avoidFun _        = Unavoided
-
-data ExtendContext acc aenv0' aenv1 where
-  ExtendContext :: Context () aenv1 () aenv1'
-                -> Extend acc aenv0' aenv1'
-                -> ExtendContext acc aenv0' aenv1
-
-liftExtend :: forall acc aenv0 aenv0' aenv1. Kit acc
-           => VectoriseAcc acc
-           -> Strength
-           -> Extend acc aenv0 aenv1
-           -> Context () aenv0 () aenv0'
-           -> Size acc aenv0' Int
-           -> ExtendContext acc aenv0' aenv1
-liftExtend _ _ BaseEnv ctx _
-  = ExtendContext ctx BaseEnv
-liftExtend k strength (PushEnv env a) ctx size
-  | ExtendContext ctx' env' <- liftExtend k strength env ctx size
-  = case k strength ctx' (sink env' size) a of
-      AvoidedAcc a' -> ExtendContext (PushAccC ctx')  (PushEnv env' a')
-      LiftedAcc  a' -> ExtendContext (PushLAccC ctx') (PushEnv env' a')
-
-data EmbedContext aenv aenv' = forall aenv''. EmbedContext (Context () aenv'' () aenv') (aenv :> aenv'')
-
-embedContext :: Context env aenv env' aenv'
-             -> EmbedContext aenv aenv'
-embedContext EmptyC        = EmbedContext EmptyC id
-embedContext (PushExpC d)  = embedContext d
-embedContext (PushLExpC d) | EmbedContext d wk <- embedContext d
-                           = EmbedContext (PushAccC d) (SuccIdx . wk)
-embedContext (PushAccC d)  | EmbedContext d wk <- embedContext d
-                           = EmbedContext (PushAccC d) (newTop wk)
-embedContext (PushLAccC d) | EmbedContext d wk <- embedContext d
-                           = EmbedContext (PushLAccC d) (newTop wk)
-
--- Nested operations.
+-- Lifted operations.
 -- ------------------
 
-values :: forall sh e. (Shape sh, Elt e) => S.Acc (Nested (Array sh e)) -> S.Acc (Vector e)
-values a = S.Acc $ S.Aprj ZeroTupIdx a
-
-segments :: forall sh e. (Shape sh, Elt e) => S.Acc (Nested (Array sh e)) -> S.Acc (Segments sh)
+segments :: forall sh e. (Shape sh, Elt e) => S.Acc (Irregular (Array sh e)) -> S.Acc (Segments sh)
 segments a = S.Acc $ S.Aprj (SuccTupIdx ZeroTupIdx) a
 
-liftedArray :: (Shape sh, Elt e) => S.Acc (Segments sh) -> S.Acc (Vector e) -> S.Acc (Nested (Array sh e))
-liftedArray segs vals = S.Acc $ S.Atuple $ SnocAtup (SnocAtup NilAtup segs) vals
+irregular :: (Shape sh, Elt e) => S.Acc (Segments sh) -> S.Acc (Vector e) -> S.Acc (Irregular (Array sh e))
+irregular segs vals = S.Acc $ S.Atuple $ SnocAtup (SnocAtup NilAtup segs) vals
 
-asAtuple :: forall a. (Arrays a, IsAtuple a) => S.Acc a -> Atuple S.Acc (TupleRepr a)
-asAtuple a = tOA (prod (Proxy :: Proxy Arrays) (undefined :: a)) id
- where
-   tOA :: forall t. ProdR Arrays t -> (forall e. TupleIdx t e -> TupleIdx (TupleRepr a) e) -> Atuple S.Acc t
-   tOA ProdRunit     _   = NilAtup
-   tOA (ProdRsnoc t) ixt = SnocAtup (tOA t (ixt . SuccTupIdx)) (S.Acc $ S.Aprj (ixt ZeroTupIdx) a)
-
-replicate :: forall a. Arrays a => S.Exp Int -> S.Acc a -> S.Acc (Nested a)
+replicate :: forall a. Arrays a => S.Exp Int -> S.Acc a -> S.Acc (Regular a)
 replicate size a = case flavour (undefined :: a) of
                      ArraysFunit  -> S.Acc $ S.Atuple $ SnocAtup NilAtup $ S.unit size
                      ArraysFarray ->
-                       let values = S.flatten $ S.replicate (S.lift (Z:.size:.All)) (S.flatten a)
-                       in regular size (S.shape a) values
+                       let values = S.replicate (S.lift (Z:.size:.All)) (S.flatten a)
+                       in regular $ S.reshape (S.indexSnoc (S.shape a) size) values
                      ArraysFtuple -> S.Acc $ S.Atuple $ replicateT (asAtuple a)
   where
-    replicateT :: Atuple S.Acc t -> Atuple S.Acc (NestedTupleRepr t)
+    replicateT :: Atuple S.Acc t -> Atuple S.Acc (RegularTupleRepr t)
     replicateT NilAtup         = NilAtup
     replicateT (SnocAtup t a') = SnocAtup (replicateT t) (replicate size a')
 
@@ -1886,14 +1607,7 @@ generateSeg segs f = S.map (\(S.unlift -> (seg,sh,i)) -> f seg sh (S.fromIndex s
     negs  = S.fill (S.index1 $ totalSize segs) (S.tup3 (-1::S.Exp Int,S.ignore,-1::S.Exp Int) :: S.Exp (Int, sh, Int)) --Start with all -1s
     heads = S.permute combine negs (S.index1 . (offs S.!)) (S.zip3 offs (shapes segs) (S.fill (S.shape offs) 0))
 
-    -- For regular
-    squareDomain :: S.Exp Int -> S.Exp sh -> S.Acc (Array DIM2 (Int, sh, Int))
-    squareDomain sz sh = S.generate (S.index2 sz (S.shapeSize sh)) (f . S.unindex2)
-      where
-        f (S.unlift -> (seg,i)) = S.tup3 (seg, sh, i)
-
-    domain = withSegs segs (S.scanl1 (\a b -> dead b S.? (inc a, b)) heads)
-                           (\sz sh -> S.flatten (squareDomain sz sh))
+    domain = S.scanl1 (\a b -> dead b S.? (inc a, b)) heads
 
     combine :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
     combine (S.untup3 -> (seg,sh,i)) (S.untup3 -> (seg',sh',i')) =
@@ -1914,87 +1628,69 @@ enumSeg segs = generateSeg segs (\seg sh ix -> S.lift (seg, sh, ix))
 -- and we want it to fuse.
 --
 offsets :: Shape sh => S.Acc (Segments sh) -> S.Acc (Vector Int)
-offsets (S.unatup6 -> (f,_,s,sh,o,_)) = S.the f S.?| (o, S.generate (S.index1 (S.the s)) ((S.shapeSize (S.the sh) *) . S.unindex1))
+offsets (S.unatup3 -> (_,o,_)) = o
 
 shapes :: Shape sh => S.Acc (Segments sh) -> S.Acc (Vector sh)
-shapes (S.unatup6 -> (f,_,s,sh,_,shs)) = S.the f S.?| (shs, S.fill (S.index1 (S.the s)) (S.the sh))
-
-shapes' :: Shape sh => S.Acc (Segments sh) -> S.Acc (Vector' sh)
-shapes' segs = withSegs segs (asVector' (shapes segs)) replicated
+shapes (S.unatup3 -> (_,_,shs)) = shs
 
 totalSize :: Shape sh => S.Acc (Segments sh) -> S.Exp Int
-totalSize (S.unatup6 -> (_,ts,_,_,_,_)) = S.the ts
+totalSize (S.unatup3 -> (ts,_,_)) = S.the ts
 
 segmentsFromShapes :: Shape sh => S.Acc (Vector sh) -> S.Acc (Segments sh)
 segmentsFromShapes ss = let (offs,sz) = S.scanl' (+) 0 (S.map S.shapeSize ss)
                          in irregularSegs (S.the sz) offs ss
 
-regular :: (Shape sh, Elt e) => S.Exp Int -> S.Exp sh -> S.Acc (Vector e) -> S.Acc (Nested (Array sh e))
-regular sz sh = liftedArray (regularSegs sz sh)
-
 regularSegs :: Shape sh => S.Exp Int -> S.Exp sh -> S.Acc (Segments sh)
-regularSegs sz sh = S.lift ( S.unit (S.constant False)
-                           , S.unit (sz * S.shapeSize sh)
-                           , S.unit sz
-                           , S.unit sh
-                           , S.emptyArray
-                           , S.emptyArray )
+regularSegs sz sh = S.lift (S.unit (sz * S.shapeSize sh), S.enumFromN (S.index1 sz) 0, S.fill (S.index1 sz) sh)
 
 irregularSegs :: Shape sh => S.Exp Int -> S.Acc (Vector Int) -> S.Acc (Vector sh) -> S.Acc (Segments sh)
-irregularSegs ts offs shs = S.lift ( S.unit (S.constant True)
-                                   , S.unit ts
-                                   , S.unit (S.size shs)
-                                   , S.unit (S.constant empty)
+irregularSegs ts offs shs = S.lift ( S.unit ts
                                    , offs
                                    , shs )
 
-isIrregularSegs :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar Bool)
-isIrregularSegs (S.unatup6 -> (f,_,_,_,_,_)) = f
+regularShape :: (Shape sh, Elt e) => S.Acc (Regular (Array  sh e)) -> S.Exp sh
+regularShape = S.indexInit . S.shape . unregular
 
-regularShape :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar sh)
-regularShape (S.unatup6 -> (_,_,_,sh,_,_)) = sh
-
-nestedSize :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar Int)
-nestedSize (S.unatup6 -> (_,_,s,_,_,_)) = s
-
-withSegs :: (Shape sh, Arrays a) => S.Acc (Segments sh) -> S.Acc a -> (S.Exp Int -> S.Exp sh -> S.Acc a) -> S.Acc a
-withSegs (S.unatup6 -> (f,_,s,sh,_,_)) irr r = S.the f S.?| (irr, r (S.the s) (S.the sh))
-
-indexInSeg :: (Shape sh, Elt e) => S.Acc (Nested (Array sh e)) -> S.Exp Int -> S.Exp sh -> S.Exp e
+indexInSeg :: (Shape sh, Elt e) => S.Acc (Irregular (Array sh e)) -> S.Exp Int -> S.Exp sh -> S.Exp e
 indexInSeg arr seg ix = let segs = segments arr
-                        in values arr S.!! ((offsets segs S.!! seg) + (S.toIndex (shapes segs S.!! seg) ix))
+                        in irregularValues arr S.!! ((offsets segs S.!! seg) + (S.toIndex (shapes segs S.!! seg) ix))
 
-indexSegLast :: forall a. Arrays a => S.Acc (Nested a) -> S.Acc a
-indexSegLast arr =
+unregular :: (Shape sh, Elt e) => S.Acc (Regular (Array sh e)) -> S.Acc (Array (sh:.Int) e)
+unregular = S.Acc . S.Aprj ZeroTupIdx
+
+regular :: (Shape sh, Elt e) => S.Acc (Array (sh:.Int) e) -> S.Acc (Regular (Array sh e))
+regular es = S.Acc (S.Atuple $ NilAtup `SnocAtup` es)
+
+irregularValues :: (Shape sh, Elt e) => S.Acc (Irregular (Array sh e)) -> S.Acc (Vector e)
+irregularValues = S.Acc . S.Aprj ZeroTupIdx
+
+asAtuple :: forall a. (Arrays a, IsAtuple a) => S.Acc a -> Atuple S.Acc (TupleRepr a)
+asAtuple a = tOA (prod (Proxy :: Proxy Arrays) (undefined :: a)) id
+ where
+   tOA :: forall t. ProdR Arrays t -> (forall e. TupleIdx t e -> TupleIdx (TupleRepr a) e) -> Atuple S.Acc t
+   tOA ProdRunit     _   = NilAtup
+   tOA (ProdRsnoc t) ixt = SnocAtup (tOA t (ixt . SuccTupIdx)) (S.Acc $ S.Aprj (ixt ZeroTupIdx) a)
+
+sparsify :: forall a. (Arrays a) => S.Acc (Regular a) -> S.Acc (Irregular a)
+sparsify ra =
   case flavour (undefined :: a) of
-    ArraysFunit  -> S.Acc (S.Atuple NilAtup)
-    ArraysFarray -> let segs  = segments arr
-                        sh    = shapes segs  S.!! (S.size (shapes segs) - 1)
-                        start = offsets segs S.!! (S.size (shapes segs) - 1)
-                    in S.generate sh (\ix -> values arr S.!! (start + S.toIndex sh ix))
-    ArraysFtuple -> S.Acc $ S.Atuple $ indexSegLastT (prod (Proxy :: Proxy Arrays) (undefined :: a)) (asAtuple arr)
+    ArraysFunit  -> S.Acc . S.Atuple $ NilAtup `SnocAtup` S.Acc (S.Aprj ZeroTupIdx ra)
+    ArraysFarray -> sparsifyArray ra
+    ArraysFtuple -> S.Acc . S.Atuple $ sparsifyTup (prod (Proxy :: Proxy Arrays) (undefined :: a)) (asAtuple ra)
   where
-    indexSegLastT :: ProdR Arrays t -> Atuple S.Acc (NestedTupleRepr t) -> Atuple S.Acc t
-    indexSegLastT ProdRunit      NilAtup         = NilAtup
-    indexSegLastT (ProdRsnoc pr) (SnocAtup t a') = SnocAtup (indexSegLastT pr t) (indexSegLast a')
+    sparsifyArray :: (Elt e, Shape sh) => S.Acc (Regular (Array sh e)) -> S.Acc (Irregular (Array sh e))
+    sparsifyArray ra = S.Acc (S.Atuple $ NilAtup `SnocAtup` S.lift (S.unit sz, offs, shs) `SnocAtup` vs)
+      where
+        sz = S.size (unregular ra)
+        vs = S.flatten (unregular ra)
+        offs = S.enumFromStepN (S.index1 sz) 0 (S.shapeSize (regularShape ra))
+        shs  = S.fill (S.index1 sz) (regularShape ra)
 
-liftedScalar :: Elt e => S.Acc (Vector e) -> S.Acc (Nested (Scalar e))
-liftedScalar vs = regular (S.size vs) (S.constant Z) vs
+    sparsifyTup :: ProdR Arrays t -> Atuple S.Acc (RegularTupleRepr t) -> Atuple S.Acc (IrregularTupleRepr t)
+    sparsifyTup ProdRunit      NilAtup         = NilAtup
+    sparsifyTup (ProdRsnoc pr) (SnocAtup at a) = SnocAtup (sparsifyTup pr at) (sparsify a)
+    sparsifyTup _              _               = error "Impossible tuple"
 
-replicated :: Elt e => S.Exp Int -> S.Exp e -> S.Acc (Vector' e)
-replicated c e = S.lift (S.unit (S.constant False), S.unit c, S.unit e, S.emptyArray)
-
-asVector :: Elt e => S.Acc (Vector' e) -> S.Acc (Vector e)
-asVector v = withVector' v (\c e -> S.fill (S.index1 c) e) id
-
-asVector' :: Elt e => S.Acc (Vector e) -> S.Acc (Vector' e)
-asVector' v = S.lift (S.unit (S.constant True), S.unit (S.size v), S.unit (v S.!! 0), v)
-
-withVector' :: (Arrays a, Elt e) => S.Acc (Vector' e) -> (S.Exp Int -> S.Exp e -> S.Acc a) -> (S.Acc (Vector e) -> S.Acc a) -> S.Acc a
-withVector' (S.unlift -> (r, c, e, es)) f g = S.the r S.?| (g es, f (S.the c) (S.the e))
-
-asSegments :: Shape sh => S.Acc (Vector' sh) -> S.Acc (Segments sh)
-asSegments v = withVector' v regularSegs segmentsFromShapes
 
 makeFoldSegments :: forall sh. (Shape sh, Slice sh) => S.Acc (Segments (sh:.Int)) -> S.Acc (Vector Int, Segments sh)
 makeFoldSegments segs = S.lift (generateSeg inSegs (\seg sh ix -> (offs S.!! seg) + S.toIndex sh ix), outSegs)
@@ -2009,7 +1705,7 @@ nonEmpty = S.union (S.constant $ listToShape $ P.replicate (dim (ignore::sh)) 1)
 
 makeFoldSegSegments :: forall sh i. (Shape sh, Slice sh, IsIntegral i, Elt i)
                     => S.Acc (Segments (sh:.Int))
-                    -> S.Acc (Nested (Vector i))
+                    -> S.Acc (Irregular (Vector i))
                     -> S.Acc (Segments (sh:.Int), Vector i)
 makeFoldSegSegments segs isegs = S.lift (segmentsFromShapes shs', isegs')
   where
@@ -2025,22 +1721,22 @@ makeFoldSegSegments segs isegs = S.lift (segmentsFromShapes shs', isegs')
 --
 liftedCond :: forall a. Arrays a
            => S.Acc (Vector Bool) -- condition
-           -> S.Acc (Nested a)    -- then
-           -> S.Acc (Nested a)    -- else
-           -> S.Acc (Nested a)
+           -> S.Acc (Irregular a)    -- then
+           -> S.Acc (Irregular a)    -- else
+           -> S.Acc (Irregular a)
 liftedCond pred th el
   = case (flavour (undefined :: a)) of
       ArraysFunit  -> th
       ArraysFarray -> liftedCond1 th el
       ArraysFtuple -> S.Acc $ S.Atuple $ cvtT (prod (Proxy :: Proxy Arrays) (undefined :: a)) (asAtuple th) (asAtuple el)
   where
-    cvtT :: ProdR Arrays t -> Atuple S.Acc (NestedTupleRepr t) -> Atuple S.Acc (NestedTupleRepr t) -> Atuple S.Acc (NestedTupleRepr t)
+    cvtT :: ProdR Arrays t -> Atuple S.Acc (IrregularTupleRepr t) -> Atuple S.Acc (IrregularTupleRepr t) -> Atuple S.Acc (IrregularTupleRepr t)
     cvtT ProdRunit     NilAtup          NilAtup          = NilAtup
     cvtT (ProdRsnoc t) (SnocAtup t1 a1) (SnocAtup t2 a2) = SnocAtup (cvtT t t1 t2) (liftedCond pred a1 a2)
     cvtT _             _                _                = error "Unreachable code"
 
-    liftedCond1 :: (Elt e, Shape sh) => S.Acc (Nested (Array sh e)) -> S.Acc (Nested (Array sh e)) -> S.Acc (Nested (Array sh e))
-    liftedCond1 t e = liftedArray segs vals
+    liftedCond1 :: (Elt e, Shape sh) => S.Acc (Irregular (Array sh e)) -> S.Acc (Irregular (Array sh e)) -> S.Acc (Irregular (Array sh e))
+    liftedCond1 t e = irregular segs vals
       where
         shs_t = shapes (segments t)
         shs_e = shapes (segments e)
@@ -2058,8 +1754,8 @@ liftedCond pred th el
                            (S.zip offs_t offs_e)
         flag_offs = replicateSeg segs $ S.zip pred offs
 
-        vals_t = values t
-        vals_e = values e
+        vals_t = irregularValues t
+        vals_e = irregularValues e
         ones   = S.fill (S.index1 $ S.the sz_v) (1 :: S.Exp Int)
         enums  = S.scanl1Seg (+) ones $ S.map S.shapeSize shs
         vals   = S.zipWith (\t ind -> let (f,s) = S.unlift t in f S.? (vals_t S.!! (s + ind), vals_e S.!! (s + ind)))
@@ -2067,11 +1763,11 @@ liftedCond pred th el
                            enums
 
 --liftedAwhile :: forall t.
---                (Arrays t, Arrays (Nested t))
---             => (S.Acc (Nested t) -> S.Acc (Vector Bool))
---             -> (S.Acc (Nested t) -> S.Acc (Nested t))
---             -> S.Acc (Nested t)
---             -> S.Acc (Nested t)
+--                (Arrays t, Arrays (Regular t))
+--             => (S.Acc (Regular t) -> S.Acc (Vector Bool))
+--             -> (S.Acc (Regular t) -> S.Acc (Regular t))
+--             -> S.Acc (Regular t)
+--             -> S.Acc (Regular t)
 --liftedAwhile pred iter init
 --  = let
 --      (a, _ :: S.Acc (Vector Bool), _ :: S.Acc (Scalar Bool)) = S.unlift $ S.awhile pred' iter' init'
@@ -2080,54 +1776,50 @@ liftedCond pred th el
 --    init' = let f = pred init
 --            in S.lift (init, f, S.or f)
 
---    pred' :: S.Acc (Nested t, Vector Bool, Scalar Bool) -> S.Acc (Scalar Bool)
---    pred' f = let (_ :: S.Acc (Nested t), _ :: S.Acc (Vector Bool), c) = S.unlift f in c
+--    pred' :: S.Acc (Regular t, Vector Bool, Scalar Bool) -> S.Acc (Scalar Bool)
+--    pred' f = let (_ :: S.Acc (Regular t), _ :: S.Acc (Vector Bool), c) = S.unlift f in c
 
---    iter' :: S.Acc (Nested t, Vector Bool, Scalar Bool) -> S.Acc (Nested t, Vector Bool, Scalar Bool)
+--    iter' :: S.Acc (Regular t, Vector Bool, Scalar Bool) -> S.Acc (Regular t, Vector Bool, Scalar Bool)
 --    iter' (S.unlift -> (a, f, _ :: S.Acc (Scalar Bool)))
 --      = let a' = liftedCond f (iter a) a
 --            f' = S.zipWith (S.&&*) f (pred a')
 --            c' = S.or f'
 --        in S.lift (a', f', c')
 
-liftedReshape :: (Elt e, Shape sh, Shape sh') => S.Acc (Vector' sh) -> S.Acc (Nested (Array sh' e)) -> S.Acc (Nested (Array sh e))
-liftedReshape extents a =
+irregularReshape :: (Elt e, Shape sh, Shape sh') => S.Acc (Vector sh) -> S.Acc (Irregular (Array sh' e)) -> S.Acc (Irregular (Array sh e))
+irregularReshape extents a =
   let segs  = segments a
-      segs' = withVector' extents (\c sh -> regularSegs c sh) (irregularSegs (totalSize segs) (offsets segs))
-  in liftedArray segs' (values a)
+      segs' = irregularSegs (totalSize segs) (offsets segs) extents
+  in irregular segs' (irregularValues a)
 
 --liftedGenerate :: (Elt e, Shape sh)
 --               => S.Acc (Vector sh)
 --               -> (S.Acc (Vector sh) -> S.Acc (Vector e))
 --               -> S.Acc (Regular (Array sh e))
 --liftedGenerate extents fun
---  = liftedArray extents (fun (enumSeg extents))
+--  = irregular extents (fun (enumSeg extents))
 
 liftedZip :: (Elt a, Elt b, Shape sh)
-          => S.Acc (Nested (Array sh a))
-          -> S.Acc (Nested (Array sh b))
-          -> S.Acc (Nested (Array sh (a,b)))
-liftedZip as bs = liftedArray segs vals
+          => S.Acc (Irregular (Array sh a))
+          -> S.Acc (Irregular (Array sh b))
+          -> S.Acc (Irregular (Array sh (a,b)))
+liftedZip as bs = irregular segs vals
   where
     segs = intersectSegments (segments as) (segments bs)
 
     vals = generateSeg segs (\seg _ ix -> S.lift (indexInSeg as seg ix, indexInSeg bs seg ix))
 
 intersectSegments :: Shape sh => S.Acc (Segments sh) -> S.Acc (Segments sh) -> S.Acc (Segments sh)
-intersectSegments as bs = withSegs as bothIrregular
-                        $ \sz sh   -> withSegs bs bothIrregular
-                        $ \sz' sh' -> regularSegs sz (sh `S.intersect` sh')
-  where
-    bothIrregular = segmentsFromShapes (S.zipWith S.intersect (shapes as) (shapes bs))
+intersectSegments as bs = segmentsFromShapes (S.zipWith S.intersect (shapes as) (shapes bs))
 
 --liftedFold :: (Elt e, Shape sh, Slice sh)
 --           => (S.Exp e -> S.Exp e -> S.Exp e)
 --           -> S.Exp e
 --           -> S.Acc (LiftedArray (sh:.Int) e)
 --           -> S.Acc (LiftedArray sh        e)
---liftedFold f z a = liftedArray segs' vals
+--liftedFold f z a = irregular segs' vals
 --  where
---    vals = S.foldSeg f z (values a) (replicateSeg segs' heads')
+--    vals = S.foldSeg f z (regularValues a) (replicateSeg segs' heads')
 
 --    (segs, heads) = S.unzip $ S.map (\sh -> S.lift (S.indexTail sh, S.indexHead sh)) (segments a)
 
@@ -2140,10 +1832,10 @@ intersectSegments as bs = withSegs as bothIrregular
 --              -> S.Acc (LiftedArray (sh:.Int) e)
 --              -> S.Acc (LiftedArray DIM1      Int)
 --              -> S.Acc (LiftedArray (sh:.Int) e)
---liftedFoldSeg f z a is = liftedArray segs vals
+--liftedFoldSeg f z a is = irregular segs vals
 --  where
 --    tails = S.map S.indexTail (segments a)
---    vals = S.foldSeg f z (values a) isegs
+--    vals = S.foldSeg f z (regularValues a) isegs
 --    segs = S.zipWith (\x y -> S.lift (x:.y)) tails
 --                                             (S.map S.unindex1 (segments is))
 --    isegs = replicateVectors tails is
@@ -2154,10 +1846,10 @@ intersectSegments as bs = withSegs as bothIrregular
 --                  -> (S.Acc (Vector sh') -> S.Acc (Vector sh))
 --                  -> S.Acc (LiftedArray sh  e)
 --                  -> S.Acc (Regular (Array sh' e))
---liftedBackpermute shapes f a = liftedArray shapes vals'
+--liftedBackpermute shapes f a = irregular shapes vals'
 --  where
 --    segs   = segments a
---    vals   = values a
+--    vals   = regularValues a
 --    enums  = enumSeg shapes
 --    ixs    = f enums
 --    starts = replicateSeg shapes (fst $ offsets segs)
@@ -2173,11 +1865,11 @@ liftedBackpermutePre segs = S.lift . S.unzip
 
 liftedBackpermute :: (Elt e, Shape sh)
                   => S.Acc (Vector Int, Vector sh)
-                  -> S.Acc (Nested (Array sh e))
+                  -> S.Acc (Irregular (Array sh e))
                   -> S.Acc (Vector e)
 liftedBackpermute (S.unlift -> (segs, ixs)) a = vals'
   where
-    vals  = values a
+    vals  = irregularValues a
     offs  = offsets (segments a)
     shs   = shapes (segments a)
     vals' = S.generate (S.shape segs) f
@@ -2190,48 +1882,59 @@ liftedBackpermute (S.unlift -> (segs, ixs)) a = vals'
 --              -> (S.Acc (Vector sh) -> S.Acc (Vector sh'))
 --              -> S.Acc (Regular (Array sh e))
 --              -> S.Acc (Regular (Array sh' e))
---liftedPermute combine defaults perm init = liftedArray shapes' vals
+--liftedPermute combine defaults perm init = irregular shapes' vals
 --  where
 --    shapes  = segments ini
 --    shapes' = segments defaults
 --    enums   = enumSeg shapes
 --    ixs     = perm enums
---    ixs'    = asOffsetsOf (liftedArray shapes ixs) shapes'
---    vals    = S.permute combine (values defaults) (ixs' S.!) (values init)
+--    ixs'    = asOffsetsOf (irregular shapes ixs) shapes'
+--    vals    = S.permute combine (regularValues defaults) (ixs' S.!) (regularValues init)
 
 asOffsetsOf :: (Shape sh, Shape sh')
-            => S.Acc (Nested (Array sh sh'))
+            => S.Acc (Irregular (Array sh sh'))
             -> S.Acc (Segments sh')
             -> S.Acc (Vector DIM1)
-asOffsetsOf ixs shapes' = S.map S.index1 $ S.zipWith (+) starts (S.map S.shapeSize (values ixs))
+asOffsetsOf ixs shapes' = S.map S.index1 $ S.zipWith (+) starts (S.map S.shapeSize (irregularValues ixs))
   where
     shapes = segments ixs
     starts = replicateSeg shapes (offsets shapes')
 
-liftedIndex :: (Shape sh, Elt e)
-            => S.Acc (Nested (Array sh e))
-            -> S.Acc (Vector' sh)
-            -> S.Acc (Vector' e)
-liftedIndex arr ixs = asVector' $ S.backpermute (S.shape ixs') f (values arr)
+liftedRegularIndex :: (Shape sh, Elt e)
+                   => S.Acc (Regular (Array sh e))
+                   -> S.Acc (Vector sh)
+                   -> S.Acc (Vector e)
+liftedRegularIndex arr ixs = S.backpermute (S.shape ixs) f (unregular arr)
   where
-    ixs' = asVector ixs
+    f ix = S.indexSnoc (ixs S.! ix) (S.unindex1 ix)
+
+liftedIrregularIndex :: (Shape sh, Elt e)
+                     => S.Acc (Irregular (Array sh e))
+                     -> S.Acc (Vector sh)
+                     -> S.Acc (Vector e)
+liftedIrregularIndex arr ixs = S.backpermute (S.shape ixs) f (irregularValues arr)
+  where
     f ix = let off = offsets (segments arr) S.! ix
                sh  = shapes  (segments arr) S.! ix
-           in S.index1 $ off + S.toIndex sh (ixs' S.! ix)
+           in S.index1 $ off + S.toIndex sh (ixs S.! ix)
 
 
--- RCE: Using a generate here, as opposed to the backpermute used above, so that the linear indexing
--- is preserved. In reality, it may be better to do this as a backpermute or, equally as likely, i
--- makes no difference whatsoever.
-liftedLinearIndex :: (Shape sh, Elt e)
-                  => S.Acc (Nested (Array sh e))
-                  -> S.Acc (Vector' Int)
-                  -> S.Acc (Vector' e)
-liftedLinearIndex arr ixs = asVector' $ S.backpermute (S.shape ixs') f (values arr)
+liftedRegularLinearIndex :: (Shape sh, Elt e)
+                         => S.Acc (Regular (Array sh e))
+                         -> S.Acc (Vector Int)
+                         -> S.Acc (Vector e)
+liftedRegularLinearIndex arr ixs = S.generate (S.shape ixs) f
   where
-    ixs' = asVector ixs
+    f ix = unregular arr S.!! (ixs S.! ix + (S.shapeSize ix) * S.shapeSize (regularShape arr))
+
+liftedIrregularLinearIndex :: (Shape sh, Elt e)
+                           => S.Acc (Irregular (Array sh e))
+                           -> S.Acc (Vector Int)
+                           -> S.Acc (Vector e)
+liftedIrregularLinearIndex arr ixs = S.backpermute (S.shape ixs) f (irregularValues arr)
+  where
     f ix = let off = offsets (segments arr) S.! ix
-           in S.index1 $ off + ixs' S.! ix
+           in S.index1 $ off + ixs S.! ix
 
 -- |Compute head flags vector from segment descriptor for left-scans.
 --
@@ -2263,31 +1966,51 @@ mkTailFlags seg
     zeros  = S.fill (S.index1 $ len + 1) 0
     ones   = S.fill (S.index1  $ S.size offset) 1
 
+castAcc :: (Arrays a, Arrays a') => IsIso a a' -> S.Acc a -> S.Acc a'
+castAcc IsoRefl      a = a
+castAcc (IsoTuple t) a = S.Acc . S.Atuple $ castTup t (asAtuple a)
+  where
+    castTup :: IsoTuple t t' -> Atuple S.Acc t -> Atuple S.Acc t'
+    castTup NilIso NilAtup = NilAtup
+    castTup (SnocIso t' is) (SnocAtup t'' a) = castTup t' t'' `SnocAtup` castAcc is a
+    castTup _ _ = error "Absurd"
+
 replicateC :: (Arrays a, Kit acc)
-           => acc aenv (Scalar Int) -> acc aenv a -> acc aenv (Nested a)
+           => acc aenv (Scalar Int) -> acc aenv a -> acc aenv (Regular a)
 replicateC = fromHOAS2 (replicate . S.the)
 
 enumSegC :: (Shape sh, Kit acc) => acc aenv (Segments sh) -> acc aenv (Vector (Int, sh, sh))
 enumSegC = fromHOAS enumSeg
 
+zipC :: (Kit acc, Elt a, Elt b, Shape sh)
+     => acc aenv (Array sh a)
+     -> acc aenv (Array sh b)
+     -> acc aenv (Array sh (a,b))
+zipC = fromHOAS2 S.zip
+
+unzipC :: (Kit acc, Elt a, Elt b, Shape sh)
+       => acc aenv (Array sh (a,b))
+       -> acc aenv (Array sh a, Array sh b)
+unzipC = fromHOAS (S.lift . S.unzip)
+
 liftedZipC :: (Kit acc, Shape sh, Elt a, Elt b)
-           => acc aenv (Nested (Array sh a))
-           -> acc aenv (Nested (Array sh b))
-           -> acc aenv (Nested (Array sh (a,b)))
+           => acc aenv (Irregular (Array sh a))
+           -> acc aenv (Irregular (Array sh b))
+           -> acc aenv (Irregular (Array sh (a,b)))
 liftedZipC = fromHOAS2 liftedZip
 
-liftedCondC :: (Arrays a, Arrays (Nested a), Kit acc)
+liftedCondC :: (Arrays a, Kit acc)
             => acc aenv (Vector Bool)
-            -> acc aenv (Nested a)
-            -> acc aenv (Nested a)
-            -> acc aenv (Nested a)
+            -> acc aenv (Irregular a)
+            -> acc aenv (Irregular a)
+            -> acc aenv (Irregular a)
 liftedCondC = fromHOAS3 liftedCond
 
-liftedReshapeC :: (Elt e, Shape sh, Shape sh', Kit acc)
-               => acc aenv (Vector' sh)
-               -> acc aenv (Nested (Array sh' e))
-               -> acc aenv (Nested (Array sh e))
-liftedReshapeC = fromHOAS2 liftedReshape
+irregularReshapeC :: (Elt e, Shape sh, Shape sh', Kit acc)
+                  => acc aenv (Vector sh)
+                  -> acc aenv (Irregular (Array sh' e))
+                  -> acc aenv (Irregular (Array sh e))
+irregularReshapeC = fromHOAS2 irregularReshape
 
 liftedBackpermutePreC :: (Shape sh', Kit acc)
                       => acc aenv (Segments sh')
@@ -2296,27 +2019,39 @@ liftedBackpermutePreC = fromHOAS liftedBackpermutePre
 
 liftedBackpermuteC :: (Elt e, Shape sh, Kit acc)
                    => acc aenv (Vector Int, Vector sh)
-                   -> acc aenv (Nested (Array sh e))
+                   -> acc aenv (Irregular (Array sh e))
                    -> acc aenv (Vector e)
 liftedBackpermuteC = fromHOAS2 liftedBackpermute
 
 asOffsetsOfC :: (Shape sh, Shape sh', Kit acc)
-             => acc aenv (Nested (Array sh sh'))
+             => acc aenv (Irregular (Array sh sh'))
              -> acc aenv (Segments sh')
              -> acc aenv (Vector DIM1)
 asOffsetsOfC = fromHOAS2 asOffsetsOf
 
-liftedIndexC :: (Kit acc, Shape sh, Elt e)
-             => acc aenv (Nested (Array sh e))
-             -> acc aenv (Vector' sh)
-             -> acc aenv (Vector' e)
-liftedIndexC = fromHOAS2 liftedIndex
+liftedRegularIndexC :: (Kit acc, Shape sh, Elt e)
+                    => acc aenv (Regular (Array sh e))
+                    -> acc aenv (Vector sh)
+                    -> acc aenv (Vector e)
+liftedRegularIndexC = fromHOAS2 liftedRegularIndex
 
-liftedLinearIndexC :: (Kit acc, Shape sh, Elt e)
-                   => acc aenv (Nested (Array sh e))
-                   -> acc aenv (Vector' Int)
-                   -> acc aenv (Vector' e)
-liftedLinearIndexC = fromHOAS2 liftedLinearIndex
+liftedIrregularIndexC :: (Kit acc, Shape sh, Elt e)
+                      => acc aenv (Irregular (Array sh e))
+                      -> acc aenv (Vector sh)
+                      -> acc aenv (Vector e)
+liftedIrregularIndexC = fromHOAS2 liftedIrregularIndex
+
+liftedRegularLinearIndexC :: (Kit acc, Shape sh, Elt e)
+                          => acc aenv (Regular (Array sh e))
+                          -> acc aenv (Vector Int)
+                          -> acc aenv (Vector e)
+liftedRegularLinearIndexC = fromHOAS2 liftedRegularLinearIndex
+
+liftedIrregularLinearIndexC :: (Kit acc, Shape sh, Elt e)
+                            => acc aenv (Irregular (Array sh e))
+                            -> acc aenv (Vector Int)
+                            -> acc aenv (Vector e)
+liftedIrregularLinearIndexC = fromHOAS2 liftedIrregularLinearIndex
 
 indexLastC :: forall acc env aenv sh. Shape sh
            => PreOpenExp acc env aenv (sh:.Int)
@@ -2328,23 +2063,20 @@ flattenC :: forall acc aenv sh e. (Kit acc, Shape sh, Elt e)
          => acc aenv (Array sh e) -> acc aenv (Vector e)
 flattenC = fromHOAS S.flatten
 
-regularC :: (Kit acc, Shape sh, Elt e) => acc aenv (Scalar Int) -> acc aenv (Scalar sh) -> acc aenv (Vector e) -> acc aenv (Nested (Array sh e))
-regularC = fromHOAS3 ((. S.the) . regular . S.the)
+regularC :: (Kit acc, Shape sh, Elt e) => acc aenv (Array (sh:.Int) e) -> acc aenv (Regular (Array sh e))
+regularC = fromHOAS regular
 
-valuesC :: (Kit acc, Shape sh, Elt e) => acc aenv (Nested (Array sh e)) -> acc aenv (Vector e)
-valuesC = fromHOAS values
+unregularC :: (Kit acc, Shape sh, Elt e) => acc aenv (Regular (Array sh e)) -> acc aenv (Array (sh:.Int) e)
+unregularC = fromHOAS unregular
 
-segmentsC :: (Kit acc, Shape sh, Elt e) => acc aenv (Nested (Array sh e)) -> acc aenv (Segments sh)
+segmentsC :: (Kit acc, Shape sh, Elt e) => acc aenv (Irregular (Array sh e)) -> acc aenv (Segments sh)
 segmentsC = fromHOAS segments
 
 shapesC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Vector sh)
 shapesC = fromHOAS shapes
 
-shapes'C :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Vector' sh)
-shapes'C = fromHOAS shapes'
-
-irregularC :: (Kit acc, Shape sh, Elt e) => acc aenv (Segments sh) -> acc aenv (Vector e) -> acc aenv (Nested (Array sh e))
-irregularC segs vs = inject . Atuple $ NilAtup `SnocAtup` segs `SnocAtup` vs
+irregularValuesC :: (Kit acc, Shape sh, Elt e) => acc aenv (Irregular (Array sh e)) -> acc aenv (Vector e)
+irregularValuesC = inject . Aprj ZeroTupIdx
 
 segmentsFromShapesC :: (Kit acc, Shape sh) => acc aenv (Vector sh) -> acc aenv (Segments sh)
 segmentsFromShapesC = fromHOAS segmentsFromShapes
@@ -2352,36 +2084,27 @@ segmentsFromShapesC = fromHOAS segmentsFromShapes
 regularSegsC :: (Kit acc, Shape sh) => acc aenv (Scalar Int) -> acc aenv (Scalar sh) -> acc aenv (Segments sh)
 regularSegsC = fromHOAS2 ((. S.the) . regularSegs . S.the)
 
-liftedScalarC :: (Kit acc, Elt e) => acc aenv (Vector e) -> acc aenv (Nested (Scalar e))
-liftedScalarC = fromHOAS liftedScalar
+sparsifyC :: (Kit acc, Arrays a) => acc aenv (Regular a) -> acc aenv (Irregular a)
+sparsifyC = fromHOAS sparsify
 
-isIrregularSegsC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar Bool)
-isIrregularSegsC = fromHOAS isIrregularSegs
-
-regularShapeC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar sh)
-regularShapeC = fromHOAS regularShape
-
-nestedSizeC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar Int)
-nestedSizeC = fromHOAS nestedSize
-
-asVectorC :: (Kit acc, Elt e) => acc aenv (Vector' e) -> acc aenv (Vector e)
-asVectorC = fromHOAS asVector
-
-asVector'C :: (Kit acc, Elt e) => acc aenv (Vector e) -> acc aenv (Vector' e)
-asVector'C = fromHOAS asVector'
-
-asSegmentsC :: (Kit acc, Shape sh) => acc aenv (Vector' sh) -> acc aenv (Segments sh)
-asSegmentsC = fromHOAS asSegments
-
-replicatedC :: (Kit acc, Elt e) => acc aenv (Scalar Int) -> acc aenv (Scalar e) -> acc aenv (Vector' e)
-replicatedC = fromHOAS2 (\i e -> replicated (S.the i) (S.the e))
+regularShapeC :: (Kit acc, Shape sh, Elt e) => acc aenv (Regular (Array sh e)) -> acc aenv (Scalar sh)
+regularShapeC = fromHOAS (S.unit . regularShape)
 
 makeFoldSegmentsC :: (Kit acc, Shape sh, Slice sh) => acc aenv (Segments (sh:.Int)) -> acc aenv (Vector Int, Segments sh)
 makeFoldSegmentsC = fromHOAS makeFoldSegments
 
-makeFoldSegSegmentsC :: (Kit acc, Shape sh, Slice sh, IsIntegral i, Elt i) => acc aenv (Segments (sh:.Int)) -> acc aenv (Nested (Vector i)) -> acc aenv (Segments (sh:.Int), Vector i)
+makeFoldSegSegmentsC :: (Kit acc, Shape sh, Slice sh, IsIntegral i, Elt i) => acc aenv (Segments (sh:.Int)) -> acc aenv (Irregular (Vector i)) -> acc aenv (Segments (sh:.Int), Vector i)
 makeFoldSegSegmentsC = fromHOAS2 makeFoldSegSegments
 
+castAccC :: (Kit acc, Arrays a, Arrays a') => IsIso a a' -> acc aenv a -> acc aenv a'
+castAccC iso = fromHOAS (castAcc iso)
+
+asAtupleC :: forall acc aenv a. (Arrays a, IsAtuple a, Kit acc) => acc aenv a -> Atuple (acc aenv) (TupleRepr a)
+asAtupleC a = tOA (prod (Proxy :: Proxy Arrays) (undefined :: a)) id
+  where
+    tOA :: forall t. ProdR Arrays t -> (forall e. TupleIdx t e -> TupleIdx (TupleRepr a) e) -> Atuple (acc aenv) t
+    tOA ProdRunit     _   = NilAtup
+    tOA (ProdRsnoc t) ixt = SnocAtup (tOA t (ixt . SuccTupIdx)) (inject $ Aprj (ixt ZeroTupIdx) a)
 
 -- HOAS-conversion
 -- ---------------
@@ -2395,8 +2118,8 @@ cvtHOAS = weaken ixt . fromOpenAfun . S.convertAfun True True True True
     ixt :: () :> aenv
     ixt ix = case ix of {}
 
-cvtExpHOAS :: S.Function f => f -> OpenFun env aenv (S.FunctionR f)
-cvtExpHOAS = weakenE ixt . weaken ixt . S.convertFun True
+cvtExpHOAS :: (Kit acc, S.Function f) => f -> PreOpenFun acc env aenv (S.FunctionR f)
+cvtExpHOAS = weakenE ixt . weaken ixt . fromOpenFun . S.convertFun True
   where
     ixt :: () :> aenv
     ixt ix = case ix of {}
@@ -2431,14 +2154,14 @@ fromHOAS3 f a b c =
     Alam (Alam (Alam (Abody d))) -> inject $ Alet a $^ Alet (weaken SuccIdx b) $^ Alet (weaken (SuccIdx . SuccIdx) c) d
     _                            -> error "Absurd"
 
-fromExpHOAS3 :: forall env aenv a b c d. (Elt a, Elt b, Elt c, Elt d)
+fromExpHOAS3 :: forall acc env aenv a b c d. (Elt a, Elt b, Elt c, Elt d, Kit acc)
              => (S.Exp a -> S.Exp b -> S.Exp c -> S.Exp d)
-             -> OpenExp env aenv a
-             -> OpenExp env aenv b
-             -> OpenExp env aenv c
-             -> OpenExp env aenv d
+             -> PreOpenExp acc env aenv a
+             -> PreOpenExp acc env aenv b
+             -> PreOpenExp acc env aenv c
+             -> PreOpenExp acc env aenv d
 fromExpHOAS3 f a b c =
-  case (cvtExpHOAS f :: OpenFun env aenv (a -> b -> c -> d)) of
+  case (cvtExpHOAS f :: PreOpenFun acc env aenv (a -> b -> c -> d)) of
     Lam (Lam (Lam (Body d))) -> Let a $ Let (weakenE SuccIdx b) $ Let (weakenE (SuccIdx . SuccIdx) c) d
     _                        -> error "Absurd"
 
@@ -2477,12 +2200,12 @@ atup :: forall acc aenv a b t. (Kit acc, Arrays a, Arrays b, Arrays t, IsAtuple 
      -> acc aenv t
 atup a b = inject $ Atuple $ NilAtup `SnocAtup` a `SnocAtup` b
 
-atup3 :: forall acc aenv a b c t. (Kit acc, Arrays a, Arrays b, Arrays c, Arrays t, IsAtuple t, ProdRepr t ~ ((((),a),b),c))
-      => acc aenv a
-      -> acc aenv b
-      -> acc aenv c
-      -> acc aenv t
-atup3 a b c = inject $ Atuple $ NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
+-- atup3 :: forall acc aenv a b c t. (Kit acc, Arrays a, Arrays b, Arrays c, Arrays t, IsAtuple t, ProdRepr t ~ ((((),a),b),c))
+--       => acc aenv a
+--       -> acc aenv b
+--       -> acc aenv c
+--       -> acc aenv t
+-- atup3 a b c = inject $ Atuple $ NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
 
 tupIx0 :: TupleIdx (t,a) a
 tupIx0 = ZeroTupIdx
@@ -2490,26 +2213,26 @@ tupIx0 = ZeroTupIdx
 tupIx1 :: TupleIdx ((t,a),b) a
 tupIx1 = SuccTupIdx ZeroTupIdx
 
-tupIx2 :: TupleIdx (((t,a),b),c) a
-tupIx2 = SuccTupIdx (SuccTupIdx ZeroTupIdx)
-
-tupIx3 :: TupleIdx ((((t,a),b),c),d) a
-tupIx3 = SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))
+-- tupIx2 :: TupleIdx (((t,a),b),c) a
+-- tupIx2 = SuccTupIdx (SuccTupIdx ZeroTupIdx)
+--
+-- tupIx3 :: TupleIdx ((((t,a),b),c),d) a
+-- tupIx3 = SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))
 
 replicateA :: forall acc aenv a.
              (Kit acc, Arrays a)
-          => acc aenv a
-          -> Size acc  aenv Int
-          -> acc aenv (Nested a)
-replicateA a size
+           => Size acc  aenv Int
+           -> acc aenv a
+           -> acc aenv (Regular a)
+replicateA size a
   = replicateC (unitSize size) a
 
 replicateE :: forall acc aenv e.
               (Kit acc, Elt e)
            => Size acc aenv Int
            -> PreExp acc aenv e
-           -> PreOpenAcc acc aenv (Vector e)
-replicateE (Size b s) e = Alet b $^ Replicate (SliceFixed SliceNil) (IndexCons IndexNil s) (inject . weakenA1 $ Unit e)
+           -> acc aenv (Vector e)
+replicateE (Size b s) e = inject . Alet b $^ Replicate (SliceFixed SliceNil) (IndexCons IndexNil s) (inject . weakenA1 $ Unit e)
 
 var0 :: (Kit acc, Elt t)
      => PreOpenExp acc (env, t) aenv t
@@ -2535,17 +2258,17 @@ avar2 :: (Kit acc, Arrays t)
       => acc (((aenv, t), s), r) t
 avar2 = inject $ Avar $ SuccIdx . SuccIdx $ ZeroIdx
 
-avar3 :: (Kit acc, Arrays t)
-      => acc ((((aenv, t), s), r), q) t
-avar3 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
-
-avar4 :: (Kit acc, Arrays t)
-      => acc (((((aenv, t), s), r), q), p) t
-avar4 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
-
-avar5 :: (Kit acc, Arrays t)
-      => acc ((((((aenv, t), s), r), q), p), o) t
-avar5 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
+-- avar3 :: (Kit acc, Arrays t)
+--       => acc ((((aenv, t), s), r), q) t
+-- avar3 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
+--
+-- avar4 :: (Kit acc, Arrays t)
+--       => acc (((((aenv, t), s), r), q), p) t
+-- avar4 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
+--
+-- avar5 :: (Kit acc, Arrays t)
+--       => acc ((((((aenv, t), s), r), q), p), o) t
+-- avar5 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
 
 the :: Elt e
     => acc aenv (Scalar e)
@@ -2570,6 +2293,17 @@ unindex1 :: PreOpenExp acc env aenv DIM1
          -> PreOpenExp acc env aenv Int
 unindex1 = IndexHead
 
+indexSnoc :: (Shape sh, Slice sh)
+          => PreOpenExp acc env aenv sh
+          -> PreOpenExp acc env aenv Int
+          -> PreOpenExp acc env aenv (sh:.Int)
+indexSnoc sh i = IndexTrans (IndexCons (IndexTrans sh) i)
+
+indexInit :: (Shape sh, Slice sh)
+          => PreOpenExp acc env aenv (sh:.Int)
+          -> PreOpenExp acc env aenv sh
+indexInit = IndexTrans . IndexTail . IndexTrans
+
 segmented :: (Elt e, Kit acc)
           => PreOpenFun acc env aenv (e -> e -> e)
           -> PreOpenFun acc env aenv ((Int, e) -> (Int, e) -> (Int, e))
@@ -2579,10 +2313,21 @@ segmented f = Lam . Lam . Body
               (sndE var0)
               (subApplyE2 (weakenE2 f) (sndE var0) (sndE var1)))
 
+maximum :: Kit acc
+        => PreOpenExp acc env aenv Int
+        -> PreOpenExp acc env aenv Int
+        -> PreOpenExp acc env aenv Int
+maximum a b = PrimApp (PrimMax scalarType) (tup a b)
+
 newTop :: env :> env'
        -> (env,t) :> (env', t)
 newTop _  ZeroIdx = ZeroIdx
 newTop wk (SuccIdx ix) = SuccIdx $ wk ix
+
+swapTop :: ((env,s),t) :> ((env,t),s)
+swapTop ZeroIdx                 = SuccIdx ZeroIdx
+swapTop (SuccIdx ZeroIdx)       = ZeroIdx
+swapTop (SuccIdx (SuccIdx idx)) = SuccIdx (SuccIdx idx)
 
 weakenA1 :: Sink f
          => f aenv t
@@ -2604,15 +2349,15 @@ weakenA4 :: Sink f
          -> f ((((aenv,p),q),r),s) t
 weakenA4 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx)
 
-weakenA5 :: Sink f
-         => f aenv t
-         -> f (((((aenv,o),p),q),r),s) t
-weakenA5 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx)
-
-weakenA6 :: Sink f
-         => f aenv t
-         -> f ((((((aenv,n),o),p),q),r),s) t
-weakenA6 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx)
+-- weakenA5 :: Sink f
+--          => f aenv t
+--          -> f (((((aenv,o),p),q),r),s) t
+-- weakenA5 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx)
+--
+-- weakenA6 :: Sink f
+--          => f aenv t
+--          -> f ((((((aenv,n),o),p),q),r),s) t
+-- weakenA6 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx)
 
 weakenE1 :: SinkExp f
          => f env     aenv t
@@ -2623,11 +2368,6 @@ weakenE2 :: SinkExp f
          => f env         aenv t
          -> f ((env,r),s) aenv t
 weakenE2 = weakenE (SuccIdx . SuccIdx)
-
-weakenE3 :: SinkExp f
-         => f env         aenv t
-         -> f (((env,q),r),s) aenv t
-weakenE3 = weakenE (SuccIdx . SuccIdx . SuccIdx)
 
 fun1 :: (Kit acc, Elt a, Elt b)
      => (forall env. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b)
@@ -2644,23 +2384,22 @@ fun3 :: (Kit acc, Elt a, Elt b, Elt c, Elt d)
      -> PreOpenFun acc env aenv (a -> b -> c -> d)
 fun3 f = Lam (Lam (Lam (Body (f var2 var1 var0))))
 
-unliftA :: forall env aenv env' aenv'.
-           Context env aenv env' aenv'
-        -> (aenv :?> aenv')
-unliftA (PushAccC _)    ZeroIdx      = Just ZeroIdx
-unliftA (PushAccC d)    (SuccIdx ix) = SuccIdx <$> unliftA d ix
-unliftA (PushLAccC _)   ZeroIdx      = Nothing
-unliftA (PushLAccC d)   (SuccIdx ix) = SuccIdx <$> unliftA d ix
-unliftA (PushExpC d)    ix           = unliftA d ix
-unliftA (PushLExpC d)   ix           = SuccIdx <$> unliftA d ix
-unliftA _               _            = error "unliftA: Inconsistent evalution"
+fromContext :: forall acc aenv aenv' t. (Kit acc, Arrays t)
+            => Context aenv aenv'
+            -> Idx aenv t
+            -> Maybe (PreOpenAcc acc aenv' t)
+fromContext BaseC        ix           = Just $ Avar ix
+fromContext (PushC _ ty) ZeroIdx      = castAccC' <$> isIso ty <*> pure (Avar ZeroIdx)
+  where
+    castAccC' iso = extract . castAccC iso . inject
+fromContext (PushC d _)  (SuccIdx ix) = weakenA1 <$> fromContext d ix
 
 
-rebuildToLift :: Rebuildable f
-              => Context env aenv env' aenv'
-              -> f aenv t
-              -> Maybe (f aenv' t)
-rebuildToLift d = rebuildPartial (liftA Avar . unliftA d)
+strengthenUnder :: (Rebuildable f, AccClo f ~ acc, Kit acc)
+                => Context aenv aenv'
+                -> f aenv t
+                -> Maybe (f aenv' t)
+strengthenUnder d = rebuildPartial (fromContext d)
 
 alet :: (Kit acc, Arrays a, Arrays b)
      => acc aenv     a
@@ -2674,6 +2413,25 @@ apply :: (Kit acc, Arrays a)
       -> acc             aenv b
 apply f = inject . subApply f
 
+-- apply2 :: (Kit acc, Arrays a)
+--        => PreOpenAfun acc aenv (a -> b -> c)
+--        -> acc             aenv a
+--        -> acc             aenv b
+--        -> acc             aenv c
+-- apply2 f a = inject . subApply2 f a
+--
+-- apply3 :: (Kit acc, Arrays a)
+--        => PreOpenAfun acc aenv (a -> b -> c -> d)
+--        -> acc             aenv a
+--        -> acc             aenv b
+--        -> acc             aenv c
+--        -> acc             aenv d
+-- apply3 (Alam (Alam (Alam (Abody f)))) a b c
+--   = inject . Alet a
+--   $^ Alet (weakenA1 b)
+--   $^ Alet (weakenA2 c)
+--   $ f
+
 subApply2 :: (Kit acc, Arrays a)
          => PreOpenAfun acc aenv (a -> b -> c)
          -> acc             aenv a
@@ -2684,14 +2442,6 @@ subApply2 (Alam (Alam (Abody f))) a b
   $ inject $ Alet (weakenA1 b)
   $ f
 subApply2 _ _ _ = error "subApply2: inconsistent evaluation"
-
-subApplyE :: Kit acc
-          => PreOpenFun  acc env aenv (a -> b)
-          -> PreOpenExp  acc env aenv a
-          -> PreOpenExp  acc env aenv b
-subApplyE (Lam (Body f)) a
-  = Let a f
-subApplyE _ _ = error "subApplyE: inconsistent evaluation"
 
 subApplyE2 :: Kit acc
            => PreOpenFun  acc env aenv (a -> b -> c)
@@ -2736,6 +2486,13 @@ infixr 0 $^
      -> t
 ($^) f a = f $ inject a
 
+infixr 9 .^
+(.^) :: Kit acc
+     => (acc aenv b -> c)
+     -> (a -> PreOpenAcc acc aenv b)
+     -> (a -> c)
+f .^ g = f . inject . g
+
 
 simpleSize :: forall acc aenv e. Kit acc => PreExp acc aenv e ->  Size acc aenv e
 simpleSize e = Size (inject $ Use () :: acc aenv ()) (weakenA1 e)
@@ -2743,195 +2500,294 @@ simpleSize e = Size (inject $ Use () :: acc aenv ()) (weakenA1 e)
 unitSize :: (Kit acc, Elt e) => Size acc aenv e -> acc aenv (Scalar e)
 unitSize (Size b s) = inject $ Alet b $ inject $ Unit s
 
-sizeOfVector' :: (Kit acc, Elt e) => acc aenv (Vector' e) -> Size acc aenv Int
-sizeOfVector' a = Size (inject $ Aprj tupIx2 a) (the avar0)
+sizeOfVector :: (Kit acc, Elt e) => acc aenv (Vector e) -> Size acc aenv Int
+sizeOfVector a = Size a (ShapeSize (Shape avar0))
+
+generalizeRank :: (Kit acc, Shape sh, Elt e, Elt e')
+               => PreOpenAfun acc aenv (Vector e -> Vector e')
+               -> PreOpenAfun acc aenv (Array sh e -> Array sh e')
+generalizeRank (Alam (Abody f)) =  Alam . Abody
+                                $^ Reshape (Shape avar0)
+                                $^ Alet (flattenC avar0)
+                                $  weaken (swapTop . SuccIdx) f
+generalizeRank _ = error "Absurd"
+
+generalizeRank2 :: (Kit acc, Shape sh, Elt e, Elt e', Elt e'')
+                => PreOpenAfun acc aenv (Vector e -> Vector e' -> Vector e'')
+                -> PreOpenAfun acc aenv (Array sh e -> Array sh e' -> Array sh e'')
+generalizeRank2 f
+  =  Alam . Alam . Abody
+  $^ Alet (zipC avar1 avar0)
+  $^ Reshape (Shape avar0)
+  $^ Alet (unzipC avar0)
+  $^ subApply2 (weakenA4 f) (flattenC (fstA avar0)) (flattenC (sndA avar0))
 
 -- Debugging
 -- ----------
-trace :: String -> String -> a -> a
-trace header msg
-  = Debug.trace Debug.dump_vectorisation
-  $ header ++ ": " ++ msg
+-- trace :: String -> String -> a -> a
+-- trace header msg
+--   = Debug.trace Debug.dump_vectorisation
+--   $ header ++ ": " ++ msg
 
 -- Sequence vectorisation
 -- ------------------------
 
-vectoriseSeq :: OpenNaturalSeq () a -> Maybe (OpenChunkedSeq () a)
-vectoriseSeq = vectoriseOpenSeq Conservative EmptyC
-
-vectoriseOpenSeq :: forall aenv aenv' a.
-                    Strength
-                 -> Context () aenv () aenv'
-                 -> OpenNaturalSeq aenv a
-                 -> Maybe (OpenChunkedSeq aenv' a)
-vectoriseOpenSeq strength ctx seq =
+vectoriseOpenSeq :: forall acc aenv aenv' a. Kit acc
+                 => VectoriseAcc acc
+                 -> Context aenv aenv'
+                 -> Size acc aenv' Int
+                 -> PreOpenNaturalSeq acc aenv a
+                 -> Maybe (PreOpenChunkedSeq  acc aenv' a)
+vectoriseOpenSeq vectAcc ctx size seq =
   case seq of
-    Producer p s -> Producer <$> cvtP p <*> vectoriseOpenSeq strength (PushLAccC ctx) s
+    Producer p s -> do
+      LiftedAcc ty p' <- cvtP p
+      Producer p' <$> vectoriseOpenSeq vectAcc (PushC ctx ty) (weakenA1 size) s
     Consumer c   -> cvtC c
-    Reify{}      -> Nothing
+    Reify _      -> error "Unexpected reify"
   where
-    cvtP :: NaturalProducer OpenAcc aenv t -> Maybe (ChunkedProducer OpenAcc aenv' (Nested t))
+    cvtP :: NaturalProducer acc aenv t -> Maybe (LiftedAcc (ChunkedProducer acc) aenv' t)
     cvtP p =
       case p of
-        Pull _             -> Nothing
-        Subarrays sh a     -> subarrays <$> cvtE sh <*> pure a
-        Produce l f        -> ProduceAccum <$> cvtL l <*> return (streamify f) <*> return nil
-        MapBatch f f' a x  -> mapBatch <$> pure (cvtAF f) <*> cvtAF' f' <*> cvtA' a <*> pure (cvtA x)
-        ProduceAccum{}     -> stageError
+        Pull _              -> Nothing
+        Subarrays sh a      -> LiftedAcc RegularT <$> (subarrays <$> cvtE sh <*> pure a)
+        Produce l (Alam (Abody f))
+          | LiftedAcc ty f' <- vectAcc (ctx `PushC` RegularT) (regularSize avar0) f
+          -> LiftedAcc ty <$> (ProduceAccum <$> cvtL l <*> return (streamify f') <*> return nil)
+        -- MapBatch f c c' a x -> Just $ mapBatch f c c' a x
+        ProduceAccum{}      -> stageError
+        Produce _ _         -> error "Absurd"
 
-    cvtL :: Maybe (Exp aenv Int) -> Maybe (Maybe (Exp aenv' Int))
+    cvtL :: Maybe (PreExp acc aenv Int) -> Maybe (Maybe (PreExp acc aenv' Int))
     cvtL Nothing = Just Nothing
-    cvtL (Just l) | Just l' <- rebuildToLift ctx l
+    cvtL (Just l) | Just l' <- strengthenUnder ctx l
                   = Just (Just l')
                   | otherwise
                   = $internalError "vectoriseOpenSeq" "Limit depends on sequence elements"
 
-    mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
-             => OpenAfun aenv' (Nested s -> Nested a -> Nested b)
-             -> OpenAfun aenv' (s -> Nested b -> (s, Nested c))
-             -> OpenAcc  aenv' s
-             -> OpenAfun aenv' (Scalar Int -> Nested a)
-             -> ChunkedProducer OpenAcc aenv' (Nested (s,c))
-    mapBatch f f' a x = ProduceAccum Nothing f'' a
-      where
-        f'' = Alam . Alam . Abody
-            $ repack
-            $^ Alet (apply (weakenA2 x) $^ Unit (sndE (the avar1)))
-            $ weakenA3 f' `partApply` avar1 `apply` (weakenA3 f `partApply` replicateC (unit (sndE (the avar2))) avar1 `apply` avar0)
-        repack a = OpenAcc $ Alet a
-                 $ atup (atup (replicateC (unit (sndE (the avar2))) (fstA avar0)) (sndA avar0)) (fstA avar0)
+    -- mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
+    --          => PreOpenAfun acc aenv (s -> a -> b)
+    --          -> PreOpenAfun acc aenv (s -> Regular b -> (s, Regular c))
+    --          -> PreOpenAfun acc aenv (s -> Irregular b -> (s, Irregular c))
+    --          -> acc  aenv s
+    --          -> acc  aenv a
+    --          -> LiftedAcc (ChunkedProducer acc) aenv' (s,c)
+    -- mapBatch (Alam (Alam (Abody f))) (cvtAF' -> Just c) (cvtAF' -> Just c') (cvtA' -> Just s) (cvtA -> LiftedAcc ty a)
+    --   | LiftedAcc ty' f' <- cvtAUnder (ctx `PushC` avoidedType `PushC` ty) f
+    --   , Just iso <- isIso ty'
+    --   = let
+    --       theType = TupleT (NilLtup `SnocLtup` avoidedType `SnocLtup` avoidedType)
+    --
+    --       f'' :: PreOpenAfun acc aenv' (Scalar (Int, Int) -> s -> ((s,c),s))
+    --       f'' = Alam . Alam . Abody $
+    --         let
+    --           sz = sndE (the avar1)
+    --           a' = inject $ Alet (unit sz) (weaken (newTop (SuccIdx . SuccIdx)) a)
+    --           b  = castAccC iso $ apply3 (weakenA2 . Alam . Alam . Alam . Abody $ f') avar0 a' (unit sz)
+    --         in fromHOAS repack $ apply2 (weakenA2 c) avar0 (replicateA (simpleSize sz) b)
+    --
+    --       repack :: Arrays c' => S.Acc (s, c') -> S.Acc ((s,c'),s)
+    --       repack (S.unatup2 -> (s,c)) = S.lift ((s, c), s)
+    --
+    --     in LiftedAcc theType $ ProduceAccum Nothing f'' s
 
-    subarrays :: (Shape sh, sh :<= DIM3, Elt e) => Exp aenv' sh -> Array sh e -> ChunkedProducer OpenAcc aenv' (Nested (Array sh e))
+    subarrays :: (Shape sh, sh :<= DIM3, Elt e) => PreExp acc aenv' sh -> Array sh e -> ChunkedProducer acc aenv' (Regular (Array sh e))
     subarrays sh arr = ProduceAccum subLimit f nil
       where
         f = Alam . Alam . Abody $ atup (liftedSubArrays (the avar1) (weakenA2 sh) arr) nil
-        totalSize = Const (size (shape arr))
+        totalSize = Const (Sugar.size (shape arr))
         subSize = ShapeSize sh
         subLimit = Just (totalSize `div` subSize)
         div a b = PrimApp (PrimIDiv integralType) (tup a b)
 
 
-    streamify :: Arrays t => OpenAfun aenv (Scalar Int -> t) -> OpenAfun aenv' (Scalar (Int,Int) -> () -> (Nested t, ()))
+    streamify :: Arrays t' => acc (aenv', Regular (Scalar Int)) t' -> PreOpenAfun acc aenv' (Scalar (Int,Int) -> () -> (t', ()))
     streamify f =
-      let f' = liftOpenAfun1 Conservative ctx f
+      let f' = Alam . Abody $ f
       in Alam . Alam . Abody . nest $ weakenA2 f' `apply` fromRange avar1
 
-    fromRange :: forall aenv. OpenAcc aenv (Scalar (Int, Int)) -> OpenAcc aenv (Nested (Scalar Int))
-    fromRange r =  liftedScalarC
+    fromRange :: forall aenv. acc aenv (Scalar (Int, Int)) -> acc aenv (Regular (Scalar Int))
+    fromRange r =  regularC
                 $^ Generate (index1 $ sndE r') (Lam . Body $ fstE r' `plus` unindex1 var0)
       where
-        r' :: forall env. OpenExp env aenv (Int, Int)
+        r' :: forall env. PreOpenExp acc env aenv (Int, Int)
         r' = the r
         plus a b = PrimApp (PrimAdd numType) (tup a b)
 
-    nest :: forall aenv a. Arrays a => OpenAcc aenv a -> OpenAcc aenv (a,())
-    nest = OpenAcc . Atuple . (\a -> NilAtup `SnocAtup` a `SnocAtup` nil)
+    nest :: forall aenv a. Arrays a => acc aenv a -> acc aenv (a,())
+    nest = inject . Atuple . (\a -> NilAtup `SnocAtup` a `SnocAtup` nil)
 
-    cvtC :: NaturalConsumer OpenAcc aenv t -> Maybe (OpenChunkedSeq aenv' t)
+    cvtC :: NaturalConsumer acc aenv t -> Maybe (PreOpenChunkedSeq acc aenv' t)
     cvtC c =
       case c of
-        FoldBatch f f' a x -> foldBatch <$> pure (cvtAF'' f) <*> cvtAF' f' <*> cvtA' a <*> pure (cvtA x)
-        Stuple t           -> Consumer . Stuple <$> cvtCT t
+        FoldBatch f a x -> foldBatch f a x
+        Stuple t        -> Consumer . Stuple <$> cvtCT t
+        Last _ _        -> stageError
+        Elements x      -> Just (elements x)
+        Tabulate x      -> Just (tabulate x)
 
-    foldBatch :: forall a b s. (Arrays a, Arrays b, Arrays s)
-              => OpenAfun aenv' (s -> Nested a -> Nested b)
-              -> OpenAfun aenv' (s -> Nested b -> s)
-              -> OpenAcc  aenv' s
-              -> OpenAfun aenv' (Scalar Int -> Nested a)
-              -> OpenChunkedSeq aenv' s
-    foldBatch f f' a x = Producer (ProduceAccum Nothing f'' a) (Consumer (Last avar0 (weakenA1 a)))
+    foldBatch :: forall a x. (Arrays a, Arrays x)
+              => PreOpenAfun acc aenv (a -> x -> a)
+              -> acc  aenv a
+              -> acc  aenv x
+              -> Maybe (PreOpenChunkedSeq acc aenv' a)
+    foldBatch (Alam (Alam (Abody f))) a x
+      | LiftedAcc tya f' <- vectAcc (ctx `PushC` avoidedType `PushC` avoidedType) (simpleSize (sndE (the avar0))) (weakenA1 (alet (weakenA1 x) f))
+      = do
+          a'  <- cvtA' a
+          iso <- isIso tya
+          let f'' = alet (weaken swapTop (castAccC iso f')) $ atup avar0 avar0
+          return
+            $ Producer (ProduceAccum Nothing (Alam (Alam (Abody f''))) a') (Consumer (Last avar0 (weakenA1 a')))
+    foldBatch _ _ _
+      = error "Impossible function"
+
+    elements :: (Shape sh, Elt e)
+             => acc aenv (Array sh e)
+             -> PreOpenChunkedSeq acc aenv' (Vector e)
+    elements x
+      | LiftedAcc ty x' <- cvtA x
+      = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS2 (f ty) (weakenA2 x') avar0)) a)
+                          (Consumer (Last avar0 (weakenA1 a)))
       where
-        f'' = Alam . Alam . Abody
-            $ repack
-            $^ Alet (apply (weakenA2 x) $^ Unit (sndE (the avar1)))
-            $ weakenA3 f' `partApply` avar1 `apply` (weakenA3 f `partApply` avar1 `apply` avar0)
-        repack a = OpenAcc $ Alet a
-                 $ atup avar0 avar0
+        f ty x a = let x' = a S.++ flatten ty x in S.lift (x',x')
 
-    cvtCT :: Atuple (OpenNaturalSeq aenv) t -> Maybe (Atuple (OpenChunkedSeq aenv') t)
+        a :: Elt e => acc aenv' (Vector e)
+        a = inject . Use $ newArray empty undefined
+
+        flatten :: (Shape sh, Elt e) => LiftedType (Array sh e) x -> S.Acc x -> S.Acc (Vector e)
+        flatten AvoidedT   = S.flatten
+        flatten RegularT   = S.flatten . unregular
+        flatten IrregularT = irregularValues
+        flatten _          = error "Impossible lifted type"
+
+    tabulate :: forall sh e. (Shape sh, Elt e)
+             => acc aenv (Array sh e)
+             -> PreOpenChunkedSeq acc aenv' (Array (sh:.Int) e)
+    tabulate x
+      | LiftedAcc ty x' <- cvtA x
+      = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS3 (f ty) avar1 (weakenA2 x') avar0)) a)
+                 (Consumer (Last avar0 (weakenA1 (inject (Use (newArray empty undefined))))))
+      where
+        f :: LiftedType (Array sh e) x
+          -> S.Acc (Scalar (Int,Int))
+          -> S.Acc x
+          -> S.Acc (Array (sh:.Int) e)
+          -> S.Acc (Array (sh:.Int) e, Array (sh:.Int) e)
+        f ty ix x a
+          = let x'  = reduce ty x
+                x'' = S.fst (S.the ix) S.==* S.constant 0
+                    S.?| ( x'
+                         , concat a x')
+
+            in S.lift (x'',x'')
+          where
+            concat x y =
+              let
+                sh_x = S.indexInit (S.shape x)
+                sh_y = S.indexInit (S.shape y)
+                sz_x = S.indexLast (S.shape x)
+                sz_y = S.indexLast (S.shape y)
+              in S.generate (S.indexSnoc (S.intersect sh_x sh_y) (sz_x + sz_y))
+                            (\ix -> S.indexLast ix  S.<* sz_x S.? (x S.! ix, y S.! ix))
+
+            reduce :: LiftedType (Array sh e) x -> S.Acc x -> S.Acc (Array (sh:.Int) e)
+            reduce AvoidedT x = S.reshape (S.indexSnoc (S.shape x) 1) x
+            reduce RegularT x = unregular x
+            reduce IrregularT x =
+              let
+                shs = shapes (segments x)
+                sh = S.fold1 S.intersect shs
+              in S.generate (S.indexSnoc (S.the sh) (S.length shs)) (\ix -> indexInSeg x (S.indexLast ix) (S.indexInit ix))
+            reduce _ _ = error "Impossible lifted type"
+
+        a :: acc aenv' (Array (sh:.Int) e)
+        a = inject $ Use (newArray empty undefined)
+
+    cvtCT :: Atuple (PreOpenNaturalSeq acc aenv) t -> Maybe (Atuple (PreOpenChunkedSeq acc aenv') t)
     cvtCT NilAtup        = Just NilAtup
-    cvtCT (SnocAtup t c) = SnocAtup <$> cvtCT t <*> vectoriseOpenSeq strength ctx c
+    cvtCT (SnocAtup t c) = SnocAtup <$> cvtCT t <*> vectoriseOpenSeq vectAcc ctx size c
 
-    nil :: forall aenv. OpenAcc aenv ()
-    nil = OpenAcc $ Atuple NilAtup
+    nil :: forall aenv. acc aenv ()
+    nil = inject $ Atuple NilAtup
 
-    cvtE :: Elt t => Exp aenv t -> Maybe (Exp aenv' t)
-    cvtE e | Just e' <- rebuildToLift ctx e
+    cvtE :: Elt t => PreExp acc aenv t -> Maybe (PreExp acc aenv' t)
+    cvtE e | Just e' <- strengthenUnder ctx e
            = Just e'
     cvtE _ = Nothing
     --
     -- cvtF :: Fun aenv t -> Fun aenv' t
-    -- cvtF = vectoriseSeqOpenFun strength ctx
+    -- cvtF = vectoriseSeqOpenFun ctx
     --
-    cvtA :: Arrays t => OpenAcc aenv t -> OpenAfun aenv' (Scalar Int -> Nested t)
-    cvtA = liftOpenAcc strength ctx
 
-    cvtA' :: OpenAcc aenv t -> Maybe (OpenAcc aenv' t)
-    cvtA' t =
-      case rebuildToLift ctx t of
-        Nothing -> $internalError "vectoriseOpenSeq" "Sequence invariant array term depends on sequence elements"
-        Just t' -> Just t'
+    -- cvtAUnder :: forall aenv aenv' t. Arrays t
+    --           => Context aenv aenv'
+    --           -> acc aenv t
+    --           -> LiftedAcc acc (aenv', Scalar Int) t
+    -- cvtAUnder ctx = vectoriseOpenAcc (PushC ctx avoidedType) (simpleSize (the avar0)) . weakenA1
 
-    cvtAF :: forall a b c. OpenAfun aenv (a -> b -> c) -> OpenAfun aenv' (Nested a -> Nested b -> Nested c)
-    cvtAF = liftOpenAfun2 Conservative ctx
+    cvtA :: Arrays t => acc aenv t -> LiftedAcc acc aenv' t
+    cvtA = vectAcc ctx size
 
-    cvtAF' :: OpenAfun aenv t -> Maybe (OpenAfun aenv' t)
-    cvtAF' t =
-      case rebuildToLift ctx t of
-        Nothing -> $internalError "vectoriseOpenSeq" "Sequence invariant array function depends on sequence elements"
-        Just t' -> Just t'
+    cvtA' :: Arrays t => acc aenv t -> Maybe (acc aenv' t)
+    cvtA' (cvtA -> LiftedAcc ty a) | Just iso <- isIso ty
+                                   = Just (castAccC iso a)
+                                   | otherwise
+                                   = Nothing
+    --
+    -- cvtAF' :: PreOpenAfun acc aenv t -> Maybe (PreOpenAfun acc aenv' t)
+    -- cvtAF' t =
+    --   case strengthenUnder ctx t of
+    --     Nothing -> $internalError "vectoriseOpenSeq" "Sequence invariant array function depends on sequence elements"
+    --     Just t' -> Just t'
 
-    cvtAF'' :: forall a b c. OpenAfun aenv (a -> b -> c) -> OpenAfun aenv' (a -> Nested b -> Nested c)
-    cvtAF'' (Alam (Alam (Abody f)))
-      = case vectoriseOpenAcc Conservative (PushLAccC . PushAccC $ ctx) (liftedSize avar0) f of
-          AvoidedAcc a' | Size b s <- liftedSize avar0
-                        -> Alam . Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
-          LiftedAcc  a' -> Alam . Alam . Abody $ a'
-
-    -- untup :: OpenAfun aenv t -> OpenAfun aenv t
+    -- untup :: PreOpenAfun acc aenv t -> PreOpenAfun acc aenv t
     -- untup = untupleAfun BaseReducedMap
 
     stageError = $internalError "vectoriseOpenSeq" "AST is at wrong stage for vectorisation. It seems to have already been vectorised."
 
-liftedSubArrays :: forall aenv sh e. (sh :<= DIM3, Elt e, Shape sh)
-                => Exp aenv (Int, Int)
-                -> Exp aenv sh
+liftedSubArrays :: forall acc aenv sh e. (sh :<= DIM3, Elt e, Shape sh, Kit acc)
+                => PreExp acc aenv (Int, Int)
+                -> PreExp acc aenv sh
                 -> Array sh e
-                -> OpenAcc aenv (Nested (Array sh e))
+                -> acc aenv (Regular (Array sh e))
 liftedSubArrays index sh arr
   | AsSlice <- asSlice (Proxy :: Proxy sh)
-  = regularC (unit (sndE index)) (unit sh) $
+  = regularC $
   case (maximumRank :: sh :<=: DIM3) of
-    RankZ          -> flattenC $^ (Use arr)
-    RankSnoc RankZ -> flattenC
-                    $^ Subarray (index1 (fstE index `times` unindex1 sh)) (index1 (sndE index `times` unindex1 sh)) arr
+    RankZ          -> flattenC $^ Use arr
+    RankSnoc RankZ -> inject $ Reshape (indexSnoc sh (sndE index))
+      $^ Subarray (index1 (fstE index `times` unindex1 sh)) (index1 (sndE index `times` unindex1 sh)) arr
     RankSnoc (RankSnoc RankZ)
-      -> flattenC
+      -> inject . Reshape (indexSnoc sh (sndE index))
       $^ Alet (inject $ Unit (twoDC index sh (Const fsh)))
-      $  tail -- head `catC` body `catC` tail
+      $  head `catC` body `catC` tail
       where
-        -- head = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
-        -- body = inject
-        --      $  Backpermute (weakenA1 $ index2 (sndE index) (IndexHead sh)) (Lam . Body $ reorderC (weakenA1 . weakenE1 $ sh) (Const fsh) var0)
-        --      $^ Subarray (fstE . snd $ the avar0) (sndE . snd $ the avar0) arr
+        head = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
+        body = inject
+             $  Backpermute (weakenA1 $ index2 (sndE index) (IndexHead sh)) (Lam . Body $ reorderC (weakenA1 . weakenE1 $ sh) (Const fsh) var0)
+             $^ Subarray (fstE . snd $ the avar0) (sndE . snd $ the avar0) arr
         tail = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
 
-        fst :: (Elt a, Elt b, Elt c) => Exp aenv' (a,b,c) -> Exp aenv' a
+        fst :: (Elt a, Elt b, Elt c) => PreExp acc aenv' (a,b,c) -> PreExp acc aenv' a
         fst = Prj (SuccTupIdx (SuccTupIdx ZeroTupIdx))
-        snd :: (Elt a, Elt b, Elt c) => Exp aenv' (a,b,c) -> Exp aenv' b
+        snd :: (Elt a, Elt b, Elt c) => PreExp acc aenv' (a,b,c) -> PreExp acc aenv' b
         snd = Prj (SuccTupIdx ZeroTupIdx)
-        trd :: (Elt a, Elt b, Elt c) => Exp aenv' (a,b,c) -> Exp aenv' c
-        trd = Prj ZeroTupIdx
+        -- trd :: (Elt a, Elt b, Elt c) => PreExp acc aenv' (a,b,c) -> PreExp acc aenv' c
+        -- trd = Prj ZeroTupIdx
 
         fsh = fromElt (shape arr)
     _ -> error "Absurd"
 
   where
     times a b = PrimApp (PrimMul numType) (tup a b)
-    catC :: OpenAcc aenv' (Array DIM2 e) -> OpenAcc aenv' (Array DIM2 e) -> OpenAcc aenv' (Array DIM2 e)
+    catC :: acc aenv' (Array DIM2 e) -> acc aenv' (Array DIM2 e) -> acc aenv' (Array DIM2 e)
     catC = fromHOAS2 cat
+
+    twoDC :: PreOpenExp acc env aenv' (Int,Int) -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' ((DIM2,DIM2), (DIM2,DIM2), (DIM2,DIM2))
     twoDC = fromExpHOAS3 twoD
-    reorderC :: OpenExp env aenv' DIM2 -> OpenExp env aenv' DIM2 -> OpenExp env aenv' DIM2 -> OpenExp env aenv' DIM2
+
+    reorderC :: PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2
     reorderC = fromExpHOAS3 reorder
 
     twoD :: S.Exp (Int,Int) -> S.Exp DIM2 -> S.Exp DIM2 -> S.Exp ((DIM2,DIM2), (DIM2,DIM2), (DIM2,DIM2))
@@ -2968,251 +2824,139 @@ liftedSubArrays index sh arr
         y_out = y `mod` fh
       in S.index2 y_out x_out
 
-stripExpCtx :: Context env aenv env aenv -> Context () aenv () aenv
-stripExpCtx c =
-  case c of
-    EmptyC -> EmptyC
-    PushExpC c' -> stripExpCtx c'
-    PushAccC c' -> PushAccC (stripExpCtx c')
-    _ -> error "unreachable"
-
-vectoriseSeqOpenExp :: forall env aenv a.
-                       Bool
-                    -> Strength
-                    -> Context env aenv env aenv
-                    -> OpenExp env aenv a
-                    -> OpenExp env aenv a
-vectoriseSeqOpenExp vectorise strength ctx = cvtE
-  where
-    cvtA :: OpenAcc aenv t -> OpenAcc aenv t
-    cvtA a = vectoriseSeqOpenAcc vectorise strength (stripExpCtx ctx) a
-
-    cvtT :: Tuple (OpenExp env aenv) t -> Tuple (OpenExp env aenv) t
-    cvtT tup = case tup of
-      NilTup      -> NilTup
-      SnocTup t a -> cvtT t `SnocTup` cvtE a
-
-    cvtF :: OpenFun env aenv t -> OpenFun env aenv t
-    cvtF = vectoriseSeqOpenFun vectorise strength ctx
-
-    cvtE :: OpenExp env aenv t -> OpenExp env aenv t
-    cvtE exp =
-      case exp of
-        Let bnd body            -> Let (cvtE bnd) (vectoriseSeqOpenExp vectorise strength (PushExpC ctx) body)
-        Var ix                  -> Var ix
-        Const c                 -> Const c
-        Tuple tup               -> Tuple (cvtT tup)
-        Prj tup t               -> Prj tup (cvtE t)
-        IndexNil                -> IndexNil
-        IndexCons sh sz         -> IndexCons (cvtE sh) (cvtE sz)
-        IndexHead sh            -> IndexHead (cvtE sh)
-        IndexTail sh            -> IndexTail (cvtE sh)
-        IndexTrans sh           -> IndexTrans (cvtE sh)
-        IndexAny                -> IndexAny
-        IndexSlice x ix sh      -> IndexSlice x ix (cvtE sh)
-        IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
-        ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
-        FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
-        ToSlice x sh i          -> ToSlice x (cvtE sh) (cvtE i)
-        Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
-        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
-        PrimConst c             -> PrimConst c
-        PrimApp f x             -> PrimApp f (cvtE x)
-        Index a sh              -> Index (cvtA a) (cvtE sh)
-        LinearIndex a i         -> LinearIndex (cvtA a) (cvtE i)
-        Shape a                 -> Shape (cvtA a)
-        ShapeSize sh            -> ShapeSize (cvtE sh)
-        Intersect s t           -> Intersect (cvtE s) (cvtE t)
-        Union s t               -> Union (cvtE s) (cvtE t)
-        Foreign ff f e          -> Foreign ff (vectoriseSeqOpenFun vectorise strength EmptyC f) (cvtE e)
-
-vectoriseSeqAcc :: Bool -> OpenAcc () a -> OpenAcc () a
-vectoriseSeqAcc vectorise = vectoriseSeqOpenAcc vectorise Conservative EmptyC
-
-vectoriseSeqOpenAcc :: forall aenv a.
-                       Bool
-                    -> Strength
-                    -> Context () aenv () aenv
-                    -> OpenAcc aenv a
-                    -> OpenAcc aenv a
-vectoriseSeqOpenAcc vectorise strength ctx = cvtA
-  where
-    cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
-    cvtT atup = case atup of
-      NilAtup      -> NilAtup
-      SnocAtup t a -> cvtT t `SnocAtup` cvtA a
-
-    cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
-    cvtAfun = vectoriseSeqOpenAfun vectorise strength ctx
-
-    cvtE :: Elt t => Exp aenv t -> Exp aenv t
-    cvtE = vectoriseSeqOpenExp vectorise strength ctx
-
-    cvtF :: Fun aenv t -> Fun aenv t
-    cvtF = vectoriseSeqOpenFun vectorise strength ctx
-
-    cvtA :: OpenAcc aenv t -> OpenAcc aenv t
-    cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
-      Alet bnd body             -> Alet (cvtA bnd) (vectoriseSeqOpenAcc vectorise strength (PushAccC ctx) body)
-      Avar ix                   -> Avar ix
-      Atuple tup                -> Atuple (cvtT tup)
-      Aprj tup a                -> Aprj tup (cvtA a)
-      Apply f a                 -> Apply (cvtAfun f) (cvtA a)
-      Aforeign ff afun acc      -> Aforeign ff (vectoriseSeqAfun vectorise afun) (cvtA acc)
-      Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
-      Awhile p f a              -> Awhile (cvtAfun p) (cvtAfun f) (cvtA a)
-      Use a                     -> Use a
-      Unit e                    -> Unit (cvtE e)
-      Reshape e a               -> Reshape (cvtE e) (cvtA a)
-      Generate e f              -> Generate (cvtE e) (cvtF f)
-      Transform sh ix f a       -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
-      Subarray ix sh arr        -> Subarray (cvtE ix) (cvtE sh) arr
-      Replicate sl slix a       -> Replicate sl (cvtE slix) (cvtA a)
-      Slice sl a slix           -> Slice sl (cvtA a) (cvtE slix)
-      Map f a                   -> Map (cvtF f) (cvtA a)
-      ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
-      Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)
-      Fold1 f a                 -> Fold1 (cvtF f) (cvtA a)
-      Scanl f z a               -> Scanl (cvtF f) (cvtE z) (cvtA a)
-      Scanl' f z a              -> Scanl' (cvtF f) (cvtE z) (cvtA a)
-      Scanl1 f a                -> Scanl1 (cvtF f) (cvtA a)
-      Scanr f z a               -> Scanr (cvtF f) (cvtE z) (cvtA a)
-      Scanr' f z a              -> Scanr' (cvtF f) (cvtE z) (cvtA a)
-      Scanr1 f a                -> Scanr1 (cvtF f) (cvtA a)
-      Permute f1 a1 f2 a2       -> Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
-      Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
-      Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
-      Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Collect s _               -> Collect (fuseSeq (reduceOpenSeq s))
-                                           (if vectorise
-                                            then fuseSeq <$> vectoriseOpenSeq strength ctx s
-                                            else Nothing)
-      FoldSeg f z a s           -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
-      Fold1Seg f a s            -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
-
-vectoriseSeqAfun :: Bool -> OpenAfun () t -> OpenAfun () t
-vectoriseSeqAfun vectorise = vectoriseSeqOpenAfun vectorise Conservative EmptyC
-
-vectoriseSeqOpenFun :: Bool
-                    -> Strength
-                    -> Context env aenv env aenv
-                    -> OpenFun env aenv t
-                    -> OpenFun env aenv t
-vectoriseSeqOpenFun vectorise strength ctx fun =
-  case fun of
-    Body b -> Body (vectoriseSeqOpenExp vectorise strength ctx b)
-    Lam f  -> Lam (vectoriseSeqOpenFun vectorise strength (PushExpC ctx) f)
-
-vectoriseSeqOpenAfun :: Bool
-                     -> Strength
-                     -> Context () aenv () aenv
-                     -> OpenAfun aenv t
-                     -> OpenAfun aenv t
-vectoriseSeqOpenAfun vectorise strength ctx afun =
-  case afun of
-    Abody b -> Abody (vectoriseSeqOpenAcc vectorise strength ctx b)
-    Alam f  -> Alam (vectoriseSeqOpenAfun vectorise strength (PushAccC ctx) f)
-
 
 -- Sequence AST reduction
 --
-reduceStreamSeq :: Elt index
-                => StreamSeq index OpenAcc a
-                -> StreamSeq index OpenAcc a
+reduceStreamSeq :: Kit acc
+                => StreamSeq Int acc a
+                -> StreamSeq Int acc a
 reduceStreamSeq (StreamSeq binds seq) = StreamSeq binds (reduceOpenSeq seq)
 
-reduceOpenSeq :: forall index aenv a. Elt index
-              => PreOpenSeq index OpenAcc aenv a
-              -> PreOpenSeq index OpenAcc aenv a
+reduceOpenSeq :: forall acc aenv a. Kit acc
+              => PreOpenNaturalSeq acc aenv a
+              -> PreOpenNaturalSeq acc aenv a
 reduceOpenSeq seq =
   case seq of
     Producer p s -> Producer (cvtP p) (reduceOpenSeq s)
     Consumer c   -> cvtC c
     Reify a      -> Reify a
   where
-    cvtP :: Producer index OpenAcc aenv t -> Producer index OpenAcc aenv t
+    cvtP :: NaturalProducer acc aenv t -> NaturalProducer acc aenv t
     cvtP p =
       case p of
         Pull src           -> Pull src
         Subarrays sh a     -> subarrays sh a
         Produce l f        -> ProduceAccum l (streamify f) nil
-        MapBatch f f' a x  -> mapBatch f f' a x
+        -- MapBatch f c _ a x -> mapBatch f c a x
         ProduceAccum{}     -> stageError
 
-    cvtC :: Consumer index OpenAcc aenv t -> PreOpenSeq index OpenAcc aenv t
+    cvtC :: NaturalConsumer acc aenv t -> PreOpenNaturalSeq acc aenv t
     cvtC c =
       case c of
-        FoldBatch f f' a x -> foldBatch f f' a x
-        Stuple t           -> Consumer (Stuple (cvtCT t))
+        FoldBatch f a x -> foldBatch f a x
+        Stuple t        -> Consumer (Stuple (cvtCT t))
+        Last _ _        -> stageError
+        Elements x      -> elements x
+        Tabulate x      -> tabulate x
 
-    mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
-             => OpenAfun aenv (s -> a -> b)
-             -> OpenAfun aenv (s -> Nested b -> (s, Nested c))
-             -> OpenAcc aenv s
-             -> OpenAcc aenv a
-             -> Producer index OpenAcc aenv (s,c)
-    mapBatch f f' a x = ProduceAccum Nothing f'' a
+    -- mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
+    --          => PreOpenAfun acc aenv (s -> a -> b)
+    --          -> PreOpenAfun acc aenv (s -> Regular b -> (s, Regular c))
+    --          -> acc aenv s
+    --          -> acc aenv a
+    --          -> NaturalProducer acc aenv (s,c)
+    -- mapBatch f c a x = ProduceAccum Nothing f'' a
+    --   where
+    --     f'' :: PreOpenAfun acc aenv (Scalar index -> s -> ((s,c),s))
+    --     f'' = Alam . Alam . Abody . repack . alet (weakenA2 x)
+    --         $ weakenA3 c `partApply` avar1 `apply` (nest1 $ weakenA3 f `partApply` avar1 `apply` avar0)
+    --
+    --     repack :: forall aenv. acc aenv (s, Regular c) -> acc aenv ((s, c),s)
+    --     repack b = alet b $ atup (atup (fstA avar0) (fromHOAS deNest1 (sndA avar0))) (fstA avar0)
+    --
+    --     nest1 :: forall aenv x. Arrays x => acc aenv x -> acc aenv (Regular x)
+    --     nest1 = replicateC (unit (Const 1))
+    --
+    --     deNest1 :: forall x. Arrays x => S.Acc (Regular x) -> S.Acc x
+    --     deNest1 x =
+    --       case flavour (undefined :: x) of
+    --         ArraysFunit  -> S.use ()
+    --         ArraysFarray -> S.reshape (S.indexInit (S.shape (unregular x)))
+    --                                   (unregular x)
+    --         ArraysFtuple -> S.Acc $ S.Atuple $ deNestT (prod (Proxy :: Proxy Arrays) (undefined :: x)) (asAtuple x)
+    --       where
+    --         deNestT :: ProdR Arrays t -> Atuple S.Acc (RegularTupleRepr t) -> Atuple S.Acc t
+    --         deNestT ProdRunit     NilAtup         = NilAtup
+    --         deNestT (ProdRsnoc p) (SnocAtup t a') = SnocAtup (deNestT p t) (deNest1 a')
+    --         deNestT _             _               = error "Absurd"
+
+    foldBatch :: forall a s. (Arrays a, Arrays s)
+              => PreOpenAfun acc aenv (s -> a -> s)
+              -> acc aenv s
+              -> acc aenv a
+              -> PreOpenNaturalSeq acc aenv s
+    foldBatch f a x = Producer (ProduceAccum Nothing f' a) (Consumer (Last avar0 (weakenA1 a)))
       where
-        f'' :: OpenAfun aenv (Scalar index -> s -> ((s,c),s))
-        f'' = Alam . Alam . Abody . repack . alet (weakenA2 x)
-            $ weakenA3 f' `partApply` avar1 `apply` (nest1 $ weakenA3 f `partApply` avar1 `apply` avar0)
+        f' :: PreOpenAfun acc aenv (Scalar Int -> s -> (s,s))
+        f' = Alam . Alam . Abody . repack . alet (weakenA2 x)
+           $ weakenA3 f `partApply` avar1 `apply` avar0
 
-        repack :: forall aenv. OpenAcc aenv (s, Nested c) -> OpenAcc aenv ((s, c),s)
-        repack b = alet b $ atup (atup (fstA avar0) (fromHOAS deNest1 (sndA avar0))) (fstA avar0)
-
-        nest1 :: forall aenv x. Arrays x => OpenAcc aenv x -> OpenAcc aenv (Nested x)
-        nest1 = replicateC (unit (Const 1))
-
-        deNest1 :: forall x. Arrays x => S.Acc (Nested x) -> S.Acc x
-        deNest1 x =
-          case flavour (undefined :: x) of
-            ArraysFunit  -> S.use ()
-            ArraysFarray -> S.reshape (S.the $ withSegs (segments x) (S.unit (shapes (segments x) S.!! 0)) (const S.unit))
-                                      (values x)
-            ArraysFtuple -> S.Acc $ S.Atuple $ deNestT (prod (Proxy :: Proxy Arrays) (undefined :: x)) (asAtuple x)
-          where
-            deNestT :: ProdR Arrays t -> Atuple S.Acc (NestedTupleRepr t) -> Atuple S.Acc t
-            deNestT ProdRunit     NilAtup         = NilAtup
-            deNestT (ProdRsnoc p) (SnocAtup t a') = SnocAtup (deNestT p t) (deNest1 a')
-
-    foldBatch :: forall a b s. (Arrays a, Arrays b, Arrays s)
-              => OpenAfun aenv (s -> a -> b)
-              -> OpenAfun aenv (s -> Nested b -> s)
-              -> OpenAcc aenv s
-              -> OpenAcc aenv a
-              -> PreOpenSeq index OpenAcc aenv s
-    foldBatch f f' a x = Producer (ProduceAccum Nothing f'' a) (Consumer (Last avar0 (weakenA1 a)))
-      where
-        f'' :: OpenAfun aenv (Scalar index -> s -> (s,s))
-        f'' = Alam . Alam . Abody . repack . alet (weakenA2 x)
-            $ weakenA3 f' `partApply` avar1 `apply` (nest1 $ weakenA3 f `partApply` avar1 `apply` avar0)
-
-        repack :: forall aenv. OpenAcc aenv s -> OpenAcc aenv (s,s)
+        repack :: forall aenv. acc aenv s -> acc aenv (s,s)
         repack b = alet b $ atup avar0 avar0
 
-        nest1 :: forall aenv x. Arrays x => OpenAcc aenv x -> OpenAcc aenv (Nested x)
-        nest1 = replicateC (unit (Const 1))
-
-    cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv) t
+    cvtCT :: Atuple (PreOpenNaturalSeq acc aenv) t -> Atuple (PreOpenNaturalSeq acc aenv) t
     cvtCT NilAtup        = NilAtup
     cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (reduceOpenSeq c)
 
-    nil :: forall aenv. OpenAcc aenv ()
-    nil = OpenAcc (Atuple NilAtup)
+    nil :: forall aenv. acc aenv ()
+    nil = inject (Atuple NilAtup)
+
+    elements :: (Shape sh, Elt e)
+             => acc aenv (Array sh e)
+             -> PreOpenNaturalSeq acc aenv (Vector e)
+    elements x = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS2 f (weakenA2 x) avar0)) a)
+                          (Consumer (Last avar0 (weakenA1 a)))
+      where
+        f x a = let x' = a S.++ S.flatten x in S.lift (x',x')
+        a :: Elt e => acc aenv (Vector e)
+        a = inject . Use $ newArray empty undefined
+
+    tabulate :: forall sh e. (Shape sh, Elt e)
+             => acc aenv (Array sh e)
+             -> PreOpenNaturalSeq acc aenv (Array (sh:.Int) e)
+    tabulate x = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS3 f avar1 (weakenA2 x) avar0)) a)
+                          (Consumer (Last avar0 (weakenA1 (inject (Use (newArray empty undefined))))))
+      where
+        f :: S.Acc (Scalar Int) -> S.Acc (Array sh e) -> S.Acc (Array (sh:.Int) e) -> S.Acc (Array (sh:.Int) e, Array (sh:.Int) e)
+        f ix x a = let x' =    S.the ix S.==* S.constant 0
+                          S.?| (S.reshape (S.indexSnoc (S.shape x) (S.constant 1)) x
+                               , concat x a)
+
+                   in S.lift (x',x')
+        concat x y =
+          let
+            sh_x = S.shape x
+            sh_y = S.indexInit (S.shape y)
+            sz_y = S.indexLast (S.shape y)
+          in S.generate (S.indexSnoc (S.intersect sh_x sh_y) (sz_y + 1))
+                        (\ix -> S.indexLast ix  S.<* sz_y S.? (y S.! ix, x S.! S.indexInit ix))
+
+        a :: acc aenv (Array (sh:.Int) e)
+        a = inject $ Use (newArray empty undefined)
 
     streamify :: Arrays t
-              => PreOpenAfun OpenAcc aenv (Scalar index -> t)
-              -> PreOpenAfun OpenAcc aenv (Scalar index -> () -> (t, ()))
+              => PreOpenAfun acc aenv (Scalar Int -> t)
+              -> PreOpenAfun acc aenv (Scalar Int -> () -> (t, ()))
     streamify f = Alam . Alam . Abody $ atup (weakenA2 f `apply` avar1) nil
 
     subarrays :: forall sh aenv e. (Shape sh, sh :<= DIM3, Elt e)
-              => Exp aenv sh
+              => PreExp acc aenv sh
               -> Array sh e
-              -> Producer index OpenAcc aenv (Array sh e)
-    subarrays sh arr = ProduceAccum (Just (totalSize `div` subSize)) f (OpenAcc (Unit (Const (fromElt (empty :: sh)))))
+              -> NaturalProducer acc aenv (Array sh e)
+    subarrays sh arr = ProduceAccum (Just (totalSize `div` subSize)) f (inject (Unit (Const (fromElt (empty :: sh)))))
       where
         f = Alam . Alam . Abody
-          $ atup (OpenAcc (Subarray (the avar0) (weakenA2 sh) arr)) (OpenAcc (Unit (the avar0 `plusS` (weakenA2 sh))))
+          $ atup (inject (Subarray (the avar0) (weakenA2 sh) arr)) (inject (Unit (the avar0 `plusS` (weakenA2 sh))))
 
         totalSize = Const (size (shape arr))
         subSize = ShapeSize sh
@@ -3222,7 +2966,7 @@ reduceOpenSeq seq =
         plus a b = PrimApp (PrimAdd numType) (tup a b)
         times a b = PrimApp (PrimMul numType) (tup a b)
 
-        plusS :: forall aenv. (Shape sh, sh :<= DIM3) => Exp aenv sh -> Exp aenv sh -> Exp aenv sh
+        plusS :: forall aenv. (Shape sh, sh :<= DIM3) => PreExp acc aenv sh -> PreExp acc aenv sh -> PreExp acc aenv sh
         plusS a b =
           case (maximumRank :: sh :<=: DIM3) of
             RankZ          -> a
@@ -3234,10 +2978,17 @@ reduceOpenSeq seq =
                         (width a `plus` (y `div` height fsh `times` width b))
             _                         -> error "Vectorisation doesn't currently support subarrays on an array of dimension higher than 2"
           where
-            height, width :: Exp aenv DIM2 -> Exp aenv Int
+            height, width :: PreExp acc aenv DIM2 -> PreExp acc aenv Int
             height = IndexHead . IndexTail
             width  = IndexHead
-            fsh :: Exp aenv sh
+            fsh :: PreExp acc aenv sh
             fsh = Const (fromElt (shape arr))
 
     stageError = $internalError "vectoriseOpenSeq" "AST is at wrong stage for vectorisation. It seems to have already been vectorised."
+
+
+-- Utility functions
+--
+
+dummy :: k a -> a
+dummy _ = undefined

@@ -50,13 +50,10 @@ module Data.Array.Accelerate.Language (
   streamIn, subarrays, produce,
 
   -- * Sequence transudcers
-  mapSeq, zipWithSeq, mapBatch,
+  mapSeq, zipWithSeq, -- mapBatch,
 
   -- * Sequence consumers
-  foldBatch,
-
-  -- * Batched sequencing
-  Nested,
+  foldBatch, elements, tabulate,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -82,7 +79,7 @@ module Data.Array.Accelerate.Language (
   -- * Foreign functions
   foreignAcc, foreignAcc2, foreignAcc3,
   foreignExp, foreignExp2, foreignExp3,
-  VectorisedForeign(..),
+  VectorisedRegularForeign(..),
 
   -- * Pipelining
   (>->),
@@ -133,7 +130,7 @@ import Text.Printf
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union, toSlice)
-import Data.Array.Accelerate.Array.Lifted               ( Nested, VectorisedForeign(..) )
+import Data.Array.Accelerate.Array.Lifted               ( VectorisedRegularForeign(..) )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
@@ -523,21 +520,38 @@ zipWithSeq = Seq $$$ ZipWithSeq
 
 -- |A batched map.
 --
-mapBatch :: (Arrays a, Arrays b, Arrays c, Arrays s)
-         => (Acc s -> Acc a -> Acc b)
-         -> (Acc s -> Acc (Nested b) -> Acc (s, Nested c))
-         -> Acc s
-         -> Seq [a]
-         -> Seq [(s,c)]
-mapBatch = Seq $$$$ MapBatch
+-- mapBatch :: (Arrays a, Arrays b, Arrays c, Arrays s)
+--          => (Acc s -> Acc a -> Acc b)
+--          -> (Acc s -> Acc (Regular b) -> Acc (s, Regular c))
+--          -> (Acc s -> Acc (Irregular b) -> Acc (s, Irregular c))
+--          -> Acc s
+--          -> Seq [a]
+--          -> Seq [(s,c)]
+-- mapBatch = Seq $$$$$ MapBatch
 
 foldBatch :: (Arrays a, Arrays b, Arrays s)
-          => (Acc s -> Acc a -> Acc b)
-          -> (Acc s -> Acc (Nested b) -> Acc s)
+          => (Acc s -> Seq [a] -> Seq b)
+          -> (Acc b -> Acc s)
           -> Acc s
           -> Seq [a]
           -> Seq s
 foldBatch = Seq $$$$ FoldBatch
+
+-- |Flatten and concatenate all elements in the sequence.
+--
+elements :: (Shape sh, Elt e)
+         => Seq [Array sh e]
+         -> Seq (Vector e)
+elements = Seq . Elements
+
+-- |Construct an array from all elements in the sequence by concatenating on the
+-- outer dimension. If sequence is irregular, all elements are trimmed to the
+-- shape of the smallest element in the sequence.
+--
+tabulate :: (Shape sh, Elt e)
+         => Seq [Array sh e]
+         -> Seq (Array (sh:.Int) e)
+tabulate = Seq . Tabulate
 
 collect :: Arrays arrs => Seq arrs -> Acc arrs
 collect = Acc . Collect

@@ -278,8 +278,11 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
-    match (Collect s1 cs1) (Collect s2 cs2)
-      | Just REFL <- matchSeq matchAcc hashAcc s1 s2
+    match (Collect min1 max1 i1 s1 cs1) (Collect min2 max2 i2 s2 cs2)
+      | Just REFL <- matchExp min1 min2
+      , Just REFL <- join $ liftA2 matchExp max1 max2
+      , Just REFL <- join $ liftA2 matchExp i1 i2
+      , Just REFL <- matchSeq matchAcc hashAcc s1 s2
       , Just REFL <- matchSeq matchAcc hashAcc s1 s2
       , Just REFL <- join $ matchSeq matchAcc hashAcc <$> cs1 <*> cs2
       = Just REFL
@@ -367,12 +370,13 @@ matchSeq m h = match
       | Just REFL <- join $ liftA2 matchExp l1 l2
       , Just REFL <- matchPreOpenAfun m f1 f2
       = Just REFL
-    matchP (MapBatch f1 c1 a1 x1) (MapBatch f2 c2 a2 x2)
-      | Just REFL <- matchPreOpenAfun m f1 f2
-      , Just REFL <- matchPreOpenAfun m c1 c2
-      , Just REFL <- m a1 a2
-      , Just REFL <- m x1 x2
-      = Just REFL
+    -- matchP (MapBatch f1 c1 c1' a1 x1) (MapBatch f2 c2 c2' a2 x2)
+    --   | Just REFL <- matchPreOpenAfun m f1 f2
+    --   , Just REFL <- matchPreOpenAfun m c1 c2
+    --   , Just REFL <- matchPreOpenAfun m c1' c2'
+    --   , Just REFL <- m a1 a2
+    --   , Just REFL <- m x1 x2
+    --   = Just REFL
     matchP (ProduceAccum l1 f1 a1) (ProduceAccum l2 f2 a2)
       | Just REFL <- join $ liftA2 matchExp l1 l2
       , Just REFL <- matchPreOpenAfun m f1 f2
@@ -386,9 +390,8 @@ matchSeq m h = match
       | Just REFL <- m a1 a2
       , Just REFL <- m d1 d2
       = Just REFL
-    matchC (FoldBatch f1 c1 a1 x1) (FoldBatch f2 c2 a2 x2)
+    matchC (FoldBatch f1 a1 x1) (FoldBatch f2 a2 x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
-      , Just REFL <- matchPreOpenAfun m c1 c2
       , Just REFL <- m a1 a2
       , Just REFL <- m x1 x2
       = Just REFL
@@ -1012,7 +1015,7 @@ hashPreOpenSeq hashAcc s =
         Pull src            -> hashWithSalt salt "Pull"         `hashSource` src
         Subarrays sh a      -> hashWithSalt salt "Subarrays"    `hashE` sh `hashWithSalt` hashArrays ArraysRarray a
         Produce l f         -> hashWithSalt salt "Produce"      `hashL` l  `hashAF` f
-        MapBatch f c a x    -> hashWithSalt salt "MapBatch"     `hashAF` f `hashAF` c `hashA`  a `hashA` x
+        -- MapBatch f c c' a x -> hashWithSalt salt "MapBatch"     `hashAF` f `hashAF` c `hashAF` c' `hashA`  a `hashA` x
         ProduceAccum l f a  -> hashWithSalt salt "ProduceAccum" `hashL` l `hashAF` f `hashA` a
 
 
@@ -1025,9 +1028,11 @@ hashPreOpenSeq hashAcc s =
     hashC :: Int -> Consumer idx acc aenv' a -> Int
     hashC salt c =
       case c of
-        FoldBatch f c a x      -> hashWithSalt salt "FoldBatch"     `hashAF` f `hashAF` c `hashA`  a `hashA` x
-        Last a d               -> hashWithSalt salt "Last"       `hashA` a `hashA` d
-        Stuple t               -> hash "Stuple"                  `hashWithSalt` hashAtuple (hashS salt) t
+        FoldBatch f a x -> hashWithSalt salt "FoldBatch" `hashAF` f `hashA` a `hashA` x
+        Last a d        -> hashWithSalt salt "Last"      `hashA` a `hashA` d
+        Stuple t        -> hash "Stuple"                 `hashWithSalt` hashAtuple (hashS salt) t
+        Elements x      -> hashWithSalt salt "Elements"  `hashA` x
+        Tabulate x      -> hashWithSalt salt "Tabulate"  `hashA` x
 
   in case s of
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
@@ -1049,6 +1054,10 @@ hashPreOpenAcc hashAcc pacc =
 
     hashS :: Int -> PreOpenSeq idx acc aenv arrs -> Int
     hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
+
+    hashL :: Int -> Maybe (PreExp acc aenv' e) -> Int
+    hashL salt Nothing = salt
+    hashL salt (Just l) = hashE salt l
 
     a & f = f a
 
@@ -1085,7 +1094,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Collect s cs                -> hash "Seq"           `hashS` s  & fromMaybe id (flip hashS <$> cs)
+    Collect min max i s cs      -> hash "Seq"           `hashE` min `hashL` max `hashL` i `hashS` s  & fromMaybe id (flip hashS <$> cs)
 
 
 hashArrays :: ArraysR a -> a -> Int

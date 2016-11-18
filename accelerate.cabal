@@ -234,6 +234,7 @@ Library
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Trafo.Algebra
                         Data.Array.Accelerate.Trafo.Base
+                        Data.Array.Accelerate.Trafo.Dependency
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Rewrite
                         Data.Array.Accelerate.Trafo.Sharing

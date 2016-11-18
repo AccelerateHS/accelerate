@@ -108,7 +108,6 @@ import Data.List
 import Data.Typeable
 
 -- friends
-import Data.Array.Accelerate.Array.Lifted               ( Nested )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
@@ -471,9 +470,18 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sh e2)              -- source array #2
               -> PreOpenAcc acc aenv (Array sh e')
 
-  -- A sequence of operations.
+  -- Force a sequence computation. The computation is iterated for as many times
+  -- as is required to consume all input sequences or until the maximum number
+  -- of iterations is reached. If the sequence has a chunked equivalent,
+  -- backends will initially use the supplied minimum chunk size and may
+  -- increase it for scheduling reasons, but never go above the provided
+  -- maximum.
+  --
   Collect     :: Arrays arrs
-              => PreOpenNaturalSeq acc aenv arrs
+              => PreExp acc aenv Int                -- min number of elements per iteration
+              -> Maybe (PreExp acc aenv Int)        -- max number per iteration
+              -> Maybe (PreExp acc aenv Int)        -- max number of iterations
+              -> PreOpenNaturalSeq acc aenv arrs
               -> Maybe (PreOpenChunkedSeq acc aenv arrs)
               -> PreOpenAcc acc aenv arrs
 
@@ -550,12 +558,14 @@ data Producer index acc aenv a where
                -> Producer index acc aenv a
 
   -- Perform a batched map.
-  MapBatch     :: (Arrays a, Arrays b, Arrays c, Arrays s)
-               => PreOpenAfun acc aenv (s -> a -> b)
-               -> PreOpenAfun acc aenv (s -> Nested b -> (s, Nested c))
-               -> acc aenv s
-               -> acc aenv a
-               -> Producer index acc aenv (s,c)
+  -- TODO: Make map subsequence
+  -- MapBatch     :: (Arrays a, Arrays b, Arrays c, Arrays s)
+  --              => PreOpenAfun acc aenv (s -> a -> b)
+  --              -> PreOpenAfun acc aenv (s -> Regular b -> (s, Regular c))
+  --              -> PreOpenAfun acc aenv (s -> Irregular b -> (s, Irregular c))
+  --              -> acc aenv s
+  --              -> acc aenv a
+  --              -> Producer index acc aenv (s,c)
 
   -- Generate a sequence with some accumulator.
   --
@@ -569,11 +579,11 @@ data Producer index acc aenv a where
 -- | A sequence consumer.
 --
 data Consumer index acc aenv a where
+
   -- A batched fold
   --
-  FoldBatch      ::(Arrays a, Arrays b, Arrays s)
-                 => PreOpenAfun acc aenv (s -> a -> b)
-                 -> PreOpenAfun acc aenv (s -> Nested b -> s)
+  FoldBatch      ::(Arrays a, Arrays s)
+                 => PreOpenAfun acc aenv (s -> a -> s)
                  -> acc aenv s
                  -> acc aenv a
                  -> Consumer index acc aenv s
@@ -593,6 +603,19 @@ data Consumer index acc aenv a where
   Stuple         :: (Arrays a, IsAtuple a)
                  => Atuple (PreOpenSeq index acc aenv) (TupleRepr a)
                  -> Consumer index acc aenv a
+
+  -- Concatenate all elements of subarrays into one large vector.
+  --
+  Elements       :: (Shape sh, Elt e)
+                 => acc aenv (Array sh e)
+                 -> Consumer index acc aenv (Vector e)
+
+  -- Join all arrays along the outermost dimension. This has intersection
+  -- semantics.
+  --
+  Tabulate       :: (Shape sh, Elt e)
+                 => acc aenv (Array sh e)
+                 -> Consumer index acc aenv (Array (sh:.Int) e)
 
 -- |A natural sequence computation is one where elements are computed one at a
 -- time.

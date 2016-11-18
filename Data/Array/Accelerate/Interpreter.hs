@@ -181,8 +181,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Use arr                     -> toArr arr
     Subarray ix sh arr          -> subarrayOp (evalE ix) (evalE sh) arr
     Unit e                      -> unitOp (evalE e)
-    Collect s cs                -> fromMaybe (evalSeq s aenv)
-                                             (evalSeq <$> cs <*> pure aenv)
+    Collect min max i s cs      -> fromMaybe (evalSeq (evalE min) (evalE <$> max) (evalE <$> i) s aenv)
+                                             (evalSeq (evalE min) (evalE <$> max) (evalE <$> i) <$> cs <*> pure aenv)
 
 
     -- Producers
@@ -755,57 +755,59 @@ data Stream index aenv arrs where
   Done    :: arrs -> Stream index aenv arrs
   Combine :: IsAtuple arrs => Atuple (Stream index aenv) (TupleRepr arrs) -> Stream index aenv arrs
 
-evalStream :: forall index aenv arrs. SeqIndex index => Val aenv -> Stream index aenv arrs -> arrs
-evalStream aenv = eval initialIndex
+evalStream :: forall index aenv arrs. SeqIndex index => Int -> Maybe Int -> Maybe Int -> Val aenv -> Stream index aenv arrs -> arrs
+evalStream min max n aenv = eval n (initialIndex min)
   where
-    eval :: index -> Stream index aenv arrs -> arrs
-    eval i s =
+    eval :: Maybe Int -> index -> Stream index aenv arrs -> arrs
+    eval (Just 0) _ s = getResult s
+    eval n        i s =
       case stepStream i aenv s of
         Left a   -> a
-        Right s' -> eval (nextIndex i) s'
+        Right s' -> eval ((flip (-) 1) <$> n) (nextIndex max i) s'
 
-    stepStream :: forall aenv arrs. index -> Val aenv -> Stream index aenv arrs -> Either arrs (Stream index aenv arrs)
-    stepStream _     (Push _ a) (Yield _)     = Right (Yield a)
-    stepStream _     _          (Done a)      = Left a
-    stepStream index aenv       (Step f s st) =
-      case f index aenv s of
-        Nothing      -> Left (getResult st)
-        Just (a, s') -> Step f s' <$> stepStream index (Push aenv a) st
-    stepStream index aenv (Combine t) = Right (Combine (stepTup t))
-      where
-        stepTup :: Atuple (Stream index aenv) t -> Atuple (Stream index aenv) t
-        stepTup NilAtup        = NilAtup
-        stepTup (SnocAtup t s) = stepTup t `SnocAtup` either Done id (stepStream index aenv s)
+stepStream :: forall index aenv arrs. index -> Val aenv -> Stream index aenv arrs -> Either arrs (Stream index aenv arrs)
+stepStream _     (Push _ a) (Yield _)     = Right (Yield a)
+stepStream _     _          (Yield _)     = error "Absurd"
+stepStream _     _          (Done a)      = Left a
+stepStream index aenv       (Step f s st) =
+  case f index aenv s of
+    Nothing      -> Left (getResult st)
+    Just (a, s') -> Step f s' <$> stepStream index (Push aenv a) st
+stepStream index aenv (Combine t) = Right (Combine (stepTup t))
+  where
+    stepTup :: Atuple (Stream index aenv) t -> Atuple (Stream index aenv) t
+    stepTup NilAtup        = NilAtup
+    stepTup (SnocAtup t s) = stepTup t `SnocAtup` either Done id (stepStream index aenv s)
 
-    getResult :: forall aenv arrs. Stream index aenv arrs -> arrs
-    getResult (Done a)  = a
-    getResult (Yield a) = a
-    getResult (Step _ _ s) = getResult s
-    getResult (Combine t)  = toAtuple (getTup t)
-      where
-        getTup :: Atuple (Stream index aenv) t -> t
-        getTup NilAtup        = ()
-        getTup (SnocAtup t s) = (getTup t, getResult s)
+getResult :: Stream index aenv arrs -> arrs
+getResult (Done a)  = a
+getResult (Yield a) = a
+getResult (Step _ _ s) = getResult s
+getResult (Combine t)  = toAtuple (getTup t)
+  where
+    getTup :: Atuple (Stream index aenv) t -> t
+    getTup NilAtup        = ()
+    getTup (SnocAtup t s) = (getTup t, getResult s)
 
 class SeqIndex index where
-  initialIndex :: index
+  initialIndex :: Int -> index
   startIndex   :: index -> Int
-  nextIndex    :: index -> index
+  nextIndex    :: Maybe Int -> index -> index
   boundIndex   :: index -> Int -> index
 
 instance SeqIndex Int where
-  initialIndex = 0
+  initialIndex _ = 0
   startIndex = id
-  nextIndex = (+1)
+  nextIndex _ = (+1)
   boundIndex i _ = i
 
 mAXIMUM_CHUNK_SIZE :: Int
 mAXIMUM_CHUNK_SIZE = 1024
 
 instance SeqIndex (Int, Int) where
-  initialIndex = (0,1)
+  initialIndex m = (0,1 `max` m)
   startIndex = fst
-  nextIndex (i,n) = (i+n, if n < mAXIMUM_CHUNK_SIZE then n*2 else n)
+  nextIndex m (i,n) = (i+n, if n < fromMaybe mAXIMUM_CHUNK_SIZE m then n*2 else n)
   boundIndex (i,n) max = if i + n < max
                          then (i,n)
                          else (i,max - i)
@@ -814,15 +816,18 @@ evalDelayedSeq :: SeqIndex index
                => DelayedSeq index arrs
                -> arrs
 evalDelayedSeq (StreamSeq aenv s) | aenv' <- evalExtend aenv Empty
-                                  = evalSeq s aenv'
+                                  = evalSeq 1 Nothing Nothing s aenv'
 
 evalSeq :: forall index aenv arrs. SeqIndex index
-        => PreOpenSeq index DelayedOpenAcc aenv  arrs
+        => Int
+        -> Maybe Int
+        -> Maybe Int
+        -> PreOpenSeq index DelayedOpenAcc aenv  arrs
         -> Val aenv -> arrs
-evalSeq s aenv = evalSeq' s
+evalSeq min max i s aenv = evalSeq' s
   where
     evalSeq' :: PreOpenSeq index DelayedOpenAcc aenv arrs -> arrs
-    evalSeq' = evalStream aenv . initSeq Just
+    evalSeq' = evalStream min max i aenv . initSeq Just
 
     initSeq :: forall arrs aenv'. aenv' :?> aenv
             -> PreOpenSeq index DelayedOpenAcc aenv' arrs
@@ -845,12 +850,14 @@ evalSeq s aenv = evalSeq' s
           where
             d'           = fromJust (strengthen v d)
             f' _ aenv () = Just (evalOpenAcc a aenv,())
+        initC _          = $internalError "evalSeq" "Seq AST is at the wrong stage"
 
         initCT :: Atuple (PreOpenSeq index DelayedOpenAcc aenv') t -> Atuple (Stream index aenv') t
         initCT NilAtup = NilAtup
         initCT (t `SnocAtup` c) = let t' = initCT t
                                       c' = initSeq v c
                                   in (t' `SnocAtup` c')
+    initSeq _ _ = $internalError "initSeq" "Seq AST is at incorrect stage"
 
     unsrc :: Source a -> [a]
     unsrc (List as) = as

@@ -18,12 +18,15 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- Lifted array representation. Vector of arrays represented as segmented vectors.
+-- Flattened array representation
 --
 
 module Data.Array.Accelerate.Array.Lifted (
 
-  Nested(..), NestedTupleRepr, Segments, VectorisedForeign(..), isVectorised,
+  Regular(..), RegularTupleRepr,
+  Irregular(..), IrregularTupleRepr, Segments,
+
+  VectorisedRegularForeign(..), isVectorisedRegular,
 
 ) where
 
@@ -37,62 +40,77 @@ import Data.Array.Accelerate.Array.Sugar                        hiding ( Segment
 -- Nested arrays
 -- ----------------
 --
--- We specify a special new type of surface tuple to represent the nested
--- version of members of the `Arrays' class. We do this in order to convince the
--- type checker that the nested arrays or tuples of arrays, are still members of
--- the 'Arrays' class.
+-- We specify special new types of surface tuple to represent the sequence chunk
+-- versions of members of the `Arrays' class. We do this in order to convince
+-- the type checker that the nested arrays or tuples of arrays, are still
+-- members of the 'Arrays' class.
 
-newtype Nested a = Nested (Nested' a (ArrRepr a)) deriving Typeable
+-- Regular chunks. All subarray are of the same extent.
+--
+newtype Regular a = Regular (Regular' a (ArrRepr a)) deriving Typeable
 
--- Segment descriptors. The segments descriptors of a nested array capture the
--- sizes of the subarrays. They are either regular or irregular, as indicated by
--- the flag.
+-- Irregular chunks. Subarrays can vary in extent.
 --
--- For regular nested arrays, we track the total number of arrays as well as the
--- extent of each of the subarrays.
+newtype Irregular a = Irregular (Irregular' a (ArrRepr a)) deriving Typeable
+
+-- Segment descriptors. The segments descriptors of an irregular chunk capture
+-- the offset and extent of each subarray. We split this up into two vectors as
+-- opposed to a vector of pairs to aid in fusion.
 --
--- For irregular arrays, each segment of a lifted array is defined by its index
--- into its flattend representation as well as its shape. We split this up into
--- two vectors as opposed to a vector of pairs to aid in fusion.
+-- We also keep track of the total size of the chunk (in terms of scalar
+-- elements) the segment descriptors refer to. If we do not do this, we are
+-- forced get the last offset and the last size and add them together. By
+-- indexing the offsets and the extents in this way we could force them both to
+-- be manifest, even though we may only care about one of their elements.
 --
--- In both cases we also keep track of the total size of the lifted array the
--- segment descriptors refer to. This aids in fusion.
---
-type Segments sh = ( Scalar Bool -- Irregular?
-                   , Scalar Int  -- Total size in scalar elements
-                   , Scalar Int  -- If regular, number of subarrays
-                   , Scalar sh   -- If regular, extent of subarrays
-                   , Vector Int  -- If irregular, offsets
-                   , Vector sh   -- If irregular, extents
+type Segments sh = ( Scalar Int  -- Total size in scalar elements
+                   , Vector Int  -- Offsets
+                   , Vector sh   -- Extents
                    )
 
-type family Nested' a a' where
-  Nested' ()           ()           = ((),Scalar Int)
-  Nested' (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
-  Nested' a            (l,r)        = NestedTupleRepr (TupleRepr a)
+-- For both flattened representations we have to distribute over tuples.
+--
+type family Irregular' a a' where
+  Irregular' ()           ()           = ((),Scalar Int)
+  Irregular' (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
+  Irregular' a            (l,r)        = IrregularTupleRepr (TupleRepr a)
 
-type family NestedTupleRepr t where
-  NestedTupleRepr ()     = ()
-  NestedTupleRepr (b, a) = (NestedTupleRepr b, Nested a)
+type family Regular' a a' where
+  Regular' ()           ()           = ((),Scalar Int)
+  Regular' (Array sh e) (Array sh e) = ((),Array (sh:.Int) e)
+  Regular' a            (l,r)        = RegularTupleRepr (TupleRepr a)
 
-instance Arrays a => IsProduct Arrays (Nested a) where
-  type ProdRepr (Nested a) = Nested' a (ArrRepr a)
-  fromProd _ (Nested a) = a
-  toProd   _               = Nested
+type family IrregularTupleRepr t where
+  IrregularTupleRepr ()     = ()
+  IrregularTupleRepr (b, a) = (IrregularTupleRepr b, Irregular a)
+
+type family RegularTupleRepr t where
+  RegularTupleRepr ()     = ()
+  RegularTupleRepr (b, a) = (RegularTupleRepr b, Regular a)
+
+
+-- Instances for both IsProduct and Arrays. By being careful in our
+-- construction there are no additional constraints on 'a' in order to produce
+-- an Arrays instance for 'Regular a' and 'Irregular a'.
+--
+instance Arrays a => IsProduct Arrays (Regular a) where
+  type ProdRepr (Regular a) = Regular' a (ArrRepr a)
+  fromProd _ (Regular a) = a
+  toProd   _               = Regular
   prod     _ _             =
     case flavour (undefined :: a) of
       ArraysFunit  -> ProdRsnoc ProdRunit
-      ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
+      ArraysFarray -> ProdRsnoc ProdRunit
       ArraysFtuple -> tup (prod arraysP (undefined :: a))
         where
-          tup :: ProdR Arrays t -> ProdR Arrays (NestedTupleRepr t)
+          tup :: ProdR Arrays t -> ProdR Arrays (RegularTupleRepr t)
           tup ProdRunit      = ProdRunit
           tup (ProdRsnoc pr) = ProdRsnoc (tup pr)
 
-type instance ArrRepr (Nested a) = ArrRepr (Nested' a (ArrRepr a))
+type instance ArrRepr (Regular a) = ArrRepr (Regular' a (ArrRepr a))
 
-instance Arrays a => Arrays (Nested a) where
-  arrays _ = tup (prod arraysP (undefined :: Nested a))
+instance Arrays a => Arrays (Regular a) where
+  arrays _ = tup (prod arraysP (undefined :: Regular a))
     where
       tup :: forall t. ProdR Arrays t -> ArraysR (ArrRepr t)
       tup ProdRunit      = ArraysRunit
@@ -103,17 +121,61 @@ instance Arrays a => Arrays (Nested a) where
     ArraysFunit  -> ArraysFtuple
     ArraysFarray -> ArraysFtuple
     ArraysFtuple ->
-      case arrays (undefined :: Nested a) of
+      case arrays (undefined :: Regular a) of
         ArraysRpair _ _ -> ArraysFtuple
         _               -> error "Unreachable"
 
-  toArr a = Nested (tA (prod arraysP (undefined :: Nested a)) a)
+  toArr a = Regular (tA (prod arraysP (undefined :: Regular a)) a)
     where
       tA :: ProdR Arrays t -> ArrRepr t -> t
       tA ProdRunit      ()          = ()
       tA (ProdRsnoc pr) (((),ar),a) = (tA pr ar, toArr a)
 
-  fromArr (Nested a) = fA (prod arraysP (undefined :: Nested a)) a
+  fromArr (Regular a) = fA (prod arraysP (undefined :: Regular a)) a
+    where
+      fA :: ProdR Arrays t -> t -> ArrRepr t
+      fA ProdRunit      ()    = ()
+      fA (ProdRsnoc pr) (l,a) = (((),fA pr l), fromArr a)
+
+instance Arrays a => IsProduct Arrays (Irregular a) where
+  type ProdRepr (Irregular a) = Irregular' a (ArrRepr a)
+  fromProd _ (Irregular a) = a
+  toProd   _               = Irregular
+  prod     _ _             =
+    case flavour (undefined :: a) of
+      ArraysFunit  -> ProdRsnoc ProdRunit
+      ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
+      ArraysFtuple -> tup (prod arraysP (undefined :: a))
+        where
+          tup :: ProdR Arrays t -> ProdR Arrays (IrregularTupleRepr t)
+          tup ProdRunit      = ProdRunit
+          tup (ProdRsnoc pr) = ProdRsnoc (tup pr)
+
+type instance ArrRepr (Irregular a) = ArrRepr (Irregular' a (ArrRepr a))
+
+instance Arrays a => Arrays (Irregular a) where
+  arrays _ = tup (prod arraysP (undefined :: Irregular a))
+    where
+      tup :: forall t. ProdR Arrays t -> ArraysR (ArrRepr t)
+      tup ProdRunit      = ArraysRunit
+      tup (ProdRsnoc pr) = ArraysRpair (ArraysRpair ArraysRunit (tup pr)) ar
+        where ar :: forall e l. t ~ (l,e) => ArraysR (ArrRepr e)
+              ar = arrays (undefined :: e)
+  flavour _ = case flavour (undefined :: a) of
+    ArraysFunit  -> ArraysFtuple
+    ArraysFarray -> ArraysFtuple
+    ArraysFtuple ->
+      case arrays (undefined :: Irregular a) of
+        ArraysRpair _ _ -> ArraysFtuple
+        _               -> error "Unreachable"
+
+  toArr a = Irregular (tA (prod arraysP (undefined :: Irregular a)) a)
+    where
+      tA :: ProdR Arrays t -> ArrRepr t -> t
+      tA ProdRunit      ()          = ()
+      tA (ProdRsnoc pr) (((),ar),a) = (tA pr ar, toArr a)
+
+  fromArr (Irregular a) = fA (prod arraysP (undefined :: Irregular a)) a
     where
       fA :: ProdR Arrays t -> t -> ArrRepr t
       fA ProdRunit      ()    = ()
@@ -122,11 +184,11 @@ instance Arrays a => Arrays (Nested a) where
 arraysP :: Proxy Arrays
 arraysP = Proxy
 
-data VectorisedForeign a b = forall f.  Foreign f => VectorisedForeign (f (Nested a) (Nested b))
+data VectorisedRegularForeign a b = forall f.  Foreign f => VectorisedRegularForeign (f (Regular a) (Regular b))
   deriving Typeable
 
-instance Foreign VectorisedForeign where
-  strForeign (VectorisedForeign f) = strForeign f
+instance Foreign VectorisedRegularForeign where
+  strForeign (VectorisedRegularForeign f) = strForeign f
 
-isVectorised :: (Typeable as, Typeable bs, Foreign f) => f as bs -> Maybe (VectorisedForeign as bs)
-isVectorised = cast
+isVectorisedRegular :: (Typeable as, Typeable bs, Foreign f) => f as bs -> Maybe (VectorisedRegularForeign as bs)
+isVectorisedRegular = cast

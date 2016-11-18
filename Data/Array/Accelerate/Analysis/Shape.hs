@@ -71,7 +71,7 @@ preAccDim k pacc =
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "inconceivable!"
 
-    Collect _ _          -> case arrays (undefined :: Array sh e) of
+    Collect _ _ _ _ _    -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "ppbbbbbt~"
 

@@ -116,6 +116,10 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppAF :: PreOpenAfun acc aenv f -> Doc
     ppAF = parens . prettyPreOpenAfun prettyAcc aenv
 
+    ppL :: Maybe (PreExp acc aenv e) -> Doc
+    ppL Nothing  = text "infinity"
+    ppL (Just l) = ppE l
+
     ppB :: forall sh e. Elt e
         => {-dummy-} acc aenv (Array sh e)
         -> Boundary (EltRepr e)
@@ -178,7 +182,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
 
-    pp (Collect s cs)           = wrap $ hang (text "collect") 2
+    pp (Collect min max i s cs) = wrap $ hang ("collect" .$ [ppE min, ppL max, ppL i] ) 2
                                        $ encloseSep lbrace rbrace semi
                                        $ maybe (prettySeq prettyAcc wrap aenv s)
                                                (prettySeq prettyAcc wrap aenv)
@@ -222,15 +226,17 @@ prettySeq prettyAcc wrap aenv seq =
         Pull _               -> "pull"         .$ [ text "[..]" ]
         Subarrays sh _       -> "subarrays"    .$ [ ppE sh, text "[..]" ]
         Produce l f          -> "produce"      .$ [ ppL l, ppAF f ]
-        MapBatch f f' s a    -> "mapBatch"     .$ [ ppAF f, ppAF f', ppA s, ppA a]
+        -- MapBatch f c c' s a  -> "mapBatch"     .$ [ ppAF f, ppAF c, ppAF c', ppA s, ppA a]
         ProduceAccum l f a   -> "produceAccum" .$ [ ppL l, ppAF f, ppA a ]
 
     prettyC :: forall a. Consumer idx acc aenv a -> Doc
     prettyC c =
       case c of
-        FoldBatch f f' s a   -> "foldBatch"    .$ [ ppAF f, ppAF f', ppA s, ppA a]
-        Last a d             -> "last"        ..$ [ ppA a, ppA d]
-        Stuple t             -> tuple (prettyT t)
+        FoldBatch f s a -> "foldBatch"    .$ [ ppAF f, ppA s, ppA a]
+        Last a d        -> "last"        ..$ [ ppA a, ppA d]
+        Stuple t        -> tuple (prettyT t)
+        Elements x      -> "Elements"    ..$ [ ppA x ]
+        Tabulate x      -> "Tabulate"    ..$ [ ppA x ]
 
     prettyT :: forall t. Atuple (PreOpenSeq idx acc aenv) t -> [Doc]
     prettyT NilAtup        = []

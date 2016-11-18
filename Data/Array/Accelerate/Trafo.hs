@@ -117,7 +117,7 @@ convertAcc = convertAccWith phases
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = Fusion.convertAcc enableAccFusion
-  $ Vectorise.vectoriseSeqAcc vectoriseSequences
+  $ Vectorise.vectoriseAcc `when` vectoriseSequences
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
   $ Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc
@@ -132,7 +132,7 @@ convertAfun = convertAfunWith phases
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = Fusion.convertAfun enableAccFusion
-  $ Vectorise.vectoriseSeqAfun vectoriseSequences
+  $ Vectorise.vectoriseAfun `when` vectoriseSequences
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc

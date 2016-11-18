@@ -62,6 +62,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Dependency
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
@@ -214,7 +215,7 @@ manifest fuseAcc (OpenAcc pacc) =
     Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
 
     -- Seq operations
-    Collect s cs            -> Collect (cvtS s) (cvtS <$> cs)
+    Collect min max i s cs  -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (cvtS s) (cvtS <$> cs)
 
     where
       -- Flatten needless let-binds, which can be introduced by the conversion to
@@ -588,7 +589,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> atupleD embedAcc tup
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Collect s cs        -> collectD s cs
+    Collect min max i s cs
+                        -> collectD min max i s cs
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -783,13 +785,16 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
     -- TODO: Sequence invariant code motion
-    collectD :: PreOpenNaturalSeq acc aenv arrs
+    collectD :: PreExp acc aenv Int
+             -> Maybe (PreExp acc aenv Int)
+             -> Maybe (PreExp acc aenv Int)
+             -> PreOpenNaturalSeq acc aenv arrs
              -> Maybe (PreOpenChunkedSeq acc aenv arrs)
              -> Embed acc aenv arrs
-    collectD s Nothing
-      = Embed (BaseEnv `PushEnv` inject (Collect (embedSeq embedAcc s) Nothing)) (Done ZeroIdx)
-    collectD s (Just cs)
-      = Embed (BaseEnv `PushEnv` inject (Collect (embedSeq embedAcc s) (Just (embedSeq embedAcc cs)))) (Done ZeroIdx)
+    collectD min max i s Nothing
+      = Embed (BaseEnv `PushEnv` inject (Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (embedSeq embedAcc s) Nothing)) (Done ZeroIdx)
+    collectD min max i s (Just cs)
+      = Embed (BaseEnv `PushEnv` inject (Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (embedSeq embedAcc s) (Just (embedSeq embedAcc cs)))) (Done ZeroIdx)
 
 -- 2 steps
 --
@@ -833,63 +838,66 @@ renameIn (There i) (SuccIdx ix) = swap $ SuccIdx (renameIn i ix)
     swap (SuccIdx ZeroIdx)      = ZeroIdx
     swap (SuccIdx (SuccIdx ix)) = SuccIdx (SuccIdx ix)
 
-data DependentSeq index aenv arrs where
+-- TODO: Reconsider this structure. Don't think this is actually saving any time
+-- over the naive way.
+data DependentSeq index acc aenv arrs where
   Dproducer  :: Arrays a
              => aenv' ::> aenv                  -- Strongest possible environment
-             -> Dproducer index aenv' a
+             -> Dproducer index acc aenv' a
              -> Int                             -- Usage count
-             -> DependentSeq index (aenv,a) arrs
-             -> DependentSeq index aenv     arrs
+             -> DependentSeq index acc (aenv,a) arrs
+             -> DependentSeq index acc aenv     arrs
 
   Dconsumers :: (Elt index, Arrays arrs)
-             => Dconsumer index aenv arrs
-             -> DependentSeq index aenv arrs
+             => Dconsumer index acc aenv arrs
+             -> DependentSeq index acc aenv arrs
 
   Dreify     :: Arrays a
              => aenv' ::> aenv
-             -> OpenAcc aenv' a
-             -> DependentSeq index aenv [a]
+             -> acc aenv' a
+             -> DependentSeq index acc aenv [a]
 
-data Dproducer index aenv a where
+data Dproducer index acc aenv a where
   Dpull :: Source a
-        -> Dproducer index aenv a
+        -> Dproducer index acc aenv a
 
   DproduceAccum :: (Arrays a, Arrays s, Elt index)
-                => Stream index s aenv a
-                -> Dproducer index aenv a
+                => Stream index acc s aenv a
+                -> Dproducer index acc aenv a
 
-data Stream index s aenv a where
-  Stream :: Maybe (Exp aenv Int)
-         -> OpenAfun aenv (Scalar index -> s -> (a,s))
-         -> OpenAcc aenv s
-         -> Stream index s aenv a
+data Stream index acc s aenv a where
+  Stream :: Maybe (PreExp acc aenv Int)
+         -> PreOpenAfun acc aenv (Scalar index -> s -> (a,s))
+         -> acc aenv s
+         -> Stream index acc s aenv a
 
-instance Sink (Dproducer index) where
+instance Kit acc => Sink (Dproducer index acc) where
   weaken _ (Dpull src) = Dpull src
   weaken v (DproduceAccum s) = DproduceAccum (weaken v s)
 
-instance Sink (Stream index s) where
+instance Kit acc => Sink (Stream index acc s) where
   weaken v (Stream l f s) = Stream (weaken v <$> l) (weaken v f) (weaken v s)
 
-data Dconsumer index aenv arrs where
+data Dconsumer index acc aenv arrs where
   Dtuple   :: (IsAtuple arrs, Arrays arrs)
-           => Atuple (DependentSeq index aenv) (TupleRepr arrs)
-           -> Dconsumer index aenv arrs
+           => Atuple (DependentSeq index acc aenv) (TupleRepr arrs)
+           -> Dconsumer index acc aenv arrs
 
   Ddone    :: Arrays a
            => aenv' ::> aenv
-           -> OpenAcc aenv' a
+           -> acc aenv' a
            -> aenv'' ::> aenv
-           -> OpenAcc aenv'' a
-           -> Dconsumer index aenv a
+           -> acc aenv'' a
+           -> Dconsumer index acc aenv a
 
-fuseSeq :: Elt index
-        => PreOpenSeq index OpenAcc aenv arrs
-        -> PreOpenSeq index OpenAcc aenv arrs
+fuseSeq :: (Kit acc, Elt index)
+        => PreOpenSeq index acc aenv arrs
+        -> PreOpenSeq index acc aenv arrs
 fuseSeq = deannotate . fuseDependent . makeDependent
 
-deannotate :: DependentSeq index aenv arrs
-           -> PreOpenSeq index OpenAcc aenv arrs
+deannotate :: forall index acc aenv arrs. Kit acc
+           => DependentSeq index acc aenv arrs
+           -> PreOpenSeq index acc aenv arrs
 deannotate (Dproducer _ (Dpull src) _ ds)
   = Producer (Pull src) (deannotate ds)
 deannotate (Dproducer wenv (DproduceAccum (Stream l f s)) _ ds)
@@ -897,46 +905,47 @@ deannotate (Dproducer wenv (DproduceAccum (Stream l f s)) _ ds)
 deannotate (Dconsumers cons)
   = Consumer $ dcons cons
   where
-    dcons :: forall aenv index a. Elt index => Dconsumer index aenv a -> Consumer index OpenAcc aenv a
+    dcons :: forall aenv a. Elt index => Dconsumer index acc aenv a -> Consumer index acc aenv a
     dcons (Ddone env a envd d) = Last (weaken (abstract env) a) (weaken (abstract envd) d)
     dcons (Dtuple t) = Stuple (dtup t)
       where
-        dtup :: Atuple (DependentSeq index aenv) arrs
-             -> Atuple (PreOpenSeq index OpenAcc aenv) arrs
+        dtup :: forall arrs.
+                Atuple (DependentSeq index acc aenv) arrs
+             -> Atuple (PreOpenSeq index acc aenv) arrs
         dtup NilAtup = NilAtup
         dtup (t `SnocAtup` c) = dtup t `SnocAtup` deannotate c
 deannotate (Dreify wenv a) = weaken (abstract wenv) $ Reify a
 
-makeDependent :: Elt index
-              => PreOpenSeq index OpenAcc aenv arrs
-              -> DependentSeq index aenv arrs
+makeDependent :: forall index acc aenv arrs. (Kit acc, Elt index)
+              => PreOpenSeq index acc aenv arrs
+              -> DependentSeq index acc aenv arrs
 makeDependent = fst . makeD
   where
-    makeD :: Elt index
-          => PreOpenSeq index OpenAcc aenv arrs
-          -> (DependentSeq index aenv arrs, Count aenv)
+    makeD :: forall aenv arrs. Elt index
+          => PreOpenSeq index acc aenv arrs
+          -> (DependentSeq index acc aenv arrs, Count aenv)
     makeD (Producer p s)
-      | Stronger env <- dependenciesProducer dependenciesOpenAcc p
+      | Stronger env <- dependenciesProducer dependenciesAcc p
       , (s', CountPush counts c) <- makeD s
       , p' <- makeP (weaken (inverse env) p)
       = (Dproducer env p' c s', counts <> count env)
     makeD (Consumer c) | (c' , counts) <- makeC c
       = (c', counts)
     makeD (Reify a)
-      | Stronger env <- dependenciesOpenAcc a
+      | Stronger env <- dependenciesAcc a
       = (Dreify env (weaken (inverse env) a), count env)
 
-    makeP :: Producer index OpenAcc aenv arrs -> Dproducer index aenv arrs
+    makeP :: forall aenv arrs. Producer index acc aenv arrs -> Dproducer index acc aenv arrs
     makeP (Pull src) = Dpull src
     makeP (ProduceAccum l f a) = DproduceAccum (Stream l f a)
     makeP _ = $internalError "makeDependent" "AST is at incorrect stage for fusion"
 
-    makeC :: Elt index
-          => Consumer index OpenAcc aenv arrs
-          -> (DependentSeq index aenv arrs, Count aenv)
+    makeC :: forall aenv arrs. Elt index
+          => Consumer index acc aenv arrs
+          -> (DependentSeq index acc aenv arrs, Count aenv)
     makeC (Last a d)
-      | Stronger env  <- dependenciesOpenAcc a
-      , Stronger envd <- dependenciesOpenAcc d
+      | Stronger env  <- dependenciesAcc a
+      , Stronger envd <- dependenciesAcc d
       , a' <- weaken (inverse env) a
       , d' <- weaken (inverse envd) d
       = (Dconsumers (Ddone env a' envd d')
@@ -945,30 +954,31 @@ makeDependent = fst . makeD
       | (t', counts) <- makeT t
       = (Dconsumers (Dtuple t'), counts)
       where
-        makeT :: Elt index
-              => Atuple (PreOpenSeq index OpenAcc aenv) arrs
-              -> (Atuple (DependentSeq index aenv) arrs, Count aenv)
+        makeT :: forall aenv arrs. Elt index
+              => Atuple (PreOpenSeq index acc aenv) arrs
+              -> (Atuple (DependentSeq index acc aenv) arrs, Count aenv)
         makeT NilAtup = (NilAtup, CountBase)
         makeT (t `SnocAtup` c)
           | (t', counts) <- makeT t
           , (c', counts') <- makeD c
           = (t' `SnocAtup` c', counts <> counts')
 
-    count :: aenv' ::> aenv -> Count aenv
+    count :: forall aenv aenv'. aenv' ::> aenv -> Count aenv
     count WeakEmpty = CountBase
     count WeakBase = CountBase
     count (WeakIn v) = CountPush (count v) 1
     count (WeakOut v) = CountPush (count v) 0
 
-    inverse :: aenv ::> aenv' -> aenv' :> aenv
+    inverse :: forall aenv aenv'. aenv ::> aenv' -> aenv' :> aenv
     inverse WeakBase      ix           = ix
     inverse (WeakIn _)    ZeroIdx      = ZeroIdx
     inverse (WeakIn rix)  (SuccIdx ix) = SuccIdx (inverse rix ix)
     inverse (WeakOut rix) (SuccIdx ix) = inverse rix ix
     inverse _ _ = error "Reduced environment is not consistent with term"
 
-fuseDependent :: DependentSeq index aenv arrs
-              -> DependentSeq index aenv arrs
+fuseDependent :: Kit acc
+              => DependentSeq index acc aenv arrs
+              -> DependentSeq index acc aenv arrs
 fuseDependent (Dproducer wenv p count ds)
   | count == 1
   , DproduceAccum s <- p
@@ -980,12 +990,12 @@ fuseDependent (Dconsumers c)
 fuseDependent (Dreify env a)
   = Dreify env a
 
-pushDown :: forall index aenv out out' a s arrs. (Arrays a, Arrays s, Elt index)
+pushDown :: forall index acc aenv out out' a s arrs. (Arrays a, Arrays s, Elt index, Kit acc)
          => out' ::> out
-         -> Stream index s out' a
+         -> Stream index acc s out' a
          -> In a aenv out
-         -> DependentSeq index aenv arrs
-         -> DependentSeq index out  arrs
+         -> DependentSeq index acc aenv arrs
+         -> DependentSeq index acc out  arrs
 pushDown wenv p inenv (Dproducer wenv' p' count ds)
   = case invariant inenv wenv' of
       Left wenv'' -> Dproducer wenv'' p' count (pushDown (WeakOut wenv) p (There inenv) ds)
@@ -999,8 +1009,8 @@ pushDown wenv p inenv (Dconsumers c)
    = pushC c
    where
      pushC :: forall arrs.
-              Dconsumer index aenv arrs
-           -> DependentSeq index out arrs
+              Dconsumer index acc aenv arrs
+           -> DependentSeq index acc out arrs
      pushC (Ddone wenv' a wenvd d)
        | Left wenvd' <- invariant inenv wenvd
        = case invariant inenv wenv' of
@@ -1012,8 +1022,8 @@ pushDown wenv p inenv (Dconsumers c)
      pushC (Dtuple t)
        = Dconsumers $ Dtuple (pushT t)
        where
-         pushT :: Atuple (DependentSeq index aenv) t
-               -> Atuple (DependentSeq index out) t
+         pushT :: Atuple (DependentSeq index acc aenv) t
+               -> Atuple (DependentSeq index acc out) t
          pushT NilAtup = NilAtup
          pushT (t `SnocAtup` c) = pushT t `SnocAtup` pushDown wenv p inenv c
 
@@ -1066,40 +1076,40 @@ data StrongerUnion aenv aenv' aenv'' where
                 -> aenv''  ::> aenv'''
                 -> StrongerUnion aenv aenv' aenv''
 
-bindSInP :: (Arrays s, Arrays a)
+bindSInP :: (Kit acc, Arrays s, Arrays a)
          => In a aenv out
-         -> Stream index s out a
-         -> Dproducer index aenv arrs
-         -> Dproducer index out  arrs
+         -> Stream index acc s out a
+         -> Dproducer index acc aenv arrs
+         -> Dproducer index acc out  arrs
 bindSInP inenv src (DproduceAccum target)
   = DproduceAccum $ fuseStreams src (weaken (renameIn inenv) target)
 bindSInP _ _ (Dpull target)
   = Dpull target
 
-fuseStreams :: (Elt index, Arrays s, Arrays s', Arrays a, Arrays arrs)
-            => Stream index s      aenv     a
-            -> Stream index s'     (aenv,a) arrs
-            -> Stream index (s,s') aenv     arrs
+fuseStreams :: (Kit acc, Elt index, Arrays s, Arrays s', Arrays a, Arrays arrs)
+            => Stream index acc s      aenv     a
+            -> Stream index acc s'     (aenv,a) arrs
+            -> Stream index acc (s,s') aenv     arrs
 fuseStreams (Stream l fun init) (Stream l' fun' init')
   = Stream (mergeLimits l (discardTop <$> l')) (pair fun fun') (tuple init (discardTop init'))
   where
-    pair  :: (Elt index, Arrays a, Arrays b, Arrays b', Arrays arrs)
-          => OpenAfun aenv (Scalar index -> b -> (a, b))
-          -> OpenAfun (aenv,a) (Scalar index -> b' -> (arrs, b'))
-          -> OpenAfun aenv (Scalar index -> (b,b') -> (arrs, (b, b')))
+    pair  :: (Kit acc, Elt index, Arrays a, Arrays b, Arrays b', Arrays arrs)
+          => PreOpenAfun acc aenv (Scalar index -> b -> (a, b))
+          -> PreOpenAfun acc (aenv,a) (Scalar index -> b' -> (arrs, b'))
+          -> PreOpenAfun acc aenv (Scalar index -> (b,b') -> (arrs, (b, b')))
     pair f f'
       = Alam $ Alam $ Abody $
         alet (app2 (weaken (SuccIdx . SuccIdx) f) v1 (fstA v0))
       $ alet (app3 (weaken (SuccIdx . SuccIdx . SuccIdx) (Alam f')) (fstA v0) v2 (sndA v1))
       $ tuple (fstA v0) (tuple (sndA v1) (sndA v0))
 
-    mergeLimits :: Maybe (Exp aenv Int) -> Maybe (Exp aenv Int) -> Maybe (Exp aenv Int)
+    mergeLimits :: Maybe (PreExp acc aenv Int) -> Maybe (PreExp acc aenv Int) -> Maybe (PreExp acc aenv Int)
     mergeLimits Nothing Nothing = Nothing
     mergeLimits Nothing (Just l) = Just l
     mergeLimits (Just l) Nothing = Just l
     mergeLimits (Just l) (Just l') = Just (min l l')
       where
-        min :: Exp aenv Int -> Exp aenv Int -> Exp aenv Int
+        min :: PreExp acc aenv Int -> PreExp acc aenv Int -> PreExp acc aenv Int
         min a b = PrimApp (PrimMin scalarType) (Tuple (NilTup `SnocTup` a `SnocTup` b))
 
     discardTop :: Rebuildable acc => acc (aenv,a) b -> acc aenv b
@@ -1113,47 +1123,49 @@ fuseStreams (Stream l fun init) (Stream l' fun' init')
 v0 :: (Kit acc, Arrays a) => acc (aenv,a) a
 v0 = inject (Avar ZeroIdx)
 
-v1 :: Arrays a => OpenAcc ((aenv,a),b) a
-v1 = OpenAcc (Avar (SuccIdx ZeroIdx))
+v1 :: (Kit acc, Arrays a) => acc ((aenv,a),b) a
+v1 = inject (Avar (SuccIdx ZeroIdx))
 
-v2 :: Arrays a => OpenAcc (((aenv,a),b),c) a
-v2 = OpenAcc (Avar (SuccIdx (SuccIdx ZeroIdx)))
+v2 :: (Kit acc, Arrays a) => acc (((aenv,a),b),c) a
+v2 = inject (Avar (SuccIdx (SuccIdx ZeroIdx)))
 
 under :: aenv :> aenv' -> (aenv,a) :> (aenv',a)
 under _ ZeroIdx      = ZeroIdx
 under v (SuccIdx ix) = SuccIdx (v ix)
 
-fstA :: (Arrays a, Arrays b)
-    => OpenAcc aenv (a, b)
-    -> OpenAcc aenv a
-fstA = OpenAcc . Aprj (SuccTupIdx ZeroTupIdx)
+fstA :: (Kit acc, Arrays a, Arrays b)
+    => acc aenv (a, b)
+    -> acc aenv a
+fstA = inject . Aprj (SuccTupIdx ZeroTupIdx)
 
-sndA :: (Arrays a, Arrays b)
-    => OpenAcc aenv (a, b)
-    -> OpenAcc aenv b
-sndA = OpenAcc . Aprj ZeroTupIdx
+sndA :: (Kit acc, Arrays a, Arrays b)
+     => acc aenv (a, b)
+     -> acc aenv b
+sndA = inject . Aprj ZeroTupIdx
 
-alet :: (Arrays a, Arrays b)
-     => OpenAcc aenv a
-     -> OpenAcc (aenv, a) b
-     -> OpenAcc aenv b
-alet a = OpenAcc . Alet a
+alet :: (Kit acc, Arrays a, Arrays b)
+     => acc aenv a
+     -> acc (aenv, a) b
+     -> acc aenv b
+alet a = inject . Alet a
 
-app2 :: OpenAfun aenv (a -> b -> c)
-     -> OpenAcc aenv a
-     -> OpenAcc aenv b
-     -> OpenAcc aenv c
+app2 :: Kit acc
+     => PreOpenAfun acc aenv (a -> b -> c)
+     -> acc aenv a
+     -> acc aenv b
+     -> acc aenv c
 app2 (Alam (Alam (Abody f))) a b = alet a $ alet (weaken SuccIdx b) f
 
-app3 :: OpenAfun aenv (a -> b -> c -> d)
-     -> OpenAcc aenv a
-     -> OpenAcc aenv b
-     -> OpenAcc aenv c
-     -> OpenAcc aenv d
+app3 :: Kit acc
+     => PreOpenAfun acc aenv (a -> b -> c -> d)
+     -> acc aenv a
+     -> acc aenv b
+     -> acc aenv c
+     -> acc aenv d
 app3 (Alam (Alam (Alam (Abody f)))) a b c = alet a $ alet (weaken SuccIdx b) $ alet (weaken (SuccIdx . SuccIdx) c) f
 
-tuple :: (Arrays a, Arrays b) => OpenAcc aenv a -> OpenAcc aenv b -> OpenAcc aenv (a,b)
-tuple a b = OpenAcc (Atuple (NilAtup `SnocAtup` a `SnocAtup` b))
+tuple :: (Kit acc, Arrays a, Arrays b) => acc aenv a -> acc aenv b -> acc aenv (a,b)
+tuple a b = inject (Atuple (NilAtup `SnocAtup` a `SnocAtup` b))
 
 data StrongerIn a aenv out where
   StrongerIn :: out' ::> out -> In a aenv out' -> StrongerIn a aenv out
@@ -1395,74 +1407,6 @@ instance Kit acc => Sink (Embed acc) where
 -- Tuple manipulation
 -- ==================
 
--- Note: [Tuple manipulation]
---
--- As a part of the embedding stage, we need to be able to transform tuples and
--- other product types, splitting out those components that should be embedded
--- from those that should remain as part of the product. Unfortunately, due to
--- the way product types are represented in Accelerate, with a non injective
--- relationship between surface types and representation types, this causes
--- problems. Supposing we have a tuple like so
---
---   (a,b,c)
---
--- then suppose we want to pull b out of it, leaving us with (a,c). However,
--- the only way we can inspect the structure of a product is via its
--- representation type. That means we take
---
--- ((((),a),b),c)
---
--- and product (((),a),c). But what is the surface type corresponding to this
--- representation type?
---
--- FreeProd is a product type that gives a surface type for any product
--- representation type. That is, for all t, FreeProd (ProdRepr t) is a valid
--- product type. Additionally, for all t', ProdRepr (FreeProd t') ~ t'. This
--- gives us what we need in order to transform product types.
---
-
--- The free product. A surface product type for any given product representation
--- tyoe.
---
-data FreeProd t where
-  NilFreeProd  :: FreeProd ()
-  SnocFreeProd :: Arrays s => FreeProd t -> s -> FreeProd (t,s)
-  deriving ( Typeable )
-
-instance IsProduct Arrays (FreeProd ()) where
-  type ProdRepr (FreeProd ()) = ()
-  fromProd _ _ = ()
-  toProd _ _ = NilFreeProd
-  prod _ _ = ProdRunit
-
-instance (IsProduct Arrays (FreeProd t), Arrays s) => IsProduct Arrays (FreeProd (t,s)) where
-  type ProdRepr (FreeProd (t,s)) = (ProdRepr (FreeProd t), s)
-  fromProd cst (SnocFreeProd t s) = (fromProd cst t, s)
-  toProd cst (t,s) = SnocFreeProd (toProd cst t) s
-  prod cst _ = ProdRsnoc (prod cst (undefined :: FreeProd t))
-
-type instance ArrRepr (FreeProd (t,a)) = (ArrRepr (FreeProd t), ArrRepr a)
-type instance ArrRepr (FreeProd ())    = ((),())
-
-instance (IsAtuple (FreeProd t), Typeable t, Arrays (FreeProd t), Arrays a) => Arrays (FreeProd (t,a)) where
-  arrays  _ = arrays (undefined :: FreeProd t) `ArraysRpair` arrays (undefined :: a)
-  flavour _ = ArraysFtuple
-  --
-  toArr (t,a) = SnocFreeProd (toArr t) (toArr a)
-  fromArr (SnocFreeProd t a) = (fromArr t, fromArr a)
-
-instance Arrays (FreeProd ()) where
-  arrays  _ = ArraysRpair ArraysRunit ArraysRunit
-  flavour _ = ArraysFtuple
-  --
-  toArr   _ = NilFreeProd
-  fromArr _ = ((),())
-
--- Unofortunately, the properties that hold for all array tuple representations
--- GHCs typechecker cannot infer.
---
-type IsAtupleRepr t = (Arrays (FreeProd t), Typeable t, IsAtuple (FreeProd t), t ~ ProdRepr (FreeProd t))
-
 -- Subproduct captures that a product representation t' can be extracted from
 -- product representation t.
 --
@@ -1530,8 +1474,8 @@ subproduct (OutSub t _) = subproduct t
 -- Use the most specific version of a combinator whenever possible.
 --
 compute :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> PreOpenAcc acc aenv arrs
-compute (Embed (PushEnv env a) (Done ZeroIdx)) = bind env (extract a)
-compute (Embed env cc) = bind env (compute' cc)
+compute (Embed (PushEnv env a) (Done ZeroIdx)) = extract (bind env a)
+compute (Embed env cc) = extract (bind env (inject (compute' cc)))
 
 compute' :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
 compute' cc = case simplify cc of
@@ -2023,7 +1967,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Collect s cs            -> Collect (replaceSeq cunc avar s) (replaceSeq cunc avar <$> cs)
+        Collect min max i s cs  -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (replaceSeq cunc avar s) (replaceSeq cunc avar <$> cs)
 
       where
         cvtA :: acc aenv s -> acc aenv s
@@ -2161,7 +2105,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Collect s cs            -> Collect (subtupleSeq atup avar ixt s) (subtupleSeq atup avar ixt <$> cs)
+        Collect min max i s cs  -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (subtupleSeq atup avar ixt s) (subtupleSeq atup avar ixt <$> cs)
 
       where
         cvtA :: acc aenv s -> acc aenv' s

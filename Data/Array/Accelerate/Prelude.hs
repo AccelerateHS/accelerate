@@ -2,7 +2,10 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverlappingInstances  #-}
+{-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ViewPatterns          #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 -- |
@@ -89,25 +92,23 @@ module Data.Array.Accelerate.Prelude (
   lift1, lift2, lift3, ilift1, ilift2, ilift3,
 
   -- ** Tuple construction and destruction
-  fst, afst, snd, asnd, curry, uncurry,
+  fst, afst, snd, asnd, curry, uncurry, curry3, uncurry3,
 
   -- ** Index construction and destruction
-  index0, index1, unindex1, index2, unindex2, index3, unindex3,
+  index0, index1, unindex1, index2, unindex2, index3, unindex3, indexSnoc,
+  indexInit, indexLast,
 
   -- * Array operations with a scalar result
   the, null, length,
 
   -- * Sequence reductions
-  foldSeqE, fromSeq, concatElems, concatShapes, foldSeqFlatten, foldBatch, isIrregularSeq,
+  foldSeqE, fromSeq, shapes, foldSeqFlatten,
 
   -- * Sequence generators
   toSeqInner, toSeqOuter, produceScalar,
 
   -- * Sequence transducers
-  mapSeqE, zipWithSeqE, scanSeqE, zipSeq, unzipSeq,
-
-  -- * Sequence batches
-  denest, denest3, nestedValues, nestedSize,
+  mapSeqE, zipWithSeqE, zipSeq, unzipSeq,
 
 ) where
 
@@ -115,11 +116,11 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Bits
 import Data.Bool
+import Data.Proxy
 import Prelude ((.), ($), (+), (-), (*), undefined, const, id, min, max, Float, Double, Char)
 import qualified Prelude as P
 
 -- friends
-import Data.Array.Accelerate.Array.Lifted hiding ( Segments )
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect, union, transpose, toSlice)
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Product
@@ -1985,6 +1986,10 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 -- Instances for Seq
 
+instance Arrays a => Lift Seq (Acc a) where
+  type Plain (Acc a) = a
+  lift a = Seq (AsSeq a)
+
 instance (Lift Seq a, Lift Seq b, Arrays (Plain a), Arrays (Plain b)) => Lift Seq (a, b) where
   type Plain (a, b) = (Plain a, Plain b)
   lift (a, b) = stup2 (lift a, lift b)
@@ -2174,6 +2179,16 @@ curry f x y = f (lift (x, y))
 uncurry :: Unlift f (f a, f b) => (f a -> f b -> f c) -> f (Plain (f a), Plain (f b)) -> f c
 uncurry f t = let (x, y) = unlift t in f x y
 
+-- |Same as curry but for triples
+--
+curry3 :: Lift f (f a, f b, f c) => (f (Plain (f a), Plain (f b), Plain (f c)) -> f d) -> f a -> f b -> f c -> f d
+curry3 f x y z = f (lift (x, y, z))
+
+-- |Same as for uncurry but for triples
+--
+uncurry3 :: Unlift f (f a, f b, f c) => (f a -> f b -> f c -> f d) -> f (Plain (f a), Plain (f b), Plain (f c)) -> f d
+uncurry3 f t = let (x, y, z) = unlift t in f x y z
+
 
 -- Shapes and indices
 -- ------------------
@@ -2228,6 +2243,29 @@ unindex3
 unindex3 ix = let Z :. k :. j :. i = unlift ix  :: Z :. Exp i :. Exp i :. Exp i
               in  lift (k, j, i)
 
+indexLast
+  :: forall sh. Shape sh
+  => Exp (sh:.Int)
+  -> Exp Int
+indexLast | AsSlice <- asSlice (Proxy :: Proxy sh)
+          = indexHead . indexTrans
+
+indexInit
+  :: forall sh. Shape sh
+  => Exp (sh:.Int)
+  -> Exp sh
+indexInit | AsSlice <- asSlice (Proxy :: Proxy sh)
+          = indexTrans . indexTail . indexTrans
+
+indexSnoc
+  :: forall sh. Shape sh
+  => Exp sh
+  -> Exp Int
+  -> Exp (sh:.Int)
+indexSnoc sh | AsSlice <- asSlice (Proxy :: Proxy sh)
+             = indexTrans . (Exp . IndexCons (indexTrans sh))
+
+
 
 -- Array operations with a scalar result
 -- -------------------------------------
@@ -2264,28 +2302,16 @@ foldSeqE :: Elt a
          -> Exp a
          -> Seq [Scalar a]
          -> Seq (Scalar a)
-foldSeqE f z = foldSeqFlatten (\ acc _ bs -> unit (f (the (fold1 f bs)) (the acc))) (unit z)
+foldSeqE f z = foldBatch (\s as -> lift (s, elements as)) (\(unatup2 -> (s,as)) -> fold f (the s) as) (unit z)
 
 -- | Reduce a sequence by appending all the shapes and all the
 -- elements in two seperate vectors.
 --
 fromSeq :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix, Vector a)
-fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
-  where
-    f x sh1 a1 =
-      let (sh0, a0) = unlift x
-      in lift (sh0 ++ sh1, a0 ++ a1)
+fromSeq s = lift (shapes s, elements s)
 
-
-concatElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
-concatElems = foldSeqFlatten f emptyArray
-  where
-    f a0 _ a1 = a0 ++ a1
-
-concatShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
-concatShapes = foldSeqFlatten f emptyArray
-  where
-    f sh0 sh1 _ = sh0 ++ sh1
+shapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
+shapes = elements . mapSeq (unit . shape)
 
 -- | Sequence an array on the innermost dimension.
 --
@@ -2331,16 +2357,18 @@ unzipSeq s = (mapSeq afst s, mapSeq asnd s)
 -- combining each element using the given binary operation (+). (+) must be
 -- associative.
 --
-scanSeqE :: Elt e
-         => (Exp e -> Exp e -> Exp e)
-         -> Exp e
-         -> Seq [Scalar e]
-         -> Seq [Scalar e]
-scanSeqE f z = mapSeq asnd .
-               mapBatch (const id)
-                        (\acc es -> let (es', acc') = scanl' f (the acc) (nestedValues es)
-                                    in lift (acc', nestedScalars es'))
-                        (unit z)
+-- scanSeqE :: Elt e
+--          => (Exp e -> Exp e -> Exp e)
+--          -> Exp e
+--          -> Seq [Scalar e]
+--          -> Seq [Scalar e]
+-- scanSeqE f z = mapSeq asnd .
+--                mapBatch (const id)
+--                         (\acc es -> let (es', acc') = scanl' f (the acc) (flatten (unregular es))
+--                                     in lift (acc', regular es'))
+--                         (\acc es -> let (es', acc') = scanl' f (the acc) (irregularValues es)
+--                                     in lift (acc', sparsify (regular es')))
+--                         (unit z)
 
 -- | Convert the given array to a sequence by dividing the array up into slices.
 -- This is similar to 'slice' in the way the array is indexed. The initial slice
@@ -2354,28 +2382,6 @@ toSeq :: (Slice slix, Elt a)
 toSeq spec acc
   = let length = size acc `P.div` shapeSize (indexSlice spec (shape acc))
     in produce length (\ix -> slice acc (toSlice spec (shape acc) (the ix)))
-
--- |A combination of map and fold. Applies a function to a chunk of a sequence,
--- passing an accumulating parameter from left to right, and returning the new
--- sequence.
---
--- The function "f" needs to obey the following law, at least
--- observationally:
---
---   forall a shs1 shs2 es1 es2.
---     uncurry3 f (f b shs1 es1) = f b (shs1 ++ shs2) (es1 ++ es2)
---
---     where uncurry3 f (a, b, c) = f a b c
---
--- mapAccumFlat :: (Arrays a, Shape sh, Elt e, Shape sh', Elt e')
---              => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> Acc (a, Vector sh', Vector e'))
---              -> Acc a
---              -> Seq [Array sh e]
---              -> Seq [Array sh' e']
--- mapAccumFlat f a = mapSeq asnd . mapBatch (const id) a
---   where
---     f' a' arrs = let (a', shapes, es) = unlift $ f a' (withShapes arrs id P.Nothing) (nestedValues arrs)
---                  in _
 
 -- | foldSeqFlatten f a0 x seq. f must be semi-associative, with
 -- vecotor append (++) as the companion operator:
@@ -2397,49 +2403,4 @@ foldSeqFlatten :: (Arrays a, Shape sh, Elt e)
                -> Acc a
                -> Seq [Array sh e]
                -> Seq a
-foldSeqFlatten f a = foldBatch (const id) f' a
-  where
-    f' a' arrs = f a' (withShapes arrs id P.Nothing) (nestedValues arrs)
-
-isIrregularSeq :: (Shape sh, Elt e) => Seq [Array sh e] -> Seq (Scalar Bool)
-isIrregularSeq = foldBatch (const id) (const f) (unit (constant False))
-  where
-    f a = withShapes a (const (unit (constant True))) (P.Just (const (unit (constant False))))
-
-denest :: (Arrays a, Arrays b)
-       => Acc (Nested (a,b))
-       -> (Acc (Nested a), Acc (Nested b))
-denest nab = (Acc (Aprj (SuccTupIdx ZeroTupIdx) nab), Acc (Aprj ZeroTupIdx nab))
-
-denest3 :: (Arrays a, Arrays b, Arrays c)
-        => Acc (Nested (a,b,c))
-        -> (Acc (Nested a), Acc (Nested b), Acc (Nested c))
-denest3 nabc = (Acc (Aprj (SuccTupIdx (SuccTupIdx ZeroTupIdx)) nabc)
-             , Acc (Aprj (SuccTupIdx ZeroTupIdx) nabc)
-             , Acc (Aprj ZeroTupIdx nabc))
-
-nestedValues :: (Shape sh, Elt e) => Acc (Nested (Array sh e)) -> Acc (Vector e)
-nestedValues = Acc . Aprj ZeroTupIdx
-
-nestedSize :: (Shape sh, Elt e) => Acc (Nested (Array sh e)) -> Exp Int
-nestedSize a = the $ withShapes a (unit . size) (P.Just (unit . fst . the))
-
-withShapes :: (Arrays a, Shape sh, Elt e)
-           => Acc (Nested (Array sh e))
-           -> (Acc (Vector sh) -> Acc a)
-           -> P.Maybe (Acc (Scalar (Int, sh)) -> Acc a)
-           -> Acc a
-withShapes a irregular mr =
-  let
-    (isIrregular, _, r_subCount, r_shape, _, ir_shapes) = unatup6 (Acc (Aprj (SuccTupIdx ZeroTupIdx) a))
-    regular =
-      case mr of
-        P.Nothing -> irregular (fill (index1 (the r_subCount)) (the r_shape))
-        P.Just r  -> r (unit (lift (the r_subCount, the r_shape)))
-  in the isIrregular ?| (irregular ir_shapes, regular)
-
-nestedScalars :: Elt e => Acc (Vector e) -> Acc (Nested (Scalar e))
-nestedScalars es = Acc (Atuple $ NilAtup `SnocAtup` segs `SnocAtup` es)
-  where
-    segs = atup6 (unit (constant False), unit l, unit l, unit index0, emptyArray, emptyArray)
-    l    = size es
+foldSeqFlatten f = foldBatch (\a s -> lift (a, shapes s, elements s)) (uncurry3 f)
