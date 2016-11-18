@@ -494,6 +494,8 @@ zip9 = zipWith9 (\a b c d e f g h i -> lift (a,b,c,d,e,f,g,h,i))
 -- | The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
 --
+-- If the argument array is manifest in memory, 'unzip' is a NOP.
+--
 unzip :: (Shape sh, Elt a, Elt b)
       => Acc (Array sh (a, b))
       -> (Acc (Array sh a), Acc (Array sh b))
@@ -1252,7 +1254,8 @@ index1' i = lift (Z :. fromIntegral i)
 -- Reshaping of arrays
 -- -------------------
 
--- | Flattens a given array of arbitrary dimension.
+-- | Flatten the given array of arbitrary dimension into a one-dimensional
+-- vector. As with 'reshape', this operation performs no work.
 --
 flatten :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Vector e)
 flatten a
@@ -1270,8 +1273,8 @@ flatten a
 fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
 fill sh c = generate sh (const c)
 
--- | Create an array of the given shape containing the values x, x+1, etc (in
---   row-major order).
+-- | Create an array of the given shape containing the values @x@, @x+1@, etc.
+-- (in row-major order).
 --
 -- >>> enumFromN (constant (Z:.5:.10)) 0 :: Array DIM2 Int
 -- Matrix (Z :. 5 :. 10)
@@ -1758,8 +1761,8 @@ slit m n acc =
 --
 -- Without the use of 'compute', the operations are fused together and the three
 -- long-running loops are executed sequentially in a single kernel. Instead, the
--- individual operations can now be executed concurrently, reducing overall
--- runtime (for backends which support this).
+-- individual operations can now be executed concurrently, potentially reducing
+-- overall runtime.
 --
 compute :: Arrays a => Acc a -> Acc a
 compute = id >-> id
@@ -1939,17 +1942,19 @@ unindex3 ix = let Z :. k :. j :. i = unlift ix  :: Z :. Exp i :. Exp i :. Exp i
 -- Array operations with a scalar result
 -- -------------------------------------
 
--- |Extraction of the element in a singleton array
+-- | Extract the element of a singleton array.
+--
+-- > the xs  ==  xs ! Z
 --
 the :: Elt e => Acc (Scalar e) -> Exp e
 the = (!index0)
 
--- |Test whether an array is empty
+-- | Test whether an array is empty.
 --
-null :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Bool
+null :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp Bool
 null arr = size arr ==* 0
 
--- |Get the length of a vector
+-- | Get the length of a vector.
 --
 length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
@@ -1962,7 +1967,7 @@ length = unindex1 . shape
 -- | Reduce a sequence by appending all the shapes and all the elements in two
 -- separate vectors.
 --
-fromSeq :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix, Vector a)
+fromSeq :: (Shape sh, Elt a) => Seq [Array sh a] -> Seq (Vector sh, Vector a)
 fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
   where
     f x sh1 a1 =
@@ -1970,12 +1975,12 @@ fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
       in lift (sh0 ++ sh1, a0 ++ a1)
 
 
-fromSeqElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
+fromSeqElems :: (Shape sh, Elt a) => Seq [Array sh a] -> Seq (Vector a)
 fromSeqElems = foldSeqFlatten f emptyArray
   where
     f a0 _ a1 = a0 ++ a1
 
-fromSeqShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
+fromSeqShapes :: (Shape sh, Elt a) => Seq [Array sh a] -> Seq (Vector sh)
 fromSeqShapes = foldSeqFlatten f emptyArray
   where
     f sh0 sh1 _ = sh0 ++ sh1

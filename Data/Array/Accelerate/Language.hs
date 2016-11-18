@@ -119,17 +119,35 @@ import Prelude                                          ( ($), (.) )
 -- Array introduction
 -- ------------------
 
--- | Array inlet: makes an array available for processing using the Accelerate
--- language.
+-- | Make an array from vanilla Haskell available for processing within embedded
+-- Accelerate computations.
 --
--- Depending upon the backend used to execute array computations, this may
--- trigger (asynchronous) data transfer.
+-- Depending upon which backend is used to eventually execute array
+-- computations, 'use' may entail data transfer (e.g. to a GPU).
+--
+-- 'use' is overloaded so that it can accept tuples of 'Arrays':
+--
+-- >>> let vec = fromList (Z:.10) [0..]  :: Array DIM1 Int
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]  :: Array DIM2 Int
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let vec' = use vec         :: Acc (Array DIM1 Int)
+-- >>> let mat' = use mat         :: Acc (Array DIM2 Int)
+-- >>> let tup  = use (vec, mat)  :: Acc (Array DIM1 Int, Array DIM2 Int)
 --
 use :: Arrays arrays => arrays -> Acc arrays
 use = Acc . Use
 
--- | Scalar inlet: injects a scalar (or a tuple of scalars) into a singleton
--- array for use in the Accelerate language.
+-- | Construct a singleton (one element) array from a scalar value (or tuple of
+-- scalar values).
 --
 unit :: Elt e => Exp e -> Acc (Scalar e)
 unit = Acc . Unit
@@ -173,10 +191,11 @@ unit = Acc . Unit
 -- >>> replicate (lift (Z :. 2 :. All :. 3)) (use vec)
 -- Array (Z :. 2 :. 10 :. 3) [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9,0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9]
 --
-replicate :: (Slice slix, Elt e)
-          => Exp slix
-          -> Acc (Array (SliceShape slix) e)
-          -> Acc (Array (FullShape  slix) e)
+replicate
+    :: (Slice slix, Elt e)
+    => Exp slix
+    -> Acc (Array (SliceShape slix) e)
+    -> Acc (Array (FullShape  slix) e)
 replicate = Acc $$ Replicate
 
 -- | Construct a new array by applying a function to each index.
@@ -204,13 +223,15 @@ replicate = Acc $$ Replicate
 --
 -- If the index given by the scalar function is then used to dispatch further
 -- parallel work, whose result is returned into 'Exp' terms by array indexing
--- operations such as (`!`) or `the`, the program will fail with the error:
+-- operations such as ('!') or 'Data.Array.Accelerate.Prelude.the', the program
+-- will fail with the error:
 -- '.\/Data\/Array\/Accelerate\/Trafo\/Sharing.hs:447 (convertSharingExp): inconsistent valuation \@ shared \'Exp\' tree ...'.
 --
-generate :: (Shape ix, Elt a)
-         => Exp ix
-         -> (Exp ix -> Exp a)
-         -> Acc (Array ix a)
+generate
+    :: (Shape sh, Elt a)
+    => Exp sh
+    -> (Exp sh -> Exp a)
+    -> Acc (Array sh a)
 generate = Acc $$ Generate
 
 -- Shape manipulation
@@ -219,12 +240,17 @@ generate = Acc $$ Generate
 -- | Change the shape of an array without altering its contents. The 'size' of
 -- the source and result arrays must be identical.
 --
--- > precondition: size ix == size ix'
+-- > precondition: shapeSize sh == shapeSize sh'
 --
-reshape :: (Shape ix, Shape ix', Elt e)
-        => Exp ix
-        -> Acc (Array ix' e)
-        -> Acc (Array ix e)
+-- If the argument array is manifest in memory, 'reshape' is a NOP. If the
+-- argument is to be fused into a subsequent operation, 'reshape' corresponds to
+-- an index transformation in the fused code.
+--
+reshape
+    :: (Shape sh, Shape sh', Elt e)
+    => Exp sh
+    -> Acc (Array sh' e)
+    -> Acc (Array sh e)
 reshape = Acc $$ Reshape
 
 -- Extraction of sub-arrays
@@ -234,10 +260,9 @@ reshape = Acc $$ Reshape
 -- second argument. The result is a new array (possibly a singleton)
 -- containing the selected dimensions (`All`s) in their entirety.
 --
--- This can be used to /cut out/ entire dimensions.  The opposite of
--- `replicate`.  For example, if 'mat' is a two dimensional array, the
--- following will select a specific row and yield a one dimensional
--- result:
+-- 'slice' is the opposite of 'replicate', and can be used to /cut out/ entire
+-- dimensions. For example, for the two dimensional array 'mat', the following
+-- will select a specific row and yield a one dimensional result:
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
 -- >>> mat
@@ -266,22 +291,25 @@ slice = Acc $$ Slice
 -- Map-like functions
 -- ------------------
 
--- | Apply the given function element-wise to the given array.
+-- | Apply the given function element-wise to an array.
 --
-map :: (Shape ix, Elt a, Elt b)
+-- > map f [x1, x2, ... xn] = [f x1, f x2, ... f xn]
+--
+map :: (Shape sh, Elt a, Elt b)
     => (Exp a -> Exp b)
-    -> Acc (Array ix a)
-    -> Acc (Array ix b)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
 map = Acc $$ Map
 
--- | Apply the given binary function element-wise to the two arrays.  The extent of the resulting
--- array is the intersection of the extents of the two source arrays.
+-- | Apply the given binary function element-wise to the two arrays. The extent
+-- of the resulting array is the intersection of the extents of the two source
+-- arrays.
 --
-zipWith :: (Shape ix, Elt a, Elt b, Elt c)
+zipWith :: (Shape sh, Elt a, Elt b, Elt c)
         => (Exp a -> Exp b -> Exp c)
-        -> Acc (Array ix a)
-        -> Acc (Array ix b)
-        -> Acc (Array ix c)
+        -> Acc (Array sh a)
+        -> Acc (Array sh b)
+        -> Acc (Array sh c)
 zipWith = Acc $$$ ZipWith
 
 -- Reductions
@@ -341,11 +369,11 @@ zipWith = Acc $$$ ZipWith
 -- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
 -- compute multiple results from a single reduction.
 --
-fold :: (Shape ix, Elt a)
+fold :: (Shape sh, Elt a)
      => (Exp a -> Exp a -> Exp a)
      -> Exp a
-     -> Acc (Array (ix:.Int) a)
-     -> Acc (Array ix a)
+     -> Acc (Array (sh:.Int) a)
+     -> Acc (Array sh a)
 fold = Acc $$$ Fold
 
 -- | Variant of 'fold' that requires the reduced array to be non-empty and
@@ -353,10 +381,10 @@ fold = Acc $$$ Fold
 -- /associative/ function to enable an efficient parallel implementation. The
 -- initial element does not need to be an identity element.
 --
-fold1 :: (Shape ix, Elt a)
+fold1 :: (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
-      -> Acc (Array (ix:.Int) a)
-      -> Acc (Array ix a)
+      -> Acc (Array (sh:.Int) a)
+      -> Acc (Array sh a)
 fold1 = Acc $$ Fold1
 
 -- | Segmented reduction along the innermost dimension of an array. The segment
@@ -386,12 +414,12 @@ fold1 = Acc $$ Fold1
 --     40, 170, 0, 138]
 --
 foldSeg
-    :: (Shape ix, Elt a, Elt i, IsIntegral i)
+    :: (Shape sh, Elt a, Elt i, IsIntegral i)
     => (Exp a -> Exp a -> Exp a)
     -> Exp a
-    -> Acc (Array (ix:.Int) a)
+    -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
-    -> Acc (Array (ix:.Int) a)
+    -> Acc (Array (sh:.Int) a)
 foldSeg = Acc $$$$ FoldSeg
 
 -- | Variant of 'foldSeg' that requires /all/ segments of the reduced array to
@@ -399,11 +427,11 @@ foldSeg = Acc $$$$ FoldSeg
 -- specifies the length of each of the logical sub-arrays.
 --
 fold1Seg
-    :: (Shape ix, Elt a, Elt i, IsIntegral i)
+    :: (Shape sh, Elt a, Elt i, IsIntegral i)
     => (Exp a -> Exp a -> Exp a)
-    -> Acc (Array (ix:.Int) a)
+    -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
-    -> Acc (Array (ix:.Int) a)
+    -> Acc (Array (sh:.Int) a)
 fold1Seg = Acc $$$ Fold1Seg
 
 -- Scan functions
@@ -534,12 +562,12 @@ scanr1 = Acc $$ Scanr1
 -- Vector (Z :. 10) [2,4,4,3,2,2,0,0,2,1]
 --
 permute
-    :: (Shape ix, Shape ix', Elt a)
+    :: (Shape sh, Shape sh', Elt a)
     => (Exp a -> Exp a -> Exp a)        -- ^ combination function
-    -> Acc (Array ix' a)                -- ^ array of default values
-    -> (Exp ix -> Exp ix')              -- ^ permutation
-    -> Acc (Array ix  a)                -- ^ array to be permuted
-    -> Acc (Array ix' a)
+    -> Acc (Array sh' a)                -- ^ array of default values
+    -> (Exp sh -> Exp sh')              -- ^ permutation
+    -> Acc (Array sh  a)                -- ^ array to be permuted
+    -> Acc (Array sh' a)
 permute = Acc $$$$ Permute
 
 -- | Backward permutation specified by an index mapping from the destination
@@ -574,11 +602,11 @@ permute = Acc $$$$ Permute
 --     9, 19, 29, 39, 49]
 --
 backpermute
-    :: (Shape ix, Shape ix', Elt a)
-    => Exp ix'                          -- ^ shape of the result array
-    -> (Exp ix' -> Exp ix)              -- ^ permutation
-    -> Acc (Array ix  a)                -- ^ source array
-    -> Acc (Array ix' a)
+    :: (Shape sh, Shape sh', Elt a)
+    => Exp sh'                          -- ^ shape of the result array
+    -> (Exp sh' -> Exp sh)              -- ^ permutation
+    -> Acc (Array sh  a)                -- ^ source array
+    -> Acc (Array sh' a)
 backpermute = Acc $$$ Backpermute
 
 
@@ -611,16 +639,36 @@ type Stencil3x5x5 a = (Stencil3x5 a, Stencil3x5 a, Stencil3x5 a, Stencil3x5 a, S
 type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a)
 
 
--- |Map a stencil over an array.  In contrast to 'map', the domain of a stencil function is an
---  entire /neighbourhood/ of each array element.  Neighbourhoods are sub-arrays centred around a
---  focal point.  They are not necessarily rectangular, but they are symmetric in each dimension
---  and have an extent of at least three in each dimensions — due to the symmetry requirement, the
---  extent is necessarily odd.  The focal point is the array position that is determined by the
---  stencil.
+-- | Map a stencil over an array. In contrast to 'map', the domain of a stencil
+-- function is an entire /neighbourhood/ of each array element. Neighbourhoods
+-- are sub-arrays centred around a focal point. They are not necessarily
+-- rectangular, but they are symmetric and have an extent of at least three
+-- along each axis. Due to the symmetry requirement the extent is necessarily
+-- odd. The focal point is the array position that is determined by the stencil.
 --
---  For those array positions where the neighbourhood extends past the boundaries of the source
---  array, a boundary condition determines the contents of the out-of-bounds neighbourhood
---  positions.
+-- For those array positions where the neighbourhood extends past the boundaries
+-- of the source array, a boundary condition determines the contents of the
+-- out-of-bounds neighbourhood positions.
+--
+-- For example, the following computes a 5x5
+-- <https://en.wikipedia.org/wiki/Gaussian_blur Gaussian blur> as a separable
+-- 2-pass operation.
+--
+-- > type Stencil5x1 a = (Stencil3 a, Stencil5 a, Stencil3 a)
+-- > type Stencil1x5 a = (Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a)
+-- >
+-- > convolve5x1 :: Num a => [Exp a] -> Stencil5x1 a -> Exp a
+-- > convolve5x1 kernel (_, (a,b,c,d,e), _)
+-- >   = Prelude.sum $ Prelude.zipWith (*) kernel [a,b,c,d,e]
+-- >
+-- > convolve1x5 :: Num a => [Exp a] -> Stencil1x5 a -> Exp a
+-- > convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
+-- >   = Prelude.sum $ Prelude.zipWith (*) kernel [a,b,c,d,e]
+-- >
+-- > gaussian = [0.06136,0.24477,0.38774,0.24477,0.06136]
+-- >
+-- > blur = stencil (convolve5x1 gaussian) Clamp
+-- >      . stencil (convolve1x5 gaussian) Clamp
 --
 stencil
     :: (Stencil sh a stencil, Elt b)
@@ -630,8 +678,9 @@ stencil
     -> Acc (Array sh b)                       -- ^ destination array
 stencil = Acc $$$ Stencil
 
--- | Map a binary stencil of an array.  The extent of the resulting array is the
--- intersection of the extents of the two source arrays.
+-- | Map a binary stencil of an array. The extent of the resulting array is the
+-- intersection of the extents of the two source arrays. This is the stencil
+-- equivalent of 'zipWith'.
 --
 stencil2
     :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
@@ -764,6 +813,8 @@ collect = Acc . Collect
 -- foreign implementations can be supplied, and will be tested for suitability
 -- against the target backend in sequence.
 --
+-- For an example see the <https://hackage.haskell.org/package/accelerate-fft accelerate-fft> package.
+--
 foreignAcc
     :: (Arrays as, Arrays bs, Foreign asm)
     => asm (as -> bs)
@@ -893,31 +944,58 @@ while = Exp $$$ While
 -- Array operations with a scalar result
 -- -------------------------------------
 
--- |Expression form that extracts a scalar from an array
+-- | Multidimensional array indexing. Extract the value from an array at the
+-- specified zero-based index.
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> mat ! (Z:.1:.2)
+-- 12
 --
 infixl 9 !
-(!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix -> Exp e
+(!) :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh -> Exp e
 (!) = Exp $$ Index
 
--- |Expression form that extracts a scalar from an array at a linear index
+-- | Extract the value from an array at the specified linear index.
+-- Multidimensional arrays in Accelerate are stored in row-major order with
+-- zero-based indexing.
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> mat !! 12
+-- 12
 --
 infixl 9 !!
-(!!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Int -> Exp e
+(!!) :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp Int -> Exp e
 (!!) = Exp $$ LinearIndex
 
--- |Expression form that yields the shape of an array
+-- | Extract the shape (extent) of an array.
 --
-shape :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix
+shape :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh
 shape = Exp . Shape
 
--- |Expression form that yields the size of an array
+-- | The number of elements in the array
 --
-size :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Int
+size :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp Int
 size = shapeSize . shape
 
--- |The total number of elements in an array of the given 'Shape'
+-- | The number of elements that would be held by an array of the given shape.
 --
-shapeSize :: Shape ix => Exp ix -> Exp Int
+shapeSize :: Shape sh => Exp sh -> Exp Int
 shapeSize = Exp . ShapeSize
 
 
@@ -1036,8 +1114,7 @@ bitcast = mkBitcast
 -- ---------
 
 -- |Magic value identifying elements that are ignored in a forward permutation.
--- Note that this currently does not work for singleton arrays.
 --
-ignore :: Shape ix => Exp ix
+ignore :: Shape sh => Exp sh
 ignore = constant Sugar.ignore
 

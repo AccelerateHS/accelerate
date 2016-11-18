@@ -121,33 +121,50 @@ instance (Show sh, Show sz) => Show (sh :. sz) where
 
 -- | Marker for entire dimensions in slice and division descriptors.
 --
--- For example, when used in slices passed to `Data.Array.Accelerate.replicate`,
--- the occurrences of `All` indicate the dimensions into which the array's
--- existing extent will be placed, rather than the new dimensions introduced by
--- replication.
+-- Used in slices passed to 'Data.Array.Accelerate.replicate', occurrences of
+-- 'All' indicate the dimensions into which the array's existing extent will be
+-- placed, rather than the new dimensions introduced by replication. See
+-- 'Data.Array.Accelerate.replicate' for examples.
 --
 data All = All
   deriving (Typeable, Show, Eq)
 
--- |Marker for arbitrary shapes in slice and division descriptors.  Such arbitrary
---  shapes may include an unknown number of dimensions.
+-- | Marker for arbitrary shapes in slice and division descriptors. Such
+-- arbitrary shapes may include an unknown number of dimensions.
 --
---  `Any` can be used in the leftmost position of a slice instead of
---  `Z`, for example @(Any :. _ :. _)@.  In the following definition
---  `Any` is used to match against whatever shape the type variable
---  `sh` takes:
+-- 'Any' can be used in the leftmost position of a slice instead of 'Z', for
+-- example @(Any :. _ :. _)@.  In the following definition 'Any' is used to
+-- match against whatever shape the type variable 'sh' takes:
 --
--- > repN :: (Shape sh, Elt e) => Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
--- > repN n a = replicate (constant $ Any :. n) a
+-- > repN :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
+-- > repN n a = replicate (lift (Any :. n)) a
+--
+-- >>> let x = unit 42  :: Acc (Scalar Int)
+-- >>> repN 10 x
+-- Vector (Z :. 10) [42,42,42,42,42,42,42,42,42,42]
+--
+-- >>> let xs = fromList (Z:.10) [0..]  :: Acc (Vector Int)
+-- >>> repN 5 xs
+-- Matrix (Z :. 10 :. 5)
+--   [ 0, 0, 0, 0, 0,
+--     1, 1, 1, 1, 1,
+--     2, 2, 2, 2, 2,
+--     3, 3, 3, 3, 3,
+--     4, 4, 4, 4, 4,
+--     5, 5, 5, 5, 5,
+--     6, 6, 6, 6, 6,
+--     7, 7, 7, 7, 7,
+--     8, 8, 8, 8, 8,
+--     9, 9, 9, 9, 9]
 --
 data Any sh = Any
   deriving (Typeable, Show, Eq)
 
 -- | Marker for splitting along an entire dimension in division descriptors.
 --
--- For example, when used in a division descriptor passed to 'Data.Array.Accelerate.toSeq',
--- a `Split` indicates that the array should be divided along this dimension
--- forming the elements of the output sequence.
+-- For example, when used in a division descriptor passed to
+-- 'Data.Array.Accelerate.toSeq', a `Split` indicates that the array should be
+-- divided along this dimension forming the elements of the output sequence.
 --
 data Split = Split
   deriving (Typeable, Show, Eq)
@@ -155,8 +172,8 @@ data Split = Split
 -- | Marker for arbitrary shapes in slices descriptors, where it is desired to
 -- split along an unknown number of dimensions.
 --
---  For example, in the following definition, 'Divide' matches against any
---  shape and flattens everything but the innermost dimension.
+-- For example, in the following definition, 'Divide' matches against any shape
+-- and flattens everything but the innermost dimension.
 --
 -- > vectors :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Vector e]
 -- > vectors = toSeq (Divide :. All)
@@ -235,12 +252,29 @@ toTuple = toProd (Proxy :: Proxy Elt)
 -- Array elements (tuples of scalars)
 -- ----------------------------------
 
--- | Accelerate supports as array elements only simple atomic types, and tuples
--- thereof. These element types are stored efficiently in memory, unpacked as
--- consecutive elements without pointers.
+-- | The 'Elt' class characterises the allowable array element types, and hence
+-- the types which can appear in scalar Accelerate expressions.
 --
--- This class characterises the types of values that can be array elements, and
--- hence, appear in scalar Accelerate expressions.
+-- Accelerate arrays consist of simple atomic types as well as nested tuples
+-- thereof, stored efficiently in memory as consecutive unpacked elements
+-- without pointers. It roughly consists of:
+--
+--  * Signed and unsigned integers (8, 16, 32, and 64-bits wide)
+--  * Floating point numbers (single and double precision)
+--  * 'Char'
+--  * 'Bool'
+--  * ()
+--  * Shapes formed from 'Z' and ':.'
+--  * Nested tuples of all of these, currently up to 15-elements wide
+--
+-- Adding new instances for 'Elt' consists of explaining to Accelerate how to
+-- map between your data type and a (tuple of) primitive values. For examples
+-- see:
+--
+--  * "Data.Array.Accelerate.Data.Complex"
+--  * "Data.Array.Accelerate.Data.Monoid"
+--  * <https://hackage.haskell.org/package/linear-accelerate linear-accelerate>
+--  * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>
 --
 class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
       => Elt a where
@@ -617,6 +651,10 @@ data ArraysFlavour arrs where
   ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
   ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
 
+-- | 'Arrays' consists of nested tuples of individual 'Array's, currently up to
+-- 15-elements wide. Accelerate computations can thereby return multiple
+-- results.
+--
 class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
   flavour  :: a {- dummy -} -> ArraysFlavour a
@@ -785,10 +823,27 @@ tuple :: IsTuple tup => {- dummy -} tup -> TupleR (TupleRepr tup)
 tuple = prod (Proxy :: Proxy Elt)
 
 
--- |Multi-dimensional arrays for array processing.
+-- | Dense, regular, multi-dimensional arrays.
+--
+-- The 'Array' is the core computational unit of Accelerate. All programs in
+-- Accelerate take zero or more arrays as input and produce one or more arrays
+-- as output.
+--
+-- Array data is store unboxed in an unzipped struct-of-array representation.
+-- Elements are laid out in row-major order (the right-most index of a 'Shape'
+-- is the fastest varying). The allowable array element types are members of the
+-- 'Elt' class, which roughly consists of:
+--
+--  * Signed and unsigned integers (8, 16, 32, and 64-bits wide).
+--  * Floating point numbers (single and double precision)
+--  * 'Char'
+--  * 'Bool'
+--  * ()
+--  * Shapes formed from 'Z' and ':.'.
+--  * Nested tuples of all of these, currently up to 15-elements wide.
 --
 -- If device and host memory are separate, arrays will be transferred to the
--- device when necessary (if possible asynchronously and in parallel with other
+-- device when necessary (possibly asynchronously and in parallel with other
 -- tasks) and cached on the device if sufficient memory is available.
 --
 data Array sh e where

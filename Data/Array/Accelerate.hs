@@ -31,17 +31,15 @@
 -- * "Data.Array.Accelerate.Interpreter": simple interpreter in Haskell as a
 --   reference implementation defining the semantics of the Accelerate language
 --
--- * "Data.Array.Accelerate.LLVM.Native": implementation supporting parallel
---   execution on multicore CPUs (e.g. x86).
---   (<http://hackage.haskell.org/package/accelerate-llvm-native hackage>)
+-- * <http://hackage.haskell.org/package/accelerate-llvm-native accelerate-llvm-native>:
+--   implementation supporting parallel execution on multicore CPUs (e.g. x86).
 --
--- * "Data.Array.Accelerate.LLVM.PTX": implementation supporting parallel
---   execution on CUDA-capable NVIDIA GPUs.
---   (<http://hackage.haskell.org/package/accelerate-llvm-ptx hackage>)
+-- * <http://hackage.haskell.org/package/accelerate-llvm-ptx accelerate-llvm-ptx>:
+--   implementation supporting parallel execution on CUDA-capable NVIDIA GPUs.
 --
--- * "Data.Array.Accelerate.CUDA": an older implementation supporting parallel
---   execution on CUDA-capable NVIDIA GPUs.
---   /__NOTE:__ This backend is being deprecated in favour of @accelerate-llvm-ptx@./
+-- * <http://hackage.haskell.org/package/accelerate-cuda accelerate-cuda>:
+--   an older implementation supporting parallel execution on CUDA-capable
+--   NVIDIA GPUs. /__NOTE:__ This backend is being deprecated in favour of @accelerate-llvm-ptx@./
 --
 -- [/Examples and documentation:/]
 --
@@ -49,8 +47,9 @@
 -- <https://github.com/AccelerateHS/accelerate/wiki GitHub wiki>. Please help us
 -- complete it!
 --
--- * The @accelerate-examples@ package demonstrates a range of computational
---   kernels and several complete applications (<http://hackage.haskell.org/package/accelerate-examples hackage>):
+-- * The <http://hackage.haskell.org/package/accelerate-examples accelerate-examples>
+--   package demonstrates a range of computational kernels and several complete
+--   applications:
 --
 --      - Implementation of the <https://en.wikipedia.org/wiki/Canny_edge_detector canny edge detector>
 --      - Interactive <https://en.wikipedia.org/wiki/Mandelbrot_set Mandelbrot set> generator
@@ -64,14 +63,13 @@
 --      <<http://i.imgur.com/RwCzQVw.jpg accelerate-mandelbrot>>
 --      <<http://i.imgur.com/7ohhKm9.jpg accelerate-ray>>
 --
--- * @lulesh-accelerate@ is an implementation of the Livermore Unstructured
---   Lagrangian Explicit Shock Hydrodynamics (LULESH) application. LULESH
---   is representative of typical hydrodynamics codes, although simplified and
---   hard-coded to solve the Sedov blast problem on an unstructured hexahedron
---   mesh.
+-- * <http://hackage.haskell.org/package/lulesh-accelerate lulesh-accelerate>
+--   is an implementation of the Livermore Unstructured Lagrangian Explicit
+--   Shock Hydrodynamics (LULESH) application. LULESH is representative of
+--   typical hydrodynamics codes, although simplified and hard-coded to solve
+--   the Sedov blast problem on an unstructured hexahedron mesh.
 --
---      - <https://codesign.llnl.gov/lulesh.php>.
---      - <http://hackage.haskell.org/package/lulesh-accelerate>.
+--      - For more information on LULESH: <https://codesign.llnl.gov/lulesh.php>.
 --
 --      <<https://codesign.llnl.gov/images/sedov-3d-LLNL.png>>
 --
@@ -138,19 +136,30 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  Acc, Arrays, Array, Scalar, Vector, Segments,
+  Acc, Array, Arrays, Scalar, Vector, Segments,
 
   -- ** Array element types
   Elt,
 
   -- ** Shapes & Indices
   --
-  -- | Array indices are snoc type lists; that is, they are backwards and the
-  -- end-of-list token, `Z`, occurs on the left. For example, the type of a
-  -- rank-2 array index is @Z :. Int :. Int@.
+  -- | In Accelerate, array shapes and indices are constructed as snoc-lists
+  -- using 'Z' and (':.'). That is, the innermost or fastest varying dimension
+  -- is the right-most index, which also corresponds to which elements will be
+  -- adjacent in memory.
   --
-  Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..), -- Split(..), Divide(..), Division(..),
+  -- 'Z' represents a singleton or rank-0 index, and operator (':.') is used to
+  -- increase the rank (or dimensionality) of an array by one, at both the type
+  -- and value level.
+  --
+  -- > Z              :: Z  ~  DIM0                 -- rank-0 index
+  -- > Z :. 10        :: Z :. Int  ~  DIM1          -- rank-1 index, representing a vector of length 10
+  -- > Z :. 10 :. 5   :: Z :. Int :. Int  ~  DIM2   -- rank-2 index, representing a matrix of 10 rows and 5 columns
+  --
+  Z(..), (:.)(..),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
+  Shape, Slice(..), All(..), Any(..),
+  -- Split(..), Divide(..), Division(..),
 
   -- ** Accessors
   -- *** Indexing
@@ -159,16 +168,12 @@ module Data.Array.Accelerate (
   -- *** Shape information
   null, length, shape, size, shapeSize,
 
-  -- *** Extracting sub-arrays
-  slice,
-  init, tail, take, drop, slit,
-
   -- ** Construction
   -- *** Introduction
   use, unit,
 
   -- *** Initialisation
-  generate, replicate, fill,
+  generate, fill,
 
   -- *** Enumeration
   enumFromN, enumFromStepN,
@@ -185,16 +190,6 @@ module Data.Array.Accelerate (
   (>->),
   compute,
 
-  -- ** Modifying Arrays
-  -- *** Shape manipulation
-  reshape, flatten,
-
-  -- *** Permutations
-  permute, backpermute, ignore,
-
-  -- *** Specialised permutations
-  reverse, transpose,
-
   -- ** Element-wise operations
   -- *** Indexing
   indexed,
@@ -209,6 +204,23 @@ module Data.Array.Accelerate (
 
   -- *** Unzipping
   unzip, unzip3, unzip4, unzip5, unzip6, unzip7, unzip8, unzip9,
+
+  -- ** Modifying Arrays
+  -- *** Shape manipulation
+  reshape, flatten,
+
+  -- *** Replication
+  replicate,
+
+  -- *** Extracting sub-arrays
+  slice,
+  init, tail, take, drop, slit,
+
+  -- *** Permutations
+  permute, backpermute, ignore,
+
+  -- *** Specialised permutations
+  reverse, transpose,
 
   -- ** Working with predicates
   -- *** Filtering
@@ -226,10 +238,10 @@ module Data.Array.Accelerate (
   -- *** Segmented reductions
   foldSeg, fold1Seg,
 
-  -- *** Specialised folds
+  -- *** Specialised reductions
   all, any, and, or, sum, product, minimum, maximum,
 
-  -- ** Prefix sums (scans)
+  -- ** Scans (prefix sums)
   scanl, scanl1, scanl', scanr, scanr1, scanr',
   prescanl, postscanl, prescanr, postscanr,
 
@@ -237,10 +249,23 @@ module Data.Array.Accelerate (
   scanlSeg, scanl1Seg, scanl'Seg, prescanlSeg, postscanlSeg,
   scanrSeg, scanr1Seg, scanr'Seg, prescanrSeg, postscanrSeg,
 
-  -- ** Stencil
+  -- ** Stencils
   stencil, stencil2,
 
-  -- -- ** Sequence elimination
+  -- *** Stencil specification
+  Stencil, Boundary(..),
+
+  -- *** Common stencil patterns
+  Stencil3, Stencil5, Stencil7, Stencil9,
+  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
+  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
+  Stencil3x5x5, Stencil5x5x5,
+
+  -- ** Foreign Function Interface (FFI)
+  foreignAcc,
+  foreignExp,
+
+  -- -- ** Sequence operations
   -- collect,
 
   -- -- ** Sequence producers
@@ -252,19 +277,6 @@ module Data.Array.Accelerate (
   -- -- ** Sequence consumers
   -- foldSeq, foldSeqFlatten, fromSeq, fromSeqElems, fromSeqShapes,
   -- toSeqInner, toSeqOuter2, toSeqOuter3,
-
-  -- *** Specification
-  Stencil, Boundary(..),
-
-  -- *** Common stencil patterns
-  Stencil3, Stencil5, Stencil7, Stencil9,
-  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
-  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
-  Stencil3x5x5, Stencil5x5x5,
-
-  -- ** Foreign
-  foreignAcc,
-  foreignExp,
 
   -- ---------------------------------------------------------------------------
   -- * The /Accelerate/ Expression Language
@@ -290,21 +302,6 @@ module Data.Array.Accelerate (
   -- *** Numeric conversion classes
   FromIntegral(..),
   ToFloating(..),
-
-  -- *** Primitive types
-  --
-  -- Avoid using these in your own functions wherever possible.
-  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
-
-  -- ** Element types
-  Int, Int8, Int16, Int32, Int64,
-  Word, Word8, Word16, Word32, Word64,
-  Float, Double,
-  Bool(..), Char,
-
-  CFloat, CDouble,
-  CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
-  CChar, CSChar, CUChar,
 
   -- ** Lifting and Unlifting
 
@@ -358,14 +355,7 @@ module Data.Array.Accelerate (
   lift1, lift2, lift3,
   ilift1, ilift2, ilift3,
 
-  -- ** Operations
-  --
-  -- | Some of the standard Haskell 98 typeclass functions need to be
-  -- reimplemented because their types change. If so, function names kept the
-  -- same and infix operations are suffixed by an asterisk. If not reimplemented
-  -- here, the standard typeclass instances apply.
-  --
-
+  -- ** Scalar operations
   -- *** Introduction
   constant,
 
@@ -400,8 +390,8 @@ module Data.Array.Accelerate (
 
   -- ** Conversions
   --
-  -- | For additional conversion routines, see the accelerate-io package:
-  -- <http://hackage.haskell.org/package/accelerate-io>
+  -- | For additional conversion routines, see the
+  -- <http://hackage.haskell.org/package/accelerate-io accelerate-io> package.
 
   -- *** Function
   fromFunction,
@@ -414,8 +404,24 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Prelude re-exports
-
   (.), ($), error, undefined,
+
+  -- ---------------------------------------------------------------------------
+  -- * Types
+  -- ** Primitive element types
+  Int, Int8, Int16, Int32, Int64,
+  Word, Word8, Word16, Word32, Word64,
+  Float, Double,
+  Bool(..), Char,
+
+  CFloat, CDouble,
+  CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
+  CChar, CSChar, CUChar,
+
+  -- ** Type reifications
+  --
+  -- Avoid using these in your own functions wherever possible.
+  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
 
 ) where
 
