@@ -160,7 +160,7 @@ unit = Acc . Unit
 -- >>> let vec = fromList (Z:.10) [0..]
 -- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
 --
--- We can replicate these elements to form a two-dimensional array either by
+-- ...we can replicate these elements to form a two-dimensional array either by
 -- replicating those elements as new rows:
 --
 -- >>> replicate (lift (Z :. 4 :. All)) (use vec)
@@ -170,7 +170,7 @@ unit = Acc . Unit
 --     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 --     0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 --
--- ... or as columns:
+-- ...or as columns:
 --
 -- >>> replicate (lift (Z :. All :. 4)) (use vec)
 -- Matrix (Z :. 10 :. 4)
@@ -190,6 +190,43 @@ unit = Acc . Unit
 --
 -- >>> replicate (lift (Z :. 2 :. All :. 3)) (use vec)
 -- Array (Z :. 2 :. 10 :. 3) [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9,0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9]
+--
+-- The marker 'Any' can be used in the slice specification to match against some
+-- arbitrary dimension. For example, here 'Any' matches against whatever shape
+-- type variable @sh@ takes.
+--
+-- > rep0 :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
+-- > rep0 n a = replicate (lift (Any :. n)) a
+--
+-- >>> let x = unit 42  :: Acc (Scalar Int)
+-- >>> rep0 10 x
+-- Vector (Z :. 10) [42,42,42,42,42,42,42,42,42,42]
+--
+-- >>> rep0 5 (use vec)
+-- Matrix (Z :. 10 :. 5)
+--   [ 0, 0, 0, 0, 0,
+--     1, 1, 1, 1, 1,
+--     2, 2, 2, 2, 2,
+--     3, 3, 3, 3, 3,
+--     4, 4, 4, 4, 4,
+--     5, 5, 5, 5, 5,
+--     6, 6, 6, 6, 6,
+--     7, 7, 7, 7, 7,
+--     8, 8, 8, 8, 8,
+--     9, 9, 9, 9, 9]
+--
+-- Of course, 'Any' and 'All' can be used together.
+--
+-- > rep1 :: (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
+-- > rep1 n a = A.replicate (lift (Any :. n :. All)) a
+--
+-- >>> rep1 5 (use vec)
+-- Matrix (Z :. 5 :. 10)
+--   [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+--     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+--     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+--     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+--     0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 --
 replicate
     :: (Slice slix, Elt e)
@@ -261,8 +298,7 @@ reshape = Acc $$ Reshape
 -- containing the selected dimensions (`All`s) in their entirety.
 --
 -- 'slice' is the opposite of 'replicate', and can be used to /cut out/ entire
--- dimensions. For example, for the two dimensional array 'mat', the following
--- will select a specific row and yield a one dimensional result:
+-- dimensions. For example, for the two dimensional array 'mat':
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..]
 -- >>> mat
@@ -273,14 +309,49 @@ reshape = Acc $$ Reshape
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
+-- ...will can select a specific row to yield a one dimensional result by fixing
+-- the row index (2) while allowing the column index to vary (via 'All'):
+--
 -- >>> slice (use mat) (lift (Z :. 2 :. All))
 -- Vector (Z :. 10) [20,21,22,23,24,25,26,27,28,29]
 --
--- A fully specified index (with no `All`s) returns a single element (zero
+-- A fully specified index (with no 'All's) returns a single element (zero
 -- dimensional array).
 --
 -- >>> slice (use mat) (lift (Z :. 4 :. 2))
 -- Scalar Z [42]
+--
+-- The marker 'Any' can be used in the slice specification to match against some
+-- arbitrary (lower) dimension. Here 'Any' matches whatever shape type variable
+-- @sh@ takes:
+--
+-- > sl0 :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
+-- > sl0 a n = A.slice a (lift (Any :. n))
+--
+-- >>> let vec = fromList (Z:.10) [0..]
+-- >>> sl0 (use vec) 4
+-- Scalar Z [4]
+--
+-- >>> sl0 (use mat) 4
+-- Vector (Z :. 5) [4,14,24,34,44]
+--
+-- Of course, 'Any' and 'All' can be used together.
+--
+-- > sl1 :: (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
+-- > sl1 a n = A.slice a (lift (Any :. n :. All))
+--
+-- >>> sl1 (use mat) 4
+-- Vector (Z :. 10) [40,41,42,43,44,45,46,47,48,49]
+--
+-- >>> let cube = fromList (Z:.3:.4:.5) [0..]
+-- >>> cube
+-- Array (Z :. 3 :. 4 :. 5) [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59]
+--
+-- >>> sl1 (use cube) 2
+-- Matrix (Z :. 3 :. 5)
+--   [ 10, 11, 12, 13, 14,
+--     30, 31, 32, 33, 34,
+--     50, 51, 52, 53, 54]
 --
 slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)

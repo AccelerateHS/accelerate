@@ -119,43 +119,26 @@ data tail :. head = tail :. head
 instance (Show sh, Show sz) => Show (sh :. sz) where
   show (sh :. sz) = show sh ++ " :. " ++ show sz
 
--- | Marker for entire dimensions in slice and division descriptors.
+-- | Marker for entire dimensions in 'Data.Array.Accelerate.Language.slice' and
+-- 'Data.Array.Accelerate.Language.replicate' descriptors.
 --
--- Used in slices passed to 'Data.Array.Accelerate.replicate', occurrences of
--- 'All' indicate the dimensions into which the array's existing extent will be
--- placed, rather than the new dimensions introduced by replication. See
--- 'Data.Array.Accelerate.replicate' for examples.
+-- Occurrences of 'All' indicate the dimensions into which the array's existing
+-- extent will be placed unchanged.
+--
+-- See 'Data.Array.Accelerate.Language.slice' and
+-- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data All = All
   deriving (Typeable, Show, Eq)
 
--- | Marker for arbitrary shapes in slice and division descriptors. Such
--- arbitrary shapes may include an unknown number of dimensions.
+-- | Marker for arbitrary dimensions in 'Data.Array.Accelerate.Language.slice'
+-- and 'Data.Array.Accelerate.Language.replicate' descriptors.
 --
--- 'Any' can be used in the leftmost position of a slice instead of 'Z', for
--- example @(Any :. _ :. _)@.  In the following definition 'Any' is used to
--- match against whatever shape the type variable 'sh' takes:
+-- 'Any' can be used in the leftmost position of a slice instead of 'Z',
+-- indicating that any dimensionality is admissible in that position.
 --
--- > repN :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
--- > repN n a = replicate (lift (Any :. n)) a
---
--- >>> let x = unit 42  :: Acc (Scalar Int)
--- >>> repN 10 x
--- Vector (Z :. 10) [42,42,42,42,42,42,42,42,42,42]
---
--- >>> let xs = fromList (Z:.10) [0..]  :: Acc (Vector Int)
--- >>> repN 5 xs
--- Matrix (Z :. 10 :. 5)
---   [ 0, 0, 0, 0, 0,
---     1, 1, 1, 1, 1,
---     2, 2, 2, 2, 2,
---     3, 3, 3, 3, 3,
---     4, 4, 4, 4, 4,
---     5, 5, 5, 5, 5,
---     6, 6, 6, 6, 6,
---     7, 7, 7, 7, 7,
---     8, 8, 8, 8, 8,
---     9, 9, 9, 9, 9]
+-- See 'Data.Array.Accelerate.Language.slice' and
+-- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data Any sh = Any
   deriving (Typeable, Show, Eq)
