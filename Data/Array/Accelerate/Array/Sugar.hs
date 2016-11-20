@@ -780,7 +780,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 --
 type TupleRepr a = ProdRepr a
 
--- |We represent tuples as heterogenous lists, typed by a type list.
+-- |We represent tuples as heterogeneous lists, typed by a type list.
 --
 data Tuple c t where
   NilTup  ::                              Tuple c ()
@@ -806,9 +806,15 @@ tuple = prod (Proxy :: Proxy Elt)
 
 -- | Dense, regular, multi-dimensional arrays.
 --
--- The 'Array' is the core computational unit of Accelerate. All programs in
+-- The 'Array' is the core computational unit of Accelerate; all programs in
 -- Accelerate take zero or more arrays as input and produce one or more arrays
--- as output.
+-- as output. The 'Array' type has two type parameters:
+--
+--  * /sh/: is the shape of the array, tracking the dimensionality and extent of
+--    each dimension of the array; for example, 'DIM1' for one-dimensional
+--    'Vector's, 'DIM2' for two-dimensional matrices, and so on.
+--  * /e/: represents the type of each element of the array; for example,
+--    'Int', 'Float', et cetera.
 --
 -- Array data is store unboxed in an unzipped struct-of-array representation.
 -- Elements are laid out in row-major order (the right-most index of a 'Shape'
@@ -823,9 +829,17 @@ tuple = prod (Proxy :: Proxy Elt)
 --  * Shapes formed from 'Z' and (':.')
 --  * Nested tuples of all of these, currently up to 15-elements wide.
 --
+-- Note that 'Array' itself is not an allowable element type---there are no
+-- nested arrays in Accelerate, regular arrays only!
+--
 -- If device and host memory are separate, arrays will be transferred to the
 -- device when necessary (possibly asynchronously and in parallel with other
--- tasks) and cached on the device if sufficient memory is available.
+-- tasks) and cached on the device if sufficient memory is available. Arrays are
+-- made available to embedded language computations via
+-- 'Data.Array.Accelerate.use'.
+--
+-- Section "Getting data in" lists functions for getting data into and out of
+-- the 'Array' type.
 --
 data Array sh e where
   Array :: (Shape sh, Elt e)
@@ -1078,7 +1092,7 @@ instance (Shape sh, Slice sh) => Division (Divide sh) where
 shape :: Shape sh => Array sh e -> sh
 shape (Array sh _) = toElt sh
 
--- |Array indexing
+-- | Array indexing
 --
 infixl 9 !
 (!) :: Array sh e -> sh -> e
@@ -1102,7 +1116,7 @@ fromFunction sh f = adata `seq` Array (fromElt sh) adata
                    return (arr, undefined)
 
 
--- |Create a vector from the concatenation of the given list of vectors.
+-- | Create a vector from the concatenation of the given list of vectors.
 --
 concatVectors :: Elt e => [Vector e] -> Vector e
 {-# INLINE concatVectors #-}
@@ -1126,7 +1140,35 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
     (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
 
 
+-- | Convert elements of a list into an Accelerate 'Array'.
 --
+-- This will generate a new multidimensional 'Array' of the specified shape and
+-- extent by consuming elements from the list and adding them to the array in
+-- row-major order.
+--
+-- >>> fromList (Z:.10) [0..] :: Vector Int
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
+--
+-- Note that we pull elements off the list lazily, so infinite lists are
+-- accepted:
+--
+-- >>> fromList (Z:.5:.10) (repeat 0) :: Array DIM2 Float
+-- Matrix (Z :. 5 :. 10)
+--   [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+--
+-- You can also make use of the @OverloadedLists@ extension to produce
+-- one-dimensional vectors from a /finite/ list.
+--
+-- >>> [0..9] :: Vector Int
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
+--
+-- Note that this requires first traversing the list to determine its length,
+-- and then traversing it a second time to collect the elements into the array,
+-- thus forcing the spine of the list to be manifest on the heap.
 --
 fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 {-# INLINE fromList #-}
@@ -1145,7 +1187,7 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
                     go 0 xs
                     return (arr, undefined)
 
--- | Convert an accelerated array to a list in row-major order.
+-- | Convert an accelerated 'Array' to a list in row-major order.
 --
 toList :: forall sh e. Array sh e -> [e]
 {-# INLINE toList #-}

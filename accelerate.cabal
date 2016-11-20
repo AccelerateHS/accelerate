@@ -72,8 +72,7 @@ Description:
   .
   [/Examples and documentation/]
   .
-  Haddock documentation is included in the package, and a tutorial is available
-  on the GitHub wiki: <https://github.com/AccelerateHS/accelerate/wiki>
+  Haddock documentation is included in the package
   .
   The @accelerate-examples@ package demonstrates a range of computational
   kernels and several complete applications, including:

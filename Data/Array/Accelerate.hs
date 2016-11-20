@@ -10,11 +10,11 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- This module defines an embedded language of array computations for
--- high-performance computing. Computations on multi-dimensional, regular arrays
--- are expressed in the form of parameterised collective operations (such as
--- maps, reductions, and permutations). These computations are online compiled
--- and can be executed on a range of architectures.
+-- @Data.Array.Accelerate@ defines an embedded language of array computations
+-- for high-performance computing in Haskell. Computations on multi-dimensional,
+-- regular arrays are expressed in the form of parameterised collective
+-- operations such as maps, reductions, and permutations. These computations are
+-- online compiled and can be executed on a range of architectures.
 --
 -- [/Abstract interface:/]
 --
@@ -22,6 +22,16 @@
 -- client code can generate array computations and submit them for execution,
 -- but it cannot inspect these computations. This is to allow for more
 -- flexibility for future extensions of this library.
+--
+-- [/Stratified language:/]
+--
+-- Accelerate distinguishes the types of collective operations 'Acc' from the
+-- type of scalar operations 'Exp' to achieve a stratified language. Collective
+-- operations comprise many scalar computations that are executed in parallel,
+-- but scalar computations /can not/ contain collective operations. This
+-- separation excludes /nested, irregular/ data-parallelism statically; instead,
+-- Accelerate is limited to /flat data-parallelism/ involving only regular,
+-- multi-dimensional arrays.
 --
 -- [/Code execution:/]
 --
@@ -41,11 +51,7 @@
 --   an older implementation supporting parallel execution on CUDA-capable
 --   NVIDIA GPUs. /__NOTE:__ This backend is being deprecated in favour of @accelerate-llvm-ptx@./
 --
--- [/Examples and documentation:/]
---
--- * A (draft) tutorial is available on the
--- <https://github.com/AccelerateHS/accelerate/wiki GitHub wiki>. Please help us
--- complete it!
+-- [/Examples:/]
 --
 -- * The <http://hackage.haskell.org/package/accelerate-examples accelerate-examples>
 --   package demonstrates a range of computational kernels and several complete
@@ -116,7 +122,7 @@
 --     * Trevor L. McDonell: <mailto:tmcdonell@cse.unsw.edu.au>
 --     * Manuel M T Chakravarty: <mailto:chak@cse.unsw.edu.au>
 --
--- [/NOTE:/]
+-- [/Tip:/]
 --
 -- Accelerate tends to stress GHC's garbage collector, so it helps to increase
 -- the default GC allocation sizes. This can be done when running an executable
@@ -135,34 +141,25 @@
 module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
-  -- ** Array data types
-  Acc, Array, Arrays, Scalar, Vector, Segments,
+  -- ** Embedded array computations
+  Acc,
 
-  -- ** Array element types
+  -- *** Arrays
+  Array, Arrays, Scalar, Vector, Segments,
+
+  -- *** Array elements
   Elt,
 
-  -- ** Shapes & Indices
-  --
-  -- | In Accelerate, array shapes and indices are constructed as snoc-lists
-  -- using 'Z' and (':.'). That is, the innermost or fastest varying dimension
-  -- is the right-most index, which also corresponds to which elements will be
-  -- adjacent in memory.
-  --
-  -- 'Z' represents a singleton or rank-0 index, and operator (':.') is used to
-  -- increase the rank (or dimensionality) of an array by one, at both the type
-  -- and value level.
-  --
-  -- > Z              :: Z  ~  DIM0                 -- rank-0 index
-  -- > Z :. 10        :: Z :. Int  ~  DIM1          -- rank-1 index, representing a vector of length 10
-  -- > Z :. 10 :. 5   :: Z :. Int :. Int  ~  DIM2   -- rank-2 index, representing a matrix of 10 rows and 5 columns
+  -- *** Array shapes & indices
+  -- $shapes_and_indices
   --
   Z(..), (:.)(..),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
   Shape, Slice(..), All(..), Any(..),
   -- Split(..), Divide(..), Division(..),
 
-  -- ** Accessors
-  -- *** Indexing
+  -- ** Array access
+  -- *** Element indexing
   (!), (!!), the,
 
   -- *** Shape information
@@ -300,52 +297,7 @@ module Data.Array.Accelerate (
   ToFloating(..),
 
   -- ** Lifting and Unlifting
-
-  -- | A value of type 'Int' is a plain Haskell value (unlifted), whereas an
-  -- @Exp Int@ is a /lifted/ value, that is, an integer lifted into the domain
-  -- of embedded expressions (an abstract syntax tree in disguise). Both 'Acc'
-  -- and 'Exp' are /surface types/ into which values may be lifted. Lifting
-  -- plain array and scalar surface types is equivalent to 'use' and 'constant'
-  -- respectively.
-  --
-  -- In general an @Exp Int@ cannot be unlifted into an 'Int', because the
-  -- actual number will not be available until a later stage of execution (e.g.
-  -- during GPU execution, when 'run' is called). Similarly an @Acc array@ can
-  -- not be unlifted to a vanilla 'array'; you should instead 'run' the
-  -- expression with a specific backend to evaluate it.
-  --
-  -- Lifting and unlifting are also used to pack and unpack an expression into
-  -- and out of constructors such as tuples, respectively. Those expressions, at
-  -- runtime, will become tuple dereferences. For example:
-  --
-  -- >>> let sh = constant (Z :. 4 :. 10)   :: Exp DIM2
-  -- >>> let Z :. x :. y = unlift sh        :: Z :. Exp Int :. Exp Int
-  -- >>> let t = lift (x,y)                 :: Exp (Int, Int)
-  --
-  -- >>> let r  = scanl' f z xs             :: (Acc (Vector Int), Acc (Scalar Int))
-  -- >>> let r' = lift r                    :: Acc (Vector Int, Scalar Int)
-  --
-  -- [/Note:/]
-  --
-  -- Use of 'lift' and (especially) 'unlift' is probably the most common source
-  -- of type errors when using Accelerate. GHC is not very good at determining
-  -- the type the [un]lifted expression should have, so it is often necessary to
-  -- add an explicit type signature.
-  --
-  -- For example, in the following GHC will complain that it can not determine
-  -- the type of 'y', even though we might expect that to be obvious (or for it
-  -- to not care):
-  --
-  -- > fst :: (Elt a, Elt b) => Exp (a,b) -> Exp a
-  -- > fst t = let (x,y) = unlift t in x
-  --
-  -- The fix is to instead add an explicit type signature. Note that this
-  -- requires the @ScopedTypeVariables@ extension and to bring the type
-  -- variables @a@ and @b@ into scope with @forall@:
-  --
-  -- > fst :: forall a b. (Elt a, Elt b) => Exp (a,b) -> Exp a
-  -- > fst t = let (x,y) = unlift t  :: (Exp a, Exp b)
-  -- >         in x
+  -- $lifting_and_unlifting
   --
   Lift(..), Unlift(..),
   lift1, lift2, lift3,
@@ -389,10 +341,8 @@ module Data.Array.Accelerate (
   -- ** Operations
   arrayRank, arrayShape, arraySize, indexArray,
 
-  -- ** Conversions
-  --
-  -- | For additional conversion routines, see the
-  -- <http://hackage.haskell.org/package/accelerate-io accelerate-io> package.
+  -- ** Getting data in
+  -- $getting_data_in
 
   -- *** Function
   fromFunction,
@@ -440,7 +390,7 @@ import Prelude                                                      ( (.), ($), 
 
 -- rename as '(!)' is already used by the EDSL for indexing
 
--- |Array indexing in plain Haskell code.
+-- | Array indexing in plain Haskell code.
 --
 indexArray :: Array sh e -> sh -> e
 indexArray = (S.!)
@@ -461,5 +411,113 @@ arrayShape = S.shape
 arraySize :: Shape sh => sh -> Int
 arraySize = S.size
 
+-- Named documentation chunks
+-- --------------------------
+
+-- $shapes_and_indices
+--
+-- Operations in Accelerate take the form of collective operations over arrays
+-- of the type @'Array' sh e@. Much like the
+-- <https://hackage.haskell.org/package/repa repa> library, arrays in Accelerate
+-- are parameterised by a type /sh/ which determines the dimensionality of the
+-- array and the type of each index, as well as the type of each element of the
+-- array /e/.
+--
+-- Shape types, and multidimensional array indices, are built like lists
+-- (technically; a heterogeneous snoc-list) using 'Z' and (':.'):
+--
+-- > data Z = Z
+-- > data tail :. head = tail :. head
+--
+-- Here, the constructor 'Z' corresponds to a shape with zero dimension (or
+-- a 'Scalar' array, with one element) and is used to mark the end of the list.
+-- The constructor (':.') adds additional dimensions to the shape on the
+-- /right/. For example:
+--
+-- > Z :. Int
+--
+-- is the type of the shape of a one-dimensional array ('Vector') indexed by an
+-- 'Int', while:
+--
+-- > Z :. Int :. Int
+--
+-- is the type of the shape of a two-dimensional array (a matrix) indexed by an
+-- 'Int' in each dimension.
+--
+-- This style is used to construct both the /type/ and /value/ of the shape. For
+-- example, to define the shape of a vector of ten elements:
+--
+-- > sh :: Z :. Int
+-- > sh = Z :. 10
+--
+-- Note that the right-most index is the /innermost/ dimension. This is the
+-- fastest-varying index, and corresponds to the elements of the array which are
+-- adjacent in memory.
+--
+
+-- $lifting_and_unlifting
+--
+-- A value of type 'Int' is a plain Haskell value (unlifted), whereas an @Exp
+-- Int@ is a /lifted/ value, that is, an integer lifted into the domain of
+-- embedded expressions (an abstract syntax tree in disguise). Both 'Acc' and
+-- 'Exp' are /surface types/ into which values may be lifted. Lifting plain
+-- array and scalar surface types is equivalent to 'use' and 'constant'
+-- respectively.
+--
+-- In general an @Exp Int@ cannot be unlifted into an 'Int', because the actual
+-- number will not be available until a later stage of execution (e.g. during
+-- GPU execution, when 'run' is called). Similarly an @Acc array@ can not be
+-- unlifted to a vanilla 'array'; you should instead 'run' the expression with
+-- a specific backend to evaluate it.
+--
+-- Lifting and unlifting are also used to pack and unpack an expression into and
+-- out of constructors such as tuples, respectively. Those expressions, at
+-- runtime, will become tuple dereferences. For example:
+--
+-- >>> let sh = constant (Z :. 4 :. 10)   :: Exp DIM2
+-- >>> let Z :. x :. y = unlift sh        :: Z :. Exp Int :. Exp Int
+-- >>> let t = lift (x,y)                 :: Exp (Int, Int)
+--
+-- >>> let r  = scanl' f z xs             :: (Acc (Vector Int), Acc (Scalar Int))
+-- >>> let r' = lift r                    :: Acc (Vector Int, Scalar Int)
+--
+-- [/Note:/]
+--
+-- Use of 'lift' and 'unlift' is probably the most common source of type errors
+-- when using Accelerate. GHC is not very good at determining the type the
+-- [un]lifted expression should have, so it is often necessary to add an
+-- explicit type signature.
+--
+-- For example, in the following GHC will complain that it can not determine the
+-- type of 'y', even though we might expect that to be obvious (or for it to not
+-- care):
+--
+-- > fst :: (Elt a, Elt b) => Exp (a,b) -> Exp a
+-- > fst t = let (x,y) = unlift t in x
+--
+-- The fix is to instead add an explicit type signature. Note that this requires
+-- the @ScopedTypeVariables@ extension and to bring the type variables @a@ and
+-- @b@ into scope with @forall@:
+--
+-- > fst :: forall a b. (Elt a, Elt b) => Exp (a,b) -> Exp a
+-- > fst t = let (x,y) = unlift t  :: (Exp a, Exp b)
+-- >         in x
+--
+
+-- $getting_data_in
+-- #getting_data_in#
+--
+-- We often need to generate or read data into an 'Array' so that it can be used
+-- in Accelerate. The base @accelerate@ library includes basic conversions
+-- routines, but for additional functionality see the
+-- <http://hackage.haskell.org/package/accelerate-io accelerate-io> package,
+-- which includes conversions between:
+--
+--  * <https://hackage.haskell.org/package/repa repa>: another Haskell library for high-performance parallel arrays
+--  * <https://hackage.haskell.org/package/vector vector>: efficient boxed and unboxed one-dimensional arrays
+--  * <https://hackage.haskell.org/package/array array>: immutable arrays
+--  * <https://hackage.haskell.org/package/bmp BMP>: uncompressed BMP image files
+--  * <https://hackage.haskell.org/package/bytestring bytestring> compact, immutable binary data
+--  * As well as copying data directly from raw 'Foreign.Ptr.Ptr's
 --
 
