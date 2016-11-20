@@ -62,10 +62,8 @@ module Data.Array.Accelerate.Array.Sugar (
 
 -- standard library
 import Control.DeepSeq
-import Data.Array.IArray                                        ( IArray )
 import Data.List                                                ( intercalate, transpose )
 import Data.Typeable
-import qualified Data.Array.IArray                              as IArray
 
 import GHC.Exts                                                 ( IsList )
 import qualified GHC.Exts                                       as GHC
@@ -1128,53 +1126,7 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
     (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
 
 
-type family IxShapeRepr e where
-  IxShapeRepr ()    = ()
-  IxShapeRepr Int   = ((),Int)
-  IxShapeRepr (t,h) = (IxShapeRepr t, h)
-
-fromIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => sh -> ix
-fromIxShapeRepr sh = toElt (go (eltType (undefined::ix)) (fromElt sh))
-  where
-    go :: forall ix'. TupleType ix' -> IxShapeRepr ix' -> ix'
-    go UnitTuple ()                                                         = ()
-    go (SingleTuple     (NumScalarType (IntegralNumType TypeInt{}))) ((),h) = h
-    go (PairTuple tt _) (t, h)                                              = (go tt t, h)
-    go _ _ = error "Not a valid IArray.Ix"
-
-toIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => ix -> sh
-toIxShapeRepr ix = toElt (go (eltType (undefined::ix)) (fromElt ix))
-  where
-    go :: forall ix'. TupleType ix' -> ix' -> IxShapeRepr ix'
-    go UnitTuple        ()                                             = ()
-    go (SingleTuple     (NumScalarType (IntegralNumType TypeInt{}))) h = ((), h)
-    go (PairTuple tt _) (t, h)                                         = (go tt t, h)
-    go _ _ = error "Not a valid IArray.Ix"
-
--- | Convert an 'IArray' to an accelerated array.
 --
--- While the type signature mentions Accelerate internals that are not exported,
--- in practice satisfying the type equality is straight forward. The index type
--- @ix@ must be the unit type @()@ for singleton arrays, or an @Int@ or tuple of
--- @Int@'s for multidimensional arrays.
---
-fromIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
-           => a ix e -> Array sh e
-fromIArray iarr = newArray sh (\ix -> iarr IArray.! fromIxShapeRepr ix)
-  where
-    (lo,hi) = IArray.bounds iarr
-    sh      = rangeToShape (toIxShapeRepr lo, toIxShapeRepr hi)
-
--- | Convert an accelerated array to an 'IArray'.
---
-toIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix)
-         => Array sh e -> a ix e
-toIArray arr = IArray.array bnds [(ix, arr ! toIxShapeRepr ix) | ix <- IArray.range bnds]
-  where
-    (lo,hi) = shapeToRange (shape arr)
-    bnds    = (fromIxShapeRepr lo, fromIxShapeRepr hi)
-
--- | Convert a list, with elements in row-major order, into an accelerated array.
 --
 fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 {-# INLINE fromList #-}

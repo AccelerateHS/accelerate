@@ -400,9 +400,6 @@ module Data.Array.Accelerate (
   -- *** Lists
   fromList, toList,
 
-  -- *** 'Data.Array.IArray.IArray'
-  fromIArray, toIArray,
-
   -- ---------------------------------------------------------------------------
   -- * Prelude re-exports
   (.), ($), error, undefined,
