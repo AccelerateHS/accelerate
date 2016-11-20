@@ -48,7 +48,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
-  shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList, concatVectors,
+  shape, (!), allocateArray, fromFunction, fromList, toList, concatVectors,
 
   -- * Tuples
   TupleR, TupleRepr, tuple,
@@ -1089,11 +1089,12 @@ infixl 9 !
 -- FIXME: using this due to a bug in 6.10.x
 (!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` toIndex (toElt sh) ix)
 
--- |Create an array from its representation function
+-- | Create an array from its representation function, applied at each index of
+-- the array.
 --
-newArray :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
-{-# INLINE newArray #-}
-newArray sh f = adata `seq` Array (fromElt sh) adata
+fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
+{-# INLINE fromFunction #-}
+fromFunction sh f = adata `seq` Array (fromElt sh) adata
   where
     (adata, _) = runArrayData $ do
                    arr <- newArrayData (size sh)

@@ -221,7 +221,7 @@ evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, evalOpenAcc a aenv)
 -- ----------------
 
 unitOp :: Elt e => e -> Scalar e
-unitOp e = newArray Z (const e)
+unitOp e = fromFunction Z (const e)
 
 
 generateOp
@@ -229,7 +229,7 @@ generateOp
     => sh
     -> (sh -> e)
     -> Array sh e
-generateOp = newArray
+generateOp = fromFunction
 
 
 transformOp
@@ -240,7 +240,7 @@ transformOp
     -> Delayed (Array sh a)
     -> Array sh' b
 transformOp sh' p f (Delayed _ xs _)
-  = newArray sh' (\ix -> f (xs $ p ix))
+  = fromFunction sh' (\ix -> f (xs $ p ix))
 
 
 reshapeOp
@@ -260,7 +260,7 @@ replicateOp
     -> Array sl e
     -> Array sh e
 replicateOp slice slix arr
-  = newArray (toElt sh) (\ix -> arr ! liftToElt pf ix)
+  = fromFunction (toElt sh) (\ix -> arr ! liftToElt pf ix)
   where
     (sh, pf) = extend slice (fromElt slix) (fromElt (shape arr))
 
@@ -284,7 +284,7 @@ sliceOp
     -> slix
     -> Array sl e
 sliceOp slice arr slix
-  = newArray (toElt sh') (\ix -> arr ! liftToElt pf ix)
+  = fromFunction (toElt sh') (\ix -> arr ! liftToElt pf ix)
   where
     (sh', pf) = restrict slice (fromElt slix) (fromElt (shape arr))
 
@@ -306,7 +306,7 @@ mapOp :: (Shape sh, Elt b)
       -> Delayed (Array sh a)
       -> Array sh b
 mapOp f (Delayed sh xs _)
-  = newArray sh (\ix -> f (xs ix))
+  = fromFunction sh (\ix -> f (xs ix))
 
 
 zipWithOp
@@ -316,7 +316,7 @@ zipWithOp
     -> Delayed (Array sh b)
     -> Array sh c
 zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
-  = newArray (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
+  = fromFunction (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
 
 -- zipWith'Op
 --     :: (Shape sh, Elt a)
@@ -325,11 +325,11 @@ zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
 --     -> Delayed (Array sh a)
 --     -> Array sh a
 -- zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
---   = newArray (shx `union` shy) (\ix -> if ix `outside` shx
---                                        then ys ix
---                                        else if ix `outside` shy
---                                        then xs ix
---                                        else f (xs ix) (ys ix))
+--   = fromFunction (shx `union` shy) (\ix -> if ix `outside` shx
+--                                            then ys ix
+--                                            else if ix `outside` shy
+--                                            then xs ix
+--                                            else f (xs ix) (ys ix))
 --   where
 --     a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
 
@@ -342,10 +342,10 @@ foldOp
     -> Array sh e
 foldOp f z (Delayed (sh :. n) arr _)
   | size sh == 0
-  = newArray (listToShape . map (max 1) . shapeToList $ sh) (const z)
+  = fromFunction (listToShape . map (max 1) . shapeToList $ sh) (const z)
 
   | otherwise
-  = newArray sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr (ix :. i)) f z)
+  = fromFunction sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr (ix :. i)) f z)
 
 
 fold1Op
@@ -355,7 +355,7 @@ fold1Op
     -> Array sh e
 fold1Op f (Delayed (sh :. n) arr _)
   = $boundsCheck "fold1" "empty array" (n > 0)
-  $ newArray sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
+  $ fromFunction sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
 
 
 foldSegOp
@@ -367,7 +367,7 @@ foldSegOp
     -> Array (sh :. Int) e
 foldSegOp f z (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
-  = newArray (sh :. n)
+  = fromFunction (sh :. n)
   $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
                        end   = fromIntegral $ offset ! (Z :. ix+1)
                    in
@@ -384,7 +384,7 @@ fold1SegOp
     -> Array (sh :. Int) e
 fold1SegOp f (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
-  = newArray (sh :. n)
+  = fromFunction (sh :. n)
   $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
                        end   = fromIntegral $ offset ! (Z :. ix+1)
                    in
@@ -601,7 +601,7 @@ backpermuteOp
     -> Delayed (Array sh e)
     -> Array sh' e
 backpermuteOp sh' p (Delayed _ arr _)
-  = newArray sh' (\ix -> arr $ p ix)
+  = fromFunction sh' (\ix -> arr $ p ix)
 
 
 stencilOp
@@ -611,7 +611,7 @@ stencilOp
     -> Array sh a
     -> Array sh b
 stencilOp stencil boundary arr
-  = newArray sh f
+  = fromFunction sh f
   where
     f           = stencil . stencilAccess bounded
     sh          = shape arr
@@ -631,7 +631,7 @@ stencil2Op
     -> Array sh b
     -> Array sh c
 stencil2Op stencil boundary1 arr1 boundary2 arr2
-  = newArray (sh1 `intersect` sh2) f
+  = fromFunction (sh1 `intersect` sh2) f
   where
     sh1         = shape arr1
     sh2         = shape arr2
@@ -1466,7 +1466,7 @@ evalSeq conf s aenv = evalSeq' s
         ToSeq sliceIndex slix (delayed -> Delayed sh ix _) ->
           let n   = R.size (R.sliceShape sliceIndex (fromElt sh))
               k   = elemsPerChunk conf n
-          in ExecStreamIn k (toSeqOp sliceIndex slix (newArray sh ix))
+          in ExecStreamIn k (toSeqOp sliceIndex slix (fromFunction sh ix))
         MapSeq     f x       -> ExecMap     (mapChunk (evalAF f)) (cursor0 x)
         ChunkedMapSeq f x    -> ExecMap     (evalAF f) (cursor0 x)
         ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalAF f)) (cursor0 x) (cursor0 y)
@@ -1484,7 +1484,7 @@ evalSeq conf s aenv = evalSeq' s
       case c of
         FoldSeq f e x ->
           let f' = evalF f
-              a0 = newArray (Z :. chunkSize conf) (const (evalE e))
+              a0 = fromFunction (Z :. chunkSize conf) (const (evalE e))
               consumer v c = zipWith'Op f' (delayArray v) (delayArray (chunkElems c))
               finalizer = fold1Op f' . delayArray
           in ExecFold consumer finalizer a0 (cursor0 x)
@@ -1568,7 +1568,7 @@ fetchAllOp segs elts
   = [fetch (segs ! (Z :. i)) (offsets ! (Z :. i)) | i <- [0 .. size (shape segs) - 1]]
   | otherwise = error $ "illegal argument to fetchAllOp"
   where
-    fetch sh offset = newArray sh (\ ix -> elts ! (Z :. ((toIndex sh ix) + offset)))
+    fetch sh offset = fromFunction sh (\ ix -> elts ! (Z :. ((toIndex sh ix) + offset)))
 
 dropOp :: Elt e => Int -> Vector e -> Vector e
 dropOp i v   -- TODO
@@ -1578,7 +1578,7 @@ dropOp i v   -- TODO
   | n <- size (shape v)
   , i <= n
   , i >= 0
-  = newArray (Z :. n - i) (\ (Z :. j) -> v ! (Z :. i + j))
+  = fromFunction (Z :. n - i) (\ (Z :. j) -> v ! (Z :. i + j))
   | otherwise = error $ "illegal argument to drop"
 
 offsetsOp :: Shape sh => Segments sh -> (Vector Int, Scalar Int)

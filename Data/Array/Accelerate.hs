@@ -437,8 +437,8 @@ import Prelude                                                      ( (.), ($), 
 
 
 -- Renamings
+-- ---------
 --
-
 -- FIXME: these all need to go into a separate module for separate importing!
 
 -- rename as '(!)' is already used by the EDSL for indexing
@@ -464,9 +464,5 @@ arrayShape = S.shape
 arraySize :: Shape sh => sh -> Int
 arraySize = S.size
 
--- | Create an array from its representation function.
 --
-{-# INLINE fromFunction #-}
-fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
-fromFunction = newArray
 
