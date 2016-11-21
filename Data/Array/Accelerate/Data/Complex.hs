@@ -58,6 +58,7 @@ instance Elt a => Elt (Complex a) where
   eltType _             = eltType (undefined :: (a,a))
   toElt p               = let (a, b) = toElt p in a :+ b
   fromElt (a :+ b)      = fromElt (a, b)
+  eltFlavour _          = EltTuple
 
 instance cst a => IsProduct cst (Complex a) where
   type ProdRepr (Complex a) = ProdRepr (a, a)

@@ -47,6 +47,7 @@ instance Elt a => Elt (Sum a) where
   eltType _       = PairTuple UnitTuple (eltType (undefined::a))
   toElt ((),x)    = Sum (toElt x)
   fromElt (Sum x) = ((), fromElt x)
+  eltFlavour _    = EltTuple
 
 instance Elt a => IsProduct Elt (Sum a) where
   type ProdRepr (Sum a) = ((), a)
@@ -96,6 +97,7 @@ instance Elt a => Elt (Product a) where
   eltType _       = PairTuple UnitTuple (eltType (undefined::a))
   toElt ((),x)    = Product (toElt x)
   fromElt (Product x) = ((), fromElt x)
+  eltFlavour _        = EltTuple
 
 instance Elt a => IsProduct Elt (Product a) where
   type ProdRepr (Product a) = ((), a)
