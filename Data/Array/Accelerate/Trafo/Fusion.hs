@@ -55,6 +55,10 @@ import Data.Function                                    ( on )
 import Data.Maybe                                       ( fromMaybe )
 import Data.Monoid                                      ( (<>) )
 
+#if __GLASGOW_HASKELL__ <= 708
+import Data.Monoid                                      ( Monoid )
+#endif
+
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Error
