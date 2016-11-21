@@ -304,7 +304,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     ppSh :: PreOpenExp acc env aenv sh -> Doc
     ppSh = parens . ppE'
 
-    ppSl :: Elt sl => PreOpenExp acc env aenv sl -> Doc
+    ppSl :: PreOpenExp acc env aenv sl -> Doc
     ppSl = parens . ppE'
 
     ppSI :: SliceIndex slix sl co sh -> Doc

@@ -173,8 +173,7 @@ withFL _    _ _ _                        = error "Absurd"
 
 infixr 0 $*
 
-($*) :: Arrays t'
-     => (forall t. Arrays t => acc aenv t -> acc' aenv' t)
+($*) :: (forall t. Arrays t => acc aenv t -> acc' aenv' t)
      -> LiftedAcc acc aenv t'
      -> LiftedAcc acc' aenv' t'
 f $* LiftedAcc t a = LiftedAcc t (f a)
@@ -550,15 +549,14 @@ liftPreOpenAcc vectAcc ctx size acc
     -- Regular versions of combinators.
     -- ===================================
 
-    aletL :: forall bnd. (Arrays bnd, Arrays t)
+    aletL :: forall bnd. Arrays bnd
           => acc aenv bnd
           -> acc (aenv, bnd) t
           -> LiftedAcc acc aenv' t
     aletL bnd body | LiftedAcc ty a <- cvtA bnd
                    = inject . Alet a $* vectAcc (PushC ctx ty) (weakenA1 size) body
 
-    avarL :: Arrays t
-          => Idx aenv t
+    avarL :: Idx aenv t
           -> LiftedAcc acc aenv' t
     avarL = cvtIx ctx
       where
@@ -620,8 +618,7 @@ liftPreOpenAcc vectAcc ctx size acc
     foreignL _  _    _
       = error $ nestedError "first" "foreign"
 
-    acondL :: Arrays t
-           => PreExp acc aenv Bool
+    acondL :: PreExp acc aenv Bool
            -> acc aenv t
            -> acc aenv t
            -> LiftedAcc acc aenv' t
@@ -1390,7 +1387,7 @@ liftExp vectAcc ctx size exp
         varL' (ExpPush _) ZeroIdx = ZeroIdx
         varL' (ExpPush ctx) (SuccIdx ix) = SuccIdx (varL' ctx ix)
 
-    letL :: forall bnd_t. (Elt e, Elt bnd_t)
+    letL :: forall bnd_t. Elt bnd_t
          => PreOpenExp acc env          aenv bnd_t
          -> PreOpenExp acc (env, bnd_t) aenv e
          -> LiftedExp acc env aenv' aenv'' e
@@ -1404,8 +1401,7 @@ liftExp vectAcc ctx size exp
     -- no array terms embedded in scalar expressions other than array variables.
     -- For now this is true.
     --
-    condL :: Elt e
-          => LiftedExp acc env aenv' aenv'' Bool
+    condL :: LiftedExp acc env aenv' aenv'' Bool
           -> LiftedExp acc env aenv' aenv'' e
           -> LiftedExp acc env aenv' aenv'' e
           -> LiftedExp acc env aenv' aenv'' e
@@ -1430,8 +1426,7 @@ liftExp vectAcc ctx size exp
     --                  (i^, replicate sh False)
     -- @
     --
-    whileL :: Elt e
-           => PreOpenFun acc env aenv (e -> Bool)
+    whileL :: PreOpenFun acc env aenv (e -> Bool)
            -> PreOpenFun acc env aenv (e -> e)
            -> PreOpenExp acc env aenv e
            -> LiftedExp  acc env aenv' aenv'' e
@@ -1512,7 +1507,7 @@ liftExp vectAcc ctx size exp
     shapeL _
       = error "Absurd"
 
-    cvtTuple :: (IsTuple e, Elt e)
+    cvtTuple :: IsTuple e
              => Tuple (PreOpenExp acc env aenv) (TupleRepr e)
              -> LiftedExp acc env aenv' aenv'' e
     cvtTuple (cvtT -> (at, LiftedTuple aenv t))
@@ -2254,7 +2249,7 @@ var0 = Var ZeroIdx
 var1 :: Elt t1 => PreOpenExp acc ((env, t1), t0) aenv t1
 var1 = Var $ SuccIdx ZeroIdx
 
-var2 :: (Kit acc, Elt t)
+var2 :: Elt t
      => PreOpenExp acc (((env, t), s), r) aenv t
 var2 = Var . SuccIdx . SuccIdx $ ZeroIdx
 
@@ -2322,8 +2317,7 @@ segmented f = Lam . Lam . Body
               (sndE var0)
               (subApplyE2 (weakenE2 f) (sndE var0) (sndE var1)))
 
-maximum :: Kit acc
-        => PreOpenExp acc env aenv Int
+maximum :: PreOpenExp acc env aenv Int
         -> PreOpenExp acc env aenv Int
         -> PreOpenExp acc env aenv Int
 maximum a b = PrimApp (PrimMax scalarType) (tup a b)
@@ -2370,17 +2364,17 @@ weakenE1 = weakenE SuccIdx
 weakenE2 :: SinkExp f => f env aenv t -> f ((env,s1),s0) aenv t
 weakenE2 = weakenE (SuccIdx . SuccIdx)
 
-fun1 :: (Kit acc, Elt a, Elt b)
+fun1 :: (Elt a, Elt b)
      => (forall env. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b)
      -> PreOpenFun acc env aenv (a -> b)
 fun1 f = Lam (Body (f var0))
 
-fun2 :: (Kit acc, Elt a, Elt b, Elt c)
+fun2 :: (Elt a, Elt b, Elt c)
      => (forall env. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv c)
      -> PreOpenFun acc env aenv (a -> b -> c)
 fun2 f = Lam (Lam (Body (f var1 var0)))
 
-fun3 :: (Kit acc, Elt a, Elt b, Elt c, Elt d)
+fun3 :: (Elt a, Elt b, Elt c, Elt d)
      => (forall env'. PreOpenExp acc env' aenv a -> PreOpenExp acc env' aenv b -> PreOpenExp acc env' aenv c -> PreOpenExp acc env' aenv d)
      -> PreOpenFun acc env aenv (a -> b -> c -> d)
 fun3 f = Lam (Lam (Lam (Body (f var2 var1 var0))))
@@ -2714,7 +2708,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     nil :: forall aenv. acc aenv ()
     nil = inject $ Atuple NilAtup
 
-    cvtE :: Elt t => PreExp acc aenv t -> Maybe (PreExp acc aenv' t)
+    cvtE :: PreExp acc aenv t -> Maybe (PreExp acc aenv' t)
     cvtE e | Just e' <- strengthenUnder ctx e
            = Just e'
     cvtE _ = Nothing

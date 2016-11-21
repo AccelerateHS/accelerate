@@ -892,7 +892,7 @@ deannotate (Dproducer wenv (DproduceAccum (Stream l f s)) _ ds)
 deannotate (Dconsumers cons)
   = Consumer $ dcons cons
   where
-    dcons :: forall aenv a. Elt index => Dconsumer index acc aenv a -> Consumer index acc aenv a
+    dcons :: forall aenv a. Dconsumer index acc aenv a -> Consumer index acc aenv a
     dcons (Ddone env a envd d) = Last (weaken (abstract env) a) (weaken (abstract envd) d)
     dcons (Dtuple t) = Stuple (dtup t)
       where
@@ -908,8 +908,7 @@ makeDependent :: forall index acc aenv arrs. (Kit acc, Elt index)
               -> DependentSeq index acc aenv arrs
 makeDependent = fst . makeD
   where
-    makeD :: forall aenv arrs. Elt index
-          => PreOpenSeq index acc aenv arrs
+    makeD :: forall aenv arrs. PreOpenSeq index acc aenv arrs
           -> (DependentSeq index acc aenv arrs, Count aenv)
     makeD (Producer p s)
       | Stronger env <- dependenciesProducer dependenciesAcc p
@@ -927,8 +926,7 @@ makeDependent = fst . makeD
     makeP (ProduceAccum l f a) = DproduceAccum (Stream l f a)
     makeP _ = $internalError "makeDependent" "AST is at incorrect stage for fusion"
 
-    makeC :: forall aenv arrs. Elt index
-          => Consumer index acc aenv arrs
+    makeC :: forall aenv arrs. Consumer index acc aenv arrs
           -> (DependentSeq index acc aenv arrs, Count aenv)
     makeC (Last a d)
       | Stronger env  <- dependenciesAcc a
@@ -941,8 +939,7 @@ makeDependent = fst . makeD
       | (t', counts) <- makeT t
       = (Dconsumers (Dtuple t'), counts)
       where
-        makeT :: forall aenv arrs. Elt index
-              => Atuple (PreOpenSeq index acc aenv) arrs
+        makeT :: forall aenv arrs. Atuple (PreOpenSeq index acc aenv) arrs
               -> (Atuple (DependentSeq index acc aenv) arrs, Count aenv)
         makeT NilAtup = (NilAtup, CountBase)
         makeT (t `SnocAtup` c)
@@ -1607,7 +1604,7 @@ transformD sh' p f
 --       expensive and/or `sh` is large.
 --
 replicateD
-    :: (Kit acc, Shape sh, Shape sl, Slice slix, Elt slix)
+    :: (Kit acc, Shape sh, Shape sl, Slice slix)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> PreExp     acc aenv slix
     -> Cunctation acc aenv (Array sl e)
@@ -1620,7 +1617,7 @@ replicateD sliceIndex slix cc
 -- Dimensional slice as a backwards permutation
 --
 sliceD
-    :: (Kit acc, Shape sh, Shape sl, Elt slix, Slice slix)
+    :: (Kit acc, Shape sh, Shape sl, Slice slix)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> PreExp     acc aenv slix
     -> Cunctation acc aenv (Array sh e)
@@ -1863,7 +1860,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     -- extra type variables, and ensures we don't do extra work manipulating the
     -- body when not necessary (which can lead to a complexity blowup).
     --
-    eliminate :: forall aenv aenv' t brrs. (Kit acc, Arrays brrs, Arrays t)
+    eliminate :: forall aenv aenv' t brrs. (Arrays brrs, Arrays t)
               => Elim acc aenv' t
               -> Extend     acc aenv aenv'
               -> Cunctation acc      aenv' t
@@ -1962,7 +1959,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Body e          -> Body (replaceE sh' f' avar e)
         Lam f           -> Lam  (replaceF (weakenE SuccIdx sh') (weakenE SuccIdx f') avar f)
 
-    replaceA :: forall aenv t a. (Kit acc, Arrays t)
+    replaceA :: forall aenv t a. Arrays t
              => Cunctation acc aenv t -> Idx aenv t
              -> PreOpenAcc acc aenv a
              -> PreOpenAcc acc aenv a
@@ -2039,7 +2036,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         reduceAcond (Const f) t e = if f then extract t else extract e
         reduceAcond f t e         = Acond f t e
 
-    replaceSeq :: forall index aenv t t'. (Kit acc, Arrays t')
+    replaceSeq :: forall index aenv t t'. Arrays t'
                => Cunctation acc aenv t' -> Idx aenv t'
                -> PreOpenSeq index acc aenv t -> PreOpenSeq index acc aenv t
     replaceSeq cunc avar s =
@@ -2098,7 +2095,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     assumeArray _ _ a
       = a
 
-    subtupleA :: forall aenv aenv' t a. (IsAtuple t, Kit acc, Arrays t)
+    subtupleA :: forall aenv aenv' t a. (IsAtuple t, Arrays t)
               => Atuple (acc aenv') (TupleRepr t)
               -> Idx aenv t
               -> aenv :> aenv'
@@ -2187,7 +2184,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
             prj (SuccTupIdx ix) (s `SnocAtup` _) = prj ix s
 
 
-    subtupleSeq :: forall index aenv aenv' t t'. (IsAtuple t', Kit acc, Arrays t')
+    subtupleSeq :: forall index aenv aenv' t t'. (IsAtuple t', Arrays t')
                 => Atuple (acc aenv') (TupleRepr t')
                 -> Idx aenv t'
                 -> aenv :> aenv'
@@ -2322,7 +2319,7 @@ aprjD embedAcc ix a
 -- variables to have zero space cost, as well as tuple construction and let
 -- bindings when their subterms also have no cost.
 --
-atupleD :: forall acc aenv a. (Kit acc, Arrays a, IsAtuple a)
+atupleD :: forall acc aenv a. (Arrays a, IsAtuple a)
         => EmbedAcc acc
         -> Atuple (acc aenv) (TupleRepr a)
         -> Embed acc aenv a

@@ -574,8 +574,7 @@ usesOfPreAcc countAcc idx = count
     countA :: acc aenv a -> Use s
     countA = countAcc idx
 
-    countAF :: Kit acc
-            => PreOpenAfun acc aenv' f
+    countAF :: PreOpenAfun acc aenv' f
             -> Idx aenv' s
             -> Use s
     countAF (Alam f)  v = countAF f (SuccIdx v)
