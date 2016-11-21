@@ -42,7 +42,6 @@ import Data.Maybe                                       ( fromMaybe )
 import Data.Typeable
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative                              hiding ( Const, empty )
-import Control.Monad                                    ( (>=>) )
 #endif
 
 -- friends
