@@ -59,7 +59,7 @@ import Unsafe.Coerce                                    ( unsafeCoerce )
 import Prelude                                          hiding ( sum )
 
 #if __GLASGOW_HASKELL__ <= 708
-import Control.Applicative                              ( (<$>), (<*>) )
+import Control.Applicative                              ( (<$>), (<*>), pure )
 #endif
 
 -- friends
