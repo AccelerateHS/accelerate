@@ -5,7 +5,6 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE ImpredicativeTypes    #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -1159,7 +1158,7 @@ infix 2 :<=
 instance Z :<= sh where
   maximumRank = RankZ
 
-instance (sh1 :<= sh2) => sh1:.Int :<= sh2:.Int where
+instance (sh1 :<= sh2) => (sh1:.Int) :<= (sh2:.Int) where
   maximumRank = RankSnoc maximumRank
 
 infix 2 :<=:
