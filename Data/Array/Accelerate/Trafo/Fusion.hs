@@ -57,7 +57,7 @@ import Data.Monoid                                      ( (<>) )
 
 #if __GLASGOW_HASKELL__ <= 708
 import Data.Functor                                     ( (<$>) )
-import Data.Monoid                                      ( Monoid )
+import Data.Monoid                                      ( Monoid(..) )
 #endif
 
 -- friends

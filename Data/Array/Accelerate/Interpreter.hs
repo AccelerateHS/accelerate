@@ -58,6 +58,10 @@ import Data.Maybe                                       ( fromMaybe, fromJust )
 import Unsafe.Coerce                                    ( unsafeCoerce )
 import Prelude                                          hiding ( sum )
 
+#if __GLASGOW_HASKELL__ <= 708
+import Control.Applicative                              ( (<$>), (<*>) )
+#endif
+
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Data
