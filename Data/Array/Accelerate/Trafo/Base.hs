@@ -63,6 +63,10 @@ import Data.Typeable
 import Text.PrettyPrint                                 hiding ( (<>) )
 import Prelude                                          hiding ( until )
 
+#if __GLASGOW_HASKELL__ <= 708
+import Control.Applicative                              ( (<$>), (<*>) )
+#endif
+
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( Val(..) )
 import Data.Array.Accelerate.Analysis.Match
