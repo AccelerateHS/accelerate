@@ -1,5 +1,4 @@
 {-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE DefaultSignatures   #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -38,7 +37,6 @@ module Data.Array.Accelerate.Trafo.Substitution (
 ) where
 
 import Control.Applicative                              hiding ( Const )
-import Data.Traversable                                 ( sequenceA )
 import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
@@ -123,15 +121,13 @@ instance Functor Identity where
   fmap f (Identity a) = Identity (f a)
 
 instance Applicative Identity where
-  (Identity f) <*> (Identity a) = Identity (f a)
-  pure a = Identity a
+  Identity f <*> Identity a = Identity (f a)
+  pure a                    = Identity a
 
 -- A class for rebuilding terms.
 --
--- Minimal complete definition is 'AccClo' and rebuild'.
---
 class Rebuildable f where
-
+  {-# MINIMAL rebuildPartial #-}
   type AccClo f :: (* -> * -> *)
 
   rebuildPartial :: (Applicative f', SyntacticAcc fa)
@@ -139,6 +135,7 @@ class Rebuildable f where
                  -> f aenv  a
                  -> f' (f aenv' a)
 
+  {-# INLINEABLE rebuildA #-}
   rebuildA :: (SyntacticAcc fa)
               => (forall a'. Arrays a' => Idx aenv a' -> fa (AccClo f) aenv' a')
               -> f aenv  a
@@ -147,16 +144,16 @@ class Rebuildable f where
 
 -- A class for rebuilding scalar terms.
 --
--- Minimal complete definition is 'AccClo' and rebuild'.
---
 class RebuildableExp f where
   type AccCloE (f :: * -> * -> * -> *) :: * -> * -> *
 
+  {-# MINIMAL rebuildPartialE #-}
   rebuildPartialE :: (Applicative f', SyntacticExp fe)
                   => (forall e'. Elt e' => Idx env e' -> f' (fe (AccCloE f) env' aenv e'))
                   -> f env aenv  e
                   -> f' (f env' aenv e)
 
+  {-# INLINABLE rebuildE #-}
   rebuildE :: SyntacticExp fe
            => (forall e'. Elt e' => Idx env e' -> fe (AccCloE f) env' aenv e')
            -> f env aenv  e
@@ -171,18 +168,22 @@ type RebuildableAcc acc = (Rebuildable acc, AccClo acc ~ acc)
 --
 instance RebuildableAcc acc => Rebuildable (PreOpenExp acc env) where
   type AccClo (PreOpenExp acc env) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildPreOpenExp rebuildPartial (pure . IE)
 
 instance RebuildableAcc acc => Rebuildable (PreOpenFun acc env) where
   type AccClo (PreOpenFun acc env) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildFun rebuildPartial (pure . IE)
 
 instance RebuildableAcc acc => Rebuildable (PreOpenAcc acc) where
   type AccClo (PreOpenAcc acc) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildPreOpenAcc rebuildPartial
 
 instance RebuildableAcc acc => Rebuildable (PreOpenAfun acc) where
   type AccClo (PreOpenAfun acc) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildAfun rebuildPartial
 
 instance RebuildableAcc acc => Rebuildable (PreOpenSeq index acc) where
@@ -203,6 +204,7 @@ newtype RebuildAtup acc aenv t = RebuildAtup { unRAtup :: Atuple (acc aenv) t }
 
 instance RebuildableAcc acc => Rebuildable (RebuildTup acc env) where
   type AccClo (RebuildTup acc env) = acc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial v t = RebuildTup <$> rebuildTup rebuildPartial (pure . IE) v (unRTup t)
 
 instance RebuildableAcc acc => Rebuildable (RebuildAtup acc) where
@@ -211,14 +213,17 @@ instance RebuildableAcc acc => Rebuildable (RebuildAtup acc) where
 
 instance Rebuildable OpenAcc where
   type AccClo OpenAcc = OpenAcc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial = rebuildOpenAcc
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenExp acc) where
   type AccCloE (PreOpenExp acc) = acc
+  {-# INLINEABLE rebuildPartialE #-}
   rebuildPartialE v = rebuildPreOpenExp rebuildPartial v (pure . IA)
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
   type AccCloE (PreOpenFun acc) = acc
+  {-# INLINEABLE rebuildPartialE #-}
   rebuildPartialE v = rebuildFun rebuildPartial v (pure . IA)
 
 instance RebuildableAcc acc => RebuildableExp (RebuildTup acc) where
@@ -245,25 +250,60 @@ type env :> env' = forall t'. Idx env t' -> Idx env' t'
 
 class Sink f where
   weaken :: env :> env' -> f env t -> f env' t
-  default weaken :: Rebuildable f => env :> env' -> f env t -> f env' t
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
-instance Sink Idx where
-  weaken k = k
+  -- TLM: We can't use this default instance because it doesn't lead to
+  --      specialised code. Perhaps the INLINEABLE pragma is ignored: GHC bug?
+  --
+  -- {-# INLINEABLE weaken #-}
+  -- default weaken :: Rebuildable f => env :> env' -> f env t -> f env' t
+  -- weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
 --instance Rebuildable f => Sink f where -- undecidable, incoherent
 --  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
-instance RebuildableAcc acc => Sink (PreOpenAcc acc)
-instance RebuildableAcc acc => Sink (PreOpenAfun acc)
-instance RebuildableAcc acc => Sink (PreOpenExp acc env)
-instance RebuildableAcc acc => Sink (PreOpenFun acc env)
-instance RebuildableAcc acc => Sink (RebuildTup acc env)
-instance RebuildableAcc acc => Sink (RebuildAtup acc)
-instance RebuildableAcc acc => Sink (PreOpenSeq index acc)
-instance RebuildableAcc acc => Sink (Producer index acc)
-instance RebuildableAcc acc => Sink (Consumer index acc)
+instance Sink Idx where
+  {-# INLINEABLE weaken #-}
+  weaken k = k
+
+instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (RebuildAtup acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (RebuildTup acc env) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (PreOpenSeq index acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (Producer index acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
+instance RebuildableAcc acc => Sink (Consumer index acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+
 instance Sink OpenAcc where
+  {-# INLINEABLE weaken #-}
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
 -- This rewrite rule is disabled because 'weaken' is now part of a type class.
 -- As such, we cannot attach a NOINLINE pragma because it has many definitions.
@@ -274,12 +314,24 @@ instance Sink OpenAcc where
 
 class SinkExp f where
   weakenE :: env :> env' -> f env aenv t -> f env' aenv t
-  default weakenE :: RebuildableExp f => env :> env' -> f env aenv t -> f env' aenv t
-  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+
+  -- See comment in 'weaken'
+  --
+  -- {-# INLINEABLE weakenE #-}
+  -- default weakenE :: RebuildableExp f => env :> env' -> f env aenv t -> f env' aenv t
+  -- weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
 
 instance RebuildableAcc acc => SinkExp (PreOpenExp acc) where
+  {-# INLINEABLE weakenE #-}
+  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+
 instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
+  {-# INLINEABLE weakenE #-}
+  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+
 instance RebuildableAcc acc => SinkExp (RebuildTup acc) where
+  {-# INLINEABLE weakenE #-}
+  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
 
 -- See above for why this is disabled.
 -- {-# RULES
@@ -298,9 +350,11 @@ instance RebuildableAcc acc => SinkExp (RebuildTup acc) where
 -- The type of partially shifting terms from one context into another.
 type env :?> env' = forall t'. Idx env t' -> Maybe (Idx env' t')
 
+{-# INLINEABLE strengthen #-}
 strengthen :: Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
 strengthen k = rebuildPartial (fmap IA . k)
 
+{-# INLINEABLE strengthenE #-}
 strengthenE :: RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
 strengthenE k = rebuildPartialE (fmap IE . k)
 
@@ -322,26 +376,28 @@ class SyntacticExp f where
 newtype IdxE (acc :: * -> * -> *) env aenv t = IE { unIE :: Idx env t }
 
 instance SyntacticExp IdxE where
-  varIn         = IE
-  expOut        = Var . unIE
-  weakenExp _   = IE . SuccIdx . unIE
+  varIn          = IE
+  expOut         = Var . unIE
+  weakenExp _    = IE . SuccIdx . unIE
   weakenExpAcc _ = IE . unIE
 
 instance SyntacticExp PreOpenExp where
-  varIn         = Var
-  expOut        = id
-  weakenExp k   = runIdentity . rebuildPreOpenExp k (Identity . weakenExp k . IE) (Identity . IA)
+  varIn          = Var
+  expOut         = id
+  weakenExp k    = runIdentity . rebuildPreOpenExp k (Identity . weakenExp k . IE) (Identity . IA)
   weakenExpAcc k = runIdentity . rebuildPreOpenExp k (Identity . IE) (Identity . weakenAcc k . IA)
 
+{-# INLINEABLE shiftE #-}
 shiftE
     :: (Applicative f, SyntacticExp fe, Elt t)
     => RebuildAcc acc
     -> (forall t'. Elt t' => Idx env t' -> f (fe acc env' aenv t'))
-    -> Idx     (env,  s)      t
-    -> f (fe  acc (env', s) aenv t)
+    -> Idx       (env,  s)      t
+    -> f (fe acc (env', s) aenv t)
 shiftE _ _ ZeroIdx      = pure $ varIn ZeroIdx
 shiftE k v (SuccIdx ix) = weakenExp k <$> (v ix)
 
+{-# INLINEABLE rebuildPreOpenExp #-}
 rebuildPreOpenExp
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
@@ -351,34 +407,35 @@ rebuildPreOpenExp
     -> f (PreOpenExp acc env' aenv' t)
 rebuildPreOpenExp k v av exp =
   case exp of
-    Let a b             -> Let <$> rebuildPreOpenExp k v av a <*> rebuildPreOpenExp k (shiftE k v) av b
-    Var ix              -> expOut <$> v ix
-    Const c             -> pure $ Const c
-    Tuple tup           -> Tuple <$> rebuildTup k v av tup
-    Prj tup e           -> Prj tup <$> rebuildPreOpenExp k v av e
+    Const c             -> pure (Const c)
+    PrimConst c         -> pure (PrimConst c)
     IndexNil            -> pure IndexNil
-    IndexCons sh sz     -> IndexCons <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av sz
-    IndexHead sh        -> IndexHead <$> rebuildPreOpenExp k v av sh
-    IndexTail sh        -> IndexTail <$> rebuildPreOpenExp k v av sh
-    IndexTrans sh       -> IndexTrans <$> rebuildPreOpenExp k v av sh
     IndexAny            -> pure IndexAny
+    Var ix              -> expOut          <$> v ix
+    Let a b             -> Let             <$> rebuildPreOpenExp k v av a  <*> rebuildPreOpenExp k (shiftE k v) av b
+    Tuple tup           -> Tuple           <$> rebuildTup k v av tup
+    Prj tup e           -> Prj tup         <$> rebuildPreOpenExp k v av e
+    IndexCons sh sz     -> IndexCons       <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av sz
+    IndexHead sh        -> IndexHead       <$> rebuildPreOpenExp k v av sh
+    IndexTail sh        -> IndexTail       <$> rebuildPreOpenExp k v av sh
     IndexSlice x ix sh  -> IndexSlice x ix <$> rebuildPreOpenExp k v av sh
-    IndexFull x ix sl   -> IndexFull x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
-    ToIndex sh ix       -> ToIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    FromIndex sh ix     -> FromIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    ToSlice x sh ix     -> ToSlice x <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    Cond p t e          -> Cond <$> rebuildPreOpenExp k v av p <*> rebuildPreOpenExp k v av t <*> rebuildPreOpenExp k v av e
-    While p f x         -> While <$> rebuildFun k v av p <*> rebuildFun k v av f <*> rebuildPreOpenExp k v av x
-    PrimConst c         -> pure $ PrimConst c
-    PrimApp f x         -> PrimApp f <$> rebuildPreOpenExp k v av x
-    Index a sh          -> Index <$> k av a <*> rebuildPreOpenExp k v av sh
-    LinearIndex a i     -> LinearIndex <$> k av a <*> rebuildPreOpenExp k v av i
-    Shape a             -> Shape <$> k av a
-    ShapeSize sh        -> ShapeSize <$> rebuildPreOpenExp k v av sh
-    Intersect s t       -> Intersect <$> rebuildPreOpenExp k v av s <*> rebuildPreOpenExp k v av t
-    Union s t           -> Union <$> rebuildPreOpenExp k v av s <*> rebuildPreOpenExp k v av t
-    Foreign ff f e      -> Foreign ff f <$> rebuildPreOpenExp k v av e
+    IndexFull x ix sl   -> IndexFull x     <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
+    ToIndex sh ix       -> ToIndex         <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    FromIndex sh ix     -> FromIndex       <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    ToSlice x sh ix     -> ToSlice x       <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    IndexTrans sh       -> IndexTrans      <$> rebuildPreOpenExp k v av sh
+    Cond p t e          -> Cond            <$> rebuildPreOpenExp k v av p  <*> rebuildPreOpenExp k v av t  <*> rebuildPreOpenExp k v av e
+    While p f x         -> While           <$> rebuildFun k v av p         <*> rebuildFun k v av f         <*> rebuildPreOpenExp k v av x
+    PrimApp f x         -> PrimApp f       <$> rebuildPreOpenExp k v av x
+    Index a sh          -> Index           <$> k av a                      <*> rebuildPreOpenExp k v av sh
+    LinearIndex a i     -> LinearIndex     <$> k av a                      <*> rebuildPreOpenExp k v av i
+    Shape a             -> Shape           <$> k av a
+    ShapeSize sh        -> ShapeSize       <$> rebuildPreOpenExp k v av sh
+    Intersect s t       -> Intersect       <$> rebuildPreOpenExp k v av s  <*> rebuildPreOpenExp k v av t
+    Union s t           -> Union           <$> rebuildPreOpenExp k v av s  <*> rebuildPreOpenExp k v av t
+    Foreign ff f e      -> Foreign ff f    <$> rebuildPreOpenExp k v av e
 
+{-# INLINEABLE rebuildTup #-}
 rebuildTup
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
@@ -391,6 +448,7 @@ rebuildTup k v av tup =
     NilTup      -> pure NilTup
     SnocTup t e -> SnocTup <$> rebuildTup k v av t <*> rebuildPreOpenExp k v av e
 
+{-# INLINEABLE rebuildFun #-}
 rebuildFun
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
@@ -429,6 +487,7 @@ instance SyntacticAcc PreOpenAcc where
   accOut        = id
   weakenAcc k   = runIdentity . rebuildPreOpenAcc k (Identity . weakenAcc k . IA)
 
+{-# INLINEABLE shiftA #-}
 shiftA
     :: (Applicative f, SyntacticAcc fa, Arrays t)
     => RebuildAcc acc
@@ -438,6 +497,7 @@ shiftA
 shiftA _ _ ZeroIdx      = pure $ avarIn ZeroIdx
 shiftA k v (SuccIdx ix) = weakenAcc k <$> v ix
 
+{-# INLINEABLE rebuildPreOpenAcc #-}
 rebuildPreOpenAcc
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -446,43 +506,41 @@ rebuildPreOpenAcc
     -> f (PreOpenAcc acc aenv' t)
 rebuildPreOpenAcc k av acc =
   case acc of
-    Alet a b            -> Alet <$> k av a <*> k (shiftA k av) b
-    Avar ix             -> accOut <$> av ix
-    Atuple tup          -> Atuple <$> rebuildAtup k av tup
-    Aprj tup a          -> Aprj tup <$> k av a
-    Apply f a           -> Apply <$> rebuildAfun k av f <*> k av a
-    Aforeign ff afun as -> Aforeign ff afun <$> k av as
-    Acond p t e         -> Acond <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
-    Awhile p f a        -> Awhile <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
-    Use a               -> pure $ Use a
-    Subarray ix sh a    -> Subarray <$> rebuildPreOpenExp k (pure . IE) av ix <*> rebuildPreOpenExp k (pure . IE) av sh <*> pure a
-    Unit e              -> Unit <$> rebuildPreOpenExp k (pure . IE) av e
-    Reshape e a         -> Reshape <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
-    Generate e f        -> Generate <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
-    Transform sh ix f a -> Transform <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
-    Replicate sl slix a -> Replicate sl <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
-    Slice sl a slix     -> Slice sl <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
-    Map f a             -> Map <$> rebuildFun k (pure . IE) av f <*> k av a
-    ZipWith f a1 a2     -> ZipWith <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
-    Fold f z a          -> Fold <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Fold1 f a           -> Fold1 <$> rebuildFun k (pure . IE) av f <*> k av a
-    FoldSeg f z a s     -> FoldSeg <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
-    Fold1Seg f a s      -> Fold1Seg <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
-    Scanl f z a         -> Scanl <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl' f z a        -> Scanl' <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl1 f a          -> Scanl1 <$> rebuildFun k (pure . IE) av f <*> k av a
-    Scanr f z a         -> Scanr <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr' f z a        -> Scanr' <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr1 f a          -> Scanr1 <$> rebuildFun k (pure . IE) av f <*> k av a
-    Permute f1 a1 f2 a2 -> Permute <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
-    Backpermute sh f a  -> Backpermute <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
-    Stencil f b a       -> Stencil <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
-    Stencil2 f b1 a1 b2 a2
-                        -> Stencil2 <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
-    Collect min max i s cs
-                        -> Collect <$> rebuildPreOpenExp k (pure . IE) av min <*> sequenceA (rebuildPreOpenExp k (pure . IE) av <$> max)
-                                   <*> sequenceA (rebuildPreOpenExp k (pure . IE) av <$> i) <*> rebuildSeq k av s <*> sequenceA (rebuildSeq k av <$> cs)
+    Use a                   -> pure (Use a)
+    Alet a b                -> Alet         <$> k av a <*> k (shiftA k av) b
+    Avar ix                 -> accOut       <$> av ix
+    Atuple tup              -> Atuple       <$> rebuildAtup k av tup
+    Aprj tup a              -> Aprj tup     <$> k av a
+    Apply f a               -> Apply        <$> rebuildAfun k av f <*> k av a
+    Acond p t e             -> Acond        <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
+    Awhile p f a            -> Awhile       <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
+    Subarray ix sh a        -> Subarray     <$> rebuildPreOpenExp k (pure . IE) av ix <*> rebuildPreOpenExp k (pure . IE) av sh <*> pure a
+    Unit e                  -> Unit         <$> rebuildPreOpenExp k (pure . IE) av e
+    Reshape e a             -> Reshape      <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
+    Generate e f            -> Generate     <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
+    Transform sh ix f a     -> Transform    <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
+    Replicate sl slix a     -> Replicate sl <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
+    Slice sl a slix         -> Slice sl     <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
+    Map f a                 -> Map          <$> rebuildFun k (pure . IE) av f <*> k av a
+    ZipWith f a1 a2         -> ZipWith      <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
+    Fold f z a              -> Fold         <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Fold1 f a               -> Fold1        <$> rebuildFun k (pure . IE) av f <*> k av a
+    FoldSeg f z a s         -> FoldSeg      <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
+    Fold1Seg f a s          -> Fold1Seg     <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
+    Scanl f z a             -> Scanl        <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl' f z a            -> Scanl'       <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl1 f a              -> Scanl1       <$> rebuildFun k (pure . IE) av f <*> k av a
+    Scanr f z a             -> Scanr        <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr' f z a            -> Scanr'       <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr1 f a              -> Scanr1       <$> rebuildFun k (pure . IE) av f <*> k av a
+    Permute f1 a1 f2 a2     -> Permute      <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
+    Backpermute sh f a      -> Backpermute  <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
+    Stencil f b a           -> Stencil      <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
+    Stencil2 f b1 a1 b2 a2  -> Stencil2     <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
+    Collect min max i s cs  -> Collect      <$> rebuildPreOpenExp k (pure . IE) av min <*> traverse (rebuildPreOpenExp k (pure . IE) av) max <*> traverse (rebuildPreOpenExp k (pure . IE) av) i <*> rebuildSeq k av s <*> traverse (rebuildSeq k av) cs
+    Aforeign ff afun as     -> Aforeign ff afun <$> k av as
 
+{-# INLINEABLE rebuildAfun #-}
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -494,6 +552,7 @@ rebuildAfun k av afun =
     Abody b     -> Abody <$> k av b
     Alam f      -> Alam  <$> rebuildAfun k (shiftA k av) f
 
+{-# INLINEABLE rebuildAtup #-}
 rebuildAtup
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -505,6 +564,7 @@ rebuildAtup k av atup =
     NilAtup      -> pure NilAtup
     SnocAtup t a -> SnocAtup <$> rebuildAtup k av t <*> k av a
 
+{-# INLINEABLE rebuildSeq #-}
 rebuildSeq
     :: (SyntacticAcc fa, Applicative f)
     => RebuildAcc acc
@@ -517,6 +577,7 @@ rebuildSeq k v seq =
     Consumer c   -> Consumer <$> rebuildC k v c
     Reify  a     -> Reify    <$> k v a
 
+{-# INLINEABLE rebuildP #-}
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
@@ -530,6 +591,7 @@ rebuildP k v p =
     -- MapBatch f c c' a x -> MapBatch <$> rebuildAfun k v f <*> rebuildAfun k v c <*> rebuildAfun k v c' <*> k v a <*> k v x
     ProduceAccum l f a  -> ProduceAccum <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f <*> k v a
 
+{-# INLINEABLE rebuildC #-}
 rebuildC :: forall idx acc fa f aenv aenv' a. (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
@@ -549,6 +611,7 @@ rebuildC k v c =
 
 -- For OpenAcc
 
+{-# INLINEABLE rebuildOpenAcc #-}
 rebuildOpenAcc
     :: (Applicative f, SyntacticAcc fa)
     => (forall t'. Arrays t' => Idx aenv t' -> f (fa OpenAcc aenv' t'))

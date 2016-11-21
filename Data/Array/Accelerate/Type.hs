@@ -1,9 +1,12 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies       #-}
-{-# LANGUAGE TypeOperators      #-}
+{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DeriveDataTypeable   #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE StandaloneDeriving   #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -19,32 +22,62 @@
 --
 --  /Scalar types supported in array computations/
 --
---  Integral types: Int, Int8, Int16, Int32, Int64, Word, Word8, Word16, Word32,
---    Word64, CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong
+--  Integral types:
+--    * Int
+--    * Int8
+--    * Int16
+--    * Int32
+--    * Int64
+--    * Word
+--    * Word8
+--    * Word16
+--    * Word32
+--    * Word64
+--    * CShort
+--    * CUShort
+--    * CInt
+--    * CUInt
+--    * CLong
+--    * CULong
+--    * CLLong
+--    * CULLong
 --
---  Floating types: Float, Double, CFloat, CDouble
+--  Floating types:
+--    * Float
+--    * Double
+--    * CFloat
+--    * CDouble
 --
---  Non-numeric types: Bool, Char, CChar, CSChar, CUChar
+--  Non-numeric types:
+--    * Bool
+--    * Char
+--    * CChar
+--    * CSChar
+--    * CUChar
 --
---  'Int' has the same bitwidth as in plain Haskell computations, and 'Float'
---  and 'Double' represent IEEE single and double precision floating point
---  numbers, respectively.
+--  Note that 'Int' has the same bit width as in plain Haskell computations, and
+--  'Float' and 'Double' represent IEEE single and double precision floating
+--  point numbers, respectively.
 --
 
 module Data.Array.Accelerate.Type (
+  Float, Double, Char, Bool(..),
   module Data.Int,
   module Data.Word,
   module Foreign.C.Types,
   module Data.Array.Accelerate.Type
 ) where
 
--- Imports Typeable instances for 8-tuples and beyond
-import Data.Orphans ()
+
+import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
+
 -- standard libraries
 import Data.Bits
 import Data.Int
+import Data.Type.Equality
 import Data.Typeable
 import Data.Word
+import GHC.TypeLits
 import Foreign.Storable
 import Foreign.C.Types (
   CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
@@ -59,17 +92,17 @@ import Foreign.C.Types (
 
 data IntegralDict a where
   IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
-                  , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a)
+                  , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
                => IntegralDict a
 
 data FloatingDict a where
   FloatingDict :: ( Enum a, Eq a, Ord a, Show a
                   , Floating a, Fractional a, Num a, Real a, RealFrac a
-                  , RealFloat a, Storable a)
+                  , RealFloat a, Storable a )
                => FloatingDict a
 
 data NonNumDict a where
-  NonNumDict :: (Bounded a, Enum a, Eq a, Ord a, Show a, Storable a)
+  NonNumDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a, Storable a )
              => NonNumDict a
 
 -- Scalar type representation
@@ -108,7 +141,7 @@ data FloatingType a where
 -- |Non-numeric types supported in array computations.
 --
 data NonNumType a where
-  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to CInt
+  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to Word8
   TypeChar    :: NonNumDict Char      -> NonNumType Char
   TypeCChar   :: NonNumDict CChar     -> NonNumType CChar
   TypeCSChar  :: NonNumDict CSChar    -> NonNumType CSChar
@@ -429,7 +462,7 @@ instance IsBounded CSChar where
 instance IsBounded CUChar where
   boundedType = NonNumBoundedType nonNumType
 
--- |All scalar type
+-- |All scalar types
 --
 class Typeable a => IsScalar a where
   scalarType :: ScalarType a
@@ -552,13 +585,71 @@ nonNumDict (TypeCSChar dict) = dict
 nonNumDict (TypeCUChar dict) = dict
 
 
--- Tuple type
--- ----------
+-- Tuple types
+-- -----------
 
 data TupleType a where
   UnitTuple   ::                               TupleType ()
   SingleTuple :: ScalarType a               -> TupleType a
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
+
+
+-- Type-level bit sizes
+-- --------------------
+
+-- |Constraint that values of these two types have the same bit width
+--
+type BitSizeEq a b = (BitSize a == BitSize b) ~ 'True
+
+type family BitSize a :: Nat
+
+type instance BitSize Int8    = 8
+type instance BitSize Int16   = 16
+type instance BitSize Int32   = 32
+type instance BitSize Int64   = 64
+type instance BitSize Word8   = 8
+type instance BitSize Word16  = 16
+type instance BitSize Word32  = 32
+type instance BitSize Word64  = 64
+type instance BitSize Char    = 32
+type instance BitSize Bool    = 1
+
+type instance BitSize CShort  = 16
+type instance BitSize CUShort = 16
+type instance BitSize CInt    = 32
+type instance BitSize CUInt   = 32
+type instance BitSize CLLong  = 64
+type instance BitSize CULLong = 64
+type instance BitSize CChar   = 8
+type instance BitSize CUChar  = 8
+type instance BitSize CSChar  = 8
+
+type instance BitSize Float   = 32
+type instance BitSize CFloat  = 32
+type instance BitSize Double  = 64
+type instance BitSize CDouble = 64
+
+type instance BitSize Int    = $( case finiteBitSize (undefined::Int) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
+type instance BitSize Word   = $( case finiteBitSize (undefined::Word) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
+type instance BitSize CLong  = $( case finiteBitSize (undefined::CLong) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
+
+type instance BitSize CULong = $( case finiteBitSize (undefined::CULLong) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
 
 -- Stencil support
 -- ---------------

@@ -184,11 +184,16 @@ instance Arrays a => Arrays (Irregular a) where
 arraysP :: Proxy Arrays
 arraysP = Proxy
 
-data VectorisedRegularForeign a b = forall f.  Foreign f => VectorisedRegularForeign (f (Regular a) (Regular b))
+data VectorisedRegularForeign asm where
+  VectorisedRegularForeign :: Foreign f
+                           => f (Regular a -> Regular b)
+                           -> VectorisedRegularForeign (a -> b)
   deriving Typeable
 
 instance Foreign VectorisedRegularForeign where
   strForeign (VectorisedRegularForeign f) = strForeign f
 
-isVectorisedRegular :: (Typeable as, Typeable bs, Foreign f) => f as bs -> Maybe (VectorisedRegularForeign as bs)
+isVectorisedRegular :: (Typeable asm, Foreign f)
+                    => f asm
+                    -> Maybe (VectorisedRegularForeign asm)
 isVectorisedRegular = cast

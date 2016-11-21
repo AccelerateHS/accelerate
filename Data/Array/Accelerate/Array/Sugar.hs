@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
@@ -14,13 +15,16 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+#if __GLASGOW_HASKELL__ <= 708
+{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
+#endif
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
 --               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
---               [2013..2014] Robert Clifton-Everest
+--               [2009..2016] Trevor L. McDonell
+--               [2013..2016] Robert Clifton-Everest
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
@@ -63,9 +67,12 @@ module Data.Array.Accelerate.Array.Sugar (
 ) where
 
 -- standard library
-import Data.Typeable
+import Control.DeepSeq
 import Data.Array.IArray                                        ( IArray )
+import Data.List                                                ( intercalate )
+import Data.Typeable
 import qualified Data.Array.IArray                              as IArray
+import qualified Data.List                                      as List
 
 import GHC.Exts                                                 ( IsList )
 import qualified GHC.Exts                                       as GHC
@@ -607,13 +614,10 @@ sinkFromElt2 :: (Elt a, Elt b, Elt c)
 {-# INLINE sinkFromElt2 #-}
 sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 
-{-# RULES
-
-"fromElt/toElt" forall e.
-  fromElt (toElt e) = e
-
-"toElt/fromElt" forall e.
-  toElt (fromElt e) = e #-}
+-- {-# RULES
+-- "fromElt/toElt" forall e. fromElt (toElt e) = e
+-- "toElt/fromElt" forall e. toElt (fromElt e) = e
+-- #-}
 
 
 -- Foreign functions
@@ -623,11 +627,11 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 -- By default it has no instances. If a backend wishes to have an FFI it must
 -- provide an instance.
 --
-class Typeable f => Foreign (f :: * -> * -> *) where
+class Typeable asm => Foreign asm where
 
   -- Backends should be able to produce a string representation of the foreign
   -- function for pretty printing, typically the name of the function.
-  strForeign :: f args results -> String
+  strForeign :: asm args -> String
 
 
 -- Surface arrays
@@ -806,13 +810,10 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromArr o)
 
 
-{-# RULES
-
-"fromArr/toArr" forall a.
-  fromArr (toArr a) = a
-
-"toArr/fromArr" forall a.
-  toArr (fromArr a) = a #-}
+-- {-# RULES
+-- "fromArr/toArr" forall a. fromArr (toArr a) = a
+-- "toArr/fromArr" forall a. toArr (fromArr a) = a
+-- #-}
 
 
 -- Tuple representation
@@ -864,6 +865,40 @@ data Array sh e where
 
 deriving instance Typeable Array
 
+instance NFData (Array sh e) where
+  rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
+    where
+      go :: ArrayEltR e' -> ArrayData e' -> ()
+      go ArrayEltRunit         AD_Unit         = ()
+      go ArrayEltRint          (AD_Int ua)     = rnf ua
+      go ArrayEltRint8         (AD_Int8 ua)    = rnf ua
+      go ArrayEltRint16        (AD_Int16 ua)   = rnf ua
+      go ArrayEltRint32        (AD_Int32 ua)   = rnf ua
+      go ArrayEltRint64        (AD_Int64 ua)   = rnf ua
+      go ArrayEltRword         (AD_Word ua)    = rnf ua
+      go ArrayEltRword8        (AD_Word8 ua)   = rnf ua
+      go ArrayEltRword16       (AD_Word16 ua)  = rnf ua
+      go ArrayEltRword32       (AD_Word32 ua)  = rnf ua
+      go ArrayEltRword64       (AD_Word64 ua)  = rnf ua
+      go ArrayEltRcshort       (AD_CShort ua)  = rnf ua
+      go ArrayEltRcushort      (AD_CUShort ua) = rnf ua
+      go ArrayEltRcint         (AD_CInt ua)    = rnf ua
+      go ArrayEltRcuint        (AD_CUInt ua)   = rnf ua
+      go ArrayEltRclong        (AD_CLong ua)   = rnf ua
+      go ArrayEltRculong       (AD_CULong ua)  = rnf ua
+      go ArrayEltRcllong       (AD_CLLong ua)  = rnf ua
+      go ArrayEltRcullong      (AD_CULLong ua) = rnf ua
+      go ArrayEltRfloat        (AD_Float ua)   = rnf ua
+      go ArrayEltRdouble       (AD_Double ua)  = rnf ua
+      go ArrayEltRcfloat       (AD_CFloat ua)  = rnf ua
+      go ArrayEltRcdouble      (AD_CDouble ua) = rnf ua
+      go ArrayEltRbool         (AD_Bool ua)    = rnf ua
+      go ArrayEltRchar         (AD_Char ua)    = rnf ua
+      go ArrayEltRcchar        (AD_CChar ua)   = rnf ua
+      go ArrayEltRcschar       (AD_CSChar ua)  = rnf ua
+      go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
+      go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
+
 -- |Scalars arrays hold a single element
 --
 type Scalar e = Array DIM0 e
@@ -902,7 +937,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
        => Shape sh where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
-  dim    :: sh -> Int
+  rank   :: sh -> Int
 
   -- |Total number of elements in an array of the given /shape/.
   size   :: sh -> Int
@@ -966,7 +1001,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
 
   shapeType :: proxy sh -> ShapeR sh
 
-  dim                   = Repr.dim . fromElt
+  rank                  = Repr.rank . fromElt
   size                  = Repr.size . fromElt
   empty                 = toElt Repr.empty
   -- (#) must be individually defined, as it holds for all instances *except*
@@ -1227,7 +1262,7 @@ fromIArray iarr = newArray sh (\ix -> iarr IArray.! fromIxShapeRepr ix)
 
 -- | Convert an accelerated array to an 'IArray'.
 --
-toIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
+toIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix)
          => Array sh e -> a ix e
 toIArray arr = IArray.array bnds [(ix, arr ! toIxShapeRepr ix) | ix <- IArray.range bnds]
   where
@@ -1266,26 +1301,22 @@ toList (Array sh adata) = go 0
     go !i | i >= n      = []
           | otherwise   = toElt (adata `unsafeIndexArrayData` i) : go (i+1)
 
--- Convert an array to a string
---
-instance Show (Array sh e) where
-  show arr@Array{}
-    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
-
 instance Elt e => IsList (Vector e) where
   type Item (Vector e) = e
   toList         = toList
   fromListN n xs = fromList (Z:.n) xs
   fromList xs    = GHC.fromListN (length xs) xs
 
-{--
--- Specialised Show instances for dimensions zero, one, and two. Requires
--- overlapping instances.
+#if __GLASGOW_HASKELL__ >= 710
+-- Convert an array to a string, using specialised instances for dimensions
+-- zero, one, and two. These are available for ghc-7.10 and later only (earlier
+-- versions of ghc would require -XIncoherentInstances in the client module).
 --
 -- TODO:
---   * Formatting of the matrix should be better, such as aligning the columns?
---   * Make matrix formatting optional? It is more difficult to copy/paste the
---     result, for example.
+--   * Make special formatting optional? It is more difficult to copy/paste the
+--     result, for example. Also it does not look good if the matrix row does
+--     not fit on a single line.
+--   * The AST pretty printer does not use these instances
 --
 instance Show (Scalar e) where
   show arr@Array{}
@@ -1297,16 +1328,36 @@ instance Show (Vector e) where
 
 instance Show (Array DIM2 e) where
   show arr@Array{}
-    = "Array (" ++ showShape (shape arr) ++ ") \n " ++ showMat (toMatrix (toList arr))
+    = "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat (toMatrix (toList arr))
     where
-      showRow xs        = intercalate "," (map show xs)
-      showMat mat       = "[" ++ intercalate "\n ," (map showRow mat) ++ "]"
-
       Z :. _ :. cols    = shape arr
       toMatrix []       = []
       toMatrix xs       = let (r,rs) = splitAt cols xs
                           in  r : toMatrix rs
---}
+
+      showMat []        = "[]"
+      showMat mat       = "\n  " ++ ppMat (map (map show) mat)
+
+      ppRow row         = concatMap (++",") row
+      ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
+      ppColumns         = List.transpose . map (\col -> pad (width col) col) . List.transpose
+        where
+          extra = 1
+          width = maximum . map length
+          pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
+#endif
+
+-- This is a bit unfortunate, but we need to use an INCOHERENT instance because
+-- GHC can't determine that with the above specialisations, a DIM3+ instance
+-- covers all remaining possibilities, and lacking a general instance is
+-- problematic for operations which want a 'Show (Array sh e)' constraint.
+-- Furthermore, those clients are likely to pick this instance, rather than the
+-- more specific ones above, which is (perhaps) a little unfortunate.
+--
+instance {-# INCOHERENT #-} Show (Array sh e) where
+  show arr@Array{}
+    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
 
 -- | Nicely format a shape as a string
 --

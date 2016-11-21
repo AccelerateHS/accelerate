@@ -1,13 +1,12 @@
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE OverlappingInstances #-}   -- TLM: required by client code
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# OPTIONS_GHC -fno-warn-missing-methods #-}
-{-# OPTIONS_GHC -fno-warn-orphans         #-}
+{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies     #-}
+{-# LANGUAGE TypeOperators    #-}
+{-# LANGUAGE ViewPatterns     #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2016] Trevor L. McDonell
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
@@ -37,7 +36,7 @@ module Data.Array.Accelerate.Language (
   -- * Shape manipulation
   reshape,
 
-  -- * Extraction of subarrays
+  -- * Extraction of sub-arrays
   slice,
 
   -- * Map-like functions
@@ -77,61 +76,45 @@ module Data.Array.Accelerate.Language (
   Stencil3x5x5, Stencil5x5x5,
 
   -- * Foreign functions
-  foreignAcc, foreignAcc2, foreignAcc3,
-  foreignExp, foreignExp2, foreignExp3,
+  foreignAcc,
+  foreignExp,
   VectorisedRegularForeign(..),
 
   -- * Pipelining
   (>->),
-
-  -- * Array-level flow-control
-  acond, awhile,
 
   -- * Index construction and destruction
   indexHead, indexTail, toIndex, fromIndex, indexSlice, indexTrans,
   intersect, union, toSlice,
 
   -- * Flow-control
-  cond, while,
+  acond, awhile,
+  cond,  while,
 
   -- * Array operations with a scalar result
   (!), (!!), shape, size, shapeSize,
 
-  -- * Methods of H98 classes that we need to redefine as their signatures change
-  (==*), (/=*), (<*), (<=*), (>*), (>=*),
-  bit, setBit, clearBit, complementBit, testBit,
-  shift,  shiftL,  shiftR,
-  rotate, rotateL, rotateR,
-  truncate, round, floor, ceiling,
-  even, odd, isNaN,
-
-  -- * Standard functions that we need to redefine as their signatures change
-  (&&*), (||*), not,
+  -- * Numeric functions
+  subtract, even, odd, gcd, lcm,
 
   -- * Conversions
-  ord, chr, boolToInt, fromIntegral,
+  ord, chr, boolToInt, bitcast,
 
   -- * Constants
   ignore
 
-  -- Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
-  -- Fractional, RealFrac, RealFloat
-
 ) where
 
--- standard libraries
-import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
-  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error )
-import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
-import qualified Prelude                                as P
-import Text.Printf
-
 -- friends
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union, toSlice)
 import Data.Array.Accelerate.Array.Lifted               ( VectorisedRegularForeign(..) )
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union, toSlice)
+import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+
+-- standard libraries
+import Prelude                                          ( ($), (.) )
 
 
 -- Array introduction
@@ -265,6 +248,9 @@ zipWith = Acc $$$ ZipWith
 -- | Reduction of the innermost dimension of an array of arbitrary rank.  The
 -- first argument needs to be an /associative/ function to enable an efficient
 -- parallel implementation.
+--
+-- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
+-- compute multiple results from a single reduction.
 --
 fold :: (Shape ix, Elt a)
      => (Exp a -> Exp a -> Exp a)
@@ -449,25 +435,25 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 --  array, a boundary condition determines the contents of the out-of-bounds neighbourhood
 --  positions.
 --
-stencil :: (Shape ix, Elt a, Elt b, Stencil ix a stencil)
-        => (stencil -> Exp b)                 -- ^stencil function
-        -> Boundary a                         -- ^boundary condition
-        -> Acc (Array ix a)                   -- ^source array
-        -> Acc (Array ix b)                   -- ^destination array
+stencil
+    :: (Stencil sh a stencil, Elt b)
+    => (stencil -> Exp b)                     -- ^ stencil function
+    -> Boundary a                             -- ^ boundary condition
+    -> Acc (Array sh a)                       -- ^ source array
+    -> Acc (Array sh b)                       -- ^ destination array
 stencil = Acc $$$ Stencil
 
 -- | Map a binary stencil of an array.  The extent of the resulting array is the
 -- intersection of the extents of the two source arrays.
 --
-stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
-             Stencil ix a stencil1,
-             Stencil ix b stencil2)
-        => (stencil1 -> stencil2 -> Exp c)    -- ^binary stencil function
-        -> Boundary a                         -- ^boundary condition #1
-        -> Acc (Array ix a)                   -- ^source array #1
-        -> Boundary b                         -- ^boundary condition #2
-        -> Acc (Array ix b)                   -- ^source array #2
-        -> Acc (Array ix c)                   -- ^destination array
+stencil2
+    :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
+    => (stencil1 -> stencil2 -> Exp c)        -- ^ binary stencil function
+    -> Boundary a                             -- ^ boundary condition #1
+    -> Acc (Array sh a)                       -- ^ source array #1
+    -> Boundary b                             -- ^ boundary condition #2
+    -> Acc (Array sh b)                       -- ^ source array #2
+    -> Acc (Array sh c)                       -- ^ destination array
 stencil2 = Acc $$$$$ Stencil2
 
 
@@ -559,65 +545,44 @@ collect = Acc . Collect
 -- Foreign function calling
 -- ------------------------
 
--- | Call a foreign function. The form the function takes is dependent on the backend being used.
--- The arguments are passed as either a single array or as a tuple of arrays. In addition a pure
--- Accelerate version of the function needs to be provided to support backends other than the one
--- being targeted.
-foreignAcc :: (Arrays acc, Arrays res, Foreign ff)
-           => ff acc res
-           -> (Acc acc -> Acc res)
-           -> Acc acc
-           -> Acc res
+-- | Call a foreign array function.
+--
+-- The form the first argument takes is dependent on the backend being targeted.
+-- Note that the foreign function only has access to the input array(s) passed
+-- in as its argument.
+--
+-- In case the operation is being executed on a backend which does not support
+-- this foreign implementation, the fallback implementation is used instead,
+-- which itself could be a foreign implementation for a (presumably) different
+-- backend, or an implementation of pure Accelerate. In this way, multiple
+-- foreign implementations can be supplied, and will be tested for suitability
+-- against the target backend in sequence.
+--
+foreignAcc
+    :: (Arrays as, Arrays bs, Foreign asm)
+    => asm (as -> bs)
+    -> (Acc as -> Acc bs)
+    -> Acc as
+    -> Acc bs
 foreignAcc = Acc $$$ Aforeign
 
--- | Call a foreign function with foreign implementations for two different backends.
-foreignAcc2 :: (Arrays acc, Arrays res, Foreign ff1, Foreign ff2)
-            => ff1 acc res
-            -> ff2 acc res
-            -> (Acc acc -> Acc res)
-            -> Acc acc
-            -> Acc res
-foreignAcc2 ff1 = Acc $$$ Aforeign ff1 $$ Acc $$$ Aforeign
-
--- | Call a foreign function with foreign implementations for three different backends.
-foreignAcc3 :: (Arrays acc, Arrays res, Foreign ff1, Foreign ff2, Foreign ff3)
-            => ff1 acc res
-            -> ff2 acc res
-            -> ff3 acc res
-            -> (Acc acc -> Acc res)
-            -> Acc acc
-            -> Acc res
-foreignAcc3 ff1 ff2 = Acc $$$ Aforeign ff1 $$ Acc $$$ Aforeign ff2 $$ Acc $$$ Aforeign
-
--- | Call a foreign expression function. The form the function takes is dependent on the
--- backend being used. The arguments are passed as either a single scalar element or as a
--- tuple of elements. In addition a pure Accelerate version of the function needs to be
--- provided to support backends other than the one being targeted.
-foreignExp :: (Elt e, Elt res, Foreign ff)
-           => ff e res
-           -> (Exp e -> Exp res)
-           -> Exp e
-           -> Exp res
+-- | Call a foreign scalar expression.
+--
+-- The form of the first argument is dependent on the backend being targeted.
+-- Note that the foreign function only has access to the input element(s) passed
+-- in as its first argument.
+--
+-- As with 'foreignAcc', the fallback implementation itself may be a (sequence
+-- of) foreign implementation(s) for a different backend(s), or implemented
+-- purely in Accelerate.
+--
+foreignExp
+    :: (Elt x, Elt y, Foreign asm)
+    => asm (x -> y)
+    -> (Exp x -> Exp y)
+    -> Exp x
+    -> Exp y
 foreignExp = Exp $$$ Foreign
-
--- | Call a foreign function with foreign implementations for two different backends.
-foreignExp2 :: (Elt e, Elt res, Foreign ff1, Foreign ff2)
-            => ff1 e res
-            -> ff2 e res
-            -> (Exp e -> Exp res)
-            -> Exp e
-            -> Exp res
-foreignExp2 ff1 = Exp $$$ Foreign ff1 $$ Exp $$$ Foreign
-
--- | Call a foreign function with foreign implementations for three different backends.
-foreignExp3 :: (Elt e, Elt res, Foreign ff1, Foreign ff2, Foreign ff3)
-            => ff1 e res
-            -> ff2 e res
-            -> ff3 e res
-            -> (Exp e -> Exp res)
-            -> Exp e
-            -> Exp res
-foreignExp3 ff1 ff2 = Exp $$$ Foreign ff1 $$ Exp $$$ Foreign ff2 $$ Exp $$$ Foreign
 
 
 -- Composition of array computations
@@ -646,12 +611,14 @@ acond :: Arrays a
       -> Acc a
 acond = Acc $$$ Acond
 
--- | An array-level while construct
+-- | An array-level 'while' construct. Continue to apply the given function,
+-- starting with the initial value, until the test function evaluates to
+-- 'False'.
 --
 awhile :: Arrays a
-       => (Acc a -> Acc (Scalar Bool))
-       -> (Acc a -> Acc a)
-       -> Acc a
+       => (Acc a -> Acc (Scalar Bool))    -- ^ keep evaluating while this returns 'True'
+       -> (Acc a -> Acc a)                -- ^ function to apply
+       -> Acc a                           -- ^ initial value
        -> Acc a
 awhile = Acc $$$ Awhile
 
@@ -726,12 +693,12 @@ cond :: Elt t
 cond = Exp $$$ Cond
 
 -- | While construct. Continue to apply the given function, starting with the
--- initial value, until the test function evaluates to true.
+-- initial value, until the test function evaluates to 'False'.
 --
 while :: Elt e
-      => (Exp e -> Exp Bool)
-      -> (Exp e -> Exp e)
-      -> Exp e
+      => (Exp e -> Exp Bool)    -- ^ keep evaluating while this returns 'True'
+      -> (Exp e -> Exp e)       -- ^ function to apply
+      -> Exp e                  -- ^ initial value
       -> Exp e
 while = Exp $$$ While
 
@@ -767,279 +734,53 @@ shapeSize :: Shape ix => Exp ix -> Exp Int
 shapeSize = Exp . ShapeSize
 
 
--- Instances of all relevant H98 classes
--- -------------------------------------
+-- Numeric functions
+-- -----------------
 
-preludeError :: String -> String -> a
-preludeError x y = error (printf "Prelude.%s applied to EDSL types: use %s instead" x y)
-
-instance (Elt t, IsBounded t) => Bounded (Exp t) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
-
-instance (Elt t, IsScalar t) => Enum (Exp t)
---  succ = mkSucc
---  pred = mkPred
-  -- FIXME: ops
-
-instance (Elt t, IsScalar t) => Eq (Exp t) where
-  -- FIXME: instance makes no sense with standard signatures
-  (==)  = preludeError "Eq.==" "(==*)"
-  (/=)  = preludeError "Eq./=" "(/=*)"
-
-instance (Elt t, IsScalar t) => Ord (Exp t) where
-  -- FIXME: instance makes no sense with standard signatures
-  min           = mkMin
-  max           = mkMax
-  --
-  compare       = error "Prelude.Ord.compare applied to EDSL types"
-  (<)           = preludeError "Ord.<"  "(<*)"
-  (<=)          = preludeError "Ord.<=" "(<=*)"
-  (>)           = preludeError "Ord.>"  "(>*)"
-  (>=)          = preludeError "Ord.>=" "(>=*)"
-
-instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
-  (.&.)      = mkBAnd
-  (.|.)      = mkBOr
-  xor        = mkBXor
-  complement = mkBNot
-  -- FIXME: argh, the rest have fixed types in their signatures
-
-
--- | @'shift' x i@ shifts @x@ left by @i@ bits if @i@ is positive, or right by
--- @-i@ bits otherwise. Right shifts perform sign extension on signed number
--- types; i.e. they fill the top bits with 1 if the @x@ is negative and with 0
--- otherwise.
+-- | 'subtract' is the same as @'flip' ('-')@.
 --
-shift :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shift  x i
-  = cond (i ==* 0) x
-  $ cond (i <*  0) (x `mkBShiftR` (-i))
-                   (x `mkBShiftL` i)
+subtract :: Num a => Exp a -> Exp a -> Exp a
+subtract x y = y - x
 
--- | Shift the argument left by the specified number of bits
--- (which must be non-negative).
+-- | Determine if a number is even
 --
-shiftL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shiftL x i
-  = cond (i ==* 0) x
-  $ mkBShiftL x i
+even :: Integral a => Exp a -> Exp Bool
+even n = n `rem` 2 ==* 0
 
--- | Shift the first argument right by the specified number of bits. The result
--- is undefined for negative shift amounts and shift amounts greater or equal to
--- the 'bitSize'.
+-- | Determine if a number is odd
 --
--- Right shifts perform sign extension on signed number types; i.e. they fill
--- the top bits with 1 if the @x@ is negative and with 0 otherwise.
+odd :: Integral a => Exp a -> Exp Bool
+odd n = n `rem` 2 /=* 0
+
+-- | @'gcd' x y@ is the non-negative factor of both @x@ and @y@ of which every
+-- common factor of both @x@ and @y@ is also a factor; for example:
 --
-shiftR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shiftR x i
-  = cond (i ==* 0) x
-  $ mkBShiftR x i
-
--- | @'rotate' x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right by
--- @-i@ bits otherwise.
+-- >>> gcd 4 2 = 2
+-- >>> gcd (-4) 6 = 2
+-- >>> gcd 0 4 = 4
+-- >>> gcd 0 0 = 0
 --
-rotate :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotate x i
-  = cond (i ==* 0) x
-  $ cond (i <*  0) (x `mkBRotateR` (-i))
-                   (x `mkBRotateL` i)
-
--- | Rotate the argument left by the specified number of bits
--- (which must be non-negative).
+-- That is, the common divisor that is \"greatest\" in the divisibility
+-- preordering.
 --
-rotateL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotateL x i
-  = cond (i ==* 0) x
-  $ mkBRotateL x i
+gcd :: Integral a => Exp a -> Exp a -> Exp a
+gcd x y = gcd' (abs x) (abs y)
+  where
+    gcd' :: Integral a => Exp a -> Exp a -> Exp a
+    gcd' u v =
+      let (r,_) = untup2
+                $ while (\(untup2 -> (_,b)) -> b /=* 0)
+                        (\(untup2 -> (a,b)) -> tup2 (b, a `rem` b))
+                        (tup2 (u,v))
+      in r
 
--- | Rotate the argument right by the specified number of bits
--- (which must be non-negative).
+
+-- | @'lcm' x y@ is the smallest positive integer that both @x@ and @y@ divide.
 --
-rotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotateR x i
-  = cond (i ==* 0) x
-  $ mkBRotateR x i
-
--- | @bit i@ is a value with the @i@th bit set and all other bits clear
---
-bit :: (Elt t, IsIntegral t) => Exp Int -> Exp t
-bit x = 1 `shiftL` x
-
--- | @x \`setBit\` i@ is the same as @x .|. bit i@
---
-setBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-x `setBit` i = x .|. bit i
-
--- | @x \`clearBit\` i@ is the same as @x .&. complement (bit i)@
---
-clearBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-x `clearBit` i = x .&. complement (bit i)
-
--- | @x \`complementBit\` i@ is the same as @x \`xor\` bit i@
---
-complementBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-x `complementBit` i = x `xor` bit i
-
--- | Return 'True' if the @n@th bit of the argument is 1
---
-testBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp Bool
-x `testBit` i       = (x .&. bit i) /=* 0
-
-
-instance (Elt t, IsNum t) => Num (Exp t) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance (Elt t, IsNum t) => Real (Exp t)
-  -- FIXME: Why did we include this class?  We won't need `toRational' until
-  --   we support rational numbers in AP computations.
-
-instance (Elt t, IsIntegral t) => Integral (Exp t) where
-  quot    = mkQuot
-  rem     = mkRem
-  div     = mkIDiv
-  mod     = mkMod
-  quotRem = mkQuotRem
-  divMod  = mkDivMod
---  toInteger =  -- makes no sense
-
-instance (Elt t, IsFloating t) => Floating (Exp t) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
-
-instance (Elt t, IsFloating t) => Fractional (Exp t) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
-
-instance (Elt t, IsFloating t) => RealFrac (Exp t)
-  -- FIXME: add other ops
-
-instance (Elt t, IsFloating t) => RealFloat (Exp t) where
-  atan2 = mkAtan2
-  -- FIXME: add other ops
-
-
--- Methods from H98 classes, where we need other signatures
--- --------------------------------------------------------
-
-infix 4 ==*, /=*, <*, <=*, >*, >=*
-
--- |Equality lifted into Accelerate expressions.
---
-(==*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(==*) = mkEq
-
--- |Inequality lifted into Accelerate expressions.
---
-(/=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(/=*) = mkNEq
-
--- compare :: a -> a -> Ordering  -- we have no enumerations at the moment
--- compare = ...
-
--- |Smaller-than lifted into Accelerate expressions.
---
-(<*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(<*)  = mkLt
-
--- |Greater-or-equal lifted into Accelerate expressions.
---
-(>=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(>=*) = mkGtEq
-
--- |Greater-than lifted into Accelerate expressions.
---
-(>*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(>*)  = mkGt
-
--- |Smaller-or-equal lifted into Accelerate expressions.
---
-(<=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(<=*) = mkLtEq
-
--- Conversions from the RealFrac class
---
-
--- | @truncate x@ returns the integer nearest @x@ between zero and @x@.
---
-truncate :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-truncate = mkTruncate
-
--- | @round x@ returns the nearest integer to @x@, or the even integer if @x@ is
--- equidistant between two integers.
---
-round :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-round = mkRound
-
--- | @floor x@ returns the greatest integer not greater than @x@.
---
-floor :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-floor = mkFloor
-
--- | @ceiling x@ returns the least integer not less than @x@.
---
-ceiling :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-ceiling = mkCeiling
-
--- | return if the integer is even
---
-even :: (Elt a, IsIntegral a) => Exp a -> Exp Bool
-even x = x .&. 1 ==* 0
-
--- | return if the integer is odd
---
-odd :: (Elt a, IsIntegral a) => Exp a -> Exp Bool
-odd x = x .&. 1 ==* 1
-
--- | return if the argument is an IEEE "not-a-number" (NaN) value
---
-isNaN :: (Elt a, IsFloating a) => Exp a -> Exp Bool
-isNaN = mkIsNaN
-
-
--- Non-overloaded standard functions, where we need other signatures
--- -----------------------------------------------------------------
-
--- |Conjunction
---
-infixr 3 &&*
-(&&*) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&*) = mkLAnd
-
--- |Disjunction
---
-infixr 2 ||*
-(||*) :: Exp Bool -> Exp Bool -> Exp Bool
-(||*) = mkLOr
-
--- |Negation
---
-not :: Exp Bool -> Exp Bool
-not = mkLNot
+lcm :: Integral a => Exp a -> Exp a -> Exp a
+lcm x y
+  = cond (x ==* 0 ||* y ==* 0) 0
+  $ abs ((x `quot` (gcd x y)) * y)
 
 
 -- Conversions
@@ -1061,10 +802,11 @@ chr = mkChr
 boolToInt :: Exp Bool -> Exp Int
 boolToInt = mkBoolToInt
 
--- |General coercion from integral types
+-- |Reinterpret a value as another type. The two representations must have the
+-- same bit size.
 --
-fromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
-fromIntegral = mkFromIntegral
+bitcast :: (Elt a, Elt b, IsScalar a, IsScalar b, BitSizeEq a b) => Exp a -> Exp b
+bitcast = mkBitcast
 
 
 -- Constants

@@ -1,8 +1,11 @@
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -90,13 +93,17 @@ module Data.Array.Accelerate.AST (
   Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
-  PreOpenSeq(..), PreOpenNaturalSeq, PreOpenChunkedSeq, OpenNaturalSeq, OpenChunkedSeq,
+  PreOpenSeq(..), PreOpenNaturalSeq, PreOpenChunkedSeq, OpenNaturalSeq, OpenChunkedSeq, OpenSeq,
   Producer(..), Consumer(..), NaturalProducer, ChunkedProducer, NaturalConsumer, ChunkedConsumer, Seq,
   Source(..),
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
   PrimFun(..),
+
+  -- NFData
+  NFDataAcc,
+  rnfOpenAcc, rnfPreOpenAfun, rnfPreOpenAcc, rnfPreOpenSeq, rnfPreOpenFun, rnfPreOpenExp,
 
   -- debugging
   showPreAccOp, showPreExpOp,
@@ -106,13 +113,16 @@ module Data.Array.Accelerate.AST (
 --standard library
 import Data.List
 import Data.Typeable
+import Control.DeepSeq
 
 -- friends
-import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
+#if __GLASGOW_HASKELL__ < 800
+import Data.Array.Accelerate.Error
+#endif
 
 
 -- Typed de Bruijn indices
@@ -160,14 +170,18 @@ data ValElt env where
 prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
+#if __GLASGOW_HASKELL__ < 800
 prj _             _            = $internalError "prj" "inconsistent valuation"
+#endif
 
 -- Projection of a value from a valuation of array elements using a de Bruijn index
 --
 prjElt :: Idx env t -> ValElt env -> t
 prjElt ZeroIdx       (PushElt _   v) = Sugar.toElt v
 prjElt (SuccIdx idx) (PushElt val _) = prjElt idx val
+#if __GLASGOW_HASKELL__ < 800
 prjElt _             _               = $internalError "prjElt" "inconsistent valuation"
+#endif
 
 -- Array expressions
 -- -----------------
@@ -246,11 +260,11 @@ data PreOpenAcc acc aenv a where
   -- Apply a backend-specific foreign function to an array, with a pure
   -- Accelerate version for use with other backends. The functions must be
   -- closed.
-  Aforeign    :: (Arrays arrs, Arrays a, Foreign f)
-              => f arrs a                                       -- The foreign function for a given backend
-              -> PreAfun      acc      (arrs -> a)              -- A pure accelerate version
-              -> acc              aenv arrs                     -- Arguments to the function
-              -> PreOpenAcc   acc aenv a
+  Aforeign    :: (Arrays as, Arrays bs, Foreign asm)
+              => asm                   (as -> bs)               -- The foreign function for a given backend
+              -> PreAfun      acc      (as -> bs)               -- Fallback implementation(s)
+              -> acc              aenv as                       -- Arguments to the function
+              -> PreOpenAcc   acc aenv bs
 
   -- If-then-else for array-level computations
   Acond       :: Arrays arrs
@@ -634,9 +648,11 @@ type ChunkedConsumer = Consumer (Int, Int)
 type OpenNaturalSeq = PreOpenNaturalSeq OpenAcc
 type OpenChunkedSeq = PreOpenChunkedSeq OpenAcc
 
+type OpenSeq index = PreOpenSeq index OpenAcc
+
 -- |Closed sequence computations
 --
-type Seq index  = PreOpenSeq index OpenAcc ()
+type Seq index  = OpenSeq index ()
 
 -- |Closed array expression aka an array program
 --
@@ -886,8 +902,8 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv t
 
   -- Apply a backend-specific foreign function
-  Foreign       :: (Foreign f, Elt x, Elt y)
-                => f x y
+  Foreign       :: (Foreign asm, Elt x, Elt y)
+                => asm           (x -> y)
                 -> PreFun acc () (x -> y)
                 -> PreOpenExp acc env aenv x
                 -> PreOpenExp acc env aenv y
@@ -1133,19 +1149,384 @@ data PrimFun sig where
   PrimLNot :: PrimFun (Bool         -> Bool)
 
   -- character conversions
+  -- FIXME: use IntegralType?
   PrimOrd  :: PrimFun (Char -> Int)
   PrimChr  :: PrimFun (Int  -> Char)
-  -- FIXME: use IntegralType?
 
-  -- FIXME: conversions between various integer types
-  --        should we have an overloaded functions like 'toInt'?
-  --        (or 'fromEnum' for enums?)
-  PrimBoolToInt    :: PrimFun (Bool -> Int)
+  -- boolean conversion
+  PrimBoolToInt :: PrimFun (Bool -> Int)
+
+  -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
+  PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
 
-  -- FIXME: what do we want to do about Enum?  succ and pred are only
-  --   moderatly useful without user-defined enumerations, but we want
-  --   the range constructs for arrays (but that's not scalar primitives)
+  -- reinterpret the bits of a value as a different type
+  -- (the two types must have the same bit size)
+  PrimCoerce :: ScalarType a -> ScalarType b -> PrimFun (a -> b)
+
+  -- FIXME: Conversions between various integer types: should we have overloaded
+  -- functions like 'toInt'? (or 'fromEnum' for enums?)
+
+  -- FIXME: What do we want to do about Enum? 'succ' and 'pred' are only
+  -- moderately useful without user-defined enumerations, but we want the range
+  -- constructs for arrays (but that's not scalar primitives)
+
+
+-- NFData instances
+-- ================
+
+instance NFData (OpenAfun aenv f) where
+  rnf = rnfOpenAfun
+
+instance NFData (OpenAcc aenv t) where
+  rnf = rnfOpenAcc
+
+instance NFData (OpenSeq index aenv t) where
+  rnf = rnfPreOpenSeq rnfOpenAcc
+
+instance NFData (OpenExp env aenv t) where
+  rnf = rnfPreOpenExp rnfOpenAcc
+
+instance NFData (OpenFun env aenv t) where
+  rnf = rnfPreOpenFun rnfOpenAcc
+
+
+-- Array expressions
+-- -----------------
+
+type NFDataAcc acc = forall aenv t. acc aenv t -> ()
+
+rnfIdx :: Idx env t -> ()
+rnfIdx ZeroIdx      = ()
+rnfIdx (SuccIdx ix) = rnfIdx ix
+
+rnfTupleIdx :: TupleIdx t e -> ()
+rnfTupleIdx ZeroTupIdx       = ()
+rnfTupleIdx (SuccTupIdx tix) = rnfTupleIdx tix
+
+rnfOpenAfun :: OpenAfun aenv t -> ()
+rnfOpenAfun = rnfPreOpenAfun rnfOpenAcc
+
+rnfOpenAcc :: OpenAcc aenv t -> ()
+rnfOpenAcc (OpenAcc pacc) = rnfPreOpenAcc rnfOpenAcc pacc
+
+rnfPreOpenAfun :: NFDataAcc acc -> PreOpenAfun acc aenv t -> ()
+rnfPreOpenAfun rnfA (Abody b) = rnfA b
+rnfPreOpenAfun rnfA (Alam f)  = rnfPreOpenAfun rnfA f
+
+rnfPreOpenAcc :: forall acc aenv t. NFDataAcc acc -> PreOpenAcc acc aenv t -> ()
+rnfPreOpenAcc rnfA pacc =
+  let
+      rnfAF :: PreOpenAfun acc aenv' t' -> ()
+      rnfAF = rnfPreOpenAfun rnfA
+
+      rnfE :: PreOpenExp acc env' aenv' t' -> ()
+      rnfE = rnfPreOpenExp rnfA
+
+      rnfF :: PreOpenFun acc env' aenv' t' -> ()
+      rnfF = rnfPreOpenFun rnfA
+
+      rnfS :: PreOpenSeq index acc aenv' t' -> ()
+      rnfS = rnfPreOpenSeq rnfA
+
+      rnfL :: Maybe (PreOpenExp acc env' aenv' t') -> ()
+      rnfL (Just e) = rnfE e
+      rnfL Nothing  = ()
+
+      rnfB :: forall aenv' sh e. Elt e => acc aenv' (Array sh e) -> Boundary (EltRepr e) -> ()
+      rnfB _ = rnfBoundary (eltType (undefined::e))
+  in
+  case pacc of
+    Alet bnd body             -> rnfA bnd `seq` rnfA body
+    Avar ix                   -> rnfIdx ix
+    Atuple atup               -> rnfAtuple rnfA atup
+    Aprj tix a                -> rnfTupleIdx tix `seq` rnfA a
+    Apply afun acc            -> rnfAF afun `seq` rnfA acc
+    Aforeign asm afun a       -> rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
+    Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
+    Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
+    Use arrs                  -> rnfArrays (arrays (undefined::t)) arrs
+    Subarray sh ix arrs       -> rnfE sh `seq` rnfE ix `seq` rnfArrays (arrays (undefined::t)) arrs
+    Unit x                    -> rnfE x
+    Reshape sh a              -> rnfE sh `seq` rnfA a
+    Generate sh f             -> rnfE sh `seq` rnfF f
+    Transform sh p f a        -> rnfE sh `seq` rnfF p `seq` rnfF f `seq` rnfA a
+    Replicate slice sh a      -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
+    Slice slice a sh          -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
+    Map f a                   -> rnfF f `seq` rnfA a
+    ZipWith f a1 a2           -> rnfF f `seq` rnfA a1 `seq` rnfA a2
+    Fold f z a                -> rnfF f `seq` rnfE z `seq` rnfA a
+    Fold1 f a                 -> rnfF f `seq` rnfA a
+    FoldSeg f z a s           -> rnfF f `seq` rnfE z `seq` rnfA a `seq` rnfA s
+    Fold1Seg f a s            -> rnfF f `seq` rnfA a `seq` rnfA s
+    Scanl f z a               -> rnfF f `seq` rnfE z `seq` rnfA a
+    Scanl1 f a                -> rnfF f `seq` rnfA a
+    Scanl' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
+    Scanr f z a               -> rnfF f `seq` rnfE z `seq` rnfA a
+    Scanr1 f a                -> rnfF f `seq` rnfA a
+    Scanr' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
+    Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
+    Backpermute sh f a        -> rnfE sh `seq` rnfF f `seq` rnfA a
+    Stencil f b a             -> rnfF f `seq` rnfB a b `seq` rnfA a
+    Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB a1 b1 `seq` rnfB a2 b2 `seq` rnfA a1 `seq` rnfA a2
+    Collect min max i s cs    -> rnfE min `seq` rnfL max `seq` rnfL i `seq` rnfS s `seq` maybe () rnfS cs
+
+
+rnfAtuple :: NFDataAcc acc -> Atuple (acc aenv) t -> ()
+rnfAtuple _    NilAtup          = ()
+rnfAtuple rnfA (SnocAtup tup a) = rnfAtuple rnfA tup `seq` rnfA a
+
+rnfArrays :: ArraysR arrs -> arrs -> ()
+rnfArrays ArraysRunit           ()      = ()
+rnfArrays ArraysRarray          arr     = rnf arr
+rnfArrays (ArraysRpair ar1 ar2) (a1,a2) = rnfArrays ar1 a1 `seq` rnfArrays ar2 a2
+
+rnfBoundary :: TupleType t -> Boundary t -> ()
+rnfBoundary _ Clamp        = ()
+rnfBoundary _ Mirror       = ()
+rnfBoundary _ Wrap         = ()
+rnfBoundary t (Constant c) = rnfConst t c
+
+
+-- Sequence expressions
+-- --------------------
+
+rnfPreOpenSeq :: forall index acc aenv t. NFDataAcc acc -> PreOpenSeq index acc aenv t -> ()
+rnfPreOpenSeq rnfA topSeq =
+  let
+      rnfS :: PreOpenSeq index acc aenv' t' -> ()
+      rnfS = rnfPreOpenSeq rnfA
+
+      rnfP :: Producer index acc aenv' t' -> ()
+      rnfP = rnfSeqProducer rnfA
+
+      rnfC :: Consumer index acc aenv' t' -> ()
+      rnfC = rnfSeqConsumer rnfA
+  in
+  case topSeq of
+    Producer p s              -> rnfP p `seq` rnfS s
+    Consumer c                -> rnfC c
+    Reify ix                  -> rnfA ix
+
+rnfSeqProducer :: forall index acc aenv t. NFDataAcc acc -> Producer index acc aenv t -> ()
+rnfSeqProducer rnfA topSeq =
+  let
+      -- RCE: Should probably reconsider this. If we're streaming in from a list
+      -- we don't want to force the entire list when we force the AST.
+      rnfArrs :: forall a. Arrays a => [a] -> ()
+      rnfArrs []     = ()
+      rnfArrs (a:as) = rnfArrays (arrays (undefined::a)) (fromArr a) `seq` rnfArrs as
+
+      rnfSource :: Arrays a => Source a -> ()
+      rnfSource (RegularList sh as) = rnfConst (eltType sh) (fromElt sh) `seq` rnfArrs as
+      rnfSource (List as)           = rnfArrs as
+
+      rnfAF :: PreOpenAfun acc aenv' t' -> ()
+      rnfAF = rnfPreOpenAfun rnfA
+
+      rnfL :: Maybe (PreOpenExp acc env' aenv' t') -> ()
+      rnfL (Just e) = rnfE e
+      rnfL Nothing  = ()
+
+      rnfE :: PreOpenExp acc env' aenv' t' -> ()
+      rnfE = rnfPreOpenExp rnfA
+  in
+  case topSeq of
+    Pull as            -> rnfSource as
+    Subarrays sh a     -> rnfE sh `seq` rnfArrays (arrays a) (fromArr a)
+    Produce l f        -> rnfL l `seq` rnfAF f
+    ProduceAccum l f a -> rnfL l `seq` rnfAF f `seq` rnfA a
+
+rnfSeqConsumer :: forall index acc aenv t. NFDataAcc acc -> Consumer index acc aenv t -> ()
+rnfSeqConsumer rnfA topSeq =
+  let
+      rnfAF :: PreOpenAfun acc aenv' t' -> ()
+      rnfAF = rnfPreOpenAfun rnfA
+  in
+  case topSeq of
+    FoldBatch f a x -> rnfAF f `seq` rnfA a `seq` rnfA x
+    Last a d        -> rnfA a `seq` rnfA d
+    Stuple stup     -> rnfStuple rnfA stup
+    Elements a      -> rnfA a
+    Tabulate a      -> rnfA a
+
+rnfStuple :: NFDataAcc acc -> Atuple (PreOpenSeq index acc aenv) t -> ()
+rnfStuple _    NilAtup          = ()
+rnfStuple rnfA (SnocAtup tup c) = rnfStuple rnfA tup `seq` rnfPreOpenSeq rnfA c
+
+
+-- Scalar expressions
+-- ------------------
+
+rnfPreOpenFun :: NFDataAcc acc -> PreOpenFun acc env aenv t -> ()
+rnfPreOpenFun rnfA (Body b) = rnfPreOpenExp rnfA b
+rnfPreOpenFun rnfA (Lam f)  = rnfPreOpenFun rnfA f
+
+rnfPreOpenExp :: forall acc env aenv t. NFDataAcc acc -> PreOpenExp acc env aenv t -> ()
+rnfPreOpenExp rnfA topExp =
+  let
+      rnfF :: PreOpenFun acc env' aenv' t' -> ()
+      rnfF = rnfPreOpenFun rnfA
+
+      rnfE :: PreOpenExp acc env' aenv' t' -> ()
+      rnfE = rnfPreOpenExp rnfA
+  in
+  case topExp of
+    Let bnd body              -> rnfE bnd `seq` rnfE body
+    Var ix                    -> rnfIdx ix
+    Foreign asm f x           -> rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
+    Const t                   -> rnfConst (eltType (undefined::t)) t
+    Tuple t                   -> rnfTuple rnfA t
+    Prj ix e                  -> rnfTupleIdx ix `seq` rnfE e
+    IndexNil                  -> ()
+    IndexCons sh sz           -> rnfE sh `seq` rnfE sz
+    IndexHead sh              -> rnfE sh
+    IndexTail sh              -> rnfE sh
+    IndexAny                  -> ()
+    IndexSlice slice _ sh     -> rnfSliceIndex slice `seq` rnfE sh
+    IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
+    ToIndex sh ix             -> rnfE sh `seq` rnfE ix
+    FromIndex sh ix           -> rnfE sh `seq` rnfE ix
+    IndexTrans sh             -> rnfE sh
+    ToSlice slice slix i      -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE i
+    Cond p e1 e2              -> rnfE p `seq` rnfE e1 `seq` rnfE e2
+    While p f x               -> rnfF p `seq` rnfF f `seq` rnfE x
+    PrimConst c               -> rnfPrimConst c
+    PrimApp f x               -> rnfPrimFun f `seq` rnfE x
+    Index a ix                -> rnfA a `seq` rnfE ix
+    LinearIndex a ix          -> rnfA a `seq` rnfE ix
+    Shape a                   -> rnfA a
+    ShapeSize sh              -> rnfE sh
+    Intersect sh1 sh2         -> rnfE sh1 `seq` rnfE sh2
+    Union sh1 sh2             -> rnfE sh1 `seq` rnfE sh2
+
+rnfTuple :: NFDataAcc acc -> Tuple (PreOpenExp acc env aenv) t -> ()
+rnfTuple _    NilTup        = ()
+rnfTuple rnfA (SnocTup t e) = rnfTuple rnfA t `seq` rnfPreOpenExp rnfA e
+
+rnfConst :: TupleType t -> t -> ()
+rnfConst UnitTuple          ()    = ()
+rnfConst (SingleTuple t)    !_    = rnfScalarType t  -- scalars should have (nf == whnf)
+rnfConst (PairTuple ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
+
+rnfPrimConst :: PrimConst c -> ()
+rnfPrimConst (PrimMinBound t) = rnfBoundedType t
+rnfPrimConst (PrimMaxBound t) = rnfBoundedType t
+rnfPrimConst (PrimPi t)       = rnfFloatingType t
+
+rnfPrimFun :: PrimFun f -> ()
+rnfPrimFun (PrimAdd t)            = rnfNumType t
+rnfPrimFun (PrimSub t)            = rnfNumType t
+rnfPrimFun (PrimMul t)            = rnfNumType t
+rnfPrimFun (PrimNeg t)            = rnfNumType t
+rnfPrimFun (PrimAbs t)            = rnfNumType t
+rnfPrimFun (PrimSig t)            = rnfNumType t
+rnfPrimFun (PrimQuot t)           = rnfIntegralType t
+rnfPrimFun (PrimRem t)            = rnfIntegralType t
+rnfPrimFun (PrimQuotRem t)        = rnfIntegralType t
+rnfPrimFun (PrimIDiv t)           = rnfIntegralType t
+rnfPrimFun (PrimMod t)            = rnfIntegralType t
+rnfPrimFun (PrimDivMod t)         = rnfIntegralType t
+rnfPrimFun (PrimBAnd t)           = rnfIntegralType t
+rnfPrimFun (PrimBOr t)            = rnfIntegralType t
+rnfPrimFun (PrimBXor t)           = rnfIntegralType t
+rnfPrimFun (PrimBNot t)           = rnfIntegralType t
+rnfPrimFun (PrimBShiftL t)        = rnfIntegralType t
+rnfPrimFun (PrimBShiftR t)        = rnfIntegralType t
+rnfPrimFun (PrimBRotateL t)       = rnfIntegralType t
+rnfPrimFun (PrimBRotateR t)       = rnfIntegralType t
+rnfPrimFun (PrimFDiv t)           = rnfFloatingType t
+rnfPrimFun (PrimRecip t)          = rnfFloatingType t
+rnfPrimFun (PrimSin t)            = rnfFloatingType t
+rnfPrimFun (PrimCos t)            = rnfFloatingType t
+rnfPrimFun (PrimTan t)            = rnfFloatingType t
+rnfPrimFun (PrimAsin t)           = rnfFloatingType t
+rnfPrimFun (PrimAcos t)           = rnfFloatingType t
+rnfPrimFun (PrimAtan t)           = rnfFloatingType t
+rnfPrimFun (PrimSinh t)           = rnfFloatingType t
+rnfPrimFun (PrimCosh t)           = rnfFloatingType t
+rnfPrimFun (PrimTanh t)           = rnfFloatingType t
+rnfPrimFun (PrimAsinh t)          = rnfFloatingType t
+rnfPrimFun (PrimAcosh t)          = rnfFloatingType t
+rnfPrimFun (PrimAtanh t)          = rnfFloatingType t
+rnfPrimFun (PrimExpFloating t)    = rnfFloatingType t
+rnfPrimFun (PrimSqrt t)           = rnfFloatingType t
+rnfPrimFun (PrimLog t)            = rnfFloatingType t
+rnfPrimFun (PrimFPow t)           = rnfFloatingType t
+rnfPrimFun (PrimLogBase t)        = rnfFloatingType t
+rnfPrimFun (PrimTruncate f i)     = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimRound f i)        = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimFloor f i)        = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimCeiling f i)      = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimIsNaN t)          = rnfFloatingType t
+rnfPrimFun (PrimAtan2 t)          = rnfFloatingType t
+rnfPrimFun (PrimLt t)             = rnfScalarType t
+rnfPrimFun (PrimGt t)             = rnfScalarType t
+rnfPrimFun (PrimLtEq t)           = rnfScalarType t
+rnfPrimFun (PrimGtEq t)           = rnfScalarType t
+rnfPrimFun (PrimEq t)             = rnfScalarType t
+rnfPrimFun (PrimNEq t)            = rnfScalarType t
+rnfPrimFun (PrimMax t)            = rnfScalarType t
+rnfPrimFun (PrimMin t)            = rnfScalarType t
+rnfPrimFun PrimLAnd               = ()
+rnfPrimFun PrimLOr                = ()
+rnfPrimFun PrimLNot               = ()
+rnfPrimFun PrimOrd                = ()
+rnfPrimFun PrimChr                = ()
+rnfPrimFun PrimBoolToInt          = ()
+rnfPrimFun (PrimFromIntegral i n) = rnfIntegralType i `seq` rnfNumType n
+rnfPrimFun (PrimToFloating n f)   = rnfNumType n `seq` rnfFloatingType f
+rnfPrimFun (PrimCoerce a b)       = rnfScalarType a `seq` rnfScalarType b
+
+rnfSliceIndex :: SliceIndex ix slice co sh -> ()
+rnfSliceIndex SliceNil        = ()
+rnfSliceIndex (SliceAll sh)   = rnfSliceIndex sh
+rnfSliceIndex (SliceFixed sh) = rnfSliceIndex sh
+
+rnfScalarType :: ScalarType t -> ()
+rnfScalarType (NumScalarType t)    = rnfNumType t
+rnfScalarType (NonNumScalarType t) = rnfNonNumType t
+
+rnfBoundedType :: BoundedType t -> ()
+rnfBoundedType (IntegralBoundedType t) = rnfIntegralType t
+rnfBoundedType (NonNumBoundedType t)   = rnfNonNumType t
+
+rnfNumType :: NumType t -> ()
+rnfNumType (IntegralNumType t) = rnfIntegralType t
+rnfNumType (FloatingNumType t) = rnfFloatingType t
+
+rnfNonNumType :: NonNumType t -> ()
+rnfNonNumType (TypeBool   NonNumDict) = ()
+rnfNonNumType (TypeChar   NonNumDict) = ()
+rnfNonNumType (TypeCChar  NonNumDict) = ()
+rnfNonNumType (TypeCSChar NonNumDict) = ()
+rnfNonNumType (TypeCUChar NonNumDict) = ()
+
+rnfIntegralType :: IntegralType t -> ()
+rnfIntegralType (TypeInt     IntegralDict) = ()
+rnfIntegralType (TypeInt8    IntegralDict) = ()
+rnfIntegralType (TypeInt16   IntegralDict) = ()
+rnfIntegralType (TypeInt32   IntegralDict) = ()
+rnfIntegralType (TypeInt64   IntegralDict) = ()
+rnfIntegralType (TypeWord    IntegralDict) = ()
+rnfIntegralType (TypeWord8   IntegralDict) = ()
+rnfIntegralType (TypeWord16  IntegralDict) = ()
+rnfIntegralType (TypeWord32  IntegralDict) = ()
+rnfIntegralType (TypeWord64  IntegralDict) = ()
+rnfIntegralType (TypeCShort  IntegralDict) = ()
+rnfIntegralType (TypeCUShort IntegralDict) = ()
+rnfIntegralType (TypeCInt    IntegralDict) = ()
+rnfIntegralType (TypeCUInt   IntegralDict) = ()
+rnfIntegralType (TypeCLong   IntegralDict) = ()
+rnfIntegralType (TypeCULong  IntegralDict) = ()
+rnfIntegralType (TypeCLLong  IntegralDict) = ()
+rnfIntegralType (TypeCULLong IntegralDict) = ()
+
+rnfFloatingType :: FloatingType t -> ()
+rnfFloatingType (TypeFloat   FloatingDict) = ()
+rnfFloatingType (TypeDouble  FloatingDict) = ()
+rnfFloatingType (TypeCFloat  FloatingDict) = ()
+rnfFloatingType (TypeCDouble FloatingDict) = ()
 
 
 -- Debugging

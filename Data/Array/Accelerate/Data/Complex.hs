@@ -1,7 +1,7 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE IncoherentInstances   #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -38,13 +38,18 @@ module Data.Array.Accelerate.Data.Complex (
 
 ) where
 
-import Prelude
-import Data.Complex                             ( Complex(..) )
-import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
-import qualified Data.Complex                   as C
+import Data.Array.Accelerate.Classes                                as A
+import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Type
+
+import Prelude                                                      ( ($), (^), undefined, fromInteger )
+import Data.Complex                                                 ( Complex(..) )
+import qualified Data.Complex                                       as C
+import qualified Prelude                                            as P
 
 
 type instance EltRepr (Complex a) = EltRepr (a, a)
@@ -71,17 +76,24 @@ instance Elt a => Unlift Exp (Complex (Exp a)) where
       in
       x :+ y
 
-instance (Elt a, IsFloating a) => Num (Exp (Complex a)) where
+instance A.Eq a => A.Eq (Complex a) where
+  x ==* y = let r1 :+ c1 = unlift x
+                r2 :+ c2 = unlift y
+            in  r1 ==* r2 &&* c1 ==* c2
+  x /=* y = let r1 :+ c1 = unlift x
+                r2 :+ c2 = unlift y
+            in  r1 /=* r2 ||* c1 /=* c2
+
+instance A.RealFloat a => P.Num (Exp (Complex a)) where
   (+)           = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (-)           = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (*)           = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   negate        = lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
   signum        = lift1 (signum :: Complex (Exp a) -> Complex (Exp a))
   abs           = lift1 (abs :: Complex (Exp a) -> Complex (Exp a))
-  fromInteger n = lift (constant (fromInteger n) :+ 0)
+  fromInteger n = lift ((fromInteger n :: Exp a) :+ 0)
 
-
-instance (Elt a, IsFloating a) => Fractional (Exp (Complex a)) where
+instance A.RealFloat a => P.Fractional (Exp (Complex a)) where
   c / c'
     = let x  :+ y       = unlift c
           x' :+ y'      = unlift c'     :: Complex (Exp a)
@@ -92,20 +104,19 @@ instance (Elt a, IsFloating a) => Fractional (Exp (Complex a)) where
       lift (re :+ im)
 
   fromRational x
-    = lift (constant (fromRational x) :+ constant 0)
+    = lift ((fromRational x :: Exp a) :+ 0)
 
-
-instance (Elt a, IsFloating a, RealFloat a) => Floating (Exp (Complex a)) where
+instance A.RealFloat a => P.Floating (Exp (Complex a)) where
   sqrt z
     = let
           x :+ y        = unlift z
           v'            = abs y / (u'*2)
           u'            = sqrt ((magnitude z + abs x) / 2)
-          (u, v)        = unlift ( x A.<* 0 ? ( lift (v',u'), lift (u',v') ) )
+          (u, v)        = unlift $ cond (x <* 0) (lift (v',u')) (lift (u',v'))
       in
-      x ==* 0 &&* y ==* 0 ?
-        {- then -} ( 0
-        {- else -} , lift (u :+ (y A.<* 0 ? (-v,v))) )
+      cond (x ==* 0 &&* y ==* 0)
+        {- then -} 0
+        {- else -} (lift (u :+ (cond (y <* 0) (-v) v)))
 
   pi            = lift (pi :: Complex (Exp a))
   log z         = lift (log (magnitude z) :+ phase z)
@@ -123,10 +134,13 @@ instance (Elt a, IsFloating a, RealFloat a) => Floating (Exp (Complex a)) where
   acosh         = lift1 (acosh :: Complex (Exp a) -> Complex (Exp a))
   atanh         = lift1 (atanh :: Complex (Exp a) -> Complex (Exp a))
 
+instance (A.FromIntegral a b, A.Num b) => A.FromIntegral a (Complex b) where
+  fromIntegral x = lift (fromIntegral x :+ (0 :: Exp b))
+
 
 -- | The non-negative magnitude of a complex number
 --
-magnitude :: (Elt a, IsFloating a) => Exp (Complex a) -> Exp a
+magnitude :: RealFloat a => Exp (Complex a) -> Exp a
 magnitude c =
   let r :+ i    = unlift c
   in sqrt (r*r + i*i)
@@ -134,7 +148,7 @@ magnitude c =
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
-phase :: (Elt a, IsFloating a) => Exp (Complex a) -> Exp a
+phase :: RealFloat a => Exp (Complex a) -> Exp a
 phase c =
   let x :+ y    = unlift c
   in atan2 y x
@@ -143,18 +157,26 @@ phase c =
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
-polar :: (Elt a, IsFloating a) => Exp (Complex a) -> Exp (a,a)
+polar :: RealFloat a => Exp (Complex a) -> Exp (a,a)
 polar z =  lift (magnitude z, phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-mkPolar :: forall a. (Elt a, IsFloating a) => Exp a -> Exp a -> Exp (Complex a)
+#if __GLASGOW_HASKELL__ <= 708
+mkPolar :: forall a. RealFloat a => Exp a -> Exp a -> Exp (Complex a)
+#else
+mkPolar :: forall a. Floating a  => Exp a -> Exp a -> Exp (Complex a)
+#endif
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-cis :: forall a. (Elt a, IsFloating a) => Exp a -> Exp (Complex a)
+#if __GLASGOW_HASKELL__ <= 708
+cis :: forall a. RealFloat a => Exp a -> Exp (Complex a)
+#else
+cis :: forall a. Floating a  => Exp a -> Exp (Complex a)
+#endif
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
@@ -175,6 +197,6 @@ imag c =
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: (Elt a, IsNum a) => Exp (Complex a) -> Exp (Complex a)
+conjugate :: Num a => Exp (Complex a) -> Exp (Complex a)
 conjugate z = lift $ real z :+ (- imag z)
 

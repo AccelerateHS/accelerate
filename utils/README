@@ -1,6 +1,5 @@
 This directory contains some utilities to use Accelerate from within GHCi.
 
-Copy (or symlink) the wrapper script 'ghci' to the root directory of the
-accelerate source tree. You might also like to copy the file 'dot_ghci' to
-'.ghci' to the root directory.
+Symling (or copy) the wrapper script 'ghci' to the root directory of the
+accelerate source tree.
 

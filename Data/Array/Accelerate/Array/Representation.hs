@@ -45,7 +45,7 @@ import GHC.Base                                         ( quotInt, remInt )
 --
 class (Eq sh, Slice sh) => Shape sh where
   -- user-facing methods
-  dim       :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
+  rank      :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
   size      :: sh -> Int             -- ^total number of elements in an array of this /shape/
   empty     :: sh                    -- ^empty shape.
 
@@ -83,7 +83,7 @@ class (Eq sh, Slice sh) => Shape sh where
   transpose = listToShape . reverse . shapeToList
 
 instance Shape () where
-  dim _             = 0
+  rank _            = 0
   size ()           = 1
   empty             = ()
 
@@ -105,7 +105,7 @@ instance Shape () where
   listToShape _  = $internalError "listToShape" "non-empty list when converting to unit"
 
 instance Shape sh => Shape (sh, Int) where
-  dim _                             = dim (undefined :: sh) + 1
+  rank _                            = rank (undefined :: sh) + 1
   size (sh, sz)                     = size sh * sz
   empty                             = (empty, 0)
 
@@ -121,7 +121,7 @@ instance Shape sh => Shape (sh, Int) where
     -- the remainder for the highest dimension since i < sz must hold.
     --
     where
-      r | dim sh == 0   = $indexCheck "fromIndex" i sz i
+      r | rank sh == 0  = $indexCheck "fromIndex" i sz i
         | otherwise     = i `remInt` sz
 
   bound (sh, sz) (ix, i) bndy

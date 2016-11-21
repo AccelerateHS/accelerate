@@ -393,13 +393,13 @@ usesOfExp idx = countE
     countE :: PreOpenExp acc env aenv e -> UseElt s
     countE exp = case exp of
       Var this
-        | Just REFL <- match this idx   -> oneUseElt
+        | Just Refl <- match this idx   -> oneUseElt
         | otherwise                     -> zeroUseElt
       --
       Let bnd body              -> countE bnd <+.> usesOfExp (SuccIdx idx) body
       Const _                   -> zeroUseElt
       Tuple t                   -> countT t
-      Prj ix (Var v)            | Just REFL <- match v idx
+      Prj ix (Var v)            | Just Refl <- match v idx
                                 -> useComponentElt ix zeroUseElt
       Prj _ e                   -> countE e
       IndexNil                  -> zeroUseElt
@@ -521,7 +521,7 @@ usesOfPreAcc countAcc idx = count
   where
     countIdx :: Idx aenv a -> Use s
     countIdx this
-        | Just REFL <- match this idx   = oneUse
+        | Just Refl <- match this idx   = oneUse
         | otherwise                     = zeroUse
 
     count :: PreOpenAcc acc aenv a -> Use s
@@ -603,7 +603,7 @@ usesOfPreAcc countAcc idx = count
 prjChain :: Kit acc => Idx aenv s -> acc aenv t' -> Use t' -> Maybe (Use s)
 prjChain idx a u =
   case extract a of
-    Avar x    | Just REFL <- match idx x
+    Avar x    | Just Refl <- match idx x
               -> Just u
     Aprj ix a -> prjChain idx a (updateUse zeroUse ix u)
     _         -> Nothing
@@ -645,8 +645,7 @@ usesOfPreSeq countAcc idx seq =
     countA :: acc aenv a -> Use s
     countA = countAcc idx
 
-    countAF :: Kit acc
-            => PreOpenAfun acc aenv' f
+    countAF :: PreOpenAfun acc aenv' f
             -> Idx aenv' s
             -> Use s
     countAF (Alam f)  v = countAF f (SuccIdx v)
@@ -691,7 +690,7 @@ usesOfExpA countAcc idx exp =
     Intersect sh sz           -> countE sh <+> countE sz
     Union sh sz               -> countE sh <+> countE sz
     Shape a                   | Avar v    <- extract a
-                              , Just REFL <- match v idx
+                              , Just Refl <- match v idx
                               -> UseArray 1 0
                               | otherwise
                               -> countA a
@@ -865,7 +864,7 @@ elimArrayAccess idx exp =
     PrimConst c         -> noAccess $ PrimConst c
     PrimApp f x         -> PrimApp f `cvtE1` cvtE x
     Index a sh          | Avar idx' <- extract a
-                        , Just REFL <- match idx idx'
+                        , Just Refl <- match idx idx'
                         -> Left (sh, Var ZeroIdx)
                         | otherwise
                         -> Index a `cvtE1` cvtE sh
@@ -904,7 +903,7 @@ elimArrayAccess idx exp =
           -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv a) (PreOpenExp acc env aenv a)
     cvtE2 f (Right s)     (Right t)      = Right (f s t)
     cvtE2 f (Right s)     (Left (e, t))  = Left (e, f (weakenE SuccIdx s) t)
-    cvtE2 f (Left (e, s)) (Left (e', t)) | Just REFL <- match e e'
+    cvtE2 f (Left (e, s)) (Left (e', t)) | Just Refl <- match e e'
                                          = Left (e, Let (Var ZeroIdx) $ f (weakenE oneBelow s) (weakenE oneBelow t))
                                          | otherwise
                                          = Right (f (inline s (access e)) (inline t (access e')))
@@ -920,15 +919,15 @@ elimArrayAccess idx exp =
     cvtE3 f (Right r) (Right s)     (Left (e, t))  = Left (e, f (weakenE SuccIdx r) (weakenE SuccIdx s) t)
     cvtE3 f r@Right{} s@Left{}      t@Right{}      = cvtE3 (flip . f) r t s
     cvtE3 f r@Left{}  s@Right{}     t@Right{}      = cvtE3 (flip f) s r t
-    cvtE3 f (Right r) (Left (e, s)) (Left (e', t)) | Just REFL <- match e e'
+    cvtE3 f (Right r) (Left (e, s)) (Left (e', t)) | Just Refl <- match e e'
                                                    = Left (e, Let (Var ZeroIdx) $ f (weakenE (SuccIdx . SuccIdx) r) (weakenE oneBelow s) (weakenE oneBelow t))
                                                    | otherwise
                                                    = Right (f r (inline s (access e)) (inline t (access e')))
     cvtE3 f r@Left{}  s@Right{}     t@Left{}       = cvtE3 (flip f) s r t
     cvtE3 f r@Left{}  s@Left{}      t@Right{}      = cvtE3 (flip . f) r t s
     cvtE3 f (Left (e,r)) (Left (e', s)) (Left (e'', t))
-      | Just REFL <- match e e'
-      , Just REFL <- match e' e''
+      | Just Refl <- match e e'
+      , Just Refl <- match e' e''
       = Left (e, Let (Var ZeroIdx) $ f (weakenE oneBelow r) (weakenE oneBelow s) (weakenE oneBelow t))
       | otherwise
       = Right (f (inline r (access e)) (inline s (access e)) (inline t (access e')))
@@ -944,7 +943,7 @@ elimArrayAccess idx exp =
                                         = Right (Let s (inline t (access e)))
     cvtLet (Left (e, s)) (Right t)      = Left (e, Let s (weakenE (swapTop . SuccIdx) t))
     cvtLet (Left (e, s)) (Left (e', t)) | Just e''  <- strengthenE noTop e'
-                                        , Just REFL <- match e e''
+                                        , Just Refl <- match e e''
                                         = Left (e, Let (Var ZeroIdx) $ Let (weakenE oneBelow s) (weakenE (under oneBelow . swapTop) t))
                                         | otherwise
                                         = Right (Let (inline s (access e)) (inline t (access e')))
@@ -966,7 +965,7 @@ elimArrayAccess idx exp =
             (Right t', Right e')             -> Right (t' `SnocTup` e')
             (Right t', Left (sh, e'))  -> Left (sh, (unRTup . weakenE SuccIdx . RebuildTup) t' `SnocTup` e', False)
             (Left (sh, t', dups), Right e')  -> Left (sh, t' `SnocTup` weakenE SuccIdx e', dups)
-            (Left (sh, t', _), Left (sh', e')) | Just REFL <- match sh sh'
+            (Left (sh, t', _), Left (sh', e')) | Just Refl <- match sh sh'
                                             -> Left (sh, t' `SnocTup` e', True)
                                             | otherwise
                                             -> Right (unRTup (inline (RebuildTup t') (access sh)) `SnocTup` inline e' (access sh'))

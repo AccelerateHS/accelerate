@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
@@ -14,7 +15,9 @@ module Data.Array.Accelerate.Trafo.Rewrite
   where
 
 import Prelude                                          hiding ( seq )
+#if __GLASGOW_HASKELL__ <= 708
 import Data.Functor                                     ( (<$>) )
+#endif
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -39,7 +42,7 @@ convertSegments = cvtA
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
     cvtAfun = convertSegmentsAfun
 
-    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE :: Exp aenv t -> Exp aenv t
     cvtE = id
 
     cvtF :: Fun aenv t -> Fun aenv t
@@ -147,7 +150,7 @@ convertSegmentsSeq seq =
     cvtCT NilAtup        = NilAtup
     cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (convertSegmentsSeq c)
 
-    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE :: Exp aenv t -> Exp aenv t
     cvtE = id
 
     cvtA :: OpenAcc aenv t -> OpenAcc aenv t

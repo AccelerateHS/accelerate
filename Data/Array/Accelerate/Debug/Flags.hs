@@ -2,7 +2,11 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
-#ifndef ACCELERATE_DEBUG
+#ifdef ACCELERATE_DEBUG
+#if __GLASGOW_HASKELL >= 800
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+#endif
+#else
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-}
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
@@ -24,7 +28,7 @@ module Data.Array.Accelerate.Debug.Flags (
 
   Flags, Mode,
   acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
-  dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
+  dump_phases, dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
   dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm,
   dump_exec, dump_sched,
 
@@ -81,6 +85,7 @@ fclabels [d|
     , verbose                   :: !Bool                -- be very chatty
 
       -- optimisation and simplification
+    , dump_phases               :: !Bool                -- print information about each phase of the compiler
     , dump_sharing              :: !Bool                -- sharing recovery phase
     , dump_simpl_stats          :: !Bool                -- statistics form fusion/simplification
     , dump_simpl_iterations     :: !Bool                -- output from each simplifier iteration
@@ -133,6 +138,7 @@ fflags =
 dflags :: [FlagSpec (Bool -> Flags -> Flags)]
 dflags =
   [ Option "verbose"                    (set verbose)
+  , Option "dump-phases"                (set dump_phases)
   , Option "dump-sharing"               (set dump_sharing)
   , Option "dump-simpl-stats"           (set dump_simpl_stats)
   , Option "dump-simpl-iterations"      (set dump_simpl_iterations)
@@ -190,7 +196,7 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def def def
+    defaults            = Flags def def def def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
     parse1 opts this    =
@@ -227,7 +233,7 @@ getUpdateArgs = do
   setProgArgv (prog : before ++ after)
 #else
   M.unless (null flags)
-    $ error "Data.Array.Accelerate: Debugging options are disabled. Install with -fdebug to enable them."
+    $ error "Data.Array.Accelerate: Debugging options are disabled. Reinstall package 'accelerate' with '-fdebug' to enable them."
 #endif
   return flags
 
@@ -268,7 +274,7 @@ clearFlags _ = return ()
 
 -- | Conditional execution of a monadic debugging expression
 --
-{-# SPECIALISE when :: Mode -> IO () -> IO () #-}
+{-# INLINEABLE when #-}
 when :: MonadIO m => Mode -> m () -> m ()
 when f s = do
   yes <- liftIO $ queryFlag f
@@ -276,7 +282,7 @@ when f s = do
 
 -- | The opposite of 'when'
 --
-{-# SPECIALISE unless :: Mode -> IO () -> IO () #-}
+{-# INLINEABLE unless #-}
 unless :: MonadIO m => Mode -> m () -> m ()
 unless f s = do
   yes <- liftIO $ queryFlag f

@@ -40,8 +40,10 @@ import Prelude                                          hiding ( exp, replicate,
 import qualified Prelude                                as P
 import Data.Maybe                                       ( fromMaybe )
 import Data.Typeable
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative                              hiding ( Const, empty )
 import Control.Monad                                    ( (>=>) )
+#endif
 
 -- friends
 import Data.Array.Accelerate.AST                       hiding ( Empty )
@@ -55,9 +57,10 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
-import qualified Data.Array.Accelerate.Smart            as S
-import qualified Data.Array.Accelerate.Prelude          as S
+import qualified Data.Array.Accelerate.Classes          as S
 import qualified Data.Array.Accelerate.Language         as S
+import qualified Data.Array.Accelerate.Prelude          as S
+import qualified Data.Array.Accelerate.Smart            as S
 import qualified Data.Array.Accelerate.Trafo.Sharing    as S
 
 import Data.Array.Accelerate.Error
@@ -602,7 +605,7 @@ liftPreOpenAcc vectAcc ctx size acc
       = error "Absurd"
 
     foreignL :: (Arrays arrs, Arrays t, Foreign f)
-             => f arrs t
+             => f (arrs -> t)
              -> PreAfun     acc       (arrs -> t)
              -> acc             aenv  arrs
              -> LiftedAcc   acc aenv' t
@@ -1343,8 +1346,7 @@ liftExp vectAcc ctx size exp
          -> LiftedExp acc env aenv' aenv'' e
     cvtE exp' = liftExp vectAcc ctx size exp'
 
-    cvtA :: forall sh' e'.
-            (Elt e', Shape sh')
+    cvtA :: forall sh' e'. (Elt e', Shape sh')
          => acc aenv (Array sh' e')
          -> LiftedAcc acc aenv' (Array sh' e')
     cvtA (extract -> Avar ix) = cvtIx (arrayContext ctx) ix
@@ -1701,7 +1703,7 @@ makeFoldSegments segs = S.lift (generateSeg inSegs (\seg sh ix -> (offs S.!! seg
     inSegs  = segmentsFromShapes shs
 
 nonEmpty :: forall sh. Shape sh => S.Exp sh -> S.Exp sh
-nonEmpty = S.union (S.constant $ listToShape $ P.replicate (dim (ignore::sh)) 1)
+nonEmpty = S.union (S.constant $ listToShape $ P.replicate (rank (ignore::sh)) 1)
 
 makeFoldSegSegments :: forall sh i. (Shape sh, Slice sh, IsIntegral i, Elt i)
                     => S.Acc (Segments (sh:.Int))
@@ -1715,7 +1717,17 @@ makeFoldSegSegments segs isegs = S.lift (segmentsFromShapes shs', isegs')
                shi = shapes (segments isegs) S.! ix
            in S.lift (sh :. S.shapeSize shi)
 
-    isegs' = generateSeg (segments isegs) (\seg _ ix -> indexInSeg isegs seg ix + S.fromIntegral (offsets (segments isegs) S.!! seg))
+    isegs' = generateSeg (segments isegs) (\seg _ ix -> indexInSeg isegs seg ix `plus` fromIntegral (offsets (segments isegs) S.!! seg))
+
+    -- RCE: Because we only have an IsIntegral constraint on i, we can't use the (+) and
+    -- fromIntegral from the prelude. Even though we know that IsIntegral i => Num (Exp i), we
+    -- can't in general prove that to the type checker.
+    --
+    plus :: S.Exp i -> S.Exp i -> S.Exp i
+    plus a b = S.Exp (S.PrimApp (PrimAdd numType) (S.lift (a,b)))
+
+    fromIntegral :: S.Exp Int -> S.Exp i
+    fromIntegral i = S.Exp (S.PrimApp (PrimFromIntegral integralType numType) i)
 
 -- RCE: I have a strong feeling this can be done better.
 --
@@ -1733,7 +1745,9 @@ liftedCond pred th el
     cvtT :: ProdR Arrays t -> Atuple S.Acc (IrregularTupleRepr t) -> Atuple S.Acc (IrregularTupleRepr t) -> Atuple S.Acc (IrregularTupleRepr t)
     cvtT ProdRunit     NilAtup          NilAtup          = NilAtup
     cvtT (ProdRsnoc t) (SnocAtup t1 a1) (SnocAtup t2 a2) = SnocAtup (cvtT t t1 t2) (liftedCond pred a1 a2)
-    cvtT _             _                _                = error "Unreachable code"
+#if __GLASGOW_HASKELL__ < 800
+    cvtT _             _                _                = error "unreachable"
+#endif
 
     liftedCond1 :: (Elt e, Shape sh) => S.Acc (Irregular (Array sh e)) -> S.Acc (Irregular (Array sh e)) -> S.Acc (Irregular (Array sh e))
     liftedCond1 t e = irregular segs vals
@@ -2188,7 +2202,7 @@ sndE :: forall acc env aenv a b. (Elt a, Elt b)
      -> PreOpenExp acc env aenv b
 sndE = Prj ZeroTupIdx
 
-tup :: forall acc env aenv a b. (Elt a,Elt b)
+tup :: forall acc env aenv a b. (Elt a, Elt b)
     => PreOpenExp acc env aenv a
     -> PreOpenExp acc env aenv b
     -> PreOpenExp acc env aenv (a,b)
@@ -2234,12 +2248,10 @@ replicateE :: forall acc aenv e.
            -> acc aenv (Vector e)
 replicateE (Size b s) e = inject . Alet b $^ Replicate (SliceFixed SliceNil) (IndexCons IndexNil s) (inject . weakenA1 $ Unit e)
 
-var0 :: (Kit acc, Elt t)
-     => PreOpenExp acc (env, t) aenv t
+var0 :: Elt t0 => PreOpenExp acc (env, t0) aenv t0
 var0 = Var ZeroIdx
 
-var1 :: (Kit acc, Elt t)
-     => PreOpenExp acc ((env, t), s) aenv t
+var1 :: Elt t1 => PreOpenExp acc ((env, t1), t0) aenv t1
 var1 = Var $ SuccIdx ZeroIdx
 
 var2 :: (Kit acc, Elt t)
@@ -2250,12 +2262,10 @@ avar0 :: (Kit acc, Arrays t)
       => acc (aenv, t) t
 avar0 = inject $ Avar ZeroIdx
 
-avar1 :: (Kit acc, Arrays t)
-      => acc ((aenv, t), s) t
+avar1 :: (Kit acc, Arrays a1) => acc ((aenv, a1), a0) a1
 avar1 = inject $ Avar $ SuccIdx ZeroIdx
 
-avar2 :: (Kit acc, Arrays t)
-      => acc (((aenv, t), s), r) t
+avar2 :: (Kit acc, Arrays a2) => acc (((aenv, a2), a1), a0) a2
 avar2 = inject $ Avar $ SuccIdx . SuccIdx $ ZeroIdx
 
 -- avar3 :: (Kit acc, Arrays t)
@@ -2280,8 +2290,7 @@ unit :: (Kit acc, Elt e)
      -> acc aenv (Scalar e)
 unit = inject . Unit
 
-index1 :: PreOpenExp acc env aenv Int
-       -> PreOpenExp acc env aenv DIM1
+index1 :: PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv DIM1
 index1 = IndexCons IndexNil
 
 index2 :: PreOpenExp acc env aenv Int
@@ -2334,19 +2343,13 @@ weakenA1 :: Sink f
          -> f (aenv,s) t
 weakenA1 = weaken SuccIdx
 
-weakenA2 :: Sink f
-         => f aenv t
-         -> f ((aenv,r),s) t
+weakenA2 :: Sink f => f aenv t -> f ((aenv,s1),s0) t
 weakenA2 = weaken (SuccIdx . SuccIdx)
 
-weakenA3 :: Sink f
-         => f aenv t
-         -> f (((aenv,q),r),s) t
+weakenA3 :: Sink f => f aenv t -> f (((aenv,s2),s1),s0) t
 weakenA3 = weaken (SuccIdx . SuccIdx . SuccIdx)
 
-weakenA4 :: Sink f
-         => f aenv t
-         -> f ((((aenv,p),q),r),s) t
+weakenA4 :: Sink f => f aenv t -> f ((((aenv,s3),s2),s1),s0) t
 weakenA4 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx)
 
 -- weakenA5 :: Sink f
@@ -2364,9 +2367,7 @@ weakenE1 :: SinkExp f
          -> f (env,s) aenv t
 weakenE1 = weakenE SuccIdx
 
-weakenE2 :: SinkExp f
-         => f env         aenv t
-         -> f ((env,r),s) aenv t
+weakenE2 :: SinkExp f => f env aenv t -> f ((env,s1),s0) aenv t
 weakenE2 = weakenE (SuccIdx . SuccIdx)
 
 fun1 :: (Kit acc, Elt a, Elt b)
@@ -2432,22 +2433,24 @@ apply f = inject . subApply f
 --   $^ Alet (weakenA2 c)
 --   $ f
 
-subApply2 :: (Kit acc, Arrays a)
-         => PreOpenAfun acc aenv (a -> b -> c)
-         -> acc             aenv a
-         -> acc             aenv b
-         -> PreOpenAcc  acc aenv c
+subApply2
+    :: (Kit acc, Arrays a)
+    => PreOpenAfun acc aenv (a -> b -> c)
+    -> acc             aenv a
+    -> acc             aenv b
+    -> PreOpenAcc  acc aenv c
 subApply2 (Alam (Alam (Abody f))) a b
   = Alet a
   $ inject $ Alet (weakenA1 b)
   $ f
 subApply2 _ _ _ = error "subApply2: inconsistent evaluation"
 
-subApplyE2 :: Kit acc
-           => PreOpenFun  acc env aenv (a -> b -> c)
-           -> PreOpenExp  acc env aenv a
-           -> PreOpenExp  acc env aenv b
-           -> PreOpenExp  acc env aenv c
+subApplyE2
+    :: Kit acc
+    => PreOpenFun  acc env aenv (a -> b -> c)
+    -> PreOpenExp  acc env aenv a
+    -> PreOpenExp  acc env aenv b
+    -> PreOpenExp  acc env aenv c
 subApplyE2 (Lam (Lam (Body f))) a b
   = Let a
   $ Let (weakenE1 b)

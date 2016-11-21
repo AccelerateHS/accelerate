@@ -49,10 +49,10 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  L.Acc, L.Seq, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
+  Acc, Seq, Arrays, Array, Scalar, Vector, Segments,
 
   -- ** Array element types
-  S.Elt,
+  Elt,
 
   -- ** Shapes & Indices
   --
@@ -60,139 +60,165 @@ module Data.Array.Accelerate (
   -- end-of-list token, `Z`, occurs on the left. For example, the type of a
   -- rank-2 array index is @Z :. Int :. Int@.
   --
-  S.Z(..), (S.:.)(..), S.Shape, S.All(..), S.Any(..), S.Split(..), S.Divide(..), S.Slice, S.Division(..),
-  S.DIM0, S.DIM1, S.DIM2, S.DIM3, S.DIM4, S.DIM5, S.DIM6, S.DIM7, S.DIM8, S.DIM9,
+  Z(..), (:.)(..), Shape, All(..), Any(..), Split(..), Divide(..), Slice(..), Division(..),
+  DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- ** Accessors
   -- *** Indexing
-  (L.!), (L.!!), P.the,
+  (!), (!!), the,
 
   -- *** Shape information
-  P.null, P.length, L.shape, L.size, L.shapeSize,
+  null, length, shape, size, shapeSize,
 
   -- *** Extracting sub-arrays
-  L.slice,
-  P.init, P.tail, P.take, P.drop, P.slit,
+  slice,
+  init, tail, take, drop, slit,
 
   -- ** Construction
   -- *** Introduction
-  L.use, L.unit,
+  use, unit,
 
   -- *** Initialisation
-  L.generate, L.replicate, P.fill,
+  generate, replicate, fill,
 
   -- *** Enumeration
-  P.enumFromN, P.enumFromStepN,
+  enumFromN, enumFromStepN,
 
   -- *** Concatenation
-  (P.++),
+  (++),
 
   -- ** Composition
   -- *** Flow control
-  (P.?|), L.acond, L.awhile,
+  (?|), acond, awhile,
+  IfThenElse(..),
 
   -- *** Pipelining
-  (L.>->),
+  (>->),
 
   -- *** Controlling execution
-  P.compute,
+  compute,
 
   -- ** Modifying Arrays
   -- *** Shape manipulation
-  L.reshape, P.flatten,
+  reshape, flatten,
 
   -- *** Permutations
-  L.permute, L.backpermute, L.ignore,
+  permute, backpermute, ignore,
 
   -- *** Specialised permutations
-  P.reverse, P.transpose,
+  reverse, transpose,
 
   -- ** Element-wise operations
   -- *** Indexing
-  P.indexed,
+  indexed,
 
   -- *** Mapping
-  L.map, P.imap,
+  map, imap,
 
   -- *** Zipping
-  L.zipWith, P.zipWith3, P.zipWith4, P.zipWith5, P.zipWith6, P.zipWith7, P.zipWith8, P.zipWith9,
-  P.izipWith, P.izipWith3, P.izipWith4, P.izipWith5, P.izipWith6, P.izipWith7, P.izipWith8, P.izipWith9,
-  P.zip, P.zip3, P.zip4, P.zip5, P.zip6, P.zip7, P.zip8, P.zip9,
+  zipWith, zipWith3, zipWith4, zipWith5, zipWith6, zipWith7, zipWith8, zipWith9,
+  izipWith, izipWith3, izipWith4, izipWith5, izipWith6, izipWith7, izipWith8, izipWith9,
+  zip, zip3, zip4, zip5, zip6, zip7, zip8, zip9,
 
   -- *** Unzipping
-  P.unzip, P.unzip3, P.unzip4, P.unzip5, P.unzip6, P.unzip7, P.unzip8, P.unzip9,
+  unzip, unzip3, unzip4, unzip5, unzip6, unzip7, unzip8, unzip9,
 
   -- ** Working with predicates
   -- *** Filtering
-  P.filter,
+  filter,
 
   -- *** Scatter
-  P.scatter, P.scatterIf,
+  scatter, scatterIf,
 
   -- *** Gather
-  P.gather,  P.gatherIf,
+  gather,  gatherIf,
 
   -- ** Folding
-  L.fold, L.fold1, P.foldAll, P.fold1All,
+  fold, fold1, foldAll, fold1All,
 
   -- *** Segmented reductions
-  L.foldSeg, L.fold1Seg,
+  foldSeg, fold1Seg,
 
   -- *** Specialised folds
-  P.all, P.any, P.and, P.or, P.sum, P.product, P.minimum, P.maximum,
+  all, any, and, or, sum, product, minimum, maximum,
 
   -- ** Prefix sums (scans)
-  L.scanl, L.scanl1, L.scanl', L.scanr, L.scanr1, L.scanr',
-  P.prescanl, P.postscanl, P.prescanr, P.postscanr,
+  scanl, scanl1, scanl', scanr, scanr1, scanr',
+  prescanl, postscanl, prescanr, postscanr,
 
   -- *** Segmented scans
-  P.scanlSeg, P.scanl1Seg, P.scanl'Seg, P.prescanlSeg, P.postscanlSeg,
-  P.scanrSeg, P.scanr1Seg, P.scanr'Seg, P.prescanrSeg, P.postscanrSeg,
+  scanlSeg, scanl1Seg, scanl'Seg, prescanlSeg, postscanlSeg,
+  scanrSeg, scanr1Seg, scanr'Seg, prescanrSeg, postscanrSeg,
 
   -- ** Stencil
-  L.stencil, L.stencil2,
+  stencil, stencil2,
 
   -- ** Sequence elimination
-  L.collect,
+  collect,
 
   -- ** Sequence producers
-  L.streamIn, L.subarrays, L.produce, P.produceScalar,
-  P.toSeqInner, P.toSeqOuter,
+  streamIn, subarrays, produce, produceScalar,
+  toSeqInner, toSeqOuter,
 
   -- ** Sequence transducers
-  L.mapSeq, L.zipWithSeq, P.mapSeqE, P.zipWithSeqE, P.zipSeq, P.unzipSeq,
+  mapSeq, zipWithSeq, mapSeqE, zipWithSeqE, zipSeq, unzipSeq,
 
   -- ** Sequence consumers
-  P.foldSeqE, P.fromSeq, L.elements, P.shapes, L.tabulate, L.foldBatch,
+  foldSeqE, fromSeq, elements, shapes, tabulate, foldBatch,
 
   -- *** Specification
-  L.Stencil, L.Boundary(..),
+  Stencil, Boundary(..),
 
   -- *** Common stencil patterns
-  L.Stencil3, L.Stencil5, L.Stencil7, L.Stencil9,
-  L.Stencil3x3, L.Stencil5x3, L.Stencil3x5, L.Stencil5x5,
-  L.Stencil3x3x3, L.Stencil5x3x3, L.Stencil3x5x3, L.Stencil3x3x5, L.Stencil5x5x3, L.Stencil5x3x5,
-  L.Stencil3x5x5, L.Stencil5x5x5,
+  Stencil3, Stencil5, Stencil7, Stencil9,
+  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
+  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
+  Stencil3x5x5, Stencil5x5x5,
 
   -- ** Foreign
-  L.foreignAcc, L.foreignAcc2, L.foreignAcc3,
-  L.foreignExp, L.foreignExp2, L.foreignExp3,
-  L.VectorisedRegularForeign(..),
+  foreignAcc,
+  foreignExp,
+  VectorisedRegularForeign(..),
 
   -- ---------------------------------------------------------------------------
-
   -- * The /Accelerate/ Expression Language
   -- ** Scalar data types
-  L.Exp,
+  Exp,
 
   -- ** Type classes
-  T.IsScalar, T.IsNum, T.IsBounded, T.IsIntegral, T.IsFloating, T.IsNonNum,
+  -- *** Basic type classes
+  Eq(..),
+  Ord(..),
+  -- Enum, -- vacuous
+  Bounded, minBound, maxBound,
+
+  -- *** Numeric type classes
+  Num, (+), (-), (*), negate, abs, signum, fromInteger,
+  -- Real, -- vacuous
+  Integral, quot, rem, div, mod, quotRem, divMod,
+  Fractional, (/), recip, fromRational,
+  Floating, pi, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, exp, sqrt, log, (**), logBase,
+  RealFrac(..),
+  RealFloat(..),
+
+  -- *** Numeric conversion classes
+  FromIntegral(..),
+  ToFloating(..),
+
+  -- *** Primitive types
+  --
+  -- Avoid using these in your own functions wherever possible.
+  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
 
   -- ** Element types
-  T.Int, T.Int8, T.Int16, T.Int32, T.Int64, T.Word, T.Word8, T.Word16, T.Word32, T.Word64,
-  T.CShort, T.CUShort, T.CInt, T.CUInt, T.CLong, T.CULong, T.CLLong, T.CULLong,
-  Float, Double, T.CFloat, T.CDouble,
-  Bool, Char, T.CChar, T.CSChar, T.CUChar,
+  Int, Int8, Int16, Int32, Int64,
+  Word, Word8, Word16, Word32, Word64,
+  Float, Double,
+  Bool(..), Char,
+
+  CFloat, CDouble,
+  CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
+  CChar, CSChar, CUChar,
 
   -- ** Lifting and Unlifting
 
@@ -223,7 +249,9 @@ module Data.Array.Accelerate (
   -- >     -> lift      :: Acc (Scalar Int, Vector Float)
   -- >     -> ...
   --
-  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.lift3, P.ilift1, P.ilift2, P.ilift3,
+  Lift(..), Unlift(..),
+  lift1, lift2, lift3,
+  ilift1, ilift2, ilift3,
 
   -- ** Operations
   --
@@ -234,44 +262,36 @@ module Data.Array.Accelerate (
   --
 
   -- *** Introduction
-  L.constant,
+  constant,
 
   -- *** Tuples
-  P.fst, P.afst, P.snd, P.asnd, P.curry, P.uncurry,
+  fst, afst, snd, asnd, curry, uncurry,
 
   -- *** Flow control
-  (P.?), P.caseof, L.cond, L.while, P.iterate,
+  (?), caseof, cond, while, iterate,
 
   -- *** Scalar reduction
-  P.sfoldl,
+  sfoldl,
 
-  -- *** Basic operations
-  (L.&&*), (L.||*), L.not,
-  (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*),
+  -- *** Logical operations
+  (&&*), (||*), not,
 
-  -- *** Numeric functions
-  L.truncate, L.round, L.floor, L.ceiling, L.even, L.odd,
-  L.isNaN,
-
-  -- *** Bitwise functions
-  L.bit, L.setBit, L.clearBit, L.complementBit, L.testBit,
-  L.shift,  L.shiftL,  L.shiftR,
-  L.rotate, L.rotateL, L.rotateR,
+  -- *** Numeric operations
+  subtract, even, odd, gcd, lcm,
 
   -- *** Shape manipulation
-  P.index0, P.index1, P.unindex1, P.index2, P.unindex2, P.index3, P.unindex3,
-  L.indexHead, L.indexTail,
-  L.toIndex, L.fromIndex,
-  L.intersect, L.indexTrans,
+  index0, index1, unindex1, index2, unindex2, index3, unindex3,
+  indexHead, indexTail,
+  toIndex, fromIndex,
+  intersect, indexTrans,
 
   -- *** Conversions
-  L.ord, L.chr, L.boolToInt, L.fromIntegral,
+  ord, chr, boolToInt, bitcast,
 
   -- ---------------------------------------------------------------------------
-
   -- * Plain arrays
   -- ** Operations
-  arrayDim, arrayShape, arraySize, indexArray,
+  arrayRank, arrayShape, arraySize, indexArray,
 
   -- ** Conversions
   --
@@ -282,22 +302,29 @@ module Data.Array.Accelerate (
   fromFunction,
 
   -- *** Lists
-  S.fromList, S.toList,
+  fromList, toList,
 
   -- *** 'Data.Array.IArray.IArray'
-  S.fromIArray, S.toIArray,
+  fromIArray, toIArray,
+
+  -- ---------------------------------------------------------------------------
+  -- * Prelude re-exports
+
+  (.), ($), error, undefined,
 
 ) where
 
 -- friends
-import Data.Array.Accelerate.Trafo                  () -- show instances
-import qualified Data.Array.Accelerate.Array.Sugar  as S
-import qualified Data.Array.Accelerate.Language     as L
-import qualified Data.Array.Accelerate.Prelude      as P
-import qualified Data.Array.Accelerate.Type         as T
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), rank, shape, size, toIndex, fromIndex, intersect, ignore, transpose )
+import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Prelude
+import Data.Array.Accelerate.Trafo                                  () -- show instances
+import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
--- system
-import Prelude (Float, Double, Bool, Char)
+-- re-exported from D.A.A.Classes.Num but not found ??
+import Prelude                                                      ( (.), ($), undefined, error, fromInteger )
 
 
 -- Renamings
@@ -309,28 +336,27 @@ import Prelude (Float, Double, Bool, Char)
 
 -- |Array indexing in plain Haskell code.
 --
-indexArray :: S.Array sh e -> sh -> e
+indexArray :: Array sh e -> sh -> e
 indexArray = (S.!)
 
 -- | Rank of an array.
 --
-arrayDim :: S.Shape sh => sh -> T.Int
-arrayDim = S.dim
--- FIXME: Rename to rank
+arrayRank :: Shape sh => sh -> Int
+arrayRank = S.rank
 
 -- |Array shape in plain Haskell code.
 --
-arrayShape :: S.Shape sh => S.Array sh e -> sh
+arrayShape :: Shape sh => Array sh e -> sh
 arrayShape = S.shape
 -- rename as 'shape' is already used by the EDSL to query an array's shape
 
 -- | Total number of elements in an array of the given 'Shape'.
 --
-arraySize :: S.Shape sh => sh -> T.Int
+arraySize :: Shape sh => sh -> Int
 arraySize = S.size
 
 -- | Create an array from its representation function.
 --
 {-# INLINE fromFunction #-}
-fromFunction :: (S.Shape sh, S.Elt e) => sh -> (sh -> e) -> S.Array sh e
-fromFunction = S.newArray
+fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
+fromFunction = newArray

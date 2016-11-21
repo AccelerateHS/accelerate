@@ -1,6 +1,11 @@
 # vim: nospell
-language: minimal
-sudo: false
+#
+# Basic template to test with GHC=[7.8, 7.10, 8.0]. Caches the 'stack' build
+# directory to speed subsequent compilations.
+#
+language: generic
+dist: trusty
+sudo: required
 
 cache:
   directories:
@@ -10,68 +15,49 @@ matrix:
   include:
     - env: GHC=7.8.4 CABAL=1.18
       compiler: "GHC 7.8"
-      addons:
-        apt:
-          sources:
-            - hvr-ghc
-          packages:
-            - ghc-7.8.4
-            - cabal-install-1.18
-            - happy-1.19.5
-            - alex-3.1.4
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
 
-    - env: GHC=7.10.2 CABAL=1.22
+    - env: GHC=7.10.3 CABAL=1.22
       compiler: "GHC 7.10"
-      addons:
-        apt:
-          sources:
-            - hvr-ghc
-          packages:
-            - ghc-7.10.2
-            - cabal-install-1.22
-            - happy-1.19.5
-            - alex-3.1.4
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
 
-    # - env: GHC=8.0.1 CABAL=1.24
-    #   compiler: "GHC 8.0 (prerelease)"
-    #   addons:
-    #     apt:
-    #       sources:
-    #         - hvr-ghc
-    #       packages:
-    #         - ghc-8.0.1
-    #         - cabal-install-1.24
-    #         - happy-1.19.5
-    #         - alex-3.1.4
+    - env: GHC=8.0.1 CABAL=1.22
+      compiler: "GHC 8.0"
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
+
+    - env: GHC=head CABAL=head
+      compiler: "GHC HEAD"
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ ghc-head, cabal-install-head, happy-1.19.5, alex-3.1.7 ] }}
 
   allow_failures:
-    - env: GHC=8.0.1 CABAL=1.24
+    - env: GHC=head CABAL=head
+
+  fast_finish: true
 
 before_install:
-  - export PATH=/opt/ghc/$GHC/bin:/opt/cabal/$CABAL/bin:/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$PATH
-
-  # Fetch stack
-  - mkdir $HOME/bin
-  - export PATH=$HOME/bin:$PATH
-  - travis_retry curl -L "https://www.stackage.org/stack/linux-x86_64" | gunzip | tar -x
-  - mv stack-*/stack $HOME/bin
-  - ln -s stack-${GHC%.*}.yaml stack.yaml
-  - travis_retry stack setup
-  - travis_retry stack install hscolour
+  - export PATH=/opt/cabal/$CABAL/bin:/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:$HOME/.cabal/bin:$PATH
+  - source .travis/install-stack.sh
 
 install:
-  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - cabal --version
   - stack --version
-  - opt --version; true
-  - llc --version; true
-  - travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps -j2
+  - |
+      if [ ${GHC} == head -o ! -e stack.yaml ]; then
+        travis_retry cabal install --only-dependencies
+      else
+        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps
+      fi
 
 script:
-  - stack build --no-terminal --flag accelerate:debug
-  - stack build --no-terminal --haddock --no-haddock-deps
+  - |
+      if [ ${GHC} == head -o ! -e stack.yaml ]; then
+        cabal install
+        cabal haddock
+      else
+        stack build --no-terminal --haddock --no-haddock-deps
+      fi
 
-notifications:
-  slack:
-    rooms:
-      secure: "L9SOGXXGLQvBPv5vBJW6EWLLDSodrr17Sgac7Q3frwPZGnbnrGM4HGj4pJwSHBBMu0rI2p8Qfx7r2DW+C8rXLJ+7o8fQog3HYXdQJaiPQTpGTyLnrWW7cfOdQSZ7cNsjcd+IsJWkPpv/CNK12sAP0zzDD44UYUXGp1HPGjG0W1c="
+after_success:
+  - source .travis/update-accelerate-buildbot.sh
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
@@ -36,15 +37,13 @@ import Prelude                                          hiding ( exp, iterate )
 import Data.Array.Accelerate.AST                        hiding ( prj )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Elt(..), Shape(..), ShapeR(..), SliceR(..), Slice(..), AsSlice(..), toElt, fromElt, (:.)(..), EltRepr, All(..)
+import Data.Array.Accelerate.Array.Sugar                ( Elt(..), Shape(..), ShapeR(..), SliceR(..), Slice(..), AsSlice(..), toElt, fromElt, (:.)(..), EltRepr
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList, transpose )
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -83,7 +82,7 @@ instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
 -- memory because there are insufficient registers available. We sidestep this
 -- tricky and target-dependent issue by, for now, simply ignoring it.
 --
-localCSE :: (Kit acc, Elt a, Elt b)
+localCSE :: (Kit acc, Elt a)
          => Gamma      acc env env aenv
          -> PreOpenExp acc env     aenv a
          -> PreOpenExp acc (env,a) aenv b
@@ -107,6 +106,7 @@ globalCSE env exp
   | otherwise                    = Nothing
 
 
+{--
 -- Compared to regular Haskell, the scalar expression language of Accelerate is
 -- rather limited in order to meet the restrictions of what can be efficiently
 -- implemented on specialised hardware, such as GPUs. For example, to avoid
@@ -140,9 +140,6 @@ recoverLoops
     -> PreOpenExp acc env     aenv a
     -> PreOpenExp acc (env,a) aenv b
     -> Maybe (PreOpenExp acc env aenv b)
-recoverLoops _ _ _
-  = Nothing
-{--
 recoverLoops _ bnd e3
   -- To introduce scaler loops, we look for expressions of the form:
   --
@@ -155,8 +152,8 @@ recoverLoops _ bnd e3
   --   iterate[2] (\y -> e2) e1
   --
   | Let e1 e2           <- bnd
-  , Just REFL           <- matchEnvTop e2 e3
-  , Just REFL           <- match e2 e3
+  , Just Refl           <- matchEnvTop e2 e3
+  , Just Refl           <- match e2 e3
   = Stats.ruleFired "loop recovery/intro" . Just
   $ Iterate (constant 2) e2 e1
 
@@ -169,7 +166,7 @@ recoverLoops _ bnd e3
   -- iteration with the trip count increased by one.
   --
   | Iterate n f e1      <- bnd
-  , Just REFL           <- match f e3
+  , Just Refl           <- match f e3
   = Stats.ruleFired "loop recovery/merge" . Just
   $ Iterate (constant 1 `plus` n) f e1
 
@@ -187,7 +184,7 @@ recoverLoops _ bnd e3
                 => PreOpenExp acc (env,s) aenv f
                 -> PreOpenExp acc (env,t) aenv g
                 -> Maybe (s :=: t)
-    matchEnvTop _ _ = gcast REFL
+    matchEnvTop _ _ = gcast Refl
 --}
 
 
@@ -211,9 +208,9 @@ simplifyOpenExp env = first getAny . cvtE
     cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
-        | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | otherwise                                              -> Let <$> bnd' <*> body'
+        -- Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | Just reduct <- localCSE env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | otherwise                                          -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
           env'  = PushExp env (snd bnd')
@@ -236,7 +233,10 @@ simplifyOpenExp env = first getAny . cvtE
       ToSlice x sh i            -> toSlice x (cvtE sh) (cvtE i)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
-      PrimApp f x               -> evalPrimApp env f <$> cvtE x
+      PrimApp f x               -> (u<>v, fx)
+        where
+          (u, x') = cvtE x
+          (v, fx) = evalPrimApp env f x'
       Index a sh                -> Index a <$> cvtE sh
       LinearIndex a i           -> LinearIndex a <$> cvtE i
       Shape a                   -> pure $ Shape a
@@ -310,7 +310,7 @@ simplifyOpenExp env = first getAny . cvtE
     cond p@(_,p') t@(_,t') e@(_,e')
       | Const True  <- p'        = Stats.knownBranch "True"      (yes t')
       | Const False <- p'        = Stats.knownBranch "False"     (yes e')
-      | Just REFL <- match t' e' = Stats.knownBranch "redundant" (yes e')
+      | Just Refl <- match t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                = Cond <$> p <*> t <*> e
 
     -- If we are projecting elements from a tuple structure or tuple of constant
@@ -334,7 +334,9 @@ simplifyOpenExp env = first getAny . cvtE
         prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s
         prjT ZeroTupIdx       (SnocTup _ v) = v
         prjT (SuccTupIdx idx) (SnocTup t _) = prjT idx t
+#if __GLASGOW_HASKELL__ < 800
         prjT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
+#endif
 
         prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env' aenv s
         prjC ZeroTupIdx       (_,   v) = Const (fromElt v)
@@ -375,7 +377,7 @@ simplifyOpenExp env = first getAny . cvtE
       , Just sh'        <- gcast sz'
       = Stats.ruleFired "Z:.indexHead" $ yes sh'
     indexCons (_,IndexTail sl') (_,IndexHead sz')
-      | Just REFL       <- match sl' sz'
+      | Just Refl       <- match sl' sz'
       = Stats.ruleFired "indexTail:.indexHead" $ yes sl'
     indexCons sl sz
       = IndexCons <$> sl <*> sz
@@ -480,7 +482,7 @@ simplifyOpenExp env = first getAny . cvtE
       , i == 1
       = Stats.ruleFired "fromIndex/indexCons" $ yes (IndexCons (FromIndex sh i') (Const 1))
     fromIndex  (_,sh) (_,ToIndex sh' ix)
-      | Just REFL <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
+      | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
     fromIndex _ (_,i)
       | ShapeRcons ShapeRnil <- shapeType (Proxy :: Proxy sh)
       = Stats.ruleFired "fromIndex/dim1" $ yes (IndexCons IndexNil i)
@@ -517,10 +519,10 @@ simplifyOpenExp env = first getAny . cvtE
     sameSize (IndexCons sh i) (IndexCons sh' i')
       | ShapeRcons _ <- shapeType (Proxy :: Proxy sh)
       , ShapeRcons _ <- shapeType (Proxy :: Proxy sh')
-      , Just REFL <- match i i'
+      , Just Refl <- match i i'
       = sameSize sh sh'
     sameSize sh sh'
-      | Just REFL <- match sh sh'
+      | Just Refl <- match sh sh'
       = True
     sameSize _ _ = False
 
@@ -590,9 +592,11 @@ iterate
 iterate ppr f = fix 1 . setup
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
-    -- excessive run times, we set this value very low.
+    -- excessive run times, we (should) set this value very low.
     --
-    lIMIT       = 5
+    -- TODO: make this tunable via debug flags.
+    --
+    lIMIT       = 25
 
     simplify'   = Stats.simplifierDone . f
     setup x     = Stats.trace Stats.dump_simpl_iterations (printf "simplifier begin:\n%s\n" (ppr x))
@@ -600,7 +604,7 @@ iterate ppr f = fix 1 . setup
 
     fix :: Int -> f a -> f a
     fix i x0
-      | i > lIMIT       = $internalWarning "iterate" "iteration limit reached" (x0 ==^ f x0) x0
+      | i > lIMIT       = $internalWarning "simplify" "iteration limit reached" (not (x0 ==^ f x0)) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2
