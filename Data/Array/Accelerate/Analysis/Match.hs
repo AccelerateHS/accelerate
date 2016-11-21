@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -49,6 +50,10 @@ import Data.Typeable
 import Data.Hashable
 import System.Mem.StableName
 import System.IO.Unsafe                                 ( unsafePerformIO )
+
+#if __GLASGOW_HASKELL__ <= 708
+import Control.Applicative                               ( (<$>), (<*>) )
+#endif
 
 -- friends
 import Data.Array.Accelerate.AST
