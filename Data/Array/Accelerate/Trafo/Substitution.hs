@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -37,6 +38,9 @@ module Data.Array.Accelerate.Trafo.Substitution (
 ) where
 
 import Control.Applicative                              hiding ( Const )
+#if __GLASGOW_HASKELL__ <= 708
+import Data.Traversable                                 ( traverse, sequenceA )
+#endif
 import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
