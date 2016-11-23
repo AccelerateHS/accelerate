@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
@@ -329,7 +330,9 @@ zipWithUelt f (UseEltTuple t1) (UseEltTuple t2) = UseEltTuple (t1 `tup` t2)
     tup :: Tuple UseElt t -> Tuple UseElt t -> Tuple UseElt t
     tup NilTup          NilTup          = NilTup
     tup (SnocTup t1 a1) (SnocTup t2 a2) = tup t1 t2 `SnocTup` zipWithUelt f a1 a2
+    #if __GLASGOW_HASKELL__ < 800
     tup _               _               = error "Chewie, we're home."
+    #endif
 zipWithUelt _ _                 _           = error "Aaarrrrhhggg!"
 
 -- Update use at a specific index.
@@ -367,7 +370,9 @@ instance Eq (UseElt a) where
 instance Eq (Tuple UseElt t) where
   NilTup        == NilTup        = True
   SnocTup t1 a1 == SnocTup t2 a2 = t1 == t2 && a1 == a2
+  #if __GLASGOW_HASKELL__ < 800
   _             == _             = error "Impossible usage"
+  #endif
 
 -- Check if a condition is try for the use of all components.
 --
@@ -460,7 +465,9 @@ zipWithU f g (UseTuple t1)    (UseTuple t2)    = UseTuple (t1 `tup` t2)
     tup :: Atuple Use t -> Atuple Use t -> Atuple Use t
     tup NilAtup          NilAtup          = NilAtup
     tup (SnocAtup t1 a1) (SnocAtup t2 a2) = tup t1 t2 `SnocAtup` zipWithU f g a1 a2
+    #if __GLASGOW_HASKELL__ < 800
     tup _                _                = error "Chewie, we're home."
+    #endif
 zipWithU _ _ _                _                = error "Aaarrrrhhggg!"
 
 -- Update use at a specific index.
@@ -499,7 +506,9 @@ instance Eq (Use a) where
 instance Eq (Atuple Use t) where
   NilAtup        == NilAtup        = True
   SnocAtup t1 a1 == SnocAtup t2 a2 = t1 == t2 && a1 == a2
+  #if __GLASGOW_HASKELL__ < 800
   _              == _              = error "That thing out there... That is no dinosaur"
+  #endif
 
 -- Check if a condition is try for the use of all components.
 --

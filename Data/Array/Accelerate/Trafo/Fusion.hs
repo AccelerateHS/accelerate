@@ -1049,7 +1049,6 @@ data Insert a aenv out where
 insert :: In a aenv out -> out ::> out' -> Insert a aenv out'
 insert inenv WeakBase  = Insert WeakBase inenv
 insert Here WeakEmpty = Insert (WeakIn WeakEmpty) Here
-insert _ WeakEmpty = error "Inaccessible"
 insert inenv (WeakOut wenv)
   | Insert wenv' inenv' <- insert inenv wenv
   = Insert (WeakOut wenv') (There inenv')
@@ -1058,6 +1057,9 @@ insert Here (WeakIn wenv)
 insert (There inenv) (WeakIn wenv)
   | Insert wenv' inenv' <- insert inenv wenv
   = Insert (WeakIn wenv') (There inenv')
+#if __GLASGOW_HASKELL__ < 800
+insert _ WeakEmpty = error "Inaccessible"
+#endif
 
 data StrongerUnion aenv aenv' aenv'' where
   StrongerUnion :: aenv''' ::> aenv

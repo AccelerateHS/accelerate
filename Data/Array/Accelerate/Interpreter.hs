@@ -1125,7 +1125,6 @@ evalStream min max n aenv = eval n (initialIndex min)
 
 stepStream :: forall index aenv arrs. index -> Val aenv -> Stream index aenv arrs -> Either arrs (Stream index aenv arrs)
 stepStream _     (Push _ a) (Yield _)     = Right (Yield a)
-stepStream _     _          (Yield _)     = error "Absurd"
 stepStream _     _          (Done a)      = Left a
 stepStream index aenv       (Step f s st) =
   case f index aenv s of
@@ -1136,6 +1135,9 @@ stepStream index aenv (Combine t) = Right (Combine (stepTup t))
     stepTup :: Atuple (Stream index aenv) t -> Atuple (Stream index aenv) t
     stepTup NilAtup        = NilAtup
     stepTup (SnocAtup t s) = stepTup t `SnocAtup` either Done id (stepStream index aenv s)
+#if __GLASGOW_HASKELL__ < 800
+stepStream _     _          (Yield _)     = error "Absurd"
+#endif
 
 getResult :: Stream index aenv arrs -> arrs
 getResult (Done a)  = a
