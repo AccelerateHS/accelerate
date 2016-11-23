@@ -158,13 +158,13 @@ module Data.Array.Accelerate (
 
   -- ** Sequence producers
   streamIn, subarrays, produce, produceScalar,
-  toSeqInner, toSeqOuter,
+  toSeq, toSeqInner, toSeqOuter,
 
   -- ** Sequence transducers
   mapSeq, zipWithSeq, mapSeqE, zipWithSeqE, zipSeq, unzipSeq,
 
   -- ** Sequence consumers
-  foldSeqE, fromSeq, elements, shapes, tabulate, foldBatch,
+  foldSeqE, fromSeq, elements, shapes, tabulate, foldBatch, foldSeqFlatten,
 
   -- *** Specification
   Stencil, Boundary(..),

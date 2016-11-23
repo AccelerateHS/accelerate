@@ -108,7 +108,7 @@ module Data.Array.Accelerate.Prelude (
   foldSeqE, fromSeq, shapes, foldSeqFlatten,
 
   -- * Sequence generators
-  toSeqInner, toSeqOuter, produceScalar,
+  toSeq, toSeqInner, toSeqOuter, produceScalar,
 
   -- * Sequence transducers
   mapSeqE, zipWithSeqE, zipSeq, unzipSeq,
