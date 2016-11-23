@@ -730,6 +730,26 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- of the source array, a boundary condition determines the contents of the
 -- out-of-bounds neighbourhood positions.
 --
+-- Stencil neighbourhoods are specified via nested tuples, where the nesting
+-- depth is equal to the dimensionality of the array. For example, a 3x1 stencil
+-- for a one-dimensional array:
+--
+-- > s31 :: Stencil3 a -> Exp a
+-- > s31 (l,c,r) = ...
+--
+-- ...where @c@ is the focal point of the stencil, and @l@ and @r@ represent the
+-- elements to the left and right of the focal point, respectively. Similarly,
+-- a 3x3 stencil for a two-dimensional array:
+--
+-- > s33 :: Stencil3x3 a -> Exp a
+-- > s33 ((_,t,_)
+--       ,(l,c,r)
+--       ,(_,b,_)) = ...
+--
+-- ...where @c@ is again the focal point and @t@, @b@, @l@ and @r@ are the
+-- elements to the top, bottom, left, and right of the focal point, respectively
+-- (the diagonal elements have been elided).
+--
 -- For example, the following computes a 5x5
 -- <https://en.wikipedia.org/wiki/Gaussian_blur Gaussian blur> as a separable
 -- 2-pass operation.
