@@ -325,9 +325,9 @@ join size l1 l2 a1 a2 =
     (IrregularT, IrregularT)   -> Join IrregularT a1 a2
     (TupleT t1, TupleT t2)     | JoinTuple t a1' a2' <- joinT t1 t2 (asAtupleC a1) (asAtupleC a2)
                                -> Join (freeProdT t) (inject (Atuple a1')) (inject (Atuple a2'))
-    #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
     _                          -> error "Impossible lifted type relation"
-    #endif
+#endif
   where
     joinT :: LiftedTupleType t t'
           -> LiftedTupleType t t''
@@ -340,10 +340,10 @@ join size l1 l2 a1 a2 =
       | Join l a1' a2' <- join size l1 l2 a1 a2
       , JoinTuple lt t1' t2' <- joinT lt1 lt2 t1 t2
       = JoinTuple (SnocLtup lt l) (SnocAtup t1' a1') (SnocAtup t2' a2')
-    #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
     joinT _                 _                  _               _
       = error "Impossible lifted tuple type relation"
-    #endif
+#endif
 
 -- |Vectorise any sequence computations embedded in the 'Acc' term.
 --
@@ -547,9 +547,9 @@ liftPreOpenAcc vectAcc ctx size acc
         cvtT :: forall t t'. LiftedTupleType t t' -> Atuple (acc aenv') t' -> Atuple (acc aenv') (IrregularTupleRepr t)
         cvtT NilLtup         NilAtup         = NilAtup
         cvtT (SnocLtup t ty) (SnocAtup t' a) = SnocAtup (cvtT t t') (cvt ty a)
-        #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
         cvtT _               _               = error "Absurd"
-        #endif
+#endif
 
     liftedE :: forall t. Elt t => LiftedExp acc () aenv' aenv' t -> acc aenv' (Vector t)
     liftedE (LiftedExp (Just e) _) = replicateE size e
@@ -1481,10 +1481,10 @@ liftExp vectAcc ctx size exp
       = LiftedExp Nothing (liftedRegularIndexC (weaken (under ctx) a) ix)
       | IrregularT <- ty
       = LiftedExp Nothing (liftedIrregularIndexC (weaken (under ctx) a) ix)
-    #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
     indexL _ _
       = error "Absurd"
-    #endif
+#endif
 
     linearIndexL :: forall sh'. Shape sh'
                  => acc            aenv  (Array sh' e)
@@ -1498,10 +1498,10 @@ liftExp vectAcc ctx size exp
       = LiftedExp Nothing (liftedRegularLinearIndexC (weaken (under ctx) a) ix)
       | IrregularT <- ty
       = LiftedExp Nothing (liftedIrregularLinearIndexC (weaken (under ctx) a) ix)
-    #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
     linearIndexL _ _
       = error "Absurd"
-    #endif
+#endif
 
     shapeL :: (Shape sh, Elt e')
            => acc aenv (Array sh e')
@@ -1517,10 +1517,10 @@ liftExp vectAcc ctx size exp
                   (inject . Alet (weaken (under ctx) a) $ replicateE (weakenA1 size) (indexInit (Shape (unregularC avar0))))
       | IrregularT <- ty
       = LiftedExp Nothing (shapesC (segmentsC (weaken (under ctx) a)))
-    #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
     shapeL _
       = error "Absurd"
-    #endif
+#endif
 
     cvtTuple :: IsTuple e
              => Tuple (PreOpenExp acc env aenv) (TupleRepr e)
@@ -1701,9 +1701,9 @@ sparsify ra =
     sparsifyTup :: ProdR Arrays t -> Atuple S.Acc (RegularTupleRepr t) -> Atuple S.Acc (IrregularTupleRepr t)
     sparsifyTup ProdRunit      NilAtup         = NilAtup
     sparsifyTup (ProdRsnoc pr) (SnocAtup at a) = SnocAtup (sparsifyTup pr at) (sparsify a)
-    #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
     sparsifyTup _              _               = error "Impossible tuple"
-    #endif
+#endif
 
 
 makeFoldSegments :: forall sh. (Shape sh, Slice sh) => S.Acc (Segments (sh:.Int)) -> S.Acc (Vector Int, Segments sh)
@@ -1999,9 +1999,9 @@ castAcc (IsoTuple t) a = S.Acc . S.Atuple $ castTup t (asAtuple a)
     castTup :: IsoTuple t t' -> Atuple S.Acc t -> Atuple S.Acc t'
     castTup NilIso NilAtup = NilAtup
     castTup (SnocIso t' is) (SnocAtup t'' a) = castTup t' t'' `SnocAtup` castAcc is a
-    #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
     castTup _ _ = error "Absurd"
-    #endif
+#endif
 
 replicateC :: (Arrays a, Kit acc)
            => acc aenv (Scalar Int) -> acc aenv a -> acc aenv (Regular a)
@@ -2675,9 +2675,9 @@ vectoriseOpenSeq vectAcc ctx size seq =
         flatten AvoidedT   = S.flatten
         flatten RegularT   = S.flatten . unregular
         flatten IrregularT = irregularValues
-        #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
         flatten _          = error "Impossible lifted type"
-        #endif
+#endif
 
     tabulate :: forall sh e. (Shape sh, Elt e)
              => acc aenv (Array sh e)
@@ -2717,9 +2717,9 @@ vectoriseOpenSeq vectAcc ctx size seq =
                 shs = shapes (segments x)
                 sh = S.fold1 S.intersect shs
               in S.generate (S.indexSnoc (S.the sh) (S.length shs)) (\ix -> indexInSeg x (S.indexLast ix) (S.indexInit ix))
-            #if __GLASGOW_HASKELL__ < 800
+#if __GLASGOW_HASKELL__ < 800
             reduce _ _ = error "Impossible lifted type"
-            #endif
+#endif
 
         a :: acc aenv' (Array (sh:.Int) e)
         a = inject $ Use (newArray empty undefined)
