@@ -850,8 +850,8 @@ data Array sh e where
 deriving instance Typeable Array
 
 instance (Eq sh, Eq e) => Eq (Array sh e) where
-  arr1@Array{} == arr2@Array{}
-    = shape arr1 == shape arr2 && toList arr1 == toList arr2
+  arr1@Array{} == arr2@Array{} = shape arr1 == shape arr2 && toList arr1 == toList arr2
+  arr1@Array{} /= arr2@Array{} = shape arr1 /= shape arr2 || toList arr1 /= toList arr2
 
 instance NFData (Array sh e) where
   rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
