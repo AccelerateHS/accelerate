@@ -15,7 +15,7 @@ import Data.Bits                                                as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
-import Test.QuickCheck                                          hiding ( (.&.) )
+import Test.QuickCheck                                          hiding ( (.&.), suchThat )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
@@ -165,6 +165,13 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
     denom f = forAll arbitrary $ \xs ->
               requiring (/= 0) $ \ys -> f xs ys
 
+
+suchThat :: Gen a -> (a -> Bool) -> Gen a
+suchThat gen p = do
+  x <- gen
+  case p x of
+    True  -> return x
+    False -> sized $ \n -> resize (n+1) (suchThat gen p)
 
 {-# INLINE requiring #-}
 requiring
