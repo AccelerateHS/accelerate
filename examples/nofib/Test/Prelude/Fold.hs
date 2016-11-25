@@ -194,19 +194,19 @@ test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"
-          $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
-            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
+          $ forAllShrink arbitrarySegments             shrinkSegments             $ \(seg :: Segments Int32)    ->
+            forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
               run2 backend (A.foldSeg (+) 0) xs seg ~?= foldSegRef (+) 0 xs seg
 
           , testProperty "non-neutral sum"
-          $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
-            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
+          $ forAllShrink arbitrarySegments             shrinkSegments             $ \(seg :: Segments Int32)    ->
+            forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
             forAll arbitrary                     $ \z                          ->
               run3 backend (\z' -> A.foldSeg (+) (the z')) (scalar z) xs seg ~?= foldSegRef (+) z xs seg
 
           , testProperty "minimum"
-          $ forAll arbitrarySegments1            $ \(seg :: Segments Int32)    ->
-            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
+          $ forAllShrink arbitrarySegments1            shrinkSegments1            $ \(seg :: Segments Int32)    ->
+            forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
               run2 backend (A.fold1Seg A.min) xs seg ~?= fold1SegRef P.min xs seg
           ]
 

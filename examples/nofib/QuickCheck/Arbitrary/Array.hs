@@ -104,6 +104,20 @@ arbitrarySegmentedArray segs = do
   sh            <- sized $ \n -> arbitraryShape (n `div` 2)
   arbitraryArray (sh :. sz)
 
+shrinkSegmentedArray
+    :: (Integral i, Shape sh, Elt e, Arbitrary e)
+    => Segments i
+    -> Array (sh :. Int) e
+    -> [Array (sh :. Int) e]
+shrinkSegmentedArray segs arr =
+  let n       = fromIntegral $ sum (Sugar.toList segs)
+      sz :. _ = Sugar.shape arr
+      req     = Sugar.size sz * n
+  in
+  [ Sugar.fromList (sz :. n) sl | sl <- shrink (Sugar.toList arr)
+                                , length sl >= req
+                                ]
+
 
 -- Generate a segment descriptor. Both the array and individual segments might
 -- be empty.
@@ -114,6 +128,12 @@ arbitrarySegments =
     k <- choose (0,n)
     arbitraryArrayOf (Z:.k) (choose (0, fromIntegral n))
 
+shrinkSegments :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
+shrinkSegments arr =
+  [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr)
+                                       , all (>= 0) sl
+                                       ]
+
 -- Generate a possibly empty segment descriptor, where each segment is non-empty
 --
 arbitrarySegments1 :: (Elt i, Integral i, Random i) => Gen (Segments i)
@@ -121,6 +141,12 @@ arbitrarySegments1 =
   sized $ \n -> do
     k <- choose (0,n)
     arbitraryArrayOf (Z:.k) (choose (1, 1 `max` fromIntegral n))
+
+shrinkSegments1 :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
+shrinkSegments1 arr =
+  [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr)
+                                       , all (>= 1) sl
+                                       ]
 
 
 -- Generate an vector where every element in the array is unique. The maximum
