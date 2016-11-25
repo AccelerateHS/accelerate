@@ -52,8 +52,8 @@ Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
   Default:              False
 
-Flag llvm-gpu
-  Description:          Enable the LLVM backend for NVIDIA CPUs
+Flag llvm-ptx
+  Description:          Enable the LLVM PTX backend for NVIDIA GPUs
   Default:              False
 
 Flag cilk
@@ -172,7 +172,7 @@ Library
     build-depends:
         accelerate-llvm-native          == 1.0.*
 
-  if flag(llvm-gpu)
+  if flag(llvm-ptx)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
         accelerate-llvm-ptx             == 1.0.*
