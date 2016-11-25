@@ -10,7 +10,7 @@ import QuickCheck.Arbitrary.Shape
 import Data.List
 import Test.QuickCheck
 import System.Random                                    ( Random )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM0, DIM1, DIM2, DIM3, DIM4 )
+import Data.Array.Accelerate.Array.Sugar                ( Array(..), Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM0, DIM1, DIM2, DIM3, DIM4 )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Set                               as Set
 
@@ -21,21 +21,22 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM0 e) where
   shrink arr = [ Sugar.fromList Z [x] | x <- shrink (arr ! Z) ]
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM1 e) where
-  arbitrary  = arbitraryArray =<< sized arbitraryShape
+  arbitrary  = arbitraryArray =<< arbitrary
   shrink arr = [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr) ]
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
-  arbitrary  = arbitraryArray =<< sized arbitraryShape
-  shrink arr =
-    let (Z :. width :. height)   = Sugar.shape arr
+  arbitrary  = arbitraryArray =<< arbitrary
+  shrink arr@(Array _ adata) =
+    let sh@(Z :. height :. width) = Sugar.shape arr
+        shrinkOne []     = []
+        shrinkOne (x:xs) = [ x':xs | x'  <- shrink x ]
+                        ++ [ x:xs' | xs' <- shrinkOne xs ]
     in
-    [ Sugar.fromList (Z :. length slx :. length sly) [ arr ! (Z:.x:.y) | x <- slx, y <- sly ]
-        | slx <- map nub $ shrink [0 .. width  - 1]
-        , sly <- map nub $ shrink [0 .. height - 1]
-    ]
+    [ Array (((),h),w) adata | h <- shrink height, w <- shrink width ] ++
+    [ Sugar.fromList sh sl   | sl <- shrinkOne (Sugar.toList arr) ]
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM3 e) where
-  arbitrary  = arbitraryArray =<< sized arbitraryShape
+  arbitrary  = arbitraryArray =<< arbitrary
   shrink arr =
     let (Z :. width :. height :. depth)   = Sugar.shape arr
     in
@@ -46,7 +47,7 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM3 e) where
     ]
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM4 e) where
-  arbitrary  = arbitraryArray =<< sized arbitraryShape
+  arbitrary  = arbitraryArray =<< arbitrary
   shrink arr =
     let (Z :. width :. height :. depth :. time)   = Sugar.shape arr
     in
