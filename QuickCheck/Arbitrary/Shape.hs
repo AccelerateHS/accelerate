@@ -16,34 +16,34 @@ instance Arbitrary DIM0 where
 
 instance Arbitrary DIM1 where
   arbitrary     = do
-    n   <- sized $ \n -> choose (0, 2*n)
+    NonNegative n <- arbitrary
     return (Z :. n)
 
   shrink (Z :. n) = [ Z :. n' | n' <- shrink n ]
 
 instance Arbitrary DIM2 where
-  arbitrary     = sized $ \n -> do
-    w   <- choose (0, n)
-    h   <- choose (0, n)
+  arbitrary     = do
+    NonNegative w <- arbitrary
+    NonNegative h <- arbitrary
     return (Z :. h :. w)
 
   shrink (Z :. h :. w) = [ Z :. h' :. w' | h' <- shrink h, w' <- shrink w ]
 
 instance Arbitrary DIM3 where
-  arbitrary     = sized $ \n -> do
-    w   <- choose (0, n)
-    h   <- choose (0, n)
-    d   <- choose (0, n)
+  arbitrary     = do
+    NonNegative w <- arbitrary
+    NonNegative h <- arbitrary
+    NonNegative d <- arbitrary
     return (Z :. h :. w :. d)
 
   shrink (Z :. h :. w :. d) = [ Z :. h' :. w' :. d' | h' <- shrink h, w' <- shrink w, d' <- shrink d ]
 
 instance Arbitrary DIM4 where
-  arbitrary     = sized $ \n -> do
-    w   <- choose (0, n)
-    h   <- choose (0, n)
-    d   <- choose (0, n)
-    t   <- choose (0, n)
+  arbitrary     = do
+    NonNegative w <- arbitrary
+    NonNegative h <- arbitrary
+    NonNegative d <- arbitrary
+    NonNegative t <- arbitrary
     return (Z :. h :. w :. d :. t)
 
   shrink (Z :. h :. w :. d :. t) = [ Z :. h' :. w' :. d' :. t' | h' <- shrink h, w' <- shrink w, d' <- shrink d, t' <- shrink t ]
