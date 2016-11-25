@@ -19,7 +19,7 @@ instance Arbitrary DIM1 where
     NonNegative n <- arbitrary
     return (Z :. n)
 
-  shrink (Z :. n) = [ Z :. n' | n' <- shrink n ]
+  shrink (Z :. n) = [ Z :. n' | n' <- shrink n, n' >= 0 ]
 
 instance Arbitrary DIM2 where
   arbitrary     = do
@@ -27,7 +27,11 @@ instance Arbitrary DIM2 where
     NonNegative h <- arbitrary
     return (Z :. h :. w)
 
-  shrink (Z :. h :. w) = [ Z :. h' :. w' | h' <- shrink h, w' <- shrink w ]
+  shrink (Z :. h :. w) =
+    [ Z :. h' :. w'
+        | h' <- shrink h, h' >= 0
+        , w' <- shrink w, w' >= 0
+    ]
 
 instance Arbitrary DIM3 where
   arbitrary     = do
@@ -36,7 +40,12 @@ instance Arbitrary DIM3 where
     NonNegative d <- arbitrary
     return (Z :. h :. w :. d)
 
-  shrink (Z :. h :. w :. d) = [ Z :. h' :. w' :. d' | h' <- shrink h, w' <- shrink w, d' <- shrink d ]
+  shrink (Z :. h :. w :. d) =
+    [ Z :. h' :. w' :. d'
+        | h' <- shrink h, h' >= 0
+        , w' <- shrink w, w' >= 0
+        , d' <- shrink d, d' >= 0
+    ]
 
 instance Arbitrary DIM4 where
   arbitrary     = do
@@ -46,7 +55,13 @@ instance Arbitrary DIM4 where
     NonNegative t <- arbitrary
     return (Z :. h :. w :. d :. t)
 
-  shrink (Z :. h :. w :. d :. t) = [ Z :. h' :. w' :. d' :. t' | h' <- shrink h, w' <- shrink w, d' <- shrink d, t' <- shrink t ]
+  shrink (Z :. h :. w :. d :. t) =
+    [ Z :. h' :. w' :. d' :. t'
+        | h' <- shrink h, h' >= 0
+        , w' <- shrink w, w' >= 0
+        , d' <- shrink d, d' >= 0
+        , t' <- shrink t, t' >= 0
+    ]
 
 
 -- Generate an arbitrary shape with approximately this many elements in each
