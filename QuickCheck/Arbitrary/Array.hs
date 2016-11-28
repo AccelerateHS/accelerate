@@ -106,18 +106,18 @@ arbitrarySegmentedArray segs = do
   arbitraryArray (sh :. sz)
 
 shrinkSegmentedArray
-    :: (Integral i, Shape sh, Elt e, Arbitrary e)
-    => Segments i
-    -> Array (sh :. Int) e
+    :: (Shape sh, Elt e, Arbitrary sh, Arbitrary e)
+    => Array (sh :. Int) e
     -> [Array (sh :. Int) e]
-shrinkSegmentedArray segs arr =
-  let n       = fromIntegral $ sum (Sugar.toList segs)
-      sz :. _ = Sugar.shape arr
-      req     = Sugar.size sz * n
+shrinkSegmentedArray arr@(Array _ adata) =
+  let
+      sh@(sz :. n)     = Sugar.shape arr
+      shrinkOne []     = []
+      shrinkOne (x:xs) = [ x':xs | x'  <- shrink x ]
+                      ++ [ x:xs' | xs' <- shrinkOne xs ]
   in
-  [ Sugar.fromList (sz :. n) sl | sl <- shrink (Sugar.toList arr)
-                                , length sl >= req
-                                ]
+  [ Array (Sugar.fromElt sz',n) adata | sz' <- shrink sz ] ++
+  [ Sugar.fromList sh sl | sl <- shrinkOne (Sugar.toList arr) ]
 
 
 -- Generate a segment descriptor. Both the array and individual segments might
@@ -131,9 +131,7 @@ arbitrarySegments =
 
 shrinkSegments :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
 shrinkSegments arr =
-  [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr)
-                                       , all (>= 0) sl
-                                       ]
+  [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkList (\x -> [ s | s <- shrink x, s >= 0]) (Sugar.toList arr) ]
 
 -- Generate a possibly empty segment descriptor, where each segment is non-empty
 --
@@ -145,9 +143,7 @@ arbitrarySegments1 =
 
 shrinkSegments1 :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
 shrinkSegments1 arr =
-  [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr)
-                                       , all (>= 1) sl
-                                       ]
+  [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkList (\x -> [ s | s <- shrink x, s >= 1]) (Sugar.toList arr) ]
 
 
 -- Generate an vector where every element in the array is unique. The maximum
