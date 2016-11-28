@@ -22,7 +22,6 @@ import Test.Framework.Providers.QuickCheck2
 import Config
 import Test.Base
 import QuickCheck.Arbitrary.Array
-import QuickCheck.Arbitrary.Shape
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Data.Bits                          as A
 import Data.Array.Accelerate.Examples.Internal                  as A
@@ -162,8 +161,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
     test_max xs ys      = run2 backend (A.zipWith (A.max)) xs ys ~?= zipWithRef (P.max) xs ys
 
     {-# INLINE denom #-}
-    denom f = forAll arbitrary $ \xs ->
-              requiring (/= 0) $ \ys -> f xs ys
+    denom f = forAllShrink arbitrary shrink $ \xs ->
+              requiring (/= 0)              $ \ys -> f xs ys
 
 
 suchThat :: Gen a -> (a -> Bool) -> Gen a
@@ -180,8 +179,14 @@ requiring
     -> (Array sh e -> prop)
     -> Property
 requiring f go =
-  forAll (sized arbitraryShape)                         $ \sh ->
-  forAll (arbitraryArrayOf sh (arbitrary `suchThat` f)) $ \arr ->
+  let
+      shrinkRequiring arr       = [ fromList (Sugar.shape arr) sl | sl <- shrinkOneRequiring (toList arr) ]
+      shrinkOneRequiring []     = []
+      shrinkOneRequiring (x:xs) = [ x':xs | x'  <- shrink x, f x' ]
+                             P.++ [ x:xs' | xs' <- shrinkOneRequiring xs ]
+  in
+  forAllShrink arbitrary                                      shrink          $ \sh ->
+  forAllShrink (arbitraryArrayOf sh (arbitrary `suchThat` f)) shrinkRequiring $ \arr ->
     go arr
 
 
