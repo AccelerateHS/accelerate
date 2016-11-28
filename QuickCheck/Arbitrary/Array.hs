@@ -131,6 +131,12 @@ arbitrarySegments =
 
 shrinkSegments :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
 shrinkSegments arr =
+  let
+      merge (x:y:zs)  = [ xy:zs  | xy   <- (x+y) : shrink (x+y), xy >= 0 ]
+                     ++ [ x:yzs' | yzs' <- merge (y:zs) ]
+      merge _         = []
+  in
+  [ Sugar.fromList (Z :. length sl) sl | sl <- merge (Sugar.toList arr) ] ++
   [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkList (\x -> [ s | s <- shrink x, s >= 0]) (Sugar.toList arr) ]
 
 -- Generate a possibly empty segment descriptor, where each segment is non-empty
@@ -143,6 +149,12 @@ arbitrarySegments1 =
 
 shrinkSegments1 :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
 shrinkSegments1 arr =
+  let
+      merge (x:y:zs)  = [ xy:zs  | xy   <- (x+y) : shrink (x+y), xy >= 1 ]
+                     ++ [ x:yzs' | yzs' <- merge (y:zs) ]
+      merge _         = []
+  in
+  [ Sugar.fromList (Z :. length sl) sl | sl <- merge (Sugar.toList arr) ] ++
   [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkList (\x -> [ s | s <- shrink x, s >= 1]) (Sugar.toList arr) ]
 
 
