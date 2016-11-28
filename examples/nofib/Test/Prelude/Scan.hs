@@ -88,45 +88,45 @@ test_scan backend opt = testGroup "scan" $ catMaybes
     -- segmented left/right scan
     --
     test_scanl1seg elt =
-      forAllShrink arbitrarySegments1            shrinkSegments1            $ \(seg :: Vector Int32) ->
-      forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \xs  ->
+      forAllShrink arbitrarySegments1            shrinkSegments1      $ \(seg :: Vector Int32) ->
+      forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
         arraySize (arrayShape xs) > 0 ==>
           (run2 backend (A.scanl1Seg (+))) xs seg
           ~?=
           scanl1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanr1seg elt =
-      forAllShrink arbitrarySegments1            shrinkSegments1            $ \(seg :: Vector Int32) ->
-      forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \xs  ->
+      forAllShrink arbitrarySegments1            shrinkSegments1      $ \(seg :: Vector Int32) ->
+      forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
         arraySize (arrayShape xs) > 0 ==>
           (run2 backend (A.scanr1Seg (+))) xs seg
           ~?=
           scanr1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanlseg elt =
-      forAllShrink arbitrarySegments             shrinkSegments             $ \(seg :: Vector Int32) ->
-      forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \xs  ->
+      forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
+      forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
         (run2 backend (A.scanlSeg (+) 0)) xs seg
         ~?=
         scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanrseg elt =
-      forAllShrink arbitrarySegments             shrinkSegments             $ \(seg :: Vector Int32) ->
-      forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \xs  ->
+      forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
+      forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
         (run2 backend (A.scanrSeg (+) 0)) xs seg
         ~?=
         scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanl'seg elt =
-      forAllShrink arbitrarySegments             shrinkSegments             $ \(seg :: Vector Int32) ->
-      forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \xs  ->
+      forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
+      forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
         (run2 backend (lift $$ A.scanl'Seg (+) 0)) xs seg
         ~?=
         scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanr'seg elt =
-      forAllShrink arbitrarySegments             shrinkSegments             $ \(seg :: Vector Int32) ->
-      forAllShrink (arbitrarySegmentedArray seg) (shrinkSegmentedArray seg) $ \xs  ->
+      forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
+      forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
         (run2 backend (lift $$ A.scanr'Seg (+) 0)) xs seg
         ~?=
         scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
