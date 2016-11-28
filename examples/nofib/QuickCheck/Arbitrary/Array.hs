@@ -7,56 +7,28 @@ module QuickCheck.Arbitrary.Array where
 
 import QuickCheck.Arbitrary.Shape
 
-import Data.List
 import Test.QuickCheck
 import System.Random                                    ( Random )
-import Data.Array.Accelerate.Array.Sugar                ( Array(..), Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM0, DIM1, DIM2, DIM3, DIM4 )
+import Data.Array.Accelerate.Array.Sugar                ( Array(..), Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM1 )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Set                               as Set
 
 
 
-instance (Elt e, Arbitrary e) => Arbitrary (Array DIM0 e) where
+instance (Elt e, Arbitrary e) => Arbitrary (Array Z e) where
   arbitrary  = arbitraryArray Z
   shrink arr = [ Sugar.fromList Z [x] | x <- shrink (arr ! Z) ]
 
-instance (Elt e, Arbitrary e) => Arbitrary (Array DIM1 e) where
-  arbitrary  = arbitraryArray =<< arbitrary
-  shrink arr = [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr) ]
-
-instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
-  arbitrary  = arbitraryArray =<< arbitrary
+instance (Shape sh, Elt e, Arbitrary sh, Arbitrary e) => Arbitrary (Array (sh:.Int) e) where
+  arbitrary = arbitraryArray =<< arbitrary
   shrink arr@(Array _ adata) =
-    let sh@(Z :. height :. width) = Sugar.shape arr
-        shrinkOne []     = []
-        shrinkOne (x:xs) = [ x':xs | x'  <- shrink x ]
-                        ++ [ x:xs' | xs' <- shrinkOne xs ]
+    let
+        sh = Sugar.shape arr
+        xs = Sugar.toList arr
     in
-    [ Array (((),h),w) adata | h <- shrink height, w <- shrink width ] ++
-    [ Sugar.fromList sh sl   | sl <- shrinkOne (Sugar.toList arr) ]
+    [ Array (Sugar.fromElt sh') adata | sh' <- shrink sh ] ++
+    [ Sugar.fromList sh sl | sl <- shrinkOne xs ]
 
-instance (Elt e, Arbitrary e) => Arbitrary (Array DIM3 e) where
-  arbitrary  = arbitraryArray =<< arbitrary
-  shrink arr =
-    let (Z :. width :. height :. depth)   = Sugar.shape arr
-    in
-    [ Sugar.fromList (Z :. length slx :. length sly :. length slz) [ arr ! (Z:.x:.y:.z) | x <- slx, y <- sly, z <- slz ]
-        | slx <- map nub $ shrink [0 .. width  - 1]
-        , sly <- map nub $ shrink [0 .. height - 1]
-        , slz <- map nub $ shrink [0 .. depth  - 1]
-    ]
-
-instance (Elt e, Arbitrary e) => Arbitrary (Array DIM4 e) where
-  arbitrary  = arbitraryArray =<< arbitrary
-  shrink arr =
-    let (Z :. width :. height :. depth :. time)   = Sugar.shape arr
-    in
-    [ Sugar.fromList (Z :. length slx :. length sly :. length slz :. length slw) [ arr ! (Z:.x:.y:.z:.w) | x <- slx, y <- sly, z <- slz, w <- slw ]
-        | slx <- map nub $ shrink [0 .. width  - 1]
-        , sly <- map nub $ shrink [0 .. height - 1]
-        , slz <- map nub $ shrink [0 .. depth  - 1]
-        , slw <- map nub $ shrink [0 .. time   - 1]
-    ]
 
 -- Generate an arbitrary array of the given shape using the default element
 -- generator
@@ -112,9 +84,6 @@ shrinkSegmentedArray
 shrinkSegmentedArray arr@(Array _ adata) =
   let
       sh@(sz :. n)     = Sugar.shape arr
-      shrinkOne []     = []
-      shrinkOne (x:xs) = [ x':xs | x'  <- shrink x ]
-                      ++ [ x:xs' | xs' <- shrinkOne xs ]
   in
   [ Array (Sugar.fromElt sz',n) adata | sz' <- shrink sz ] ++
   [ Sugar.fromList sh sl | sl <- shrinkOne (Sugar.toList arr) ]
@@ -132,11 +101,11 @@ arbitrarySegments =
 shrinkSegments :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
 shrinkSegments arr =
   let
-      merge (x:y:zs)  = [ xy:zs  | xy   <- (x+y) : shrink (x+y), xy >= 0 ]
-                     ++ [ x:yzs' | yzs' <- merge (y:zs) ]
-      merge _         = []
+      shrinkSeg (x:y:zs) = [ xy:zs  | xy   <- (x+y) : shrink (x+y), xy >= 0 ]
+                        ++ [ x:yzs' | yzs' <- shrinkSeg (y:zs) ]
+      shrinkSeg _        = []
   in
-  [ Sugar.fromList (Z :. length sl) sl | sl <- merge (Sugar.toList arr) ] ++
+  [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkSeg (Sugar.toList arr) ] ++
   [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkList (\x -> [ s | s <- shrink x, s >= 0]) (Sugar.toList arr) ]
 
 -- Generate a possibly empty segment descriptor, where each segment is non-empty
@@ -150,11 +119,11 @@ arbitrarySegments1 =
 shrinkSegments1 :: (Elt i, Integral i, Arbitrary i) => Segments i -> [Segments i]
 shrinkSegments1 arr =
   let
-      merge (x:y:zs)  = [ xy:zs  | xy   <- (x+y) : shrink (x+y), xy >= 1 ]
-                     ++ [ x:yzs' | yzs' <- merge (y:zs) ]
-      merge _         = []
+      shrinkSeg (x:y:zs) = [ xy:zs  | xy   <- (x+y) : shrink (x+y), xy >= 1 ]
+                        ++ [ x:yzs' | yzs' <- shrinkSeg (y:zs) ]
+      shrinkSeg _        = []
   in
-  [ Sugar.fromList (Z :. length sl) sl | sl <- merge (Sugar.toList arr) ] ++
+  [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkSeg (Sugar.toList arr) ] ++
   [ Sugar.fromList (Z :. length sl) sl | sl <- shrinkList (\x -> [ s | s <- shrink x, s >= 1]) (Sugar.toList arr) ]
 
 
@@ -187,4 +156,13 @@ arbitraryCSRMatrix =
                      ind <- choose (0, fromIntegral cols - 1)
                      return (ind, val)
     return (segd, smat, cols)
+
+
+-- Helpers
+-- -------
+
+shrinkOne :: Arbitrary a => [a] -> [[a]]
+shrinkOne []     = []
+shrinkOne (x:xs) = [ x':xs | x'  <- shrink x ]
+                ++ [ x:xs' | xs' <- shrinkOne xs ]
 

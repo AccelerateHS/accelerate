@@ -6,62 +6,23 @@
 module QuickCheck.Arbitrary.Shape where
 
 import Test.QuickCheck
-import Data.Array.Accelerate                            ( Shape, Z(..), (:.)(..), DIM0, DIM1, DIM2, DIM3, DIM4 )
+import Data.Array.Accelerate                            ( Shape, Z(..), (:.)(..) )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
-instance Arbitrary DIM0 where
+instance Arbitrary Z where
   arbitrary     = return Z
-  shrink        = return
+  shrink _      = []
 
-instance Arbitrary DIM1 where
-  arbitrary     = do
-    NonNegative n <- arbitrary
-    return (Z :. n)
-
-  shrink (Z :. n) = [ Z :. n' | n' <- shrink n, n' >= 0 ]
-
-instance Arbitrary DIM2 where
-  arbitrary     = do
-    NonNegative w <- arbitrary
-    NonNegative h <- arbitrary
-    return (Z :. h :. w)
-
-  shrink (Z :. h :. w) =
-    [ Z :. h' :. w'
-        | h' <- shrink h, h' >= 0
-        , w' <- shrink w, w' >= 0
-    ]
-
-instance Arbitrary DIM3 where
-  arbitrary     = do
-    NonNegative w <- arbitrary
-    NonNegative h <- arbitrary
-    NonNegative d <- arbitrary
-    return (Z :. h :. w :. d)
-
-  shrink (Z :. h :. w :. d) =
-    [ Z :. h' :. w' :. d'
-        | h' <- shrink h, h' >= 0
-        , w' <- shrink w, w' >= 0
-        , d' <- shrink d, d' >= 0
-    ]
-
-instance Arbitrary DIM4 where
-  arbitrary     = do
-    NonNegative w <- arbitrary
-    NonNegative h <- arbitrary
-    NonNegative d <- arbitrary
-    NonNegative t <- arbitrary
-    return (Z :. h :. w :. d :. t)
-
-  shrink (Z :. h :. w :. d :. t) =
-    [ Z :. h' :. w' :. d' :. t'
-        | h' <- shrink h, h' >= 0
-        , w' <- shrink w, w' >= 0
-        , d' <- shrink d, d' >= 0
-        , t' <- shrink t, t' >= 0
-    ]
+instance Arbitrary sh => Arbitrary (sh :. Int) where
+  arbitrary = do
+    sh             <- arbitrary
+    NonNegative sz <- arbitrary
+    return (sh :. sz)
+  --
+  shrink (sh :. sz) =
+    [ sh  :. sz' | sz' <- shrink sz, sz' >= 0 ] ++
+    [ sh' :. sz  | sh' <- shrink sh ]
 
 
 -- Generate an arbitrary shape with approximately this many elements in each
