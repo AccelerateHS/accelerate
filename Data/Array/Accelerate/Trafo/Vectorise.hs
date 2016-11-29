@@ -519,6 +519,15 @@ liftPreOpenAcc vectAcc ctx size acc
         ixt (SuccIdx ix) = SuccIdx (SuccIdx ix)
     higher _ = error "Absurd"
 
+    higher' :: forall aenv sh sh'. (Slice sh, Slice sh', Shape sh, Shape sh')
+            => PreOpenAfun acc aenv (Vector sh -> Vector sh')
+            -> PreOpenAfun acc aenv (Vector (sh:.Int) -> Vector (sh':.Int))
+    higher' (Alam (Abody f)) = Alam . Abody
+                           $^ Alet (inject $ Map (fun1 indexInit) avar0)
+                           $^ Alet (inject $ Map (fun1 indexLastC) avar1)
+                           $^ ZipWith (fun2 indexSnoc) (weaken (SuccIdx . newTop SuccIdx) f) avar0
+    higher' _ = error "Absurd"
+
     -- asRegular :: forall t. Arrays t => LiftedAcc acc aenv' t -> Maybe (acc aenv' (Regular t))
     -- asRegular (LiftedAcc ty a) = cvt ty a
     --   where
@@ -1082,6 +1091,25 @@ liftPreOpenAcc vectAcc ctx size acc
                    $^ Alet (regularSegsC avar0 (weakenA1 $ unit sh'))
                    $^ Alet (liftedBackpermutePreC avar0)
                    $  liftedBackpermuteC (atup (fstA avar0) (inject $ Map (weakenA3 f) (sndA avar0)))
+                                         (weakenA3 a')
+        in withFL size reg ireg a
+      | LiftedExp (Just sh') _ <- sh
+      , AsSlice         <- asSlice (Proxy :: Proxy sh)
+      , AsSlice         <- asSlice (Proxy :: Proxy sh')
+      = let
+          reg a' = regularAcc "backpermute" . regularC
+                 $^ Alet (unregularC a')
+                 $^ Alet (unit $ weakenA1 sh' `indexSnoc` indexLastC (Shape avar0))
+                 $^ Alet (higher' (weakenA2 f_l) `apply` flattenC (enumC avar0))
+                 $^ Backpermute (the avar1)
+                                (fun1 $ LinearIndex avar0 . ToIndex (the avar1))
+                                avar2
+          ireg a' = regularAcc "backpermute" . regularC
+                   $^ Alet (unitSize size)
+                   $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
+                   $^ Alet (regularSegsC avar0 (weakenA1 $ unit sh'))
+                   $^ Alet (liftedBackpermutePreC avar0)
+                   $  liftedBackpermuteC (atup (fstA avar0) (weakenA3 f_l `apply` sndA avar0))
                                          (weakenA3 a')
         in withFL size reg ireg a
       | otherwise
@@ -2341,6 +2369,13 @@ maximum :: PreOpenExp acc env aenv Int
         -> PreOpenExp acc env aenv Int
         -> PreOpenExp acc env aenv Int
 maximum a b = PrimApp (PrimMax scalarType) (tup a b)
+
+enumC :: (Shape sh, Kit acc)
+      => acc aenv (Scalar sh)
+      -> acc aenv (Array sh sh)
+enumC sh = inject
+         $ Alet sh
+         $^ Generate (the avar0) (fun1 id)
 
 newTop :: env :> env'
        -> (env,t) :> (env', t)
