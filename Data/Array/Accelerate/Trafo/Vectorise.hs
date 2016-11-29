@@ -62,6 +62,7 @@ import qualified Data.Array.Accelerate.Prelude          as S
 import qualified Data.Array.Accelerate.Smart            as S
 import qualified Data.Array.Accelerate.Trafo.Sharing    as S
 
+import qualified Data.Array.Accelerate.Debug            as Debug
 import Data.Array.Accelerate.Error
 
 -- The lifted type relationship
@@ -454,12 +455,12 @@ liftPreOpenAcc vectAcc ctx size acc
                         -> collectL min max i s
 
   where
-    avoidedAcc   :: Arrays a => acc aenv' a             -> LiftedAcc acc aenv' a
-    regularAcc   :: Arrays a => acc aenv' (Regular a)   -> LiftedAcc acc aenv' a
-    irregularAcc :: Arrays a => acc aenv' (Irregular a) -> LiftedAcc acc aenv' a
-    avoidedAcc   = LiftedAcc avoidedType
-    regularAcc   = LiftedAcc regularType
-    irregularAcc = LiftedAcc irregularType
+    avoidedAcc   :: Arrays a => String -> acc aenv' a             -> LiftedAcc acc aenv' a
+    regularAcc   :: Arrays a => String -> acc aenv' (Regular a)   -> LiftedAcc acc aenv' a
+    irregularAcc :: Arrays a => String -> acc aenv' (Irregular a) -> LiftedAcc acc aenv' a
+    avoidedAcc   f = trace "AVOIDED"   f . LiftedAcc avoidedType
+    regularAcc   f = trace "REGULAR"   f . LiftedAcc regularType
+    irregularAcc f = trace "IRREGULAR" f . LiftedAcc irregularType
 
     nestedError :: String -> String -> String
     nestedError place op = "Unexpect nested parallelism in " ++ place ++ " argument to " ++ op
@@ -623,7 +624,7 @@ liftPreOpenAcc vectAcc ctx size acc
       | Just (VectorisedRegularForeign ff') <- isVectorisedRegular ff
       , LiftedAcc RegularT afun' <- vectAcc (BaseC `PushC` regularType) (regularSize avar0) afun
       , ArraysFarray <- flavour (undefined :: t)
-      = regularAcc (inject $ Aforeign ff' (Alam . Abody $ afun') a)
+      = regularAcc "foreign" (inject $ Aforeign ff' (Alam . Abody $ afun') a)
     foreignL _  _    _
       = error $ nestedError "first" "foreign"
 
@@ -638,7 +639,7 @@ liftPreOpenAcc vectAcc ctx size acc
       , Join ty'' t'' e'' <- join size ty ty' t' e'
       = LiftedAcc ty'' $^ Acond p' t'' e''
       | otherwise
-      = irregularAcc $ liftedCondC (liftedE p) (asIrregular t) (asIrregular e)
+      = irregularAcc "acond" $ liftedCondC (liftedE p) (asIrregular t) (asIrregular e)
 
     -- TODO: Reimplement this
     awhileL :: forall t. Arrays t
@@ -684,15 +685,15 @@ liftPreOpenAcc vectAcc ctx size acc
     useL :: Arrays a
          => ArrRepr a
          -> LiftedAcc acc aenv' a
-    useL a = avoidedAcc $^ Use a
+    useL a = avoidedAcc "use" $^ Use a
 
     unitL :: Elt e
           => PreExp acc aenv e
           -> LiftedAcc acc aenv' (Scalar e)
     unitL (cvtE -> LiftedExp ae e)
       = case ae of
-          Nothing -> regularAcc (regularC e)
-          Just e' -> avoidedAcc $^ Unit e'
+          Nothing -> regularAcc "unit" (regularC e)
+          Just e' -> avoidedAcc "unit" $^ Unit e'
 
     reshapeL :: forall sh sh' e.
                 (Shape sh, Shape sh', Elt e)
@@ -702,17 +703,17 @@ liftPreOpenAcc vectAcc ctx size acc
     reshapeL (cvtE -> sh) (cvtA -> a)
       | LiftedAcc AvoidedT a'  <- a
       , LiftedExp (Just sh') _ <- sh
-      = avoidedAcc $^ Reshape sh' a'
+      = avoidedAcc "reshape" $^ Reshape sh' a'
       | LiftedExp (Just sh') _ <- sh
       , LiftedAcc RegularT a'  <- a
       , AsSlice <- asSlice sh'
-      = regularAcc
+      = regularAcc "reshape"
       $  regularC
       $^ Alet (unitSize size)
       $^ Reshape (indexSnoc (weakenA1 sh') (the avar0)) (unregularC (weakenA1 a'))
       | otherwise
       -- RCE: Should an invalid use of reshape always generate a runtime error?
-      = irregularAcc $ irregularReshapeC (liftedE sh) (asIrregular a)
+      = irregularAcc "reshape" $ irregularReshapeC (liftedE sh) (asIrregular a)
 
 
     generateL :: forall sh e. (Elt e, Shape sh)
@@ -722,17 +723,17 @@ liftPreOpenAcc vectAcc ctx size acc
     generateL (cvtE -> sh) (cvtF1 -> (f_a, f_l))
       | Just f <- f_a
       , LiftedExp (Just sh') _ <- sh
-      = avoidedAcc
+      = avoidedAcc "generate"
       $^ Generate sh' f
       | LiftedExp (Just sh') _ <- sh
       , AsSlice <- asSlice sh'
-      = regularAcc
+      = regularAcc "generate"
       $^ Alet (unitSize size)
       $  regularC
       $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
       $^ weakenA1 f_l `subApply` flattenC (inject $ Generate (indexSnoc (weakenA1 sh') (the avar0)) (fun1 indexInit))
       | otherwise
-      = irregularAcc
+      = irregularAcc "generate"
       $^ Alet (segmentsFromExp sh)
       $ irregularC avar0
                   (inject $ weakenA1 f_l `subApply` (inject . Map (fun1 $ Prj tupIx0) $ enumSegC avar0))
@@ -749,7 +750,7 @@ liftPreOpenAcc vectAcc ctx size acc
     replicateL sl (cvtE -> slix) (cvtA -> a)
       | LiftedAcc AvoidedT a'            <- a
       , LiftedExp (Just slix') _ <- slix
-      = avoidedAcc
+      = avoidedAcc "replicate"
       $^ Replicate sl slix' a'
     replicateL sl slix a
       = cvtA
@@ -770,7 +771,7 @@ liftPreOpenAcc vectAcc ctx size acc
     sliceL sl (cvtA -> a) (cvtE -> slix)
       | LiftedAcc AvoidedT a'            <- a
       , LiftedExp (Just slix') _ <- slix
-      = avoidedAcc
+      = avoidedAcc "slice"
       $^ Slice sl a' slix'
     sliceL sl a slix
       = cvtA
@@ -814,15 +815,15 @@ liftPreOpenAcc vectAcc ctx size acc
                        .^ Alet (unzipC (irregularValuesC avar0))
                        .  irregularC (segmentsC avar1)
                        $^ ZipWith (weakenA2 f) (fstA avar0) (sndA avar0)
-        in withL (\a' -> withL (avoidedAcc . zipA  a')
-                                (regularAcc . zipR  (replicateA size a'))
-                                (irregularAcc . zipIr (sparsifyC (replicateA size a')))
+        in withL (\a' -> withL (avoidedAcc "zipWith" . zipA  a')
+                                (regularAcc "zipWith" . zipR  (replicateA size a'))
+                                (irregularAcc "zipWith" . zipIr (sparsifyC (replicateA size a')))
                                 b)
                   (\a' -> appFL size
                                 (zipR a')
                                 (zipIr (sparsifyC a'))
                                 b)
-                  (\a' -> irregularAcc $ zipIr a' (asIrregular b))
+                  (\a' -> irregularAcc "zipWith" $ zipIr a' (asIrregular b))
                   a
       | otherwise
       = let
@@ -837,7 +838,7 @@ liftPreOpenAcc vectAcc ctx size acc
                                 (zipR a')
                                 (zipIr (sparsifyC a'))
                                 b)
-                  (\a' -> irregularAcc $ zipIr a' (asIrregular b))
+                  (\a' -> irregularAcc "zipWith" $ zipIr a' (asIrregular b))
                   a
 
     foldL :: forall sh e. (Elt e, Shape sh)
@@ -889,10 +890,10 @@ liftPreOpenAcc vectAcc ctx size acc
     foldSegL (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a) (cvtA -> segs)
       | LiftedAcc AvoidedT a'    <- a
       , LiftedAcc AvoidedT segs' <- segs
-      = avoidedAcc
+      = avoidedAcc "foldSeg"
       $^ FoldSeg f z a' segs'
       | AsSlice <- asSlice (Proxy :: Proxy sh)
-      = irregularAcc
+      = irregularAcc "foldSeg"
       $^ Alet (asIrregular a)
       $^ Alet (weakenA1 $ asIrregular segs)
       $^ Alet (makeFoldSegSegmentsC (segmentsC avar1) avar0)
@@ -909,10 +910,10 @@ liftPreOpenAcc vectAcc ctx size acc
     fold1SegL (cvtF2 -> (Just f,_)) (cvtA -> a) (cvtA -> segs)
       | LiftedAcc AvoidedT a'    <- a
       , LiftedAcc AvoidedT segs' <- segs
-      = avoidedAcc
+      = avoidedAcc "fold1Seg"
       $^ Fold1Seg f a' segs'
       | AsSlice <- asSlice (Proxy :: Proxy sh)
-      = irregularAcc
+      = irregularAcc "fold1Seg"
       $^ Alet (asIrregular a)
       $^ Alet (weakenA1 $ asIrregular segs)
       $^ Alet (makeFoldSegSegmentsC (segmentsC avar1) avar0)
@@ -927,10 +928,10 @@ liftPreOpenAcc vectAcc ctx size acc
                -> LiftedAcc  acc aenv' (Vector e)
     scanl1L (cvtF2 -> (Just f,_)) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
-      = avoidedAcc
+      = avoidedAcc "scanl1"
       $^ Scanl1 f a'
       | otherwise
-      = irregularAcc
+      = irregularAcc "scanl1"
       $ scanl1Lift f (asIrregular a)
     scanl1L _ _
       = error $ nestedError "first" "scanl1"
@@ -942,10 +943,10 @@ liftPreOpenAcc vectAcc ctx size acc
                -> LiftedAcc  acc aenv' (Vector e)
     scanlL (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
-      = avoidedAcc
+      = avoidedAcc "scanl"
       $^ Scanl f z a'
       | otherwise
-      = irregularAcc
+      = irregularAcc "scanl"
       $  scanlLift f z (asIrregular a)
     scanlL _ _ _
       = error $ nestedError "first or second" "scanl"
@@ -957,10 +958,10 @@ liftPreOpenAcc vectAcc ctx size acc
                -> LiftedAcc  acc aenv' (Vector e, Scalar e)
     scanl'L (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
-      = avoidedAcc
+      = avoidedAcc "scanl'"
       $^ Scanl' f z a'
       | otherwise
-      = irregularAcc
+      = irregularAcc "scanl'"
       $^ Alet (asIrregular a)
       $^ Alet (S.map S.unindex1 `fromHOAS` shapesC (segmentsC avar0))
       $^ Alet (irregularValuesC avar1)
@@ -996,10 +997,10 @@ liftPreOpenAcc vectAcc ctx size acc
                -> LiftedAcc  acc aenv' (Vector e)
     scanr1L (cvtF2 -> (Just f,_)) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
-      = avoidedAcc
+      = avoidedAcc "scanr1"
       $^ Scanr1 f a'
       | otherwise
-      = irregularAcc
+      = irregularAcc "scanr1"
       $ scanr1Lift f (asIrregular a)
     scanr1L _ _
       = error $ nestedError "first" "scanr1"
@@ -1011,10 +1012,10 @@ liftPreOpenAcc vectAcc ctx size acc
                -> LiftedAcc  acc aenv' (Vector e)
     scanrL (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
-      = avoidedAcc
+      = avoidedAcc "scanr"
       $^ Scanr f z a'
       | otherwise
-      = irregularAcc
+      = irregularAcc "scanr"
       $ scanrLift f z (asIrregular a)
     scanrL _ _ _
       = error $ nestedError "first or second" "scanr"
@@ -1026,10 +1027,10 @@ liftPreOpenAcc vectAcc ctx size acc
                -> LiftedAcc  acc aenv' (Vector e, Scalar e)
     scanr'L (cvtF2 -> (Just f,_)) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
-      = avoidedAcc
+      = avoidedAcc "scanr"
       $^ Scanr' f z a'
       | otherwise
-      = irregularAcc
+      = irregularAcc "scanr"
       $^ Alet (asIrregular a)
       $^ Alet (segmentsC avar0)
       $^ Alet (irregularValuesC avar1)
@@ -1065,17 +1066,17 @@ liftPreOpenAcc vectAcc ctx size acc
       | LiftedAcc AvoidedT a'          <- a
       , LiftedExp (Just sh') _ <- sh
       , Just f                 <- f_a
-      =  avoidedAcc
+      =  avoidedAcc "backpermute"
       $^ Backpermute sh' f a'
       | Just f <- f_a
       , LiftedExp (Just sh') _ <- sh
       , AsSlice         <- asSlice (Proxy :: Proxy sh)
       , AsSlice         <- asSlice (Proxy :: Proxy sh')
       = let
-          reg a' = regularAcc . regularC
+          reg a' = regularAcc "backpermute" . regularC
                  $^ Alet (unregularC a')
                  $^ Backpermute (indexSnoc (weakenA1 sh') (indexLastC (Shape avar0))) (higher (weakenA1 f)) avar0
-          ireg a' = regularAcc . regularC
+          ireg a' = regularAcc "backpermute" . regularC
                    $^ Alet (unitSize size)
                    $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
                    $^ Alet (regularSegsC avar0 (weakenA1 $ unit sh'))
@@ -1084,7 +1085,7 @@ liftPreOpenAcc vectAcc ctx size acc
                                          (weakenA3 a')
         in withFL size reg ireg a
       | otherwise
-      =  irregularAcc
+      =  irregularAcc "backpermute"
       $^ Alet (segmentsFromExp sh)
       $^ Alet (liftedBackpermutePreC avar0)
       $  irregularC avar1
@@ -1104,11 +1105,11 @@ liftPreOpenAcc vectAcc ctx size acc
       | Just p           <- p_a
       , LiftedAcc AvoidedT a'    <- a
       , LiftedAcc AvoidedT defs' <- defs
-      =  avoidedAcc
+      =  avoidedAcc "permute"
       $^ Permute comb defs' p a'
       -- TODO: Regular permutation
       |  otherwise
-      =  irregularAcc
+      =  irregularAcc "permute"
       $^ Alet (asIrregular defs)
       $^ Alet (weakenA1 $ asIrregular a)
       $  let init     = avar0
@@ -1132,7 +1133,7 @@ liftPreOpenAcc vectAcc ctx size acc
              -> acc            aenv (Array sh e)
              -> LiftedAcc  acc aenv' (Array sh e')
     stencilL (cvtF1 -> (Just f,_)) b (cvtA -> LiftedAcc AvoidedT a)
-      = avoidedAcc
+      = avoidedAcc "stencil"
       $^ Stencil f b a
     stencilL _                                      _ _
       = error $ "Disallowed nested parallelism: Stencil operations must reside at the top level of "
@@ -1151,7 +1152,7 @@ liftPreOpenAcc vectAcc ctx size acc
               (cvtA -> LiftedAcc AvoidedT a1)
               b2
               (cvtA -> LiftedAcc AvoidedT a2)
-      = avoidedAcc
+      = avoidedAcc "stencil2"
       $^ Stencil2 f b1 a1 b2 a2
     stencil2L _                                 _  _  _  _
       = error $ "Disallowed nested parallelism: Stencil operations must reside at the top level of "
@@ -2540,10 +2541,10 @@ generalizeRank2 f
 
 -- Debugging
 -- ----------
--- trace :: String -> String -> a -> a
--- trace header msg
---   = Debug.trace Debug.dump_vectorisation
---   $ header ++ ": " ++ msg
+trace :: String -> String -> a -> a
+trace header msg
+  = Debug.trace Debug.dump_vectorisation
+  $ header ++ ": " ++ msg
 
 -- Sequence vectorisation
 -- ------------------------
