@@ -43,7 +43,7 @@ As a simple example, consider the computation of a dot product of two vectors of
     dotp :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Scalar Float)
     dotp xs ys = fold (+) 0 (zipWith (*) xs ys)
 
-Except for the type, this code is almost the same as the corresponding Haskell code on lists of floats. The types indicate that the computation may be online-compiled for performance — for example, using `Data.Array.Accelerate.CUDA.run` it may be on-the-fly off-loaded to a GPU.
+Except for the type, this code is almost the same as the corresponding Haskell code on lists of floats. The types indicate that the computation may be online-compiled for performance; for example, using `Data.Array.Accelerate.LLVM.PTX.run` it may be on-the-fly off-loaded to a GPU.
 
 Availability
 ------------
@@ -51,25 +51,23 @@ Availability
 Package accelerate is available from
 
  * Hackage: [accelerate][Hackage] - install with `cabal install accelerate`
- * GitHub: [AccelerateHS/accelerate][GitHub] - get the source with `git clone https://github.com/AccelerateHS/accelerate.git`
+ * GitHub: [AccelerateHS/accelerate][GitHub] - get the source with `git clone https://github.com/AccelerateHS/accelerate.git`. The easiest way to compile the source distributions is via the Haskell [stack](https://docs.haskellstack.org/en/stable/README/) tool.
 
 Additional components
 ---------------------
 
 The following supported add-ons are available as separate packages:
 
-  * [accelerate-cuda][accelerate-cuda]: Backend targeting CUDA-enabled NVIDA GPUs — requires the NVIDIA CUDA SDK and hardware with compute capability 1.2 or greater (see the [table on Wikipedia][wiki-cc])
+  * [accelerate-llvm-native][accelerate-llvm-native]: Backend targeting multicore CPUs.
+  * [accelerate-llvm-ptx][accelerate-llvm-ptx]: Backend targeting CUDA-enabled NVIDIA GPUs. Requires a GPU with compute capability 2.0 or greater (see the [table on Wikipedia][wiki-cc]).
+  * [accelerate-cuda][accelerate-cuda]: Backend targeting CUDA-enabled NVIDA GPUs. Requires a GPU with compute capability 1.2 or greater. _NOTE:_ This backend is being deprecated in favour of `accelerate-llvm-ptx`.
   * [accelerate-examples][accelerate-examples]: Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
-  * [accelerate-io][accelerate-io]: Fast conversion between Accelerate arrays and other array formats (including Repa arrays)
-  * [accelerate-fft][accelerate-fft]: Fast Fourier transform implementation, with optimised implementation for the CUDA backend
+  * [accelerate-io][accelerate-io]: Fast conversion between Accelerate arrays and other array formats (for example, Repa and Vector)
+  * [accelerate-fft][accelerate-fft]: Fast Fourier transform implementation, with bindings to optimised FFI implementations.
 
 Install them from Hackage with `cabal install PACKAGENAME`.
 
-The following components are experimental and/or incomplete. Please contact us if you are interested in helping to work on or test them!
-
-  * [accelerate-llvm][accelerate-llvm]: A framework for constructing backends targeting LLVM IR, with concrete backends for multicore CPUs and NVIDIA GPUs.
-
-The following libraries can also be used with Accelerate:
+We also maintain the following libraries:
 
   * [colour-accelerate][colour-accelerate]: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL)
   * [gloss-accelerate][gloss-accelerate]: Generate [gloss][gloss] pictures from Accelerate
@@ -80,19 +78,11 @@ The following libraries can also be used with Accelerate:
   * [numeric-prelude-accelerate][numeric-prelude-accelerate]: Lifting the [numeric-prelude][numeric-prelude] to Accelerate
 
 
-Requirements
-------------
-
-  * Glasgow Haskell Compiler (GHC), 7.8.3 or later
-  * For the CUDA backend, CUDA version 5.0 or later
-  * Haskell libraries as specified in the [`accelerate.cabal`][accelerate-cabal] and optionally [`accelerate-cuda.cabal`][accelerate-cuda-cabal] files.
-
 Documentation
 -------------
 
   * Haddock documentation is included and linked with the individual package releases on [Hackage][Hackage].
   * Haddock documentation for in-development components can be found [here](http://tmcdonell-bot.github.io/accelerate-travis-buildbot/).
-  * Additional online documentation can be found in the [GitHub wiki][Wiki].
   * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately][HOAS-conv].
 
 Examples
@@ -212,6 +202,8 @@ Here is a list of features that are currently missing:
   [accelerate-cabal]:           https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [accelerate-cuda-cabal]:      https://github.com/AccelerateHS/accelerate-cuda/accelerate-cuda.cabal
   [accelerate-llvm]:            https://github.com/AccelerateHS/accelerate-llvm
+  [accelerate-llvm-native]:     https://github.com/AccelerateHS/accelerate-llvm-native
+  [accelerate-llvm-ptx]:        https://github.com/AccelerateHS/accelerate-llvm-ptx
   [GitHub]:                     https://github.com/AccelerateHS/accelerate
   [Wiki]:                       https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                     https://github.com/AccelerateHS/accelerate/issues

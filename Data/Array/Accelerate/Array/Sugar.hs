@@ -48,7 +48,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
-  shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList, concatVectors,
+  shape, (!), allocateArray, fromFunction, fromList, toList, concatVectors,
 
   -- * Tuples
   TupleR, TupleRepr, tuple,
@@ -62,10 +62,8 @@ module Data.Array.Accelerate.Array.Sugar (
 
 -- standard library
 import Control.DeepSeq
-import Data.Array.IArray                                        ( IArray )
 import Data.List                                                ( intercalate, transpose )
 import Data.Typeable
-import qualified Data.Array.IArray                              as IArray
 
 import GHC.Exts                                                 ( IsList )
 import qualified GHC.Exts                                       as GHC
@@ -119,35 +117,35 @@ data tail :. head = tail :. head
 instance (Show sh, Show sz) => Show (sh :. sz) where
   show (sh :. sz) = show sh ++ " :. " ++ show sz
 
--- | Marker for entire dimensions in slice and division descriptors.
+-- | Marker for entire dimensions in 'Data.Array.Accelerate.Language.slice' and
+-- 'Data.Array.Accelerate.Language.replicate' descriptors.
 --
--- For example, when used in slices passed to `Data.Array.Accelerate.replicate`,
--- the occurrences of `All` indicate the dimensions into which the array's
--- existing extent will be placed, rather than the new dimensions introduced by
--- replication.
+-- Occurrences of 'All' indicate the dimensions into which the array's existing
+-- extent will be placed unchanged.
+--
+-- See 'Data.Array.Accelerate.Language.slice' and
+-- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data All = All
   deriving (Typeable, Show, Eq)
 
--- |Marker for arbitrary shapes in slice and division descriptors.  Such arbitrary
---  shapes may include an unknown number of dimensions.
+-- | Marker for arbitrary dimensions in 'Data.Array.Accelerate.Language.slice'
+-- and 'Data.Array.Accelerate.Language.replicate' descriptors.
 --
---  `Any` can be used in the leftmost position of a slice instead of
---  `Z`, for example @(Any :. _ :. _)@.  In the following definition
---  `Any` is used to match against whatever shape the type variable
---  `sh` takes:
+-- 'Any' can be used in the leftmost position of a slice instead of 'Z',
+-- indicating that any dimensionality is admissible in that position.
 --
--- > repN :: (Shape sh, Elt e) => Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
--- > repN n a = replicate (constant $ Any :. n) a
+-- See 'Data.Array.Accelerate.Language.slice' and
+-- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data Any sh = Any
   deriving (Typeable, Show, Eq)
 
 -- | Marker for splitting along an entire dimension in division descriptors.
 --
--- For example, when used in a division descriptor passed to 'Data.Array.Accelerate.toSeq',
--- a `Split` indicates that the array should be divided along this dimension
--- forming the elements of the output sequence.
+-- For example, when used in a division descriptor passed to
+-- 'Data.Array.Accelerate.toSeq', a `Split` indicates that the array should be
+-- divided along this dimension forming the elements of the output sequence.
 --
 data Split = Split
   deriving (Typeable, Show, Eq)
@@ -155,8 +153,8 @@ data Split = Split
 -- | Marker for arbitrary shapes in slices descriptors, where it is desired to
 -- split along an unknown number of dimensions.
 --
---  For example, in the following definition, 'Divide' matches against any
---  shape and flattens everything but the innermost dimension.
+-- For example, in the following definition, 'Divide' matches against any shape
+-- and flattens everything but the innermost dimension.
 --
 -- > vectors :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Vector e]
 -- > vectors = toSeq (Divide :. All)
@@ -235,12 +233,29 @@ toTuple = toProd (Proxy :: Proxy Elt)
 -- Array elements (tuples of scalars)
 -- ----------------------------------
 
--- | Accelerate supports as array elements only simple atomic types, and tuples
--- thereof. These element types are stored efficiently in memory, unpacked as
--- consecutive elements without pointers.
+-- | The 'Elt' class characterises the allowable array element types, and hence
+-- the types which can appear in scalar Accelerate expressions.
 --
--- This class characterises the types of values that can be array elements, and
--- hence, appear in scalar Accelerate expressions.
+-- Accelerate arrays consist of simple atomic types as well as nested tuples
+-- thereof, stored efficiently in memory as consecutive unpacked elements
+-- without pointers. It roughly consists of:
+--
+--  * Signed and unsigned integers (8, 16, 32, and 64-bits wide)
+--  * Floating point numbers (single and double precision)
+--  * 'Char'
+--  * 'Bool'
+--  * ()
+--  * Shapes formed from 'Z' and (':.')
+--  * Nested tuples of all of these, currently up to 15-elements wide
+--
+-- Adding new instances for 'Elt' consists of explaining to Accelerate how to
+-- map between your data type and a (tuple of) primitive values. For examples
+-- see:
+--
+--  * "Data.Array.Accelerate.Data.Complex"
+--  * "Data.Array.Accelerate.Data.Monoid"
+--  * <https://hackage.haskell.org/package/linear-accelerate linear-accelerate>
+--  * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>
 --
 class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
       => Elt a where
@@ -617,6 +632,10 @@ data ArraysFlavour arrs where
   ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
   ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
 
+-- | 'Arrays' consists of nested tuples of individual 'Array's, currently up to
+-- 15-elements wide. Accelerate computations can thereby return multiple
+-- results.
+--
 class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
   flavour  :: a {- dummy -} -> ArraysFlavour a
@@ -761,7 +780,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 --
 type TupleRepr a = ProdRepr a
 
--- |We represent tuples as heterogenous lists, typed by a type list.
+-- |We represent tuples as heterogeneous lists, typed by a type list.
 --
 data Tuple c t where
   NilTup  ::                              Tuple c ()
@@ -785,11 +804,42 @@ tuple :: IsTuple tup => {- dummy -} tup -> TupleR (TupleRepr tup)
 tuple = prod (Proxy :: Proxy Elt)
 
 
--- |Multi-dimensional arrays for array processing.
+-- | Dense, regular, multi-dimensional arrays.
+--
+-- The 'Array' is the core computational unit of Accelerate; all programs in
+-- Accelerate take zero or more arrays as input and produce one or more arrays
+-- as output. The 'Array' type has two type parameters:
+--
+--  * /sh/: is the shape of the array, tracking the dimensionality and extent of
+--    each dimension of the array; for example, 'DIM1' for one-dimensional
+--    'Vector's, 'DIM2' for two-dimensional matrices, and so on.
+--  * /e/: represents the type of each element of the array; for example,
+--    'Int', 'Float', et cetera.
+--
+-- Array data is store unboxed in an unzipped struct-of-array representation.
+-- Elements are laid out in row-major order (the right-most index of a 'Shape'
+-- is the fastest varying). The allowable array element types are members of the
+-- 'Elt' class, which roughly consists of:
+--
+--  * Signed and unsigned integers (8, 16, 32, and 64-bits wide).
+--  * Floating point numbers (single and double precision)
+--  * 'Char'
+--  * 'Bool'
+--  * ()
+--  * Shapes formed from 'Z' and (':.')
+--  * Nested tuples of all of these, currently up to 15-elements wide.
+--
+-- Note that 'Array' itself is not an allowable element type---there are no
+-- nested arrays in Accelerate, regular arrays only!
 --
 -- If device and host memory are separate, arrays will be transferred to the
--- device when necessary (if possible asynchronously and in parallel with other
--- tasks) and cached on the device if sufficient memory is available.
+-- device when necessary (possibly asynchronously and in parallel with other
+-- tasks) and cached on the device if sufficient memory is available. Arrays are
+-- made available to embedded language computations via
+-- 'Data.Array.Accelerate.use'.
+--
+-- Section "Getting data in" lists functions for getting data into and out of
+-- the 'Array' type.
 --
 data Array sh e where
   Array :: (Shape sh, Elt e)
@@ -798,6 +848,67 @@ data Array sh e where
         -> Array sh e
 
 deriving instance Typeable Array
+
+instance (Eq sh, Eq e) => Eq (Array sh e) where
+  arr1@Array{} == arr2@Array{} = shape arr1 == shape arr2 && toList arr1 == toList arr2
+  arr1@Array{} /= arr2@Array{} = shape arr1 /= shape arr2 || toList arr1 /= toList arr2
+
+#if __GLASGOW_HASKELL__ >= 710
+-- Convert an array to a string, using specialised instances for dimensions
+-- zero, one, and two. These are available for ghc-7.10 and later only (earlier
+-- versions of ghc would require -XIncoherentInstances in the client module).
+--
+-- TODO:
+--   * Make special formatting optional? It is more difficult to copy/paste the
+--     result, for example. Also it does not look good if the matrix row does
+--     not fit on a single line.
+--   * The AST pretty printer does not use these instances
+--
+instance Show (Scalar e) where
+  show arr@Array{} =
+    "Scalar Z " ++ show (toList arr)
+
+instance Show (Vector e) where
+  show arr@Array{} =
+    "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Show (Array DIM2 e) where
+  show arr@Array{} =
+    "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat (toMatrix (toList arr))
+    where
+      Z :. _ :. cols    = shape arr
+      toMatrix []       = []
+      toMatrix xs       = let (r,rs) = splitAt cols xs
+                          in  r : toMatrix rs
+      --
+      showMat []        = "[]"
+      showMat mat       = "\n  " ++ ppMat (map (map show) mat)
+      --
+      ppRow row         = concatMap (++",") row
+      ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
+      ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
+        where
+          extra = 0
+          width = maximum . map length
+          pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
+#endif
+
+-- This is a bit unfortunate, but we need to use an INCOHERENT instance because
+-- GHC can't determine that with the above specialisations, a DIM3+ instance
+-- covers all remaining possibilities, and lacking a general instance is
+-- problematic for operations which want a 'Show (Array sh e)' constraint.
+-- Furthermore, those clients are likely to pick this instance, rather than the
+-- more specific ones above, which is (perhaps) a little unfortunate.
+--
+instance {-# INCOHERENT #-} Show (Array sh e) where
+  show arr@Array{} =
+    "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Elt e => IsList (Vector e) where
+  type Item (Vector e) = e
+  toList         = toList
+  fromListN n xs = fromList (Z:.n) xs
+  fromList xs    = GHC.fromListN (length xs) xs
 
 instance NFData (Array sh e) where
   rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
@@ -861,6 +972,7 @@ type DIM6 = DIM5:.Int
 type DIM7 = DIM6:.Int
 type DIM8 = DIM7:.Int
 type DIM9 = DIM8:.Int
+
 
 -- Shape constraints and indexing
 -- ------------------------------
@@ -1042,7 +1154,7 @@ instance (Shape sh, Slice sh) => Division (Divide sh) where
 shape :: Shape sh => Array sh e -> sh
 shape (Array sh _) = toElt sh
 
--- |Array indexing
+-- | Array indexing
 --
 infixl 9 !
 (!) :: Array sh e -> sh -> e
@@ -1051,11 +1163,12 @@ infixl 9 !
 -- FIXME: using this due to a bug in 6.10.x
 (!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` toIndex (toElt sh) ix)
 
--- |Create an array from its representation function
+-- | Create an array from its representation function, applied at each index of
+-- the array.
 --
-newArray :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
-{-# INLINE newArray #-}
-newArray sh f = adata `seq` Array (fromElt sh) adata
+fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
+{-# INLINE fromFunction #-}
+fromFunction sh f = adata `seq` Array (fromElt sh) adata
   where
     (adata, _) = runArrayData $ do
                    arr <- newArrayData (size sh)
@@ -1065,7 +1178,7 @@ newArray sh f = adata `seq` Array (fromElt sh) adata
                    return (arr, undefined)
 
 
--- |Create a vector from the concatenation of the given list of vectors.
+-- | Create a vector from the concatenation of the given list of vectors.
 --
 concatVectors :: Elt e => [Vector e] -> Vector e
 {-# INLINE concatVectors #-}
@@ -1089,53 +1202,35 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
     (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
 
 
-type family IxShapeRepr e where
-  IxShapeRepr ()    = ()
-  IxShapeRepr Int   = ((),Int)
-  IxShapeRepr (t,h) = (IxShapeRepr t, h)
-
-fromIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => sh -> ix
-fromIxShapeRepr sh = toElt (go (eltType (undefined::ix)) (fromElt sh))
-  where
-    go :: forall ix'. TupleType ix' -> IxShapeRepr ix' -> ix'
-    go UnitTuple ()                                                         = ()
-    go (SingleTuple     (NumScalarType (IntegralNumType TypeInt{}))) ((),h) = h
-    go (PairTuple tt _) (t, h)                                              = (go tt t, h)
-    go _ _ = error "Not a valid IArray.Ix"
-
-toIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => ix -> sh
-toIxShapeRepr ix = toElt (go (eltType (undefined::ix)) (fromElt ix))
-  where
-    go :: forall ix'. TupleType ix' -> ix' -> IxShapeRepr ix'
-    go UnitTuple        ()                                             = ()
-    go (SingleTuple     (NumScalarType (IntegralNumType TypeInt{}))) h = ((), h)
-    go (PairTuple tt _) (t, h)                                         = (go tt t, h)
-    go _ _ = error "Not a valid IArray.Ix"
-
--- | Convert an 'IArray' to an accelerated array.
+-- | Convert elements of a list into an Accelerate 'Array'.
 --
--- While the type signature mentions Accelerate internals that are not exported,
--- in practice satisfying the type equality is straight forward. The index type
--- @ix@ must be the unit type @()@ for singleton arrays, or an @Int@ or tuple of
--- @Int@'s for multidimensional arrays.
+-- This will generate a new multidimensional 'Array' of the specified shape and
+-- extent by consuming elements from the list and adding them to the array in
+-- row-major order.
 --
-fromIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
-           => a ix e -> Array sh e
-fromIArray iarr = newArray sh (\ix -> iarr IArray.! fromIxShapeRepr ix)
-  where
-    (lo,hi) = IArray.bounds iarr
-    sh      = rangeToShape (toIxShapeRepr lo, toIxShapeRepr hi)
-
--- | Convert an accelerated array to an 'IArray'.
+-- >>> fromList (Z:.10) [0..] :: Vector Int
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
 --
-toIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix)
-         => Array sh e -> a ix e
-toIArray arr = IArray.array bnds [(ix, arr ! toIxShapeRepr ix) | ix <- IArray.range bnds]
-  where
-    (lo,hi) = shapeToRange (shape arr)
-    bnds    = (fromIxShapeRepr lo, fromIxShapeRepr hi)
-
--- | Convert a list, with elements in row-major order, into an accelerated array.
+-- Note that we pull elements off the list lazily, so infinite lists are
+-- accepted:
+--
+-- >>> fromList (Z:.5:.10) (repeat 0) :: Array DIM2 Float
+-- Matrix (Z :. 5 :. 10)
+--   [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+--     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+--
+-- You can also make use of the @OverloadedLists@ extension to produce
+-- one-dimensional vectors from a /finite/ list.
+--
+-- >>> [0..9] :: Vector Int
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
+--
+-- Note that this requires first traversing the list to determine its length,
+-- and then traversing it a second time to collect the elements into the array,
+-- thus forcing the spine of the list to be manifest on the heap.
 --
 fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 {-# INLINE fromList #-}
@@ -1154,7 +1249,7 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
                     go 0 xs
                     return (arr, undefined)
 
--- | Convert an accelerated array to a list in row-major order.
+-- | Convert an accelerated 'Array' to a list in row-major order.
 --
 toList :: forall sh e. Array sh e -> [e]
 {-# INLINE toList #-}
@@ -1166,64 +1261,6 @@ toList (Array sh adata) = go 0
     !n                  = Repr.size sh
     go !i | i >= n      = []
           | otherwise   = toElt (adata `unsafeIndexArrayData` i) : go (i+1)
-
-instance Elt e => IsList (Vector e) where
-  type Item (Vector e) = e
-  toList         = toList
-  fromListN n xs = fromList (Z:.n) xs
-  fromList xs    = GHC.fromListN (length xs) xs
-
-#if __GLASGOW_HASKELL__ >= 710
--- Convert an array to a string, using specialised instances for dimensions
--- zero, one, and two. These are available for ghc-7.10 and later only (earlier
--- versions of ghc would require -XIncoherentInstances in the client module).
---
--- TODO:
---   * Make special formatting optional? It is more difficult to copy/paste the
---     result, for example. Also it does not look good if the matrix row does
---     not fit on a single line.
---   * The AST pretty printer does not use these instances
---
-instance Show (Scalar e) where
-  show arr@Array{}
-    = "Scalar Z " ++ show (toList arr)
-
-instance Show (Vector e) where
-  show arr@Array{}
-    = "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
-
-instance Show (Array DIM2 e) where
-  show arr@Array{}
-    = "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat (toMatrix (toList arr))
-    where
-      Z :. _ :. cols    = shape arr
-      toMatrix []       = []
-      toMatrix xs       = let (r,rs) = splitAt cols xs
-                          in  r : toMatrix rs
-
-      showMat []        = "[]"
-      showMat mat       = "\n  " ++ ppMat (map (map show) mat)
-
-      ppRow row         = concatMap (++",") row
-      ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
-      ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
-        where
-          extra = 1
-          width = maximum . map length
-          pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
-#endif
-
--- This is a bit unfortunate, but we need to use an INCOHERENT instance because
--- GHC can't determine that with the above specialisations, a DIM3+ instance
--- covers all remaining possibilities, and lacking a general instance is
--- problematic for operations which want a 'Show (Array sh e)' constraint.
--- Furthermore, those clients are likely to pick this instance, rather than the
--- more specific ones above, which is (perhaps) a little unfortunate.
---
-instance {-# INCOHERENT #-} Show (Array sh e) where
-  show arr@Array{}
-    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
-
 
 -- | Nicely format a shape as a string
 --

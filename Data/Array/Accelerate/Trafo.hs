@@ -171,7 +171,7 @@ convertSeq = convertSeqWith phases
 convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
 convertSeqWith Phase{..} s
   = phase "array-fusion"           (Fusion.convertSeq enableAccFusion)
-  $ phase "vectorise-sequences"    Vectorise.vectoriseSeq     `when` vectoriseSequences
+  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeq     `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s

@@ -911,10 +911,13 @@ liftPreOpenAcc vectAcc strength ctx size acc
     fold1SegL _ _ _
       = error $ nestedError "first" "foldSeg"
 
-    scanl1L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanl1L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
+    scanl1L _ _
+      = error "TODO: vectorise scanl1L"
+{--
     scanl1L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
@@ -927,12 +930,16 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $  extract $ scanl1Lift f (sink b1 (lifted a))
     scanl1L _ _
       = error $ nestedError "first" "scanl1"
+--}
 
-    scanlL :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanlL :: forall sh e. (Shape sh, Elt e)
+           => PreFun acc  aenv  (e -> e -> e)
+           -> PreExp acc  aenv  e
+           -> acc            aenv  (Array (sh:.Int) e)
+           -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
+    scanlL _ _ _
+      = error "TODO: vectorise scanlL"
+{--
     scanlL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
@@ -947,12 +954,16 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $  scanlLift (weakenA1 f) (the avar0) (weakenA1 $ sink b1 $ lifted a)
     scanlL _ _ _
       = error $ nestedError "first or second" "scanl"
+--}
 
-    scanl'L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e, Scalar e)
+    scanl'L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> PreExp acc  aenv  e
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e, Array sh e)
+    scanl'L _ _ _
+      = error "TODO: vectorise scanl'"
+{--
     scanl'L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
@@ -992,11 +1003,15 @@ liftPreOpenAcc vectAcc strength ctx size acc
             avar0
     scanl'L _ _ _
       = error $ nestedError "first or second" "scanl"
+--}
 
-    scanr1L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanr1L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
+    scanr1L _ _
+      = error "TODO: vectorise scanr1"
+{--
     scanr1L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
@@ -1009,12 +1024,16 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $  extract $ scanr1Lift f (sink b1 (lifted a))
     scanr1L _ _
       = error $ nestedError "first" "scanr1"
+--}
 
-    scanrL :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+    scanrL :: forall sh e. (Shape sh, Elt e)
+           => PreFun acc  aenv  (e -> e -> e)
+           -> PreExp acc  aenv  e
+           -> acc            aenv  (Array (sh:.Int) e)
+           -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
+    scanrL _ _ _
+      = error "TODO: vectorise scanr"
+{--
     scanrL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
@@ -1029,12 +1048,16 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $  scanrLift (weakenA1 f) (the avar0) (weakenA1 $ sink b1 (lifted a))
     scanrL _ _ _
       = error $ nestedError "first or second" "scanr"
+--}
 
-    scanr'L :: forall e. Elt e
-               => PreFun acc  aenv  (e -> e -> e)
-               -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e, Scalar e)
+    scanr'L :: forall sh e. (Shape sh, Elt e)
+            => PreFun acc  aenv  (e -> e -> e)
+            -> PreExp acc  aenv  e
+            -> acc            aenv  (Array (sh:.Int) e)
+            -> LiftedAcc  acc aenv' (Array (sh:.Int) e, Array sh e)
+    scanr'L _ _ _
+      = error "TODO: vectorise scanr'"
+{--
     scanr'L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
@@ -1071,6 +1094,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
             avar0
     scanr'L _ _ _
       = error $ nestedError "first or second" "scanr'"
+--}
 
     backpermuteL :: (Shape sh, Shape sh', Elt e)
                  => PreExp acc  aenv  sh'
@@ -1169,6 +1193,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = error $ "Disallowed nested parallelism: Stencil operations must reside at the top level of "
              ++ "parallel nesting and the supplied stencil function contain no nested parallelism."
 
+{--
     scanl1Lift :: forall aenv e. Elt e
                => PreFun acc aenv (e -> e -> e)
                -> acc aenv (LiftedArray DIM1 e)
@@ -1252,10 +1277,11 @@ liftPreOpenAcc vectAcc strength ctx size acc
           avar2
           avar1
           avar0
+--}
 
     extentVector :: forall sh aenv. Shape sh
-                => PreExp acc aenv sh
-                -> acc            aenv (Vector sh)
+                 => PreExp acc aenv sh
+                 -> acc            aenv (Vector sh)
     extentVector sh =  inject
                     $  Alet (inject $ Unit sh)
                     $^ Reshape (IndexCons (Const ()) (ShapeSize (the avar0)))
@@ -1819,8 +1845,8 @@ enumSegLinear
     -> S.Acc (Vector Int)
 enumSegLinear segs = enum_s
   where
-    sizes = S.map S.shapeSize segs
-    ones = S.fill (S.shape segs) (1 :: S.Exp Int)
+    sizes  = S.map S.shapeSize segs
+    ones   = S.fill (S.shape segs) (1 :: S.Exp Int)
     ones_s = replicateSeg segs ones
     enum_s = S.afst $ S.scanl'Seg (+) 0 ones_s sizes
 
@@ -2059,6 +2085,7 @@ liftedLinearIndex vals ixs = S.generate (S.shape ixs) (\ix -> values vals S.!! (
   where
     starts = fst $ offsets (segments vals)
 
+{--
 -- |Compute head flags vector from segment vector for left-scans.
 --
 -- The vector will be full of zeros in the body of a segment, and non-zero
@@ -2086,6 +2113,7 @@ mkTailFlags seg
     (offset, len)       = S.scanr' (+) 0 $ S.map S.unindex1 seg
     zeros               = S.fill (S.index1 $ S.the len + 1) 0
     ones                = S.fill (S.index1  $ S.size offset) 1
+--}
 
 replicateC
     :: (Arrays a, Arrays (Vector' a), Kit acc)
@@ -2444,6 +2472,7 @@ the a = Index a (Const ())
 index1 :: PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv DIM1
 index1 = IndexCons IndexNil
 
+{--
 segmented
     :: (Elt e, Kit acc)
     => PreOpenFun acc env aenv (e -> e -> e)
@@ -2454,6 +2483,7 @@ segmented f
           (Cond (PrimNEq scalarType `PrimApp` tup (fstE var0) (Const 0))
           (sndE var0)
           (subApplyE2 (weakenE2 f) (sndE var0) (sndE var1)))
+--}
 
 newTop :: env :> env' -> (env,t) :> (env', t)
 newTop _  ZeroIdx      = ZeroIdx
@@ -2474,8 +2504,8 @@ weakenA4 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx)
 weakenE1 :: SinkExp f => f env aenv t -> f (env,s0) aenv t
 weakenE1 = weakenE SuccIdx
 
-weakenE2 :: SinkExp f => f env aenv t -> f ((env,s1),s0) aenv t
-weakenE2 = weakenE (SuccIdx . SuccIdx)
+-- weakenE2 :: SinkExp f => f env aenv t -> f ((env,s1),s0) aenv t
+-- weakenE2 = weakenE (SuccIdx . SuccIdx)
 
 fun1 :: (Elt a, Elt b)
      => (PreOpenExp acc (env,a) aenv a -> PreOpenExp acc (env,a) aenv b)
@@ -2538,6 +2568,7 @@ subApply2 (Alam (Alam (Abody f))) a b
   $ f
 subApply2 _ _ _ = error "subApply2: inconsistent evaluation"
 
+{--
 subApplyE2
     :: Kit acc
     => PreOpenFun  acc env aenv (a -> b -> c)
@@ -2549,6 +2580,7 @@ subApplyE2 (Lam (Lam (Body f))) a b
   $ Let (weakenE1 b)
   $ f
 subApplyE2 _ _ _ = error "subApplyE2: inconsistent evaluation"
+--}
 
 --partApply :: Kit acc
 --          => PreOpenAfun acc aenv (a -> r)

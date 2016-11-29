@@ -80,12 +80,11 @@ class (Eq sh, Slice sh) => Shape sh where
 
 instance Shape () where
   rank _            = 0
-  size ()           = 1
   empty             = ()
-
+  ignore            = ()
   () `intersect` () = ()
   () `union` ()     = ()
-  ignore            = ()
+  size ()           = 1
   toIndex () ()     = 0
   fromIndex () _    = ()
   bound () () _     = Right ()
@@ -101,12 +100,14 @@ instance Shape () where
 
 instance Shape sh => Shape (sh, Int) where
   rank _                            = rank (undefined :: sh) + 1
-  size (sh, sz)                     = size sh * sz
   empty                             = (empty, 0)
-
+  ignore                            = (ignore, -1)
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
-  ignore                            = (ignore, -1)
+
+  size (sh, sz)                     = $boundsCheck "size" "negative shape dimension" (sz >= 0)
+                                    $ size sh * sz
+
   toIndex (sh, sz) (ix, i)          = $indexCheck "toIndex" i sz
                                     $ toIndex sh ix * sz + i
 

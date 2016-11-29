@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -110,12 +111,12 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, fromInteger, flip, undefined, fail )
 import qualified Prelude                                            as P
 
 -- friends
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect, toIndex, fromIndex )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -260,7 +261,7 @@ zipWith9 f as bs cs ds es fs gs hs is
              (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
 
 
--- | Zip two arrays with a function that also takes the elements' index
+-- | Zip two arrays with a function that also takes the element index
 --
 izipWith :: (Shape sh, Elt a, Elt b, Elt c)
          => (Exp sh -> Exp a -> Exp b -> Exp c)
@@ -271,7 +272,7 @@ izipWith f as bs
   = generate (shape as `intersect` shape bs)
              (\ix -> f ix (as ! ix) (bs ! ix))
 
--- | Zip three arrays with a function that also takes the elements index,
+-- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
 --
 izipWith3 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
@@ -284,7 +285,7 @@ izipWith3 f as bs cs
   = generate (shape as `intersect` shape bs `intersect` shape cs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix))
 
--- | Zip four arrays with the given function that also takes the elements index,
+-- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
@@ -299,7 +300,7 @@ izipWith4 f as bs cs ds
               shape cs `intersect` shape ds)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
 
--- | Zip five arrays with the given function that also takes the elements index,
+-- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
@@ -315,7 +316,7 @@ izipWith5 f as bs cs ds es
                        `intersect` shape ds `intersect` shape es)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
 
--- | Zip six arrays with the given function that also takes the elements index,
+-- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
@@ -333,7 +334,7 @@ izipWith6 f as bs cs ds es fs
                        `intersect` shape fs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
 
--- | Zip seven arrays with the given function that also takes the elements
+-- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
 --
 izipWith7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
@@ -352,7 +353,7 @@ izipWith7 f as bs cs ds es fs gs
                        `intersect` shape fs `intersect` shape gs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
 
--- | Zip eight arrays with the given function that also takes the elements
+-- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
 --
 izipWith8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
@@ -373,7 +374,7 @@ izipWith8 f as bs cs ds es fs gs hs
                        `intersect` shape hs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
 
--- | Zip nine arrays with the given function that also takes the elements index,
+-- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
 izipWith9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
@@ -396,8 +397,8 @@ izipWith9 f as bs cs ds es fs gs hs is
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
 
 
--- | Combine the elements of two arrays pairwise.  The shape of the result is
--- the intersection of the two argument shapes.
+-- | Combine the elements of two arrays pairwise. The shape of the result is the
+-- intersection of the two argument shapes.
 --
 zip :: (Shape sh, Elt a, Elt b)
     => Acc (Array sh a)
@@ -492,6 +493,8 @@ zip9 = zipWith9 (\a b c d e f g h i -> lift (a,b,c,d,e,f,g,h,i))
 
 -- | The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
+--
+-- If the argument array is manifest in memory, 'unzip' is a NOP.
 --
 unzip :: (Shape sh, Elt a, Elt b)
       => Acc (Array sh (a, b))
@@ -614,7 +617,17 @@ unzip9 xs = ( map get1 xs, map get2 xs, map get3 xs
 -- Reductions
 -- ----------
 
--- | Reduction of an array of arbitrary rank to a single scalar value.
+-- | Reduction of an array of arbitrary rank to a single scalar value. The first
+-- argument needs to be an /associative/ function to enable efficient parallel
+-- implementation. The initial element does not need to be an identity element.
+--
+-- >>> let vec = fromList (Z:.10) [0..]
+-- >>> foldAll (+) 42 (use vec)
+-- Scalar Z [87]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> foldAll (+) 0 (use mat)
+-- Scalar Z [1225]
 --
 foldAll :: (Shape sh, Elt a)
         => (Exp a -> Exp a -> Exp a)
@@ -624,7 +637,8 @@ foldAll :: (Shape sh, Elt a)
 foldAll f e arr = fold f e (flatten arr)
 
 -- | Variant of 'foldAll' that requires the reduced array to be non-empty and
--- doesn't need an default value.
+-- doesn't need an default value. The first argument must be an /associative/
+-- function.
 --
 fold1All :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
@@ -701,27 +715,36 @@ maximum = fold1All max
 -- Composite scans
 -- ---------------
 
--- |Left-to-right prescan (aka exclusive scan).  As for 'scan', the first argument must be an
--- /associative/ function.  Denotationally, we have
+-- | Left-to-right prescan (aka exclusive scan).  As for 'scan', the first
+-- argument must be an /associative/ function.  Denotationally, we have
 --
 -- > prescanl f e = Prelude.fst . scanl' f e
 --
-prescanl :: Elt a
+-- >>> let vec = fromList (Z:.10) [1..10]
+-- >>> prescanl (+) 0 (use vec)
+-- Vector (Z :. 10) [0,0,1,3,6,10,15,21,28,36]
+--
+prescanl :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Vector a)
+         -> Acc (Array (sh:.Int) a)
+         -> Acc (Array (sh:.Int) a)
 prescanl f e = P.fst . scanl' f e
 
--- |Left-to-right postscan, a variant of 'scanl1' with an initial value.  Denotationally, we have
+-- | Left-to-right postscan, a variant of 'scanl1' with an initial value. As
+-- with 'scanl1', the array must not be empty. Denotationally, we have:
 --
 -- > postscanl f e = map (e `f`) . scanl1 f
 --
-postscanl :: Elt a
+-- >>> let vec = fromList (Z:.10) [1..10]
+-- >>> postscanl (+) 42 (use vec)
+-- Vector (Z :. 10) [42,43,45,48,52,57,63,70,78,87]
+--
+postscanl :: (Shape sh, Elt a)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Vector a)
+          -> Acc (Array (sh:.Int) a)
+          -> Acc (Array (sh:.Int) a)
 postscanl f e = map (e `f`) . scanl1 f
 
 -- |Right-to-left prescan (aka exclusive scan).  As for 'scan', the first argument must be an
@@ -729,38 +752,67 @@ postscanl f e = map (e `f`) . scanl1 f
 --
 -- > prescanr f e = Prelude.fst . scanr' f e
 --
-prescanr :: Elt a
+prescanr :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Vector a)
+         -> Acc (Array (sh:.Int) a)
+         -> Acc (Array (sh:.Int) a)
 prescanr f e = P.fst . scanr' f e
 
 -- |Right-to-left postscan, a variant of 'scanr1' with an initial value.  Denotationally, we have
 --
 -- > postscanr f e = map (e `f`) . scanr1 f
 --
-postscanr :: Elt a
+postscanr :: (Shape sh, Elt a)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Vector a)
+          -> Acc (Array (sh:.Int) a)
+          -> Acc (Array (sh:.Int) a)
 postscanr f e = map (`f` e) . scanr1 f
 
 
 -- Segmented scans
 -- ---------------
 
--- |Segmented version of 'scanl'
+-- | Segmented version of 'scanl' along the innermost dimension of an array. The
+-- innermost dimension must have at least as many elements as the sum of the
+-- segment descriptor.
 --
-scanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Segments i)
-         -> Acc (Vector a)
-scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg' )
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanlSeg (+) 0 (use mat) (use seg)
+-- Matrix (Z :. 5 :. 12)
+--   [ 0,  0, 0,  1,  3,   6,  10, 0, 0,  5, 11,  18,
+--     0, 10, 0, 11, 23,  36,  50, 0, 0, 15, 31,  48,
+--     0, 20, 0, 21, 43,  66,  90, 0, 0, 25, 51,  78,
+--     0, 30, 0, 31, 63,  96, 130, 0, 0, 35, 71, 108,
+--     0, 40, 0, 41, 83, 126, 170, 0, 0, 45, 91, 138]
+--
+scanlSeg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanlSeg f z arr seg =
+  if null arr ||* null flags
+    then fill (lift (sh:.sz + length seg)) z
+    else scanl1Seg f arr' seg'
   where
+    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
+
     -- Segmented exclusive scan is implemented by first injecting the seed
     -- element at the head of each segment, and then performing a segmented
     -- inclusive scan.
@@ -770,10 +822,11 @@ scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg
     -- start of a segment.
     --
     seg'        = map (+1) seg
-    vec'        = permute const
-                          (fill (index1 $ size vec + size seg) z)
-                          (\ix -> index1' $ unindex1' ix + inc ! ix)
-                          vec
+    arr'        = permute const
+                          (fill (lift (sh :. sz + length seg)) z)
+                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
+                                  in  lift (sx :. i + fromIntegral (inc ! index1 i)))
+                          (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
     -- place for each successive segment, to make room for the seed element.
@@ -784,27 +837,55 @@ scanlSeg f z vec seg = null flags ?| ( fill (shape seg) z , scanl1Seg f vec' seg
     inc         = scanl1 (+) flags
 
 
--- |Segmented version of 'scanl''
+-- | Segmented version of 'scanl'' along the innermost dimension of an array. The
+-- innermost dimension must have at least as many elements as the sum of the
+-- segment descriptor.
 --
 -- The first element of the resulting tuple is a vector of scanned values. The
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
 --
-scanl'Seg :: forall a i. (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-          => (Exp a -> Exp a -> Exp a)
-          -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a, Vector a)
-scanl'Seg f z vec seg = result
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let (res,sums) = scanl'Seg (+) 0 (use mat) (use seg)
+-- >>> res
+-- Matrix (Z :. 5 :. 8)
+--   [ 0, 0,  1,  3,   6, 0,  5, 11,
+--     0, 0, 11, 23,  36, 0, 15, 31,
+--     0, 0, 21, 43,  66, 0, 25, 51,
+--     0, 0, 31, 63,  96, 0, 35, 71,
+--     0, 0, 41, 83, 126, 0, 45, 91]
+-- >>> sums
+-- Matrix (Z :. 5 :. 4)
+--   [  0,  10, 0,  18,
+--     10,  50, 0,  48,
+--     20,  90, 0,  78,
+--     30, 130, 0, 108,
+--     40, 170, 0, 138]
+--
+scanl'Seg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
+scanl'Seg f z arr seg =
+  if null arr
+    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
+    else lift (body, sums)
   where
-    -- Returned the result combined, so that the sub-calculations are shared
-    -- should the user require both results.
-    --
-    result      = lift ( null vec  ?| (emptyArray, body)
-                       , null vec' ?| (emptyArray, sums)
-                       )
-
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
     --
@@ -814,35 +895,42 @@ scanl'Seg f z vec seg = result
     --      by sharing _observation_. Perhaps a global CSE-style pass would be
     --      beneficial.
     --
-    vec'        = scanlSeg f z vec seg
+    arr'        = scanlSeg f z arr seg
 
     -- Extract the final reduction value for each segment, which is at the last
     -- index of each segment.
     --
     seg'        = map (+1) seg
     tails       = zipWith (+) seg . P.fst $ scanl' (+) 0 seg'
-    sums        = backpermute (shape seg) (\ix -> index1' $ tails ! ix) vec'
+    sums        = backpermute
+                    (lift (indexTail (shape arr') :. length seg))
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. fromIntegral (tails ! index1 i)))
+                    arr'
 
     -- Slice out the body of each segment.
     --
     -- Build a head-flags representation based on the original segment
     -- descriptor. This contains the target length of each of the body segments,
-    -- which is one fewer element than the actual bodies stored in vec'. Thus,
+    -- which is one fewer element than the actual bodies stored in arr'. Thus,
     -- the flags align with the last element of each body section, and when
     -- scanned, this element will be incremented over.
     --
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
-                $ permute (+) (fill (index1 $ size vec + 1) 0)
+                $ permute (+) (fill (index1 $ size arr + 1) 0)
                               (\ix -> index1' $ offset ! ix)
                               (fill (shape seg) (1 :: Exp i))
 
-    body        = backpermute (shape vec)
-                              (\ix -> index1' $ unindex1' ix + inc ! ix)
-                              vec'
+    len         = offset ! index1 (length offset - 1)
+    body        = backpermute
+                    (lift (indexTail (shape arr) :. fromIntegral len))
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                    arr'
 
 
--- | Segmented version of 'scanl1'.
+-- | Segmented version of 'scanl1' along the innermost dimension.
 --
 -- As with 'scanl1', the total number of elements considered, in this case given
 -- by the 'sum' of segment descriptor, must not be zero. The input vector must
@@ -853,52 +941,104 @@ scanl'Seg f z vec seg = result
 --
 -- > scanl1Seg f xs [n,0,0] == scanl1Seg f xs [n]   where n /= 0
 --
-scanl1Seg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-          => (Exp a -> Exp a -> Exp a)
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a)
-scanl1Seg f vec seg
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanl1Seg (+) (use mat) (use seg)
+-- Matrix (Z :. 5 :. 8)
+--   [  0,  1,  3,   6,  10,  5, 11,  18,
+--     10, 11, 23,  36,  50, 15, 31,  48,
+--     20, 21, 43,  66,  90, 25, 51,  78,
+--     30, 31, 63,  96, 130, 35, 71, 108,
+--     40, 41, 83, 126, 170, 45, 91, 138]
+--
+scanl1Seg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanl1Seg f arr seg
   = P.snd
   . unzip
   . scanl1 (segmented f)
-  $ zip (mkHeadFlags seg) vec
+  $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkHeadFlags seg)) arr
 
 -- |Segmented version of 'prescanl'.
 --
-prescanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-            => (Exp a -> Exp a -> Exp a)
-            -> Exp a
-            -> Acc (Vector a)
-            -> Acc (Segments i)
-            -> Acc (Vector a)
+prescanlSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 prescanlSeg f e vec seg
-  = P.fst
-  . unatup2
+  = afst
   $ scanl'Seg f e vec seg
 
 -- |Segmented version of 'postscanl'.
 --
-postscanlSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-             => (Exp a -> Exp a -> Exp a)
-             -> Exp a
-             -> Acc (Vector a)
-             -> Acc (Segments i)
-             -> Acc (Vector a)
+postscanlSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 postscanlSeg f e vec seg
   = map (f e)
   $ scanl1Seg f vec seg
 
--- |Segmented version of 'scanr'.
+-- | Segmented version of 'scanr' along the innermost dimension of an array. The
+-- innermost dimension must have at least as many elements as the sum of the
+-- segment descriptor.
 --
-scanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Vector a)
-         -> Acc (Segments i)
-         -> Acc (Vector a)
-scanrSeg f z vec seg = null flags ?| ( fill (shape seg) z, scanr1Seg f vec' seg' )
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanrSeg (+) 0 (use mat) (use seg)
+-- Matrix (Z :. 5 :. 12)
+--   [  2, 0,  18,  15, 11,  6, 0, 0,  24, 17,  9, 0,
+--     12, 0,  58,  45, 31, 16, 0, 0,  54, 37, 19, 0,
+--     22, 0,  98,  75, 51, 26, 0, 0,  84, 57, 29, 0,
+--     32, 0, 138, 105, 71, 36, 0, 0, 114, 77, 39, 0,
+--     42, 0, 178, 135, 91, 46, 0, 0, 144, 97, 49, 0]
+--
+scanrSeg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanrSeg f z arr seg =
+  if null arr ||* null flags
+    then fill (lift (sh :. sz + length seg)) z
+    else scanr1Seg f arr' seg'
   where
+    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
+
     -- Using technique described for 'scanlSeg', where we intersperse the array
     -- with the seed element at the start of each segment, and then perform an
     -- inclusive segmented scan.
@@ -907,77 +1047,137 @@ scanrSeg f z vec seg = null flags ?| ( fill (shape seg) z, scanr1Seg f vec' seg'
     inc         = scanl1 (+) flags
 
     seg'        = map (+1) seg
-    vec'        = permute const
-                          (fill (index1 $ size vec + size seg) z)
-                          (\ix -> index1' $ unindex1' ix + inc ! ix - 1)
-                          vec
+    arr'        = permute const
+                          (fill (lift (sh :. sz + length seg)) z)
+                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
+                                  in  lift (sx :. i + fromIntegral (inc ! index1 i) - 1))
+                          (drop (sz - length flags) arr)
 
 
 -- | Segmented version of 'scanr''.
 --
-scanr'Seg :: forall a i. (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-          => (Exp a -> Exp a -> Exp a)
-          -> Exp a
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a, Vector a)
-scanr'Seg f z vec seg = result
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let (res,sums) = scanr'Seg (+) 0 (use mat) (use seg)
+-- >>> res
+-- Matrix (Z :. 5 :. 8)
+--   [ 0,  15, 11,  6, 0, 17,  9, 0,
+--     0,  45, 31, 16, 0, 37, 19, 0,
+--     0,  75, 51, 26, 0, 57, 29, 0,
+--     0, 105, 71, 36, 0, 77, 39, 0,
+--     0, 135, 91, 46, 0, 97, 49, 0]
+-- >>> sums
+-- Matrix (Z :. 5 :. 4)
+--   [  2,  18, 0,  24,
+--     12,  58, 0,  54,
+--     22,  98, 0,  84,
+--     32, 138, 0, 114,
+--     42, 178, 0, 144]
+--
+scanr'Seg
+    :: forall sh e i. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
+scanr'Seg f z arr seg =
+  if null arr
+    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
+    else lift (body, sums)
   where
     -- Using technique described for scanl'Seg
     --
-    result      = lift ( null vec  ?| (emptyArray, body)
-                       , null vec' ?| (emptyArray, sums)
-                       )
-
-    vec'        = scanrSeg f z vec seg
+    arr'        = scanrSeg f z arr seg
 
     -- reduction values
     seg'        = map (+1) seg
     heads       = P.fst $ scanl' (+) 0 seg'
-    sums        = backpermute (shape seg) (\ix -> index1' $ heads ! ix) vec'
+    sums        = backpermute
+                    (lift (indexTail (shape arr') :. length seg))
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. fromIntegral (heads ! index1 i)))
+                    arr'
 
     -- body segments
-    inc         = scanl1 (+) $ mkHeadFlags seg
-    body        = backpermute (shape vec)
-                              (\ix -> index1' $ unindex1' ix + inc ! ix)
-                              vec'
+    flags       = mkHeadFlags seg
+    inc         = scanl1 (+) flags
+    body        = backpermute
+                    (lift (indexTail (shape arr) :. indexHead (shape flags)))
+                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
+                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                    arr'
 
 
--- |Segmented version of 'scanr1'.
+-- | Segmented version of 'scanr1'.
 --
-scanr1Seg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-          => (Exp a -> Exp a -> Exp a)
-          -> Acc (Vector a)
-          -> Acc (Segments i)
-          -> Acc (Vector a)
-scanr1Seg f vec seg
+-- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> scanr1Seg (+) (use mat) (use seg)
+-- Matrix (Z :. 5 :. 8)
+--   [  0,  10,   9,  7,  4,  18, 13,  7,
+--     10,  50,  39, 27, 14,  48, 33, 17,
+--     20,  90,  69, 47, 24,  78, 53, 27,
+--     30, 130,  99, 67, 34, 108, 73, 37,
+--     40, 170, 129, 87, 44, 138, 93, 47]
+--
+scanr1Seg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+scanr1Seg f arr seg
   = P.snd
   . unzip
   . scanr1 (flip (segmented f))
-  $ zip (mkTailFlags seg) vec
+  $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkTailFlags seg)) arr
 
 
 -- |Segmented version of 'prescanr'.
 --
-prescanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
-            => (Exp a -> Exp a -> Exp a)
-            -> Exp a
-            -> Acc (Vector a)
-            -> Acc (Segments i)
-            -> Acc (Vector a)
+prescanrSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 prescanrSeg f e vec seg
-  = P.fst
-  . unatup2
+  = afst
   $ scanr'Seg f e vec seg
 
 -- |Segmented version of 'postscanr'.
 --
-postscanrSeg :: (Elt a, Integral i, Bits i, FromIntegral i Int)
-             => (Exp a -> Exp a -> Exp a)
-             -> Exp a
-             -> Acc (Vector a)
-             -> Acc (Segments i)
-             -> Acc (Vector a)
+postscanrSeg
+    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
 postscanrSeg f e vec seg
   = map (f e)
   $ scanr1Seg f vec seg
@@ -1050,20 +1250,17 @@ segmented f a b =
 index1' ::  (Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
 index1' i = lift (Z :. fromIntegral i)
 
-unindex1' :: FromIntegral Int i => Exp DIM1 -> Exp i
-unindex1' ix = let Z :. i = unlift ix in fromIntegral i
-
 
 -- Reshaping of arrays
 -- -------------------
 
--- | Flattens a given array of arbitrary dimension.
+-- | Flatten the given array of arbitrary dimension into a one-dimensional
+-- vector. As with 'reshape', this operation performs no work.
 --
 flatten :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Vector e)
 flatten a
-  | Just Refl <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::DIM1))
-  , Just a'   <- gcast a
-  = a'
+  | Just Refl <- matchShapeType (undefined::sh) (undefined::DIM1)
+  = a
 flatten a
   = reshape (index1 $ size a) a
 
@@ -1076,8 +1273,16 @@ flatten a
 fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
 fill sh c = generate sh (const c)
 
--- | Create an array of the given shape containing the values x, x+1, etc (in
---   row-major order).
+-- | Create an array of the given shape containing the values @x@, @x+1@, etc.
+-- (in row-major order).
+--
+-- >>> enumFromN (constant (Z:.5:.10)) 0 :: Array DIM2 Int
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
 enumFromN
     :: (Shape sh, Num e, FromIntegral Int e)
@@ -1088,6 +1293,14 @@ enumFromN sh x = enumFromStepN sh x 1
 
 -- | Create an array of the given shape containing the values @x@, @x+y@,
 -- @x+y+y@ etc. (in row-major order).
+--
+-- >>> enumFromStepN (constant (Z:.5:.10)) 0 0.5 :: Array DIM2 Float
+-- Matrix (Z :. 5 :. 10)
+--   [  0.0,  0.5,  1.0,  1.5,  2.0,  2.5,  3.0,  3.5,  4.0,  4.5,
+--      5.0,  5.5,  6.0,  6.5,  7.0,  7.5,  8.0,  8.5,  9.0,  9.5,
+--     10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5,
+--     15.0, 15.5, 16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5,
+--     20.0, 20.5, 21.0, 21.5, 22.0, 22.5, 23.0, 23.5, 24.0, 24.5]
 --
 enumFromStepN
     :: (Shape sh, Num e, FromIntegral Int e)
@@ -1103,8 +1316,39 @@ enumFromStepN sh x y
 -- Concatenation
 -- -------------
 
--- | Concatenate outermost component of two arrays. The extent of the lower
+-- | Concatenate innermost component of two arrays. The extent of the lower
 --   dimensional component is the intersection of the two arrays.
+--
+-- >>> let m1 = fromList (Z:.5:.10) [0..]
+-- >>> m1
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let m2 = fromList (Z:.10:.3) [0..]
+-- >>> m2
+-- Matrix (Z :. 10 :. 3)
+--   [  0,  1,  2,
+--      3,  4,  5,
+--      6,  7,  8,
+--      9, 10, 11,
+--     12, 13, 14,
+--     15, 16, 17,
+--     18, 19, 20,
+--     21, 22, 23,
+--     24, 25, 26,
+--     27, 28, 29]
+--
+-- >>> use m1 ++ use m2
+-- Matrix (Z :. 5 :. 13)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  0,  1,  2,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,  3,  4,  5,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,  6,  7,  8,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,  9, 10, 11,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 12, 13, 14]
 --
 infixr 5 ++
 (++) :: forall sh e. (Slice sh, Shape sh, Elt e)
@@ -1126,45 +1370,97 @@ infixr 5 ++
 -- Filtering
 -- ---------
 
--- | Drop elements that do not satisfy the predicate
+-- | Drop elements that do not satisfy the predicate. Returns the elements which
+-- pass the predicate, together with a segment descriptor indicating how many
+-- elements along each outer dimension were valid.
 --
-filter :: Elt a
-       => (Exp a -> Exp Bool)
-       -> Acc (Vector a)
-       -> Acc (Vector a)
+-- >>> let vec = fromList (Z :. 10) [1..10] :: Vector Int
+-- >>> vec
+-- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
+--
+-- >>> filter even (use vec)
+-- (Vector (Z :. 5) [2,4,6,8,10], Scalar Z [5])
+--
+-- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
+-- >>> mat
+-- Matrix (Z :. 4 :. 10)
+--   [ 1, 2, 3, 4,  5,  6,  7,  8,  9, 10,
+--     1, 1, 1, 1,  1,  2,  2,  2,  2,  2,
+--     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+--     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
+--
+-- >>> filter odd (use mat)
+-- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19], Vector (Z :. 4) [5,5,0,10])
+--
+filter :: forall sh e. (Shape sh, Slice sh, Elt e)
+       => (Exp e -> Exp Bool)
+       -> Acc (Array (sh:.Int) e)
+       -> Acc (Vector e, Array sh Int)
 filter p arr
-  = let flags            = map (boolToInt . p) arr
-        (targetIdx, len) = scanl' (+) 0 flags
-        arr'             = backpermute (index1 $ the len) id arr
+  -- Optimise 1-dimensional arrays, where we can avoid additional computations
+  -- for the offset indices.
+  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
+  = let
+        keep            = map p arr
+        (target, len)   = scanl' (+) 0 (map boolToInt keep)
+        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
+        dummy           = backpermute (index1 (the len)) id arr
+        result          = permute const dummy prj arr
     in
-    permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, index1 $ targetIdx!ix)) arr
-    -- FIXME: This is abusing 'permute' in that the first two arguments are
-    --        only justified because we know the permutation function will
-    --        write to each location in the target exactly once.
-    --        Instead, we should have a primitive that directly encodes the
-    --        compaction pattern of the permutation function.
+    if null arr
+      then lift (emptyArray, fill (constant Z) 0)
+      else lift (result, len)
+
+filter p arr
+  = let
+        sz              = indexTail (shape arr)
+        keep            = map p arr
+        (target, len)   = scanl' (+) 0 (map boolToInt keep)
+        (offset, valid) = scanl' (+) 0 (flatten len)
+        prj ix          = if keep!ix
+                            then index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
+                            else ignore
+        dummy           = backpermute (index1 (the valid)) id (flatten arr)
+        result          = permute const dummy prj arr
+    in
+    if null arr
+      then lift (emptyArray, fill sz 0)
+      else lift (result, len)
+
+-- FIXME: [Permute in the filter operation]
+--
+-- This is abusing 'permute' in that the first two arguments, the combination
+-- function and array of default values, are only justified because we know the
+-- permutation function will write to each location in the target exactly once.
+--
+-- Instead, we should have a primitive that directly encodes the compaction
+-- pattern of the permutation function. This may be more efficient to compute,
+-- and avoids the computation of the defaults array, which is ultimately wasted
+-- work.
+--
 
 {-# NOINLINE filter #-}
 {-# RULES
   "ACC filter/filter" forall f g arr.
-    filter f (filter g arr) = filter (\x -> g x &&* f x) arr
+    filter f (afst (filter g arr)) = filter (\x -> g x &&* f x) arr
  #-}
 
 
 -- Gather operations
 -- -----------------
 
--- | Gather elements from a source array at the given indices. For example:
+-- | Gather elements from a source array by reading values at the given indices.
 --
---  > input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
---  > from   = [1, 3, 7, 2, 5, 3]
---  >
---  > output = [9, 4, 1, 6, 2, 4]
+-- >>> let input = fromList (Z:.9) [1,9,6,4,4,2,0,1,2]
+-- >>> let from  = fromList (Z:.6) [1,3,7,2,5,3]
+-- >>> gather (use from) (use input)
+-- Vector (Z :. 6) [9,4,1,6,2,4]
 --
-gather :: (Shape sh, Elt e)
-       => Acc (Array sh Int)      -- ^ index of source at each index to gather
-       -> Acc (Vector e)          -- ^ source vector
-       -> Acc (Array sh e)        -- ^ output
+gather
+    :: (Shape sh, Elt e)
+    => Acc (Array sh Int)         -- ^ index of source at each index to gather
+    -> Acc (Vector e)             -- ^ source values
+    -> Acc (Array sh e)
 gather indices input = map (input !!) indices
   -- TLM NOTES:
   --  * (!!) has potential for later optimisation
@@ -1172,30 +1468,27 @@ gather indices input = map (input !!) indices
   --    intuition that 'Int' ~ 'DIM1'.
 
 
--- | Conditionally copy elements from source array to destination array according
---   to an index mapping. This is a backpermute operation where a 'from' vector
---   encodes the output to input index mapping. In addition, there is a 'mask'
---   vector, and an associated predication function, that specifies whether an
---   element will be copied. If not copied, the output array assumes the default
---   vector's value.
+-- | Conditionally copy elements from source array to destination array
+-- according to an index mapping.
 --
---   For example:
+-- In addition, the 'mask' vector and associated predication function specifies
+-- whether the element is copied or a default value is used instead.
 --
---  > default = [6, 6, 6, 6, 6, 6]
---  > from    = [1, 3, 7, 2, 5, 3]
---  > mask    = [3, 4, 9, 2, 7, 5]
---  > pred    = (>* 4)
---  > input   = [1, 9, 6, 4, 4, 2, 0, 1, 2]
---  >
---  > output  = [6, 6, 1, 6, 2, 4]
+-- >>> let defaults = fromList (Z :. 6) [6,6,6,6,6,6]
+-- >>> let from     = fromList (Z :. 6) [1,3,7,2,5,3]
+-- >>> let mask     = fromList (Z :. 6) [3,4,9,2,7,5]
+-- >>> let input    = fromList (Z :. 9) [1,9,6,4,4,2,0,1,2]
+-- >>> gatherIf (use from) (use mask) (>* 4) (use defaults) (use input)
+-- Vector (Z :. 6) [6,6,1,6,2,4]
 --
-gatherIf :: (Elt a, Elt b)
-         => Acc (Vector Int)      -- ^index mapping
-         -> Acc (Vector a)        -- ^mask
-         -> (Exp a -> Exp Bool)   -- ^predicate
-         -> Acc (Vector b)        -- ^default
-         -> Acc (Vector b)        -- ^input
-         -> Acc (Vector b)        -- ^output
+gatherIf
+    :: (Elt a, Elt b)
+    => Acc (Vector Int)           -- ^ source indices to gather from
+    -> Acc (Vector a)             -- ^ mask vector
+    -> (Exp a -> Exp Bool)        -- ^ predicate function
+    -> Acc (Vector b)             -- ^ default values
+    -> Acc (Vector b)             -- ^ source values
+    -> Acc (Vector b)
 gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
   where
     zf p g      = p ? (unlift g)
@@ -1206,63 +1499,50 @@ gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
 -- Scatter operations
 -- ------------------
 
--- | Copy elements from source array to destination array according to an index
---   mapping. This is a forward-permute operation where a 'to' vector encodes an
---   input to output index mapping. Output elements for indices that are not
---   mapped assume the default vector's value.
+-- | Overwrite elements of the destination by scattering the values of the
+-- source array according to the given index mapping.
 --
---   For example:
+-- Note that if the destination index appears more than once in the mapping the
+-- result is undefined.
 --
---  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---  > to      = [1, 3, 7, 2, 5, 8]
---  > input   = [1, 9, 6, 4, 4, 2, 5]
---  >
---  > output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
+-- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8]
+-- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5]
+-- >>> scatter (use to) (fill (constant (Z:.10)) 0) (use input)
+-- Vector (Z :. 10) [0,1,4,9,0,4,0,6,2,0]
 --
---   Note if the same index appears in the index mapping more than once, the
---   result is undefined. It does not makes sense for the 'to' vector to be
---   larger than the 'input' vector.
---
-scatter :: Elt e
-        => Acc (Vector Int)       -- ^index mapping
-        -> Acc (Vector e)         -- ^default
-        -> Acc (Vector e)         -- ^input
-        -> Acc (Vector e)         -- ^output
+scatter
+    :: Elt e
+    => Acc (Vector Int)           -- ^ destination indices to scatter into
+    -> Acc (Vector e)             -- ^ default values
+    -> Acc (Vector e)             -- ^ source values
+    -> Acc (Vector e)
 scatter to defaults input = permute const defaults pf input'
   where
     pf ix       = index1 (to ! ix)
     input'      = backpermute (shape to `intersect` shape input) id input
 
 
--- | Conditionally copy elements from source array to destination array according
---   to an index mapping. This is a forward-permute operation where a 'to'
---   vector encodes an input to output index mapping. In addition, there is a
---   'mask' vector, and an associated predicate function. The mapping will only
---   occur if the predicate function applied to the mask at that position
---   resolves to 'True'. If not copied, the output array assumes the default
---   vector's value.
+-- | Conditionally overwrite elements of the destination by scattering values of
+-- the source array according to a given index mapping, whenever the masking
+-- function resolves to 'True'.
 --
---   For example:
+-- Note that if the destination index appears more than once in the mapping the
+-- result is undefined.
 --
---  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---  > to      = [1, 3, 7, 2, 5, 8]
---  > mask    = [3, 4, 9, 2, 7, 5]
---  > pred    = (>* 4)
---  > input   = [1, 9, 6, 4, 4, 2, 5]
---  >
---  > output  = [0, 0, 0, 0, 0, 4, 0, 6, 2]
+-- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8]
+-- >>> let mask  = fromList (Z :. 6) [3,4,9,2,7,5]
+-- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5]
+-- >>> scatterIf (use to) (use mask) (>* 4) (fill (constant (Z:.10)) 0) (use input)
+-- Vector (Z :. 10) [0,0,0,0,0,4,0,6,2,0]
 --
---   Note if the same index appears in the mapping more than once, the result is
---   undefined. The 'to' and 'mask' vectors must be the same length. It does not
---   make sense for these to be larger than the 'input' vector.
---
-scatterIf :: (Elt e, Elt e')
-          => Acc (Vector Int)      -- ^index mapping
-          -> Acc (Vector e)        -- ^mask
-          -> (Exp e -> Exp Bool)   -- ^predicate
-          -> Acc (Vector e')       -- ^default
-          -> Acc (Vector e')       -- ^input
-          -> Acc (Vector e')       -- ^output
+scatterIf
+    :: (Elt e, Elt e')
+    => Acc (Vector Int)           -- ^ destination indices to scatter into
+    -> Acc (Vector e)             -- ^ mask vector
+    -> (Exp e -> Exp Bool)        -- ^ predicate function
+    -> Acc (Vector e')            -- ^ default values
+    -> Acc (Vector e')            -- ^ source values
+    -> Acc (Vector e')
 scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
     pf ix       = pred (maskV ! ix) ? ( index1 (to ! ix), ignore )
@@ -1291,8 +1571,25 @@ transpose mat =
 -- Extracting sub-vectors
 -- ----------------------
 
--- | Yield the first @n@ elements in the outermost dimension of the array (plus
+-- | Yield the first @n@ elements in the innermost dimension of the array (plus
 -- all lower dimensional elements).
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> take 5 (use mat)
+-- Matrix (Z :. 5 :. 5)
+--   [  0,  1,  2,  3,  4,
+--     10, 11, 12, 13, 14,
+--     20, 21, 22, 23, 24,
+--     30, 31, 32, 33, 34,
+--     40, 41, 42, 43, 44]
 --
 take :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Exp Int
@@ -1305,8 +1602,25 @@ take n acc =
   backpermute (lift (sh :. n')) id acc
 
 
--- | Yield all but the first @n@ elements along the outermost dimension of the
+-- | Yield all but the first @n@ elements along the innermost dimension of the
 -- array (plus all lower dimensional elements).
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> drop 7 (use mat)
+-- Matrix (Z :. 5 :. 3)
+--   [  7,  8,  9,
+--     17, 18, 19,
+--     27, 28, 29,
+--     37, 38, 39,
+--     47, 48, 49]
 --
 drop :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Exp Int
@@ -1321,7 +1635,24 @@ drop n acc =
   backpermute (lift (sh :. 0 `max` (sz - n'))) index acc
 
 
--- | Yield all but the elements in the last index of the outermost dimension.
+-- | Yield all but the elements in the last index of the innermost dimension.
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> init (use mat)
+-- Matrix (Z :. 5 :. 9)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48]
 --
 init :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
@@ -1331,8 +1662,25 @@ init acc =
   in  backpermute (lift (sh :. sz `min` (sz - 1))) id acc
 
 
--- | Yield all but the first element of the input vector. The vector must not be
---   empty.
+-- | Yield all but the first element along the innermost dimension of an array.
+-- The innermost dimension must not be empty.
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> tail (use mat)
+-- Matrix (Z :. 5 :. 9)
+--   [  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
 tail :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
@@ -1345,7 +1693,7 @@ tail acc =
   backpermute (lift (sh :. 0 `max` (sz - 1))) index acc
 
 
--- | Yield a slit (slice) of the outermost indices of an array. Denotationally,
+-- | Yield a slit (slice) of the innermost indices of an array. Denotationally,
 -- we have:
 --
 -- > slit i n = take n . drop i
@@ -1369,10 +1717,15 @@ slit m n acc =
 -- ---------------------
 
 -- | Force an array expression to be evaluated, preventing it from fusing with
--- other operations.
+-- other operations. Forcing operations to be computed to memory, rather than
+-- being fused into their consuming function, can sometimes improve performance.
+-- For example, computing a matrix 'transpose' could provide better memory
+-- locality for the subsequent operation. Preventing fusion to split large
+-- operations into several simpler steps could also help by reducing register
+-- pressure.
 --
--- In the case of GPU execution, this also means that the operation is available
--- to be executed concurrently with other kernels. In particular, consider using
+-- Preventing fusion also means that the individual operations are available to
+-- be executed concurrently with other kernels. In particular, consider using
 -- this if you have a series of operations that are compute bound rather than
 -- memory bound.
 --
@@ -1381,20 +1734,20 @@ slit m n acc =
 -- > loop :: Exp Int -> Exp Int
 -- > loop ticks =
 -- >   let clockRate = 900000   -- kHz
--- >   in  A.while (\i -> i <* clockRate * ticks) (+1) 0
+-- >   in  while (\i -> i <* clockRate * ticks) (+1) 0
 -- >
 -- > test :: Acc (Vector Int)
 -- > test =
--- >   A.zip3
--- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
--- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
--- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
+-- >   zip3
+-- >     (compute $ map loop (use $ fromList (Z:.1) [10]))
+-- >     (compute $ map loop (use $ fromList (Z:.1) [10]))
+-- >     (compute $ map loop (use $ fromList (Z:.1) [10]))
 -- >
 --
 -- Without the use of 'compute', the operations are fused together and the three
 -- long-running loops are executed sequentially in a single kernel. Instead, the
--- individual kernels can now be executed concurrently, reducing overall runtime
--- (on hardware that supports concurrent kernel execution).
+-- individual operations can now be executed concurrently, potentially reducing
+-- overall runtime.
 --
 compute :: Arrays a => Acc a -> Acc a
 compute = id >-> id
@@ -1574,17 +1927,19 @@ unindex3 ix = let Z :. k :. j :. i = unlift ix  :: Z :. Exp i :. Exp i :. Exp i
 -- Array operations with a scalar result
 -- -------------------------------------
 
--- |Extraction of the element in a singleton array
+-- | Extract the element of a singleton array.
+--
+-- > the xs  ==  xs ! Z
 --
 the :: Elt e => Acc (Scalar e) -> Exp e
 the = (!index0)
 
--- |Test whether an array is empty
+-- | Test whether an array is empty.
 --
-null :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Bool
+null :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp Bool
 null arr = size arr ==* 0
 
--- |Get the length of a vector
+-- | Get the length of a vector.
 --
 length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
@@ -1597,7 +1952,7 @@ length = unindex1 . shape
 -- | Reduce a sequence by appending all the shapes and all the elements in two
 -- separate vectors.
 --
-fromSeq :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix, Vector a)
+fromSeq :: (Shape sh, Elt a) => Seq [Array sh a] -> Seq (Vector sh, Vector a)
 fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
   where
     f x sh1 a1 =
@@ -1605,12 +1960,12 @@ fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
       in lift (sh0 ++ sh1, a0 ++ a1)
 
 
-fromSeqElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
+fromSeqElems :: (Shape sh, Elt a) => Seq [Array sh a] -> Seq (Vector a)
 fromSeqElems = foldSeqFlatten f emptyArray
   where
     f a0 _ a1 = a0 ++ a1
 
-fromSeqShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
+fromSeqShapes :: (Shape sh, Elt a) => Seq [Array sh a] -> Seq (Vector sh)
 fromSeqShapes = foldSeqFlatten f emptyArray
   where
     f sh0 sh1 _ = sh0 ++ sh1
@@ -1640,4 +1995,16 @@ generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = use (fromList empty [])
+
+
+-- Utilities
+-- ---------
+
+matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
+matchShapeType _ _
+  | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
+  = gcast Refl
+
+matchShapeType _ _
+  = Nothing
 
