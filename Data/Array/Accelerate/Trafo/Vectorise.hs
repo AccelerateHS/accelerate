@@ -2743,7 +2743,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
                 sz_x = S.indexLast (S.shape x)
                 sz_y = S.indexLast (S.shape y)
               in S.generate (S.indexSnoc (S.intersect sh_x sh_y) (sz_x + sz_y))
-                            (\ix -> S.indexLast ix  S.<* sz_x S.? (x S.! ix, y S.! ix))
+                            (\ix -> S.indexLast ix  S.<* sz_x S.? (x S.! ix, y S.! (S.indexSnoc (S.indexInit ix) (S.indexLast ix - sz_x))))
 
             reduce :: LiftedType (Array sh e) x -> S.Acc x -> S.Acc (Array (sh:.Int) e)
             reduce AvoidedT x = S.reshape (S.indexSnoc (S.shape x) 1) x
