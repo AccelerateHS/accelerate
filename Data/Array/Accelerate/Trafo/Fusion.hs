@@ -1873,20 +1873,22 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
               -> Cunctation acc      aenv' t
               ->            acc      (aenv, t) brrs
               -> Embed      acc aenv           brrs
-    eliminate elim env1 cc1 body
-      | ElimTuple env1' sp <- elim
-      , t'' <- fromSubproduct sp
-      , body'  <- kmap (subtupleA (unRAtup (weaken SuccIdx (RebuildAtup t''))) ZeroIdx (under SuccIdx))
-                       (sink1 (env1 `append` env1') body)
-      , Just body'' <- strengthen noTop body' -- This is just to convince the type checker
+    eliminate (ElimTuple env1' sp) env1 _ body
+      | t''              <- fromSubproduct sp
+      , body'            <- kmap (subtupleA (unRAtup (weaken SuccIdx (RebuildAtup t''))) ZeroIdx (under SuccIdx))
+                                 (sink1 (env1 `append` env1') body)
+      , Just body''      <- strengthen noTop body' -- This is just to convince the type checker
       , Embed env0' cc0' <- embedAcc body''
       = Embed (env1 `append` env1' `append` PushEnv BaseEnv (inject (Atuple (subproduct sp))) `append` env0') cc0'
-      | ElimDead <- elim
-      , Just body' <- strengthen noTop body
-      -- , body' <- rebuildA (subAtop (compute (Embed env1 cc1))) body
+      | otherwise
+      = $internalError "eliminate" "AST still contains references to eliminated tuple"
+    eliminate ElimDead _ _ body
+      | Just body' <- strengthen noTop body
       = embedAcc body'
-      | ElimEmbed <- elim
-      , Embed env0' cc0' <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA (weaken SuccIdx cc1) ZeroIdx) (sink1 env1 body)
+      | otherwise
+      = $internalError "eliminate" "Term does not actually appear to be dead"
+    eliminate ElimEmbed env1 cc1 body
+      | Embed env0' cc0' <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA (weaken SuccIdx cc1) ZeroIdx) (sink1 env1 body)
       = Embed (env1 `append` env0') cc0'
       where
         bnd :: PreOpenAcc acc aenv' t
@@ -2102,6 +2104,10 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     assumeArray _ _ a
       = a
 
+    -- Substitute a tuple value into the AST. The reason for doing this
+    -- explicitly, rathern than just substituting normally and having subsequent
+    -- fusion handle the Aprj/Atuple eliminations is to avoid an explosion in
+    -- the size of the AST.
     subtupleA :: forall aenv aenv' t a. (IsAtuple t, Arrays t)
               => Atuple (acc aenv') (TupleRepr t)
               -> Idx aenv t
