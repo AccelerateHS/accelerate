@@ -853,6 +853,63 @@ instance (Eq sh, Eq e) => Eq (Array sh e) where
   arr1@Array{} == arr2@Array{} = shape arr1 == shape arr2 && toList arr1 == toList arr2
   arr1@Array{} /= arr2@Array{} = shape arr1 /= shape arr2 || toList arr1 /= toList arr2
 
+#if __GLASGOW_HASKELL__ >= 710
+-- Convert an array to a string, using specialised instances for dimensions
+-- zero, one, and two. These are available for ghc-7.10 and later only (earlier
+-- versions of ghc would require -XIncoherentInstances in the client module).
+--
+-- TODO:
+--   * Make special formatting optional? It is more difficult to copy/paste the
+--     result, for example. Also it does not look good if the matrix row does
+--     not fit on a single line.
+--   * The AST pretty printer does not use these instances
+--
+instance Show (Scalar e) where
+  show arr@Array{} =
+    "Scalar Z " ++ show (toList arr)
+
+instance Show (Vector e) where
+  show arr@Array{} =
+    "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Show (Array DIM2 e) where
+  show arr@Array{} =
+    "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat (toMatrix (toList arr))
+    where
+      Z :. _ :. cols    = shape arr
+      toMatrix []       = []
+      toMatrix xs       = let (r,rs) = splitAt cols xs
+                          in  r : toMatrix rs
+      --
+      showMat []        = "[]"
+      showMat mat       = "\n  " ++ ppMat (map (map show) mat)
+      --
+      ppRow row         = concatMap (++",") row
+      ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
+      ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
+        where
+          extra = 0
+          width = maximum . map length
+          pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
+#endif
+
+-- This is a bit unfortunate, but we need to use an INCOHERENT instance because
+-- GHC can't determine that with the above specialisations, a DIM3+ instance
+-- covers all remaining possibilities, and lacking a general instance is
+-- problematic for operations which want a 'Show (Array sh e)' constraint.
+-- Furthermore, those clients are likely to pick this instance, rather than the
+-- more specific ones above, which is (perhaps) a little unfortunate.
+--
+instance {-# INCOHERENT #-} Show (Array sh e) where
+  show arr@Array{} =
+    "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Elt e => IsList (Vector e) where
+  type Item (Vector e) = e
+  toList         = toList
+  fromListN n xs = fromList (Z:.n) xs
+  fromList xs    = GHC.fromListN (length xs) xs
+
 instance NFData (Array sh e) where
   rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
     where
@@ -915,6 +972,7 @@ type DIM6 = DIM5:.Int
 type DIM7 = DIM6:.Int
 type DIM8 = DIM7:.Int
 type DIM9 = DIM8:.Int
+
 
 -- Shape constraints and indexing
 -- ------------------------------
@@ -1203,64 +1261,6 @@ toList (Array sh adata) = go 0
     !n                  = Repr.size sh
     go !i | i >= n      = []
           | otherwise   = toElt (adata `unsafeIndexArrayData` i) : go (i+1)
-
-instance Elt e => IsList (Vector e) where
-  type Item (Vector e) = e
-  toList         = toList
-  fromListN n xs = fromList (Z:.n) xs
-  fromList xs    = GHC.fromListN (length xs) xs
-
-#if __GLASGOW_HASKELL__ >= 710
--- Convert an array to a string, using specialised instances for dimensions
--- zero, one, and two. These are available for ghc-7.10 and later only (earlier
--- versions of ghc would require -XIncoherentInstances in the client module).
---
--- TODO:
---   * Make special formatting optional? It is more difficult to copy/paste the
---     result, for example. Also it does not look good if the matrix row does
---     not fit on a single line.
---   * The AST pretty printer does not use these instances
---
-instance Show (Scalar e) where
-  show arr@Array{}
-    = "Scalar Z " ++ show (toList arr)
-
-instance Show (Vector e) where
-  show arr@Array{}
-    = "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
-
-instance Show (Array DIM2 e) where
-  show arr@Array{}
-    = "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat (toMatrix (toList arr))
-    where
-      Z :. _ :. cols    = shape arr
-      toMatrix []       = []
-      toMatrix xs       = let (r,rs) = splitAt cols xs
-                          in  r : toMatrix rs
-
-      showMat []        = "[]"
-      showMat mat       = "\n  " ++ ppMat (map (map show) mat)
-
-      ppRow row         = concatMap (++",") row
-      ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
-      ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
-        where
-          extra = 1
-          width = maximum . map length
-          pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
-#endif
-
--- This is a bit unfortunate, but we need to use an INCOHERENT instance because
--- GHC can't determine that with the above specialisations, a DIM3+ instance
--- covers all remaining possibilities, and lacking a general instance is
--- problematic for operations which want a 'Show (Array sh e)' constraint.
--- Furthermore, those clients are likely to pick this instance, rather than the
--- more specific ones above, which is (perhaps) a little unfortunate.
---
-instance {-# INCOHERENT #-} Show (Array sh e) where
-  show arr@Array{}
-    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
-
 
 -- | Nicely format a shape as a string
 --
