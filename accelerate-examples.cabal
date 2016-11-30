@@ -251,6 +251,7 @@ Executable accelerate-nofib
         Test.Issues.Issue228
         Test.Issues.Issue255
         Test.Issues.Issue264
+        Test.Issues.Issue286
         Test.Issues.Issue287
         Test.Issues.Issue288
         Test.Prelude
@@ -301,11 +302,13 @@ Executable accelerate-nofib
         , containers                      >= 0.5
         , fclabels                        >= 2.0
         , HUnit                           >= 1.2
+        , pipes                           >= 4.1.6
         , QuickCheck                      >= 2.7
         , random
         , test-framework                  >= 0.5
         , test-framework-hunit            >= 0.3
         , test-framework-quickcheck2      >= 0.2
+        , vector                          >= 0.7
 
 
 -- Sparse matrix vector multiplication

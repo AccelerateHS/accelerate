@@ -21,6 +21,7 @@ import Test.Issues.Issue187
 import Test.Issues.Issue228
 import Test.Issues.Issue255
 import Test.Issues.Issue264
+import Test.Issues.Issue286
 import Test.Issues.Issue287
 import Test.Issues.Issue288
 
@@ -44,6 +45,7 @@ test_issues be conf =
     , test_issue228 be conf
     , test_issue255 be conf
     , test_issue264 be conf
+    , test_issue286 be conf
     , test_issue287 be conf
     , test_issue288 be conf
     ]
