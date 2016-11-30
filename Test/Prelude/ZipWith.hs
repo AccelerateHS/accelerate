@@ -199,6 +199,5 @@ zipWithRef f xs ys =
       shy       = fromElt (arrayShape ys)
       sh        = toElt (R.intersect shx shy)
   in
-  newArray sh (\ix -> f (xs Sugar.! ix) (ys Sugar.! ix))
-
+  fromFunction sh (\ix -> f (xs Sugar.! ix) (ys Sugar.! ix))
 
