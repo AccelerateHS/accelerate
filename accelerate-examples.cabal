@@ -250,6 +250,7 @@ Executable accelerate-nofib
         Test.Issues.Issue187
         Test.Issues.Issue228
         Test.Issues.Issue255
+        Test.Issues.Issue264
         Test.Issues.Issue287
         Test.Issues.Issue288
         Test.Prelude
