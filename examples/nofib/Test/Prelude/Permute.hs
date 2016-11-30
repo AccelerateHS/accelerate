@@ -59,7 +59,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
           [
             test_fill (undefined :: e)
           , testProperty "scatter"   (test_scatter :: e -> Property)
-          , testProperty "scatterIf" (test_scatterIf :: e -> Property)
+          -- , testProperty "scatterIf" (test_scatterIf :: e -> Property)
           , testProperty "histogram" (test_histogram A.fromIntegral P.fromIntegral :: Vector e -> Property)
           ]
 
@@ -70,7 +70,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
           [
             test_fill (undefined :: e)
           , testProperty "scatter"   (test_scatter :: e -> Property)
-          , testProperty "scatterIf" (test_scatterIf :: e -> Property)
+          -- , testProperty "scatterIf" (test_scatterIf :: e -> Property)
           , testProperty "histogram" (test_histogram A.floor P.floor :: Vector e -> Property)
           ]
 
@@ -127,16 +127,16 @@ test_permute backend opt = testGroup "permute" $ catMaybes
         ~?=
         IArray.elems (scatterRef (toIArray mapV) (toIArray defaultV) (toIArray inputV))
 
-    test_scatterIf :: forall e. (Elt e, Similar e, Arbitrary e) => e -> Property
-    test_scatterIf _ =
-      forAll (sized $ \n -> choose (0,n))               $ \k -> let m = 2*k in
-      forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
-      forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
-      forAll (arbitraryArray (Z:.n))                    $ \(maskV :: Vector Int) ->
-      forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
-        toList (run4 backend (\p v d x -> A.scatterIf p v A.even d x) mapV maskV defaultV inputV)
-        ~?=
-        IArray.elems (scatterIfRef (toIArray mapV) (toIArray maskV) P.even (toIArray defaultV) (toIArray inputV))
+    -- test_scatterIf :: forall e. (Elt e, Similar e, Arbitrary e) => e -> Property
+    -- test_scatterIf _ =
+    --   forAll (sized $ \n -> choose (0,n))               $ \k -> let m = 2*k in
+    --   forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
+    --   forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
+    --   forAll (arbitraryArray (Z:.n))                    $ \(maskV :: Vector Int) ->
+    --   forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
+    --     toList (run4 backend (\p v d x -> A.scatterIf p v A.even d x) mapV maskV defaultV inputV)
+    --     ~?=
+    --     IArray.elems (scatterIfRef (toIArray mapV) (toIArray maskV) P.even (toIArray defaultV) (toIArray inputV))
 
 
 
@@ -154,20 +154,18 @@ scatterRef mapV defaultV inputV
        forM_ (IArray.assocs mapV) $ \(inIx, outIx) -> M.writeArray mu outIx (inputV IArray.! inIx)
        return mu
 
-
-scatterIfRef
-    :: IArray.UArray Int Int
-    -> IArray.Array Int e
-    -> (e -> Bool)
-    -> IArray.Array Int t
-    -> IArray.Array Int t
-    -> IArray.Array Int t
-scatterIfRef mapV maskV f defaultV inputV
-  = runSTArray
-  $ do mu <- M.thaw defaultV
-       forM_ (IArray.assocs mapV) $ \(inIx, outIx) ->
-         when (f (maskV IArray.! inIx)) $
-           M.writeArray mu outIx (inputV IArray.! inIx)
-       return mu
-
+-- scatterIfRef
+--     :: IArray.UArray Int Int
+--     -> IArray.Array Int e
+--     -> (e -> Bool)
+--     -> IArray.Array Int t
+--     -> IArray.Array Int t
+--     -> IArray.Array Int t
+-- scatterIfRef mapV maskV f defaultV inputV
+--   = runSTArray
+--   $ do mu <- M.thaw defaultV
+--        forM_ (IArray.assocs mapV) $ \(inIx, outIx) ->
+--          when (f (maskV IArray.! inIx)) $
+--            M.writeArray mu outIx (inputV IArray.! inIx)
+--        return mu
 
