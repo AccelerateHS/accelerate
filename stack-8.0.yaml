@@ -12,7 +12,7 @@ packages:
   extra-dep: true
 
 - location:
-    git:    https://github.com/AcceleratHS/accelerate-cuda.git
+    git:    https://github.com/AccelerateHS/accelerate-cuda.git
     commit: cd8d31c24717ab1041057d1979113689ac79fead
   extra-dep: true
 
