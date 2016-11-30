@@ -21,9 +21,10 @@ test_issue286 :: Backend -> Config -> Test
 test_issue286 backend _conf =
   testGroup "286 (run with +RTS -M4M)"
     [
-      testCase "hs.hs"    (void $ runEffect $ hs_producer sh  >-> hs_consumer)
-    , testCase "hs.acc"   (void $ runEffect $ hs_producer sh  >-> acc_consumer1 sh backend)
-    , testCase "acc.acc"  (void $ runEffect $ acc_producer sh >-> acc_consumer2 backend)
+      testCase "hs.hs"    (void $ runEffect $ hs_producer sh  >-> hs_consume_sv)
+    , testCase "hs.acc"   (void $ runEffect $ hs_producer sh  >-> acc_consume_sv sh backend)
+    , testCase "acc.hs"   (void $ runEffect $ acc_producer sh >-> hs_consume_acc)
+    , testCase "acc.acc"  (void $ runEffect $ acc_producer sh >-> acc_consume_acc backend)
     ]
     where
       sh :: DIM2
@@ -39,14 +40,29 @@ hs_producer sh = producer' 0
         then producer' 0
         else producer' (i+1)
 
-hs_consumer :: Consumer (S.Vector Word8) IO ()
-hs_consumer = consumer' 0 0
+hs_consume_sv :: Consumer (S.Vector Word8) IO ()
+hs_consume_sv = consumer' 0 0
   where
     consumer' :: Int -> Float -> Consumer (S.Vector Word8) IO ()
     consumer' n acc = do
       v <- await
       let
           i  = S.sum $ S.map P.fromIntegral v
+          i' = i + acc
+          n' = n + 1
+      if i' `seq` n' `seq` (n == lIMIT)
+        then acc `seq` return ()
+        else consumer' n' i'
+
+hs_consume_acc :: Consumer (Array DIM2 Word8) IO ()
+hs_consume_acc = consumer' 0 0
+  where
+    consumer' :: Int -> Float -> Consumer (Array DIM2 Word8) IO ()
+    consumer' n acc = do
+      v <- await
+      let
+          a  = toVectors v      :: S.Vector Word8
+          i  = S.sum $ S.map P.fromIntegral a
           i' = i + acc
           n' = n + 1
       if i' `seq` n' `seq` (n == lIMIT)
@@ -64,8 +80,8 @@ acc_producer sh = producer' 0
           then producer' 0
           else producer' (i+1)
 
-acc_consumer1 :: DIM2 -> Backend -> Consumer (S.Vector Word8) IO ()
-acc_consumer1 sh backend = consumer' 0 0
+acc_consume_sv :: DIM2 -> Backend -> Consumer (S.Vector Word8) IO ()
+acc_consume_sv sh backend = consumer' 0 0
   where
     go = run1 backend (A.sum . A.map A.fromIntegral)
 
@@ -81,8 +97,8 @@ acc_consumer1 sh backend = consumer' 0 0
         then acc `seq` return ()
         else consumer' n' i'
 
-acc_consumer2 :: Backend -> Consumer (Array DIM2 Word8) IO ()
-acc_consumer2 backend = consumer' 0 0
+acc_consume_acc :: Backend -> Consumer (Array DIM2 Word8) IO ()
+acc_consume_acc backend = consumer' 0 0
   where
     go = run1 backend (A.sum . A.map A.fromIntegral)
 
