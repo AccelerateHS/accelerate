@@ -24,6 +24,7 @@ import Config
 import QuickCheck.Arbitrary.Array                               ()
 
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.IO                                 as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Unboxed                                       as IArray hiding ( Array )
 import qualified Data.Array.IArray                              as IArray

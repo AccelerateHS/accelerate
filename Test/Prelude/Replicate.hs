@@ -14,6 +14,7 @@ import Test.Framework
 
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.IO                                 as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Unboxed                                       as IArray hiding ( Array )
 import Data.Label
