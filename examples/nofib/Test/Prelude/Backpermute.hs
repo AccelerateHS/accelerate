@@ -23,7 +23,7 @@ import Test.Base
 import QuickCheck.Arbitrary.Array
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        ( newArray )
+import Data.Array.Accelerate.Array.Sugar                        as A ( Array(..) )
 import Data.Array.Accelerate.Examples.Internal                  as A
 
 
@@ -74,7 +74,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
         --
         transposeRef xs =
           let swap (Z:.x:.y)    = Z :. y :. x
-          in  newArray (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))
+          in  fromFunction (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))
 
         -- Extracting sub-vectors
         --
