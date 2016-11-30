@@ -24,6 +24,7 @@ import Test.Base
 import QuickCheck.Arbitrary.Array
 
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.IO                                 as A
 import Data.Array.Accelerate.Array.Sugar                        ( rank )
 import Data.Array.Accelerate.Examples.Internal                  as A
 
