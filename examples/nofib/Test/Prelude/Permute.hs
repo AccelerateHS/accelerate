@@ -24,6 +24,7 @@ import Test.Base
 import QuickCheck.Arbitrary.Array
 
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.IO                                 as A
 import Data.Array.Accelerate.Array.Sugar                        ( rank )
 import Data.Array.Accelerate.Examples.Internal                  as A
 
@@ -58,7 +59,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
           [
             test_fill (undefined :: e)
           , testProperty "scatter"   (test_scatter :: e -> Property)
-          , testProperty "scatterIf" (test_scatterIf :: e -> Property)
+          -- , testProperty "scatterIf" (test_scatterIf :: e -> Property)
           , testProperty "histogram" (test_histogram A.fromIntegral P.fromIntegral :: Vector e -> Property)
           ]
 
@@ -69,7 +70,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
           [
             test_fill (undefined :: e)
           , testProperty "scatter"   (test_scatter :: e -> Property)
-          , testProperty "scatterIf" (test_scatterIf :: e -> Property)
+          -- , testProperty "scatterIf" (test_scatterIf :: e -> Property)
           , testProperty "histogram" (test_histogram A.floor P.floor :: Vector e -> Property)
           ]
 
@@ -88,28 +89,24 @@ test_permute backend opt = testGroup "permute" $ catMaybes
         testDim sh = testProperty ("DIM" P.++ show (rank sh)) (push_fill :: Array sh e -> Property)
           where
             push_fill :: Array sh e -> Property
-            push_fill xs =
-              let xs'   = use xs
-                  zeros = A.fill (A.shape xs') (constant 0)
-              in
-              run backend (permute const zeros id xs') ~?= xs
+            push_fill xs = run1 backend go xs ~?= xs
+              where
+                go arr = permute const (A.fill (A.shape arr) (constant 0)) id arr
 
     -- Test if the combining operation for forward permutation works, by
     -- building a histogram. Often tricky for parallel backends.
     --
     test_histogram :: (P.Num e, A.Num e, Similar e, IArray UArray e) => (Exp e -> Exp Int) -> (e -> Int) -> Vector e -> Property
     test_histogram f g xs =
-      forAll (sized return) $
-        \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
+      forAll arbitrary $ \(Positive n) ->
+        run2 backend (histogramAcc f) (scalar n) xs ~?= histogramRef n g xs
 
-    histogramAcc :: A.Num e => Int -> (Exp e -> Exp Int) -> Vector e -> Acc (Vector e)
-    histogramAcc n f xs =
-      let n'        = unit (constant n)
-          xs'       = use xs
-          zeros     = A.generate (constant (Z :. n)) (const 0)
-          ones      = A.generate (shape xs')         (const 1)
+    histogramAcc :: A.Num e => (Exp e -> Exp Int) -> Acc (Scalar Int) -> Acc (Vector e) -> Acc (Vector e)
+    histogramAcc f n xs =
+      let zeros = A.fill (index1 $ the n) 0
+          ones  = A.fill (shape xs)       1
       in
-      permute (+) zeros (\ix -> index1 $ f (xs' A.! ix) `mod` the n') ones
+      permute (+) zeros (\ix -> index1 $ f (xs A.! ix) `mod` the n) ones
 
     histogramRef :: forall e. (Elt e, P.Num e, IArray UArray e) => Int -> (e -> Int) -> Vector e -> Vector e
     histogramRef n f xs =
@@ -126,20 +123,20 @@ test_permute backend opt = testGroup "permute" $ catMaybes
       forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
       forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
       forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
-        toList (run backend $ A.scatter (use mapV) (use defaultV) (use inputV))
+        toList (run3 backend A.scatter mapV defaultV inputV)
         ~?=
         IArray.elems (scatterRef (toIArray mapV) (toIArray defaultV) (toIArray inputV))
 
-    test_scatterIf :: forall e. (Elt e, Similar e, Arbitrary e) => e -> Property
-    test_scatterIf _ =
-      forAll (sized $ \n -> choose (0,n))               $ \k -> let m = 2*k in
-      forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
-      forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
-      forAll (arbitraryArray (Z:.n))                    $ \(maskV :: Vector Int) ->
-      forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
-        toList (run backend $ A.scatterIf (use mapV) (use maskV) A.even (use defaultV) (use inputV))
-        ~?=
-        IArray.elems (scatterIfRef (toIArray mapV) (toIArray maskV) P.even (toIArray defaultV) (toIArray inputV))
+    -- test_scatterIf :: forall e. (Elt e, Similar e, Arbitrary e) => e -> Property
+    -- test_scatterIf _ =
+    --   forAll (sized $ \n -> choose (0,n))               $ \k -> let m = 2*k in
+    --   forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
+    --   forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
+    --   forAll (arbitraryArray (Z:.n))                    $ \(maskV :: Vector Int) ->
+    --   forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
+    --     toList (run4 backend (\p v d x -> A.scatterIf p v A.even d x) mapV maskV defaultV inputV)
+    --     ~?=
+    --     IArray.elems (scatterIfRef (toIArray mapV) (toIArray maskV) P.even (toIArray defaultV) (toIArray inputV))
 
 
 
@@ -157,20 +154,18 @@ scatterRef mapV defaultV inputV
        forM_ (IArray.assocs mapV) $ \(inIx, outIx) -> M.writeArray mu outIx (inputV IArray.! inIx)
        return mu
 
-
-scatterIfRef
-    :: IArray.UArray Int Int
-    -> IArray.Array Int e
-    -> (e -> Bool)
-    -> IArray.Array Int t
-    -> IArray.Array Int t
-    -> IArray.Array Int t
-scatterIfRef mapV maskV f defaultV inputV
-  = runSTArray
-  $ do mu <- M.thaw defaultV
-       forM_ (IArray.assocs mapV) $ \(inIx, outIx) ->
-         when (f (maskV IArray.! inIx)) $
-           M.writeArray mu outIx (inputV IArray.! inIx)
-       return mu
-
+-- scatterIfRef
+--     :: IArray.UArray Int Int
+--     -> IArray.Array Int e
+--     -> (e -> Bool)
+--     -> IArray.Array Int t
+--     -> IArray.Array Int t
+--     -> IArray.Array Int t
+-- scatterIfRef mapV maskV f defaultV inputV
+--   = runSTArray
+--   $ do mu <- M.thaw defaultV
+--        forM_ (IArray.assocs mapV) $ \(inIx, outIx) ->
+--          when (f (maskV IArray.! inIx)) $
+--            M.writeArray mu outIx (inputV IArray.! inIx)
+--        return mu
 

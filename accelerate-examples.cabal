@@ -24,8 +24,15 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
-Extra-source-files:     data/hashcat/README.md
-                        data/matrices/README.md
+Extra-source-files:
+    data/matrices/README.md
+    examples/canny/README.md
+    examples/fluid/README.md
+    examples/hashcat/README.md
+    examples/kmeans/README.md
+    examples/mandelbrot/README.md
+    examples/pagerank/README.md
+    examples/ray/README.md
 
 -- Flags that control features of the benchmark programs
 --
@@ -52,8 +59,8 @@ Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
   Default:              False
 
-Flag llvm-gpu
-  Description:          Enable the LLVM backend for NVIDIA CPUs
+Flag llvm-ptx
+  Description:          Enable the LLVM PTX backend for NVIDIA GPUs
   Default:              False
 
 Flag cilk
@@ -165,14 +172,14 @@ Library
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:
-        accelerate-cuda                 == 1.0.*
+        accelerate-cuda                 == 0.16.*
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
     build-depends:
         accelerate-llvm-native          == 1.0.*
 
-  if flag(llvm-gpu)
+  if flag(llvm-ptx)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
         accelerate-llvm-ptx             == 1.0.*
@@ -262,7 +269,7 @@ Executable accelerate-nofib
         Test.Spectral.RadixSort
         Test.Spectral.SMVM
 
-  ghc-options:          -Wall -threaded -fpedantic-bottoms -fno-full-laziness -fno-excess-precision -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:          -Wall -threaded -fpedantic-bottoms -fno-excess-precision -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
   ghc-prof-options:     -auto-all
 
   extra-libraries:      stdc++
@@ -272,7 +279,7 @@ Executable accelerate-nofib
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:
-        accelerate-cuda                 == 1.0.*
+        accelerate-cuda                 == 0.16.*
 
     other-modules:
         Test.Foreign.CUDA
@@ -532,7 +539,8 @@ Executable accelerate-smoothlife
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 1.0.*
+    build-depends:
+        accelerate-cuda                   == 0.16.*
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T

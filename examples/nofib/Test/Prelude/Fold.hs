@@ -68,7 +68,7 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array sh e -> Property)
-          , testProperty "non-neutral sum" (test_sum' :: Array sh e -> e -> Property)
+          , testProperty "non-neutral sum" (test_sum' :: Array sh e -> NonZero e -> Property)
           , testProperty "non-commutative" (test_mss  :: sh -> e -> Property)
           , testProperty "minimum"         (test_min  :: Array sh e -> Property)
           , testProperty "maximum"         (test_max  :: Array sh e -> Property)
@@ -80,26 +80,27 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
             test_min :: Array sh e -> Property
             test_min xs
               =   arraySize (arrayShape xs) > 0
-              ==> run backend (A.fold1All A.min (use xs)) ~?= fold1AllRef P.min xs
+              ==> run1 backend (A.fold1All A.min) xs ~?= fold1AllRef P.min xs
 
             test_max :: Array sh e -> Property
             test_max xs
               =   arraySize (arrayShape xs) > 0
-              ==> run backend (A.fold1All A.max (use xs)) ~?= fold1AllRef P.max xs
+              ==> run1 backend (A.fold1All A.max) xs ~?= fold1AllRef P.max xs
 
             test_sum :: Array sh e -> Property
-            test_sum xs = run backend (A.foldAll (+) 0 (use xs)) ~?= foldAllRef (+) 0 xs
+            test_sum xs = run1 backend (A.foldAll (+) 0) xs ~?= foldAllRef (+) 0 xs
 
-            test_sum' :: Array sh e -> e -> Property
-            test_sum' xs z =
-              let z' = unit (constant z)
-              in  run backend (A.foldAll (+) (the z') (use xs)) ~?= foldAllRef (+) z xs
+            test_sum' :: Array sh e -> NonZero e -> Property
+            test_sum' xs (NonZero z) =
+              run2 backend (\z' -> A.foldAll (+) (the z')) (scalar z) xs
+              ~?=
+              foldAllRef (+) z xs
 
             test_mss :: sh -> e -> Property
             test_mss (arraySize -> n) _
               =   n > 0
               ==> forAll (arbitraryArrayOf (Z:.n) smallArbitrary) $ \(xs :: Vector e) ->
-                    run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
+                    run1 backend maximumSegmentSum xs ~?= maximumSegmentSumRef xs
 
 
 -- multidimensional fold
@@ -131,7 +132,7 @@ test_fold backend opt = testGroup "fold" $ catMaybes
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array (sh :. Int) e -> Property)
-          , testProperty "non-neutral sum" (test_sum' :: Array (sh :. Int) e -> e -> Property)
+          , testProperty "non-neutral sum" (test_sum' :: Array (sh :. Int) e -> NonZero e -> Property)
           , testProperty "non-commutative" (test_mss  :: (sh :. Int) -> e -> Property)
           , testProperty "minimum"         (test_min  :: Array (sh :. Int) e -> Property)
           , testProperty "maximum"         (test_max  :: Array (sh :. Int) e -> Property)
@@ -143,26 +144,25 @@ test_fold backend opt = testGroup "fold" $ catMaybes
             test_min :: Array (sh:.Int) e -> Property
             test_min xs
               =   indexHead (arrayShape xs) > 0
-              ==> run backend (A.fold1 A.min (use xs)) ~?= fold1Ref P.min xs
+              ==> run1 backend (A.fold1 A.min) xs ~?= fold1Ref P.min xs
 
             test_max :: Array (sh:.Int) e -> Property
             test_max xs
               =   indexHead (arrayShape xs) > 0
-              ==> run backend (A.fold1 A.max (use xs)) ~?= fold1Ref P.max xs
+              ==> run1 backend (A.fold1 A.max) xs ~?= fold1Ref P.max xs
 
             test_sum :: Array (sh:.Int) e -> Property
-            test_sum xs = run backend (A.fold (+) 0 (use xs)) ~?= foldRef (+) 0 xs
+            test_sum xs = run1 backend (A.fold (+) 0) xs ~?= foldRef (+) 0 xs
 
-            test_sum' :: Array (sh:.Int) e -> e -> Property
-            test_sum' xs z =
-              let z' = unit (constant z)
-              in  run backend (A.fold (+) (the z') (use xs)) ~?= foldRef (+) z xs
+            test_sum' :: Array (sh:.Int) e -> NonZero e -> Property
+            test_sum' xs (NonZero z) =
+              run2 backend (\z' -> A.fold (+) (the z')) (scalar z) xs ~?= foldRef (+) z xs
 
             test_mss :: (sh:.Int) -> e -> Property
             test_mss sz _
               =   indexHead sz > 0
               ==> forAll (arbitraryArrayOf sz smallArbitrary) $ \(xs :: Array (sh:.Int) e) ->
-                    run backend (maximumSegmentSum (use xs)) ~?= maximumSegmentSumRef xs
+                    run1 backend maximumSegmentSum xs ~?= maximumSegmentSumRef xs
 
 
 -- segmented fold
@@ -194,21 +194,20 @@ test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"
-          $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
-            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run backend (A.foldSeg (+) 0 (use xs) (use seg)) ~?= foldSegRef (+) 0 xs seg
+          $ forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Segments Int32)    ->
+            forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \(xs  :: Array (sh:.Int) e) ->
+              run2 backend (A.foldSeg (+) 0) xs seg ~?= foldSegRef (+) 0 xs seg
 
           , testProperty "non-neutral sum"
-          $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
-            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-            forAll arbitrary                     $ \z                          ->
-              let z' = unit (constant z)
-              in  run backend (A.foldSeg (+) (the z') (use xs) (use seg)) ~?= foldSegRef (+) z xs seg
+          $ forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Segments Int32)    ->
+            forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \(xs  :: Array (sh:.Int) e) ->
+            forAll arbitrary                                                      $ \(NonZero z)                ->
+              run3 backend (\z' -> A.foldSeg (+) (the z')) (scalar z) xs seg ~?= foldSegRef (+) z xs seg
 
           , testProperty "minimum"
-          $ forAll arbitrarySegments1            $ \(seg :: Segments Int32)    ->
-            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run backend (A.fold1Seg A.min (use xs) (use seg)) ~?= fold1SegRef P.min xs seg
+          $ forAllShrink arbitrarySegments1            shrinkSegments1      $ \(seg :: Segments Int32)    ->
+            forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \(xs  :: Array (sh:.Int) e) ->
+              run2 backend (A.fold1Seg A.min) xs seg ~?= fold1SegRef P.min xs seg
           ]
 
 

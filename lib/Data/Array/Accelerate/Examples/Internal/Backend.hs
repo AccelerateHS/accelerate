@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns  #-}
 {-# LANGUAGE CPP           #-}
 {-# LANGUAGE TypeOperators #-}
 -- |
@@ -70,8 +71,24 @@ run1 CUDA        f = CUDA.run1 f
 run1 Cilk        f = Cilk.run . f . use
 #endif
 
+{-# INLINE run2 #-}
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
-run2 backend f x y = run1 backend (A.uncurry f) (x,y)
+run2 backend f x y = go (x,y)
+  where
+    !go = run1 backend (A.uncurry f)
+
+{-# INLINE run3 #-}
+run3 :: (Arrays a, Arrays b, Arrays c, Arrays d) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d) -> a -> b -> c -> d
+run3 backend f x y z = go (x,y,z)
+  where
+    !go = run1 backend (\t -> let (a,b,c) = unlift t in f a b c)
+
+
+{-# INLINE run4 #-}
+run4 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d -> Acc e) -> a -> b -> c -> d -> e
+run4 backend f x y z w = go (x,y,z,w)
+  where
+    !go = run1 backend (\t -> let (a,b,c,d) = unlift t in f a b c d)
 
 
 -- | The set of backends available to execute the program.

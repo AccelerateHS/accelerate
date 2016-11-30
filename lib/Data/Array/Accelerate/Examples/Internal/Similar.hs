@@ -125,13 +125,6 @@ absRelTol epsilonAbs epsilonRel u v
   | abs u > abs v          = abs ((u-v) / u) < epsilonRel
   | otherwise              = abs ((v-u) / v) < epsilonRel
 
-instance (P.Eq e, P.Eq sh, Shape sh) => P.Eq (Array sh e) where
-  a1 == a2      =  arrayShape a1 == arrayShape a2
-                && toList a1     == toList a2
-
-  a1 /= a2      =  arrayShape a1 /= arrayShape a2
-                || toList a1     /= toList a2
-
 instance (Similar e, P.Eq sh, Shape sh) => Similar (Array sh e) where
   a1 ~= a2      =  arrayShape a1 == arrayShape a2
                 && toList a1     ~= toList a2

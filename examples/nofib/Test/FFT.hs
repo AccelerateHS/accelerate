@@ -122,12 +122,12 @@ test_fft backend opt = testGroup "fft" $ catMaybes
               test_fft_ifft (PowerOf2Array xs) =
                 let sh = arrayShape xs
                 in  arraySize sh > 0 ==>
-                      run backend (fft1D' Inverse sh . fft1D' Forward sh $ use xs) ~?= xs
+                      run1 backend (fft1D' Inverse sh . fft1D' Forward sh) xs ~?= xs
 
               test_fft_dft (PowerOf2Array xs) =
                 let sh = (arrayShape xs)
                 in  arraySize sh > 0 ==>
-                      run backend (fft1D' Forward sh (use xs)) ~?= run1 backend dft xs
+                      run1 backend (fft1D' Forward sh) xs ~?= run1 backend dft xs
 
         testDIM2 :: Test
         testDIM2 =
@@ -139,13 +139,13 @@ test_fft backend opt = testGroup "fft" $ catMaybes
               test_trans (PowerOf2Array xs) =
                 let sh = arrayShape xs
                 in  arraySize sh > 0 ==>
-                      run backend (A.transpose . fft2D' Forward sh $ use xs)
-                  ~?= run backend (fft2D' Forward sh . A.transpose $ use xs)
+                      run1 backend (A.transpose . fft2D' Forward sh) xs
+                  ~?= run1 backend (fft2D' Forward sh . A.transpose) xs
 
               test_fft_ifft (PowerOf2Array xs) =
                 let sh = arrayShape xs
                 in  arraySize (arrayShape xs) > 0 ==>
-                      run backend (fft2D' Inverse sh . fft2D' Forward sh $ use xs) ~?= xs
+                      run1 backend (fft2D' Inverse sh . fft2D' Forward sh) xs ~?= xs
 
         testDIM3 :: Test
         testDIM3 =
@@ -156,7 +156,7 @@ test_fft backend opt = testGroup "fft" $ catMaybes
               test_fft_ifft (PowerOf2Array xs) =
                 let sh = arrayShape xs
                 in  arraySize (arrayShape xs) > 0 ==>
-                      run backend (fft3D' Inverse sh . fft3D' Forward sh $ use xs) ~?= xs
+                      run1 backend (fft3D' Inverse sh . fft3D' Forward sh) xs ~?= xs
 
 
     -- test_dft_fft :: (Similar a, P.RealFloat a, A.RealFloat a, A.IsFloating a, A.FromIntegral Int a) => PowerOf2Array (Complex a) -> Property

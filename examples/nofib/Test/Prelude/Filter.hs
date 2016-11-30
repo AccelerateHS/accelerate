@@ -18,9 +18,11 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
+import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
-import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate                                    as A hiding ( size )
 import Data.Array.Accelerate.Examples.Internal                  as A
+import Data.Array.Accelerate.Array.Sugar                        as Sugar
 
 --
 -- Filter ----------------------------------------------------------------------
@@ -43,15 +45,42 @@ test_filter backend opt = testGroup "filter" $ catMaybes
     testIntegralElt :: forall e. (P.Integral e, A.Integral e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
-      | otherwise               = Just
-      $ testProperty (show (typeOf (undefined :: e))) (run_filter A.even P.even :: Vector e -> Property)
+      | otherwise               = Just $ testGroup (show (typeOf (undefined::e)))
+          [ testDim dim1
+          , testDim dim2
+          ]
+      where
+        testDim :: forall sh. (Shape sh, Slice sh, P.Eq sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
+          [ testProperty "even" (run_filter A.even P.even :: Array (sh:.Int) e -> Property)
+          ]
 
     testFloatingElt :: forall e. (P.RealFrac e, A.RealFrac e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testFloatingElt ok _
       | P.not (get ok opt)      = Nothing
-      | otherwise               = Just
-      $ testProperty (show (typeOf (undefined :: e))) (run_filter (>* 0) (> 0) :: Vector e -> Property)
+      | otherwise               = Just $ testGroup (show (typeOf (undefined::e)))
+          [ testDim dim1
+          , testDim dim2
+          ]
+      where
+        testDim :: forall sh. (Shape sh, Slice sh, P.Eq sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
+          [ testProperty "positive" (run_filter (>* 0) (> 0) :: Array (sh:.Int) e -> Property)
+          ]
 
     run_filter f g xs
-      = toList (run1 backend (A.filter f) xs) ~?= P.filter g (toList xs)
+      = run1 backend (A.filter f) xs ~?= filterRef g xs
+
+
+filterRef
+    :: (Shape sh, Elt e)
+    => (e -> Bool)
+    -> Array (sh:.Int) e
+    -> (Vector e, Array sh Int)
+filterRef f arr = (fromList (Z:.total) (concat result), fromList sh len)
+  where
+    sh :. n   = arrayShape arr
+    result    = P.take (size sh) [ P.filter f sub | sub <- splitEvery n (toList arr) ]
+    len       = P.map P.length result
+    total     = P.sum len
 
