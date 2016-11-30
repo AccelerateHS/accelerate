@@ -24,8 +24,15 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
-Extra-source-files:     data/hashcat/README.md
-                        data/matrices/README.md
+Extra-source-files:
+    data/matrices/README.md
+    examples/canny/README.md
+    examples/fluid/README.md
+    examples/hashcat/README.md
+    examples/kmeans/README.md
+    examples/mandelbrot/README.md
+    examples/pagerank/README.md
+    examples/ray/README.md
 
 -- Flags that control features of the benchmark programs
 --
