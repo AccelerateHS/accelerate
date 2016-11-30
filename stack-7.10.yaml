@@ -7,18 +7,18 @@ packages:
 - '.'
 
 - location:
-    git:    https://github.com/tmcdonell/accelerate.git
-    commit: a3a8ca524b18c480400da0134b3ec9a7f3bd306d
+    git:    https://github.com/AccelerateHS/accelerate.git
+    commit: f83a4fcd672f59b834425fe67c41d6a46edbcde5
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: 3ff507ce7e76312187a18ccd78d25679620c9d59
+    commit: cd8d31c24717ab1041057d1979113689ac79fead
   extra-dep: true
 
 - location:
-    git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 8f5b421a4677c0d08099bff2876a6da0616d4d6c
+    git:    https://github.com/AccelerateHS/accelerate-llvm.git
+    commit: bb05ef082f99456b0719124d9f7d10c2199a2838
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -26,28 +26,28 @@ packages:
     - 'accelerate-llvm-ptx'
 
 - location:
-    git:    https://github.com/AccelerateHS/accelerate-io.git
-    commit: ae41a4f55062b12153ea6d872487a0aa336a9a77
+    git:    https://github.com/tmcdonell/accelerate-io.git
+    commit: f4c84a5c961345bf65059f555f21c6e8bf3070a1
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: 0f5c90f70b0bdf33bebe7dc446c367e4168a23e5
+    commit: d630b34f8b0738795d709a514e9123b7b8ad61e2
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/gloss-accelerate.git
-    commit: 5666cdb78513f3e7baa3519c01c0da719e8768a8
+    commit: 7aefea11b56dbc230e64ee39d7f268fccc2735de
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/gloss-raster-accelerate.git
-    commit: 65333a10aeb2b2685ef906fc2444a6768badabf6
+    commit: d417c5d0def219d1f4ed3da4892cf2cdd0090073
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: 167b6dc58383a4aa8fef17c2dab09f2fa6d13fa5
+    commit: b366828f709e71fcd0371beae34285cf9551d1c5
   extra-dep: true
 
 - location:
@@ -79,7 +79,7 @@ flags:
     shared-llvm: true
   accelerate:
     debug: false
-    ekg:   true
+    ekg:   false
   accelerate-cuda:
     debug: false
   accelerate-llvm-native:
@@ -90,13 +90,13 @@ flags:
   accelerate-fft:
     cuda:     true
     llvm-cpu: true
-    llvm-gpu: true
+    llvm-ptx: true
   accelerate-examples:
-    cuda:       false
+    cuda:       true
     llvm-cpu:   true
-    llvm-gpu:   false
+    llvm-ptx:   true
     gui:        true
-    ekg:        true
+    ekg:        false
     codespeed:  false
     nofib:      true
     smvm:       true

@@ -172,7 +172,7 @@ Library
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:
-        accelerate-cuda                 == 1.0.*
+        accelerate-cuda                 == 0.16.*
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
@@ -279,7 +279,7 @@ Executable accelerate-nofib
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:
-        accelerate-cuda                 == 1.0.*
+        accelerate-cuda                 == 0.16.*
 
     other-modules:
         Test.Foreign.CUDA
@@ -539,7 +539,8 @@ Executable accelerate-smoothlife
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 1.0.*
+    build-depends:
+        accelerate-cuda                   == 0.16.*
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
