@@ -18,10 +18,11 @@ import Data.ByteString.Lex.Integral             ( readHexadecimal )
 import qualified Data.Serialize                 as S
 import qualified Data.ByteString                as B
 import qualified Data.ByteString.Lazy           as L
-import Prelude                                  as P
+import Prelude                                  as P hiding ( Eq(..), (&&) )
 
-import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate                    hiding ( Ord(..) )
 import Data.Array.Accelerate.Data.Bits          as A
+import qualified Data.Array.Accelerate          as A
 
 
 -- Generate an MD5 hash for every word in the dictionary, and if an entry
@@ -42,7 +43,7 @@ hashcatDict dict passwd
 
     cmp x y     = let (x1,x2,x3,x4) = unlift x
                       (y1,y2,y3,y4) = unlift y
-                  in x1 ==* y1 &&* x2 ==* y2 &&* x3 ==* y3 &&* x4 ==* y4
+                  in x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4
 
 -- Generate an MD5 hash for a single word, and if an entry matches the
 -- given unknown md5, returns the given index. If not matched, this
@@ -58,7 +59,7 @@ hashcatWord passwd word ix
     crypt       = md5Round (\i -> word A.! index1 i)
     cmp x y     = let (x1,x2,x3,x4) = unlift x
                       (y1,y2,y3,y4) = unlift y
-                  in x1 ==* y1 &&* x2 ==* y2 &&* x3 ==* y3 &&* x4 ==* y4
+                  in x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4
 
 
 -- An MD5 round processes 512 bits of the input, as 16 x 32-bit values. We
@@ -82,7 +83,7 @@ md5 dict
 md5Round :: (Exp Int -> Exp Word32) -> Exp MD5
 md5Round fetch
   = lift
-  $ foldl step (a0,b0,c0,d0) [0..64]
+  $ P.foldl step (a0,b0,c0,d0) [0..64]
   where
     step (a,b,c,d) i
       | i < 16    = shfl ((b .&. c) .|. ((complement b) .&. d))

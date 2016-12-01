@@ -14,7 +14,7 @@ module Data.Array.Accelerate.Examples.Internal.Util
 import Numeric
 import Data.List
 
-import Data.Array.Accelerate                              as A
+import Data.Array.Accelerate                              as A ( Z(..), Elt, Scalar, fromList )
 import Prelude                                            as P
 
 

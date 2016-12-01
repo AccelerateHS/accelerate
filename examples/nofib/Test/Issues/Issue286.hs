@@ -9,7 +9,7 @@ import Test.Framework
 import Test.Framework.Providers.HUnit
 
 import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A hiding ( (>->) )
+import Data.Array.Accelerate                                    as A hiding ( (>->), (==) )
 import Data.Array.Accelerate.IO                                 as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 

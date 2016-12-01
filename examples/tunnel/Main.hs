@@ -104,7 +104,7 @@ voronoise xy irregular smoothness =
 iterFromTo :: Elt a => Exp Int -> Exp Int -> Exp a -> (Exp Int -> Exp a -> Exp a) -> Exp a
 iterFromTo inf sup x body
   = A.snd
-  $ A.while (\ix -> A.fst ix <=* sup)
+  $ A.while (\ix -> A.fst ix <= sup)
             (\ix -> A.lift (A.fst ix + 1, A.uncurry body ix))
             (lift (inf, x))
 

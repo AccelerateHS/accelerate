@@ -61,7 +61,7 @@ acc3 = scatterIf to mask p over xs
 
     mask :: Acc (Vector Int32)
     mask        = use [3, 4, 9, 2, 7, 5]
-    p           = (>* 4)
+    p           = (A.> 4)
 
 
 ref4 :: (Elt a, P.Num a) => Vector a
@@ -76,7 +76,7 @@ acc4 = scatterIf to mask p over xs
 
     mask :: Acc (Vector Int32)
     mask        = use [3, 4, 9, 2, 7, 5]
-    p           = (>* 4)
+    p           = (A.> 4)
 
 
 ref5 :: (Elt a, P.Num a) => Vector a
@@ -101,7 +101,7 @@ acc6 = gatherIf from mask p over xs
 
     mask :: Acc (Vector Int32)
     mask        = use [3, 4, 9, 2, 7, 5]
-    p           = (>* 4)
+    p           = (A.> 4)
 
 
 gatherIf

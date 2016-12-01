@@ -16,7 +16,7 @@ import Data.Array.Accelerate.Data.Colour.Names
 import Graphics.Gloss.Accelerate.Data.Point
 
 -- standard library
-import Prelude                                                  as P
+import qualified Prelude                                        as P
 
 
 -- | Generate all of the rays that will be cast from the given eye position to
@@ -75,7 +75,7 @@ traceRay limit objects lights ambient = go limit
             (hit_s, dist_s, s)  = unlift $ castRay distanceToSphere dummySphere spheres orig dir
             (hit_p, dist_p, p)  = unlift $ castRay distanceToPlane  dummyPlane  planes  orig dir
         in
-        A.not (hit_s ||* hit_p) ?
+        A.not (hit_s || hit_p) ?
           -- ray didn't intersect any objects
         ( constant black
 
@@ -87,7 +87,7 @@ traceRay limit objects lights ambient = go limit
               next_p      = hitPlaneCheck p dist_p orig dir
 
               (point, normal, colour, shine)
-                          = unlift (dist_s A.<* dist_p ? ( next_s, next_p ))
+                          = unlift (dist_s < dist_p ? ( next_s, next_p ))
 
               -- result angle of ray after reflection
               newdir      = dir - (2.0 * (normal `dot` dir)) .* normal

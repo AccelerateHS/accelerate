@@ -18,10 +18,12 @@ module Data.Array.Accelerate.Examples.Internal.Similar (
 
 ) where
 
-import Prelude                                          as P
+import Data.Array.Accelerate                            ( Z(..), (:.)(..), Array, Shape, arrayShape, toList )
 import Data.Complex
+import Data.Int
+import Data.Word
 import Foreign.C.Types
-import Data.Array.Accelerate
+import Prelude                                          as P
 
 
 -- A class of things that support almost-equality, so that we can disregard
@@ -30,7 +32,7 @@ import Data.Array.Accelerate
 class Similar a where
   {-# INLINE (~=) #-}
   (~=) :: a -> a -> Bool
-  default (~=) :: P.Eq a => a -> a -> Bool
+  default (~=) :: Eq a => a -> a -> Bool
   (~=) = (==)
 
 infix 4 ~=
@@ -75,7 +77,7 @@ instance (Similar a, Similar b, Similar c, Similar d, Similar e, Similar f, Simi
     x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4 && x5 ~= y5 && x6 ~= y6 && x7 ~= y7 && x8 ~= y8 && x9 ~= y9
 
 instance Similar Z
-instance (P.Eq sh, P.Eq sz) => Similar (sh:.sz)
+instance (Eq sh, Eq sz) => Similar (sh:.sz)
 
 instance Similar Int
 instance Similar Int8
@@ -115,17 +117,17 @@ instance Similar e => Similar (Complex e) where
 -- relTol epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
 
 {-# INLINEABLE absRelTol #-}
-absRelTol :: P.RealFloat a => a -> a -> a -> a -> Bool
+absRelTol :: RealFloat a => a -> a -> a -> a -> Bool
 absRelTol epsilonAbs epsilonRel u v
-  |  P.isInfinite u
-  && P.isInfinite v        = True
-  |  P.isNaN u
-  && P.isNaN v             = True
+  |  isInfinite u
+  && isInfinite v          = True
+  |  isNaN u
+  && isNaN v               = True
   | abs (u-v) < epsilonAbs = True
   | abs u > abs v          = abs ((u-v) / u) < epsilonRel
   | otherwise              = abs ((v-u) / v) < epsilonRel
 
-instance (Similar e, P.Eq sh, Shape sh) => Similar (Array sh e) where
+instance (Similar e, Eq sh, Shape sh) => Similar (Array sh e) where
   a1 ~= a2      =  arrayShape a1 == arrayShape a2
                 && toList a1     ~= toList a2
 

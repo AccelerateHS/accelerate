@@ -118,7 +118,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
         test_gather :: Vector e -> Property
         test_gather xs =
           let Z :. n  = arrayShape xs
-          in  n > 0 ==>
+          in  n P.> 0 ==>
                 forAll arbitrary                               $ \(sh' :: DIM1) ->
                 forAll (arbitraryArrayOf sh' (choose (0,n-1))) $ \mapv          ->
                   toList (run2 backend A.gather mapv xs)

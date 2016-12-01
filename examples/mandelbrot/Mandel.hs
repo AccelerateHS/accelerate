@@ -15,8 +15,8 @@ module Mandel (
 
 ) where
 
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
+import qualified Prelude                                            as P
+import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Data.Colour.RGBA
 import Data.Array.Accelerate.Data.Complex
 
@@ -42,7 +42,7 @@ type Render a           = Scalar (View a) -> Bitmap
 -- This returns the iteration depth 'i' at divergence.
 --
 mandelbrot
-    :: forall a. (P.Floating a, A.RealFloat a, A.FromIntegral Int a)
+    :: forall a. (P.Floating a, RealFloat a, FromIntegral Int a)
     => Int
     -> Int
     -> Int
@@ -51,9 +51,9 @@ mandelbrot
 mandelbrot screenX screenY depth view =
   generate (constant (Z:.screenY:.screenX))
            (\ix -> let c = initial ix
-                   in  A.snd $ A.while (\zi -> A.snd zi A.<* lIMIT &&* dot (A.fst zi) A.<* 4)
-                                       (\zi -> lift1 (next c) zi)
-                                       (lift (c, constant 0)))
+                   in  snd $ while (\zi -> snd zi < lIMIT && dot (fst zi) < 4)
+                                   (\zi -> lift1 (next c) zi)
+                                   (lift (c, constant 0)))
   where
     -- The view plane
     (xmin,ymin,xmax,ymax)     = unlift (the view)
@@ -69,8 +69,8 @@ mandelbrot screenX screenY depth view =
     initial ix = lift ( (xmin + (x * sizex) / viewx) :+ (ymin + (y * sizey) / viewy) )
       where
         pr = unindex2 ix
-        x  = A.fromIntegral (A.snd pr :: Exp Int)
-        y  = A.fromIntegral (A.fst pr :: Exp Int)
+        x  = fromIntegral (snd pr :: Exp Int)
+        y  = fromIntegral (fst pr :: Exp Int)
 
     -- take a single step of the iteration
     next :: Exp (Complex a) -> (Exp (Complex a), Exp Int32) -> (Exp (Complex a), Exp Int32)
@@ -85,7 +85,7 @@ mandelbrot screenX screenY depth view =
 -- Rendering -------------------------------------------------------------------
 
 prettyRGBA :: Exp Int32 -> Exp Int32 -> Exp RGBA32
-prettyRGBA cmax c = c ==* cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
+prettyRGBA cmax c = c == cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
 
 -- Directly convert the iteration count on escape to a colour. The base set
 -- (x,y,z) yields a dark background with light highlights.
@@ -95,9 +95,9 @@ prettyRGBA cmax c = c ==* cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
 escapeToColour :: Exp Int32 -> Exp RGBA32
 escapeToColour m = constant 0xFFFFFFFF - (packABGR8 . lift $ RGBA r g b 0)
   where
-    r   = A.fromIntegral (3 * m)
-    g   = A.fromIntegral (5 * m)
-    b   = A.fromIntegral (7 * m)
+    r   = fromIntegral (3 * m)
+    g   = fromIntegral (5 * m)
+    b   = fromIntegral (7 * m)
 
 
 {--
@@ -106,8 +106,8 @@ escapeToColour m = constant 0xFFFFFFFF - (packABGR8 . lift $ RGBA r g b 0)
 prettyRGBA :: Elt a => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
 prettyRGBA lIMIT s' = r + g + b + a
   where
-    s   = A.snd s'
-    t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
+    s   = snd s'
+    t   = fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
     r   = (t     `rem` 128 + 64) * 0x1000000
     g   = (t * 2 `rem` 128 + 64) * 0x10000
     b   = (t * 3 `rem` 256     ) * 0x100
@@ -116,10 +116,10 @@ prettyRGBA lIMIT s' = r + g + b + a
 {--
 prettyRGBA :: forall a. (Elt a, IsFloating a) => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
 prettyRGBA lIMIT s =
-  let cmax      = A.fromIntegral lIMIT          :: Exp a
-      c         = A.fromIntegral (A.snd s)
+  let cmax      = fromIntegral lIMIT          :: Exp a
+      c         = fromIntegral (snd s)
   in
-  c >* 0.98 * cmax ? ( 0xFF000000, rampColourHotToCold 0 cmax c )
+  c > 0.98 * cmax ? ( 0xFF000000, rampColourHotToCold 0 cmax c )
 
 -- Standard Hot-to-Cold hypsometric colour ramp. Colour sequence is
 --   Red, Yellow, Green, Cyan, Blue
@@ -131,22 +131,22 @@ rampColourHotToCold
     -> Exp a                            -- ^ data value
     -> Exp RGBA32
 rampColourHotToCold vmin vmax vNotNorm
-  = let v       = vmin `A.max` vNotNorm `A.min` vmax
+  = let v       = vmin `max` vNotNorm `min` vmax
         dv      = vmax - vmin
         --
-        result  = v <* vmin + 0.28 * dv
+        result  = v < vmin + 0.28 * dv
                 ? ( lift ( constant 0.0
                          , 4 * (v-vmin) / dv
                          , constant 1.0
                          , constant 1.0 )
 
-                , v <* vmin + 0.5 * dv
+                , v < vmin + 0.5 * dv
                 ? ( lift ( constant 0.0
                          , constant 1.0
                          , 1 + 4 * (vmin + 0.25 * dv - v) / dv
                          , constant 1.0 )
 
-                , v <* vmin + 0.75 * dv
+                , v < vmin + 0.75 * dv
                 ? ( lift ( 4 * (v - vmin - 0.5 * dv) / dv
                          , constant 1.0
                          , constant 0.0

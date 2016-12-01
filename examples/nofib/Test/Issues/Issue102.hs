@@ -36,7 +36,7 @@ test1 =
       --embed into a vector of length p
       y         = generate (constant (Z :. lts :. p :. rts))
                            (\ix -> let (Z :. l :. i :. r) = unlift ix :: Z :. Exp Int :. Exp Int :. Exp Int
-                                   in  i ==* 0 ? (0, x' ! (lift $ Z :. l :. i-1 :. r)))
+                                   in  i A.== 0 ? (0, x' ! (lift $ Z :. l :. i-1 :. r)))
 
       -- do a DFT_p
       y'        = reshape (constant (Z :. lts :. p :. rts)) (flatten y)

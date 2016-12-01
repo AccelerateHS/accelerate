@@ -22,14 +22,14 @@ import Data.Array.Accelerate.Smart
 
 -- standard library
 import Data.Typeable
-import Prelude                                                  as P
+import qualified Prelude                                        as P
 
 
 -- | An omnidirectional point light source, whose intensity drops off with
 --   distance from the source.
 --
 data Light = Light Position Colour
-  deriving (P.Eq, Show, Typeable)
+  deriving (P.Eq, P.Show, Typeable)
 
 type Lights = Array DIM1 Light
 
@@ -84,7 +84,7 @@ applyLight objects point normal light
         RGB r g b               = unlift (lightColor light)
         refl                    = lift $ RGB (r * mag) (g * mag) (b * mag)
     in
-    checkRay distanceToSphere spheres point dir dist ||* checkRay distanceToPlane planes point dir dist
+    checkRay distanceToSphere spheres point dir dist || checkRay distanceToPlane planes point dir dist
       ? ( constant black, refl )
 
 

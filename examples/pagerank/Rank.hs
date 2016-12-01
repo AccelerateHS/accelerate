@@ -112,7 +112,7 @@ pageRank backend _noSeq maxIters chunkSize pageCount from to sizes0 _titlesFile 
             dangleContrib :: Acc (Scalar Rank)
             dangleContrib = A.unit (the dangleScore / (A.lift (P.fromIntegral pageCount :: Float)))
 
-            d r s = s ==* 0 ? (r, 0)
+            d r s = s A.== 0 ? (r, 0)
 
           in A.map (+ A.the dangleContrib) ranks
 
@@ -127,7 +127,7 @@ pageRank backend _noSeq maxIters chunkSize pageCount from to sizes0 _titlesFile 
         zeros = run backend $ A.fill (A.lift $ Z :. pageCount) 0
 
         stepInChunks !ranks !parRanks !start
-          | start >= edgeCount
+          | start P.>= edgeCount
           = parRanks
           | otherwise
           = let end     = P.min (start + chunkSize) edgeCount
@@ -142,5 +142,5 @@ pageRank backend _noSeq maxIters chunkSize pageCount from to sizes0 _titlesFile 
 
         -- Computer the index of the maximum rank.
         maxIndex :: A.Vector Rank -> A.Scalar Int
-        maxIndex = run1 backend $ (\ranks -> A.fold (\x y -> ranks ! index1 x >* ranks ! index1 y ? (x,y)) 0 (A.enumFromN (A.shape ranks) 0))
+        maxIndex = run1 backend $ (\ranks -> A.fold (\x y -> ranks ! index1 x A.> ranks ! index1 y ? (x,y)) 0 (A.enumFromN (A.shape ranks) 0))
 

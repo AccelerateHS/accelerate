@@ -14,9 +14,9 @@ import Data.Array.Accelerate.CUDA.Foreign                       as A
 
 test_cuda :: Backend -> Config -> Test
 test_cuda backend _conf = testGroup "CUDA"
-  $ if backend == CUDA
-       then [ testExpf, testFmaf ]
-       else [ ]
+  $ case backend of
+      CUDA -> [ testExpf, testFmaf ]
+      _    -> [ ]
   where
     testExpf :: Test
     testExpf = testProperty "expf" test_expf

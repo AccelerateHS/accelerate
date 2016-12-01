@@ -25,8 +25,8 @@ main = do
   beginMonitoring
   (_, opts, rest)       <- parseArgs options defaults header footer
 
-  inputs                <- (&&) <$> doesFileExist "points.bin"
-                                <*> doesFileExist "clusters"
+  inputs                <- (P.&&) <$> doesFileExist "points.bin"
+                                  <*> doesFileExist "clusters"
   unless inputs $ do
     error "Run the GenSamples program first to generate random data"
 

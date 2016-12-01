@@ -12,6 +12,7 @@ import Type
 import Data.Label
 import Control.Monad
 import Prelude                                          as P
+
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
 import Data.Array.Accelerate.Data.Colour.RGBA           as A
@@ -215,8 +216,8 @@ makeDensity_checks backend width height
                 y'              = A.fromIntegral y
                 tx              = 10 * (x' - xc) / width'
                 ty              = 10 * (y' - yc) / height'
-                xk1             = abs tx >* 3*pi/2 ? (0 , cos tx)
-                yk1             = abs ty >* 3*pi/2 ? (0 , cos ty)
+                xk1             = abs tx A.> 3*pi/2 ? (0 , cos tx)
+                yk1             = abs ty A.> 3*pi/2 ? (0 , cos ty)
                 d1              = xk1 * yk1
             in
             0 `A.max` d1
@@ -271,7 +272,7 @@ loadDensity_bmp backend filepath width height
   = do  arr             <- either (error . show) id `fmap` readImageFromBMP filepath
         let Z:.h:.w     =  arrayShape arr
 
-        when (w /= width || h /= height)
+        when (w P./= width P.|| h P./= height)
           $ error "accelerate-fluid: density-bmp does not match width x height"
 
         return . run backend $ A.map (luminance . unpackRGBA) (use arr)
@@ -282,7 +283,7 @@ loadVelocity_bmp backend filepath width height
   = do  arr             <- either (error . show) id `fmap` readImageFromBMP filepath
         let Z:.h:.w     =  arrayShape arr
 
-        when (w /= width || h /= height)
+        when (w P./= width P.|| h P./= height)
           $ error "accelerate-fluid: velocity-bmp does not match width x height"
 
         let conv rgb =

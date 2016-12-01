@@ -8,7 +8,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: f83a4fcd672f59b834425fe67c41d6a46edbcde5
+    commit: 9ef83c15fd7dfde8c16ea9010d7261c0da2209e3
   extra-dep: true
 
 - location:
@@ -17,8 +17,8 @@ packages:
   extra-dep: true
 
 - location:
-    git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: bb05ef082f99456b0719124d9f7d10c2199a2838
+    git:    https://github.com/AccelerateHS/accelerate-llvm.git
+    commit: 708389da8fbf7048a8d68b3eb6eb500aa43e7ea1
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -32,27 +32,27 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: d630b34f8b0738795d709a514e9123b7b8ad61e2
+    commit: 14a179f036435b976a5883abf592ccfc9810082f
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/gloss-accelerate.git
-    commit: 7aefea11b56dbc230e64ee39d7f268fccc2735de
+    commit: 17d7acb5bb707be723eab3add3e95a61190eb5bc
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/gloss-raster-accelerate.git
-    commit: d417c5d0def219d1f4ed3da4892cf2cdd0090073
+    commit: 70b6b4a688fd7694db39702520324aef5c09914c
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: b366828f709e71fcd0371beae34285cf9551d1c5
+    commit: 2c36c09d5ec0c4eb66dca3a2bc931d1c024890b8
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: 665e2f6fd6da4fd47edbfe8e56ebce0e697c95ed
+    commit: 952a2d4234b9855650ca7dc69ff6b234a7cdb56f
   extra-dep: true
 
 - location:

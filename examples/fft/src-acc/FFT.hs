@@ -2,7 +2,7 @@
 module FFT
   where
 
-import Prelude                                          as P
+import qualified Prelude                                as P
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
 import Data.Array.Accelerate.Data.Colour.RGBA           as A
@@ -28,7 +28,7 @@ imageFFT sh cutoff img = lift (arrMag, arrPhase)
 
     -- Clip the magnitude of the transformed array
     clipMag     = the (unit (constant (P.fromIntegral cutoff)))
-    clip x      = x >* clipMag ? ( 1 , x / clipMag )
+    clip x      = x > clipMag ? ( 1 , x / clipMag )
     arrMag      = A.map (packRGBA . grey . clip . magnitude) arrFreq
 
     -- Get the phase of the transformed array

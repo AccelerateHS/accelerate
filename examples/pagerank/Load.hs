@@ -53,5 +53,6 @@ loadPages filePath maxPageId
                 Just links' <- parsePage l links
                 go links' (ixLine+1) rest
 
-
+         | otherwise
+         = error "PageRank.loadPages: unexpected error"
 

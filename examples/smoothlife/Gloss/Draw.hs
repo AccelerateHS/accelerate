@@ -5,7 +5,7 @@ module Gloss.Draw
 
 import Config
 
-import Prelude                                                      as P
+import qualified Prelude                                            as P
 import Data.Label
 
 import Graphics.Gloss                                               ( Picture, scale )
@@ -39,13 +39,13 @@ colourise scheme = A.map (packRGB . colour scheme)
 
     rainbow :: Exp Float -> Exp Float -> Exp Colour
     rainbow p x
-      = p >* 0 &&* p A.<* 1
-                 ? (rgb x         (x*p)     0
-      , p A.<* 2 ? (rgb (x*(2-p)) x         0
-      , p A.<* 3 ? (rgb 0         x         (x*(p-2))
-      , p A.<* 4 ? (rgb 0         (x*(4-p)) x
-      , p A.<* 5 ? (rgb (x*(p-4)) 0         x
-      , p A.<* 6 ? (rgb x         0         (x*(6-p))
+      = p > 0 && p < 1
+              ? (rgb x         (x*p)     0
+      , p < 2 ? (rgb (x*(2-p)) x         0
+      , p < 3 ? (rgb 0         x         (x*(p-2))
+      , p < 4 ? (rgb 0         (x*(4-p)) x
+      , p < 5 ? (rgb (x*(p-4)) 0         x
+      , p < 6 ? (rgb x         0         (x*(6-p))
       , {-else-}   (constant black)))))))
 
     rainbow' :: Exp Float -> Exp Float -> Exp Colour

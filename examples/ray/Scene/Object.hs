@@ -20,8 +20,8 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Data.Colour.RGB
 
 -- standard library
-import Prelude                                                  as P
 import Data.Typeable
+import qualified Prelude                                        as P
 
 
 -- | All objects in the scene
@@ -33,7 +33,7 @@ type Objects = (Array DIM1 Sphere, Array DIM1 Plane)
 --   object separately (and hope this works out...)
 --
 data Sphere = Sphere Position Float Colour Float
-  deriving (P.Eq, Show, Typeable)
+  deriving (P.Eq, P.Show, Typeable)
 
 spherePos    :: Exp Sphere -> Exp Position
 sphereColor  :: Exp Sphere -> Exp Colour
@@ -42,7 +42,7 @@ sphereRadius :: Exp Sphere -> Exp Float
 
 
 data Plane = Plane Position Direction Colour Float
-  deriving (P.Eq, Show, Typeable)
+  deriving (P.Eq, P.Show, Typeable)
 
 planePos    :: Exp Plane -> Exp Position
 planeNormal :: Exp Plane -> Exp Direction
@@ -72,7 +72,7 @@ distanceToSphere sphere origin direction
         p       = origin + ((pos - origin) `dot` direction) .* direction
         d_cp    = magnitude (p - pos)
         sep     = p - origin
-        miss    = d_cp >=* radius ||* sep `dot` direction <=* 0
+        miss    = d_cp >= radius || sep `dot` direction <= 0
     in
     miss ? ( lift (False, infinity)
            , lift (True,  magnitude sep - sqrt (radius * radius - d_cp * d_cp)) )
@@ -91,8 +91,8 @@ distanceToPlane plane origin direction
         normal          = planeNormal plane
         theta           = direction `dot` normal        -- TLM: name?
     in
-    theta >=* 0 ? ( lift (False, infinity)
-                  , lift (True,  ((pos - origin) `dot` normal) / theta) )
+    theta >= 0 ? ( lift (False, infinity)
+                 , lift (True,  ((pos - origin) `dot` normal) / theta) )
 
 
 -- | The maximum representable floating point value
@@ -127,10 +127,10 @@ checkers pos
 
         v1      = (A.truncate (x / 100) :: Exp Int32) `mod` 2
         v2      = (A.truncate (z / 100) :: Exp Int32) `mod` 2
-        v3      = A.fromIntegral . boolToInt $ x A.<* 0.0
-        v4      = A.fromIntegral . boolToInt $ z A.<* 0.0
+        v3      = A.fromIntegral . boolToInt $ x A.< 0.0
+        v4      = A.fromIntegral . boolToInt $ z A.< 0.0
     in
-    v1 `xor` v2 `xor` v3 `xor` v4 ==* 1 {- True -}
+    v1 `xor` v2 `xor` v3 `xor` v4 == 1 {- True -}
       ? ( rgb 1.0 1.0 1.0
         , rgb 0.4 0.4 0.4 )
 

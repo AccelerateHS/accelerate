@@ -138,9 +138,10 @@ instance Show Backend where
 -- available.
 --
 defaultBackend :: Backend
-defaultBackend
-  | maxBound == Interpreter = Interpreter
-  | otherwise               = succ Interpreter
+defaultBackend =
+  case maxBound of
+    Interpreter -> Interpreter
+    _           -> succ Interpreter
 
 
 -- The set of available backnds. This will be used for both the command line

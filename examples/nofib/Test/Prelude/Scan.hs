@@ -21,9 +21,10 @@ import Test.Framework.Providers.QuickCheck2
 import Config
 import Test.Base
 import QuickCheck.Arbitrary.Array
-import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate                                    as A hiding ( Ord(..) )
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
+import qualified Data.Array.Accelerate                          as A
 
 
 --

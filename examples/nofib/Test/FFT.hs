@@ -22,7 +22,7 @@ import QuickCheck.Arbitrary.Shape
 import Data.Array.Accelerate.Math.DFT
 import Data.Array.Accelerate.Math.FFT
 
-import Data.Array.Accelerate                                    as A hiding ( (!) )
+import Data.Array.Accelerate                                    as A hiding ( (!), Ord(..), Eq(..) )
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.Array.Sugar                        ( (!) )
 import Data.Array.Accelerate.Data.Complex
@@ -147,16 +147,16 @@ test_fft backend opt = testGroup "fft" $ catMaybes
                 in  arraySize (arrayShape xs) > 0 ==>
                       run1 backend (fft2D' Inverse sh . fft2D' Forward sh) xs ~?= xs
 
-        testDIM3 :: Test
-        testDIM3 =
-          testGroup "DIM3"
-            [ testProperty "ifft.fft"  (test_fft_ifft :: PowerOf2Array DIM3 (Complex a) -> Property)
-            ]
-            where
-              test_fft_ifft (PowerOf2Array xs) =
-                let sh = arrayShape xs
-                in  arraySize (arrayShape xs) > 0 ==>
-                      run1 backend (fft3D' Inverse sh . fft3D' Forward sh) xs ~?= xs
+        -- testDIM3 :: Test
+        -- testDIM3 =
+        --   testGroup "DIM3"
+        --     [ testProperty "ifft.fft"  (test_fft_ifft :: PowerOf2Array DIM3 (Complex a) -> Property)
+        --     ]
+        --     where
+        --       test_fft_ifft (PowerOf2Array xs) =
+        --         let sh = arrayShape xs
+        --         in  arraySize (arrayShape xs) > 0 ==>
+        --               run1 backend (fft3D' Inverse sh . fft3D' Forward sh) xs ~?= xs
 
 
     -- test_dft_fft :: (Similar a, P.RealFloat a, A.RealFloat a, A.IsFloating a, A.FromIntegral Int a) => PowerOf2Array (Complex a) -> Property

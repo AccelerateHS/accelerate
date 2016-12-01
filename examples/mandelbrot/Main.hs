@@ -42,7 +42,7 @@ main = do
     [ bench "mandelbrot" $ whnf (force . renderWorld) world ]
 
   runInteractive opts rest
-    $ if fps == 0
+    $ if fps P.== 0
          then G.display
                   (G.InWindow "Mandelbrot" (width, height) (10, 10))
                   G.black
