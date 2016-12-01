@@ -438,12 +438,12 @@ simplifyOpenExp env = first getAny . cvtE
       | Just sh <- gcast IndexNil         -- sh ~ Z
       = Stats.ruleFired "indexSlice/nil" $ yes sh
     indexSlice (SliceFixed x) p (_, sh)
-      | SliceRcons sr  <- sliceType p
+      | SliceRfixed sr <- sliceType p
       , ShapeRcons sh' <- shapeType sh
       , AsSlice        <- asSlice sh'
       = Stats.ruleFired "indexSlice/fixed" $ yes (IndexSlice x sr (IndexTail sh))
     indexSlice (SliceAll x) p (_, IndexCons sh i)
-      | SliceRcons sr  <- sliceType p
+      | SliceRall sr   <- sliceType p
       , ShapeRcons _   <- shapeType (Proxy :: Proxy sh)
       , ShapeRcons sl' <- shapeType (Proxy :: Proxy sl)
       , AsSlice        <- asSlice sl'

@@ -1038,9 +1038,10 @@ data ShapeR sh where
   ShapeRcons :: Shape sh => ShapeR sh -> ShapeR (sh :. Int)
 
 data SliceR sh where
-  SliceRnil  :: SliceR Z
-  SliceRcons :: (Slice sl, Elt e) => SliceR sl -> SliceR (sl :. e)
-  SliceRany  :: Shape sh => SliceR (Any sh)
+  SliceRnil   :: SliceR Z
+  SliceRall   :: (Slice sl) => SliceR sl -> SliceR (sl :. All)
+  SliceRfixed :: (Slice sl) => SliceR sl -> SliceR (sl :. Int)
+  SliceRany   :: Shape sh => SliceR (Any sh)
 
 instance Shape Z where
   sliceAnyIndex  _ = Repr.SliceNil
@@ -1087,7 +1088,7 @@ instance Slice sl => Slice (sl:.All) where
   type FullShape    (sl:.All) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceAll (sliceIndex (undefined :: sl))
   toSlice (sh :. _) i = toSlice sh i :. All
-  sliceType _ = SliceRcons (sliceType (Proxy :: Proxy sl))
+  sliceType _ = SliceRall (sliceType (Proxy :: Proxy sl))
 
 instance Slice sl => Slice (sl:.Int) where
   type SliceShape   (sl:.Int) = SliceShape   sl
@@ -1095,7 +1096,7 @@ instance Slice sl => Slice (sl:.Int) where
   type FullShape    (sl:.Int) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined :: sl))
   toSlice (sh :. n) i' = toSlice sh (i' `div` n) :. (i' `mod` n)
-  sliceType _ = SliceRcons (sliceType (Proxy :: Proxy sl))
+  sliceType _ = SliceRfixed (sliceType (Proxy :: Proxy sl))
 
 instance Shape sh => Slice (Any sh) where
   type SliceShape   (Any sh) = sh
