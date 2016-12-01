@@ -674,14 +674,14 @@ any f = or . map f
 and :: Shape sh
     => Acc (Array sh Bool)
     -> Acc (Scalar Bool)
-and = foldAll (&&*) (constant True)
+and = foldAll (&&) (constant True)
 
 -- | Check if any element is 'True'
 --
 or :: Shape sh
    => Acc (Array sh Bool)
    -> Acc (Scalar Bool)
-or = foldAll (||*) (constant False)
+or = foldAll (||) (constant False)
 
 -- | Compute the sum of elements
 --
@@ -807,7 +807,7 @@ scanlSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 scanlSeg f z arr seg =
-  if null arr ||* null flags
+  if null arr || null flags
     then fill (lift (sh:.sz + length seg)) z
     else scanl1Seg f arr' seg'
   where
@@ -1033,7 +1033,7 @@ scanrSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 scanrSeg f z arr seg =
-  if null arr ||* null flags
+  if null arr || null flags
     then fill (lift (sh :. sz + length seg)) z
     else scanr1Seg f arr' seg'
   where
@@ -1234,7 +1234,7 @@ segmented f a b =
   let (aF, aV) = unlift a
       (bF, bV) = unlift b
   in
-  lift (aF .|. bF, bF /=* 0 ? (bV, f aV bV))
+  lift (aF .|. bF, bF /= 0 ? (bV, f aV bV))
 
 -- |Index construction and destruction generalised to integral types.
 --
@@ -1361,7 +1361,7 @@ infixr 5 ++
     in
     generate (lift (intersect sh1 sh2 :. n + m))
              (\ix -> let sh :. i = unlift ix    :: Exp sh :. Exp Int
-                     in  i <* n ? ( xs ! ix, ys ! lift (sh :. i-n)) )
+                     in  i < n ? ( xs ! ix, ys ! lift (sh :. i-n)) )
 
 -- TLM: If we have something like (concat . split) then the source array will
 --      have two use sites, but is actually safe (and better) to inline.
@@ -1442,7 +1442,7 @@ filter p arr
 {-# NOINLINE filter #-}
 {-# RULES
   "ACC filter/filter" forall f g arr.
-    filter f (afst (filter g arr)) = filter (\x -> g x &&* f x) arr
+    filter f (afst (filter g arr)) = filter (\x -> g x && f x) arr
  #-}
 
 
@@ -1478,7 +1478,7 @@ gather indices input = map (input !!) indices
 -- >>> let from     = fromList (Z :. 6) [1,3,7,2,5,3]
 -- >>> let mask     = fromList (Z :. 6) [3,4,9,2,7,5]
 -- >>> let input    = fromList (Z :. 9) [1,9,6,4,4,2,0,1,2]
--- >>> gatherIf (use from) (use mask) (>* 4) (use defaults) (use input)
+-- >>> gatherIf (use from) (use mask) (> 4) (use defaults) (use input)
 -- Vector (Z :. 6) [6,6,1,6,2,4]
 --
 gatherIf
@@ -1532,7 +1532,7 @@ scatter to defaults input = permute const defaults pf input'
 -- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8]
 -- >>> let mask  = fromList (Z :. 6) [3,4,9,2,7,5]
 -- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5]
--- >>> scatterIf (use to) (use mask) (>* 4) (fill (constant (Z:.10)) 0) (use input)
+-- >>> scatterIf (use to) (use mask) (> 4) (fill (constant (Z:.10)) 0) (use input)
 -- Vector (Z :. 10) [0,0,0,0,0,4,0,6,2,0]
 --
 scatterIf
@@ -1734,7 +1734,7 @@ slit m n acc =
 -- > loop :: Exp Int -> Exp Int
 -- > loop ticks =
 -- >   let clockRate = 900000   -- kHz
--- >   in  while (\i -> i <* clockRate * ticks) (+1) 0
+-- >   in  while (\i -> i < clockRate * ticks) (+1) 0
 -- >
 -- > test :: Acc (Vector Int)
 -- > test =
@@ -1815,7 +1815,7 @@ iterate n f z
   = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
         step (i, acc)   = ( i+1, f acc )
     in
-    snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
+    snd $ while (\v -> fst v < n) (lift1 step) (lift (constant 0, z))
 
 
 -- Scalar bulk operations
@@ -1835,7 +1835,7 @@ sfoldl f z ix xs
         step (i, acc)   = ( i+1, acc `f` (xs ! lift (ix :. i)) )
         (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
     in
-    snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
+    snd $ while (\v -> fst v < n) (lift1 step) (lift (constant 0, z))
 
 
 -- Tuples
@@ -1937,7 +1937,7 @@ the = (!index0)
 -- | Test whether an array is empty.
 --
 null :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp Bool
-null arr = size arr ==* 0
+null arr = size arr == 0
 
 -- | Get the length of a vector.
 --

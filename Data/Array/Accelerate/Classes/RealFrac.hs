@@ -145,8 +145,8 @@ defaultProperFraction
     -> (Exp a, Exp b)
 defaultProperFraction x =
   untup2 $ Exp
-         $ Cond (x ==* 0) (tup2 (0, 0))
-                          (tup2 (n, f))
+         $ Cond (x == 0) (tup2 (0, 0))
+                         (tup2 (n, f))
   where
     n = truncate x
     f = x - toFloating n

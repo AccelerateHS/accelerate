@@ -74,14 +74,14 @@ instance A.Num a => P.Num (Exp (Sum a)) where
   fromInteger x   = lift (P.fromInteger x :: Sum (Exp a))
 
 instance A.Eq a => A.Eq (Sum a) where
-  (==*) = lift2 ((==*) `on` getSum)
-  (/=*) = lift2 ((/=*) `on` getSum)
+  (==) = lift2 ((==) `on` getSum)
+  (/=) = lift2 ((/=) `on` getSum)
 
 instance A.Ord a => A.Ord (Sum a) where
-  (<*)    = lift2 ((<*) `on` getSum)
-  (>*)    = lift2 ((>*) `on` getSum)
-  (<=*)   = lift2 ((<=*) `on` getSum)
-  (>=*)   = lift2 ((>=*) `on` getSum)
+  (<)     = lift2 ((<) `on` getSum)
+  (>)     = lift2 ((>) `on` getSum)
+  (<=)    = lift2 ((<=) `on` getSum)
+  (>=)    = lift2 ((>=) `on` getSum)
   min x y = lift . Sum $ lift2 (min `on` getSum) x y
   max x y = lift . Sum $ lift2 (max `on` getSum) x y
 
@@ -123,14 +123,14 @@ instance A.Num a => P.Num (Exp (Product a)) where
   fromInteger x   = lift (P.fromInteger x :: Product (Exp a))
 
 instance A.Eq a => A.Eq (Product a) where
-  (==*) = lift2 ((==*) `on` getProduct)
-  (/=*) = lift2 ((/=*) `on` getProduct)
+  (==) = lift2 ((==) `on` getProduct)
+  (/=) = lift2 ((/=) `on` getProduct)
 
 instance A.Ord a => A.Ord (Product a) where
-  (<*)    = lift2 ((<*) `on` getProduct)
-  (>*)    = lift2 ((>*) `on` getProduct)
-  (<=*)   = lift2 ((<=*) `on` getProduct)
-  (>=*)   = lift2 ((>=*) `on` getProduct)
+  (<)     = lift2 ((<) `on` getProduct)
+  (>)     = lift2 ((>) `on` getProduct)
+  (<=)    = lift2 ((<=) `on` getProduct)
+  (>=)    = lift2 ((>=) `on` getProduct)
   min x y = lift . Product $ lift2 (min `on` getProduct) x y
   max x y = lift . Product $ lift2 (max `on` getProduct) x y
 

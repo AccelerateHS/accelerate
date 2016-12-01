@@ -1115,12 +1115,12 @@ subtract x y = y - x
 -- | Determine if a number is even
 --
 even :: Integral a => Exp a -> Exp Bool
-even n = n `rem` 2 ==* 0
+even n = n `rem` 2 == 0
 
 -- | Determine if a number is odd
 --
 odd :: Integral a => Exp a -> Exp Bool
-odd n = n `rem` 2 /=* 0
+odd n = n `rem` 2 /= 0
 
 -- | @'gcd' x y@ is the non-negative factor of both @x@ and @y@ of which every
 -- common factor of both @x@ and @y@ is also a factor; for example:
@@ -1139,7 +1139,7 @@ gcd x y = gcd' (abs x) (abs y)
     gcd' :: Integral a => Exp a -> Exp a -> Exp a
     gcd' u v =
       let (r,_) = untup2
-                $ while (\(untup2 -> (_,b)) -> b /=* 0)
+                $ while (\(untup2 -> (_,b)) -> b /= 0)
                         (\(untup2 -> (a,b)) -> tup2 (b, a `rem` b))
                         (tup2 (u,v))
       in r
@@ -1149,7 +1149,7 @@ gcd x y = gcd' (abs x) (abs y)
 --
 lcm :: Integral a => Exp a -> Exp a -> Exp a
 lcm x y
-  = cond (x ==* 0 ||* y ==* 0) 0
+  = cond (x == 0 || y == 0) 0
   $ abs ((x `quot` (gcd x y)) * y)
 
 
@@ -1157,7 +1157,7 @@ lcm x y
 --
 infixr 8 ^
 (^) :: forall a b. (Num a, Integral b) => Exp a -> Exp b -> Exp a
-x0 ^ y0 = cond (y0 <=* 0) 1 (f x0 y0)
+x0 ^ y0 = cond (y0 <= 0) 1 (f x0 y0)
   where
     f :: Exp a -> Exp b -> Exp a
     f x y =
@@ -1166,12 +1166,12 @@ x0 ^ y0 = cond (y0 <=* 0) 1 (f x0 y0)
                           (\(untup2 -> (u,v)) -> tup2 (u * u, v `quot` 2))
                           (tup2 (x, y))
       in
-      cond (y' ==* 1) x' (g (x'*x') ((y'-1) `quot` 2) x')
+      cond (y' == 1) x' (g (x'*x') ((y'-1) `quot` 2) x')
 
     g :: Exp a -> Exp b -> Exp a -> Exp a
     g x y z =
       let (x',_,z') = untup3
-                    $ while (\(untup3 -> (_,v,_)) -> v /=* 1)
+                    $ while (\(untup3 -> (_,v,_)) -> v /= 1)
                             (\(untup3 -> (u,v,w)) ->
                               cond (even v) (tup3 (u*u, v     `quot` 2, w))
                                             (tup3 (u*u, (v-1) `quot` 2, w*u)))
@@ -1184,7 +1184,7 @@ x0 ^ y0 = cond (y0 <=* 0) 1 (f x0 y0)
 infixr 8 ^^
 (^^) :: (Fractional a, Integral b) => Exp a -> Exp b -> Exp a
 x ^^ n
-  = cond (n >=* 0)
+  = cond (n >= 0)
   {- then -} (x ^ n)
   {- else -} (recip (x ^ (negate n)))
 
