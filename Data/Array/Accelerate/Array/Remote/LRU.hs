@@ -78,13 +78,13 @@ data Status = Clean     -- Array in remote memory matches array in host memory.
 type Timestamp = Integer
 
 data Used task where
-  Used :: (PrimElt e a)
-       => Timestamp
-       -> Status
-       -> Int      -- Use count
-       -> [task]   -- Asynchronous tasks using the array
-       -> Int      -- Array size
-       -> Weak (ArrayData e)
+  Used :: PrimElt e a
+       => !Timestamp
+       -> !Status
+       -> {-# UNPACK #-} !Int                   -- Use count
+       -> ![task]                               -- Asynchronous tasks using the array
+       -> {-# UNPACK #-} !Int                   -- Array size
+       -> {-# UNPACK #-} !(Weak (ArrayData e))
        -> Used task
 
 -- |A Task represents a process executing asynchronously that can be polled for
