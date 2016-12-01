@@ -178,7 +178,7 @@ module Data.Array.Accelerate (
   -- ** Foreign
   foreignAcc,
   foreignExp,
-  VectorisedRegularForeign(..),
+  VectorisedForeign(..), LiftedType(..),
 
   -- ---------------------------------------------------------------------------
   -- * The /Accelerate/ Expression Language

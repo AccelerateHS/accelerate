@@ -78,7 +78,7 @@ module Data.Array.Accelerate.Language (
   -- * Foreign functions
   foreignAcc,
   foreignExp,
-  VectorisedRegularForeign(..),
+  VectorisedForeign(..), LiftedType(..),
 
   -- * Pipelining
   (>->),
@@ -106,7 +106,7 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Array.Lifted               ( VectorisedRegularForeign(..) )
+import Data.Array.Accelerate.Array.Lifted               ( VectorisedForeign(..), LiftedType(..) )
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union, toSlice)
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Smart
