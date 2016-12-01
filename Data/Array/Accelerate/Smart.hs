@@ -401,6 +401,11 @@ data PreExp acc seq exp t where
                 -> exp (FullShape slix)
                 -> PreExp acc seq exp (SliceShape slix)
 
+  IndexFull     :: Slice slix
+                => exp slix
+                -> exp (SliceShape slix)
+                -> PreExp acc seq exp (FullShape slix)
+
   ToIndex       :: Shape sh
                 => exp sh
                 -> exp sh
@@ -1627,6 +1632,7 @@ showPreExpOp IndexTail{}        = "IndexTail"
 showPreExpOp IndexTrans{}       = "IndexTrans"
 showPreExpOp IndexAny           = "IndexAny"
 showPreExpOp IndexSlice{}       = "IndexSlice"
+showPreExpOp IndexFull{}        = "IndexFull"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"
 showPreExpOp ToSlice{}          = "ToSlice"

@@ -84,7 +84,7 @@ module Data.Array.Accelerate.Language (
   (>->),
 
   -- * Index construction and destruction
-  indexHead, indexTail, toIndex, fromIndex, indexSlice, indexTrans,
+  indexHead, indexTail, toIndex, fromIndex, indexSlice, indexFull, indexTrans,
   intersect, union, toSlice,
 
   -- * Flow-control
@@ -648,6 +648,14 @@ indexSlice :: Slice slix
            -> Exp (FullShape slix)
            -> Exp (SliceShape slix)
 indexSlice = Exp $$ IndexSlice
+
+-- | Construct a shape from the slice descriptor and a slice of the shape.
+--
+indexFull :: Slice slix
+          => Exp slix
+          -> Exp (SliceShape slix)
+          -> Exp (FullShape slix)
+indexFull = Exp $$ IndexFull
 
 -- | Map a multi-dimensional index into a linear, row-major representation of an
 -- array. The first argument is the array shape, the second is the index.
