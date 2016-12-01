@@ -1,9 +1,13 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TypeOperators         #-}
+#if __GLASGOW_HASKELL__ <= 708
+{-# LANGUAGE DeriveDataTypeable    #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Array.Lifted
 -- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everest
