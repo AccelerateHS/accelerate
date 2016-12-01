@@ -19,7 +19,7 @@ import Data.Vector.Storable                                     as S
 
 test_issue286 :: Backend -> Config -> Test
 test_issue286 backend _conf =
-  testGroup "286 (run with +RTS -M4M)"
+  testGroup "286 (run with +RTS -M4M -RTS or check heap profile in EKG or similar)"
     [
       testCase "hs.hs"    (void $ runEffect $ hs_producer sh  >-> hs_consume_sv)
     , testCase "hs.acc"   (void $ runEffect $ hs_producer sh  >-> acc_consume_sv sh backend)
