@@ -22,10 +22,11 @@ import Data.Typeable
 import Test.QuickCheck
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
-import Data.Array.Accelerate                                    as A hiding (indexHead, indexTail)
+import Data.Array.Accelerate                                    as A hiding ( Ord(..), indexHead, indexTail )
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import Data.Array.Accelerate.Examples.Internal                  as A
+import qualified Data.Array.Accelerate                          as A
 
 import Config
 import Test.Base

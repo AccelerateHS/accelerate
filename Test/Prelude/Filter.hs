@@ -65,7 +65,7 @@ test_filter backend opt = testGroup "filter" $ catMaybes
       where
         testDim :: forall sh. (Shape sh, Slice sh, P.Eq sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
-          [ testProperty "positive" (run_filter (>* 0) (> 0) :: Array (sh:.Int) e -> Property)
+          [ testProperty "positive" (run_filter (A.> 0) (P.> 0) :: Array (sh:.Int) e -> Property)
           ]
 
     run_filter f g xs

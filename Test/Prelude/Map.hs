@@ -16,7 +16,7 @@ import Data.Label
 import Data.Maybe
 import Data.Typeable
 import System.Random
-import Test.QuickCheck                                          hiding ( (.&.) )
+import Test.QuickCheck                                          hiding ( (.&.), suchThat )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
@@ -24,7 +24,7 @@ import Config
 import Test.Base
 import QuickCheck.Arbitrary.Array
 import QuickCheck.Arbitrary.Shape
-import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate                                    as A hiding ( Ord(..) )
 import Data.Array.Accelerate.Data.Bits                          as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
@@ -139,6 +139,14 @@ test_map backend opt = testGroup "map" $ catMaybes
     test_log xs        = run1 backend (A.map log) xs ~?= mapRef log xs
 
 
+suchThat :: Gen a -> (a -> Bool) -> Gen a
+suchThat gen p = do
+  x <- gen
+  case p x of
+    True  -> return x
+    False -> sized $ \n -> resize (n+1) (suchThat gen p)
+
+
 {-# INLINE requiring #-}
 requiring
     :: (Elt e, Shape sh, Arbitrary e, Arbitrary sh, Testable prop)
@@ -146,8 +154,14 @@ requiring
     -> (Array sh e -> prop)
     -> Property
 requiring f go =
-  forAll (sized arbitraryShape)                         $ \sh ->
-  forAll (arbitraryArrayOf sh (arbitrary `suchThat` f)) $ \arr ->
+  let
+      shrinkRequiring arr       = [ fromList (Sugar.shape arr) sl | sl <- shrinkOneRequiring (toList arr) ]
+      shrinkOneRequiring []     = []
+      shrinkOneRequiring (x:xs) = [ x':xs | x'  <- shrink x, f x' ]
+                             P.++ [ x:xs' | xs' <- shrinkOneRequiring xs ]
+  in
+  forAllShrink arbitrary                                      shrink          $ \sh ->
+  forAllShrink (arbitraryArrayOf sh (arbitrary `suchThat` f)) shrinkRequiring $ \arr ->
     go arr
 
 

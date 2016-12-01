@@ -122,13 +122,13 @@ sortKey keyFun arr =  foldl sortOneBit arr (P.map lift ([0..31] :: [Int]))
         keys    = A.map keyFun inArr
 
         bits    = A.map (\a -> (A.testBit a bitNum) ? (1, 0)) keys
-        bitsInv = A.map (\b -> (b ==* 0) ? (1, 0)) bits
+        bitsInv = A.map (\b -> (b A.== 0) ? (1, 0)) bits
 
         (falses, numZeroes) = A.scanl' (+) 0 bitsInv
         trues               = A.map (\x -> (A.the numZeroes) + (A.fst x) - (A.snd x))
                             $ A.zip ixs falses
 
-        dstIxs = A.map (\x -> let (b, t, f) = unlift x  in (b ==* (constant (0::Int))) ? (f, t))
+        dstIxs = A.map (\x -> let (b, t, f) = unlift x  in (b A.== (constant (0::Int))) ? (f, t))
                $ A.zip3 bits trues falses
         outArr = scatter dstIxs inArr inArr -- just use input as default array
                                             --(we're writing over everything anyway)
@@ -239,19 +239,19 @@ iteration = testGroup "iteration"
 
     test1 :: Acc (Vector Float)
     test1 = flip A.map vec
-      $ \x -> A.while (A.<* x) (+1) 0
+      $ \x -> A.while (A.< x) (+1) 0
 
     test2 :: Acc (Vector Float)
     test2 = flip A.map vec
       $ \x -> let y = 2*pi
-              in  y + A.while (A.<* 10) (+y) x
+              in  y + A.while (A.< 10) (+y) x
 
     test3 :: Acc (Vector Float)
     test3 = flip A.map vec
-      $ \x -> A.while (A.<* x) (+x) 0
+      $ \x -> A.while (A.< x) (+x) 0
 
     awhile_test :: Acc (Vector Float)
-    awhile_test = A.awhile (\a -> A.unit (the (A.sum a) A.<* 200)) (A.map (+1)) vec
+    awhile_test = A.awhile (\a -> A.unit (the (A.sum a) A.< 200)) (A.map (+1)) vec
 
     iterate_test :: Acc (Vector Float)
     iterate_test = flip A.map vec
@@ -271,7 +271,7 @@ iteration = testGroup "iteration"
           for 64 (\j acc' -> i + j + acc') 0) 0
 
     unused :: Exp Int
-      = A.while (==* 10) (const 10) 5
+      = A.while (A.== 10) (const 10) 5
 
 ----------------------------------------------------------------------
 

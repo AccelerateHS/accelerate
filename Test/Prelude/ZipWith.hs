@@ -73,11 +73,11 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "(.|.)"        (test_bor  :: Array sh a -> Array sh a -> Property)
           , testProperty "xor"          (test_xor  :: Array sh a -> Array sh a -> Property)
           , testProperty "shift"        (test_shift :: Array sh a -> Array sh Int -> Property)
-          , testProperty "shiftL"       (requiring (>= 0) (flip test_shiftL :: Array sh Int -> Array sh a -> Property))
-          , testProperty "shiftR"       (requiring (>= 0) (flip test_shiftR :: Array sh Int -> Array sh a -> Property))
+          , testProperty "shiftL"       (requiring (P.>= 0) (flip test_shiftL :: Array sh Int -> Array sh a -> Property))
+          , testProperty "shiftR"       (requiring (P.>= 0) (flip test_shiftR :: Array sh Int -> Array sh a -> Property))
           , testProperty "rotate"       (test_rotate :: Array sh a -> Array sh Int -> Property)
-          , testProperty "rotateL"      (requiring (>= 0) (flip test_rotateL :: Array sh Int -> Array sh a -> Property))
-          , testProperty "rotateR"      (requiring (>= 0) (flip test_rotateR :: Array sh Int -> Array sh a -> Property))
+          , testProperty "rotateL"      (requiring (P.>= 0) (flip test_rotateL :: Array sh Int -> Array sh a -> Property))
+          , testProperty "rotateR"      (requiring (P.>= 0) (flip test_rotateR :: Array sh Int -> Array sh a -> Property))
 
             -- relational and equality operators
           , testProperty "(<)"          (test_lt  :: Array sh a -> Array sh a -> Property)
@@ -128,8 +128,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "(/)"          (denom (test_div :: Array sh a -> Array sh a -> Property))
           , testProperty "(**)"         (test_pow :: Array sh a -> Array sh a -> Property)
           , testProperty "atan2"        (test_atan2 :: Array sh a -> Array sh a -> Property)
-          , testProperty "logBase"      (requiring (> 0) $ \(xs :: Array sh a) ->
-                                         requiring (> 0) $ \(ys :: Array sh a) -> test_logBase xs ys)
+          , testProperty "logBase"      (requiring (P.> 0) $ \(xs :: Array sh a) ->
+                                         requiring (P.> 0) $ \(ys :: Array sh a) -> test_logBase xs ys)
 
             -- relational and equality operators
           , testProperty "(<)"          (test_lt  :: Array sh a -> Array sh a -> Property)
@@ -151,18 +151,18 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
     test_minus xs ys    = run2 backend (A.zipWith (-)) xs ys ~?= zipWithRef (-) xs ys
     test_mult xs ys     = run2 backend (A.zipWith (*)) xs ys ~?= zipWithRef (*) xs ys
 
-    test_lt xs ys       = run2 backend (A.zipWith (A.<*))  xs ys ~?= zipWithRef (<) xs ys
-    test_gt xs ys       = run2 backend (A.zipWith (A.>*))  xs ys ~?= zipWithRef (>) xs ys
-    test_lte xs ys      = run2 backend (A.zipWith (A.<=*)) xs ys ~?= zipWithRef (<=) xs ys
-    test_gte xs ys      = run2 backend (A.zipWith (A.>=*)) xs ys ~?= zipWithRef (>=) xs ys
-    test_eq xs ys       = run2 backend (A.zipWith (A.==*)) xs ys ~?= zipWithRef (==) xs ys
-    test_neq xs ys      = run2 backend (A.zipWith (A./=*)) xs ys ~?= zipWithRef (/=) xs ys
+    test_lt xs ys       = run2 backend (A.zipWith (A.<))  xs ys ~?= zipWithRef (P.<) xs ys
+    test_gt xs ys       = run2 backend (A.zipWith (A.>))  xs ys ~?= zipWithRef (P.>) xs ys
+    test_lte xs ys      = run2 backend (A.zipWith (A.<=)) xs ys ~?= zipWithRef (P.<=) xs ys
+    test_gte xs ys      = run2 backend (A.zipWith (A.>=)) xs ys ~?= zipWithRef (P.>=) xs ys
+    test_eq xs ys       = run2 backend (A.zipWith (A.==)) xs ys ~?= zipWithRef (P.==) xs ys
+    test_neq xs ys      = run2 backend (A.zipWith (A./=)) xs ys ~?= zipWithRef (P./=) xs ys
     test_min xs ys      = run2 backend (A.zipWith (A.min)) xs ys ~?= zipWithRef (P.min) xs ys
     test_max xs ys      = run2 backend (A.zipWith (A.max)) xs ys ~?= zipWithRef (P.max) xs ys
 
     {-# INLINE denom #-}
     denom f = forAllShrink arbitrary shrink $ \xs ->
-              requiring (/= 0)              $ \ys -> f xs ys
+              requiring (P./= 0)            $ \ys -> f xs ys
 
 
 suchThat :: Gen a -> (a -> Bool) -> Gen a

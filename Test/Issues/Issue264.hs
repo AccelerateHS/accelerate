@@ -70,21 +70,21 @@ test_issue264 backend opt
     test_negneg xs        = run1 backend (A.map negate . A.map negate) xs ~?= mapRef (negate . negate) xs
     test_notnot xs        = run1 backend (A.map A.not . A.map A.not) xs ~?= mapRef (P.not . P.not) xs
 
-    test_andnot xs ys     = run2 backend (A.zipWith (\x y -> A.not (x A.&&* y))) xs ys
+    test_andnot xs ys     = run2 backend (A.zipWith (\x y -> A.not (x A.&& y))) xs ys
                             ~?=
-                            zipWithRef (\x y -> P.not (x && y)) xs ys
+                            zipWithRef (\x y -> P.not (x P.&& y)) xs ys
 
-    test_ornot xs ys      = run2 backend (A.zipWith (\x y -> A.not (x A.||* y))) xs ys
+    test_ornot xs ys      = run2 backend (A.zipWith (\x y -> A.not (x A.|| y))) xs ys
                             ~?=
-                            zipWithRef (\x y -> P.not (x || y)) xs ys
+                            zipWithRef (\x y -> P.not (x P.|| y)) xs ys
 
-    test_andnotnot xs ys  = run2 backend (A.zipWith (\x y -> A.not (A.not (x A.&&* y)))) xs ys
+    test_andnotnot xs ys  = run2 backend (A.zipWith (\x y -> A.not (A.not (x A.&& y)))) xs ys
                             ~?=
-                            zipWithRef (\x y -> P.not (P.not (x && y))) xs ys
+                            zipWithRef (\x y -> P.not (P.not (x P.&& y))) xs ys
 
-    test_ornotnot xs ys   = run2 backend (A.zipWith (\x y -> A.not (A.not (x A.||* y)))) xs ys
+    test_ornotnot xs ys   = run2 backend (A.zipWith (\x y -> A.not (A.not (x A.|| y)))) xs ys
                             ~?=
-                            zipWithRef (\x y -> P.not (P.not (x || y))) xs ys
+                            zipWithRef (\x y -> P.not (P.not (x P.|| y))) xs ys
 
 mapRef :: (Shape sh, Elt b) => (a -> b) -> Array sh a -> Array sh b
 mapRef f xs

@@ -33,7 +33,7 @@ test1 =
   in
   A.permute (\a12 b12 -> let (a1,a2) = unlift a12
                              (b1,b2) = unlift b12
-                         in (a1 <=* b1)
+                         in (a1 A.<= b1)
                           ? ( lift (a1, A.min a2 b1)
                             , lift (b1, A.min b2 a1)
                             ))
