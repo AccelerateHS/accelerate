@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -1725,8 +1726,34 @@ toSeq :: (Slice slix, Elt a)
       -> Acc (Array (FullShape slix) a)
       -> Seq [Array (SliceShape slix) a]
 toSeq spec acc
-  = let length = size acc `P.div` shapeSize (indexSlice spec (shape acc))
+  = let length = slicesLeft spec (shape acc)
     in produce length (\ix -> slice acc (toSlice spec (shape acc) (the ix)))
+
+slicesLeft :: forall slix. Slice slix => Exp slix -> Exp (FullShape slix) -> Exp Int
+slicesLeft spec sh = total - soFar
+  where
+    soFar = shapeSize (indexFull spec (constant sl1))
+
+    total | ASlice spec' <- coSlice (sliceType (undefined :: slix -> slix)) :: ASlice (FullShape slix)
+          = shapeSize (indexSlice (constant spec') sh)
+
+    sl1 :: SliceShape slix
+    sl1 = listToShape (P.replicate (rank (undefined :: SliceShape slix)) 1)
+
+data ASlice sh where
+  ASlice :: (Slice slix, FullShape slix ~ sh) => slix -> ASlice sh
+
+coSlice :: forall slix. SliceR slix -> ASlice (FullShape slix)
+coSlice SliceRnil = ASlice Z
+coSlice (SliceRall sl) | ASlice sl' <- coSlice sl
+                       = ASlice (sl':.(0 ::Int))
+coSlice (SliceRfixed sl) | ASlice sl' <- coSlice sl
+                         = ASlice (sl':.All)
+coSlice SliceRany | AsSlice <- asSlice (const anyShape)
+                  = ASlice (anyShape)
+  where
+    anyShape :: forall sh. (slix ~ Any sh, Shape sh) => sh
+    anyShape = listToShape (P.replicate (rank (undefined :: sh)) 0)
 
 -- | foldSeqFlatten f a0 x seq. f must be semi-associative, with
 -- vecotor append (++) as the companion operator:
