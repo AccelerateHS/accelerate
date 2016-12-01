@@ -352,7 +352,7 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Prelude re-exports
-  (.), ($), error, undefined,
+  (.), ($), error, undefined, const,
 
   -- ---------------------------------------------------------------------------
   -- Types
@@ -380,7 +380,7 @@ import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
 -- re-exported from D.A.A.Classes.Num but not found (GHC<8 bug)
-import Prelude                                                      ( (.), ($), undefined, error, fromInteger )
+import Prelude                                                      ( (.), ($), undefined, error, const, fromInteger )
 
 
 -- Renamings
