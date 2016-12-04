@@ -442,14 +442,26 @@ simplifyOpenExp env = first getAny . cvtE
       , ShapeRcons sh' <- shapeType sh
       , AsSlice        <- asSlice sh'
       = Stats.ruleFired "indexSlice/fixed" $ yes (IndexSlice x sr (IndexTail sh))
+    indexSlice x _ (_, sh)
+      | Just Refl <- allAlls x
+      , Just sh' <- gcast sh
+      = Stats.ruleFired "indexSlice/alls" $ yes sh'
     indexSlice (SliceAll x) p (_, IndexCons sh i)
       | SliceRall sr   <- sliceType p
       , ShapeRcons _   <- shapeType (Proxy :: Proxy sh)
       , ShapeRcons sl' <- shapeType (Proxy :: Proxy sl)
       , AsSlice        <- asSlice sl'
-      = Stats.ruleFired "indexSlice/fixed" $ yes (IndexCons (IndexSlice x sr sh) i)
+      = Stats.ruleFired "indexSlice/all" $ yes (IndexCons (IndexSlice x sr sh) i)
     indexSlice x p sh
       = IndexSlice x p <$> sh
+
+    allAlls :: SliceIndex slix sl co sh -> Maybe (sl :~: sh)
+    allAlls SliceNil       = Just Refl
+    allAlls (SliceFixed _) = Nothing
+    allAlls (SliceAll sl)  | Just Refl <- allAlls sl
+                           = Just Refl
+                           | otherwise
+                           = Nothing
 
     shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
     shapeSize (_, Const c)  = Stats.ruleFired "shapeSize/const" $ yes (Const (product (shapeToList (toElt c :: sh))))
