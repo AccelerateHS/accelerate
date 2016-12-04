@@ -1052,9 +1052,9 @@ liftPreOpenAcc vectAcc ctx size acc
           reg a' = regularAcc "backpermute"
                  $^ Alet a'
                  $^ Alet (unit $ weakenA1 sh' `indexSnoc` indexLastC (Shape avar0))
-                 $^ Alet (higher' (weakenA2 f_l) `apply` flattenC (enumC avar0))
+                 $^ Alet (inject . Reshape (the avar0) $ higher' (weakenA2 f_l) `apply` flattenC (enumC avar0))
                  $^ Backpermute (the avar1)
-                                (fun1 $ LinearIndex avar0 . ToIndex (the avar1))
+                                (fun1 $ Index avar0)
                                 avar2
           ireg a' = regularAcc "backpermute"
                    $^ Alet (unitSize size)
