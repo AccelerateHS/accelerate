@@ -134,6 +134,8 @@ import qualified Data.Array.Accelerate.AST      as AST
 --  * <http://hackage.haskell.org/package/accelerate-llvm-native accelerate-llvm-native>: for execution on multicore CPUs
 --  * <http://hackage.haskell.org/package/accelerate-llvm-ptx accelerate-llvm-ptx>: for execution on NVIDIA CUDA-capable GPUs
 --
+-- See also 'Exp', which encapsulates embedded _scalar_ computations.
+--
 -- [/Tips:/]
 --
 --  * Since 'Acc' represents embedded computations that will only be executed
