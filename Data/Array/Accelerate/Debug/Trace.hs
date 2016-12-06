@@ -24,6 +24,7 @@ import Data.Array.Accelerate.Debug.Flags
 import Numeric
 import System.CPUTime
 import System.IO.Unsafe
+import Text.Printf
 import qualified Debug.Trace                            as D
 
 
@@ -113,7 +114,7 @@ putTraceMsg :: String -> IO ()
 putTraceMsg msg = do
   psec        <- getCPUTime
   let secs    = fromIntegral psec * 1E-12 :: Double
-  D.traceIO   $ showFFloat (Just 3) secs (':':msg)
+  D.traceIO   $ printf "[%8.3f] %s" secs msg
 #else
 putTraceMsg _   = return ()
 #endif
