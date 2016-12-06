@@ -307,7 +307,9 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
   where
     removable rs (sa, RemoteArray w _ _) = do
       alive <- isJust <$> deRefWeak w
-      if alive then return rs else return (sa:rs)
+      if alive
+        then return rs
+        else return (sa:rs)
 
 
 -- | Call `free` on all arrays that are not currently associated with host-side
