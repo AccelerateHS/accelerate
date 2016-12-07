@@ -86,17 +86,13 @@ data Context aenv aenv' where
 type VectoriseAcc acc = forall aenv aenv' t.
                         Arrays t
                      => Context aenv aenv'
-                     -> Size acc aenv' Int
+                     -> Size acc aenv'
                      -> acc aenv t
                      -> LiftedAcc acc aenv' t
 
 -- |The size parameter in the lifting transform.
 --
-data Size acc aenv e where
-  Size :: Arrays a => acc aenv a -> PreExp acc (aenv,a) e -> Size acc aenv e
-
-instance Kit acc => Sink (Size acc) where
-  weaken k (Size b s) = Size (weaken k b) (weaken (newTop k) s)
+type Size acc aenv = acc aenv (Scalar Int)
 
 -- The result of vectorisation. We get back a new term of type t' and a witness
 -- that t' is a lifted type of t.
@@ -136,7 +132,7 @@ withL _ _ _ _                        = error "Absurd"
 #endif
 
 withFL :: Kit acc
-       => Size acc aenv Int
+       => Size acc aenv
        -> (acc aenv (RegularArray sh e)   -> a)
        -> (acc aenv (IrregularArray sh e) -> a)
        -> LiftedAcc acc aenv (Array sh e)
@@ -172,7 +168,7 @@ appL :: (Shape sh', Elt e')
 appL f g h = withL (LiftedAcc AvoidedT . f) (LiftedAcc RegularT . g) (LiftedAcc IrregularT . h)
 
 appFL :: (Kit acc, Shape sh', Elt e')
-      => Size acc aenv Int
+      => Size acc aenv
       -> (acc aenv (RegularArray sh e)   -> acc' aenv' (RegularArray sh' e'))
       -> (acc aenv (IrregularArray sh e) -> acc' aenv' (IrregularArray sh' e'))
       -> LiftedAcc acc  aenv  (Array sh e)
@@ -224,15 +220,15 @@ isIso _          = Nothing
 data Join a a' a'' where
   Join :: Arrays b
        => LiftedType a b
-       -> (forall acc aenv. Kit acc => Size acc aenv Int -> acc aenv a'  -> acc aenv b)
-       -> (forall acc aenv. Kit acc => Size acc aenv Int -> acc aenv a'' -> acc aenv b)
+       -> (forall acc aenv. Kit acc => Size acc aenv -> acc aenv a'  -> acc aenv b)
+       -> (forall acc aenv. Kit acc => Size acc aenv -> acc aenv a'' -> acc aenv b)
        -> Join a a' a''
 
 data JoinTuple t t' t'' where
   JoinTuple :: IsAtupleRepr s
             => LiftedTupleType t s
-            -> (forall acc aenv. Kit acc => Size acc aenv Int -> Atuple (acc aenv) t'  -> Atuple (acc aenv) s)
-            -> (forall acc aenv. Kit acc => Size acc aenv Int -> Atuple (acc aenv) t'' -> Atuple (acc aenv) s)
+            -> (forall acc aenv. Kit acc => Size acc aenv -> Atuple (acc aenv) t'  -> Atuple (acc aenv) s)
+            -> (forall acc aenv. Kit acc => Size acc aenv -> Atuple (acc aenv) t'' -> Atuple (acc aenv) s)
             -> JoinTuple t t' t''
 
 join :: forall a a' a''. (Arrays a, Arrays a', Arrays a'')
@@ -242,9 +238,9 @@ join :: forall a a' a''. (Arrays a, Arrays a', Arrays a'')
 join l1 l2 =
   case (l1,l2) of
     (UnitT, UnitT)             -> Join UnitT (const id) (const id)
-    (UnitT, LiftedUnitT)       -> Join LiftedUnitT (const . unitSize) (const . unitSize)
-    (LiftedUnitT, UnitT)       -> Join LiftedUnitT (const . unitSize) (const . unitSize)
-    (LiftedUnitT, LiftedUnitT) -> Join LiftedUnitT (const . unitSize) (const . unitSize)
+    (UnitT, LiftedUnitT)       -> Join LiftedUnitT const const
+    (LiftedUnitT, UnitT)       -> Join LiftedUnitT const const
+    (LiftedUnitT, LiftedUnitT) -> Join LiftedUnitT const const
     (AvoidedT, AvoidedT)       -> Join AvoidedT (const id) (const id)
     (AvoidedT, l)              | Join l' k k' <- join RegularT l
                                -> Join l' (\sz -> k sz . replicateA sz) k'
@@ -284,7 +280,7 @@ join l1 l2 =
 -- |Vectorise any sequence computations embedded in the 'Acc' term.
 --
 vectoriseAcc :: Arrays t => Acc t -> Acc t
-vectoriseAcc (vectoriseOpenAcc BaseC (simpleSize (Const 1)) -> LiftedAcc ty a)
+vectoriseAcc (vectoriseOpenAcc BaseC (unit (Const 1)) -> LiftedAcc ty a)
   | Just iso <- isIso ty
   = castAccC iso a
 vectoriseAcc _
@@ -297,7 +293,7 @@ vectoriseAfun = vectoriseOpenAfun BaseC
 
 vectoriseOpenAfun :: Context aenv aenv' -> OpenAfun aenv t -> OpenAfun aenv' t
 vectoriseOpenAfun ctx (Abody a)
-  | LiftedAcc ty a'  <- vectoriseOpenAcc ctx (simpleSize (Const 1)) a
+  | LiftedAcc ty a'  <- vectoriseOpenAcc ctx (unit (Const 1)) a
   , Just iso         <- isIso ty
   = Abody (castAccC iso a')
   | otherwise
@@ -307,36 +303,36 @@ vectoriseOpenAfun ctx (Alam f)
 
 vectoriseOpenAcc :: Arrays t
                  => Context aenv aenv'
-                 -> Size OpenAcc aenv' Int
+                 -> Size OpenAcc aenv'
                  -> OpenAcc aenv t
                  -> LiftedOpenAcc aenv' t
 vectoriseOpenAcc ctx size (OpenAcc a) = liftPreOpenAcc vectoriseOpenAcc ctx size a
 
 irregularSize :: (Kit acc, Shape sh, Elt e)
               => acc aenv (IrregularArray sh e)
-              -> Size acc aenv Int
-irregularSize a = Size (shapesC (segmentsC a)) $ ShapeSize (Shape avar0)
+              -> Size acc aenv
+irregularSize a = inject . Alet (shapesC (segmentsC a)) $^ Unit (ShapeSize (Shape avar0))
 
 regularSize :: (Kit acc, Shape sh, Elt e)
             => acc aenv (RegularArray sh e)
-            -> Size acc aenv Int
-regularSize a = Size (inject . Alet a $ unit (indexLastC (Shape avar0))) $ the avar0
+            -> Size acc aenv
+regularSize a = inject . Alet a $^ Unit (indexLastC (Shape avar0))
 
 sizeFromType :: forall acc aenv a a'. (Kit acc, Arrays a')
              => LiftedType a a'
              -> acc aenv a'
-             -> Size acc aenv Int
-sizeFromType ty = fromMaybe (simpleSize (Const 1)) . szt ty
+             -> Size acc aenv
+sizeFromType ty = fromMaybe (unit (Const 1)) . szt ty
   where
-    szt :: forall a a'. Arrays a' => LiftedType a a' -> acc aenv a' -> Maybe (Size acc aenv Int)
+    szt :: forall a a'. Arrays a' => LiftedType a a' -> acc aenv a' -> Maybe (Size acc aenv)
     szt UnitT       _ = Nothing
-    szt LiftedUnitT a = Just $ Size a (the avar0)
+    szt LiftedUnitT a = Just $^ Alet a (unit (the avar0))
     szt AvoidedT    _ = Nothing
     szt RegularT    a = Just $ regularSize a
     szt IrregularT  a = Just $ irregularSize a
     szt (TupleT t)  a = szTuple t (asAtupleC a)
 
-    szTuple :: LiftedTupleType t t' -> Atuple (acc aenv) t' -> Maybe (Size acc aenv Int)
+    szTuple :: LiftedTupleType t t' -> Atuple (acc aenv) t' -> Maybe (Size acc aenv)
     szTuple NilLtup        NilAtup         = Nothing
     szTuple (SnocLtup t l) (SnocAtup at a) = maybe (szTuple t at) Just (szt l a)
 #if __GLASGOW_HASKELL__ < 800
@@ -349,7 +345,7 @@ sizeFromType ty = fromMaybe (simpleSize (Const 1)) . szt ty
 liftPreOpenAcc :: forall acc aenv aenv' t. (Kit acc, Arrays t)
                => VectoriseAcc acc
                -> Context aenv aenv'
-               -> Size acc aenv' Int
+               -> Size acc aenv'
                -> PreOpenAcc acc aenv t
                -> LiftedAcc acc aenv' t
 liftPreOpenAcc vectAcc ctx size acc
@@ -569,11 +565,11 @@ liftPreOpenAcc vectAcc ctx size acc
       $* Alet (liftedE p)
       $* acond size ty'' (k size t') (k' size e')
       where
-        acond :: forall aenv' a a'. Arrays a' => Size acc aenv' Int -> LiftedType a a' -> acc aenv' a' -> acc aenv' a' -> LiftedAcc acc (aenv', Vector Bool) a
+        acond :: forall aenv' a a'. Arrays a' => Size acc aenv' -> LiftedType a a' -> acc aenv' a' -> acc aenv' a' -> LiftedAcc acc (aenv', Vector Bool) a
         acond size ty t e =
           case ty of
             UnitT       -> LiftedAcc UnitT $^ Use ()
-            LiftedUnitT -> LiftedAcc LiftedUnitT (unitSize size')
+            LiftedUnitT -> LiftedAcc LiftedUnitT size'
             AvoidedT    -> LiftedAcc IrregularT (liftedCondC avar0 (sparsifyC (replicateA size' (weakenA1 t))) (sparsifyC (replicateA size' (weakenA1 e))))
             RegularT    -> LiftedAcc IrregularT (liftedCondC avar0 (sparsifyC (weakenA1 t)) (sparsifyC (weakenA1 e)))
             IrregularT  -> LiftedAcc IrregularT (liftedCondC avar0 (weakenA1 t) (weakenA1 e))
@@ -581,7 +577,7 @@ liftPreOpenAcc vectAcc ctx size acc
                         -> LiftedAcc (freeProdT ty) $^ Alet (weakenA1 t) $^ Alet (weakenA2 e) $^ Atuple at
 
           where
-            size' :: Size acc (aenv', Vector Bool) Int
+            size' :: Size acc (aenv', Vector Bool)
             size' = weakenA1 size
 
             acondT :: forall aenv'' t t'. aenv'' ~ (((aenv', Vector Bool), a'), a')
@@ -671,7 +667,7 @@ liftPreOpenAcc vectAcc ctx size acc
       , LiftedAcc RegularT a'  <- a
       , AsSlice <- asSlice sh'
       = regularAcc "reshape"
-      $^ Alet (unitSize size)
+      $^ Alet size
       $^ Reshape (indexSnoc (weakenA1 sh') (the avar0)) (weakenA1 a')
       | otherwise
       -- RCE: Should an invalid use of reshape always generate a runtime error?
@@ -690,7 +686,7 @@ liftPreOpenAcc vectAcc ctx size acc
       | LiftedExp (Just sh') _ <- sh
       , AsSlice <- asSlice sh'
       = regularAcc "generate"
-      $^ Alet (unitSize size)
+      $^ Alet size
       $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
       $^ weakenA1 f_l `subApply` flattenC (inject $ Generate (indexSnoc (weakenA1 sh') (the avar0)) (fun1 indexInit))
       | otherwise
@@ -1038,7 +1034,7 @@ liftPreOpenAcc vectAcc ctx size acc
                  $^ Alet a'
                  $^ Backpermute (indexSnoc (weakenA1 sh') (indexLastC (Shape avar0))) (higher (weakenA1 f)) avar0
           ireg a' = regularAcc "backpermute"
-                   $^ Alet (unitSize size)
+                   $^ Alet size
                    $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
                    $^ Alet (regularSegsC avar0 (weakenA1 $ unit sh'))
                    $^ Alet (liftedBackpermutePreC avar0)
@@ -1057,7 +1053,7 @@ liftPreOpenAcc vectAcc ctx size acc
                                 (fun1 $ Index avar0)
                                 avar2
           ireg a' = regularAcc "backpermute"
-                   $^ Alet (unitSize size)
+                   $^ Alet size
                    $^ Reshape (indexSnoc (weakenA1 sh') (the avar0))
                    $^ Alet (regularSegsC avar0 (weakenA1 $ unit sh'))
                    $^ Alet (liftedBackpermutePreC avar0)
@@ -1148,7 +1144,7 @@ liftPreOpenAcc vectAcc ctx size acc
       | Just s' <- strengthenUnder ctx (reduceOpenSeq s)
       , Just cs <- vectoriseOpenSeq vectAcc ctx size s
       = LiftedAcc avoidedType
-      $^ Alet (unitSize size)
+      $^ Alet size
       $^ Collect (maximum (the avar0) (fromMaybe (Const 1) (weakenA1 <$> cvtE' min)))
                  (weakenA1 <$> (cvtE' =<< max))
                  (weakenA1 <$> (cvtE' =<< i))
@@ -1249,7 +1245,7 @@ liftPreOpenAcc vectAcc ctx size acc
                     => LiftedExp acc () aenv' aenv' sh
                     -> acc aenv' (Segments sh)
     segmentsFromExp (LiftedExp (Just sh) _)
-      = regularSegsC (unitSize size) (unit sh)
+      = regularSegsC size (unit sh)
     segmentsFromExp (LiftedExp _ sh)
       = segmentsFromShapesC sh
 
@@ -1264,7 +1260,7 @@ data ExpContext env aenv aenv' aenv'' where
 liftExp :: forall acc env aenv aenv' aenv'' e. (Kit acc, Elt e)
         => VectoriseAcc acc
         -> ExpContext env aenv aenv' aenv''
-        -> Size acc aenv'' Int
+        -> Size acc aenv''
         -> PreOpenExp acc env aenv e
         -> LiftedExp acc env aenv' aenv'' e
 liftExp vectAcc ctx size exp
@@ -1509,7 +1505,7 @@ liftExp vectAcc ctx size exp
     cvtTuple (cvtT -> (at, LiftedTuple aenv t))
       =  LiftedExp (Tuple <$> at)
       .  bind aenv
-      .^ Alet (unitSize (sink aenv $ size))
+      .^ Alet (sink aenv $ size)
       $^ Generate (index1 (the avar0)) (Lam . Body $ Tuple (weakenTup SuccIdx t))
 
     cvtT :: forall t.
@@ -2181,18 +2177,18 @@ tupIx1 = SuccTupIdx ZeroTupIdx
 
 replicateA :: forall acc aenv sh e.
              (Kit acc, Shape sh, Elt e)
-           => Size acc  aenv Int
+           => Size acc aenv
            -> acc aenv (Array sh e)
            -> acc aenv (RegularArray sh e)
 replicateA size a
-  = replicateC (unitSize size) a
+  = replicateC size a
 
 replicateE :: forall acc aenv e.
               (Kit acc, Elt e)
-           => Size acc aenv Int
+           => Size acc aenv
            -> PreExp acc aenv e
            -> acc aenv (Vector e)
-replicateE (Size b s) e = inject . Alet b $^ Replicate (SliceFixed SliceNil) (IndexCons IndexNil s) (inject . weakenA1 $ Unit e)
+replicateE s e = inject . Alet s $^ Replicate (SliceFixed SliceNil) (IndexCons IndexNil (the avar0)) (inject . weakenA1 $ Unit e)
 
 var0 :: Elt t0 => PreOpenExp acc (env, t0) aenv t0
 var0 = Var ZeroIdx
@@ -2448,15 +2444,8 @@ infixr 9 .^
      -> (a -> c)
 f .^ g = f . inject . g
 
-
-simpleSize :: forall acc aenv e. Kit acc => PreExp acc aenv e ->  Size acc aenv e
-simpleSize e = Size (inject $ Use () :: acc aenv ()) (weakenA1 e)
-
-unitSize :: (Kit acc, Elt e) => Size acc aenv e -> acc aenv (Scalar e)
-unitSize (Size b s) = inject $ Alet b $ inject $ Unit s
-
-sizeOfVector :: (Kit acc, Elt e) => acc aenv (Vector e) -> Size acc aenv Int
-sizeOfVector a = Size a (ShapeSize (Shape avar0))
+sizeOfVector :: (Kit acc, Elt e) => acc aenv (Vector e) -> Size acc aenv
+sizeOfVector a = inject . Alet a $ unit (ShapeSize (Shape avar0))
 
 generalizeRank :: (Kit acc, Shape sh, Elt e, Elt e')
                => PreOpenAfun acc aenv (Vector e -> Vector e')
@@ -2490,7 +2479,7 @@ trace header msg
 vectoriseOpenSeq :: forall acc aenv aenv' a. Kit acc
                  => VectoriseAcc acc
                  -> Context aenv aenv'
-                 -> Size acc aenv' Int
+                 -> Size acc aenv'
                  -> PreOpenNaturalSeq acc aenv a
                  -> Maybe (PreOpenChunkedSeq  acc aenv' a)
 vectoriseOpenSeq vectAcc ctx size seq =
@@ -2539,7 +2528,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     --           sz = sndE (the avar1)
     --           a' = inject $ Alet (unit sz) (weaken (newTop (SuccIdx . SuccIdx)) a)
     --           b  = castAccC iso $ apply3 (weakenA2 . Alam . Alam . Alam . Abody $ f') avar0 a' (unit sz)
-    --         in fromHOAS repack $ apply2 (weakenA2 c) avar0 (replicateA (simpleSize sz) b)
+    --         in fromHOAS repack $ apply2 (weakenA2 c) avar0 (replicateA (unit sz) b)
     --
     --       repack :: Arrays c' => S.Acc (s, c') -> S.Acc ((s,c'),s)
     --       repack (S.unatup2 -> (s,c)) = S.lift ((s, c), s)
@@ -2587,7 +2576,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
               -> acc  aenv x
               -> Maybe (PreOpenChunkedSeq acc aenv' a)
     foldBatch (Alam (Alam (Abody f))) a x
-      | LiftedAcc tya f' <- vectAcc (ctx `PushC` avoidedType `PushC` avoidedType) (simpleSize (sndE (the avar0))) (weakenA1 (alet (weakenA1 x) f))
+      | LiftedAcc tya f' <- vectAcc (ctx `PushC` avoidedType `PushC` avoidedType) (unit (sndE (the avar0))) (weakenA1 (alet (weakenA1 x) f))
       = do
           a'  <- cvtA' a
           iso <- isIso tya
@@ -2683,7 +2672,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     --           => Context aenv aenv'
     --           -> acc aenv t
     --           -> LiftedAcc acc (aenv', Scalar Int) t
-    -- cvtAUnder ctx = vectoriseOpenAcc (PushC ctx avoidedType) (simpleSize (the avar0)) . weakenA1
+    -- cvtAUnder ctx = vectoriseOpenAcc (PushC ctx avoidedType) (unit (the avar0)) . weakenA1
 
     cvtA :: Arrays t => acc aenv t -> LiftedAcc acc aenv' t
     cvtA = vectAcc ctx size
