@@ -196,18 +196,24 @@ availableBackends optBackend =
 --     non-thread-safe backend (perhaps it requires exclusive access to the
 --     accelerator board) should specify `Just 1`.
 --
+-- Both the LLVM-CPU and LLVM-PTX backends are safe to run concurrently given
+-- the same execution context. Although this results in over-subscription,
+-- particularly for the CPU backend, it still improves performance because the
+-- majority of the time is spent in the reference implementation / checking
+-- results, so running multiple tests concurrently is still useful.
+--
 concurrentBackends :: Backend -> Maybe Int
 concurrentBackends Interpreter  = Nothing
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-concurrentBackends CPU          = Just 1
+concurrentBackends CPU          = Nothing
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-concurrentBackends PTX          = Nothing       -- ???
+concurrentBackends PTX          = Nothing
 #endif
 #ifdef ACCELERATE_CUDA_BACKEND
-concurrentBackends CUDA         = Nothing       -- not quite true! D:
+concurrentBackends CUDA         = Just 1      -- not thread safe
 #endif
 #ifdef ACCELERATE_CILK_BACKEND
-concurrentBackends Cilk         = Just 1
+concurrentBackends Cilk         = Just 1      -- not thread safe
 #endif
 
