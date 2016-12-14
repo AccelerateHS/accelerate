@@ -352,7 +352,7 @@ convertSharingSeq
     -> [StableSharingSeq]
     -> ScopedSeq arrs
     -> AST.PreOpenNaturalSeq AST.OpenAcc aenv arrs
-convertSharingSeq _ alyt _ senv (ScopedSeq lams (SvarSharing sn))
+convertSharingSeq _ alyt _ senv (ScopedSeq lams _ (SvarSharing sn))
   | Just i <- findIndex (matchStableSeq sn) senv'
   = AST.Reify $ AST.OpenAcc . AST.Avar $ prjIdx (ctxt ++ "; i = " ++ show i) i alyt
   | null senv'
@@ -364,10 +364,11 @@ convertSharingSeq _ alyt _ senv (ScopedSeq lams (SvarSharing sn))
     senv' = lams ++ senv
     ctxt  = "shared 'Seq' tree with stable name " ++ show (hashStableNameHeight sn)
     err   = "inconsistent valuation @ " ++ ctxt ++ ";\n  senv' = " ++ show senv'
-convertSharingSeq config alyt aenv senv (ScopedSeq lams (SletSharing sa@(StableSharingSeq _ (SeqSharing _ boundSeq)) bodySeq))
+convertSharingSeq config alyt aenv senv (ScopedSeq lams lams' (SletSharing sa@(StableSharingSeq _ (SeqSharing _ boundSeq)) bodySeq))
   = convSeq boundSeq bodySeq
   where
     senv' = lams ++ senv
+    aenv' = lams' ++ aenv
 
     convSeq :: forall bnd body.
                PreSeq ScopedAcc ScopedSeq ScopedExp bnd
@@ -380,22 +381,22 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams (SletSharing sa@(StableS
         StreamIn arrs         -> producer $ AST.Pull (AST.List arrs)
         Subarrays sh arr      -> producer $ AST.Subarrays (cvtE sh) arr
         Produce l f           -> producer $ AST.Produce (Just $ cvtE l) (cvtAF1 f)
-        MapSeq afun x         -> producer $ mkMapSeq (convertSharingAfun1 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x)
-        ZipWithSeq afun x y   -> producer $ mkZipWithSeq (convertSharingAfun2 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x) (asIdx y)
+        MapSeq afun x         -> producer $ mkMapSeq (convertSharingAfun1 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv') afun) (asIdx x)
+        ZipWithSeq afun x y   -> producer $ mkZipWithSeq (convertSharingAfun2 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv') afun) (asIdx x) (asIdx y)
         -- MapBatch fun c c' a x -> producer $ AST.MapBatch (cvtAF2 fun) (cvtAF2 c) (cvtAF2 c') (cvtA a) (AST.OpenAcc . AST.Avar $ asIdx x)
         _                     -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where
         producer :: (bnd ~ [a], Arrays a)
                  => AST.NaturalProducer AST.OpenAcc aenv a
                  -> AST.PreOpenNaturalSeq AST.OpenAcc aenv body
-        producer p = AST.Producer p $ convertSharingSeq config alyt' (noStableSharingAcc : aenv) (sa:senv') body
+        producer p = AST.Producer p $ convertSharingSeq config alyt' (noStableSharingAcc : aenv') (sa:senv') body
           where
             alyt' = incLayout alyt `PushLayout` ZeroIdx
 
         asIdx :: Arrays a
               => ScopedSeq [a]
               -> Idx aenv a
-        asIdx (ScopedSeq lams (SvarSharing sn))
+        asIdx (ScopedSeq lams _ (SvarSharing sn))
           | Just i <- findIndex (matchStableSeq sn) senv''
           = prjIdx (ctxt ++ "; i = " ++ show i) i alyt
           | null senv''
@@ -411,24 +412,25 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams (SletSharing sa@(StableS
           = $internalError "convertSharingSeq:asIdx" "Sequence computation not in A-normal form"
 
         cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
-        cvtE = convertSharingExp config EmptyLayout alyt [] aenv
+        cvtE = convertSharingExp config EmptyLayout alyt [] aenv'
 
         -- cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
         -- cvtA acc = convertSharingAcc config alyt aenv acc
 
         cvtAF1 :: forall a b. (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> OpenAfun aenv (a -> b)
-        cvtAF1 = convertSharingAfun1 config alyt aenv
+        cvtAF1 = convertSharingAfun1 config alyt aenv'
 
         -- cvtAF2 :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> OpenAfun aenv (a -> b -> c)
         -- cvtAF2 = convertSharingAfun2 config alyt aenv
 
-convertSharingSeq _ _ _ _ (ScopedSeq _ (SletSharing _ _))
+convertSharingSeq _ _ _ _ (ScopedSeq _ _ (SletSharing _ _))
  = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
 
-convertSharingSeq config alyt aenv senv (ScopedSeq lams (SeqSharing _ s))
+convertSharingSeq config alyt aenv senv (ScopedSeq lams lams' (SeqSharing _ s))
   = cvtC s
   where
     senv' = lams ++ senv
+    aenv' = lams' ++ aenv
 
     cvtC :: PreSeq ScopedAcc ScopedSeq ScopedExp a -> AST.PreOpenNaturalSeq AST.OpenAcc aenv a
     cvtC s =
@@ -443,7 +445,7 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams (SeqSharing _ s))
     asIdx :: Arrays a
           => ScopedSeq [a]
           -> Idx aenv a
-    asIdx (ScopedSeq lams' (SvarSharing sn))
+    asIdx (ScopedSeq lams' _ (SvarSharing sn))
       | Just i <- findIndex (matchStableSeq sn) senv''
       = prjIdx (ctxt ++ "; i = " ++ show i) i alyt
       | null senv''
@@ -459,7 +461,7 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams (SeqSharing _ s))
       = $internalError "convertSharingSeq:asIdx" "Sequence computation not in A-normal form"
 
     cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
-    cvtA acc = convertSharingAcc config alyt aenv acc
+    cvtA acc = convertSharingAcc config alyt aenv' acc
 
     cvtSF2 :: forall a b c. (Arrays a, Arrays b, Arrays c)
            => (Acc a -> Seq [b] -> ScopedSeq c)
@@ -468,8 +470,8 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams (SeqSharing _ s))
     cvtSF2 f f' = Alam (Alam (Abody (AST.OpenAcc (AST.Alet (AST.OpenAcc (AST.Collect (AST.Const 1) Nothing (Just i) s Nothing)) a))))
       where
         i     = AST.Const (1 :: Int)
-        s     = convertSharingSeq config alyt' aenv senv' body
-        a     = weaken v (convertSharingAcc config (incLayout alyt `PushLayout` ZeroIdx) aenv body')
+        s     = convertSharingSeq config alyt' aenv' senv' body
+        a     = weaken v (convertSharingAcc config (incLayout alyt `PushLayout` ZeroIdx) aenv' body')
         body  = f undefined undefined
         body' = f' undefined
         alyt' = incLayout (incLayout alyt `PushLayout` ZeroIdx) `PushLayout` ZeroIdx
@@ -480,7 +482,7 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams (SeqSharing _ s))
 
     cvtST :: Atuple ScopedSeq t -> Atuple (AST.OpenNaturalSeq aenv) t
     cvtST NilAtup        = NilAtup
-    cvtST (SnocAtup t c) = SnocAtup (cvtST t) (convertSharingSeq config alyt aenv senv' c)
+    cvtST (SnocAtup t c) = SnocAtup (cvtST t) (convertSharingSeq config alyt aenv' senv' c)
 
 convertSharingAfun1
     :: forall aenv a b. (Arrays a, Arrays b)
@@ -1168,9 +1170,9 @@ data SharingSeq acc seq exp arrs where
 -- immediate surrounding lambdas.
 data UnscopedSeq t = UnscopedSeq [Int] (SharingSeq UnscopedAcc UnscopedSeq RootExp t)
 
--- Array expression with sharing. For expressions rooted in functions the list holds a sorted
+-- Array expression with sharing. For expressions rooted in functions the lists hold a sorted
 -- environment corresponding to the variables bound in the immediate surounding lambdas.
-data ScopedSeq t = ScopedSeq [StableSharingSeq] (SharingSeq ScopedAcc ScopedSeq ScopedExp t)
+data ScopedSeq t = ScopedSeq [StableSharingSeq] [StableSharingAcc] (SharingSeq ScopedAcc ScopedSeq ScopedExp t)
 
 -- Sequences rooted in 'Acc' computations.
 --
@@ -2115,6 +2117,7 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
 isFreeVar :: NodeCount -> Bool
 isFreeVar (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag _))) _) = True
 isFreeVar (ExpNodeCount (StableSharingExp _ (ExpSharing _ (Tag  _))) _) = True
+isFreeVar (SeqNodeCount (StableSharingSeq _ (SeqSharing _ (Stag _))) _) = True
 isFreeVar _                                                             = False
 
 
@@ -2706,15 +2709,18 @@ determineScopesSeq
     -> (ScopedSeq t, NodeCounts)          -- Root (closed) expression plus Acc node counts
 determineScopesSeq config accOccMap (RootSeq seqOccMap seq@(UnscopedSeq fvs _))
   = let
-        (ScopedSeq [] seqWithScopes, (nodeCounts,graph)) = determineScopesSharingSeq config accOccMap seqOccMap seq
+        (ScopedSeq [] [] seqWithScopes, (nodeCounts,graph)) = determineScopesSharingSeq config accOccMap seqOccMap seq
         binds      = [s | SeqNodeCount s _ <- filter (not . isFreeVar) nodeCounts]
-        lets       = foldl (flip (.)) id . map (\x y -> SletSharing x (ScopedSeq [] y)) $ binds
+        lets       = foldl (flip (.)) id . map (\x y -> SletSharing x (ScopedSeq [] [] y)) $ binds
         sharingSeq = lets seqWithScopes
         newCounts  = filter (not . isSeqCount) nodeCounts
         isSeqCount SeqNodeCount{} = True
         isSeqCount _              = False
     in
-    (ScopedSeq (buildInitialEnvSeq fvs [s | SeqNodeCount s _ <- nodeCounts]) sharingSeq, cleanCounts (newCounts,graph))
+    ( ScopedSeq (buildInitialEnvSeq fvs [s | SeqNodeCount s _ <- nodeCounts])
+                []
+                sharingSeq
+    , cleanCounts (newCounts,graph))
 
 determineScopesSharingSeq
   :: Config
@@ -2756,14 +2762,16 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
         isBoundHere _                                                             = False
 
     scopesFoldFun :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Seq [b] -> UnscopedSeq c) -> (Acc a -> Seq [b] -> ScopedSeq c, NodeCounts)
-    scopesFoldFun f = (\ _ _ -> (ScopedSeq ssa body'), (counts',graph))
+    scopesFoldFun f = (\ _ _ -> (ScopedSeq sss ssa body'), (counts',graph))
       where
         body@(UnscopedSeq fvs _) = f undefined undefined
-        ((ScopedSeq [] body'), (counts,graph)) = scopesSeq body
-        ssa     = buildInitialEnvSeq fvs [sa | SeqNodeCount sa _ <- freeCounts]
+        ((ScopedSeq [] [] body'), (counts,graph)) = scopesSeq body
+        sss     = buildInitialEnvSeq fvs [sa | SeqNodeCount sa _ <- freeCounts]
+        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
         (freeCounts, counts') = partition isBoundHere counts
 
         isBoundHere (SeqNodeCount (StableSharingSeq _ (SeqSharing _ (Stag i))) _) = i `elem` fvs
+        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
         isBoundHere _                                                             = False
 
     scopesTup :: Atuple UnscopedSeq tup -> (Atuple ScopedSeq tup, NodeCounts)
@@ -2778,7 +2786,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
     scopesSeq (UnscopedSeq _ (SletSharing _ _))
       = $internalError "determineScopesSharingSeq: scopesSeq" "unexpected 'LetSharing'"
     scopesSeq (UnscopedSeq _ (SvarSharing sn))
-      = (ScopedSeq [] (SvarSharing sn), StableSharingSeq sn (SvarSharing sn) `insertSeqNode` noNodeCounts)
+      = (ScopedSeq [] [] (SvarSharing sn), StableSharingSeq sn (SvarSharing sn) `insertSeqNode` noNodeCounts)
 
     scopesSeq (UnscopedSeq _ (SeqSharing sn s)) =
       case s of
@@ -2846,7 +2854,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
           = let allCount = StableSharingSeq sn (SeqSharing sn newSeq) `insertSeqNode` subCount
             in
             tracePure "Producer" (show allCount)
-            (ScopedSeq [] (SvarSharing sn), allCount)
+            (ScopedSeq [] [] (SvarSharing sn), allCount)
 
         -- Consumers cannot be shared.
         --
@@ -2855,7 +2863,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
                  -> (ScopedSeq t, NodeCounts)
         consumer newSeq subCount
           = tracePure "Consumer" (show subCount)
-            (ScopedSeq [] (SeqSharing sn newSeq), subCount)
+            (ScopedSeq [] [] (SeqSharing sn newSeq), subCount)
 
 -- |Recover sharing information and annotate the HOAS AST with variable and let binding
 -- annotations.  The first argument determines whether array computations are floated out of
@@ -2929,10 +2937,10 @@ recoverSharingSeq config seq
 
           return (seq', frozenAccOccMap)
 
-        (ScopedSeq sss sharingSeq, (ns, _)) =
+        (ScopedSeq sss ssa sharingSeq, (ns, _)) =
           determineScopesSeq config accOccMap rootSeq
     in
-    (ScopedSeq [] sharingSeq, sss, [a | AccNodeCount a _ <- ns])
+    (ScopedSeq [] [] sharingSeq, sss, ssa ++ [a | AccNodeCount a _ <- ns])
 
 
 -- Debugging
