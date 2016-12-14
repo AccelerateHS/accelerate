@@ -2770,7 +2770,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
       case c of
         FoldBatch f a x -> foldBatch f a x
         Stuple t        -> Consumer . Stuple <$> cvtCT t
-        Last _ _        -> stageError
+        Last a d        -> Consumer <$> (Last <$> cvtA' a <*> cvtA' d)
         Elements x      -> Just (elements x)
         Tabulate x      -> Just (tabulate x)
 
@@ -3006,7 +3006,7 @@ reduceOpenSeq seq =
       case c of
         FoldBatch f a x -> foldBatch f a x
         Stuple t        -> Consumer (Stuple (cvtCT t))
-        Last _ _        -> stageError
+        Last a d        -> Consumer (Last a d)
         Elements x      -> elements x
         Tabulate x      -> tabulate x
 
