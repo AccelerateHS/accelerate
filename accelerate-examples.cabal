@@ -53,7 +53,7 @@ Flag codespeed
 --
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
-  Default:              True
+  Default:              False
 
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
