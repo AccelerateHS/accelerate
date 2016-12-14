@@ -596,6 +596,8 @@ data Consumer index acc aenv a where
 
   -- A batched fold
   --
+  -- Converted to ProduceAccum and Last by vectorisation.
+  --
   FoldBatch      ::(Arrays a, Arrays s)
                  => PreOpenAfun acc aenv (s -> a -> s)
                  -> acc aenv s
@@ -620,12 +622,16 @@ data Consumer index acc aenv a where
 
   -- Concatenate all elements of subarrays into one large vector.
   --
+  -- Removed by vectorisation.
+  --
   Elements       :: (Shape sh, Elt e)
                  => acc aenv (Array sh e)
                  -> Consumer index acc aenv (Vector e)
 
   -- Join all arrays along the outermost dimension. This has intersection
   -- semantics.
+  --
+  -- Removed by vectorisation.
   --
   Tabulate       :: (Shape sh, Elt e)
                  => acc aenv (Array sh e)
