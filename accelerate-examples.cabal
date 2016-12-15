@@ -495,7 +495,6 @@ Executable accelerate-nbody
         Common.Dump
         Common.Tree
         Common.Type
-        Common.Util
         Common.World
         Config
         Gloss.Draw
