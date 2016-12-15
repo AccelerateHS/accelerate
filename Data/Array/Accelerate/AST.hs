@@ -491,12 +491,11 @@ data PreOpenAcc acc aenv a where
   -- increase it for scheduling reasons, but never go above the provided
   -- maximum.
   --
-  Collect     :: Arrays arrs
+  Collect     :: (SeqIndex index, Arrays arrs)
               => PreExp acc aenv Int                -- min number of elements per iteration
               -> Maybe (PreExp acc aenv Int)        -- max number per iteration
               -> Maybe (PreExp acc aenv Int)        -- max number of iterations
-              -> PreOpenNaturalSeq acc aenv arrs
-              -> Maybe (PreOpenChunkedSeq acc aenv arrs)
+              -> PreOpenSeq index acc aenv arrs
               -> PreOpenAcc acc aenv arrs
 
 -- Vanilla open array computations
@@ -1276,7 +1275,7 @@ rnfPreOpenAcc rnfA pacc =
     Backpermute sh f a        -> rnfE sh `seq` rnfF f `seq` rnfA a
     Stencil f b a             -> rnfF f `seq` rnfB a b `seq` rnfA a
     Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB a1 b1 `seq` rnfB a2 b2 `seq` rnfA a1 `seq` rnfA a2
-    Collect min max i s cs    -> rnfE min `seq` rnfL max `seq` rnfL i `seq` rnfS s `seq` maybe () rnfS cs
+    Collect min max i s       -> rnfE min `seq` rnfL max `seq` rnfL i `seq` rnfS s
 
 
 rnfAtuple :: NFDataAcc acc -> Atuple (acc aenv) t -> ()

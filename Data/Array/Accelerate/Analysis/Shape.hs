@@ -82,7 +82,7 @@ preAccDim k pacc =
                               _            -> error "inconceivable!"
 #endif
 
-    Collect _ _ _ _ _    -> case arrays (undefined :: Array sh e) of
+    Collect _ _ _ _      -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
 #if __GLASGOW_HASKELL__ < 800
                               _            -> error "ppbbbbbt~"

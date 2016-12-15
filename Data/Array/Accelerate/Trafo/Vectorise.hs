@@ -398,8 +398,7 @@ liftPreOpenAcc vectAcc ctx size acc
     Stencil f b a       -> stencilL f b a
     Stencil2 f b1 a1 b2 a2
                         -> stencil2L f b1 a1 b2 a2
-    Collect min max i s _
-                        -> collectL min max i s
+    Collect min max i s -> collectL min max i s
 
   where
     avoidedAcc   :: forall aenv a.    Arrays a          => String -> acc aenv a                     -> LiftedAcc acc aenv a
@@ -1192,22 +1191,21 @@ liftPreOpenAcc vectAcc ctx size acc
       = error $ "Disallowed nested parallelism: Stencil operations must reside at the top level of "
              ++ "parallel nesting and the supplied stencil function contain no nested parallelism."
 
-    collectL :: Arrays arrs
+    collectL :: forall index arrs. (SeqIndex index, Arrays arrs)
              => PreExp acc aenv Int
              -> Maybe (PreExp acc aenv Int)
              -> Maybe (PreExp acc aenv Int)
-             -> PreOpenNaturalSeq acc aenv arrs
+             -> PreOpenSeq index acc aenv arrs
              -> LiftedAcc acc aenv' arrs
     collectL min max i s
-      | Just s' <- strengthenUnder ctx (reduceOpenSeq s)
+      | Just Refl <- eqT :: Maybe (index :~: Int)
       , Just cs <- vectoriseOpenSeq vectAcc ctx size s
       = LiftedAcc avoidedType
       $^ Alet size
       $^ Collect (maximum (the avar0) (fromMaybe (Const 1) (weakenA1 <$> cvtE' min)))
                  (weakenA1 <$> (cvtE' =<< max))
                  (weakenA1 <$> (cvtE' =<< i))
-                 (weakenA1 $ fuseSeq s')
-                 (Just (weakenA1 $ fuseSeq cs))
+                 (weakenA1 $ fuseSeq cs)
       | otherwise
       = error "Nested sequence computation is not closed in its accumulators"
 

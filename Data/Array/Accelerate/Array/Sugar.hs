@@ -61,7 +61,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Atuple(..), IsAtuple, fromAtuple, toAtuple,
 
   -- * Miscellaneous
-  showShape, Foreign(..), sliceShape, enumSlices,
+  showShape, Foreign(..), sliceShape, enumSlices, SeqIndex(..),
 
 ) where
 
@@ -1167,6 +1167,29 @@ infix 2 :<=:
 data sh1 :<=: sh2 where
   RankZ :: Z :<=: sh
   RankSnoc :: sh1 :<=: sh2 -> sh1:.Int :<=: sh2:.Int
+
+-- Sequence indexing
+-- -----------------
+
+class Elt index => SeqIndex index where
+  initialIndex :: Int -> index
+  startIndex   :: index -> Int
+  modifySize   :: (Int -> Int) -> index -> index
+  boundIndex   :: index -> Int -> index
+
+instance SeqIndex Int where
+  initialIndex _ = 0
+  startIndex = id
+  modifySize = ($)
+  boundIndex i _ = i
+
+instance SeqIndex (Int, Int) where
+  initialIndex m = (0,1 `max` m)
+  startIndex = fst
+  modifySize = fmap
+  boundIndex (i,n) max = if i + n < max
+                         then (i,n)
+                         else (i,max - i)
 
 -- Array operations
 -- ----------------

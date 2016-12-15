@@ -124,8 +124,8 @@ dependenciesPreAcc depsAcc = deps
       Backpermute sh f a     -> depsE sh <> depsF f  <> depsAcc a
       Stencil f _ a          -> depsF f  <> depsAcc a
       Stencil2 f _ a1 _ a2   -> depsF f  <> depsAcc a1 <> depsAcc a2
-      Collect min max i s cs -> depsE min <> maybe mempty depsE max <> maybe mempty depsE i
-                             <> dependenciesPreSeq depsAcc s  <> maybe mempty (dependenciesPreSeq depsAcc) cs
+      Collect min max i s    -> depsE min <> maybe mempty depsE max <> maybe mempty depsE i
+                             <> dependenciesPreSeq depsAcc s
 
     depsAF :: PreOpenAfun acc aenv' f
            -> Stronger aenv'

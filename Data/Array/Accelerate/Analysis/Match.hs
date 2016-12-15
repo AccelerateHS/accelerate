@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE PolyKinds           #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
@@ -276,13 +277,12 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just Refl
 
-    match (Collect min1 max1 i1 s1 cs1) (Collect min2 max2 i2 s2 cs2)
+    match (Collect min1 max1 i1 s1) (Collect min2 max2 i2 s2)
       | Just Refl <- matchExp min1 min2
       , Just Refl <- join $ liftA2 matchExp max1 max2
       , Just Refl <- join $ liftA2 matchExp i1 i2
+      , Just Refl <- eqT3 s1 s2 -- index ~ index'
       , Just Refl <- matchSeq matchAcc hashAcc s1 s2
-      , Just Refl <- matchSeq matchAcc hashAcc s1 s2
-      , Just Refl <- join $ matchSeq matchAcc hashAcc <$> cs1 <*> cs2
       = Just Refl
 
     match _ _
@@ -994,6 +994,11 @@ commutes h f x = case f of
       --
       | otherwise                               = exp
 
+-- | Equality over @k1 -> k2 -> k3 -> k4@
+eqT3 :: forall t t' (a :: k1) (b :: k2) (c ::k3) (a' :: k1) (b' :: k2) (c' :: k3).
+        (Typeable t, Typeable t')
+     => t a b c -> t' a' b' c' -> Maybe (t :~: t')
+eqT3 _ _ = eqT :: Maybe (t :~: t')
 
 -- Hashing
 -- =======
@@ -1083,8 +1088,6 @@ hashPreOpenAcc hashAcc pacc =
     hashL salt Nothing = salt
     hashL salt (Just l) = hashE salt l
 
-    a & f = f a
-
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
     Avar v                      -> hash "Avar"          `hashWithSalt` hashIdx v
@@ -1118,7 +1121,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Collect min max i s cs      -> hash "Seq"           `hashE` min `hashL` max `hashL` i `hashS` s  & fromMaybe id (flip hashS <$> cs)
+    Collect min max i s         -> hash "Seq"           `hashE` min `hashL` max `hashL` i `hashS` s
 
 
 hashArrays :: ArraysR a -> a -> Int

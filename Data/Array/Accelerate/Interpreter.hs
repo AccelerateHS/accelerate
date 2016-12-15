@@ -187,8 +187,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Use arr                     -> toArr arr
     Subarray ix sh arr          -> subarrayOp (evalE ix) (evalE sh) arr
     Unit e                      -> unitOp (evalE e)
-    Collect min max i s cs      -> fromMaybe (evalSeq (evalE min) (evalE <$> max) (evalE <$> i) s aenv)
-                                             (evalSeq (evalE min) (evalE <$> max) (evalE <$> i) <$> cs <*> pure aenv)
+    Collect min max i s         -> evalSeq (evalE min) (evalE <$> max) (evalE <$> i) s aenv
 
 
     -- Producers
@@ -1123,6 +1122,10 @@ evalStream min max n aenv = eval n (initialIndex min)
         Left a   -> a
         Right s' -> eval ((flip (-) 1) <$> n) (nextIndex max i) s'
 
+    nextIndex max = modifySize (\n -> if 2*n <= fromMaybe mAXIMUM_CHUNK_SIZE max
+                                        then 2*n
+                                        else n)
+
 stepStream :: forall index aenv arrs. index -> Val aenv -> Stream index aenv arrs -> Either arrs (Stream index aenv arrs)
 stepStream _     (Push _ a) (Yield _)     = Right (Yield a)
 stepStream _     _          (Done a)      = Left a
@@ -1149,28 +1152,8 @@ getResult (Combine t)  = toAtuple (getTup t)
     getTup NilAtup        = ()
     getTup (SnocAtup t s) = (getTup t, getResult s)
 
-class SeqIndex index where
-  initialIndex :: Int -> index
-  startIndex   :: index -> Int
-  nextIndex    :: Maybe Int -> index -> index
-  boundIndex   :: index -> Int -> index
-
-instance SeqIndex Int where
-  initialIndex _ = 0
-  startIndex = id
-  nextIndex _ = (+1)
-  boundIndex i _ = i
-
 mAXIMUM_CHUNK_SIZE :: Int
 mAXIMUM_CHUNK_SIZE = 1024
-
-instance SeqIndex (Int, Int) where
-  initialIndex m = (0,1 `max` m)
-  startIndex = fst
-  nextIndex m (i,n) = (i+n, if n < fromMaybe mAXIMUM_CHUNK_SIZE m then n*2 else n)
-  boundIndex (i,n) max = if i + n < max
-                         then (i,n)
-                         else (i,max - i)
 
 evalDelayedSeq :: SeqIndex index
                => DelayedSeq index arrs

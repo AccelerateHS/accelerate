@@ -73,7 +73,8 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
                                                         , Elt, EltRepr, Shape, Slice, Tuple(..), Atuple(..)
-                                                        , IsAtuple, TupleRepr, Scalar, ArraysFlavour(..) )
+                                                        , IsAtuple, TupleRepr, Scalar, ArraysFlavour(..)
+                                                        , SeqIndex )
 import Data.Array.Accelerate.Product
 
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -218,7 +219,7 @@ manifest fuseAcc (OpenAcc pacc) =
     Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
 
     -- Seq operations
-    Collect min max i s cs  -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (cvtS s) (cvtS <$> cs)
+    Collect min max i s     -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (cvtS s)
 
     where
       -- Flatten needless let-binds, which can be introduced by the conversion to
@@ -592,8 +593,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> atupleD embedAcc tup
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Collect min max i s cs
-                        -> collectD min max i s cs
+    Collect min max i s -> collectD min max i s
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -777,16 +777,14 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
     -- TODO: Sequence invariant code motion
-    collectD :: PreExp acc aenv Int
+    collectD :: SeqIndex index
+             => PreExp acc aenv Int
              -> Maybe (PreExp acc aenv Int)
              -> Maybe (PreExp acc aenv Int)
-             -> PreOpenNaturalSeq acc aenv arrs
-             -> Maybe (PreOpenChunkedSeq acc aenv arrs)
+             -> PreOpenSeq index acc aenv arrs
              -> Embed acc aenv arrs
-    collectD min max i s Nothing
-      = Embed (BaseEnv `PushEnv` inject (Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (embedSeq embedAcc s) Nothing)) (Done ZeroIdx)
-    collectD min max i s (Just cs)
-      = Embed (BaseEnv `PushEnv` inject (Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (embedSeq embedAcc s) (Just (embedSeq embedAcc cs)))) (Done ZeroIdx)
+    collectD min max i s
+      = Embed (BaseEnv `PushEnv` inject (Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (embedSeq embedAcc s))) (Done ZeroIdx)
 
 -- 2 steps
 --
@@ -2013,7 +2011,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Collect min max i s cs  -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (replaceSeq cunc avar s) (replaceSeq cunc avar <$> cs)
+        Collect min max i s     -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (replaceSeq cunc avar s)
 
       where
         cvtA :: acc aenv s -> acc aenv s
@@ -2155,7 +2153,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Collect min max i s cs  -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (subtupleSeq atup avar ixt s) (subtupleSeq atup avar ixt <$> cs)
+        Collect min max i s     -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (subtupleSeq atup avar ixt s)
 
       where
         cvtA :: acc aenv s -> acc aenv' s

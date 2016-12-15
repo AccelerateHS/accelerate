@@ -183,11 +183,9 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
 
-    pp (Collect min max i s cs) = wrap $ hang ("collect" .$ [ppE min, ppL max, ppL i] ) 2
+    pp (Collect min max i s)    = wrap $ hang ("collect" .$ [ppE min, ppL max, ppL i] ) 2
                                        $ encloseSep lbrace rbrace semi
-                                       $ maybe (prettySeq prettyAcc wrap aenv s)
-                                               (prettySeq prettyAcc wrap aenv)
-                                               cs
+                                       $ prettySeq prettyAcc wrap aenv s
 
 prettySeq
     :: forall idx acc aenv arrs.

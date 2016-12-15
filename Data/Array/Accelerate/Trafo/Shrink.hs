@@ -207,7 +207,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Collect min max i s cs    -> Collect (shrinkE min) (shrinkE <$> max) (shrinkE <$> i) (shrinkS s) (shrinkS <$> cs)
+      Collect min max i s       -> Collect (shrinkE min) (shrinkE <$> max) (shrinkE <$> i) (shrinkS s)
 
     shrinkS :: PreOpenSeq index acc aenv' a -> PreOpenSeq index acc aenv' a
     shrinkS seq =
@@ -577,8 +577,8 @@ usesOfPreAcc countAcc idx = count
       Backpermute sh f a        -> countE sh <+> countF f  <+> countA a
       Stencil f _ a             -> countF f  <+> countA a
       Stencil2 f _ a1 _ a2      -> countF f  <+> countA a1 <+> countA a2
-      Collect min max i s cs    -> foldl (<+>) zeroUse (map (fromMaybe zeroUse . fmap countE) [Just min,max,i])
-                                <+> maybe (usesOfPreSeq countAcc idx s) (usesOfPreSeq countAcc idx) cs
+      Collect min max i s       -> foldl (<+>) zeroUse (map (fromMaybe zeroUse . fmap countE) [Just min,max,i])
+                                <+> usesOfPreSeq countAcc idx s
 
     countA :: acc aenv a -> Use s
     countA = countAcc idx
@@ -769,7 +769,7 @@ reduceAccessPreAcc reduceAcc idx pacc =
     Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
     Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
     Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-    Collect min max i s cs    -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (reduceAccessSeq reduceAcc idx s) (reduceAccessSeq reduceAcc idx <$> cs)
+    Collect min max i s       -> Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (reduceAccessSeq reduceAcc idx s)
 
   where
     cvtA :: acc aenv a' -> acc aenv a'
