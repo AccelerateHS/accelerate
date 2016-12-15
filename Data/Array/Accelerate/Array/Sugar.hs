@@ -1174,18 +1174,21 @@ data sh1 :<=: sh2 where
 class Elt index => SeqIndex index where
   initialIndex :: Int -> index
   startIndex   :: index -> Int
+  nextIndex    :: index -> index
   modifySize   :: (Int -> Int) -> index -> index
   boundIndex   :: index -> Int -> index
 
 instance SeqIndex Int where
   initialIndex _ = 0
   startIndex = id
+  nextIndex = (+1)
   modifySize = ($)
   boundIndex i _ = i
 
 instance SeqIndex (Int, Int) where
   initialIndex m = (0,1 `max` m)
   startIndex = fst
+  nextIndex (i,n) = (i+n,n)
   modifySize = fmap
   boundIndex (i,n) max = if i + n < max
                          then (i,n)

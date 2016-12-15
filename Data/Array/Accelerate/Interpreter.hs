@@ -1120,11 +1120,12 @@ evalStream min max n aenv = eval n (initialIndex min)
     eval n        i s =
       case stepStream i aenv s of
         Left a   -> a
-        Right s' -> eval ((flip (-) 1) <$> n) (nextIndex max i) s'
+        Right s' -> eval ((flip (-) 1) <$> n) (nextIndex' max i) s'
 
-    nextIndex max = modifySize (\n -> if 2*n <= fromMaybe mAXIMUM_CHUNK_SIZE max
-                                        then 2*n
-                                        else n)
+    nextIndex' max = modifySize (\n -> if 2*n <= fromMaybe mAXIMUM_CHUNK_SIZE max
+                                         then 2*n
+                                         else n)
+                   . nextIndex
 
 stepStream :: forall index aenv arrs. index -> Val aenv -> Stream index aenv arrs -> Either arrs (Stream index aenv arrs)
 stepStream _     (Push _ a) (Yield _)     = Right (Yield a)
