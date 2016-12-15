@@ -23,6 +23,10 @@ import Data.Complex
 import Data.Int
 import Data.Word
 import Foreign.C.Types
+import Linear.V1
+import Linear.V2
+import Linear.V3
+import Linear.V4
 import Prelude                                          as P
 
 
@@ -75,6 +79,18 @@ instance (Similar a, Similar b, Similar c, Similar d, Similar e, Similar f, Simi
     => Similar (a, b, c, d, e, f, g, h, i) where
   (x1, x2, x3, x4, x5, x6, x7, x8, x9) ~= (y1, y2, y3, y4, y5, y6, y7, y8, y9) =
     x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4 && x5 ~= y5 && x6 ~= y6 && x7 ~= y7 && x8 ~= y8 && x9 ~= y9
+
+instance Similar a => Similar (V1 a) where
+  V1 x ~= V1 y = x ~= y
+
+instance Similar a => Similar (V2 a) where
+  V2 x1 x2 ~= V2 y1 y2 = x1 ~= y1 && x2 ~= y2
+
+instance Similar a => Similar (V3 a) where
+  V3 x1 x2 x3 ~= V3 y1 y2 y3 = x1 ~= y1 && x2 ~= y2 && x3 ~= y3
+
+instance Similar a => Similar (V4 a) where
+  V4 x1 x2 x3 x4 ~= V4 y1 y2 y3 y4 = x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4
 
 instance Similar Z
 instance (Eq sh, Eq sz) => Similar (sh:.sz)

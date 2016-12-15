@@ -20,9 +20,11 @@ module Common.Body (
 ) where
 
 import Common.Type
-import Common.Util
 
-import Data.Array.Accelerate            as A
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Linear.Metric
+import Data.Array.Accelerate.Linear.Vector
+import Data.Array.Accelerate.Control.Lens
 
 
 -- Acceleration ----------------------------------------------------------------
@@ -67,11 +69,11 @@ accel   :: Exp R                -- ^ Smoothing parameter
         -> Exp PointMass        -- ^ Neighbouring point
         -> Exp Accel
 
-accel epsilon pmi pmj = s *. r
+accel epsilon pmi pmj = s *^ r
   where
     mj          = massOfPointMass pmj
 
-    r           = positionOfPointMass pmj .-. positionOfPointMass pmi
+    r           = positionOfPointMass pmj - positionOfPointMass pmi
     rsqr        = dot r r + epsilon * epsilon
     invr        = 1 / sqrt rsqr
     invr3       = invr * invr * invr
@@ -84,34 +86,29 @@ accel epsilon pmi pmj = s *. r
 
 -- | Make a stationary Body of unit mass
 --
-unitBody :: Exp (Vec R) -> Exp Body
-unitBody pos = lift (pointmass, vec 0, vec 0)
+unitBody :: Exp (V3 R) -> Exp Body
+unitBody pos = body
   where
-    pointmass = lift (pos, constant 1)          :: Exp PointMass
+    pointmass = lift (pos, constant 1)                    :: Exp PointMass
+    body      = lift (pointmass, constant 0, constant 0)  :: Exp Body
 
 
 -- | Take the Velocity of a Body
 --
 velocityOfBody :: Exp Body -> Exp Velocity
-velocityOfBody body = vel
-  where
-    (_, vel, _) = unlift body   :: (Exp PointMass, Exp Velocity, Exp Accel)
+velocityOfBody = view _2
 
 
 -- | Take the Acceleration of a Body
 --
 accelOfBody :: Exp Body -> Exp Accel
-accelOfBody body = acc
-  where
-    (_, _, acc) = unlift body   :: (Exp PointMass, Exp Velocity, Exp Accel)
+accelOfBody = view _3
 
 
 -- | Take the PointMass of a Body
 --
 pointMassOfBody :: Exp Body -> Exp PointMass
-pointMassOfBody body = mp
-  where
-    (mp, _, _)  = unlift body   :: (Exp PointMass, Exp Velocity, Exp Accel)
+pointMassOfBody = view _1
 
 
 -- | Take the position or mass of a PointMass
@@ -154,11 +151,11 @@ setStartVelOfBody startVel body = lift (pm, vel'', acc)
     acc         = accelOfBody body
     pos         = positionOfPointMass pm
 
-    pos'        = normalise pos
-    vel'        = lift (y', -x', z')
-    vel''       = (sqrt (magnitude pos) * startVel) *. vel'
+    pos'        = normalize pos
+    vel'        = lift (V3 y' (-x') z')
+    vel''       = (sqrt (norm pos) * startVel) *^ vel'
 
-    (x',y',z')  = unlift pos'   :: Vec (Exp R)
+    V3 x' y' z' = unlift pos'   :: V3 (Exp R)
 
 
 -- | Advance a body forwards in time.
@@ -173,6 +170,6 @@ advanceBody time body = lift ( pm', vel', acc )
     mass        = massOfPointMass pm
 
     pm'         = lift (pos', mass)             :: Exp PointMass
-    pos'        = pos .+. time *. vel
-    vel'        = vel .+. time *. acc
+    pos'        = pos + time *^ vel
+    vel'        = vel + time *^ acc
 

@@ -107,7 +107,7 @@ drawBody conf ((position, mass), _, _)
 -- | Draw a point using a filled circle.
 --
 drawPoint :: Position -> R -> Picture
-drawPoint (x, y, _) size
+drawPoint (V3 x y _) size
   = Translate (realToFrac x) (realToFrac y)
   $ ThickCircle (size / 2) size
 

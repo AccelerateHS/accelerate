@@ -140,6 +140,7 @@ Library
         , directory                       >= 1.1
         , fclabels                        >= 2.0
         , HUnit                           >= 1.2
+        , linear                          >= 1.1
         , mwc-random                      >= 0.8
         , QuickCheck                      >= 2.7
         , test-framework                  >= 0.5
@@ -521,6 +522,8 @@ Executable accelerate-nbody
         , accelerate-examples             == 1.0.*
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
+        , lens-accelerate                 >= 0.1
+        , linear-accelerate               >= 0.3
         , mwc-random                      >= 0.8
 
 
