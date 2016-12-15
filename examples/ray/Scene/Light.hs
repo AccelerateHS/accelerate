@@ -8,15 +8,18 @@ module Scene.Light
   where
 
 -- friends
-import Vec3
+import Common.Type
 import Ray.Intersect
 import Scene.Object
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
-import Data.Array.Accelerate.Data.Colour.RGB
 import Data.Array.Accelerate.Data.Colour.Names
+import Data.Array.Accelerate.Data.Colour.RGB
+import Data.Array.Accelerate.Linear.Metric
+import Data.Array.Accelerate.Linear.Vector
+
+import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
@@ -74,8 +77,8 @@ applyLight objects point normal light
         -- on the surface?
         --
         lp_p                    = lightPos light - point
-        dist                    = magnitude lp_p
-        dir                     = (1.0 / dist) .* lp_p
+        dist                    = norm lp_p
+        dir                     = (1.0 / dist) *^ lp_p
 
         -- Calculate the magnitude of the reflected light, if there are no
         -- occluding objects between the light and the surface point.

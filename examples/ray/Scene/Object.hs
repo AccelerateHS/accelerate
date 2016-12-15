@@ -8,12 +8,17 @@ module Scene.Object
   where
 
 -- friends
-import Vec3
+import Common.Type
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
+import Data.Array.Accelerate.Control.Lens
 import Data.Array.Accelerate.Data.Bits
+import Data.Array.Accelerate.Linear.Metric
+import Data.Array.Accelerate.Linear.V3
+import Data.Array.Accelerate.Linear.Vector
+
+import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
@@ -69,13 +74,13 @@ distanceToSphere sphere origin direction
         pos     = spherePos sphere
         radius  = sphereRadius sphere
 
-        p       = origin + ((pos - origin) `dot` direction) .* direction
-        d_cp    = magnitude (p - pos)
+        p       = origin + ((pos - origin) `dot` direction) *^ direction
+        d_cp    = norm (p - pos)
         sep     = p - origin
         miss    = d_cp >= radius || sep `dot` direction <= 0
     in
     miss ? ( lift (False, infinity)
-           , lift (True,  magnitude sep - sqrt (radius * radius - d_cp * d_cp)) )
+           , lift (True,  norm sep - sqrt (radius * radius - d_cp * d_cp)) )
 
 
 -- | Compute the distance to the surface of a Plane
@@ -115,7 +120,7 @@ sphereNormal
     -> Exp Position             -- ^ A point on the surface of the sphere
     -> Exp Direction            -- ^ Normal at that point
 sphereNormal sphere point
-  = normalise (point - spherePos sphere)
+  = normalize (point - spherePos sphere)
 
 
 -- | A checkerboard pattern along the x/z axis
@@ -123,8 +128,8 @@ sphereNormal sphere point
 checkers :: Exp Position -> Exp Colour
 checkers pos
   = let
-        (x,_,z) = xyzOfVec pos
-
+        x       = pos ^. _x
+        z       = pos ^. _z
         v1      = (A.truncate (x / 100) :: Exp Int32) `mod` 2
         v2      = (A.truncate (z / 100) :: Exp Int32) `mod` 2
         v3      = A.fromIntegral . boolToInt $ x A.< 0.0

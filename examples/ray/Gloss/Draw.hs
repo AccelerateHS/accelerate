@@ -3,7 +3,7 @@ module Gloss.Draw
   where
 
 -- friends
-import Vec3
+import Common.Type
 import Scene.Light
 import Scene.Object
 import Scene.State
@@ -12,6 +12,7 @@ import Ray.Trace
 -- frenemies
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Data.Colour.RGB                    as RGB
+import Data.Array.Accelerate.Linear.Metric
 import qualified Data.Array.Accelerate.Data.Colour.RGBA         as RGBA
 
 import Graphics.Gloss.Accelerate.Data.Point
@@ -55,7 +56,7 @@ tracePixel sizeX sizeY fov bounces ambient state point
 
         (x,y)           = xyOfPoint point
 
-        eyeDir          = normalise $ makeVec3 (x * fovX) ((-y) * fovY) 0 - eyePos
+        eyeDir          = normalize $ lift (V3 (x * fovX) ((-y) * fovY) 0) - eyePos
         eyePos          = the eyePos'
         (objects, lights, eyePos')
                         = unlift state

@@ -6,7 +6,7 @@ module Ray.Intersect
   where
 
 -- friends
-import Vec3
+import Common.Type
 import Scene.Object
 
 -- frenemies
@@ -71,7 +71,7 @@ checkRay
     -> Exp Bool
 checkRay distanceTo objs orig dir dist
   = fst $ while (\s -> let (hit, i) = unlift s in not hit && i < unindex1 (shape objs))
-                (\s -> let i          = snd s
+                (\s -> let i        = snd s
                            (hit, dist') = unlift $ distanceTo (objs ! index1 i) orig dir
                        in  hit && dist' < dist ? (lift (True, i), lift (False, i+1)))
                 (constant (False, 0))

@@ -666,6 +666,7 @@ Executable accelerate-ray
   hs-source-dirs:       examples/ray
   Main-is:              Main.hs
   other-modules:
+        Common.Type
         Config
         Gloss.Draw
         Gloss.Event
@@ -675,7 +676,6 @@ Executable accelerate-ray
         Scene.Object
         Scene.State
         Scene.World
-        Vec3
 
   ghc-prof-options:     -auto-all
   ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
@@ -695,6 +695,8 @@ Executable accelerate-ray
         , gloss                           >= 1.8
         , gloss-accelerate                >= 0.2
         , gloss-raster-accelerate         >= 0.2
+        , lens-accelerate                 >= 0.1
+        , linear-accelerate               >= 0.3
 
 
 -- K-means
