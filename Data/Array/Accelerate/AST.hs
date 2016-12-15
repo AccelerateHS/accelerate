@@ -637,6 +637,8 @@ data Consumer index acc aenv a where
                  => acc aenv (Array sh e)
                  -> Consumer index acc aenv (Array (sh:.Int) e)
 
+deriving instance Typeable PreOpenSeq
+
 -- |A natural sequence computation is one where elements are computed one at a
 -- time.
 --
