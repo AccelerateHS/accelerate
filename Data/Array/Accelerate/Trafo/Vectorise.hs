@@ -1388,22 +1388,26 @@ liftExp vectAcc ctx size exp
 
     cvtA :: forall sh' e'. (Elt e', Shape sh')
          => acc aenv (Array sh' e')
-         -> LiftedAcc acc aenv' (Array sh' e')
+         -> (LiftedAcc acc aenv' (Array sh' e'), LiftedAcc acc aenv' (Array sh' e'))
     cvtA (extract -> Avar ix) = cvtIx ctx
       where
         cvtIx :: forall env aenv''.
                  ExpContext acc env aenv aenv' aenv''
-              -> LiftedAcc acc aenv' (Array sh' e')
+              -> (LiftedAcc acc aenv' (Array sh' e'), LiftedAcc acc aenv' (Array sh' e'))
         cvtIx (ExpBase ctx)  = cvtIx' ctx ix
         cvtIx (ExpPush ctx') = cvtIx ctx'
+
+        dup :: a -> (a,a)
+        dup a = (a,a)
 
         cvtIx' :: forall t aenv aenv'. Arrays t
                => Context acc aenv aenv'
                -> Idx aenv t
-               -> LiftedAcc acc aenv' t
-        cvtIx' BaseC           ix           = LiftedAcc avoidedType $^ Avar ix
-        cvtIx' (PushC _ ty _)  ZeroIdx      = LiftedAcc ty avar0
-        cvtIx' (PushC ctx _ n) (SuccIdx ix) = replicateNest n $ weakenA1 (cvtIx' ctx ix)
+               -> (LiftedAcc acc aenv' t, LiftedAcc acc aenv' t)
+        cvtIx' BaseC           ix           = dup (LiftedAcc avoidedType $^ Avar ix)
+        cvtIx' (PushC _ ty _)  ZeroIdx      = dup (LiftedAcc ty avar0)
+        cvtIx' (PushC ctx _ n) (SuccIdx ix) = let (a,a') = cvtIx' ctx ix
+                                              in (weakenA1 a, replicateNest n (weakenA1 a'))
     cvtA _ = $internalError "liftExp" "Embedded array term"
 
 
@@ -1507,7 +1511,7 @@ liftExp vectAcc ctx size exp
            => acc            aenv  (Array sh e)
            -> PreOpenExp acc env       aenv   sh
            -> LiftedExp  acc env aenv' aenv'' e
-    indexL (cvtA -> LiftedAcc ty a) (cvtE -> LiftedExp aix ix)
+    indexL (cvtA -> (_,LiftedAcc ty a)) (cvtE -> LiftedExp aix ix)
       | AvoidedT <- ty
       = LiftedExp (Index <$> pure a <*> aix)
                   (inject . Alet (weaken (under ctx) a) $^ Map (fun1 (Index avar0)) (weakenA1 ix))
@@ -1524,7 +1528,7 @@ liftExp vectAcc ctx size exp
                  => acc            aenv  (Array sh' e)
                  -> PreOpenExp acc env     aenv  Int
                  -> LiftedExp acc env aenv' aenv'' e
-    linearIndexL (cvtA -> LiftedAcc ty a) (cvtE -> LiftedExp aix ix)
+    linearIndexL (cvtA -> (_,LiftedAcc ty a)) (cvtE -> LiftedExp aix ix)
       | AvoidedT <- ty
       = LiftedExp (LinearIndex <$> pure a <*> aix)
                   (inject . Alet (weaken (under ctx) a) $^ Map (fun1 (LinearIndex avar0)) (weakenA1 ix))
@@ -1540,7 +1544,7 @@ liftExp vectAcc ctx size exp
     shapeL :: (Shape sh, Elt e')
            => acc aenv (Array sh e')
            -> LiftedExp acc env aenv' aenv'' sh
-    shapeL (cvtA -> LiftedAcc ty a)
+    shapeL (cvtA -> (LiftedAcc ty a, LiftedAcc ty' a'))
       | AvoidedT <- ty
       = LiftedExp (Just (Shape a)) (inject . Alet (weaken (under ctx) a) $ replicateE (weakenA1 size) (Shape avar0))
       -- We can still avoid vectorisation if we depend on an array term that was
@@ -1549,8 +1553,8 @@ liftExp vectAcc ctx size exp
       , AsSlice <- asSlice (the (regularShapeC a))
       = LiftedExp (Just (indexInit (Shape a)))
                   (inject . Alet (weaken (under ctx) a) $ replicateE (weakenA1 size) (indexInit (Shape avar0)))
-      | IrregularT <- ty
-      = LiftedExp Nothing (shapesC (segmentsC (weaken (under ctx) a)))
+      | IrregularT <- ty'
+      = LiftedExp Nothing (shapesC (segmentsC (weaken (under ctx) a')))
 #if __GLASGOW_HASKELL__ < 800
     shapeL _
       = error "Absurd"
