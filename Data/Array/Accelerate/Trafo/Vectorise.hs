@@ -2795,22 +2795,21 @@ vectoriseOpenSeq vectAcc ctx size seq =
     elements :: (Shape sh, Elt e)
              => acc aenv (Array sh e)
              -> PreOpenChunkedSeq acc aenv' (Vector e)
-    elements x
-      | LiftedAcc ty x' <- cvtA x
-      = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS2 (f ty) (weakenA2 x') avar0)) a)
-                          (Consumer (Last avar0 (weakenA1 a)))
+    elements (cvtA -> LiftedAcc ty x)
+      = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS3 (f ty) avar1 (weakenA2 x) avar0)) a)
+                 (Consumer (Last avar0 (weakenA1 a)))
       where
-        f ty x a = let x' = a S.++ flatten ty x in S.lift (x',x')
+        f ty i x a = let x' = a S.++ flatten ty (S.snd (S.the i)) x in S.lift (x',x')
 
         a :: Elt e => acc aenv' (Vector e)
         a = inject . Use $ newArray empty undefined
 
-        flatten :: (Shape sh, Elt e) => LiftedType (Array sh e) x -> S.Acc x -> S.Acc (Vector e)
-        flatten AvoidedT   = S.flatten
-        flatten RegularT   = S.flatten
-        flatten IrregularT = irregularValues
+        flatten :: (Shape sh, Elt e) => LiftedType (Array sh e) x -> S.Exp Int -> S.Acc x -> S.Acc (Vector e)
+        flatten AvoidedT   sz = S.flatten . replicate sz
+        flatten RegularT   _  = S.flatten
+        flatten IrregularT _  = irregularValues
 #if __GLASGOW_HASKELL__ < 800
-        flatten _          = error "Impossible lifted type"
+        flatten _  _          = error "Impossible lifted type"
 #endif
 
     tabulate :: forall sh e. (Shape sh, Elt e)
