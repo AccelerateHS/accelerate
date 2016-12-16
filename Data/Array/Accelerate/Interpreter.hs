@@ -1180,9 +1180,10 @@ evalSeq min max i s aenv = evalSeq' s
     initSeq v (Producer (ProduceAccum l f a) s) = Step f' (evalOpenAcc a' aenv) (initSeq (drop v) s)
       where
         a'        = fromJust (strengthen v a)
-        l'        = evalPreExp evalOpenAcc (fromJust (strengthen v =<< l)) aenv
-        f' i aenv a | startIndex i < l'
-                    = let (arr, a') = evalOpenAfun f aenv (fromList Z [boundIndex i l']) a
+        l'        = fromJust . strengthen v <$> l
+        l''       = evalPreExp evalOpenAcc <$> l' <*> pure aenv
+        f' i aenv a | fromMaybe True ((startIndex i <) <$> l'')
+                    = let (arr, a') = evalOpenAfun f aenv (fromList Z [maybe i (boundIndex i) l'']) a
                       in Just (arr, a')
                     | otherwise
                     = Nothing
