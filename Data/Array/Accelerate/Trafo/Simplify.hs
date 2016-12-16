@@ -489,10 +489,6 @@ simplifyOpenExp env = first getAny . cvtE
     fromIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
     fromIndex  (_,IndexNil) _
       = Stats.ruleFired "fromIndex/Z" $ yes IndexNil
-    fromIndex  (_,IndexCons sh (Const i)) (_,i')
-      | ShapeRcons _ <- shapeType (Proxy :: Proxy sh)
-      , i == 1
-      = Stats.ruleFired "fromIndex/indexCons" $ yes (IndexCons (FromIndex sh i') (Const 1))
     fromIndex  (_,sh) (_,ToIndex sh' ix)
       | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
     fromIndex _ (_,i)
