@@ -21,12 +21,11 @@ import Data.Int
 import Data.Label
 import Data.Word
 import Graphics.Gloss.Accelerate.Data.Picture                       as G
-import Graphics.Gloss.Interface.Pure.Game                           hiding ( translate, scale )
+import Graphics.Gloss.Interface.Pure.Game                           hiding ( Vector, translate, scale )
 import System.Exit
 import Prelude                                                      as P
 
-import Data.Array.Accelerate                                        ( Array, Scalar, DIM2, Elt, Z(..), (:.)(..) )
-import Data.Array.Accelerate.Data.Colour.RGB                        as A
+import Data.Array.Accelerate                                        ( Arrays, Array, Scalar, Vector, DIM2, Elt, Acc, Z(..), (:.)(..) )
 import Data.Array.Accelerate.Examples.Internal                      as A
 import qualified Data.Array.Accelerate                              as A
 
@@ -38,10 +37,11 @@ data Precision  = Float | Double
 
 data World where
   World :: (P.RealFloat a, A.RealFloat a) =>
-    { worldDirty        :: !Bool
-    , worldPrecision    :: !Precision
-    , worldPicture      :: Picture
-    , worldRender       :: (Scalar a -> Scalar a -> Scalar a -> Scalar Int32 -> Scalar a -> Array DIM2 Word32)
+    { worldPicture      :: !Picture
+    , worldDirty        :: Bool
+    , worldPrecision    :: Precision
+    , worldPalette      :: Vector Word32
+    , worldRender       :: (Scalar a, Scalar a, Scalar a, Scalar Int32, Scalar a) -> Array DIM2 Word32
     , worldSizeX        :: !Int
     , worldSizeY        :: !Int
     , worldPosX         :: Scalar a
@@ -61,31 +61,32 @@ initialWorld conf opts
   $ World { worldDirty      = True
           , worldPrecision  = Float
           , worldPicture    = blank
+          , worldPalette    = run (get optBackend opts) (ultraPalette 2048)
           , worldSizeX      = get configWidth conf
           , worldSizeY      = get configHeight conf
           , worldPanning    = Nothing
           , worldZooming    = Nothing
-          , worldPosX       = undefined :: Scalar Float
-          , worldPosY       = undefined
-          , worldWidth      = undefined
-          , worldRadius     = undefined
-          , worldIters      = undefined
-          , worldRender     = undefined
+          , worldPosX       = unit 0 :: Scalar Float
+          , worldPosY       = unit 0
+          , worldWidth      = unit 0
+          , worldRadius     = unit 0
+          , worldIters      = unit 0
+          , worldRender     = \_ -> A.fromList (Z:.0:.0) []
           }
 
 setPrecision :: Options -> Precision -> World -> World
 setPrecision opts prec World{..} =
   let
+      mandel :: (A.RealFloat a, A.FromIntegral Int a, A.ToFloating Int32 a)
+             => Acc (Scalar a) -> Acc (Scalar a) -> Acc (Scalar a) -> Acc (Scalar Int32) -> Acc (Scalar a) -> Acc (Array DIM2 Word32)
+      mandel x y w l r = A.map (escapeToRGBA l (A.use worldPalette)) $ mandelbrot worldSizeX worldSizeY x y w l r
+
+      uncurry5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
+               => (Acc a -> Acc b -> Acc c -> Acc d -> Acc e -> Acc f)
+               -> (Acc (a,b,c,d,e) -> Acc f)
+      uncurry5 f x = let (a,b,c,d,e) = A.unlift x in f a b c d e
+
       backend = get optBackend opts
-      palette = run backend
-              $ A.generate (A.constant (Z :. 2048))
-                           (\ix -> packRGB (ultra (A.toFloating (A.unindex1 ix) / 2048)))
-      --
-      render :: (A.RealFloat a, A.FromIntegral Int a, A.ToFloating Int32 a)
-             => Scalar a -> Scalar a -> Scalar a -> Scalar Int32 -> Scalar a -> Array DIM2 Word32
-      render  = run5 backend $ \posX posY width limit radius
-             -> A.map (escapeToRGBA limit (A.use palette))
-              $ mandelbrot worldSizeX worldSizeY posX posY width limit radius
   in
   case prec of
     Float  -> let cvt :: (Elt a, P.Real a) => Scalar a -> Scalar Float
@@ -96,7 +97,7 @@ setPrecision opts prec World{..} =
                     , worldPosY      = cvt worldPosY
                     , worldWidth     = cvt worldWidth
                     , worldRadius    = cvt worldRadius
-                    , worldRender    = render
+                    , worldRender    = run1 backend (uncurry5 mandel)
                     , ..
                     }
     Double -> let cvt :: (Elt a, P.Real a) => Scalar a -> Scalar Double
@@ -107,7 +108,7 @@ setPrecision opts prec World{..} =
                     , worldPosY      = cvt worldPosY
                     , worldWidth     = cvt worldWidth
                     , worldRadius    = cvt worldRadius
-                    , worldRender    = render
+                    , worldRender    = run1 backend (uncurry5 mandel)
                     , ..
                     }
 
@@ -187,7 +188,7 @@ updateWorld world =
 
 renderWorld :: World -> Array DIM2 Word32
 renderWorld World{..} =
-  worldRender worldPosX worldPosY worldWidth worldIters worldRadius
+  worldRender (worldPosX, worldPosY, worldWidth, worldIters, worldRadius)
 
 
 -- Miscellaneous

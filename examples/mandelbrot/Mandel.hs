@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RebindableSyntax    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -104,6 +105,13 @@ escapeToRGBA (the -> limit) palette (unlift -> (z, n)) =
         --
         scale   = 256
         shift   = 1664
+
+ultraPalette
+    :: Int
+    -> Acc (Vector Word32)
+ultraPalette points
+  = A.generate (A.constant (Z :. points))
+               (\ix -> packRGB (ultra (A.toFloating (A.unindex1 ix) / P.fromIntegral points)))
 
 
 -- Pick a nice colour, given a number in the range [0,1].
