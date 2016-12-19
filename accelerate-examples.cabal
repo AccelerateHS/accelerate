@@ -449,6 +449,7 @@ Executable accelerate-mandelbrot
           base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
+        , accelerate-io                   == 1.0.*
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss                           >= 1.7

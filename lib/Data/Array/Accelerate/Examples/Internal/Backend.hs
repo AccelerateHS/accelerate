@@ -90,6 +90,12 @@ run4 backend f x y z w = go (x,y,z,w)
   where
     !go = run1 backend (\t -> let (a,b,c,d) = unlift t in f a b c d)
 
+{-# INLINE run5 #-}
+run5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d -> Acc e -> Acc f) -> a -> b -> c -> d -> e -> f
+run5 backend f x y z w u = go (x,y,z,w,u)
+  where
+    !go = run1 backend (\t -> let (a,b,c,d,e) = unlift t in f a b c d e)
+
 
 -- | The set of backends available to execute the program.
 --

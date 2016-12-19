@@ -37,7 +37,7 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/gloss-accelerate.git
-    commit: 17d7acb5bb707be723eab3add3e95a61190eb5bc
+    commit: ebf359c410d8bba2ea7f29e2e50c5102abd9304e
   extra-dep: true
 
 - location:
@@ -47,7 +47,7 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: 2c36c09d5ec0c4eb66dca3a2bc931d1c024890b8
+    commit: eac97f41a88ca7d7f4576fd4e41f04b57f106453
   extra-dep: true
 
 - location:

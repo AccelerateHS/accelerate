@@ -10,8 +10,7 @@ data Config = Config
   {
     _configWidth        :: Int
   , _configHeight       :: Int
-  , _configLimit        :: Int
-  , _configFramerate    :: Int
+  , _configFilePath     :: Maybe FilePath
   }
   deriving Show
 
@@ -21,23 +20,20 @@ defaults :: Config
 defaults = Config
   { _configWidth        = 800
   , _configHeight       = 600
-  , _configLimit        = 255
-  , _configFramerate    = 25
+  , _configFilePath     = Nothing
   }
 
 options :: [OptDescr (Config -> Config)]
 options =
   [ Option []   ["width"]       (ReqArg (set configWidth . read) "INT")         "visualisation width (800)"
   , Option []   ["height"]      (ReqArg (set configHeight . read) "INT")        "visualisation height (600)"
-  , Option []   ["limit"]       (ReqArg (set configLimit . read) "INT")         "iteration limit for escape (255)"
-  , Option []   ["framerate"]   (ReqArg (set configFramerate . read) "INT")     "visualisation framerate (10)"
-  , Option []   ["static"]      (NoArg  (set configFramerate 0))                "do not animate the image"
+  , Option []   ["bmp"]         (ReqArg (set configFilePath . Just) "FILE")     "save image to file"
   ]
 
 
 header :: [String]
 header =
-  [ "accelerate-mandelbrot (c) [2011..2014] The Accelerate Team"
+  [ "accelerate-mandelbrot (c) [2011..2016] The Accelerate Team"
   , ""
   , "Usage: accelerate-mandelbrot [OPTIONS]"
   , ""
@@ -47,11 +43,15 @@ footer :: [String]
 footer =
   [ ""
   , "Runtime usage:"
-  , "     arrows       translate display"
-  , "     z ;          zoom in"
-  , "     x q          zoom out"
-  , "     f            single precision calculations"
-  , "     d            double precision calculations (if supported)"
+  , "     ESC           quit"
+  , "     mouse drag    translate display"
+  , "     w/s           zoom in/out"
+  , "     a/d           iteration count"
+  , "     z/c           escape radius"
+  , "     0 .. 9        select presets"
+  , "     r             reset display"
+  , "     .             print current configuration"
+  , "     p             switch between single/double precision"
   , ""
   ]
 
