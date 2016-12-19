@@ -35,7 +35,7 @@ main = do
       runInteractive opts rest $
         G.playIO (G.InWindow "Mandelbrot" (width,height) (10,10))
                  G.black
-                 10
+                 60
                  (updateWorld world)
                  draw
                  (react conf opts)

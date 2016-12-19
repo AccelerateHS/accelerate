@@ -91,21 +91,23 @@ setPrecision opts prec World{..} =
     Float  -> let cvt :: (Elt a, P.Real a) => Scalar a -> Scalar Float
                   cvt x = unit (P.realToFrac (the x))
               in
-              World { worldPosX   = cvt worldPosX
-                    , worldPosY   = cvt worldPosY
-                    , worldWidth  = cvt worldWidth
-                    , worldRadius = cvt worldRadius
-                    , worldRender = render
+              World { worldPrecision = Float
+                    , worldPosX      = cvt worldPosX
+                    , worldPosY      = cvt worldPosY
+                    , worldWidth     = cvt worldWidth
+                    , worldRadius    = cvt worldRadius
+                    , worldRender    = render
                     , ..
                     }
     Double -> let cvt :: (Elt a, P.Real a) => Scalar a -> Scalar Double
                   cvt x = unit (P.realToFrac (the x))
               in
-              World { worldPosX   = cvt worldPosX
-                    , worldPosY   = cvt worldPosY
-                    , worldWidth  = cvt worldWidth
-                    , worldRadius = cvt worldRadius
-                    , worldRender = render
+              World { worldPrecision = Double
+                    , worldPosX      = cvt worldPosX
+                    , worldPosY      = cvt worldPosY
+                    , worldWidth     = cvt worldWidth
+                    , worldRadius    = cvt worldRadius
+                    , worldRender    = render
                     , ..
                     }
 
