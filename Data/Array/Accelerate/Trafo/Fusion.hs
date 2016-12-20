@@ -56,6 +56,7 @@ import Data.Maybe                                       ( fromMaybe )
 import Data.Typeable
 
 #if __GLASGOW_HASKELL__ <= 708
+import Control.Applicative                              ( (<*>), pure )
 import Data.Functor                                     ( (<$>) )
 import Data.Monoid                                      ( Monoid(..) )
 #endif
