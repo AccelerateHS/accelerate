@@ -50,7 +50,6 @@ import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation      ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar               hiding ( Segments )
 import Data.Array.Accelerate.Trafo.Base                hiding ( PushExp )
-import Data.Array.Accelerate.Trafo.Fusion
 import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Product
@@ -1205,7 +1204,7 @@ liftPreOpenAcc vectAcc ctx size acc
       $^ Collect (maximum (the avar0) (fromMaybe (Const 1) (weakenA1 <$> cvtE' min)))
                  (weakenA1 <$> (cvtE' =<< max))
                  (weakenA1 <$> (cvtE' =<< i))
-                 (weakenA1 $ fuseSeq cs)
+                 (weakenA1 cs)
       | otherwise
       = error "Nested sequence computation is not closed in its accumulators"
 

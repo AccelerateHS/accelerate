@@ -95,7 +95,7 @@ module Data.Array.Accelerate.AST (
   -- * Accelerated sequences
   PreOpenSeq(..), PreOpenNaturalSeq, PreOpenChunkedSeq, OpenNaturalSeq, OpenChunkedSeq, OpenSeq,
   Producer(..), Consumer(..), NaturalProducer, ChunkedProducer, NaturalConsumer, ChunkedConsumer, Seq,
-  Source(..),
+  Source(..), SeqIndex(..),
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
@@ -119,7 +119,7 @@ import Control.DeepSeq
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                as Sugar
+import Data.Array.Accelerate.Array.Sugar                as Sugar hiding ( tuple )
 #if __GLASGOW_HASKELL__ < 800
 import Data.Array.Accelerate.Error
 #endif
@@ -505,6 +505,11 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 -- deriving instance Typeable PreOpenAcc
 deriving instance Typeable OpenAcc
 
+
+-- |Closed array expression aka an array program
+--
+type Acc = OpenAcc ()
+
 -- | Computations over sequences.
 --
 -- By parameterising over the index type, we can encode sequences that compute
@@ -662,10 +667,39 @@ type OpenSeq index = PreOpenSeq index OpenAcc
 --
 type Seq index  = OpenSeq index ()
 
--- |Closed array expression aka an array program
---
-type Acc = OpenAcc ()
+-- Sequence indexing
+-- -----------------
 
+class Elt index => SeqIndex index where
+  initialIndex :: PreExp acc aenv Int -> PreExp acc aenv index
+  limit        :: PreExp acc aenv index -> PreExp acc aenv Int -> PreExp acc aenv index
+  contains     :: PreExp acc aenv Int -> PreExp acc aenv index -> PreExp acc aenv Bool
+  contains'    :: index -> Int -> Bool
+  nextIndex    :: index -> index
+  modifySize   :: (Int -> Int) -> index -> index
+
+instance SeqIndex Int where
+  initialIndex _ = Const 0
+  limit    _ l = l
+  contains l i = PrimApp (PrimLt scalarType) (Tuple (NilTup `SnocTup` l `SnocTup` i))
+  contains' = (<)
+  nextIndex = (+1)
+  modifySize = ($)
+
+instance SeqIndex (Int, Int) where
+  initialIndex n = tuple (Const 0) n
+  limit ix l
+    = let
+        i = Prj (SuccTupIdx ZeroTupIdx) ix
+        n = Prj ZeroTupIdx ix
+        j  = PrimApp (PrimAdd numType) (tuple i n)
+      in Cond (PrimApp (PrimLt scalarType) (tuple j l))
+              ix
+              (tuple i (PrimApp (PrimSub numType) (tuple l i)))
+  contains l i = PrimApp (PrimLt scalarType) (tuple (Prj (SuccTupIdx ZeroTupIdx) i) l)
+  contains' (i,_) = (i <)
+  nextIndex (i,n) = (i+n,n)
+  modifySize = fmap
 
 -- |Operations on stencils.
 --
@@ -1535,6 +1569,12 @@ rnfFloatingType (TypeFloat   FloatingDict) = ()
 rnfFloatingType (TypeDouble  FloatingDict) = ()
 rnfFloatingType (TypeCFloat  FloatingDict) = ()
 rnfFloatingType (TypeCDouble FloatingDict) = ()
+
+-- Utility
+-- -------
+
+tuple :: (Elt a, Elt b) => PreExp acc aenv a -> PreExp acc aenv b -> PreExp acc aenv (a,b)
+tuple a b = Tuple (NilTup `SnocTup` a `SnocTup` b)
 
 
 -- Debugging

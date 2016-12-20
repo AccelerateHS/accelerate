@@ -1104,55 +1104,6 @@ evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   =
 -- Sequence evaluation
 -- ---------------
 
--- An executable sequence.
---
-data Stream index aenv arrs where
-  Step    :: (index -> Val aenv -> s -> Maybe (a,s)) -> s -> Stream index (aenv,a) arrs -> Stream index aenv arrs
-  Yield   :: arrs -> Stream index (aenv,arrs) arrs
-  Done    :: arrs -> Stream index aenv arrs
-  Combine :: IsAtuple arrs => Atuple (Stream index aenv) (TupleRepr arrs) -> Stream index aenv arrs
-
-evalStream :: forall index aenv arrs. SeqIndex index => Int -> Maybe Int -> Maybe Int -> Val aenv -> Stream index aenv arrs -> arrs
-evalStream min max n aenv = eval n (initialIndex min)
-  where
-    eval :: Maybe Int -> index -> Stream index aenv arrs -> arrs
-    eval (Just 0) _ s = getResult s
-    eval n        i s =
-      case stepStream i aenv s of
-        Left a   -> a
-        Right s' -> eval ((flip (-) 1) <$> n) (nextIndex' max i) s'
-
-    nextIndex' max = modifySize (\n -> if 2*n <= fromMaybe mAXIMUM_CHUNK_SIZE max
-                                         then 2*n
-                                         else n)
-                   . nextIndex
-
-stepStream :: forall index aenv arrs. index -> Val aenv -> Stream index aenv arrs -> Either arrs (Stream index aenv arrs)
-stepStream _     (Push _ a) (Yield _)     = Right (Yield a)
-stepStream _     _          (Done a)      = Left a
-stepStream index aenv       (Step f s st) =
-  case f index aenv s of
-    Nothing      -> Left (getResult st)
-    Just (a, s') -> Step f s' <$> stepStream index (Push aenv a) st
-stepStream index aenv (Combine t) = Right (Combine (stepTup t))
-  where
-    stepTup :: Atuple (Stream index aenv) t -> Atuple (Stream index aenv) t
-    stepTup NilAtup        = NilAtup
-    stepTup (SnocAtup t s) = stepTup t `SnocAtup` either Done id (stepStream index aenv s)
-#if __GLASGOW_HASKELL__ < 800
-stepStream _     _          (Yield _)     = error "Absurd"
-#endif
-
-getResult :: Stream index aenv arrs -> arrs
-getResult (Done a)  = a
-getResult (Yield a) = a
-getResult (Step _ _ s) = getResult s
-getResult (Combine t)  = toAtuple (getTup t)
-  where
-    getTup :: Atuple (Stream index aenv) t -> t
-    getTup NilAtup        = ()
-    getTup (SnocAtup t s) = (getTup t, getResult s)
-
 mAXIMUM_CHUNK_SIZE :: Int
 mAXIMUM_CHUNK_SIZE = 1024
 
@@ -1167,50 +1118,40 @@ evalSeq :: forall index aenv arrs. SeqIndex index
         -> Maybe Int
         -> Maybe Int
         -> PreOpenSeq index DelayedOpenAcc aenv  arrs
-        -> Val aenv -> arrs
-evalSeq min max i s aenv = evalSeq' s
+        -> Val aenv
+        -> arrs
+evalSeq min max i s aenv =
+  case s of
+    Producer (ProduceAccum l f a) (Consumer (Last a' d)) ->
+      go i
+         (evalPreExp evalOpenAcc (initialIndex (Const min)) aenv)
+         (evalPreExp evalOpenAcc <$> l <*> pure aenv)
+         (evalOpenAfun f aenv)
+         (evalOpenAcc a aenv)
+         (evalOpenAcc (fromJust (strengthen (drop Just) d)) aenv)
+         (evalOpenAcc a')
+    _ -> $internalError "evalSeq" "Sequence computation does not appear to be delayed"
   where
-    evalSeq' :: PreOpenSeq index DelayedOpenAcc aenv arrs -> arrs
-    evalSeq' = evalStream min max i aenv . initSeq Just
+    go :: Maybe Int
+       -> index
+       -> Maybe Int
+       -> (Scalar index -> s -> (a, s))
+       -> s
+       -> arrs
+       -> (Val (aenv, a) -> arrs)
+       -> arrs
+    go i index l f s a next =
+      let
+        (a', s') = f (newArray Z (const index)) s
+      in if maybe True (contains' index) l && maybe True (>0) i
+           then go (flip (-) 1 <$> i)
+                   (nextIndex' index) l f s' (next (aenv `Push` a')) next
+           else a
 
-    initSeq :: forall arrs aenv'. aenv' :?> aenv
-            -> PreOpenSeq index DelayedOpenAcc aenv' arrs
-            -> Stream index aenv' arrs
-    initSeq v (Producer (Pull src) s) = Step (const (const uncons)) (unsrc src) (initSeq (drop v) s)
-    initSeq v (Producer (ProduceAccum l f a) s) = Step f' (evalOpenAcc a' aenv) (initSeq (drop v) s)
-      where
-        a'        = fromJust (strengthen v a)
-        l'        = fromJust . strengthen v <$> l
-        l''       = evalPreExp evalOpenAcc <$> l' <*> pure aenv
-        f' i aenv a | fromMaybe True ((startIndex i <) <$> l'')
-                    = let (arr, a') = evalOpenAfun f aenv (fromList Z [maybe i (boundIndex i) l'']) a
-                      in Just (arr, a')
-                    | otherwise
-                    = Nothing
-    initSeq v (Consumer c) = initC c
-      where
-        initC :: Consumer index DelayedOpenAcc aenv' a -> Stream index aenv' a
-        initC (Stuple t) = Combine (initCT t)
-        initC (Last a d) = Step f' () (Yield (evalOpenAcc d' aenv))
-          where
-            d'           = fromJust (strengthen v d)
-            f' _ aenv () = Just (evalOpenAcc a aenv,())
-        initC _          = $internalError "evalSeq" "Seq AST is at the wrong stage"
-
-        initCT :: Atuple (PreOpenSeq index DelayedOpenAcc aenv') t -> Atuple (Stream index aenv') t
-        initCT NilAtup = NilAtup
-        initCT (t `SnocAtup` c) = let t' = initCT t
-                                      c' = initSeq v c
-                                  in (t' `SnocAtup` c')
-    initSeq _ _ = $internalError "initSeq" "Seq AST is at incorrect stage"
-
-    unsrc :: Source a -> [a]
-    unsrc (List as) = as
-    unsrc (RegularList _ as) = as
-
-    uncons :: [a] -> Maybe (a, [a])
-    uncons [] = Nothing
-    uncons (x : xs) = Just (x, xs)
+    nextIndex'= modifySize (\n -> if 2*n <= fromMaybe mAXIMUM_CHUNK_SIZE max
+                                  then 2*n
+                                  else n)
+                   . nextIndex
 
     drop :: aenv' :?> aenv -> (aenv',a) :?> aenv
     drop _ ZeroIdx      = Nothing
