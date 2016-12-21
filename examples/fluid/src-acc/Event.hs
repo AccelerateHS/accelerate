@@ -7,9 +7,11 @@ module Event where
 
 import Config
 import World
+
 import Data.Label
-import Graphics.Gloss.Interface.Pure.Game
-import Data.Array.Accelerate          ( Z(..), (:.)(..) )
+import System.Exit
+import Graphics.Gloss.Interface.IO.Game
+import Data.Array.Accelerate                                        ( Z(..), (:.)(..) )
 
 
 -- Event locations are returned as window coordinates, where the origin is in
@@ -17,13 +19,14 @@ import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 -- size is (100,100) with scale factor of 4, then the event coordinates are
 -- returned in the range [-200,200].
 --
-react :: Config -> Event -> World -> World
+react :: Config -> Event -> World -> IO World
 react opt event world =
   case event of
-    EventKey (Char c) s m _                     -> keyboard c s m
-    EventKey (MouseButton LeftButton) s m uv    -> mouse m s (coord uv)
-    EventMotion uv                              -> motion (coord uv)
-    _                                           -> world
+    EventKey (Char c) s m _                     -> return $ keyboard c s m
+    EventKey (MouseButton LeftButton) s m uv    -> return $ mouse m s (coord uv)
+    EventMotion uv                              -> return $ motion (coord uv)
+    EventKey (SpecialKey KeyEsc) Down _ _       -> exitSuccess
+    _                                           -> return world
   where
     -- Inject a new density source when the left button is clicked.
     --

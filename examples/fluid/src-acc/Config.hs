@@ -164,6 +164,7 @@ footer :: [String]
 footer =
   [ ""
   , "Runtime usage:"
+  , "     ESC          quit"
   , "     click        add density sources to the image"
   , "     shift-click  add velocity sources"
   , "     r            reset the image"
