@@ -184,7 +184,7 @@ advance _ world@World{..}
 --
 updateWorld :: World -> World
 updateWorld world =
-  world { worldPicture = bitmapOfArray (renderWorld world) False }
+  world { worldPicture = bitmapOfArray (renderWorld world) True }
 
 renderWorld :: World -> Array DIM2 Word32
 renderWorld World{..} =
