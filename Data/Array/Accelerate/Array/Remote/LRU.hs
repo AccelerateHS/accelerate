@@ -339,8 +339,8 @@ finalizer :: StableArray -> Weak (UseTable task) -> IO ()
 finalizer !key !weak_utbl = do
   mref <- deRefWeak weak_utbl
   case mref of
-    Nothing -> trace "finalize cache/dead table" $ return ()
-    Just ref -> trace ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
+    Nothing  -> message "finalize cache/dead table"
+    Just ref -> trace  ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
 
 delete :: UT task -> StableArray -> IO ()
 delete utbl key = do
