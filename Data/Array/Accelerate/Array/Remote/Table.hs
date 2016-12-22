@@ -89,9 +89,9 @@ data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
 
 data RemoteArray p where
   RemoteArray :: Typeable e
-              => {-# UNPACK #-} !(Weak ()) -- Keep track of host array liveness.
-              -> p e                       -- The actual remote pointer
-              -> Int                       -- The array size in bytes
+              => {-# UNPACK #-} !(Weak ())  -- Keep track of host array liveness
+              -> !(p e)                     -- The actual remote pointer
+              -> {-# UNPACK #-} !Int        -- The array size in bytes
               -> RemoteArray p
 
 -- | An untyped reference to an array, similar to a StableName.
@@ -389,45 +389,47 @@ makeWeakArrayData
     -> c
     -> Maybe (IO ())
     -> IO (Weak c)
-makeWeakArrayData ad c mf = mw arrayElt ad
+makeWeakArrayData !ad !c !mf = mw arrayElt ad
   where
     mw :: ArrayEltR e -> ArrayData e -> IO (Weak c)
-    mw ArrayEltRint     (AD_Int ua)     = mkWeak' ua mf
-    mw ArrayEltRint8    (AD_Int8 ua)    = mkWeak' ua mf
-    mw ArrayEltRint16   (AD_Int16 ua)   = mkWeak' ua mf
-    mw ArrayEltRint32   (AD_Int32 ua)   = mkWeak' ua mf
-    mw ArrayEltRint64   (AD_Int64 ua)   = mkWeak' ua mf
-    mw ArrayEltRword    (AD_Word ua)    = mkWeak' ua mf
-    mw ArrayEltRword8   (AD_Word8 ua)   = mkWeak' ua mf
-    mw ArrayEltRword16  (AD_Word16 ua)  = mkWeak' ua mf
-    mw ArrayEltRword32  (AD_Word32 ua)  = mkWeak' ua mf
-    mw ArrayEltRword64  (AD_Word64 ua)  = mkWeak' ua mf
-    mw ArrayEltRcshort  (AD_CShort ua)  = mkWeak' ua mf
-    mw ArrayEltRcushort (AD_CUShort ua) = mkWeak' ua mf
-    mw ArrayEltRcint    (AD_CInt ua)    = mkWeak' ua mf
-    mw ArrayEltRcuint   (AD_CUInt ua)   = mkWeak' ua mf
-    mw ArrayEltRclong   (AD_CLong ua)   = mkWeak' ua mf
-    mw ArrayEltRculong  (AD_CULong ua)  = mkWeak' ua mf
-    mw ArrayEltRcllong  (AD_CLLong ua)  = mkWeak' ua mf
-    mw ArrayEltRcullong (AD_CULLong ua) = mkWeak' ua mf
-    mw ArrayEltRfloat   (AD_Float ua)   = mkWeak' ua mf
-    mw ArrayEltRdouble  (AD_Double ua)  = mkWeak' ua mf
-    mw ArrayEltRcfloat  (AD_CFloat ua)  = mkWeak' ua mf
-    mw ArrayEltRcdouble (AD_CDouble ua) = mkWeak' ua mf
-    mw ArrayEltRbool    (AD_Bool ua)    = mkWeak' ua mf
-    mw ArrayEltRchar    (AD_Char ua)    = mkWeak' ua mf
-    mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua mf
-    mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua mf
-    mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua mf
+    mw ArrayEltRint     (AD_Int ua)     = mkWeak' ua
+    mw ArrayEltRint8    (AD_Int8 ua)    = mkWeak' ua
+    mw ArrayEltRint16   (AD_Int16 ua)   = mkWeak' ua
+    mw ArrayEltRint32   (AD_Int32 ua)   = mkWeak' ua
+    mw ArrayEltRint64   (AD_Int64 ua)   = mkWeak' ua
+    mw ArrayEltRword    (AD_Word ua)    = mkWeak' ua
+    mw ArrayEltRword8   (AD_Word8 ua)   = mkWeak' ua
+    mw ArrayEltRword16  (AD_Word16 ua)  = mkWeak' ua
+    mw ArrayEltRword32  (AD_Word32 ua)  = mkWeak' ua
+    mw ArrayEltRword64  (AD_Word64 ua)  = mkWeak' ua
+    mw ArrayEltRcshort  (AD_CShort ua)  = mkWeak' ua
+    mw ArrayEltRcushort (AD_CUShort ua) = mkWeak' ua
+    mw ArrayEltRcint    (AD_CInt ua)    = mkWeak' ua
+    mw ArrayEltRcuint   (AD_CUInt ua)   = mkWeak' ua
+    mw ArrayEltRclong   (AD_CLong ua)   = mkWeak' ua
+    mw ArrayEltRculong  (AD_CULong ua)  = mkWeak' ua
+    mw ArrayEltRcllong  (AD_CLLong ua)  = mkWeak' ua
+    mw ArrayEltRcullong (AD_CULLong ua) = mkWeak' ua
+    mw ArrayEltRfloat   (AD_Float ua)   = mkWeak' ua
+    mw ArrayEltRdouble  (AD_Double ua)  = mkWeak' ua
+    mw ArrayEltRcfloat  (AD_CFloat ua)  = mkWeak' ua
+    mw ArrayEltRcdouble (AD_CDouble ua) = mkWeak' ua
+    mw ArrayEltRbool    (AD_Bool ua)    = mkWeak' ua
+    mw ArrayEltRchar    (AD_Char ua)    = mkWeak' ua
+    mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua
+    mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua
+    mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua
 #if __GLASGOW_HASKELL__ < 800
     mw _                _               = error "Base eight is just like base ten really - if you're missing two fingers."
 #endif
 
-    mkWeak' :: UniqueArray a -> Maybe (IO ()) -> IO (Weak c)
-    mkWeak' ua Nothing  = mkWeak (uniqueArrayData ua) c
-    mkWeak' ua (Just f) = do
-      addFinalizer (uniqueArrayData ua) f
-      mkWeak (uniqueArrayData ua) c
+    mkWeak' :: UniqueArray a -> IO (Weak c)
+    mkWeak' !ua = do
+      let !uad = uniqueArrayData ua
+      case mf of
+        Nothing -> return ()
+        Just f  -> addFinalizer uad f
+      mkWeak uad c
 
 
 -- Debug
