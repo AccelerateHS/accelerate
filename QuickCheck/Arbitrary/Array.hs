@@ -9,7 +9,7 @@ import QuickCheck.Arbitrary.Shape
 
 import Test.QuickCheck
 import System.Random                                    ( Random )
-import Data.Array.Accelerate.Array.Sugar                ( Array(..), Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM1 )
+import Data.Array.Accelerate.Array.Sugar                ( Array(..), Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM1, DIM2 )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Set                               as Set
 
@@ -19,7 +19,26 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array Z e) where
   arbitrary  = arbitraryArray Z
   shrink arr = [ Sugar.fromList Z [x] | x <- shrink (arr ! Z) ]
 
-instance (Shape sh, Elt e, Arbitrary sh, Arbitrary e) => Arbitrary (Array (sh:.Int) e) where
+instance (Elt e, Arbitrary e) => Arbitrary (Array DIM1 e) where
+  arbitrary  = arbitraryArray =<< arbitrary
+  shrink arr = [ Sugar.fromList (Z :. length sl) sl | sl <- shrink (Sugar.toList arr) ]
+
+instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
+  arbitrary  = arbitraryArray =<< arbitrary
+  shrink arr =
+    let
+        xs           = Sugar.toList arr
+        sh@(Z:.h:.w) = Sugar.shape arr
+    in
+    [ q | Z:.m:.n <- shrink sh, m > 0, n > 0
+        , q       <- [ Sugar.fromFunction (Z :. m   :. n)   (\ix        -> arr Sugar.! ix)                 -- top-left
+                     , Sugar.fromFunction (Z :. m   :. w-n) (\(Z:.u:.v) -> arr Sugar.! (Z:.u    :.(n+v)))  -- top-right
+                     , Sugar.fromFunction (Z :. h-m :. n)   (\(Z:.u:.v) -> arr Sugar.! (Z:.(m+u):.v))      -- bottom-left
+                     , Sugar.fromFunction (Z :. h-m :. w-n) (\(Z:.u:.v) -> arr Sugar.! (Z:.(m+u):.(n+v)))  -- bottom-right
+                     ]] ++
+    [ Sugar.fromList sh sl | sl <- shrinkOne xs ]
+
+instance (Shape sh, Elt e, Arbitrary sh, Arbitrary e) => Arbitrary (Array (sh:.Int:.Int:.Int) e) where
   arbitrary = arbitraryArray =<< arbitrary
   shrink arr@(Array _ adata) =
     let
