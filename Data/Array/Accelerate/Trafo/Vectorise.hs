@@ -1512,12 +1512,15 @@ liftExp vectAcc ctx size exp
            -> LiftedExp  acc env aenv' aenv'' e
     indexL (cvtA -> (_,LiftedAcc ty a)) (cvtE -> LiftedExp aix ix)
       | AvoidedT <- ty
-      = LiftedExp (Index <$> pure a <*> aix)
+      = trace "AVOIDED" "index"
+      $ LiftedExp (Index <$> pure a <*> aix)
                   (inject . Alet (weaken (under ctx) a) $^ Map (fun1 (Index avar0)) (weakenA1 ix))
       | RegularT <- ty
-      = LiftedExp Nothing (liftedRegularIndexC (weaken (under ctx) a) ix)
+      = trace "REGULAR" "index"
+      $ LiftedExp Nothing (liftedRegularIndexC (weaken (under ctx) a) ix)
       | IrregularT <- ty
-      = LiftedExp Nothing (liftedIrregularIndexC (weaken (under ctx) a) ix)
+      = trace "IRREGULAR" "index"
+      $ LiftedExp Nothing (liftedIrregularIndexC (weaken (under ctx) a) ix)
 #if __GLASGOW_HASKELL__ < 800
     indexL _ _
       = error "Absurd"
