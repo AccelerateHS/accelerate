@@ -2762,16 +2762,22 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
         isBoundHere _                                                             = False
 
     scopesFoldFun :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Seq [b] -> UnscopedSeq c) -> (Acc a -> Seq [b] -> ScopedSeq c, NodeCounts)
-    scopesFoldFun f = (\ _ _ -> (ScopedSeq sss ssa body'), (counts',graph))
+    scopesFoldFun f = (\ _ _ -> (ScopedSeq sss ssa body''), (counts',graph))
       where
         body@(UnscopedSeq fvs _) = f undefined undefined
-        ((ScopedSeq [] [] body'), (counts,graph)) = scopesSeq body
+        (ScopedSeq [] [] body', (counts,graph)) = scopesSeq body
         sss     = buildInitialEnvSeq fvs [sa | SeqNodeCount sa _ <- freeCounts]
         ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
-        (freeCounts, counts') = partition isBoundHere counts
+        (boundCounts, counts') = partition isBoundHere counts
+        freeCounts = filter isFreeVar boundCounts
 
-        isBoundHere (SeqNodeCount (StableSharingSeq _ (SeqSharing _ (Stag i))) _) = i `elem` fvs
+        binds      = [s | SeqNodeCount s _ <- filter (not . isFreeVar) boundCounts]
+        lets       = foldl (flip (.)) id . map (\x y -> SletSharing x (ScopedSeq [] [] y)) $ binds
+
+        body'' = lets body'
+
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
+        isBoundHere (SeqNodeCount (StableSharingSeq _ (SeqSharing _ _)) _)        = True
         isBoundHere _                                                             = False
 
     scopesTup :: Atuple UnscopedSeq tup -> (Atuple ScopedSeq tup, NodeCounts)
