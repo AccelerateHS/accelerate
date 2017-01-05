@@ -1646,10 +1646,11 @@ generateSeg segs f = S.map (\(S.unlift -> (seg,sh,i)) -> f seg sh (S.fromIndex s
 
     -- For irregular segments
     negs  = S.fill (S.index1 $ totalSize segs) (S.tup3 (-1::S.Exp Int,S.ignore,-1::S.Exp Int) :: S.Exp (Int, sh, Int)) --Start with all -1s
-    heads = S.permute combine negs (S.index1 . (offs S.!)) (S.zip3 offs (shapes segs) (S.fill (S.shape offs) 0))
+    heads = S.permute combine negs (S.index1 . (offs S.!)) (S.zip3 (S.enumFromN (S.shape offs) 0) (shapes segs) (S.fill (S.shape offs) 0))
 
-    domain = S.scanl1 (\a b -> dead b S.? (inc a, b)) heads
-
+    domain = totalSize segs S.>* 0
+           S.?| ( S.scanl1 (\a b -> dead b S.? (inc a, b)) heads
+                , S.use (fromList (Z:.0) []))
     combine :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
     combine (S.untup3 -> (seg,sh,i)) (S.untup3 -> (seg',sh',i')) =
       S.shapeSize sh S.>* S.shapeSize sh' S.? ( S.lift (seg,sh,i) , S.lift (seg',sh',i') )
