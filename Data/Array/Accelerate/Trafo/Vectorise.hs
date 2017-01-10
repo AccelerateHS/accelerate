@@ -1643,6 +1643,9 @@ generateSeg :: forall e sh. (Elt e, Shape sh)
             => S.Acc (Segments sh)
             -> (S.Exp Int -> S.Exp sh -> S.Exp sh -> S.Exp e)
             -> S.Acc (Vector e)
+generateSeg segs f
+  | Sugar.rank (undefined::sh) == 0
+  = S.zipWith3 f (offsets segs) (shapes segs) (shapes segs)
 generateSeg segs f = S.map (\(S.unlift -> (seg,sh,i)) -> f seg sh (S.fromIndex sh i)) domain
   where
     offs  = offsets segs
@@ -1681,7 +1684,9 @@ shapes (S.unatup3 -> (_,_,shs)) = shs
 totalSize :: Shape sh => S.Acc (Segments sh) -> S.Exp Int
 totalSize (S.unatup3 -> (ts,_,_)) = S.the ts
 
-segmentsFromShapes :: Shape sh => S.Acc (Vector sh) -> S.Acc (Segments sh)
+segmentsFromShapes :: forall sh. Shape sh => S.Acc (Vector sh) -> S.Acc (Segments sh)
+segmentsFromShapes ss | ShapeRnil <- shapeType (Proxy :: Proxy sh)
+                      = regularSegs (S.length ss) (S.lift Z)
 segmentsFromShapes ss = let (offs,sz) = S.scanl' (+) 0 (S.map S.shapeSize ss)
                          in irregularSegs (S.the sz) offs ss
 
