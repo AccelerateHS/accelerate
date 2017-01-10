@@ -123,8 +123,8 @@ convertAcc = convertAccWith phases
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
-  $ phase "vectorise-sequences"    Vectorise.vectoriseAcc  `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegments `when` convertOffsetOfSegment
+  $ phase "vectorise-sequences"    Vectorise.vectoriseAcc  `when` vectoriseSequences
   $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
@@ -138,8 +138,8 @@ convertAfun = convertAfunWith phases
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
-  $ phase "vectorise-sequences"    Vectorise.vectoriseAfun      `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
+  $ phase "vectorise-sequences"    Vectorise.vectoriseAfun      `when` vectoriseSequences
   $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
@@ -170,8 +170,8 @@ convertSeq = convertSeqWith phases
 convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq Int s
 convertSeqWith Phase{..} s
   = phase "array-fusion"           (Fusion.convertStreamSeq enableAccFusion)
-  $ phase "vectorise-sequences"    Vectorise.reduceStreamSeq  `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsStreamSeq `when` convertOffsetOfSegment
+  $ phase "vectorise-sequences"    Vectorise.reduceStreamSeq  `when` vectoriseSequences
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
 

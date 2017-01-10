@@ -1719,9 +1719,8 @@ sparsify ra = S.Acc (S.Atuple $ NilAtup `SnocAtup` S.lift (S.unit sz, offs, shs)
     shs  = S.fill (S.index1 sz) (regularShape ra)
 
 makeFoldSegments :: forall sh. (Shape sh, Slice sh) => S.Acc (Segments (sh:.Int)) -> S.Acc (Vector Int, Segments sh)
-makeFoldSegments segs = S.lift (generateSeg inSegs (\seg sh ix -> (offs S.!! seg) + S.toIndex sh ix), outSegs)
+makeFoldSegments segs = S.lift (generateSeg inSegs (\seg _ _ -> S.indexHead (shapes segs S.!! seg)), outSegs)
   where
-    offs  = offsets segs
     shs   = S.map S.indexTail (shapes segs)
     outSegs = segmentsFromShapes (S.map nonEmpty shs)
     inSegs  = segmentsFromShapes shs
