@@ -645,7 +645,7 @@ type instance BitSize CLong  = $( case finiteBitSize (undefined::CLong) of
                                     _  -> error "I don't know what architecture I am"  )
 
 
-type instance BitSize CULong = $( case finiteBitSize (undefined::CULLong) of
+type instance BitSize CULong = $( case finiteBitSize (undefined::CULong) of
                                     32 -> [t| 32 |]
                                     64 -> [t| 64 |]
                                     _  -> error "I don't know what architecture I am"  )
