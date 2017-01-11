@@ -963,35 +963,35 @@ liftPreOpenAcc vectAcc ctx size acc
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanl'"
       $^ Scanl' f z a'
-      -- | otherwise
-      -- = trace "IRREGULAR" "scanl'"
-      -- $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
-      -- $^ Alet (asIrregular a)
-      -- $^ Alet (segmentsC avar0)
-      -- $^ Alet (irregularValuesC avar1)
-      -- $^ Alet (irregularValuesC $ scanlLift (weakenA3 f) (weakenA3 z) avar2)
-      -- $  fromHOAS3
-      --       (\seg vec vec' ->
-      --         let
-      --           shs'        = S.map nonEmpty (shapes seg)
-      --           tails       = S.zipWith (+) seg . fst $ S.scanl' (+) 0 shs'
-      --           sums        = S.backpermute (S.shape offset) (\ix -> S.index1 $ tails S.! ix) vec'
-      --
-      --           offset      = offsets seg
-      --           inc         = S.scanl1 (+)
-      --                       $ S.permute (+) (S.fill (S.index1 $ S.size vec + 1) 0)
-      --                                     (\ix -> S.index1 $ offset S.! ix)
-      --                                     (S.fill (S.shape offset) (1 :: S.Exp Int))
-      --
-      --           body        = S.backpermute (S.shape vec)
-      --                                     (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
-      --                                     vec'
-      --         in S.Acc . S.Atuple
-      --          $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes shs') body))
-      --                     sums)
-      --       avar2
-      --       avar1
-      --       avar0
+{-    | otherwise
+      = trace "IRREGULAR" "scanl'"
+      $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
+      $^ Alet (asIrregular a)
+      $^ Alet (segmentsC avar0)
+      $^ Alet (irregularValuesC avar1)
+      $^ Alet (irregularValuesC $ scanlLift (weakenA3 f) (weakenA3 z) avar2)
+      $  fromHOAS3
+            (\seg vec vec' ->
+              let
+                shs'        = S.map nonEmpty (shapes seg)
+                tails       = S.zipWith (+) seg . fst $ S.scanl' (+) 0 shs'
+                sums        = S.backpermute (S.shape offset) (\ix -> S.index1 $ tails S.! ix) vec'
+
+                offset      = offsets seg
+                inc         = S.scanl1 (+)
+                            $ S.permute (+) (S.fill (S.index1 $ S.size vec + 1) 0)
+                                          (\ix -> S.index1 $ offset S.! ix)
+                                          (S.fill (S.shape offset) (1 :: S.Exp Int))
+
+                body        = S.backpermute (S.shape vec)
+                                          (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
+                                          vec'
+              in S.Acc . S.Atuple
+               $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes shs') body))
+                          sums)
+            avar2
+            avar1
+            avar0 -}
     scanl'L _ _ _
       = error $ nestedError "first or second" "scanl"
 
@@ -1033,32 +1033,32 @@ liftPreOpenAcc vectAcc ctx size acc
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanr"
       $^ Scanr' f z a'
-      -- | otherwise
-      -- =  trace "IRREGULAR" "scanr'"
-      -- $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
-      -- $^ Alet (asIrregular a)
-      -- $^ Alet (segmentsC avar0)
-      -- $^ Alet (irregularValuesC avar1)
-      -- $^ Alet (irregularValuesC $ scanrLift (weakenA3 f) (weakenA3 z) avar2)
-      -- $  fromHOAS3
-      --       (\seg vec vec' ->
-      --         let
-      --           -- reduction values
-      --           seg'        = S.map (+1) $ S.map S.unindex1 (shapes seg)
-      --           heads       = P.fst $ S.scanl' (+) 0 seg'
-      --           sums        = S.backpermute (S.shape (shapes seg)) (\ix -> S.index1 $ heads S.! ix) vec'
-      --
-      --           -- body segments
-      --           inc         = S.scanl1 (+) $ mkHeadFlags seg
-      --           body        = S.backpermute (S.shape vec)
-      --                                       (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
-      --                                       vec'
-      --         in S.Acc . S.Atuple
-      --          $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes (S.map S.index1 seg')) body))
-      --                     sums)
-      --       avar2
-      --       avar1
-      --       avar0
+{-    | otherwise
+      =  trace "IRREGULAR" "scanr'"
+      $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
+      $^ Alet (asIrregular a)
+      $^ Alet (segmentsC avar0)
+      $^ Alet (irregularValuesC avar1)
+      $^ Alet (irregularValuesC $ scanrLift (weakenA3 f) (weakenA3 z) avar2)
+      $  fromHOAS3
+            (\seg vec vec' ->
+              let
+                -- reduction values
+                seg'        = S.map (+1) $ S.map S.unindex1 (shapes seg)
+                heads       = P.fst $ S.scanl' (+) 0 seg'
+                sums        = S.backpermute (S.shape (shapes seg)) (\ix -> S.index1 $ heads S.! ix) vec'
+
+                -- body segments
+                inc         = S.scanl1 (+) $ mkHeadFlags seg
+                body        = S.backpermute (S.shape vec)
+                                            (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
+                                            vec'
+              in S.Acc . S.Atuple
+               $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes (S.map S.index1 seg')) body))
+                          sums)
+            avar2
+            avar1
+            avar0 -}
     scanr'L _ _ _
       = error $ nestedError "first or second" "scanr'"
 
