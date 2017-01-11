@@ -81,13 +81,81 @@ import Data.Typeable
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.AST                hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, Seq, PreOpenSeq(..), Producer(..), Consumer(..),
-  showPreAccOp, showPreExpOp )
+import Data.Array.Accelerate.AST                hiding ( PreOpenAcc(..), OpenAcc(..), Acc
+                                                       , PreOpenExp(..), OpenExp, PreExp, Exp
+                                                       , Stencil(..), PreOpenSeq(..), Seq
+                                                       , Consumer(..), Producer(..)
+                                                       , showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST      as AST
 
 -- Array computations
 -- ------------------
+
+-- | Accelerate is an /embedded language/ that distinguishes between vanilla
+-- arrays (e.g. in Haskell memory on the CPU) and embedded arrays (e.g. in
+-- device memory on a GPU), as well as the computations on both of these. Since
+-- Accelerate is an embedded language, programs written in Accelerate are not
+-- compiled by the Haskell compiler (GHC). Rather, each Accelerate backend is
+-- a /runtime compiler/ which generates and executes parallel SIMD code of the
+-- target language at application /runtime/.
+--
+-- The type constructor 'Acc' represents embedded collective array operations.
+-- A term of type @Acc a@ is an Accelerate program which, once executed, will
+-- produce a value of type 'a' (an 'Array' or a tuple of 'Arrays'). Collective
+-- operations of type @Acc a@ comprise many /scalar expressions/, wrapped in
+-- type constructor 'Exp', which will be executed in parallel. Although
+-- collective operations comprise many scalar operations executed in parallel,
+-- scalar operations /cannot/ initiate new collective operations: this
+-- stratification between scalar operations in 'Exp' and array operations in
+-- 'Acc' helps statically exclude /nested data parallelism/, which is difficult
+-- to execute efficiently on constrained hardware such as GPUs.
+--
+-- For example, to compute a vector dot product we could write:
+--
+-- > dotp :: Num a => Vector a -> Vector a -> Acc (Scalar a)
+-- > dotp xs ys =
+-- >   let
+-- >       xs' = use xs
+-- >       ys' = use ys
+-- >   in
+-- >   fold (+) 0 ( zipWith (*) xs' ys' )
+--
+-- The function @dotp@ consumes two one-dimensional arrays ('Vector's) of
+-- values, and produces a single ('Scalar') result as output. As the return type
+-- is wrapped in the type 'Acc', we see that it is an embedded Accelerate
+-- computation - it will be evaluated in the /object/ language of dynamically
+-- generated parallel code, rather than the /meta/ language of vanilla Haskell.
+--
+-- As the arguments to @dotp@ are plain Haskell arrays, to make these available
+-- to Accelerate computations they must be embedded with the
+-- 'Data.Array.Accelerate.Language.use' function.
+--
+-- An Accelerate backend is used to evaluate the embedded computation and return
+-- the result back to vanilla Haskell. Calling the 'run' function of a backend
+-- will generate code for the target architecture, compile, and execute it. For
+-- example, the following backends are available:
+--
+--  * <http://hackage.haskell.org/package/accelerate-llvm-native accelerate-llvm-native>: for execution on multicore CPUs
+--  * <http://hackage.haskell.org/package/accelerate-llvm-ptx accelerate-llvm-ptx>: for execution on NVIDIA CUDA-capable GPUs
+--
+-- See also 'Exp', which encapsulates embedded _scalar_ computations.
+--
+-- [/Tips:/]
+--
+--  * Since 'Acc' represents embedded computations that will only be executed
+--    when evaluated by a backend, we can programatically generate these
+--    computations using the meta language Haskell; for example, unrolling loops
+--    or embedding input values into the generated code.
+--
+--  * It is usually best to keep all intermediate computations in 'Acc', and
+--    only 'run' the computation at the very end to produce the final result.
+--    This enables optimisations between intermediate results (e.g. array
+--    fusion) and, if the target architecture has a separate memory space as is
+--    the case of GPUs, to prevent excessive data transfers.
+--
+newtype Acc a = Acc (PreAcc Acc Seq Exp a)
+deriving instance Typeable Acc
+
 
 -- The level of lambda-bound variables. The root has level 0; then it increases with each bound
 -- variable — i.e., it is the same as the size of the environment at the defining occurrence.
@@ -198,39 +266,39 @@ data PreAcc acc seq exp as where
                 -> acc (Segments i)
                 -> PreAcc acc seq exp (Array (sh:.Int) e)
 
-  Scanl         :: Elt e
+  Scanl         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
-  Scanl'        :: Elt e
+  Scanl'        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e, Scalar e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e, Array sh e)
 
-  Scanl1        :: Elt e
+  Scanl1        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
-  Scanr         :: Elt e
-                => (Exp e -> Exp e -> exp e)
-                -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
-
-  Scanr'        :: Elt e
+  Scanr         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e, Scalar e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
-  Scanr1        :: Elt e
+  Scanr'        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
-                -> acc (Vector e)
-                -> PreAcc acc seq exp (Vector e)
+                -> exp e
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e, Array sh e)
+
+  Scanr1        :: (Shape sh, Elt e)
+                => (Exp e -> Exp e -> exp e)
+                -> acc (Array (sh :. Int) e)
+                -> PreAcc acc seq exp (Array (sh :. Int) e)
 
   Permute       :: (Shape sh, Shape sh', Elt e)
                 => (Exp e -> Exp e -> exp e)
@@ -314,10 +382,6 @@ data PreSeq acc seq exp arrs where
                  -> seq [a]
                  -> PreSeq acc seq exp s
 
-  Stuple         :: (Arrays arrs, IsAtuple arrs)
-                 => Atuple seq (TupleRepr arrs)
-                 -> PreSeq acc seq exp arrs
-
   Elements       :: (Shape sh, Elt e)
                  => seq [Array sh e]
                  -> PreSeq acc seq exp (Vector e)
@@ -330,26 +394,41 @@ data PreSeq acc seq exp arrs where
                  => acc a
                  -> PreSeq acc seq exp a
 
--- |Array-valued collective computations
---
-newtype Acc a = Acc (PreAcc Acc Seq Exp a)
+  -- Tuple up the results of a sequence computation. Note that the Arrays
+  -- constraint requires that the elements of the tuple are Arrays, not
+  -- streams ([]).
+  Stuple         :: (Arrays arrs, IsAtuple arrs)
+                 => Atuple seq (TupleRepr arrs)
+                 -> PreSeq acc seq exp arrs
 
 -- |Array-valued sequence computations
 --
 newtype Seq a = Seq (PreSeq Acc Seq Exp a)
 
-deriving instance Typeable Acc
 deriving instance Typeable Seq
 
 
 -- Embedded expressions of the surface language
 -- --------------------------------------------
 
--- HOAS expressions mirror the constructors of `AST.OpenExp', but with the `Tag' constructor instead
--- of variables in the form of de Bruijn indices. Moreover, HOAS expression use n-tuples and the
--- type class 'Elt' to constrain element types, whereas `AST.OpenExp' uses nested pairs and the GADT
--- 'TupleType'.
+-- HOAS expressions mirror the constructors of 'AST.OpenExp', but with the 'Tag'
+-- constructor instead of variables in the form of de Bruijn indices. Moreover,
+-- HOAS expression use n-tuples and the type class 'Elt' to constrain element
+-- types, whereas 'AST.OpenExp' uses nested pairs and the GADT 'TupleType'.
 --
+
+-- | The type 'Exp' represents embedded scalar expressions. The collective
+-- operations of Accelerate 'Acc' consist of many scalar expressions executed in
+-- data-parallel.
+--
+-- Note that scalar expressions can not initiate new collective operations:
+-- doing so introduces /nested data parallelism/, which is difficult to execute
+-- efficiently on constrained hardware such as GPUs, and is thus currently
+-- unsupported.
+--
+newtype Exp t = Exp (PreExp Acc Seq Exp t)
+
+deriving instance Typeable Exp
 
 -- | Scalar expressions to parametrise collective array operations, themselves parameterised over
 -- the type of collective array operations.
@@ -476,12 +555,6 @@ data PreExp acc seq exp t where
                 -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
                 -> exp x
                 -> PreExp acc seq exp y
-
--- | Scalar expressions for plain array computations.
---
-newtype Exp t = Exp (PreExp Acc Seq Exp t)
-
-deriving instance Typeable Exp
 
 
 -- Smart constructors and destructors for array tuples

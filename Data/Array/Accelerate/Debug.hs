@@ -112,10 +112,9 @@ withTemporaryFile template go = do
   let dir = tmp </> "accelerate-" ++ show pid
   createDirectoryIfMissing True dir
   bracket (openTempFile dir template) (hClose . snd) (uncurry go)
-#endif
 
 #ifdef WIN32
 getProcessID :: IO ProcessId
 getProcessID = return 0xaaaa
 #endif
-
+#endif

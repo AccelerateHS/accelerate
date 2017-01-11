@@ -925,10 +925,10 @@ liftPreOpenAcc vectAcc ctx size acc
     fold1SegL _ _ _
       = error $ nestedError "first" "foldSeg"
 
-    scanl1L :: forall e. Elt e
+    scanl1L :: forall sh e. (Shape sh, Elt e)
                => PreFun acc  aenv  (e -> e -> e)
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+               -> acc            aenv  (Array (sh:.Int) e)
+               -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanl1L (cvtF2 -> LiftedFun (Just f) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanl1"
@@ -939,66 +939,66 @@ liftPreOpenAcc vectAcc ctx size acc
     scanl1L _ _
       = error $ nestedError "first" "scanl1"
 
-    scanlL :: forall e. Elt e
+    scanlL :: forall sh e. (Shape sh, Elt e)
                => PreFun acc  aenv  (e -> e -> e)
                -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+               -> acc            aenv  (Array (sh:.Int) e)
+               -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanlL (cvtF2 -> LiftedFun (Just f) _) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanl"
       $^ Scanl f z a'
-      | otherwise
+      | AsSlice <- asSlice (Proxy :: Proxy sh)
       = irregularAcc "scanl"
       $  scanlLift f z (asIrregular a)
     scanlL _ _ _
       = error $ nestedError "first or second" "scanl"
 
-    scanl'L :: forall e. Elt e
+    scanl'L :: forall sh e. (Shape sh, Elt e)
                => PreFun acc  aenv  (e -> e -> e)
                -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e, Scalar e)
+               -> acc            aenv  (Array (sh:.Int) e)
+               -> LiftedAcc  acc aenv' (Array (sh:.Int) e, Array sh e)
     scanl'L (cvtF2 -> LiftedFun (Just f) _) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanl'"
       $^ Scanl' f z a'
-      | otherwise
-      = trace "IRREGULAR" "scanl'"
-      $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
-      $^ Alet (asIrregular a)
-      $^ Alet (S.map S.unindex1 `fromHOAS` shapesC (segmentsC avar0))
-      $^ Alet (irregularValuesC avar1)
-      $^ Alet (irregularValuesC $ scanlLift (weakenA3 f) (weakenA3 z) avar2)
-      $  fromHOAS3
-            (\seg vec vec' ->
-              let
-                seg'        = S.map (+1) seg
-                tails       = S.zipWith (+) seg . fst $ S.scanl' (+) 0 seg'
-                sums        = S.backpermute (S.shape seg) (\ix -> S.index1 $ tails S.! ix) vec'
-
-                offset      = S.scanl1 (+) seg
-                inc         = S.scanl1 (+)
-                            $ S.permute (+) (S.fill (S.index1 $ S.size vec + 1) 0)
-                                          (\ix -> S.index1 $ offset S.! ix)
-                                          (S.fill (S.shape seg) (1 :: S.Exp Int))
-
-                body        = S.backpermute (S.shape vec)
-                                          (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
-                                          vec'
-              in S.Acc . S.Atuple
-               $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes (S.map S.index1 seg')) body))
-                          sums)
-            avar2
-            avar1
-            avar0
+      -- | otherwise
+      -- = trace "IRREGULAR" "scanl'"
+      -- $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
+      -- $^ Alet (asIrregular a)
+      -- $^ Alet (segmentsC avar0)
+      -- $^ Alet (irregularValuesC avar1)
+      -- $^ Alet (irregularValuesC $ scanlLift (weakenA3 f) (weakenA3 z) avar2)
+      -- $  fromHOAS3
+      --       (\seg vec vec' ->
+      --         let
+      --           shs'        = S.map nonEmpty (shapes seg)
+      --           tails       = S.zipWith (+) seg . fst $ S.scanl' (+) 0 shs'
+      --           sums        = S.backpermute (S.shape offset) (\ix -> S.index1 $ tails S.! ix) vec'
+      --
+      --           offset      = offsets seg
+      --           inc         = S.scanl1 (+)
+      --                       $ S.permute (+) (S.fill (S.index1 $ S.size vec + 1) 0)
+      --                                     (\ix -> S.index1 $ offset S.! ix)
+      --                                     (S.fill (S.shape offset) (1 :: S.Exp Int))
+      --
+      --           body        = S.backpermute (S.shape vec)
+      --                                     (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
+      --                                     vec'
+      --         in S.Acc . S.Atuple
+      --          $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes shs') body))
+      --                     sums)
+      --       avar2
+      --       avar1
+      --       avar0
     scanl'L _ _ _
       = error $ nestedError "first or second" "scanl"
 
-    scanr1L :: forall e. Elt e
+    scanr1L :: forall sh e. (Shape sh, Elt e)
                => PreFun acc  aenv  (e -> e -> e)
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+               -> acc            aenv  (Array (sh:.Int) e)
+               -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanr1L (cvtF2 -> LiftedFun (Just f) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanr1"
@@ -1009,56 +1009,56 @@ liftPreOpenAcc vectAcc ctx size acc
     scanr1L _ _
       = error $ nestedError "first" "scanr1"
 
-    scanrL :: forall e. Elt e
+    scanrL :: forall sh e. (Shape sh, Elt e)
                => PreFun acc  aenv  (e -> e -> e)
                -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e)
+               -> acc            aenv  (Array (sh:.Int) e)
+               -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
     scanrL (cvtF2 -> LiftedFun (Just f) _) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanr"
       $^ Scanr f z a'
-      | otherwise
+      | AsSlice <- asSlice (Proxy :: Proxy sh)
       = irregularAcc "scanr"
       $ scanrLift f z (asIrregular a)
     scanrL _ _ _
       = error $ nestedError "first or second" "scanr"
 
-    scanr'L :: forall e. Elt e
+    scanr'L :: forall sh e. (Shape sh, Elt e)
                => PreFun acc  aenv  (e -> e -> e)
                -> PreExp acc  aenv  e
-               -> acc            aenv  (Vector e)
-               -> LiftedAcc  acc aenv' (Vector e, Scalar e)
+               -> acc            aenv  (Array (sh:.Int) e)
+               -> LiftedAcc  acc aenv' (Array (sh:.Int) e, Array sh e)
     scanr'L (cvtF2 -> LiftedFun (Just f) _) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | LiftedAcc AvoidedT a' <- a
       = avoidedAcc "scanr"
       $^ Scanr' f z a'
-      | otherwise
-      =  trace "IRREGULAR" "scanr'"
-      $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
-      $^ Alet (asIrregular a)
-      $^ Alet (segmentsC avar0)
-      $^ Alet (irregularValuesC avar1)
-      $^ Alet (irregularValuesC $ scanrLift (weakenA3 f) (weakenA3 z) avar2)
-      $  fromHOAS3
-            (\seg vec vec' ->
-              let
-                -- reduction values
-                seg'        = S.map (+1) $ S.map S.unindex1 (shapes seg)
-                heads       = P.fst $ S.scanl' (+) 0 seg'
-                sums        = S.backpermute (S.shape (shapes seg)) (\ix -> S.index1 $ heads S.! ix) vec'
-
-                -- body segments
-                inc         = S.scanl1 (+) $ mkHeadFlags seg
-                body        = S.backpermute (S.shape vec)
-                                            (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
-                                            vec'
-              in S.Acc . S.Atuple
-               $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes (S.map S.index1 seg')) body))
-                          sums)
-            avar2
-            avar1
-            avar0
+      -- | otherwise
+      -- =  trace "IRREGULAR" "scanr'"
+      -- $  LiftedAcc (freeProdT (NilLtup `SnocLtup` IrregularT `SnocLtup` RegularT))
+      -- $^ Alet (asIrregular a)
+      -- $^ Alet (segmentsC avar0)
+      -- $^ Alet (irregularValuesC avar1)
+      -- $^ Alet (irregularValuesC $ scanrLift (weakenA3 f) (weakenA3 z) avar2)
+      -- $  fromHOAS3
+      --       (\seg vec vec' ->
+      --         let
+      --           -- reduction values
+      --           seg'        = S.map (+1) $ S.map S.unindex1 (shapes seg)
+      --           heads       = P.fst $ S.scanl' (+) 0 seg'
+      --           sums        = S.backpermute (S.shape (shapes seg)) (\ix -> S.index1 $ heads S.! ix) vec'
+      --
+      --           -- body segments
+      --           inc         = S.scanl1 (+) $ mkHeadFlags seg
+      --           body        = S.backpermute (S.shape vec)
+      --                                       (\ix -> S.index1 $ S.unindex1 ix + inc S.! ix)
+      --                                       vec'
+      --         in S.Acc . S.Atuple
+      --          $ SnocAtup (SnocAtup NilAtup (irregular (segmentsFromShapes (S.map S.index1 seg')) body))
+      --                     sums)
+      --       avar2
+      --       avar1
+      --       avar0
     scanr'L _ _ _
       = error $ nestedError "first or second" "scanr'"
 
@@ -1208,10 +1208,10 @@ liftPreOpenAcc vectAcc ctx size acc
       | otherwise
       = error "Nested sequence computation is not closed in its accumulators"
 
-    scanl1Lift :: forall aenv e. Elt e
+    scanl1Lift :: forall aenv sh e. (Shape sh, Elt e)
                => PreFun acc aenv (e -> e -> e)
-               -> acc aenv (IrregularArray DIM1 e)
-               -> acc aenv (IrregularArray DIM1 e)
+               -> acc aenv (IrregularArray (sh:.Int) e)
+               -> acc aenv (IrregularArray (sh:.Int) e)
     scanl1Lift f a
       = inject
       $  Alet a
@@ -1220,15 +1220,15 @@ liftPreOpenAcc vectAcc ctx size acc
       $  unzipC
       $^ Scanl1 (weakenA1 $ segmented f)
       $  let
-           flags :: forall aenv e. Elt e => acc (aenv, IrregularArray DIM1 e) (Vector Int)
+           flags :: forall aenv sh e. (Shape sh, Elt e) => acc (aenv, IrregularArray (sh:.Int) e) (Vector Int)
            flags = fromHOAS mkHeadFlags (segmentsC avar0)
          in fromHOAS2 S.zip flags (irregularValuesC avar0)
 
-    scanlLift :: forall aenv e. Elt e
+    scanlLift :: forall aenv sh e. (Shape sh, Slice sh, Elt e)
               => PreFun acc aenv (e -> e -> e)
               -> PreExp acc aenv e
-              -> acc aenv (IrregularArray DIM1 e)
-              -> acc aenv (IrregularArray DIM1 e)
+              -> acc aenv (IrregularArray (sh:.Int) e)
+              -> acc aenv (IrregularArray (sh:.Int) e)
     scanlLift f z a
       =  scanl1Lift f
       $^ Alet a
@@ -1238,7 +1238,7 @@ liftPreOpenAcc vectAcc ctx size acc
       $  fromHOAS3
           (\seg vec z ->
              let
-              shs'        = S.map (S.ilift1 (+1)) (shapes seg)
+              shs'        = S.map expand (shapes seg)
               offs'       = S.generate (S.shape shs') (\ix -> (offsets seg S.! ix) + S.shapeSize ix)
               seg'        = irregularSegs (totalSize seg + S.size shs') offs' shs'
               vec'        = S.permute const
@@ -1247,15 +1247,17 @@ liftPreOpenAcc vectAcc ctx size acc
                                       vec
               flags       = mkHeadFlags seg
               inc         = S.scanl1 (+) flags
+
+              expand ix   = S.lift (S.indexTail ix :. S.indexHead ix + 1)
              in irregular seg' vec')
           avar2
           avar1
           avar0
 
-    scanr1Lift :: forall aenv e. Elt e
+    scanr1Lift :: forall aenv sh e. (Shape sh, Elt e)
                => PreFun acc aenv (e -> e -> e)
-               -> acc aenv (IrregularArray DIM1 e)
-               -> acc aenv (IrregularArray DIM1 e)
+               -> acc aenv (IrregularArray (sh:.Int) e)
+               -> acc aenv (IrregularArray (sh:.Int) e)
     scanr1Lift f a
       = inject
       $  Alet a
@@ -1264,15 +1266,15 @@ liftPreOpenAcc vectAcc ctx size acc
       $  unzipC
       $^ Scanr1 (weakenA1 $ segmented f)
       $  let
-           flags :: forall aenv e. Elt e => acc (aenv, IrregularArray DIM1 e) (Vector Int)
+           flags :: forall aenv sh e. (Shape sh, Elt e) => acc (aenv, IrregularArray (sh:.Int) e) (Vector Int)
            flags = fromHOAS mkTailFlags (segmentsC avar0)
          in fromHOAS2 S.zip flags (irregularValuesC avar0)
 
-    scanrLift :: forall aenv e. Elt e
+    scanrLift :: forall aenv sh e. (Shape sh, Slice sh, Elt e)
               => PreFun acc aenv (e -> e -> e)
               -> PreExp acc aenv e
-              -> acc            aenv (IrregularArray DIM1 e)
-              -> acc            aenv (IrregularArray DIM1 e)
+              -> acc            aenv (IrregularArray (sh:.Int) e)
+              -> acc            aenv (IrregularArray (sh:.Int) e)
     scanrLift f z a
       =  scanr1Lift f
       $^ Alet a
@@ -1282,7 +1284,7 @@ liftPreOpenAcc vectAcc ctx size acc
       $  fromHOAS3
           (\seg vec z ->
              let
-              shs'        = S.map (S.ilift1 (+1)) (shapes seg)
+              shs'        = S.map expand (shapes seg)
               offs'       = S.generate (S.shape shs') (\ix -> (offsets seg S.! ix) + S.shapeSize ix)
               seg'        = irregularSegs (totalSize seg + S.size shs') offs' shs'
               vec'        = S.permute const
@@ -1291,6 +1293,7 @@ liftPreOpenAcc vectAcc ctx size acc
                                       vec
               flags       = mkHeadFlags seg
               inc         = S.scanl1 (+) flags
+              expand ix   = S.lift (S.indexTail ix :. S.indexHead ix + 1)
              in irregular seg' vec')
           avar2
           avar1
@@ -1654,15 +1657,15 @@ generateSeg segs f = S.map (\(S.unlift -> (seg,sh,i)) -> f seg sh (S.fromIndex s
     negs  = S.fill (S.index1 $ totalSize segs) (S.tup3 (-1::S.Exp Int,S.ignore,-1::S.Exp Int) :: S.Exp (Int, sh, Int)) --Start with all -1s
     heads = S.permute combine negs (S.index1 . (offs S.!)) (S.zip3 (S.enumFromN (S.shape offs) 0) (shapes segs) (S.fill (S.shape offs) 0))
 
-    domain = totalSize segs S.>* 0
+    domain = totalSize segs S.> 0
            S.?| ( S.scanl1 (\a b -> dead b S.? (inc a, b)) heads
                 , S.use (fromList (Z:.0) []))
     combine :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
     combine (S.untup3 -> (seg,sh,i)) (S.untup3 -> (seg',sh',i')) =
-      S.shapeSize sh S.>* S.shapeSize sh' S.? ( S.lift (seg,sh,i) , S.lift (seg',sh',i') )
+      S.shapeSize sh S.> S.shapeSize sh' S.? ( S.lift (seg,sh,i) , S.lift (seg',sh',i') )
 
     dead :: S.Exp (Int,sh,Int) -> S.Exp Bool
-    dead (S.untup3 -> (_,_,i)) = i S.==* -1
+    dead (S.untup3 -> (_,_,i)) = i S.== -1
 
     inc :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
     inc (S.untup3 -> (seg,sh,i)) = S.lift (seg,sh,i+1)
@@ -1852,7 +1855,7 @@ intersectSegments as bs = segmentsFromShapes (S.zipWith S.intersect (shapes as) 
 --    (segs, heads) = S.unzip $ S.map (\sh -> S.lift (S.indexTail sh, S.indexHead sh)) (segments a)
 
 --    segs' = makeNonEmpty segs
---    heads' = S.zipWith (\sh h -> S.shapeSize sh S.==* 0 S.? (0,h)) segs heads
+--    heads' = S.zipWith (\sh h -> S.shapeSize sh S.== 0 S.? (0,h)) segs heads
 
 --liftedFoldSeg :: (Elt e, Shape sh, Slice sh)
 --              => (S.Exp e -> S.Exp e -> S.Exp e)
@@ -1972,28 +1975,34 @@ liftedIrregularLinearIndex arr ixs = S.backpermute (S.shape ixs) f (irregularVal
 -- empty segments are represented by this single flag entry. This is additional
 -- data is used by exclusive segmented scan.
 --
-mkHeadFlags :: S.Acc (Segments DIM1) -> S.Acc (Vector Int)
+mkHeadFlags :: forall sh. Shape sh => S.Acc (Segments (sh:.Int)) -> S.Acc (Vector Int)
 mkHeadFlags seg
+  | ShapeRnil <- shapeType (Proxy :: Proxy sh)
   = S.init
   $ S.permute (+) zeros (\ix -> S.index1 (offset S.! ix)) ones
   where
     offset = offsets seg
     len    = totalSize seg
-    zeros  = S.fill (S.index1  $ len + 1) 0
-    ones   = S.fill (S.index1  $ S.size offset) 1
+    zeros  = S.fill (S.index1  $ len + 1) (0 :: S.Exp Int)
+    ones   = S.fill (S.index1  $ S.size offset) (1 :: S.Exp Int)
+mkHeadFlags seg
+  = generateSeg seg (\_ _ ix -> S.shapeSize ix S.== 0 S.? (1, 0))
 
 -- |Compute tail flags vector from segment vector for right-scans. That is, the
 -- flag is placed at the last place in each segment.
 --
-mkTailFlags :: S.Acc (Segments DIM1) -> S.Acc (Vector Int)
+mkTailFlags :: forall sh. Shape sh => S.Acc (Segments (sh:.Int)) -> S.Acc (Vector Int)
 mkTailFlags seg
+  | ShapeRnil <- shapeType (Proxy :: Proxy sh)
   = S.init
   $ S.permute (+) zeros (\ix -> S.index1 (len - 1 - offset S.! ix)) ones
   where
     offset = offsets seg
     len    = totalSize seg
-    zeros  = S.fill (S.index1 $ len + 1) 0
-    ones   = S.fill (S.index1  $ S.size offset) 1
+    zeros  = S.fill (S.index1 $ len + 1) (0 :: S.Exp Int)
+    ones   = S.fill (S.index1  $ S.size offset) (1 :: S.Exp Int)
+mkTailFlags seg
+  = generateSeg seg (\_ sh ix -> S.shapeSize ix S.== S.shapeSize sh - 1 S.? (1, 0))
 
 castAcc :: (Arrays a, Arrays a') => IsIso a a' -> S.Acc a -> S.Acc a'
 castAcc IsoRefl      a = a
@@ -2809,7 +2818,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
         f ty i x a = let x' = a S.++ flatten ty (S.snd (S.the i)) x in S.lift (x',x')
 
         a :: Elt e => acc aenv' (Vector e)
-        a = inject . Use $ newArray empty undefined
+        a = inject . Use $ fromFunction empty undefined
 
         flatten :: (Shape sh, Elt e) => LiftedType (Array sh e) x -> S.Exp Int -> S.Acc x -> S.Acc (Vector e)
         flatten AvoidedT   sz = S.flatten . replicate sz
@@ -2825,7 +2834,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     tabulate x
       | LiftedAcc ty x' <- cvtA x
       = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS3 (f ty) avar1 (weakenA2 x') avar0)) a)
-                 (Consumer (Last avar0 (weakenA1 (inject (Use (newArray empty undefined))))))
+                 (Consumer (Last avar0 (weakenA1 (inject (Use (fromFunction empty undefined))))))
       where
         f :: LiftedType (Array sh e) x
           -> S.Acc (Scalar (Int,Int))
@@ -2834,7 +2843,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
           -> S.Acc (Array (sh:.Int) e, Array (sh:.Int) e)
         f ty ix x a
           = let x'  = reduce ty x
-                x'' = S.fst (S.the ix) S.==* S.constant 0
+                x'' = S.fst (S.the ix) S.== S.constant 0
                     S.?| ( x'
                          , concat a x')
 
@@ -2847,7 +2856,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
                 sz_x = S.indexLast (S.shape x)
                 sz_y = S.indexLast (S.shape y)
               in S.generate (S.indexSnoc (S.intersect sh_x sh_y) (sz_x + sz_y))
-                            (\ix -> S.indexLast ix  S.<* sz_x S.? (x S.! ix, y S.! (S.indexSnoc (S.indexInit ix) (S.indexLast ix - sz_x))))
+                            (\ix -> S.indexLast ix  S.< sz_x S.? (x S.! ix, y S.! (S.indexSnoc (S.indexInit ix) (S.indexLast ix - sz_x))))
 
             reduce :: LiftedType (Array sh e) x -> S.Acc x -> S.Acc (Array (sh:.Int) e)
             reduce AvoidedT x = S.reshape (S.indexSnoc (S.shape x) 1) x
@@ -2862,7 +2871,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
 #endif
 
         a :: acc aenv' (Array (sh:.Int) e)
-        a = inject $ Use (newArray empty undefined)
+        a = inject $ Use (fromFunction empty undefined)
 
     cvtCT :: Atuple (PreOpenNaturalSeq acc aenv) t -> Maybe (Atuple (PreOpenChunkedSeq acc aenv') t)
     cvtCT NilAtup        = Just NilAtup
@@ -3078,16 +3087,16 @@ reduceOpenSeq seq =
       where
         f x a = let x' = a S.++ S.flatten x in S.lift (x',x')
         a :: Elt e => acc aenv (Vector e)
-        a = inject . Use $ newArray empty undefined
+        a = inject . Use $ fromFunction empty undefined
 
     tabulate :: forall sh e. (Shape sh, Elt e)
              => acc aenv (Array sh e)
              -> PreOpenNaturalSeq acc aenv (Array (sh:.Int) e)
     tabulate x = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS3 f avar1 (weakenA2 x) avar0)) a)
-                          (Consumer (Last avar0 (weakenA1 (inject (Use (newArray empty undefined))))))
+                          (Consumer (Last avar0 (weakenA1 (inject (Use (fromFunction empty undefined))))))
       where
         f :: S.Acc (Scalar Int) -> S.Acc (Array sh e) -> S.Acc (Array (sh:.Int) e) -> S.Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-        f ix x a = let x' =    S.the ix S.==* S.constant 0
+        f ix x a = let x' =    S.the ix S.== S.constant 0
                           S.?| (S.reshape (S.indexSnoc (S.shape x) (S.constant 1)) x
                                , concat x a)
 
@@ -3098,10 +3107,10 @@ reduceOpenSeq seq =
             sh_y = S.indexInit (S.shape y)
             sz_y = S.indexLast (S.shape y)
           in S.generate (S.indexSnoc (S.intersect sh_x sh_y) (sz_y + 1))
-                        (\ix -> S.indexLast ix  S.<* sz_y S.? (y S.! ix, x S.! S.indexInit ix))
+                        (\ix -> S.indexLast ix  S.< sz_y S.? (y S.! ix, x S.! S.indexInit ix))
 
         a :: acc aenv (Array (sh:.Int) e)
-        a = inject $ Use (newArray empty undefined)
+        a = inject $ Use (fromFunction empty undefined)
 
     streamify :: Arrays t
               => PreOpenAfun acc aenv (Scalar Int -> t)

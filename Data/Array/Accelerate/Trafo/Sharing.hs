@@ -60,9 +60,11 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
-import Data.Array.Accelerate.AST                        hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, Seq, PreOpenSeq(..), Producer(..), Consumer(..),
-  showPreAccOp, showPreExpOp )
+import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..), OpenAcc(..), Acc
+                                                               , Stencil(..), PreOpenExp(..), OpenExp
+                                                               , PreExp, Exp, Seq, PreOpenSeq(..)
+                                                               , Producer(..), Consumer(..)
+                                                               , showPreAccOp, showPreExpOp )
 import Data.Array.Accelerate.Trafo.Base                 ( StreamSeq(..), Extend(..) )
 import Data.Array.Accelerate.Trafo.Substitution         ( weaken, (:>) )
 import qualified Data.Array.Accelerate.AST              as AST
@@ -265,10 +267,9 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
 
       Pipe afun1 afun2 acc
-        -> let noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc seq exp ())
-               alyt'    = incLayout alyt `PushLayout` ZeroIdx
+        -> let alyt'    = incLayout alyt `PushLayout` ZeroIdx
                boundAcc = cvtAfun1 afun1 `AST.Apply` cvtA acc
-               bodyAcc  = convertSharingAfun1 config alyt' (noStableSharing : aenv') afun2
+               bodyAcc  = convertSharingAfun1 config alyt' (noStableSharingAcc : aenv') afun2
                           `AST.Apply`
                           AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in

@@ -204,6 +204,18 @@ type PreAfun acc = PreOpenAfun acc ()
 --
 type Afun = OpenAfun ()
 
+-- Vanilla open array computations
+--
+newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
+
+-- |Closed array expression aka an array program
+--
+type Acc = OpenAcc ()
+
+deriving instance Typeable PreOpenAcc
+deriving instance Typeable OpenAcc
+
+
 -- |Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
 --
@@ -388,46 +400,46 @@ data PreOpenAcc acc aenv a where
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*
   -- function and an initial element (which does not need to be the neutral of the
   -- associative operations)
-  Scanl       :: Elt e
+  Scanl       :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
     -- FIXME: Make the scans rank-polymorphic?
 
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
-  Scanl'      :: Elt e
+  Scanl'      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
 
   -- Haskell-style scan without an initial value
-  Scanl1      :: Elt e
+  Scanl1      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Right-to-left version of 'Scanl'
-  Scanr       :: Elt e
+  Scanr       :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Right-to-left version of 'Scanl\''
-  Scanr'      :: Elt e
+  Scanr'      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
 
   -- Right-to-left version of 'Scanl1'
-  Scanr1      :: Elt e
+  Scanr1      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Generalised forward permutation is characterised by a permutation function
   -- that determines for each element of the source array where it should go in
@@ -498,17 +510,6 @@ data PreOpenAcc acc aenv a where
               -> PreOpenSeq index acc aenv arrs
               -> PreOpenAcc acc aenv arrs
 
--- Vanilla open array computations
---
-newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
-
--- deriving instance Typeable PreOpenAcc
-deriving instance Typeable OpenAcc
-
-
--- |Closed array expression aka an array program
---
-type Acc = OpenAcc ()
 
 -- | Computations over sequences.
 --
@@ -924,6 +925,18 @@ type PreFun acc = PreOpenFun acc ()
 --
 type Fun = OpenFun ()
 
+-- |Vanilla open expression
+--
+type OpenExp = PreOpenExp OpenAcc
+
+-- |Parametrised expression without free scalar variables
+--
+type PreExp acc = PreOpenExp acc ()
+
+-- |Vanilla expression without free scalar variables
+--
+type Exp = OpenExp ()
+
 -- |Parametrised open expressions using de Bruijn indices for variables ranging over tuples
 -- of scalars and arrays of tuples.  All code, except Cond, is evaluated eagerly.  N-tuples are
 -- represented as nested pairs.
@@ -1078,19 +1091,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv dim
 
 
--- |Vanilla open expression
---
-type OpenExp = PreOpenExp OpenAcc
-
--- |Parametrised expression without free scalar variables
---
-type PreExp acc = PreOpenExp acc ()
-
--- |Vanilla expression without free scalar variables
---
-type Exp = OpenExp ()
-
--- |Primitive GPU constants
+-- |Primitive constant values
 --
 data PrimConst ty where
 

@@ -16,9 +16,8 @@
 {-# OPTIONS_HADDOCK prune #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2016] Trevor L. McDonell
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
@@ -27,17 +26,19 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- This interpreter is meant to be a reference implementation of the semantics
--- of the embedded array language.  The emphasis is on defining the semantics
+-- of the embedded array language. The emphasis is on defining the semantics
 -- clearly, not on performance.
 --
--- /Surface types versus representation types/
+
+-- [/Surface types versus representation types:/]
 --
--- As a general rule, we perform all computations on representation types and we store all data
--- as values of representation types.  To guarantee the type safety of the interpreter, this
--- currently implies a lot of conversions between surface and representation types.  Optimising
--- the code by eliminating back and forth conversions is fine, but only where it doesn't
--- negatively affects clarity — after all, the main purpose of the interpreter is to serve as an
--- executable specification.
+-- As a general rule, we perform all computations on representation types and we
+-- store all data as values of representation types. To guarantee the type
+-- safety of the interpreter, this currently implies a lot of conversions
+-- between surface and representation types. Optimising the code by eliminating
+-- back and forth conversions is fine, but only where it doesn't negatively
+-- affects clarity---after all, the main purpose of the interpreter is to serve
+-- as an executable specification.
 --
 
 module Data.Array.Accelerate.Interpreter (
@@ -229,7 +230,7 @@ evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, evalOpenAcc a aenv)
 -- ----------------
 
 unitOp :: Elt e => e -> Scalar e
-unitOp e = newArray Z (const e)
+unitOp e = fromFunction Z (const e)
 
 
 generateOp
@@ -237,7 +238,7 @@ generateOp
     => sh
     -> (sh -> e)
     -> Array sh e
-generateOp = newArray
+generateOp = fromFunction
 
 
 transformOp
@@ -248,7 +249,7 @@ transformOp
     -> Delayed (Array sh a)
     -> Array sh' b
 transformOp sh' p f (Delayed _ xs _)
-  = newArray sh' (\ix -> f (xs $ p ix))
+  = fromFunction sh' (\ix -> f (xs $ p ix))
 
 
 reshapeOp
@@ -268,7 +269,7 @@ replicateOp
     -> Array sl e
     -> Array sh e
 replicateOp slice slix arr
-  = newArray (toElt sh) (\ix -> arr ! liftToElt pf ix)
+  = fromFunction (toElt sh) (\ix -> arr ! liftToElt pf ix)
   where
     (sh, pf) = extend slice (fromElt slix) (fromElt (shape arr))
 
@@ -292,7 +293,7 @@ sliceOp
     -> slix
     -> Array sl e
 sliceOp slice arr slix
-  = newArray (toElt sh') (\ix -> arr ! liftToElt pf ix)
+  = fromFunction (toElt sh') (\ix -> arr ! liftToElt pf ix)
   where
     (sh', pf) = restrict slice (fromElt slix) (fromElt (shape arr))
 
@@ -314,7 +315,7 @@ mapOp :: (Shape sh, Elt b)
       -> Delayed (Array sh a)
       -> Array sh b
 mapOp f (Delayed sh xs _)
-  = newArray sh (\ix -> f (xs ix))
+  = fromFunction sh (\ix -> f (xs ix))
 
 
 zipWithOp
@@ -324,7 +325,23 @@ zipWithOp
     -> Delayed (Array sh b)
     -> Array sh c
 zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
-  = newArray (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
+  = fromFunction (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
+
+-- zipWith'Op
+--     :: (Shape sh, Elt a)
+--     => (a -> a -> a)
+--     -> Delayed (Array sh a)
+--     -> Delayed (Array sh a)
+--     -> Array sh a
+-- zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
+--   = fromFunction (shx `union` shy) (\ix -> if ix `outside` shx
+--                                            then ys ix
+--                                            else if ix `outside` shy
+--                                            then xs ix
+--                                            else f (xs ix) (ys ix))
+--   where
+--     a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
+
 
 foldOp
     :: (Shape sh, Elt e)
@@ -334,10 +351,10 @@ foldOp
     -> Array sh e
 foldOp f z (Delayed (sh :. n) arr _)
   | size sh == 0
-  = newArray (listToShape . map (max 1) . shapeToList $ sh) (const z)
+  = fromFunction (listToShape . map (max 1) . shapeToList $ sh) (const z)
 
   | otherwise
-  = newArray sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr (ix :. i)) f z)
+  = fromFunction sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr (ix :. i)) f z)
 
 
 fold1Op
@@ -347,7 +364,7 @@ fold1Op
     -> Array sh e
 fold1Op f (Delayed (sh :. n) arr _)
   = $boundsCheck "fold1" "empty array" (n > 0)
-  $ newArray sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
+  $ fromFunction sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
 
 
 foldSegOp
@@ -359,7 +376,7 @@ foldSegOp
     -> Array (sh :. Int) e
 foldSegOp f z (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
-  = newArray (sh :. n)
+  = fromFunction (sh :. n)
   $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
                        end   = fromIntegral $ offset ! (Z :. ix+1)
                    in
@@ -376,7 +393,7 @@ fold1SegOp
     -> Array (sh :. Int) e
 fold1SegOp f (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
-  = newArray (sh :. n)
+  = fromFunction (sh :. n)
   $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
                        end   = fromIntegral $ offset ! (Z :. ix+1)
                    in
@@ -387,139 +404,162 @@ fold1SegOp f (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
 
 
 scanl1Op
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
-    -> Delayed (Vector e)
-    -> Vector e
-scanl1Op f (Delayed sh@(Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanl1Op f (Delayed sh@(_ :. n) ain _)
   = $boundsCheck "scanl1" "empty array" (n > 0)
   $ adata `seq` Array (fromElt sh) adata
   where
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData n
+      aout <- newArrayData (size sh)
 
-      let write (Z:.0) = unsafeWriteArrayData aout 0 (fromElt $ ain 0)
-          write (Z:.i) = do
-            x <- unsafeReadArrayData aout (i-1)
-            y <- return . fromElt $  ain  i
-            unsafeWriteArrayData aout i (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh (sz:.0)) (fromElt (ain (sz:.0)))
+          write (sz:.i) = do
+            x <- unsafeReadArrayData aout (toIndex sh (sz:.i-1))
+            y <- return $ fromElt (ain (sz:.i))
+            unsafeWriteArrayData aout (toIndex sh (sz:.i)) (f' x y)
 
       iter1 sh write (>>)
       return (aout, undefined)
 
 
 scanlOp
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> Vector e
-scanlOp f z (Delayed (Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanlOp f z (Delayed (sh :. n) ain _)
   = adata `seq` Array (fromElt sh') adata
   where
-    sh'         = Z :. n+1
+    sh'         = sh :. n+1
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData (n+1)
+      aout <- newArrayData (size sh')
 
-      let write (Z:.0) = unsafeWriteArrayData aout 0 (fromElt z)
-          write (Z:.i) = do
-            x <- unsafeReadArrayData aout (i-1)
-            y <- return . fromElt $  ain  (i-1)
-            unsafeWriteArrayData aout i (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh' (sz:.0)) (fromElt z)
+          write (sz:.i) = do
+            x <- unsafeReadArrayData aout (toIndex sh' (sz:.i-1))
+            y <- return $ fromElt (ain (sz:.i-1))
+            unsafeWriteArrayData aout (toIndex sh' (sz:.i)) (f' x y)
 
       iter sh' write (>>) (return ())
       return (aout, undefined)
 
 
 scanl'Op
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> (Vector e, Scalar e)
-scanl'Op f z (scanlOp f z -> arr)
-  = let
-        arr'    = case arr of Array _ adata -> Array ((), n-1) adata
-        sum     = unitOp (arr ! (Z:.n-1))
-        n       = size (shape arr)
-    in
-    (arr', sum)
+    -> Delayed (Array (sh:.Int) e)
+    -> (Array (sh:.Int) e, Array sh e)
+scanl'Op f z (Delayed (sh :. n) ain _)
+  = aout `seq` asum `seq` ( Array (fromElt (sh:.n)) aout
+                          , Array (fromElt sh)      asum )
+  where
+    f'          = sinkFromElt2 f
+    --
+    (AD_Pair aout asum, _) = runArrayData $ do
+      aout <- newArrayData (size (sh:.n))
+      asum <- newArrayData (size sh)
+
+      let write (sz:.0)
+            | n == 0    = unsafeWriteArrayData asum (toIndex sh sz) (fromElt z)
+            | otherwise = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.0)) (fromElt z)
+          write (sz:.i) = do
+            x <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.i-1))
+            y <- return $ fromElt (ain (sz:.i-1))
+            if i == n
+              then unsafeWriteArrayData asum (toIndex sh      sz)      (f' x y)
+              else unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.i)) (f' x y)
+
+      iter (sh:.n+1) write (>>) (return ())
+      return (AD_Pair aout asum, undefined)
 
 
 scanrOp
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> Vector e
-scanrOp f z (Delayed (Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanrOp f z (Delayed (sz :. n) ain _)
   = adata `seq` Array (fromElt sh') adata
   where
-    sh'         = Z :. n+1
+    sh'         = sz :. n+1
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData (n+1)
+      aout <- newArrayData (size sh')
 
-      let write (Z:.0) = unsafeWriteArrayData aout n (fromElt z)
-          write (Z:.i) = do
-            x <- return . fromElt $  ain  (n-i)
-            y <- unsafeReadArrayData aout (n-i+1)
-            unsafeWriteArrayData aout (n-i) (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh' (sz:.n)) (fromElt z)
+          write (sz:.i) = do
+            x <- return $ fromElt (ain (sz:.n-i))
+            y <- unsafeReadArrayData aout (toIndex sh' (sz:.n-i+1))
+            unsafeWriteArrayData aout (toIndex sh' (sz:.n-i)) (f' x y)
 
       iter sh' write (>>) (return ())
       return (aout, undefined)
 
 
 scanr1Op
-    :: Elt e
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
-    -> Delayed (Vector e)
-    -> Vector e
-scanr1Op f (Delayed sh@(Z :. n) _ ain)
+    -> Delayed (Array (sh:.Int) e)
+    -> Array (sh:.Int) e
+scanr1Op f (Delayed sh@(_ :. n) ain _)
   = $boundsCheck "scanr1" "empty array" (n > 0)
   $ adata `seq` Array (fromElt sh) adata
   where
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
-      aout <- newArrayData n
+      aout <- newArrayData (size sh)
 
-      let write (Z:.0) = unsafeWriteArrayData aout (n-1) (fromElt $ ain (n-1))
-          write (Z:.i) = do
-            x <- return . fromElt $  ain  (n-i-1)
-            y <- unsafeReadArrayData aout (n-i)
-            unsafeWriteArrayData aout (n-i-1) (f' x y)
+      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh (sz:.n-1)) (fromElt (ain (sz:.n-1)))
+          write (sz:.i) = do
+            x <- return $ fromElt (ain (sz:.n-i-1))
+            y <- unsafeReadArrayData aout (toIndex sh (sz:.n-i))
+            unsafeWriteArrayData aout (toIndex sh (sz:.n-i-1)) (f' x y)
 
       iter1 sh write (>>)
       return (aout, undefined)
 
 
 scanr'Op
-    :: forall e. Elt e
+    :: forall sh e. (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Delayed (Vector e)
-    -> (Vector e, Scalar e)
-scanr'Op f z (Delayed (Z :. n) _ ain)
-  = (Array ((),n) adata, unitOp (toElt asum))
+    -> Delayed (Array (sh:.Int) e)
+    -> (Array (sh:.Int) e, Array sh e)
+scanr'Op f z (Delayed (sh :. n) ain _)
+  = aout `seq` asum `seq` ( Array (fromElt (sh:.n)) aout
+                          , Array (fromElt sh)      asum )
   where
-    f' x y      = sinkFromElt2 f (fromElt x) y
+    f'          = sinkFromElt2 f
     --
-    (adata, asum) = runArrayData $ do
-      aout <- newArrayData n
+    (AD_Pair aout asum, _) = runArrayData $ do
+      aout <- newArrayData (size (sh:.n))
+      asum <- newArrayData (size sh)
 
-      let trav i !y | i < 0     = return y
-          trav i y              = do
-            unsafeWriteArrayData aout i y
-            trav (i-1) (f' (ain i) y)
+      let write (sz:.0)
+            | n == 0    = unsafeWriteArrayData asum (toIndex sh sz) (fromElt z)
+            | otherwise = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-1)) (fromElt z)
 
-      final <- trav (n-1) (fromElt z)
-      return (aout, final)
+          write (sz:.i) = do
+            x <- return $ fromElt (ain (sz:.n-i))
+            y <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.n-i))
+            if i == n
+              then unsafeWriteArrayData asum (toIndex sh      sz)          (f' x y)
+              else unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-i-1)) (f' x y)
+
+      iter (sh:.n+1) write (>>) (return ())
+      return (AD_Pair aout asum, undefined)
 
 
 permuteOp
@@ -570,7 +610,7 @@ backpermuteOp
     -> Delayed (Array sh e)
     -> Array sh' e
 backpermuteOp sh' p (Delayed _ arr _)
-  = newArray sh' (\ix -> arr $ p ix)
+  = fromFunction sh' (\ix -> arr $ p ix)
 
 subarrayOp
     :: (Shape sh, Elt e)
@@ -579,7 +619,7 @@ subarrayOp
     -> Array sh e
     -> Array sh e
 subarrayOp ix sh arr
-  = newArray sh (\ix' -> arr ! (ix `offset` ix'))
+  = fromFunction sh (\ix' -> arr ! (ix `offset` ix'))
 
 
 stencilOp
@@ -589,7 +629,7 @@ stencilOp
     -> Array sh a
     -> Array sh b
 stencilOp stencil boundary arr
-  = newArray sh f
+  = fromFunction sh f
   where
     f           = stencil . stencilAccess bounded
     sh          = shape arr
@@ -609,7 +649,7 @@ stencil2Op
     -> Array sh b
     -> Array sh c
 stencil2Op stencil boundary1 arr1 boundary2 arr2
-  = newArray (sh1 `intersect` sh2) f
+  = fromFunction (sh1 `intersect` sh2) f
   where
     sh1         = shape arr1
     sh2         = shape arr2
@@ -1100,7 +1140,6 @@ evalMin (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty =
 evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry min
 
 
-
 -- Sequence evaluation
 -- ---------------
 
@@ -1142,7 +1181,7 @@ evalSeq min max i s aenv =
        -> arrs
     go i index l f s a next =
       let
-        (a', s') = f (newArray Z (const index)) s
+        (a', s') = f (fromFunction Z (const index)) s
       in if maybe True (contains' index) l && maybe True (>0) i
            then go (flip (-) 1 <$> i)
                    (nextIndex' index) l f s' (next (aenv `Push` a')) next

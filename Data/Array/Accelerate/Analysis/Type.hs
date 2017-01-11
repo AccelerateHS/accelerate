@@ -115,8 +115,9 @@ preAccType k pacc =
     Collect _ _ _ _     -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
 #if __GLASGOW_HASKELL__ < 800
-                             _            -> error "Something funny"
+                             _            -> error "rob you are terrible at this game"
 #endif
+--}
 
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc

@@ -46,7 +46,7 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( ($), (^), undefined, fromInteger )
+import Prelude                                                      ( ($), undefined, fromInteger )
 import Data.Complex                                                 ( Complex(..) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
@@ -78,12 +78,12 @@ instance Elt a => Unlift Exp (Complex (Exp a)) where
       x :+ y
 
 instance A.Eq a => A.Eq (Complex a) where
-  x ==* y = let r1 :+ c1 = unlift x
-                r2 :+ c2 = unlift y
-            in  r1 ==* r2 &&* c1 ==* c2
-  x /=* y = let r1 :+ c1 = unlift x
-                r2 :+ c2 = unlift y
-            in  r1 /=* r2 ||* c1 /=* c2
+  x == y = let r1 :+ c1 = unlift x
+               r2 :+ c2 = unlift y
+           in  r1 == r2 && c1 == c2
+  x /= y = let r1 :+ c1 = unlift x
+               r2 :+ c2 = unlift y
+           in  r1 /= r2 || c1 /= c2
 
 instance A.RealFloat a => P.Num (Exp (Complex a)) where
   (+)           = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
@@ -98,7 +98,7 @@ instance A.RealFloat a => P.Fractional (Exp (Complex a)) where
   c / c'
     = let x  :+ y       = unlift c
           x' :+ y'      = unlift c'     :: Complex (Exp a)
-          den           = x'^(2 :: Int) + y'^(2 :: Int)
+          den           = x' P.^ (2 :: Int) + y' P.^ (2 :: Int)
           re            = (x * x' + y * y') / den
           im            = (y * x' - x * y') / den
       in
@@ -113,11 +113,11 @@ instance A.RealFloat a => P.Floating (Exp (Complex a)) where
           x :+ y        = unlift z
           v'            = abs y / (u'*2)
           u'            = sqrt ((magnitude z + abs x) / 2)
-          (u, v)        = unlift $ cond (x <* 0) (lift (v',u')) (lift (u',v'))
+          (u, v)        = unlift $ cond (x < 0) (lift (v',u')) (lift (u',v'))
       in
-      cond (x ==* 0 &&* y ==* 0)
+      cond (x == 0 && y == 0)
         {- then -} 0
-        {- else -} (lift (u :+ (cond (y <* 0) (-v) v)))
+        {- else -} (lift (u :+ (cond (y < 0) (-v) v)))
 
   pi            = lift (pi :: Complex (Exp a))
   log z         = lift (log (magnitude z) :+ phase z)

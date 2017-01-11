@@ -78,13 +78,13 @@ data Status = Clean     -- Array in remote memory matches array in host memory.
 type Timestamp = Integer
 
 data Used task where
-  Used :: (PrimElt e a)
-       => Timestamp
-       -> Status
-       -> Int      -- Use count
-       -> [task]   -- Asynchronous tasks using the array
-       -> Int      -- Array size
-       -> Weak (ArrayData e)
+  Used :: PrimElt e a
+       => !Timestamp
+       -> !Status
+       -> {-# UNPACK #-} !Int                   -- Use count
+       -> ![task]                               -- Asynchronous tasks using the array
+       -> {-# UNPACK #-} !Int                   -- Array size
+       -> {-# UNPACK #-} !(Weak (ArrayData e))
        -> Used task
 
 -- |A Task represents a process executing asynchronously that can be polled for
@@ -339,8 +339,8 @@ finalizer :: StableArray -> Weak (UseTable task) -> IO ()
 finalizer !key !weak_utbl = do
   mref <- deRefWeak weak_utbl
   case mref of
-    Nothing -> trace "finalize cache/dead table" $ return ()
-    Just ref -> trace ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
+    Nothing  -> message "finalize cache/dead table"
+    Just ref -> trace  ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
 
 delete :: UT task -> StableArray -> IO ()
 delete utbl key = do

@@ -17,6 +17,7 @@
 module Data.Array.Accelerate.Classes.RealFrac (
 
   RealFrac(..),
+  div', mod', divMod',
 
 ) where
 
@@ -34,6 +35,31 @@ import Data.Array.Accelerate.Classes.ToFloating
 import Text.Printf
 import Prelude                                                      ( ($), String, error )
 import qualified Prelude                                            as P
+
+
+-- | Generalisation of 'P.div' to any instance of 'RealFrac'
+--
+div' :: (RealFrac a, Elt b, IsIntegral b) => Exp a -> Exp a -> Exp b
+div' n d = floor (n / d)
+
+-- | Generalisation of 'P.mod' to any instance of 'RealFrac'
+--
+mod' :: (Floating a, RealFrac a, ToFloating Int a) => Exp a -> Exp a -> Exp a
+mod' n d = n - (toFloating f) * d
+  where
+    f :: Exp Int
+    f = div' n d
+
+-- | Generalisation of 'P.divMod' to any instance of 'RealFrac'
+--
+divMod'
+    :: (Floating a, RealFrac a, Num b, IsIntegral b, ToFloating b a)
+    => Exp a
+    -> Exp a
+    -> (Exp b, Exp a)
+divMod' n d = (f, n - (toFloating f) * d)
+  where
+    f = div' n d
 
 
 -- | Extracting components of fractions.
@@ -119,8 +145,8 @@ defaultProperFraction
     -> (Exp a, Exp b)
 defaultProperFraction x =
   untup2 $ Exp
-         $ Cond (x ==* 0) (tup2 (0, 0))
-                          (tup2 (n, f))
+         $ Cond (x == 0) (tup2 (0, 0))
+                         (tup2 (n, f))
   where
     n = truncate x
     f = x - toFloating n

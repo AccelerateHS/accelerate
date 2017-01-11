@@ -87,6 +87,7 @@ preAccDim k pacc =
 #if __GLASGOW_HASKELL__ < 800
                               _            -> error "ppbbbbbt~"
 #endif
+--}
 
     Acond _ acc _        -> k acc
     Awhile _ _ acc       -> k acc

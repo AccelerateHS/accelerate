@@ -72,16 +72,16 @@ class Eq a => Bits a where
   -- 0 otherwise.
   shift         :: Exp a -> Exp Int -> Exp a
   shift x i
-    = cond (i <* 0) (x `shiftR` (-i))
-    $ cond (i >* 0) (x `shiftL` i)
+    = cond (i < 0) (x `shiftR` (-i))
+    $ cond (i > 0) (x `shiftL` i)
     $ x
 
   -- | @'rotate' x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right
   -- by @-i@ bits otherwise.
   rotate        :: Exp a -> Exp Int -> Exp a
   rotate x i
-    = cond (i <* 0) (x `rotateR` (-i))
-    $ cond (i >* 0) (x `rotateL` i)
+    = cond (i < 0) (x `rotateR` (-i))
+    $ cond (i > 0) (x `rotateL` i)
     $ x
 
   -- | The value with all bits unset
@@ -157,14 +157,14 @@ class Bits b => FiniteBits b where
 -- ------------------
 
 instance Bits Bool where
-  (.&.)        = (&&*)
-  (.|.)        = (||*)
-  xor          = (/=*)
+  (.&.)        = (&&)
+  (.|.)        = (||)
+  xor          = (/=)
   complement   = not
-  shift x i    = cond (i ==* 0) x (constant False)
-  testBit x i  = cond (i ==* 0) x (constant False)
+  shift x i    = cond (i == 0) x (constant False)
+  testBit x i  = cond (i == 0) x (constant False)
   rotate x _   = x
-  bit i        = i ==* 0
+  bit i        = i == 0
   isSigned     = isSignedDefault
   popCount     = mkBoolToInt
 
@@ -619,16 +619,16 @@ bitDefault :: (IsIntegral t, Bits t) => Exp Int -> Exp t
 bitDefault x = constant 1 `shiftL` x
 
 testBitDefault :: (IsIntegral t, Bits t) => Exp t -> Exp Int -> Exp Bool
-testBitDefault x i = (x .&. bit i) /=* constant 0
+testBitDefault x i = (x .&. bit i) /= constant 0
 
 shiftDefault :: (FiniteBits t, IsIntegral t, B.Bits t) => Exp t -> Exp Int -> Exp t
 shiftDefault x i
-  = cond (i >=* 0) (shiftLDefault x i)
+  = cond (i >= 0) (shiftLDefault x i)
                    (shiftRDefault x (-i))
 
 shiftLDefault :: (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftLDefault x i
-  = cond (i >=* finiteBitSize x) (constant 0)
+  = cond (i >= finiteBitSize x) (constant 0)
   $ mkBShiftL x i
 
 shiftRDefault :: forall t. (B.Bits t, FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
@@ -639,13 +639,13 @@ shiftRDefault
 -- Shift the argument right (signed)
 shiftRADefault :: (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftRADefault x i
-  = cond (i >=* finiteBitSize x) (cond (mkLt x (constant 0)) (constant (-1)) (constant 0))
+  = cond (i >= finiteBitSize x) (cond (mkLt x (constant 0)) (constant (-1)) (constant 0))
   $ mkBShiftR x i
 
 -- Shift the argument right (unsigned)
 shiftRLDefault :: (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftRLDefault x i
-  = cond (i >=* finiteBitSize x) (constant 0)
+  = cond (i >= finiteBitSize x) (constant 0)
   $ mkBShiftR x i
 
 rotateDefault :: forall t. (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
@@ -677,7 +677,7 @@ rotateDefault'
     -> Exp Int
     -> Exp i
 rotateDefault' _ x i
-  = cond (i' ==* 0) x
+  = cond (i' == 0) x
   $ w2i ((x' `mkBShiftL` i') `mkBOr` (x' `mkBShiftR` (wsib - i')))
   where
     w2i  = mkBitcast :: Exp w -> Exp i
@@ -689,12 +689,12 @@ rotateDefault' _ x i
 
 rotateLDefault :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 rotateLDefault x i
-  = cond (i ==* 0) x
+  = cond (i == 0) x
   $ mkBRotateL x i
 
 rotateRDefault :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 rotateRDefault x i
-  = cond (i ==* 0) x
+  = cond (i == 0) x
   $ mkBRotateR x i
 
 isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
@@ -714,7 +714,7 @@ popCountKernighan :: (Bits a, Num a) => Exp a -> Exp Int
 popCountKernighan x = r
   where
     (r,_) = untup2
-          $ while (\(untup2 -> (_,v)) -> v /=* 0)
+          $ while (\(untup2 -> (_,v)) -> v /= 0)
                   (\(untup2 -> (c,v)) -> tup2 (c+1, v .&. (v-1)))
                   (tup2 (0,x))
 
