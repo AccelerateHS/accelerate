@@ -119,6 +119,9 @@ evalPrimApp env f x
       PrimBShiftR ty            -> evalBShiftR ty x env
       PrimBRotateL ty           -> evalBRotateL ty x env
       PrimBRotateR ty           -> evalBRotateR ty x env
+      PrimPopCount ty           -> evalPopCount ty x env
+      PrimCountLeadingZeros ty  -> evalCountLeadingZeros ty x env
+      PrimCountTrailingZeros ty -> evalCountTrailingZeros ty x env
       PrimFDiv ty               -> evalFDiv ty x env
       PrimRecip ty              -> evalRecip ty x env
       PrimSin ty                -> evalSin ty x env
@@ -452,6 +455,37 @@ evalBRotateR _ (untup2 -> Just (x,i)) env
   = Stats.ruleFired "x `rotateR` 0" $ Just x
 evalBRotateR ty arg env
   | IntegralDict <- integralDict ty = eval2 rotateR arg env
+
+evalPopCount :: Elt a => IntegralType a -> a :-> Int
+evalPopCount ty | IntegralDict <- integralDict ty = eval1 popCount
+
+evalCountLeadingZeros :: Elt a => IntegralType a -> a :-> Int
+#if __GLASGOW_HASKELL__ >= 710
+evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 countLeadingZeros
+#else
+evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 clz
+  where
+    clz x = (w-1) - go (w-1)
+      where
+        go i | i < 0       = i  -- no bit set
+             | testBit x i = i
+             | otherwise   = go (i-1)
+        w = finiteBitSize x
+#endif
+
+evalCountTrailingZeros :: Elt a => IntegralType a -> a :-> Int
+#if __GLASGOW_HASKELL__ >= 710
+evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 countTrailingZeros
+#else
+evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 ctz
+  where
+    ctz x = go 0
+      where
+        go i | i >= w      = i
+             | testBit x i = i
+             | otherwise   = go (i+1)
+        w = finiteBitSize x
+#endif
 
 
 -- Methods of Fractional & Floating
