@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -47,7 +48,7 @@ test_map backend opt = testGroup "map" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall a. (P.Integral a, P.Bits a, A.Integral a, A.Bits a, Arbitrary a, Similar a, A.FromIntegral a Float) => (Config :-> Bool) -> a -> Maybe Test
+    testIntegralElt :: forall a. (P.Integral a, P.FiniteBits a, A.Integral a, A.FiniteBits a, Arbitrary a, Similar a, A.FromIntegral a Float) => (Config :-> Bool) -> a -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
@@ -59,16 +60,18 @@ test_map backend opt = testGroup "map" $ catMaybes
         testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary (Array sh a)) => sh -> Test
         testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [ -- operators on Num
-            testProperty "neg"          (test_negate :: Array sh a -> Property)
-          , testProperty "abs"          (test_abs    :: Array sh a -> Property)
-          , testProperty "signum"       (test_signum :: Array sh a -> Property)
+            testProperty "neg"                (test_negate :: Array sh a -> Property)
+          , testProperty "abs"                (test_abs    :: Array sh a -> Property)
+          , testProperty "signum"             (test_signum :: Array sh a -> Property)
 
             -- operators on Integral & Bits
-          , testProperty "complement"   (test_complement :: Array sh a -> Property)
-          , testProperty "popCount"     (test_popCount   :: Array sh a -> Property)
+          , testProperty "complement"         (test_complement :: Array sh a -> Property)
+          , testProperty "popCount"           (test_popCount   :: Array sh a -> Property)
+          , testProperty "countLeadingZeros"  (test_countLeadingZeros  :: Array sh a -> Property)
+          , testProperty "countTrailingZeros" (test_countTrailingZeros :: Array sh a -> Property)
 
             -- conversions
-          , testProperty "fromIntegral" (test_fromIntegral :: Array sh a -> Property)
+          , testProperty "fromIntegral"       (test_fromIntegral :: Array sh a -> Property)
           ]
           where
             test_fromIntegral xs = run1 backend (A.map A.fromIntegral) xs ~?= mapRef (P.fromIntegral :: a -> Float) xs
@@ -121,8 +124,10 @@ test_map backend opt = testGroup "map" $ catMaybes
     test_abs    xs     = run1 backend (A.map abs) xs    ~?= mapRef abs xs
     test_signum xs     = run1 backend (A.map signum) xs ~?= mapRef signum xs
 
-    test_complement xs = run1 backend (A.map A.complement) xs ~?= mapRef P.complement xs
-    test_popCount   xs = run1 backend (A.map A.popCount)   xs ~?= mapRef P.popCount xs
+    test_complement xs          = run1 backend (A.map A.complement) xs ~?= mapRef P.complement xs
+    test_popCount   xs          = run1 backend (A.map A.popCount)   xs ~?= mapRef P.popCount xs
+    test_countLeadingZeros xs   = run1 backend (A.map A.countLeadingZeros) xs  ~?= mapRef countLeadingZerosRef xs
+    test_countTrailingZeros xs  = run1 backend (A.map A.countTrailingZeros) xs ~?= mapRef countTrailingZerosRef xs
 
     test_recip xs      = run1 backend (A.map recip) xs ~?= mapRef recip xs
     test_sin xs        = run1 backend (A.map sin) xs ~?= mapRef sin xs
@@ -173,4 +178,32 @@ mapRef f xs
   = fromList (arrayShape xs)
   $ P.map f
   $ toList xs
+
+countLeadingZerosRef :: P.FiniteBits a => a -> Int
+#if __GLASGOW_HASKELL__ >= 710
+countLeadingZerosRef = P.countLeadingZeros
+#else
+countLeadingZerosRef = clz
+  where
+    clz x = (w-1) - go (w-1)
+      where
+        go i | i < 0         = i  -- no bit set
+             | P.testBit x i = i
+             | otherwise     = go (i-1)
+        w = P.finiteBitSize x
+#endif
+
+countTrailingZerosRef :: P.FiniteBits a => a -> Int
+#if __GLASGOW_HASKELL__ >= 710
+countTrailingZerosRef = P.countTrailingZeros
+#else
+countTrailingZerosRef = ctz
+  where
+    ctz x = go 0
+      where
+        go i | i >= w        = i
+             | P.testBit x i = i
+             | otherwise     = go (i+1)
+        w = P.finiteBitSize x
+#endif
 

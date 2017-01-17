@@ -8,7 +8,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 3fb349fc9fb4ed957ca847941afbe86cb5fa457b
+    commit: 03fe5ed61eba4f4f750786134035ce858fbc4ef7
   extra-dep: true
 
 - location:
@@ -18,7 +18,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: feeb953ba05567d08c24f2f6c7b7ef008e60363b
+    commit: fae79cdf4f668c03f84513531cd6059355cb38a4
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -71,7 +71,7 @@ packages:
 
 extra-deps:
 - 'chaselev-deque-0.5.0.5'
-- 'cuda-0.7.5.1'
+- 'cuda-0.7.5.2'
 - 'cufft-0.7.5.0'
 - 'libffi-0.1'
 - 'normaldistribution-1.1.0.3'
