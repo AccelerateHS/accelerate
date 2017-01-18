@@ -368,49 +368,68 @@ evalSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 signum
 -- Methods of Integral & Bits
 -- --------------------------
 
-evalQuot :: Elt a => IntegralType a -> (a,a) :-> a
-evalQuot ty | IntegralDict <- integralDict ty = eval2 quot
+evalQuot :: IntegralType a -> (a,a) :-> a
+evalQuot ty exp env
+  | Just qr    <- evalQuotRem ty exp env
+  , Just (q,_) <- untup2 qr
+  = Just q
+evalQuot _ _ _
+  = Nothing
 
-evalRem :: Elt a => IntegralType a -> (a,a) :-> a
-evalRem ty | IntegralDict <- integralDict ty = eval2 rem
+evalRem :: IntegralType a -> (a,a) :-> a
+evalRem ty exp env
+  | Just qr    <- evalQuotRem ty exp env
+  , Just (_,r) <- untup2 qr
+  = Just r
+evalRem _ _ _
+  = Nothing
 
-evalQuotRem :: IntegralType a -> (a,a) :-> (a,a)
+evalQuotRem :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalQuotRem ty exp env
   | IntegralDict                           <- integralDict ty
   , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
-  , Just a <- propagate env x
-  , Just b <- propagate env y
-  = Stats.substitution "constant fold"
-  $ Just $ let (u,v) = quotRem a b
-           in  tup2 (Const (fromElt u), Const (fromElt v))
-
+  , Just b                                 <- propagate env y
+  = case b of
+      0 -> Nothing
+      1 -> Stats.ruleFired "quotRem x 1" $ Just (tup2 (x, Const (fromElt (0::a))))
+      _ -> case propagate env x of
+             Nothing -> Nothing
+             Just a  -> Stats.substitution "constant fold"
+                      $ Just $ let (u,v) = quotRem a b
+                               in  tup2 (Const (fromElt u), Const (fromElt v))
 evalQuotRem _ _ _
   = Nothing
 
-evalIDiv :: Elt a => IntegralType a -> (a,a) :-> a
-evalIDiv ty | IntegralDict <- integralDict ty = evalIDiv'
 
-evalIDiv' :: (Elt a, Integral a) => (a,a) :-> a
-evalIDiv' (untup2 -> Just (x,y)) env
-  | Just 1      <- propagate env y
-  = Stats.ruleFired "x`div`1" $ Just x
+evalIDiv :: IntegralType a -> (a,a) :-> a
+evalIDiv ty exp env
+  | Just dm    <- evalDivMod ty exp env
+  , Just (d,_) <- untup2 dm
+  = Just d
+evalIDiv _ _ _
+  = Nothing
 
-evalIDiv' arg env
-  = eval2 div arg env
+evalMod :: IntegralType a -> (a,a) :-> a
+evalMod ty exp env
+  | Just dm    <- evalDivMod ty exp env
+  , Just (_,m) <- untup2 dm
+  = Just m
+evalMod _ _ _
+  = Nothing
 
-evalMod :: Elt a => IntegralType a -> (a,a) :-> a
-evalMod ty | IntegralDict <- integralDict ty = eval2 mod
-
-evalDivMod :: IntegralType a -> (a,a) :-> (a,a)
+evalDivMod :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalDivMod ty exp env
   | IntegralDict                           <- integralDict ty
   , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
-  , Just a <- propagate env x
-  , Just b <- propagate env y
-  = Stats.substitution "constant fold"
-  $ Just $ let (u,v) = divMod a b
-           in  tup2 (Const (fromElt u), Const (fromElt v))
-
+  , Just b                                 <- propagate env y
+  = case b of
+      0 -> Nothing
+      1 -> Stats.ruleFired "divMod x 1" $ Just (tup2 (x, Const (fromElt (0::a))))
+      _ -> case propagate env x of
+             Nothing -> Nothing
+             Just a  -> Stats.substitution "constant fold"
+                      $ Just $ let (u,v) = divMod a b
+                               in  tup2 (Const (fromElt u), Const (fromElt v))
 evalDivMod _ _ _
   = Nothing
 
