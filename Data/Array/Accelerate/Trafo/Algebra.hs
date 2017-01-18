@@ -456,10 +456,10 @@ evalBRotateR _ (untup2 -> Just (x,i)) env
 evalBRotateR ty arg env
   | IntegralDict <- integralDict ty = eval2 rotateR arg env
 
-evalPopCount :: Elt a => IntegralType a -> a :-> Int
+evalPopCount :: IntegralType a -> a :-> Int
 evalPopCount ty | IntegralDict <- integralDict ty = eval1 popCount
 
-evalCountLeadingZeros :: Elt a => IntegralType a -> a :-> Int
+evalCountLeadingZeros :: IntegralType a -> a :-> Int
 #if __GLASGOW_HASKELL__ >= 710
 evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 countLeadingZeros
 #else
@@ -473,7 +473,7 @@ evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 clz
         w = finiteBitSize x
 #endif
 
-evalCountTrailingZeros :: Elt a => IntegralType a -> a :-> Int
+evalCountTrailingZeros :: IntegralType a -> a :-> Int
 #if __GLASGOW_HASKELL__ >= 710
 evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 countTrailingZeros
 #else
