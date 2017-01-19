@@ -50,24 +50,30 @@ module Data.Array.Accelerate.Interpreter (
 ) where
 
 -- standard libraries
+import Control.DeepSeq
+import Control.Exception
 import Control.Monad
 import Data.Bits
-import Data.Char                                        ( chr, ord )
-import Unsafe.Coerce                                    ( unsafeCoerce )
-import Prelude                                          hiding ( sum )
+import Data.Char                                                    ( chr, ord )
+import System.IO.Unsafe                                             ( unsafePerformIO )
+import Text.Printf                                                  ( printf )
+import Unsafe.Coerce                                                ( unsafeCoerce )
+import Prelude                                                      hiding ( sum )
 
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
+import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Trafo                              hiding ( Delayed )
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Smart                    as Sugar
-import qualified Data.Array.Accelerate.Trafo                    as AST
-import qualified Data.Array.Accelerate.Array.Representation     as R
+import qualified Data.Array.Accelerate.Array.Representation         as R
+import qualified Data.Array.Accelerate.Smart                        as Sugar
+import qualified Data.Array.Accelerate.Trafo                        as AST
+
+import qualified Data.Array.Accelerate.Debug                        as D
 
 
 -- Program execution
@@ -76,18 +82,25 @@ import qualified Data.Array.Accelerate.Array.Representation     as R
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run acc
-  = let a = convertAccWith config acc
-    in  evalOpenAcc a Empty
-
+run a = unsafePerformIO execute
+  where
+    !acc    = convertAccWith config a
+    execute = do
+      D.dumpGraph $!! acc
+      D.dumpSimplStats
+      phase "execute" D.elapsed (evaluate (evalOpenAcc acc Empty))
 
 -- | Prepare and run an embedded array program of one argument
 --
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
-run1 afun
-  = let f = convertAfunWith config afun
-    in  evalOpenAfun f Empty
-
+run1 f = \a -> unsafePerformIO (execute a)
+  where
+    !acc    = convertAfunWith config f
+    !afun   = unsafePerformIO $ do
+                D.dumpGraph $!! acc
+                D.dumpSimplStats
+                return acc
+    execute x = phase "execute" D.elapsed (evaluate (evalOpenAfun afun Empty x))
 
 -- -- | Stream a lazily read list of input arrays through the given program,
 -- -- collecting results as we go
@@ -107,6 +120,12 @@ config =  Phase
   , convertOffsetOfSegment = False
   -- , vectoriseSequences     = True
   }
+
+-- Debugging
+-- ---------
+
+phase :: String -> (Double -> Double -> String) -> IO a -> IO a
+phase n fmt go = D.timed D.dump_phases (\wall cpu -> printf "phase %s: %s" n (fmt wall cpu)) go
 
 
 -- Delayed Arrays
