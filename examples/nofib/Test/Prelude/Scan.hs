@@ -12,6 +12,7 @@ module Test.Prelude.Scan (
 
 import Prelude                                                  as P
 import Test.QuickCheck
+import Data.Functor                                             ( <$> )
 import Data.Label
 import Data.Maybe
 import Data.Typeable
