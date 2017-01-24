@@ -811,7 +811,7 @@ streamIn = Seq . StreamIn
 -- moving inward - e.g. if the array is a matrix, the returned sequence is the
 -- submatrices in column major order.
 --
-subarrays :: (Shape sh, Elt e, sh :<= DIM3)
+subarrays :: (Shape sh, Elt e, sh :<= DIM2)
           => Exp sh
           -> Array sh e
           -> Seq [Array sh e]

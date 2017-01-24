@@ -342,7 +342,7 @@ data PreSeq acc seq exp arrs where
                  => [a]
                  -> PreSeq acc seq exp [a]
 
-  Subarrays      :: (Shape sh, Elt e, sh :<= DIM3)
+  Subarrays      :: (Shape sh, Elt e, sh :<= DIM2)
                  => exp sh
                  -> Array sh e
                  -> PreSeq acc seq exp [Array sh e]

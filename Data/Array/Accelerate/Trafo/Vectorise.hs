@@ -2757,7 +2757,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     --
     --     in LiftedAcc theType $ ProduceAccum Nothing f'' s
 
-    subarrays :: (Shape sh, sh :<= DIM3, Elt e) => PreExp acc aenv' sh -> Array sh e -> ChunkedProducer acc aenv' (RegularArray sh e)
+    subarrays :: (Shape sh, sh :<= DIM2, Elt e) => PreExp acc aenv' sh -> Array sh e -> ChunkedProducer acc aenv' (RegularArray sh e)
     subarrays sh arr = ProduceAccum subLimit f nil
       where
         f = Alam . Alam . Abody $ atup (liftedSubArrays (the avar1) (weakenA2 sh) arr) nil
@@ -2915,14 +2915,14 @@ vectoriseOpenSeq vectAcc ctx size seq =
 
     stageError = $internalError "vectoriseOpenSeq" "AST is at wrong stage for vectorisation. It seems to have already been vectorised."
 
-liftedSubArrays :: forall acc aenv sh e. (sh :<= DIM3, Elt e, Shape sh, Kit acc)
+liftedSubArrays :: forall acc aenv sh e. (sh :<= DIM2, Elt e, Shape sh, Kit acc)
                 => PreExp acc aenv (Int, Int)
                 -> PreExp acc aenv sh
                 -> Array sh e
                 -> acc aenv (RegularArray sh e)
 liftedSubArrays index sh arr
   | AsSlice <- asSlice (Proxy :: Proxy sh)
-  = case (maximumRank :: sh :<=: DIM3) of
+  = case (maximumRank :: sh :<=: DIM2) of
       RankZ          -> flattenC $^ Use arr
       RankSnoc RankZ -> inject $ Reshape (indexSnoc sh (sndE index))
         $^ Subarray (index1 (fstE index `times` unindex1 sh)) (index1 (sndE index `times` unindex1 sh)) arr
@@ -3117,7 +3117,7 @@ reduceOpenSeq seq =
               -> PreOpenAfun acc aenv (Scalar Int -> () -> (t, ()))
     streamify f = Alam . Alam . Abody $ atup (weakenA2 f `apply` avar1) nil
 
-    subarrays :: forall sh aenv e. (Shape sh, sh :<= DIM3, Elt e)
+    subarrays :: forall sh aenv e. (Shape sh, sh :<= DIM2, Elt e)
               => PreExp acc aenv sh
               -> Array sh e
               -> NaturalProducer acc aenv (Array sh e)
@@ -3134,9 +3134,9 @@ reduceOpenSeq seq =
         plus a b = PrimApp (PrimAdd numType) (tup a b)
         times a b = PrimApp (PrimMul numType) (tup a b)
 
-        plusS :: forall aenv. (Shape sh, sh :<= DIM3) => PreExp acc aenv sh -> PreExp acc aenv sh -> PreExp acc aenv sh
+        plusS :: forall aenv. (Shape sh, sh :<= DIM2) => PreExp acc aenv sh -> PreExp acc aenv sh -> PreExp acc aenv sh
         plusS a b =
-          case (maximumRank :: sh :<=: DIM3) of
+          case (maximumRank :: sh :<=: DIM2) of
             RankZ          -> a
             RankSnoc RankZ -> index1 (unindex1 a `plus` unindex1 b)
             RankSnoc (RankSnoc RankZ) ->

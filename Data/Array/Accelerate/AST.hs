@@ -299,7 +299,7 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv arrs
 
   -- Subarray inlet by strided copy
-  Subarray    :: (Shape sh, Elt e)
+  Subarray    :: (Shape sh, Elt e, sh :<= DIM2)
               => PreExp acc aenv sh                             -- index of subarray
               -> PreExp acc aenv sh                             -- extent of subarray
               -> Array sh e
@@ -563,7 +563,7 @@ data Producer index acc aenv a where
   -- Split an array up into subarrays along the outermost dimension.
   --
   -- Turned into 'ProduceAccum' and 'Subarray' by vectorisation.
-  Subarrays    :: (Shape sh, Elt e, sh :<= DIM3)
+  Subarrays    :: (Shape sh, Elt e, sh :<= DIM2)
                => PreExp acc aenv sh             -- The size of each subarray
                -> Array sh e                     -- The array to extract from
                -> Producer index acc aenv (Array sh e)
