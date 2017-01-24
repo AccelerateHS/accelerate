@@ -155,7 +155,7 @@ module Data.Array.Accelerate (
   --
   Z(..), (:.)(..),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
-  Shape, Slice(..), All(..), Any(..),
+  Shape, Slice, All(..), Any(..),
   -- Split(..), Divide(..), Division(..),
 
   -- ** Array access
@@ -327,6 +327,7 @@ module Data.Array.Accelerate (
   indexHead, indexTail,
   toIndex, fromIndex,
   intersect, indexTrans,
+  toSlice,
 
   -- *** Conversions
   ord, chr, boolToInt, bitcast,
@@ -372,7 +373,7 @@ module Data.Array.Accelerate (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), rank, shape, size, toIndex, fromIndex, intersect, ignore, transpose )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), rank, shape, size, toIndex, fromIndex, intersect, ignore, transpose, toSlice )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Prelude
