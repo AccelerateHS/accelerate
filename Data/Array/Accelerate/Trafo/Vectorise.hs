@@ -2937,20 +2937,20 @@ liftedSubArrays index sh arr
       RankSnoc (RankSnoc RankZ)
         -> inject . Reshape (indexSnoc sh (sndE index))
         $^ Alet (inject $ Unit (twoDC index sh (Const fsh)))
-        $  head `catC` body `catC` tail
+        $  tail `catC` body `catC` head
         where
-          head = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
+          head = inject $ Subarray (fstE . trd $ the avar0) (sndE . trd $ the avar0) arr
           body = inject
-               $  Backpermute (weakenA1 $ index2 (sndE index) (IndexHead sh)) (Lam . Body $ reorderC (weakenA1 . weakenE1 $ sh) (Const fsh) var0)
-               $^ Subarray (fstE . snd $ the avar0) (sndE . snd $ the avar0) arr
+               $  Backpermute (trd (snd (the avar0))) (Lam . Body $ reorderC (weakenA1 . weakenE1 $ sh) (Const fsh) var0)
+               $^ Subarray (fst . snd $ the avar0) (snd . snd $ the avar0) arr
           tail = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
 
           fst :: (Elt a, Elt b, Elt c) => PreExp acc aenv' (a,b,c) -> PreExp acc aenv' a
           fst = Prj (SuccTupIdx (SuccTupIdx ZeroTupIdx))
           snd :: (Elt a, Elt b, Elt c) => PreExp acc aenv' (a,b,c) -> PreExp acc aenv' b
           snd = Prj (SuccTupIdx ZeroTupIdx)
-          -- trd :: (Elt a, Elt b, Elt c) => PreExp acc aenv' (a,b,c) -> PreExp acc aenv' c
-          -- trd = Prj ZeroTupIdx
+          trd :: (Elt a, Elt b, Elt c) => PreExp acc aenv' (a,b,c) -> PreExp acc aenv' c
+          trd = Prj ZeroTupIdx
 
           fsh = fromElt (shape arr)
       _ -> error "Absurd"
@@ -2960,13 +2960,13 @@ liftedSubArrays index sh arr
     catC :: acc aenv' (Array DIM2 e) -> acc aenv' (Array DIM2 e) -> acc aenv' (Array DIM2 e)
     catC = fromHOAS2 cat
 
-    twoDC :: PreOpenExp acc env aenv' (Int,Int) -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' ((DIM2,DIM2), (DIM2,DIM2), (DIM2,DIM2))
+    twoDC :: PreOpenExp acc env aenv' (Int,Int) -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' ((DIM2,DIM2), (DIM2,DIM2,DIM2), (DIM2,DIM2))
     twoDC = fromExpHOAS3 twoD
 
     reorderC :: PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2 -> PreOpenExp acc env aenv' DIM2
     reorderC = fromExpHOAS3 reorder
 
-    twoD :: S.Exp (Int,Int) -> S.Exp DIM2 -> S.Exp DIM2 -> S.Exp ((DIM2,DIM2), (DIM2,DIM2), (DIM2,DIM2))
+    twoD :: S.Exp (Int,Int) -> S.Exp DIM2 -> S.Exp DIM2 -> S.Exp ((DIM2,DIM2), (DIM2,DIM2,DIM2), (DIM2,DIM2))
     twoD (S.unlift -> (i,n)) sh fsh =
       let
         (Z:.height:.width) = S.unlift sh
@@ -2980,12 +2980,26 @@ liftedSubArrays index sh arr
         (Z:.fheight:.(_::S.Exp Int)) = S.unlift (fromAbs fsh)
         i_y = i `mod` fheight
         i_x = i `div` fheight
-        tail, body, head :: S.Exp (DIM2, DIM2)
-        tail = S.lift (toAbs (S.index2 i_y i_x), toAbs (S.index2 ((fheight - i_y) `min` n) 1))
-        tail_n = fheight - i_y
-        body = S.lift (toAbs (S.index2 0 (i_x + 1)), toAbs (S.index2 fheight ((n - tail_n) `div` fheight)))
-        head = S.lift (toAbs (S.index2 0 (i_x + 1 + S.indexHead (S.snd body))), toAbs (S.index2 ((n - tail_n) `mod` fheight) 1))
-      in S.lift (tail,body,head)
+
+        tail_x      = i_x
+        tail_y      = i_y
+        tail_width  = 1
+        tail_height = min (fheight - i_y) n
+
+        body_x      = i_x + 1
+        body_y      = 0
+        body_width  = max 0 ((n - tail_height) `div` fheight)
+        body_height = fheight
+        body_sh     = toAbs (S.index2 (body_width*fheight) 1)
+
+        head_x = body_x + body_width
+        head_y = 0
+        head_width = 1
+        head_height = n - tail_height - body_height*body_width
+
+      in S.lift ( (toAbs (S.index2 tail_y tail_x), toAbs (S.index2 tail_height tail_width))
+                , (toAbs (S.index2 body_y body_x), toAbs (S.index2 body_height body_width), body_sh)
+                , (toAbs (S.index2 head_y head_x), toAbs (S.index2 head_height head_width)))
 
     cat :: S.Acc (Array DIM2 e) -> S.Acc (Array DIM2 e) -> S.Acc (Array DIM2 e)
     cat a b = S.reshape (S.index2 h w) (S.flatten a S.++ S.flatten b)
@@ -2994,9 +3008,9 @@ liftedSubArrays index sh arr
         h = h_a + (S.fst . S.unindex2 $ S.shape b)
 
     reorder :: S.Exp DIM2 -> S.Exp DIM2 -> S.Exp DIM2 -> S.Exp DIM2
-    reorder sh (S.unlift -> Z:.fh:.fw) (S.unlift -> Z:.y:.x) =
+    reorder sh (S.unlift -> Z:.fh:.(_::S.Exp Int)) (S.unlift -> Z:.y:.x) =
       let
-        x_out = x + ((y `div` fw) * (S.indexHead sh))
+        x_out = x + ((y `div` fh) * (S.indexHead sh))
         y_out = y `mod` fh
       in S.index2 y_out x_out
 
