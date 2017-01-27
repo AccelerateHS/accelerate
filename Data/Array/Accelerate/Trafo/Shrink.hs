@@ -537,10 +537,7 @@ usesOfPreAcc countAcc idx = count
     count pacc = case pacc of
       Avar this                 -> countIdx this
       --
-      Alet bnd body             | Just u <- prjChain idx bnd (countAcc ZeroIdx body)
-                                -> countAcc (SuccIdx idx) body <+> u
-                                | otherwise
-                                -> countA bnd <+> countAcc (SuccIdx idx) body
+      Alet bnd body             -> countA bnd <+> countAcc (SuccIdx idx) body
 
       Atuple tup                -> countAT tup
       Aprj ix a                 | Just u <- prjChain idx (inject $ Aprj ix a) oneUse
