@@ -1968,7 +1968,7 @@ liftedRegularLinearIndex :: (Shape sh, Elt e)
                          -> S.Acc (Vector e)
 liftedRegularLinearIndex arr ixs = S.generate (S.shape ixs) f
   where
-    f ix = arr S.!! (ixs S.! ix + (S.shapeSize ix) * S.shapeSize (regularShape arr))
+    f ix = arr S.!! (ixs S.! ix + S.unindex1 ix * S.shapeSize (regularShape arr))
 
 liftedIrregularLinearIndex :: (Shape sh, Elt e)
                            => S.Acc (IrregularArray sh e)
@@ -2340,7 +2340,7 @@ replicateIr s (LiftedAcc ty a)= LiftedAcc ty (rep s ty a)
              -> S.Acc (Array (sh':.Int) e)
     repArray segs arr
       = let
-          ixs = replicateSeg segs (S.enumFromN (S.index1 (S.indexLast (S.shape arr))) 0)
+          ixs = generateSeg segs (\seg _ _ -> seg)
           f ix = arr S.! (S.indexInit ix `S.indexSnoc` (ixs S.!! S.indexLast ix))
         in S.generate (S.indexSnoc (regularShape arr) (totalSize segs)) f
 
