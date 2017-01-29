@@ -1535,12 +1535,15 @@ liftExp vectAcc ctx size exp
                  -> LiftedExp acc env aenv' aenv'' e
     linearIndexL (cvtA -> (_,LiftedAcc ty a)) (cvtE -> LiftedExp aix ix)
       | AvoidedT <- ty
-      = LiftedExp (LinearIndex <$> pure a <*> aix)
+      = trace "AVOIDED" "linearIndex"
+      $ LiftedExp (LinearIndex <$> pure a <*> aix)
                   (inject . Alet (weaken (under ctx) a) $^ Map (fun1 (LinearIndex avar0)) (weakenA1 ix))
       | RegularT <- ty
-      = LiftedExp Nothing (liftedRegularLinearIndexC (weaken (under ctx) a) ix)
+      = trace "REGULAR" "linearIndex"
+      $ LiftedExp Nothing (liftedRegularLinearIndexC (weaken (under ctx) a) ix)
       | IrregularT <- ty
-      = LiftedExp Nothing (liftedIrregularLinearIndexC (weaken (under ctx) a) ix)
+      = trace "IRREGULAR" "linearIndex"
+      $ LiftedExp Nothing (liftedIrregularLinearIndexC (weaken (under ctx) a) ix)
 #if __GLASGOW_HASKELL__ < 800
     linearIndexL _ _
       = error "Absurd"
@@ -2316,8 +2319,8 @@ replicateIr s (LiftedAcc ty a)= LiftedAcc ty (rep s ty a)
        UnitT       -> a
        AvoidedT    -> a
        LiftedUnitT -> totalSizeC s
-       RegularT    -> fromHOAS2 repArray s a
-       IrregularT  -> fromHOAS2 repIrregular s a
+       RegularT    -> trace "REPLICATING" "Regular by Irregular"   fromHOAS2 repArray s a
+       IrregularT  -> trace "REPLICATING" "Irregular by Irregular" fromHOAS2 repIrregular s a
        (TupleT t)  -> inject . Alet a $^ Atuple (repT (weakenA1 s) t (asAtupleC avar0))
 
     repT :: acc aenv' (Segments sh)
@@ -2368,8 +2371,8 @@ replicateR s (LiftedAcc ty a) = LiftedAcc ty (rep s ty a)
        UnitT       -> a
        AvoidedT    -> a
        LiftedUnitT -> inject . Alet s $^ Alet (weakenA1 a) $^ Unit (the avar0 `times` the avar1)
-       RegularT    -> fromHOAS2 repArray s a
-       IrregularT  -> fromHOAS2 repIrregular s a
+       RegularT    -> trace "REPLICATING" "Regular by Regular"   $ fromHOAS2 repArray s a
+       IrregularT  -> trace "REPLICATING" "Irregular by Regular" $ fromHOAS2 repIrregular s a
        (TupleT t)  -> inject . Alet a $^ Atuple (repT (weakenA1 s) t (asAtupleC avar0))
 
     repT :: acc aenv' (Scalar Int)
