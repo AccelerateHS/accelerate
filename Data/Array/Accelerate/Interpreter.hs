@@ -52,12 +52,16 @@ module Data.Array.Accelerate.Interpreter (
 ) where
 
 -- standard libraries
+import Control.DeepSeq
+import Control.Exception
 import Control.Monad
 import Data.Bits
-import Data.Char                                        ( chr, ord )
-import Data.Maybe                                       ( fromMaybe, fromJust )
-import Unsafe.Coerce                                    ( unsafeCoerce )
-import Prelude                                          hiding ( sum )
+import Data.Char                                                    ( chr, ord )
+import Data.Maybe                                                   ( fromMaybe, fromJust )
+import System.IO.Unsafe                                             ( unsafePerformIO )
+import Text.Printf                                                  ( printf )
+import Unsafe.Coerce                                                ( unsafeCoerce )
+import Prelude                                                      hiding ( sum )
 
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative                              ( (<$>), (<*>), pure )
@@ -66,15 +70,17 @@ import Control.Applicative                              ( (<$>), (<*>), pure )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
+import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Trafo                              hiding ( Delayed )
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Smart                    as Sugar
-import qualified Data.Array.Accelerate.Trafo                    as AST
-import qualified Data.Array.Accelerate.Array.Representation     as R
+import qualified Data.Array.Accelerate.Array.Representation         as R
+import qualified Data.Array.Accelerate.Smart                        as Sugar
+import qualified Data.Array.Accelerate.Trafo                        as AST
+
+import qualified Data.Array.Accelerate.Debug                        as D
 
 
 -- Program execution
@@ -83,18 +89,25 @@ import qualified Data.Array.Accelerate.Array.Representation     as R
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run acc
-  = let a = convertAccWith config acc
-    in  evalOpenAcc a Empty
-
+run a = unsafePerformIO execute
+  where
+    !acc    = convertAccWith config a
+    execute = do
+      D.dumpGraph $!! acc
+      D.dumpSimplStats
+      phase "execute" D.elapsed (evaluate (evalOpenAcc acc Empty))
 
 -- | Prepare and run an embedded array program of one argument
 --
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
-run1 afun
-  = let f = convertAfunWith config afun
-    in  evalOpenAfun f Empty
-
+run1 f = \a -> unsafePerformIO (execute a)
+  where
+    !acc    = convertAfunWith config f
+    !afun   = unsafePerformIO $ do
+                D.dumpGraph $!! acc
+                D.dumpSimplStats
+                return acc
+    execute x = phase "execute" D.elapsed (evaluate (evalOpenAfun afun Empty x))
 
 -- | Stream a lazily read list of input arrays through the given program,
 -- collecting results as we go
@@ -114,6 +127,12 @@ config =  Phase
   , convertOffsetOfSegment = False
   , vectoriseSequences     = True
   }
+
+-- Debugging
+-- ---------
+
+phase :: String -> (Double -> Double -> String) -> IO a -> IO a
+phase n fmt go = D.timed D.dump_phases (\wall cpu -> printf "phase %s: %s" n (fmt wall cpu)) go
 
 
 -- Delayed Arrays
@@ -786,68 +805,71 @@ evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
 evalPrimConst (PrimPi       ty) = evalPi ty
 
 evalPrim :: PrimFun p -> p
-evalPrim (PrimAdd             ty) = evalAdd ty
-evalPrim (PrimSub             ty) = evalSub ty
-evalPrim (PrimMul             ty) = evalMul ty
-evalPrim (PrimNeg             ty) = evalNeg ty
-evalPrim (PrimAbs             ty) = evalAbs ty
-evalPrim (PrimSig             ty) = evalSig ty
-evalPrim (PrimQuot            ty) = evalQuot ty
-evalPrim (PrimRem             ty) = evalRem ty
-evalPrim (PrimQuotRem         ty) = evalQuotRem ty
-evalPrim (PrimIDiv            ty) = evalIDiv ty
-evalPrim (PrimMod             ty) = evalMod ty
-evalPrim (PrimDivMod          ty) = evalDivMod ty
-evalPrim (PrimBAnd            ty) = evalBAnd ty
-evalPrim (PrimBOr             ty) = evalBOr ty
-evalPrim (PrimBXor            ty) = evalBXor ty
-evalPrim (PrimBNot            ty) = evalBNot ty
-evalPrim (PrimBShiftL         ty) = evalBShiftL ty
-evalPrim (PrimBShiftR         ty) = evalBShiftR ty
-evalPrim (PrimBRotateL        ty) = evalBRotateL ty
-evalPrim (PrimBRotateR        ty) = evalBRotateR ty
-evalPrim (PrimFDiv            ty) = evalFDiv ty
-evalPrim (PrimRecip           ty) = evalRecip ty
-evalPrim (PrimSin             ty) = evalSin ty
-evalPrim (PrimCos             ty) = evalCos ty
-evalPrim (PrimTan             ty) = evalTan ty
-evalPrim (PrimAsin            ty) = evalAsin ty
-evalPrim (PrimAcos            ty) = evalAcos ty
-evalPrim (PrimAtan            ty) = evalAtan ty
-evalPrim (PrimSinh            ty) = evalSinh ty
-evalPrim (PrimCosh            ty) = evalCosh ty
-evalPrim (PrimTanh            ty) = evalTanh ty
-evalPrim (PrimAsinh           ty) = evalAsinh ty
-evalPrim (PrimAcosh           ty) = evalAcosh ty
-evalPrim (PrimAtanh           ty) = evalAtanh ty
-evalPrim (PrimExpFloating     ty) = evalExpFloating ty
-evalPrim (PrimSqrt            ty) = evalSqrt ty
-evalPrim (PrimLog             ty) = evalLog ty
-evalPrim (PrimFPow            ty) = evalFPow ty
-evalPrim (PrimLogBase         ty) = evalLogBase ty
-evalPrim (PrimTruncate     ta tb) = evalTruncate ta tb
-evalPrim (PrimRound        ta tb) = evalRound ta tb
-evalPrim (PrimFloor        ta tb) = evalFloor ta tb
-evalPrim (PrimCeiling      ta tb) = evalCeiling ta tb
-evalPrim (PrimAtan2           ty) = evalAtan2 ty
-evalPrim (PrimIsNaN           ty) = evalIsNaN ty
-evalPrim (PrimLt              ty) = evalLt ty
-evalPrim (PrimGt              ty) = evalGt ty
-evalPrim (PrimLtEq            ty) = evalLtEq ty
-evalPrim (PrimGtEq            ty) = evalGtEq ty
-evalPrim (PrimEq              ty) = evalEq ty
-evalPrim (PrimNEq             ty) = evalNEq ty
-evalPrim (PrimMax             ty) = evalMax ty
-evalPrim (PrimMin             ty) = evalMin ty
-evalPrim PrimLAnd                 = evalLAnd
-evalPrim PrimLOr                  = evalLOr
-evalPrim PrimLNot                 = evalLNot
-evalPrim PrimOrd                  = evalOrd
-evalPrim PrimChr                  = evalChr
-evalPrim PrimBoolToInt            = evalBoolToInt
-evalPrim (PrimFromIntegral ta tb) = evalFromIntegral ta tb
-evalPrim (PrimToFloating ta tb)   = evalToFloating ta tb
-evalPrim PrimCoerce{}             = unsafeCoerce
+evalPrim (PrimAdd                ty) = evalAdd ty
+evalPrim (PrimSub                ty) = evalSub ty
+evalPrim (PrimMul                ty) = evalMul ty
+evalPrim (PrimNeg                ty) = evalNeg ty
+evalPrim (PrimAbs                ty) = evalAbs ty
+evalPrim (PrimSig                ty) = evalSig ty
+evalPrim (PrimQuot               ty) = evalQuot ty
+evalPrim (PrimRem                ty) = evalRem ty
+evalPrim (PrimQuotRem            ty) = evalQuotRem ty
+evalPrim (PrimIDiv               ty) = evalIDiv ty
+evalPrim (PrimMod                ty) = evalMod ty
+evalPrim (PrimDivMod             ty) = evalDivMod ty
+evalPrim (PrimBAnd               ty) = evalBAnd ty
+evalPrim (PrimBOr                ty) = evalBOr ty
+evalPrim (PrimBXor               ty) = evalBXor ty
+evalPrim (PrimBNot               ty) = evalBNot ty
+evalPrim (PrimBShiftL            ty) = evalBShiftL ty
+evalPrim (PrimBShiftR            ty) = evalBShiftR ty
+evalPrim (PrimBRotateL           ty) = evalBRotateL ty
+evalPrim (PrimBRotateR           ty) = evalBRotateR ty
+evalPrim (PrimPopCount           ty) = evalPopCount ty
+evalPrim (PrimCountLeadingZeros  ty) = evalCountLeadingZeros ty
+evalPrim (PrimCountTrailingZeros ty) = evalCountTrailingZeros ty
+evalPrim (PrimFDiv               ty) = evalFDiv ty
+evalPrim (PrimRecip              ty) = evalRecip ty
+evalPrim (PrimSin                ty) = evalSin ty
+evalPrim (PrimCos                ty) = evalCos ty
+evalPrim (PrimTan                ty) = evalTan ty
+evalPrim (PrimAsin               ty) = evalAsin ty
+evalPrim (PrimAcos               ty) = evalAcos ty
+evalPrim (PrimAtan               ty) = evalAtan ty
+evalPrim (PrimSinh               ty) = evalSinh ty
+evalPrim (PrimCosh               ty) = evalCosh ty
+evalPrim (PrimTanh               ty) = evalTanh ty
+evalPrim (PrimAsinh              ty) = evalAsinh ty
+evalPrim (PrimAcosh              ty) = evalAcosh ty
+evalPrim (PrimAtanh              ty) = evalAtanh ty
+evalPrim (PrimExpFloating        ty) = evalExpFloating ty
+evalPrim (PrimSqrt               ty) = evalSqrt ty
+evalPrim (PrimLog                ty) = evalLog ty
+evalPrim (PrimFPow               ty) = evalFPow ty
+evalPrim (PrimLogBase            ty) = evalLogBase ty
+evalPrim (PrimTruncate        ta tb) = evalTruncate ta tb
+evalPrim (PrimRound           ta tb) = evalRound ta tb
+evalPrim (PrimFloor           ta tb) = evalFloor ta tb
+evalPrim (PrimCeiling         ta tb) = evalCeiling ta tb
+evalPrim (PrimAtan2              ty) = evalAtan2 ty
+evalPrim (PrimIsNaN              ty) = evalIsNaN ty
+evalPrim (PrimLt                 ty) = evalLt ty
+evalPrim (PrimGt                 ty) = evalGt ty
+evalPrim (PrimLtEq               ty) = evalLtEq ty
+evalPrim (PrimGtEq               ty) = evalGtEq ty
+evalPrim (PrimEq                 ty) = evalEq ty
+evalPrim (PrimNEq                ty) = evalNEq ty
+evalPrim (PrimMax                ty) = evalMax ty
+evalPrim (PrimMin                ty) = evalMin ty
+evalPrim PrimLAnd                    = evalLAnd
+evalPrim PrimLOr                     = evalLOr
+evalPrim PrimLNot                    = evalLNot
+evalPrim PrimOrd                     = evalOrd
+evalPrim PrimChr                     = evalChr
+evalPrim PrimBoolToInt               = evalBoolToInt
+evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
+evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
+evalPrim PrimCoerce{}                = unsafeCoerce
 
 
 -- Tuple construction and projection
@@ -1091,12 +1113,43 @@ evalBRotateL ty | IntegralDict <- integralDict ty = uncurry rotateL
 evalBRotateR :: IntegralType a -> ((a, Int) -> a)
 evalBRotateR ty | IntegralDict <- integralDict ty = uncurry rotateR
 
+evalPopCount :: IntegralType a -> (a -> Int)
+evalPopCount ty | IntegralDict <- integralDict ty = popCount
+
+evalCountLeadingZeros :: IntegralType a -> (a -> Int)
+#if __GLASGOW_HASKELL__ >= 710
+evalCountLeadingZeros ty | IntegralDict <- integralDict ty = countLeadingZeros
+#else
+evalCountLeadingZeros ty | IntegralDict <- integralDict ty = clz
+  where
+    clz x = (w-1) - go (w-1)
+      where
+        go i | i < 0       = i  -- no bit set
+             | testBit x i = i
+             | otherwise   = go (i-1)
+        w = finiteBitSize x
+#endif
+
+evalCountTrailingZeros :: IntegralType a -> (a -> Int)
+#if __GLASGOW_HASKELL__ >= 710
+evalCountTrailingZeros ty | IntegralDict <- integralDict ty = countTrailingZeros
+#else
+evalCountTrailingZeros ty | IntegralDict <- integralDict ty = ctz
+  where
+    ctz x = go 0
+      where
+        go i | i >= w      = i
+             | testBit x i = i
+             | otherwise   = go (i+1)
+        w = finiteBitSize x
+#endif
+
+
 evalFDiv :: FloatingType a -> ((a, a) -> a)
 evalFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)
 
 evalRecip :: FloatingType a -> (a -> a)
 evalRecip ty | FloatingDict <- floatingDict ty = recip
-
 
 
 evalLt :: ScalarType a -> ((a, a) -> Bool)

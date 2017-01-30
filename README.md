@@ -202,8 +202,8 @@ Here is a list of features that are currently missing:
   [accelerate-cabal]:           https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [accelerate-cuda-cabal]:      https://github.com/AccelerateHS/accelerate-cuda/accelerate-cuda.cabal
   [accelerate-llvm]:            https://github.com/AccelerateHS/accelerate-llvm
-  [accelerate-llvm-native]:     https://github.com/AccelerateHS/accelerate-llvm-native
-  [accelerate-llvm-ptx]:        https://github.com/AccelerateHS/accelerate-llvm-ptx
+  [accelerate-llvm-native]:     https://github.com/AccelerateHS/accelerate-llvm
+  [accelerate-llvm-ptx]:        https://github.com/AccelerateHS/accelerate-llvm
   [GitHub]:                     https://github.com/AccelerateHS/accelerate
   [Wiki]:                       https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                     https://github.com/AccelerateHS/accelerate/issues

@@ -57,7 +57,7 @@ module Data.Array.Accelerate.Smart (
 
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkQuotRem, mkIDiv, mkMod, mkDivMod,
-  mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR,
+  mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR, mkPopCount, mkCountLeadingZeros, mkCountTrailingZeros,
   mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq, mkEq, mkNEq, mkMax, mkMin,
   mkLAnd, mkLOr, mkLNot, mkIsNaN,
 
@@ -1461,7 +1461,7 @@ mkAbs x = Exp $ PrimAbs numType `PrimApp` x
 mkSig :: (Elt t, IsNum t) => Exp t -> Exp t
 mkSig x = Exp $ PrimSig numType `PrimApp` x
 
--- Operators from Integral & Bits
+-- Operators from Integral
 
 mkQuot :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkQuot x y = Exp $ PrimQuot integralType `PrimApp` tup2 (x, y)
@@ -1480,6 +1480,9 @@ mkMod x y = Exp $ PrimMod integralType `PrimApp` tup2 (x, y)
 
 mkDivMod :: (Elt t, IsIntegral t) => Exp t -> Exp t -> (Exp t, Exp t)
 mkDivMod x y = untup2 $ Exp $ PrimDivMod integralType `PrimApp` tup2 (x ,y)
+
+
+-- Operators from Bits and FiniteBits
 
 mkBAnd :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkBAnd x y = Exp $ PrimBAnd integralType `PrimApp` tup2 (x, y)
@@ -1504,6 +1507,16 @@ mkBRotateL x i = Exp $ PrimBRotateL integralType `PrimApp` tup2 (x, i)
 
 mkBRotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 mkBRotateR x i = Exp $ PrimBRotateR integralType `PrimApp` tup2 (x, i)
+
+mkPopCount :: (Elt t, IsIntegral t) => Exp t -> Exp Int
+mkPopCount x = Exp $ PrimPopCount integralType `PrimApp` x
+
+mkCountLeadingZeros :: (Elt t, IsIntegral t) => Exp t -> Exp Int
+mkCountLeadingZeros x = Exp $ PrimCountLeadingZeros integralType `PrimApp` x
+
+mkCountTrailingZeros :: (Elt t, IsIntegral t) => Exp t -> Exp Int
+mkCountTrailingZeros x = Exp $ PrimCountTrailingZeros integralType `PrimApp` x
+
 
 -- Operators from Fractional
 

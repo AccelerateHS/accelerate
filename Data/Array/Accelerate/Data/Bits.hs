@@ -152,6 +152,22 @@ class Bits b => FiniteBits b where
   -- | Return the number of bits in the type of the argument.
   finiteBitSize :: Exp b -> Exp Int
 
+  -- | Count the number of zero bits preceding the most significant set bit.
+  -- This can be used to compute a base-2 logarithm via:
+  --
+  -- > logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
+  --
+  countLeadingZeros :: Exp b -> Exp Int
+
+  -- | Count the number of zero bits following the least significant set bit.
+  -- The related
+  -- <http://en.wikipedia.org/wiki/Find_first_set find-first-set operation> can
+  -- be expressed in terms of this as:
+  --
+  -- > findFirstSet x = 1 + countTrailingZeros x
+  --
+  countTrailingZeros :: Exp b -> Exp Int
+
 
 -- Instances for Bits
 -- ------------------
@@ -184,7 +200,7 @@ instance Bits Int where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits Int8 where
   (.&.)        = mkBAnd
@@ -202,7 +218,7 @@ instance Bits Int8 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt8 . bitcast
+  popCount     = mkPopCount
 
 instance Bits Int16 where
   (.&.)        = mkBAnd
@@ -220,7 +236,7 @@ instance Bits Int16 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt16 . bitcast
+  popCount     = mkPopCount
 
 instance Bits Int32 where
   (.&.)        = mkBAnd
@@ -238,7 +254,7 @@ instance Bits Int32 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt32 . bitcast
+  popCount     = mkPopCount
 
 instance Bits Int64 where
   (.&.)        = mkBAnd
@@ -256,7 +272,7 @@ instance Bits Int64 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt64 . bitcast
+  popCount     = mkPopCount
 
 instance Bits Word where
   (.&.)        = mkBAnd
@@ -274,7 +290,7 @@ instance Bits Word where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits Word8 where
   (.&.)        = mkBAnd
@@ -292,7 +308,7 @@ instance Bits Word8 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt8
+  popCount     = mkPopCount
 
 instance Bits Word16 where
   (.&.)        = mkBAnd
@@ -310,7 +326,7 @@ instance Bits Word16 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt16
+  popCount     = mkPopCount
 
 instance Bits Word32 where
   (.&.)        = mkBAnd
@@ -328,7 +344,7 @@ instance Bits Word32 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt32
+  popCount     = mkPopCount
 
 instance Bits Word64 where
   (.&.)        = mkBAnd
@@ -346,7 +362,7 @@ instance Bits Word64 where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCnt64
+  popCount     = mkPopCount
 
 instance Bits CInt where
   (.&.)        = mkBAnd
@@ -364,7 +380,7 @@ instance Bits CInt where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits CUInt where
   (.&.)        = mkBAnd
@@ -382,7 +398,7 @@ instance Bits CUInt where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits CLong where
   (.&.)        = mkBAnd
@@ -400,7 +416,7 @@ instance Bits CLong where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits CULong where
   (.&.)        = mkBAnd
@@ -418,7 +434,7 @@ instance Bits CULong where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits CLLong where
   (.&.)        = mkBAnd
@@ -436,7 +452,7 @@ instance Bits CLLong where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits CULLong where
   (.&.)        = mkBAnd
@@ -454,7 +470,7 @@ instance Bits CULLong where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits CShort where
   (.&.)        = mkBAnd
@@ -472,7 +488,7 @@ instance Bits CShort where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 instance Bits CUShort where
   (.&.)        = mkBAnd
@@ -490,7 +506,7 @@ instance Bits CUShort where
   rotateL      = rotateLDefault
   rotateR      = rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = popCountDefault
+  popCount     = mkPopCount
 
 -- instance Bits CChar where
 --   (.&.)        = mkBAnd
@@ -508,7 +524,7 @@ instance Bits CUShort where
 --   rotateL      = rotateLDefault
 --   rotateR      = rotateRDefault
 --   isSigned     = isSignedDefault
---   popCount     = popCountDefault
+--   popCount     = mkPopCount
 
 -- instance Bits CUChar where
 --   (.&.)        = mkBAnd
@@ -526,7 +542,7 @@ instance Bits CUShort where
 --   rotateL      = rotateLDefault
 --   rotateR      = rotateRDefault
 --   isSigned     = isSignedDefault
---   popCount     = popCountDefault
+--   popCount     = mkPopCount
 
 -- instance Bits CSChar where
 --   (.&.)        = mkBAnd
@@ -544,68 +560,106 @@ instance Bits CUShort where
 --   rotateL      = rotateLDefault
 --   rotateR      = rotateRDefault
 --   isSigned     = isSignedDefault
---   popCount     = popCountDefault
+--   popCount     = mkPopCount
 
 
 -- Instances for FiniteBits
 -- ------------------------
 
 instance FiniteBits Bool where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Bool))
+  finiteBitSize _      = constant (B.finiteBitSize (undefined::Bool))
+  countLeadingZeros  x = cond x 0 1
+  countTrailingZeros x = cond x 0 1
 
 instance FiniteBits Int where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Int))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Int))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Int8 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Int8))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Int8))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Int16 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Int16))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Int16))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Int32 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Int32))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Int32))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Int64 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Int64))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Int64))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Word where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Word))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Word))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Word8 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Word8))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Word8))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Word16 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Word16))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Word16))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Word32 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Word32))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Word32))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits Word64 where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::Word64))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::Word64))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CInt where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CInt))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CInt))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CUInt where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CUInt))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CUInt))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CLong where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CLong))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CLong))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CULong where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CULong))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CULong))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CLLong where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CLLong))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CLLong))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CULLong where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CULLong))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CULLong))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CShort where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CShort))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CShort))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 instance FiniteBits CUShort where
-  finiteBitSize _ = constant (B.finiteBitSize (undefined::CUShort))
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CUShort))
+  countLeadingZeros  = mkCountLeadingZeros
+  countTrailingZeros = mkCountTrailingZeros
 
 -- instance FiniteBits CChar
 -- instance FiniteBits CUChar
@@ -624,7 +678,7 @@ testBitDefault x i = (x .&. bit i) /= constant 0
 shiftDefault :: (FiniteBits t, IsIntegral t, B.Bits t) => Exp t -> Exp Int -> Exp t
 shiftDefault x i
   = cond (i >= 0) (shiftLDefault x i)
-                   (shiftRDefault x (-i))
+                  (shiftRDefault x (-i))
 
 shiftLDefault :: (FiniteBits t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shiftLDefault x i
@@ -700,8 +754,8 @@ rotateRDefault x i
 isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
 isSignedDefault _ = constant (B.isSigned (undefined::b))
 
-popCountDefault :: forall a. (B.FiniteBits a, IsScalar a, Bits a, Num a) => Exp a -> Exp Int
-popCountDefault =
+_popCountDefault :: forall a. (B.FiniteBits a, IsScalar a, Bits a, Num a) => Exp a -> Exp Int
+_popCountDefault =
   $( [e| case B.finiteBitSize (undefined::a) of
            8  -> popCnt8  . mkUnsafeCoerce
            16 -> popCnt16 . mkUnsafeCoerce

@@ -1114,21 +1114,26 @@ data PrimFun sig where
   PrimAbs  :: NumType a -> PrimFun (a      -> a)
   PrimSig  :: NumType a -> PrimFun (a      -> a)
 
-  -- operators from Integral & Bits
+  -- operators from Integral
   PrimQuot     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimRem      :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimQuotRem  :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
   PrimIDiv     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimMod      :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimDivMod   :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
-  PrimBAnd     :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBOr      :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBXor     :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBNot     :: IntegralType a -> PrimFun (a        -> a)
-  PrimBShiftL  :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBShiftR  :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateL :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateR :: IntegralType a -> PrimFun ((a, Int) -> a)
+
+  -- operators from Bits & FiniteBits
+  PrimBAnd               :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBOr                :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBXor               :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBNot               :: IntegralType a -> PrimFun (a        -> a)
+  PrimBShiftL            :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBShiftR            :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateL           :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateR           :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimPopCount           :: IntegralType a -> PrimFun (a -> Int)
+  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> Int)
+  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> Int)
 
   -- operators from Fractional and Floating
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
@@ -1458,68 +1463,71 @@ rnfPrimConst (PrimMaxBound t) = rnfBoundedType t
 rnfPrimConst (PrimPi t)       = rnfFloatingType t
 
 rnfPrimFun :: PrimFun f -> ()
-rnfPrimFun (PrimAdd t)            = rnfNumType t
-rnfPrimFun (PrimSub t)            = rnfNumType t
-rnfPrimFun (PrimMul t)            = rnfNumType t
-rnfPrimFun (PrimNeg t)            = rnfNumType t
-rnfPrimFun (PrimAbs t)            = rnfNumType t
-rnfPrimFun (PrimSig t)            = rnfNumType t
-rnfPrimFun (PrimQuot t)           = rnfIntegralType t
-rnfPrimFun (PrimRem t)            = rnfIntegralType t
-rnfPrimFun (PrimQuotRem t)        = rnfIntegralType t
-rnfPrimFun (PrimIDiv t)           = rnfIntegralType t
-rnfPrimFun (PrimMod t)            = rnfIntegralType t
-rnfPrimFun (PrimDivMod t)         = rnfIntegralType t
-rnfPrimFun (PrimBAnd t)           = rnfIntegralType t
-rnfPrimFun (PrimBOr t)            = rnfIntegralType t
-rnfPrimFun (PrimBXor t)           = rnfIntegralType t
-rnfPrimFun (PrimBNot t)           = rnfIntegralType t
-rnfPrimFun (PrimBShiftL t)        = rnfIntegralType t
-rnfPrimFun (PrimBShiftR t)        = rnfIntegralType t
-rnfPrimFun (PrimBRotateL t)       = rnfIntegralType t
-rnfPrimFun (PrimBRotateR t)       = rnfIntegralType t
-rnfPrimFun (PrimFDiv t)           = rnfFloatingType t
-rnfPrimFun (PrimRecip t)          = rnfFloatingType t
-rnfPrimFun (PrimSin t)            = rnfFloatingType t
-rnfPrimFun (PrimCos t)            = rnfFloatingType t
-rnfPrimFun (PrimTan t)            = rnfFloatingType t
-rnfPrimFun (PrimAsin t)           = rnfFloatingType t
-rnfPrimFun (PrimAcos t)           = rnfFloatingType t
-rnfPrimFun (PrimAtan t)           = rnfFloatingType t
-rnfPrimFun (PrimSinh t)           = rnfFloatingType t
-rnfPrimFun (PrimCosh t)           = rnfFloatingType t
-rnfPrimFun (PrimTanh t)           = rnfFloatingType t
-rnfPrimFun (PrimAsinh t)          = rnfFloatingType t
-rnfPrimFun (PrimAcosh t)          = rnfFloatingType t
-rnfPrimFun (PrimAtanh t)          = rnfFloatingType t
-rnfPrimFun (PrimExpFloating t)    = rnfFloatingType t
-rnfPrimFun (PrimSqrt t)           = rnfFloatingType t
-rnfPrimFun (PrimLog t)            = rnfFloatingType t
-rnfPrimFun (PrimFPow t)           = rnfFloatingType t
-rnfPrimFun (PrimLogBase t)        = rnfFloatingType t
-rnfPrimFun (PrimTruncate f i)     = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimRound f i)        = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimFloor f i)        = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimCeiling f i)      = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimIsNaN t)          = rnfFloatingType t
-rnfPrimFun (PrimAtan2 t)          = rnfFloatingType t
-rnfPrimFun (PrimLt t)             = rnfScalarType t
-rnfPrimFun (PrimGt t)             = rnfScalarType t
-rnfPrimFun (PrimLtEq t)           = rnfScalarType t
-rnfPrimFun (PrimGtEq t)           = rnfScalarType t
-rnfPrimFun (PrimEq t)             = rnfScalarType t
-rnfPrimFun (PrimNEq t)            = rnfScalarType t
-rnfPrimFun (PrimMax t)            = rnfScalarType t
-rnfPrimFun (PrimMin t)            = rnfScalarType t
-rnfPrimFun PrimLAnd               = ()
-rnfPrimFun PrimLOr                = ()
-rnfPrimFun PrimLNot               = ()
-rnfPrimFun PrimOrd                = ()
-rnfPrimFun PrimChr                = ()
-rnfPrimFun PrimBoolToInt          = ()
-rnfPrimFun (PrimFromIntegral i n) = rnfIntegralType i `seq` rnfNumType n
-rnfPrimFun (PrimToFloating n f)   = rnfNumType n `seq` rnfFloatingType f
-rnfPrimFun (PrimCoerce a b)       = rnfScalarType a `seq` rnfScalarType b
+rnfPrimFun (PrimAdd t)                = rnfNumType t
+rnfPrimFun (PrimSub t)                = rnfNumType t
+rnfPrimFun (PrimMul t)                = rnfNumType t
+rnfPrimFun (PrimNeg t)                = rnfNumType t
+rnfPrimFun (PrimAbs t)                = rnfNumType t
+rnfPrimFun (PrimSig t)                = rnfNumType t
+rnfPrimFun (PrimQuot t)               = rnfIntegralType t
+rnfPrimFun (PrimRem t)                = rnfIntegralType t
+rnfPrimFun (PrimQuotRem t)            = rnfIntegralType t
+rnfPrimFun (PrimIDiv t)               = rnfIntegralType t
+rnfPrimFun (PrimMod t)                = rnfIntegralType t
+rnfPrimFun (PrimDivMod t)             = rnfIntegralType t
+rnfPrimFun (PrimBAnd t)               = rnfIntegralType t
+rnfPrimFun (PrimBOr t)                = rnfIntegralType t
+rnfPrimFun (PrimBXor t)               = rnfIntegralType t
+rnfPrimFun (PrimBNot t)               = rnfIntegralType t
+rnfPrimFun (PrimBShiftL t)            = rnfIntegralType t
+rnfPrimFun (PrimBShiftR t)            = rnfIntegralType t
+rnfPrimFun (PrimBRotateL t)           = rnfIntegralType t
+rnfPrimFun (PrimBRotateR t)           = rnfIntegralType t
+rnfPrimFun (PrimPopCount t)           = rnfIntegralType t
+rnfPrimFun (PrimCountLeadingZeros t)  = rnfIntegralType t
+rnfPrimFun (PrimCountTrailingZeros t) = rnfIntegralType t
+rnfPrimFun (PrimFDiv t)               = rnfFloatingType t
+rnfPrimFun (PrimRecip t)              = rnfFloatingType t
+rnfPrimFun (PrimSin t)                = rnfFloatingType t
+rnfPrimFun (PrimCos t)                = rnfFloatingType t
+rnfPrimFun (PrimTan t)                = rnfFloatingType t
+rnfPrimFun (PrimAsin t)               = rnfFloatingType t
+rnfPrimFun (PrimAcos t)               = rnfFloatingType t
+rnfPrimFun (PrimAtan t)               = rnfFloatingType t
+rnfPrimFun (PrimSinh t)               = rnfFloatingType t
+rnfPrimFun (PrimCosh t)               = rnfFloatingType t
+rnfPrimFun (PrimTanh t)               = rnfFloatingType t
+rnfPrimFun (PrimAsinh t)              = rnfFloatingType t
+rnfPrimFun (PrimAcosh t)              = rnfFloatingType t
+rnfPrimFun (PrimAtanh t)              = rnfFloatingType t
+rnfPrimFun (PrimExpFloating t)        = rnfFloatingType t
+rnfPrimFun (PrimSqrt t)               = rnfFloatingType t
+rnfPrimFun (PrimLog t)                = rnfFloatingType t
+rnfPrimFun (PrimFPow t)               = rnfFloatingType t
+rnfPrimFun (PrimLogBase t)            = rnfFloatingType t
+rnfPrimFun (PrimTruncate f i)         = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimRound f i)            = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimFloor f i)            = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimCeiling f i)          = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimIsNaN t)              = rnfFloatingType t
+rnfPrimFun (PrimAtan2 t)              = rnfFloatingType t
+rnfPrimFun (PrimLt t)                 = rnfScalarType t
+rnfPrimFun (PrimGt t)                 = rnfScalarType t
+rnfPrimFun (PrimLtEq t)               = rnfScalarType t
+rnfPrimFun (PrimGtEq t)               = rnfScalarType t
+rnfPrimFun (PrimEq t)                 = rnfScalarType t
+rnfPrimFun (PrimNEq t)                = rnfScalarType t
+rnfPrimFun (PrimMax t)                = rnfScalarType t
+rnfPrimFun (PrimMin t)                = rnfScalarType t
+rnfPrimFun PrimLAnd                   = ()
+rnfPrimFun PrimLOr                    = ()
+rnfPrimFun PrimLNot                   = ()
+rnfPrimFun PrimOrd                    = ()
+rnfPrimFun PrimChr                    = ()
+rnfPrimFun PrimBoolToInt              = ()
+rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
+rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
+rnfPrimFun (PrimCoerce a b)           = rnfScalarType a `seq` rnfScalarType b
 
 rnfSliceIndex :: SliceIndex ix slice co sh -> ()
 rnfSliceIndex SliceNil        = ()
