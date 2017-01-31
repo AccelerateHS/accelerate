@@ -1719,6 +1719,12 @@ indexInSeg :: (Shape sh, Elt e) => S.Acc (IrregularArray sh e) -> S.Exp Int -> S
 indexInSeg arr seg ix = let segs = segments arr
                         in irregularValues arr S.!! ((offsets segs S.!! seg) + (S.toIndex (shapes segs S.!! seg) ix))
 
+indexSeg :: (Shape sh, Elt e) => S.Acc (IrregularArray sh e) -> S.Acc (Scalar Int) -> S.Acc (Array sh e)
+indexSeg arr i = S.backpermute sh (S.index1 . (offs S.!! S.the i +) . S.toIndex sh) (irregularValues arr)
+  where
+    sh   = shapes (segments arr) S.!! S.the i
+    offs = offsets (segments arr)
+
 irregularValues :: (Shape sh, Elt e) => S.Acc (IrregularArray sh e) -> S.Acc (Vector e)
 irregularValues = S.Acc . S.Aprj ZeroTupIdx
 
@@ -1979,6 +1985,21 @@ liftedIrregularLinearIndex arr ixs = S.backpermute (S.shape ixs) f (irregularVal
     f ix = let off = offsets (segments arr) S.! ix
            in S.index1 $ off + ixs S.! ix
 
+sliceSeg :: (Shape sh, Elt e)
+         => S.Acc (Scalar (Int,Int))
+         -> S.Acc (IrregularArray sh e)
+         -> S.Acc (IrregularArray sh e)
+sliceSeg index arr = irregular (irregularSegs ts offs' shs) vals
+  where
+    (start, n) = S.unlift (S.the index)
+    offs = offsets (segments arr)
+    startOffset = offs S.!! start
+
+    ts    = totalSize (segments arr) - startOffset
+    shs   = S.backpermute (S.index1 n) (S.index1 . (+ start) . S.unindex1) (shapes (segments arr))
+    offs' = S.generate (S.index1 n) (\ix -> offs S.!! (start + S.unindex1 ix) - startOffset)
+    vals  = S.backpermute (S.index1 ts) (\ix -> S.index1 (startOffset + S.unindex1 ix)) (irregularValues arr)
+
 -- |Compute head flags vector from segment descriptor for left-scans.
 --
 -- The vector will be full of zeros in the body of a segment, and non-zero
@@ -2138,6 +2159,9 @@ segmentsFromShapesC = fromHOAS segmentsFromShapes
 
 regularSegsC :: (Kit acc, Shape sh) => acc aenv (Scalar Int) -> acc aenv (Scalar sh) -> acc aenv (Segments sh)
 regularSegsC = fromHOAS2 ((. S.the) . regularSegs . S.the)
+
+irregularSegsC :: (Kit acc, Shape sh) => acc aenv (Scalar Int) -> acc aenv (Vector Int) -> acc aenv (Vector sh) -> acc aenv (Segments sh)
+irregularSegsC = fromHOAS3 (irregularSegs . S.the)
 
 sparsifyC :: (Kit acc, Shape sh, Elt e) => acc aenv (RegularArray sh e) -> acc aenv (IrregularArray sh e)
 sparsifyC = fromHOAS sparsify
@@ -2726,14 +2750,15 @@ vectoriseOpenSeq vectAcc ctx size seq =
     cvtP :: NaturalProducer acc aenv t -> Maybe (LiftedAcc (ChunkedProducer acc) aenv' t)
     cvtP p =
       case p of
-        Pull _              -> Nothing
-        Subarrays sh a      -> LiftedAcc RegularT <$> (subarrays <$> cvtE sh <*> pure a)
+        Pull _                  -> Nothing
+        Subarrays sh a          -> LiftedAcc RegularT <$> (subarrays <$> cvtE sh <*> pure a)
+        FromSegs segs n vals    -> LiftedAcc IrregularT <$> (fromSegs <$> cvtA' segs <*> cvtE n <*> cvtA' vals)
         Produce l (Alam (Abody f))
           | LiftedAcc ty f' <- vectAcc (push ctx RegularT) (regularSize avar0) f
           -> LiftedAcc ty <$> (ProduceAccum <$> cvtL l <*> return (streamify f') <*> return nil)
         -- MapBatch f c c' a x -> Just $ mapBatch f c c' a x
-        ProduceAccum{}      -> stageError
-        Produce _ _         -> error "Absurd"
+        ProduceAccum{}          -> stageError
+        Produce _ _             -> error "Absurd"
 
     cvtL :: Maybe (PreExp acc aenv Int) -> Maybe (Maybe (PreExp acc aenv' Int))
     cvtL Nothing = Just Nothing
@@ -2776,6 +2801,23 @@ vectoriseOpenSeq vectAcc ctx size seq =
         subSize = ShapeSize sh
         subLimit = Just (totalSize `div` subSize)
         div a b = PrimApp (PrimIDiv integralType) (tup a b)
+
+    fromSegs :: (Shape sh, Elt e)
+             => acc aenv' (Vector (Int,sh))
+             -> PreExp acc aenv' Int -- Number of segments
+             -> acc aenv' (Vector e)
+             -> ChunkedProducer acc aenv' (IrregularArray sh e)
+    fromSegs segs n vals = ProduceAccum (Just n) f a
+      where
+        a =  inject
+          $  Alet vals
+          $^ Alet (weakenA1 $ unzipC segs)
+          $  irregularC (irregularSegsC (unit (ShapeSize (Shape avar1))) (fstA avar0) (sndA avar0))
+                        avar1
+
+        f =  Alam . Alam . Abody
+          $^ Alet (fromHOAS2 sliceSeg avar1 avar0)
+          $  atup avar0 avar1
 
 
     streamify :: Arrays t' => acc (aenv', Vector Int) t' -> PreOpenAfun acc aenv' (Scalar (Int,Int) -> () -> (t', ()))
@@ -2892,9 +2934,8 @@ vectoriseOpenSeq vectAcc ctx size seq =
     nil = inject $ Atuple NilAtup
 
     cvtE :: PreExp acc aenv t -> Maybe (PreExp acc aenv' t)
-    cvtE e | Just e' <- strengthenUnder ctx e
-           = Just e'
-    cvtE _ = Nothing
+    cvtE = strengthenUnder ctx
+
     --
     -- cvtF :: Fun aenv t -> Fun aenv' t
     -- cvtF = vectoriseSeqOpenFun ctx
@@ -3039,6 +3080,7 @@ reduceOpenSeq seq =
       case p of
         Pull src           -> Pull src
         Subarrays sh a     -> subarrays sh a
+        FromSegs s n v     -> fromSegs s n v
         Produce l f        -> ProduceAccum l (streamify f) nil
         -- MapBatch f c _ a x -> mapBatch f c a x
         ProduceAccum{}     -> stageError
@@ -3176,6 +3218,23 @@ reduceOpenSeq seq =
             width  = IndexHead
             fsh :: PreExp acc aenv sh
             fsh = Const (fromElt (shape arr))
+
+    fromSegs :: (Shape sh, Elt e)
+             => acc aenv' (Vector (Int,sh))
+             -> PreExp acc aenv' Int -- Number of segments
+             -> acc aenv' (Vector e)
+             -> NaturalProducer acc aenv' (Array sh e)
+    fromSegs segs n vals = ProduceAccum (Just n) f a
+      where
+        a =  inject
+          $  Alet vals
+          $^ Alet (weakenA1 (unzipC segs))
+          $  irregularC (irregularSegsC (unit (ShapeSize (Shape avar1))) (fstA avar0) (sndA avar0))
+                       avar1
+
+        f =  Alam . Alam . Abody
+          $^ Alet (fromHOAS2 indexSeg avar0 avar1)
+          $  atup avar0 avar1
 
     stageError = $internalError "vectoriseOpenSeq" "AST is at wrong stage for vectorisation. It seems to have already been vectorised."
 

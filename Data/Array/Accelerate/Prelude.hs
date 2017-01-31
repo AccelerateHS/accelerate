@@ -109,7 +109,7 @@ module Data.Array.Accelerate.Prelude (
   foldSeqE, fromSeq, shapes, foldSeqFlatten,
 
   -- * Sequence generators
-  toSeq, toSeqInner, toSeqOuter, produceScalar,
+  toSeq, toSeqInner, toSeqOuter, produceScalar, fromShapes, fromOffsets,
 
   -- * Sequence transducers
   mapSeqE, zipWithSeqE, zipSeq, unzipSeq,
@@ -2027,6 +2027,21 @@ toSeqOuter = mapSeq transpose . toSeqInner . transpose
 --
 produceScalar :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
 produceScalar n f = produce n (unit . f . the)
+
+-- | Produce a sequence from shape segments and a flattened vector of values.
+--
+fromShapes :: (Shape sh, Elt e) => Acc (Segments sh) -> Acc (Vector e) -> Seq [Array sh e]
+fromShapes shs = fromSegs (zip offs shs) (length shs)
+  where
+    (offs,_) = scanl' (+) 0 (map shapeSize shs)
+
+-- | Produce a sequence from shape segments and a flattened vector of values.
+--
+fromOffsets :: Elt e => Acc (Segments Int) -> Acc (Vector e) -> Seq [Vector e]
+fromOffsets offs vs = fromSegs (zip offs shs) (length offs) vs
+  where
+    ts  = length vs
+    shs = map index1 (zipWith (-) (offs ++ flatten (unit ts)) offs)
 
 -- | Map over sequences specialised to scalar sequences.
 --

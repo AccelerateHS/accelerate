@@ -381,6 +381,7 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams lams' (SletSharing sa@(S
                                $ AST.OpenAcc (AST.Avar (SuccIdx (prjIdx ("Nested sequence variabe: " ++ show i) i alyt )))
         StreamIn arrs         -> producer $ AST.Pull (AST.List arrs)
         Subarrays sh arr      -> producer $ AST.Subarrays (cvtE sh) arr
+        FromSegs s n vs       -> producer $ AST.FromSegs (cvtA s) (cvtE n) (cvtA vs)
         Produce l f           -> producer $ AST.Produce (Just $ cvtE l) (cvtAF1 f)
         MapSeq afun x         -> producer $ mkMapSeq (convertSharingAfun1 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv') afun) (asIdx x)
         ZipWithSeq afun x y   -> producer $ mkZipWithSeq (convertSharingAfun2 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv') afun) (asIdx x) (asIdx y)
@@ -415,8 +416,8 @@ convertSharingSeq config alyt aenv senv (ScopedSeq lams lams' (SletSharing sa@(S
         cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
         cvtE = convertSharingExp config EmptyLayout alyt [] aenv'
 
-        -- cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
-        -- cvtA acc = convertSharingAcc config alyt aenv acc
+        cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
+        cvtA acc = convertSharingAcc config alyt aenv acc
 
         cvtAF1 :: forall a b. (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> OpenAfun aenv (a -> b)
         cvtAF1 = convertSharingAfun1 config alyt aenv'
@@ -1835,6 +1836,11 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
             Subarrays sh arr -> producer $ do
               (sh', h1) <- traverseExp lvl sh
               return (Subarrays sh' arr, h1 + 1)
+            FromSegs s n vs -> producer $ do
+              (s' , h1) <- traverseAcc lvl s
+              (n' , h2) <- traverseExp lvl n
+              (vs', h3) <- traverseAcc lvl vs
+              return (FromSegs s' n' vs', h1 `max` h2 `max` h3 + 1)
             Produce l afun -> producer $ do
               (l'   , h1) <- traverseExp lvl l
               (afun', h2) <- traverseAfun1 lvl afun
@@ -2803,6 +2809,12 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
           let
             (sh'   , accCount1) = scopesExp sh
           in producer (Subarrays sh' arr) accCount1
+        FromSegs s n vs ->
+          let
+            (s' , accCount1) = scopesAcc s
+            (n' , accCount2) = scopesExp n
+            (vs', accCount3) = scopesAcc vs
+          in producer (FromSegs s' n' vs') (accCount1 +++ accCount2 +++ accCount3)
         Produce l afun ->
           let
             (l'   , accCount1) = scopesExp l

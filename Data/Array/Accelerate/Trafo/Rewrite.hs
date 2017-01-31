@@ -133,6 +133,7 @@ convertSegmentsSeq seq =
       case p of
         Pull src            -> Pull src
         Subarrays sh arr    -> Subarrays (cvtE sh) arr
+        FromSegs s n vs     -> FromSegs (cvtA s) (cvtE n) (cvtA vs)
         Produce l f         -> Produce (cvtE <$> l) (cvtAfun f)
         -- MapBatch f c c' a x -> MapBatch (cvtAfun f) (cvtAfun c) (cvtAfun c') (cvtA a) (cvtA x)
         ProduceAccum l f a  -> ProduceAccum (cvtE <$> l) (cvtAfun f) (cvtA a)

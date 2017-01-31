@@ -164,6 +164,7 @@ dependenciesProducer depsAcc p =
   case p of
     Pull _              -> mempty
     Subarrays sh _      -> depsE sh
+    FromSegs s n vs     -> depsAcc s <> depsE n <> depsAcc vs
     Produce l f         -> maybe mempty depsE l <> depsAF f
     -- MapBatch f c c' a x -> depsAF f <> depsAF c <> depsAF c' <> depsAcc a <> depsAcc x
     ProduceAccum l f a  -> maybe mempty depsE l <> depsAF f <> depsAcc a

@@ -265,7 +265,7 @@ module Data.Array.Accelerate (
   collect,
 
   -- ** Sequence producers
-  streamIn, subarrays, produce, produceScalar,
+  streamIn, subarrays, produce, produceScalar, fromSegs, fromShapes, fromOffsets,
   toSeq, toSeqInner, toSeqOuter,
 
   -- ** Sequence transducers

@@ -377,6 +377,11 @@ matchSeq m h = match
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchArrays ArraysRarray ArraysRarray a1 a2
       = Just Refl
+    matchP (FromSegs s1 n1 vs1) (FromSegs s2 n2 vs2)
+      | Just Refl <- m s1 s2
+      , Just Refl <- matchExp n1 n2
+      , Just Refl <- m vs1 vs2
+      = Just Refl
     matchP (Produce l1 f1) (Produce l2 f2)
       | Just Refl <- join $ liftA2 matchExp l1 l2
       , Just Refl <- matchPreOpenAfun m f1 f2
@@ -1049,6 +1054,7 @@ hashPreOpenSeq hashAcc s =
       case p of
         Pull src            -> hashWithSalt salt "Pull"         `hashSource` src
         Subarrays sh a      -> hashWithSalt salt "Subarrays"    `hashE` sh `hashWithSalt` hashArrays ArraysRarray a
+        FromSegs s n vs     -> hashWithSalt salt "FromSegs"     `hashA` s `hashE` n `hashA` vs
         Produce l f         -> hashWithSalt salt "Produce"      `hashL` l  `hashAF` f
         -- MapBatch f c c' a x -> hashWithSalt salt "MapBatch"     `hashAF` f `hashAF` c `hashAF` c' `hashA`  a `hashA` x
         ProduceAccum l f a  -> hashWithSalt salt "ProduceAccum" `hashL` l `hashAF` f `hashA` a

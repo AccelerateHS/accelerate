@@ -224,6 +224,7 @@ prettySeq prettyAcc wrap aenv seq =
       case p of
         Pull _               -> "pull"         .$ [ text "[..]" ]
         Subarrays sh _       -> "subarrays"    .$ [ ppE sh, text "[..]" ]
+        FromSegs s n vs      -> "fromSegs"     .$ [ ppA s, ppE n, ppA vs ]
         Produce l f          -> "produce"      .$ [ ppL l, ppAF f ]
         -- MapBatch f c c' s a  -> "mapBatch"     .$ [ ppAF f, ppAF c, ppAF c', ppA s, ppA a]
         ProduceAccum l f a   -> "produceAccum" .$ [ ppL l, ppAF f, ppA a ]

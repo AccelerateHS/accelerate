@@ -347,6 +347,12 @@ data PreSeq acc seq exp arrs where
                  -> Array sh e
                  -> PreSeq acc seq exp [Array sh e]
 
+  FromSegs       :: (Shape sh, Elt e)
+                 => acc (Segments (Int,sh))
+                 -> exp Int                      -- Number of segments
+                 -> acc (Vector e)
+                 -> PreSeq acc seq exp [Array sh e]
+
   Produce        :: Arrays a
                  => exp Int
                  -> (Acc (Scalar Int) -> acc a)
@@ -1675,6 +1681,7 @@ showPreSeqOp :: PreSeq acc seq exp arrs -> String
 showPreSeqOp Stag{}           = "Stag"
 showPreSeqOp StreamIn{}       = "StreamIn"
 showPreSeqOp Subarrays{}      = "Subarrays"
+showPreSeqOp FromSegs{}       = "FromSegs"
 showPreSeqOp Produce{}        = "Produce"
 showPreSeqOp MapSeq{}         = "MapSeq"
 showPreSeqOp ZipWithSeq{}     = "ZipWithSeq"

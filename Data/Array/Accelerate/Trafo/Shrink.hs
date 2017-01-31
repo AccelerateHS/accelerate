@@ -221,6 +221,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       case p of
         Pull src            -> Pull src
         Subarrays sh arr    -> Subarrays (shrinkE sh) arr
+        FromSegs s n vs     -> FromSegs (shrinkAcc s) (shrinkE n) (shrinkAcc vs)
         Produce l f         -> Produce (shrinkE <$> l) (shrinkAF f)
         -- MapBatch f c c' a x -> MapBatch (shrinkAF f) (shrinkAF c) (shrinkAF c') (shrinkAcc a) (shrinkAcc x)
         ProduceAccum l f a  -> ProduceAccum (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
@@ -630,6 +631,7 @@ usesOfPreSeq countAcc idx seq =
       case p of
         Pull _              -> zeroUse
         Subarrays sh _      -> countE sh
+        FromSegs s n vs     -> countA s <+> countE n <+> countA vs
         Produce l f         -> maybe zeroUse countE l <+> countAF f idx
         -- MapBatch f c c' a x -> countAF f idx <+> countAF c idx <+> countAF c' idx <+> countA a <+> countA x
         ProduceAccum l f a  -> maybe zeroUse countE l <+> countAF f idx <+> countA a

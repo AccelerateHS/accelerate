@@ -591,6 +591,7 @@ rebuildP k v p =
   case p of
     Pull arrs           -> pure (Pull arrs)
     Subarrays sh arr    -> Subarrays <$> rebuildPreOpenExp k (pure . IE) v sh <*> pure arr
+    FromSegs s n vs     -> FromSegs <$> k v s <*> rebuildPreOpenExp k (pure . IE) v n <*> k v vs
     Produce l f         -> Produce <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f
     -- MapBatch f c c' a x -> MapBatch <$> rebuildAfun k v f <*> rebuildAfun k v c <*> rebuildAfun k v c' <*> k v a <*> k v x
     ProduceAccum l f a  -> ProduceAccum <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f <*> k v a

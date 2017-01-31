@@ -47,7 +47,7 @@ module Data.Array.Accelerate.Language (
   collect,
 
   -- * Sequence producers
-  streamIn, subarrays, produce,
+  streamIn, subarrays, produce, fromSegs,
 
   -- * Sequence transudcers
   mapSeq, zipWithSeq, -- mapBatch,
@@ -816,6 +816,16 @@ subarrays :: (Shape sh, Elt e, sh :<= DIM2)
           -> Array sh e
           -> Seq [Array sh e]
 subarrays = Seq $$ Subarrays
+
+-- |Generate a sequence from a some segment descriptors (in (offset,shape)
+-- format) and a vector of values.
+--
+fromSegs :: (Shape sh, Elt e)
+         => Acc (Segments (Int,sh)) -- ^Segments
+         -> Exp Int                 -- ^Take this many segments
+         -> Acc (Vector e)          -- ^The flattened values vector
+         -> Seq [Array sh e]
+fromSegs = Seq $$$ FromSegs
 
 -- |Generate a sequence by applying a function at every index.
 --

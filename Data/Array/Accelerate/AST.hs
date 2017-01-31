@@ -568,6 +568,16 @@ data Producer index acc aenv a where
                -> Array sh e                     -- The array to extract from
                -> Producer index acc aenv (Array sh e)
 
+  -- Generate a sequence from segment descriptors and the flattened values
+  -- vector.
+  --
+  -- Turned into 'ProduceAccum' by vectorisation
+  FromSegs     :: (Shape sh, Elt e)
+               => acc aenv (Segments (Int,sh))
+               -> PreExp acc aenv Int            -- Number of segments
+               -> acc aenv (Vector e)
+               -> Producer index acc aenv (Array sh e)
+
   -- Generate a sequence from a function until limit is reached.
   --
   -- Converted to ProduceAccum by vectorisation (with () as the accumulator.)
@@ -1382,6 +1392,7 @@ rnfSeqProducer rnfA topSeq =
   case topSeq of
     Pull as            -> rnfSource as
     Subarrays sh a     -> rnfE sh `seq` rnfArrays (arrays a) (fromArr a)
+    FromSegs s n v     -> rnfA s `seq` rnfE n `seq` rnfA v
     Produce l f        -> rnfL l `seq` rnfAF f
     ProduceAccum l f a -> rnfL l `seq` rnfAF f `seq` rnfA a
 
