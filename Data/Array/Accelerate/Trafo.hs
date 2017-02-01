@@ -86,6 +86,9 @@ data Phase = Phase
     -- | Convert segment length arrays into segment offset arrays?
   , convertOffsetOfSegment      :: Bool
 
+    -- | Convert subarray extraction into array indexing?
+  , convertSubarrayToIndex      :: Bool
+
     -- | Vectorise maps and zipwiths in sequence computations to
     --   enable chunked execution?
   , vectoriseSequences          :: Bool
@@ -103,6 +106,7 @@ phases =  Phase
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
+  , convertSubarrayToIndex = False
   , vectoriseSequences     = True
   }
 
@@ -124,6 +128,7 @@ convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
   $ phase "rewrite-segment-offset" Rewrite.convertSegments `when` convertOffsetOfSegment
+  $ phase "rewrite-subarray-index" Rewrite.convertSubarray `when` convertSubarrayToIndex
   $ phase "vectorise-sequences"    Vectorise.vectoriseAcc  `when` vectoriseSequences
   $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
@@ -139,7 +144,8 @@ convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ phase "vectorise-sequences"    Vectorise.vectoriseAfun      `when` vectoriseSequences
+  $ phase "rewrite-subarray-index" Rewrite.convertSubarrayAfun `when` convertSubarrayToIndex
+  $ phase "vectorise-sequences"    Vectorise.vectoriseAfun     `when` vectoriseSequences
   $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
@@ -171,7 +177,8 @@ convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq Int s
 convertSeqWith Phase{..} s
   = phase "array-fusion"           (Fusion.convertStreamSeq enableAccFusion)
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsStreamSeq `when` convertOffsetOfSegment
-  $ phase "vectorise-sequences"    Vectorise.reduceStreamSeq  `when` vectoriseSequences
+  $ phase "rewrite-subarray-index" Rewrite.convertSubarrayStreamSeq `when` convertSubarrayToIndex
+  $ phase "vectorise-sequences"    Vectorise.reduceStreamSeq        `when` vectoriseSequences
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
 
