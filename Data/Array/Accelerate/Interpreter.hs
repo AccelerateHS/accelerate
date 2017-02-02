@@ -125,6 +125,7 @@ config =  Phase
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
+  , convertSubarrayToIndex = False
   , vectoriseSequences     = True
   }
 
