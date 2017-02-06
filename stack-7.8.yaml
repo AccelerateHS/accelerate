@@ -8,7 +8,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 08d63ed03a8224000906f11d05afeafb3c6d977e
+    commit: 1108decb6ec67f604fd9f8a3e4202ec7ead43bfb
   extra-dep: true
 
 - location:
@@ -32,7 +32,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: 14a179f036435b976a5883abf592ccfc9810082f
+    commit: f801c78cb72e01a181b2023020444ffc9a099040
   extra-dep: true
 
 - location:
