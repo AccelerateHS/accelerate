@@ -32,7 +32,7 @@
 
 module Data.Array.Accelerate.Trafo.Vectorise (
 
-  vectoriseAcc, vectoriseAfun, reduceStreamSeq,
+  vectoriseAcc, vectoriseAfun, vectoriseStreamSeq,
 
 ) where
 
@@ -2733,6 +2733,14 @@ trace header msg
 -- Sequence vectorisation
 -- ------------------------
 
+vectoriseStreamSeq :: StreamSeq Int       OpenAcc arrs
+                   -> StreamSeq (Int,Int) OpenAcc arrs
+vectoriseStreamSeq (StreamSeq binds seq)
+  | Just seq' <- vectoriseOpenSeq vectoriseOpenAcc BaseC (unit (Const 1)) seq
+  = StreamSeq binds seq'
+  | otherwise
+  = $internalError "vectoriseOpenSeq" "malformed sequence expression"
+
 vectoriseOpenSeq :: forall acc aenv aenv' a. Kit acc
                  => VectoriseAcc acc
                  -> Context acc aenv aenv'
@@ -2745,7 +2753,12 @@ vectoriseOpenSeq vectAcc ctx size seq =
       LiftedAcc ty p' <- cvtP p
       Producer p' <$> vectoriseOpenSeq vectAcc (push ctx ty) (weakenA1 size) s
     Consumer c   -> cvtC c
-    Reify _      -> error "Unexpected reify"
+    Reify ty arr
+      | Just iso           <- isIso ty
+      , LiftedAcc ty' arr' <- cvtA (castAccC iso arr)
+      -> Just (Reify ty' arr')
+      | otherwise
+      -> $internalError "vectoriseOpenSeq" "malformed sequence expression"
   where
     cvtP :: NaturalProducer acc aenv t -> Maybe (LiftedAcc (ChunkedProducer acc) aenv' t)
     cvtP p =
@@ -3073,7 +3086,7 @@ reduceOpenSeq seq =
   case seq of
     Producer p s -> Producer (cvtP p) (reduceOpenSeq s)
     Consumer c   -> cvtC c
-    Reify a      -> Reify a
+    Reify ty a   -> Reify ty a
   where
     cvtP :: NaturalProducer acc aenv t -> NaturalProducer acc aenv t
     cvtP p =

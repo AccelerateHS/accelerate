@@ -57,6 +57,7 @@ import Data.IORef
 import Data.Typeable                                                ( Typeable )
 import Foreign.C.Types
 import Foreign.ForeignPtr
+import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
 import Language.Haskell.TH
@@ -198,6 +199,7 @@ class ArrayElt e where
   touchArrayData         :: ArrayData e -> IO ()
   --
   newArrayData           :: Int -> IO (MutableArrayData e)
+  unsafeCopyArrayData    :: ArrayData e -> Int -> Int -> IO (ArrayData e)
   unsafeReadArrayData    :: MutableArrayData e -> Int      -> IO e
   unsafeWriteArrayData   :: MutableArrayData e -> Int -> e -> IO ()
   unsafeFreezeArrayData  :: MutableArrayData e -> IO (ArrayData e)
@@ -217,6 +219,8 @@ instance ArrayElt () where
   ptrsOfArrayData AD_Unit                 = ()
   {-# INLINE touchArrayData #-}
   touchArrayData AD_Unit                  = return ()
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData AD_Unit _ _         = return AD_Unit
   {-# INLINE newArrayData #-}
   newArrayData size                       = size `seq` return AD_Unit
   {-# INLINE unsafeReadArrayData #-}
@@ -235,6 +239,8 @@ instance ArrayElt Int where
   touchArrayData (AD_Int ba)              = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Int <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Int ba) s n     = AD_Int <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Int ba) i       = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -251,6 +257,8 @@ instance ArrayElt Int8 where
   touchArrayData (AD_Int8 ba)             = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Int8 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Int8 ba) s n    = AD_Int8 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Int8 ba) i      = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -267,6 +275,8 @@ instance ArrayElt Int16 where
   touchArrayData (AD_Int16 ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Int16 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Int16 ba) s n   = AD_Int16 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Int16 ba) i     = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -283,6 +293,8 @@ instance ArrayElt Int32 where
   touchArrayData (AD_Int32 ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Int32 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Int32 ba) s n   = AD_Int32 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Int32 ba) i     = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -299,6 +311,8 @@ instance ArrayElt Int64 where
   touchArrayData (AD_Int64 ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Int64 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Int64 ba) s n   = AD_Int64 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Int64 ba) i     = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -315,6 +329,8 @@ instance ArrayElt Word where
   touchArrayData (AD_Word ba)             = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Word <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Word ba) s n    = AD_Word <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Word ba) i      = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -331,6 +347,8 @@ instance ArrayElt Word8 where
   touchArrayData (AD_Word8 ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Word8 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Word8 ba) s n   = AD_Word8 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Word8 ba) i     = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -347,6 +365,8 @@ instance ArrayElt Word16 where
   touchArrayData (AD_Word16 ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Word16 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Word16 ba) s n  = AD_Word16 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Word16 ba) i    = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -363,6 +383,8 @@ instance ArrayElt Word32 where
   touchArrayData (AD_Word32 ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Word32 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Word32 ba) s n  = AD_Word32 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Word32 ba) i    = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -379,6 +401,8 @@ instance ArrayElt Word64 where
   touchArrayData (AD_Word64 ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Word64 <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Word64 ba) s n  = AD_Word64 <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Word64 ba) i    = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -395,6 +419,8 @@ instance ArrayElt CShort where
   touchArrayData (AD_CShort ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CShort <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CShort ba) s n  = AD_CShort <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CShort ba) i    = CShort <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -412,6 +438,8 @@ instance ArrayElt CUShort where
   touchArrayData (AD_CUShort ba)          = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CUShort <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CUShort ba) s n = AD_CUShort <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CUShort ba) i   = CUShort <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -429,6 +457,8 @@ instance ArrayElt CInt where
   touchArrayData (AD_CInt ba)             = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CInt <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CInt ba) s n    = AD_CInt <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CInt ba) i      = CInt <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -446,6 +476,8 @@ instance ArrayElt CUInt where
   touchArrayData (AD_CUInt ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CUInt <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CUInt ba) s n   = AD_CUInt <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CUInt ba) i     = CUInt <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -463,6 +495,8 @@ instance ArrayElt CLong where
   touchArrayData (AD_CLong ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CLong <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CLong ba) s n   = AD_CLong <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CLong ba) i     = CLong <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -480,6 +514,8 @@ instance ArrayElt CULong where
   touchArrayData (AD_CULong ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CULong <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CULong ba) s n  = AD_CULong <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CULong ba) i    = CULong <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -497,6 +533,8 @@ instance ArrayElt CLLong where
   touchArrayData (AD_CLLong ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CLLong <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CLLong ba) s n  = AD_CLLong <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CLLong ba) i    = CLLong <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -514,6 +552,8 @@ instance ArrayElt CULLong where
   touchArrayData (AD_CULLong ba)          = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CULLong <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CULLong ba) s n = AD_CULLong <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CULLong ba) i   = CULLong <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -531,6 +571,8 @@ instance ArrayElt Float where
   touchArrayData (AD_Float ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Float <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Float ba) s n   = AD_Float <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Float ba) i     = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -547,6 +589,8 @@ instance ArrayElt Double where
   touchArrayData (AD_Double ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Double <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Double ba) s n  = AD_Double <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Double ba) i    = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -563,6 +607,8 @@ instance ArrayElt CFloat where
   touchArrayData (AD_CFloat ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CFloat <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CFloat ba) s n  = AD_CFloat <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CFloat ba) i    = CFloat <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -580,6 +626,8 @@ instance ArrayElt CDouble where
   touchArrayData (AD_CDouble ba)          = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CDouble <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CDouble ba) s n = AD_CDouble <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CDouble ba) i   = CDouble <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -599,6 +647,8 @@ instance ArrayElt Bool where
   ptrsOfArrayData (AD_Bool ba)            = unsafeUniqueArrayPtr ba
   {-# INLINE touchArrayData #-}
   touchArrayData (AD_Bool ba)             = touchUniqueArray ba
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Bool ba) s n    = AD_Bool <$> unsafeCopyArray ba s n
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Bool <$> newArrayData' size
   {-# INLINE unsafeReadArrayData #-}
@@ -619,6 +669,8 @@ instance ArrayElt Char where
   touchArrayData (AD_Char ba)             = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_Char <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Char ba) s n    = AD_Char <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_Char ba) i      = unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -635,6 +687,8 @@ instance ArrayElt CChar where
   touchArrayData (AD_CChar ba)            = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CChar <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CChar ba) s n   = AD_CChar <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CChar ba) i     = CChar <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -652,6 +706,8 @@ instance ArrayElt CSChar where
   touchArrayData (AD_CSChar ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CSChar <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CSChar ba) s n  = AD_CSChar <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CSChar ba) i    = CSChar <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -669,6 +725,8 @@ instance ArrayElt CUChar where
   touchArrayData (AD_CUChar ba)           = touchUniqueArray ba
   {-# INLINE newArrayData #-}
   newArrayData size                       = AD_CUChar <$> newArrayData' size
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_CUChar ba) s n  = AD_CUChar <$> unsafeCopyArray ba s n
   {-# INLINE unsafeReadArrayData #-}
   unsafeReadArrayData (AD_CUChar ba) i    = CUChar <$> unsafeReadArray ba i
   {-# INLINE unsafeWriteArrayData #-}
@@ -686,6 +744,8 @@ instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
   touchArrayData (AD_Pair a b)                = touchArrayData a >> touchArrayData b
   {-# INLINE unsafeWriteArrayData #-}
   unsafeWriteArrayData (AD_Pair a b) i (x, y) = unsafeWriteArrayData a i x >> unsafeWriteArrayData b i y
+  {-# INLINE unsafeCopyArrayData #-}
+  unsafeCopyArrayData (AD_Pair a b) s n       = AD_Pair <$> unsafeCopyArrayData a s n <*> unsafeCopyArrayData b s n
   {-# INLINE newArrayData #-}
   newArrayData size                           = AD_Pair <$> newArrayData size <*> newArrayData size
   {-# INLINE unsafeFreezeArrayData #-}
@@ -757,6 +817,15 @@ unsafeReadArray ua i =
 unsafeWriteArray :: Storable e => UniqueArray e -> Int -> e -> IO ()
 unsafeWriteArray ua i e =
   withUniqueArrayPtr ua $ \ptr -> pokeElemOff ptr i e
+
+-- Copy a section of an array into a new mutable array. This does no bounds
+-- checking.
+unsafeCopyArray :: Storable e => UniqueArray e -> Int -> Int -> IO (UniqueArray e)
+unsafeCopyArray src start n = do
+  dst <- newArrayData' n
+  withUniqueArrayPtr dst $ \dst' ->
+    withUniqueArrayPtr src $ \src' -> copyArray dst' (advancePtr src' start) n
+  return dst
 
 -- Allocate a new array with enough storage to hold the given number of
 -- elements.

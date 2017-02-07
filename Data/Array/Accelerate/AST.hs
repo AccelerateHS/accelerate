@@ -120,6 +120,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                as Sugar hiding ( tuple )
+import Data.Array.Accelerate.Array.Lifted               ( LiftedType(..), LiftedTupleType(..) )
 #if __GLASGOW_HASKELL__ < 800
 import Data.Array.Accelerate.Error
 #endif
@@ -530,8 +531,10 @@ data PreOpenSeq index acc aenv arrs where
            -> PreOpenSeq index acc aenv arrs
 
   -- Make a sequence manifest.
-  Reify    :: Arrays arrs
-           => acc aenv arrs
+  --
+  Reify    :: (Arrays arrs, Arrays arrs')
+           => LiftedType arrs arrs'
+           -> acc aenv arrs'
            -> PreOpenSeq index acc aenv [arrs]
 
 -- | External sources of sequences for sequence computations.
@@ -1360,11 +1363,23 @@ rnfPreOpenSeq rnfA topSeq =
 
       rnfC :: Consumer index acc aenv' t' -> ()
       rnfC = rnfSeqConsumer rnfA
+
+      rnfLiftedType :: LiftedType a a' -> ()
+      rnfLiftedType UnitT       = ()
+      rnfLiftedType LiftedUnitT = ()
+      rnfLiftedType AvoidedT    = ()
+      rnfLiftedType RegularT    = ()
+      rnfLiftedType IrregularT  = ()
+      rnfLiftedType (TupleT t)  = rnfLiftedTupleType t
+
+      rnfLiftedTupleType :: LiftedTupleType tup tup' -> ()
+      rnfLiftedTupleType NilLtup        = ()
+      rnfLiftedTupleType (SnocLtup t a) = rnfLiftedTupleType t `seq` rnfLiftedType a
   in
   case topSeq of
     Producer p s              -> rnfP p `seq` rnfS s
     Consumer c                -> rnfC c
-    Reify ix                  -> rnfA ix
+    Reify ty ix               -> rnfLiftedType ty `seq` rnfA ix
 
 rnfSeqProducer :: forall index acc aenv t. NFDataAcc acc -> Producer index acc aenv t -> ()
 rnfSeqProducer rnfA topSeq =

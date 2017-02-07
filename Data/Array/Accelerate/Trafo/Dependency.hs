@@ -155,7 +155,7 @@ dependenciesPreSeq depsAcc seq =
   case seq of
     Producer p s -> dependenciesProducer depsAcc p <> dropTop (dependenciesPreSeq depsAcc s)
     Consumer c   -> dependenciesConsumer depsAcc c
-    Reify a      -> depsAcc a
+    Reify _ a    -> depsAcc a
 
 dependenciesProducer :: forall acc index aenv arrs. DependenciesAcc acc
                      -> Producer index acc aenv arrs

@@ -219,8 +219,8 @@ data StreamSeq index acc t where
 type DelayedOpenAfun      = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp       = PreOpenExp DelayedOpenAcc
 type DelayedOpenFun       = PreOpenFun DelayedOpenAcc
-type DelayedOpenSeq index = PreOpenSeq index DelayedOpenAcc
-type DelayedSeq index     = StreamSeq index DelayedOpenAcc
+type DelayedOpenSeq       = PreOpenSeq (Int, Int) DelayedOpenAcc
+type DelayedSeq           = StreamSeq (Int, Int) DelayedOpenAcc
 
 data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
@@ -266,7 +266,7 @@ instance NFData (DelayedOpenAcc aenv t) where
 instance NFData (StreamSeq index OpenAcc t) where
   rnf = rnfStreamSeq rnfOpenAcc
 
-instance NFData (DelayedSeq index t) where
+instance NFData (DelayedSeq t) where
   rnf = rnfStreamSeq rnfDelayedOpenAcc
 
 hashDelayed :: HashAcc DelayedOpenAcc
@@ -339,9 +339,9 @@ dependenciesDelayed acc = case acc of
 -- example, if you want to stream the whole sequence out.
 --
 prettyDelayedSeq
-    :: forall index arrs.
+    :: forall arrs.
        (Doc -> Doc)                             -- apply to compound expressions
-    -> DelayedSeq index arrs
+    -> DelayedSeq arrs
     -> Doc
 prettyDelayedSeq wrap (StreamSeq env s)
   | (d, aenv) <- pp env

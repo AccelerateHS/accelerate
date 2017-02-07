@@ -170,15 +170,15 @@ convertFun
 -- | Convert a closed sequence computation, incorporating sharing observation and
 --   optimisation.
 --
-convertSeq :: Typeable s => Seq s -> DelayedSeq Int s
+convertSeq :: Typeable s => Seq s -> DelayedSeq s
 convertSeq = convertSeqWith phases
 
-convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq Int s
+convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
 convertSeqWith Phase{..} s
   = phase "array-fusion"           (Fusion.convertStreamSeq enableAccFusion)
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsStreamSeq `when` convertOffsetOfSegment
   $ phase "rewrite-subarray-index" Rewrite.convertSubarrayStreamSeq `when` convertSubarrayToIndex
-  $ phase "vectorise-sequences"    Vectorise.reduceStreamSeq        `when` vectoriseSequences
+  $ phase "vectorise-sequences"    Vectorise.vectoriseStreamSeq
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
 

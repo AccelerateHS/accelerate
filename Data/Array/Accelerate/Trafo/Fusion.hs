@@ -69,10 +69,11 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Lifted               ( LiftedType )
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
-                                                        , Elt, EltRepr, Shape, Slice, Tuple(..), Atuple(..)
-                                                        , IsAtuple, TupleRepr, Scalar, ArraysFlavour(..) )
+                                                        , Elt, EltRepr, Shape(empty), Slice, Tuple(..), Atuple(..)
+                                                        , IsAtuple, TupleRepr, Scalar, ArraysFlavour(..), fromList )
 import Data.Array.Accelerate.Product
 
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -96,13 +97,22 @@ convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
 
 -- | Apply the fusion transformation to the array computations embedded
 --   in a sequence computation.
-convertStreamSeq :: Elt index => Bool -> StreamSeq index OpenAcc a -> DelayedSeq index a
+convertStreamSeq :: Bool -> StreamSeq (Int,Int) OpenAcc a -> DelayedSeq a
 convertStreamSeq fuseAcc (StreamSeq binds seq)
-  = withSimplStats (StreamSeq (fuseBinds binds) (convertOpenSeq fuseAcc seq))
+  = withSimplStats (StreamSeq (fuseBinds binds) (convertOpenSeq fuseAcc (fuse seq)))
   where
     fuseBinds :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
     fuseBinds BaseEnv = BaseEnv
     fuseBinds (PushEnv env a) = fuseBinds env `PushEnv` manifest fuseAcc (computeAcc (embedOpenAcc fuseAcc a))
+
+    fuse :: PreOpenSeq (Int,Int) OpenAcc aenv a -> PreOpenSeq (Int,Int) OpenAcc aenv a
+    fuse (seqToStream -> Reified ty (Stream l (Alam (Alam (Abody f))) a _)) =
+      let
+        l' = simplify <$> l
+        a' = computeAcc (embedOpenAcc fuseAcc a)
+        f' = computeAcc (embedOpenAcc fuseAcc f)
+      in Producer (ProduceAccum l' (Alam . Alam $ Abody f') a') (Reify ty v0)
+
 
 withSimplStats :: a -> a
 #ifdef ACCELERATE_DEBUG
@@ -303,7 +313,7 @@ convertOpenSeq :: Bool -> PreOpenSeq index OpenAcc aenv a -> PreOpenSeq index De
 convertOpenSeq fuseAcc s =
   case s of
     Consumer c          -> Consumer (cvtC c)
-    Reify a             -> Reify (manifest fuseAcc a)
+    Reify ty a          -> Reify ty (manifest fuseAcc a)
     Producer p s'       -> Producer (cvtP p) (convertOpenSeq fuseAcc s')
   where
     cvtC :: Consumer index OpenAcc aenv a -> Consumer index DelayedOpenAcc aenv a
@@ -778,13 +788,24 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
 
 -- |Convert a sequence computation into a single stream computation.
 --
-seqToStream :: forall acc aenv index a. (Kit acc, Arrays a, SeqIndex index)
+seqToStream :: forall acc aenv index a. (Kit acc, SeqIndex index)
             => PreOpenSeq index acc aenv a
             -> Stream index acc aenv a
 seqToStream (Producer (ProduceAccum l f a) s)
   = applyLimit (fuseStreams (Stream l f a Nothing) (seqToStream s))
 seqToStream (Consumer (Last a d))
   = Stream Nothing (Alam . Alam . Abody . alet (weaken (SuccIdx . SuccIdx) a) $ atuple v0 v0) d (Just . Alam $ Abody v0)
+seqToStream (Reify ty a)
+  = Reified ty $ Stream Nothing (Alam . Alam . Abody . alet (weaken (SuccIdx . SuccIdx) a) $ atuple v0 v0) (emptyArrays a) (Just . Alam $ Abody v0)
+  where
+    emptyArrays :: forall arrs. Arrays arrs => acc aenv arrs -> acc aenv arrs
+    emptyArrays _ = inject $ Use (eA (arrays (undefined :: arrs)))
+      where
+        eA :: ArraysR t -> t
+        eA ArraysRunit = ()
+        eA ArraysRarray = fromList empty []
+        eA (ArraysRpair aR1 aR2) = (eA aR1, eA aR2)
+
 seqToStream (Consumer (Stuple t))
   | StreamTuple l t' a sel t s <- cvtT' (cvtT t)
   = Stream l
@@ -839,7 +860,7 @@ seqToStream (Consumer (Stuple t))
         ixt ZeroIdx = Aprj ZeroTupIdx v0
         ixt (SuccIdx ix) = Avar (SuccIdx ix)
 
-fuseStreams :: (Kit acc, Elt index, Arrays a, Arrays arrs)
+fuseStreams :: (Kit acc, Elt index)
             => Stream index acc aenv     a
             -> Stream index acc (aenv,a) arrs
             -> Stream index acc aenv     arrs
@@ -863,6 +884,7 @@ fuseStreams (Stream l fun init _) (Stream l' fun' init' sel')
         f :: (aenv, a) :?> aenv
         f ZeroIdx = Nothing
         f (SuccIdx ix) = Just ix
+fuseStreams s (Reified ty s') = Reified ty (fuseStreams s s')
 
 mergeLimits :: Maybe (PreExp acc aenv Int) -> Maybe (PreExp acc aenv Int) -> Maybe (PreExp acc aenv Int)
 mergeLimits Nothing Nothing = Nothing
@@ -876,12 +898,16 @@ mergeLimits (Just l) (Just l') = Just (min l l')
 -- A stream computation is essentially a state transformer.
 --
 data Stream index acc aenv a where
-  Stream :: Arrays s
+  Stream :: (Arrays s, Arrays a)
          => Maybe (PreExp acc aenv Int)
          -> PreOpenAfun acc aenv (Scalar index -> s -> (a,s))
          -> acc aenv s
          -> (forall aenv. Maybe (PreOpenAfun acc aenv (s -> a)))
          -> Stream index acc aenv a
+  Reified :: Arrays a
+          => LiftedType a a'
+          -> Stream index acc aenv a'
+          -> Stream index acc aenv [a]
 
 data StreamTuple index acc aenv t where
   StreamTuple :: (IsAtupleRepr s, IsAtupleRepr t')
@@ -894,7 +920,7 @@ data StreamTuple index acc aenv t where
               -> StreamTuple index acc aenv t
 
 
-applyLimit :: (Kit acc, SeqIndex index, Arrays a)
+applyLimit :: (Kit acc, SeqIndex index)
            => Stream index acc aenv a
            -> Stream index acc aenv a
 applyLimit (Stream (Just l) f a msel@(Just sel))
@@ -906,6 +932,8 @@ applyLimit (Stream (Just l) f a msel@(Just sel))
                (atuple (app sel v0) v0)
 applyLimit (Stream l f a msel)
   = Stream l f a msel
+applyLimit (Reified ty s)
+  = Reified ty (applyLimit s)
 
 v0 :: (Kit acc, Arrays a) => acc (aenv,a) a
 v0 = inject (Avar ZeroIdx)
@@ -1813,7 +1841,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
             (replaceSeq (weaken SuccIdx cunc) (weaken SuccIdx avar) s')
         Consumer c ->
           Consumer (cvtC c)
-        Reify a -> Reify (cvtA a)
+        Reify ty a -> Reify ty (cvtA a)
 
       where
         cvtC :: Consumer index acc aenv s -> Consumer index acc aenv s
@@ -1968,8 +1996,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
             (subtupleSeq (unRAtup (weaken SuccIdx (RebuildAtup atup))) (weaken SuccIdx avar) (under ixt) s')
         Consumer c ->
           Consumer (cvtC c)
-        Reify a -> Reify (cvtA a)
-
+        Reify ty a -> Reify ty (cvtA a)
       where
         cvtC :: Consumer index acc aenv s -> Consumer index acc aenv' s
         cvtC c =

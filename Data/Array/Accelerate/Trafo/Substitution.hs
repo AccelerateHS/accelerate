@@ -579,7 +579,7 @@ rebuildSeq k v seq =
   case seq of
     Producer p s -> Producer <$> rebuildP k v p <*> rebuildSeq k (shiftA k v) s
     Consumer c   -> Consumer <$> rebuildC k v c
-    Reify  a     -> Reify    <$> k v a
+    Reify ty a   -> Reify ty <$> k v a
 
 {-# INLINEABLE rebuildP #-}
 rebuildP :: (SyntacticAcc fa, Applicative f)

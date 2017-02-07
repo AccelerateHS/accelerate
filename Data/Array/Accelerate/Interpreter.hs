@@ -70,12 +70,14 @@ import Control.Applicative                              ( (<$>), (<*>), pure )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Lifted                           ( LiftedType(..), LiftedTupleType(..) )
 import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.Array.Lifted                 as L
 import qualified Data.Array.Accelerate.Array.Representation         as R
 import qualified Data.Array.Accelerate.Smart                        as Sugar
 import qualified Data.Array.Accelerate.Trafo                        as AST
@@ -1200,8 +1202,7 @@ evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   =
 mAXIMUM_CHUNK_SIZE :: Int
 mAXIMUM_CHUNK_SIZE = 1024
 
-evalDelayedSeq :: SeqIndex index
-               => DelayedSeq index arrs
+evalDelayedSeq :: DelayedSeq arrs
                -> arrs
 evalDelayedSeq (StreamSeq aenv s) | aenv' <- evalExtend aenv Empty
                                   = evalSeq 1 Nothing Nothing s aenv'
@@ -1215,40 +1216,82 @@ evalSeq :: forall index aenv arrs. SeqIndex index
         -> arrs
 evalSeq min max i s aenv =
   case s of
-    Producer (ProduceAccum l f a) (Consumer (Last a' d)) ->
+    Producer (ProduceAccum l f a) (Consumer (Last a' d)) -> last $
       go i
          (evalPreExp evalOpenAcc (initialIndex (Const min)) aenv)
          (evalPreExp evalOpenAcc <$> l <*> pure aenv)
          (evalOpenAfun f aenv)
          (evalOpenAcc a aenv)
-         (evalOpenAcc (fromJust (strengthen (drop Just) d)) aenv)
+         [evalOpenAcc (fromJust (strengthen (drop Just) d)) aenv]
+         (evalOpenAcc a')
+    Producer (ProduceAccum l f a) (Reify ty a') -> concatMap (divide ty) $
+      go i
+         (evalPreExp evalOpenAcc (initialIndex (Const min)) aenv)
+         (evalPreExp evalOpenAcc <$> l <*> pure aenv)
+         (evalOpenAfun f aenv)
+         (evalOpenAcc a aenv)
+         []
          (evalOpenAcc a')
     _ -> $internalError "evalSeq" "Sequence computation does not appear to be delayed"
   where
-    go :: Maybe Int
+    go :: forall arrs s a. Maybe Int
        -> index
        -> Maybe Int
        -> (Scalar index -> s -> (a, s))
        -> s
-       -> arrs
+       -> [arrs]
        -> (Val (aenv, a) -> arrs)
-       -> arrs
+       -> [arrs]
     go i index l f s a next =
       let
         (a', s') = f (fromFunction Z (const index)) s
+        a''      = next (aenv `Push` a')
       in if maybe True (contains' index) l && maybe True (>0) i
-           then go (flip (-) 1 <$> i)
-                   (nextIndex' index) l f s' (next (aenv `Push` a')) next
+           then a'' : go (flip (-) 1 <$> i)
+                         (nextIndex' index) l f s' [] next
            else a
 
     nextIndex'= modifySize (\n -> if 2*n <= fromMaybe mAXIMUM_CHUNK_SIZE max
                                   then 2*n
                                   else n)
-                   . nextIndex
+              . nextIndex
 
     drop :: aenv' :?> aenv -> (aenv',a) :?> aenv
     drop _ ZeroIdx      = Nothing
     drop v (SuccIdx ix) = v ix
+
+    divide :: LiftedType a a' -> a' -> [a]
+    divide UnitT       _ = [()]
+    divide LiftedUnitT a = replicate (a ! Z) ()
+    divide AvoidedT    a = [a]
+    divide RegularT    a = regular a
+    divide IrregularT  a = irregular a
+    divide (TupleT t)  a = map toAtuple (divideT t (fromAtuple a))
+      where
+        divideT :: LiftedTupleType t t' -> t' -> [t]
+        divideT NilLtup          ()    = [()]
+        divideT (SnocLtup lt ty) (t,a) = zip (divideT lt t) (divide ty a)
+
+    regular :: forall sh e. Shape sh => Array (sh:.Int) e -> [Array sh e]
+    regular arr@(Array _ adata) = [Array (fromElt sh') (copy (i * size sh') (size sh')) | i <- [0..n-1]]
+      where
+        sh  = shapeToList (shape arr)
+        n   = last sh
+        --
+        sh' :: sh
+        sh' = listToShape (init sh)
+        --
+        copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)
+
+    irregular :: forall sh e. Shape sh => (L.Segments sh, Vector e) -> [Array sh e]
+    irregular (segs, (Array _ adata))
+      = [Array (fromElt (shs ! (Z:.i))) (copy (offs ! (Z:.i)) (size (shs ! (Z:.i)))) | i <- [0..n-1]]
+      where
+        (_, offs, shs) = segs
+        n              = size (shape shs)
+        --
+        copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)
+
 
 evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
 evalExtend BaseEnv aenv = aenv

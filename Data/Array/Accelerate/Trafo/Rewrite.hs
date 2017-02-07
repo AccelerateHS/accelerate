@@ -127,7 +127,7 @@ convertSegmentsSeq seq =
   case seq of
     Producer p s -> Producer (cvtP p) (convertSegmentsSeq s)
     Consumer c   -> Consumer (cvtC c)
-    Reify a      -> Reify (cvtA a)
+    Reify ty a   -> Reify ty (cvtA a)
   where
     cvtP :: Producer index OpenAcc aenv a -> Producer index OpenAcc aenv a
     cvtP p =
@@ -261,7 +261,7 @@ convertSubarraySeq seq =
   case seq of
     Producer p s -> Producer (cvtP p) (convertSubarraySeq s)
     Consumer c   -> Consumer (cvtC c)
-    Reify a      -> Reify (cvtA a)
+    Reify ty a   -> Reify ty (cvtA a)
   where
     cvtP :: Producer index OpenAcc aenv a -> Producer index OpenAcc aenv a
     cvtP p =

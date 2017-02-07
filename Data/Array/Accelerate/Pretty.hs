@@ -73,5 +73,5 @@ instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenExp acc env ae
 instance (Kit acc, PrettyEnv aenv) => Show (PreOpenSeq index acc aenv t) where
   show s = renderStyle wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc noParens prettyEnv s
 
-instance Show (DelayedSeq index a) where
+instance Show (DelayedSeq a) where
   show = renderStyle wide . prettyDelayedSeq noParens

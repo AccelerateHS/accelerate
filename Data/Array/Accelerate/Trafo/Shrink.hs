@@ -214,7 +214,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       case seq of
         Producer p s -> Producer (shrinkP p) (shrinkS s)
         Consumer c   -> Consumer (shrinkC c)
-        Reify a      -> Reify (shrinkAcc a)
+        Reify ty a   -> Reify ty (shrinkAcc a)
 
     shrinkP :: Producer index acc aenv' a -> Producer index acc aenv' a
     shrinkP p =
@@ -624,7 +624,7 @@ usesOfPreSeq countAcc idx seq =
   case seq of
     Producer p s -> countP p <+> usesOfPreSeq countAcc (SuccIdx idx) s
     Consumer c   -> countC c
-    Reify a      -> countA a
+    Reify _ a    -> countA a
   where
     countP :: Producer index acc aenv arrs -> Use s
     countP p =
@@ -804,7 +804,7 @@ reduceAccessSeq reduceAcc idx seq =
   case seq of
     Producer p s -> Producer (cvtP p) (reduceAccessSeq reduceAcc (SuccIdx idx) s)
     Consumer c   -> Consumer (cvtC c)
-    Reify a      -> Reify (cvtA a)
+    Reify ty a   -> Reify ty (cvtA a)
   where
     cvtA :: acc aenv a' -> acc aenv a'
     cvtA = reduceAcc idx

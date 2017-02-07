@@ -200,7 +200,7 @@ prettySeq prettyAcc wrap aenv seq =
       prettyP p : prettySeq prettyAcc wrap (aenv `Push` avar (sizeEnv aenv)) s'
     Consumer c    ->
       [prettyC c]
-    Reify ix      -> ["reify" ..$ [ppA ix]]
+    Reify _ ix    -> ["reify" ..$ [ppA ix]]
   where
     avar n         = char 'a' <> int n
     name .$  docs = wrap $ hang (avar (sizeEnv aenv) <+> text ":=" <+> text name) 2 (sep docs)

@@ -363,9 +363,9 @@ matchSeq m h = match
     match (Consumer c1)   (Consumer c2)
       | Just Refl <- matchC c1 c2
       = Just Refl
-    match (Reify ix1) (Reify ix2)
+    match (Reify _ ix1) (Reify _ ix2)
       | Just Refl <- m ix1 ix2
-      = Just Refl
+      = gcast Refl
     match _ _
       = Nothing
 
@@ -1078,7 +1078,7 @@ hashPreOpenSeq hashAcc s =
   in case s of
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
     Consumer   c    -> hash "Consumer"   `hashC` c
-    Reify      ix   -> hash "Reify"      `hashA` ix
+    Reify _    ix   -> hash "Reify"      `hashA` ix
 
 
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int

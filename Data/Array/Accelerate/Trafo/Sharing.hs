@@ -59,6 +59,7 @@ import Prelude
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
+import Data.Array.Accelerate.Array.Lifted               ( avoidedType )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..), OpenAcc(..), Acc
                                                                , Stencil(..), PreOpenExp(..), OpenExp
@@ -355,7 +356,7 @@ convertSharingSeq
     -> AST.PreOpenNaturalSeq AST.OpenAcc aenv arrs
 convertSharingSeq _ alyt _ senv (ScopedSeq lams _ (SvarSharing sn))
   | Just i <- findIndex (matchStableSeq sn) senv'
-  = AST.Reify $ AST.OpenAcc . AST.Avar $ prjIdx (ctxt ++ "; i = " ++ show i) i alyt
+  = AST.Reify avoidedType $ AST.OpenAcc . AST.Avar $ prjIdx (ctxt ++ "; i = " ++ show i) i alyt
   | null senv'
   = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
             show (hashStableNameHeight sn) ++ ")"
