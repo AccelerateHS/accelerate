@@ -1654,32 +1654,48 @@ generateSeg segs f
   = S.zipWith3 f (offsets segs) (shapes segs) (shapes segs)
 generateSeg segs f = S.map (\(S.unlift -> (seg,sh,i)) -> f seg sh (S.fromIndex sh i)) domain
   where
+    shs   = shapes segs
     offs  = offsets segs
+    ts    = totalSize segs
 
-    -- For irregular segments
-    negs  = S.fill (S.index1 $ totalSize segs) (S.tup3 (-1::S.Exp Int, S.constant Sugar.empty, 0::S.Exp Int) :: S.Exp (Int, sh, Int)) --Start with all -1s
-    heads = S.permute const negs place (S.zip3 (S.enumFromN (S.shape offs) 0) (shapes segs) (S.fill (S.shape offs) 0))
+    -- Using a binary search for each element to preserve fusibility.
 
-    domain = totalSize segs S.> 0
-           S.?| ( S.scanl1 (\a b -> dead b
-                                 S.? ( inc (merge a b)
-                                     , b)) heads
-                , S.use (fromList (Z:.0) []))
+    search :: S.Exp Int -> S.Exp Int
+    search i = S.fst $ S.while (S.uncurry nonconverged) (S.uncurry f) (S.lift (0::S.Exp Int,S.length offs))
+      where
+        nonconverged l h = h - l S.> 1
+        f l h =
+         let m = (h + l) `S.div` 2
+         in offs S.!! m S.> i S.?
+              ( S.lift (l,m)
+              , S.lift (m,h) )
 
-    place :: S.Exp DIM1 -> S.Exp DIM1
-    place ix =     S.shapeSize (shapes segs S.! ix) S.> 0
-               S.? ( S.index1 (offs S.! ix)
-                   , S.ignore)
+    domain = S.imap (\i s -> S.lift (s, shs S.!! s, S.unindex1 i - offs S.!! s))
+           $ S.generate (S.index1 ts) (search . S.unindex1)
+    -- -- For irregular segments
+    -- negs  = S.fill (S.index1 $ totalSize segs) (S.tup3 (-1::S.Exp Int, S.constant Sugar.empty, 0::S.Exp Int) :: S.Exp (Int, sh, Int)) --Start with all -1s
+    -- heads = S.permute const negs place (S.zip3 (S.enumFromN (S.shape offs) 0) (shapes segs) (S.fill (S.shape offs) 0))
 
-    dead :: S.Exp (Int,sh,Int) -> S.Exp Bool
-    dead (S.untup3 -> (seg,_,_)) = seg S.== -1
+    -- domain = totalSize segs S.> 0
+    --        S.?| ( S.scanl1 (\a b -> dead b
+    --                              S.? ( inc (merge a b)
+    --                                  , b)) heads
+    --             , S.use (fromList (Z:.0) []))
 
-    inc :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
-    inc (S.untup3 -> (seg,sh,i)) = S.lift (seg,sh,i+1)
+    -- place :: S.Exp DIM1 -> S.Exp DIM1
+    -- place ix =     S.shapeSize (shapes segs S.! ix) S.> 0
+    --            S.? ( S.index1 (offs S.! ix)
+    --                , S.ignore)
 
-    merge :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
-    merge (S.untup3 -> (seg,sh,i)) (S.untup3 -> (_,_,i'))
-      = S.lift (seg,sh,i+i')
+    -- dead :: S.Exp (Int,sh,Int) -> S.Exp Bool
+    -- dead (S.untup3 -> (seg,_,_)) = seg S.== -1
+
+    -- inc :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
+    -- inc (S.untup3 -> (seg,sh,i)) = S.lift (seg,sh,i+1)
+
+    -- merge :: S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int) -> S.Exp (Int,sh,Int)
+    -- merge (S.untup3 -> (seg,sh,i)) (S.untup3 -> (_,_,i'))
+    --   = S.lift (seg,sh,i+i')
 
 enumSeg :: Shape sh => S.Acc (Segments sh) -> S.Acc (Vector (Int, sh, sh))
 enumSeg segs = generateSeg segs (\seg sh ix -> S.lift (seg, sh, ix))
