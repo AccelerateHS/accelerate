@@ -67,8 +67,9 @@ data LiftedTupleType t t' where
            -> LiftedTupleType (t,a) (t',a')
 
 deriving instance (Eq (LiftedTupleType t t'))
-
 deriving instance (Eq (LiftedType t t'))
+deriving instance (Show (LiftedTupleType t t'))
+deriving instance (Show (LiftedType t t'))
 
 -- For any type a, generate a witness that a is a lifted type for a.
 --

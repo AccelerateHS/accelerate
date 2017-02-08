@@ -2756,7 +2756,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     Reify ty arr
       | Just iso           <- isIso ty
       , LiftedAcc ty' arr' <- cvtA (castAccC iso arr)
-      -> Just (Reify ty' arr')
+      -> trace "REIFY" (show ty') $ Just (Reify ty' arr')
       | otherwise
       -> $internalError "vectoriseOpenSeq" "malformed sequence expression"
   where

@@ -69,9 +69,9 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Lifted               ( LiftedType )
+import Data.Array.Accelerate.Array.Lifted               ( LiftedType(..), LiftedTupleType(..) )
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr, Z(..), toAtuple
                                                         , Elt, EltRepr, Shape(empty), Slice, Tuple(..), Atuple(..)
                                                         , IsAtuple, TupleRepr, Scalar, ArraysFlavour(..), fromList )
 import Data.Array.Accelerate.Product
@@ -796,15 +796,25 @@ seqToStream (Producer (ProduceAccum l f a) s)
 seqToStream (Consumer (Last a d))
   = Stream Nothing (Alam . Alam . Abody . alet (weaken (SuccIdx . SuccIdx) a) $ atuple v0 v0) d (Just . Alam $ Abody v0)
 seqToStream (Reify ty a)
-  = Reified ty $ Stream Nothing (Alam . Alam . Abody . alet (weaken (SuccIdx . SuccIdx) a) $ atuple v0 v0) (emptyArrays a) (Just . Alam $ Abody v0)
+  = Reified ty $ Stream Nothing (Alam . Alam . Abody . alet (weaken (SuccIdx . SuccIdx) a) $ atuple v0 v0) emptyArrays (Just . Alam $ Abody v0)
   where
-    emptyArrays :: forall arrs. Arrays arrs => acc aenv arrs -> acc aenv arrs
-    emptyArrays _ = inject $ Use (eA (arrays (undefined :: arrs)))
+    emptyArrays = inject $ Use (fromArr (eA ty))
       where
-        eA :: ArraysR t -> t
-        eA ArraysRunit = ()
-        eA ArraysRarray = fromList empty []
-        eA (ArraysRpair aR1 aR2) = (eA aR1, eA aR2)
+        eA :: LiftedType t t' -> t'
+        eA UnitT        = $internalError "seqToStream" "Unvectorised reify"
+        eA LiftedUnitT  = $internalError "seqToStream" "Unvectorised reify"
+        eA AvoidedT     = $internalError "seqToStream" "Unvectorised reify"
+        eA RegularT     = fromList empty []
+        eA IrregularT   = ((fromList Z [0], fromList empty [], fromList empty []), fromList empty [])
+        eA (TupleT tup) = toAtuple (eAT tup)
+
+        eAT :: LiftedTupleType t t' -> t'
+        eAT NilLtup        = ()
+        eAT (SnocLtup t a) = (eAT t, eA a)
+        eAv :: ArraysR t -> t
+        eAv ArraysRunit = ()
+        eAv ArraysRarray = fromList empty []
+        eAv (ArraysRpair aR1 aR2) = (eAv aR1, eAv aR2)
 
 seqToStream (Consumer (Stuple t))
   | StreamTuple l t' a sel t s <- cvtT' (cvtT t)
