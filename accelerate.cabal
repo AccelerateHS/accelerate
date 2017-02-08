@@ -284,6 +284,7 @@ Library
         Data.Array.Accelerate.Analysis.Stencil
         Data.Array.Accelerate.Analysis.Type
         Data.Array.Accelerate.Array.Data
+        Data.Array.Accelerate.Array.Lifted
         Data.Array.Accelerate.Array.Remote
         Data.Array.Accelerate.Array.Remote.Class
         Data.Array.Accelerate.Array.Remote.LRU
@@ -304,7 +305,6 @@ Library
 
   Other-modules:
         Data.Atomic
-        Data.Array.Accelerate.Array.Lifted
         Data.Array.Accelerate.Array.Remote.Nursery
         Data.Array.Accelerate.Classes
         Data.Array.Accelerate.Classes.Bounded
