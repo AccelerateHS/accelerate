@@ -29,13 +29,17 @@ module Data.Array.Accelerate.Array.Lifted (
 
   VectorisedForeign(..), isVectorisedForeign,
 
+  divide,
+
 ) where
 
 import Prelude                                                  hiding ( concat )
 import Data.Typeable
+import System.IO.Unsafe                                         ( unsafePerformIO )
 
 -- friends
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Array.Data                         ( unsafeCopyArrayData )
 import Data.Array.Accelerate.Array.Sugar                        hiding ( Segments )
 
 -- The lifted type relationship
@@ -131,3 +135,35 @@ isVectorisedForeign :: (Typeable asm, Foreign f)
                     => f asm
                     -> Maybe (VectorisedForeign asm)
 isVectorisedForeign = cast
+
+divide :: LiftedType a a' -> a' -> [a]
+divide UnitT       _ = [()]
+divide LiftedUnitT a = replicate (a ! Z) ()
+divide AvoidedT    a = [a]
+divide RegularT    a = regular a
+divide IrregularT  a = irregular a
+divide (TupleT t)  a = map toAtuple (divideT t (fromAtuple a))
+  where
+    divideT :: LiftedTupleType t t' -> t' -> [t]
+    divideT NilLtup          ()    = [()]
+    divideT (SnocLtup lt ty) (t,a) = zip (divideT lt t) (divide ty a)
+
+regular :: forall sh e. Shape sh => Array (sh:.Int) e -> [Array sh e]
+regular arr@(Array _ adata) = [Array (fromElt sh') (copy (i * size sh') (size sh')) | i <- [0..n-1]]
+  where
+    sh  = shapeToList (shape arr)
+    n   = last sh
+    --
+    sh' :: sh
+    sh' = listToShape (init sh)
+    --
+    copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)
+
+irregular :: forall sh e. Shape sh => (Segments sh, Vector e) -> [Array sh e]
+irregular (segs, (Array _ adata))
+  = [Array (fromElt (shs ! (Z:.i))) (copy (offs ! (Z:.i)) (size (shs ! (Z:.i)))) | i <- [0..n-1]]
+  where
+    (_, offs, shs) = segs
+    n              = size (shape shs)
+    --
+    copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)

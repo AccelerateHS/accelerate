@@ -70,14 +70,13 @@ import Control.Applicative                              ( (<$>), (<*>), pure )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Lifted                           ( LiftedType(..), LiftedTupleType(..) )
+import Data.Array.Accelerate.Array.Lifted                           ( divide )
 import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Array.Lifted                 as L
 import qualified Data.Array.Accelerate.Array.Representation         as R
 import qualified Data.Array.Accelerate.Smart                        as Sugar
 import qualified Data.Array.Accelerate.Trafo                        as AST
@@ -1259,38 +1258,6 @@ evalSeq min max i s aenv =
     drop :: aenv' :?> aenv -> (aenv',a) :?> aenv
     drop _ ZeroIdx      = Nothing
     drop v (SuccIdx ix) = v ix
-
-    divide :: LiftedType a a' -> a' -> [a]
-    divide UnitT       _ = [()]
-    divide LiftedUnitT a = replicate (a ! Z) ()
-    divide AvoidedT    a = [a]
-    divide RegularT    a = regular a
-    divide IrregularT  a = irregular a
-    divide (TupleT t)  a = map toAtuple (divideT t (fromAtuple a))
-      where
-        divideT :: LiftedTupleType t t' -> t' -> [t]
-        divideT NilLtup          ()    = [()]
-        divideT (SnocLtup lt ty) (t,a) = zip (divideT lt t) (divide ty a)
-
-    regular :: forall sh e. Shape sh => Array (sh:.Int) e -> [Array sh e]
-    regular arr@(Array _ adata) = [Array (fromElt sh') (copy (i * size sh') (size sh')) | i <- [0..n-1]]
-      where
-        sh  = shapeToList (shape arr)
-        n   = last sh
-        --
-        sh' :: sh
-        sh' = listToShape (init sh)
-        --
-        copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)
-
-    irregular :: forall sh e. Shape sh => (L.Segments sh, Vector e) -> [Array sh e]
-    irregular (segs, (Array _ adata))
-      = [Array (fromElt (shs ! (Z:.i))) (copy (offs ! (Z:.i)) (size (shs ! (Z:.i)))) | i <- [0..n-1]]
-      where
-        (_, offs, shs) = segs
-        n              = size (shape shs)
-        --
-        copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)
 
 
 evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
