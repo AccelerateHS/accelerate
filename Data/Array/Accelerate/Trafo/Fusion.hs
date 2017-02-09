@@ -811,10 +811,6 @@ seqToStream (Reify ty a)
         eAT :: LiftedTupleType t t' -> t'
         eAT NilLtup        = ()
         eAT (SnocLtup t a) = (eAT t, eA a)
-        eAv :: ArraysR t -> t
-        eAv ArraysRunit = ()
-        eAv ArraysRarray = fromList empty []
-        eAv (ArraysRpair aR1 aR2) = (eAv aR1, eAv aR2)
 
 seqToStream (Consumer (Stuple t))
   | StreamTuple l t' a sel t s <- cvtT' (cvtT t)
