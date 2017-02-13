@@ -51,6 +51,7 @@ import Data.Array.Accelerate.Array.Representation      ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar               hiding ( Segments )
 import Data.Array.Accelerate.Trafo.Base                hiding ( PushExp )
 import Data.Array.Accelerate.Pretty                    ()
+import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
@@ -509,6 +510,15 @@ liftPreOpenAcc vectAcc ctx size acc
     liftedE (LiftedExp (Just e) _) = replicateE size e
     liftedE (LiftedExp _        e) = e
 
+    reduce1 :: forall aenv t sh e. (Shape sh, Elt e) => Idx aenv (Array sh e) -> acc aenv t -> acc aenv t
+    reduce1 idx = kmap (reduceAccessPreAcc reduce1 idx)
+
+    reduce :: forall aenv t a. Arrays a => Idx aenv a -> acc aenv t -> acc aenv t
+    reduce | ArraysFarray <- flavour (undefined :: a)
+           = reduce1
+           | otherwise
+           = const id
+
     -- Regular versions of combinators.
     -- ===================================
 
@@ -517,7 +527,8 @@ liftPreOpenAcc vectAcc ctx size acc
           -> acc (aenv, bnd) t
           -> LiftedAcc acc aenv' t
     aletL bnd body | LiftedAcc ty a <- cvtA bnd
-                   = inject . Alet a $* vectAcc (push ctx ty) (weakenA1 size) body
+                   , body' <- reduce ZeroIdx body
+                   = inject . Alet a $* vectAcc (push ctx ty) (weakenA1 size) body'
 
     avarL :: Idx aenv t
           -> LiftedAcc acc aenv' t
