@@ -430,6 +430,16 @@ matchSource (RegularList _ arrs1) (RegularList _ arrs2)
           sn2 <- makeStableName arrs2
           return $! hashStableName sn1 == hashStableName sn2
       = gcast Refl
+matchSource (Function f1 a1) (Function f2 a2)
+      | unsafePerformIO $ do
+          sn1 <- makeStableName f1
+          sn2 <- makeStableName f2
+          return $! hashStableName sn1 == hashStableName sn2
+      , unsafePerformIO $ do
+          sn1 <- makeStableName a1
+          sn2 <- makeStableName a2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast Refl
 matchSource _ _ = Nothing
 
 
@@ -1065,6 +1075,7 @@ hashPreOpenSeq hashAcc s =
       case a of
         List arrs          -> hashWithSalt salt "List"        `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName arrs)
         RegularList _ arrs -> hashWithSalt salt "RegularList" `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName arrs)
+        Function f a       -> hashWithSalt salt "Function"    `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName f) `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName a)
 
     hashC :: Int -> Consumer idx acc aenv' a -> Int
     hashC salt c =

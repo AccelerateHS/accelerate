@@ -99,14 +99,15 @@ convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
 --   in a sequence computation.
 convertStreamSeq :: Bool -> StreamSeq (Int,Int) OpenAcc a -> DelayedSeq a
 convertStreamSeq fuseAcc (StreamSeq binds seq)
-  = withSimplStats (StreamSeq (fuseBinds binds) (convertOpenSeq fuseAcc (fuse seq)))
+  = withSimplStats (StreamSeq (fuseBinds binds) (convertOpenSeq fuseAcc (fuse (seqToStream seq))))
   where
     fuseBinds :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
     fuseBinds BaseEnv = BaseEnv
     fuseBinds (PushEnv env a) = fuseBinds env `PushEnv` manifest fuseAcc (computeAcc (embedOpenAcc fuseAcc a))
 
-    fuse :: PreOpenSeq (Int,Int) OpenAcc aenv a -> PreOpenSeq (Int,Int) OpenAcc aenv a
-    fuse (seqToStream -> Reified ty (Stream l (Alam (Alam (Abody f))) a _)) =
+    fuse :: Stream (Int,Int) OpenAcc aenv a -> PreOpenSeq (Int,Int) OpenAcc aenv a
+    fuse (Sourced src s) = Producer (Pull src) (fuse s)
+    fuse (Reified ty (Stream l (Alam (Alam (Abody f))) a _)) =
       let
         l' = simplify <$> l
         a' = computeAcc (embedOpenAcc fuseAcc a)
@@ -791,6 +792,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
 seqToStream :: forall acc aenv index a. (Kit acc, SeqIndex index)
             => PreOpenSeq index acc aenv a
             -> Stream index acc aenv a
+seqToStream (Producer (Pull src) s)
+  = Sourced src (seqToStream s)
 seqToStream (Producer (ProduceAccum l f a) s)
   = applyLimit (fuseStreams (Stream l f a Nothing) (seqToStream s))
 seqToStream (Consumer (Last a d))
@@ -891,6 +894,12 @@ fuseStreams (Stream l fun init _) (Stream l' fun' init' sel')
         f ZeroIdx = Nothing
         f (SuccIdx ix) = Just ix
 fuseStreams s (Reified ty s') = Reified ty (fuseStreams s s')
+fuseStreams s (Sourced a s')  = Sourced a (fuseStreams (weaken SuccIdx s) (weaken swapTop s'))
+  where
+    swapTop :: ((aenv,a),t) :> ((aenv,t),a)
+    swapTop ZeroIdx                = SuccIdx ZeroIdx
+    swapTop (SuccIdx ZeroIdx)      = ZeroIdx
+    swapTop (SuccIdx (SuccIdx ix)) = (SuccIdx (SuccIdx ix))
 
 mergeLimits :: Maybe (PreExp acc aenv Int) -> Maybe (PreExp acc aenv Int) -> Maybe (PreExp acc aenv Int)
 mergeLimits Nothing Nothing = Nothing
@@ -914,6 +923,10 @@ data Stream index acc aenv a where
           => LiftedType a a'
           -> Stream index acc aenv a'
           -> Stream index acc aenv [a]
+  Sourced :: Arrays t
+          => Source t
+          -> Stream index acc (aenv,t) a
+          -> Stream index acc aenv a
 
 data StreamTuple index acc aenv t where
   StreamTuple :: (IsAtupleRepr s, IsAtupleRepr t')
@@ -925,6 +938,13 @@ data StreamTuple index acc aenv t where
               -> (forall aenv. Atuple (acc (aenv,FreeProd t')) s)
               -> StreamTuple index acc aenv t
 
+instance Kit acc => Sink (Stream index acc) where
+  weaken v (Stream l f a sel)
+    = Stream (weaken v <$> l) (weaken v f) (weaken v a) sel
+  weaken v (Reified ty s)
+    = Reified ty (weaken v s)
+  weaken v (Sourced a s)
+    = Sourced a (weaken (under v) s)
 
 applyLimit :: (Kit acc, SeqIndex index)
            => Stream index acc aenv a
@@ -940,6 +960,8 @@ applyLimit (Stream l f a msel)
   = Stream l f a msel
 applyLimit (Reified ty s)
   = Reified ty (applyLimit s)
+applyLimit (Sourced a s)
+  = Sourced a (applyLimit s)
 
 v0 :: (Kit acc, Arrays a) => acc (aenv,a) a
 v0 = inject (Avar ZeroIdx)
@@ -2140,22 +2162,27 @@ collectD :: forall acc aenv arrs index. (Kit acc, Arrays arrs, SeqIndex index)
          -> PreOpenSeq index acc aenv arrs
          -> Embed acc aenv arrs
 collectD embedAcc min max i s
-  | Stream l (Alam (Alam (Abody f))) a (Just sel) <- seqToStream s
+  | s' <- seqToStream s
   = let
       min' = simplify min
       max' = simplify <$> max
       i'   = simplify <$> i
-
-      a' = cvtA a
-      f' = cvtA f
-
-      s' = Producer (ProduceAccum (simplify <$> l) (Alam . Alam $ Abody f') a') (Consumer (Last v0 (sel `app` weaken SuccIdx a')))
-
-      cvtA :: Arrays a => acc aenv' a -> acc aenv' a
-      cvtA = computeAcc . embedAcc
     in case i' of
-      Just (Const 1) -> embedAcc (fstA . alet (unit (initialIndex min)) . alet (weaken SuccIdx a) $ f)
-      _              -> Embed (BaseEnv `PushEnv` inject (Collect min' max' i' s')) (Done ZeroIdx)
+      Just (Const 1) | Stream _ (Alam (Alam (Abody f))) a _ <- s'
+                     -> embedAcc (fstA . alet (unit (initialIndex min)) . alet (weaken SuccIdx a) $ f)
+      _              -> Embed (BaseEnv `PushEnv` inject (Collect min' max' i' (fromStream s'))) (Done ZeroIdx)
+  where
+    fromStream :: forall aenv. Stream index acc aenv arrs -> PreOpenSeq index acc aenv arrs
+    fromStream (Sourced a s) = Producer (Pull a) (fromStream s)
+    fromStream (Stream l (Alam (Alam (Abody f))) a (Just sel))
+      = let
+          a' = cvtA a
+          f' = cvtA f
+
+          cvtA :: Arrays a => acc aenv' a -> acc aenv' a
+          cvtA = computeAcc . embedAcc
+        in Producer (ProduceAccum (simplify <$> l) (Alam . Alam $ Abody f') a') (Consumer (Last v0 (sel `app` weaken SuccIdx a')))
+
 
 -- Scalar expressions
 -- ------------------

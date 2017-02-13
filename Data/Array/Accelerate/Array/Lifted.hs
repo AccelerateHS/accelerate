@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
@@ -29,17 +30,18 @@ module Data.Array.Accelerate.Array.Lifted (
 
   VectorisedForeign(..), isVectorisedForeign,
 
-  divide,
+  divide, concatRegular, concatIrregular,
 
 ) where
 
 import Prelude                                                  hiding ( concat )
+import Control.Monad                                            ( zipWithM_, foldM_ )
 import Data.Typeable
 import System.IO.Unsafe                                         ( unsafePerformIO )
 
 -- friends
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Data                         ( unsafeCopyArrayData )
+import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Sugar                        hiding ( Segments )
 
 -- The lifted type relationship
@@ -136,20 +138,21 @@ isVectorisedForeign :: (Typeable asm, Foreign f)
                     -> Maybe (VectorisedForeign asm)
 isVectorisedForeign = cast
 
+
 divide :: LiftedType a a' -> a' -> [a]
 divide UnitT       _ = [()]
 divide LiftedUnitT a = replicate (a ! Z) ()
 divide AvoidedT    a = [a]
-divide RegularT    a = regular a
-divide IrregularT  a = irregular a
+divide RegularT    a = divideRegular a
+divide IrregularT  a = divideIrregular a
 divide (TupleT t)  a = map toAtuple (divideT t (fromAtuple a))
   where
     divideT :: LiftedTupleType t t' -> t' -> [t]
     divideT NilLtup          ()    = [()]
     divideT (SnocLtup lt ty) (t,a) = zip (divideT lt t) (divide ty a)
 
-regular :: forall sh e. Shape sh => Array (sh:.Int) e -> [Array sh e]
-regular arr@(Array _ adata) = [Array (fromElt sh') (copy (i * size sh') (size sh')) | i <- [0..n-1]]
+divideRegular :: forall sh e. Shape sh => Array (sh:.Int) e -> [Array sh e]
+divideRegular arr@(Array _ adata) = [Array (fromElt sh') (copy (i * size sh') (size sh')) | i <- [0..n-1]]
   where
     sh  = shapeToList (shape arr)
     n   = last sh
@@ -157,13 +160,59 @@ regular arr@(Array _ adata) = [Array (fromElt sh') (copy (i * size sh') (size sh
     sh' :: sh
     sh' = listToShape (init sh)
     --
-    copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)
+    {-# NOINLINE copy #-}
+    copy start n = unsafePerformIO $ do
+      dst <- newArrayData n
+      unsafeCopyArrayData adata dst start 0 n
+      touchArrayData adata
+      unsafeFreezeArrayData dst
+      return dst
 
-irregular :: forall sh e. Shape sh => (Segments sh, Vector e) -> [Array sh e]
-irregular (segs, (Array _ adata))
+divideIrregular :: forall sh e. Shape sh => (Segments sh, Vector e) -> [Array sh e]
+divideIrregular (segs, (Array _ adata))
   = [Array (fromElt (shs ! (Z:.i))) (copy (offs ! (Z:.i)) (size (shs ! (Z:.i)))) | i <- [0..n-1]]
   where
     (_, offs, shs) = segs
     n              = size (shape shs)
     --
-    copy start n = unsafePerformIO (unsafeCopyArrayData adata start n)
+    {-# NOINLINE copy #-}
+    copy start n = unsafePerformIO $ do
+      dst <- newArrayData n
+      unsafeCopyArrayData adata dst start 0 n
+      touchArrayData adata
+      unsafeFreezeArrayData dst
+      return dst
+
+concatRegular :: forall sh e. (Shape sh, Elt e) => sh -> [Array sh e] -> Array (sh:.Int) e
+concatRegular sh arrs = copy
+  where
+    !n   = length arrs
+    sh' :: sh:.Int
+    !sh' = listToShape (shapeToList sh ++ [n])
+    --
+    {-# NOINLINE copy #-}
+    copy = unsafePerformIO  $ do
+      dst <- newArrayData (size sh * n)
+      zipWithM_ (copyIntoArray dst) arrs [0,size sh..]
+      dst' <- unsafeFreezeArrayData dst
+      return (Array (fromElt sh') dst')
+
+concatIrregular :: forall sh e. (Shape sh, Elt e) => [Array sh e] -> (Segments sh, Vector e)
+concatIrregular arrs = (segs, copy)
+  where
+    !n         = length arrs
+    !shapes    = map shape arrs
+    !totalSize = sum (map size shapes)
+    !segs      = ( fromList Z [totalSize]
+                 , fromList (Z:.n) (init (scanl (+) 0 (map size shapes)))
+                 , fromList (Z:.n) shapes)
+    --
+    {-# NOINLINE copy #-}
+    copy = unsafePerformIO $ do
+      dst <- newArrayData totalSize
+      foldM_ (\start arr -> copyIntoArray dst arr start >> return (start + (size (shape arr)))) 0 arrs
+      dst' <- unsafeFreezeArrayData dst
+      return $! (Array ((),totalSize)) dst'
+
+copyIntoArray :: forall sh e. (Shape sh, Elt e) => ArrayData (EltRepr e) -> Array sh e -> Int -> IO ()
+copyIntoArray dst (Array sh src) start = unsafeCopyArrayData src dst 0 start (size (toElt sh :: sh))

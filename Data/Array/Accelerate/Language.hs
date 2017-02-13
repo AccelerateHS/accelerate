@@ -802,9 +802,9 @@ stencil2 = Acc $$$$$ Stencil2
 -- Common sequence types
 --
 
-streamIn :: Arrays a
-         => [a]
-         -> Seq [a]
+streamIn :: (Shape sh, Elt e)
+         => [Array sh e]
+         -> Seq [Array sh e]
 streamIn = Seq . StreamIn
 
 -- |Split an array up into subarrays of given shape along the outermost dimension

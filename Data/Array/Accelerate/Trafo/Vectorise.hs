@@ -2779,7 +2779,9 @@ vectoriseOpenSeq vectAcc ctx size seq =
     cvtP :: NaturalProducer acc aenv t -> Maybe (LiftedAcc (ChunkedProducer acc) aenv' t)
     cvtP p =
       case p of
-        Pull _                  -> Nothing
+        Pull (List a)           -> Just . LiftedAcc IrregularT $ Pull (irregularSource a)
+        Pull (RegularList sh a) -> Just . LiftedAcc RegularT   $ Pull (regularSource sh a)
+        Pull _                  -> $internalError "vectoriseOpenSeq" "AST is at incorrect stage"
         Subarrays sh a          -> LiftedAcc RegularT <$> (subarrays <$> cvtE sh <*> pure a)
         FromSegs segs n vals    -> LiftedAcc IrregularT <$> (fromSegs <$> cvtA' segs <*> cvtE n <*> cvtA' vals)
         Produce l (Alam (Abody f))
@@ -2993,6 +2995,18 @@ vectoriseOpenSeq vectAcc ctx size seq =
 
     -- untup :: PreOpenAfun acc aenv t -> PreOpenAfun acc aenv t
     -- untup = untupleAfun BaseReducedMap
+
+    regularSource :: (Shape sh, Elt e) => sh -> [Array sh e] -> Source (Array (sh:.Int) e)
+    regularSource sh arrs = Function f arrs
+      where
+        f sz rest = let (as, rest') = splitAt sz rest
+                    in (null rest', concatRegular sh as, rest')
+
+    irregularSource :: (Shape sh, Elt e) => [Array sh e] -> Source (Segments sh, Vector e)
+    irregularSource arrs = Function f arrs
+      where
+        f sz rest = let (as, rest') = splitAt sz rest
+                    in (null as, concatIrregular as, rest')
 
     stageError = $internalError "vectoriseOpenSeq" "AST is at wrong stage for vectorisation. It seems to have already been vectorised."
 

@@ -542,15 +542,20 @@ data PreOpenSeq index acc aenv arrs where
 data Source a where
 
   -- Lazily pull elements from a list to create a sequence.
-  List      :: Arrays a
-            => [a]
-            -> Source a
+  List      :: (Shape sh, Elt e)
+            => [Array sh e]
+            -> Source (Array sh e)
 
   -- Similar to above but all arrays are of a statically known shape.
   RegularList :: (Shape sh, Elt e)
               => sh
               -> [Array sh e]
               -> Source (Array sh e)
+
+  Function    :: Arrays a
+              => (Int -> s -> (Bool,a,s))
+              -> s
+              -> Source a
 
 -- | A sequence producer.
 --
@@ -691,6 +696,7 @@ class Elt index => SeqIndex index where
   contains'    :: index -> Int -> Bool
   nextIndex    :: index -> index
   modifySize   :: (Int -> Int) -> index -> index
+  indexSize    :: index -> Int
 
 instance SeqIndex Int where
   initialIndex _ = Const 0
@@ -699,6 +705,7 @@ instance SeqIndex Int where
   contains' = (<)
   nextIndex = (+1)
   modifySize = ($)
+  indexSize _ = 1
 
 instance SeqIndex (Int, Int) where
   initialIndex n = tuple (Const 0) n
@@ -714,6 +721,7 @@ instance SeqIndex (Int, Int) where
   contains' (i,_) = (i <)
   nextIndex (i,n) = (i+n,n)
   modifySize = fmap
+  indexSize = snd
 
 -- |Operations on stencils.
 --
@@ -1386,13 +1394,14 @@ rnfSeqProducer rnfA topSeq =
   let
       -- RCE: Should probably reconsider this. If we're streaming in from a list
       -- we don't want to force the entire list when we force the AST.
-      rnfArrs :: forall a. Arrays a => [a] -> ()
-      rnfArrs []     = ()
-      rnfArrs (a:as) = rnfArrays (arrays (undefined::a)) (fromArr a) `seq` rnfArrs as
+      -- rnfArrs :: forall a. Arrays a => [a] -> ()
+      -- rnfArrs []     = ()
+      -- rnfArrs (a:as) = rnfArrays (arrays (undefined::a)) (fromArr a) `seq` rnfArrs as
 
-      rnfSource :: Arrays a => Source a -> ()
-      rnfSource (RegularList sh as) = rnfConst (eltType sh) (fromElt sh) `seq` rnfArrs as
-      rnfSource (List as)           = rnfArrs as
+      rnfSource :: forall a. Arrays a => Source a -> ()
+      rnfSource (RegularList sh _) = rnfConst (eltType sh) (fromElt sh)
+      rnfSource (List _)           = ()
+      rnfSource (Function _ _)     = ()
 
       rnfAF :: PreOpenAfun acc aenv' t' -> ()
       rnfAF = rnfPreOpenAfun rnfA

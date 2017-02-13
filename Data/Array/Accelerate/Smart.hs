@@ -338,9 +338,9 @@ data PreSeq acc seq exp arrs where
                  => Level                        -- environment size at defining occurrence
                  -> PreSeq acc seq exp [t]
 
-  StreamIn       :: Arrays a
-                 => [a]
-                 -> PreSeq acc seq exp [a]
+  StreamIn       :: (Shape sh, Elt e)
+                 => [Array sh e]
+                 -> PreSeq acc seq exp [Array sh e]
 
   Subarrays      :: (Shape sh, Elt e, sh :<= DIM2)
                  => exp sh
