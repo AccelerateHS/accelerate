@@ -875,7 +875,11 @@ elimArrayAccess idx exp =
                         -> Left (sh, Var ZeroIdx)
                         | otherwise
                         -> Index a `cvtE1` cvtE sh
-    LinearIndex a i     -> LinearIndex a `cvtE1` cvtE i
+    LinearIndex a i     | Avar idx' <- extract a
+                        , Just Refl <- match idx idx'
+                        -> Left (FromIndex (Shape a) i, Var ZeroIdx)
+                        | otherwise
+                        -> LinearIndex a `cvtE1` cvtE i
     Shape a             -> noAccess $ Shape a
     ShapeSize sh        -> ShapeSize `cvtE1` cvtE sh
     Intersect s t       -> cvtE2 Intersect (cvtE s) (cvtE t)
