@@ -1,14 +1,14 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-7.16
+resolver: lts-8.0
 
 packages:
 - '.'
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 1108decb6ec67f604fd9f8a3e4202ec7ead43bfb
+    commit: 24fb4dd0802df4d6834ae3e731fe469494e485e9
   extra-dep: true
 
 - location:
@@ -18,7 +18,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: e0597a1cc010f88408ca867bfb54d4a13d9e4a80
+    commit: c5ba27aee1f7bccae3f5ea2c20e452886ae5d7b0
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -27,12 +27,12 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-io.git
-    commit: f4c84a5c961345bf65059f555f21c6e8bf3070a1
+    commit: c8a618b563853b08f3501979e05e51d1303d7fa4
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: f801c78cb72e01a181b2023020444ffc9a099040
+    commit: a27ec08ee856dd217880ac33a6f52ba9f184dcfb
   extra-dep: true
 
 - location:
@@ -61,9 +61,10 @@ packages:
   extra-dep: true
 
 - location:
-    git:    https://github.com/bscarlet/llvm-general.git
-    commit: 529f9bf117b5ffd1ccf7ebeb679a97b3b1c67938  # 3.8
-    # commit: ec1ad5bd2112e7f64dbb43441b5e2075cf6ad8e7  # 3.9
+    git:    https://github.com/tmcdonell/llvm-general.git
+    # commit: 8971e275fe56dfd0090ac777e38e6dd641a0306a # 3.5
+    # commit: f80beba704a6b168326d442197b43e71a1ab730d # 3.8
+    commit: 69863022efd2691e8198da0c24b7e49b8d5ebd4c # 3.9
   extra-dep: true
   subdirs:
     - 'llvm-general'
@@ -93,11 +94,11 @@ flags:
     debug: false
     nvvm:  false
   accelerate-fft:
-    cuda:     true
+    cuda:     false
     llvm-cpu: true
     llvm-ptx: true
   accelerate-examples:
-    cuda:       true
+    cuda:       false
     llvm-cpu:   true
     llvm-ptx:   true
     gui:        true
