@@ -38,13 +38,14 @@ module Data.Array.Accelerate.Trafo.Vectorise (
 
 import Prelude                                          hiding ( exp, replicate, concat, maximum )
 import qualified Prelude                                as P
-import Data.Maybe                                       ( fromMaybe )
+import Data.Maybe                                       ( fromMaybe, isJust )
 import Data.Typeable
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative                              hiding ( Const, empty )
 #endif
 
 -- friends
+import Data.Array.Accelerate.Analysis.Match            ( matchPreOpenExp )
 import Data.Array.Accelerate.AST                       hiding ( Empty )
 import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation      ( SliceIndex(..) )
@@ -382,7 +383,7 @@ liftPreOpenAcc vectAcc ctx size acc
     Replicate sl slix a -> replicateL sl slix a
     Slice sl a slix     -> sliceL sl a slix
     Map f a             -> mapL f a
-    ZipWith f a1 a2     -> zipWithL f a1 a2
+    ZipWith f a1 a2     -> zipWithL (sameShape a1 a2) f a1 a2
     Fold f z a          -> foldL f z a
     Fold1 f a           -> fold1L f a
     FoldSeg f z a s     -> foldSegL f z a s
@@ -809,22 +810,33 @@ liftPreOpenAcc vectAcc ctx size acc
                (LiftedAcc ty avar0)
 
     zipWithL :: forall sh a b c. (Elt a, Elt b, Elt c, Shape sh)
-             => PreFun     acc aenv  (a -> b -> c)
+             => Bool
+             -> PreFun     acc aenv  (a -> b -> c)
              -> acc            aenv  (Array sh a)
              -> acc            aenv  (Array sh b)
              -> LiftedAcc  acc aenv' (Array sh c)
-    zipWithL (cvtF2 -> LiftedFun f_a f_l)
+    zipWithL sameShape
+             (cvtF2 -> LiftedFun f_a f_l)
              (cvtA -> a)
              (cvtA -> b)
       | Just f <- f_a
       = let
            zipA a' = inject . ZipWith f a'
            zipR a' = inject . ZipWith f a'
-           zipIr a' b' =  inject
+
+           -- Two different versions  of irregular zipWith depending on whether
+           -- the two input arrays are the same shape.
+           --
+           zipIr = if sameShape then zipSIr else zipIr'
+           zipIr' a' b' =  inject
                        .  Alet (liftedZipC a' b')
                        .^ Alet (unzipC (irregularValuesC avar0))
                        .  irregularC (segmentsC avar1)
                        $^ ZipWith (weakenA2 f) (fstA avar0) (sndA avar0)
+           zipSIr a' b' = inject
+                        .  Alet a'
+                        .  irregularC (segmentsC avar0)
+                        $^ ZipWith (weakenA1 f) (irregularValuesC avar0) (irregularValuesC (weakenA1 b'))
         in withL (\a' -> withL (avoidedAcc "zipWith" . zipA  a')
                                 (regularAcc "zipWith" . zipR  (replicateA size a'))
                                 (irregularAcc "zipWith" . zipIr (sparsifyC (replicateA size a')))
@@ -833,7 +845,7 @@ liftPreOpenAcc vectAcc ctx size acc
                                 (zipR a')
                                 (zipIr (sparsifyC a'))
                                 b)
-                  (\a' -> irregularAcc "zipWith" $ zipIr a' (asIrregular b))
+                  (\a' -> irregularAcc "zipWith" $ (zipIr a' (asIrregular b)))
                   a
       | AsSlice <- asSlice (Proxy :: Proxy sh)
       = let
@@ -3292,6 +3304,22 @@ reduceOpenSeq seq =
 
     stageError = $internalError "vectoriseOpenSeq" "AST is at wrong stage for vectorisation. It seems to have already been vectorised."
 
+-- Shape analysis
+--
+sameShape :: Kit acc => acc aenv (Array sh e1) -> acc aenv (Array sh e2) -> Bool
+sameShape a b | same (extract a) (extract b)
+              = trace "sameShape" "Found equal shapes for zipWith" True
+              | otherwise = False
+  where
+    same :: Kit acc => PreOpenAcc acc aenv (Array sh e1) -> PreOpenAcc acc aenv (Array sh e2) -> Bool
+    same (Generate sh1 _)  (Generate sh2 _)  | Just Refl <- match sh1 sh2
+                                             = True
+    same (Map _ a)         (Map _ b)         = sameShape a b
+    same (ZipWith _ a1 a2) (ZipWith _ b1 b2) =  (sameShape a1 b1 && sameShape a2 b2)
+                                             || (sameShape a1 b2 && sameShape a2 b1)
+    same (Avar ix1)        (Avar ix2)        | Just Refl <- match ix1 ix2
+                                             = True
+    same _                 _                 = False
 
 -- Utility functions
 --
