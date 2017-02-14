@@ -66,7 +66,7 @@
 --      - A cellular automaton simulation
 --      - A "password recovery" tool, for dictionary attacks on MD5 hashes.
 --
---      <<http://i.imgur.com/RwCzQVw.jpg accelerate-mandelbrot>>
+--      <<http://i.imgur.com/5Tbsp1j.jpg accelerate-mandelbrot>>
 --      <<http://i.imgur.com/7ohhKm9.jpg accelerate-ray>>
 --
 -- * <http://hackage.haskell.org/package/lulesh-accelerate lulesh-accelerate>
