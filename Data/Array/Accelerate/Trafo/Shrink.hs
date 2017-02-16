@@ -814,13 +814,19 @@ reduceAccessSeq reduceAcc idx seq =
 
     cvtP :: Producer index acc aenv a' -> Producer index acc aenv a'
     cvtP (Pull src)           = Pull src
+    cvtP (Subarrays sh a)     = Subarrays    (cvtE sh) a
+    cvtP (FromSegs s n vs)    = FromSegs     (cvtA s) (cvtE n) (cvtA vs)
+    cvtP (Produce l f)        = Produce      (cvtE <$> l) (reduceAccessAfun reduceAcc idx f)
     cvtP (ProduceAccum l f a) = ProduceAccum (cvtE <$> l) (reduceAccessAfun reduceAcc idx f) (cvtA a)
     cvtP _                    = stageError
 
     cvtC :: Consumer index acc aenv a' -> Consumer index acc aenv a'
-    cvtC (Last a d) = Last (cvtA a) (cvtA d)
-    cvtC (Stuple t) = Stuple (cvtT t)
-    cvtC _          = stageError
+    cvtC (Last a d)        = Last (cvtA a) (cvtA d)
+    cvtC (Stuple t)        = Stuple (cvtT t)
+    cvtC (FoldBatch f a x) = FoldBatch (reduceAccessAfun reduceAcc idx f) (cvtA a) (cvtA x)
+    cvtC (Elements x)      = Elements (cvtA x)
+    cvtC (Tabulate x)      = Tabulate (cvtA x)
+    cvtC _                 = stageError
 
     cvtT :: Atuple (PreOpenSeq index acc aenv) t -> Atuple (PreOpenSeq index acc aenv) t
     cvtT NilAtup        = NilAtup
