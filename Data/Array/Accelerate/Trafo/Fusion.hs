@@ -1633,6 +1633,22 @@ aletD' :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
        -> Embed    acc aenv         brrs
 aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
+  -- one-tuples
+  -- ----------
+  --
+  -- A consequence of splitting up tuples to fuse components individually is
+  -- that we are often left with one-tuples. This can confuse later fusion
+  -- attempts as references to them  cannot be embedded in 'Exp' terms despite
+  -- in essence them being arrays. We remove let bound one tuples here,
+  -- replacing all references to them with a new tuple constructor so that the
+  -- prj/Atuple rule may fire.
+  --
+  | Ctuple (NilAtup `SnocAtup` Embed env1' cc1') <- cc1
+  , acc1  <- compute (Embed (env1 `append` env1') cc1')
+  , t     <- NilAtup `SnocAtup` avarIn ZeroIdx
+  , acc0' <- rebuildA (subAtop (Atuple t)) (weaken (under SuccIdx) acc0)
+  = aletD' embedAcc elimAcc (Embed (env1 `append` env1') cc1') (embedAcc acc0')
+
   -- let-binding
   -- -----------
   --
