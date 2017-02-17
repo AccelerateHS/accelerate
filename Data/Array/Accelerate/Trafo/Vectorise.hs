@@ -3312,14 +3312,29 @@ sameShape a b | same (extract a) (extract b)
               | otherwise = False
   where
     same :: Kit acc => PreOpenAcc acc aenv (Array sh e1) -> PreOpenAcc acc aenv (Array sh e2) -> Bool
-    same (Generate sh1 _)  (Generate sh2 _)  | Just Refl <- match sh1 sh2
-                                             = True
-    same (Map _ a)         (Map _ b)         = sameShape a b
-    same (ZipWith _ a1 a2) (ZipWith _ b1 b2) =  (sameShape a1 b1 && sameShape a2 b2)
-                                             || (sameShape a1 b2 && sameShape a2 b1)
-    same (Avar ix1)        (Avar ix2)        | Just Refl <- match ix1 ix2
-                                             = True
-    same _                 _                 = False
+    same (Generate sh1 _)       (Generate sh2 _)
+      | Just Refl <- match sh1 sh2
+      = True
+    same (Generate sh1 _)       (Backpermute sh2 _ _)
+      | Just Refl <- match sh1 sh2
+      = True
+    same (Backpermute sh1 _ _)  (Generate sh2 _)
+      | Just Refl <- match sh1 sh2
+      = True
+    same (Backpermute sh1 _ _)  (Backpermute sh2 _ _)
+      | Just Refl <- match sh1 sh2
+      = True
+    same (Map _ a)              b
+      = sameShape a (inject b)
+    same a                      (Map _ b)
+      = sameShape (inject a) b
+    same (ZipWith _ a1 a2)      (ZipWith _ b1 b2)
+      =    (sameShape a1 b1 && sameShape a2 b2)
+        || (sameShape a1 b2 && sameShape a2 b1)
+    same (Avar ix1)             (Avar ix2)
+      | Just Refl <- match ix1 ix2
+      = True
+    same _                      _                 = False
 
 -- Utility functions
 --
