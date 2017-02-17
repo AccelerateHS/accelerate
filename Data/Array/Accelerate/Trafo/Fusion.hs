@@ -1327,7 +1327,9 @@ mapD :: (Kit acc, Shape sh, Elt b)
      => PreFun acc aenv (a -> b)
      -> Embed  acc aenv (Array sh a)
      -> Embed  acc aenv (Array sh b)
-mapD f (unzipD f -> Just a) = a
+-- FIXME: Find a way for constant time unzipping to play nicely with fusion
+-- through tuples.
+-- mapD f (unzipD f -> Just a) = a
 mapD f (Embed env cc)
   = Stats.ruleFired "mapD"
   $ Embed env (go cc)
