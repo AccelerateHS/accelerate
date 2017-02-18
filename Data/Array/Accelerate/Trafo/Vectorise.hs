@@ -52,6 +52,7 @@ import Data.Array.Accelerate.Array.Representation      ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar               hiding ( Segments )
 import Data.Array.Accelerate.Trafo.Base                hiding ( PushExp )
 import Data.Array.Accelerate.Pretty                    ()
+import Data.Array.Accelerate.Trafo.Fusion
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Product
@@ -1224,10 +1225,10 @@ liftPreOpenAcc vectAcc ctx size acc
       , Just cs <- vectoriseOpenSeq vectAcc ctx size s
       = LiftedAcc avoidedType
       $^ Alet size
-      $^ Collect (maximum (the avar0) (fromMaybe (Const 1) (weakenA1 <$> cvtE' min)))
-                 (weakenA1 <$> (cvtE' =<< max))
-                 (weakenA1 <$> (cvtE' =<< i))
-                 (weakenA1 cs)
+      $^ collectD (maximum (the avar0) (fromMaybe (Const 1) (weakenA1 <$> cvtE' min)))
+                  (weakenA1 <$> (cvtE' =<< max))
+                  (weakenA1 <$> (cvtE' =<< i))
+                  (weakenA1 cs)
       | otherwise
       = error "Nested sequence computation is not closed in its accumulators"
 
@@ -2814,7 +2815,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
         Subarrays sh a          -> LiftedAcc RegularT <$> (subarrays <$> cvtE sh <*> pure a)
         FromSegs segs n vals    -> LiftedAcc IrregularT <$> (fromSegs <$> cvtA' segs <*> cvtE n <*> cvtA' vals)
         Produce l (Alam (Abody f))
-          | LiftedAcc ty f' <- vectAcc (push ctx RegularT) (regularSize avar0) f
+          | LiftedAcc ty f' <- vectAcc (push ctx RegularT) (regularSize avar0) (embedAcc f)
           -> LiftedAcc ty <$> (ProduceAccum <$> cvtL l <*> return (streamify f') <*> return nil)
         -- MapBatch f c c' a x -> Just $ mapBatch f c c' a x
         ProduceAccum{}          -> stageError
@@ -2899,7 +2900,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     cvtC :: NaturalConsumer acc aenv t -> Maybe (PreOpenChunkedSeq acc aenv' t)
     cvtC c =
       case c of
-        FoldBatch f a x -> foldBatch f a x
+        FoldBatch f a x -> foldBatch (embedAfun f) (embedAcc a) (embedAcc x)
         Stuple t        -> Consumer . Stuple <$> cvtCT t
         Last a d        -> Consumer <$> (Last <$> cvtA' a <*> cvtA' d)
         Elements x      -> Just (elements x)
@@ -2928,7 +2929,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
       = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS3 (f ty) avar1 (weakenA2 x) avar0)) a)
                  (Consumer (Last avar0 (weakenA1 a)))
       where
-        f ty i x a = let x' = flatten ty (S.snd (S.the i)) x
+        f ty i x a = let x'  = flatten ty (S.snd (S.the i)) x
                          x'' = S.fst (S.the i) S.== 0 S.?| (x', a S.++ x')
                      in S.lift (x',x')
 
@@ -3010,7 +3011,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
     -- cvtAUnder ctx = vectoriseOpenAcc (PushC ctx avoidedType) (unit (the avar0)) . weakenA1
 
     cvtA :: Arrays t => acc aenv t -> LiftedAcc acc aenv' t
-    cvtA = vectAcc ctx size
+    cvtA = vectAcc ctx size . embedAcc
 
     cvtA' :: Arrays t => acc aenv t -> Maybe (acc aenv' t)
     cvtA' (cvtA -> LiftedAcc ty a) | Just iso <- isIso ty
@@ -3352,6 +3353,18 @@ sameShape a b | same (extract a) (extract b)
       | Just Refl <- match ix1 ix2
       = True
     same _                      _                 = False
+
+-- Embedding
+--
+embedAcc :: (Kit acc, Arrays a) => acc aenv a -> acc aenv a
+embedAcc = inject . compute . embed
+  where
+    embed :: Kit acc => EmbedAcc acc
+    embed (extract -> pacc) = embedPreAcc True embed elimOpenAcc pacc
+
+embedAfun :: Kit acc => PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
+embedAfun (Alam  f) = Alam  (embedAfun f)
+embedAfun (Abody a) = Abody (embedAcc a)
 
 -- Utility functions
 --

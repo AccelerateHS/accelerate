@@ -44,7 +44,8 @@ module Data.Array.Accelerate.Trafo.Fusion (
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- ** Conversion
-  convertAcc, convertAfun, convertStreamSeq,
+  convertAcc, convertAfun, convertStreamSeq, embedPreAcc, EmbedAcc, elimOpenAcc, compute,
+  collectD,
 
 ) where
 
@@ -384,201 +385,201 @@ type EmbedAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Embed acc 
 embedOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
 embedOpenAcc fuseAcc (OpenAcc pacc) =
   embedPreAcc fuseAcc (embedOpenAcc fuseAcc) elimOpenAcc pacc
+
+elimOpenAcc :: forall acc aenv aenv' s t. (Kit acc, Arrays s) => Extend acc aenv aenv' -> Cunctation acc aenv' s -> acc (aenv,s) t -> Elim acc aenv' s
+elimOpenAcc env bnd body
+  = elimA env bnd (count ZeroIdx body)
   where
-    elimOpenAcc :: Arrays s => Extend OpenAcc aenv aenv' -> Cunctation OpenAcc aenv' s -> OpenAcc (aenv,s) t -> Elim OpenAcc aenv' s
-    elimOpenAcc env bnd body
-      = elimA env bnd (count ZeroIdx body)
+    -- Ensure we only calculate the usage of the bound variable once.
+    --
+    count :: UsesOfAcc acc
+    count idx (extract -> pacc) = usesOfPreAcc count idx pacc
+
+    -- Given how it is used in the body term, decide whether all or some
+    -- components can be eliminated.
+    --
+    -- Note that we must inspect the entire term, not just the Cunctation
+    -- that would be produced by embedAcc. If we don't we can be left with
+    -- dead terms that don't get eliminated. This problem occurred in the
+    -- canny program. RCE: I'm not actually sure this is true anymore.
+    --
+    elimA :: forall aenv aenv' s'. Arrays s' => Extend acc aenv aenv' -> Cunctation acc aenv' s' -> Use s' -> Elim acc aenv' s'
+    elimA env bnd u =
+      case bnd of
+        -- The bound term is dead in the body, so don't traverse it.
+        --
+        _   | allUse (on (&&) (==0)) u
+            -> Stats.ruleFired "elimDead" ElimDead
+
+        -- The term can't be fused, but if it's simple enough, still embed
+        -- it.
+        --
+        Done _   -> if zeroCostExtend env
+                    then Stats.ruleFired "elimDone" ElimEmbed
+                    else Stats.ruleFired "elimBind" (ElimBind bnd)
+
+        -- Unit (()) terms can always be eliminated.
+        --
+        Ctuple NilAtup -> Stats.ruleFired "elimUnit" ElimEmbed
+
+        -- The bound term can be split into several tuple components, decide
+        -- whether we can eliminate each one independently.
+        --
+        Ctuple t | UseTuple u' <- u
+                  -> elimTuple t u'
+
+        -- The bound term is indivisble, but fusible.
+        --
+        _        -> elimBase (compute' bnd) u
       where
-        -- Ensure we only calculate the usage of the bound variable once.
+
+        -- When does the cost of re-computation outweigh that of memory access?
+        -- For the moment only do the substitution if the bound array is
+        -- constructed in a few special ways or if there is only a single use of
+        -- it in the body. However, it is likely advantageous to be far more
+        -- aggressive here. SEE: [Sharing vs. Fusion]
         --
-        count :: UsesOfAcc OpenAcc
-        count idx (OpenAcc pacc) = usesOfPreAcc count idx pacc
+        elimBase :: PreOpenAcc acc aenv' s' -> Use s'-> Elim acc aenv' s'
+        elimBase bnd' u
+          -- The definition of 'unzip' applied to manifest data, which is
+          -- defined in the prelude as a map projecting out the appropriate
+          -- element. This should always be eliminated
+          --
+          | Map f a                 <- bnd'
+          , Avar _                  <- extract a
+          , Lam (Body (Prj _ (Var ZeroIdx)))    <- f
+          = Stats.ruleFired "unzipD" ElimEmbed
 
-        -- Given how it is used in the body term, decide whether all or some
-        -- components can be eliminated.
-        --
-        -- Note that we must inspect the entire term, not just the Cunctation
-        -- that would be produced by embedAcc. If we don't we can be left with
-        -- dead terms that don't get eliminated. This problem occurred in the
-        -- canny program. RCE: I'm not actually sure this is true anymore.
-        --
-        elimA :: forall aenv aenv' s'. Arrays s' => Extend OpenAcc aenv aenv' -> Cunctation OpenAcc aenv' s' -> Use s' -> Elim OpenAcc aenv' s'
-        elimA env bnd u =
-          case bnd of
-            -- The bound term is dead in the body, so don't traverse it.
-            --
-            _   | allUse (on (&&) (==0)) u
-                -> Stats.ruleFired "elimDead" ElimDead
+          | Avar _ <- bnd'
+          = Stats.ruleFired "elimAvar" ElimEmbed
 
-            -- The term can't be fused, but if it's simple enough, still embed
-            -- it.
-            --
-            Done _   -> if zeroCostExtend env
-                        then Stats.ruleFired "elimDone" ElimEmbed
-                        else Stats.ruleFired "elimBind" (ElimBind bnd)
+          -- Similarly, "simple" scalar expression wrapped in unit arrays should
+          -- also be eliminated in all cases.
+          --
+          | Unit e <- bnd'
+          , simpleExp e
+          = Stats.ruleFired "simpleScalar" ElimEmbed
 
-            -- Unit (()) terms can always be eliminated.
-            --
-            Ctuple NilAtup -> Stats.ruleFired "elimUnit" ElimEmbed
+          -- Backpermutes with "simple: functions should be embedded.
+          --
+          | Backpermute _ f _ <- bnd'
+          , simpleFun f
+          = Stats.ruleFired "simpleBackpermute" ElimEmbed
 
-            -- The bound term can be split into several tuple components, decide
-            -- whether we can eliminate each one independently.
-            --
-            Ctuple t | UseTuple u' <- u
-                     -> elimTuple t u'
+          -- Eliminate when there is a single use of the bound array in the use
+          -- site.
+          --
+          | allUse (const (<= lIMIT)) u
+          = ElimEmbed
 
-            -- The bound term is indivisble, but fusible.
-            --
-            _        -> elimBase (compute' bnd) u
+          | otherwise
+          = ElimBind bnd
           where
+            lIMIT = 1
 
-            -- When does the cost of re-computation outweigh that of memory access?
-            -- For the moment only do the substitution if the bound array is
-            -- constructed in a few special ways or if there is only a single use of
-            -- it in the body. However, it is likely advantageous to be far more
-            -- aggressive here. SEE: [Sharing vs. Fusion]
-            --
-            elimBase :: PreOpenAcc OpenAcc aenv' s' -> Use s'-> Elim OpenAcc aenv' s'
-            elimBase bnd' u
-              -- The definition of 'unzip' applied to manifest data, which is
-              -- defined in the prelude as a map projecting out the appropriate
-              -- element. This should always be eliminated
-              --
-              | Map f a                 <- bnd'
-              , Avar _                  <- extract a
-              , Lam (Body (Prj _ (Var ZeroIdx)))    <- f
-              = Stats.ruleFired "unzipD" ElimEmbed
+    -- Different components of a tuple can be eliminated independently.
+    --
+    -- In decidiing what components of a tuple can be eliminated, we have to
+    -- be careful how we treat let bindings. This for example is simple to
+    -- embed.
+    --
+    --   let a = (generate sh f, generate sh' g)
+    --   in zipWith h (fst a) (snd a)
+    --
+    -- Because each component of 'a' only occurs once we can transform this
+    -- into
+    --
+    --   zipWith (generate sh f, gemerate sh' g)
+    --
+    -- What about this, however?
+    --
+    --   let a = (generate sh f, scanl g 0 arr)
+    --   in zipWith h (fst a) (snd a)
+    --
+    -- In this case we embed the fst component of 'a' but leave the second
+    -- component bound.
+    --
+    --   let a = scanl g 0 arr
+    --   in zipWith h (generate sh f) a
+    --
+    -- It gets more complex with
+    --
+    --   let a = let b = scanr j 1 arr
+    --           in (map f b, scanl g 0 b)
+    --   in zipWith h (fst a) (snd a)
+    --
+    -- This becomes
+    --
+    --   let b = scanr j 1 arr in
+    --   let a = scanl g 0 b
+    --   in zipWith h (map f b) a
+    --
+    -- Here we are floating b out, possibly extending its lifetime. However,
+    -- by doing this we are able to fuse the first component of 'a'. In
+    -- general we consider the benefit of fusion outweighs the cost of let
+    -- floating.
+    --
+    -- Similarly,
+    --
+    --   let a = ( let b = scanr j 1 arr
+    --             in map f b
+    --           , scanl g 0 arr)
+    --   in zipWith h (fst a) (snd a)
+    --
+    -- becomes
+    --
+    --   let a = scanl g 0 arr in
+    --   let b = scanr j 1 arr
+    --   in zipWith h (map f b) a
+    --
+    elimTuple :: forall aenv' t. IsAtuple t
+              => Atuple (Embed acc aenv') (TupleRepr t)
+              -> Atuple Use (TupleRepr t)
+              -> Elim acc aenv' t
+    elimTuple = elim ElimTuple id True
+      where
+        elim :: forall aenv aenv' t a. IsAtuple a
+              => (forall aenv'' t'. IsAtupleRepr t' => Extend acc aenv' aenv'' -> Subproduct (Embed acc aenv'') t' t -> Elim acc aenv a)
+              -> aenv :> aenv'
+              -> Bool
+              -> Atuple (Embed acc aenv) t
+              -> Atuple Use t
+              -> Elim acc aenv a
+        elim _ _ True NilAtup NilAtup
+          = ElimDead
+        elim k _ False NilAtup NilAtup
+          = k BaseEnv NilSub
+        elim k v allDead (SnocAtup t (weaken v -> Embed env' a)) (SnocAtup ut u)
+          = case elimA env' a u of
+              ElimDead     -> elim (\env'' sp -> k env'' (OutSub sp (sink env'' (Embed env' a)))) v allDead t ut
+              ElimBind a'  -> elim (\env'' sp -> k env'' (InSub sp (AllSub (sink env'' (Embed env' a'))))) v False t ut
+              ElimEmbed    -> elim (\env'' sp -> k (env' `append` env'') (OutSub sp (sink env'' (Embed BaseEnv a)))) (sink env' . v) False t ut
+              ElimTuple env1 t' ->
+                let env'' = env' `append` env1
+                in elim (\env''' sp -> k (env'' `append` env''') (InSub sp (TupleSub  (sinkSub env''' t')))) (sink env'' . v) False t ut
 
-              | Avar _ <- bnd'
-              = Stats.ruleFired "elimAvar" ElimEmbed
+    sinkSub  :: forall acc acc' aenv aenv' t' t. Sink acc => Extend acc' aenv aenv' -> Subproduct (acc aenv) t' t -> Subproduct (acc aenv') t' t
+    sinkSub _   NilSub = NilSub
+    sinkSub env (OutSub t' a) = OutSub (sinkSub env t') (sink env a)
+    sinkSub env (InSub t' (AllSub a)) = InSub (sinkSub env t') (AllSub (sink env a))
+    sinkSub env (InSub t' (TupleSub t)) = InSub (sinkSub env t') (TupleSub (sinkSub env t))
 
-              -- Similarly, "simple" scalar expression wrapped in unit arrays should
-              -- also be eliminated in all cases.
-              --
-              | Unit e <- bnd'
-              , simpleExp e
-              = Stats.ruleFired "simpleScalar" ElimEmbed
+    zeroCostExtend :: Extend acc env env' -> Bool
+    zeroCostExtend BaseEnv = True
+    zeroCostExtend (PushEnv env a) = zeroCostExtend env && zeroCostAcc a
 
-              -- Backpermutes with "simple: functions should be embedded.
-              --
-              | Backpermute _ f _ <- bnd'
-              , simpleFun f
-              = Stats.ruleFired "simpleBackpermute" ElimEmbed
+    zeroCostAcc :: forall env t. acc env t -> Bool
+    zeroCostAcc acc =
+      case extract acc of
+        Avar _   -> True
+        Aprj _ a -> zeroCostAcc a
+        Alet a b -> zeroCostAcc a && zeroCostAcc b
+        Atuple t -> zeroCostAtuple t
+        _        -> False
 
-              -- Eliminate when there is a single use of the bound array in the use
-              -- site.
-              --
-              | allUse (const (<= lIMIT)) u
-              = ElimEmbed
-
-              | otherwise
-              = ElimBind bnd
-              where
-                lIMIT = 1
-
-        -- Different components of a tuple can be eliminated independently.
-        --
-        -- In decidiing what components of a tuple can be eliminated, we have to
-        -- be careful how we treat let bindings. This for example is simple to
-        -- embed.
-        --
-        --   let a = (generate sh f, generate sh' g)
-        --   in zipWith h (fst a) (snd a)
-        --
-        -- Because each component of 'a' only occurs once we can transform this
-        -- into
-        --
-        --   zipWith (generate sh f, gemerate sh' g)
-        --
-        -- What about this, however?
-        --
-        --   let a = (generate sh f, scanl g 0 arr)
-        --   in zipWith h (fst a) (snd a)
-        --
-        -- In this case we embed the fst component of 'a' but leave the second
-        -- component bound.
-        --
-        --   let a = scanl g 0 arr
-        --   in zipWith h (generate sh f) a
-        --
-        -- It gets more complex with
-        --
-        --   let a = let b = scanr j 1 arr
-        --           in (map f b, scanl g 0 b)
-        --   in zipWith h (fst a) (snd a)
-        --
-        -- This becomes
-        --
-        --   let b = scanr j 1 arr in
-        --   let a = scanl g 0 b
-        --   in zipWith h (map f b) a
-        --
-        -- Here we are floating b out, possibly extending its lifetime. However,
-        -- by doing this we are able to fuse the first component of 'a'. In
-        -- general we consider the benefit of fusion outweighs the cost of let
-        -- floating.
-        --
-        -- Similarly,
-        --
-        --   let a = ( let b = scanr j 1 arr
-        --             in map f b
-        --           , scanl g 0 arr)
-        --   in zipWith h (fst a) (snd a)
-        --
-        -- becomes
-        --
-        --   let a = scanl g 0 arr in
-        --   let b = scanr j 1 arr
-        --   in zipWith h (map f b) a
-        --
-        elimTuple :: IsAtuple t
-                  => Atuple (Embed OpenAcc aenv') (TupleRepr t)
-                  -> Atuple Use (TupleRepr t)
-                  -> Elim OpenAcc aenv' t
-        elimTuple = elim ElimTuple id True
-          where
-            elim :: forall aenv aenv' t a. IsAtuple a
-                 => (forall aenv'' t'. IsAtupleRepr t' => Extend OpenAcc aenv' aenv'' -> Subproduct (Embed OpenAcc aenv'') t' t -> Elim OpenAcc aenv a)
-                 -> aenv :> aenv'
-                 -> Bool
-                 -> Atuple (Embed OpenAcc aenv) t
-                 -> Atuple Use t
-                 -> Elim OpenAcc aenv a
-            elim _ _ True NilAtup NilAtup
-              = ElimDead
-            elim k _ False NilAtup NilAtup
-              = k BaseEnv NilSub
-            elim k v allDead (SnocAtup t (weaken v -> Embed env' a)) (SnocAtup ut u)
-              = case elimA env' a u of
-                  ElimDead     -> elim (\env'' sp -> k env'' (OutSub sp (sink env'' (Embed env' a)))) v allDead t ut
-                  ElimBind a'  -> elim (\env'' sp -> k env'' (InSub sp (AllSub (sink env'' (Embed env' a'))))) v False t ut
-                  ElimEmbed    -> elim (\env'' sp -> k (env' `append` env'') (OutSub sp (sink env'' (Embed BaseEnv a)))) (sink env' . v) False t ut
-                  ElimTuple env1 t' ->
-                    let env'' = env' `append` env1
-                    in elim (\env''' sp -> k (env'' `append` env''') (InSub sp (TupleSub  (sinkSub env''' t')))) (sink env'' . v) False t ut
-
-        sinkSub  :: Sink acc => Extend acc' aenv aenv' -> Subproduct (acc aenv) t' t -> Subproduct (acc aenv') t' t
-        sinkSub _   NilSub = NilSub
-        sinkSub env (OutSub t' a) = OutSub (sinkSub env t') (sink env a)
-        sinkSub env (InSub t' (AllSub a)) = InSub (sinkSub env t') (AllSub (sink env a))
-        sinkSub env (InSub t' (TupleSub t)) = InSub (sinkSub env t') (TupleSub (sinkSub env t))
-
-        zeroCostExtend :: Kit acc => Extend acc env env' -> Bool
-        zeroCostExtend BaseEnv = True
-        zeroCostExtend (PushEnv env a) = zeroCostExtend env && zeroCostAcc a
-
-        zeroCostAcc :: Kit acc => acc env t -> Bool
-        zeroCostAcc acc =
-          case extract acc of
-            Avar _   -> True
-            Aprj _ a -> zeroCostAcc a
-            Alet a b -> zeroCostAcc a && zeroCostAcc b
-            Atuple t -> zeroCostAtuple t
-            _        -> False
-
-        zeroCostAtuple :: Kit acc => Atuple (acc env) t -> Bool
-        zeroCostAtuple NilAtup        = True
-        zeroCostAtuple (SnocAtup t a) = zeroCostAcc a && zeroCostAtuple t
+    zeroCostAtuple :: forall env t. Atuple (acc env) t -> Bool
+    zeroCostAtuple NilAtup        = True
+    zeroCostAtuple (SnocAtup t a) = zeroCostAcc a && zeroCostAtuple t
 
 embedPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
@@ -607,7 +608,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> atupleD embedAcc tup
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Collect min max i s -> collectD embedAcc min max i s
+    Collect min max i s -> done $ Collect (cvtE min) (cvtE <$> max) (cvtE <$> i) (cvtS s)
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -790,6 +791,34 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | Done{} <- cc = Embed env                                  cc
       | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
+    cvtS :: PreOpenSeq index acc aenv' a -> PreOpenSeq index acc aenv' a
+    cvtS seq =
+      case seq of
+        Producer p s -> Producer (cvtP p) (cvtS s)
+        Consumer c   -> Consumer (cvtC c)
+        Reify ty a   -> Reify ty (cvtA a)
+      where
+        cvtP :: Producer index acc aenv' a' -> Producer index acc aenv' a'
+        cvtP (Pull src)           = Pull src
+        cvtP (Subarrays sh a)     = Subarrays    (cvtE sh) a
+        cvtP (FromSegs s n vs)    = FromSegs     (cvtA s) (cvtE n) (cvtA vs)
+        cvtP (Produce l f)        = Produce      (cvtE <$> l) (cvtAF f)
+        cvtP (ProduceAccum l f a) = ProduceAccum (cvtE <$> l) (cvtAF f) (cvtA a)
+        cvtP _                    = stageError
+
+        cvtC :: Consumer index acc aenv' a' -> Consumer index acc aenv' a'
+        cvtC (Last a d)        = Last (cvtA a) (cvtA d)
+        cvtC (Stuple t)        = Stuple (cvtT t)
+        cvtC (FoldBatch f a x) = FoldBatch (cvtAF f) (cvtA a) (cvtA x)
+        cvtC (Elements x)      = Elements (cvtA x)
+        cvtC (Tabulate x)      = Tabulate (cvtA x)
+        cvtC _                 = stageError
+
+        cvtT :: Atuple (PreOpenSeq index acc aenv') t -> Atuple (PreOpenSeq index acc aenv') t
+        cvtT NilAtup        = NilAtup
+        cvtT (SnocAtup t s) = SnocAtup (cvtT t) (cvtS s)
+
+        stageError = $internalError "reduceAccessSeq" "Sequence AST is at an unexpected stage"
 -- Sequence fusion
 -- ----------------
 
@@ -2044,7 +2073,10 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
           Producer
             (case p of
                Pull s -> Pull s
-               ProduceAccum l f a -> ProduceAccum (cvtE <$> l) (cvtAF f) (cvtA a))
+               ProduceAccum l f a -> ProduceAccum (cvtE <$> l) (cvtAF f) (cvtA a)
+               Subarrays sh a     -> Subarrays    (cvtE sh) a
+               FromSegs s n vs    -> FromSegs     (cvtA s) (cvtE n) (cvtA vs)
+               Produce l f        -> Produce      (cvtE <$> l) (cvtAF f))
             (subtupleSeq (unRAtup (weaken SuccIdx (RebuildAtup atup))) (weaken SuccIdx avar) (under ixt) s')
         Consumer c ->
           Consumer (cvtC c)
@@ -2055,6 +2087,9 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
           case c of
             Last a d -> Last (cvtA a) (cvtA d)
             Stuple t -> Stuple (cvtCT t)
+            FoldBatch f a x -> FoldBatch (cvtAF f) (cvtA a) (cvtA x)
+            Elements x      -> Elements (cvtA x)
+            Tabulate x      -> Tabulate (cvtA x)
 
         cvtCT :: Atuple (PreOpenSeq index acc aenv) s -> Atuple (PreOpenSeq index acc aenv') s
         cvtCT NilAtup        = NilAtup
@@ -2179,13 +2214,12 @@ atupleD embedAcc t = Embed BaseEnv (Ctuple (cvtET t))
 
 -- TODO: Sequence invariant code motion
 collectD :: forall acc aenv arrs index. (Kit acc, Arrays arrs, SeqIndex index)
-         => EmbedAcc acc
-         -> PreExp acc aenv Int
+         => PreExp acc aenv Int
          -> Maybe (PreExp acc aenv Int)
          -> Maybe (PreExp acc aenv Int)
          -> PreOpenSeq index acc aenv arrs
-         -> Embed acc aenv arrs
-collectD embedAcc min max i s
+         -> PreOpenAcc acc aenv arrs
+collectD min max i s
   | s' <- seqToStream s
   = let
       min' = simplify min
@@ -2193,19 +2227,13 @@ collectD embedAcc min max i s
       i'   = simplify <$> i
     in case i' of
       Just (Const 1) | Stream _ (Alam (Alam (Abody f))) a _ <- s'
-                     -> embedAcc (fstA . alet (unit (initialIndex min)) . alet (weaken SuccIdx a) $ f)
-      _              -> Embed (BaseEnv `PushEnv` inject (Collect min' max' i' (fromStream s'))) (Done ZeroIdx)
+                     -> extract . fstA . alet (unit (initialIndex min)) . alet (weaken SuccIdx a) $ f
+      _              -> Collect min' max' i' (fromStream s')
   where
     fromStream :: forall aenv. Stream index acc aenv arrs -> PreOpenSeq index acc aenv arrs
     fromStream (Sourced a s) = Producer (Pull a) (fromStream s)
     fromStream (Stream l (Alam (Alam (Abody f))) a (Just sel))
-      = let
-          a' = cvtA a
-          f' = cvtA f
-
-          cvtA :: Arrays a => acc aenv' a -> acc aenv' a
-          cvtA = computeAcc . embedAcc
-        in Producer (ProduceAccum (simplify <$> l) (Alam . Alam $ Abody f') a') (Consumer (Last v0 (sel `app` weaken SuccIdx a')))
+      = Producer (ProduceAccum (simplify <$> l) (Alam . Alam $ Abody f) a) (Consumer (Last v0 (sel `app` weaken SuccIdx a)))
 
 
 -- Scalar expressions
