@@ -2534,6 +2534,12 @@ index2 :: PreOpenExp acc env aenv Int
        -> PreOpenExp acc env aenv DIM2
 index2 h w = IndexNil `IndexCons` h `IndexCons` w
 
+index3 :: PreOpenExp acc env aenv Int
+       -> PreOpenExp acc env aenv Int
+       -> PreOpenExp acc env aenv Int
+       -> PreOpenExp acc env aenv DIM3
+index3 d h w = IndexNil `IndexCons` d `IndexCons` h `IndexCons` w
+
 unindex1 :: PreOpenExp acc env aenv DIM1
          -> PreOpenExp acc env aenv Int
 unindex1 = IndexHead
@@ -2922,7 +2928,9 @@ vectoriseOpenSeq vectAcc ctx size seq =
       = Producer (ProduceAccum Nothing (Alam . Alam . Abody $ (fromHOAS3 (f ty) avar1 (weakenA2 x) avar0)) a)
                  (Consumer (Last avar0 (weakenA1 a)))
       where
-        f ty i x a = let x' = a S.++ flatten ty (S.snd (S.the i)) x in S.lift (x',x')
+        f ty i x a = let x' = flatten ty (S.snd (S.the i)) x
+                         x'' = S.fst (S.the i) S.== 0 S.?| (x', a S.++ x')
+                     in S.lift (x',x')
 
         a :: Elt e => acc aenv' (Vector e)
         a = inject . Use $ fromFunction empty undefined
