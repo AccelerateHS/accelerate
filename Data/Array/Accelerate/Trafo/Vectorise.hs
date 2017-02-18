@@ -3039,6 +3039,15 @@ liftedSubArrays :: forall acc aenv sh e. (sh :<= DIM2, Elt e, Shape sh, Kit acc)
                 -> Array sh e
                 -> acc aenv (RegularArray sh e)
 liftedSubArrays index sh arr
+  | Just Refl <- eqT :: Maybe (sh :~: DIM2)
+  , IndexNil `IndexCons` h `IndexCons` Const w <- sh
+  , Z:.h':.w' <- shape arr
+  , w == w'
+  = inject
+  $  Reshape (index3 (sndE index) h (Const w))
+  $^ Subarray (index2 (times h (fstE index)) (Const 0))
+              (index2 (times h (sndE index)) (Const w))
+              arr
   | AsSlice <- asSlice (Proxy :: Proxy sh)
   = case (maximumRank :: sh :<=: DIM2) of
       RankZ          -> flattenC $^ Use arr
