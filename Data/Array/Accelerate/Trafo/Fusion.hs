@@ -459,6 +459,12 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
               , simpleExp e
               = Stats.ruleFired "simpleScalar" ElimEmbed
 
+              -- Backpermutes with "simple: functions should be embedded.
+              --
+              | Backpermute _ f _ <- bnd'
+              , simpleFun f
+              = Stats.ruleFired "simpleBackpermute" ElimEmbed
+
               -- Eliminate when there is a single use of the bound array in the use
               -- site.
               --
@@ -2278,6 +2284,10 @@ simpleExp e =
 simpleTuple :: Tuple (PreOpenExp acc env aenv) t -> Bool
 simpleTuple NilTup        = True
 simpleTuple (SnocTup t e) = simpleTuple t && simpleExp e
+
+simpleFun :: PreOpenFun acc env aenv t -> Bool
+simpleFun (Lam f)  = simpleFun f
+simpleFun (Body b) = simpleExp b
 
 noTop :: (aenv,a) :?> aenv
 noTop ZeroIdx = Nothing
