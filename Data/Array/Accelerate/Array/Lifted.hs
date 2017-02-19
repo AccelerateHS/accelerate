@@ -148,7 +148,7 @@ divide IrregularT  a = divideIrregular a
 divide (TupleT t)  a = map toAtuple (divideT t (fromAtuple a))
   where
     divideT :: LiftedTupleType t t' -> t' -> [t]
-    divideT NilLtup          ()    = [()]
+    divideT NilLtup          ()    = repeat ()
     divideT (SnocLtup lt ty) (t,a) = zip (divideT lt t) (divide ty a)
 
 divideRegular :: forall sh e. Shape sh => Array (sh:.Int) e -> [Array sh e]
