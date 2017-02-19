@@ -385,7 +385,7 @@ liftPreOpenAcc vectAcc ctx size acc
     Slice sl a slix     -> sliceL sl a slix
     Map f a             -> mapL f a
     ZipWith f a1 a2     -> zipWithL (sameShape a1 a2) f a1 a2
-    Fold f z a          -> foldL f z a
+    Fold f z a          -> foldL f z a (fixedInnerDimension a)
     Fold1 f a           -> fold1L f a
     FoldSeg f z a s     -> foldSegL f z a s
     Fold1Seg f a s      -> fold1SegL f a s
@@ -874,19 +874,25 @@ liftPreOpenAcc vectAcc ctx size acc
           => PreFun acc     aenv  (e -> e -> e)
           -> PreExp acc     aenv  e
           -> acc            aenv  (Array (sh:.Int) e)
+          -> Maybe (PreExp acc aenv' Int)
           -> LiftedAcc  acc aenv' (Array sh e)
-    foldL (cvtF2 -> LiftedFun (Just f) _) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
+    foldL (cvtF2 -> LiftedFun (Just f) _) (cvtE -> LiftedExp (Just z) _) (cvtA -> a) mi
       | AsSlice <- asSlice (Proxy :: Proxy sh)
       = let
+          div a b = PrimApp (PrimIDiv integralType) (tup a b)
+
           foldA = avoidedAcc "fold" . inject . Fold f z
           foldR = regularAcc "fold" . inject . Fold f z
           foldIr a = irregularAcc "fold" . inject
                    .  Alet a
                    .^ Alet (makeFoldSegmentsC (segmentsC avar0))
                    .  irregularC (sndA avar0)
-                   $^ FoldSeg (weakenA2 f) (weakenA2 z) (irregularValuesC avar1) (fstA avar0)
+                   $^ flip (maybe (FoldSeg (weakenA2 f) (weakenA2 z) (irregularValuesC avar1) (fstA avar0))) mi
+                   $  \i -> Fold (weakenA2 f) (weakenA2 z)
+                   $^ Alet (totalSizeC (segmentsC avar1))
+                   $^ Reshape (IndexCons (index1 $ div (the avar0) (weakenA3 i)) (weakenA3 i)) (irregularValuesC avar2)
         in withL foldA foldR foldIr a
-    foldL _ _ _
+    foldL _ _ _ _
       = error $ nestedError "first or second" "fold"
 
     fold1L :: forall sh e. (Elt e, Shape sh)
@@ -1330,6 +1336,22 @@ liftPreOpenAcc vectAcc ctx size acc
       = regularSegsC size (unit sh)
     segmentsFromExp (LiftedExp _ sh)
       = segmentsFromShapesC sh
+
+    fixedInnerDimension :: acc aenv (Array (sh:.Int) e)
+                        -> Maybe (PreExp acc aenv' Int)
+    fixedInnerDimension (extract -> a)
+      | Just i <- fid a
+      , LiftedExp (Just i') _ <- cvtE i
+      = trace "liftAcc" "fixed inner dimension for fold" $ Just i'
+      where
+        fid :: PreOpenAcc acc aenv (Array (sh:.Int) e) -> Maybe (PreExp acc aenv Int)
+        fid a = case a of
+          Generate (_ `IndexCons` i) _      -> Just i
+          Backpermute (_ `IndexCons` i) _ _ -> Just i
+          Map _ a                           -> fid (extract a)
+          _                                 -> Nothing
+    fixedInnerDimension _
+      = Nothing
 
 data ExpContext acc env aenv aenv' aenv'' where
   ExpBase :: Context acc aenv aenv'
