@@ -205,11 +205,13 @@ simplifyOpenExp env = first getAny . cvtE
     cvtE :: Elt t => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     cvtE IndexNil = pure IndexNil
     cvtE _   | Just e <- gcast IndexNil    = yes e -- If it's Z, don't bother traversing
-    cvtE exp | Just e <- globalCSE env exp = yes e
+    cvtE exp | not (zeroCost exp)
+             , Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
         -- Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
         | Just reduct <- localCSE env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | zeroCost (snd bnd')                                -> yes $ inline (snd body') (snd bnd')
         | otherwise                                          -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
@@ -533,6 +535,23 @@ simplifyOpenExp env = first getAny . cvtE
       | Just Refl <- match sh sh'
       = True
     sameSize _ _ = False
+
+    -- Sometimes sharing recovery leaves us with simple terms let bound that
+    -- don't really need to be. Leaving them let bound can stop other
+    -- optimisation passes, like array access reduction, from working.
+    --
+    -- RCE: At least for the case of array access reduction, this wouldn't be
+    -- necessary if we had a more general form of CSE. However, given that we
+    -- don't, this is a reasonable compromise as it works in a lot of cases
+    -- where it needs to and has no impact on those where it doesn't.
+    --
+    zeroCost :: PreOpenExp acc env aenv a -> Bool
+    zeroCost IndexNil      = True
+    zeroCost (Var _)       = True
+    zeroCost (IndexTail e) = zeroCost e
+    zeroCost (IndexHead e) = zeroCost e
+    zeroCost (Prj _ e)     = zeroCost e
+    zeroCost _             = False
 
     allFixed :: SliceIndex slix sl co sh -> Bool
     allFixed SliceNil          = True
