@@ -878,14 +878,14 @@ liftPreOpenAcc vectAcc ctx size acc
     foldL (cvtF2 -> LiftedFun (Just f) _) (cvtE -> LiftedExp (Just z) _) (cvtA -> a)
       | AsSlice <- asSlice (Proxy :: Proxy sh)
       = let
-          foldA = inject . Fold f z
-          foldR = inject . Fold f z
-          foldIr a = inject
+          foldA = avoidedAcc "fold" . inject . Fold f z
+          foldR = regularAcc "fold" . inject . Fold f z
+          foldIr a = irregularAcc "fold" . inject
                    .  Alet a
                    .^ Alet (makeFoldSegmentsC (segmentsC avar0))
                    .  irregularC (sndA avar0)
                    $^ FoldSeg (weakenA2 f) (weakenA2 z) (irregularValuesC avar1) (fstA avar0)
-        in appL foldA foldR foldIr a
+        in withL foldA foldR foldIr a
     foldL _ _ _
       = error $ nestedError "first or second" "fold"
 
