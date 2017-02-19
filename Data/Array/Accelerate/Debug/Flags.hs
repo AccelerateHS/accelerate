@@ -30,7 +30,7 @@ module Data.Array.Accelerate.Debug.Flags (
   acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
   dump_phases, dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
   dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm,
-  dump_exec, dump_sched,
+  dump_exec, dump_sched, seq_chunk_size,
 
   accInit,
   queryFlag, setFlag, setFlags, clearFlag, clearFlags,
@@ -79,6 +79,7 @@ fclabels [d|
 --    , unfolding_use_threshold   :: !(Maybe Int)         -- the magic cut-off figure for inlining
     , flush_cache               :: !(Maybe Bool)        -- delete persistent compilation cache(s)
     , fast_math                 :: !(Maybe Bool)        -- use faster, less precise math library operations
+    , seq_chunk_size            :: !(Maybe Int)         -- compute sequences in chunks of this size
 
       -- Debug trace
       -- -----------
@@ -196,9 +197,16 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def def def def
+    defaults            = Flags def def def def def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
+    parse1 opts this
+      | "-chunk-size=" `isPrefixOf` this
+      = let arg = tail $ dropWhile (/='=') this
+            r = reads arg
+        in case r of
+             [(n, "")] | n > 0 -> set seq_chunk_size (Just n) opts
+             _ -> trace ("Illegal argument to chunk-size: " ++ show arg ++ ". Expected positive integer.") opts
     parse1 opts this    =
       case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of
         [Option _ go]   -> go opts
