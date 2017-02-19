@@ -2931,7 +2931,7 @@ vectoriseOpenSeq vectAcc ctx size seq =
       where
         f ty i x a = let x'  = flatten ty (S.snd (S.the i)) x
                          x'' = S.fst (S.the i) S.== 0 S.?| (x', a S.++ x')
-                     in S.lift (x',x')
+                     in S.lift (x'',x'')
 
         a :: Elt e => acc aenv' (Vector e)
         a = inject . Use $ fromFunction empty undefined
