@@ -318,7 +318,7 @@ Executable accelerate-nofib
 Executable accelerate-smvm
   hs-source-dirs:       examples/smvm
   Main-is:              Main.hs
-  other-modules:        Config Matrix MatrixMarket SMVM
+  other-modules:        Config Matrix SMVM
 
   ghc-prof-options:     -auto-all
   ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
@@ -336,14 +336,12 @@ Executable accelerate-smvm
           base                            >= 4.7
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
-        , attoparsec                      >= 0.10
-        , bytestring                      >= 0.9
-        , bytestring-lexing               >= 0.5
+        , accelerate-io                   == 1.0.*
         , fclabels                        >= 2.0
-        , primitive                       >= 0.5
+        , matrix-market-attoparsec        >= 0.1
         , mwc-random                      >= 0.8
+        , scientific                      >= 0.3
         , vector                          >= 0.7
-        , vector-algorithms               >= 0.4
 
 
 -- A quasicrystal demo as the sum of waves in a plane

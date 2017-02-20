@@ -1,110 +1,112 @@
-{-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
 
-module Matrix where
+module Matrix (
 
+  CSRMatrix(..),
+  matrixToCSR, nnz, rows, columns,
+
+) where
+
+import Control.Monad
 import Data.Int
-import MatrixMarket
+import Data.List
+import Data.Matrix.MatrixMarket                                     ( Matrix(..), Structure(..) )
+import Data.Scientific
+import Data.Vector.Storable                                         ( Vector, Storable )
 import System.Random.MWC
-import System.IO.Unsafe
-import Control.Monad.Primitive
+import qualified Data.Vector.Storable                               as S
 
-import Data.Vector.Unboxed                      ( Vector, Unbox )
-import qualified Data.Vector.Unboxed            as V
-import qualified Data.Vector.Unboxed.Mutable    as M
-import qualified Data.Vector.Algorithms.Intro   as V
 
-type CSRMatrix a =
-    ( Vector Int32              -- segment descriptor
-    , Vector (Int32, a)         -- sparse vector for the (flattened) rows
-    , Int                       -- number of columns
-    )
 
--- Read a sparse matrix from a MatrixMarket file. Pattern matrices are filled
--- with random numbers in the range (-1,1).
+data CSRMatrix a =
+  CSRMatrix { csr_segd_length :: !(Vector Int32)    -- segment descriptor as row lengths
+            , csr_segd_offset :: !(Vector Int32)    -- segment descriptor as row offset
+            , csr_indices     :: !(Vector Int32)    -- column indices
+            , csr_values      :: !(Vector a)        -- non-zero values
+            , csr_dim         :: !(Int,Int)         -- matrix dimensions (rows, columns)
+            }
+  deriving Show
+
+
+nnz :: Storable a => CSRMatrix a -> Int
+nnz = S.length . csr_values
+
+rows :: CSRMatrix a -> Int
+rows = fst . csr_dim
+
+columns :: CSRMatrix a -> Int
+columns = snd . csr_dim
+
+
+-- Convert data read from MatrixMarket format into compressed-sparse-row format
+-- with zero-based indexing.
 --
-{-# INLINE readCSRMatrix #-}
-readCSRMatrix
+-- Note that for [Skew-]Symmetric and Hermitian matrices, only the lower
+-- triangle is stored in the file. For those cases this routine fills in the
+-- upper triangle positions as well, so that the returned CSR matrix is in
+-- general format.
+--
+matrixToCSR
     :: GenIO
-    -> FilePath
-    -> IO (CSRMatrix Float)
-readCSRMatrix gen file = do
-  mtx <- readMatrix file
-  case mtx of
-    (RealMatrix    dim l vals) -> csr dim l vals
-    (PatternMatrix dim l ix)   -> csr dim l =<< mapM' (\(a,b) -> (a,b,) `fmap` uniformR (-1,1) gen) ix
-    (IntMatrix _ _ _)          -> error "IntMatrix type not supported"
-    (ComplexMatrix _ _ _)      -> error "ComplexMatrix type not supported"
+    -> Matrix Scientific
+    -> IO (CSRMatrix Double)
+matrixToCSR _ (RMatrix dim _ structure entries)
+  = return
+  $ toCSR dim
+  $ case structure of
+      General  -> flip map entries
+                $ \(r,c,v) -> (fromIntegral (r-1), fromIntegral (c-1), toRealFloat v)
+      _        -> flip concatMap entries
+                $ \(r,c,v) -> let v' = toRealFloat v
+                                  r' = fromIntegral (r-1)
+                                  c' = fromIntegral (c-1)
+                              in
+                              if r' == c' then [(r',c',v')]
+                                          else [(r',c',v'), (c',r',v')]
+
+matrixToCSR gen (PatternMatrix dim _ structure entries)
+  = fmap (toCSR dim)
+  $ case structure of
+      General -> forM entries
+               $ \(r,c) -> let r' = fromIntegral (r-1)
+                               c' = fromIntegral (c-1)
+                           in do
+                             v <- uniform gen
+                             return (r', c', v)
+      _       -> fmap concat
+               $ forM entries
+               $ \(r,c) -> let r' = fromIntegral (r-1)
+                               c' = fromIntegral (c-1)
+                           in do
+                             v <- uniform gen
+                             u <- uniform gen
+                             if r' == c' then return [(r',c',v)]
+                                         else return [(r',c',v), (c',r',u)]
+
+matrixToCSR _ CMatrix{}   = error "matrixToCSR: complex matrices not supported"
+matrixToCSR _ IntMatrix{} = error "matrixToCSR: integer matrices not supported"
 
 
--- A randomly generated matrix of given size
+-- Convert the given list of (row index, column index, value) triples into a CSR
+-- matrix representation.
 --
-{-# INLINE randomCSRMatrix #-}
-randomCSRMatrix
-    :: (PrimMonad m, Variate a, Num a, Unbox a)
-    => Gen (PrimState m)
-    -> Int
-    -> Int
-    -> m (CSRMatrix a)
-randomCSRMatrix gen rows cols = do
-  segd <- randomVectorR ( 0, fromIntegral cols-1) gen rows
-  let nnz = fromIntegral $ V.sum segd
-  inds <- randomVectorR ( 0, fromIntegral cols-1) gen nnz
-  vals <- randomVectorR (-1,1) gen nnz
-  return (segd, V.zip inds vals, cols)
+toCSR :: (Int,Int)
+      -> [(Int32,Int32,Double)]
+      -> CSRMatrix Double
+toCSR dim entries =
+  let cmp (r1,c1,_) (r2,c2,_)
+        | r1 == r2  = compare c1 c2
+        | otherwise = compare r1 r2
 
-
-{-# INLINE randomVectorR #-}
-randomVectorR
-    :: (PrimMonad m, Variate a, Unbox a)
-    => (a, a)
-    -> Gen (PrimState m)
-    -> Int
-    -> m (Vector a)
-randomVectorR r g n = V.replicateM n (uniformR r g)
-
-
--- Read elements into unboxed arrays, convert to zero-indexed compressed sparse
--- row format.
---
-{-# INLINE csr #-}
-csr :: forall a. Unbox a
-    => (Int,Int)
-    -> Int
-    -> [(Int32,Int32,a)]
-    -> IO (Vector Int32, Vector (Int32,a), Int)
-csr (m,_n) l elems = do
-  mu <- M.new l         :: IO (M.IOVector (Int32,Int32,a))
-
-  let goe :: Int -> [(Int32,Int32,a)] -> IO ()
-      goe  _ []     = return ()
-      goe !n (x:xs) = let (i,j,v) = x in M.unsafeWrite mu n (i-1,j-1,v) >> goe (n+1) xs
-  goe 0 elems
-
-  let cmp (x1,y1,_) (x2,y2,_) | x1 == x2  = compare y1 y2
-                              | otherwise = compare x1 x2
-  V.sortBy cmp mu
-
-  (i,j,v) <- V.unzip3 `fmap` V.unsafeFreeze mu
-  mseg    <- M.new m
-
-  let gos :: Int -> Vector Int32 -> IO (Vector Int32)
-      gos !n rows
-        | n >= m        = V.unsafeFreeze mseg
-        | otherwise     = let (s,ss) = V.span (== fromIntegral n) rows
-                          in M.unsafeWrite mseg n (fromIntegral $ V.length s) >> gos (n+1) ss
-
-  seg <- gos 0 i
-  return (seg , V.zip j v, _n)
-
-
--- Lazier versions of things in Control.Monad
---
-sequence' :: [IO a] -> IO [a]
-sequence' ms = foldr k (return []) ms
-    where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
-
-mapM' :: (a -> IO b) -> [a] -> IO [b]
-mapM' f as = sequence' (map f as)
+      sorted      = sortBy cmp entries    -- possibly more efficient to sort as unboxed vector
+      (rx,ix,vs)  = unzip3 sorted
+      segd        = map (fromIntegral . length) (group rx)
+      segd_len    = S.fromList segd
+      segd_off    = S.scanl (+) 0 segd_len
+  in
+  CSRMatrix { csr_segd_length = segd_len
+            , csr_segd_offset = segd_off
+            , csr_indices     = S.fromList ix
+            , csr_values      = S.fromList vs
+            , csr_dim         = dim
+            }
 
