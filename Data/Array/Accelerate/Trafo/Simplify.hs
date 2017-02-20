@@ -546,12 +546,14 @@ simplifyOpenExp env = first getAny . cvtE
     -- where it needs to and has no impact on those where it doesn't.
     --
     zeroCost :: PreOpenExp acc env aenv a -> Bool
-    zeroCost IndexNil      = True
-    zeroCost (Var _)       = True
-    zeroCost (IndexTail e) = zeroCost e
-    zeroCost (IndexHead e) = zeroCost e
-    zeroCost (Prj _ e)     = zeroCost e
-    zeroCost _             = False
+    zeroCost IndexNil         = True
+    zeroCost (Var _)          = True
+    zeroCost (Const _)        = True
+    zeroCost (IndexTail e)    = zeroCost e
+    zeroCost (IndexHead e)    = zeroCost e
+    zeroCost (Prj _ e)        = zeroCost e
+    zeroCost (IndexCons sh i) = zeroCost sh && zeroCost i
+    zeroCost _                = False
 
     allFixed :: SliceIndex slix sl co sh -> Bool
     allFixed SliceNil          = True
