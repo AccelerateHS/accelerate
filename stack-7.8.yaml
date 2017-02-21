@@ -89,7 +89,7 @@ extra-deps:
 - 'libffi-0.1'
 # - 'llvm-general-3.5.1.2'
 # - 'llvm-general-pure-3.5.1.0'
-- 'matrix-market-attoparsec-0.1.0.4'
+- 'matrix-market-attoparsec-0.1.0.5'
 - 'mtl-2.2.1'
 - 'normaldistribution-1.1.0.3'
 - 'nvvm-0.7.5.1'

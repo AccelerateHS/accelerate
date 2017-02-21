@@ -342,6 +342,7 @@ Executable accelerate-smvm
         , mwc-random                      >= 0.8
         , scientific                      >= 0.3
         , vector                          >= 0.7
+        , vector-algorithms               >= 0.4
 
 
 -- A quasicrystal demo as the sum of waves in a plane

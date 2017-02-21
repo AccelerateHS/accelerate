@@ -75,7 +75,7 @@ extra-deps:
 - 'cuda-0.7.5.2'
 - 'cufft-0.7.5.0'
 - 'libffi-0.1'
-- 'matrix-market-attoparsec-0.1.0.4'
+- 'matrix-market-attoparsec-0.1.0.5'
 - 'normaldistribution-1.1.0.3'
 - 'nvvm-0.7.5.1'
 - 'unique-0'
