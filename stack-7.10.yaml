@@ -18,7 +18,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: c5ba27aee1f7bccae3f5ea2c20e452886ae5d7b0
+    commit: f8bd8411efcbfc106818cd4e4975e6a3db191fa1
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
