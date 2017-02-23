@@ -378,8 +378,8 @@ liftPreOpenAcc vectAcc ctx size acc
     Unit e              -> unitL e
     Reshape e a         -> reshapeL e a
     Generate e f        -> generateL e f
-    -- Transform and Subarray only appear as part of subsequent optimsations.
-    Transform {}        -> $internalError "liftPreOpenAcc" "Unable to vectorise Transform"
+    Transform sh f f' a -> transformL sh f f' a
+    -- Subarray appears only as part of subsequent optimsations.
     Subarray {}         -> $internalError "liftPreOpenAcc" "Unable to vectorise Subarrays"
     Replicate sl slix a -> replicateL sl slix a
     Slice sl a slix     -> sliceL sl a slix
@@ -1091,6 +1091,30 @@ liftPreOpenAcc vectAcc ctx size acc
             avar0 -}
     scanr'L _ _ _
       = error $ nestedError "first or second" "scanr'"
+
+    transformL :: forall sh sh' e e'. (Shape sh, Shape sh', Elt e, Elt e')
+               => PreExp acc  aenv  sh'
+               -> PreFun acc  aenv  (sh' -> sh)
+               -> PreFun acc  aenv  (e -> e')
+               -> acc            aenv  (Array sh e)
+               -> LiftedAcc  acc aenv' (Array sh' e')
+    transformL sh f (cvtF1 -> LiftedFun f'_a f'_l) a
+      | Just f' <- f'_a
+      , perm    <- backpermuteL sh f a
+      = appL (inject . Map f')        -- Converted back to tranform during fusion
+             (inject . Map f')        -- Converted back to tranform during fusion
+             (\a' -> inject . Alet a'
+                  $ irregularC (segmentsC avar0)
+                  $^ Map (weakenA1 f') (irregularValuesC avar0))
+             perm
+      | LiftedAcc ty perm <- backpermuteL sh f a
+      = inject . Alet perm
+      $*
+         appFL (weakenA1 size)
+               (apply (generalizeRank (f'_l (nestingType ty))))
+               (\a' -> irregularC (segmentsC a')
+                     $ f'_l (nestingType ty) `apply` irregularValuesC a')
+               (LiftedAcc ty avar0)
 
     backpermuteL :: forall sh sh' e. (Shape sh, Shape sh', Elt e)
                  => PreExp acc  aenv  sh'
