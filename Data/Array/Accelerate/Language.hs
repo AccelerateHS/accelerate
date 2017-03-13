@@ -987,12 +987,12 @@ awhile = Acc $$$ Awhile
 -- Shapes and indices
 -- ------------------
 
--- | Get the outermost dimension of a shape
+-- | Get the innermost dimension of a shape
 --
 indexHead :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp a
 indexHead = Exp . IndexHead
 
--- | Get all but the outermost element of a shape
+-- | Get all but the innermost element of a shape
 --
 indexTail :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp sh
 indexTail = Exp . IndexTail

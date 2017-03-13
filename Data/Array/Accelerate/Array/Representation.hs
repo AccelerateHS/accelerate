@@ -222,8 +222,8 @@ sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
 sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 
 
--- | Enumerate all slices within a given bound. The outermost
--- dimension changes most rapidly.
+-- | Enumerate all slices within a given bound. The innermost dimension changes
+-- most rapidly.
 --
 -- See 'Data.Array.Accelerate.Array.Sugar.enumSlices' for an example.
 --
