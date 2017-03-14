@@ -33,6 +33,14 @@
 -- Accelerate is limited to /flat data-parallelism/ involving only regular,
 -- multi-dimensional arrays.
 --
+-- [/Optimisations:/]
+--
+-- Accelerate uses a number of scalar and array optimisations, including
+-- /array fusion/, in order to improve the performance of programs. Fusing
+-- a program entails combining successive traversals (loops) over an array into
+-- a single traversal, which reduces memory traffic and eliminates intermediate
+-- arrays.
+--
 -- [/Code execution:/]
 --
 -- Several backends are available which can be used to evaluate accelerate
