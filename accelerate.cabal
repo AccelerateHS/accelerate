@@ -193,6 +193,8 @@ Flag debug
       * @dump-cc@: Print information related to kernel code
         generation/compilation. Print the generated code if @verbose@.
     .
+      * @dump-ld@: Print information related to runtime linking.
+    .
       * @dump-asm@: Print information related to kernel assembly. Print the
         assembled code if @verbose@.
     .

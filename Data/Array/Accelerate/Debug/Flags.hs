@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Debug.Flags (
   Flags, Mode,
   acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
   dump_phases, dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
-  dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm,
+  dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_ld, dump_asm,
   dump_exec, dump_sched,
 
   accInit,
@@ -94,17 +94,18 @@ fclabels [d|
     , dump_simpl_dot            :: !Bool                -- generate simplified dot output
 
       -- garbage collection
-    , dump_gc                   :: !Bool                -- dump GC trace
-    , dump_gc_stats             :: !Bool                -- output GC statistics
+    , dump_gc                   :: !Bool                -- trace garbage collector
+    , dump_gc_stats             :: !Bool                -- print final GC statistics
 
       -- code generation / compilation
     , debug_cc                  :: !Bool                -- compile with debug symbols
-    , dump_cc                   :: !Bool                -- compilation trace
-    , dump_asm                  :: !Bool                -- dump generated code
+    , dump_cc                   :: !Bool                -- trace code generation & compilation
+    , dump_ld                   :: !Bool                -- trace runtime linker
+    , dump_asm                  :: !Bool                -- trace assembler
 
       -- execution
-    , dump_exec                 :: !Bool                -- dump execution trace
-    , dump_sched                :: !Bool                -- dump scheduler trace
+    , dump_exec                 :: !Bool                -- trace execution
+    , dump_sched                :: !Bool                -- trace scheduler
     }
  |]
 
@@ -148,6 +149,7 @@ dflags =
   , Option "dump-gc-stats"              (set dump_gc_stats)
   , Option "debug-cc"                   (set debug_cc)
   , Option "dump-cc"                    (set dump_cc)
+  , Option "dump-ld"                    (set dump_ld)
   , Option "dump-asm"                   (set dump_asm)
   , Option "dump-exec"                  (set dump_exec)
   , Option "dump-sched"                 (set dump_sched)
@@ -195,7 +197,7 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def def def def
+    defaults            = Flags def def def def def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
     parse1 opts this    =
