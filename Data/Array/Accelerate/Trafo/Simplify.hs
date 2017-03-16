@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
+{-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
@@ -25,6 +26,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 ) where
 
 -- standard library
+import Data.Label
 import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
@@ -35,13 +37,14 @@ import Prelude                                          hiding ( exp, iterate )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
+import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Algebra
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Analysis.Shape
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -426,12 +429,10 @@ simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
 -- repeatedly until no more changes are made.
 --
 simplifyExp :: (Elt t, Kit acc) => PreExp acc aenv t -> PreExp acc aenv t
-simplifyExp = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenExp EmptyExp)
--- simplifyExp = iterate (show . prettyPreOpenExp prettyAcc noParens PP.Empty PP.Empty) (simplifyOpenExp EmptyExp)
+simplifyExp = iterate summariseOpenExp (simplifyOpenExp EmptyExp)
 
 simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
-simplifyFun = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenFun EmptyExp)
--- simplifyFun = iterate (show . prettyPreOpenFun prettyAcc PP.Empty) (simplifyOpenFun EmptyExp)
+simplifyFun = iterate summariseOpenFun (simplifyOpenFun EmptyExp)
 
 
 -- NOTE: [Simplifier iterations]
@@ -451,16 +452,16 @@ simplifyFun = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenFun EmptyExp)
 -- With internal checks on, we also issue a warning if the iteration limit is
 -- reached, but it was still possible to make changes to the expression.
 --
-{-# SPECIALISE iterate :: (Exp aenv t -> String) -> (Exp aenv t -> (Bool, Exp aenv t)) -> Exp aenv t -> Exp aenv t #-}
-{-# SPECIALISE iterate :: (Fun aenv t -> String) -> (Fun aenv t -> (Bool, Fun aenv t)) -> Fun aenv t -> Fun aenv t #-}
+{-# SPECIALISE iterate :: (Exp aenv t -> Stats) -> (Exp aenv t -> (Bool, Exp aenv t)) -> Exp aenv t -> Exp aenv t #-}
+{-# SPECIALISE iterate :: (Fun aenv t -> Stats) -> (Fun aenv t -> (Bool, Fun aenv t)) -> Fun aenv t -> Fun aenv t #-}
 
 iterate
     :: forall f a. (Match f, Shrink (f a))
-    => (f a -> String)
+    => (f a -> Stats)
     -> (f a -> (Bool, f a))
     -> f a
     -> f a
-iterate ppr f = fix 1 . setup
+iterate summarise f = fix 1 . setup
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
     -- excessive run times, we (should) set this value very low.
@@ -470,8 +471,8 @@ iterate ppr f = fix 1 . setup
     lIMIT       = 25
 
     simplify'   = Stats.simplifierDone . f
-    setup x     = Stats.trace Stats.dump_simpl_iterations (printf "simplifier begin:\n%s\n" (ppr x))
-                $ snd (trace 0 "simplify" (simplify' x))
+    setup x     = Stats.trace Stats.dump_simpl_iterations (msg 0 "init" x)
+                $ snd (trace 1 "simplify" (simplify' x))
 
     fix :: Int -> f a -> f a
     fix i x0
@@ -492,5 +493,200 @@ iterate ppr f = fix 1 . setup
       | otherwise       = v
 
     msg :: Int -> String -> f a -> String
-    msg i s x = printf "%s [%d/%d]:\n%s\n" s i lIMIT (ppr x)
+    msg i s x = printf "simpl-iters/%-8s [%d]: %s" s i (ppr x)
+
+    ppr :: f a -> String
+    ppr = show . summarise
+
+
+-- Debugging support
+-- -----------------
+
+data Stats = Stats
+  { _terms    :: {-# UNPACK #-} !Int
+  , _types    :: {-# UNPACK #-} !Int
+  , _binders  :: {-# UNPACK #-} !Int
+  , _vars     :: {-# UNPACK #-} !Int
+  , _ops      :: {-# UNPACK #-} !Int
+  }
+
+instance Show Stats where
+  show (Stats a b c d e) =
+    printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
+
+-- Rather than using the TH deriving mechanism, otherwise the summarise*
+-- functions will not be in scope for the above.
+--
+terms, types, binders, vars, ops :: Stats :-> Int
+terms   = lens _terms   (\f Stats{..} -> Stats { _terms   = f _terms, ..})
+types   = lens _types   (\f Stats{..} -> Stats { _types   = f _types, ..})
+binders = lens _binders (\f Stats{..} -> Stats { _binders = f _binders, ..})
+vars    = lens _vars    (\f Stats{..} -> Stats { _vars    = f _vars, ..})
+ops     = lens _ops     (\f Stats{..} -> Stats { _ops     = f _ops, ..})
+
+infixl 1 &
+(&) :: a -> (a -> b) -> b
+(&) x f = f x
+
+infixr 4 +~
+(+~) :: Num a => f :-> a -> a -> f -> f
+(+~) l c s = modify l (+c) s
+
+infixl 6 +++
+(+++) :: Stats -> Stats -> Stats
+Stats a1 b1 c1 d1 e1 +++ Stats a2 b2 c2 d2 e2 = Stats (a1+a2) (b1+b2) (c1+c2) (d1+d2) (e1+e2)
+
+summariseOpenFun :: PreOpenFun acc env aenv f -> Stats
+summariseOpenFun (Body e) = summariseOpenExp e & terms +~ 1
+summariseOpenFun (Lam f)  = summariseOpenFun f & terms +~ 1 & binders +~ 1
+
+summariseOpenExp :: PreOpenExp acc env aenv t -> Stats
+summariseOpenExp = modify terms (+1) . goE
+  where
+    zero = Stats 0 0 0 0 0
+
+    travE :: PreOpenExp acc env aenv t -> Stats
+    travE = summariseOpenExp
+
+    travF :: PreOpenFun acc env aenv t -> Stats
+    travF = summariseOpenFun
+
+    travA :: acc aenv a -> Stats
+    travA _ = zero & vars +~ 1  -- assume an array index, else we should have failed elsewhere
+
+    travT :: Tuple (PreOpenExp acc env aenv) t -> Stats
+    travT NilTup        = zero & terms +~ 1
+    travT (SnocTup t e) = travT t +++ travE e & terms +~ 1
+
+    travTix :: TupleIdx t e -> Stats
+    travTix ZeroTupIdx     = zero & terms +~ 1
+    travTix (SuccTupIdx t) = travTix t & terms +~ 1
+
+    travC :: PrimConst c -> Stats
+    travC (PrimMinBound t) = travBoundedType t & terms +~ 1
+    travC (PrimMaxBound t) = travBoundedType t & terms +~ 1
+    travC (PrimPi t)       = travFloatingType t & terms +~ 1
+
+    travNonNumType :: NonNumType t -> Stats
+    travNonNumType _ = zero & types +~ 1
+
+    travIntegralType :: IntegralType t -> Stats
+    travIntegralType _ = zero & types +~ 1
+
+    travFloatingType :: FloatingType t -> Stats
+    travFloatingType _ = zero & types +~ 1
+
+    travNumType :: NumType t -> Stats
+    travNumType (IntegralNumType t) = travIntegralType t & types +~ 1
+    travNumType (FloatingNumType t) = travFloatingType t & types +~ 1
+
+    travBoundedType :: BoundedType t -> Stats
+    travBoundedType (IntegralBoundedType t) = travIntegralType t & types +~ 1
+    travBoundedType (NonNumBoundedType t)   = travNonNumType t & types +~ 1
+
+    travScalarType :: ScalarType t -> Stats
+    travScalarType (NumScalarType t)    = travNumType t & types +~ 1
+    travScalarType (NonNumScalarType t) = travNonNumType t & types +~ 1
+
+    -- The scrutinee has already been counted
+    goE :: PreOpenExp acc env aenv t -> Stats
+    goE exp =
+      case exp of
+        Let bnd body          -> travE bnd +++ travE body & binders +~ 1
+        Var{}                 -> zero & vars +~ 1
+        Foreign _ _ x         -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
+        Const{}               -> zero
+        Tuple tup             -> travT tup & terms +~ 1
+        Prj ix e              -> travTix ix +++ travE e
+        IndexNil              -> zero
+        IndexCons sh sz       -> travE sh +++ travE sz
+        IndexHead sh          -> travE sh
+        IndexTail sh          -> travE sh
+        IndexAny              -> zero
+        IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
+        IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
+        ToIndex sh ix         -> travE sh +++ travE ix
+        FromIndex sh ix       -> travE sh +++ travE ix
+        Cond p t e            -> travE p +++ travE t +++ travE e
+        While p f x           -> travF p +++ travF f +++ travE x
+        PrimConst c           -> travC c
+        Index a ix            -> travA a +++ travE ix
+        LinearIndex a ix      -> travA a +++ travE ix
+        Shape a               -> travA a
+        ShapeSize sh          -> travE sh
+        Intersect sh1 sh2     -> travE sh1 +++ travE sh2
+        Union sh1 sh2         -> travE sh1 +++ travE sh2
+        PrimApp f x           -> travPrimFun f +++ travE x
+
+    travPrimFun :: PrimFun f -> Stats
+    travPrimFun = modify ops (+1) . goF
+      where
+        goF :: PrimFun f -> Stats
+        goF fun =
+          case fun of
+            PrimAdd                t -> travNumType t
+            PrimSub                t -> travNumType t
+            PrimMul                t -> travNumType t
+            PrimNeg                t -> travNumType t
+            PrimAbs                t -> travNumType t
+            PrimSig                t -> travNumType t
+            PrimQuot               t -> travIntegralType t
+            PrimRem                t -> travIntegralType t
+            PrimQuotRem            t -> travIntegralType t
+            PrimIDiv               t -> travIntegralType t
+            PrimMod                t -> travIntegralType t
+            PrimDivMod             t -> travIntegralType t
+            PrimBAnd               t -> travIntegralType t
+            PrimBOr                t -> travIntegralType t
+            PrimBXor               t -> travIntegralType t
+            PrimBNot               t -> travIntegralType t
+            PrimBShiftL            t -> travIntegralType t
+            PrimBShiftR            t -> travIntegralType t
+            PrimBRotateL           t -> travIntegralType t
+            PrimBRotateR           t -> travIntegralType t
+            PrimPopCount           t -> travIntegralType t
+            PrimCountLeadingZeros  t -> travIntegralType t
+            PrimCountTrailingZeros t -> travIntegralType t
+            PrimFDiv               t -> travFloatingType t
+            PrimRecip              t -> travFloatingType t
+            PrimSin                t -> travFloatingType t
+            PrimCos                t -> travFloatingType t
+            PrimTan                t -> travFloatingType t
+            PrimAsin               t -> travFloatingType t
+            PrimAcos               t -> travFloatingType t
+            PrimAtan               t -> travFloatingType t
+            PrimSinh               t -> travFloatingType t
+            PrimCosh               t -> travFloatingType t
+            PrimTanh               t -> travFloatingType t
+            PrimAsinh              t -> travFloatingType t
+            PrimAcosh              t -> travFloatingType t
+            PrimAtanh              t -> travFloatingType t
+            PrimExpFloating        t -> travFloatingType t
+            PrimSqrt               t -> travFloatingType t
+            PrimLog                t -> travFloatingType t
+            PrimFPow               t -> travFloatingType t
+            PrimLogBase            t -> travFloatingType t
+            PrimTruncate         f i -> travFloatingType f +++ travIntegralType i
+            PrimRound            f i -> travFloatingType f +++ travIntegralType i
+            PrimFloor            f i -> travFloatingType f +++ travIntegralType i
+            PrimCeiling          f i -> travFloatingType f +++ travIntegralType i
+            PrimIsNaN              t -> travFloatingType t
+            PrimAtan2              t -> travFloatingType t
+            PrimLt                 t -> travScalarType t
+            PrimGt                 t -> travScalarType t
+            PrimLtEq               t -> travScalarType t
+            PrimGtEq               t -> travScalarType t
+            PrimEq                 t -> travScalarType t
+            PrimNEq                t -> travScalarType t
+            PrimMax                t -> travScalarType t
+            PrimMin                t -> travScalarType t
+            PrimLAnd                 -> zero
+            PrimLOr                  -> zero
+            PrimLNot                 -> zero
+            PrimOrd                  -> zero
+            PrimChr                  -> zero
+            PrimBoolToInt            -> zero
+            PrimFromIntegral     i n -> travIntegralType i +++ travNumType n
+            PrimToFloating       n f -> travNumType n +++ travFloatingType f
+            PrimCoerce           a b -> travScalarType a +++ travScalarType b
 
