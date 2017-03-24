@@ -53,7 +53,7 @@ Description:
     * @accelerate-fft@: Discrete Fourier transforms, with FFI bindings to
       optimised implementations.
   .
-  Additionally, we maintain the following libraries which can be used with Accelerate:
+    * @accelerate-bignum@: Fixed-width large integer arithmetic.
   .
     * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV,
       and HSL).

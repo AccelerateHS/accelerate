@@ -58,17 +58,13 @@ Additional components
 
 The following supported add-ons are available as separate packages:
 
-  * [accelerate-llvm-native][accelerate-llvm-native]: Backend targeting multicore CPUs.
-  * [accelerate-llvm-ptx][accelerate-llvm-ptx]: Backend targeting CUDA-enabled NVIDIA GPUs. Requires a GPU with compute capability 2.0 or greater (see the [table on Wikipedia][wiki-cc]).
-  * [accelerate-cuda][accelerate-cuda]: Backend targeting CUDA-enabled NVIDA GPUs. Requires a GPU with compute capability 1.2 or greater. _NOTE:_ This backend is being deprecated in favour of `accelerate-llvm-ptx`.
+  * [accelerate-llvm-native][accelerate-llvm-native]: Backend targeting multicore CPUs
+  * [accelerate-llvm-ptx][accelerate-llvm-ptx]: Backend targeting CUDA-enabled NVIDIA GPUs. Requires a GPU with compute capability 2.0 or greater (see the [table on Wikipedia][wiki-cc])
+  * [accelerate-cuda][accelerate-cuda]: Backend targeting CUDA-enabled NVIDA GPUs. Requires a GPU with compute capability 1.2 or greater. _NOTE:_ This backend is being deprecated in favour of `accelerate-llvm-ptx`
   * [accelerate-examples][accelerate-examples]: Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
   * [accelerate-io][accelerate-io]: Fast conversion between Accelerate arrays and other array formats (for example, Repa and Vector)
-  * [accelerate-fft][accelerate-fft]: Fast Fourier transform implementation, with bindings to optimised FFI implementations.
-
-Install them from Hackage with `cabal install PACKAGENAME`.
-
-We also maintain the following libraries:
-
+  * [accelerate-fft][accelerate-fft]: Fast Fourier transform implementation, with bindings to optimised FFI implementations
+  * [accelerate-bignum][accelerate-bignum]: Fixed-width large integer arithmetic
   * [colour-accelerate][colour-accelerate]: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL)
   * [gloss-accelerate][gloss-accelerate]: Generate [gloss][gloss] pictures from Accelerate
   * [gloss-raster-accelerate][gloss-raster-accelerate]: Parallel rendering of raster images and animations
@@ -76,6 +72,8 @@ We also maintain the following libraries:
   * [linear-accelerate][linear-accelerate]: [Linear][linear] vector spaces in Accelerate
   * [mwc-random-accelerate][mwc-random-accelerate]: Generate Accelerate arrays filled with high quality pseudorandom numbers
   * [numeric-prelude-accelerate][numeric-prelude-accelerate]: Lifting the [numeric-prelude][numeric-prelude] to Accelerate
+
+Install them from Hackage with `cabal install PACKAGENAME`.
 
 
 Documentation
@@ -204,6 +202,7 @@ Here is a list of features that are currently missing:
   [accelerate-llvm]:            https://github.com/AccelerateHS/accelerate-llvm
   [accelerate-llvm-native]:     https://github.com/AccelerateHS/accelerate-llvm
   [accelerate-llvm-ptx]:        https://github.com/AccelerateHS/accelerate-llvm
+  [accelerate-bignum]:          https://github.com/tmcdonell/accelerate-bignum
   [GitHub]:                     https://github.com/AccelerateHS/accelerate
   [Wiki]:                       https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                     https://github.com/AccelerateHS/accelerate/issues

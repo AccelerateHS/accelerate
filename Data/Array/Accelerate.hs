@@ -95,6 +95,9 @@
 -- * <https://hackage.haskell.org/package/accelerate-fft accelerate-fft>: Fast
 -- Fourier transform, with FFI bindings to optimised implementations.
 --
+-- * <https://hackage.haskell.org/package/accelerate-bignum accelerate-bignum>:
+-- Fixed-width large integer arithmetic.
+--
 -- * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>:
 -- Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
 --
