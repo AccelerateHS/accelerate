@@ -34,4 +34,4 @@ By default this example will execute in chunks consisting of 12 million links at
 
   [pagerank-wiki]:          https://en.wikipedia.org/wiki/PageRank
   [repa-homepage]:          http://repa.ouroborus.net/
-  [wikipedia-link-dump]:    http://haselgrove.id.au/wikipedia.htm
+  [wikipedia-link-dump]:    https://wayback.archive.org/web/20160818143819/http://haselgrove.id.au/wikipedia.htm
