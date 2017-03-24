@@ -24,6 +24,7 @@ import Test.Issues.Issue264
 import Test.Issues.Issue286
 import Test.Issues.Issue287
 import Test.Issues.Issue288
+import Test.Issues.Issue362
 
 import Data.Array.Accelerate.Examples.Internal
 
@@ -48,5 +49,6 @@ test_issues be conf =
     , test_issue286 be conf
     , test_issue287 be conf
     , test_issue288 be conf
+    , test_issue362 be conf
     ]
 

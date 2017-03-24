@@ -173,22 +173,22 @@ Library
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:
-        accelerate-cuda                 == 0.17.*
+        accelerate-cuda                   == 0.17.*
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
     build-depends:
-        accelerate-llvm-native          == 1.0.*
+        accelerate-llvm-native            == 1.0.*
 
   if flag(llvm-ptx)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
-        accelerate-llvm-ptx             == 1.0.*
+        accelerate-llvm-ptx               == 1.0.*
 
   if flag(cilk)
     CPP-options:        -DACCELERATE_CILK_BACKEND
     build-depends:
-        accelerate-icc-opencl           == 1.0.*
+        accelerate-icc-opencl             == 1.0.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -255,6 +255,7 @@ Executable accelerate-nofib
         Test.Issues.Issue286
         Test.Issues.Issue287
         Test.Issues.Issue288
+        Test.Issues.Issue362
         Test.Prelude
         Test.Prelude.Backpermute
         Test.Prelude.Filter
@@ -282,7 +283,7 @@ Executable accelerate-nofib
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:
-        accelerate-cuda                 == 0.17.*
+        accelerate-cuda                   == 0.17.*
 
     other-modules:
         Test.Foreign.CUDA
