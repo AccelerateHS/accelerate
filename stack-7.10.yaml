@@ -8,7 +8,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: b6c1621ce2993b76b858ee2af4aa46b81fe95202
+    commit: a9677400b9a3e6c55b27e586286281a10c9f3b16
   extra-dep: true
 
 - location:
@@ -18,7 +18,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 48744386436d664c59145c8d80a8851c53716ea9
+    commit: f1d8b57aea5d891d1c1ec3a2bfa31a4c5a8aae19
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -60,16 +60,6 @@ packages:
     commit: 00415bf19d76446685053222f90843f75ad6f94b
   extra-dep: true
 
-- location:
-    git:    https://github.com/tmcdonell/llvm-general.git
-    commit: 8971e275fe56dfd0090ac777e38e6dd641a0306a # 3.5
-    # commit: f80beba704a6b168326d442197b43e71a1ab730d # 3.8
-    # commit: 69863022efd2691e8198da0c24b7e49b8d5ebd4c # 3.9
-  extra-dep: true
-  subdirs:
-    - 'llvm-general'
-    - 'llvm-general-pure'
-
 extra-deps:
 - 'chaselev-deque-0.5.0.5'
 - 'cuda-0.7.5.2'
@@ -77,8 +67,8 @@ extra-deps:
 - 'gloss-1.10.2.5'
 - 'gloss-rendering-1.10.3.5'
 - 'libffi-0.1'
-# - 'llvm-general-3.5.1.2'
-# - 'llvm-general-pure-3.5.1.0'
+- 'llvm-hs-4.0.0.0'
+- 'llvm-hs-pure-4.0.0.0'
 - 'matrix-market-attoparsec-0.1.0.5'
 - 'normaldistribution-1.1.0.3'
 - 'nvvm-0.7.5.1'
@@ -86,8 +76,11 @@ extra-deps:
 
 # Override default flag values for local packages and extra-deps
 flags:
-  llvm-general:
+  llvm-hs:
     shared-llvm: true
+    semigroups: true
+  llvm-hs-pure:
+    semigroups: true
   accelerate:
     debug: false
     ekg:   false
