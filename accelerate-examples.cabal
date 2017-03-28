@@ -279,8 +279,6 @@ Executable accelerate-nofib
         -threaded
         -fpedantic-bottoms
         -fno-excess-precision
-        -fno-liberate-case
-        -fsimpl-tick-factor=300
         -eventlog
         -rtsopts
         -with-rtsopts=-n2M
