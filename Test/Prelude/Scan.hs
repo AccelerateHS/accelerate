@@ -194,9 +194,9 @@ test_scan backend opt = testGroup "scan" $ catMaybes
 
             iappend' :: Exp (e,e) -> Exp (e,e) -> Exp (e,e)
             iappend' x y
-              = x A.== constant one ?                          ( y
-              , y A.== constant one ?                          ( x
-              , x A.== constant top A.|| y A.== constant top ? ( constant top
+              = x A.== constant one ? ( y
+              , y A.== constant one ? ( x
+              , x A.== constant top ? ( constant top -- A.|| y A.== constant top; see AccelerateHS/accelerate#364
               , let
                     (x1,x2) = unlift x :: (Exp e, Exp e)
                     (y1,y2) = unlift y :: (Exp e, Exp e)
