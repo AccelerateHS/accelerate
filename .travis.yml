@@ -31,7 +31,7 @@ addons:
     packages: &apt_packages
       - alex-3.1.4
       - freeglut3-dev
-      - g++-4.8
+      - g++-4.9
       - happy-1.19.5
       - libfftw3-dev
       - libgmp-dev
@@ -81,8 +81,8 @@ before_install:
   #     esac
   - source .travis/install-stack.sh
   - source .travis/update-ghc-settings.sh
-  - export CC=gcc-4.8
-  - export CXX=g++-4.8
+  - export CC=gcc-4.9
+  - export CXX=g++-4.9
 
 install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
