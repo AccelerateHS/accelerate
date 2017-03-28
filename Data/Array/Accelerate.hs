@@ -33,6 +33,14 @@
 -- Accelerate is limited to /flat data-parallelism/ involving only regular,
 -- multi-dimensional arrays.
 --
+-- [/Optimisations:/]
+--
+-- Accelerate uses a number of scalar and array optimisations, including
+-- /array fusion/, in order to improve the performance of programs. Fusing
+-- a program entails combining successive traversals (loops) over an array into
+-- a single traversal, which reduces memory traffic and eliminates intermediate
+-- arrays.
+--
 -- [/Code execution:/]
 --
 -- Several backends are available which can be used to evaluate accelerate
@@ -66,7 +74,7 @@
 --      - A cellular automaton simulation
 --      - A "password recovery" tool, for dictionary attacks on MD5 hashes.
 --
---      <<http://i.imgur.com/RwCzQVw.jpg accelerate-mandelbrot>>
+--      <<http://i.imgur.com/5Tbsp1j.jpg accelerate-mandelbrot>>
 --      <<http://i.imgur.com/7ohhKm9.jpg accelerate-ray>>
 --
 -- * <http://hackage.haskell.org/package/lulesh-accelerate lulesh-accelerate>

@@ -101,7 +101,7 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
   * A cellular automata simulation
   * A "password recovery" tool, for dictionary lookup of MD5 hashes
 
-[![Mandelbrot](http://i.imgur.com/RwCzQVw.jpg "accelerate-mandelbrot")](http://i.imgur.com/U0VcEZB.jpg)
+[![Mandelbrot](http://i.imgur.com/5Tbsp1j.jpg "accelerate-mandelbrot")](http://i.imgur.com/RgXRqsc.jpg)
 [![Raytracer](http://i.imgur.com/7ohhKm9.jpg "accelerate-ray")](http://i.imgur.com/ZNEGEJK.jpg)
 
 <!--

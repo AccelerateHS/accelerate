@@ -170,8 +170,7 @@ Flag debug
     .
       * @dump-simpl-stats@: Print statistics related to fusion & simplification.
     .
-      * @dump-simpl-iterations@: Print the output from each simplifier
-        iteration.
+      * @dump-simpl-iterations@: Print a summary after each simplifier iteration.
     .
       * @dump-vectorisation@: Print information related to the vectoriser.
     .
@@ -192,6 +191,8 @@ Flag debug
     .
       * @dump-cc@: Print information related to kernel code
         generation/compilation. Print the generated code if @verbose@.
+    .
+      * @dump-ld@: Print information related to runtime linking.
     .
       * @dump-asm@: Print information related to kernel assembly. Print the
         assembled code if @verbose@.

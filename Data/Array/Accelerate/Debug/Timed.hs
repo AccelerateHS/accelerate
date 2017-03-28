@@ -23,11 +23,13 @@ import Control.Monad.Trans                              ( MonadIO )
 import Text.Printf
 
 #if ACCELERATE_DEBUG
+import Control.Applicative
 import Control.Monad.Trans                              ( liftIO )
 import Data.Int
 import Data.List
 import Data.Time.Clock
 import System.CPUTime
+import Prelude
 
 import GHC.Stats
 #endif
@@ -44,7 +46,7 @@ timed mode fmt action = do
   enabled <- liftIO $ queryFlag mode
   if enabled
     then do
-      with_gc <- liftIO getGCStatsEnabled
+      with_gc <- liftIO $ (&&) <$> getGCStatsEnabled <*> queryFlag verbose
       if with_gc
         then timed_gc    fmt action
         else timed_simpl fmt action

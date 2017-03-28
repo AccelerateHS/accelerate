@@ -636,6 +636,19 @@ scanr1 = Acc $$ Scanr1
 -- >>> histogram (use xs)
 -- Vector (Z :. 10) [2,4,4,3,2,2,0,0,2,1]
 --
+-- [/Note:/]
+--
+-- Regarding array fusion:
+--
+--   1. The 'permute' operation will always be evaluated; it can not be fused
+--      into a later step.
+--
+--   2. Since the index permutation function might not cover all positions in
+--      the output array (the function is not surjective), the array of default
+--      values must be evaluated. However, other operations may fuse into this.
+--
+--   3. The array of source values can fuse into the permutation operation.
+--
 permute
     :: (Shape sh, Shape sh', Elt a)
     => (Exp a -> Exp a -> Exp a)        -- ^ combination function
@@ -980,12 +993,12 @@ awhile = Acc $$$ Awhile
 -- Shapes and indices
 -- ------------------
 
--- | Get the outermost dimension of a shape
+-- | Get the innermost dimension of a shape
 --
 indexHead :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp a
 indexHead = Exp . IndexHead
 
--- | Get all but the outermost element of a shape
+-- | Get all but the innermost element of a shape
 --
 indexTail :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp sh
 indexTail = Exp . IndexTail

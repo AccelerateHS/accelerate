@@ -138,7 +138,73 @@ import qualified Data.Array.Accelerate.AST      as AST
 --  * <http://hackage.haskell.org/package/accelerate-llvm-native accelerate-llvm-native>: for execution on multicore CPUs
 --  * <http://hackage.haskell.org/package/accelerate-llvm-ptx accelerate-llvm-ptx>: for execution on NVIDIA CUDA-capable GPUs
 --
--- See also 'Exp', which encapsulates embedded _scalar_ computations.
+-- See also 'Exp', which encapsulates embedded /scalar/ computations.
+--
+-- [/Fusion:/]
+--
+-- Array computations of type 'Acc' will be subject to /array fusion/;
+-- Accelerate will combine individual 'Acc' computations into a single
+-- computation, which reduces the number of traversals over the input data and
+-- thus improves performance. As such, it is often useful to have some intuition
+-- on when fusion should occur.
+--
+-- The main idea is to first partition array operations into two categories:
+--
+--   1. Element-wise operations, such as 'Data.Array.Accelerate.map',
+--      'Data.Array.Accelerate.generate', and
+--      'Data.Array.Accelerate.backpermute'. Each element of these operations
+--      can be computed independently of all others.
+--
+--   2. Collective operations such as 'Data.Array.Accelerate.fold',
+--      'Data.Array.Accelerate.scanl', and 'Data.Array.Accelerate.stencil'. To
+--      compute each output element of these operations requires reading
+--      multiple elements from the input array(s).
+--
+-- Element-wise operations fuse together whenever the consumer operation uses
+-- a single element of the input array. Element-wise operations can both fuse
+-- their inputs into themselves, as well be fused into later operations. Both
+-- these examples should fuse into a single loop:
+--
+-- > map -> reverse -> reshape -> map -> map
+--
+-- > map -> backpermute ->
+-- >                       zipWith -> map
+-- >           generate ->
+--
+-- If the consumer operation uses more than one element of the input array
+-- (typically, via 'Data.Array.Accelerate.generate' indexing an array multiple
+-- times), then the input array will be completely evaluated first; no fusion
+-- occurs in this case, because fusing the first operation into the second
+-- implies duplicating work.
+--
+-- On the other hand, collective operations can fuse their input arrays into
+-- themselves, but on output always evaluate to an array; collective operations
+-- will not be fused into a later step. For example:
+--
+-- >      use ->
+-- >             zipWith -> fold |-> map
+-- > generate ->
+--
+-- Here the element-wise sequence ('Data.Array.Accelerate.use'
+-- + 'Data.Array.Accelerate.generate' + 'Data.Array.Accelerate.zipWith') will
+-- fuse into a single operation, which then fuses into the collective
+-- 'Data.Array.Accelerate.fold' operation. At this point in the program the
+-- 'Data.Array.Accelerate.fold' must now be evaluated. In the final step the
+-- 'Data.Array.Accelerate.map' reads in the array produced by
+-- 'Data.Array.Accelerate.fold'. As there is no fusion between the
+-- 'Data.Array.Accelerate.fold' and 'Data.Array.Accelerate.map' steps, this
+-- program consists of two "loops"; one for the 'Data.Array.Accelerate.use'
+-- + 'Data.Array.Accelerate.generate' + 'Data.Array.Accelerate.zipWith'
+-- + 'Data.Array.Accelerate.fold' step, and one for the final
+-- 'Data.Array.Accelerate.map' step.
+--
+-- You can see how many operations will be executed in the fused program by
+-- 'Show'-ing the 'Acc' program, or by using the debugging option @-ddump-dot@
+-- to save the program as a graphviz DOT file.
+--
+-- As a special note, the operations 'Data.Array.Accelerate.unzip' and
+-- 'Data.Array.Accelerate.reshape', when applied to a real array, are executed
+-- in constant time, so in this situation these operations will not be fused.
 --
 -- [/Tips:/]
 --
