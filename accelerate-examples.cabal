@@ -273,8 +273,21 @@ Executable accelerate-nofib
         Test.Spectral.RadixSort
         Test.Spectral.SMVM
 
-  ghc-options:          -Wall -threaded -fpedantic-bottoms -fno-excess-precision -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
-  ghc-prof-options:     -auto-all
+  ghc-options:
+        -O2
+        -Wall
+        -threaded
+        -fpedantic-bottoms
+        -fno-excess-precision
+        -fno-liberate-case
+        -fsimpl-tick-factor=300
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+
+  ghc-prof-options:
+        -auto-all
 
   extra-libraries:      stdc++
   c-sources:            examples/nofib/Test/IO/fill_with_values.cpp

@@ -40,6 +40,7 @@ import qualified Data.Array.Accelerate.Cilk             as Cilk
 
 -- | Execute Accelerate expressions
 --
+{-# INLINE run #-}
 run :: Arrays a => Backend -> Acc a -> a
 run Interpreter = Interp.run
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
@@ -56,6 +57,7 @@ run Cilk        = Cilk.run
 #endif
 
 
+{-# INLINE run1 #-}
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
 run1 Interpreter f = Interp.run1 f
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
