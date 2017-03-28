@@ -81,8 +81,6 @@ before_install:
   #     esac
   - source .travis/install-stack.sh
   - source .travis/update-ghc-settings.sh
-  - export CC=gcc-4.9
-  - export CXX=g++-4.9
 
 install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
