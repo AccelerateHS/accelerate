@@ -9,11 +9,11 @@
 {-# LANGUAGE TypeOperators         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
--- Copyright   : [2009..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2009..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 --               [2010..2011] Ben Lever
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --

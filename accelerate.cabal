@@ -118,12 +118,11 @@ License-file:           LICENSE
 Author:                 Manuel M T Chakravarty,
                         Robert Clifton-Everest,
                         Gabriele Keller,
-                        Sean Lee,
                         Ben Lever,
                         Trevor L. McDonell,
                         Ryan Newtown,
                         Sean Seefried
-Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+Maintainer:             Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 Homepage:               https://github.com/AccelerateHS/accelerate/
 Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 

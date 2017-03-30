@@ -13,8 +13,9 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Table
--- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2016] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
+--               [2015..2017] Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <tmcdonell@cse.unsw.edu.au>
