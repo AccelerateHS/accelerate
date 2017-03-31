@@ -8,17 +8,17 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: a9677400b9a3e6c55b27e586286281a10c9f3b16
+    commit: 22d49629ade9b9b8e93985362323b1259155df37
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: bdf85542a5c1786feadd0eb9f3fdaa67759d666a
+    commit: 0f4d0b9781af099dad8739b57f4da55466293597
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: f1d8b57aea5d891d1c1ec3a2bfa31a4c5a8aae19
+    commit: 2bb0fb1c7608b4b37269a0a631dc2289bff2f560
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -36,28 +36,8 @@ packages:
   extra-dep: true
 
 - location:
-    git:    https://github.com/tmcdonell/gloss-accelerate.git
-    commit: ebf359c410d8bba2ea7f29e2e50c5102abd9304e
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/gloss-raster-accelerate.git
-    commit: 021732e3fc6d62fd6c9f882f8c9c564b9514d54a
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: eac97f41a88ca7d7f4576fd4e41f04b57f106453
-  extra-dep: true
-
-- location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: 952a2d4234b9855650ca7dc69ff6b234a7cdb56f
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/lens-accelerate.git
-    commit: 00415bf19d76446685053222f90843f75ad6f94b
+    commit: 8dccc8d26d8e46e6cd30436047537a2795fd5064
   extra-dep: true
 
 extra-deps:
@@ -66,6 +46,7 @@ extra-deps:
 - 'bytestring-lexing-0.5.0.2'
 - 'Cabal-1.24.2.0'
 - 'chaselev-deque-0.5.0.5'
+- 'colour-accelerate-0.1.0.0'
 - 'cuda-0.7.5.3'
 - 'cufft-0.7.5.0'
 - 'ekg-0.4.0.10'
@@ -74,9 +55,12 @@ extra-deps:
 - 'exceptions-0.8.2.1'
 - 'file-embed-0.0.10'
 - 'gloss-1.9.2.1'
+- 'gloss-accelerate-0.2.0.0'
+- 'gloss-raster-accelerate-0.2.0.0'
 - 'gloss-rendering-1.9.2.1'
 - 'GLURaw-1.4.0.2'
 - 'GLUT-2.5.1.1'
+- 'lens-accelerate-0.1.0.0'
 - 'libffi-0.1'
 - 'llvm-hs-4.0.0.0'
 - 'llvm-hs-pure-4.0.0.0'
