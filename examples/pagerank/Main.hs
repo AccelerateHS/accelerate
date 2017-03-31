@@ -8,11 +8,10 @@ import Config
 import Count
 import Rank
 
-import Control.Monad
-import Data.Char
-import Data.Label                 ( get )
-
 import Data.Array.Accelerate.Examples.Internal
+
+import Control.Monad
+import Data.Label                                                   ( get )
 
 
 main :: IO ()

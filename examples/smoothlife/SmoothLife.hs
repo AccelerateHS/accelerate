@@ -14,7 +14,7 @@ module SmoothLife
 
 import Config
 
-import Prelude                                          as P
+import qualified Prelude                                as P
 import Data.Label
 import Data.Array.Accelerate                            as A hiding ( size )
 import Data.Array.Accelerate.Examples.Internal          as A hiding ( nf )
@@ -40,12 +40,12 @@ smoothlife conf opts aa
     -- A simulation step
     --
     aaf         = fft2D' Forward sh (complex aa)
-    nf          = A.zipWith (*) aaf (use krf')
-    mf          = A.zipWith (*) aaf (use kdf')
-    n           = A.map (\x -> real x / kflr'') (fft2D' Inverse sh nf)
-    m           = A.map (\x -> real x / kfld'') (fft2D' Inverse sh mf)
+    nf          = zipWith (*) aaf (use krf')
+    mf          = zipWith (*) aaf (use kdf')
+    n           = map (\x -> real x / kflr'') (fft2D' Inverse sh nf)
+    m           = map (\x -> real x / kfld'') (fft2D' Inverse sh mf)
     aa'         = snm conf sn sm b1 b2 d1 d2 n m
-    aa''        = clamp $ A.zipWith timestepMode aa' aa
+    aa''        = clamp $ zipWith timestepMode aa' aa
 
     -- simulation parameters
     --
@@ -63,14 +63,14 @@ smoothlife conf opts aa
 
     -- initial state
     --
-    kflr        = A.sum kr
-    kfld        = A.sum kd
+    kflr        = sum kr
+    kfld        = sum kd
     krf         = fft2D' Forward sh (shift2D (complex kr))
     kdf         = fft2D' Forward sh (shift2D (complex kd))
 
-    kd          = A.generate (constant sh) (\ix -> 1 - linear (radius ix) ri b)
-    kr          = A.generate (constant sh) (\ix -> let r = radius ix
-                                        in  linear r ri b * (1 - linear r ra b))
+    kd          = generate (constant sh) (\ix -> 1 - linear (radius ix) ri b)
+    kr          = generate (constant sh) (\ix -> let r = radius ix
+                                                 in  linear r ri b * (1 - linear r ra b))
 
     kflr''      = constant (kflr' `A.indexArray` Z)
     kfld''      = constant (kfld' `A.indexArray` Z)
@@ -82,22 +82,22 @@ smoothlife conf opts aa
     get1 f c    = constant  $ get f c
     get2 f c    = let (x,y) = get f c in (constant x, constant y)
 
-    complex     = A.map (\x -> lift (x :+ constant 0))
+    complex     = map (\x -> lift (x :+ constant 0))
 
     radius ix   =
       let Z:.y':.x'   = unlift ix     :: Z :. Exp Int :. Exp Int
-          x           = A.fromIntegral $ x' - constant (size `div` 2)
-          y           = A.fromIntegral $ y' - constant (size `div` 2)
+          x           = fromIntegral $ x' - constant (size `div` 2)
+          y           = fromIntegral $ y' - constant (size `div` 2)
       in
       sqrt (x*x + y*y)
 
     linear x l u
-      = x A.<* l-u/2 ? ( 0.0
-      , x A.>* l+u/2 ? ( 1.0
+      = x < l-u/2 ? ( 0.0
+      , x > l+u/2 ? ( 1.0
       , (x - l + u / 2) / u ))
 
-    clamp = A.map
-          (\x -> A.min (A.max x 0.0) 1.0)
+    clamp = map
+          (\x -> min (max x 0.0) 1.0)
 
     timestepModes f g
       = [ f
@@ -112,7 +112,7 @@ smoothlife conf opts aa
 --
 snm :: Config -> Exp R -> Exp R -> Exp R -> Exp R -> Exp R -> Exp R -> Acc (Matrix R) -> Acc (Matrix R) -> Acc (Matrix R)
 snm conf sn sm b1 b2 d1 d2
-  = A.zipWith sigmode
+  = zipWith sigmode
   where
     sigtype     = getSigmoidFunction (get configSigtype conf)
     mixtype     = getSigmoidFunction (get configMixtype conf)
@@ -153,7 +153,7 @@ getSigmoidFunction f x a ea
 #endif
     in
     case f of
-      Hard      -> x >=* a ? (1, 0)
+      Hard      -> x >= a ? (1, 0)
       Smooth    -> 1.0/(1.0+cexp(-(x-a)*4.0/ea))
       Atan      -> atan ((x-a) * pi/ea) / pi + 0.5
       Atancos   -> 0.5 * (0.5 * atan ((x-a) / ea) / pi * cos ((x-a) * 1.4) * 1.1 + 1.0)
@@ -165,7 +165,7 @@ getSigmoidFunction f x a ea
   where
     bounded :: (Exp R -> Exp R -> Exp R -> Exp R) -> Exp R -> Exp R -> Exp R -> Exp R
     bounded f' x' a' ea'
-      = x' A.<* a'-ea'/2.0 ? ( 0.0
-      , x' A.>* a'+ea'/2.0 ? ( 1.0
+      = x' < a'-ea'/2.0 ? ( 0.0
+      , x' > a'+ea'/2.0 ? ( 1.0
       , f' x' a' ea' ))
 

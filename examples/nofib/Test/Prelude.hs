@@ -11,7 +11,7 @@ import Test.Prelude.Map
 import Test.Prelude.Permute
 import Test.Prelude.Replicate
 import Test.Prelude.Scan
-import Test.Prelude.Sequences
+-- import Test.Prelude.Sequences
 import Test.Prelude.Stencil
 import Test.Prelude.ZipWith
 
@@ -30,5 +30,5 @@ test_prelude be conf =
     , test_stencil be conf
     , test_replicate be conf
     , test_filter be conf
-    , test_sequences be conf
+    -- , test_sequences be conf
     ]

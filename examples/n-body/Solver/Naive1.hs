@@ -4,7 +4,6 @@ module Solver.Naive1
 
 import Common.Type
 import Common.Body
-import Common.Util
 
 import Data.Array.Accelerate                    as A
 
@@ -26,5 +25,5 @@ calcAccels epsilon bodies
         rows    = A.replicate (lift $ Z :. All :. n) bodies
 
     in
-    A.fold (.+.) (vec 0) $ A.zipWith (accel epsilon) rows cols
+    A.fold (+) 0 $ A.zipWith (accel epsilon) rows cols
 

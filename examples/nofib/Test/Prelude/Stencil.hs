@@ -24,6 +24,7 @@ import Config
 import QuickCheck.Arbitrary.Array                               ()
 
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.IO                                 as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Unboxed                                       as IArray hiding ( Array )
 import qualified Data.Array.IArray                              as IArray
@@ -74,7 +75,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
       where
         pattern (x,y,z) = x + z - 2 * y
 
-        acc xs = run backend $ stencil pattern Clamp (use xs)
+        acc xs = run1 backend (stencil pattern Clamp) xs
 
         ref :: (P.Num e, IArray UArray e) => UArray Int e -> UArray Int e
         ref xs =
@@ -94,7 +95,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
                 )
                 = (t1 + t2 + t3 - l + 4*m - r - b1 - b2 - b3)
 
-        acc xs = run backend $ stencil pattern (Constant 0) (use xs)
+        acc xs = run1 backend (stencil pattern (Constant 0)) xs
 
         ref :: (P.Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
         ref xs =
@@ -121,7 +122,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
           let pattern' :: A.Num a => Stencil3x3 a -> Exp a
               pattern' = pattern
           in
-          run backend $ stencil pattern' Clamp (use xs)
+          run1 backend (stencil pattern' Clamp) xs
 
         ref :: (P.Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
         ref xs =
@@ -131,7 +132,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
           in
           stencil2DRef pattern clamp xs
 
-    test_stencil2D3 :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Array DIM2 (a,a) -> Property
+    test_stencil2D3 :: (P.Num a, A.Num a, Similar a) => Array DIM2 (a,a) -> Property
     test_stencil2D3 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern :: forall a. A.Num a => Stencil3x3 (a,a) -> Exp a
@@ -149,7 +150,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
             in
             x1 - y2 + y1 - z2 + z1 - x2
 
-        acc xs = run backend $ stencil pattern (Constant (0,0)) (use xs)
+        acc xs = run1 backend (stencil pattern (Constant (0,0))) xs
 
         ref :: P.Num a => IArray.Array (Int,Int) (a,a) -> IArray.Array (Int,Int) a
         ref xs =

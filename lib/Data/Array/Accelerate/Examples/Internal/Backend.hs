@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns  #-}
 {-# LANGUAGE CPP           #-}
 {-# LANGUAGE TypeOperators #-}
 -- |
@@ -23,14 +24,14 @@ import System.Console.GetOpt
 import Data.Array.Accelerate
 import qualified Data.Array.Accelerate                  as A
 import qualified Data.Array.Accelerate.Interpreter      as Interp
-#ifdef ACCELERATE_CUDA_BACKEND
-import qualified Data.Array.Accelerate.CUDA             as CUDA
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 import qualified Data.Array.Accelerate.LLVM.Native      as CPU
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
 #ifdef ACCELERATE_CILK_BACKEND
 import qualified Data.Array.Accelerate.Cilk             as Cilk
@@ -39,52 +40,70 @@ import qualified Data.Array.Accelerate.Cilk             as Cilk
 
 -- | Execute Accelerate expressions
 --
+{-# INLINE run #-}
 run :: Arrays a => Backend -> Acc a -> a
 run Interpreter = Interp.run
-#ifdef ACCELERATE_CUDA_BACKEND
-run CUDA        = CUDA.run
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 run CPU         = CPU.run
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run PTX         = PTX.run
 #endif
+#ifdef ACCELERATE_CUDA_BACKEND
+run CUDA        = CUDA.run
+#endif
 #ifdef ACCELERATE_CILK_BACKEND
 run Cilk        = Cilk.run
 #endif
 
 
+{-# INLINE run1 #-}
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
 run1 Interpreter f = Interp.run1 f
-#ifdef ACCELERATE_CUDA_BACKEND
-run1 CUDA        f = CUDA.run1 f
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 run1 CPU         f = CPU.run1 f
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run1 PTX         f = PTX.run1 f
 #endif
+#ifdef ACCELERATE_CUDA_BACKEND
+run1 CUDA        f = CUDA.run1 f
+#endif
 #ifdef ACCELERATE_CILK_BACKEND
 run1 Cilk        f = Cilk.run . f . use
 #endif
 
+{-# INLINE run2 #-}
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
-run2 backend f x y = run1 backend (A.uncurry f) (x,y)
+run2 backend f x y = go (x,y)
+  where
+    !go = run1 backend (A.uncurry f)
+
+{-# INLINE run3 #-}
+run3 :: (Arrays a, Arrays b, Arrays c, Arrays d) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d) -> a -> b -> c -> d
+run3 backend f x y z = go (x,y,z)
+  where
+    !go = run1 backend (\t -> let (a,b,c) = unlift t in f a b c)
+
+
+{-# INLINE run4 #-}
+run4 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d -> Acc e) -> a -> b -> c -> d -> e
+run4 backend f x y z w = go (x,y,z,w)
+  where
+    !go = run1 backend (\t -> let (a,b,c,d) = unlift t in f a b c d)
 
 
 -- | The set of backends available to execute the program.
 --
 data Backend = Interpreter
-#ifdef ACCELERATE_CUDA_BACKEND
-             | CUDA
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
              | CPU
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
              | PTX
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+             | CUDA
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
              | Multi
@@ -92,7 +111,7 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CILK_BACKEND
              | Cilk
 #endif
-  deriving (P.Eq, P.Bounded)
+  deriving (P.Eq, P.Enum, P.Bounded)
 
 
 -- The choice of show instance is important because this will be used to
@@ -100,14 +119,14 @@ data Backend = Interpreter
 --
 instance Show Backend where
   show Interpreter      = "interpreter"
-#ifdef ACCELERATE_CUDA_BACKEND
-  show CUDA             = "cuda"
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   show CPU              = "llvm-cpu"
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-  show PTX              = "llvm-gpu"
+  show PTX              = "llvm-ptx"
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+  show CUDA             = "cuda"
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
   show Multi            = "llvm-multi"
@@ -117,15 +136,14 @@ instance Show Backend where
 #endif
 
 
--- The default backend to use. Currently the only complete accelerated backend
--- is CUDA, so default to that if it is available.
+-- The default backend to use. Use one of the accelerated backends whenever
+-- available.
 --
 defaultBackend :: Backend
-#ifdef ACCELERATE_CUDA_BACKEND
-defaultBackend = CUDA
-#else
-defaultBackend = maxBound
-#endif
+defaultBackend =
+  case maxBound of
+    Interpreter -> Interpreter
+    _           -> succ Interpreter
 
 
 -- The set of available backnds. This will be used for both the command line
@@ -137,11 +155,6 @@ availableBackends optBackend =
             (NoArg (set optBackend Interpreter))
             "reference implementation (sequential)"
 
-#ifdef ACCELERATE_CUDA_BACKEND
-  , Option  [] [show CUDA]
-            (NoArg (set optBackend CUDA))
-            "implementation for NVIDIA GPUs (parallel)"
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   , Option  [] [show CPU]
             (NoArg (set optBackend CPU))
@@ -151,6 +164,11 @@ availableBackends optBackend =
   , Option  [] [show PTX]
             (NoArg (set optBackend PTX))
             "LLVM based implementation for NVIDIA GPUs (parallel)"
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+  , Option  [] [show CUDA]
+            (NoArg (set optBackend CUDA))
+            "CUDA based implementation for NVIDIA GPUs (parallel)"
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
   , Option  [] [show Multi]
@@ -180,18 +198,24 @@ availableBackends optBackend =
 --     non-thread-safe backend (perhaps it requires exclusive access to the
 --     accelerator board) should specify `Just 1`.
 --
+-- Both the LLVM-CPU and LLVM-PTX backends are safe to run concurrently given
+-- the same execution context. Although this results in over-subscription,
+-- particularly for the CPU backend, it still improves performance because the
+-- majority of the time is spent in the reference implementation / checking
+-- results, so running multiple tests concurrently is still useful.
+--
 concurrentBackends :: Backend -> Maybe Int
 concurrentBackends Interpreter  = Nothing
-#ifdef ACCELERATE_CUDA_BACKEND
-concurrentBackends CUDA         = Nothing       -- not quite true! D:
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-concurrentBackends CPU          = Just 1
+concurrentBackends CPU          = Nothing
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-concurrentBackends PTX          = Nothing       -- ???
+concurrentBackends PTX          = Nothing
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+concurrentBackends CUDA         = Just 1      -- not thread safe
 #endif
 #ifdef ACCELERATE_CILK_BACKEND
-concurrentBackends Cilk         = Just 1
+concurrentBackends Cilk         = Just 1      -- not thread safe
 #endif
 

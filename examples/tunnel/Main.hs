@@ -25,7 +25,6 @@ import Data.Array.Accelerate.Control.Lens                           ( (^.) )
 import Graphics.Gloss.Accelerate.Raster.Field                       hiding ( clamp )
 
 import Prelude                                                      ( IO, fmap )
-import qualified Prelude                                            as P
 
 
 -- Fractional part of a number
@@ -105,7 +104,7 @@ voronoise xy irregular smoothness =
 iterFromTo :: Elt a => Exp Int -> Exp Int -> Exp a -> (Exp Int -> Exp a -> Exp a) -> Exp a
 iterFromTo inf sup x body
   = A.snd
-  $ A.while (\ix -> A.fst ix <=* sup)
+  $ A.while (\ix -> A.fst ix <= sup)
             (\ix -> A.lift (A.fst ix + 1, A.uncurry body ix))
             (lift (inf, x))
 
@@ -113,9 +112,6 @@ v2OfPoint :: Exp Point -> Exp (V2 Float)
 v2OfPoint p =
   let (x,y) = xyOfPoint p
   in  lift (V2 x y)
-
-mod' :: Exp Float -> Exp Float -> Exp Float
-mod' n d = n - A.fromIntegral (A.floor (n/d) :: Exp Int) * d
 
 -- The time vortex
 --

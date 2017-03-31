@@ -1,162 +1,170 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE RebindableSyntax    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
---
--- A Mandelbrot set generator.
--- Originally submitted by Simon Marlow as part of Issue #49.
---
-module Mandel (
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 
-  -- Types
-  View, Render, Bitmap,
+module Mandel where
 
-  -- Pretty pictures
-  mandelbrot, prettyRGBA,
+import Data.Array.Accelerate                              as A
+import Data.Array.Accelerate.Data.Complex                 as A
+import Data.Array.Accelerate.Data.Colour.RGB              as A
+import Data.Array.Accelerate.Data.Colour.Names            as A
 
-) where
-
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.Data.Colour.RGBA
-import Data.Array.Accelerate.Data.Complex
-
--- Types -----------------------------------------------------------------------
-
--- Current view into the complex plane
-type View a             = (a, a, a, a)
-
--- Image data
-type RGBA32             = Word32
-type Bitmap             = Array DIM2 RGBA32
-
--- Action to render a frame
-type Render a           = Scalar (View a) -> Bitmap
+import Prelude                                            ( fromInteger )
+import qualified Prelude                                  as P
 
 
--- Mandelbrot Set --------------------------------------------------------------
-
--- Compute the mandelbrot as repeated application of the recurrence relation:
---
---   Z_{n+1} = c + Z_n^2
---
--- This returns the iteration depth 'i' at divergence.
---
 mandelbrot
-    :: forall a. (P.Floating a, A.RealFloat a, A.Ord a, A.FromIntegral Int a)
-    => Int
-    -> Int
-    -> Int
-    -> Acc (Scalar (View a))
-    -> Acc (Array DIM2 Int32)
-mandelbrot screenX screenY depth view =
-  generate (constant (Z:.screenY:.screenX))
-           (\ix -> let c = initial ix
-                   in  A.snd $ A.while (\zi -> A.snd zi A.<* lIMIT &&* dot (A.fst zi) A.<* 4)
-                                       (\zi -> lift1 (next c) zi)
-                                       (lift (c, constant 0)))
+    :: forall a. (Num a, RealFloat a, FromIntegral Int a)
+    => Int                                  -- ^ image width
+    -> Int                                  -- ^ image height
+    -> Acc (Scalar a)                       -- ^ centre x
+    -> Acc (Scalar a)                       -- ^ centre y
+    -> Acc (Scalar a)                       -- ^ view width
+    -> Acc (Scalar Int32)                   -- ^ iteration limit
+    -> Acc (Scalar a)                       -- ^ divergence radius
+    -> Acc (Array DIM2 (Complex a, Int32))
+mandelbrot screenX screenY (the -> x0) (the -> y0) (the -> width) (the -> limit) (the -> radius) =
+  A.generate (A.constant (Z :. screenY :. screenX))
+             (\ix -> let z0 = complexOfPixel ix
+                         zn = while (\zi -> snd zi       < limit
+                                         && dot (fst zi) < radius)
+                                    (\zi -> step z0 zi)
+                                    (lift (z0, constant 0))
+                     in
+                     zn)
   where
-    -- The view plane
-    (xmin,ymin,xmax,ymax)     = unlift (the view)
-    sizex                     = xmax - xmin
-    sizey                     = ymax - ymin
+    -- Convert the given array index, representing a pixel in the final image,
+    -- into the corresponding point on the complex plane.
+    --
+    complexOfPixel :: Exp DIM2 -> Exp (Complex a)
+    complexOfPixel (unlift -> Z :. y :. x) =
+      let
+          height = P.fromIntegral screenY / P.fromIntegral screenX * width
+          xmin   = x0 - width  / 2
+          ymin   = y0 - height / 2
+          --
+          re     = xmin + (fromIntegral x * width)  / fromIntegral (constant screenX)
+          im     = ymin + (fromIntegral y * height) / fromIntegral (constant screenY)
+      in
+      lift (re :+ im)
 
-    viewx                     = constant (P.fromIntegral screenX)
-    viewy                     = constant (P.fromIntegral screenY)
+    -- Divergence condition
+    --
+    dot :: Exp (Complex a) -> Exp a
+    dot (unlift -> x :+ y) = x*x + y*y
 
-    -- initial conditions for a given pixel in the window, translated to the
-    -- corresponding point in the complex plane
-    initial :: Exp DIM2 -> Exp (Complex a)
-    initial ix = lift ( (xmin + (x * sizex) / viewx) :+ (ymin + (y * sizey) / viewy) )
+    -- Take a single step of the recurrence relation
+    --
+    step :: Exp (Complex a) -> Exp (Complex a, Int32) -> Exp (Complex a, Int32)
+    step c (unlift -> (z, i)) = lift (next c z, i + constant 1)
+
+    next :: Exp (Complex a) -> Exp (Complex a) -> Exp (Complex a)
+    next c z = c + z * z
+
+
+-- Convert the iteration count on escape to a colour.
+--
+-- Uses the method described here:
+-- <http://stackoverflow.com/questions/16500656/which-color-gradient-is-used-to-color-mandelbrot-in-wikipedia>
+--
+escapeToColour
+    :: (RealFloat a, ToFloating Int32 a)
+    => Acc (Scalar Int32)
+    -> Exp (Complex a, Int32)
+    -> Exp Colour
+escapeToColour (the -> limit) (unlift -> (z, n)) =
+  if n == limit
+    then black
+    else ultra (toFloating ix / toFloating points)
       where
-        pr = unindex2 ix
-        x  = A.fromIntegral (A.snd pr :: Exp Int)
-        y  = A.fromIntegral (A.fst pr :: Exp Int)
-
-    -- take a single step of the iteration
-    next :: Exp (Complex a) -> (Exp (Complex a), Exp Int32) -> (Exp (Complex a), Exp Int32)
-    next c (z, i) = (c + (z * z), i+1)
-
-    dot c = let r :+ i = unlift c
-            in  r*r + i*i
-
-    lIMIT = P.fromIntegral depth
-
-
--- Rendering -------------------------------------------------------------------
-
-prettyRGBA :: Exp Int32 -> Exp Int32 -> Exp RGBA32
-prettyRGBA cmax c = c ==* cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
-
--- Directly convert the iteration count on escape to a colour. The base set
--- (x,y,z) yields a dark background with light highlights.
---
--- Note that OpenGL reads pixel data in AGBR format, rather than RGBA.
---
-escapeToColour :: Exp Int32 -> Exp RGBA32
-escapeToColour m = constant 0xFFFFFFFF - (packABGR8 . lift $ RGBA r g b 0)
-  where
-    r   = A.fromIntegral (3 * m)
-    g   = A.fromIntegral (5 * m)
-    b   = A.fromIntegral (7 * m)
-
-
-{--
--- A simple colour scheme
---
-prettyRGBA :: Elt a => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
-prettyRGBA lIMIT s' = r + g + b + a
-  where
-    s   = A.snd s'
-    t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
-    r   = (t     `rem` 128 + 64) * 0x1000000
-    g   = (t * 2 `rem` 128 + 64) * 0x10000
-    b   = (t * 3 `rem` 256     ) * 0x100
-    a   = 0xFF
---}
-{--
-prettyRGBA :: forall a. (Elt a, IsFloating a) => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
-prettyRGBA lIMIT s =
-  let cmax      = A.fromIntegral lIMIT          :: Exp a
-      c         = A.fromIntegral (A.snd s)
-  in
-  c >* 0.98 * cmax ? ( 0xFF000000, rampColourHotToCold 0 cmax c )
-
--- Standard Hot-to-Cold hypsometric colour ramp. Colour sequence is
---   Red, Yellow, Green, Cyan, Blue
---
-rampColourHotToCold
-    :: (Elt a, IsFloating a)
-    => Exp a                            -- ^ minimum value of the range
-    -> Exp a                            -- ^ maximum value of the range
-    -> Exp a                            -- ^ data value
-    -> Exp RGBA32
-rampColourHotToCold vmin vmax vNotNorm
-  = let v       = vmin `A.max` vNotNorm `A.min` vmax
-        dv      = vmax - vmin
+        mag     = magnitude z
+        smooth  = logBase 2 (logBase 2 mag)
+        ix      = truncate (sqrt (toFloating n + 1 - smooth) * scale + shift) `mod` points
         --
-        result  = v <* vmin + 0.28 * dv
-                ? ( lift ( constant 0.0
-                         , 4 * (v-vmin) / dv
-                         , constant 1.0
-                         , constant 1.0 )
+        scale   = 256
+        shift   = 1664
+        points  = 2048 :: Exp Int
 
-                , v <* vmin + 0.5 * dv
-                ? ( lift ( constant 0.0
-                         , constant 1.0
-                         , 1 + 4 * (vmin + 0.25 * dv - v) / dv
-                         , constant 1.0 )
+escapeToRGBA
+    :: (RealFloat a, ToFloating Int32 a)
+    => Acc (Scalar Int32)
+    -> Acc (Vector Word32)
+    -> Exp (Complex a, Int32)
+    -> Exp Word32
+escapeToRGBA (the -> limit) palette (unlift -> (z, n)) =
+  if n == limit
+    then packRGB black
+    else palette ! index1 ix
+      where
+        mag     = magnitude z
+        smooth  = logBase 2 (logBase 2 mag)
+        ix      = truncate (sqrt (toFloating n + 1 - smooth) * scale + shift) `mod` length palette
+        --
+        scale   = 256
+        shift   = 1664
 
-                , v <* vmin + 0.75 * dv
-                ? ( lift ( 4 * (v - vmin - 0.5 * dv) / dv
-                         , constant 1.0
-                         , constant 0.0
-                         , constant 1.0 )
+ultraPalette
+    :: Int
+    -> Acc (Vector Word32)
+ultraPalette points
+  = A.generate (A.constant (Z :. points))
+               (\ix -> packRGB (ultra (A.toFloating (A.unindex1 ix) / P.fromIntegral points)))
 
-                ,   lift ( constant 1.0
-                         , 1 + 4 * (vmin + 0.75 * dv - v) / dv
-                         , constant 0.0
-                         , constant 1.0 )
-                )))
-    in
-    rgba32OfFloat result
---}
+
+-- Pick a nice colour, given a number in the range [0,1].
+--
+ultra :: Exp Float -> Exp Colour
+ultra p =
+  if p <= p1 then interp (p0,p1) (c0,c1) (m0,m1) p else
+  if p <= p2 then interp (p1,p2) (c1,c2) (m1,m2) p else
+  if p <= p3 then interp (p2,p3) (c2,c3) (m2,m3) p else
+  if p <= p4 then interp (p3,p4) (c3,c4) (m3,m4) p else
+                  interp (p4,p5) (c4,c5) (m4,m5) p
+  where
+    p0 = 0.0     ; c0 = rgb8 0   7   100  ; m0 = (0.7843138, 2.4509804,  2.52451)
+    p1 = 0.16    ; c1 = rgb8 32  107 203  ; m1 = (1.93816,   2.341629,   1.6544118)
+    p2 = 0.42    ; c2 = rgb8 237 255 255  ; m2 = (1.7046283, 0.0,        0.0)
+    p3 = 0.6425  ; c3 = rgb8 255 170 0    ; m3 = (0.0,       -2.2812111, 0.0)
+    p4 = 0.8575  ; c4 = rgb8 0   2   0    ; m4 = (0.0,       0.0,        0.0)
+    p5 = 1.0     ; c5 = c0                ; m5 = m0
+
+    -- interpolate each of the RGB components
+    interp (x0,x1) (y0,y1) ((mr0,mg0,mb0),(mr1,mg1,mb1)) x =
+      let
+          RGB r0 g0 b0 = unlift y0 :: RGB (Exp Float)
+          RGB r1 g1 b1 = unlift y1 :: RGB (Exp Float)
+      in
+      rgb (cubic (x0,x1) (r0,r1) (mr0,mr1) x)
+          (cubic (x0,x1) (g0,g1) (mg0,mg1) x)
+          (cubic (x0,x1) (b0,b1) (mb0,mb1) x)
+
+-- cubic interpolation
+cubic :: (Exp Float, Exp Float)
+      -> (Exp Float, Exp Float)
+      -> (Exp Float, Exp Float)
+      -> Exp Float
+      -> Exp Float
+cubic (x0,x1) (y0,y1) (m0,m1) x =
+  let
+      -- basis functions for cubic hermite spine
+      h_00 = (1 + 2*t) * (1 - t) ** 2
+      h_10 = t * (1 - t) ** 2
+      h_01 = t ** 2 * (3 - 2 * t)
+      h_11 = t ** 2 * (t - 1)
+      --
+      h    = x1 - x0
+      t    = (x - x0) / h
+  in
+  y0 * h_00 + h * m0 * h_10 + y1 * h_01 + h * m1 * h_11
+
+-- linear interpolation
+linear :: (Exp Float, Exp Float)
+       -> (Exp Float, Exp Float)
+       -> Exp Float
+       -> Exp Float
+linear (x0,x1) (y0,y1) x =
+  y0 + (x - x0) * (y1 - y0) / (x1 - x0)
+

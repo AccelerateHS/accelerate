@@ -1,24 +1,24 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-7.2
+resolver: lts-8.0
 
 packages:
 - '.'
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 3d6d22693821eb3da29bffded270db27d65ba158
+    commit: 22d49629ade9b9b8e93985362323b1259155df37
   extra-dep: true
 
-- location:
-    git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: d5c94d0a3876f10f69fa6297cb0f380215a31ed9
-  extra-dep: true
+# - location:
+#     git:    https://github.com/AccelerateHS/accelerate-cuda.git
+#     commit: 0f4d0b9781af099dad8739b57f4da55466293597
+#   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 1d3dde832f1623d14b6edffe146a17e345fed7f1
+    commit: 2bb0fb1c7608b4b37269a0a631dc2289bff2f560
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -27,81 +27,59 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-io.git
-    commit: 2bb4dabcb33839e972dc8e678c80a65046333807
+    commit: c8a618b563853b08f3501979e05e51d1303d7fa4
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: 9c2e0996979c56ad540fa29970c4dd2f15de99ff
-  extra-dep: true
-
-- location:
-    git:    https://github.com/robeverest/cufft.git
-    commit: 3a793a1dfdc205867d38d90303356832a11c0718
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/gloss-accelerate.git
-    commit: 5666cdb78513f3e7baa3519c01c0da719e8768a8
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/gloss-raster-accelerate.git
-    commit: 65333a10aeb2b2685ef906fc2444a6768badabf6
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: 167b6dc58383a4aa8fef17c2dab09f2fa6d13fa5
+    commit: a27ec08ee856dd217880ac33a6f52ba9f184dcfb
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: 665e2f6fd6da4fd47edbfe8e56ebce0e697c95ed
+    commit: 8dccc8d26d8e46e6cd30436047537a2795fd5064
   extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/lens-accelerate.git
-    commit: 00415bf19d76446685053222f90843f75ad6f94b
-  extra-dep: true
-
-- location:
-    git:    https://github.com/bscarlet/llvm-general.git
-    commit: 529f9bf117b5ffd1ccf7ebeb679a97b3b1c67938
-  extra-dep: true
-  subdirs:
-    - 'llvm-general'
-    - 'llvm-general-pure'
 
 extra-deps:
 - 'chaselev-deque-0.5.0.5'
-- 'cuda-0.7.5.0'
+- 'colour-accelerate-0.1.0.0'
+- 'cuda-0.7.5.3'
+- 'cufft-0.7.5.0'
+- 'gloss-accelerate-0.2.0.0'
+- 'gloss-raster-accelerate-0.2.0.0'
+- 'lens-accelerate-0.1.0.0'
 - 'libffi-0.1'
+- 'llvm-hs-4.0.0.0'
+- 'llvm-hs-pure-4.0.0.0'
+- 'matrix-market-attoparsec-0.1.0.5'
 - 'normaldistribution-1.1.0.3'
-- 'nvvm-0.7.5.0'
+- 'nvvm-0.7.5.1'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps
 flags:
-  llvm-general:
+  llvm-hs:
     shared-llvm: true
   accelerate:
-    debug: false
-    ekg:   true
+    debug: true
+    ekg:   false
+  # accelerate-cuda:
+  #   debug: true
+  accelerate-llvm-native:
+    debug: true
+  accelerate-llvm-ptx:
+    debug: true
+    nvvm:  false
   accelerate-fft:
-    cuda:     true
+    cuda:     false
     llvm-cpu: true
-    llvm-gpu: true
-  accelerate-fft:
-    cuda:     true
-    llvm-cpu: true
-    llvm-gpu: true
+    llvm-ptx: true
   accelerate-examples:
-    cuda:       true
+    cuda:       false
     llvm-cpu:   true
-    llvm-gpu:   true
+    llvm-ptx:   true
     gui:        true
-    ekg:        true
+    ekg:        false
     codespeed:  false
     nofib:      true
     smvm:       true

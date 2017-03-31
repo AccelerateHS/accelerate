@@ -1,6 +1,6 @@
-{-# LANGUAGE ConstraintKinds  #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns     #-}
+{-# LANGUAGE ConstraintKinds   #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE ViewPatterns      #-}
 -- An implementation of the Canny edge detection algorithm
 --
 --   J. F. Canny, "A Computational Approach to Edge Detection" in _Pattern
@@ -14,11 +14,11 @@
 
 module Canny where
 
-import Prelude                                          as P
+import qualified Prelude                                as P
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
-import Data.Array.Accelerate.Data.Colour.RGB
+import Data.Array.Accelerate.Data.Colour.RGB            hiding ( clamp )
 
 
 -- Canny algorithm -------------------------------------------------------------
@@ -64,11 +64,11 @@ edge Strong     = 1.0
 edge' :: Edge -> Exp Float
 edge' = constant . edge
 
-convolve5x1 :: A.Num a => [Exp a] -> Stencil5x1 a -> Exp a
+convolve5x1 :: Num a => [Exp a] -> Stencil5x1 a -> Exp a
 convolve5x1 kernel (_, (a,b,c,d,e), _)
   = P.sum $ P.zipWith (*) kernel [a,b,c,d,e]
 
-convolve1x5 :: A.Num a => [Exp a] -> Stencil1x5 a -> Exp a
+convolve1x5 :: Num a => [Exp a] -> Stencil1x5 a -> Exp a
 convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
   = P.sum $ P.zipWith (*) kernel [a,b,c,d,e]
 
@@ -76,7 +76,7 @@ convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
 -- RGB to Greyscale conversion, in the range [0,255]
 --
 toGreyscale :: Acc (Image RGBA32) -> Acc (Image Float)
-toGreyscale = A.map (\rgba -> 255 * luminance (unpackRGB rgba))
+toGreyscale = map (\rgba -> 255 * luminance (unpackRGB rgba))
 
 
 -- Separable Gaussian blur in the x- and y-directions
@@ -139,15 +139,15 @@ gradientMagDir low = stencil magdir Clamp
           --
           -- Determine the angle of the vector and rotate it around a bit to
           -- make the segments easier to classify
-          theta       = A.atan2 dy dx
+          theta       = atan2 dy dx
           alpha       = (theta - (pi/8)) * (4/pi)
 
           -- Normalise the angle to between [0..8)
-          norm        = alpha + 8 * A.fromIntegral (boolToInt (alpha <=* 0))
+          norm        = alpha + 8 * fromIntegral (boolToInt (alpha <= 0))
 
           -- Try to avoid doing explicit tests, to avoid warp divergence
-          undef       = abs dx <=* low &&* abs dy <=* low
-          dir         = boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `A.min` 255)
+          undef       = abs dx <= low && abs dy <= low
+          dir         = boolToInt (not undef) * ((64 * (1 + floor norm `mod` 4)) `min` 255)
       in
       lift (mag, dir)
 
@@ -180,20 +180,20 @@ nonMaximumSuppression low high magdir =
         --          |
         --   255 --- ---
         --
-        offsetx         = dir A.>* orient' Vert  ? (-1, dir A.<* orient' Vert ? (1, 0))
-        offsety         = dir A.<* orient' Horiz ? (-1, 0)
+        offsetx         = dir > orient' Vert  ? (-1, dir < orient' Vert ? (1, 0))
+        offsety         = dir < orient' Horiz ? (-1, 0)
 
         (fwd, _)        = unlift $ magdir ! lift (clamp (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
         (rev, _)        = unlift $ magdir ! lift (clamp (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
 
-        clamp (Z:.u:.v) = Z :. 0 `A.max` u `A.min` (h-1) :. 0 `A.max` v `A.min` (w-1)
+        clamp (Z:.u:.v) = Z :. 0 `max` u `min` (h-1) :. 0 `max` v `min` (w-1)
 
         -- Try to avoid doing explicit tests to avoid warp divergence.
         --
-        none            = dir ==* orient' Undef ||* mag A.<* low ||* mag A.<* fwd ||* mag A.<* rev
-        strong          = mag >=* high
+        none            = dir == orient' Undef || mag < low || mag < fwd || mag < rev
+        strong          = mag >= high
     in
-    A.fromIntegral (boolToInt (A.not none) * (1 + boolToInt strong)) * 0.5
+    fromIntegral (boolToInt (not none) * (1 + boolToInt strong)) * 0.5
 
 
 -- Extract the linear indices of the strong edges
@@ -202,10 +202,10 @@ selectStrong
   :: Acc (Image Float)
   -> Acc (Array DIM1 Int)
 selectStrong img =
-  let strong            = A.map (\x -> boolToInt (x ==* edge' Strong)) (flatten img)
-      (targetIdx, len)  = A.scanl' (+) 0 strong
-      indices           = A.enumFromN (index1 $ size img) 0
-      zeros             = A.fill (index1 $ the len) 0
+  let strong            = map (\x -> boolToInt (x == edge' Strong)) (flatten img)
+      (targetIdx, len)  = scanl' (+) 0 strong
+      indices           = enumFromN (index1 $ size img) 0
+      zeros             = fill (index1 $ the len) 0
   in
-  A.permute const zeros (\ix -> strong!ix ==* 0 ? (ignore, index1 $ targetIdx!ix)) indices
+  permute const zeros (\ix -> strong!ix == 0 ? (ignore, index1 $ targetIdx!ix)) indices
 

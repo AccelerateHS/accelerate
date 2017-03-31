@@ -4,7 +4,7 @@ module Scene.State
   where
 
 -- friends
-import Vec3
+import Common.Type
 import Scene.Light
 import Scene.Object
 import Scene.World
@@ -51,10 +51,10 @@ initState time
   = advanceState 0
   $ State
       { _stateTime              = time
-      , _stateEyePos            = XYZ 50    (-100) (-700)
+      , _stateEyePos            = V3 50    (-100) (-700)
 
-      , _stateEyeDelta          = XYZ (-50) 200   1296
-      , _stateLightDelta        = XYZ 0     0     0
+      , _stateEyeDelta          = V3 (-50) 200   1296
+      , _stateLightDelta        = V3 0     0     0
 
       , _stateLeftClick         = Nothing
 
@@ -83,11 +83,11 @@ advanceState dt state
     speed        = get stateMoveSpeed state
     move eye f d = case get f state of
                     Nothing     -> id
-                    Just Fwd    -> modify eye (+ (set d ( speed * dt) (XYZ 0 0 0)))
-                    Just Rev    -> modify eye (+ (set d (-speed * dt) (XYZ 0 0 0)))
+                    Just Fwd    -> modify eye (+ (set d ( speed * dt) (V3 0 0 0)))
+                    Just Rev    -> modify eye (+ (set d (-speed * dt) (V3 0 0 0)))
 
-    zz          = lens (\(XYZ _ _ z) -> z) (\f (XYZ x y z) -> XYZ x y (f z))
-    xx          = lens (\(XYZ x _ _) -> x) (\f (XYZ x y z) -> XYZ (f x) y z)
+    zz          = lens (\(V3 _ _ z) -> z) (\f (V3 x y z) -> V3 x y (f z))
+    xx          = lens (\(V3 x _ _) -> x) (\f (V3 x y z) -> V3 (f x) y z)
 
 
 -- | Set the time of the world

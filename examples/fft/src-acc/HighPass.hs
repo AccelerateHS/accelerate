@@ -1,8 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module HighPass
   where
 
-import Prelude                                          as P
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
 import Data.Array.Accelerate.Data.Colour.RGBA           as A
@@ -42,10 +42,10 @@ transform sh@(Z :. height :. width) cutoff' arrReal = arrResult
     centreY     = constant (height `div` 2)
 
     zap ix      = let (Z :. y :. x)     = unlift ix
-                      inx               = x >* centreX - cutoff &&* x A.<* centreX + cutoff
-                      iny               = y >* centreY - cutoff &&* y A.<* centreY + cutoff
+                      inx               = x > centreX - cutoff && x A.< centreX + cutoff
+                      iny               = y > centreY - cutoff && y A.< centreY + cutoff
                   in
-                  inx &&* iny ? (constant (0 :+ 0), arrFreq A.! ix)
+                  inx && iny ? (constant (0 :+ 0), arrFreq A.! ix)
 
     arrFilt     = A.generate (A.shape arrFreq) zap
 

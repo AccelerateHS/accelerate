@@ -5,8 +5,7 @@
 # Caches the 'stack' build directory to speed subsequent compilations.
 #
 language: generic
-dist: trusty
-sudo: false
+dist: precise
 
 cache:
   timeout: 600
@@ -15,27 +14,73 @@ cache:
     - $HOME/llvm
     - .stack-work/install
 
+addons:
+  apt:
+    sources: &apt_sources
+      - hvr-ghc
+      - ubuntu-toolchain-r-test
+      - llvm-toolchain-precise
+      # - llvm-toolchain-precise-3.5
+      # - llvm-toolchain-precise-3.6
+      # - llvm-toolchain-precise-3.7
+      # - llvm-toolchain-precise-3.8
+      # - llvm-toolchain-precise-3.9
+      - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-4.0 main'
+        key_url: 'http://apt.llvm.org/llvm-snapshot.gpg.key'
+
+    packages: &apt_packages
+      - alex-3.1.4
+      - freeglut3-dev
+      - g++-4.8
+      - happy-1.19.5
+      - libfftw3-dev
+      - libgmp-dev
+      - llvm-4.0-dev
+      - nvidia-cuda-toolkit
+
 matrix:
   include:
-    - env: GHC=7.8.4 CABAL=1.18 LLVM=3.4.2
+    - env: GHC=7.8.4 CABAL=1.18 LLVM=4.0.0
       compiler: "GHC 7.8"
-      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, libfftw3-dev, freeglut3-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
+      addons:
+        apt:
+          sources: *apt_sources
+          packages:
+            - *apt_packages
+            - cabal-install-1.18
 
-    - env: GHC=7.10.3 CABAL=1.22 LLVM=3.5.2
+    - env: GHC=7.10.3 CABAL=1.22 LLVM=4.0.0
       compiler: "GHC 7.10"
-      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, libfftw3-dev, freeglut3-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
+      addons:
+        apt:
+          sources: *apt_sources
+          packages:
+            - *apt_packages
+            - cabal-install-1.22
 
-    - env: GHC=8.0.1 CABAL=1.24 LLVM=3.8.1
+    - env: GHC=8.0.2 CABAL=1.24 LLVM=4.0.0
       compiler: "GHC 8.0"
-      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, libfftw3-dev, freeglut3-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
+      addons:
+        apt:
+          sources: *apt_sources
+          packages:
+            - *apt_packages
+            - cabal-install-1.24
 
   fast_finish: true
 
 before_install:
-  - export PATH=/opt/cabal/$CABAL/bin:/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:$HOME/.cabal/bin:$PATH
-  - export UPGRADE_CABAL=1
+  - export PATH=/opt/cabal/$CABAL/bin:/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$HOME/.cabal/bin:$PATH
+  # - |
+  #     case ${GHC} in
+  #       7.8.*) export UPGRADE_CABAL=1 ;;
+  #     esac
+  # - |
+  #     case ${LLVM} in
+  #       3.5.*) source .travis/install-llvm-trusty.sh ;;
+  #     esac
   - source .travis/install-stack.sh
-  - source .travis/install-llvm-trusty.sh
+  - source .travis/update-ghc-settings.sh
 
 install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
@@ -47,7 +92,7 @@ install:
       if [ ${GHC} == head -o ! -e stack.yaml ]; then
         travis_retry cabal install --only-dependencies
       else
-        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps
+        travis_retry stack build --fast --only-dependencies --no-terminal --no-haddock-deps
       fi
 
 script:
@@ -56,7 +101,7 @@ script:
         cabal install
         cabal haddock
       else
-        stack build --no-terminal --haddock --no-haddock-deps
+        stack build --fast --no-terminal --haddock --no-haddock-deps
       fi
 
 after_success:

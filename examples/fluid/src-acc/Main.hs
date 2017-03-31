@@ -77,6 +77,6 @@ main = do
           fps                                   -- display framerate
           initialWorld                          -- initial state of the simulation
           (render conf)                         -- render world state into a picture
-          (\e -> return . react conf e)         -- handle user events
+          (react conf)                          -- handle user events
           (\_ -> return . simulate)             -- one step of the simulation
 

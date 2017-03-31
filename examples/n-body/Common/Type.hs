@@ -1,18 +1,17 @@
 
-module Common.Type where
+module Common.Type (
 
+  V3(..),
+  module Common.Type,
 
--- Types -----------------------------------------------------------------------
--- We're using tuples instead of ADTs and defining Elt instances
---
+) where
+
+import Data.Array.Accelerate.Linear.V3
+
 
 -- | Not all compute devices support double precision
 --
 type R          = Float
-
--- | A data point in space
---
-type Vec a      = (a, a, a)
 
 -- | Units of time
 --
@@ -20,16 +19,16 @@ type Time       = R
 
 -- | The velocity of a point.
 --
-type Velocity   = Vec R
+type Velocity   = V3 R
 
 -- | The acceleration of a point.
 --
-type Accel      = Vec R
+type Accel      = V3 R
 
 -- | A point in 2D space with its mass.
 --
 type Mass       = R
-type Position   = Vec R
+type Position   = V3 R
 type PointMass  = (Position, Mass)
 
 -- | Bodies consist of a Position and Mass, but also carry their velocity and

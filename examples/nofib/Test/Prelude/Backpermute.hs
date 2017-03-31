@@ -23,7 +23,7 @@ import Test.Base
 import QuickCheck.Arbitrary.Array
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        ( newArray )
+import Data.Array.Accelerate.Array.Sugar                        as A ( Array(..) )
 import Data.Array.Accelerate.Examples.Internal                  as A
 
 
@@ -57,94 +57,97 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           , testProperty "drop"         (test_drop      :: Array DIM1 e -> Property)
           , testProperty "slit"         (test_slit      :: Array DIM1 e -> Property)
           , testProperty "gather"       (test_gather    :: Array DIM1 e -> Property)
-          , testProperty "gatherIf"     (test_gatherIf  :: Array DIM1 e -> Property)
+          -- , testProperty "gatherIf"     (test_gatherIf  :: Array DIM1 e -> Property)
           ]
       where
         test_reverse :: Vector e -> Property
-        test_reverse xs   = run backend (reverseAcc xs)   ~?= reverseRef xs
+        test_reverse xs   = run1 backend A.reverse xs   ~?= reverseRef xs
 
         test_transpose :: Array DIM2 e -> Property
-        test_transpose xs = run backend (transposeAcc xs) ~?= transposeRef xs
+        test_transpose xs = run1 backend A.transpose xs ~?= transposeRef xs
 
         -- Reverse a vector
         --
-        reverseAcc xs = A.reverse (use xs)
         reverseRef xs = fromList (arrayShape xs) (P.reverse $ toList xs)
 
         -- Transpose a 2D matrix
         --
-        transposeAcc xs = A.transpose (use xs)
         transposeRef xs =
           let swap (Z:.x:.y)    = Z :. y :. x
-          in  newArray (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))
+          in  fromFunction (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))
 
         -- Extracting sub-vectors
         --
         test_init :: Vector e -> Property
         test_init xs =
           P.not (isEmptyArray xs)
-            ==> toList (run backend (A.init (A.use xs))) ~?= P.init (toList xs)
+            ==> toList (run1 backend A.init xs) ~?= P.init (toList xs)
 
         test_tail :: Vector e -> Property
         test_tail xs =
           P.not (isEmptyArray xs)
-            ==> toList (run backend (A.tail (A.use xs))) ~?= P.tail (toList xs)
+            ==> toList (run1 backend A.tail xs) ~?= P.tail (toList xs)
 
         test_drop :: Vector e -> Property
         test_drop xs =
           let n = arraySize (arrayShape xs)
           in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-                toList (run backend (A.drop (constant i) (use xs))) ~?= P.drop i (toList xs)
+                toList (run2 backend (\i' -> A.drop (the i')) (scalar i) xs)
+                ~?=
+                P.drop i (toList xs)
 
         test_take :: Vector e -> Property
-        test_take xs =
-          let n = arraySize (arrayShape xs)
+        test_take xs@(Array _ adata) =
+          let Z :. n = arrayShape xs
           in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-                toList (run backend (A.take (constant i) (use xs))) ~?= P.take i (toList xs)
+                run2 backend (\i' -> A.take (the i')) (scalar i) xs
+                ~?=
+                Array ((),i) adata
 
         test_slit :: Vector e -> Property
         test_slit xs =
           let n = arraySize (arrayShape xs)
           in  forAll (choose (0, 0 `P.max` (n-1)))   $ \i ->
               forAll (choose (0, 0 `P.max` (n-1-i))) $ \j ->
-                toList (run backend (A.slit (constant i) (constant j) (use xs))) ~?= P.take j (P.drop i (toList xs))
+                toList (run3 backend (\i' j' -> A.slit (the i') (the j')) (scalar i) (scalar j) xs)
+                ~?=
+                P.take j (P.drop i (toList xs))
 
         -- Gathering
         --
         test_gather :: Vector e -> Property
         test_gather xs =
-          let n     = arraySize (arrayShape xs)
-              n'    = 0 `P.max` (n-1)
-          in
-          forAll arbitrary                              $ \(sh' :: DIM1) ->
-          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv          ->
-            toList (run backend (A.gather (use mapv) (use xs)))
-            ~?=
-            [ xs `indexArray` (Z:.i) | i <- toList mapv ]
+          let Z :. n  = arrayShape xs
+          in  n P.> 0 ==>
+                forAll arbitrary                               $ \(sh' :: DIM1) ->
+                forAll (arbitraryArrayOf sh' (choose (0,n-1))) $ \mapv          ->
+                  toList (run2 backend A.gather mapv xs)
+                  ~?=
+                  [ xs `indexArray` (Z:.i) | i <- toList mapv ]
 
-        test_gatherIf :: Vector e -> Property
-        test_gatherIf xs =
-          let n             = arraySize (arrayShape xs)
-              n'            = 0 `P.max` (n-1)
-          in
-          forAll arbitrary                              $ \sh' ->
-          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
-          forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
-          forAll (arbitraryArray sh')                   $ \defaultv ->
-            toList (run backend $ A.gatherIf (use mapv) (use maskv) A.even (use defaultv) (use xs))
-            ~?=
-            gatherIfRef P.even mapv maskv defaultv xs
+        -- test_gatherIf :: Vector e -> Property
+        -- test_gatherIf xs =
+        --   let n             = arraySize (arrayShape xs)
+        --       n'            = 0 `P.max` (n-1)
+        --   in
+        --   forAll arbitrary                              $ \sh' ->
+        --   forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
+        --   forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
+        --   forAll (arbitraryArray sh')                   $ \defaultv ->
+        --     toList (run4 backend (\p m d x -> A.gatherIf p m A.even d x) mapv maskv defaultv xs)
+        --     ~?=
+        --     gatherIfRef P.even mapv maskv defaultv xs
 
 
 -- Reference Implementation
 -- ------------------------
 
-gatherIfRef :: (e -> Bool) -> Vector Int -> Vector e -> Vector t -> Vector t -> [t]
-gatherIfRef g mapv maskv defaultv inputv
-  = let n           = arraySize (arrayShape defaultv)
-        select ix
-          | g (maskv `indexArray` ix) = inputv   `indexArray` (Z :. mapv `indexArray` ix)
-          | otherwise                 = defaultv `indexArray` ix
-    in
-    [ select ix | i <- [0 .. n-1], let ix = Z :. i ]
+-- gatherIfRef :: (e -> Bool) -> Vector Int -> Vector e -> Vector t -> Vector t -> [t]
+-- gatherIfRef g mapv maskv defaultv inputv
+--   = let n           = arraySize (arrayShape defaultv)
+--         select ix
+--           | g (maskv `indexArray` ix) = inputv   `indexArray` (Z :. mapv `indexArray` ix)
+--           | otherwise                 = defaultv `indexArray` ix
+--     in
+--     [ select ix | i <- [0 .. n-1], let ix = Z :. i ]
 

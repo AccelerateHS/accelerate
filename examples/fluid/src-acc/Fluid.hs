@@ -10,8 +10,9 @@ module Fluid (
 ) where
 
 import Type
-import Prelude                  as P
-import Data.Array.Accelerate    as A
+import Data.Array.Accelerate                              as A
+
+import qualified Prelude                                  as P
 
 
 type Simulation
@@ -59,7 +60,7 @@ project steps vf = A.stencil2 poisson (A.Constant zero) vf (A.Constant zero) p
   where
     grad        = A.stencil divF (A.Constant zero) vf
     p1          = A.stencil2 pF (A.Constant zero) grad (A.Constant zero)
-    p           = foldl1 (.) (P.replicate steps p1) grad
+    p           = P.foldl1 (.) (P.replicate steps p1) grad
 
     poisson :: A.Stencil3x3 Velocity -> A.Stencil3x3 Float -> Exp Velocity
     poisson (_,(_,uv,_),_) ((_,t,_), (l,_,r), (_,b,_)) = uv .-. 0.5 .*. A.lift (r-l, b-t)
@@ -102,7 +103,7 @@ inject
     -> Acc (Field e)
 inject source field =
   let (is, ps) = A.unlift source
-  in A.size ps ==* 0
+  in A.size ps == 0
        ?| ( field, A.permute (.+.) field (is A.!) ps )
 
 
@@ -119,8 +120,8 @@ diffuse
     -> Acc (Field e)
     -> Acc (Field e)
 diffuse steps dt dn df0 =
-  a ==* 0
-    ?| ( df0 , foldl1 (.) (P.replicate steps diffuse1) df0 )
+  a == 0
+    ?| ( df0 , P.foldl1 (.) (P.replicate steps diffuse1) df0 )
   where
     a           = A.constant dt * A.constant dn * (A.fromIntegral (A.size df0))
     c           = 1 + 4*a
@@ -168,7 +169,7 @@ advect dt vf df = A.generate sh backtrace
 
         -- read the density values surrounding the calculated advection point
         get ix'@(Z :. j' :. i')
-          = (j' A.<* 0 ||* i' A.<* 0 ||* j' >=* h ||* i' >=* w)
+          = (j' A.< 0 || i' A.< 0 || j' >= h || i' >= w)
           ? (A.constant zero, df A.! A.lift ix')
 
         d00     = get (Z :. j0 :. i0)

@@ -98,12 +98,12 @@ unsigned(Word32)
 unsigned(Word64)
 
 radixOfSigned :: forall e. (Radix e, A.Bounded e, A.Integral e, A.FromIntegral e Int) => Exp Int -> Exp e -> Exp Int
-radixOfSigned i e = i ==* (passes' - 1) ? (radix' (e `xor` minBound), radix' e)
+radixOfSigned i e = i A.== (passes' - 1) ? (radix' (e `xor` minBound), radix' e)
    where
      radix' x = A.fromIntegral $ (x `A.shiftR` i) .&. 1
      passes'  = constant (passes (undefined :: e))
 
-radixOfUnsigned :: (Radix e, A.Bounded e, A.Integral e, A.FromIntegral e Int) => Exp Int -> Exp e -> Exp Int
+radixOfUnsigned :: (Radix e, A.Integral e, A.FromIntegral e Int) => Exp Int -> Exp e -> Exp Int
 radixOfUnsigned i e = A.fromIntegral $ (e `A.shiftR` i) .&. 1
 
 
@@ -120,7 +120,7 @@ radixsortBy rdx arr = foldr1 (>->) (P.map radixPass [0..p-1]) arr
   where
     p = passes (undefined :: r)
     --
-    deal f x      = let (a,b)   = unlift x in (f ==* 0) ? (a,b)
+    deal f x      = let (a,b)   = unlift x in (f A.== 0) ? (a,b)
     radixPass k v = let k'      = unit (constant k)
                         flags   = A.map (radix (the k') . rdx) v
                         idown   = prescanl (+) 0 . A.map (xor 1)        $ flags

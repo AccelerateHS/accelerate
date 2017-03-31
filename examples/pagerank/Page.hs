@@ -2,19 +2,16 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies    #-}
 
-module Page
-        ( PageId
-        , Rank
-        , Link
-        , MLinks(..)
-        , parsePage
-        , parsePageId)
-where
+module Page (
+
+  PageId, Rank, Link, MLinks(..),
+  parsePage, parsePageId
+
+) where
+
 import Prelude                                   as P
 import qualified Data.ByteString.Lazy.Char8      as BL
-import qualified Data.Vector.Storable            as U
 import qualified Data.Vector.Storable.Mutable    as UM
-import Control.Monad.ST
 import Data.Word
 
 
@@ -33,11 +30,14 @@ type Rank
         = Float
 
 -- | A mutable set of links
-data MLinks = MLinks { ix    :: Int
-                     , size  :: Int
-                     , from  :: (UM.IOVector PageId)
-                     , to    :: (UM.IOVector PageId)
-                     , sizes :: UM.IOVector Int }
+data MLinks
+        = MLinks
+            { ml_ix    :: Int
+            , ml_size  :: Int
+            , ml_from  :: UM.IOVector PageId
+            , ml_to    :: UM.IOVector PageId
+            , ml_sizes :: UM.IOVector Int
+            }
 
 
 -- | Parse just the PageId from a line in the links file.
@@ -74,14 +74,14 @@ char c bs
 
 -- | Parse a vector of PageIds.
 pageIds    :: PageId -> BL.ByteString -> MLinks -> IO (MLinks)
-pageIds pid bs0 links
- = go links 0 bs0
+pageIds pid bs0 links0
+ = go links0 0 bs0
 
  where  go links@(MLinks{..}) count bs
-         | ix >= size
-         = do   from'  <- UM.grow from size
-                to'    <- UM.grow to   size
-                go (MLinks ix (2*size) from' to' sizes) count bs
+         | ml_ix >= ml_size
+         = do   from'  <- UM.grow ml_from ml_size
+                to'    <- UM.grow ml_to   ml_size
+                go (MLinks ml_ix (2*ml_size) from' to' ml_sizes) count bs
 
          | BL.null bs
          = final
@@ -90,14 +90,15 @@ pageIds pid bs0 links
          = go links count bs2
 
          | Just (i, bs2) <- BL.readInt bs
-         = do   UM.write from ix pid
-                UM.write to ix (fromIntegral i)
-                go (MLinks (ix+1) size from to sizes) (count+1) bs2
+         = do   UM.write ml_from ml_ix pid
+                UM.write ml_to   ml_ix (fromIntegral i)
+                go (MLinks (ml_ix+1) ml_size ml_from ml_to ml_sizes) (count+1) bs2
 
          | otherwise
          = final
          where
             final =
                 do
-                    UM.write sizes (fromIntegral pid) count
+                    UM.write ml_sizes (fromIntegral pid) count
                     return links
+

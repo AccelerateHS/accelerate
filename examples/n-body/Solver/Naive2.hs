@@ -4,7 +4,6 @@ module Solver.Naive2
 
 import Common.Type
 import Common.Body
-import Common.Util
 
 import Data.Array.Accelerate                    as A
 
@@ -16,8 +15,8 @@ import Data.Array.Accelerate                    as A
 --
 calcAccels :: Exp R -> Acc (Vector PointMass) -> Acc (Vector Accel)
 calcAccels epsilon bodies
-  = let move body       = A.sfoldl (\acc next -> acc .+. accel epsilon body next)
-                                   (vec 0)
+  = let move body       = A.sfoldl (\acc next -> acc + accel epsilon body next)
+                                   0
                                    (constant Z)
                                    bodies
     in

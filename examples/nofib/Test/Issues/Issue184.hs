@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Test.Issues.Issue184 (test_issue184)
   where
@@ -6,7 +7,6 @@ import Config
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
-import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 
@@ -25,7 +25,7 @@ ref1 = fromList (Z :. 1000) [1,4,9,16,25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 test1 :: Acc (Vector Int)
 test1 =
   let v   = use (fromList (Z :. 5) [1,2,3,4,5] :: Vector Int)
-      f x = x A.<* 5 ? (let y = v A.!! x in y*y, 0)
+      f x = x < 5 ? (let y = v !! x in y*y, 0)
   in generate (index1 1000) (f . unindex1)
 
 
@@ -36,7 +36,7 @@ test2 :: Acc (Scalar Bool)
 test2 =
   let x = constant 1 :: Exp Int
       v = use (fromList (Z :. 5) [1,2,3,4,5] :: Vector Int)
-      y = (x ==* 1 ||* v A.!! (-1) ==* 1)
+      y = (x == 1 || v !! (-1) == 1)
   in unit y
 
 
@@ -47,6 +47,6 @@ test3 :: Acc (Scalar Bool)
 test3 =
   let x = constant 1 :: Exp Int
       v = use (fromList (Z :. 5) [1,2,3,4,5] :: Vector Int)
-      y = (x /=* 1 &&* v A.!! (-1) ==* 1)
+      y = (x /= 1 && v !! (-1) == 1)
   in unit y
 

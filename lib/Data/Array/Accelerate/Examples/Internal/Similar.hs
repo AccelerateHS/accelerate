@@ -18,10 +18,16 @@ module Data.Array.Accelerate.Examples.Internal.Similar (
 
 ) where
 
-import Prelude                                          as P
+import Data.Array.Accelerate                            ( Z(..), (:.)(..), Array, Shape, arrayShape, toList )
 import Data.Complex
+import Data.Int
+import Data.Word
 import Foreign.C.Types
-import Data.Array.Accelerate
+import Linear.V1
+import Linear.V2
+import Linear.V3
+import Linear.V4
+import Prelude                                          as P
 
 
 -- A class of things that support almost-equality, so that we can disregard
@@ -30,7 +36,7 @@ import Data.Array.Accelerate
 class Similar a where
   {-# INLINE (~=) #-}
   (~=) :: a -> a -> Bool
-  default (~=) :: P.Eq a => a -> a -> Bool
+  default (~=) :: Eq a => a -> a -> Bool
   (~=) = (==)
 
 infix 4 ~=
@@ -74,8 +80,20 @@ instance (Similar a, Similar b, Similar c, Similar d, Similar e, Similar f, Simi
   (x1, x2, x3, x4, x5, x6, x7, x8, x9) ~= (y1, y2, y3, y4, y5, y6, y7, y8, y9) =
     x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4 && x5 ~= y5 && x6 ~= y6 && x7 ~= y7 && x8 ~= y8 && x9 ~= y9
 
+instance Similar a => Similar (V1 a) where
+  V1 x ~= V1 y = x ~= y
+
+instance Similar a => Similar (V2 a) where
+  V2 x1 x2 ~= V2 y1 y2 = x1 ~= y1 && x2 ~= y2
+
+instance Similar a => Similar (V3 a) where
+  V3 x1 x2 x3 ~= V3 y1 y2 y3 = x1 ~= y1 && x2 ~= y2 && x3 ~= y3
+
+instance Similar a => Similar (V4 a) where
+  V4 x1 x2 x3 x4 ~= V4 y1 y2 y3 y4 = x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4
+
 instance Similar Z
-instance (P.Eq sh, P.Eq sz) => Similar (sh:.sz)
+instance (Eq sh, Eq sz) => Similar (sh:.sz)
 
 instance Similar Int
 instance Similar Int8
@@ -106,7 +124,7 @@ instance Similar Double  where (~=) = absRelTol 0.00005 0.005
 instance Similar CFloat  where (~=) = absRelTol 0.00005 0.005
 instance Similar CDouble where (~=) = absRelTol 0.00005 0.005
 
-instance (Similar e, P.RealFloat e) => Similar (Complex e) where
+instance Similar e => Similar (Complex e) where
   (r1 :+ i1) ~= (r2 :+ i2) = r1 ~= r2 && i1 ~= i2
 
 
@@ -115,24 +133,17 @@ instance (Similar e, P.RealFloat e) => Similar (Complex e) where
 -- relTol epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
 
 {-# INLINEABLE absRelTol #-}
-absRelTol :: (P.RealFloat a, P.Ord a) => a -> a -> a -> a -> Bool
+absRelTol :: RealFloat a => a -> a -> a -> a -> Bool
 absRelTol epsilonAbs epsilonRel u v
-  |  P.isInfinite u
-  && P.isInfinite v        = True
-  |  P.isNaN u
-  && P.isNaN v             = True
+  |  isInfinite u
+  && isInfinite v          = True
+  |  isNaN u
+  && isNaN v               = True
   | abs (u-v) < epsilonAbs = True
   | abs u > abs v          = abs ((u-v) / u) < epsilonRel
   | otherwise              = abs ((v-u) / v) < epsilonRel
 
-instance (P.Eq e, P.Eq sh, Shape sh) => P.Eq (Array sh e) where
-  a1 == a2      =  arrayShape a1 == arrayShape a2
-                && toList a1     == toList a2
-
-  a1 /= a2      =  arrayShape a1 /= arrayShape a2
-                || toList a1     /= toList a2
-
-instance (Similar e, P.Eq sh, Shape sh) => Similar (Array sh e) where
+instance (Similar e, Eq sh, Shape sh) => Similar (Array sh e) where
   a1 ~= a2      =  arrayShape a1 == arrayShape a2
                 && toList a1     ~= toList a2
 

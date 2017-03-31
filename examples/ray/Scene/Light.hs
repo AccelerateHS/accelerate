@@ -8,28 +8,31 @@ module Scene.Light
   where
 
 -- friends
-import Vec3
+import Common.Type
 import Ray.Intersect
 import Scene.Object
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
-import Data.Array.Accelerate.Data.Colour.RGB
 import Data.Array.Accelerate.Data.Colour.Names
+import Data.Array.Accelerate.Data.Colour.RGB
+import Data.Array.Accelerate.Linear.Metric
+import Data.Array.Accelerate.Linear.Vector
+
+import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
 -- standard library
 import Data.Typeable
-import Prelude                                                  as P
+import qualified Prelude                                        as P
 
 
 -- | An omnidirectional point light source, whose intensity drops off with
 --   distance from the source.
 --
 data Light = Light Position Colour
-  deriving (P.Eq, Show, Typeable)
+  deriving (P.Eq, P.Show, Typeable)
 
 type Lights = Array DIM1 Light
 
@@ -74,8 +77,8 @@ applyLight objects point normal light
         -- on the surface?
         --
         lp_p                    = lightPos light - point
-        dist                    = magnitude lp_p
-        dir                     = (1.0 / dist) .* lp_p
+        dist                    = norm lp_p
+        dir                     = (1.0 / dist) *^ lp_p
 
         -- Calculate the magnitude of the reflected light, if there are no
         -- occluding objects between the light and the surface point.
@@ -84,7 +87,7 @@ applyLight objects point normal light
         RGB r g b               = unlift (lightColor light)
         refl                    = lift $ RGB (r * mag) (g * mag) (b * mag)
     in
-    checkRay distanceToSphere spheres point dir dist ||* checkRay distanceToPlane planes point dir dist
+    checkRay distanceToSphere spheres point dir dist || checkRay distanceToPlane planes point dir dist
       ? ( constant black, refl )
 
 

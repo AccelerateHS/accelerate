@@ -1,7 +1,7 @@
 Name:                   accelerate-examples
-Version:                2.0.0.0
+Version:                1.0.0.0
 Cabal-version:          >=1.8
-Tested-with:            GHC == 7.8.*
+Tested-with:            GHC >= 7.8
 Build-type:             Simple
 
 Synopsis:               Examples using the Accelerate library
@@ -24,8 +24,15 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
-Extra-source-files:     data/hashcat/README.md
-                        data/matrices/README.md
+Extra-source-files:
+    data/matrices/README.md
+    examples/canny/README.md
+    examples/fluid/README.md
+    examples/hashcat/README.md
+    examples/kmeans/README.md
+    examples/mandelbrot/README.md
+    examples/pagerank/README.md
+    examples/ray/README.md
 
 -- Flags that control features of the benchmark programs
 --
@@ -46,14 +53,14 @@ Flag codespeed
 --
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
-  Default:              True
+  Default:              False
 
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
   Default:              False
 
-Flag llvm-gpu
-  Description:          Enable the LLVM backend for NVIDIA CPUs
+Flag llvm-ptx
+  Description:          Enable the LLVM PTX backend for NVIDIA GPUs
   Default:              False
 
 Flag cilk
@@ -124,34 +131,38 @@ Flag kmeans
 
 Library
   hs-source-dirs:       lib
-  Build-depends:        accelerate                      == 2.0.*,
-                        ansi-wl-pprint                  >= 0.6,
-                        base                            >= 4.7,
-                        containers                      >= 0.5,
-                        criterion                       >= 1.0,
-                        directory                       >= 1.1,
-                        fclabels                        >= 2.0,
-                        HUnit                           >= 1.2,
-                        mwc-random                      >= 0.8,
-                        QuickCheck                      >= 2.7,
-                        test-framework                  >= 0.5,
-                        test-framework-hunit            >= 0.3,
-                        test-framework-quickcheck2      >= 0.2
+  Build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , ansi-wl-pprint                  >= 0.6
+        , containers                      >= 0.5
+        , criterion                       >= 1.0
+        , directory                       >= 1.1
+        , fclabels                        >= 2.0
+        , HUnit                           >= 1.2
+        , linear                          >= 1.1
+        , mwc-random                      >= 0.8
+        , QuickCheck                      >= 2.7
+        , test-framework                  >= 0.5
+        , test-framework-hunit            >= 0.3
+        , test-framework-quickcheck2      >= 0.2
 
-  Exposed-modules:      Data.Array.Accelerate.Examples.Internal
+  Exposed-modules:
+        Data.Array.Accelerate.Examples.Internal
 
-  Other-modules:        Data.Array.Accelerate.Examples.Internal.Backend
-                        Data.Array.Accelerate.Examples.Internal.Criterion
-                        Data.Array.Accelerate.Examples.Internal.Criterion.Config
-                        Data.Array.Accelerate.Examples.Internal.Interactive
-                        Data.Array.Accelerate.Examples.Internal.Monitoring
-                        Data.Array.Accelerate.Examples.Internal.ParseArgs
-                        Data.Array.Accelerate.Examples.Internal.Random.Array
-                        Data.Array.Accelerate.Examples.Internal.Report
-                        Data.Array.Accelerate.Examples.Internal.Similar
-                        Data.Array.Accelerate.Examples.Internal.TestFramework
-                        Data.Array.Accelerate.Examples.Internal.TestFramework.Config
-                        Data.Array.Accelerate.Examples.Internal.Util
+  Other-modules:
+        Data.Array.Accelerate.Examples.Internal.Backend
+        Data.Array.Accelerate.Examples.Internal.Criterion
+        Data.Array.Accelerate.Examples.Internal.Criterion.Config
+        Data.Array.Accelerate.Examples.Internal.Interactive
+        Data.Array.Accelerate.Examples.Internal.Monitoring
+        Data.Array.Accelerate.Examples.Internal.ParseArgs
+        Data.Array.Accelerate.Examples.Internal.Random.Array
+        Data.Array.Accelerate.Examples.Internal.Report
+        Data.Array.Accelerate.Examples.Internal.Similar
+        Data.Array.Accelerate.Examples.Internal.TestFramework
+        Data.Array.Accelerate.Examples.Internal.TestFramework.Config
+        Data.Array.Accelerate.Examples.Internal.Util
 
   ghc-options:          -O2 -Wall
   ghc-prof-options:     -caf-all -auto-all
@@ -161,38 +172,44 @@ Library
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 2.0.*
+    build-depends:
+        accelerate-cuda                   == 0.17.*
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 2.0.*
+    build-depends:
+        accelerate-llvm-native            == 1.0.*
 
-  if flag(llvm-gpu)
+  if flag(llvm-ptx)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 2.0.*
+    build-depends:
+        accelerate-llvm-ptx               == 1.0.*
 
   if flag(cilk)
     CPP-options:        -DACCELERATE_CILK_BACKEND
-    build-depends:      accelerate-icc-opencl           == 2.0.*
+    build-depends:
+        accelerate-icc-opencl             == 1.0.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
 
   if flag(codespeed)
     CPP-options:        -DACCELERATE_ENABLE_CODESPEED
-    build-depends:      aeson                           >= 0.8,
-                        bytestring                      >= 0.10,
-                        HTTP                            >= 4000.2,
-                        http-types                      >= 0.8,
-                        network                         >= 2.5,
-                        process                         >= 1.0,
-                        statistics                      >= 0.13,
-                        template-haskell                >= 2.2,
-                        text                            >= 0.11,
-                        time                            >= 1.4
+    build-depends:
+          aeson                           >= 0.8
+        , bytestring                      >= 0.10
+        , HTTP                            >= 4000.2
+        , http-types                      >= 0.8
+        , network                         >= 2.5
+        , process                         >= 1.0
+        , statistics                      >= 0.13
+        , template-haskell                >= 2.2
+        , text                            >= 0.11
+        , time                            >= 1.4
 
-    other-modules:      Data.Array.Accelerate.Examples.Internal.Codespeed
-                        Data.Array.Accelerate.Examples.Internal.TH
+    other-modules:
+        Data.Array.Accelerate.Examples.Internal.Codespeed
+        Data.Array.Accelerate.Examples.Internal.TH
 
 
 -- The main test program. This includes randomised quickcheck testing for array
@@ -202,60 +219,73 @@ Library
 --
 Executable accelerate-nofib
   Main-is:              Main.hs
-  hs-source-dirs:       examples/nofib
-                        examples/smvm
+  hs-source-dirs:
+        examples/nofib
+        examples/smvm
 
-  other-modules:        Config
-                        SMVM
-                        QuickCheck.Arbitrary.Array
-                        QuickCheck.Arbitrary.Shape
-                        Test.Base
-                        Test.FFT
-                        Test.Foreign
-                        Test.IO
-                        Test.IO.Ptr
-                        Test.IO.Vector
-                        Test.Imaginary
-                        Test.Imaginary.DotP
-                        Test.Imaginary.SASUM
-                        Test.Imaginary.SAXPY
-                        Test.Issues
-                        Test.Issues.Issue93
-                        Test.Issues.Issue102
-                        Test.Issues.Issue114
-                        Test.Issues.Issue119
-                        Test.Issues.Issue123
-                        Test.Issues.Issue137
-                        Test.Issues.Issue168
-                        Test.Issues.Issue184
-                        Test.Issues.Issue185
-                        Test.Issues.Issue187
-                        Test.Prelude
-                        Test.Prelude.Backpermute
-                        Test.Prelude.Filter
-                        Test.Prelude.Fold
-                        Test.Prelude.Map
-                        Test.Prelude.Permute
-                        Test.Prelude.Replicate
-                        Test.Prelude.Scan
-                        Test.Prelude.Sequences
-                        Test.Prelude.Stencil
-                        Test.Prelude.ZipWith
-                        Test.Sharing
-                        Test.Spectral
-                        Test.Spectral.BlackScholes
-                        Test.Spectral.RadixSort
-                        Test.Spectral.SMVM
+  other-modules:
+        Config
+        QuickCheck.Arbitrary.Array
+        QuickCheck.Arbitrary.Shape
+        SMVM
+        Test.Base
+        Test.FFT
+        Test.Foreign
+        Test.Imaginary
+        Test.Imaginary.DotP
+        Test.Imaginary.SASUM
+        Test.Imaginary.SAXPY
+        Test.IO
+        Test.IO.Ptr
+        Test.IO.Vector
+        Test.Issues
+        Test.Issues.Issue93
+        Test.Issues.Issue102
+        Test.Issues.Issue114
+        Test.Issues.Issue119
+        Test.Issues.Issue123
+        Test.Issues.Issue137
+        Test.Issues.Issue168
+        Test.Issues.Issue184
+        Test.Issues.Issue185
+        Test.Issues.Issue187
+        Test.Issues.Issue228
+        Test.Issues.Issue255
+        Test.Issues.Issue264
+        Test.Issues.Issue286
+        Test.Issues.Issue287
+        Test.Issues.Issue288
+        Test.Issues.Issue362
+        Test.Prelude
+        Test.Prelude.Backpermute
+        Test.Prelude.Filter
+        Test.Prelude.Fold
+        Test.Prelude.Map
+        Test.Prelude.Permute
+        Test.Prelude.Replicate
+        Test.Prelude.Scan
+        -- Test.Prelude.Sequences
+        Test.Prelude.Stencil
+        Test.Prelude.ZipWith
+        Test.Sharing
+        Test.Spectral
+        Test.Spectral.BlackScholes
+        Test.Spectral.RadixSort
+        Test.Spectral.SMVM
 
-  ghc-options:          -Wall
-                        -threaded
-                        -fpedantic-bottoms
-                        -fno-full-laziness
-                        -fno-excess-precision
-                        -eventlog
-                        -rtsopts
+  ghc-options:
+        -O2
+        -Wall
+        -threaded
+        -fpedantic-bottoms
+        -fno-excess-precision
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
 
-  ghc-prof-options:     -auto-all
+  ghc-prof-options:
+        -auto-all
 
   extra-libraries:      stdc++
   c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
@@ -263,8 +293,11 @@ Executable accelerate-nofib
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 2.0.*
-    other-modules:      Test.Foreign.CUDA
+    build-depends:
+        accelerate-cuda                   == 0.17.*
+
+    other-modules:
+        Test.Foreign.CUDA
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -272,35 +305,35 @@ Executable accelerate-nofib
   if !flag(nofib)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        accelerate-fft                  == 2.0.*,
-                        accelerate-io                   == 2.0.*,
-                        base                            >= 4.7,
-                        array                           >= 0.3,
-                        containers                      >= 0.5,
-                        fclabels                        >= 2.0,
-                        HUnit                           >= 1.2,
-                        QuickCheck                      >= 2.7,
-                        test-framework                  >= 0.5,
-                        test-framework-hunit            >= 0.3,
-                        test-framework-quickcheck2      >= 0.2,
-                        random
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-fft                  == 1.0.*
+        , accelerate-io                   == 1.0.*
+        , array                           >= 0.3
+        , containers                      >= 0.5
+        , fclabels                        >= 2.0
+        , HUnit                           >= 1.2
+        , pipes                           >= 4.1.6
+        , QuickCheck                      >= 2.7
+        , random
+        , test-framework                  >= 0.5
+        , test-framework-hunit            >= 0.3
+        , test-framework-quickcheck2      >= 0.2
+        , vector                          >= 0.7
 
 
 -- Sparse matrix vector multiplication
 -- -----------------------------------
 
 Executable accelerate-smvm
-  Main-is:              Main.hs
   hs-source-dirs:       examples/smvm
-  other-modules:        Config
-                        Matrix
-                        MatrixMarket
-                        SMVM
+  Main-is:              Main.hs
+  other-modules:        Config Matrix SMVM
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if impl(ghc >= 7.6)
     ghc-options:        -fsimpl-tick-factor=130
@@ -311,17 +344,17 @@ Executable accelerate-smvm
   if !flag(smvm)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        attoparsec                      >= 0.10,
-                        bytestring                      >= 0.9,
-                        bytestring-lexing               >= 0.5,
-                        fclabels                        >= 2.0,
-                        primitive                       >= 0.5,
-                        mwc-random                      >= 0.8,
-                        vector                          >= 0.7,
-                        vector-algorithms               >= 0.4
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-io                   == 1.0.*
+        , fclabels                        >= 2.0
+        , matrix-market-attoparsec        >= 0.1
+        , mwc-random                      >= 0.8
+        , scientific                      >= 0.3
+        , vector                          >= 0.7
+        , vector-algorithms               >= 0.4
 
 
 -- A quasicrystal demo as the sum of waves in a plane
@@ -332,8 +365,8 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -341,12 +374,14 @@ Executable accelerate-crystal
   if !flag(crystal)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        colour-accelerate               >= 0.1,
-                        fclabels                        >= 2.0,
-                        gloss-raster-accelerate         >= 0.2
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , colour-accelerate               >= 0.1
+        , fclabels                        >= 2.0
+        , gloss-raster-accelerate         >= 0.2
+
 
 -- The slit-scan effect creating a Doctor Who time vortex
 -- ------------------------------------------------------
@@ -356,8 +391,8 @@ Executable accelerate-tunnel
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -365,13 +400,14 @@ Executable accelerate-tunnel
   if !flag(tunnel)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        fclabels                        >= 2.0,
-                        gloss-raster-accelerate         >= 0.2,
-                        lens-accelerate                 >= 0.1,
-                        linear-accelerate               >= 0.3
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , fclabels                        >= 2.0
+        , gloss-raster-accelerate         >= 0.2
+        , lens-accelerate                 >= 0.1
+        , linear-accelerate               >= 0.3
 
 
 -- Image edge detection
@@ -380,17 +416,10 @@ Executable accelerate-tunnel
 Executable accelerate-canny
   hs-source-dirs:       examples/canny/src-acc
   Main-is:              Main.hs
-  other-modules:        Config
-                        Canny
-                        Wildfire
-
-  ghc-options:          -Wall
-                        -threaded
-                        -Odph
-                        -eventlog
-                        -rtsopts
+  other-modules:        Config Canny Wildfire
 
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -Odph -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -398,15 +427,16 @@ Executable accelerate-canny
   if !flag(canny)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        accelerate-io                   == 2.0.*,
-                        base                            >= 4.7,
-                        colour-accelerate               >= 0.1,
-                        fclabels                        >= 2.0,
-                        repa                            >= 3.1,
-                        repa-io                         >= 3.1,
-                        vector                          >= 0.7
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-io                   == 1.0.*
+        , colour-accelerate               >= 0.1
+        , fclabels                        >= 2.0
+        , repa                            >= 3.1
+        , repa-io                         >= 3.1
+        , vector                          >= 0.7
 
 
 -- A simple mandelbrot generator
@@ -415,12 +445,10 @@ Executable accelerate-canny
 Executable accelerate-mandelbrot
   hs-source-dirs:       examples/mandelbrot
   Main-is:              Main.hs
-  other-modules:        Config
-                        Mandel
-                        World
+  other-modules:        Config Mandel World
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -428,13 +456,15 @@ Executable accelerate-mandelbrot
   if !flag(mandelbrot)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        colour-accelerate               >= 0.1,
-                        fclabels                        >= 2.0,
-                        gloss                           >= 1.7,
-                        gloss-accelerate                >= 0.2
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-io                   == 1.0.*
+        , colour-accelerate               >= 0.1
+        , fclabels                        >= 2.0
+        , gloss                           >= 1.7
+        , gloss-accelerate                >= 0.2
 
 
 -- A stable fluid simulation
@@ -443,14 +473,10 @@ Executable accelerate-mandelbrot
 Executable accelerate-fluid
   Main-is:              Main.hs
   hs-source-dirs:       examples/fluid/src-acc
-  other-modules:        Config
-                        Event
-                        Fluid
-                        Type
-                        World
+  other-modules:        Config Event Fluid Type World
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -458,41 +484,42 @@ Executable accelerate-fluid
   if !flag(fluid)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        accelerate-io                   == 2.0.*,
-                        base                            >= 4.7,
-                        bmp                             >= 1.2,
-                        colour-accelerate               >= 0.1,
-                        fclabels                        >= 2.0,
-                        gloss                           >= 1.9,
-                        gloss-rendering                 >= 1.9
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-io                   == 1.0.*
+        , bmp                             >= 1.2
+        , colour-accelerate               >= 0.1
+        , fclabels                        >= 2.0
+        , gloss                           >= 1.9
+        , gloss-rendering                 >= 1.9
 
 
 -- Simulation of gravitational attraction between solid particles
 -- --------------------------------------------------------------
 
 Executable accelerate-nbody
-  Main-is:              Main.hs
   hs-source-dirs:       examples/n-body
-  other-modules:        Common.Body
-                        Common.Dump
-                        Common.Tree
-                        Common.Type
-                        Common.Util
-                        Common.World
-                        Config
-                        Gloss.Draw
-                        Gloss.Event
-                        Gloss.Simulate
-                        Random.Position
-                        Solver.BarnsHut
-                        Solver.Naive1
-                        Solver.Naive2
-                        Test
+  Main-is:              Main.hs
+  other-modules:
+        Common.Body
+        Common.Dump
+        Common.Tree
+        Common.Type
+        Common.World
+        Config
+        Gloss.Draw
+        Gloss.Event
+        Gloss.Simulate
+        Random.Position
+        Solver.BarnsHut
+        Solver.Naive1
+        Solver.Naive2
+        Test
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -500,33 +527,38 @@ Executable accelerate-nbody
   if !flag(nbody)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        fclabels                        >= 2.0,
-                        gloss                           >= 1.7,
-                        mwc-random                      >= 0.8
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , fclabels                        >= 2.0
+        , gloss                           >= 1.7
+        , lens-accelerate                 >= 0.1
+        , linear-accelerate               >= 0.3
+        , mwc-random                      >= 0.8
 
 
 -- A celular automata
 -- ------------------
 
 Executable accelerate-smoothlife
-  Main-is:              Main.hs
   hs-source-dirs:       examples/smoothlife
-  other-modules:        Config
-                        Gloss.Draw
-                        Gloss.Event
-                        Gloss.Simulate
-                        Random.Splat
-                        SmoothLife
+  Main-is:              Main.hs
+  other-modules:
+        Config
+        Gloss.Draw
+        Gloss.Event
+        Gloss.Simulate
+        Random.Splat
+        SmoothLife
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 2.0.*
+    build-depends:
+        accelerate-cuda                   == 0.17.*
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -534,29 +566,28 @@ Executable accelerate-smoothlife
   if !flag(smoothlife)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        accelerate-fft                  == 2.0.*,
-                        base                            >= 4.7,
-                        colour-accelerate               >= 0.1,
-                        fclabels                        >= 2.0,
-                        gloss                           >= 1.7,
-                        gloss-accelerate                >= 0.2,
-                        mwc-random                      >= 0.8
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-fft                  == 1.0.*
+        , colour-accelerate               >= 0.1
+        , fclabels                        >= 2.0
+        , gloss                           >= 1.7
+        , gloss-accelerate                >= 0.2
+        , mwc-random                      >= 0.8
 
 
--- A password recovery tool
--- ------------------------
+-- A "password recovery" tool
+-- --------------------------
 
 Executable accelerate-hashcat
-  Main-is:              Main.hs
   hs-source-dirs:       examples/hashcat
-  other-modules:        Config
-                        Digest
-                        MD5
+  Main-is:              Main.hs
+  other-modules:        Config Digest MD5
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -564,15 +595,17 @@ Executable accelerate-hashcat
   if !flag(hashcat)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        bytestring                      >= 0.9,
-                        bytestring-lexing               >= 0.5,
-                        cereal                          >= 0.3,
-                        criterion                       >= 1.0,
-                        fclabels                        >= 2.0,
-                        mwc-random                      >= 0.8
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , bytestring                      >= 0.9
+        , bytestring-lexing               >= 0.5
+        , cereal                          >= 0.3
+        , criterion                       >= 1.0
+        , fclabels                        >= 2.0
+        , mwc-random                      >= 0.8
+
 
 -- FFT examples
 -- ------------
@@ -580,12 +613,10 @@ Executable accelerate-hashcat
 Executable accelerate-fft
   Main-is:              Main.hs
   hs-source-dirs:       examples/fft/src-acc
-  other-modules:        Config
-                        HighPass
-                        FFT
+  other-modules:        Config HighPass FFT
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -593,30 +624,33 @@ Executable accelerate-fft
   if !flag(fft)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        accelerate-fft                  == 2.0.*,
-                        accelerate-io                   == 2.0.*,
-                        base                            >= 4.7,
-                        colour-accelerate               >= 0.1,
-                        fclabels                        >= 2.0,
-                        filepath                        >= 1.0
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-fft                  == 1.0.*
+        , accelerate-io                   == 1.0.*
+        , colour-accelerate               >= 0.1
+        , fclabels                        >= 2.0
+        , filepath                        >= 1.0
 
 -- PageRank
 -- --------
 
 Executable accelerate-pagerank
-  Main-is:              Main.hs
   hs-source-dirs:       examples/pagerank
-  other-modules:        Config
-                        Count
-                        Load
-                        Page
-                        Progress
-                        Rank
-                        Step
+  Main-is:              Main.hs
+  other-modules:
+        Config
+        Count
+        Load
+        Page
+        Progress
+        Rank
+        Step
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
+  ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -624,86 +658,94 @@ Executable accelerate-pagerank
   if !flag(pagerank)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        accelerate-io                   == 2.0.*,
-                        base                            >= 4.7,
-                        bytestring                      >= 0.9.2,
-                        containers                      >= 0.4.2,
-                        directory                       >= 1.1,
-                        fclabels                        >= 1.0,
-                        vector                          >= 0.9,
-                        vector-algorithms               >= 0.5.4
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , accelerate-io                   == 1.0.*
+        , bytestring                      >= 0.9.2
+        , containers                      >= 0.4.2
+        , directory                       >= 1.1
+        , fclabels                        >= 1.0
+        , vector                          >= 0.9
+        , vector-algorithms               >= 0.5.4
 
 
 -- Ray tracer
 -- ----------
 
 Executable accelerate-ray
-  Main-is:              Main.hs
   hs-source-dirs:       examples/ray
-  other-modules:        Config
-                        Vec3
-                        Gloss.Draw
-                        Gloss.Event
-                        Ray.Intersect
-                        Ray.Trace
-                        Scene.Light
-                        Scene.Object
-                        Scene.State
-                        Scene.World
+  Main-is:              Main.hs
+  other-modules:
+        Common.Type
+        Config
+        Gloss.Draw
+        Gloss.Event
+        Ray.Intersect
+        Ray.Trace
+        Scene.Light
+        Scene.Object
+        Scene.State
+        Scene.World
+
+  ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+
+  if flag(ekg)
+    ghc-options:        -with-rtsopts=-T
 
   if !flag(ray)
     buildable:          False
   else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        fclabels                        >= 1.0,
-                        colour-accelerate               >= 0.1,
-                        gloss                           >= 1.8,
-                        gloss-accelerate                >= 0.2,
-                        gloss-raster-accelerate         >= 0.2
-
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
-  ghc-prof-options:     -auto-all
-
-  if flag(ekg)
-    ghc-options:        -with-rtsopts=-T
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , colour-accelerate               >= 0.1
+        , fclabels                        >= 1.0
+        , gloss                           >= 1.8
+        , gloss-accelerate                >= 0.2
+        , gloss-raster-accelerate         >= 0.2
+        , lens-accelerate                 >= 0.1
+        , linear-accelerate               >= 0.3
 
 
 -- K-means
 -- -------
 
 Executable accelerate-kmeans
-  Main-is:              Main.hs
   hs-source-dirs:       examples/kmeans
-  other-modules:        Config
-                        Main
-                        Kmeans
-                        GenSamples
+  Main-is:              Main.hs
+  other-modules:        Config Main Kmeans GenSamples
 
-  if !flag(kmeans)
-    buildable:          False
-  else
-    build-depends:      accelerate                      == 2.0.*,
-                        accelerate-examples             == 2.0.*,
-                        base                            >= 4.7,
-                        binary                          >= 0.7,
-                        directory                       >= 1.1,
-                        fclabels                        >= 1.0,
-                        normaldistribution,
-                        random
+  ghc-prof-options:     -auto-all
+  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
 
-  ghc-options:          -Wall -threaded -rtsopts -eventlog
-  ghc-prof-options:     -auto-all
+  if !flag(kmeans)
+    buildable:          False
+  else
+    build-depends:
+          base                            >= 4.7 && < 4.10
+        , accelerate                      == 1.0.*
+        , accelerate-examples             == 1.0.*
+        , binary                          >= 0.7
+        , directory                       >= 1.1
+        , fclabels                        >= 1.0
+        , normaldistribution
+        , random
 
 
 source-repository head
   type:                 git
+  location:             https://github.com/AccelerateHS/accelerate-examples
+
+source-repository this
+  type:                 git
+  tag:                  1.0.0.0
   location:             https://github.com/AccelerateHS/accelerate-examples
 
 -- vim: nospell

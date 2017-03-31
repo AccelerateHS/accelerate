@@ -4,7 +4,7 @@ module Gloss.Event
   where
 
 -- friends
-import Vec3
+import Common.Type
 import Scene.State
 
 -- library
@@ -45,12 +45,12 @@ handleEvent event state
 
     motion (x,y)
       | Just (oX, oY)           <- get stateLeftClick state
-      , XYZ eyeX eyeY eyeZ      <- get stateEyeDelta  state
+      , V3 eyeX eyeY eyeZ       <- get stateEyeDelta  state
       = let eyeX'       = eyeX + (x - oX)
             eyeY'       = eyeY
             eyeZ'       = eyeZ + (y - oY)
         in
-        set stateEyeDelta (XYZ eyeX' eyeY' eyeZ')
+        set stateEyeDelta (V3 eyeX' eyeY' eyeZ')
           $ set stateLeftClick  (Just (x, y))
           $ state
 

@@ -4,7 +4,7 @@ module Ray.Trace
   where
 
 -- friends
-import Vec3
+import Common.Type
 import Scene.Object
 import Scene.Light
 import Ray.Intersect
@@ -13,10 +13,12 @@ import Ray.Intersect
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Data.Colour.RGB                    as RGB
 import Data.Array.Accelerate.Data.Colour.Names
+import Data.Array.Accelerate.Linear.Metric
+import Data.Array.Accelerate.Linear.Vector
 import Graphics.Gloss.Accelerate.Data.Point
 
 -- standard library
-import Prelude                                                  as P
+import qualified Prelude                                        as P
 
 
 -- | Generate all of the rays that will be cast from the given eye position to
@@ -39,7 +41,7 @@ castViewRays sizeX sizeY fov eyePos
     in
     A.generate (constant (Z :. sizeY :. sizeX))
                (\ix -> let (x, y) = xyOfPoint $ pointOfIndex sizeX sizeY ix
-                       in  normalise $ makeVec3 (x * fovX) ((-y) * fovY) 0 - eyePos)
+                       in  normalize $ lift (V3 (x * fovX) ((-y) * fovY) 0) - eyePos)
 
 
 -- | Cast a single ray into the scene
@@ -56,8 +58,8 @@ traceRay limit objects lights ambient = go limit
   where
     (spheres, planes)   = unlift objects
 
-    dummySphere         = constant (Sphere (XYZ 0 0 0) 0           (RGB 0 0 0) 0)
-    dummyPlane          = constant (Plane  (XYZ 0 0 0) (XYZ 0 0 1) (RGB 0 0 0) 0)
+    dummySphere         = constant (Sphere (V3 0 0 0) 0          (RGB 0 0 0) 0)
+    dummyPlane          = constant (Plane  (V3 0 0 0) (V3 0 0 1) (RGB 0 0 0) 0)
 
     -- Stop once there are too many reflections, in case we've found two
     -- parallel mirrors.
@@ -75,7 +77,7 @@ traceRay limit objects lights ambient = go limit
             (hit_s, dist_s, s)  = unlift $ castRay distanceToSphere dummySphere spheres orig dir
             (hit_p, dist_p, p)  = unlift $ castRay distanceToPlane  dummyPlane  planes  orig dir
         in
-        A.not (hit_s ||* hit_p) ?
+        A.not (hit_s || hit_p) ?
           -- ray didn't intersect any objects
         ( constant black
 
@@ -87,10 +89,10 @@ traceRay limit objects lights ambient = go limit
               next_p      = hitPlaneCheck p dist_p orig dir
 
               (point, normal, colour, shine)
-                          = unlift (dist_s A.<* dist_p ? ( next_s, next_p ))
+                          = unlift (dist_s < dist_p ? ( next_s, next_p ))
 
               -- result angle of ray after reflection
-              newdir      = dir - (2.0 * (normal `dot` dir)) .* normal
+              newdir      = dir - (2.0 * (normal `dot` dir)) *^ normal
 
               -- determine the direct lighting at this point
               direct      = applyLights objects lights point normal
@@ -120,7 +122,7 @@ scaleColour s c = lift (RGB s s s) * c
 hitSphere :: Exp Sphere -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Colour, Float)
 hitSphere sph dist orig dir
   = let
-        point   = orig + dist .* dir
+        point   = orig + dist *^ dir
         normal  = sphereNormal sph point
         colour  = sphereColor sph
         shine   = sphereShine sph
@@ -130,7 +132,7 @@ hitSphere sph dist orig dir
 hitPlane :: Exp Plane -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Colour, Float)
 hitPlane pln dist orig dir
   = let
-        point   = orig + dist .* dir
+        point   = orig + dist *^ dir
         normal  = planeNormal pln
         colour  = planeColor pln
         shine   = planeShine pln
@@ -140,7 +142,7 @@ hitPlane pln dist orig dir
 hitPlaneCheck :: Exp PlaneCheck -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Colour, Float)
 hitPlaneCheck pln dist orig dir
   = let
-        point   = orig + dist .* dir
+        point   = orig + dist *^ dir
         normal  = planeCheckNormal pln
         colour  = checkers point
         shine   = planeCheckShine pln

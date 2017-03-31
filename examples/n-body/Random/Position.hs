@@ -17,14 +17,14 @@ import Data.Array.Accelerate.Array.Sugar                as A
 -- | Points distributed as a disc
 --
 disc :: Position -> R -> sh :~> Position
-disc (originX, originY, originZ) radiusMax _ix gen
+disc (V3 originX originY originZ) radiusMax _ix gen
   = do  radius          <- uniformR (0,radiusMax) gen
         theta           <- uniformR (0, pi)       gen
         phi             <- uniformR (0, 2*pi)     gen
 
-        return ( originX + radius * sin theta * cos phi
-               , originY + radius * sin theta * sin phi
-               , originZ + radius * cos theta )
+        return $ V3 (originX + radius * sin theta * cos phi)
+                    (originY + radius * sin theta * sin phi)
+                    (originZ + radius * cos theta)
 
 
 -- | A point cloud with areas of high and low density
@@ -33,7 +33,7 @@ cloud :: Shape sh => (Int,Int) -> R -> sh :~> Position
 cloud (fromIntegral -> sizeX, fromIntegral -> sizeY) radiusMax ix gen
   = let
         blob (sx,sy,sz) r
-          = disc (sx * sizeX, sy * sizeY, sz * (sizeX `min` sizeY))
+          = disc (V3 (sx * sizeX) (sy * sizeY) (sz * (sizeX `min` sizeY)))
                  (radiusMax * r)
 
     in case A.size ix `mod` 5 of

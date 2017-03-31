@@ -67,7 +67,7 @@ distance u v =
   let (x1,y1) = unlift u
       (x2,y2) = unlift v
   in
-  (x1-x2)^(2::Int) + (y1-y2)^(2::Int)
+  (x1-x2) P.^ (2::Int) + (y1-y2) P.^ (2::Int)
 
 
 -- For each of the given points, return the cluster Id that that that point is
@@ -88,7 +88,7 @@ findClosestCluster clusters points =
       let d  = A.snd st
           d' = distance p (centroidOfCluster c)
       in
-      d' A.<* d ? ( lift (idOfCluster c, d') , st )
+      d' A.< d ? ( lift (idOfCluster c, d') , st )
 
 
 -- Given a vector of points and a vector of clusters we, we first locate the
@@ -158,7 +158,7 @@ makeNewClusters points clusters
                              yes     = lift (constant 1, points ! index1 j)
                              no      = constant (0, (0, 0))
                          in
-                         near ==* A.fromIntegral i ? ( yes, no ))
+                         near A.== A.fromIntegral i ? ( yes, no ))
 
     addPointSum :: Exp (PointSum a) -> Exp (PointSum a) -> Exp (PointSum a)
     addPointSum x y =
@@ -211,7 +211,7 @@ kmeans points clusters
       $ A.zipWith (\c1 c2 -> let (x1,y1) = unlift (centroidOfCluster c1)
                                  (x2,y2) = unlift (centroidOfCluster c2)
                              in
-                             abs (x1-x2) >* 0.01 ||* abs (y1-y2) >* 0.01) xs ys
+                             abs (x1-x2) A.> 0.01 A.|| abs (y1-y2) A.> 0.01) xs ys
 
 
 -- The largest non-infinite floating point number
@@ -223,6 +223,6 @@ inf = P.encodeFloat m n
     b           = P.floatRadix a
     e           = P.floatDigits a
     (_, e')     = P.floatRange a
-    m           = b ^ e - 1
+    m           = b P.^ e - 1
     n           = e' - e
 
