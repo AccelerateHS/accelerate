@@ -393,4 +393,9 @@ source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
 
+source-repository this
+  Type:                 git
+  Tag:                  1.0.0.0
+  Location:             git://github.com/AccelerateHS/accelerate.git
+
 -- vim: nospell
