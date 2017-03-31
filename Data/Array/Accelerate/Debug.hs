@@ -2,11 +2,11 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -22,10 +22,15 @@ module Data.Array.Accelerate.Debug (
   dumpGraph,
   dumpSimplStats,
 
+  monitoringIsEnabled,
+  debuggingIsEnabled,
+
 ) where
 
 import Data.Array.Accelerate.Debug.Flags                as Debug
+import Data.Array.Accelerate.Debug.Monitoring           as Debug
 import Data.Array.Accelerate.Debug.Stats                as Debug
+import Data.Array.Accelerate.Debug.Timed                as Debug
 import Data.Array.Accelerate.Debug.Trace                as Debug
 
 import Data.Array.Accelerate.Pretty.Graphviz
@@ -49,15 +54,30 @@ import System.Win32.Process                             ( ProcessId )
 #endif
 
 
+debuggingIsEnabled :: Bool
+#if ACCELERATE_DEBUG
+debuggingIsEnabled = True
+#else
+debuggingIsEnabled = False
+#endif
+
+monitoringIsEnabled :: Bool
+#if ACCELERATE_MONITORING
+monitoringIsEnabled = True
+#else
+monitoringIsEnabled = False
+#endif
+
+
 -- | Display simplifier statistics. The counts are reset afterwards.
 --
-{-# SPECIALISE dumpSimplStats :: IO () #-}
+{-# INLINEABLE dumpSimplStats #-}
 dumpSimplStats :: MonadIO m => m ()
 #if ACCELERATE_DEBUG
-dumpSimplStats =
-  liftIO $ do
+dumpSimplStats = do
+  liftIO $ Debug.when dump_simpl_stats $ do
     stats <- simplCount
-    traceIO dump_simpl_stats (show stats)
+    putTraceMsg (show stats)
     resetSimplCount
 #else
 dumpSimplStats = return ()
@@ -67,7 +87,7 @@ dumpSimplStats = return ()
 -- | Write a representation of the given input (a closed array expression or
 -- function) to file in Graphviz dot format in the temporary directory.
 --
-{-# SPECIALISE dumpGraph :: PrettyGraph g => g -> IO () #-}
+{-# INLINEABLE dumpGraph #-}
 dumpGraph :: (MonadIO m, PrettyGraph g) => g -> m ()
 #if ACCELERATE_DEBUG
 dumpGraph g =
@@ -92,10 +112,9 @@ withTemporaryFile template go = do
   let dir = tmp </> "accelerate-" ++ show pid
   createDirectoryIfMissing True dir
   bracket (openTempFile dir template) (hClose . snd) (uncurry go)
-#endif
 
 #ifdef WIN32
 getProcessID :: IO ProcessId
 getProcessID = return 0xaaaa
 #endif
-
+#endif

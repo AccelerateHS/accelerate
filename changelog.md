@@ -1,3 +1,8 @@
+1.0.0.0
+
+  * Many API and internal changes
+
+  * Bug fixes and other enhancements
 
 0.15.0.0
 

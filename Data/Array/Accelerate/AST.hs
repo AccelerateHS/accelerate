@@ -1,8 +1,11 @@
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -12,14 +15,14 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 --               [2010..2011] Ben Lever
+--               [2013..2017] Robert Clifton-Everest
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -90,12 +93,16 @@ module Data.Array.Accelerate.AST (
   Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
-  PreOpenSeq(..), Seq,
-  Producer(..), Consumer(..),
+  -- PreOpenSeq(..), Seq,
+  -- Producer(..), Consumer(..),
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
   PrimFun(..),
+
+  -- NFData
+  NFDataAcc,
+  rnfPreOpenAfun, rnfPreOpenAcc, rnfPreOpenFun, rnfPreOpenExp,
 
   -- debugging
   showPreAccOp, showPreExpOp,
@@ -105,14 +112,16 @@ module Data.Array.Accelerate.AST (
 --standard library
 import Data.List
 import Data.Typeable
+import Control.DeepSeq
 
 -- friends
-import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Lifted               ( Vector' )
-import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
+#if __GLASGOW_HASKELL__ < 800
+import Data.Array.Accelerate.Error
+#endif
 
 
 -- Typed de Bruijn indices
@@ -159,14 +168,18 @@ data ValElt env where
 prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
+#if __GLASGOW_HASKELL__ < 800
 prj _             _            = $internalError "prj" "inconsistent valuation"
+#endif
 
 -- Projection of a value from a valuation of array elements using a de Bruijn index
 --
 prjElt :: Idx env t -> ValElt env -> t
 prjElt ZeroIdx       (PushElt _   v) = Sugar.toElt v
 prjElt (SuccIdx idx) (PushElt val _) = prjElt idx val
+#if __GLASGOW_HASKELL__ < 800
 prjElt _             _               = $internalError "prjElt" "inconsistent valuation"
+#endif
 
 -- Array expressions
 -- -----------------
@@ -188,6 +201,18 @@ type PreAfun acc = PreOpenAfun acc ()
 -- |Vanilla array-computation function without free array variables
 --
 type Afun = OpenAfun ()
+
+-- Vanilla open array computations
+--
+newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
+
+-- |Closed array expression aka an array program
+--
+type Acc = OpenAcc ()
+
+deriving instance Typeable PreOpenAcc
+deriving instance Typeable OpenAcc
+
 
 -- |Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
@@ -245,11 +270,11 @@ data PreOpenAcc acc aenv a where
   -- Apply a backend-specific foreign function to an array, with a pure
   -- Accelerate version for use with other backends. The functions must be
   -- closed.
-  Aforeign    :: (Arrays arrs, Arrays a, Foreign f)
-              => f arrs a                                       -- The foreign function for a given backend
-              -> PreAfun      acc      (arrs -> a)              -- A pure accelerate version
-              -> acc              aenv arrs                     -- Arguments to the function
-              -> PreOpenAcc   acc aenv a
+  Aforeign    :: (Arrays as, Arrays bs, Foreign asm)
+              => asm                   (as -> bs)               -- The foreign function for a given backend
+              -> PreAfun      acc      (as -> bs)               -- Fallback implementation(s)
+              -> acc              aenv as                       -- Arguments to the function
+              -> PreOpenAcc   acc aenv bs
 
   -- If-then-else for array-level computations
   Acond       :: Arrays arrs
@@ -366,46 +391,46 @@ data PreOpenAcc acc aenv a where
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*
   -- function and an initial element (which does not need to be the neutral of the
   -- associative operations)
-  Scanl       :: Elt e
+  Scanl       :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
     -- FIXME: Make the scans rank-polymorphic?
 
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
-  Scanl'      :: Elt e
+  Scanl'      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
 
   -- Haskell-style scan without an initial value
-  Scanl1      :: Elt e
+  Scanl1      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Right-to-left version of 'Scanl'
-  Scanr       :: Elt e
+  Scanr       :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Right-to-left version of 'Scanl\''
-  Scanr'      :: Elt e
+  Scanr'      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
 
   -- Right-to-left version of 'Scanl1'
-  Scanr1      :: Elt e
+  Scanr1      :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              -> acc            aenv (Array (sh:.Int) e)
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Generalised forward permutation is characterised by a permutation function
   -- that determines for each element of the source array where it should go in
@@ -463,19 +488,13 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv (Array sh e')
 
   -- A sequence of operations.
-  Collect     :: Arrays arrs
-              => PreOpenSeq acc aenv () arrs
-              -> PreOpenAcc acc aenv arrs
+  -- Collect     :: Arrays arrs
+  --             => PreOpenSeq acc aenv () arrs
+  --             -> PreOpenAcc acc aenv arrs
 
--- Vanilla open array computations
---
-newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
-
--- deriving instance Typeable PreOpenAcc
-deriving instance Typeable OpenAcc
-
+{--
 data PreOpenSeq acc aenv senv arrs where
-  Producer :: (Arrays a)
+  Producer :: Arrays a
            => Producer acc aenv senv a
            -> PreOpenSeq acc aenv (senv, a) arrs
            -> PreOpenSeq acc aenv senv arrs
@@ -564,7 +583,7 @@ data Consumer acc aenv senv a where
   -- as the companion operator:
   --
   --   Forall b sh1 a1 sh2 a2.
---       f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+  --     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
   --
   -- It is common to ignore the shape vectors, yielding the usual
   -- semi-associativity law:
@@ -588,10 +607,7 @@ data Consumer acc aenv senv a where
 -- |Closed sequence computation
 --
 type Seq = PreOpenSeq OpenAcc () ()
-
--- |Closed array expression aka an array program
---
-type Acc = OpenAcc ()
+--}
 
 
 -- |Operations on stencils.
@@ -817,6 +833,18 @@ type PreFun acc = PreOpenFun acc ()
 --
 type Fun = OpenFun ()
 
+-- |Vanilla open expression
+--
+type OpenExp = PreOpenExp OpenAcc
+
+-- |Parametrised expression without free scalar variables
+--
+type PreExp acc = PreOpenExp acc ()
+
+-- |Vanilla expression without free scalar variables
+--
+type Exp = OpenExp ()
+
 -- |Parametrised open expressions using de Bruijn indices for variables ranging over tuples
 -- of scalars and arrays of tuples.  All code, except Cond, is evaluated eagerly.  N-tuples are
 -- represented as nested pairs.
@@ -837,8 +865,8 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv t
 
   -- Apply a backend-specific foreign function
-  Foreign       :: (Foreign f, Elt x, Elt y)
-                => f x y
+  Foreign       :: (Foreign asm, Elt x, Elt y)
+                => asm           (x -> y)
                 -> PreFun acc () (x -> y)
                 -> PreOpenExp acc env aenv x
                 -> PreOpenExp acc env aenv y
@@ -961,19 +989,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv dim
 
 
--- |Vanilla open expression
---
-type OpenExp = PreOpenExp OpenAcc
-
--- |Parametrised expression without free scalar variables
---
-type PreExp acc = PreOpenExp acc ()
-
--- |Vanilla expression without free scalar variables
---
-type Exp = OpenExp ()
-
--- |Primitive GPU constants
+-- |Primitive constant values
 --
 data PrimConst ty where
 
@@ -996,21 +1012,26 @@ data PrimFun sig where
   PrimAbs  :: NumType a -> PrimFun (a      -> a)
   PrimSig  :: NumType a -> PrimFun (a      -> a)
 
-  -- operators from Integral & Bits
+  -- operators from Integral
   PrimQuot     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimRem      :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimQuotRem  :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
   PrimIDiv     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimMod      :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimDivMod   :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
-  PrimBAnd     :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBOr      :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBXor     :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBNot     :: IntegralType a -> PrimFun (a        -> a)
-  PrimBShiftL  :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBShiftR  :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateL :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateR :: IntegralType a -> PrimFun ((a, Int) -> a)
+
+  -- operators from Bits & FiniteBits
+  PrimBAnd               :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBOr                :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBXor               :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBNot               :: IntegralType a -> PrimFun (a        -> a)
+  PrimBShiftL            :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBShiftR            :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateL           :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateR           :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimPopCount           :: IntegralType a -> PrimFun (a -> Int)
+  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> Int)
+  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> Int)
 
   -- operators from Fractional and Floating
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
@@ -1097,6 +1118,359 @@ data PrimFun sig where
   -- constructs for arrays (but that's not scalar primitives)
 
 
+-- NFData instances
+-- ================
+
+instance NFData (OpenAfun aenv f) where
+  rnf = rnfOpenAfun
+
+instance NFData (OpenAcc aenv t) where
+  rnf = rnfOpenAcc
+
+-- instance NFData (Seq t) where
+--   rnf = rnfPreOpenSeq rnfOpenAcc
+
+instance NFData (OpenExp env aenv t) where
+  rnf = rnfPreOpenExp rnfOpenAcc
+
+instance NFData (OpenFun env aenv t) where
+  rnf = rnfPreOpenFun rnfOpenAcc
+
+
+-- Array expressions
+-- -----------------
+
+type NFDataAcc acc = forall aenv t. acc aenv t -> ()
+
+rnfIdx :: Idx env t -> ()
+rnfIdx ZeroIdx      = ()
+rnfIdx (SuccIdx ix) = rnfIdx ix
+
+rnfTupleIdx :: TupleIdx t e -> ()
+rnfTupleIdx ZeroTupIdx       = ()
+rnfTupleIdx (SuccTupIdx tix) = rnfTupleIdx tix
+
+rnfOpenAfun :: OpenAfun aenv t -> ()
+rnfOpenAfun = rnfPreOpenAfun rnfOpenAcc
+
+rnfOpenAcc :: OpenAcc aenv t -> ()
+rnfOpenAcc (OpenAcc pacc) = rnfPreOpenAcc rnfOpenAcc pacc
+
+rnfPreOpenAfun :: NFDataAcc acc -> PreOpenAfun acc aenv t -> ()
+rnfPreOpenAfun rnfA (Abody b) = rnfA b
+rnfPreOpenAfun rnfA (Alam f)  = rnfPreOpenAfun rnfA f
+
+rnfPreOpenAcc :: forall acc aenv t. NFDataAcc acc -> PreOpenAcc acc aenv t -> ()
+rnfPreOpenAcc rnfA pacc =
+  let
+      rnfAF :: PreOpenAfun acc aenv' t' -> ()
+      rnfAF = rnfPreOpenAfun rnfA
+
+      rnfE :: PreOpenExp acc env' aenv' t' -> ()
+      rnfE = rnfPreOpenExp rnfA
+
+      rnfF :: PreOpenFun acc env' aenv' t' -> ()
+      rnfF = rnfPreOpenFun rnfA
+
+      -- rnfS :: PreOpenSeq acc aenv' senv' t' -> ()
+      -- rnfS = rnfPreOpenSeq rnfA
+
+      rnfB :: forall aenv' sh e. Elt e => acc aenv' (Array sh e) -> Boundary (EltRepr e) -> ()
+      rnfB _ = rnfBoundary (eltType (undefined::e))
+  in
+  case pacc of
+    Alet bnd body             -> rnfA bnd `seq` rnfA body
+    Avar ix                   -> rnfIdx ix
+    Atuple atup               -> rnfAtuple rnfA atup
+    Aprj tix a                -> rnfTupleIdx tix `seq` rnfA a
+    Apply afun acc            -> rnfAF afun `seq` rnfA acc
+    Aforeign asm afun a       -> rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
+    Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
+    Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
+    Use arrs                  -> rnfArrays (arrays (undefined::t)) arrs
+    Unit x                    -> rnfE x
+    Reshape sh a              -> rnfE sh `seq` rnfA a
+    Generate sh f             -> rnfE sh `seq` rnfF f
+    Transform sh p f a        -> rnfE sh `seq` rnfF p `seq` rnfF f `seq` rnfA a
+    Replicate slice sh a      -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
+    Slice slice a sh          -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
+    Map f a                   -> rnfF f `seq` rnfA a
+    ZipWith f a1 a2           -> rnfF f `seq` rnfA a1 `seq` rnfA a2
+    Fold f z a                -> rnfF f `seq` rnfE z `seq` rnfA a
+    Fold1 f a                 -> rnfF f `seq` rnfA a
+    FoldSeg f z a s           -> rnfF f `seq` rnfE z `seq` rnfA a `seq` rnfA s
+    Fold1Seg f a s            -> rnfF f `seq` rnfA a `seq` rnfA s
+    Scanl f z a               -> rnfF f `seq` rnfE z `seq` rnfA a
+    Scanl1 f a                -> rnfF f `seq` rnfA a
+    Scanl' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
+    Scanr f z a               -> rnfF f `seq` rnfE z `seq` rnfA a
+    Scanr1 f a                -> rnfF f `seq` rnfA a
+    Scanr' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
+    Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
+    Backpermute sh f a        -> rnfE sh `seq` rnfF f `seq` rnfA a
+    Stencil f b a             -> rnfF f `seq` rnfB a b `seq` rnfA a
+    Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB a1 b1 `seq` rnfB a2 b2 `seq` rnfA a1 `seq` rnfA a2
+    -- Collect s                 -> rnfS s
+
+
+rnfAtuple :: NFDataAcc acc -> Atuple (acc aenv) t -> ()
+rnfAtuple _    NilAtup          = ()
+rnfAtuple rnfA (SnocAtup tup a) = rnfAtuple rnfA tup `seq` rnfA a
+
+rnfArrays :: ArraysR arrs -> arrs -> ()
+rnfArrays ArraysRunit           ()      = ()
+rnfArrays ArraysRarray          arr     = rnf arr
+rnfArrays (ArraysRpair ar1 ar2) (a1,a2) = rnfArrays ar1 a1 `seq` rnfArrays ar2 a2
+
+rnfBoundary :: TupleType t -> Boundary t -> ()
+rnfBoundary _ Clamp        = ()
+rnfBoundary _ Mirror       = ()
+rnfBoundary _ Wrap         = ()
+rnfBoundary t (Constant c) = rnfConst t c
+
+
+{--
+-- Sequence expressions
+-- --------------------
+
+rnfPreOpenSeq :: forall acc aenv senv t. NFDataAcc acc -> PreOpenSeq acc aenv senv t -> ()
+rnfPreOpenSeq rnfA topSeq =
+  let
+      rnfS :: PreOpenSeq acc aenv' senv' t' -> ()
+      rnfS = rnfPreOpenSeq rnfA
+
+      rnfP :: Producer acc aenv' senv' t' -> ()
+      rnfP = rnfSeqProducer rnfA
+
+      rnfC :: Consumer acc aenv' senv' t' -> ()
+      rnfC = rnfSeqConsumer rnfA
+  in
+  case topSeq of
+    Producer p s              -> rnfP p `seq` rnfS s
+    Consumer c                -> rnfC c
+    Reify ix                  -> rnfIdx ix
+
+rnfSeqProducer :: forall acc aenv senv t. NFDataAcc acc -> Producer acc aenv senv t -> ()
+rnfSeqProducer rnfA topSeq =
+  let
+      rnfArrs :: forall a. Arrays a => [a] -> ()
+      rnfArrs []     = ()
+      rnfArrs (a:as) = rnfArrays (arrays (undefined::a)) (fromArr a) `seq` rnfArrs as
+
+      rnfAF :: PreOpenAfun acc aenv' t' -> ()
+      rnfAF = rnfPreOpenAfun rnfA
+
+      rnfF :: PreOpenFun acc env' aenv' t' -> ()
+      rnfF = rnfPreOpenFun rnfA
+
+      rnfE :: PreOpenExp acc env' aenv' t' -> ()
+      rnfE = rnfPreOpenExp rnfA
+  in
+  case topSeq of
+    StreamIn as               -> rnfArrs as
+    ToSeq slice _ a           -> rnfSliceIndex slice `seq` rnfA a
+    MapSeq f ix               -> rnfAF f `seq` rnfIdx ix
+    ChunkedMapSeq f ix        -> rnfAF f `seq` rnfIdx ix
+    ZipWithSeq f ix1 ix2      -> rnfAF f `seq` rnfIdx ix1 `seq` rnfIdx ix2
+    ScanSeq f z ix            -> rnfF f `seq` rnfE z `seq` rnfIdx ix
+
+rnfSeqConsumer :: forall acc aenv senv t. NFDataAcc acc -> Consumer acc aenv senv t -> ()
+rnfSeqConsumer rnfA topSeq =
+  let
+      rnfAF :: PreOpenAfun acc aenv' t' -> ()
+      rnfAF = rnfPreOpenAfun rnfA
+
+      rnfF :: PreOpenFun acc env' aenv' t' -> ()
+      rnfF = rnfPreOpenFun rnfA
+
+      rnfE :: PreOpenExp acc env' aenv' t' -> ()
+      rnfE = rnfPreOpenExp rnfA
+  in
+  case topSeq of
+    FoldSeq f z ix            -> rnfF f `seq` rnfE z `seq` rnfIdx ix
+    FoldSeqFlatten f a ix     -> rnfAF f `seq` rnfA a `seq` rnfIdx ix
+    Stuple stup               -> rnfStuple rnfA stup
+
+rnfStuple :: NFDataAcc acc -> Atuple (Consumer acc aenv senv) t -> ()
+rnfStuple _    NilAtup          = ()
+rnfStuple rnfA (SnocAtup tup c) = rnfStuple rnfA tup `seq` rnfSeqConsumer rnfA c
+--}
+
+-- Scalar expressions
+-- ------------------
+
+rnfPreOpenFun :: NFDataAcc acc -> PreOpenFun acc env aenv t -> ()
+rnfPreOpenFun rnfA (Body b) = rnfPreOpenExp rnfA b
+rnfPreOpenFun rnfA (Lam f)  = rnfPreOpenFun rnfA f
+
+rnfPreOpenExp :: forall acc env aenv t. NFDataAcc acc -> PreOpenExp acc env aenv t -> ()
+rnfPreOpenExp rnfA topExp =
+  let
+      rnfF :: PreOpenFun acc env' aenv' t' -> ()
+      rnfF = rnfPreOpenFun rnfA
+
+      rnfE :: PreOpenExp acc env' aenv' t' -> ()
+      rnfE = rnfPreOpenExp rnfA
+  in
+  case topExp of
+    Let bnd body              -> rnfE bnd `seq` rnfE body
+    Var ix                    -> rnfIdx ix
+    Foreign asm f x           -> rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
+    Const t                   -> rnfConst (eltType (undefined::t)) t
+    Tuple t                   -> rnfTuple rnfA t
+    Prj ix e                  -> rnfTupleIdx ix `seq` rnfE e
+    IndexNil                  -> ()
+    IndexCons sh sz           -> rnfE sh `seq` rnfE sz
+    IndexHead sh              -> rnfE sh
+    IndexTail sh              -> rnfE sh
+    IndexAny                  -> ()
+    IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
+    IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
+    ToIndex sh ix             -> rnfE sh `seq` rnfE ix
+    FromIndex sh ix           -> rnfE sh `seq` rnfE ix
+    Cond p e1 e2              -> rnfE p `seq` rnfE e1 `seq` rnfE e2
+    While p f x               -> rnfF p `seq` rnfF f `seq` rnfE x
+    PrimConst c               -> rnfPrimConst c
+    PrimApp f x               -> rnfPrimFun f `seq` rnfE x
+    Index a ix                -> rnfA a `seq` rnfE ix
+    LinearIndex a ix          -> rnfA a `seq` rnfE ix
+    Shape a                   -> rnfA a
+    ShapeSize sh              -> rnfE sh
+    Intersect sh1 sh2         -> rnfE sh1 `seq` rnfE sh2
+    Union sh1 sh2             -> rnfE sh1 `seq` rnfE sh2
+
+rnfTuple :: NFDataAcc acc -> Tuple (PreOpenExp acc env aenv) t -> ()
+rnfTuple _    NilTup        = ()
+rnfTuple rnfA (SnocTup t e) = rnfTuple rnfA t `seq` rnfPreOpenExp rnfA e
+
+rnfConst :: TupleType t -> t -> ()
+rnfConst UnitTuple          ()    = ()
+rnfConst (SingleTuple t)    !_    = rnfScalarType t  -- scalars should have (nf == whnf)
+rnfConst (PairTuple ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
+
+rnfPrimConst :: PrimConst c -> ()
+rnfPrimConst (PrimMinBound t) = rnfBoundedType t
+rnfPrimConst (PrimMaxBound t) = rnfBoundedType t
+rnfPrimConst (PrimPi t)       = rnfFloatingType t
+
+rnfPrimFun :: PrimFun f -> ()
+rnfPrimFun (PrimAdd t)                = rnfNumType t
+rnfPrimFun (PrimSub t)                = rnfNumType t
+rnfPrimFun (PrimMul t)                = rnfNumType t
+rnfPrimFun (PrimNeg t)                = rnfNumType t
+rnfPrimFun (PrimAbs t)                = rnfNumType t
+rnfPrimFun (PrimSig t)                = rnfNumType t
+rnfPrimFun (PrimQuot t)               = rnfIntegralType t
+rnfPrimFun (PrimRem t)                = rnfIntegralType t
+rnfPrimFun (PrimQuotRem t)            = rnfIntegralType t
+rnfPrimFun (PrimIDiv t)               = rnfIntegralType t
+rnfPrimFun (PrimMod t)                = rnfIntegralType t
+rnfPrimFun (PrimDivMod t)             = rnfIntegralType t
+rnfPrimFun (PrimBAnd t)               = rnfIntegralType t
+rnfPrimFun (PrimBOr t)                = rnfIntegralType t
+rnfPrimFun (PrimBXor t)               = rnfIntegralType t
+rnfPrimFun (PrimBNot t)               = rnfIntegralType t
+rnfPrimFun (PrimBShiftL t)            = rnfIntegralType t
+rnfPrimFun (PrimBShiftR t)            = rnfIntegralType t
+rnfPrimFun (PrimBRotateL t)           = rnfIntegralType t
+rnfPrimFun (PrimBRotateR t)           = rnfIntegralType t
+rnfPrimFun (PrimPopCount t)           = rnfIntegralType t
+rnfPrimFun (PrimCountLeadingZeros t)  = rnfIntegralType t
+rnfPrimFun (PrimCountTrailingZeros t) = rnfIntegralType t
+rnfPrimFun (PrimFDiv t)               = rnfFloatingType t
+rnfPrimFun (PrimRecip t)              = rnfFloatingType t
+rnfPrimFun (PrimSin t)                = rnfFloatingType t
+rnfPrimFun (PrimCos t)                = rnfFloatingType t
+rnfPrimFun (PrimTan t)                = rnfFloatingType t
+rnfPrimFun (PrimAsin t)               = rnfFloatingType t
+rnfPrimFun (PrimAcos t)               = rnfFloatingType t
+rnfPrimFun (PrimAtan t)               = rnfFloatingType t
+rnfPrimFun (PrimSinh t)               = rnfFloatingType t
+rnfPrimFun (PrimCosh t)               = rnfFloatingType t
+rnfPrimFun (PrimTanh t)               = rnfFloatingType t
+rnfPrimFun (PrimAsinh t)              = rnfFloatingType t
+rnfPrimFun (PrimAcosh t)              = rnfFloatingType t
+rnfPrimFun (PrimAtanh t)              = rnfFloatingType t
+rnfPrimFun (PrimExpFloating t)        = rnfFloatingType t
+rnfPrimFun (PrimSqrt t)               = rnfFloatingType t
+rnfPrimFun (PrimLog t)                = rnfFloatingType t
+rnfPrimFun (PrimFPow t)               = rnfFloatingType t
+rnfPrimFun (PrimLogBase t)            = rnfFloatingType t
+rnfPrimFun (PrimTruncate f i)         = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimRound f i)            = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimFloor f i)            = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimCeiling f i)          = rnfFloatingType f `seq` rnfIntegralType i
+rnfPrimFun (PrimIsNaN t)              = rnfFloatingType t
+rnfPrimFun (PrimAtan2 t)              = rnfFloatingType t
+rnfPrimFun (PrimLt t)                 = rnfScalarType t
+rnfPrimFun (PrimGt t)                 = rnfScalarType t
+rnfPrimFun (PrimLtEq t)               = rnfScalarType t
+rnfPrimFun (PrimGtEq t)               = rnfScalarType t
+rnfPrimFun (PrimEq t)                 = rnfScalarType t
+rnfPrimFun (PrimNEq t)                = rnfScalarType t
+rnfPrimFun (PrimMax t)                = rnfScalarType t
+rnfPrimFun (PrimMin t)                = rnfScalarType t
+rnfPrimFun PrimLAnd                   = ()
+rnfPrimFun PrimLOr                    = ()
+rnfPrimFun PrimLNot                   = ()
+rnfPrimFun PrimOrd                    = ()
+rnfPrimFun PrimChr                    = ()
+rnfPrimFun PrimBoolToInt              = ()
+rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
+rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
+rnfPrimFun (PrimCoerce a b)           = rnfScalarType a `seq` rnfScalarType b
+
+rnfSliceIndex :: SliceIndex ix slice co sh -> ()
+rnfSliceIndex SliceNil        = ()
+rnfSliceIndex (SliceAll sh)   = rnfSliceIndex sh
+rnfSliceIndex (SliceFixed sh) = rnfSliceIndex sh
+
+rnfScalarType :: ScalarType t -> ()
+rnfScalarType (NumScalarType t)    = rnfNumType t
+rnfScalarType (NonNumScalarType t) = rnfNonNumType t
+
+rnfBoundedType :: BoundedType t -> ()
+rnfBoundedType (IntegralBoundedType t) = rnfIntegralType t
+rnfBoundedType (NonNumBoundedType t)   = rnfNonNumType t
+
+rnfNumType :: NumType t -> ()
+rnfNumType (IntegralNumType t) = rnfIntegralType t
+rnfNumType (FloatingNumType t) = rnfFloatingType t
+
+rnfNonNumType :: NonNumType t -> ()
+rnfNonNumType (TypeBool   NonNumDict) = ()
+rnfNonNumType (TypeChar   NonNumDict) = ()
+rnfNonNumType (TypeCChar  NonNumDict) = ()
+rnfNonNumType (TypeCSChar NonNumDict) = ()
+rnfNonNumType (TypeCUChar NonNumDict) = ()
+
+rnfIntegralType :: IntegralType t -> ()
+rnfIntegralType (TypeInt     IntegralDict) = ()
+rnfIntegralType (TypeInt8    IntegralDict) = ()
+rnfIntegralType (TypeInt16   IntegralDict) = ()
+rnfIntegralType (TypeInt32   IntegralDict) = ()
+rnfIntegralType (TypeInt64   IntegralDict) = ()
+rnfIntegralType (TypeWord    IntegralDict) = ()
+rnfIntegralType (TypeWord8   IntegralDict) = ()
+rnfIntegralType (TypeWord16  IntegralDict) = ()
+rnfIntegralType (TypeWord32  IntegralDict) = ()
+rnfIntegralType (TypeWord64  IntegralDict) = ()
+rnfIntegralType (TypeCShort  IntegralDict) = ()
+rnfIntegralType (TypeCUShort IntegralDict) = ()
+rnfIntegralType (TypeCInt    IntegralDict) = ()
+rnfIntegralType (TypeCUInt   IntegralDict) = ()
+rnfIntegralType (TypeCLong   IntegralDict) = ()
+rnfIntegralType (TypeCULong  IntegralDict) = ()
+rnfIntegralType (TypeCLLong  IntegralDict) = ()
+rnfIntegralType (TypeCULLong IntegralDict) = ()
+
+rnfFloatingType :: FloatingType t -> ()
+rnfFloatingType (TypeFloat   FloatingDict) = ()
+rnfFloatingType (TypeDouble  FloatingDict) = ()
+rnfFloatingType (TypeCFloat  FloatingDict) = ()
+rnfFloatingType (TypeCDouble FloatingDict) = ()
+
+
 -- Debugging
 -- ---------
 
@@ -1132,7 +1506,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Collect{}          = "Collect"
+-- showPreAccOp Collect{}          = "Collect"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

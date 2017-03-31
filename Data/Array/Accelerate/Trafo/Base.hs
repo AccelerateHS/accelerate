@@ -17,10 +17,10 @@
 #endif
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Base
--- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -28,14 +28,14 @@
 module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
-  Kit(..), Match(..), (:=:)(REFL),
+  Kit(..), Match(..), (:~:)(..),
   avarIn, kmap, fromOpenAfun,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
-  DelayedSeq(..), DelayedOpenSeq,
+  -- DelayedSeq(..), DelayedOpenSeq,
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
@@ -49,7 +49,9 @@ module Data.Array.Accelerate.Trafo.Base (
 
 -- standard library
 import Control.Applicative
+import Control.DeepSeq
 import Data.Hashable
+import Data.Type.Equality
 import Text.PrettyPrint
 import Prelude                                          hiding ( until )
 
@@ -83,10 +85,13 @@ instance Kit OpenAcc where
   inject                 = OpenAcc
   extract (OpenAcc pacc) = pacc
   fromOpenAcc            = id
-
-  matchAcc      = matchOpenAcc
-  hashAcc       = hashOpenAcc
-  prettyAcc     = prettyOpenAcc
+  --
+  {-# INLINEABLE hashAcc   #-}
+  {-# INLINEABLE matchAcc  #-}
+  {-# INLINEABLE prettyAcc #-}
+  hashAcc                = hashOpenAcc
+  matchAcc               = matchOpenAcc
+  prettyAcc              = prettyOpenAcc
 
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
 avarIn = inject  . Avar
@@ -102,21 +107,26 @@ fromOpenAfun (Alam f)  = Alam  $ fromOpenAfun f
 -- to the existentially quantified terms in the positive case.
 --
 class Match f where
-  match :: f s -> f t -> Maybe (s :=: t)
+  match :: f s -> f t -> Maybe (s :~: t)
 
 instance Match (Idx env) where
+  {-# INLINEABLE match #-}
   match = matchIdx
 
 instance Kit acc => Match (PreOpenExp acc env aenv) where
+  {-# INLINEABLE match #-}
   match = matchPreOpenExp matchAcc hashAcc
 
 instance Kit acc => Match (PreOpenFun acc env aenv) where
+  {-# INLINEABLE match #-}
   match = matchPreOpenFun matchAcc hashAcc
 
 instance Kit acc => Match (PreOpenAcc acc aenv) where
+  {-# INLINEABLE match #-}
   match = matchPreOpenAcc matchAcc hashAcc
 
 instance {-# INCOHERENT #-} Kit acc => Match (acc aenv) where
+  {-# INLINEABLE match #-}
   match = matchAcc
 
 
@@ -133,15 +143,15 @@ type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
 type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
 
-data DelayedSeq t where
-  DelayedSeq :: Extend DelayedOpenAcc () aenv
-             -> DelayedOpenSeq aenv () t
-             -> DelayedSeq t
+-- data DelayedSeq t where
+--   DelayedSeq :: Extend DelayedOpenAcc () aenv
+--              -> DelayedOpenSeq aenv () t
+--              -> DelayedSeq t
 
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
 type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
-type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
+-- type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
 
 data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
@@ -154,13 +164,15 @@ data DelayedOpenAcc aenv a where
 
 instance Rebuildable DelayedOpenAcc where
   type AccClo DelayedOpenAcc = DelayedOpenAcc
+  {-# INLINEABLE rebuildPartial #-}
   rebuildPartial v acc = case acc of
-    Manifest pacc -> Manifest <$> (rebuildPartial v pacc)
-    Delayed{..}   -> Delayed <$> (rebuildPartial v extentD)
-                             <*> (rebuildPartial v indexD)
-                             <*> (rebuildPartial v linearIndexD)
+    Manifest pacc -> Manifest <$> rebuildPartial v pacc
+    Delayed{..}   -> Delayed  <$> rebuildPartial v extentD
+                              <*> rebuildPartial v indexD
+                              <*> rebuildPartial v linearIndexD
 
 instance Sink DelayedOpenAcc where
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
 instance Kit DelayedOpenAcc where
   inject                  = Manifest
@@ -168,10 +180,21 @@ instance Kit DelayedOpenAcc where
   extract Delayed{}       = error "DelayedAcc.extract"
   fromOpenAcc             = error "DelayedAcc.fromOpenAcc"
   --
-  matchAcc                = matchDelayed
+  {-# INLINEABLE hashAcc   #-}
+  {-# INLINEABLE matchAcc  #-}
+  {-# INLINEABLE prettyAcc #-}
   hashAcc                 = hashDelayed
+  matchAcc                = matchDelayed
   prettyAcc               = prettyDelayed
 
+instance NFData (DelayedOpenAfun aenv t) where
+  rnf = rnfPreOpenAfun rnfDelayedOpenAcc
+
+instance NFData (DelayedOpenAcc aenv t) where
+  rnf = rnfDelayedOpenAcc
+
+-- instance NFData (DelayedSeq t) where
+--   rnf = rnfDelayedSeq
 
 hashDelayed :: HashAcc DelayedOpenAcc
 hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
@@ -185,13 +208,29 @@ matchDelayed (Manifest pacc1) (Manifest pacc2)
   = matchPreOpenAcc matchAcc hashAcc pacc1 pacc2
 
 matchDelayed (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
-  | Just REFL   <- matchPreOpenExp matchAcc hashAcc sh1 sh2
-  , Just REFL   <- matchPreOpenFun matchAcc hashAcc ix1 ix2
-  , Just REFL   <- matchPreOpenFun matchAcc hashAcc lx1 lx2
-  = Just REFL
+  | Just Refl <- matchPreOpenExp matchAcc hashAcc sh1 sh2
+  , Just Refl <- matchPreOpenFun matchAcc hashAcc ix1 ix2
+  , Just Refl <- matchPreOpenFun matchAcc hashAcc lx1 lx2
+  = Just Refl
 
 matchDelayed _ _
   = Nothing
+
+rnfDelayedOpenAcc :: DelayedOpenAcc aenv t -> ()
+rnfDelayedOpenAcc (Manifest pacc)    = rnfPreOpenAcc rnfDelayedOpenAcc pacc
+rnfDelayedOpenAcc (Delayed sh ix lx) = rnfPreOpenExp rnfDelayedOpenAcc sh
+                                 `seq` rnfPreOpenFun rnfDelayedOpenAcc ix
+                                 `seq` rnfPreOpenFun rnfDelayedOpenAcc lx
+
+{--
+rnfDelayedSeq :: DelayedSeq t -> ()
+rnfDelayedSeq (DelayedSeq env s) = rnfExtend rnfDelayedOpenAcc env
+                             `seq` rnfPreOpenSeq rnfDelayedOpenAcc s
+
+rnfExtend :: NFDataAcc acc -> Extend acc aenv aenv' -> ()
+rnfExtend _    BaseEnv         = ()
+rnfExtend rnfA (PushEnv env a) = rnfExtend rnfA env `seq` rnfA a
+--}
 
 
 -- Note: If we detect that the delayed array is simply accessing an array
@@ -208,7 +247,7 @@ prettyDelayed wrap aenv acc = case acc of
   Manifest pacc         -> prettyPreOpenAcc prettyDelayed wrap aenv pacc
   Delayed sh f _
     | Shape a           <- sh
-    , Just REFL         <- match f (Lam (Body (Index a (Var ZeroIdx))))
+    , Just Refl         <- match f (Lam (Body (Index a (Var ZeroIdx))))
     -> prettyDelayed wrap aenv a
 
     | otherwise
@@ -274,7 +313,7 @@ sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
 lookupExp :: Kit acc => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Maybe (Idx env' t)
 lookupExp EmptyExp        _ = Nothing
 lookupExp (PushExp env e) x
-  | Just REFL <- match e x  = Just ZeroIdx
+  | Just Refl <- match e x  = Just ZeroIdx
   | otherwise               = SuccIdx `fmap` lookupExp env x
 
 

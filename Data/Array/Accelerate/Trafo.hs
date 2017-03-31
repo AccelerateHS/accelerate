@@ -7,10 +7,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo
--- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -22,24 +22,28 @@ module Data.Array.Accelerate.Trafo (
 
   convertAcc,  convertAccWith,
   convertAfun, convertAfunWith,
-  convertSeq, convertSeqWith,
+  -- convertSeq,  convertSeqWith,
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
-  DelayedSeq(..), Extend(..),
+  -- DelayedSeq(..), Extend(..),
 
   -- * Substitution
   module Data.Array.Accelerate.Trafo.Substitution,
 
+  -- * Term equality
+  Match(..), (:~:)(..),
+
 ) where
 
+import Control.DeepSeq
 import Data.Typeable
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun, convertSeq ) -- to export types
+import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
@@ -47,11 +51,13 @@ import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
-import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
+-- import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
 #ifdef ACCELERATE_DEBUG
+import Text.Printf
 import System.IO.Unsafe
 import Data.Array.Accelerate.Debug                      hiding ( when )
+import qualified Data.Array.Accelerate.Debug            as Debug
 #endif
 
 
@@ -80,9 +86,9 @@ data Phase = Phase
     -- | Convert segment length arrays into segment offset arrays?
   , convertOffsetOfSegment      :: Bool
 
-    -- | Vectorise maps and zipwiths in sequence computations to
+    --   Vectorise maps and zipwiths in sequence computations to
     --   enable chunked execution?
-  , vectoriseSequences          :: Bool
+  -- , vectoriseSequences          :: Bool
   }
 
 
@@ -97,7 +103,7 @@ phases =  Phase
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
-  , vectoriseSequences     = True
+  -- , vectoriseSequences     = True
   }
 
 when :: (a -> a) -> Bool -> a -> a
@@ -116,10 +122,10 @@ convertAcc = convertAccWith phases
 
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
-  = Fusion.convertAcc enableAccFusion
-  $ Vectorise.vectoriseSeqAcc `when` vectoriseSequences
-  $ Rewrite.convertSegments `when` convertOffsetOfSegment
-  $ Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
+  = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
+  -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
+  $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` convertOffsetOfSegment
+  $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
 
@@ -131,10 +137,10 @@ convertAfun = convertAfunWith phases
 
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
-  = Fusion.convertAfun enableAccFusion
-  $ Vectorise.vectoriseSeqAfun `when` vectoriseSequences
-  $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
+  = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
+  -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
+  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
+  $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
 
@@ -143,8 +149,8 @@ convertAfunWith Phase{..} acc
 --
 convertExp :: Elt e => Exp e -> AST.Exp () e
 convertExp
-  = Rewrite.simplify
-  . Sharing.convertExp (recoverExpSharing phases)
+  = phase "exp-simplify"      Rewrite.simplify
+  . phase "sharing-recovery" (Sharing.convertExp (recoverExpSharing phases))
 
 
 -- | Convert closed scalar functions, incorporating sharing observation and
@@ -152,9 +158,10 @@ convertExp
 --
 convertFun :: Function f => f -> AST.Fun () (FunctionR f)
 convertFun
-  = Rewrite.simplify
-  . Sharing.convertFun (recoverExpSharing phases)
+  = phase "exp-simplify"      Rewrite.simplify
+  . phase "sharing-recovery" (Sharing.convertFun (recoverExpSharing phases))
 
+{--
 -- | Convert a closed sequence computation, incorporating sharing observation and
 --   optimisation.
 --
@@ -163,12 +170,12 @@ convertSeq = convertSeqWith phases
 
 convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
 convertSeqWith Phase{..} s
-  = Fusion.convertSeq enableAccFusion
-  $ Vectorise.vectoriseSeq `when` vectoriseSequences
-  $ Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
-  $ Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
+  = phase "array-fusion"           (Fusion.convertSeq enableAccFusion)
+  -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeq     `when` vectoriseSequences
+  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
+  $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
-
+--}
 
 -- Pretty printing
 -- ---------------
@@ -188,6 +195,7 @@ instance Function (Exp a -> f) => Show (Exp a -> f) where
 -- instance Typeable a => Show (Seq a) where
 --   show = withSimplStats . show . convertSeq
 
+
 -- Debugging
 -- ---------
 
@@ -202,14 +210,23 @@ instance Function (Exp a -> f) => Show (Exp a -> f) where
 withSimplStats :: String -> String
 #ifdef ACCELERATE_DEBUG
 withSimplStats x = unsafePerformIO $ do
-  enabled <- queryFlag dump_simpl_stats
-  if not enabled
-     then return x
-     else do resetSimplCount
-             stats <- length x `seq` simplCount
-             traceIO dump_simpl_stats (show stats)
-             return x
+  Debug.when dump_simpl_stats $ x `deepseq` dumpSimplStats
+  return x
 #else
 withSimplStats x = x
+#endif
+
+-- Execute a phase of the compiler and (possibly) print some timing/gc
+-- statistics.
+--
+phase :: NFData b => String -> (a -> b) -> a -> b
+#ifdef ACCELERATE_DEBUG
+phase n f x = unsafePerformIO $ do
+  enabled <- queryFlag dump_phases
+  if enabled
+    then timed dump_phases (\wall cpu -> printf "phase %s: %s" n (elapsed wall cpu)) (return $!! f x)
+    else return (f x)
+#else
+phase _ f x = f x
 #endif
 

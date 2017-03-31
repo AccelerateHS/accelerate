@@ -1,14 +1,15 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Shape
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -47,27 +48,41 @@ preAccDim k pacc =
     Alet  _ acc          -> k acc
     Avar _               -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
+#if __GLASGOW_HASKELL__ < 800
                               _            -> error "halt, fiend!"
+#endif
 
     Apply _ _            -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
+#if __GLASGOW_HASKELL__ < 800
                               _            -> error "umm, hello"
+#endif
 
     Aforeign _ _ _      -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
+#if __GLASGOW_HASKELL__ < 800
                               _            -> error "I don't even like snails!"
+#endif
 
     Atuple _             -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
+#if __GLASGOW_HASKELL__ < 800
                               _            -> error "can we keep him?"
+#endif
 
     Aprj _ _             -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
+#if __GLASGOW_HASKELL__ < 800
                               _            -> error "inconceivable!"
+#endif
 
+{--
     Collect _            -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
+#if __GLASGOW_HASKELL__ < 800
                               _            -> error "ppbbbbbt~"
+#endif
+--}
 
     Acond _ acc _        -> k acc
     Awhile _ _ acc       -> k acc

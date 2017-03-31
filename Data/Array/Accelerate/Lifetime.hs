@@ -5,7 +5,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Lifetime
--- Copyright   : [2015] Robert Clifton-Everest, Manuel M T Chakravarty, Gabriele Keller
+-- Copyright   : [2015..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>

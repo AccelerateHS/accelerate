@@ -1,15 +1,17 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Algebra
--- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -24,11 +26,12 @@ module Data.Array.Accelerate.Trafo.Algebra (
 ) where
 
 import Prelude                                          hiding ( exp )
-import Data.Maybe                                       ( fromMaybe )
 import Data.Bits
 import Data.Char
+import Data.Monoid
 import GHC.Float                                        ( float2Double, double2Float )
 import Text.PrettyPrint
+import Unsafe.Coerce
 import qualified Prelude                                as P
 
 -- friends
@@ -74,7 +77,9 @@ propagate env = cvtE
     cvtT :: TupleIdx t e -> Tuple (PreOpenExp acc env aenv) t -> Maybe e
     cvtT ZeroTupIdx       (SnocTup _   e) = cvtE e
     cvtT (SuccTupIdx idx) (SnocTup tup _) = cvtT idx tup
+#if __GLASGOW_HASKELL__ < 800
     cvtT _                _               = error "hey what's the head angle on that thing?"
+#endif
 
 
 -- Attempt to evaluate primitive function applications
@@ -84,7 +89,7 @@ evalPrimApp
     => Gamma acc env env aenv
     -> PrimFun (a -> r)
     -> PreOpenExp acc env aenv a
-    -> PreOpenExp acc env aenv r
+    -> (Any, PreOpenExp acc env aenv r)
 evalPrimApp env f x
   -- First attempt to move constant values towards the left
   | Just r      <- commutes f x env     = evalPrimApp env f r
@@ -92,7 +97,7 @@ evalPrimApp env f x
 
   -- Now attempt to evaluate any expressions
   | otherwise
-  = fromMaybe (PrimApp f x)
+  = maybe (Any False, PrimApp f x) (Any True,)
   $ case f of
       PrimAdd ty                -> evalAdd ty x env
       PrimSub ty                -> evalSub ty x env
@@ -114,6 +119,9 @@ evalPrimApp env f x
       PrimBShiftR ty            -> evalBShiftR ty x env
       PrimBRotateL ty           -> evalBRotateL ty x env
       PrimBRotateR ty           -> evalBRotateR ty x env
+      PrimPopCount ty           -> evalPopCount ty x env
+      PrimCountLeadingZeros ty  -> evalCountLeadingZeros ty x env
+      PrimCountTrailingZeros ty -> evalCountTrailingZeros ty x env
       PrimFDiv ty               -> evalFDiv ty x env
       PrimRecip ty              -> evalRecip ty x env
       PrimSin ty                -> evalSin ty x env
@@ -163,7 +171,7 @@ evalPrimApp env f x
 -- to the left of the operator. Returning Nothing indicates no change is made.
 --
 commutes
-    :: forall acc env aenv a r. (Kit acc, Elt a, Elt r)
+    :: forall acc env aenv a r. Kit acc
     => PrimFun (a -> r)
     -> PreOpenExp acc env aenv a
     -> Gamma acc env env aenv
@@ -178,8 +186,6 @@ commutes f x env = case f of
   PrimNEq _     -> swizzle x
   PrimMax _     -> swizzle x
   PrimMin _     -> swizzle x
-  PrimLAnd      -> swizzle x
-  PrimLOr       -> swizzle x
   _             -> Nothing
   where
     swizzle :: PreOpenExp acc env aenv (b,b) -> Maybe (PreOpenExp acc env aenv (b,b))
@@ -234,10 +240,10 @@ associates fun exp = case fun of
 
     swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> PreOpenExp acc env aenv a -> [PrimFun (a -> r)] -> Maybe (PreOpenExp acc env aenv r)
     swizzle f x lvl
-      | Just REFL       <- matches f ops
+      | Just Refl       <- matches f ops
       , Just (a,bc)     <- untup2 x
       , PrimApp g y     <- bc
-      , Just REFL       <- matches g lvl
+      , Just Refl       <- matches g lvl
       , Just (b,c)      <- untup2 y
       = Stats.ruleFired (pprFun "associates" f)
       $ Just $ PrimApp g (tup2 (PrimApp f (tup2 (a,b)), c))
@@ -248,8 +254,8 @@ associates fun exp = case fun of
     matches :: (Elt s, Elt t) => PrimFun (s -> a) -> [PrimFun (t -> a)] -> Maybe (s :=: t)
     matches _ []        = Nothing
     matches f (x:xs)
-      | Just REFL       <- matchPrimFun' f x
-      = Just REFL
+      | Just Refl       <- matchPrimFun' f x
+      = Just Refl
 
       | otherwise
       = matches f xs
@@ -319,9 +325,9 @@ evalSub' ty (untup2 -> Just (x,y)) env
   | Nothing     <- propagate env x
   , Just b      <- propagate env y
   = Stats.ruleFired "-y+x"
-  $ Just $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
+  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
-  | Just REFL   <- match x y
+  | Just Refl   <- match x y
   = Stats.ruleFired "x-x"
   $ Just $ Const (fromElt (0::a))
 
@@ -362,49 +368,68 @@ evalSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 signum
 -- Methods of Integral & Bits
 -- --------------------------
 
-evalQuot :: Elt a => IntegralType a -> (a,a) :-> a
-evalQuot ty | IntegralDict <- integralDict ty = eval2 quot
+evalQuot :: IntegralType a -> (a,a) :-> a
+evalQuot ty exp env
+  | Just qr    <- evalQuotRem ty exp env
+  , Just (q,_) <- untup2 qr
+  = Just q
+evalQuot _ _ _
+  = Nothing
 
-evalRem :: Elt a => IntegralType a -> (a,a) :-> a
-evalRem ty | IntegralDict <- integralDict ty = eval2 rem
+evalRem :: IntegralType a -> (a,a) :-> a
+evalRem ty exp env
+  | Just qr    <- evalQuotRem ty exp env
+  , Just (_,r) <- untup2 qr
+  = Just r
+evalRem _ _ _
+  = Nothing
 
-evalQuotRem :: IntegralType a -> (a,a) :-> (a,a)
+evalQuotRem :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalQuotRem ty exp env
   | IntegralDict                           <- integralDict ty
   , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
-  , Just a <- propagate env x
-  , Just b <- propagate env y
-  = Stats.substitution "constant fold"
-  $ Just $ let (u,v) = quotRem a b
-           in  tup2 (Const (fromElt u), Const (fromElt v))
-
+  , Just b                                 <- propagate env y
+  = case b of
+      0 -> Nothing
+      1 -> Stats.ruleFired "quotRem x 1" $ Just (tup2 (x, Const (fromElt (0::a))))
+      _ -> case propagate env x of
+             Nothing -> Nothing
+             Just a  -> Stats.substitution "constant fold"
+                      $ Just $ let (u,v) = quotRem a b
+                               in  tup2 (Const (fromElt u), Const (fromElt v))
 evalQuotRem _ _ _
   = Nothing
 
-evalIDiv :: Elt a => IntegralType a -> (a,a) :-> a
-evalIDiv ty | IntegralDict <- integralDict ty = evalIDiv'
 
-evalIDiv' :: (Elt a, Integral a, Eq a) => (a,a) :-> a
-evalIDiv' (untup2 -> Just (x,y)) env
-  | Just 1      <- propagate env y
-  = Stats.ruleFired "x`div`1" $ Just x
+evalIDiv :: IntegralType a -> (a,a) :-> a
+evalIDiv ty exp env
+  | Just dm    <- evalDivMod ty exp env
+  , Just (d,_) <- untup2 dm
+  = Just d
+evalIDiv _ _ _
+  = Nothing
 
-evalIDiv' arg env
-  = eval2 div arg env
+evalMod :: IntegralType a -> (a,a) :-> a
+evalMod ty exp env
+  | Just dm    <- evalDivMod ty exp env
+  , Just (_,m) <- untup2 dm
+  = Just m
+evalMod _ _ _
+  = Nothing
 
-evalMod :: Elt a => IntegralType a -> (a,a) :-> a
-evalMod ty | IntegralDict <- integralDict ty = eval2 mod
-
-evalDivMod :: IntegralType a -> (a,a) :-> (a,a)
+evalDivMod :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalDivMod ty exp env
   | IntegralDict                           <- integralDict ty
   , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
-  , Just a <- propagate env x
-  , Just b <- propagate env y
-  = Stats.substitution "constant fold"
-  $ Just $ let (u,v) = divMod a b
-           in  tup2 (Const (fromElt u), Const (fromElt v))
-
+  , Just b                                 <- propagate env y
+  = case b of
+      0 -> Nothing
+      1 -> Stats.ruleFired "divMod x 1" $ Just (tup2 (x, Const (fromElt (0::a))))
+      _ -> case propagate env x of
+             Nothing -> Nothing
+             Just a  -> Stats.substitution "constant fold"
+                      $ Just $ let (u,v) = divMod a b
+                               in  tup2 (Const (fromElt u), Const (fromElt v))
 evalDivMod _ _ _
   = Nothing
 
@@ -449,6 +474,37 @@ evalBRotateR _ (untup2 -> Just (x,i)) env
   = Stats.ruleFired "x `rotateR` 0" $ Just x
 evalBRotateR ty arg env
   | IntegralDict <- integralDict ty = eval2 rotateR arg env
+
+evalPopCount :: IntegralType a -> a :-> Int
+evalPopCount ty | IntegralDict <- integralDict ty = eval1 popCount
+
+evalCountLeadingZeros :: IntegralType a -> a :-> Int
+#if __GLASGOW_HASKELL__ >= 710
+evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 countLeadingZeros
+#else
+evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 clz
+  where
+    clz x = (w-1) - go (w-1)
+      where
+        go i | i < 0       = i  -- no bit set
+             | testBit x i = i
+             | otherwise   = go (i-1)
+        w = finiteBitSize x
+#endif
+
+evalCountTrailingZeros :: IntegralType a -> a :-> Int
+#if __GLASGOW_HASKELL__ >= 710
+evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 countTrailingZeros
+#else
+evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 ctz
+  where
+    ctz x = go 0
+      where
+        go i | i >= w      = i
+             | testBit x i = i
+             | otherwise   = go (i+1)
+        w = finiteBitSize x
+#endif
 
 
 -- Methods of Fractional & Floating
@@ -523,27 +579,27 @@ evalLogBase ty | FloatingDict <- floatingDict ty = eval2 logBase
 evalAtan2 :: Elt a => FloatingType a -> (a,a) :-> a
 evalAtan2 ty | FloatingDict <- floatingDict ty = eval2 atan2
 
-evalTruncate :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalTruncate :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalTruncate ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 truncate
 
-evalRound :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalRound :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalRound ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 round
 
-evalFloor :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalFloor :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalFloor ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 floor
 
-evalCeiling :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
+evalCeiling :: Elt b => FloatingType a -> IntegralType b -> a :-> b
 evalCeiling ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 ceiling
 
-evalIsNaN :: Elt a => FloatingType a -> a :-> Bool
+evalIsNaN :: FloatingType a -> a :-> Bool
 evalIsNaN ty | FloatingDict <- floatingDict ty = eval1 isNaN
 
 
@@ -656,7 +712,7 @@ evalToFloating (FloatingNumType ta) tb x env
   , FloatingDict <- floatingDict tb = eval1 realToFrac x env
 
 evalCoerce :: Elt b => ScalarType a -> ScalarType b -> a :-> b
-evalCoerce _ _ _ _ = Nothing
+evalCoerce _ _ = eval1 unsafeCoerce
 
 
 -- Scalar primitives

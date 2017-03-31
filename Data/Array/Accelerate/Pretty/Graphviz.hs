@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE OverloadedStrings    #-}
@@ -11,10 +12,10 @@
 {-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Graphviz
--- Copyright   : [2015..2016] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2015..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -80,7 +81,9 @@ avalToVal (Apush aenv _ v) = Push (avalToVal aenv) (text v)
 aprj :: Idx aenv t -> Aval aenv -> (NodeId, Label)        -- TLM: (Vertex, Label) ??
 aprj ZeroIdx      (Apush _    n v) = (n,v)
 aprj (SuccIdx ix) (Apush aenv _ _) = aprj ix aenv
-aprj _            _                = error "inconsistent valuation"
+#if __GLASGOW_HASKELL__ < 800
+aprj _            _                = $internalError "aprj" "inconsistent valuation"
+#endif
 
 
 -- Graph construction
@@ -212,8 +215,8 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     Awhile p f x            -> do
       ident <- mkNodeId atop
       x'    <- replant =<< prettyDelayedOpenAcc detail parens aenv x
-      p'    <- prettyDelayedAfun    detail        aenv p
-      f'    <- prettyDelayedAfun    detail        aenv f
+      p'    <- prettyDelayedAfun detail aenv p
+      f'    <- prettyDelayedAfun detail aenv f
       --
       let PNode _ (Leaf (Nothing,xb)) fvs = x'
           loop                            = wrap $ hang "awhile" 2 (sep [ text p', text f', xb ])
@@ -228,30 +231,30 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays (undefined::arrs)) arrs) [] ]
     Unit e                  -> "unit"        .$ [ ppE e ]
     Generate sh f           -> "generate"    .$ [ ppSh sh, ppF f ]
-    Transform sh ix f xs    -> "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppD xs ]
-    Reshape sh xs           -> "reshape"     .$ [ ppSh sh, ppM xs ]
-    Replicate _ty ix xs     -> "replicate"   .$ [ ppSh ix, ppD xs ]
-    Slice _ty xs ix         -> "slice"       .$ [ ppD xs, ppSh ix ]
-    Map f xs                -> "map"         .$ [ ppF f, ppD xs ]
-    ZipWith f xs ys         -> "zipWith"     .$ [ ppF f, ppD xs, ppD ys ]
-    Fold f e xs             -> "fold"        .$ [ ppF f, ppE e, ppD xs ]
-    Fold1 f xs              -> "fold1"       .$ [ ppF f, ppD xs ]
-    FoldSeg f e xs ys       -> "foldSeg"     .$ [ ppF f, ppE e, ppD xs, ppD ys ]
-    Fold1Seg f xs ys        -> "fold1Seg"    .$ [ ppF f, ppD xs, ppD ys ]
-    Scanl f e xs            -> "scanl"       .$ [ ppF f, ppE e, ppD xs ]
-    Scanl' f e xs           -> "scanl'"      .$ [ ppF f, ppE e, ppD xs ]
-    Scanl1 f xs             -> "scanl1"      .$ [ ppF f, ppD xs ]
-    Scanr f e xs            -> "scanr"       .$ [ ppF f, ppE e, ppD xs ]
-    Scanr' f e xs           -> "scanr'"      .$ [ ppF f, ppE e, ppD xs ]
-    Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppD xs ]
-    Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppM dfts, ppF p, ppD xs ]
-    Backpermute sh p xs     -> "backpermute" .$ [ ppSh sh, ppF p, ppD xs ]
-    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (text (strForeign ff)) []), {- ppAf afun, -} ppM xs ]
-    Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB xs bndy, ppM xs ]
+    Transform sh ix f xs    -> "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppA xs ]
+    Reshape sh xs           -> "reshape"     .$ [ ppSh sh, ppA xs ]
+    Replicate _ty ix xs     -> "replicate"   .$ [ ppSh ix, ppA xs ]
+    Slice _ty xs ix         -> "slice"       .$ [ ppA xs, ppSh ix ]
+    Map f xs                -> "map"         .$ [ ppF f, ppA xs ]
+    ZipWith f xs ys         -> "zipWith"     .$ [ ppF f, ppA xs, ppA ys ]
+    Fold f e xs             -> "fold"        .$ [ ppF f, ppE e, ppA xs ]
+    Fold1 f xs              -> "fold1"       .$ [ ppF f, ppA xs ]
+    FoldSeg f e xs ys       -> "foldSeg"     .$ [ ppF f, ppE e, ppA xs, ppA ys ]
+    Fold1Seg f xs ys        -> "fold1Seg"    .$ [ ppF f, ppA xs, ppA ys ]
+    Scanl f e xs            -> "scanl"       .$ [ ppF f, ppE e, ppA xs ]
+    Scanl' f e xs           -> "scanl'"      .$ [ ppF f, ppE e, ppA xs ]
+    Scanl1 f xs             -> "scanl1"      .$ [ ppF f, ppA xs ]
+    Scanr f e xs            -> "scanr"       .$ [ ppF f, ppE e, ppA xs ]
+    Scanr' f e xs           -> "scanr'"      .$ [ ppF f, ppE e, ppA xs ]
+    Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppA xs ]
+    Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
+    Backpermute sh p xs     -> "backpermute" .$ [ ppSh sh, ppF p, ppA xs ]
+    Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB xs bndy, ppA xs ]
     Stencil2 sten bndy1 acc1 bndy2 acc2
-                            -> "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppM acc1,
-                                                               ppB acc2 bndy2, ppM acc2 ]
-    Collect{}               -> error "Collect"
+                            -> "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
+                                                            ppB acc2 bndy2, ppA acc2 ]
+    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (text (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
+    -- Collect{}               -> error "Collect"
 
   where
     (.$) :: String -> [Dot PDoc] -> Dot PNode
@@ -292,18 +295,22 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     aenv' :: Val aenv
     aenv' = avalToVal aenv
 
-    ppM :: DelayedOpenAcc aenv a -> Dot PDoc
-    ppM (Manifest (Avar ix)) = return (avar ix)
-    ppM _                    = $internalError "prettyDelayedOpenAcc" "expected array variable"
-
-    ppD :: DelayedOpenAcc aenv a -> Dot PDoc
-    ppD (Delayed sh f _)
+    ppA :: DelayedOpenAcc aenv a -> Dot PDoc
+    ppA (Manifest (Avar ix)) = return (avar ix)
+    ppA acc@Manifest{}       = do
+      -- Lift out and draw as a separate node. This can occur with the manifest
+      -- array arguments to permute (defaults array) and stencil[2].
+      acc'  <- prettyDelayedOpenAcc detail noParens aenv acc
+      v     <- mkLabel
+      ident <- mkNode acc' (Just v)
+      return $ PDoc (text v) [Vertex ident Nothing]
+    ppA (Delayed sh f _)
       | Shape a    <- sh                                             -- identical shape
-      , Just REFL  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
-      = ppM a
-    ppD (Delayed sh f _) = do PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
-                              return    $ PDoc (parens d) v
-    ppD Manifest{}       = $internalError "prettyDelayedOpenAcc" "expected delayed array"
+      , Just Refl  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
+      = ppA a
+    ppA (Delayed sh f _) = do
+      PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
+      return    $ PDoc (parens d) v
 
     ppB :: forall sh e. Elt e
         => {-dummy-} DelayedOpenAcc aenv (Array sh e)

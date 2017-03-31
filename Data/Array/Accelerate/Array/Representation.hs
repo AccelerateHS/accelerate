@@ -9,13 +9,13 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Representation
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
+--               [2013..2017] Robert Clifton-Everest
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -80,12 +80,11 @@ class (Eq sh, Slice sh) => Shape sh where
 
 instance Shape () where
   rank _            = 0
-  size ()           = 1
   empty             = ()
-
+  ignore            = ()
   () `intersect` () = ()
   () `union` ()     = ()
-  ignore            = ()
+  size ()           = 1
   toIndex () ()     = 0
   fromIndex () _    = ()
   bound () () _     = Right ()
@@ -101,12 +100,14 @@ instance Shape () where
 
 instance Shape sh => Shape (sh, Int) where
   rank _                            = rank (undefined :: sh) + 1
-  size (sh, sz)                     = size sh * sz
   empty                             = (empty, 0)
-
+  ignore                            = (ignore, -1)
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
-  ignore                            = (ignore, -1)
+
+  size (sh, sz)                     = $boundsCheck "size" "negative shape dimension" (sz >= 0)
+                                    $ size sh * sz
+
   toIndex (sh, sz) (ix, i)          = $indexCheck "toIndex" i sz
                                     $ toIndex sh ix * sz + i
 
@@ -221,8 +222,8 @@ sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
 sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 
 
--- | Enumerate all slices within a given bound. The outermost
--- dimension changes most rapidly.
+-- | Enumerate all slices within a given bound. The innermost dimension changes
+-- most rapidly.
 --
 -- See 'Data.Array.Accelerate.Array.Sugar.enumSlices' for an example.
 --

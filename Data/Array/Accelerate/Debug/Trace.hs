@@ -3,8 +3,8 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Trace
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
@@ -24,6 +24,7 @@ import Data.Array.Accelerate.Debug.Flags
 import Numeric
 import System.CPUTime
 import System.IO.Unsafe
+import Text.Printf
 import qualified Debug.Trace                            as D
 
 
@@ -83,14 +84,10 @@ trace _ _ expr = expr
 --
 traceIO :: Mode -> String -> IO ()
 #ifdef ACCELERATE_DEBUG
-traceIO f msg = do
-  when f $ do
-    psec        <- getCPUTime
-    let secs    = fromIntegral psec * 1E-12 :: Double
-    D.traceIO   $ showFFloat (Just 3) secs (':':msg)
+traceIO f msg = when f $ putTraceMsg msg
 #else
 {-# INLINE traceIO #-}
-traceIO _ _ = return ()
+traceIO _ _   = return ()
 #endif
 
 
@@ -107,6 +104,19 @@ traceEvent f msg expr = unsafePerformIO $ do
 #else
 {-# INLINE traceEvent #-}
 traceEvent _ _ expr = expr
+#endif
+
+
+-- | Print a message prefixed with the current CPU time.
+--
+putTraceMsg :: String -> IO ()
+#ifdef ACCELERATE_DEBUG
+putTraceMsg msg = do
+  psec        <- getCPUTime
+  let secs    = fromIntegral psec * 1E-12 :: Double
+  D.traceIO   $ printf "[%8.3f] %s" secs msg
+#else
+putTraceMsg _   = return ()
 #endif
 
 

@@ -5,10 +5,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Error
--- Copyright   : [2009..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2009..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -26,7 +26,6 @@ import Debug.Trace
 import Language.Haskell.TH                              hiding ( Unsafe )
 
 data Check = Bounds | Unsafe | Internal
-  deriving (Eq)
 
 
 -- | Issue an internal error message
@@ -65,9 +64,9 @@ unsafeCheck = appE checkQ [| Unsafe |]
 indexCheck :: Q Exp
 indexCheck = withLocation
   [| \format fn i n x ->
-        if not (doChecks Bounds) || (i >= 0 && i < n)
-           then x
-           else error (format Bounds (call fn ("index out of bounds: " ++ show (i,n)))) x |]
+        case not (doChecks Bounds) || (i >= 0 && i < n) of
+           True  -> x
+           False -> error (format Bounds (call fn ("index out of bounds: " ++ show (i,n)))) x |]
 
 
 -- | Print a warning message if the condition evaluates to False.
@@ -97,16 +96,16 @@ errorQ = withLocation
 checkQ :: Q Exp
 checkQ = withLocation
   [| \format kind fn msg cond x ->
-        if not (doChecks kind) || cond
-           then x
-           else error (format kind (call fn msg)) |]
+        case not (doChecks kind) || cond of
+          True  -> x
+          False -> error (format kind (call fn msg)) |]
 
 warningQ :: Q Exp
 warningQ = withLocation
   [| \format kind fn msg cond x ->
-        if not (doChecks kind) || cond
-           then x
-           else trace (format kind (call fn msg)) x |]
+        case not (doChecks kind) || cond of
+          True  -> x
+          False -> trace (format kind (call fn msg)) x |]
 
 withLocation :: Q Exp -> Q Exp
 withLocation f =
@@ -126,11 +125,12 @@ formatLoc loc =
 message :: Check -> String -> String
 message kind msg = unlines header ++ msg
   where
-    header = if kind == Internal
-                then [""
-                     ,"*** Internal error in package accelerate ***"
-                     ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]
-                else []
+    header =
+      case kind of
+        Internal -> [""
+                    ,"*** Internal error in package accelerate ***"
+                    ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]
+        _        -> []
 
 
 -- CPP malarky

@@ -1,7 +1,9 @@
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
+{-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
@@ -9,10 +11,10 @@
 {-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
--- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -24,6 +26,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 ) where
 
 -- standard library
+import Data.Label
 import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
@@ -34,14 +37,14 @@ import Prelude                                          hiding ( exp, iterate )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
+import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Algebra
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Analysis.Shape
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -81,7 +84,7 @@ instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
 -- memory because there are insufficient registers available. We sidestep this
 -- tricky and target-dependent issue by, for now, simply ignoring it.
 --
-localCSE :: (Kit acc, Elt a, Elt b)
+localCSE :: (Kit acc, Elt a)
          => Gamma      acc env env aenv
          -> PreOpenExp acc env     aenv a
          -> PreOpenExp acc (env,a) aenv b
@@ -105,6 +108,7 @@ globalCSE env exp
   | otherwise                    = Nothing
 
 
+{--
 -- Compared to regular Haskell, the scalar expression language of Accelerate is
 -- rather limited in order to meet the restrictions of what can be efficiently
 -- implemented on specialised hardware, such as GPUs. For example, to avoid
@@ -138,9 +142,6 @@ recoverLoops
     -> PreOpenExp acc env     aenv a
     -> PreOpenExp acc (env,a) aenv b
     -> Maybe (PreOpenExp acc env aenv b)
-recoverLoops _ _ _
-  = Nothing
-{--
 recoverLoops _ bnd e3
   -- To introduce scaler loops, we look for expressions of the form:
   --
@@ -153,8 +154,8 @@ recoverLoops _ bnd e3
   --   iterate[2] (\y -> e2) e1
   --
   | Let e1 e2           <- bnd
-  , Just REFL           <- matchEnvTop e2 e3
-  , Just REFL           <- match e2 e3
+  , Just Refl           <- matchEnvTop e2 e3
+  , Just Refl           <- match e2 e3
   = Stats.ruleFired "loop recovery/intro" . Just
   $ Iterate (constant 2) e2 e1
 
@@ -167,7 +168,7 @@ recoverLoops _ bnd e3
   -- iteration with the trip count increased by one.
   --
   | Iterate n f e1      <- bnd
-  , Just REFL           <- match f e3
+  , Just Refl           <- match f e3
   = Stats.ruleFired "loop recovery/merge" . Just
   $ Iterate (constant 1 `plus` n) f e1
 
@@ -185,7 +186,7 @@ recoverLoops _ bnd e3
                 => PreOpenExp acc (env,s) aenv f
                 -> PreOpenExp acc (env,t) aenv g
                 -> Maybe (s :=: t)
-    matchEnvTop _ _ = gcast REFL
+    matchEnvTop _ _ = gcast Refl
 --}
 
 
@@ -207,9 +208,9 @@ simplifyOpenExp env = first getAny . cvtE
     cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
-        | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | otherwise                                              -> Let <$> bnd' <*> body'
+        -- Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | Just reduct <- localCSE env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | otherwise                                          -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
           env'  = PushExp env (snd bnd')
@@ -230,7 +231,10 @@ simplifyOpenExp env = first getAny . cvtE
       FromIndex sh ix           -> fromIndex (cvtE sh) (cvtE ix)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
-      PrimApp f x               -> evalPrimApp env f <$> cvtE x
+      PrimApp f x               -> (u<>v, fx)
+        where
+          (u, x') = cvtE x
+          (v, fx) = evalPrimApp env f x'
       Index a sh                -> Index a <$> cvtE sh
       LinearIndex a i           -> LinearIndex a <$> cvtE i
       Shape a                   -> pure $ Shape a
@@ -304,7 +308,7 @@ simplifyOpenExp env = first getAny . cvtE
     cond p@(_,p') t@(_,t') e@(_,e')
       | Const True  <- p'        = Stats.knownBranch "True"      (yes t')
       | Const False <- p'        = Stats.knownBranch "False"     (yes e')
-      | Just REFL <- match t' e' = Stats.knownBranch "redundant" (yes e')
+      | Just Refl <- match t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                = Cond <$> p <*> t <*> e
 
     -- If we are projecting elements from a tuple structure or tuple of constant
@@ -327,7 +331,9 @@ simplifyOpenExp env = first getAny . cvtE
         prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s
         prjT ZeroTupIdx       (SnocTup _ v) = v
         prjT (SuccTupIdx idx) (SnocTup t _) = prjT idx t
+#if __GLASGOW_HASKELL__ < 800
         prjT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
+#endif
 
         prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env' aenv s
         prjC ZeroTupIdx       (_,   v) = Const (fromElt v)
@@ -368,7 +374,7 @@ simplifyOpenExp env = first getAny . cvtE
       , Just sh'        <- gcast sz'
       = Stats.ruleFired "Z:.indexHead" $ yes sh'
     indexCons (_,IndexTail sl') (_,IndexHead sz')
-      | Just REFL       <- match sl' sz'
+      | Just Refl       <- match sl' sz'
       = Stats.ruleFired "indexTail:.indexHead" $ yes sl'
     indexCons sl sz
       = IndexCons <$> sl <*> sz
@@ -391,12 +397,12 @@ simplifyOpenExp env = first getAny . cvtE
 
     toIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
     toIndex  (_,sh) (_,FromIndex sh' ix)
-      | Just REFL <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
+      | Just Refl <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
     toIndex sh ix                 = ToIndex <$> sh <*> ix
 
     fromIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
     fromIndex  (_,sh) (_,ToIndex sh' ix)
-      | Just REFL <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
+      | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
     fromIndex sh ix               = FromIndex <$> sh <*> ix
 
     first :: (a -> a') -> (a,b) -> (a',b)
@@ -423,12 +429,10 @@ simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
 -- repeatedly until no more changes are made.
 --
 simplifyExp :: (Elt t, Kit acc) => PreExp acc aenv t -> PreExp acc aenv t
-simplifyExp = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenExp EmptyExp)
--- simplifyExp = iterate (show . prettyPreOpenExp prettyAcc noParens PP.Empty PP.Empty) (simplifyOpenExp EmptyExp)
+simplifyExp = iterate summariseOpenExp (simplifyOpenExp EmptyExp)
 
 simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
-simplifyFun = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenFun EmptyExp)
--- simplifyFun = iterate (show . prettyPreOpenFun prettyAcc PP.Empty) (simplifyOpenFun EmptyExp)
+simplifyFun = iterate summariseOpenFun (simplifyOpenFun EmptyExp)
 
 
 -- NOTE: [Simplifier iterations]
@@ -448,29 +452,31 @@ simplifyFun = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenFun EmptyExp)
 -- With internal checks on, we also issue a warning if the iteration limit is
 -- reached, but it was still possible to make changes to the expression.
 --
-{-# SPECIALISE iterate :: (Exp aenv t -> String) -> (Exp aenv t -> (Bool, Exp aenv t)) -> Exp aenv t -> Exp aenv t #-}
-{-# SPECIALISE iterate :: (Fun aenv t -> String) -> (Fun aenv t -> (Bool, Fun aenv t)) -> Fun aenv t -> Fun aenv t #-}
+{-# SPECIALISE iterate :: (Exp aenv t -> Stats) -> (Exp aenv t -> (Bool, Exp aenv t)) -> Exp aenv t -> Exp aenv t #-}
+{-# SPECIALISE iterate :: (Fun aenv t -> Stats) -> (Fun aenv t -> (Bool, Fun aenv t)) -> Fun aenv t -> Fun aenv t #-}
 
 iterate
     :: forall f a. (Match f, Shrink (f a))
-    => (f a -> String)
+    => (f a -> Stats)
     -> (f a -> (Bool, f a))
     -> f a
     -> f a
-iterate ppr f = fix 1 . setup
+iterate summarise f = fix 1 . setup
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
-    -- excessive run times, we set this value very low.
+    -- excessive run times, we (should) set this value very low.
     --
-    lIMIT       = 5
+    -- TODO: make this tunable via debug flags.
+    --
+    lIMIT       = 25
 
     simplify'   = Stats.simplifierDone . f
-    setup x     = Stats.trace Stats.dump_simpl_iterations (printf "simplifier begin:\n%s\n" (ppr x))
-                $ snd (trace 0 "simplify" (simplify' x))
+    setup x     = Stats.trace Stats.dump_simpl_iterations (msg 0 "init" x)
+                $ snd (trace 1 "simplify" (simplify' x))
 
     fix :: Int -> f a -> f a
     fix i x0
-      | i > lIMIT       = $internalWarning "iterate" "iteration limit reached" (x0 ==^ f x0) x0
+      | i > lIMIT       = $internalWarning "simplify" "iteration limit reached" (not (x0 ==^ f x0)) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2
@@ -487,5 +493,200 @@ iterate ppr f = fix 1 . setup
       | otherwise       = v
 
     msg :: Int -> String -> f a -> String
-    msg i s x = printf "%s [%d/%d]:\n%s\n" s i lIMIT (ppr x)
+    msg i s x = printf "simpl-iters/%-8s [%d]: %s" s i (ppr x)
+
+    ppr :: f a -> String
+    ppr = show . summarise
+
+
+-- Debugging support
+-- -----------------
+
+data Stats = Stats
+  { _terms    :: {-# UNPACK #-} !Int
+  , _types    :: {-# UNPACK #-} !Int
+  , _binders  :: {-# UNPACK #-} !Int
+  , _vars     :: {-# UNPACK #-} !Int
+  , _ops      :: {-# UNPACK #-} !Int
+  }
+
+instance Show Stats where
+  show (Stats a b c d e) =
+    printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
+
+-- Rather than using the TH deriving mechanism, otherwise the summarise*
+-- functions will not be in scope for the above.
+--
+terms, types, binders, vars, ops :: Stats :-> Int
+terms   = lens _terms   (\f Stats{..} -> Stats { _terms   = f _terms, ..})
+types   = lens _types   (\f Stats{..} -> Stats { _types   = f _types, ..})
+binders = lens _binders (\f Stats{..} -> Stats { _binders = f _binders, ..})
+vars    = lens _vars    (\f Stats{..} -> Stats { _vars    = f _vars, ..})
+ops     = lens _ops     (\f Stats{..} -> Stats { _ops     = f _ops, ..})
+
+infixl 1 &
+(&) :: a -> (a -> b) -> b
+(&) x f = f x
+
+infixr 4 +~
+(+~) :: Num a => f :-> a -> a -> f -> f
+(+~) l c s = modify l (+c) s
+
+infixl 6 +++
+(+++) :: Stats -> Stats -> Stats
+Stats a1 b1 c1 d1 e1 +++ Stats a2 b2 c2 d2 e2 = Stats (a1+a2) (b1+b2) (c1+c2) (d1+d2) (e1+e2)
+
+summariseOpenFun :: PreOpenFun acc env aenv f -> Stats
+summariseOpenFun (Body e) = summariseOpenExp e & terms +~ 1
+summariseOpenFun (Lam f)  = summariseOpenFun f & terms +~ 1 & binders +~ 1
+
+summariseOpenExp :: PreOpenExp acc env aenv t -> Stats
+summariseOpenExp = modify terms (+1) . goE
+  where
+    zero = Stats 0 0 0 0 0
+
+    travE :: PreOpenExp acc env aenv t -> Stats
+    travE = summariseOpenExp
+
+    travF :: PreOpenFun acc env aenv t -> Stats
+    travF = summariseOpenFun
+
+    travA :: acc aenv a -> Stats
+    travA _ = zero & vars +~ 1  -- assume an array index, else we should have failed elsewhere
+
+    travT :: Tuple (PreOpenExp acc env aenv) t -> Stats
+    travT NilTup        = zero & terms +~ 1
+    travT (SnocTup t e) = travT t +++ travE e & terms +~ 1
+
+    travTix :: TupleIdx t e -> Stats
+    travTix ZeroTupIdx     = zero & terms +~ 1
+    travTix (SuccTupIdx t) = travTix t & terms +~ 1
+
+    travC :: PrimConst c -> Stats
+    travC (PrimMinBound t) = travBoundedType t & terms +~ 1
+    travC (PrimMaxBound t) = travBoundedType t & terms +~ 1
+    travC (PrimPi t)       = travFloatingType t & terms +~ 1
+
+    travNonNumType :: NonNumType t -> Stats
+    travNonNumType _ = zero & types +~ 1
+
+    travIntegralType :: IntegralType t -> Stats
+    travIntegralType _ = zero & types +~ 1
+
+    travFloatingType :: FloatingType t -> Stats
+    travFloatingType _ = zero & types +~ 1
+
+    travNumType :: NumType t -> Stats
+    travNumType (IntegralNumType t) = travIntegralType t & types +~ 1
+    travNumType (FloatingNumType t) = travFloatingType t & types +~ 1
+
+    travBoundedType :: BoundedType t -> Stats
+    travBoundedType (IntegralBoundedType t) = travIntegralType t & types +~ 1
+    travBoundedType (NonNumBoundedType t)   = travNonNumType t & types +~ 1
+
+    travScalarType :: ScalarType t -> Stats
+    travScalarType (NumScalarType t)    = travNumType t & types +~ 1
+    travScalarType (NonNumScalarType t) = travNonNumType t & types +~ 1
+
+    -- The scrutinee has already been counted
+    goE :: PreOpenExp acc env aenv t -> Stats
+    goE exp =
+      case exp of
+        Let bnd body          -> travE bnd +++ travE body & binders +~ 1
+        Var{}                 -> zero & vars +~ 1
+        Foreign _ _ x         -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
+        Const{}               -> zero
+        Tuple tup             -> travT tup & terms +~ 1
+        Prj ix e              -> travTix ix +++ travE e
+        IndexNil              -> zero
+        IndexCons sh sz       -> travE sh +++ travE sz
+        IndexHead sh          -> travE sh
+        IndexTail sh          -> travE sh
+        IndexAny              -> zero
+        IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
+        IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
+        ToIndex sh ix         -> travE sh +++ travE ix
+        FromIndex sh ix       -> travE sh +++ travE ix
+        Cond p t e            -> travE p +++ travE t +++ travE e
+        While p f x           -> travF p +++ travF f +++ travE x
+        PrimConst c           -> travC c
+        Index a ix            -> travA a +++ travE ix
+        LinearIndex a ix      -> travA a +++ travE ix
+        Shape a               -> travA a
+        ShapeSize sh          -> travE sh
+        Intersect sh1 sh2     -> travE sh1 +++ travE sh2
+        Union sh1 sh2         -> travE sh1 +++ travE sh2
+        PrimApp f x           -> travPrimFun f +++ travE x
+
+    travPrimFun :: PrimFun f -> Stats
+    travPrimFun = modify ops (+1) . goF
+      where
+        goF :: PrimFun f -> Stats
+        goF fun =
+          case fun of
+            PrimAdd                t -> travNumType t
+            PrimSub                t -> travNumType t
+            PrimMul                t -> travNumType t
+            PrimNeg                t -> travNumType t
+            PrimAbs                t -> travNumType t
+            PrimSig                t -> travNumType t
+            PrimQuot               t -> travIntegralType t
+            PrimRem                t -> travIntegralType t
+            PrimQuotRem            t -> travIntegralType t
+            PrimIDiv               t -> travIntegralType t
+            PrimMod                t -> travIntegralType t
+            PrimDivMod             t -> travIntegralType t
+            PrimBAnd               t -> travIntegralType t
+            PrimBOr                t -> travIntegralType t
+            PrimBXor               t -> travIntegralType t
+            PrimBNot               t -> travIntegralType t
+            PrimBShiftL            t -> travIntegralType t
+            PrimBShiftR            t -> travIntegralType t
+            PrimBRotateL           t -> travIntegralType t
+            PrimBRotateR           t -> travIntegralType t
+            PrimPopCount           t -> travIntegralType t
+            PrimCountLeadingZeros  t -> travIntegralType t
+            PrimCountTrailingZeros t -> travIntegralType t
+            PrimFDiv               t -> travFloatingType t
+            PrimRecip              t -> travFloatingType t
+            PrimSin                t -> travFloatingType t
+            PrimCos                t -> travFloatingType t
+            PrimTan                t -> travFloatingType t
+            PrimAsin               t -> travFloatingType t
+            PrimAcos               t -> travFloatingType t
+            PrimAtan               t -> travFloatingType t
+            PrimSinh               t -> travFloatingType t
+            PrimCosh               t -> travFloatingType t
+            PrimTanh               t -> travFloatingType t
+            PrimAsinh              t -> travFloatingType t
+            PrimAcosh              t -> travFloatingType t
+            PrimAtanh              t -> travFloatingType t
+            PrimExpFloating        t -> travFloatingType t
+            PrimSqrt               t -> travFloatingType t
+            PrimLog                t -> travFloatingType t
+            PrimFPow               t -> travFloatingType t
+            PrimLogBase            t -> travFloatingType t
+            PrimTruncate         f i -> travFloatingType f +++ travIntegralType i
+            PrimRound            f i -> travFloatingType f +++ travIntegralType i
+            PrimFloor            f i -> travFloatingType f +++ travIntegralType i
+            PrimCeiling          f i -> travFloatingType f +++ travIntegralType i
+            PrimIsNaN              t -> travFloatingType t
+            PrimAtan2              t -> travFloatingType t
+            PrimLt                 t -> travScalarType t
+            PrimGt                 t -> travScalarType t
+            PrimLtEq               t -> travScalarType t
+            PrimGtEq               t -> travScalarType t
+            PrimEq                 t -> travScalarType t
+            PrimNEq                t -> travScalarType t
+            PrimMax                t -> travScalarType t
+            PrimMin                t -> travScalarType t
+            PrimLAnd                 -> zero
+            PrimLOr                  -> zero
+            PrimLNot                 -> zero
+            PrimOrd                  -> zero
+            PrimChr                  -> zero
+            PrimBoolToInt            -> zero
+            PrimFromIntegral     i n -> travIntegralType i +++ travNumType n
+            PrimToFloating       n f -> travNumType n +++ travFloatingType f
+            PrimCoerce           a b -> travScalarType a +++ travScalarType b
 

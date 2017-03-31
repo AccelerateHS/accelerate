@@ -1,18 +1,19 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
--- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2016] Trevor L. McDonell
---               [2008..2009] Sean Lee
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -41,6 +42,7 @@ module Data.Array.Accelerate.Array.Data (
 
 -- friends
 import Data.Array.Accelerate.Array.Unique
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Debug.Flags
@@ -51,7 +53,7 @@ import Control.Applicative
 import Control.Monad
 import Data.Bits
 import Data.IORef
-import Data.Typeable                            ( Typeable )
+import Data.Typeable                                                ( Typeable )
 import Foreign.C.Types
 import Foreign.ForeignPtr
 import Foreign.Ptr
@@ -60,6 +62,10 @@ import Language.Haskell.TH
 import System.IO.Unsafe
 import Text.Printf
 import Prelude
+
+import GHC.Base                                                     ( Int(..), IO(..), unsafeCoerce#, newAlignedPinnedByteArray#, byteArrayContents# )
+import GHC.ForeignPtr                                               ( ForeignPtr(..), ForeignPtrContents(..) )
+
 
 -- Determine the underlying type of a Haskell CLong or CULong.
 --
@@ -722,8 +728,7 @@ fromBool False = 0
 --
 {-# INLINE runArrayData #-}
 runArrayData
-    :: ArrayElt e
-    => IO (MutableArrayData e, e)
+    :: IO (MutableArrayData e, e)
     -> (ArrayData e, e)
 runArrayData st = unsafePerformIO $ do
   (mad, r) <- st
@@ -762,12 +767,14 @@ unsafeWriteArray ua i e =
 --
 {-# INLINE newArrayData' #-}
 newArrayData' :: forall e. Storable e => Int -> IO (UniqueArray e)
-newArrayData' size =
-  newUniqueArray <=< unsafeInterleaveIO $ do
-    new <- readIORef __mallocForeignPtrBytes
-    ptr <- new (size * sizeOf (undefined :: e))
-    traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" size (show ptr)
-    return (castForeignPtr ptr)
+newArrayData' size
+  = $internalCheck "newArrayData" "size must be >= 0" (size >= 0)
+  $ newUniqueArray <=< unsafeInterleaveIO $ do
+      let bytes = size * sizeOf (undefined :: e)
+      new <- readIORef __mallocForeignPtrBytes
+      ptr <- new bytes
+      traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" bytes (show ptr)
+      return (castForeignPtr ptr)
 
 -- | Register the given function as the callback to use to allocate new array
 -- data on the host containing the specified number of bytes. The returned array
@@ -783,5 +790,18 @@ registerForeignPtrAllocator new = do
 
 {-# NOINLINE __mallocForeignPtrBytes #-}
 __mallocForeignPtrBytes :: IORef (Int -> IO (ForeignPtr Word8))
-__mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocForeignPtrBytes
+__mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocPlainForeignPtrBytesAligned
+
+-- | Allocate the given number of bytes with 16-byte alignment. This is
+-- essential for SIMD instructions.
+--
+-- Additionally, we return a plain ForeignPtr, which unlike a regular ForeignPtr
+-- created with 'mallocForeignPtr' carries no finalisers. It is an error to try
+-- to add a finaliser to the plain ForeignPtr. For our purposes this is fine,
+-- since in Accelerate finalisers are handled using Lifetime
+--
+mallocPlainForeignPtrBytesAligned :: Int -> IO (ForeignPtr a)
+mallocPlainForeignPtrBytesAligned (I# size) = IO $ \s ->
+  case newAlignedPinnedByteArray# size 16# s of
+    (# s', mbarr# #) -> (# s', ForeignPtr (byteArrayContents# (unsafeCoerce# mbarr#)) (PlainPtr mbarr#) #)
 

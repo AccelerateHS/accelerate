@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -9,10 +10,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Complex
--- Copyright   : [2015] Trevor L. McDonell
+-- Copyright   : [2015..2017] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -45,7 +46,7 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( ($), (^), undefined, fromInteger )
+import Prelude                                                      ( ($), undefined, fromInteger )
 import Data.Complex                                                 ( Complex(..) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
@@ -76,12 +77,12 @@ instance Elt a => Unlift Exp (Complex (Exp a)) where
       x :+ y
 
 instance A.Eq a => A.Eq (Complex a) where
-  x ==* y = let r1 :+ c1 = unlift x
-                r2 :+ c2 = unlift y
-            in  r1 ==* r2 &&* c1 ==* c2
-  x /=* y = let r1 :+ c1 = unlift x
-                r2 :+ c2 = unlift y
-            in  r1 /=* r2 ||* c1 /=* c2
+  x == y = let r1 :+ c1 = unlift x
+               r2 :+ c2 = unlift y
+           in  r1 == r2 && c1 == c2
+  x /= y = let r1 :+ c1 = unlift x
+               r2 :+ c2 = unlift y
+           in  r1 /= r2 || c1 /= c2
 
 instance A.RealFloat a => P.Num (Exp (Complex a)) where
   (+)           = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
@@ -96,7 +97,7 @@ instance A.RealFloat a => P.Fractional (Exp (Complex a)) where
   c / c'
     = let x  :+ y       = unlift c
           x' :+ y'      = unlift c'     :: Complex (Exp a)
-          den           = x'^(2 :: Int) + y'^(2 :: Int)
+          den           = x' P.^ (2 :: Int) + y' P.^ (2 :: Int)
           re            = (x * x' + y * y') / den
           im            = (y * x' - x * y') / den
       in
@@ -111,11 +112,11 @@ instance A.RealFloat a => P.Floating (Exp (Complex a)) where
           x :+ y        = unlift z
           v'            = abs y / (u'*2)
           u'            = sqrt ((magnitude z + abs x) / 2)
-          (u, v)        = unlift $ cond (x <* 0) (lift (v',u')) (lift (u',v'))
+          (u, v)        = unlift $ cond (x < 0) (lift (v',u')) (lift (u',v'))
       in
-      cond (x ==* 0 &&* y ==* 0)
+      cond (x == 0 && y == 0)
         {- then -} 0
-        {- else -} (lift (u :+ (cond (y <* 0) (-v) v)))
+        {- else -} (lift (u :+ (cond (y < 0) (-v) v)))
 
   pi            = lift (pi :: Complex (Exp a))
   log z         = lift (log (magnitude z) :+ phase z)
@@ -139,7 +140,7 @@ instance (A.FromIntegral a b, A.Num b) => A.FromIntegral a (Complex b) where
 
 -- | The non-negative magnitude of a complex number
 --
-magnitude :: (Elt a, RealFloat a) => Exp (Complex a) -> Exp a
+magnitude :: RealFloat a => Exp (Complex a) -> Exp a
 magnitude c =
   let r :+ i    = unlift c
   in sqrt (r*r + i*i)
@@ -147,7 +148,7 @@ magnitude c =
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
-phase :: (Elt a, RealFloat a) => Exp (Complex a) -> Exp a
+phase :: RealFloat a => Exp (Complex a) -> Exp a
 phase c =
   let x :+ y    = unlift c
   in atan2 y x
@@ -156,18 +157,26 @@ phase c =
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
-polar :: (Elt a, RealFloat a) => Exp (Complex a) -> Exp (a,a)
+polar :: RealFloat a => Exp (Complex a) -> Exp (a,a)
 polar z =  lift (magnitude z, phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-mkPolar :: forall a. (Elt a, RealFloat a) => Exp a -> Exp a -> Exp (Complex a)
+#if __GLASGOW_HASKELL__ <= 708
+mkPolar :: forall a. RealFloat a => Exp a -> Exp a -> Exp (Complex a)
+#else
+mkPolar :: forall a. Floating a  => Exp a -> Exp a -> Exp (Complex a)
+#endif
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-cis :: forall a. (Elt a, RealFloat a) => Exp a -> Exp (Complex a)
+#if __GLASGOW_HASKELL__ <= 708
+cis :: forall a. RealFloat a => Exp a -> Exp (Complex a)
+#else
+cis :: forall a. Floating a  => Exp a -> Exp (Complex a)
+#endif
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
@@ -188,6 +197,6 @@ imag c =
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: (Elt a, Num a) => Exp (Complex a) -> Exp (Complex a)
+conjugate :: Num a => Exp (Complex a) -> Exp (Complex a)
 conjugate z = lift $ real z :+ (- imag z)
 

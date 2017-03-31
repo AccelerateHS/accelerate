@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -6,11 +7,11 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Type
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -83,27 +84,41 @@ preAccType k pacc =
     --
     Avar _              -> case arrays (undefined :: (Array sh e)) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "When I get sad, I stop being sad and be AWESOME instead."
+#endif
 
     Apply _ _           -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "TRUE STORY."
+#endif
 
     Atuple _            -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "I made you a cookie, but I eated it."
+#endif
 
     Aprj _ _            -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "Hey look! even the leaves are falling for you."
+#endif
 
     Aforeign _ _ _      -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
+#if __GLASGOW_HASKELL__ < 800
                              _            -> error "Who on earth wrote all these weird error messages?"
+#endif
 
+{--
     Collect _           -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
-                             _            -> error "Something funny"
+#if __GLASGOW_HASKELL__ < 800
+                             _            -> error "rob you are terrible at this game"
+#endif
+--}
 
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc

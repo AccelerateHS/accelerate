@@ -11,12 +11,11 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Type
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -141,7 +140,7 @@ data FloatingType a where
 -- |Non-numeric types supported in array computations.
 --
 data NonNumType a where
-  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to CInt
+  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to Word8
   TypeChar    :: NonNumDict Char      -> NonNumType Char
   TypeCChar   :: NonNumDict CChar     -> NonNumType CChar
   TypeCSChar  :: NonNumDict CSChar    -> NonNumType CSChar
@@ -645,7 +644,7 @@ type instance BitSize CLong  = $( case finiteBitSize (undefined::CLong) of
                                     _  -> error "I don't know what architecture I am"  )
 
 
-type instance BitSize CULong = $( case finiteBitSize (undefined::CULLong) of
+type instance BitSize CULong = $( case finiteBitSize (undefined::CULong) of
                                     32 -> [t| 32 |]
                                     64 -> [t| 64 |]
                                     _  -> error "I don't know what architecture I am"  )

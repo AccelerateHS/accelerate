@@ -9,8 +9,8 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Cache
--- Copyright   : [2015..2016] Manuel M T Chakravarty, Gabriele Keller, Robert Clifton-Everest
---               [2016]       Trevor L. McDonell
+-- Copyright   : [2015..2017] Manuel M T Chakravarty, Gabriele Keller, Robert Clifton-Everest
+--               [2016..2017] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>
@@ -78,13 +78,13 @@ data Status = Clean     -- Array in remote memory matches array in host memory.
 type Timestamp = Integer
 
 data Used task where
-  Used :: (PrimElt e a)
-       => Timestamp
-       -> Status
-       -> Int      -- Use count
-       -> [task]   -- Asynchronous tasks using the array
-       -> Int      -- Array size
-       -> Weak (ArrayData e)
+  Used :: PrimElt e a
+       => !Timestamp
+       -> !Status
+       -> {-# UNPACK #-} !Int                   -- Use count
+       -> ![task]                               -- Asynchronous tasks using the array
+       -> {-# UNPACK #-} !Int                   -- Array size
+       -> {-# UNPACK #-} !(Weak (ArrayData e))
        -> Used task
 
 -- |A Task represents a process executing asynchronously that can be polled for
@@ -302,7 +302,7 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
 -- Typically this should only be called in very specific circumstances. This
 -- operation is not thread-safe.
 --
-free :: (RemoteMemory m, Task task, PrimElt a b)
+free :: (RemoteMemory m, PrimElt a b)
      => proxy m
      -> MemoryTable (RemotePtr m) task
      -> ArrayData a
@@ -319,7 +319,7 @@ free proxy (MemoryTable !mt !ref _) !arr = withMVar' ref $ \utbl -> do
 -- This typically only has use for backends that provide an FFI.
 --
 insertUnmanaged
-    :: (PrimElt e a, MonadIO m, Task task)
+    :: (PrimElt e a, MonadIO m)
     => MemoryTable p task
     -> ArrayData e
     -> p a
@@ -335,14 +335,14 @@ insertUnmanaged (MemoryTable mt ref weak_utbl) !arr !ptr = liftIO . withMVar' re
 -- Removing entries
 -- ----------------
 
-finalizer :: Task task => StableArray -> Weak (UseTable task) -> IO ()
+finalizer :: StableArray -> Weak (UseTable task) -> IO ()
 finalizer !key !weak_utbl = do
   mref <- deRefWeak weak_utbl
   case mref of
-    Nothing -> trace "finalize cache/dead table" $ return ()
-    Just ref -> trace ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
+    Nothing  -> message "finalize cache/dead table"
+    Just ref -> trace  ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
 
-delete :: Task task => UT task -> StableArray -> IO ()
+delete :: UT task -> StableArray -> IO ()
 delete utbl key = do
   mu <- HT.lookup utbl key
   case mu of
@@ -379,7 +379,7 @@ incCount (Used ts status count uses n weak_arr) = Used ts status (count + 1) use
 isEvicted :: Used task -> Bool
 isEvicted (Used _ status _ _ _ _) = status == Evicted
 
-withMVar' :: (MonadIO m, MonadCatch m, MonadMask m) => MVar a -> (a -> m b) -> m b
+withMVar' :: (MonadIO m, MonadMask m) => MVar a -> (a -> m b) -> m b
 withMVar' m f = mask $ \restore -> do
   a <- liftIO $ takeMVar m
   b <- restore (f a) `onException` (liftIO $ putMVar m a)

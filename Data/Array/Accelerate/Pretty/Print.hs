@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
@@ -6,12 +7,11 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Print
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2008..2009] Sean Lee
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2017] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -30,7 +30,7 @@ module Data.Array.Accelerate.Pretty.Print (
   PrettyAcc,
   prettyPreOpenAcc,
   prettyPreOpenAfun,
-  prettyPreOpenSeq,
+  -- prettyPreOpenSeq,
   prettyPreExp, prettyPreOpenExp,
   prettyPreFun, prettyPreOpenFun,
   prettyPrim,
@@ -51,7 +51,6 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar                hiding ( tuple )
-import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
 import Data.Array.Accelerate.Type
@@ -177,11 +176,12 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
 
-    pp (Collect s)              = wrap $ hang (text "collect") 2
-                                       $ encloseSep lbrace rbrace semi
-                                       $ prettyPreOpenSeq prettyAcc wrap aenv Empty s
+    -- pp (Collect s)              = wrap $ hang (text "collect") 2
+    --                                    $ encloseSep lbrace rbrace semi
+    --                                    $ prettyPreOpenSeq prettyAcc wrap aenv Empty s
 
 
+{--
 -- Pretty print a computation over sequences
 --
 prettyPreOpenSeq
@@ -242,6 +242,7 @@ prettyPreOpenSeq prettyAcc wrap aenv senv seq =
     prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
     prettyT NilAtup        = []
     prettyT (SnocAtup t c) = prettyT t ++ [prettyC c]
+--}
 
 
 -- Pretty print a function over array computations.
@@ -301,7 +302,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     ppE  = prettyPreOpenExp prettyAcc parens env aenv
     ppE' = prettyPreOpenExp prettyAcc noParens env aenv
 
-    ppSh :: Shape sh => PreOpenExp acc env aenv sh -> Doc
+    ppSh :: PreOpenExp acc env aenv sh -> Doc
     ppSh = parens . ppE'
 
     ppF :: PreOpenFun acc env aenv f -> Doc
@@ -414,68 +415,71 @@ prettyConst (PrimPi       _) = text "pi"
 -- operator should be printed infix.
 --
 prettyPrim :: PrimFun a -> (Bool, Doc)
-prettyPrim PrimAdd{}          = (True,  char '+')
-prettyPrim PrimSub{}          = (True,  char '-')
-prettyPrim PrimMul{}          = (True,  char '*')
-prettyPrim PrimNeg{}          = (False, text "negate")
-prettyPrim PrimAbs{}          = (False, text "abs")
-prettyPrim PrimSig{}          = (False, text "signum")
-prettyPrim PrimQuot{}         = (False, text "quot")
-prettyPrim PrimRem{}          = (False, text "rem")
-prettyPrim PrimQuotRem{}      = (False, text "quotRem")
-prettyPrim PrimIDiv{}         = (False, text "div")
-prettyPrim PrimMod{}          = (False, text "mod")
-prettyPrim PrimDivMod{}       = (False, text "divMod")
-prettyPrim PrimBAnd{}         = (True,  text ".&.")
-prettyPrim PrimBOr{}          = (True,  text ".|.")
-prettyPrim PrimBXor{}         = (False, text "xor")
-prettyPrim PrimBNot{}         = (False, text "complement")
-prettyPrim PrimBShiftL{}      = (False, text "shiftL")
-prettyPrim PrimBShiftR{}      = (False, text "shiftR")
-prettyPrim PrimBRotateL{}     = (False, text "rotateL")
-prettyPrim PrimBRotateR{}     = (False, text "rotateR")
-prettyPrim PrimFDiv{}         = (True,  char '/')
-prettyPrim PrimRecip{}        = (False, text "recip")
-prettyPrim PrimSin{}          = (False, text "sin")
-prettyPrim PrimCos{}          = (False, text "cos")
-prettyPrim PrimTan{}          = (False, text "tan")
-prettyPrim PrimAsin{}         = (False, text "asin")
-prettyPrim PrimAcos{}         = (False, text "acos")
-prettyPrim PrimAtan{}         = (False, text "atan")
-prettyPrim PrimSinh{}         = (False, text "sinh")
-prettyPrim PrimCosh{}         = (False, text "cosh")
-prettyPrim PrimTanh{}         = (False, text "tanh")
-prettyPrim PrimAsinh{}        = (False, text "asinh")
-prettyPrim PrimAcosh{}        = (False, text "acosh")
-prettyPrim PrimAtanh{}        = (False, text "atanh")
-prettyPrim PrimExpFloating{}  = (False, text "exp")
-prettyPrim PrimSqrt{}         = (False, text "sqrt")
-prettyPrim PrimLog{}          = (False, text "log")
-prettyPrim PrimFPow{}         = (True,  text "**")
-prettyPrim PrimLogBase{}      = (False, text "logBase")
-prettyPrim PrimTruncate{}     = (False, text "truncate")
-prettyPrim PrimRound{}        = (False, text "round")
-prettyPrim PrimFloor{}        = (False, text "floor")
-prettyPrim PrimCeiling{}      = (False, text "ceiling")
-prettyPrim PrimAtan2{}        = (False, text "atan2")
-prettyPrim PrimIsNaN{}        = (False, text "isNaN")
-prettyPrim PrimLt{}           = (True,  text "<*")
-prettyPrim PrimGt{}           = (True,  text ">*")
-prettyPrim PrimLtEq{}         = (True,  text "<=*")
-prettyPrim PrimGtEq{}         = (True,  text ">=*")
-prettyPrim PrimEq{}           = (True,  text "==*")
-prettyPrim PrimNEq{}          = (True,  text "/=*")
-prettyPrim PrimMax{}          = (False, text "max")
-prettyPrim PrimMin{}          = (False, text "min")
-prettyPrim PrimLAnd           = (True,  text "&&*")
-prettyPrim PrimLOr            = (True,  text "||*")
-prettyPrim PrimLNot           = (False, text "not")
-prettyPrim PrimOrd            = (False, text "ord")
-prettyPrim PrimChr            = (False, text "chr")
-prettyPrim PrimBoolToInt      = (False, text "boolToInt")
-prettyPrim PrimFromIntegral{} = (False, text "fromIntegral")
-prettyPrim PrimToFloating{}   = (False, text "toFloating")
-prettyPrim (PrimCoerce _ t)   = (False, text "reinterpret_cast" <> char '<' <> text (show t) <> char '>')
+prettyPrim PrimAdd{}                = (True,  char '+')
+prettyPrim PrimSub{}                = (True,  char '-')
+prettyPrim PrimMul{}                = (True,  char '*')
+prettyPrim PrimNeg{}                = (False, text "negate")
+prettyPrim PrimAbs{}                = (False, text "abs")
+prettyPrim PrimSig{}                = (False, text "signum")
+prettyPrim PrimQuot{}               = (False, text "quot")
+prettyPrim PrimRem{}                = (False, text "rem")
+prettyPrim PrimQuotRem{}            = (False, text "quotRem")
+prettyPrim PrimIDiv{}               = (False, text "div")
+prettyPrim PrimMod{}                = (False, text "mod")
+prettyPrim PrimDivMod{}             = (False, text "divMod")
+prettyPrim PrimBAnd{}               = (True,  text ".&.")
+prettyPrim PrimBOr{}                = (True,  text ".|.")
+prettyPrim PrimBXor{}               = (False, text "xor")
+prettyPrim PrimBNot{}               = (False, text "complement")
+prettyPrim PrimBShiftL{}            = (False, text "shiftL")
+prettyPrim PrimBShiftR{}            = (False, text "shiftR")
+prettyPrim PrimBRotateL{}           = (False, text "rotateL")
+prettyPrim PrimBRotateR{}           = (False, text "rotateR")
+prettyPrim PrimPopCount{}           = (False, text "popCount")
+prettyPrim PrimCountLeadingZeros{}  = (False, text "countLeadingZeros")
+prettyPrim PrimCountTrailingZeros{} = (False, text "countTrailingZeros")
+prettyPrim PrimFDiv{}               = (True,  char '/')
+prettyPrim PrimRecip{}              = (False, text "recip")
+prettyPrim PrimSin{}                = (False, text "sin")
+prettyPrim PrimCos{}                = (False, text "cos")
+prettyPrim PrimTan{}                = (False, text "tan")
+prettyPrim PrimAsin{}               = (False, text "asin")
+prettyPrim PrimAcos{}               = (False, text "acos")
+prettyPrim PrimAtan{}               = (False, text "atan")
+prettyPrim PrimSinh{}               = (False, text "sinh")
+prettyPrim PrimCosh{}               = (False, text "cosh")
+prettyPrim PrimTanh{}               = (False, text "tanh")
+prettyPrim PrimAsinh{}              = (False, text "asinh")
+prettyPrim PrimAcosh{}              = (False, text "acosh")
+prettyPrim PrimAtanh{}              = (False, text "atanh")
+prettyPrim PrimExpFloating{}        = (False, text "exp")
+prettyPrim PrimSqrt{}               = (False, text "sqrt")
+prettyPrim PrimLog{}                = (False, text "log")
+prettyPrim PrimFPow{}               = (True,  text "**")
+prettyPrim PrimLogBase{}            = (False, text "logBase")
+prettyPrim PrimTruncate{}           = (False, text "truncate")
+prettyPrim PrimRound{}              = (False, text "round")
+prettyPrim PrimFloor{}              = (False, text "floor")
+prettyPrim PrimCeiling{}            = (False, text "ceiling")
+prettyPrim PrimAtan2{}              = (False, text "atan2")
+prettyPrim PrimIsNaN{}              = (False, text "isNaN")
+prettyPrim PrimLt{}                 = (True,  text "<")
+prettyPrim PrimGt{}                 = (True,  text ">")
+prettyPrim PrimLtEq{}               = (True,  text "<=")
+prettyPrim PrimGtEq{}               = (True,  text ">=")
+prettyPrim PrimEq{}                 = (True,  text "==")
+prettyPrim PrimNEq{}                = (True,  text "/=")
+prettyPrim PrimMax{}                = (False, text "max")
+prettyPrim PrimMin{}                = (False, text "min")
+prettyPrim PrimLAnd                 = (True,  text "&&")
+prettyPrim PrimLOr                  = (True,  text "||")
+prettyPrim PrimLNot                 = (False, text "not")
+prettyPrim PrimOrd                  = (False, text "ord")
+prettyPrim PrimChr                  = (False, text "chr")
+prettyPrim PrimBoolToInt            = (False, text "boolToInt")
+prettyPrim PrimFromIntegral{}       = (False, text "fromIntegral")
+prettyPrim PrimToFloating{}         = (False, text "toFloating")
+prettyPrim (PrimCoerce _ t)         = (False, text "reinterpret_cast" <> char '<' <> text (show t) <> char '>')
 
 {-
 -- Pretty print type
@@ -552,8 +556,9 @@ sizeEnv (Push env _) = 1 + sizeEnv env
 prj :: Idx env t -> Val env -> Doc
 prj ZeroIdx      (Push _ v)   = v
 prj (SuccIdx ix) (Push env _) = prj ix env
+#if __GLASGOW_HASKELL__ < 800
 prj _            _            = error "inconsistent valuation"
-
+#endif
 
 
 -- Auxiliary operations
