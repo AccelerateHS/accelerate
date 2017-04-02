@@ -54,8 +54,8 @@ newtype Vector' a = Vector' (LiftedRepr (ArrRepr a) a)
   deriving Typeable
 
 type family LiftedRepr r a where
-  LiftedRepr ()     ()                 = ((),Scalar Int)
-  LiftedRepr (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
+  LiftedRepr ()     a                  = ((),Scalar Int)
+  LiftedRepr (Array sh e) a            = (((),Segments sh), Vector e)
   LiftedRepr (l,r) a                   = LiftedTupleRepr (TupleRepr a)
 
 type family LiftedTupleRepr t :: *
@@ -227,9 +227,9 @@ toList' :: forall a. Arrays a
         -> Vector' a -> [a]
 toList' fetchAll (Vector' x) =
   case flavour (undefined :: a) of
-    ArraysFunit | ((), n) <- x -> replicate (n ! Z) ()
+    ArraysFunit | ((), n) <- x -> replicate (n ! Z) (toArr ())
     ArraysFarray | (((), lens), vals) <- x
-                 -> fetchAll lens vals
+                 -> map toArr (fetchAll lens vals)
     ArraysFtuple -> map (toProd (Proxy :: Proxy Arrays)) (tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) x)
   where
     tup :: forall t. ProdR Arrays t -> LiftedTupleRepr t -> [t]
@@ -244,8 +244,9 @@ fromList' concat xs = Vector' $
   case flavour (undefined :: a) of
     ArraysFunit -> ((), scalar (length xs))
     ArraysFarray ->
-      let segs = map shape xs
-          vals = concat (map flatten xs)
+      let arrays = map fromArr xs
+          segs = map shape arrays
+          vals = concat (map flatten arrays)
       in (((), fromList (Z :. length segs) segs), vals)
     ArraysFtuple -> tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) (map (fromProd (Proxy :: Proxy Arrays)) xs)
   where

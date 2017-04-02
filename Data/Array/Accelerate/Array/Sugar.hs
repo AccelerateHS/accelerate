@@ -627,9 +627,9 @@ data ArraysR arrs where
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
 
 data ArraysFlavour arrs where
-  ArraysFunit  ::                                          ArraysFlavour ()
-  ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
-  ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
+  ArraysFunit  :: ArrRepr arrs ~ ()                            => ArraysFlavour arrs
+  ArraysFarray :: (Shape sh, Elt e, ArrRepr arrs ~ Array sh e) => ArraysFlavour arrs
+  ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r))        => ArraysFlavour arrs
 
 -- | 'Arrays' consists of nested tuples of individual 'Array's, currently up to
 -- 15-elements wide. Accelerate computations can thereby return multiple
