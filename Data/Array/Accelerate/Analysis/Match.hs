@@ -1150,74 +1150,120 @@ hashTuple h (SnocTup t e)       = hash "SnocTup"        `hashWithSalt` hashTuple
 
 
 hashPrimConst :: PrimConst c -> Int
-hashPrimConst PrimMinBound{}    = hash "PrimMinBound"
-hashPrimConst PrimMaxBound{}    = hash "PrimMaxBound"
-hashPrimConst PrimPi{}          = hash "PrimPi"
+hashPrimConst (PrimMinBound t)    = hash "PrimMinBound" `hashWithSalt` hashBoundedType t
+hashPrimConst (PrimMaxBound t)    = hash "PrimMaxBound" `hashWithSalt` hashBoundedType t
+hashPrimConst (PrimPi t)          = hash "PrimPi"       `hashWithSalt` hashFloatingType t
 
 hashPrimFun :: PrimFun f -> Int
-hashPrimFun PrimAdd{}                = hash "PrimAdd"
-hashPrimFun PrimSub{}                = hash "PrimSub"
-hashPrimFun PrimMul{}                = hash "PrimMul"
-hashPrimFun PrimNeg{}                = hash "PrimNeg"
-hashPrimFun PrimAbs{}                = hash "PrimAbs"
-hashPrimFun PrimSig{}                = hash "PrimSig"
-hashPrimFun PrimQuot{}               = hash "PrimQuot"
-hashPrimFun PrimRem{}                = hash "PrimRem"
-hashPrimFun PrimQuotRem{}            = hash "PrimQuotRem"
-hashPrimFun PrimIDiv{}               = hash "PrimIDiv"
-hashPrimFun PrimMod{}                = hash "PrimMod"
-hashPrimFun PrimDivMod{}             = hash "PrimDivMod"
-hashPrimFun PrimBAnd{}               = hash "PrimBAnd"
-hashPrimFun PrimBOr{}                = hash "PrimBOr"
-hashPrimFun PrimBXor{}               = hash "PrimBXor"
-hashPrimFun PrimBNot{}               = hash "PrimBNot"
-hashPrimFun PrimBShiftL{}            = hash "PrimBShiftL"
-hashPrimFun PrimBShiftR{}            = hash "PrimBShiftR"
-hashPrimFun PrimBRotateL{}           = hash "PrimBRotateL"
-hashPrimFun PrimBRotateR{}           = hash "PrimBRotateR"
-hashPrimFun PrimPopCount{}           = hash "PrimPopCount"
-hashPrimFun PrimCountLeadingZeros{}  = hash "PrimCountLeadingZeros"
-hashPrimFun PrimCountTrailingZeros{} = hash "PrimCountTrailingZeros"
-hashPrimFun PrimFDiv{}               = hash "PrimFDiv"
-hashPrimFun PrimRecip{}              = hash "PrimRecip"
-hashPrimFun PrimSin{}                = hash "PrimSin"
-hashPrimFun PrimCos{}                = hash "PrimCos"
-hashPrimFun PrimTan{}                = hash "PrimTan"
-hashPrimFun PrimAsin{}               = hash "PrimAsin"
-hashPrimFun PrimAcos{}               = hash "PrimAcos"
-hashPrimFun PrimAtan{}               = hash "PrimAtan"
-hashPrimFun PrimSinh{}               = hash "PrimSinh"
-hashPrimFun PrimCosh{}               = hash "PrimCosh"
-hashPrimFun PrimTanh{}               = hash "PrimTanh"
-hashPrimFun PrimAsinh{}              = hash "PrimAsinh"
-hashPrimFun PrimAcosh{}              = hash "PrimAcosh"
-hashPrimFun PrimAtanh{}              = hash "PrimAtanh"
-hashPrimFun PrimExpFloating{}        = hash "PrimExpFloating"
-hashPrimFun PrimSqrt{}               = hash "PrimSqrt"
-hashPrimFun PrimLog{}                = hash "PrimLog"
-hashPrimFun PrimFPow{}               = hash "PrimFPow"
-hashPrimFun PrimLogBase{}            = hash "PrimLogBase"
-hashPrimFun PrimAtan2{}              = hash "PrimAtan2"
-hashPrimFun PrimTruncate{}           = hash "PrimTruncate"
-hashPrimFun PrimRound{}              = hash "PrimRound"
-hashPrimFun PrimFloor{}              = hash "PrimFloor"
-hashPrimFun PrimCeiling{}            = hash "PrimCeiling"
-hashPrimFun PrimIsNaN{}              = hash "PrimIsNaN"
-hashPrimFun PrimLt{}                 = hash "PrimLt"
-hashPrimFun PrimGt{}                 = hash "PrimGt"
-hashPrimFun PrimLtEq{}               = hash "PrimLtEq"
-hashPrimFun PrimGtEq{}               = hash "PrimGtEq"
-hashPrimFun PrimEq{}                 = hash "PrimEq"
-hashPrimFun PrimNEq{}                = hash "PrimNEq"
-hashPrimFun PrimMax{}                = hash "PrimMax"
-hashPrimFun PrimMin{}                = hash "PrimMin"
-hashPrimFun PrimFromIntegral{}       = hash "PrimFromIntegral"
-hashPrimFun PrimToFloating{}         = hash "PrimToFloating"
-hashPrimFun PrimCoerce{}             = hash "PrimCoerce"
-hashPrimFun PrimLAnd                 = hash "PrimLAnd"
-hashPrimFun PrimLOr                  = hash "PrimLOr"
-hashPrimFun PrimLNot                 = hash "PrimLNot"
-hashPrimFun PrimOrd                  = hash "PrimOrd"
-hashPrimFun PrimChr                  = hash "PrimChr"
-hashPrimFun PrimBoolToInt            = hash "PrimBoolToInt"
+hashPrimFun (PrimAdd a)                = hash "PrimAdd"                `hashWithSalt` hashNumType a
+hashPrimFun (PrimSub a)                = hash "PrimSub"                `hashWithSalt` hashNumType a
+hashPrimFun (PrimMul a)                = hash "PrimMul"                `hashWithSalt` hashNumType a
+hashPrimFun (PrimNeg a)                = hash "PrimNeg"                `hashWithSalt` hashNumType a
+hashPrimFun (PrimAbs a)                = hash "PrimAbs"                `hashWithSalt` hashNumType a
+hashPrimFun (PrimSig a)                = hash "PrimSig"                `hashWithSalt` hashNumType a
+hashPrimFun (PrimQuot a)               = hash "PrimQuot"               `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimRem a)                = hash "PrimRem"                `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimQuotRem a)            = hash "PrimQuotRem"            `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimIDiv a)               = hash "PrimIDiv"               `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimMod a)                = hash "PrimMod"                `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimDivMod a)             = hash "PrimDivMod"             `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBAnd a)               = hash "PrimBAnd"               `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBOr a)                = hash "PrimBOr"                `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBXor a)               = hash "PrimBXor"               `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBNot a)               = hash "PrimBNot"               `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBShiftL a)            = hash "PrimBShiftL"            `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBShiftR a)            = hash "PrimBShiftR"            `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBRotateL a)           = hash "PrimBRotateL"           `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimBRotateR a)           = hash "PrimBRotateR"           `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimPopCount a)           = hash "PrimPopCount"           `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimCountLeadingZeros a)  = hash "PrimCountLeadingZeros"  `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimCountTrailingZeros a) = hash "PrimCountTrailingZeros" `hashWithSalt` hashIntegralType a
+hashPrimFun (PrimFDiv a)               = hash "PrimFDiv"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimRecip a)              = hash "PrimRecip"              `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimSin a)                = hash "PrimSin"                `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimCos a)                = hash "PrimCos"                `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimTan a)                = hash "PrimTan"                `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimAsin a)               = hash "PrimAsin"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimAcos a)               = hash "PrimAcos"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimAtan a)               = hash "PrimAtan"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimSinh a)               = hash "PrimSinh"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimCosh a)               = hash "PrimCosh"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimTanh a)               = hash "PrimTanh"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimAsinh a)              = hash "PrimAsinh"              `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimAcosh a)              = hash "PrimAcosh"              `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimAtanh a)              = hash "PrimAtanh"              `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimExpFloating a)        = hash "PrimExpFloating"        `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimSqrt a)               = hash "PrimSqrt"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimLog a)                = hash "PrimLog"                `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimFPow a)               = hash "PrimFPow"               `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimLogBase a)            = hash "PrimLogBase"            `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimAtan2 a)              = hash "PrimAtan2"              `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimTruncate a b)         = hash "PrimTruncate"           `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
+hashPrimFun (PrimRound a b)            = hash "PrimRound"              `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
+hashPrimFun (PrimFloor a b)            = hash "PrimFloor"              `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
+hashPrimFun (PrimCeiling a b)          = hash "PrimCeiling"            `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
+hashPrimFun (PrimIsNaN a)              = hash "PrimIsNaN"              `hashWithSalt` hashFloatingType a
+hashPrimFun (PrimLt a)                 = hash "PrimLt"                 `hashWithSalt` hashScalarType a
+hashPrimFun (PrimGt a)                 = hash "PrimGt"                 `hashWithSalt` hashScalarType a
+hashPrimFun (PrimLtEq a)               = hash "PrimLtEq"               `hashWithSalt` hashScalarType a
+hashPrimFun (PrimGtEq a)               = hash "PrimGtEq"               `hashWithSalt` hashScalarType a
+hashPrimFun (PrimEq a)                 = hash "PrimEq"                 `hashWithSalt` hashScalarType a
+hashPrimFun (PrimNEq a)                = hash "PrimNEq"                `hashWithSalt` hashScalarType a
+hashPrimFun (PrimMax a)                = hash "PrimMax"                `hashWithSalt` hashScalarType a
+hashPrimFun (PrimMin a)                = hash "PrimMin"                `hashWithSalt` hashScalarType a
+hashPrimFun (PrimFromIntegral a b)     = hash "PrimFromIntegral"       `hashWithSalt` hashIntegralType a `hashWithSalt` hashNumType b
+hashPrimFun (PrimToFloating a b)       = hash "PrimToFloating"         `hashWithSalt` hashNumType a      `hashWithSalt` hashFloatingType b
+hashPrimFun (PrimCoerce a b)           = hash "PrimCoerce"             `hashWithSalt` hashScalarType a   `hashWithSalt` hashScalarType b
+hashPrimFun PrimLAnd                   = hash "PrimLAnd"
+hashPrimFun PrimLOr                    = hash "PrimLOr"
+hashPrimFun PrimLNot                   = hash "PrimLNot"
+hashPrimFun PrimOrd                    = hash "PrimOrd"
+hashPrimFun PrimChr                    = hash "PrimChr"
+hashPrimFun PrimBoolToInt              = hash "PrimBoolToInt"
+
+
+hashScalarType :: ScalarType t -> Int
+hashScalarType (NumScalarType t)    = hash "NumScalarType"    `hashWithSalt` hashNumType t
+hashScalarType (NonNumScalarType t) = hash "NonNumScalarType" `hashWithSalt` hashNonNumType t
+
+hashBoundedType :: BoundedType t -> Int
+hashBoundedType (IntegralBoundedType t) = hash "IntegralBoundedType" `hashWithSalt` hashIntegralType t
+hashBoundedType (NonNumBoundedType t)   = hash "NonNumBoundedType"   `hashWithSalt` hashNonNumType t
+
+hashNonNumType :: NonNumType t -> Int
+hashNonNumType TypeBool{}   = hash "Bool"
+hashNonNumType TypeChar{}   = hash "Char"
+hashNonNumType TypeCChar{}  = hash "CChar"
+hashNonNumType TypeCSChar{} = hash "CSChar"
+hashNonNumType TypeCUChar{} = hash "CUChar"
+
+hashNumType :: NumType t -> Int
+hashNumType (IntegralNumType t) = hash "IntegralNumType" `hashWithSalt` hashIntegralType t
+hashNumType (FloatingNumType t) = hash "FloatingNumType" `hashWithSalt` hashFloatingType t
+
+hashIntegralType :: IntegralType t -> Int
+hashIntegralType TypeInt{}     = hash "Int"
+hashIntegralType TypeInt8{}    = hash "Int8"
+hashIntegralType TypeInt16{}   = hash "Int16"
+hashIntegralType TypeInt32{}   = hash "Int32"
+hashIntegralType TypeInt64{}   = hash "Int64"
+hashIntegralType TypeWord{}    = hash "Word"
+hashIntegralType TypeWord8{}   = hash "Word8"
+hashIntegralType TypeWord16{}  = hash "Word16"
+hashIntegralType TypeWord32{}  = hash "Word32"
+hashIntegralType TypeWord64{}  = hash "Word64"
+hashIntegralType TypeCShort{}  = hash "CShort"
+hashIntegralType TypeCUShort{} = hash "CUShort"
+hashIntegralType TypeCInt{}    = hash "CInt"
+hashIntegralType TypeCUInt{}   = hash "CUInt"
+hashIntegralType TypeCLong{}   = hash "CLong"
+hashIntegralType TypeCULong{}  = hash "CULong"
+hashIntegralType TypeCLLong{}  = hash "CLLong"
+hashIntegralType TypeCULLong{} = hash "CULLong"
+
+hashFloatingType :: FloatingType t -> Int
+hashFloatingType TypeFloat{}   = hash "Float"
+hashFloatingType TypeDouble{}  = hash "Double"
+hashFloatingType TypeCFloat{}  = hash "CFloat"
+hashFloatingType TypeCDouble{} = hash "CDouble"
 
