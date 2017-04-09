@@ -52,20 +52,16 @@ Flag codespeed
 -- Flags that control which Accelerate backends that are linked against
 --
 Flag cuda
-  Description:          Enable the CUDA parallel backend for NVIDIA GPUs
+  Description:          Enable the CUDA parallel backend for NVIDIA GPUs (deprecated)
   Default:              False
 
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
-  Default:              False
+  Default:              True
 
 Flag llvm-ptx
   Description:          Enable the LLVM PTX backend for NVIDIA GPUs
-  Default:              False
-
-Flag cilk
-  Description:          Enable the Cilk backend for multicore CPUs
-  Default:              False
+  Default:              True
 
 -- Flags to specify which programs to build
 --
@@ -184,11 +180,6 @@ Library
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
         accelerate-llvm-ptx               == 1.0.*
-
-  if flag(cilk)
-    CPP-options:        -DACCELERATE_CILK_BACKEND
-    build-depends:
-        accelerate-icc-opencl             == 1.0.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
