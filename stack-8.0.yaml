@@ -6,49 +6,22 @@ resolver: lts-8.0
 packages:
 - '.'
 
-- location:
-    git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 22d49629ade9b9b8e93985362323b1259155df37
-  extra-dep: true
-
-# - location:
-#     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-#     commit: 0f4d0b9781af099dad8739b57f4da55466293597
-#   extra-dep: true
-
-- location:
-    git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 2bb0fb1c7608b4b37269a0a631dc2289bff2f560
-  extra-dep: true
-  subdirs:
-    - 'accelerate-llvm'
-    - 'accelerate-llvm-native'
-    - 'accelerate-llvm-ptx'
-
-- location:
-    git:    https://github.com/AccelerateHS/accelerate-io.git
-    commit: c8a618b563853b08f3501979e05e51d1303d7fa4
-  extra-dep: true
-
-- location:
-    git:    https://github.com/AccelerateHS/accelerate-fft.git
-    commit: a27ec08ee856dd217880ac33a6f52ba9f184dcfb
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: 8dccc8d26d8e46e6cd30436047537a2795fd5064
-  extra-dep: true
-
 extra-deps:
+- 'accelerate-1.0.0.0'
+- 'accelerate-fft-1.0.0.0'
+- 'accelerate-io-1.0.0.0'
+- 'accelerate-llvm-1.0.0.0'
+- 'accelerate-llvm-native-1.0.0.0'
+- 'accelerate-llvm-ptx-1.0.0.0'
 - 'chaselev-deque-0.5.0.5'
 - 'colour-accelerate-0.1.0.0'
 - 'cuda-0.7.5.3'
 - 'cufft-0.7.5.0'
-- 'gloss-accelerate-0.2.0.0'
-- 'gloss-raster-accelerate-0.2.0.0'
+- 'gloss-accelerate-2.0.0.0'
+- 'gloss-raster-accelerate-2.0.0.0'
 - 'lens-accelerate-0.1.0.0'
 - 'libffi-0.1'
+- 'linear-accelerate-0.3'
 - 'llvm-hs-4.0.0.0'
 - 'llvm-hs-pure-4.0.0.0'
 - 'matrix-market-attoparsec-0.1.0.5'
@@ -63,8 +36,6 @@ flags:
   accelerate:
     debug: true
     ekg:   false
-  # accelerate-cuda:
-  #   debug: true
   accelerate-llvm-native:
     debug: true
   accelerate-llvm-ptx:
