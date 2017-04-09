@@ -380,7 +380,7 @@ Executable accelerate-crystal
         , accelerate-examples             == 1.0.*
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
-        , gloss-raster-accelerate         >= 0.2
+        , gloss-raster-accelerate         >= 2.0
 
 
 -- The slit-scan effect creating a Doctor Who time vortex
@@ -405,7 +405,7 @@ Executable accelerate-tunnel
         , accelerate                      == 1.0.*
         , accelerate-examples             == 1.0.*
         , fclabels                        >= 2.0
-        , gloss-raster-accelerate         >= 0.2
+        , gloss-raster-accelerate         >= 2.0
         , lens-accelerate                 >= 0.1
         , linear-accelerate               >= 0.3
 
@@ -464,7 +464,7 @@ Executable accelerate-mandelbrot
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
-        , gloss-accelerate                >= 0.2
+        , gloss-accelerate                >= 2.0
 
 
 -- A stable fluid simulation
@@ -574,7 +574,7 @@ Executable accelerate-smoothlife
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
-        , gloss-accelerate                >= 0.2
+        , gloss-accelerate                >= 2.0
         , mwc-random                      >= 0.8
 
 
@@ -705,8 +705,8 @@ Executable accelerate-ray
         , colour-accelerate               >= 0.1
         , fclabels                        >= 1.0
         , gloss                           >= 1.8
-        , gloss-accelerate                >= 0.2
-        , gloss-raster-accelerate         >= 0.2
+        , gloss-accelerate                >= 2.0
+        , gloss-raster-accelerate         >= 2.0
         , lens-accelerate                 >= 0.1
         , linear-accelerate               >= 0.3
 
