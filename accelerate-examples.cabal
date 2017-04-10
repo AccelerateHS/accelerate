@@ -323,8 +323,17 @@ Executable accelerate-smvm
   Main-is:              Main.hs
   other-modules:        Config Matrix SMVM
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if impl(ghc >= 7.6)
     ghc-options:        -fsimpl-tick-factor=130
@@ -356,8 +365,17 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -382,8 +400,17 @@ Executable accelerate-tunnel
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -409,8 +436,18 @@ Executable accelerate-canny
   Main-is:              Main.hs
   other-modules:        Config Canny Wildfire
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -Odph -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -Odph
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -438,8 +475,17 @@ Executable accelerate-mandelbrot
   Main-is:              Main.hs
   other-modules:        Config Mandel World
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -466,8 +512,17 @@ Executable accelerate-fluid
   hs-source-dirs:       examples/fluid/src-acc
   other-modules:        Config Event Fluid Type World
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -509,8 +564,17 @@ Executable accelerate-nbody
         Solver.Naive2
         Test
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -543,8 +607,17 @@ Executable accelerate-smoothlife
         Random.Splat
         SmoothLife
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
@@ -577,8 +650,17 @@ Executable accelerate-hashcat
   Main-is:              Main.hs
   other-modules:        Config Digest MD5
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -606,8 +688,17 @@ Executable accelerate-fft
   hs-source-dirs:       examples/fft/src-acc
   other-modules:        Config HighPass FFT
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -640,8 +731,17 @@ Executable accelerate-pagerank
         Rank
         Step
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -680,8 +780,17 @@ Executable accelerate-ray
         Scene.State
         Scene.World
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -710,8 +819,17 @@ Executable accelerate-kmeans
   Main-is:              Main.hs
   other-modules:        Config Main Kmeans GenSamples
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-N
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
