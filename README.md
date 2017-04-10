@@ -2,6 +2,7 @@ Examples programs using Accelerate
 ==================================
 
 [![Build Status](https://travis-ci.org/AccelerateHS/accelerate-examples.svg?branch=master)](https://travis-ci.org/AccelerateHS/accelerate-examples)
+[![Hackage](https://img.shields.io/hackage/v/accelerate-examples.svg)](https://hackage.haskell.org/package/accelerate-examples)
 
 Example programs using the Accelerate library. If you add new features to the
 base library or find a bug, please add a test case. The aim is for this program
