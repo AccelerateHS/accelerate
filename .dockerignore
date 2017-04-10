@@ -1,0 +1,8 @@
+dist
+.git
+.ghci
+.stack-work
+.cabal-sandbox
+cabal*.config
+stack.yaml
+tests
