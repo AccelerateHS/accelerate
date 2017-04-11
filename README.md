@@ -3,6 +3,8 @@ Examples programs using Accelerate
 
 [![Build Status](https://travis-ci.org/AccelerateHS/accelerate-examples.svg?branch=master)](https://travis-ci.org/AccelerateHS/accelerate-examples)
 [![Hackage](https://img.shields.io/hackage/v/accelerate-examples.svg)](https://hackage.haskell.org/package/accelerate-examples)
+[![Docker Automated build](https://img.shields.io/docker/automated/tmcdonell/accelerate-examples.svg)](https://hub.docker.com/r/tmcdonell/accelerate-examples/)
+[![Docker status](https://images.microbadger.com/badges/image/tmcdonell/accelerate-examples.svg)](https://microbadger.com/images/tmcdonell/accelerate-examples)
 
 Example programs using the Accelerate library. If you add new features to the
 base library or find a bug, please add a test case. The aim is for this program
