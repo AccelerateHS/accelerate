@@ -41,6 +41,7 @@ module Data.Array.Accelerate.Debug.Flags (
 import Control.Monad.IO.Class
 import Data.IORef
 import Data.Label
+import Data.Label.Derive
 import Data.List
 import System.Environment
 import System.IO.Unsafe
@@ -63,51 +64,52 @@ data FlagSpec flag = Option String              -- external form
 -- awkward, as we process both frontend as well as backend option flags, but
 -- gives some control over error messages and overlapping options.
 --
-fclabels [d|
-  data Flags = Flags
-    {
-      -- Functionality and phase control
-      -- -------------------------------
-      --
-      -- These are Maybe types because they will only override the backend
-      -- options if the user specifies a value
-      --
-      acc_sharing               :: !(Maybe Bool)        -- recover sharing of array computations
-    , exp_sharing               :: !(Maybe Bool)        -- recover sharing of scalar expressions
-    , fusion                    :: !(Maybe Bool)        -- fuse array expressions
-    , simplify                  :: !(Maybe Bool)        -- simplify scalar expressions
---    , unfolding_use_threshold   :: !(Maybe Int)         -- the magic cut-off figure for inlining
-    , flush_cache               :: !(Maybe Bool)        -- delete persistent compilation cache(s)
-    , fast_math                 :: !(Maybe Bool)        -- use faster, less precise math library operations
+data Flags = Flags
+  {
+    -- Functionality and phase control
+    -- -------------------------------
+    --
+    -- These are Maybe types because they will only override the backend
+    -- options if the user specifies a value
+    --
+    _acc_sharing              :: !(Maybe Bool)        -- recover sharing of array computations
+  , _exp_sharing              :: !(Maybe Bool)        -- recover sharing of scalar expressions
+  , _fusion                   :: !(Maybe Bool)        -- fuse array expressions
+  , _simplify                 :: !(Maybe Bool)        -- simplify scalar expressions
+  -- , _unfolding_use_threshold  :: !(Maybe Int)         -- the magic cut-off figure for inlining
+  , _flush_cache              :: !(Maybe Bool)        -- delete persistent compilation cache(s)
+  , _fast_math                :: !(Maybe Bool)        -- use faster, less precise math library operations
 
-      -- Debug trace
-      -- -----------
-    , verbose                   :: !Bool                -- be very chatty
+    -- Debug trace
+    -- -----------
+  , _verbose                  :: !Bool                -- be very chatty
 
-      -- optimisation and simplification
-    , dump_phases               :: !Bool                -- print information about each phase of the compiler
-    , dump_sharing              :: !Bool                -- sharing recovery phase
-    , dump_simpl_stats          :: !Bool                -- statistics form fusion/simplification
-    , dump_simpl_iterations     :: !Bool                -- output from each simplifier iteration
-    , dump_vectorisation        :: !Bool                -- output from the vectoriser
-    , dump_dot                  :: !Bool                -- generate dot output of the program
-    , dump_simpl_dot            :: !Bool                -- generate simplified dot output
+    -- optimisation and simplification
+  , _dump_phases              :: !Bool                -- print information about each phase of the compiler
+  , _dump_sharing             :: !Bool                -- sharing recovery phase
+  , _dump_simpl_stats         :: !Bool                -- statistics form fusion/simplification
+  , _dump_simpl_iterations    :: !Bool                -- output from each simplifier iteration
+  , _dump_vectorisation       :: !Bool                -- output from the vectoriser
+  , _dump_dot                 :: !Bool                -- generate dot output of the program
+  , _dump_simpl_dot           :: !Bool                -- generate simplified dot output
 
-      -- garbage collection
-    , dump_gc                   :: !Bool                -- trace garbage collector
-    , dump_gc_stats             :: !Bool                -- print final GC statistics
+    -- garbage collection
+  , _dump_gc                  :: !Bool                -- trace garbage collector
+  , _dump_gc_stats            :: !Bool                -- print final GC statistics
 
-      -- code generation / compilation
-    , debug_cc                  :: !Bool                -- compile with debug symbols
-    , dump_cc                   :: !Bool                -- trace code generation & compilation
-    , dump_ld                   :: !Bool                -- trace runtime linker
-    , dump_asm                  :: !Bool                -- trace assembler
+    -- code generation / compilation
+  , _debug_cc                 :: !Bool                -- compile with debug symbols
+  , _dump_cc                  :: !Bool                -- trace code generation & compilation
+  , _dump_ld                  :: !Bool                -- trace runtime linker
+  , _dump_asm                 :: !Bool                -- trace assembler
 
-      -- execution
-    , dump_exec                 :: !Bool                -- trace execution
-    , dump_sched                :: !Bool                -- trace scheduler
-    }
- |]
+    -- execution
+  , _dump_exec                :: !Bool                -- trace execution
+  , _dump_sched               :: !Bool                -- trace scheduler
+  }
+
+-- Generate labels with INLINE pragmas
+$(mkLabelsWith defaultNaming True False False True ''Flags)
 
 
 allFlags :: [FlagSpec (Flags -> Flags)]
