@@ -30,6 +30,7 @@ module Data.Array.Accelerate.Product (
 
 ) where
 
+
 -- |Type-safe projection indices for tuples.
 --
 -- NB: We index tuples by starting to count from the *right*!
