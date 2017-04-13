@@ -125,6 +125,9 @@ import Foreign.Storable
 import GHC.Ptr                                                      ( Ptr(..) )
 import System.IO.Unsafe
 import qualified Language.Haskell.TH                                as TH
+#if __GLASGOW_HASKELL__ <= 708
+import Instances.TH.Lift                                            () -- Int8, Int16...
+#endif
 
 -- friends
 import Data.Array.Accelerate.Array.Data

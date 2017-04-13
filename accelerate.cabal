@@ -383,6 +383,10 @@ Library
   if impl(ghc >= 8.0)
     ghc-options:        -freduction-depth=35
 
+  if impl(ghc < 7.10)
+    build-depends:
+          th-lift-instances             >= 0.1
+
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
   -- project loads in GHCi, and avoids extension clashes.
