@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -63,14 +64,15 @@ module Data.Array.Accelerate.Array.Sugar (
 import Control.DeepSeq
 import Data.List                                                ( intercalate, transpose )
 import Data.Typeable
-
 import GHC.Exts                                                 ( IsList )
+import Language.Haskell.TH                                      hiding ( Foreign )
 import qualified GHC.Exts                                       as GHC
 
 -- friends
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 
@@ -586,6 +588,11 @@ class Typeable asm => Foreign asm where
   strForeign :: asm args -> String
   strForeign _ = "<foreign>"
 
+  -- Backends which want to support compile-time embedding must be able to lift
+  -- the foreign function into Template Haskell
+  liftForeign :: asm args -> ExpQ
+  liftForeign _ = $internalError "liftForeign" "not supported by this backend"
+
 
 -- Surface arrays
 -- --------------
@@ -943,6 +950,7 @@ instance NFData (Array sh e) where
       go ArrayEltRcschar       (AD_CSChar ua)  = rnf ua
       go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
+
 
 -- |Scalars arrays hold a single element
 --
