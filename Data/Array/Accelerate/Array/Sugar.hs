@@ -584,6 +584,7 @@ class Typeable asm => Foreign asm where
   -- Backends should be able to produce a string representation of the foreign
   -- function for pretty printing, typically the name of the function.
   strForeign :: asm args -> String
+  strForeign _ = "<foreign>"
 
 
 -- Surface arrays
