@@ -1776,7 +1776,11 @@ liftIntegral TypeInt8{}    x = [| x |]
 liftIntegral TypeInt16{}   x = [| x |]
 liftIntegral TypeInt32{}   x = [| x |]
 liftIntegral TypeInt64{}   x = [| x |]
+#if __GLASGOW_HASKELL__ >= 710
 liftIntegral TypeWord{}    x = [| x |]
+#else
+liftIntegral TypeWord{}    x = return (TH.LitE (TH.IntegerL (toInteger x)))
+#endif
 liftIntegral TypeWord8{}   x = [| x |]
 liftIntegral TypeWord16{}  x = [| x |]
 liftIntegral TypeWord32{}  x = [| x |]
