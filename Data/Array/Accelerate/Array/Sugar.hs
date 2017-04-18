@@ -590,7 +590,7 @@ class Typeable asm => Foreign asm where
 
   -- Backends which want to support compile-time embedding must be able to lift
   -- the foreign function into Template Haskell
-  liftForeign :: asm args -> ExpQ
+  liftForeign :: asm args -> Q (TExp (asm args))
   liftForeign _ = $internalError "liftForeign" "not supported by this backend"
 
 
