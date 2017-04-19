@@ -108,6 +108,7 @@ module Data.Array.Accelerate.AST (
   -- TemplateHaskell
   LiftAcc,
   liftIdx, liftTupleIdx, liftArrays,
+  liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
 
   -- debugging
