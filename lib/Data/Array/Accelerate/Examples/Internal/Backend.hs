@@ -33,9 +33,6 @@ import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
-#ifdef ACCELERATE_CILK_BACKEND
-import qualified Data.Array.Accelerate.Cilk             as Cilk
-#endif
 
 
 -- | Execute Accelerate expressions
@@ -52,9 +49,6 @@ run PTX         = PTX.run
 #ifdef ACCELERATE_CUDA_BACKEND
 run CUDA        = CUDA.run
 #endif
-#ifdef ACCELERATE_CILK_BACKEND
-run Cilk        = Cilk.run
-#endif
 
 
 {-# INLINE run1 #-}
@@ -68,9 +62,6 @@ run1 PTX         f = PTX.run1 f
 #endif
 #ifdef ACCELERATE_CUDA_BACKEND
 run1 CUDA        f = CUDA.run1 f
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-run1 Cilk        f = Cilk.run . f . use
 #endif
 
 {-# INLINE run2 #-}
@@ -108,9 +99,6 @@ data Backend = Interpreter
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
              | Multi
 #endif
-#ifdef ACCELERATE_CILK_BACKEND
-             | Cilk
-#endif
   deriving (P.Eq, P.Enum, P.Bounded)
 
 
@@ -130,9 +118,6 @@ instance Show Backend where
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
   show Multi            = "llvm-multi"
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-  show Cilk             = "cilk"
 #endif
 
 
@@ -175,11 +160,6 @@ availableBackends optBackend =
             (NoArg (set optBackend Multi))
             "LLVM based multi-device implementation using CPUs and GPUs (parallel)"
 #endif
-#ifdef ACCELERATE_CILK_BACKEND
-  , Option  [] [show Cilk]
-            (NoArg (set optBackend Cilk))
-            "Cilk based implementation for multicore CPUs (parallel)"
-#endif
   ]
 
 
@@ -214,8 +194,5 @@ concurrentBackends PTX          = Nothing
 #endif
 #ifdef ACCELERATE_CUDA_BACKEND
 concurrentBackends CUDA         = Just 1      -- not thread safe
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-concurrentBackends Cilk         = Just 1      -- not thread safe
 #endif
 
