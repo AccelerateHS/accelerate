@@ -96,9 +96,6 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
              | CUDA
 #endif
-#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
-             | Multi
-#endif
   deriving (P.Eq, P.Enum, P.Bounded)
 
 
@@ -115,9 +112,6 @@ instance Show Backend where
 #endif
 #ifdef ACCELERATE_CUDA_BACKEND
   show CUDA             = "cuda"
-#endif
-#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
-  show Multi            = "llvm-multi"
 #endif
 
 
@@ -154,11 +148,6 @@ availableBackends optBackend =
   , Option  [] [show CUDA]
             (NoArg (set optBackend CUDA))
             "CUDA based implementation for NVIDIA GPUs (parallel)"
-#endif
-#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
-  , Option  [] [show Multi]
-            (NoArg (set optBackend Multi))
-            "LLVM based multi-device implementation using CPUs and GPUs (parallel)"
 #endif
   ]
 
