@@ -36,6 +36,7 @@ module Data.Array.Accelerate.Trafo.Base (
   DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
   -- DelayedSeq(..), DelayedOpenSeq,
+  matchDelayedOpenAcc, hashDelayedOpenAcc,
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
@@ -183,9 +184,9 @@ instance Kit DelayedOpenAcc where
   {-# INLINEABLE hashAcc   #-}
   {-# INLINEABLE matchAcc  #-}
   {-# INLINEABLE prettyAcc #-}
-  hashAcc                 = hashDelayed
-  matchAcc                = matchDelayed
-  prettyAcc               = prettyDelayed
+  hashAcc                 = hashDelayedOpenAcc
+  matchAcc                = matchDelayedOpenAcc
+  prettyAcc               = prettyDelayedOpenAcc
 
 instance NFData (DelayedOpenAfun aenv t) where
   rnf = rnfPreOpenAfun rnfDelayedOpenAcc
@@ -196,24 +197,24 @@ instance NFData (DelayedOpenAcc aenv t) where
 -- instance NFData (DelayedSeq t) where
 --   rnf = rnfDelayedSeq
 
-hashDelayed :: HashAcc DelayedOpenAcc
-hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
-hashDelayed Delayed{..}         = hash "Delayed"  `hashE` extentD `hashF` indexD `hashF` linearIndexD
+hashDelayedOpenAcc :: HashAcc DelayedOpenAcc
+hashDelayedOpenAcc (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
+hashDelayedOpenAcc Delayed{..}         = hash "Delayed"  `hashE` extentD `hashF` indexD `hashF` linearIndexD
   where
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
-matchDelayed :: MatchAcc DelayedOpenAcc
-matchDelayed (Manifest pacc1) (Manifest pacc2)
+matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
+matchDelayedOpenAcc (Manifest pacc1) (Manifest pacc2)
   = matchPreOpenAcc matchAcc hashAcc pacc1 pacc2
 
-matchDelayed (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
+matchDelayedOpenAcc (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
   | Just Refl <- matchPreOpenExp matchAcc hashAcc sh1 sh2
   , Just Refl <- matchPreOpenFun matchAcc hashAcc ix1 ix2
   , Just Refl <- matchPreOpenFun matchAcc hashAcc lx1 lx2
   = Just Refl
 
-matchDelayed _ _
+matchDelayedOpenAcc _ _
   = Nothing
 
 rnfDelayedOpenAcc :: DelayedOpenAcc aenv t -> ()
@@ -242,18 +243,18 @@ rnfExtend rnfA (PushEnv env a) = rnfExtend rnfA env `seq` rnfA a
 --
 -- > let a0 = <...> in map f a0
 --
-prettyDelayed :: PrettyAcc DelayedOpenAcc
-prettyDelayed wrap aenv acc = case acc of
-  Manifest pacc         -> prettyPreOpenAcc prettyDelayed wrap aenv pacc
+prettyDelayedOpenAcc :: PrettyAcc DelayedOpenAcc
+prettyDelayedOpenAcc wrap aenv acc = case acc of
+  Manifest pacc         -> prettyPreOpenAcc prettyDelayedOpenAcc wrap aenv pacc
   Delayed sh f _
     | Shape a           <- sh
     , Just Refl         <- match f (Lam (Body (Index a (Var ZeroIdx))))
-    -> prettyDelayed wrap aenv a
+    -> prettyDelayedOpenAcc wrap aenv a
 
     | otherwise
     -> wrap $ hang (text "Delayed") 2
-            $ sep [ prettyPreExp prettyDelayed parens aenv sh
-                  , parens (prettyPreFun prettyDelayed aenv f)
+            $ sep [ prettyPreExp prettyDelayedOpenAcc parens aenv sh
+                  , parens (prettyPreFun prettyDelayedOpenAcc aenv f)
                   ]
 
 
