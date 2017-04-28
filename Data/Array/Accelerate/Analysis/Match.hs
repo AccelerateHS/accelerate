@@ -1030,8 +1030,8 @@ hashPreOpenSeq hashAcc s =
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
 hashPreOpenAcc hashAcc pacc =
   let
-    hashA :: Int -> acc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashAcc
+    hashA :: forall aenv' a. Arrays a => Int -> acc aenv' a -> Int
+    hashA salt acc = salt `hashWithSalt` hashArraysType (arrays (undefined::a)) `hashWithSalt` hashAcc acc
 
     hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
@@ -1051,8 +1051,8 @@ hashPreOpenAcc hashAcc pacc =
     Aforeign _ f a              -> hash "Aforeign"      `hashWithSalt` hashAfun hashAcc f `hashA` a
     Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
     Awhile p f a                -> hash "Awhile"        `hashWithSalt` hashAfun hashAcc f `hashWithSalt` hashAfun hashAcc p `hashA` a
-    Unit e                      -> hash "Unit"          `hashE` e
-    Generate e f                -> hash "Generate"      `hashE` e  `hashF` f
+    Unit e                      -> hash "Unit"          `hashE` e  `hashWithSalt` hashArraysType (arrays (undefined::arrs))
+    Generate e f                -> hash "Generate"      `hashE` e  `hashF` f  `hashWithSalt` hashArraysType (arrays (undefined::arrs))
     Acond e a1 a2               -> hash "Acond"         `hashE` e  `hashA` a1 `hashA` a2
     Reshape sh a                -> hash "Reshape"       `hashE` sh `hashA` a
     Transform sh f1 f2 a        -> hash "Transform"     `hashE` sh `hashF` f1 `hashF` f2 `hashA` a
@@ -1081,6 +1081,14 @@ hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()
 hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
 hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
+
+hashArraysType :: forall a. ArraysR a -> Int
+hashArraysType ArraysRunit         = hash "ArraysRunit"
+hashArraysType (ArraysRpair r1 r2) = hash "ArraysRpair"  `hashWithSalt` hashArraysType r1 `hashWithSalt` hashArraysType r2
+hashArraysType ArraysRarray        = hash "ArraysRarray" `hashWithSalt` hashArrayType (undefined::a)
+  where
+    hashArrayType :: forall sh e. (Shape sh, Elt e) => Array sh e -> Int
+    hashArrayType _ = hashTupleType (eltType (undefined::sh)) `hashWithSalt` hashTupleType (eltType (undefined::e))
 
 hashAtuple :: HashAcc acc -> Atuple (acc aenv) a -> Int
 hashAtuple _ NilAtup            = hash "NilAtup"
@@ -1221,6 +1229,11 @@ hashPrimFun PrimOrd                    = hash "PrimOrd"
 hashPrimFun PrimChr                    = hash "PrimChr"
 hashPrimFun PrimBoolToInt              = hash "PrimBoolToInt"
 
+
+hashTupleType :: TupleType t -> Int
+hashTupleType UnitTuple       = hash "UnitTuple"
+hashTupleType (SingleTuple t) = hash "SingleTuple" `hashWithSalt` hashScalarType t
+hashTupleType (PairTuple a b) = hash "PairTuple"   `hashWithSalt` hashTupleType a `hashWithSalt` hashTupleType b
 
 hashScalarType :: ScalarType t -> Int
 hashScalarType (NumScalarType t)    = hash "NumScalarType"    `hashWithSalt` hashNumType t
