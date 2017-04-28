@@ -51,10 +51,6 @@ Flag codespeed
 
 -- Flags that control which Accelerate backends that are linked against
 --
-Flag cuda
-  Description:          Enable the CUDA parallel backend for NVIDIA GPUs (deprecated)
-  Default:              False
-
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
   Default:              True
@@ -62,6 +58,10 @@ Flag llvm-cpu
 Flag llvm-ptx
   Description:          Enable the LLVM PTX backend for NVIDIA GPUs
   Default:              True
+
+Flag cuda
+  Description:          Enable the CUDA parallel backend for NVIDIA GPUs (deprecated)
+  Default:              False
 
 -- Flags to specify which programs to build
 --

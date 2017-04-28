@@ -6,14 +6,28 @@ resolver: lts-2.22
 packages:
 - '.'
 
+- location:
+    git:    https://github.com/tmcdonell/accelerate.git
+    commit: 70996a233348df35657717e6cad9ed3e1641afb2
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate-llvm.git
+    commit: 03b82361d8ec1ce68e18ed24dd4025bef6365610
+  extra-dep: true
+  subdirs:
+    - 'accelerate-llvm'
+    - 'accelerate-llvm-native'
+    - 'accelerate-llvm-ptx'
+
 extra-deps:
-- 'accelerate-1.0.0.0'
+# - 'accelerate-1.0.0.0'
 - 'accelerate-cuda-0.17.0.0'
 - 'accelerate-fft-1.0.0.0'
 - 'accelerate-io-1.0.0.0'
-- 'accelerate-llvm-1.0.0.0'
-- 'accelerate-llvm-native-1.0.0.0'
-- 'accelerate-llvm-ptx-1.0.0.0'
+# - 'accelerate-llvm-1.0.0.0'
+# - 'accelerate-llvm-native-1.0.0.0'
+# - 'accelerate-llvm-ptx-1.0.0.0'
 - 'atomic-primops-0.8.0.4'
 - 'base-orphans-0.4.5'
 - 'bytestring-lexing-0.5.0.2'
