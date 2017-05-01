@@ -119,7 +119,7 @@ module Data.Array.Accelerate.Prelude (
 -- avoid clashes with Prelude functions
 --
 import Data.Proxy
-import Data.Typeable                                                ( gcast )
+import Data.Typeable                                                ( gcast, eqT )
 import GHC.Base                                                     ( Constraint )
 import Prelude                                                      ( (.), ($), Maybe(..), const, id, fromInteger, flip, undefined, fail )
 import qualified Prelude                                            as P
@@ -2089,10 +2089,13 @@ unzipSeq s = (mapSeq afst s, mapSeq asnd s)
 -- index represents the starting point with the sequence yielding each
 -- subsequent slice.
 --
-toSeq :: (Slice slix, Elt a)
+toSeq :: forall slix a. (Slice slix, Elt a)
       => Exp slix
       -> Acc (Array (FullShape slix) a)
       -> Seq [Array (SliceShape slix) a]
+toSeq spec acc
+  | Just Refl <- eqT :: Maybe (slix :~: DIM1)
+  = produce (size acc - unindex1 spec) (\ix -> unit (acc !! (unindex1 spec + the ix)))
 toSeq spec acc
   = let length = slicesLeft spec (shape acc)
     in produce length (\ix -> slice acc (toSlice spec (shape acc) (the ix)))
