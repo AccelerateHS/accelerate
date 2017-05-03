@@ -2014,8 +2014,11 @@ shapes = elements . mapSeq (unit . shape)
 
 -- | Sequence an array on the innermost dimension.
 --
-toSeqInner :: (Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Seq [Array sh a]
-toSeqInner = toSeq (lift (Any :. (0 :: Int)))
+toSeqInner :: forall sh a. (Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Seq [Array sh a]
+toSeqInner arr
+  | Just Refl <- eqT :: Maybe (sh :~: Z)
+  = produce (size arr) (\ix -> unit (arr !! (the ix)))
+toSeqInner arr = toSeq (lift (Any :. (0 :: Int))) arr
 
 -- | Sequence an array on the outermost dimension.
 --
@@ -2093,9 +2096,6 @@ toSeq :: forall slix a. (Slice slix, Elt a)
       => Exp slix
       -> Acc (Array (FullShape slix) a)
       -> Seq [Array (SliceShape slix) a]
-toSeq spec acc
-  | Just Refl <- eqT :: Maybe (slix :~: DIM1)
-  = produce (size acc - unindex1 spec) (\ix -> unit (acc !! (unindex1 spec + the ix)))
 toSeq spec acc
   = let length = slicesLeft spec (shape acc)
     in produce length (\ix -> slice acc (toSlice spec (shape acc) (the ix)))
