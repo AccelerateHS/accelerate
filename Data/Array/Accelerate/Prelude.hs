@@ -126,7 +126,7 @@ import qualified Prelude                                            as P
 
 -- friends
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect, union, transpose, toSlice, toIndex )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect, union, transpose, toSlice, toIndex, fromIndex )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -2018,6 +2018,9 @@ toSeqInner :: forall sh a. (Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Seq
 toSeqInner arr
   | Just Refl <- eqT :: Maybe (sh :~: Z)
   = produce (size arr) (\ix -> unit (arr !! (the ix)))
+toSeqInner arr
+  | Just Refl <- eqT :: Maybe (sh :~: DIM1)
+  = produce (indexHead (shape arr)) (\ix -> slice arr (lift (Z:.All:.the ix)))
 toSeqInner arr = toSeq (lift (Any :. (0 :: Int))) arr
 
 -- | Sequence an array on the outermost dimension.
