@@ -109,7 +109,7 @@ module Data.Array.Accelerate.Prelude (
   foldSeqE, fromSeq, shapes, foldSeqFlatten,
 
   -- * Sequence generators
-  toSeq, toSeqInner, toSeqOuter, produceScalar, fromShapes, fromOffsets,
+  toSeq, toSeqInner, toSeq2ndInner, toSeqOuter, produceScalar, fromShapes, fromOffsets,
 
   -- * Sequence transducers
   mapSeqE, zipWithSeqE, zipSeq, unzipSeq,
@@ -2014,18 +2014,24 @@ shapes = elements . mapSeq (unit . shape)
 
 -- | Sequence an array on the innermost dimension.
 --
-toSeqInner :: forall sh a. (Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Seq [Array sh a]
+toSeqInner :: forall sh a. (Shape sh, Slice sh, Elt a) => Acc (Array (sh :. Int) a) -> Seq [Array sh a]
 toSeqInner arr
   | Just Refl <- eqT :: Maybe (sh :~: Z)
   = produce (size arr) (\ix -> unit (arr !! (the ix)))
 toSeqInner arr
-  | Just Refl <- eqT :: Maybe (sh :~: DIM1)
-  = produce (indexHead (shape arr)) (\ix -> slice arr (lift (Z:.All:.the ix)))
-toSeqInner arr = toSeq (lift (Any :. (0 :: Int))) arr
+  = produce (indexHead (shape arr)) (\ix -> slice arr (lift (Any :. the ix)))
+
+-- | Sequence an array on the 2nd innermost dimension.
+--
+toSeq2ndInner :: forall sh a. (Shape sh, Slice sh, Elt a)
+              => Acc (Array (sh :. Int :. Int) a)
+              -> Seq [Array (sh :. Int) a]
+toSeq2ndInner arr
+  = produce (indexHead (indexTail (shape arr))) (\ix -> slice arr (lift (Any :. the ix :. All)))
 
 -- | Sequence an array on the outermost dimension.
 --
-toSeqOuter :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Array sh e]
+toSeqOuter :: (Shape sh, Slice sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Array sh e]
 toSeqOuter = mapSeq transpose . toSeqInner . transpose
 
 -- | Generate a scalar sequence of a fixed given length, by applying

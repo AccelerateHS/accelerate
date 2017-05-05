@@ -274,7 +274,7 @@ module Data.Array.Accelerate (
 
   -- ** Sequence producers
   streamIn, subarrays, produce, produceScalar, fromSegs, fromShapes, fromOffsets,
-  toSeq, toSeqInner, toSeqOuter,
+  toSeq, toSeqInner, toSeq2ndInner, toSeqOuter,
 
   -- ** Sequence transducers
   mapSeq, zipWithSeq, mapSeqE, zipWithSeqE, zipSeq, unzipSeq,
