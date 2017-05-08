@@ -130,6 +130,7 @@ Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
 Extra-source-files:
+    README.md
     CHANGELOG.md
 
 Flag debug
