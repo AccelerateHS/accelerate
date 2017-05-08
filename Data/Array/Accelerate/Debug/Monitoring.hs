@@ -18,11 +18,17 @@ module Data.Array.Accelerate.Debug.Monitoring (
   beginMonitoring,
   initAccMetrics,
 
+  -- Load monitoring
   Processor(..),
   withProcessor, addProcessorTime,
-  didAllocateBytes,
-  didEvictLRU,
-  didMajorGC,
+
+  -- GC subsystem monitoring
+  didAllocateBytesLocal, didAllocateBytesRemote,
+  didCopyBytesToRemote, didCopyBytesFromRemote,
+  increaseCurrentBytesRemote, decreaseCurrentBytesRemote,
+  setCurrentBytesNursery,
+  didRemoteGC,
+  didEvictBytes,
 
 ) where
 
@@ -87,6 +93,53 @@ beginMonitoring = return ()
 -- >
 -- >   ...
 --
+-- Note that aside from the processor load metrics, counters are shared between
+-- all active backends.
+--
+-- Registered rates:
+--
+-- [@acc.load.llvm_native@] Current processor load (%) of the LLVM CPU backend.
+-- This only includes time spent executing Accelerate functions; compare this to
+-- the total processor load (e.g. via top) to estimate the productivity of the
+-- Accelerate program.
+--
+-- [@acc.load.llvm_ptx@] Current processor load (%) of the GPU in the LLVM PTX
+-- backend. This only takes into account how much time the GPU spent executing
+-- Accelerate code, and does not consider the number of active cores during that
+-- time.
+--
+-- Registered gauges:
+--
+-- [@acc.gc.current_bytes_remote@] Total number of bytes currently considered
+-- live in the remote address space.
+--
+-- [@acc.gc.current_bytes_nursery@] Total number of bytes allocated in the
+-- remote address space but not currently live (available for reallocation).
+--
+-- Registered counters:
+--
+-- [@acc.gc.bytes_allocated_local@] Total number of bytes allocated in the local
+-- address space.
+--
+-- [@acc.gc.bytes_allocated_remote@] Total number of bytes allocated in the
+-- remote address space.
+--
+-- [@acc.gc.bytes_copied_to_remote@] Total number of bytes copied from the host
+-- to the remote address space (e.g. from the CPU to the GPU).
+--
+-- [@acc.gc.bytes_copied_from_remote@] Total number of bytes copied from the
+-- remote address space back to the host (e.g. from the GPU back to the CPU).
+--
+-- [@acc.gc.bytes_evicted_from_remote@] Total number of bytes evicted from the
+-- remote address space by the LRU memory manager, in order to make space for
+-- new allocations. A subset of __acc.gc.bytes_copied_from_remote__.
+--
+-- [@acc.gc.num_gcs@] Number of garbage collections of the remote address space
+-- performed.
+--
+-- [@acc.gc.num_lru_evict@] Total number of evictions from the remote address
+-- space performed.
+--
 #ifndef ACCELERATE_MONITORING
 initAccMetrics :: IO a
 initAccMetrics = error "Data.Array.Accelerate: Monitoring is disabled. Reinstall package 'accelerate' with '-fekg' to enable it."
@@ -95,16 +148,17 @@ initAccMetrics :: IO Store
 initAccMetrics = do
   store <- newStore
 
-  registerRate    "acc.load.llvm_native"            (calculateProcessorLoad _active_ns_llvm_native) store
-  registerRate    "acc.load.llvm_ptx"               (calculateProcessorLoad _active_ns_llvm_ptx)    store
-  registerRate    "acc.load.cuda"                   (calculateProcessorLoad _active_ns_cuda)        store
-  registerCounter "acc.gc.bytes_allocated"          (Counter.read _bytesAllocated)                  store
-  registerCounter "acc.gc.bytes_copied_to_remote"   (Counter.read _bytesCopiedToRemote)             store
-  registerCounter "acc.gc.bytes_copied_from_remote" (Counter.read _bytesCopiedFromRemote)           store
-  registerGauge   "acc.gc.current_bytes_active"     (Gauge.read   _bytesActive)                     store
-  registerGauge   "acc.gc.current_bytes_nursery"    (Gauge.read   _bytesNursery)                    store
-  registerCounter "acc.gc.num_gcs"                  (Counter.read _numMajorGC)                      store
-  registerCounter "acc.gc.num_lru_evict"            (Counter.read _numEvictions)                    store
+  registerRate    "acc.load.llvm_native"              (estimateProcessorLoad _active_ns_llvm_native)           store
+  registerRate    "acc.load.llvm_ptx"                 (estimateProcessorLoad _active_ns_llvm_ptx)              store
+  registerGauge   "acc.gc.current_bytes_remote"       (Gauge.read _current_bytes_remote)                       store
+  registerGauge   "acc.gc.current_bytes_nursery"      (Gauge.read _current_bytes_nursery)                      store
+  registerCounter "acc.gc.bytes_allocated_local"      (Counter.read _total_bytes_allocated_local)              store
+  registerCounter "acc.gc.bytes_allocated_remote"     (Counter.read _total_bytes_allocated_remote)             store
+  registerCounter "acc.gc.bytes_copied_to_remote"     (Counter.read _total_bytes_copied_to_remote)             store
+  registerCounter "acc.gc.bytes_copied_from_remote"   (Counter.read _total_bytes_copied_from_remote)           store
+  registerCounter "acc.gc.bytes_evicted_from_remote"  (Counter.read _total_bytes_evicted_from_remote)          store
+  registerCounter "acc.gc.num_gcs"                    (Counter.read _num_remote_gcs)                           store
+  registerCounter "acc.gc.num_lru_evict"              (Counter.read _num_evictions)                            store
 
   return store
 
@@ -122,7 +176,7 @@ registerRate name sample store = do
 -- Recording metrics
 -- -----------------
 
-data Processor = Native | PTX | CUDA
+data Processor = Native | PTX
 
 -- | Execute the given action and assign the elapsed wall-clock time as active
 -- time for the given processing element.
@@ -134,7 +188,6 @@ withProcessor _      = id
 #else
 withProcessor Native = withProcessor' _active_ns_llvm_native
 withProcessor PTX    = withProcessor' _active_ns_llvm_ptx
-withProcessor CUDA   = withProcessor' _active_ns_cuda
 
 withProcessor' :: Atomic -> IO a -> IO a
 withProcessor' var action = do
@@ -155,7 +208,6 @@ addProcessorTime _ _    = return ()
 #else
 addProcessorTime Native = addProcessorTime' _active_ns_llvm_native
 addProcessorTime PTX    = addProcessorTime' _active_ns_llvm_ptx
-addProcessorTime CUDA   = addProcessorTime' _active_ns_cuda
 
 addProcessorTime' :: Atomic -> Double -> IO ()
 addProcessorTime' var secs =
@@ -164,24 +216,93 @@ addProcessorTime' var secs =
 #endif
 
 
-didAllocateBytes :: Int64 -> IO ()
-didEvictLRU      :: IO ()
-didMajorGC       :: IO ()
-
+-- | Allocated the number of bytes in the local memory space
+--
+didAllocateBytesLocal :: Int64 -> IO ()
 #ifndef ACCELERATE_MONITORING
-didAllocateBytes _ = return ()
-didEvictLRU        = return ()
-didMajorGC         = return ()
+didAllocateBytesLocal _ = return ()
 #else
-didAllocateBytes n = do
-  Counter.add _bytesAllocated n
-  Gauge.add   _bytesActive    n
+didAllocateBytesLocal n = do
+  -- void $ Atomic.add _active_bytes_allocated_local n
+  Counter.add _total_bytes_allocated_local n
+#endif
 
-didEvictLRU = Counter.inc _numEvictions
+-- | Allocated the number of bytes of /new/ memory in the remote memory space
+--
+didAllocateBytesRemote :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+didAllocateBytesRemote _ = return ()
+#else
+didAllocateBytesRemote n = do
+ -- void $ Atomic.add _active_bytes_allocated_remote n
+ Counter.add _total_bytes_allocated_remote n
+#endif
 
-didMajorGC  = do
-  Counter.inc _numMajorGC
-  Gauge.set   _bytesNursery 0    -- ???
+{-# INLINE increaseCurrentBytesRemote #-}
+increaseCurrentBytesRemote :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+increaseCurrentBytesRemote _ = return ()
+#else
+increaseCurrentBytesRemote n = Gauge.add _current_bytes_remote n
+#endif
+
+{-# INLINE decreaseCurrentBytesRemote #-}
+decreaseCurrentBytesRemote :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+decreaseCurrentBytesRemote _ = return ()
+#else
+decreaseCurrentBytesRemote n = Gauge.subtract _current_bytes_remote n
+#endif
+
+-- | Copied data between the local and remote memory spaces
+--
+didCopyBytesToRemote :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+didCopyBytesToRemote _ = return ()
+#else
+didCopyBytesToRemote n = Counter.add _total_bytes_copied_to_remote n
+#endif
+
+didCopyBytesFromRemote :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+didCopyBytesFromRemote _ = return ()
+#else
+didCopyBytesFromRemote n = Counter.add _total_bytes_copied_from_remote n
+#endif
+
+
+-- TLM: This is required for the 'cleanup' function (which deletes everything
+-- from the nursery) and is somewhat useful for the add/remove functions, since
+-- we keep track of the size anyway, but we do lose track of the number of
+-- allocations/deletions to/from the nursery.
+--
+{-# INLINE setCurrentBytesNursery #-}
+setCurrentBytesNursery :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+setCurrentBytesNursery _ = return ()
+#else
+setCurrentBytesNursery n = Gauge.set _current_bytes_nursery n
+#endif
+
+
+-- | Performed a major GC of the remote memory space
+--
+didRemoteGC :: IO ()
+#ifndef ACCELERATE_MONITORING
+didRemoteGC = return ()
+#else
+didRemoteGC = Counter.inc _num_remote_gcs
+#endif
+
+-- | Performed an eviction of a remote array of the given number of bytes
+--
+didEvictBytes :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+didEvictBytes _ = return ()
+#else
+didEvictBytes n = do
+  Counter.inc _num_evictions
+  Counter.add _total_bytes_evicted_from_remote n
 #endif
 
 
@@ -205,9 +326,10 @@ data EMAState = ES
   }
 
 -- Estimate the load on the processor as a moving exponential average
+-- (weight of previous measurement = 0.2).
 --
-calculateProcessorLoad :: Atomic -> IORef EMAState -> IO Int64
-calculateProcessorLoad !var !ref = do
+estimateProcessorLoad :: Atomic -> IORef EMAState -> IO Int64
+estimateProcessorLoad !var !ref = do
   ES{..} <- readIORef ref
   time   <- getCurrentTime
   sample <- Atomic.and var 0
@@ -217,11 +339,11 @@ calculateProcessorLoad !var !ref = do
       elapsed_s   = realToFrac (diffUTCTime time old_time)
       elapsed_ns  = 1.0E9 * elapsed_s
       --
-      load_inst   = 100 * (active_ns / elapsed_ns)                -- instantaneous load
-      load_avg    = ema 0.2 elapsed_s old_avg old_inst load_inst  -- moving average load
+      new_inst    = 100 * (active_ns / elapsed_ns)                -- instantaneous load
+      new_avg     = ema 0.2 elapsed_s old_avg old_inst new_inst   -- moving average load
   --
-  writeIORef ref (ES time load_inst load_avg)
-  return (round load_avg)
+  writeIORef ref (ES time new_inst new_avg)
+  return (round new_avg)
 
 
 {--
@@ -281,47 +403,57 @@ _active_ns_llvm_ptx = unsafePerformIO (Atomic.new 0)
 _active_ns_cuda :: Atomic
 _active_ns_cuda = unsafePerformIO (Atomic.new 0)
 
--- Total number of bytes allocated in the remote address space (e.g. on the GPU)
+-- Total number of bytes allocated in the local and remote (e.g. on the GPU)
+-- address spaces
 --
-{-# NOINLINE _bytesAllocated #-}
-_bytesAllocated :: Counter
-_bytesAllocated = unsafePerformIO Counter.new
+{-# NOINLINE _total_bytes_allocated_local #-}
+_total_bytes_allocated_local :: Counter
+_total_bytes_allocated_local = unsafePerformIO Counter.new
 
--- Total number of bytes copied from the host to the remote memory space
---
-{-# NOINLINE _bytesCopiedToRemote #-}
-_bytesCopiedToRemote :: Counter
-_bytesCopiedToRemote = unsafePerformIO Counter.new
+{-# NOINLINE _total_bytes_allocated_remote #-}
+_total_bytes_allocated_remote :: Counter
+_total_bytes_allocated_remote = unsafePerformIO Counter.new
 
--- Total number of bytes copied from the remote memory space back to the device
+-- Total number of bytes copied to and from the remote memory space
 --
-{-# NOINLINE _bytesCopiedFromRemote #-}
-_bytesCopiedFromRemote :: Counter
-_bytesCopiedFromRemote = unsafePerformIO Counter.new
+{-# NOINLINE _total_bytes_copied_to_remote #-}
+_total_bytes_copied_to_remote :: Counter
+_total_bytes_copied_to_remote = unsafePerformIO Counter.new
+
+{-# NOINLINE _total_bytes_copied_from_remote #-}
+_total_bytes_copied_from_remote :: Counter
+_total_bytes_copied_from_remote = unsafePerformIO Counter.new
+
+-- Total number of bytes copied out of the remote memory space due to evictions.
+--
+{-# NOINLINE _total_bytes_evicted_from_remote #-}
+_total_bytes_evicted_from_remote :: Counter
+_total_bytes_evicted_from_remote = unsafePerformIO Counter.new
 
 -- Current working remote memory size
 --
-{-# NOINLINE _bytesActive #-}
-_bytesActive :: Gauge
-_bytesActive = unsafePerformIO Gauge.new
+{-# NOINLINE _current_bytes_remote #-}
+_current_bytes_remote :: Gauge
+_current_bytes_remote = unsafePerformIO Gauge.new
 
 -- Current size of the nursery
 --
-{-# NOINLINE _bytesNursery #-}
-_bytesNursery :: Gauge
-_bytesNursery = unsafePerformIO Gauge.new
+{-# NOINLINE _current_bytes_nursery #-}
+_current_bytes_nursery :: Gauge
+_current_bytes_nursery = unsafePerformIO Gauge.new
 
--- Number of times the nursery was flushed
+-- Number of times the remote memory was forcibly garbage collected, and nursery
+-- flushed.
 --
-{-# NOINLINE _numMajorGC #-}
-_numMajorGC :: Counter
-_numMajorGC = unsafePerformIO Counter.new
+{-# NOINLINE _num_remote_gcs #-}
+_num_remote_gcs :: Counter
+_num_remote_gcs = unsafePerformIO Counter.new
 
 -- number of LRU eviction events
 --
-{-# NOINLINE _numEvictions #-}
-_numEvictions :: Counter
-_numEvictions = unsafePerformIO Counter.new
+{-# NOINLINE _num_evictions #-}
+_num_evictions :: Counter
+_num_evictions = unsafePerformIO Counter.new
 
 #endif
 

@@ -34,25 +34,26 @@ module Data.Array.Accelerate.Array.Remote.LRU (
 
 ) where
 
-import Data.Functor
-import Data.Maybe                                               ( isNothing )
-import Data.Proxy
+import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
 import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
-import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
+import Data.Functor
+import Data.Int                                                 ( Int64 )
+import Data.Maybe                                               ( isNothing )
+import Data.Proxy
+import Foreign.Storable                                         ( sizeOf )
 import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
 import Prelude                                                  hiding ( lookup )
-
 import qualified Data.HashTable.IO                              as HT
 
-import qualified Data.Array.Accelerate.Debug                    as D
-import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
 import Data.Array.Accelerate.Array.Remote.Class
 import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
+import Data.Array.Accelerate.Error                              ( internalError )
 import qualified Data.Array.Accelerate.Array.Remote.Table       as Basic
+import qualified Data.Array.Accelerate.Debug                    as D
 
 
 -- We build cached memory tables on top of a basic memory table.
@@ -185,13 +186,13 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
 -- This has similar behaviour to malloc in Data.Array.Accelerate.Array.Memory.Table
 -- but also will copy remote arrays back to main memory in order to make space.
 --
--- The third argument indicates that the array should be considered frozen.
--- That is to say the array arrays contents will never change. In the event that
--- the array has to be evicted from the remote memory, the copy already residing
--- in host memory should be considered valid.
+-- The third argument indicates that the array should be considered frozen. That
+-- is to say that the array contents will never change. In the event that the
+-- array has to be evicted from the remote memory, the copy already residing in
+-- host memory should be considered valid.
 --
--- If malloc is called on an array that is already contained within the cache,
--- it becomes a no-op.
+-- If this function is called on an array that is already contained within the
+-- cache, this is a no-op.
 --
 -- On return, 'True' indicates that we allocated some remote memory, and 'False'
 -- indicates that we did not need to.
@@ -199,9 +200,9 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
 malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
        => MemoryTable (RemotePtr m) task
        -> ArrayData e
-       -> Bool                               -- ^True if host array is frozen.
+       -> Bool                                -- ^ True if host array is frozen.
        -> Int
-       -> m Bool
+       -> m Bool                              -- ^ Was the array allocated successfully?
 malloc (MemoryTable mt ref weak_utbl) !ad !frozen !n = do
   ts  <- liftIO $ getCPUTime
   key <- Basic.makeStableArray ad
@@ -234,7 +235,8 @@ mallocWithUsage !mt utbl !ad !usage@(Used _ _ _ _ n _) = malloc'
       case mp of
         Nothing -> do
           success <- evictLRU utbl mt
-          if success then malloc' else $internalError "malloc" "Remote memory exhausted"
+          if success then malloc'
+                     else $internalError "malloc" "Remote memory exhausted"
         Just p -> liftIO $ do
           key <- Basic.makeStableArray ad
           HT.insert utbl key usage
@@ -264,6 +266,7 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
         Just arr -> do
           message ("evictLRU/evicting " ++ show sa)
           copyIfNecessary status n arr
+          liftIO $ D.didEvictBytes (remoteBytes n weak_arr)
           liftIO $ Basic.freeStable (Proxy :: Proxy m) mt sa
           liftIO $ HT.insert utbl sa (Used ts Evicted count tasks n weak_arr)
       return True
@@ -281,6 +284,9 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
            | Nothing <- prev -> return (Just (sa, used))
         _  -> return prev
     eldest prev _ = return prev
+
+    remoteBytes :: forall e a. PrimElt e a => Int -> Weak (ArrayData e) -> Int64
+    remoteBytes n _ = fromIntegral n * fromIntegral (sizeOf (undefined::a))
 
     evictable :: Status -> Bool
     evictable Clean     = True

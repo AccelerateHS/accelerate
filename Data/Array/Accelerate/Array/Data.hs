@@ -46,6 +46,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Debug.Flags
+import Data.Array.Accelerate.Debug.Monitoring
 import Data.Array.Accelerate.Debug.Trace
 
 -- standard libraries
@@ -774,6 +775,7 @@ newArrayData' size
       new <- readIORef __mallocForeignPtrBytes
       ptr <- new bytes
       traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" bytes (show ptr)
+      didAllocateBytesLocal (fromIntegral bytes)
       return (castForeignPtr ptr)
 
 -- | Register the given function as the callback to use to allocate new array
