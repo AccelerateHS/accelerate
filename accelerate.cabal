@@ -129,7 +129,8 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
-Extra-source-files:     changelog.md
+Extra-source-files:
+    CHANGELOG.md
 
 Flag debug
   Default:              False
