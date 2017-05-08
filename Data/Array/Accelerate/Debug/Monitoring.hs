@@ -23,8 +23,8 @@ module Data.Array.Accelerate.Debug.Monitoring (
   withProcessor, addProcessorTime,
 
   -- GC subsystem monitoring
-  didAllocateBytesLocal,
-  didAllocateBytesRemote,
+  didAllocateBytesLocal, didAllocateBytesRemote,
+  didCopyBytesToRemote, didCopyBytesFromRemote,
   increaseCurrentBytesRemote, decreaseCurrentBytesRemote,
   setCurrentBytesNursery,
   didRemoteGC,
@@ -108,12 +108,6 @@ beginMonitoring = return ()
 -- Accelerate code, and does not consider the number of active cores during that
 -- time.
 --
--- [@acc.gc.transfer_rate_to_remote@] Current transfer rate (MB/s) from the
--- local to remote address space.
---
--- [@acc.gc.transfer_rate_from_remote@] Current transfer rate (MB/s) from the
--- remote address space back to the host.
---
 -- Registered gauges:
 --
 -- [@acc.gc.current_bytes_remote@] Total number of bytes currently considered
@@ -156,8 +150,6 @@ initAccMetrics = do
 
   registerRate    "acc.load.llvm_native"              (estimateProcessorLoad _active_ns_llvm_native)           store
   registerRate    "acc.load.llvm_ptx"                 (estimateProcessorLoad _active_ns_llvm_ptx)              store
-  registerRate    "acc.gc.transfer_rate_to_remote"    (estimateDataRate _active_bytes_transferred_to_remote)   store
-  registerRate    "acc.gc.transfer_rate_from_remote"  (estimateDataRate _active_bytes_transferred_from_remote) store
   registerGauge   "acc.gc.current_bytes_remote"       (Gauge.read _current_bytes_remote)                       store
   registerGauge   "acc.gc.current_bytes_nursery"      (Gauge.read _current_bytes_nursery)                      store
   registerCounter "acc.gc.bytes_allocated_local"      (Counter.read _total_bytes_allocated_local)              store
@@ -262,6 +254,22 @@ decreaseCurrentBytesRemote _ = return ()
 decreaseCurrentBytesRemote n = Gauge.subtract _current_bytes_remote n
 #endif
 
+-- | Copied data between the local and remote memory spaces
+--
+didCopyBytesToRemote :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+didCopyBytesToRemote _ = return ()
+#else
+didCopyBytesToRemote n = Counter.add _total_bytes_copied_to_remote n
+#endif
+
+didCopyBytesFromRemote :: Int64 -> IO ()
+#ifndef ACCELERATE_MONITORING
+didCopyBytesFromRemote _ = return ()
+#else
+didCopyBytesFromRemote n = Counter.add _total_bytes_copied_from_remote n
+#endif
+
 
 -- TLM: This is required for the 'cleanup' function (which deletes everything
 -- from the nursery) and is somewhat useful for the add/remove functions, since
@@ -338,27 +346,6 @@ estimateProcessorLoad !var !ref = do
   return (round new_avg)
 
 
--- Estimate data rate (transfer, allocation,...) over the given time period as
--- a moving exponential average (weight of previous measurement = 0.1). Measured
--- in MB/s.
---
-estimateDataRate :: Atomic -> IORef EMAState -> IO Int64
-estimateDataRate !var !ref = do
-  ES{..} <- readIORef ref
-  time   <- getCurrentTime
-  sample <- Atomic.and var 0
-  --
-  let
-      transferred_mb  = fromIntegral sample / (1024 * 1024)       -- TLM: maybe just report in bytes/sec. How does EKG scale graphs?
-      elapsed_s       = realToFrac (diffUTCTime time old_time)
-      --
-      new_inst        = transferred_mb / elapsed_s
-      new_avg         = ema 0.1 elapsed_s old_avg old_inst new_inst
-  --
-  writeIORef ref (ES time new_inst new_avg)
-  return (round new_avg)
-
-
 {--
 -- Compute the current load on a processor as a percentage of time spent working
 -- over the elapsed time. This is meant to run continuously by a background
@@ -415,32 +402,6 @@ _active_ns_llvm_ptx = unsafePerformIO (Atomic.new 0)
 {-# NOINLINE _active_ns_cuda #-}
 _active_ns_cuda :: Atomic
 _active_ns_cuda = unsafePerformIO (Atomic.new 0)
-
--- Number of bytes which have been allocated in the local and remote memory
--- spaces since the last update.
---
--- {-# NOINLINE _active_bytes_allocated_local #-}
--- _active_bytes_allocated_local :: Atomic
--- _active_bytes_allocated_local = unsafePerformIO (Atomic.new 0)
-
--- {-# NOINLINE _active_bytes_allocated_remote #-}
--- _active_bytes_allocated_remote :: Atomic
--- _active_bytes_allocated_remote = unsafePerformIO (Atomic.new 0)
-
--- {-# NOINLINE _active_bytes_allocated_nursery #-}
--- _active_bytes_allocated_nursery :: Atomic
--- _active_bytes_allocated_nursery = unsafePerformIO (Atomic.new 0)
-
--- Number of bytes which have been transferred to or from the remote memory
--- space since the last update.
---
-{-# NOINLINE _active_bytes_transferred_to_remote #-}
-_active_bytes_transferred_to_remote :: Atomic
-_active_bytes_transferred_to_remote = unsafePerformIO (Atomic.new 0)
-
-{-# NOINLINE _active_bytes_transferred_from_remote #-}
-_active_bytes_transferred_from_remote :: Atomic
-_active_bytes_transferred_from_remote = unsafePerformIO (Atomic.new 0)
 
 -- Total number of bytes allocated in the local and remote (e.g. on the GPU)
 -- address spaces
