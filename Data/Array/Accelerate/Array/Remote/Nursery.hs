@@ -20,16 +20,16 @@ module Data.Array.Accelerate.Array.Remote.Nursery (
 
 -- friends
 import Data.Array.Accelerate.Error
-import qualified Data.Array.Accelerate.Debug                    as D
+import qualified Data.Array.Accelerate.Debug                    as Debug
 
 -- libraries
-import Prelude                                                  hiding ( lookup )
 import Control.Concurrent.MVar
 import Data.Int
 import Data.IntMap                                              ( IntMap )
 import Data.Sequence                                            ( Seq )
 import Data.Word
 import System.Mem.Weak                                          ( Weak )
+import Prelude                                                  hiding ( lookup )
 import qualified Data.IntMap.Strict                             as IM
 import qualified Data.Sequence                                  as Seq
 import qualified Data.Traversable                               as Seq
@@ -79,8 +79,10 @@ lookup !key (Nursery !ref !_) =
                                           else Just vs        -- re-insert the tail
     in
     case fmap Seq.viewl mv of
-      Just (v Seq.:< _) -> return ( N nrs' (sz - fromIntegral key) , Just v  )
-      _                 -> return ( nrs,                             Nothing )
+      Just (v Seq.:< _) -> let sz' = sz - fromIntegral key in do
+                           Debug.setCurrentBytesNursery sz'
+                           return ( N nrs' sz', Just v  )
+      _                 -> return ( nrs,        Nothing )
 
 
 -- | Add an entry to the nursery
@@ -92,8 +94,10 @@ insert !key !val (Nursery !ref _) =
       f Nothing   = Just (Seq.singleton val)
       f (Just vs) = Just (vs Seq.|> val)
   in
-  modifyMVar_ ref $ \(N im sz) ->
-    return $! N (IM.alter f key im) (sz + fromIntegral key)
+  modifyMVar_ ref $ \(N im sz) -> do
+    let sz' = sz + fromIntegral key
+    Debug.setCurrentBytesNursery sz'
+    return $! N (IM.alter f key im) sz'
 
 
 -- | Delete all entries from the nursery
@@ -103,6 +107,7 @@ cleanup :: (ptr Word8 -> IO ()) -> NRS ptr -> IO ()
 cleanup delete !ref = do
   message "nursery cleanup"
   modifyMVar_ ref $ \(N nrs _) -> do mapM_ (Seq.mapM delete) (IM.elems nrs)
+                                     Debug.setCurrentBytesNursery 0
                                      return ( N IM.empty 0 )
 
 
@@ -118,5 +123,5 @@ size (Nursery ref _) = withMVar ref $ \(N _ sz) -> return sz
 
 {-# INLINE message #-}
 message :: String -> IO ()
-message msg = D.traceIO D.dump_gc ("gc: " ++ msg)
+message msg = Debug.traceIO Debug.dump_gc ("gc: " ++ msg)
 
