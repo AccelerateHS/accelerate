@@ -97,7 +97,6 @@ initAccMetrics = do
 
   registerRate    "acc.load.llvm_native"            (calculateProcessorLoad _active_ns_llvm_native) store
   registerRate    "acc.load.llvm_ptx"               (calculateProcessorLoad _active_ns_llvm_ptx)    store
-  registerRate    "acc.load.cuda"                   (calculateProcessorLoad _active_ns_cuda)        store
   registerCounter "acc.gc.bytes_allocated"          (Counter.read _bytesAllocated)                  store
   registerCounter "acc.gc.bytes_copied_to_remote"   (Counter.read _bytesCopiedToRemote)             store
   registerCounter "acc.gc.bytes_copied_from_remote" (Counter.read _bytesCopiedFromRemote)           store
@@ -122,7 +121,7 @@ registerRate name sample store = do
 -- Recording metrics
 -- -----------------
 
-data Processor = Native | PTX | CUDA
+data Processor = Native | PTX
 
 -- | Execute the given action and assign the elapsed wall-clock time as active
 -- time for the given processing element.
@@ -134,7 +133,6 @@ withProcessor _      = id
 #else
 withProcessor Native = withProcessor' _active_ns_llvm_native
 withProcessor PTX    = withProcessor' _active_ns_llvm_ptx
-withProcessor CUDA   = withProcessor' _active_ns_cuda
 
 withProcessor' :: Atomic -> IO a -> IO a
 withProcessor' var action = do
@@ -155,7 +153,6 @@ addProcessorTime _ _    = return ()
 #else
 addProcessorTime Native = addProcessorTime' _active_ns_llvm_native
 addProcessorTime PTX    = addProcessorTime' _active_ns_llvm_ptx
-addProcessorTime CUDA   = addProcessorTime' _active_ns_cuda
 
 addProcessorTime' :: Atomic -> Double -> IO ()
 addProcessorTime' var secs =
