@@ -10,7 +10,7 @@ Policy (PVP)](https://pvp.haskell.org)
 ### Added
   * Additional EKG monitoring hooks ([#340])
 
-## [1.0.0.0]
+## [1.0.0.0] - 2017-03-31
   * Many API and internal changes
   * Bug fixes and other enhancements
 
