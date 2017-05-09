@@ -20,9 +20,15 @@ module Data.Array.Accelerate.Trafo (
   -- * HOAS -> de Bruijn conversion
   Phase(..), phases,
 
-  convertAcc,  convertAccWith,
-  convertAfun, convertAfunWith, Afunction, AfunctionR,
-  -- convertSeq,  convertSeqWith,
+  -- ** Array computations
+  convertAcc, convertAccWith,
+
+  -- ** Array functions
+  Afunction, AfunctionR,
+  convertAfun, convertAfunWith,
+
+  -- ** Sequence computations
+  -- convertSeq, convertSeqWith,
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
