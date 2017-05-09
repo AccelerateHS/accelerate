@@ -60,6 +60,11 @@ import Debug.Trace
 data FlagSpec flag = Option String              -- external form
                             flag                -- internal form
 
+data OptKind f
+    = NoArg f
+    | IntArg (Int -> f)
+
+
 -- The runtime debug and control options supported by Accelerate. This is a bit
 -- awkward, as we process both frontend as well as backend option flags, but
 -- gives some control over error messages and overlapping options.
@@ -76,7 +81,7 @@ data Flags = Flags
   , _exp_sharing              :: !(Maybe Bool)        -- recover sharing of scalar expressions
   , _fusion                   :: !(Maybe Bool)        -- fuse array expressions
   , _simplify                 :: !(Maybe Bool)        -- simplify scalar expressions
-  -- , _unfolding_use_threshold  :: !(Maybe Int)         -- the magic cut-off figure for inlining
+  , _unfolding_use_threshold  :: !(Maybe Int)         -- the magic cut-off figure for inlining
   , _flush_cache              :: !(Maybe Bool)        -- delete persistent compilation cache(s)
   , _fast_math                :: !(Maybe Bool)        -- use faster, less precise math library operations
 
@@ -112,25 +117,36 @@ data Flags = Flags
 $(mkLabelsWith defaultNaming True False False True ''Flags)
 
 
-allFlags :: [FlagSpec (Flags -> Flags)]
+allFlags :: [FlagSpec (OptKind (Flags -> Flags))]
 allFlags
-  =  map (enable  'd') dflags
-  ++ map (enable  'f') fflags ++ map (disable 'f') fflags
+  =  map (enableB 'd') dflags
+  ++ map (enableB 'f') fflagsB ++ map (disableB 'f') fflagsB
+  ++ map (enableI 'f') fflagsI
   where
-    enable  p (Option f go) = Option ('-':p:f)        (go True)
-    disable p (Option f go) = Option ('-':p:"no-"++f) (go False)
+    enableI  p (Option f go) = Option ('-':p:f)        (IntArg go)
+    enableB  p (Option f go) = Option ('-':p:f)        (NoArg (go True))
+    disableB p (Option f go) = Option ('-':p:"no-"++f) (NoArg (go False))
 
 
 -- These @-f\<blah\>@ phase control flags can be reversed with @-fno-\<blah\>@
 --
-fflags :: [FlagSpec (Bool -> Flags -> Flags)]
-fflags =
+fflagsB :: [FlagSpec (Bool -> Flags -> Flags)]
+fflagsB =
   [ Option "acc-sharing"                (set' acc_sharing)
   , Option "exp-sharing"                (set' exp_sharing)
   , Option "fusion"                     (set' fusion)
   , Option "simplify"                   (set' simplify)
   , Option "flush-cache"                (set' flush_cache)
   , Option "fast-math"                  (set' fast_math)
+  ]
+  where
+    set' f v = set f (Just v)
+
+-- These @-f\<blah\>@ flags require an integer argument
+--
+fflagsI :: [FlagSpec (Int -> Flags -> Flags)]
+fflagsI =
+  [ Option "unfolding-use-threshold"    (set' unfolding_use_threshold)
   ]
   where
     set' f v = set f (Just v)
@@ -199,17 +215,28 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def def def def def
+    defaults :: Flags
+    defaults = Flags def def def def def def def def def def def def def def def def def def def def def def def
 
-    parse               = foldl parse1 defaults
-    parse1 opts this    =
-      case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of
-        [Option _ go]   -> go opts
+    parse :: [String] -> Flags
+    parse = foldl parse1 defaults
+
+    parse1 :: Flags -> String -> Flags
+    parse1 opts this =
+      case filter (\(Option flag _) -> prefix `isPrefixOf` flag) allFlags of
+        [Option _ f]    -> apply f
         []              -> trace unknown opts
-        alts            -> case find (\(Option flag _) -> flag == this) alts of
-                             Just (Option _ go) -> go opts
+        alts            -> case find (\(Option flag _) -> flag == prefix) alts of
+                             Just (Option _ f)  -> apply f
                              Nothing            -> trace (ambiguous alts) opts
       where
+        apply :: OptKind (Flags -> Flags) -> Flags
+        apply (NoArg f)   = f opts
+        apply (IntArg f)  = f (read suffix) opts
+
+        (prefix,rest)   = break (== '=') this
+        suffix          = if null rest then [] else tail rest
+
         unknown         = render $ text "Unknown option:" <+> quotes (text this)
         ambiguous alts  = render $
           vcat [ text "Ambiguous option:" <+> quotes (text this)
