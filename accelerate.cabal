@@ -208,7 +208,12 @@ Flag ekg
   Description:
     Enable hooks for monitoring the running application using EKG. Implies
     @debug@ mode. In order to view the metrics, your application will need to
-    initialise the EKG server like so:
+    call @Data.Array.Accelerate.Debug.beginMonitoring@ before running any
+    Accelerate computations. This will launch the server on the local machine at
+    port 8000.
+    .
+    Alternatively, if you wish to configure the EKG monitoring server you can
+    initialise it like so:
     .
     > import Data.Array.Accelerate.Debug
     >
@@ -225,7 +230,7 @@ Flag ekg
     >   ...
     .
     Note that, as with any program utilising EKG, in order to collect Haskell GC
-    statistics collection, you must either run the program with:
+    statistics, you must either run the program with:
     .
     > +RTS -T -RTS
     .
