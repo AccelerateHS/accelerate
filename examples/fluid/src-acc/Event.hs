@@ -68,11 +68,18 @@ react opt event world =
                                  , velocitySource = addVelocity x0y0 xy }
         _               -> world
     --
-    addDensity (x,y)            = (Z:.y:.x, density) : densitySource world
+    inbounds (x,y)              = x >= 0 && x < get simulationWidth  opt
+                               && y >= 0 && y < get simulationHeight opt
 
-    addVelocity (x0,y0) (x1,y1) = let u    = fromIntegral (x1-x0)
-                                      v    = fromIntegral (y1-y0)
-                                  in  (Z:.y0:.x0, (u * velocity, v * velocity)) : velocitySource world
+    addDensity ix@(x,y)
+      | inbounds ix             = (Z:.y:.x, density) : densitySource world
+      | otherwise               = densitySource world
+
+    addVelocity ix@(x0,y0) (x1,y1)
+      | inbounds ix             = let u = fromIntegral (x1-x0)
+                                      v = fromIntegral (y1-y0)
+                                  in (Z:.y0:.x0, (u * velocity, v * velocity)) : velocitySource world
+      | otherwise               = velocitySource world
     --
     density     = get inputDensity opt
     velocity    = get inputVelocity opt
