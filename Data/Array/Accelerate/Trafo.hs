@@ -40,6 +40,9 @@ module Data.Array.Accelerate.Trafo (
   -- * Term equality
   Match(..), (:~:)(..),
 
+  -- ** Auxiliary
+  matchDelayedOpenAcc, hashDelayedOpenAcc,
+
 ) where
 
 import Control.DeepSeq
