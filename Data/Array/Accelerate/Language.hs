@@ -620,6 +620,9 @@ scanr1 = Acc $$ Scanr1
 -- that are mapped to the magic value 'ignore' by the permutation function are
 -- dropped.
 --
+-- The combination function is given the new value being permuted as its first
+-- argument, and the current value of the array as its second.
+--
 -- For example, we can use 'permute' to compute the occurrence count (histogram)
 -- for an array of values in the range @[0,10)@:
 --
@@ -633,6 +636,25 @@ scanr1 = Acc $$ Scanr1
 -- >>> let xs = fromList (Z :. 20) [0,0,1,2,1,1,2,4,8,3,4,9,8,3,2,5,5,3,1,2]
 -- >>> histogram (use xs)
 -- Vector (Z :. 10) [2,4,4,3,2,2,0,0,2,1]
+--
+-- As a second example, note that the dimensionality of the source and
+-- destination arrays can differ. In this way, we can use 'permute' to create an
+-- identity matrix by overwriting elements along the diagonal:
+--
+-- > identity :: Num a => Exp Int -> Acc (Array DIM2 a)
+-- > identity n =
+-- >   let zeros = fill (index2 n n) 0
+-- >       ones  = fill (index1 n)   1
+-- >   in
+-- >   permute const zeros (\(unindex1 -> i) -> index2 i i) ones
+--
+-- >>> identity 5
+-- Matrix (Z :. 5 :. 5)
+--   [1,0,0,0,0,
+--    0,1,0,0,0,
+--    0,0,1,0,0,
+--    0,0,0,1,0,
+--    0,0,0,0,1]
 --
 -- [/Note:/]
 --
