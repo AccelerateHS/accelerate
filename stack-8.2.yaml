@@ -1,0 +1,84 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+# vim: nospell
+
+resolver: ghc-8.2
+# compiler: ghc-8.2.0.20170404  # ghc-8.2.1-rc1
+compiler: ghc-8.2.0.20170507  # ghc-8.2.1-rc2
+compiler-check: match-exact
+setup-info:
+  ghc:
+    linux64:
+      8.2.0.20170404:
+        url: https://downloads.haskell.org/~ghc/8.2.1-rc1/ghc-8.2.0.20170404-x86_64-deb8-linux.tar.xz
+        content-length: 138846620
+        sha1: 3fd303b5753b095ce020131405dcf43199e6b447
+      8.2.0.20170507:
+        url: https://downloads.haskell.org/~ghc/8.2.1-rc2/ghc-8.2.0.20170507-x86_64-deb8-linux.tar.xz
+        content-length: 141011788
+        sha1: ff886437c1d2ddfa5686d6c9efb0819a957c3dde
+
+    macosx:
+      8.2.0.20170404:
+        url: https://downloads.haskell.org/~ghc/8.2.1-rc1/ghc-8.2.0.20170404-x86_64-apple-darwin.tar.xz
+        content-length: 124010408
+        sha1: 301de7f5b6ed87ade2182ed2552df2ef39b98b03
+      8.2.0.20170507:
+        url: https://downloads.haskell.org/~ghc/8.2.1-rc2/ghc-8.2.0.20170507-x86_64-apple-darwin.tar.xz
+        content-length: 126192308
+        sha1: f059fe6f8a898d5619ab03e06e0ff0912a5f3340
+
+    windows64:
+      8.2.0.20170404:
+        url: https://downloads.haskell.org/~ghc/8.2.1-rc1/ghc-8.2.0.20170404-x86_64-unknown-mingw32.tar.xz
+        content-length: 173924808
+        sha1: 5cfd11230ff95423a7b19104232247e3fab0dba3
+      8.2.0.20170507:
+        url: https://downloads.haskell.org/~ghc/8.2.1-rc2/ghc-8.2.0.20170507-x86_64-unknown-mingw32.tar.xz
+        content-length: 177295548
+        sha1: 87646ca3a89278775ceb7be429faafac3cf738d8
+
+packages:
+- '.'
+
+extra-deps:
+- 'base-orphans-0.6'
+- 'exceptions-0.8.3'
+- 'fclabels-2.0.3.2'
+- 'hashable-1.2.6.0'
+- 'hashtables-1.2.1.1'
+- 'mtl-2.2.1'
+- 'primitive-0.6.2.0'
+- 'stm-2.4.4.1'
+- 'text-1.2.2.2'
+- 'transformers-compat-0.5.1.4'
+- 'unique-0'
+- 'unordered-containers-0.2.8.0'
+- 'vector-0.12.0.1'
+
+# Override default flag values for local packages and extra-deps
+flags:
+  accelerate:
+    unsafe-checks: false
+    bounds-checks: true
+    debug: false
+    ekg: false
+    internal-checks: false
+
+# Extra package databases containing global packages
+extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.4.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]
+
