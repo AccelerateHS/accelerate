@@ -119,6 +119,11 @@ timed_gc fmt action = do
     ]
   --
   return res
+
+#if __GLASGOW_HASKELL__ < 802
+getRTSStatsEnabled :: IO Bool
+getRTSStatsEnabled = getGCStatsEnabled
+#endif
 #endif
 
 elapsed :: Double -> Double -> String
@@ -126,9 +131,4 @@ elapsed wallTime cpuTime =
   printf "%s (wall), %s (cpu)"
     (showFFloatSIBase (Just 3) 1000 wallTime "s")
     (showFFloatSIBase (Just 3) 1000 cpuTime  "s")
-
-#if __GLASGOW_HASKELL__ < 802
-getRTSStatsEnabled :: IO Bool
-getRTSStatsEnabled = getGCStatsEnabled
-#endif
 
