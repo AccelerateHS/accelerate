@@ -1847,6 +1847,7 @@ fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
 fst e = let (x, _::Exp b) = unlift e in x
 
 -- |Extract the first component of an array pair.
+{-# NOINLINE[1] afst #-}
 afst :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc a
 afst a = let (x, _::Acc b) = unlift a in x
 
