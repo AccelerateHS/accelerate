@@ -253,7 +253,7 @@ Flag internal-checks
 
 Library
   Build-depends:
-          base                          >= 4.7 && < 4.10
+          base                          >= 4.7 && < 4.11
         , base-orphans                  >= 0.3
         , containers                    >= 0.3
         , deepseq                       >= 1.3
