@@ -21,16 +21,20 @@ matrix:
       compiler: "GHC 7.10"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
 
-    - env: GHC=8.0.2 CABAL=1.22
+    - env: GHC=8.0.2 CABAL=1.24
       compiler: "GHC 8.0"
-      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
 
-    - env: GHC=head CABAL=head
-      compiler: "GHC HEAD"
-      addons: { apt: { sources: [ hvr-ghc ], packages: [ ghc-head, cabal-install-head, happy-1.19.5, alex-3.1.7 ] }}
+    - env: GHC=8.2.0 CABAL=1.24
+      compiler: "GHC 8.2"
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
 
-  allow_failures:
-    - env: GHC=head CABAL=head
+    # - env: GHC=head CABAL=head
+    #   compiler: "GHC HEAD"
+    #   addons: { apt: { sources: [ hvr-ghc ], packages: [ ghc-head, cabal-install-head, happy-1.19.5, alex-3.1.7 ] }}
+
+  # allow_failures:
+  #   - env: GHC=head CABAL=head
 
   fast_finish: true
 
