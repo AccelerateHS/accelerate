@@ -554,7 +554,7 @@ liftToElt2 :: (Elt a, Elt b, Elt c)
            => (EltRepr a -> EltRepr b -> EltRepr c)
            -> (a -> b -> c)
 {-# INLINE liftToElt2 #-}
-liftToElt2 f = \x y -> toElt $ f (fromElt x) (fromElt y)
+liftToElt2 f x y = toElt $ f (fromElt x) (fromElt y)
 
 sinkFromElt :: (Elt a, Elt b)
             => (a -> b)
@@ -566,7 +566,7 @@ sinkFromElt2 :: (Elt a, Elt b, Elt c)
              => (a -> b -> c)
              -> (EltRepr a -> EltRepr b -> EltRepr c)
 {-# INLINE sinkFromElt2 #-}
-sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
+sinkFromElt2 f x y = fromElt $ f (toElt x) (toElt y)
 
 -- {-# RULES
 -- "fromElt/toElt" forall e. fromElt (toElt e) = e

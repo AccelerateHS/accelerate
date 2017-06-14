@@ -969,8 +969,7 @@ scanl1Seg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 scanl1Seg f arr seg
-  = P.snd
-  . unzip
+  = map snd
   . scanl1 (segmented f)
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkHeadFlags seg)) arr
 
@@ -1150,8 +1149,7 @@ scanr1Seg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 scanr1Seg f arr seg
-  = P.snd
-  . unzip
+  = map snd
   . scanr1 (flip (segmented f))
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkTailFlags seg)) arr
 
