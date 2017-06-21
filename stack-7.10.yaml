@@ -8,12 +8,12 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/accelerate.git
-    commit: 70996a233348df35657717e6cad9ed3e1641afb2
+    commit: be851212c1f5c26e948b85c5e428207c78bdae16
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 03b82361d8ec1ce68e18ed24dd4025bef6365610
+    commit: bbaf469e5f0b3ad1365dfdf4dd09472aa80d7ebe
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -39,11 +39,11 @@ extra-deps:
 - 'lens-accelerate-0.1.0.0'
 - 'libffi-0.1'
 - 'linear-accelerate-0.3'
-- 'llvm-hs-4.0.0.0'
-- 'llvm-hs-pure-4.0.0.0'
+- 'llvm-hs-4.1.0.0'
+- 'llvm-hs-pure-4.1.0.0'
 - 'matrix-market-attoparsec-0.1.0.5'
 - 'normaldistribution-1.1.0.3'
-- 'nvvm-0.7.5.1'
+- 'nvvm-0.7.5.2'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps

@@ -8,12 +8,12 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/accelerate.git
-    commit: f13c4b549b89aa11388b5f85ec69c7d6cabe5916
+    commit: be851212c1f5c26e948b85c5e428207c78bdae16
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 2638493643aec51f635d48aee75ff27c624711ce
+    commit: bbaf469e5f0b3ad1365dfdf4dd09472aa80d7ebe
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -36,11 +36,11 @@ extra-deps:
 - 'lens-accelerate-0.1.0.0'
 - 'libffi-0.1'
 - 'linear-accelerate-0.3'
-- 'llvm-hs-4.0.1.0'
-- 'llvm-hs-pure-4.0.0.0'
+- 'llvm-hs-4.1.0.0'
+- 'llvm-hs-pure-4.1.0.0'
 - 'matrix-market-attoparsec-0.1.0.5'
 - 'normaldistribution-1.1.0.3'
-- 'nvvm-0.7.5.1'
+- 'nvvm-0.7.5.2'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps
@@ -49,7 +49,7 @@ flags:
     shared-llvm: true
   accelerate:
     debug: true
-    ekg:   true
+    ekg:   false
   accelerate-llvm-native:
     debug: true
   accelerate-llvm-ptx:
@@ -64,7 +64,7 @@ flags:
     llvm-cpu:   true
     llvm-ptx:   true
     gui:        true
-    ekg:        true
+    ekg:        false
     codespeed:  false
     nofib:      true
     smvm:       true
