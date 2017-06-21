@@ -37,7 +37,6 @@ import qualified Data.Array.Accelerate.CUDA             as CUDA
 
 -- | Execute Accelerate expressions
 --
-{-# INLINE run #-}
 run :: Arrays a => Backend -> Acc a -> a
 run Interpreter = Interp.run
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
@@ -51,50 +50,56 @@ run CUDA        = CUDA.run
 #endif
 
 
-{-# INLINE run1 #-}
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
-run1 Interpreter = Interp.run1
+run1 backend f = \x -> go x
+  where
+    !go = case backend of
+            Interpreter -> Interp.run1 f
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run1 CPU         = CPU.run1
+            CPU         -> CPU.run1 f
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-run1 PTX         = PTX.run1
+            PTX         -> PTX.run1 f
 #endif
 #ifdef ACCELERATE_CUDA_BACKEND
-run1 CUDA        = CUDA.run1
+            CUDA        -> CUDA.run1 f
 #endif
 
-{-# INLINE run2 #-}
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
-#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run2 CPU     f = CPU.runN f
-#endif
-#ifdef ACCELERATE_LLVM_PTX_BACKEND
-run2 PTX     f = PTX.runN f
-#endif
-run2 backend f = \x y -> run1 backend (A.uncurry f) (x,y)
-
-{-# INLINE run3 #-}
-run3 :: (Arrays a, Arrays b, Arrays c, Arrays d) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d) -> a -> b -> c -> d
-#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run3 CPU     f = CPU.runN f
-#endif
-#ifdef ACCELERATE_LLVM_PTX_BACKEND
-run3 PTX     f = PTX.runN f
-#endif
-run3 backend f = \x y z -> run1 backend (\t -> let (a,b,c) = unlift t in f a b c) (x,y,z)
-
-{-# INLINE run4 #-}
-run4 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d -> Acc e) -> a -> b -> c -> d -> e
-#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run4 CPU     f = CPU.runN f
-#endif
-#ifdef ACCELERATE_LLVM_PTX_BACKEND
-run4 PTX     f = PTX.runN f
-#endif
-run4 backend f = \x y z w -> go (x,y,z,w)
+run2 backend f = \x y -> go x y
   where
-    !go = run1 backend (\t -> let (a,b,c,d) = unlift t in f a b c d)
+    !go = case backend of
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+            CPU -> CPU.runN f
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+            PTX -> PTX.runN f
+#endif
+            _   -> \x y -> run1 backend (A.uncurry f) (x,y)
+
+run3 :: (Arrays a, Arrays b, Arrays c, Arrays d) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d) -> a -> b -> c -> d
+run3 backend f = \x y z -> go x y z
+  where
+    !go = case backend of
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+            CPU -> CPU.runN f
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+            PTX -> PTX.runN f
+#endif
+            _   -> \x y z -> run1 backend (\t -> let (a,b,c) = unlift t in f a b c) (x,y,z)
+
+run4 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d -> Acc e) -> a -> b -> c -> d -> e
+run4 backend f = \x y z w -> go x y z w
+  where
+    !go = case backend of
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+            CPU -> CPU.runN f
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+            PTX -> PTX.runN f
+#endif
+            _   -> \x y z w -> run1 backend (\t -> let (a,b,c,d) = unlift t in f a b c d) (x,y,z,w)
 
 
 -- | The set of backends available to execute the program.
