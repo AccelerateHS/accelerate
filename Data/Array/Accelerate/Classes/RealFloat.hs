@@ -138,5 +138,5 @@ instance RealFloat a => P.RealFloat (Exp a) where
   isIEEE         = preludeError "isIEEE"
 
 preludeError :: String -> a
-preludeError x = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x)
+preludeError x = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x x)
 
