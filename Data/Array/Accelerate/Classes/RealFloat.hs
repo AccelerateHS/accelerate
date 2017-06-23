@@ -26,11 +26,15 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
+import Data.Array.Accelerate.Data.Bits
+
+import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Floating
+import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.RealFrac
 
 import Text.Printf
-import Prelude                                                      ( String, error, undefined )
+import Prelude                                                      ( (.), String, error, undefined, otherwise )
 import qualified Prelude                                            as P
 
 
@@ -54,7 +58,7 @@ class (RealFrac a, Floating a) => RealFloat a where
   floatRange _    = let (m,n) = P.floatRange (undefined::a)
                     in (constant m, constant n)
 
-  -- | Return the significand and an appropriately scaled exponent. if
+  -- | Return the significand and an appropriately scaled exponent. If
   -- @(m,n) = 'decodeFloat' x@ then @x = m*b^^n@, where @b@ is the
   -- floating-point radix ('floatRadix'). Furthermore, either @m@ and @n@ are
   -- both zero, or @b^(d-1) <= 'abs' m < b^d@, where @d = 'floatDigits' x@.
@@ -96,34 +100,40 @@ class (RealFrac a, Floating a) => RealFloat a where
   -- @'atan2' y x@ returns a value in the range [@-pi@, @pi@].
   atan2          :: Exp a -> Exp a -> Exp a
 
-  decodeFloat     = $internalError "RealFloat.decodeFloat"    "Not implemented yet"
-  encodeFloat     = $internalError "RealFloat.encodeFloat"    "Not implemented yet"
-  exponent        = $internalError "RealFloat.exponent"       "Not implemented yet"
-  significand     = $internalError "RealFloat.significand"    "Not implemented yet"
-  scaleFloat      = $internalError "RealFloat.scaleFloat"     "Not implemented yet"
-  isDenormalized  = $internalError "RealFloat.isDenormalized" "Not implemented yet"
-  isNegativeZero  = $internalError "RealFloat.isNegativeZero" "Not implemented yet"
+  decodeFloat     = $internalError "RealFloat.decodeFloat" "Not implemented yet"
+  encodeFloat     = $internalError "RealFloat.encodeFloat" "Not implemented yet"
+  exponent        = $internalError "RealFloat.exponent"    "Not implemented yet"
+  significand     = $internalError "RealFloat.significand" "Not implemented yet"
+  scaleFloat      = $internalError "RealFloat.scaleFloat"  "Not implemented yet"
 
 
 instance RealFloat Float where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkUnsafeCoerce)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkUnsafeCoerce)
 
 instance RealFloat Double where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkUnsafeCoerce)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkUnsafeCoerce)
 
 instance RealFloat CFloat where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkUnsafeCoerce)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkUnsafeCoerce)
 
 instance RealFloat CDouble where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkUnsafeCoerce)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkUnsafeCoerce)
 
 
 -- To satisfy superclass constraints
@@ -142,4 +152,75 @@ instance RealFloat a => P.RealFloat (Exp a) where
 
 preludeError :: String -> a
 preludeError x = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x x)
+
+
+ieee754 :: forall a b. P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
+ieee754 name f x
+  | P.isIEEE (undefined::a) = f x
+  | otherwise               = $internalError (printf "RealFloat.%s" name) "Not implemented for non-IEEE floating point"
+
+
+-- An IEEE754 number is denormalised iff:
+--   * exponent is zero
+--   * mantissa is non-zero.
+--   * (don't care about setting of sign bit.)
+--
+ieee754_f64_is_denormalized :: Exp Word64 -> Exp Bool
+ieee754_f64_is_denormalized x =
+  ieee754_f64_mantissa x == 0 &&
+  ieee754_f64_exponent x /= 0
+
+ieee754_f32_is_denormalized :: Exp Word32 -> Exp Bool
+ieee754_f32_is_denormalized x =
+  ieee754_f32_mantissa x == 0 &&
+  ieee754_f32_exponent x /= 0
+
+-- Negative zero if only the sign bit is set
+--
+ieee754_f64_is_negative_zero :: Exp Word64 -> Exp Bool
+ieee754_f64_is_negative_zero x =
+  ieee754_f64_negative x &&
+  ieee754_f64_exponent x == 0 &&
+  ieee754_f64_mantissa x == 0
+
+ieee754_f32_is_negative_zero :: Exp Word32 -> Exp Bool
+ieee754_f32_is_negative_zero x =
+  ieee754_f32_negative x &&
+  ieee754_f32_exponent x == 0 &&
+  ieee754_f32_mantissa x == 0
+
+
+-- Assume the host processor stores integers and floating point numbers in the
+-- same endianness (true for modern processors).
+--
+-- To recap, here's the representation of a double precision
+-- IEEE floating point number:
+--
+-- sign         63           sign bit (0==positive, 1==negative)
+-- exponent     62-52        exponent (biased by 1023)
+-- fraction     51-0         fraction (bits to right of binary point)
+--
+ieee754_f64_mantissa :: Exp Word64 -> Exp Word64
+ieee754_f64_mantissa x = x .&. 0xFFFFFFFFFFFFF
+
+ieee754_f64_exponent :: Exp Word64 -> Exp Word16
+ieee754_f64_exponent x = fromIntegral (x `unsafeShiftR` 52) .&. 0x7FF
+
+ieee754_f64_negative :: Exp Word64 -> Exp Bool
+ieee754_f64_negative x = testBit x 63
+
+-- Representation of single precision IEEE floating point number:
+--
+-- sign         31           sign bit (0==positive, 1==negative)
+-- exponent     30-23        exponent (biased by 127)
+-- fraction     22-0         fraction (bits to right of binary point)
+--
+ieee754_f32_mantissa :: Exp Word32 -> Exp Word32
+ieee754_f32_mantissa x = x .&. 0x7FFFFF
+
+ieee754_f32_exponent :: Exp Word32 -> Exp Word8
+ieee754_f32_exponent x = fromIntegral (x `unsafeShiftR` 23)
+
+ieee754_f32_negative :: Exp Word32 -> Exp Bool
+ieee754_f32_negative x = testBit x 31
 

@@ -117,11 +117,16 @@ import qualified Prelude                                            as P
 -- friends
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect, toIndex, fromIndex )
-import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
+
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.FromIntegral
+import Data.Array.Accelerate.Classes.Integral
+import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Bits
 
