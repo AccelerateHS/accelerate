@@ -1,28 +1,11 @@
-#!/bin/bash
+#!/bin/sh
 
-# Get cabal to load up ghci for us. This will set the environment appropriately
-# if we have a local sandbox installation.
+# Load up GHCi with an appropriate environment
 #
-GHC="stack exec ghci --"
-
-GHC_FLAGS="$GHC_FLAGS
-    +RTS -A128M -RTS"
-
-# If we have specified one command line argument, but that file doesn't exist,
-# search the source files for something with that name prefix.
-#
-# > ghci shar
-#
-# should result in:
-#
-# > ghci Data/Array/Accelerate/Trafo/Sharing.hs
-#
-FILES=`find Data -iname "$1*" -name "*.hs"`
-COUNT=`echo $FILES | wc -w`
-
-if [ $COUNT -eq 1 ]; then
-    $GHC $GHC_FLAGS $FILES
-else
-    $GHC $GHC_FLAGS $@
-fi
+DISTDIR=$(stack path --dist-dir)
+stack exec ghci -- \
+  -fno-ghci-sandbox \
+  -j +RTS -N -A64M -n2m -RTS \
+  ${DISTDIR}/build/cbits/atomic.o \
+  $@
 
