@@ -101,26 +101,29 @@ class (RealFrac a, Floating a) => RealFloat a where
   exponent        = $internalError "RealFloat.exponent"       "Not implemented yet"
   significand     = $internalError "RealFloat.significand"    "Not implemented yet"
   scaleFloat      = $internalError "RealFloat.scaleFloat"     "Not implemented yet"
-  isInfinite      = $internalError "RealFloat.isInfinite"     "Not implemented yet"
   isDenormalized  = $internalError "RealFloat.isDenormalized" "Not implemented yet"
   isNegativeZero  = $internalError "RealFloat.isNegativeZero" "Not implemented yet"
 
 
 instance RealFloat Float where
-  isNaN           = mkIsNaN
   atan2           = mkAtan2
+  isNaN           = mkIsNaN
+  isInfinite      = mkIsInfinite
 
 instance RealFloat Double where
-  isNaN           = mkIsNaN
   atan2           = mkAtan2
+  isNaN           = mkIsNaN
+  isInfinite      = mkIsInfinite
 
 instance RealFloat CFloat where
-  isNaN           = mkIsNaN
   atan2           = mkAtan2
+  isNaN           = mkIsNaN
+  isInfinite      = mkIsInfinite
 
 instance RealFloat CDouble where
-  isNaN           = mkIsNaN
   atan2           = mkAtan2
+  isNaN           = mkIsNaN
+  isInfinite      = mkIsInfinite
 
 
 -- To satisfy superclass constraints

@@ -147,6 +147,7 @@ evalPrimApp env f x
       PrimFloor ta tb           -> evalFloor ta tb x env
       PrimCeiling ta tb         -> evalCeiling ta tb x env
       PrimIsNaN ty              -> evalIsNaN ty x env
+      PrimIsInfinite ty         -> evalIsInfinite ty x env
       PrimLt ty                 -> evalLt ty x env
       PrimGt ty                 -> evalGt ty x env
       PrimLtEq ty               -> evalLtEq ty x env
@@ -601,6 +602,9 @@ evalCeiling ta tb
 
 evalIsNaN :: FloatingType a -> a :-> Bool
 evalIsNaN ty | FloatingDict <- floatingDict ty = eval1 isNaN
+
+evalIsInfinite :: FloatingType a -> a :-> Bool
+evalIsInfinite ty | FloatingDict <- floatingDict ty = eval1 isInfinite
 
 
 -- Relational & Equality

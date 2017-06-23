@@ -679,6 +679,7 @@ summariseOpenExp = modify terms (+1) . goE
             PrimFloor            f i -> travFloatingType f +++ travIntegralType i
             PrimCeiling          f i -> travFloatingType f +++ travIntegralType i
             PrimIsNaN              t -> travFloatingType t
+            PrimIsInfinite         t -> travFloatingType t
             PrimAtan2              t -> travFloatingType t
             PrimLt                 t -> travScalarType t
             PrimGt                 t -> travScalarType t

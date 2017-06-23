@@ -55,7 +55,7 @@ module Data.Array.Accelerate.Smart (
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkQuotRem, mkIDiv, mkMod, mkDivMod,
   mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR, mkPopCount, mkCountLeadingZeros, mkCountTrailingZeros,
   mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq, mkEq, mkNEq, mkMax, mkMin,
-  mkLAnd, mkLOr, mkLNot, mkIsNaN,
+  mkLAnd, mkLOr, mkLNot, mkIsNaN, mkIsInfinite,
 
   -- * Smart constructors for type coercion functions
   mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast, mkUnsafeCoerce,
@@ -1626,6 +1626,9 @@ mkAtan2 x y = Exp $ PrimAtan2 floatingType `PrimApp` tup2 (x, y)
 
 mkIsNaN :: (Elt t, IsFloating t) => Exp t -> Exp Bool
 mkIsNaN x = Exp $ PrimIsNaN floatingType `PrimApp` x
+
+mkIsInfinite :: (Elt t, IsFloating t) => Exp t -> Exp Bool
+mkIsInfinite x = Exp $ PrimIsInfinite floatingType `PrimApp` x
 
 -- FIXME: add missing operations from Floating, RealFrac & RealFloat
 

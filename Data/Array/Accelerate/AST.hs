@@ -1085,8 +1085,9 @@ data PrimFun sig where
   -- PrimProperFraction :: FloatingType a -> IntegralType b -> PrimFun (a -> (b, a))
 
   -- operators from RealFloat
-  PrimIsNaN :: FloatingType a -> PrimFun (a -> Bool)
-  PrimAtan2 :: FloatingType a -> PrimFun ((a, a) -> a)
+  PrimAtan2          :: FloatingType a -> PrimFun ((a, a) -> a)
+  PrimIsNaN          :: FloatingType a -> PrimFun (a -> Bool)
+  PrimIsInfinite     :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimFloatRadix     :: FloatingType a -> PrimFun (a -> Int)         -- Integer?
   -- PrimFloatDigits    :: FloatingType a -> PrimFun (a -> Int)
   -- PrimFloatRange     :: FloatingType a -> PrimFun (a -> (Int, Int))
@@ -1095,7 +1096,6 @@ data PrimFun sig where
   -- PrimExponent       :: FloatingType a -> PrimFun (a -> Int)
   -- PrimSignificand    :: FloatingType a -> PrimFun (a -> a)
   -- PrimScaleFloat     :: FloatingType a -> PrimFun ((Int, a) -> a)
-  -- PrimIsInfinite     :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimIsDenormalized :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimIsNegativeZero :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimIsIEEE         :: FloatingType a -> PrimFun (a -> Bool)
@@ -1422,6 +1422,7 @@ rnfPrimFun (PrimRound f i)            = rnfFloatingType f `seq` rnfIntegralType 
 rnfPrimFun (PrimFloor f i)            = rnfFloatingType f `seq` rnfIntegralType i
 rnfPrimFun (PrimCeiling f i)          = rnfFloatingType f `seq` rnfIntegralType i
 rnfPrimFun (PrimIsNaN t)              = rnfFloatingType t
+rnfPrimFun (PrimIsInfinite t)         = rnfFloatingType t
 rnfPrimFun (PrimAtan2 t)              = rnfFloatingType t
 rnfPrimFun (PrimLt t)                 = rnfScalarType t
 rnfPrimFun (PrimGt t)                 = rnfScalarType t
@@ -1737,6 +1738,7 @@ liftPrimFun (PrimRound ta tb)          = [|| PrimRound $$(liftFloatingType ta) $
 liftPrimFun (PrimFloor ta tb)          = [|| PrimFloor $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
 liftPrimFun (PrimCeiling ta tb)        = [|| PrimCeiling $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
 liftPrimFun (PrimIsNaN t)              = [|| PrimIsNaN $$(liftFloatingType t) ||]
+liftPrimFun (PrimIsInfinite t)         = [|| PrimIsInfinite $$(liftFloatingType t) ||]
 liftPrimFun (PrimAtan2 t)              = [|| PrimAtan2 $$(liftFloatingType t) ||]
 liftPrimFun (PrimLt t)                 = [|| PrimLt $$(liftScalarType t) ||]
 liftPrimFun (PrimGt t)                 = [|| PrimGt $$(liftScalarType t) ||]
