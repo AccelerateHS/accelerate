@@ -9,6 +9,10 @@ Policy (PVP)](https://pvp.haskell.org)
 ## [next]
 ### Added
   * Additional EKG monitoring hooks ([#340])
+  * `isInfinite` operation
+
+### Fixed
+  * [#390]: Wrong number of arguments in printf
 
 ## [1.0.0.0] - 2017-03-31
   * Many API and internal changes
@@ -85,4 +89,5 @@ Policy (PVP)](https://pvp.haskell.org)
 [0.7.1.0]:          https://github.com/AccelerateHS/accelerate/compare/0_6_0_0...0_7_1_0
 
 [#340]:             https://github.com/AccelerateHS/accelerate/issues/340
+[#390]:             https://github.com/AccelerateHS/accelerate/issues/390
 
