@@ -95,6 +95,9 @@
 -- * <https://hackage.haskell.org/package/accelerate-fft accelerate-fft>: Fast
 -- Fourier transform, with FFI bindings to optimised implementations.
 --
+-- * <https://hackage.haskell.org/package/accelerate-blas accelerate-blas>: BLAS
+-- and LAPACK operations, with FFI bindings to optimised implementations.
+--
 -- * <https://hackage.haskell.org/package/accelerate-bignum accelerate-bignum>:
 -- Fixed-width large integer arithmetic.
 --
