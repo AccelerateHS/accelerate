@@ -69,8 +69,8 @@ class (RealFrac a, Floating a) => RealFloat a where
 
   -- | Inverse of 'decodeFloat'
   encodeFloat    :: Exp Int64 -> Exp Int -> Exp a    -- Integer
-  default encodeFloat :: (P.RealFloat a, FromIntegral Int a, FromIntegral Int64 a) => Exp Int64 -> Exp Int -> Exp a
-  encodeFloat x e = fromIntegral x * (P.fromIntegral (P.floatRadix (undefined::a)) ** fromIntegral e)
+  default encodeFloat :: (FromIntegral Int a, FromIntegral Int64 a) => Exp Int64 -> Exp Int -> Exp a
+  encodeFloat x e = fromIntegral x * (fromIntegral (floatRadix (undefined :: Exp a)) ** fromIntegral e)
 
   -- | Corresponds to the second component of 'decodeFloat'
   exponent       :: Exp a -> Exp Int
