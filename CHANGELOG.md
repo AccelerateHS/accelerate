@@ -9,7 +9,7 @@ Policy (PVP)](https://pvp.haskell.org)
 ## [next]
 ### Added
   * Additional EKG monitoring hooks ([#340])
-  * `isInfinite` operation
+  * Operations from `RealFloat`
 
 ### Fixed
   * [#390]: Wrong number of arguments in printf
