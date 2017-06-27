@@ -295,7 +295,11 @@ setFlag f   = setFlags [f]
 clearFlag f = clearFlags [f]
 
 setFlag' :: (Flags :-> a) -> a -> IO ()
+#ifdef ACCELERATE_DEBUG
 setFlag' f v = modifyIORef _flags (set f v)
+#else
+setFlag' _ _ = return ()
+#endif
 
 setFlags, clearFlags :: [Mode] -> IO ()
 #ifdef ACCELERATE_DEBUG
