@@ -27,7 +27,7 @@
 module Data.Array.Accelerate.Debug.Flags (
 
   Flags, Mode,
-  acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
+  acc_sharing, exp_sharing, fusion, simplify, flush_cache, force_recomp, fast_math, verbose,
   dump_phases, dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
   dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_ld, dump_asm,
   dump_exec, dump_sched,
@@ -83,6 +83,7 @@ data Flags = Flags
   , _simplify                 :: !(Maybe Bool)        -- simplify scalar expressions
   , _unfolding_use_threshold  :: !(Maybe Int)         -- the magic cut-off figure for inlining
   , _flush_cache              :: !(Maybe Bool)        -- delete persistent compilation cache(s)
+  , _force_recomp             :: !(Maybe Bool)        -- force recompilation of array programs
   , _fast_math                :: !(Maybe Bool)        -- use faster, less precise math library operations
 
     -- Debug trace
@@ -137,6 +138,7 @@ fflagsB =
   , Option "fusion"                     (set' fusion)
   , Option "simplify"                   (set' simplify)
   , Option "flush-cache"                (set' flush_cache)
+  , Option "force-recomp"               (set' force_recomp)
   , Option "fast-math"                  (set' fast_math)
   ]
   where
@@ -216,7 +218,7 @@ initialiseFlags = do
   return $ parse (env ++ argv)
   where
     defaults :: Flags
-    defaults = Flags def def def def def def def def def def def def def def def def def def def def def def def
+    defaults = Flags def def def def def def def def def def def def def def def def def def def def def def def def
 
     parse :: [String] -> Flags
     parse = foldl parse1 defaults

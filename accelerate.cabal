@@ -156,6 +156,8 @@ Flag debug
     .
       * @flush-cache@: Clear any persistent caches on program startup (False).
     .
+      * @force-recomp@: Force recompilation of array programs (False).
+    .
       * @fast-math@: Allow algebraically equivalent transformations which may
         change floating point results (e.g., reassociate) (True).
     .
