@@ -33,7 +33,7 @@ module Data.Array.Accelerate.Debug.Flags (
   dump_exec, dump_sched,
 
   accInit,
-  queryFlag, setFlag, setFlags, clearFlag, clearFlags,
+  queryFlag, setFlag, setFlag', setFlags, clearFlag, clearFlags,
   when, unless,
 
 ) where
@@ -293,6 +293,9 @@ type Mode = Flags :-> Bool
 setFlag, clearFlag :: Mode -> IO ()
 setFlag f   = setFlags [f]
 clearFlag f = clearFlags [f]
+
+setFlag' :: (Flags :-> a) -> a -> IO ()
+setFlag' f v = modifyIORef _flags (set f v)
 
 setFlags, clearFlags :: [Mode] -> IO ()
 #ifdef ACCELERATE_DEBUG
