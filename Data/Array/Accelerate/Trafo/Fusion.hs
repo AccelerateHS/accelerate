@@ -859,16 +859,16 @@ compute (Embed env cc) = bind env (compute' cc)
 
 compute' :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
 compute' cc = case simplify cc of
-  Done v                                        -> Avar v
-  Yield sh f                                    -> Generate sh f
+  Done v                                              -> Avar v
+  Yield sh f                                          -> Generate sh f
   Step sh p f v
-    | Just Refl <- match sh (arrayShape v)
+    | Just Refl <- match sh (simplify (arrayShape v))
     , Just Refl <- isIdentity p
-    , Just Refl <- isIdentity f                 -> Avar v
-    | Just Refl <- match sh (arrayShape v)
-    , Just Refl <- isIdentity p                 -> Map f (avarIn v)
-    | Just Refl <- isIdentity f                 -> Backpermute sh p (avarIn v)
-    | otherwise                                 -> Transform sh p f (avarIn v)
+    , Just Refl <- isIdentity f                       -> Avar v
+    | Just Refl <- match sh (simplify (arrayShape v))
+    , Just Refl <- isIdentity p                       -> Map f (avarIn v)
+    | Just Refl <- isIdentity f                       -> Backpermute sh p (avarIn v)
+    | otherwise                                       -> Transform sh p f (avarIn v)
 
 
 -- Evaluate a delayed computation and tie the recursive knot
