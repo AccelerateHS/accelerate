@@ -4,7 +4,6 @@
 #
 DISTDIR=$(stack path --dist-dir)
 stack exec ghci -- \
-  -fno-ghci-sandbox \
   -j +RTS -N -A64M -n2m -RTS \
   ${DISTDIR}/build/cbits/atomic.o \
   $@
