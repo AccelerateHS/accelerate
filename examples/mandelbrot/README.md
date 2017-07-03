@@ -12,5 +12,5 @@ Example
 
 
   [wiki-mandelbrot]:        https://en.wikipedia.org/wiki/Mandelbrot_set
-  [mandelbrot-img]:         https://github.com/AccelerateHS/accelerate-examples/raw/master/samples/mandelbrot2.jpg
+  [mandelbrot-img]:         https://github.com/AccelerateHS/accelerate-examples/raw/master/samples/mandelbrot.jpg
 

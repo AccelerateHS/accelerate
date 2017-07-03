@@ -6,27 +6,46 @@ resolver: lts-8.0
 packages:
 - '.'
 
+- location:
+    git:    https://github.com/AccelerateHS/accelerate.git
+    commit: c3d36140bb98137949673699946c3eef70ad8e51
+  extra-dep: true
+
+- location:
+    git:    https://github.com/AccelerateHS/accelerate-llvm.git
+    commit: 3ff5379cf8c9c467f2c626fb5465c123208d4581
+  extra-dep: true
+  subdirs:
+    - 'accelerate-llvm'
+    - 'accelerate-llvm-native'
+    - 'accelerate-llvm-ptx'
+
+- location:
+    git:    https://github.com/tmcdonell/cuda.git
+    commit: 1bff17152088384b71a439b01ec993a54e2618c9
+  extra-dep: true
+
 extra-deps:
-- 'accelerate-1.0.0.0'
+# - 'accelerate-1.0.0.0'
 - 'accelerate-fft-1.0.0.0'
 - 'accelerate-io-1.0.0.0'
-- 'accelerate-llvm-1.0.0.0'
-- 'accelerate-llvm-native-1.0.0.0'
-- 'accelerate-llvm-ptx-1.0.0.0'
+# - 'accelerate-llvm-1.0.0.0'
+# - 'accelerate-llvm-native-1.0.0.0'
+# - 'accelerate-llvm-ptx-1.0.0.0'
 - 'chaselev-deque-0.5.0.5'
 - 'colour-accelerate-0.1.0.0'
-- 'cuda-0.7.5.3'
+# - 'cuda-0.7.5.3'
 - 'cufft-0.7.5.0'
 - 'gloss-accelerate-2.0.0.0'
 - 'gloss-raster-accelerate-2.0.0.0'
 - 'lens-accelerate-0.1.0.0'
 - 'libffi-0.1'
 - 'linear-accelerate-0.3'
-- 'llvm-hs-4.0.0.0'
-- 'llvm-hs-pure-4.0.0.0'
+- 'llvm-hs-4.1.0.0'
+- 'llvm-hs-pure-4.1.0.0'
 - 'matrix-market-attoparsec-0.1.0.5'
 - 'normaldistribution-1.1.0.3'
-- 'nvvm-0.7.5.1'
+- 'nvvm-0.7.5.2'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps

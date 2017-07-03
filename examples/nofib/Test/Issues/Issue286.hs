@@ -83,7 +83,7 @@ acc_producer sh = producer' 0
 acc_consume_sv :: DIM2 -> Backend -> Consumer (S.Vector Word8) IO ()
 acc_consume_sv sh backend = consumer' 0 0
   where
-    go = run1 backend (A.sum . A.map A.fromIntegral)
+    go = run1 backend (A.sum . A.flatten . A.map A.fromIntegral)
 
     consumer' :: Int -> Float -> Consumer (S.Vector Word8) IO ()
     consumer' n acc = do
@@ -100,7 +100,7 @@ acc_consume_sv sh backend = consumer' 0 0
 acc_consume_acc :: Backend -> Consumer (Array DIM2 Word8) IO ()
 acc_consume_acc backend = consumer' 0 0
   where
-    go = run1 backend (A.sum . A.map A.fromIntegral)
+    go = run1 backend (A.sum . A.flatten . A.map A.fromIntegral)
 
     consumer' :: Int -> Float -> Consumer (Array DIM2 Word8) IO ()
     consumer' n acc = do

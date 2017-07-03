@@ -124,7 +124,7 @@ sortKey keyFun arr =  foldl sortOneBit arr (P.map lift ([0..31] :: [Int]))
         bits    = A.map (\a -> (A.testBit a bitNum) ? (1, 0)) keys
         bitsInv = A.map (\b -> (b A.== 0) ? (1, 0)) bits
 
-        (falses, numZeroes) = A.scanl' (+) 0 bitsInv
+        (falses, numZeroes) = unlift (A.scanl' (+) 0 bitsInv)
         trues               = A.map (\x -> (A.the numZeroes) + (A.fst x) - (A.snd x))
                             $ A.zip ixs falses
 
