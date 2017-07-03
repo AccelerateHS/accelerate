@@ -563,8 +563,8 @@ scanl' :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
-       -> (Acc (Array (sh:.Int) a), Acc (Array sh a))
-scanl' = unatup2 . Acc $$$ Scanl'
+       -> Acc (Array (sh:.Int) a, Array sh a)
+scanl' = Acc $$$ Scanl'
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
 -- initial value (aka inclusive scan). The array must not be empty. The first
@@ -600,8 +600,8 @@ scanr' :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
-       -> (Acc (Array (sh:.Int) a), Acc (Array sh a))
-scanr' = unatup2 . Acc $$$ Scanr'
+       -> Acc (Array (sh:.Int) a, Array sh a)
+scanr' = Acc $$$ Scanr'
 
 -- | Right-to-left variant of 'scanl1'.
 --

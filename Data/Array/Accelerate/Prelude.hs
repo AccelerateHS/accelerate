@@ -723,7 +723,7 @@ maximum = fold1All max
 -- | Left-to-right prescan (aka exclusive scan).  As for 'scan', the first
 -- argument must be an /associative/ function.  Denotationally, we have
 --
--- > prescanl f e = Prelude.fst . scanl' f e
+-- > prescanl f e = afst . scanl' f e
 --
 -- >>> let vec = fromList (Z:.10) [1..10]
 -- >>> prescanl (+) 0 (use vec)
@@ -734,7 +734,7 @@ prescanl :: (Shape sh, Elt a)
          -> Exp a
          -> Acc (Array (sh:.Int) a)
          -> Acc (Array (sh:.Int) a)
-prescanl f e = P.fst . scanl' f e
+prescanl f e = afst . scanl' f e
 
 -- | Left-to-right postscan, a variant of 'scanl1' with an initial value. As
 -- with 'scanl1', the array must not be empty. Denotationally, we have:
@@ -755,14 +755,14 @@ postscanl f e = map (e `f`) . scanl1 f
 -- |Right-to-left prescan (aka exclusive scan).  As for 'scan', the first argument must be an
 -- /associative/ function.  Denotationally, we have
 --
--- > prescanr f e = Prelude.fst . scanr' f e
+-- > prescanr f e = afst . scanr' f e
 --
 prescanr :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Array (sh:.Int) a)
          -> Acc (Array (sh:.Int) a)
-prescanr f e = P.fst . scanr' f e
+prescanr f e = afst . scanr' f e
 
 -- |Right-to-left postscan, a variant of 'scanr1' with an initial value.  Denotationally, we have
 --
@@ -906,7 +906,7 @@ scanl'Seg f z arr seg =
     -- index of each segment.
     --
     seg'        = map (+1) seg
-    tails       = zipWith (+) seg . P.fst $ scanl' (+) 0 seg'
+    tails       = zipWith (+) seg $ prescanl (+) 0 seg'
     sums        = backpermute
                     (lift (indexTail (shape arr') :. length seg))
                     (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
@@ -1107,7 +1107,7 @@ scanr'Seg f z arr seg =
 
     -- reduction values
     seg'        = map (+1) seg
-    heads       = P.fst $ scanl' (+) 0 seg'
+    heads       = prescanl (+) 0 seg'
     sums        = backpermute
                     (lift (indexTail (shape arr') :. length seg))
                     (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
@@ -1204,7 +1204,7 @@ mkHeadFlags seg
   = init
   $ permute (+) zeros (\ix -> index1' (offset ! ix)) ones
   where
-    (offset, len)       = scanl' (+) 0 seg
+    (offset, len)       = unlift (scanl' (+) 0 seg)
     zeros               = fill (index1' $ the len + 1) 0
     ones                = fill (index1  $ size offset) 1
 
@@ -1219,7 +1219,7 @@ mkTailFlags seg
   = init
   $ permute (+) zeros (\ix -> index1' (the len - 1 - offset ! ix)) ones
   where
-    (offset, len)       = scanr' (+) 0 seg
+    (offset, len)       = unlift (scanr' (+) 0 seg)
     zeros               = fill (index1' $ the len + 1) 0
     ones                = fill (index1  $ size offset) 1
 
@@ -1405,7 +1405,7 @@ filter p arr
   | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
   = let
         keep            = map p arr
-        (target, len)   = scanl' (+) 0 (map boolToInt keep)
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
         prj ix          = keep!ix ? ( index1 (target!ix), ignore )
         dummy           = backpermute (index1 (the len)) id arr
         result          = permute const dummy prj arr
@@ -1418,8 +1418,8 @@ filter p arr
   = let
         sz              = indexTail (shape arr)
         keep            = map p arr
-        (target, len)   = scanl' (+) 0 (map boolToInt keep)
-        (offset, valid) = scanl' (+) 0 (flatten len)
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
                             then index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
                             else ignore
