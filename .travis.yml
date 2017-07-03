@@ -69,7 +69,7 @@ before_install:
   - source .travis/install-cuda-trusty.sh
   - source .travis/install-stack.sh
   - source .travis/update-ghc-settings.sh
-  - travis_retry stack install c2hs
+  - travis_retry stack install c2hs --fast --no-terminal
 
 install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
