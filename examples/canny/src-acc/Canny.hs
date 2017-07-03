@@ -203,7 +203,7 @@ selectStrong
   -> Acc (Array DIM1 Int)
 selectStrong img =
   let strong            = map (\x -> boolToInt (x == edge' Strong)) (flatten img)
-      (targetIdx, len)  = scanl' (+) 0 strong
+      (targetIdx, len)  = unlift (scanl' (+) 0 strong)
       indices           = enumFromN (index1 $ size img) 0
       zeros             = fill (index1 $ the len) 0
   in
