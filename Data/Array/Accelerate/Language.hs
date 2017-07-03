@@ -284,7 +284,7 @@ generate = Acc $$ Generate
 --
 -- > precondition: shapeSize sh == shapeSize sh'
 --
--- If the argument array is manifest in memory, 'reshape' is a NOP. If the
+-- If the argument array is manifest in memory, 'reshape' is a no-op. If the
 -- argument is to be fused into a subsequent operation, 'reshape' corresponds to
 -- an index transformation in the fused code.
 --
@@ -298,9 +298,9 @@ reshape = Acc $$ Reshape
 -- Extraction of sub-arrays
 -- ------------------------
 
--- | Index an array with a /generalised/ array index, supplied as the
--- second argument. The result is a new array (possibly a singleton)
--- containing the selected dimensions (`All`s) in their entirety.
+-- | Index an array with a /generalised/ array index, supplied as the second
+-- argument. The result is a new array (possibly a singleton) containing the
+-- selected dimensions ('All's) in their entirety.
 --
 -- 'slice' is the opposite of 'replicate', and can be used to /cut out/ entire
 -- dimensions. For example, for the two dimensional array 'mat':
@@ -367,9 +367,16 @@ slice = Acc $$ Slice
 -- Map-like functions
 -- ------------------
 
--- | Apply the given function element-wise to an array.
+-- | Apply the given function element-wise to an array. Denotationally we have:
 --
 -- > map f [x1, x2, ... xn] = [f x1, f x2, ... f xn]
+--
+-- >>> let xs = fromList (Z:.10) [0..]
+-- >>> xs
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
+--
+-- >>> map (+1) (use xs)
+-- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
 map :: (Shape sh, Elt a, Elt b)
     => (Exp a -> Exp b)
@@ -380,6 +387,28 @@ map = Acc $$ Map
 -- | Apply the given binary function element-wise to the two arrays. The extent
 -- of the resulting array is the intersection of the extents of the two source
 -- arrays.
+--
+-- >>> let xs = fromList (Z:.3:.5) [0..]
+-- >>> xs
+-- Matrix (Z :. 3 :. 5)
+--   [ 0, 1, 2, 3, 4,
+--     5, 6, 7, 8, 9,
+--    10,11,12,13,14]
+--
+-- >>> let ys = fromList (Z:.5:.10) [1..]
+-- >>> ys
+-- Matrix (Z :. 5 :. 10)
+--   [ 1, 2, 3, 4, 5, 6, 7, 8, 9,10,
+--    11,12,13,14,15,16,17,18,19,20,
+--    21,22,23,24,25,26,27,28,29,30,
+--    31,32,33,34,35,36,37,38,39,40,
+--    41,42,43,44,45,46,47,48,49,50]
+--
+-- >>> zipWith (+) (use xs) (use ys)
+-- Matrix (Z :. 3 :. 5)
+--   [ 1, 3, 5, 7, 9,
+--    16,18,20,22,24,
+--    31,33,35,37,39]
 --
 zipWith :: (Shape sh, Elt a, Elt b, Elt c)
         => (Exp a -> Exp b -> Exp c)
@@ -572,7 +601,8 @@ scanl' = Acc $$$ Scanl'
 --
 -- > scanl1 f e arr = tail (scanl f e arr)
 --
--- >>> scanl (+) (use $ fromList (Z:.4:.10) [0..])
+-- >>> let mat = fromList (Z:.4:.10) [0..]
+-- >>> scanl (+) (use mat)
 -- Matrix (Z :. 4 :. 10)
 --   [  0,  1,  3,   6,  10,  15,  21,  28,  36,  45,
 --     10, 21, 33,  46,  60,  75,  91, 108, 126, 145,
@@ -673,6 +703,9 @@ scanr1 = Acc $$ Scanr1
 --      values must be evaluated. However, other operations may fuse into this.
 --
 --   3. The array of source values can fuse into the permutation operation.
+--
+--   4. If the array of default values is only used once, it will be updated
+--      in-place.
 --
 permute
     :: (Shape sh, Shape sh', Elt a)
@@ -950,7 +983,7 @@ collect = Acc . Collect
 -- In case the operation is being executed on a backend which does not support
 -- this foreign implementation, the fallback implementation is used instead,
 -- which itself could be a foreign implementation for a (presumably) different
--- backend, or an implementation of pure Accelerate. In this way, multiple
+-- backend, or an implementation in pure Accelerate. In this way, multiple
 -- foreign implementations can be supplied, and will be tested for suitability
 -- against the target backend in sequence.
 --
@@ -995,6 +1028,9 @@ foreignExp = Exp $$$ Foreign
 -- > (acc1 >-> acc2) arrs = let tmp = acc1 arrs
 -- >                        in  tmp `seq` acc2 tmp
 --
+-- For an example use of this operation see the 'Data.Array.Accelerate.compute'
+-- function.
+--
 infixl 1 >->
 (>->) :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
 (>->) = Acc $$$ Pipe
@@ -1004,6 +1040,9 @@ infixl 1 >->
 -- -----------------------
 
 -- | An array-level if-then-else construct.
+--
+-- Enabling the @RebindableSyntax@ extension will allow you to use the standard
+-- if-then-else syntax instead.
 --
 acond :: Arrays a
       => Exp Bool               -- ^ if-condition
@@ -1027,7 +1066,15 @@ awhile = Acc $$$ Awhile
 -- Shapes and indices
 -- ------------------
 
--- | Get the innermost dimension of a shape
+-- | Get the innermost dimension of a shape.
+--
+-- The innermost dimension (right-most component of the shape) is the index of
+-- the array which varies most rapidly, and corresponds to elements of the array
+-- which are adjacent in memory.
+--
+-- Another way to think of this is, for example when writing nested loops over
+-- an array in C, this index corresponds to the index iterated over by the
+-- innermost nested loop.
 --
 indexHead :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp a
 indexHead = Exp . IndexHead
@@ -1067,6 +1114,9 @@ union = Exp $$ Union
 -- ------------
 
 -- | A scalar-level if-then-else construct.
+--
+-- Enabling the @RebindableSyntax@ extension will allow you to use the standard
+-- if-then-else syntax instead.
 --
 cond :: Elt t
      => Exp Bool                -- ^ condition

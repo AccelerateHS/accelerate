@@ -112,7 +112,6 @@ module Data.Array.Accelerate.Prelude (
 import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
 import Prelude                                                      ( (.), ($), Maybe(..), const, id, fromInteger, flip, undefined, fail )
-import qualified Prelude                                            as P
 
 -- friends
 import Data.Array.Accelerate.Analysis.Match
@@ -136,6 +135,17 @@ import Data.Array.Accelerate.Data.Bits
 
 -- | Pair each element with its index
 --
+-- >>> let xs = fromList (Z:.5) [0..]
+-- >>> indexed (use xs)
+-- Vector (Z :. 5) [(Z :. 0,0.0),(Z :. 1,1.0),(Z :. 2,2.0),(Z :. 3,3.0),(Z :. 4,4.0)]
+--
+-- >>> let mat = fromList (Z:.3:.4) [0..]
+-- >>> indexed (use mat)
+-- Matrix (Z :. 3 :. 4)
+--   [(Z :. 0 :. 0,0.0),(Z :. 0 :. 1,1.0), (Z :. 0 :. 2,2.0), (Z :. 0 :. 3,3.0),
+--    (Z :. 1 :. 0,4.0),(Z :. 1 :. 1,5.0), (Z :. 1 :. 2,6.0), (Z :. 1 :. 3,7.0),
+--    (Z :. 2 :. 0,8.0),(Z :. 2 :. 1,9.0),(Z :. 2 :. 2,10.0),(Z :. 2 :. 3,11.0)]
+--
 indexed :: (Shape sh, Elt a) => Acc (Array sh a) -> Acc (Array sh (sh, a))
 indexed xs = zip (generate (shape xs) id) xs
 
@@ -150,25 +160,27 @@ imap f xs = zipWith f (generate (shape xs) id) xs
 
 -- | Zip three arrays with the given function, analogous to 'zipWith'.
 --
-zipWith3 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
-         => (Exp a -> Exp b -> Exp c -> Exp d)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
-         -> Acc (Array sh d)
+zipWith3
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
+    => (Exp a -> Exp b -> Exp c -> Exp d)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
 zipWith3 f as bs cs
   = generate (shape as `intersect` shape bs `intersect` shape cs)
              (\ix -> f (as ! ix) (bs ! ix) (cs ! ix))
 
 -- | Zip four arrays with the given function, analogous to 'zipWith'.
 --
-zipWith4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
-         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
-         -> Acc (Array sh d)
-         -> Acc (Array sh e)
+zipWith4
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
+    => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
 zipWith4 f as bs cs ds
   = generate (shape as `intersect` shape bs `intersect`
               shape cs `intersect` shape ds)
@@ -176,14 +188,15 @@ zipWith4 f as bs cs ds
 
 -- | Zip five arrays with the given function, analogous to 'zipWith'.
 --
-zipWith5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
-         -> Acc (Array sh d)
-         -> Acc (Array sh e)
-         -> Acc (Array sh f)
+zipWith5
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+    => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
 zipWith5 f as bs cs ds es
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es)
@@ -191,15 +204,16 @@ zipWith5 f as bs cs ds es
 
 -- | Zip six arrays with the given function, analogous to 'zipWith'.
 --
-zipWith6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
-         -> Acc (Array sh d)
-         -> Acc (Array sh e)
-         -> Acc (Array sh f)
-         -> Acc (Array sh g)
+zipWith6
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+    => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
 zipWith6 f as bs cs ds es fs
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -208,16 +222,17 @@ zipWith6 f as bs cs ds es fs
 
 -- | Zip seven arrays with the given function, analogous to 'zipWith'.
 --
-zipWith7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
-         -> Acc (Array sh d)
-         -> Acc (Array sh e)
-         -> Acc (Array sh f)
-         -> Acc (Array sh g)
-         -> Acc (Array sh h)
+zipWith7
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+    => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
+    -> Acc (Array sh h)
 zipWith7 f as bs cs ds es fs gs
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -226,17 +241,18 @@ zipWith7 f as bs cs ds es fs gs
 
 -- | Zip eight arrays with the given function, analogous to 'zipWith'.
 --
-zipWith8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
-         -> Acc (Array sh d)
-         -> Acc (Array sh e)
-         -> Acc (Array sh f)
-         -> Acc (Array sh g)
-         -> Acc (Array sh h)
-         -> Acc (Array sh i)
+zipWith8
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+    => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
+    -> Acc (Array sh h)
+    -> Acc (Array sh i)
 zipWith8 f as bs cs ds es fs gs hs
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -246,18 +262,19 @@ zipWith8 f as bs cs ds es fs gs hs
 
 -- | Zip nine arrays with the given function, analogous to 'zipWith'.
 --
-zipWith9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i -> Exp j)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
-         -> Acc (Array sh d)
-         -> Acc (Array sh e)
-         -> Acc (Array sh f)
-         -> Acc (Array sh g)
-         -> Acc (Array sh h)
-         -> Acc (Array sh i)
-         -> Acc (Array sh j)
+zipWith9
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
+    => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i -> Exp j)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
+    -> Acc (Array sh h)
+    -> Acc (Array sh i)
+    -> Acc (Array sh j)
 zipWith9 f as bs cs ds es fs gs hs is
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -268,11 +285,12 @@ zipWith9 f as bs cs ds es fs gs hs is
 
 -- | Zip two arrays with a function that also takes the element index
 --
-izipWith :: (Shape sh, Elt a, Elt b, Elt c)
-         => (Exp sh -> Exp a -> Exp b -> Exp c)
-         -> Acc (Array sh a)
-         -> Acc (Array sh b)
-         -> Acc (Array sh c)
+izipWith
+    :: (Shape sh, Elt a, Elt b, Elt c)
+    => (Exp sh -> Exp a -> Exp b -> Exp c)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
 izipWith f as bs
   = generate (shape as `intersect` shape bs)
              (\ix -> f ix (as ! ix) (bs ! ix))
@@ -280,12 +298,13 @@ izipWith f as bs
 -- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
 --
-izipWith3 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
-          => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d)
-          -> Acc (Array sh a)
-          -> Acc (Array sh b)
-          -> Acc (Array sh c)
-          -> Acc (Array sh d)
+izipWith3
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
+    => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
 izipWith3 f as bs cs
   = generate (shape as `intersect` shape bs `intersect` shape cs)
              (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix))
@@ -293,13 +312,14 @@ izipWith3 f as bs cs
 -- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
-izipWith4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
-          => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e)
-          -> Acc (Array sh a)
-          -> Acc (Array sh b)
-          -> Acc (Array sh c)
-          -> Acc (Array sh d)
-          -> Acc (Array sh e)
+izipWith4
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
+    => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
 izipWith4 f as bs cs ds
   = generate (shape as `intersect` shape bs `intersect`
               shape cs `intersect` shape ds)
@@ -308,14 +328,15 @@ izipWith4 f as bs cs ds
 -- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
-izipWith5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-          => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f)
-          -> Acc (Array sh a)
-          -> Acc (Array sh b)
-          -> Acc (Array sh c)
-          -> Acc (Array sh d)
-          -> Acc (Array sh e)
-          -> Acc (Array sh f)
+izipWith5
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+    => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
 izipWith5 f as bs cs ds es
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es)
@@ -324,15 +345,16 @@ izipWith5 f as bs cs ds es
 -- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
-izipWith6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-          => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g)
-          -> Acc (Array sh a)
-          -> Acc (Array sh b)
-          -> Acc (Array sh c)
-          -> Acc (Array sh d)
-          -> Acc (Array sh e)
-          -> Acc (Array sh f)
-          -> Acc (Array sh g)
+izipWith6
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+    => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
 izipWith6 f as bs cs ds es fs
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -342,16 +364,17 @@ izipWith6 f as bs cs ds es fs
 -- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
 --
-izipWith7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-          => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h)
-          -> Acc (Array sh a)
-          -> Acc (Array sh b)
-          -> Acc (Array sh c)
-          -> Acc (Array sh d)
-          -> Acc (Array sh e)
-          -> Acc (Array sh f)
-          -> Acc (Array sh g)
-          -> Acc (Array sh h)
+izipWith7
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+    => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
+    -> Acc (Array sh h)
 izipWith7 f as bs cs ds es fs gs
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -361,17 +384,18 @@ izipWith7 f as bs cs ds es fs gs
 -- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
 --
-izipWith8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-          => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i)
-          -> Acc (Array sh a)
-          -> Acc (Array sh b)
-          -> Acc (Array sh c)
-          -> Acc (Array sh d)
-          -> Acc (Array sh e)
-          -> Acc (Array sh f)
-          -> Acc (Array sh g)
-          -> Acc (Array sh h)
-          -> Acc (Array sh i)
+izipWith8
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+    => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
+    -> Acc (Array sh h)
+    -> Acc (Array sh i)
 izipWith8 f as bs cs ds es fs gs hs
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -382,18 +406,19 @@ izipWith8 f as bs cs ds es fs gs hs
 -- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
 --
-izipWith9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-          => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i -> Exp j)
-          -> Acc (Array sh a)
-          -> Acc (Array sh b)
-          -> Acc (Array sh c)
-          -> Acc (Array sh d)
-          -> Acc (Array sh e)
-          -> Acc (Array sh f)
-          -> Acc (Array sh g)
-          -> Acc (Array sh h)
-          -> Acc (Array sh i)
-          -> Acc (Array sh j)
+izipWith9
+    :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
+    => (Exp sh -> Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i -> Exp j)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh c)
+    -> Acc (Array sh d)
+    -> Acc (Array sh e)
+    -> Acc (Array sh f)
+    -> Acc (Array sh g)
+    -> Acc (Array sh h)
+    -> Acc (Array sh i)
+    -> Acc (Array sh j)
 izipWith9 f as bs cs ds es fs gs hs is
   = generate (shape as `intersect` shape bs `intersect` shape cs
                        `intersect` shape ds `intersect` shape es
@@ -499,14 +524,14 @@ zip9 = zipWith9 (\a b c d e f g h i -> lift (a,b,c,d,e,f,g,h,i))
 -- | The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
 --
--- If the argument array is manifest in memory, 'unzip' is a NOP.
+-- If the argument array is manifest in memory, 'unzip' is a no-op.
 --
 unzip :: (Shape sh, Elt a, Elt b)
       => Acc (Array sh (a, b))
       -> (Acc (Array sh a), Acc (Array sh b))
 unzip arr = (map fst arr, map snd arr)
 
--- | Take an array of triples and return three arrays, analogous to unzip.
+-- | Take an array of triples and return three arrays, analogous to 'unzip'.
 --
 unzip3 :: (Shape sh, Elt a, Elt b, Elt c)
        => Acc (Array sh (a, b, c))
@@ -518,7 +543,7 @@ unzip3 xs = (map get1 xs, map get2 xs, map get3 xs)
     get3 x = let (_,_,c) = untup3 x in c
 
 
--- | Take an array of quadruples and return four arrays, analogous to unzip.
+-- | Take an array of quadruples and return four arrays, analogous to 'unzip'.
 --
 unzip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
        => Acc (Array sh (a, b, c, d))
@@ -530,7 +555,7 @@ unzip4 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs)
     get3 x = let (_,_,c,_) = untup4 x in c
     get4 x = let (_,_,_,d) = untup4 x in d
 
--- | Take an array of 5-tuples and return five arrays, analogous to unzip.
+-- | Take an array of 5-tuples and return five arrays, analogous to 'unzip'.
 --
 unzip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
        => Acc (Array sh (a, b, c, d, e))
@@ -543,7 +568,7 @@ unzip5 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs, map get5 xs)
     get4 x = let (_,_,_,d,_) = untup5 x in d
     get5 x = let (_,_,_,_,e) = untup5 x in e
 
--- | Take an array of 6-tuples and return six arrays, analogous to unzip.
+-- | Take an array of 6-tuples and return six arrays, analogous to 'unzip'.
 --
 unzip6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
        => Acc (Array sh (a, b, c, d, e, f))
@@ -558,7 +583,7 @@ unzip6 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs, map get5 xs, ma
     get5 x = let (_,_,_,_,e,_) = untup6 x in e
     get6 x = let (_,_,_,_,_,f) = untup6 x in f
 
--- | Take an array of 7-tuples and return seven arrays, analogous to unzip.
+-- | Take an array of 7-tuples and return seven arrays, analogous to 'unzip'.
 --
 unzip7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
        => Acc (Array sh (a, b, c, d, e, f, g))
@@ -577,7 +602,7 @@ unzip7 xs = ( map get1 xs, map get2 xs, map get3 xs
     get6 x = let (_,_,_,_,_,f,_) = untup7 x in f
     get7 x = let (_,_,_,_,_,_,g) = untup7 x in g
 
--- | Take an array of 8-tuples and return eight arrays, analogous to unzip.
+-- | Take an array of 8-tuples and return eight arrays, analogous to 'unzip'.
 --
 unzip8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
        => Acc (Array sh (a, b, c, d, e, f, g, h))
@@ -597,7 +622,7 @@ unzip8 xs = ( map get1 xs, map get2 xs, map get3 xs
     get7 x = let (_,_,_,_,_,_,g,_) = untup8 x in g
     get8 x = let (_,_,_,_,_,_,_,h) = untup8 x in h
 
--- | Take an array of 8-tuples and return eight arrays, analogous to unzip.
+-- | Take an array of 8-tuples and return eight arrays, analogous to 'unzip'.
 --
 unzip9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
        => Acc (Array sh (a, b, c, d, e, f, g, h, i))
@@ -634,21 +659,23 @@ unzip9 xs = ( map get1 xs, map get2 xs, map get3 xs
 -- >>> foldAll (+) 0 (use mat)
 -- Scalar Z [1225]
 --
-foldAll :: (Shape sh, Elt a)
-        => (Exp a -> Exp a -> Exp a)
-        -> Exp a
-        -> Acc (Array sh a)
-        -> Acc (Scalar a)
+foldAll
+    :: (Shape sh, Elt a)
+    => (Exp a -> Exp a -> Exp a)
+    -> Exp a
+    -> Acc (Array sh a)
+    -> Acc (Scalar a)
 foldAll f e arr = fold f e (flatten arr)
 
 -- | Variant of 'foldAll' that requires the reduced array to be non-empty and
--- doesn't need an default value. The first argument must be an /associative/
+-- does not need a default value. The first argument must be an /associative/
 -- function.
 --
-fold1All :: (Shape sh, Elt a)
-         => (Exp a -> Exp a -> Exp a)
-         -> Acc (Array sh a)
-         -> Acc (Scalar a)
+fold1All
+    :: (Shape sh, Elt a)
+    => (Exp a -> Exp a -> Exp a)
+    -> Acc (Array sh a)
+    -> Acc (Scalar a)
 fold1All f arr = fold1 f (flatten arr)
 
 
@@ -779,59 +806,64 @@ maximum = fold1 max
 -- Composite scans
 -- ---------------
 
--- | Left-to-right prescan (aka exclusive scan).  As for 'scan', the first
--- argument must be an /associative/ function.  Denotationally, we have
+-- | Left-to-right pre-scan (aka exclusive scan). As for 'scan', the first
+-- argument must be an /associative/ function. Denotationally, we have:
 --
 -- > prescanl f e = afst . scanl' f e
 --
 -- >>> let vec = fromList (Z:.10) [1..10]
 -- >>> prescanl (+) 0 (use vec)
--- Vector (Z :. 10) [0,0,1,3,6,10,15,21,28,36]
+-- Vector (Z :. 10) [0,1,3,6,10,15,21,28,36,45]
 --
-prescanl :: (Shape sh, Elt a)
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Array (sh:.Int) a)
-         -> Acc (Array (sh:.Int) a)
+prescanl
+    :: (Shape sh, Elt a)
+    => (Exp a -> Exp a -> Exp a)
+    -> Exp a
+    -> Acc (Array (sh:.Int) a)
+    -> Acc (Array (sh:.Int) a)
 prescanl f e = afst . scanl' f e
 
--- | Left-to-right postscan, a variant of 'scanl1' with an initial value. As
+-- | Left-to-right post-scan, a variant of 'scanl1' with an initial value. As
 -- with 'scanl1', the array must not be empty. Denotationally, we have:
 --
 -- > postscanl f e = map (e `f`) . scanl1 f
 --
 -- >>> let vec = fromList (Z:.10) [1..10]
 -- >>> postscanl (+) 42 (use vec)
--- Vector (Z :. 10) [42,43,45,48,52,57,63,70,78,87]
+-- Vector (Z :. 10) [43,45,48,52,57,63,70,78,87,97]
 --
-postscanl :: (Shape sh, Elt a)
-          => (Exp a -> Exp a -> Exp a)
-          -> Exp a
-          -> Acc (Array (sh:.Int) a)
-          -> Acc (Array (sh:.Int) a)
+postscanl
+    :: (Shape sh, Elt a)
+    => (Exp a -> Exp a -> Exp a)
+    -> Exp a
+    -> Acc (Array (sh:.Int) a)
+    -> Acc (Array (sh:.Int) a)
 postscanl f e = map (e `f`) . scanl1 f
 
--- |Right-to-left prescan (aka exclusive scan).  As for 'scan', the first argument must be an
--- /associative/ function.  Denotationally, we have
+-- | Right-to-left pre-scan (aka exclusive scan). As for 'scan', the first
+-- argument must be an /associative/ function. Denotationally, we have:
 --
 -- > prescanr f e = afst . scanr' f e
 --
-prescanr :: (Shape sh, Elt a)
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Array (sh:.Int) a)
-         -> Acc (Array (sh:.Int) a)
+prescanr
+    :: (Shape sh, Elt a)
+    => (Exp a -> Exp a -> Exp a)
+    -> Exp a
+    -> Acc (Array (sh:.Int) a)
+    -> Acc (Array (sh:.Int) a)
 prescanr f e = afst . scanr' f e
 
--- |Right-to-left postscan, a variant of 'scanr1' with an initial value.  Denotationally, we have
+-- | Right-to-left postscan, a variant of 'scanr1' with an initial value.
+-- Denotationally, we have:
 --
 -- > postscanr f e = map (e `f`) . scanr1 f
 --
-postscanr :: (Shape sh, Elt a)
-          => (Exp a -> Exp a -> Exp a)
-          -> Exp a
-          -> Acc (Array (sh:.Int) a)
-          -> Acc (Array (sh:.Int) a)
+postscanr
+    :: (Shape sh, Elt a)
+    => (Exp a -> Exp a -> Exp a)
+    -> Exp a
+    -> Acc (Array (sh:.Int) a)
+    -> Acc (Array (sh:.Int) a)
 postscanr f e = map (`f` e) . scanr1 f
 
 
@@ -1324,13 +1356,16 @@ flatten a
   | Just Refl <- matchShapeType (undefined::sh) (undefined::DIM1)
   = a
 flatten a
-  = reshape (index1 $ size a) a
+  = reshape (index1 (size a)) a
 
 
 -- Enumeration and filling
 -- -----------------------
 
 -- | Create an array where all elements are the same value.
+--
+-- >>> let zeros = fill (Z:.10) 0
+-- Vector (Z :. 10) [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
 --
 fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
 fill sh c = generate sh (const c)
@@ -1821,7 +1856,8 @@ compute = id >-> id
 -- | Infix version of 'acond'. If the predicate evaluates to 'True', the first
 -- component of the tuple is returned, else the second.
 --
--- See also: 'ifThenElse'.
+-- Enabling the @RebindableSyntax@ extension will allow you to use the standard
+-- if-then-else syntax instead.
 --
 infix 0 ?|
 (?|) :: Arrays a => Exp Bool -> (Acc a, Acc a) -> Acc a
@@ -1830,7 +1866,8 @@ c ?| (t, e) = acond c t e
 -- | An infix version of 'cond'. If the predicate evaluates to 'True', the first
 -- component of the tuple is returned, else the second.
 --
--- See also: 'ifThenElse'.
+-- Enabling the @RebindableSyntax@ extension will allow you to use the standard
+-- if-then-else syntax instead.
 --
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
@@ -1868,11 +1905,12 @@ instance IfThenElse Acc where
 
 -- | Repeatedly apply a function a fixed number of times
 --
-iterate :: forall a. Elt a
-        => Exp Int
-        -> (Exp a -> Exp a)
-        -> Exp a
-        -> Exp a
+iterate
+    :: forall a. Elt a
+    => Exp Int
+    -> (Exp a -> Exp a)
+    -> Exp a
+    -> Exp a
 iterate n f z
   = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
         step (i, acc)   = ( i+1, f acc )
@@ -1936,34 +1974,36 @@ uncurry f t = let (x, y) = unlift t in f x y
 -- Shapes and indices
 -- ------------------
 
--- |The one index for a rank-0 array.
+-- | The one index for a rank-0 array.
 --
 index0 :: Exp Z
 index0 = lift Z
 
--- |Turn an 'Int' expression into a rank-1 indexing expression.
+-- | Turn an 'Int' expression into a rank-1 indexing expression.
 --
 index1 :: Elt i => Exp i -> Exp (Z :. i)
 index1 i = lift (Z :. i)
 
--- |Turn a rank-1 indexing expression into an 'Int' expression.
+-- | Turn a rank-1 indexing expression into an 'Int' expression.
 --
 unindex1 :: Elt i => Exp (Z :. i) -> Exp i
 unindex1 ix = let Z :. i = unlift ix in i
 
 -- | Creates a rank-2 index from two Exp Int`s
 --
-index2 :: (Elt i, Slice (Z :. i))
-       => Exp i
-       -> Exp i
-       -> Exp (Z :. i :. i)
+index2
+    :: (Elt i, Slice (Z :. i))
+    => Exp i
+    -> Exp i
+    -> Exp (Z :. i :. i)
 index2 i j = lift (Z :. i :. j)
 
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
-unindex2 :: forall i. (Elt i, Slice (Z :. i))
-         => Exp (Z :. i :. i)
-         -> Exp (i, i)
+unindex2
+    :: forall i. (Elt i, Slice (Z :. i))
+    => Exp (Z :. i :. i)
+    -> Exp (i, i)
 unindex2 ix
   = let Z :. i :. j = unlift ix :: Z :. Exp i :. Exp i
     in  lift (i, j)
