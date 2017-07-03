@@ -11,6 +11,14 @@ Policy (PVP)](https://pvp.haskell.org)
   * Additional EKG monitoring hooks ([#340])
   * Operations from `RealFloat`
 
+### Changed
+  * Changed type of `scanl'`, `scanr'` to return an `Acc` tuple, rather than a
+    tuple of `Acc` arrays.
+  * Specialised folds `sum`, `product`, `minimum`, `maximum`, `and`, `or`,
+    `any`, `all` now reduce along the innermost dimension only, rather than
+    reducing all elements. You can recover the old behaviour by first
+    `flatten`-ing the input array.
+
 ### Fixed
   * [#390]: Wrong number of arguments in printf
 
