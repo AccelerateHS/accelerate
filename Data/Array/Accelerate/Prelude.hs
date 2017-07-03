@@ -658,63 +658,122 @@ fold1All f arr = fold1 f (flatten arr)
 -- Leave the results of these as scalar arrays to make it clear that these are
 -- array computations, and thus can not be nested.
 
--- | Check if all elements satisfy a predicate
+-- | Check if all elements along the innermost dimension satisfy a predicate.
+--
+-- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
+-- >>> mat
+-- Matrix (Z :. 4 :. 10)
+--   [ 1, 2, 3, 4,  5,  6,  7,  8,  9, 10,
+--     1, 1, 1, 1,  1,  2,  2,  2,  2,  2,
+--     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+--     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
+--
+-- >>> all even (use mat)
+-- Vector (Z :. 4) [False,False,True,False]
 --
 all :: (Shape sh, Elt e)
     => (Exp e -> Exp Bool)
-    -> Acc (Array sh e)
-    -> Acc (Scalar Bool)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Array sh Bool)
 all f = and . map f
 
--- | Check if any element satisfies the predicate
+-- | Check if any element along the innermost dimension satisfies the predicate.
+--
+-- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
+-- >>> mat
+-- Matrix (Z :. 4 :. 10)
+--   [ 1, 2, 3, 4,  5,  6,  7,  8,  9, 10,
+--     1, 1, 1, 1,  1,  2,  2,  2,  2,  2,
+--     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+--     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
+--
+-- >>> any even (use mat)
+-- Vector (Z :. 4) [True,True,True,False]
 --
 any :: (Shape sh, Elt e)
     => (Exp e -> Exp Bool)
-    -> Acc (Array sh e)
-    -> Acc (Scalar Bool)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Array sh Bool)
 any f = or . map f
 
--- | Check if all elements are 'True'
+-- | Check if all elements along the innermost dimension are 'True'.
 --
 and :: Shape sh
-    => Acc (Array sh Bool)
-    -> Acc (Scalar Bool)
-and = foldAll (&&) (constant True)
+    => Acc (Array (sh:.Int) Bool)
+    -> Acc (Array sh Bool)
+and = fold (&&) (constant True)
 
--- | Check if any element is 'True'
+-- | Check if any element along the innermost dimension is 'True'.
 --
 or :: Shape sh
-   => Acc (Array sh Bool)
-   -> Acc (Scalar Bool)
-or = foldAll (||) (constant False)
+   => Acc (Array (sh:.Int) Bool)
+   -> Acc (Array sh Bool)
+or = fold (||) (constant False)
 
--- | Compute the sum of elements
+-- | Compute the sum of elements along the innermost dimension of the array. To
+-- find the sum of the entire array, 'flatten' it first.
+--
+-- >>> let mat = fromList (Z:.2:.5) [0..]
+-- Vector (Z :. 2) [10,35]
 --
 sum :: (Shape sh, Num e)
-    => Acc (Array sh e)
-    -> Acc (Scalar e)
-sum = foldAll (+) 0
+    => Acc (Array (sh:.Int) e)
+    -> Acc (Array sh e)
+sum = fold (+) 0
 
--- | Compute the product of the elements
+-- | Compute the product of the elements along the innermost dimension of the
+-- array. To find the product of the entire array, 'flatten' it first.
 --
-product :: (Shape sh, Num e)
-        => Acc (Array sh e)
-        -> Acc (Scalar e)
-product = foldAll (*) 1
+-- >>> let mat = fromList (Z:.2:.5) [0..]
+-- Vector (Z :. 2) [0,15120]
+--
+product
+    :: (Shape sh, Num e)
+    => Acc (Array (sh:.Int) e)
+    -> Acc (Array sh e)
+product = fold (*) 1
 
--- | Yield the minimum element of an array. The array must not be empty.
+-- | Yield the minimum element along the innermost dimension of the array. To
+-- find find the minimum element of the entire array, 'flatten' it first.
 --
-minimum :: (Shape sh, Ord e)
-        => Acc (Array sh e)
-        -> Acc (Scalar e)
-minimum = fold1All min
+-- The array must not be empty. See also 'fold1'.
+--
+-- >>> let mat = fromList (Z :. 3 :. 4) [1,4,3,8, 0,2,8,4, 7,9,8,8]
+-- >>> mat
+-- Matrix (Z :. 3 :. 4)
+--   [ 1, 4, 3, 8,
+--     0, 2, 8, 4,
+--     7, 9, 8, 8]
+--
+-- >>> minimum (use mat)
+-- Vector (Z :. 3) [1,0,7]
+--
+minimum
+    :: (Shape sh, Ord e)
+    => Acc (Array (sh:.Int) e)
+    -> Acc (Array sh e)
+minimum = fold1 min
 
--- | Yield the maximum element of an array. The array must not be empty.
+-- | Yield the maximum element along the innermost dimension of the array. To
+-- find the maximum element of the entire array, 'flatten' it first.
 --
-maximum :: (Shape sh, Ord e)
-        => Acc (Array sh e)
-        -> Acc (Scalar e)
-maximum = fold1All max
+-- The array must not be empty. See also 'fold1'.
+--
+-- >>> let mat = fromList (Z :. 3 :. 4) [1,4,3,8, 0,2,8,4, 7,9,8,8]
+-- >>> mat
+-- Matrix (Z :. 3 :. 4)
+--   [ 1, 4, 3, 8,
+--     0, 2, 8, 4,
+--     7, 9, 8, 8]
+--
+-- >>> maximum (use mat)
+-- Vector (Z :. 3) [8,8,9]
+--
+maximum
+    :: (Shape sh, Ord e)
+    => Acc (Array (sh:.Int) e)
+    -> Acc (Array sh e)
+maximum = fold1 max
 
 
 -- Composite scans
