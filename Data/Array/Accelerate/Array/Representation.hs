@@ -133,7 +133,7 @@ instance Shape sh => Shape (sh, Int) where
     | otherwise                     = next `addDim` i
     where
       -- This function is quite difficult to optimize due to the deep recursion
-      -- that is can generate with high-dimensional arrays. If we let 'next' be
+      -- that it can generate with high-dimensional arrays. If we let 'next' be
       -- inlined into each alternative of the cases above the size of this
       -- function on an n-dimensional array will grow as 7^n. This quickly causes
       -- GHC's head to explode. See GHC Trac #10491 for more details.
