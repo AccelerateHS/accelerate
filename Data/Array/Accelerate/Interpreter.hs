@@ -62,6 +62,7 @@ import Prelude                                                      hiding ( sum
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
@@ -632,8 +633,8 @@ stencilOp
 stencilOp stencil boundary arr
   = fromFunction sh f
   where
-    f           = stencil . stencilAccess bounded
     sh          = shape arr
+    f           = stencil . stencilAccess bounded
     --
     bounded ix  =
       case bound sh ix boundary of
@@ -666,6 +667,151 @@ stencil2Op stencil boundary1 arr1 boundary2 arr2
       case bound sh2 ix boundary2 of
         Left v    -> toElt v
         Right ix' -> arr2 ! ix'
+
+
+stencilAccess
+    :: Stencil sh e stencil
+    => (sh -> e)
+    -> sh
+    -> stencil
+stencilAccess = goR stencil
+  where
+    -- Base cases, nothing interesting to do here since we know the lower
+    -- dimension is Z.
+    --
+    goR :: StencilR sh e stencil -> (sh -> e) -> sh -> stencil
+    goR StencilRunit3 rf ix =
+      let
+          z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-1)
+      , rf'   0
+      , rf'   1
+      )
+
+    goR StencilRunit5 rf ix =
+      let z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-2)
+      , rf' (-1)
+      , rf'   0
+      , rf'   1
+      , rf'   2
+      )
+
+    goR StencilRunit7 rf ix =
+      let z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-3)
+      , rf' (-2)
+      , rf' (-1)
+      , rf'   0
+      , rf'   1
+      , rf'   2
+      , rf'   3
+      )
+
+    goR StencilRunit9 rf ix =
+      let z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-4)
+      , rf' (-3)
+      , rf' (-2)
+      , rf' (-1)
+      , rf'   0
+      , rf'   1
+      , rf'   2
+      , rf'   3
+      , rf'   4
+      )
+
+    -- Recursive cases. Note that because the stencil pattern is defined with
+    -- cons ordering, whereas shapes (and indices) are defined as a snoc-list,
+    -- when we recurse on the stencil structure we must manipulate the
+    -- _left-most_ index component.
+    --
+    goR (StencilRtup3 s1 s2 s3) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-1)) ix'
+      , goR s2 (rf'   0)  ix'
+      , goR s3 (rf'   1)  ix'
+      )
+
+    goR (StencilRtup5 s1 s2 s3 s4 s5) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-2)) ix'
+      , goR s2 (rf' (-1)) ix'
+      , goR s3 (rf'   0)  ix'
+      , goR s4 (rf'   1)  ix'
+      , goR s5 (rf'   2)  ix'
+      )
+
+    goR (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-3)) ix'
+      , goR s2 (rf' (-2)) ix'
+      , goR s3 (rf' (-1)) ix'
+      , goR s4 (rf'   0)  ix'
+      , goR s5 (rf'   1)  ix'
+      , goR s6 (rf'   2)  ix'
+      , goR s7 (rf'   3)  ix'
+      )
+
+    goR (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-4)) ix'
+      , goR s2 (rf' (-3)) ix'
+      , goR s3 (rf' (-2)) ix'
+      , goR s4 (rf' (-1)) ix'
+      , goR s5 (rf'   0)  ix'
+      , goR s6 (rf'   1)  ix'
+      , goR s7 (rf'   2)  ix'
+      , goR s8 (rf'   3)  ix'
+      , goR s9 (rf'   4)  ix'
+      )
+
+    -- Add a left-most component to an index
+    --
+    cons :: forall sh. Shape sh => Int -> sh -> (sh :. Int)
+    cons ix extent = toElt $ go (eltType (undefined::sh)) (fromElt extent)
+      where
+        go :: TupleType t -> t -> (t, Int)
+        go UnitTuple         ()       = ((), ix)
+        go (PairTuple th tz) (sh, sz)
+          | SingleTuple t <- tz
+          , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
+          = (go th sh, sz)
+        go _ _
+          = $internalError "cons" "expected index with Int components"
+
+    -- Remove the left-most index of an index, and return the remainder
+    --
+    uncons :: forall sh. Shape sh => sh :. Int -> (Int, sh)
+    uncons extent = let (i,ix) = go (eltType (undefined::(sh:.Int))) (fromElt extent)
+                    in  (i, toElt ix)
+      where
+        go :: TupleType (t, Int) -> (t, Int) -> (Int, t)
+        go (PairTuple UnitTuple _)           ((), v) = (v, ())
+        go (PairTuple t1@(PairTuple _ t2) _) (v1,v3)
+          | SingleTuple t <- t2
+          , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
+          = let (i, v1') = go t1 v1
+            in  (i, (v1', v3))
+        go _ _
+          = $internalError "uncons" "expected index with Int components"
+
 
 -- toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
 --         => SliceIndex (EltRepr slix)
