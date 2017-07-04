@@ -637,281 +637,422 @@ data PreExp acc exp t where
 -- Smart constructors and destructors for array tuples
 -- ---------------------------------------------------
 
-atup2 :: (Arrays a, Arrays b) => (Acc a, Acc b) -> Acc (a, b)
-atup2 (a, b) = Acc $ Atuple (NilAtup `SnocAtup` a `SnocAtup` b)
+atup2 :: (Arrays a, Arrays b)
+      => (Acc a, Acc b)
+      -> Acc (a, b)
+atup2 (a, b)
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
 
-atup3 :: (Arrays a, Arrays b, Arrays c) => (Acc a, Acc b, Acc c) -> Acc (a, b, c)
-atup3 (a, b, c) = Acc $ Atuple (NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c)
+atup3 :: (Arrays a, Arrays b, Arrays c)
+      => (Acc a, Acc b, Acc c)
+      -> Acc (a, b, c)
+atup3 (a, b, c)
+  = Acc $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
 
 atup4 :: (Arrays a, Arrays b, Arrays c, Arrays d)
-      => (Acc a, Acc b, Acc c, Acc d) -> Acc (a, b, c, d)
+      => (Acc a, Acc b, Acc c, Acc d)
+      -> Acc (a, b, c, d)
 atup4 (a, b, c, d)
-  = Acc $ Atuple (NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d)
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
 
 atup5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
-      => (Acc a, Acc b, Acc c, Acc d, Acc e) -> Acc (a, b, c, d, e)
+      => (Acc a, Acc b, Acc c, Acc d, Acc e)
+      -> Acc (a, b, c, d, e)
 atup5 (a, b, c, d, e)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
 
 atup6 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-      => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f) -> Acc (a, b, c, d, e, f)
+      => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
+      -> Acc (a, b, c, d, e, f)
 atup6 (a, b, c, d, e, f)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
-              `SnocAtup` d `SnocAtup` e `SnocAtup` f
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
 
 atup7 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
       -> Acc (a, b, c, d, e, f, g)
 atup7 (a, b, c, d, e, f, g)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
-              `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
 
 atup8 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
       -> Acc (a, b, c, d, e, f, g, h)
 atup8 (a, b, c, d, e, f, g, h)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d
-              `SnocAtup` e `SnocAtup` f `SnocAtup` g `SnocAtup` h
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
 
 atup9 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
       -> Acc (a, b, c, d, e, f, g, h, i)
 atup9 (a, b, c, d, e, f, g, h, i)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d
-              `SnocAtup` e `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
 
 atup10 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j)
        -> Acc (a, b, c, d, e, f, g, h, i, j)
 atup10 (a, b, c, d, e, f, g, h, i, j)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
-              `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
+            `SnocAtup` j
 
 atup11 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k)
 atup11 (a, b, c, d, e, f, g, h, i, j, k)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
-              `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
+            `SnocAtup` j
+            `SnocAtup` k
 
 atup12 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l)
 atup12 (a, b, c, d, e, f, g, h, i, j, k, l)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f
-              `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
+            `SnocAtup` j
+            `SnocAtup` k
+            `SnocAtup` l
 
 atup13 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m)
 atup13 (a, b, c, d, e, f, g, h, i, j, k, l, m)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f
-              `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
+            `SnocAtup` j
+            `SnocAtup` k
+            `SnocAtup` l
+            `SnocAtup` m
 
 atup14 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 atup14 (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
-              `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m `SnocAtup` n
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
+            `SnocAtup` j
+            `SnocAtup` k
+            `SnocAtup` l
+            `SnocAtup` m
+            `SnocAtup` n
 
 atup15 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 atup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-  = Acc $ Atuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
-              `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m `SnocAtup` n `SnocAtup` o
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
+            `SnocAtup` j
+            `SnocAtup` k
+            `SnocAtup` l
+            `SnocAtup` m
+            `SnocAtup` n
+            `SnocAtup` o
 
-unatup2 :: (Arrays a, Arrays b) => Acc (a, b) -> (Acc a, Acc b)
+unatup2 :: (Arrays a, Arrays b)
+        => Acc (a, b)
+        -> (Acc a, Acc b)
 unatup2 e =
-  ( Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
-unatup3 :: (Arrays a, Arrays b, Arrays c) => Acc (a, b, c) -> (Acc a, Acc b, Acc c)
+unatup3 :: (Arrays a, Arrays b, Arrays c)
+        => Acc (a, b, c)
+        -> (Acc a, Acc b, Acc c)
 unatup3 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
 unatup4
     :: (Arrays a, Arrays b, Arrays c, Arrays d)
-    => Acc (a, b, c, d) -> (Acc a, Acc b, Acc c, Acc d)
+    => Acc (a, b, c, d)
+    -> (Acc a, Acc b, Acc c, Acc d)
 unatup4 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix3 `Aprj` e
+  , Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
 unatup5
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
-    => Acc (a, b, c, d, e) -> (Acc a, Acc b, Acc c, Acc d, Acc e)
+    => Acc (a, b, c, d, e)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e)
 unatup5 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix4 `Aprj` e
+  , Acc $ tix3 `Aprj` e
+  , Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
 unatup6
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-    => Acc (a, b, c, d, e, f) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
+    => Acc (a, b, c, d, e, f)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
 unatup6 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix5 `Aprj` e
+  , Acc $ tix4 `Aprj` e
+  , Acc $ tix3 `Aprj` e
+  , Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
 unatup7
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
-    => Acc (a, b, c, d, e, f, g) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
+    => Acc (a, b, c, d, e, f, g)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
 unatup7 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix6 `Aprj` e
+  , Acc $ tix5 `Aprj` e
+  , Acc $ tix4 `Aprj` e
+  , Acc $ tix3 `Aprj` e
+  , Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
 unatup8
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
-    => Acc (a, b, c, d, e, f, g, h) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
+    => Acc (a, b, c, d, e, f, g, h)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
 unatup8 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix7 `Aprj` e
+  , Acc $ tix6 `Aprj` e
+  , Acc $ tix5 `Aprj` e
+  , Acc $ tix4 `Aprj` e
+  , Acc $ tix3 `Aprj` e
+  , Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
 unatup9
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
-    => Acc (a, b, c, d, e, f, g, h, i) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
+    => Acc (a, b, c, d, e, f, g, h, i)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
 unatup9 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e )
+  ( Acc $ tix8 `Aprj` e
+  , Acc $ tix7 `Aprj` e
+  , Acc $ tix6 `Aprj` e
+  , Acc $ tix5 `Aprj` e
+  , Acc $ tix4 `Aprj` e
+  , Acc $ tix3 `Aprj` e
+  , Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
-unatup10 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
-         => Acc (a, b, c, d, e, f, g, h, i, j) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j)
+unatup10
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
+    => Acc (a, b, c, d, e, f, g, h, i, j)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j)
 unatup10 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e)
+  ( Acc $ tix9 `Aprj` e
+  , Acc $ tix8 `Aprj` e
+  , Acc $ tix7 `Aprj` e
+  , Acc $ tix6 `Aprj` e
+  , Acc $ tix5 `Aprj` e
+  , Acc $ tix4 `Aprj` e
+  , Acc $ tix3 `Aprj` e
+  , Acc $ tix2 `Aprj` e
+  , Acc $ tix1 `Aprj` e
+  , Acc $ tix0 `Aprj` e )
 
-unatup11 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
-         => Acc (a, b, c, d, e, f, g, h, i, j, k) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k)
+unatup11
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
+    => Acc (a, b, c, d, e, f, g, h, i, j, k)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k)
 unatup11 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e)
+  ( Acc $ tix10 `Aprj` e
+  , Acc $ tix9  `Aprj` e
+  , Acc $ tix8  `Aprj` e
+  , Acc $ tix7  `Aprj` e
+  , Acc $ tix6  `Aprj` e
+  , Acc $ tix5  `Aprj` e
+  , Acc $ tix4  `Aprj` e
+  , Acc $ tix3  `Aprj` e
+  , Acc $ tix2  `Aprj` e
+  , Acc $ tix1  `Aprj` e
+  , Acc $ tix0  `Aprj` e )
 
-unatup12 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
-         => Acc (a, b, c, d, e, f, g, h, i, j, k, l) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l)
+unatup12
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
+    => Acc (a, b, c, d, e, f, g, h, i, j, k, l)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l)
 unatup12 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e)
+  ( Acc $ tix11 `Aprj` e
+  , Acc $ tix10 `Aprj` e
+  , Acc $ tix9  `Aprj` e
+  , Acc $ tix8  `Aprj` e
+  , Acc $ tix7  `Aprj` e
+  , Acc $ tix6  `Aprj` e
+  , Acc $ tix5  `Aprj` e
+  , Acc $ tix4  `Aprj` e
+  , Acc $ tix3  `Aprj` e
+  , Acc $ tix2  `Aprj` e
+  , Acc $ tix1  `Aprj` e
+  , Acc $ tix0  `Aprj` e )
 
-unatup13 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
-         => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m)
+unatup13
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
+    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m)
 unatup13 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e)
+  ( Acc $ tix12 `Aprj` e
+  , Acc $ tix11 `Aprj` e
+  , Acc $ tix10 `Aprj` e
+  , Acc $ tix9  `Aprj` e
+  , Acc $ tix8  `Aprj` e
+  , Acc $ tix7  `Aprj` e
+  , Acc $ tix6  `Aprj` e
+  , Acc $ tix5  `Aprj` e
+  , Acc $ tix4  `Aprj` e
+  , Acc $ tix3  `Aprj` e
+  , Acc $ tix2  `Aprj` e
+  , Acc $ tix1  `Aprj` e
+  , Acc $ tix0  `Aprj` e )
 
-unatup14 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
-         => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n)
+unatup14
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
+    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n)
 unatup14 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e)
+  ( Acc $ tix13 `Aprj` e
+  , Acc $ tix12 `Aprj` e
+  , Acc $ tix11 `Aprj` e
+  , Acc $ tix10 `Aprj` e
+  , Acc $ tix9  `Aprj` e
+  , Acc $ tix8  `Aprj` e
+  , Acc $ tix7  `Aprj` e
+  , Acc $ tix6  `Aprj` e
+  , Acc $ tix5  `Aprj` e
+  , Acc $ tix4  `Aprj` e
+  , Acc $ tix3  `Aprj` e
+  , Acc $ tix2  `Aprj` e
+  , Acc $ tix1  `Aprj` e
+  , Acc $ tix0  `Aprj` e )
 
-unatup15 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
-         => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
+unatup15
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
+    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
 unatup15 e =
-  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
-  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
-  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
-  , Acc $ ZeroTupIdx `Aprj` e)
-
+  ( Acc $ tix14 `Aprj` e
+  , Acc $ tix13 `Aprj` e
+  , Acc $ tix12 `Aprj` e
+  , Acc $ tix11 `Aprj` e
+  , Acc $ tix10 `Aprj` e
+  , Acc $ tix9  `Aprj` e
+  , Acc $ tix8  `Aprj` e
+  , Acc $ tix7  `Aprj` e
+  , Acc $ tix6  `Aprj` e
+  , Acc $ tix5  `Aprj` e
+  , Acc $ tix4  `Aprj` e
+  , Acc $ tix3  `Aprj` e
+  , Acc $ tix2  `Aprj` e
+  , Acc $ tix1  `Aprj` e
+  , Acc $ tix0  `Aprj` e )
 
 
 -- Smart constructors for stencil reification
@@ -936,6 +1077,7 @@ instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e) where
   stencilPrj _ _ s = (Exp $ Prj tix2 s,
                       Exp $ Prj tix1 s,
                       Exp $ Prj tix0 s)
+
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
     = (e, e, e, e, e)
@@ -944,6 +1086,7 @@ instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
                       Exp $ Prj tix2 s,
                       Exp $ Prj tix1 s,
                       Exp $ Prj tix0 s)
+
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
     = (e, e, e, e, e, e, e)
@@ -954,6 +1097,7 @@ instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp 
                       Exp $ Prj tix2 s,
                       Exp $ Prj tix1 s,
                       Exp $ Prj tix0 s)
+
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
   where
   type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
@@ -977,6 +1121,7 @@ instance (Stencil (sh:.Int) a row2,
   stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix2 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix1 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix0 s))
+
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -990,6 +1135,7 @@ instance (Stencil (sh:.Int) a row1,
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix2 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix1 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix0 s))
+
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -1009,6 +1155,7 @@ instance (Stencil (sh:.Int) a row1,
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix2 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix1 s),
                       stencilPrj (undefined::(sh:.Int)) a (Exp $ Prj tix0 s))
+
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -1061,6 +1208,24 @@ tix7 = SuccTupIdx tix6
 
 tix8 :: TupleIdx (((((((((t, s8), s7), s6), s5), s4), s3), s2), s1), s0) s8
 tix8 = SuccTupIdx tix7
+
+tix9 :: TupleIdx ((((((((((t, s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s9
+tix9 = SuccTupIdx tix8
+
+tix10 :: TupleIdx (((((((((((t, s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s10
+tix10 = SuccTupIdx tix9
+
+tix11 :: TupleIdx ((((((((((((t, s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s11
+tix11 = SuccTupIdx tix10
+
+tix12 :: TupleIdx (((((((((((((t, s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s12
+tix12 = SuccTupIdx tix11
+
+tix13 :: TupleIdx ((((((((((((((t, s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s13
+tix13 = SuccTupIdx tix12
+
+tix14 :: TupleIdx (((((((((((((((t, s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s14
+tix14 = SuccTupIdx tix13
 
 {--
 -- Smart constructors for array tuples in sequence computations
@@ -1184,272 +1349,405 @@ constant = Exp . Const
 -- Smart constructor and destructors for scalar tuples
 --
 tup2 :: (Elt a, Elt b) => (Exp a, Exp b) -> Exp (a, b)
-tup2 (a, b) = Exp $ Tuple (NilTup `SnocTup` a `SnocTup` b)
+tup2 (a, b)
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
 
-tup3 :: (Elt a, Elt b, Elt c) => (Exp a, Exp b, Exp c) -> Exp (a, b, c)
-tup3 (a, b, c) = Exp $ Tuple (NilTup `SnocTup` a `SnocTup` b `SnocTup` c)
+tup3 :: (Elt a, Elt b, Elt c)
+     => (Exp a, Exp b, Exp c)
+     -> Exp (a, b, c)
+tup3 (a, b, c)
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
 
 tup4 :: (Elt a, Elt b, Elt c, Elt d)
-     => (Exp a, Exp b, Exp c, Exp d) -> Exp (a, b, c, d)
+     => (Exp a, Exp b, Exp c, Exp d)
+     -> Exp (a, b, c, d)
 tup4 (a, b, c, d)
-  = Exp $ Tuple (NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d)
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
 
 tup5 :: (Elt a, Elt b, Elt c, Elt d, Elt e)
-     => (Exp a, Exp b, Exp c, Exp d, Exp e) -> Exp (a, b, c, d, e)
+     => (Exp a, Exp b, Exp c, Exp d, Exp e)
+     -> Exp (a, b, c, d, e)
 tup5 (a, b, c, d, e)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
 
 tup6 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) -> Exp (a, b, c, d, e, f)
+     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
+     -> Exp (a, b, c, d, e, f)
 tup6 (a, b, c, d, e, f)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e `SnocTup` f
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
 
 tup7 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
      -> Exp (a, b, c, d, e, f, g)
 tup7 (a, b, c, d, e, f, g)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c
-             `SnocTup` d `SnocTup` e `SnocTup` f `SnocTup` g
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
 
 tup8 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
      -> Exp (a, b, c, d, e, f, g, h)
 tup8 (a, b, c, d, e, f, g, h)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d
-             `SnocTup` e `SnocTup` f `SnocTup` g `SnocTup` h
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
 
 tup9 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
      -> Exp (a, b, c, d, e, f, g, h, i)
 tup9 (a, b, c, d, e, f, g, h, i)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d
-             `SnocTup` e `SnocTup` f `SnocTup` g `SnocTup` h `SnocTup` i
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
 
 tup10 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
       => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j)
       -> Exp (a, b, c, d, e, f, g, h, i, j)
 tup10 (a, b, c, d, e, f, g, h, i, j)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e
-             `SnocTup` f `SnocTup` g `SnocTup` h `SnocTup` i `SnocTup` j
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
+           `SnocTup` j
 
 tup11 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
       => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k)
       -> Exp (a, b, c, d, e, f, g, h, i, j, k)
 tup11 (a, b, c, d, e, f, g, h, i, j, k)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e
-             `SnocTup` f `SnocTup` g `SnocTup` h `SnocTup` i `SnocTup` j `SnocTup` k
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
+           `SnocTup` j
+           `SnocTup` k
 
 tup12 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
       => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l)
       -> Exp (a, b, c, d, e, f, g, h, i, j, k, l)
 tup12 (a, b, c, d, e, f, g, h, i, j, k, l)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e `SnocTup` f
-             `SnocTup` g `SnocTup` h `SnocTup` i `SnocTup` j `SnocTup` k `SnocTup` l
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
+           `SnocTup` j
+           `SnocTup` k
+           `SnocTup` l
 
 tup13 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
       => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m)
       -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m)
 tup13 (a, b, c, d, e, f, g, h, i, j, k, l, m)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e `SnocTup` f
-             `SnocTup` g `SnocTup` h `SnocTup` i `SnocTup` j `SnocTup` k `SnocTup` l `SnocTup` m
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
+           `SnocTup` j
+           `SnocTup` k
+           `SnocTup` l
+           `SnocTup` m
 
 tup14 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
       => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n)
       -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 tup14 (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e `SnocTup` f `SnocTup` g
-             `SnocTup` h `SnocTup` i `SnocTup` j `SnocTup` k `SnocTup` l `SnocTup` m `SnocTup` n
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
+           `SnocTup` j
+           `SnocTup` k
+           `SnocTup` l
+           `SnocTup` m
+           `SnocTup` n
 
 tup15 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
       => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o)
       -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 tup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-  = Exp $ Tuple $
-      NilTup `SnocTup` a `SnocTup` b `SnocTup` c `SnocTup` d `SnocTup` e `SnocTup` f `SnocTup` g
-             `SnocTup` h `SnocTup` i `SnocTup` j `SnocTup` k `SnocTup` l `SnocTup` m `SnocTup` n `SnocTup` o
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
+           `SnocTup` j
+           `SnocTup` k
+           `SnocTup` l
+           `SnocTup` m
+           `SnocTup` n
+           `SnocTup` o
 
 untup2 :: (Elt a, Elt b) => Exp (a, b) -> (Exp a, Exp b)
 untup2 e =
-  ( Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e )
+  ( Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup3 :: (Elt a, Elt b, Elt c) => Exp (a, b, c) -> (Exp a, Exp b, Exp c)
 untup3 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup4 :: (Elt a, Elt b, Elt c, Elt d)
-       => Exp (a, b, c, d) -> (Exp a, Exp b, Exp c, Exp d)
+       => Exp (a, b, c, d)
+       -> (Exp a, Exp b, Exp c, Exp d)
 untup4 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix3 `Prj` e
+  , Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup5 :: (Elt a, Elt b, Elt c, Elt d, Elt e)
-       => Exp (a, b, c, d, e) -> (Exp a, Exp b, Exp c, Exp d, Exp e)
+       => Exp (a, b, c, d, e)
+       -> (Exp a, Exp b, Exp c, Exp d, Exp e)
 untup5 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix4 `Prj` e
+  , Exp $ tix3 `Prj` e
+  , Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup6 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-       => Exp (a, b, c, d, e, f) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
+       => Exp (a, b, c, d, e, f)
+       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
 untup6 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix5 `Prj` e
+  , Exp $ tix4 `Prj` e
+  , Exp $ tix3 `Prj` e
+  , Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup7 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-       => Exp (a, b, c, d, e, f, g) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
+       => Exp (a, b, c, d, e, f, g)
+       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
 untup7 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix6 `Prj` e
+  , Exp $ tix5 `Prj` e
+  , Exp $ tix4 `Prj` e
+  , Exp $ tix3 `Prj` e
+  , Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup8 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-       => Exp (a, b, c, d, e, f, g, h) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
+       => Exp (a, b, c, d, e, f, g, h)
+       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
 untup8 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix7 `Prj` e
+  , Exp $ tix6 `Prj` e
+  , Exp $ tix5 `Prj` e
+  , Exp $ tix4 `Prj` e
+  , Exp $ tix3 `Prj` e
+  , Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup9 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-       => Exp (a, b, c, d, e, f, g, h, i) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
+       => Exp (a, b, c, d, e, f, g, h, i)
+       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
 untup9 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix8 `Prj` e
+  , Exp $ tix7 `Prj` e
+  , Exp $ tix6 `Prj` e
+  , Exp $ tix5 `Prj` e
+  , Exp $ tix4 `Prj` e
+  , Exp $ tix3 `Prj` e
+  , Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup10 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-        => Exp (a, b, c, d, e, f, g, h, i, j) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j)
+        => Exp (a, b, c, d, e, f, g, h, i, j)
+        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j)
 untup10 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix9 `Prj` e
+  , Exp $ tix8 `Prj` e
+  , Exp $ tix7 `Prj` e
+  , Exp $ tix6 `Prj` e
+  , Exp $ tix5 `Prj` e
+  , Exp $ tix4 `Prj` e
+  , Exp $ tix3 `Prj` e
+  , Exp $ tix2 `Prj` e
+  , Exp $ tix1 `Prj` e
+  , Exp $ tix0 `Prj` e )
 
 untup11 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k)
+        => Exp (a, b, c, d, e, f, g, h, i, j, k)
+        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k)
 untup11 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix10 `Prj` e
+  , Exp $ tix9  `Prj` e
+  , Exp $ tix8  `Prj` e
+  , Exp $ tix7  `Prj` e
+  , Exp $ tix6  `Prj` e
+  , Exp $ tix5  `Prj` e
+  , Exp $ tix4  `Prj` e
+  , Exp $ tix3  `Prj` e
+  , Exp $ tix2  `Prj` e
+  , Exp $ tix1  `Prj` e
+  , Exp $ tix0  `Prj` e )
 
 untup12 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l)
+        => Exp (a, b, c, d, e, f, g, h, i, j, k, l)
+        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l)
 untup12 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix11 `Prj` e
+  , Exp $ tix10 `Prj` e
+  , Exp $ tix9  `Prj` e
+  , Exp $ tix8  `Prj` e
+  , Exp $ tix7  `Prj` e
+  , Exp $ tix6  `Prj` e
+  , Exp $ tix5  `Prj` e
+  , Exp $ tix4  `Prj` e
+  , Exp $ tix3  `Prj` e
+  , Exp $ tix2  `Prj` e
+  , Exp $ tix1  `Prj` e
+  , Exp $ tix0  `Prj` e )
 
 untup13 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m)
+        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m)
+        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m)
 untup13 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix12 `Prj` e
+  , Exp $ tix11 `Prj` e
+  , Exp $ tix10 `Prj` e
+  , Exp $ tix9  `Prj` e
+  , Exp $ tix8  `Prj` e
+  , Exp $ tix7  `Prj` e
+  , Exp $ tix6  `Prj` e
+  , Exp $ tix5  `Prj` e
+  , Exp $ tix4  `Prj` e
+  , Exp $ tix3  `Prj` e
+  , Exp $ tix2  `Prj` e
+  , Exp $ tix1  `Prj` e
+  , Exp $ tix0  `Prj` e )
 
 untup14 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n)
+        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n)
 untup14 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix13 `Prj` e
+  , Exp $ tix12 `Prj` e
+  , Exp $ tix11 `Prj` e
+  , Exp $ tix10 `Prj` e
+  , Exp $ tix9  `Prj` e
+  , Exp $ tix8  `Prj` e
+  , Exp $ tix7  `Prj` e
+  , Exp $ tix6  `Prj` e
+  , Exp $ tix5  `Prj` e
+  , Exp $ tix4  `Prj` e
+  , Exp $ tix3  `Prj` e
+  , Exp $ tix2  `Prj` e
+  , Exp $ tix1  `Prj` e
+  , Exp $ tix0  `Prj` e )
 
 untup15 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o)
+        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o)
 untup15 e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e)
+  ( Exp $ tix14 `Prj` e
+  , Exp $ tix13 `Prj` e
+  , Exp $ tix12 `Prj` e
+  , Exp $ tix11 `Prj` e
+  , Exp $ tix10 `Prj` e
+  , Exp $ tix9  `Prj` e
+  , Exp $ tix8  `Prj` e
+  , Exp $ tix7  `Prj` e
+  , Exp $ tix6  `Prj` e
+  , Exp $ tix5  `Prj` e
+  , Exp $ tix4  `Prj` e
+  , Exp $ tix3  `Prj` e
+  , Exp $ tix2  `Prj` e
+  , Exp $ tix1  `Prj` e
+  , Exp $ tix0  `Prj` e )
+
 
 -- Smart constructor for constants
 --
