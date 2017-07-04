@@ -32,7 +32,6 @@ module Data.Array.Accelerate.Array.Representation (
 
 -- friends
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Type
 
 -- standard library
 import GHC.Base                                         ( quotInt, remInt )
@@ -56,8 +55,6 @@ class (Eq sh, Slice sh) => Shape sh where
   toIndex   :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
                                -- the array (first argument is the shape)
   fromIndex :: sh -> Int -> sh -- inverse of `toIndex`
-  bound     :: sh -> sh -> Boundary e -> Either e sh
-                               -- apply a boundary condition to an index
 
   iter      :: sh -> (sh -> a) -> (a -> a -> a) -> a -> a
                                -- iterate through the entire shape, applying the function in the
@@ -87,7 +84,6 @@ instance Shape () where
   size ()           = 1
   toIndex () ()     = 0
   fromIndex () _    = ()
-  bound () () _     = Right ()
   iter  () f _ _    = f ()
   iter1 () f _      = f ()
 
@@ -119,6 +115,7 @@ instance Shape sh => Shape (sh, Int) where
       r | rank sh == 0  = $indexCheck "fromIndex" i sz i
         | otherwise     = i `remInt` sz
 
+{--
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
                                         Clamp      -> next `addDim` 0
@@ -142,6 +139,7 @@ instance Shape sh => Shape (sh, Int) where
 
       Right ds `addDim` d = Right (ds, d)
       Left e   `addDim` _ = Left e
+--}
 
   iter (sh, sz) f c r = iter sh (\ix -> iter' (ix,0)) c r
     where

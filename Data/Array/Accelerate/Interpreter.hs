@@ -630,16 +630,11 @@ stencilOp
     -> Boundary (EltRepr a)
     -> Array sh a
     -> Array sh b
-stencilOp stencil boundary arr
+stencilOp stencil bndy arr
   = fromFunction sh f
   where
     sh          = shape arr
-    f           = stencil . stencilAccess bounded
-    --
-    bounded ix  =
-      case bound sh ix boundary of
-        Left v    -> toElt v
-        Right ix' -> arr ! ix'
+    f           = stencil . stencilAccess (bounded bndy arr)
 
 
 stencil2Op
@@ -650,23 +645,13 @@ stencil2Op
     -> Boundary (EltRepr b)
     -> Array sh b
     -> Array sh c
-stencil2Op stencil boundary1 arr1 boundary2 arr2
+stencil2Op stencil bndy1 arr1 bndy2 arr2
   = fromFunction (sh1 `intersect` sh2) f
   where
     sh1         = shape arr1
     sh2         = shape arr2
-    f ix        = stencil (stencilAccess bounded1 ix)
-                          (stencilAccess bounded2 ix)
-
-    bounded1 ix =
-      case bound sh1 ix boundary1 of
-        Left v    -> toElt v
-        Right ix' -> arr1 ! ix'
-
-    bounded2 ix =
-      case bound sh2 ix boundary2 of
-        Left v    -> toElt v
-        Right ix' -> arr2 ! ix'
+    f ix        = stencil (stencilAccess (bounded bndy1 arr1) ix)
+                          (stencilAccess (bounded bndy2 arr2) ix)
 
 
 stencilAccess
@@ -811,6 +796,68 @@ stencilAccess = goR stencil
             in  (i, (v1', v3))
         go _ _
           = $internalError "uncons" "expected index with Int components"
+
+
+bounded
+    :: (Shape sh, Elt e)
+    => Boundary (EltRepr e)
+    -> Array sh e
+    -> sh
+    -> e
+bounded bndy arr ix =
+  case bndy of
+    Constant v -> if inside (shape arr) ix
+                    then arr ! ix
+                    else toElt v
+    _          -> arr ! bound (shape arr) ix
+
+  where
+    -- Whether the index (second argument) is inside the bounds of the given
+    -- shape (first argument).
+    --
+    inside :: forall sh. Shape sh => sh -> sh -> Bool
+    inside sh1 ix1 = go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
+      where
+        go :: TupleType t -> t -> t -> Bool
+        go UnitTuple          ()       ()      = True
+        go (PairTuple tsh ti) (sh, sz) (ih,iz)
+          = if go ti sz iz
+              then go tsh sh ih
+              else False
+        go (SingleTuple t) sz iz
+          | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
+          = if iz < 0 || iz >= sz
+              then False
+              else True
+          --
+          | otherwise
+          = $internalError "inside" "expected index with Int components"
+
+    -- Return the index (second argument), updated to obey the given boundary
+    -- conditions when outside the bounds of the given shape (first argument)
+    --
+    bound :: forall sh. Shape sh => sh -> sh -> sh
+    bound sh1 ix1 = toElt $ go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
+      where
+        go :: TupleType t -> t -> t -> t
+        go UnitTuple          ()       ()       = ()
+        go (PairTuple tsh ti) (sh, sz) (ih, iz) = (go tsh sh ih, go ti sz iz)
+        go (SingleTuple t)    sz       iz
+          | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
+          = let i | iz < 0    = case bndy of
+                                  Clamp      -> 0
+                                  Mirror     -> -iz
+                                  Wrap       -> sz + iz
+                                  Constant{} -> $internalError "bound" "unexpected boundary condition"
+                  | iz >= sz  = case bndy of
+                                  Clamp      -> sz - 1
+                                  Mirror     -> sz - (iz - (sz + 2))
+                                  Wrap       -> iz - sz
+                                  Constant{} -> $internalError "bound" "unexpected boundary condition"
+                  | otherwise = iz
+            in i
+          | otherwise
+          = $internalError "bound" "expected index with Int components"
 
 
 -- toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
