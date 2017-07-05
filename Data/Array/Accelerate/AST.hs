@@ -635,21 +635,21 @@ type Boundary = PreBoundary OpenAcc
 -- | Boundary condition specification for stencil operations
 --
 data PreBoundary (acc :: * -> * -> *) aenv t where
-  -- | Clamp coordinates to the extent of the array
+  -- Clamp coordinates to the extent of the array
   Clamp     :: PreBoundary acc aenv t
 
-  -- | Mirror coordinates beyond the array extent
+  -- Mirror coordinates beyond the array extent
   Mirror    :: PreBoundary acc aenv t
 
-  -- | Wrap coordinates around on each dimension
+  -- Wrap coordinates around on each dimension
   Wrap      :: PreBoundary acc aenv t
 
-  -- | Use a constant value for outlying coordinates
+  -- Use a constant value for outlying coordinates
   Constant  :: Elt e
             => EltRepr e
             -> PreBoundary acc aenv (Array sh e)
 
-  -- | Apply the given function to outlying coordinates
+  -- Apply the given function to outlying coordinates
   Function  :: (Shape sh, Elt e)
             => PreFun acc aenv (sh -> e)
             -> PreBoundary acc aenv (Array sh e)

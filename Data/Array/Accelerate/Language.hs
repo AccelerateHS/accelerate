@@ -818,8 +818,8 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 --
 -- > s33 :: Stencil3x3 a -> Exp a
 -- > s33 ((_,t,_)
---       ,(l,c,r)
---       ,(_,b,_)) = ...
+-- >     ,(l,c,r)
+-- >     ,(_,b,_)) = ...
 --
 -- ...where @c@ is again the focal point and @t@, @b@, @l@ and @r@ are the
 -- elements to the top, bottom, left, and right of the focal point, respectively
@@ -843,8 +843,8 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- > gaussian = [0.06136,0.24477,0.38774,0.24477,0.06136]
 -- >
 -- > blur :: Num a => Acc (Array DIM2 a) -> Acc (Array DIM2 a)
--- > blur = stencil (convolve5x1 gaussian) Clamp
--- >      . stencil (convolve1x5 gaussian) Clamp
+-- > blur = stencil (convolve5x1 gaussian) clamp
+-- >      . stencil (convolve1x5 gaussian) clamp
 --
 stencil
     :: (Stencil sh a stencil, Elt b)
