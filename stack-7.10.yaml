@@ -71,11 +71,11 @@ flags:
     debug: false
     nvvm:  false
   accelerate-fft:
-    cuda:     true
+    cuda:     false
     llvm-cpu: true
     llvm-ptx: true
   accelerate-examples:
-    cuda:       true
+    cuda:       false
     llvm-cpu:   true
     llvm-ptx:   true
     gui:        true
