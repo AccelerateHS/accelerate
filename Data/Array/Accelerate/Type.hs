@@ -651,17 +651,6 @@ type instance BitSize CULong = $( case finiteBitSize (undefined::CULong) of
                                     _  -> error "I don't know what architecture I am"  )
 
 
--- Stencil support
--- ---------------
-
--- |Boundary condition specification for stencil operations.
---
-data Boundary a = Clamp               -- ^clamp coordinates to the extent of the array
-                | Mirror              -- ^mirror coordinates beyond the array extent
-                | Wrap                -- ^wrap coordinates around on each dimension
-                | Constant a          -- ^use a constant value for outlying coordinates
-                deriving (Show, Read)
-
 {-
 -- Vector GPU data types
 -- ---------------------

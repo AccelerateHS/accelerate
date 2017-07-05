@@ -42,9 +42,8 @@ import qualified Data.Sequence                          as Seq
 import qualified Data.HashSet                           as Set
 
 -- friends
-import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), Idx(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Elt, EltRepr, Tuple(..), Atuple(..), arrays, toElt, strForeign )
-import Data.Array.Accelerate.Type                       ( Boundary(..) )
+import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), Idx(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Shape, Elt, Tuple(..), Atuple(..), arrays, toElt, strForeign )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty.Print
@@ -249,10 +248,9 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppA xs ]
     Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
     Backpermute sh p xs     -> "backpermute" .$ [ ppSh sh, ppF p, ppA xs ]
-    Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB xs bndy, ppA xs ]
+    Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB bndy, ppA xs ]
     Stencil2 sten bndy1 acc1 bndy2 acc2
-                            -> "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
-                                                            ppB acc2 bndy2, ppA acc2 ]
+                            -> "stencil2"    .$ [ ppF sten, ppB bndy1, ppA acc1, ppB bndy2, ppA acc2 ]
     Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (text (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
     -- Collect{}               -> error "Collect"
 
@@ -312,14 +310,14 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
       return    $ PDoc (parens d) v
 
-    ppB :: forall sh e. Elt e
-        => {-dummy-} DelayedOpenAcc aenv (Array sh e)
-        -> Boundary (EltRepr e)
+    ppB :: forall sh e. (Shape sh, Elt e)
+        => PreBoundary DelayedOpenAcc aenv (Array sh e)
         -> Dot PDoc
-    ppB _ Clamp        = return (PDoc "Clamp"  [])
-    ppB _ Mirror       = return (PDoc "Mirror" [])
-    ppB _ Wrap         = return (PDoc "Wrap"   [])
-    ppB _ (Constant e) = return (PDoc (parens $ "Constant" <+> text (show (toElt e :: e))) [])
+    ppB Clamp        = return (PDoc "Clamp"  [])
+    ppB Mirror       = return (PDoc "Mirror" [])
+    ppB Wrap         = return (PDoc "Wrap"   [])
+    ppB (Constant e) = return (PDoc (parens $ "Constant" <+> text (show (toElt e :: e))) [])
+    ppB (Function f) = "Function" `fmt` [ ppF f ]
 
     ppF :: DelayedFun aenv t -> Dot PDoc
     ppF = return . uncurry PDoc . (parens . prettyDelayedFun aenv' &&& fvF)

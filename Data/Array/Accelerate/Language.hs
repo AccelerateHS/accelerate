@@ -68,7 +68,9 @@ module Data.Array.Accelerate.Language (
   stencil, stencil2,
 
   -- ** Stencil specification
-  Boundary(..), Stencil,
+  Boundary, Stencil,
+  clamp, mirror, wrap, function,
+
 
   -- ** Common stencil types
   Stencil3, Stencil5, Stencil7, Stencil9,
@@ -847,7 +849,7 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 stencil
     :: (Stencil sh a stencil, Elt b)
     => (stencil -> Exp b)                     -- ^ stencil function
-    -> Boundary a                             -- ^ boundary condition
+    -> Boundary (Array sh a)                  -- ^ boundary condition
     -> Acc (Array sh a)                       -- ^ source array
     -> Acc (Array sh b)                       -- ^ destination array
 stencil = Acc $$$ Stencil
@@ -859,13 +861,39 @@ stencil = Acc $$$ Stencil
 stencil2
     :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> Exp c)        -- ^ binary stencil function
-    -> Boundary a                             -- ^ boundary condition #1
+    -> Boundary (Array sh a)                  -- ^ boundary condition #1
     -> Acc (Array sh a)                       -- ^ source array #1
-    -> Boundary b                             -- ^ boundary condition #2
+    -> Boundary (Array sh b)                  -- ^ boundary condition #2
     -> Acc (Array sh b)                       -- ^ source array #2
     -> Acc (Array sh c)                       -- ^ destination array
 stencil2 = Acc $$$$$ Stencil2
 
+-- | Boundary condition where elements of the stencil which would be
+-- out-of-bounds are instead clamped to the edges of the array
+--
+clamp :: Boundary (Array sh e)
+clamp = Clamp
+
+-- | Stencil boundary condition where coordinates beyond the array extent are
+-- instead mirrored
+--
+mirror :: Boundary (Array sh e)
+mirror = Mirror
+
+-- | Stencil boundary condition where coordinates beyond the array extent
+-- instead wrap around the array.
+--
+wrap :: Boundary (Array sh e)
+wrap = Wrap
+
+-- | Stencil boundary condition where the given function is applied to any
+-- outlying coordinates.
+--
+function
+    :: (Shape sh, Elt e)
+    => (Exp sh -> Exp e)
+    -> Boundary (Array sh e)
+function = Function
 
 {--
 -- Sequence operations

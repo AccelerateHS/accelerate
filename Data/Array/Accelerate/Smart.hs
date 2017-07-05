@@ -28,7 +28,7 @@
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), Stencil(..), Level,
+  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary, PreBoundary(..), Stencil(..), Level,
 
   -- * Smart constructors for literals
   constant,
@@ -79,7 +79,7 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST                hiding ( PreOpenAcc(..), OpenAcc(..), Acc
                                                        , PreOpenExp(..), OpenExp, PreExp, Exp
-                                                       , Stencil(..)
+                                                       , Stencil(..), PreBoundary(..), Boundary
                                                        , showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST      as AST
 
@@ -376,16 +376,15 @@ data PreAcc acc exp as where
 
   Stencil       :: (Shape sh, Elt a, Elt b, Stencil sh a stencil)
                 => (stencil -> exp b)
-                -> Boundary a
+                -> PreBoundary acc exp (Array sh a)
                 -> acc (Array sh a)
                 -> PreAcc acc exp (Array sh b)
 
-  Stencil2      :: (Shape sh, Elt a, Elt b, Elt c,
-                   Stencil sh a stencil1, Stencil sh b stencil2)
+  Stencil2      :: (Shape sh, Elt a, Elt b, Elt c, Stencil sh a stencil1, Stencil sh b stencil2)
                 => (stencil1 -> stencil2 -> exp c)
-                -> Boundary a
+                -> PreBoundary acc exp (Array sh a)
                 -> acc (Array sh a)
-                -> Boundary b
+                -> PreBoundary acc exp (Array sh b)
                 -> acc (Array sh b)
                 -> PreAcc acc exp (Array sh c)
 
@@ -1057,6 +1056,25 @@ unatup15 e =
 
 -- Smart constructors for stencil reification
 -- ------------------------------------------
+
+-- newtype Boundary t = Boundary (PreBoundary Acc Exp t)
+type Boundary t = PreBoundary Acc Exp t
+
+-- | Boundary condition specification for stencil operations
+--
+data PreBoundary acc exp t where
+  Clamp     :: PreBoundary acc exp t
+  Mirror    :: PreBoundary acc exp t
+  Wrap      :: PreBoundary acc exp t
+
+  Constant  :: Elt e
+            => e
+            -> PreBoundary acc exp (Array sh e)
+
+  Function  :: (Shape sh, Elt e)
+            => (Exp sh -> exp e)
+            -> PreBoundary acc exp (Array sh e)
+
 
 -- Stencil reification
 --

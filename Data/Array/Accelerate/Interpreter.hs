@@ -61,7 +61,7 @@ import Unsafe.Coerce                                                ( unsafeCoer
 import Prelude                                                      hiding ( sum )
 
 -- friends
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST                                    hiding ( Boundary, PreBoundary(..) )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
@@ -70,6 +70,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.AST                          as AST
 import qualified Data.Array.Accelerate.Array.Representation         as R
 import qualified Data.Array.Accelerate.Smart                        as Sugar
 import qualified Data.Array.Accelerate.Trafo                        as AST
@@ -178,6 +179,9 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
       evalF :: DelayedFun aenv f -> f
       evalF fun = evalPreFun evalOpenAcc fun aenv
+
+      evalB :: AST.PreBoundary DelayedOpenAcc aenv t -> Boundary t
+      evalB bnd = evalPreBoundary evalOpenAcc bnd aenv
   in
   case pacc of
     Avar ix                     -> prj ix aenv
@@ -227,8 +231,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Scanr' f z acc              -> scanr'Op (evalF f) (evalE z) (delayed acc)
     Scanr1 f acc                -> scanr1Op (evalF f) (delayed acc)
     Permute f def p acc         -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
-    Stencil sten b acc          -> stencilOp (evalF sten) b (manifest acc)
-    Stencil2 sten b1 acc1 b2 acc2-> stencil2Op (evalF sten) b1 (manifest acc1) b2 (manifest acc2)
+    Stencil sten b acc          -> stencilOp (evalF sten) (evalB b) (manifest acc)
+    Stencil2 sten b1 a1 b2 a2   -> stencil2Op (evalF sten) (evalB b1) (manifest a1) (evalB b2) (manifest a2)
 
 -- Array tuple construction and projection
 --
@@ -627,32 +631,31 @@ backpermuteOp sh' p (Delayed _ arr _)
 stencilOp
     :: (Stencil sh a stencil, Elt b)
     => (stencil -> b)
-    -> Boundary (EltRepr a)
+    -> Boundary (Array sh a)
     -> Array sh a
     -> Array sh b
-stencilOp stencil bndy arr
+stencilOp stencil bnd arr
   = fromFunction sh f
   where
-    sh          = shape arr
-    f           = stencil . stencilAccess (bounded bndy arr)
+    sh  = shape arr
+    f   = stencil . stencilAccess (bounded bnd arr)
 
 
 stencil2Op
     :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> c)
-    -> Boundary (EltRepr a)
+    -> Boundary (Array sh a)
     -> Array sh a
-    -> Boundary (EltRepr b)
+    -> Boundary (Array sh b)
     -> Array sh b
     -> Array sh c
-stencil2Op stencil bndy1 arr1 bndy2 arr2
+stencil2Op stencil bnd1 arr1 bnd2 arr2
   = fromFunction (sh1 `intersect` sh2) f
   where
-    sh1         = shape arr1
-    sh2         = shape arr2
-    f ix        = stencil (stencilAccess (bounded bndy1 arr1) ix)
-                          (stencilAccess (bounded bndy2 arr2) ix)
-
+    sh1   = shape arr1
+    sh2   = shape arr2
+    f ix  = stencil (stencilAccess (bounded bnd1 arr1) ix)
+                    (stencilAccess (bounded bnd2 arr2) ix)
 
 stencilAccess
     :: Stencil sh e stencil
@@ -800,16 +803,18 @@ stencilAccess = goR stencil
 
 bounded
     :: (Shape sh, Elt e)
-    => Boundary (EltRepr e)
+    => Boundary (Array sh e)
     -> Array sh e
     -> sh
     -> e
-bounded bndy arr ix =
-  case bndy of
-    Constant v -> if inside (shape arr) ix
-                    then arr ! ix
-                    else toElt v
-    _          -> arr ! bound (shape arr) ix
+bounded bnd arr ix =
+  if inside (shape arr) ix
+    then arr ! ix
+    else
+      case bnd of
+        Function f -> f ix
+        Constant v -> toElt v
+        _          -> arr ! bound (shape arr) ix
 
   where
     -- Whether the index (second argument) is inside the bounds of the given
@@ -844,16 +849,16 @@ bounded bndy arr ix =
         go (PairTuple tsh ti) (sh, sz) (ih, iz) = (go tsh sh ih, go ti sz iz)
         go (SingleTuple t)    sz       iz
           | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
-          = let i | iz < 0    = case bndy of
-                                  Clamp      -> 0
-                                  Mirror     -> -iz
-                                  Wrap       -> sz + iz
-                                  Constant{} -> $internalError "bound" "unexpected boundary condition"
-                  | iz >= sz  = case bndy of
-                                  Clamp      -> sz - 1
-                                  Mirror     -> sz - (iz - (sz + 2))
-                                  Wrap       -> iz - sz
-                                  Constant{} -> $internalError "bound" "unexpected boundary condition"
+          = let i | iz < 0    = case bnd of
+                                  Clamp  -> 0
+                                  Mirror -> -iz
+                                  Wrap   -> sz + iz
+                                  _      -> $internalError "bound" "unexpected boundary condition"
+                  | iz >= sz  = case bnd of
+                                  Clamp  -> sz - 1
+                                  Mirror -> sz - (iz - (sz + 2))
+                                  Wrap   -> iz - sz
+                                  _      -> $internalError "bound" "unexpected boundary condition"
                   | otherwise = iz
             in i
           | otherwise
@@ -870,6 +875,28 @@ bounded bndy arr ix =
 --         -> [Array sl e]
 -- toSeqOp sliceIndex _ arr = map (sliceOp sliceIndex arr :: slix -> Array sl e)
 --                                (enumSlices sliceIndex (shape arr))
+
+
+-- Stencil boundary conditions
+-- ---------------------------
+
+data Boundary t where
+  Clamp    :: Boundary t
+  Mirror   :: Boundary t
+  Wrap     :: Boundary t
+  Constant :: Elt t => EltRepr t -> Boundary (Array sh t)
+  Function :: (Shape sh, Elt e) => (sh -> e) -> Boundary (Array sh e)
+
+
+evalPreBoundary :: EvalAcc acc -> AST.PreBoundary acc aenv t -> Val aenv -> Boundary t
+evalPreBoundary evalAcc bnd aenv =
+  case bnd of
+    AST.Clamp      -> Clamp
+    AST.Mirror     -> Mirror
+    AST.Wrap       -> Wrap
+    AST.Constant v -> Constant v
+    AST.Function f -> Function (evalPreFun evalAcc f aenv)
+
 
 -- Scalar expression evaluation
 -- ----------------------------

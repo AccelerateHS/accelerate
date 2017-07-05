@@ -56,7 +56,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..), OpenAcc(..), Acc
                                                                , PreOpenExp(..), OpenExp, PreExp, Exp
-                                                               , Stencil(..)
+                                                               , PreBoundary(..), Boundary, Stencil(..)
                                                                , showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Debug            as Debug
@@ -301,13 +301,13 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Backpermute newDim perm acc -> AST.Backpermute (cvtE newDim) (cvtF1 perm) (cvtA acc)
       Stencil stencil boundary acc
         -> AST.Stencil (convertSharingStencilFun1 config acc alyt aenv' stencil)
-                       (convertBoundary boundary)
+                       (convertSharingBoundary config alyt aenv' boundary)
                        (cvtA acc)
       Stencil2 stencil bndy1 acc1 bndy2 acc2
         -> AST.Stencil2 (convertSharingStencilFun2 config acc1 acc2 alyt aenv' stencil)
-                        (convertBoundary bndy1)
+                        (convertSharingBoundary config alyt aenv' bndy1)
                         (cvtA acc1)
-                        (convertBoundary bndy2)
+                        (convertSharingBoundary config alyt aenv' bndy2)
                         (cvtA acc2)
       -- Collect seq -> AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
 
@@ -517,11 +517,23 @@ convertSharingAtuple config alyt aenv = cvt
 
 -- | Convert a boundary condition
 --
-convertBoundary :: Elt e => Boundary e -> Boundary (EltRepr e)
-convertBoundary Clamp        = Clamp
-convertBoundary Mirror       = Mirror
-convertBoundary Wrap         = Wrap
-convertBoundary (Constant e) = Constant (fromElt e)
+convertSharingBoundary
+    :: forall aenv t.
+       Config
+    -> Layout aenv aenv
+    -> [StableSharingAcc]
+    -> PreBoundary ScopedAcc ScopedExp t
+    -> AST.PreBoundary AST.OpenAcc aenv t
+convertSharingBoundary config alyt aenv = cvt
+  where
+    cvt :: PreBoundary ScopedAcc ScopedExp t -> AST.Boundary aenv t
+    cvt bndy =
+      case bndy of
+        Clamp       -> AST.Clamp
+        Mirror      -> AST.Mirror
+        Wrap        -> AST.Wrap
+        Constant v  -> AST.Constant $ fromElt v
+        Function f  -> AST.Function $ convertSharingFun1 config alyt aenv f
 
 
 -- Smart constructors to represent AST forms
@@ -1237,6 +1249,20 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
+    traverseBoundary
+        :: Level
+        -> PreBoundary Acc Exp t
+        -> IO (PreBoundary UnscopedAcc RootExp t, Int)
+    traverseBoundary lvl bndy =
+      case bndy of
+        Clamp      -> return (Clamp, 0)
+        Mirror     -> return (Mirror, 0)
+        Wrap       -> return (Wrap, 0)
+        Constant v -> return (Constant v, 0)
+        Function f -> do
+          (f', h) <- traverseFun1 lvl f
+          return (Function f', h)
+
     -- traverseSeq :: forall arrs. Typeable arrs
     --             => Level -> Seq arrs
     --             -> IO (RootSeq arrs, Int)
@@ -1346,15 +1372,18 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              return (Backpermute e' p' acc', h1 `max` h2 `max` h3 + 1)
             Stencil s bnd acc           -> reconstruct $ do
                                              (s'  , h1) <- makeOccMapStencil1 config accOccMap acc lvl s
-                                             (acc', h2) <- traverseAcc lvl acc
-                                             return (Stencil s' bnd acc', h1 `max` h2 + 1)
+                                             (bnd', h2) <- traverseBoundary lvl bnd
+                                             (acc', h3) <- traverseAcc lvl acc
+                                             return (Stencil s' bnd' acc', h1 `max` h2 `max` h3 + 1)
             Stencil2 s bnd1 acc1
                        bnd2 acc2        -> reconstruct $ do
                                              (s'   , h1) <- makeOccMapStencil2 config accOccMap acc1 acc2 lvl s
-                                             (acc1', h2) <- traverseAcc lvl acc1
-                                             (acc2', h3) <- traverseAcc lvl acc2
-                                             return (Stencil2 s' bnd1 acc1' bnd2 acc2',
-                                                     h1 `max` h2 `max` h3 + 1)
+                                             (bnd1', h2) <- traverseBoundary lvl bnd1
+                                             (acc1', h3) <- traverseAcc lvl acc1
+                                             (bnd2', h4) <- traverseBoundary lvl bnd2
+                                             (acc2', h5) <- traverseAcc lvl acc2
+                                             return (Stencil2 s' bnd1' acc1' bnd2' acc2',
+                                                     h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
             -- Collect s                   -> reconstruct $ do
             --                                  (s', h) <- traverseSeq lvl s
             --                                  return (Collect s', h + 1)
@@ -2185,17 +2214,20 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                        (accCount1 +++ accCount2 +++ accCount3)
           Stencil st bnd acc      -> let
                                        (st' , accCount1) = scopesStencil1 acc st
-                                       (acc', accCount2) = scopesAcc      acc
+                                       (bnd', accCount2) = scopesBoundary bnd
+                                       (acc', accCount3) = scopesAcc acc
                                      in
-                                     reconstruct (Stencil st' bnd acc') (accCount1 +++ accCount2)
+                                     reconstruct (Stencil st' bnd' acc') (accCount1 +++ accCount2 +++ accCount3)
           Stencil2 st bnd1 acc1 bnd2 acc2
                                   -> let
                                        (st'  , accCount1) = scopesStencil2 acc1 acc2 st
-                                       (acc1', accCount2) = scopesAcc acc1
-                                       (acc2', accCount3) = scopesAcc acc2
+                                       (bnd1', accCount2) = scopesBoundary bnd1
+                                       (acc1', accCount3) = scopesAcc acc1
+                                       (bnd2', accCount4) = scopesBoundary bnd2
+                                       (acc2', accCount5) = scopesAcc acc2
                                      in
-                                     reconstruct (Stencil2 st' bnd1 acc1' bnd2 acc2')
-                                       (accCount1 +++ accCount2 +++ accCount3)
+                                     reconstruct (Stencil2 st' bnd1' acc1' bnd2' acc2')
+                                       (accCount1 +++ accCount2 +++ accCount3 +++ accCount4 +++ accCount5)
           -- Collect seq             -> let
           --                              (seq', accCount1) = scopesSeq seq
           --                            in
@@ -2405,6 +2437,17 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     scopesStencil2 _ _ stencilFun = (\_ _ -> body, counts)
       where
         (body, counts) = scopesExp (stencilFun undefined undefined)
+
+    scopesBoundary :: PreBoundary UnscopedAcc RootExp t
+                   -> (PreBoundary ScopedAcc ScopedExp t, NodeCounts)
+    scopesBoundary bndy =
+      case bndy of
+        Clamp      -> (Clamp, noNodeCounts)
+        Mirror     -> (Mirror, noNodeCounts)
+        Wrap       -> (Wrap, noNodeCounts)
+        Constant v -> (Constant v, noNodeCounts)
+        Function f -> let (body, counts) = scopesFun1 f
+                      in  (Function body, counts)
 
 
 determineScopesExp
@@ -2794,6 +2837,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
 --     environment for de Bruijn conversion will have a duplicate entry, and hence, be of the wrong
 --     size, which is fatal. (The 'buildInitialEnv*' functions will already bail out.)
 --
+{-# NOINLINE recoverSharingAcc #-}
 recoverSharingAcc
     :: Typeable a
     => Config
@@ -2801,7 +2845,6 @@ recoverSharingAcc
     -> [Level]          -- The tags of newly introduced free array variables
     -> Acc a
     -> (ScopedAcc a, [StableSharingAcc])
-{-# NOINLINE recoverSharingAcc #-}
 recoverSharingAcc config alvl avars acc
   = let (acc', occMap)
           = unsafePerformIO             -- to enable stable pointers; this is safe as explained above
@@ -2810,6 +2853,7 @@ recoverSharingAcc config alvl avars acc
     determineScopesAcc config avars occMap acc'
 
 
+{-# NOINLINE recoverSharingExp #-}
 recoverSharingExp
     :: Typeable e
     => Config
@@ -2817,7 +2861,6 @@ recoverSharingExp
     -> [Level]          -- The tags of newly introduced free scalar variables
     -> Exp e
     -> (ScopedExp e, [StableSharingExp])
-{-# NOINLINE recoverSharingExp #-}
 recoverSharingExp config lvl fvar exp
   = let
         (rootExp, accOccMap) = unsafePerformIO $ do
@@ -2834,12 +2877,12 @@ recoverSharingExp config lvl fvar exp
 
 
 {--
+{-# NOINLINE recoverSharingSeq #-}
 recoverSharingSeq
     :: Typeable e
     => Config
     -> Seq e
     -> (ScopedSeq e, [StableSharingSeq])
-{-# NOINLINE recoverSharingSeq #-}
 recoverSharingSeq config seq
   = let
         (rootSeq, accOccMap) = unsafePerformIO $ do
