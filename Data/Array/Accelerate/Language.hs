@@ -852,7 +852,7 @@ stencil
     -> Boundary (Array sh a)                  -- ^ boundary condition
     -> Acc (Array sh a)                       -- ^ source array
     -> Acc (Array sh b)                       -- ^ destination array
-stencil = Acc $$$ Stencil
+stencil f (Boundary b) a = Acc $ Stencil f b a
 
 -- | Map a binary stencil of an array. The extent of the resulting array is the
 -- intersection of the extents of the two source arrays. This is the stencil
@@ -866,25 +866,25 @@ stencil2
     -> Boundary (Array sh b)                  -- ^ boundary condition #2
     -> Acc (Array sh b)                       -- ^ source array #2
     -> Acc (Array sh c)                       -- ^ destination array
-stencil2 = Acc $$$$$ Stencil2
+stencil2 f (Boundary b1) a1 (Boundary b2) a2 = Acc $ Stencil2 f b1 a1 b2 a2
 
 -- | Boundary condition where elements of the stencil which would be
 -- out-of-bounds are instead clamped to the edges of the array
 --
 clamp :: Boundary (Array sh e)
-clamp = Clamp
+clamp = Boundary Clamp
 
 -- | Stencil boundary condition where coordinates beyond the array extent are
 -- instead mirrored
 --
 mirror :: Boundary (Array sh e)
-mirror = Mirror
+mirror = Boundary Mirror
 
 -- | Stencil boundary condition where coordinates beyond the array extent
 -- instead wrap around the array.
 --
 wrap :: Boundary (Array sh e)
-wrap = Wrap
+wrap = Boundary Wrap
 
 -- | Stencil boundary condition where the given function is applied to any
 -- outlying coordinates.
@@ -893,7 +893,7 @@ function
     :: (Shape sh, Elt e)
     => (Exp sh -> Exp e)
     -> Boundary (Array sh e)
-function = Function
+function = Boundary . Function
 
 {--
 -- Sequence operations

@@ -28,7 +28,7 @@
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary, PreBoundary(..), Stencil(..), Level,
+  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), PreBoundary(..), Stencil(..), Level,
 
   -- * Smart constructors for literals
   constant,
@@ -1054,14 +1054,13 @@ unatup15 e =
   , Acc $ tix0  `Aprj` e )
 
 
--- Smart constructors for stencil reification
--- ------------------------------------------
-
--- newtype Boundary t = Boundary (PreBoundary Acc Exp t)
-type Boundary t = PreBoundary Acc Exp t
+-- Smart constructors for stencils
+-- -------------------------------
 
 -- | Boundary condition specification for stencil operations
 --
+newtype Boundary t = Boundary (PreBoundary Acc Exp t)
+
 data PreBoundary acc exp t where
   Clamp     :: PreBoundary acc exp t
   Mirror    :: PreBoundary acc exp t
