@@ -117,10 +117,10 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppB :: forall sh e. (Shape sh, Elt e)
         => PreBoundary acc aenv (Array sh e)
         -> Doc
-    ppB Clamp        = text "Clamp"
-    ppB Mirror       = text "Mirror"
-    ppB Wrap         = text "Wrap"
-    ppB (Constant e) = parens $ text "Constant" <+> text (show (toElt e :: e))
+    ppB Clamp        = text "clamp"
+    ppB Mirror       = text "mirror"
+    ppB Wrap         = text "wrap"
+    ppB (Constant e) = parens $ text "constant" <+> text (show (toElt e :: e))
     ppB (Function f) = ppF f
 
     -- pretty print a named array operation with its arguments
