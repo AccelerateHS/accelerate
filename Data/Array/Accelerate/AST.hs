@@ -1627,10 +1627,24 @@ liftArrays (ArraysRpair r1 r2) (a1,a2) = [|| ($$(liftArrays r1 a1), $$(liftArray
 
 liftArray :: forall sh e. Array sh e -> Q (TExp (Array sh e))
 liftArray (Array sh adata) =
-  [|| (Array $$(liftConst (eltType (undefined::sh)) sh) $$(go arrayElt adata)) ||]
+  [|| Array $$(liftConst (eltType (undefined::sh)) sh) $$(go arrayElt adata) ||] `sigE` typeRepToType (typeOf (undefined::Array sh e))
   where
     sz :: Int
     sz = size sh
+
+    sigE :: Q (TExp t) -> Q TH.Type -> Q (TExp t)
+    sigE e t = TH.unsafeTExpCoerce $ TH.sigE (TH.unTypeQ e) t
+
+    typeRepToType :: TypeRep -> Q TH.Type
+    typeRepToType trep = do
+      let (con, args)     = splitTyConApp trep
+          name            = TH.Name (TH.OccName (tyConName con)) (TH.NameG TH.TcClsName (TH.PkgName (tyConPackage con)) (TH.ModName (tyConModule con)))
+          --
+          appsT x []      = x
+          appsT x (y:xs)  = appsT (TH.AppT x y) xs
+          --
+      resultArgs <- mapM typeRepToType args
+      return (appsT (TH.ConT name) resultArgs)
 
     -- TODO: make sure that the resulting array is 16-byte aligned...
     arr :: forall a. (ArrayElt a, Storable a) => UniqueArray a -> Q (TExp (UniqueArray a))
@@ -1638,7 +1652,7 @@ liftArray (Array sh adata) =
       bytes <- TH.runIO $ peekArray (sizeOf (undefined::a) * sz) (castPtr (unsafeUniqueArrayPtr ua) :: Ptr Word8)
       [|| unsafePerformIO $ do
            fp  <- newForeignPtr_ $$( TH.unsafeTExpCoerce [| Ptr $(TH.litE (TH.StringPrimL bytes)) |] )
-           ua' <- newUniqueArray (castForeignPtr fp :: ForeignPtr a)
+           ua' <- newUniqueArray (castForeignPtr fp)
            return ua'
        ||]
 
