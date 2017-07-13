@@ -260,6 +260,16 @@ instance RebuildableAcc acc => Sink (RebuildTup acc env) where
   {-# INLINEABLE weaken #-}
   weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
+instance RebuildableAcc acc => Sink (PreBoundary acc) where
+  {-# INLINEABLE weaken #-}
+  weaken k bndy =
+    case bndy of
+      Clamp      -> Clamp
+      Mirror     -> Mirror
+      Wrap       -> Wrap
+      Constant c -> Constant c
+      Function f -> Function (weaken k f)
+
 instance Sink OpenAcc where
   {-# INLINEABLE weaken #-}
   weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
@@ -495,8 +505,8 @@ rebuildPreOpenAcc k av acc =
     Scanr1 f a              -> Scanr1       <$> rebuildFun k (pure . IE) av f <*> k av a
     Permute f1 a1 f2 a2     -> Permute      <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
     Backpermute sh f a      -> Backpermute  <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
-    Stencil f b a           -> Stencil      <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
-    Stencil2 f b1 a1 b2 a2  -> Stencil2     <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
+    Stencil f b a           -> Stencil      <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b  <*> k av a
+    Stencil2 f b1 a1 b2 a2  -> Stencil2     <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b1 <*> k av a1 <*> rebuildBoundary k av b2 <*> k av a2
     -- Collect seq             -> Collect      <$> rebuildSeq k av seq
     Aforeign ff afun as     -> Aforeign ff afun <$> k av as
 
@@ -523,6 +533,21 @@ rebuildAtup k av atup =
   case atup of
     NilAtup      -> pure NilAtup
     SnocAtup t a -> SnocAtup <$> rebuildAtup k av t <*> k av a
+
+{-# INLINEABLE rebuildBoundary #-}
+rebuildBoundary
+    :: (Applicative f, SyntacticAcc fa)
+    => RebuildAcc acc
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> PreBoundary acc aenv t
+    -> f (PreBoundary acc aenv' t)
+rebuildBoundary k av bndy =
+  case bndy of
+    Clamp       -> pure Clamp
+    Mirror      -> pure Mirror
+    Wrap        -> pure Wrap
+    Constant v  -> pure (Constant v)
+    Function f  -> Function <$> rebuildFun k (pure . IE) av f
 
 {--
 {-# INLINEABLE rebuildSeq #-}

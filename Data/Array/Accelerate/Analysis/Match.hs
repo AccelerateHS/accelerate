@@ -245,20 +245,18 @@ matchPreOpenAcc matchAcc hashAcc = match
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Stencil f1 b1 (a1 :: acc aenv (Array sh1 e1)))
-          (Stencil f2 b2 (a2 :: acc aenv (Array sh2 e2)))
+    match (Stencil f1 b1 a1) (Stencil f2 b2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
-      , matchBoundary (eltType (undefined::e1)) b1 b2
+      , matchBoundary matchAcc hashAcc b1 b2
       = Just Refl
 
-    match (Stencil2 f1 b1  (a1  :: acc aenv (Array sh1  e1 )) b2  (a2 :: acc aenv (Array sh2  e2 )))
-          (Stencil2 f2 b1' (a1' :: acc aenv (Array sh1' e1')) b2' (a2':: acc aenv (Array sh2' e2')))
+    match (Stencil2 f1 b1  a1  b2  a2) (Stencil2 f2 b1' a1' b2' a2')
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a1'
       , Just Refl <- matchAcc a2 a2'
-      , matchBoundary (eltType (undefined::e1)) b1 b1'
-      , matchBoundary (eltType (undefined::e2)) b2 b2'
+      , matchBoundary matchAcc hashAcc b1 b1'
+      , matchBoundary matchAcc hashAcc b2 b2'
       = Just Refl
 
     -- match (Collect s1) (Collect s2)
@@ -312,12 +310,22 @@ matchPreOpenAfun _ _         _         = Nothing
 
 -- Match stencil boundaries
 --
-matchBoundary :: TupleType e -> Boundary e -> Boundary e -> Bool
-matchBoundary ty (Constant s) (Constant t) = matchConst ty s t
-matchBoundary _  Wrap         Wrap         = True
-matchBoundary _  Clamp        Clamp        = True
-matchBoundary _  Mirror       Mirror       = True
-matchBoundary _  _            _            = False
+matchBoundary
+    :: forall acc aenv sh t. Elt t
+    => MatchAcc acc
+    -> HashAcc acc
+    -> PreBoundary acc aenv (Array sh t)
+    -> PreBoundary acc aenv (Array sh t)
+    -> Bool
+matchBoundary _ _ Clamp        Clamp        = True
+matchBoundary _ _ Mirror       Mirror       = True
+matchBoundary _ _ Wrap         Wrap         = True
+matchBoundary _ _ (Constant s) (Constant t) = matchConst (eltType (undefined::t)) s t
+matchBoundary m h (Function f) (Function g)
+  | Just Refl <- matchPreOpenFun m h f g
+  = True
+matchBoundary _ _ _ _
+  = False
 
 
 {--
@@ -1040,6 +1048,9 @@ hashPreOpenAcc hashAcc pacc =
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
+    hashB :: Int -> PreBoundary acc aenv' (Array sh e) -> Int
+    hashB salt = hashWithSalt salt . hashPreBoundary hashAcc
+
     -- hashS :: Int -> PreOpenSeq acc aenv senv arrs -> Int
     -- hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
@@ -1073,8 +1084,8 @@ hashPreOpenAcc hashAcc pacc =
     Scanr1 f a                  -> hash "Scanr1"        `hashF` f  `hashA` a
     Backpermute sh f a          -> hash "Backpermute"   `hashF` f  `hashE` sh `hashA` a
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
-    Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
-    Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
+    Stencil f b a               -> hash "Stencil"       `hashF` f  `hashB` b  `hashA` a
+    Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashB` b1 `hashA` a1 `hashB` b2 `hashA` a2
     -- Collect s                   -> hash "Seq"           `hashS` s
 
 
@@ -1093,17 +1104,18 @@ hashArraysType ArraysRarray        = hash "ArraysRarray" `hashWithSalt` hashArra
 
 hashAtuple :: HashAcc acc -> Atuple (acc aenv) a -> Int
 hashAtuple _ NilAtup            = hash "NilAtup"
-hashAtuple h (SnocAtup t a)     = hash "SnocAtup"       `hashWithSalt` hashAtuple h t `hashWithSalt` h a
+hashAtuple h (SnocAtup t a)     = hash "SnocAtup" `hashWithSalt` hashAtuple h t `hashWithSalt` h a
 
 hashAfun :: HashAcc acc -> PreOpenAfun acc aenv f -> Int
-hashAfun h (Abody b)            = hash "Abody"          `hashWithSalt` h b
-hashAfun h (Alam f)             = hash "Alam"           `hashWithSalt` hashAfun h f
+hashAfun h (Abody b)            = hash "Abody" `hashWithSalt` h b
+hashAfun h (Alam f)             = hash "Alam"  `hashWithSalt` hashAfun h f
 
-hashBoundary :: forall acc aenv sh e. Elt e => acc aenv (Array sh e) -> Boundary (EltRepr e) -> Int
-hashBoundary _ Wrap             = hash "Wrap"
-hashBoundary _ Clamp            = hash "Clamp"
-hashBoundary _ Mirror           = hash "Mirror"
-hashBoundary _ (Constant c)     = hash "Constant"       `hashWithSalt` show (toElt c :: e)
+hashPreBoundary :: forall acc aenv sh e. HashAcc acc -> PreBoundary acc aenv (Array sh e) -> Int
+hashPreBoundary _ Wrap          = hash "Wrap"
+hashPreBoundary _ Clamp         = hash "Clamp"
+hashPreBoundary _ Mirror        = hash "Mirror"
+hashPreBoundary _ (Constant v)  = hash "Constant" `hashWithSalt` show (toElt v :: e)
+hashPreBoundary h (Function f)  = hash "Function" `hashWithSalt` hashPreOpenFun h f
 
 
 -- Scalar expressions

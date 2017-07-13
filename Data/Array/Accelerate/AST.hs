@@ -91,7 +91,7 @@ module Data.Array.Accelerate.AST (
 
   -- * Accelerated array expressions
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
-  Stencil(..), StencilR(..),
+  PreBoundary(..), Boundary, Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
   -- PreOpenSeq(..), Seq,
@@ -491,22 +491,19 @@ data PreOpenAcc acc aenv a where
   -- Map a stencil over an array.  In contrast to 'map', the domain of a stencil function is an
   -- entire /neighbourhood/ of each array element.
   Stencil     :: (Elt e, Elt e', Stencil sh e stencil)
-              => PreFun     acc aenv (stencil -> e')            -- stencil function
-              -> Boundary            (EltRepr e)                -- boundary condition
-              -> acc            aenv (Array sh e)               -- source array
-              -> PreOpenAcc acc aenv (Array sh e')
+              => PreFun      acc aenv (stencil -> e')           -- stencil function
+              -> PreBoundary acc aenv (Array sh e)              -- boundary condition
+              -> acc             aenv (Array sh e)              -- source array
+              -> PreOpenAcc  acc aenv (Array sh e')
 
   -- Map a binary stencil over an array.
-  Stencil2    :: (Elt e1, Elt e2, Elt e',
-                  Stencil sh e1 stencil1,
-                  Stencil sh e2 stencil2)
-              => PreFun     acc aenv (stencil1 ->
-                                      stencil2 -> e')           -- stencil function
-              -> Boundary            (EltRepr e1)               -- boundary condition #1
-              -> acc            aenv (Array sh e1)              -- source array #1
-              -> Boundary            (EltRepr e2)               -- boundary condition #2
-              -> acc            aenv (Array sh e2)              -- source array #2
-              -> PreOpenAcc acc aenv (Array sh e')
+  Stencil2    :: (Elt a, Elt b, Elt c, Stencil sh a stencil1, Stencil sh b stencil2)
+              => PreFun      acc aenv (stencil1 -> stencil2 -> c) -- stencil function
+              -> PreBoundary acc aenv (Array sh a)                -- boundary condition #1
+              -> acc             aenv (Array sh a)                -- source array #1
+              -> PreBoundary acc aenv (Array sh b)                -- boundary condition #2
+              -> acc             aenv (Array sh b)                -- source array #2
+              -> PreOpenAcc acc  aenv (Array sh c)
 
   -- A sequence of operations.
   -- Collect     :: Arrays arrs
@@ -631,28 +628,52 @@ type Seq = PreOpenSeq OpenAcc () ()
 --}
 
 
--- |Operations on stencils.
+-- | Vanilla stencil boundary condition
+--
+type Boundary = PreBoundary OpenAcc
+
+-- | Boundary condition specification for stencil operations
+--
+data PreBoundary (acc :: * -> * -> *) aenv t where
+  -- Clamp coordinates to the extent of the array
+  Clamp     :: PreBoundary acc aenv t
+
+  -- Mirror coordinates beyond the array extent
+  Mirror    :: PreBoundary acc aenv t
+
+  -- Wrap coordinates around on each dimension
+  Wrap      :: PreBoundary acc aenv t
+
+  -- Use a constant value for outlying coordinates
+  Constant  :: Elt e
+            => EltRepr e
+            -> PreBoundary acc aenv (Array sh e)
+
+  -- Apply the given function to outlying coordinates
+  Function  :: (Shape sh, Elt e)
+            => PreFun acc aenv (sh -> e)
+            -> PreBoundary acc aenv (Array sh e)
+
+
+-- | Operations on stencils
 --
 class (Shape sh, Elt e, IsTuple stencil, Elt stencil) => Stencil sh e stencil where
-  stencil       :: StencilR sh e stencil
-  stencilAccess :: (sh -> e) -> sh -> stencil
+  stencil :: StencilR sh e stencil
 
--- |GADT reifying the 'Stencil' class.
+-- | GADT reifying the 'Stencil' class
 --
 data StencilR sh e pat where
-  StencilRunit3 :: (Elt e)
-                => StencilR DIM1 e (e,e,e)
-  StencilRunit5 :: (Elt e)
-                => StencilR DIM1 e (e,e,e,e,e)
-  StencilRunit7 :: (Elt e)
-                => StencilR DIM1 e (e,e,e,e,e,e,e)
-  StencilRunit9 :: (Elt e)
-                => StencilR DIM1 e (e,e,e,e,e,e,e,e,e)
+  StencilRunit3 :: Elt e => StencilR DIM1 e (e,e,e)
+  StencilRunit5 :: Elt e => StencilR DIM1 e (e,e,e,e,e)
+  StencilRunit7 :: Elt e => StencilR DIM1 e (e,e,e,e,e,e,e)
+  StencilRunit9 :: Elt e => StencilR DIM1 e (e,e,e,e,e,e,e,e,e)
+
   StencilRtup3  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
                 -> StencilR sh e pat3
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3)
+
   StencilRtup5  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -660,6 +681,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat4
                 -> StencilR sh e pat5
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5)
+
   StencilRtup7  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -669,6 +691,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat6
                 -> StencilR sh e pat7
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7)
+
   StencilRtup9  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -682,75 +705,33 @@ data StencilR sh e pat where
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7,pat8,pat9)
 
 
--- NB: We cannot start with 'DIM0'.  The 'IsTuple stencil' superclass would at 'DIM0' imply that
---     the types of individual array elements are in 'IsTuple'.  (That would only possible if we
---     could have (degenerate) 1-tuple, but we can't as we can't distinguish between a 1-tuple of a
---     pair and a simple pair.)  Hence, we need to start from 'DIM1' and use 'sh:.Int:.Int' in the
---     recursive case (to avoid overlapping instances).
+-- Note: [Stencil reification class]
+--
+-- We cannot start with 'DIM0'.  The 'IsTuple stencil' superclass would at
+-- 'DIM0' imply that the types of individual array elements are in 'IsTuple'.
+-- (That would only possible if we could have (degenerate) 1-tuple, but we can't
+-- as we can't distinguish between a 1-tuple of a pair and a simple pair.)
+-- Hence, we need to start from 'DIM1' and use 'sh:.Int:.Int' in the recursive
+-- case (to avoid overlapping instances).
 
 -- DIM1
 instance Elt e => Stencil DIM1 e (e, e, e) where
   stencil = StencilRunit3
-  stencilAccess rf (Z:.y) = (rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1))
-    where
-      rf' d = rf (Z:.d)
 
 instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
   stencil = StencilRunit5
-  stencilAccess rf (Z:.y) = (rf' (y - 2),
-                             rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2))
-    where
-      rf' d = rf (Z:.d)
+
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
   stencil = StencilRunit7
-  stencilAccess rf (Z:.y) = (rf' (y - 3),
-                             rf' (y - 2),
-                             rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2),
-                             rf' (y + 3))
-    where
-      rf' d = rf (Z:.d)
+
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
   stencil = StencilRunit9
-  stencilAccess rf (Z:.y) = (rf' (y - 4),
-                             rf' (y - 3),
-                             rf' (y - 2),
-                             rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2),
-                             rf' (y + 3),
-                             rf' (y + 4))
-    where
-      rf' d = rf (Z:.d)
 
--- DIM(n+1), where n>0
+-- DIM(n+1), where n>1
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3) => Stencil (sh:.Int:.Int) a (row1, row2, row3) where
   stencil = StencilRtup3 stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix)
-
-    where
-      -- Invert then re-invert to ensure each recursive step gets a shape in the
-      -- standard scoc (right-recursive) ordering
-      --
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-
-      -- Inject this dimension innermost
-      --
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
-
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -758,15 +739,6 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
   stencil = StencilRtup5 stencil stencil stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 2)) ix,
-                         stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix,
-                         stencilAccess (rf' (i + 2)) ix)
-    where
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -777,17 +749,6 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row7)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
   stencil = StencilRtup7 stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 3)) ix,
-                         stencilAccess (rf' (i - 2)) ix,
-                         stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix,
-                         stencilAccess (rf' (i + 2)) ix,
-                         stencilAccess (rf' (i + 3)) ix)
-    where
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -800,37 +761,6 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row9)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
   stencil = StencilRtup9 stencil stencil stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 4)) ix,
-                         stencilAccess (rf' (i - 3)) ix,
-                         stencilAccess (rf' (i - 2)) ix,
-                         stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix,
-                         stencilAccess (rf' (i + 2)) ix,
-                         stencilAccess (rf' (i + 3)) ix,
-                         stencilAccess (rf' (i + 4)) ix)
-    where
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
-
-
--- For stencilAccess to match how the user draws the stencil in code as a series
--- of nested tuples, we need to recurse from the left. That is, we desire the
--- following 2D stencil to represent elements to the top, bottom, left, and
--- right of the focus as follows:
---
--- stencil2D ( (_, t, _)
---           , (l, _, r)
---           , (_, b, _) ) = ...
---
--- This function is used to reverse all components of a shape so that the
--- innermost component, now the head, can be picked off.
---
--- ...but needing to go via lists is unfortunate.
---
-invertShape :: Shape sh => sh -> sh
-invertShape =  listToShape . reverse . shapeToList
 
 
 -- Embedded expressions
@@ -1196,8 +1126,8 @@ rnfPreOpenAcc rnfA pacc =
       -- rnfS :: PreOpenSeq acc aenv' senv' t' -> ()
       -- rnfS = rnfPreOpenSeq rnfA
 
-      rnfB :: forall aenv' sh e. Elt e => acc aenv' (Array sh e) -> Boundary (EltRepr e) -> ()
-      rnfB _ = rnfBoundary (eltType (undefined::e))
+      rnfB :: PreBoundary acc aenv' (Array sh e) -> ()
+      rnfB = rnfBoundary rnfA
   in
   case pacc of
     Alet bnd body             -> rnfA bnd `seq` rnfA body
@@ -1229,8 +1159,8 @@ rnfPreOpenAcc rnfA pacc =
     Scanr' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
     Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
     Backpermute sh f a        -> rnfE sh `seq` rnfF f `seq` rnfA a
-    Stencil f b a             -> rnfF f `seq` rnfB a b `seq` rnfA a
-    Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB a1 b1 `seq` rnfB a2 b2 `seq` rnfA a1 `seq` rnfA a2
+    Stencil f b a             -> rnfF f `seq` rnfB b  `seq` rnfA a
+    Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB b1 `seq` rnfB b2 `seq` rnfA a1 `seq` rnfA a2
     -- Collect s                 -> rnfS s
 
 
@@ -1243,11 +1173,12 @@ rnfArrays ArraysRunit           ()      = ()
 rnfArrays ArraysRarray          arr     = rnf arr
 rnfArrays (ArraysRpair ar1 ar2) (a1,a2) = rnfArrays ar1 a1 `seq` rnfArrays ar2 a2
 
-rnfBoundary :: TupleType t -> Boundary t -> ()
-rnfBoundary _ Clamp        = ()
-rnfBoundary _ Mirror       = ()
-rnfBoundary _ Wrap         = ()
-rnfBoundary t (Constant c) = rnfConst t c
+rnfBoundary :: forall acc aenv sh e. NFDataAcc acc -> PreBoundary acc aenv (Array sh e) -> ()
+rnfBoundary _    Clamp        = ()
+rnfBoundary _    Mirror       = ()
+rnfBoundary _    Wrap         = ()
+rnfBoundary _    (Constant c) = rnfConst (eltType (undefined::e)) c
+rnfBoundary rnfA (Function f) = rnfPreOpenFun rnfA f
 
 
 {--
@@ -1527,8 +1458,8 @@ liftPreOpenAcc liftA pacc =
       liftAF :: PreOpenAfun acc aenv f -> Q (TExp (PreOpenAfun acc aenv f))
       liftAF = liftPreOpenAfun liftA
 
-      liftB :: forall aenv' sh e. Elt e => acc aenv' (Array sh e) -> Boundary (EltRepr e) -> Q (TExp (Boundary (EltRepr e)))
-      liftB _ = liftBoundary (eltType (undefined::e))
+      liftB :: PreBoundary acc aenv (Array sh e) -> Q (TExp (PreBoundary acc aenv (Array sh e)))
+      liftB = liftBoundary liftA
 
       liftAtuple :: Atuple (acc aenv) t -> Q (TExp (Atuple (acc aenv) t))
       liftAtuple NilAtup          = [|| NilAtup ||]
@@ -1564,8 +1495,8 @@ liftPreOpenAcc liftA pacc =
     Scanr' f z a              -> [|| Scanr' $$(liftF f) $$(liftE z) $$(liftA a) ||]
     Permute f d p a           -> [|| Permute $$(liftF f) $$(liftA d) $$(liftF p) $$(liftA a) ||]
     Backpermute sh p a        -> [|| Backpermute $$(liftE sh) $$(liftF p) $$(liftA a) ||]
-    Stencil f b a             -> [|| Stencil $$(liftF f) $$(liftB a b) $$(liftA a) ||]
-    Stencil2 f b1 a1 b2 a2    -> [|| Stencil2 $$(liftF f) $$(liftB a1 b1) $$(liftA a1) $$(liftB a2 b2) $$(liftA a2) ||]
+    Stencil f b a             -> [|| Stencil $$(liftF f) $$(liftB b) $$(liftA a) ||]
+    Stencil2 f b1 a1 b2 a2    -> [|| Stencil2 $$(liftF f) $$(liftB b1) $$(liftA a1) $$(liftB b2) $$(liftA a2) ||]
 
 
 liftPreOpenFun
@@ -1688,11 +1619,16 @@ liftArray (Array sh adata) =
     go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = [|| AD_Pair $$(go r1 a1) $$(go r2 a2) ||]
 
 
-liftBoundary :: TupleType e -> Boundary e -> Q (TExp (Boundary e))
-liftBoundary _ Clamp        = [|| Clamp ||]
-liftBoundary _ Mirror       = [|| Mirror ||]
-liftBoundary _ Wrap         = [|| Wrap ||]
-liftBoundary t (Constant c) = [|| Constant $$(liftConst t c) ||]
+liftBoundary
+    :: forall acc aenv sh e.
+       LiftAcc acc
+    -> PreBoundary acc aenv (Array sh e)
+    -> Q (TExp (PreBoundary acc aenv (Array sh e)))
+liftBoundary _     Clamp        = [|| Clamp ||]
+liftBoundary _     Mirror       = [|| Mirror ||]
+liftBoundary _     Wrap         = [|| Wrap ||]
+liftBoundary _     (Constant v) = [|| Constant $$(liftConst (eltType (undefined::e)) v) ||]
+liftBoundary liftA (Function f) = [|| Function $$(liftPreOpenFun liftA f) ||]
 
 liftSliceIndex :: SliceIndex ix slice coSlice sliceDim -> Q (TExp (SliceIndex ix slice coSlice sliceDim))
 liftSliceIndex SliceNil          = [|| SliceNil ||]

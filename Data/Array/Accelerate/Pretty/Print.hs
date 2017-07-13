@@ -50,10 +50,9 @@ import Data.List
 import Text.PrettyPrint
 
 -- friends
+import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
 import Data.Array.Accelerate.Array.Sugar                hiding ( tuple )
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
-import Data.Array.Accelerate.Type
 
 
 -- Pretty printing
@@ -115,14 +114,14 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppAF :: PreOpenAfun acc aenv f -> Doc
     ppAF = parens . prettyPreOpenAfun prettyAcc aenv
 
-    ppB :: forall sh e. Elt e
-        => {-dummy-} acc aenv (Array sh e)
-        -> Boundary (EltRepr e)
+    ppB :: forall sh e. (Shape sh, Elt e)
+        => PreBoundary acc aenv (Array sh e)
         -> Doc
-    ppB _ Clamp        = text "Clamp"
-    ppB _ Mirror       = text "Mirror"
-    ppB _ Wrap         = text "Wrap"
-    ppB _ (Constant e) = parens $ text "Constant" <+> text (show (toElt e :: e))
+    ppB Clamp        = text "clamp"
+    ppB Mirror       = text "mirror"
+    ppB Wrap         = text "wrap"
+    ppB (Constant e) = parens $ text "constant" <+> text (show (toElt e :: e))
+    ppB (Function f) = ppF f
 
     -- pretty print a named array operation with its arguments
     name .$ docs = wrap $ hang (text name) 2 (sep docs)
@@ -171,10 +170,9 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     pp (Permute f dfts p acc)   = "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA acc ]
     pp (Backpermute sh p acc)   = "backpermute" .$ [ ppSh sh, ppF p, ppA acc ]
     pp (Aforeign ff _afun acc)  = "aforeign"    .$ [ text (strForeign ff), {- ppAf afun, -} ppA acc ]
-    pp (Stencil sten bndy acc)  = "stencil"     .$ [ ppF sten, ppB acc bndy, ppA acc ]
+    pp (Stencil sten bndy acc)  = "stencil"     .$ [ ppF sten, ppB bndy, ppA acc ]
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
-                                = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
-                                                               ppB acc2 bndy2, ppA acc2 ]
+                                = "stencil2"    .$ [ ppF sten, ppB bndy1, ppA acc1, ppB bndy2, ppA acc2 ]
 
     -- pp (Collect s)              = wrap $ hang (text "collect") 2
     --                                    $ encloseSep lbrace rbrace semi

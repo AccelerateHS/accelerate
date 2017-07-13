@@ -1016,9 +1016,6 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- |Inverse of 'toIndex'.
   fromIndex :: sh -> Int -> sh
 
-  -- |Apply a boundary condition to an index.
-  bound  :: sh -> sh -> Boundary a -> Either a sh
-
   -- |Iterate through the entire shape, applying the function; third argument
   -- combines results and fourth is returned in case of an empty iteration
   -- space; the index space is traversed in row-major order.
@@ -1056,10 +1053,6 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   union sh1 sh2         = toElt (Repr.union (fromElt sh1) (fromElt sh2))
   fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
   toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)
-
-  bound sh ix bndy      = case Repr.bound (fromElt sh) (fromElt ix) bndy of
-                            Left v    -> Left v
-                            Right ix' -> Right $ toElt ix'
 
   iter sh f c r         = Repr.iter  (fromElt sh) (f . toElt) c r
   iter1 sh f r          = Repr.iter1 (fromElt sh) (f . toElt) r

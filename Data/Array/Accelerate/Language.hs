@@ -68,7 +68,9 @@ module Data.Array.Accelerate.Language (
   stencil, stencil2,
 
   -- ** Stencil specification
-  Boundary(..), Stencil,
+  Boundary, Stencil,
+  clamp, mirror, wrap, function,
+
 
   -- ** Common stencil types
   Stencil3, Stencil5, Stencil7, Stencil9,
@@ -816,8 +818,8 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 --
 -- > s33 :: Stencil3x3 a -> Exp a
 -- > s33 ((_,t,_)
---       ,(l,c,r)
---       ,(_,b,_)) = ...
+-- >     ,(l,c,r)
+-- >     ,(_,b,_)) = ...
 --
 -- ...where @c@ is again the focal point and @t@, @b@, @l@ and @r@ are the
 -- elements to the top, bottom, left, and right of the focal point, respectively
@@ -841,16 +843,16 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- > gaussian = [0.06136,0.24477,0.38774,0.24477,0.06136]
 -- >
 -- > blur :: Num a => Acc (Array DIM2 a) -> Acc (Array DIM2 a)
--- > blur = stencil (convolve5x1 gaussian) Clamp
--- >      . stencil (convolve1x5 gaussian) Clamp
+-- > blur = stencil (convolve5x1 gaussian) clamp
+-- >      . stencil (convolve1x5 gaussian) clamp
 --
 stencil
     :: (Stencil sh a stencil, Elt b)
     => (stencil -> Exp b)                     -- ^ stencil function
-    -> Boundary a                             -- ^ boundary condition
+    -> Boundary (Array sh a)                  -- ^ boundary condition
     -> Acc (Array sh a)                       -- ^ source array
     -> Acc (Array sh b)                       -- ^ destination array
-stencil = Acc $$$ Stencil
+stencil f (Boundary b) a = Acc $ Stencil f b a
 
 -- | Map a binary stencil of an array. The extent of the resulting array is the
 -- intersection of the extents of the two source arrays. This is the stencil
@@ -859,12 +861,68 @@ stencil = Acc $$$ Stencil
 stencil2
     :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> Exp c)        -- ^ binary stencil function
-    -> Boundary a                             -- ^ boundary condition #1
+    -> Boundary (Array sh a)                  -- ^ boundary condition #1
     -> Acc (Array sh a)                       -- ^ source array #1
-    -> Boundary b                             -- ^ boundary condition #2
+    -> Boundary (Array sh b)                  -- ^ boundary condition #2
     -> Acc (Array sh b)                       -- ^ source array #2
     -> Acc (Array sh c)                       -- ^ destination array
-stencil2 = Acc $$$$$ Stencil2
+stencil2 f (Boundary b1) a1 (Boundary b2) a2 = Acc $ Stencil2 f b1 a1 b2 a2
+
+-- | Boundary condition where elements of the stencil which would be
+-- out-of-bounds are instead clamped to the edges of the array.
+--
+-- In the following 3x3 stencil, the out-of-bounds element @b@ will instead
+-- return the value at position @c@:
+--
+-- >   +------------+
+-- >   |a           |
+-- >  b|cd          |
+-- >   |e           |
+-- >   +------------+
+--
+clamp :: Boundary (Array sh e)
+clamp = Boundary Clamp
+
+-- | Stencil boundary condition where coordinates beyond the array extent are
+-- instead mirrored
+--
+-- In the following 5x3 stencil, the out-of-bounds element @c@ will instead
+-- return the value at position @d@, and similarly the element at @b@ will
+-- return the value at @e@:
+--
+-- >   +------------+
+-- >   |a           |
+-- > bc|def         |
+-- >   |g           |
+-- >   +------------+
+--
+mirror :: Boundary (Array sh e)
+mirror = Boundary Mirror
+
+-- | Stencil boundary condition where coordinates beyond the array extent
+-- instead wrap around the array.
+--
+-- In the following 3x3 stencil, the out of bounds elements will be read as in
+-- the pattern on the right.
+--
+-- >  a bc
+-- >   +------------+      +------------+
+-- >  d|ef          |      |ef         d|
+-- >  g|hi          |  ->  |hi         g|
+-- >   |            |      |bc         a|
+-- >   +------------+      +------------+
+--
+wrap :: Boundary (Array sh e)
+wrap = Boundary Wrap
+
+-- | Stencil boundary condition where the given function is applied to any
+-- outlying coordinates.
+--
+function
+    :: (Shape sh, Elt e)
+    => (Exp sh -> Exp e)
+    -> Boundary (Array sh e)
+function = Boundary . Function
 
 
 {--

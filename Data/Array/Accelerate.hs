@@ -264,7 +264,8 @@ module Data.Array.Accelerate (
   stencil, stencil2,
 
   -- *** Stencil specification
-  Stencil, Boundary(..),
+  Stencil, Boundary,
+  clamp, mirror, wrap, function,
 
   -- *** Common stencil patterns
   Stencil3, Stencil5, Stencil7, Stencil9,

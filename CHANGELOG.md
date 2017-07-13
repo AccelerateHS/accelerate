@@ -18,6 +18,8 @@ Policy (PVP)](https://pvp.haskell.org)
     `any`, `all` now reduce along the innermost dimension only, rather than
     reducing all elements. You can recover the old behaviour by first
     `flatten`-ing the input array.
+  * Add new stencil boundary condition `function`, to apply the given function
+    to out-of-bounds indices.
 
 ### Fixed
   * [#390]: Wrong number of arguments in printf

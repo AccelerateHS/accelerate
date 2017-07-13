@@ -197,8 +197,8 @@ manifest fuseAcc (OpenAcc pacc) =
     Scanr1 f a              -> Scanr1   (cvtF f) (delayed fuseAcc a)
     Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed fuseAcc a)
     Permute f d p a         -> Permute  (cvtF f) (manifest fuseAcc d) (cvtF p) (delayed fuseAcc a)
-    Stencil f x a           -> Stencil  (cvtF f) x (manifest fuseAcc a)
-    Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
+    Stencil f x a           -> Stencil  (cvtF f) (cvtB x) (manifest fuseAcc a)
+    Stencil2 f x a y b      -> Stencil2 (cvtF f) (cvtB x) (manifest fuseAcc a) (cvtB y) (manifest fuseAcc b)
     -- Collect s               -> Collect  (cvtS s)
 
     where
@@ -232,6 +232,13 @@ manifest fuseAcc (OpenAcc pacc) =
 
       cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
       cvtE = convertOpenExp fuseAcc
+
+      cvtB :: Boundary aenv t -> PreBoundary DelayedOpenAcc aenv t
+      cvtB Clamp        = Clamp
+      cvtB Mirror       = Mirror
+      cvtB Wrap         = Wrap
+      cvtB (Constant v) = Constant v
+      cvtB (Function f) = Function (cvtF f)
 
 convertOpenExp :: Bool -> OpenExp env aenv t -> DelayedOpenExp env aenv t
 convertOpenExp fuseAcc exp =
@@ -435,8 +442,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Scanr1 f a          -> embed  (into  Scanr1        (cvtF f)) a
     Scanr' f z a        -> embed  (into2 Scanr'        (cvtF f) (cvtE z)) a
     Permute f d p a     -> embed2 (into2 permute       (cvtF f) (cvtF p)) d a
-    Stencil f x a       -> lift   (into (stencil x)    (cvtF f)) a
-    Stencil2 f x a y b  -> lift2  (into (stencil2 x y) (cvtF f)) a b
+    Stencil f x a       -> lift   (into2 Stencil       (cvtF f) (cvtB x)) a
+    Stencil2 f x a y b  -> lift2  (into3 stencil2      (cvtF f) (cvtB x) (cvtB y)) a b
 
   where
     -- If fusion is not enabled, force terms to the manifest representation
@@ -460,17 +467,23 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- Helpers to shuffle the order of arguments to a constructor
     --
     permute f p d a     = Permute f d p a
-    stencil x f a       = Stencil f x a
-    stencil2 x y f a b  = Stencil2 f x a y b
+    stencil2 f x y a b  = Stencil2 f x a y b
 
     -- Conversions for closed scalar functions and expressions. This just
     -- applies scalar simplifications.
     --
-    cvtF :: PreFun acc aenv t -> PreFun acc aenv t
+    cvtF :: PreFun acc aenv' t -> PreFun acc aenv' t
     cvtF = simplify
 
-    cvtE :: Elt t =>PreExp acc aenv' t -> PreExp acc aenv' t
+    cvtE :: Elt t => PreExp acc aenv' t -> PreExp acc aenv' t
     cvtE = simplify
+
+    cvtB :: PreBoundary acc aenv' t -> PreBoundary acc aenv' t
+    cvtB Clamp        = Clamp
+    cvtB Mirror       = Mirror
+    cvtB Wrap         = Wrap
+    cvtB (Constant c) = Constant c
+    cvtB (Function f) = Function (cvtF f)
 
     -- Helpers to embed and fuse delayed terms
     --
@@ -480,6 +493,10 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     into2 :: (Sink f1, Sink f2)
           => (f1 env' a -> f2 env' b -> c) -> f1 env a -> f2 env b -> Extend acc env env' -> c
     into2 op a b env = op (sink env a) (sink env b)
+
+    into3 :: (Sink f1, Sink f2, Sink f3)
+          => (f1 env' a -> f2 env' b -> f3 env' c -> d) -> f1 env a -> f2 env b -> f3 env c -> Extend acc env env' -> d
+    into3 op a b c env = op (sink env a) (sink env b) (sink env c)
 
     fuse :: Arrays as
          => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
@@ -1359,8 +1376,8 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Scanr1 f a              -> Scanr1 (cvtF f) (cvtA a)
         Scanr' f z a            -> Scanr' (cvtF f) (cvtE z) (cvtA a)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
-        Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
-        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
+        Stencil f x a           -> Stencil (cvtF f) (cvtB x) (cvtA a)
+        Stencil2 f x a y b      -> Stencil2 (cvtF f) (cvtB x) (cvtA a) (cvtB y) (cvtA b)
         -- Collect seq             -> Collect (cvtSeq seq)
 
       where
@@ -1372,6 +1389,13 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
         cvtF :: PreFun acc aenv s -> PreFun acc aenv s
         cvtF = replaceF sh' f' avar
+
+        cvtB :: PreBoundary acc aenv s -> PreBoundary acc aenv s
+        cvtB Clamp        = Clamp
+        cvtB Mirror       = Mirror
+        cvtB Wrap         = Wrap
+        cvtB (Constant c) = Constant c
+        cvtB (Function f) = Function (cvtF f)
 
         cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
         cvtAT NilAtup          = NilAtup
