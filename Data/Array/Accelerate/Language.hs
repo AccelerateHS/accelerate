@@ -869,7 +869,16 @@ stencil2
 stencil2 f (Boundary b1) a1 (Boundary b2) a2 = Acc $ Stencil2 f b1 a1 b2 a2
 
 -- | Boundary condition where elements of the stencil which would be
--- out-of-bounds are instead clamped to the edges of the array
+-- out-of-bounds are instead clamped to the edges of the array.
+--
+-- In the following 3x3 stencil, the out-of-bounds element @b@ will instead
+-- return the value at position @c@:
+--
+-- >   +------------+
+-- >   |a           |
+-- >  b|cd          |
+-- >   |e           |
+-- >   +------------+
 --
 clamp :: Boundary (Array sh e)
 clamp = Boundary Clamp
@@ -877,11 +886,31 @@ clamp = Boundary Clamp
 -- | Stencil boundary condition where coordinates beyond the array extent are
 -- instead mirrored
 --
+-- In the following 5x3 stencil, the out-of-bounds element @c@ will instead
+-- return the value at position @d@, and similarly the element at @b@ will
+-- return the value at @e@:
+--
+-- >   +------------+
+-- >   |a           |
+-- > bc|def         |
+-- >   |g           |
+-- >   +------------+
+--
 mirror :: Boundary (Array sh e)
 mirror = Boundary Mirror
 
 -- | Stencil boundary condition where coordinates beyond the array extent
 -- instead wrap around the array.
+--
+-- In the following 3x3 stencil, the out of bounds elements will be read as in
+-- the pattern on the right.
+--
+-- >  a bc
+-- >   +------------+      +------------+
+-- >  d|ef          |      |ef         d|
+-- >  g|hi          |  ->  |hi         g|
+-- >   |            |      |bc         a|
+-- >   +------------+      +------------+
 --
 wrap :: Boundary (Array sh e)
 wrap = Boundary Wrap
@@ -894,6 +923,7 @@ function
     => (Exp sh -> Exp e)
     -> Boundary (Array sh e)
 function = Boundary . Function
+
 
 {--
 -- Sequence operations
