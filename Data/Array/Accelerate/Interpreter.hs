@@ -856,7 +856,7 @@ bounded bnd arr ix =
                                   _      -> $internalError "bound" "unexpected boundary condition"
                   | iz >= sz  = case bnd of
                                   Clamp  -> sz - 1
-                                  Mirror -> sz - (iz - (sz + 2))
+                                  Mirror -> sz - (iz - sz + 2)
                                   Wrap   -> iz - sz
                                   _      -> $internalError "bound" "unexpected boundary condition"
                   | otherwise = iz
