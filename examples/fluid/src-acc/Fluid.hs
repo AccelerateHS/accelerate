@@ -56,10 +56,10 @@ velocity steps dt dp vs
 -- Ensure the velocity field conserves mass
 --
 project :: Int -> Acc VelocityField -> Acc VelocityField
-project steps vf = A.stencil2 poisson (A.Constant zero) vf (A.Constant zero) p
+project steps vf = A.stencil2 poisson (function $ const zero) vf (function $ const zero) p
   where
-    grad        = A.stencil divF (A.Constant zero) vf
-    p1          = A.stencil2 pF (A.Constant zero) grad (A.Constant zero)
+    grad        = A.stencil divF (function $ const zero) vf
+    p1          = A.stencil2 pF (function $ const zero) grad (function $ const zero)
     p           = P.foldl1 (.) (P.replicate steps p1) grad
 
     poisson :: A.Stencil3x3 Velocity -> A.Stencil3x3 Float -> Exp Velocity
@@ -126,7 +126,7 @@ diffuse steps dt dn df0 =
     a           = A.constant dt * A.constant dn * (A.fromIntegral (A.size df0))
     c           = 1 + 4*a
 
-    diffuse1 df = A.stencil2 relax (A.Constant zero) df0 (A.Constant zero) df
+    diffuse1 df = A.stencil2 relax (function $ const zero) df0 (function $ const zero) df
 
     relax :: FieldElt e => A.Stencil3x3 e -> A.Stencil3x3 e -> Exp e
     relax (_,(_,x0,_),_) ((_,t,_), (l,_,r), (_,b,_)) = (x0 .+. a .*. (l.+.t.+.r.+.b)) ./. c
@@ -170,7 +170,7 @@ advect dt vf df = A.generate sh backtrace
         -- read the density values surrounding the calculated advection point
         get ix'@(Z :. j' :. i')
           = (j' A.< 0 || i' A.< 0 || j' >= h || i' >= w)
-          ? (A.constant zero, df A.! A.lift ix')
+          ? (zero, df A.! A.lift ix')
 
         d00     = get (Z :. j0 :. i0)
         d10     = get (Z :. j1 :. i0)

@@ -12,7 +12,7 @@ import Config
 
 import Data.Label
 
-import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate                                        as A hiding ( clamp )
 import Data.Array.Accelerate.Examples.Internal                      as A
 
 import Data.Array.Accelerate.Linear.Metric

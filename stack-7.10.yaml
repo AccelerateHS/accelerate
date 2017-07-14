@@ -7,13 +7,13 @@ packages:
 - '.'
 
 - location:
-    git:    https://github.com/AccelerateHS/accelerate.git
-    commit: c3d36140bb98137949673699946c3eef70ad8e51
+    git:    https://github.com/tmcdonell/accelerate.git
+    commit: 75b48553724c9e48dacbde2ee693cde7d066a6db
   extra-dep: true
 
 - location:
-    git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 3ff5379cf8c9c467f2c626fb5465c123208d4581
+    git:    https://github.com/tmcdonell/accelerate-llvm.git
+    commit: 97af36d297a88ff3e80197b232121e8aeab35aef
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -25,9 +25,13 @@ packages:
     commit: 1bff17152088384b71a439b01ec993a54e2618c9
   extra-dep: true
 
+- location:
+    git:    https://github.com/tmcdonell/colour-accelerate.git
+    commit: 2c7ce095282b2d0ef33cc1e73ca865cc3cc3211b
+  extra-dep: true
+
 extra-deps:
 # - 'accelerate-1.0.0.0'
-- 'accelerate-cuda-0.17.0.0'
 - 'accelerate-fft-1.0.0.0'
 - 'accelerate-io-1.0.0.0'
 # - 'accelerate-llvm-1.0.0.0'
@@ -35,7 +39,7 @@ extra-deps:
 # - 'accelerate-llvm-ptx-1.0.0.0'
 - 'Cabal-1.24.2.0'
 - 'chaselev-deque-0.5.0.5'
-- 'colour-accelerate-0.1.0.0'
+# - 'colour-accelerate-0.1.0.0'
 # - 'cuda-0.7.5.2'
 - 'cufft-0.7.5.0'
 - 'gloss-1.11.1.1'
@@ -63,8 +67,6 @@ flags:
   accelerate:
     debug: false
     ekg:   false
-  accelerate-cuda:
-    debug: false
   accelerate-llvm-native:
     debug: false
   accelerate-llvm-ptx:

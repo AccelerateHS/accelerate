@@ -40,7 +40,7 @@ infixl 7 .*.
 infixl 7 ./.
 
 class Elt e => FieldElt e where
-  zero  :: e
+  zero  :: Exp e
   (.+.) :: Exp e -> Exp e -> Exp e
   (.-.) :: Exp e -> Exp e -> Exp e
   (.*.) :: Exp Float -> Exp e -> Exp e
@@ -54,7 +54,7 @@ instance FieldElt Density where
   (./.) = (/)
 
 instance FieldElt Velocity where
-  zero  = (0, 0)
+  zero  = constant (0, 0)
   (.+.) = app2 (+)
   (.-.) = app2 (-)
   c  .*. xy = let (x,y) = unlift xy in lift (c*x, c*y)
