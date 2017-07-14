@@ -75,7 +75,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
       where
         pattern (x,y,z) = x + z - 2 * y
 
-        acc xs = run1 backend (stencil pattern Clamp) xs
+        acc xs = run1 backend (stencil pattern clamp) xs
 
         ref :: (P.Num e, IArray UArray e) => UArray Int e -> UArray Int e
         ref xs =
@@ -95,7 +95,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
                 )
                 = (t1 + t2 + t3 - l + 4*m - r - b1 - b2 - b3)
 
-        acc xs = run1 backend (stencil pattern (Constant 0)) xs
+        acc xs = run1 backend (stencil pattern (function (const 0))) xs
 
         ref :: (P.Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
         ref xs =
@@ -122,7 +122,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
           let pattern' :: A.Num a => Stencil3x3 a -> Exp a
               pattern' = pattern
           in
-          run1 backend (stencil pattern' Clamp) xs
+          run1 backend (stencil pattern' clamp) xs
 
         ref :: (P.Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
         ref xs =
@@ -150,7 +150,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
             in
             x1 - y2 + y1 - z2 + z1 - x2
 
-        acc xs = run1 backend (stencil pattern (Constant (0,0))) xs
+        acc xs = run1 backend (stencil pattern (function (\_ -> constant (0,0)))) xs
 
         ref :: P.Num a => IArray.Array (Int,Int) (a,a) -> IArray.Array (Int,Int) a
         ref xs =
@@ -167,7 +167,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
     testBoundary :: Maybe Test
     testBoundary = Just . testCase "boundary segfault" $ do
       let f ((x,_,_,_,_),_,_,_,_) = x
-          b = Constant 0
+          b = function (const 0)
           s = stencil (f::Stencil5x5 Int -> Exp Int) b (A.fill (lift (Z:.1:.1000000 :: DIM2)) (0::Exp Int))
           a = run backend s
       indexArray a (Z:.0:.0) @?= 0

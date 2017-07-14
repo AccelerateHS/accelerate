@@ -195,19 +195,19 @@ varUse = (first, both, second)
     fs = fromList (Z:.10:.10) [0..]
 
     -- Ignoring the first parameter
-    first = stencil2 centre Clamp (use fs) Clamp (use is)
+    first = stencil2 centre clamp (use fs) clamp (use is)
       where
         centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Int
         centre _ (_,(_,y,_),_)  = y
 
     -- Using both
-    both = stencil2 centre Clamp (use fs) Clamp (use is)
+    both = stencil2 centre clamp (use fs) clamp (use is)
       where
         centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Float
         centre (_,(_,x,_),_) (_,(_,y,_),_)  = x + A.fromIntegral y
 
     -- Not using the second parameter
-    second = stencil2 centre Clamp (use fs) Clamp (use is)
+    second = stencil2 centre clamp (use fs) clamp (use is)
       where
         centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Float
         centre (_,(_,x,_),_) _  = x
