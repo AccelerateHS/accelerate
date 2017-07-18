@@ -274,7 +274,6 @@ Executable accelerate-nofib
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -332,7 +331,6 @@ Executable accelerate-smvm
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -375,7 +373,6 @@ Executable accelerate-crystal
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -411,7 +408,6 @@ Executable accelerate-tunnel
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -449,7 +445,6 @@ Executable accelerate-canny
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -488,7 +483,6 @@ Executable accelerate-mandelbrot
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -526,7 +520,6 @@ Executable accelerate-fluid
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -579,7 +572,6 @@ Executable accelerate-nbody
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -623,7 +615,6 @@ Executable accelerate-smoothlife
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -667,7 +658,6 @@ Executable accelerate-hashcat
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -706,7 +696,6 @@ Executable accelerate-fft
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -750,7 +739,6 @@ Executable accelerate-pagerank
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -800,7 +788,6 @@ Executable accelerate-ray
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
@@ -840,7 +827,6 @@ Executable accelerate-kmeans
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
-        -with-rtsopts=-N
         -with-rtsopts=-qg
 
   ghc-prof-options:
