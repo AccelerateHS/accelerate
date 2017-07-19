@@ -150,8 +150,7 @@ availableBackends :: (options :-> Backend) -> [OptDescr (options -> options)]
 availableBackends optBackend =
   [ Option  [] [show Interpreter]
             (NoArg (set optBackend Interpreter))
-            "reference implementation (sequential)"
-
+            "reference implementation (sequential, slow)"
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   , Option  [] [show CPU]
             (NoArg (set optBackend CPU))
