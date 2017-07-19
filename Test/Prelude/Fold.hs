@@ -93,7 +93,7 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
 
             test_sum' :: Array sh e -> NonZero e -> Property
             test_sum' xs (NonZero z) =
-              run2 backend (\z' -> A.foldAll (+) (the z')) (scalar z) xs
+              runN backend (\z' -> A.foldAll (+) (the z')) (scalar z) xs
               ~?=
               foldAllRef (+) z xs
 
@@ -157,7 +157,7 @@ test_fold backend opt = testGroup "fold" $ catMaybes
 
             test_sum' :: Array (sh:.Int) e -> NonZero e -> Property
             test_sum' xs (NonZero z) =
-              run2 backend (\z' -> A.fold (+) (the z')) (scalar z) xs ~?= foldRef (+) z xs
+              runN backend (\z' -> A.fold (+) (the z')) (scalar z) xs ~?= foldRef (+) z xs
 
             test_mss :: (sh:.Int) -> e -> Property
             test_mss sz _
@@ -197,18 +197,18 @@ test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
             testProperty "sum"
           $ forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Segments Int32)    ->
             forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \(xs  :: Array (sh:.Int) e) ->
-              run2 backend (A.foldSeg (+) 0) xs seg ~?= foldSegRef (+) 0 xs seg
+              runN backend (A.foldSeg (+) 0) xs seg ~?= foldSegRef (+) 0 xs seg
 
           , testProperty "non-neutral sum"
           $ forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Segments Int32)    ->
             forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \(xs  :: Array (sh:.Int) e) ->
             forAll arbitrary                                                      $ \(NonZero z)                ->
-              run3 backend (\z' -> A.foldSeg (+) (the z')) (scalar z) xs seg ~?= foldSegRef (+) z xs seg
+              runN backend (\z' -> A.foldSeg (+) (the z')) (scalar z) xs seg ~?= foldSegRef (+) z xs seg
 
           , testProperty "minimum"
           $ forAllShrink arbitrarySegments1            shrinkSegments1      $ \(seg :: Segments Int32)    ->
             forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \(xs  :: Array (sh:.Int) e) ->
-              run2 backend (A.fold1Seg A.min) xs seg ~?= fold1SegRef P.min xs seg
+              runN backend (A.fold1Seg A.min) xs seg ~?= fold1SegRef P.min xs seg
           ]
 
 
