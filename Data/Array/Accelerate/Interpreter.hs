@@ -42,7 +42,8 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run, run1,
+  Sugar.Acc, Arrays,
+  run, run1, runN,
 
   -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj
@@ -92,17 +93,27 @@ run a = unsafePerformIO execute
       D.dumpSimplStats
       phase "execute" D.elapsed (evaluate (evalOpenAcc acc Empty))
 
--- | Prepare and run an embedded array program of one argument
+-- | This is 'runN' specialised to an array program of one argument.
 --
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
-run1 f = \a -> unsafePerformIO (execute a)
+run1 = runN
+
+-- | Prepare and execute an embedded array program.
+--
+runN :: Afunction f => f -> AfunctionR f
+runN f = go
   where
     !acc    = convertAfunWith config f
     !afun   = unsafePerformIO $ do
                 D.dumpGraph $!! acc
                 D.dumpSimplStats
                 return acc
-    execute x = phase "execute" D.elapsed (evaluate (evalOpenAfun afun Empty x))
+    !go     = eval afun Empty
+    --
+    eval :: DelayedOpenAfun aenv f -> Val aenv -> f
+    eval (Alam f)  aenv = \a -> eval f (aenv `Push` a)
+    eval (Abody b) aenv = unsafePerformIO $ phase "execute" D.elapsed (evaluate (evalOpenAcc b aenv))
+
 
 -- -- | Stream a lazily read list of input arrays through the given program,
 -- -- collecting results as we go
