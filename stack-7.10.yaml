@@ -8,12 +8,12 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/accelerate.git
-    commit: 75b48553724c9e48dacbde2ee693cde7d066a6db
+    commit: a4e5d51334f303a32ee45979f342f8c391b43da3
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 4f63abc235ba84d0fe87ce6a791ef157aaab635f
+    commit: c042c80388dac6b15fdb17d1f4f66b10d6c47e0a
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'

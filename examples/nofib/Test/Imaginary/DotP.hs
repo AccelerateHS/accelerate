@@ -47,7 +47,7 @@ test_dotp backend opt = testGroup "dot-product" $ catMaybes
       $ testProperty (show (typeOf (undefined :: a))) (run_dotp :: Vector a -> Vector a -> Property)
 
     run_dotp xs ys =
-      run2 backend dotp xs ys `indexArray` Z
+      runN backend dotp xs ys `indexArray` Z
       ~?=
       P.sum [ x * y | x <- toList xs | y <- toList ys ]
 

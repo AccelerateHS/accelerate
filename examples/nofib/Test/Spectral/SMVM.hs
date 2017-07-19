@@ -52,7 +52,7 @@ test_smvm backend opt = testGroup "smvm" $ catMaybes
     run_smvm _ =
       forAll arbitraryCSRMatrix           $ \(segd, svec :: Vector (Int32,a), cols) ->
       forAll (arbitraryArray (Z :. cols)) $ \vec ->
-        run2 backend smvm (segd, svec) vec
+        runN backend smvm (segd, svec) vec
         ~?=
         smvmRef segd svec vec
 

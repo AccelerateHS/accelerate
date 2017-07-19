@@ -166,10 +166,10 @@ Library
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
 
-  if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:
-        accelerate-cuda                   == 0.17.*
+  -- if flag(cuda)
+  --   CPP-options:        -DACCELERATE_CUDA_BACKEND
+  --   build-depends:
+  --       accelerate-cuda                   == 0.17.*
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
@@ -283,13 +283,13 @@ Executable accelerate-nofib
   c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
                         examples/nofib/Test/Spectral/BlackScholes.cpp
 
-  if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:
-        accelerate-cuda                   == 0.17.*
-
-    other-modules:
-        Test.Foreign.CUDA
+  -- if flag(cuda)
+  --   CPP-options:        -DACCELERATE_CUDA_BACKEND
+  --   build-depends:
+  --       accelerate-cuda                   == 0.17.*
+  --
+  --   other-modules:
+  --       Test.Foreign.CUDA
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -620,10 +620,10 @@ Executable accelerate-smoothlife
   ghc-prof-options:
         -auto-all
 
-  if flag(cuda)
-    cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:
-        accelerate-cuda                   == 0.17.*
+  -- if flag(cuda)
+  --   cpp-options:        -DACCELERATE_CUDA_BACKEND
+  --   build-depends:
+  --       accelerate-cuda                   == 0.17.*
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T

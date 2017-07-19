@@ -99,7 +99,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
     test_histogram :: (P.Num e, A.Num e, Similar e, IArray UArray e) => (Exp e -> Exp Int) -> (e -> Int) -> Vector e -> Property
     test_histogram f g xs =
       forAll arbitrary $ \(Positive n) ->
-        run2 backend (histogramAcc f) (scalar n) xs ~?= histogramRef n g xs
+        runN backend (histogramAcc f) (scalar n) xs ~?= histogramRef n g xs
 
     histogramAcc :: A.Num e => (Exp e -> Exp Int) -> Acc (Scalar Int) -> Acc (Vector e) -> Acc (Vector e)
     histogramAcc f n xs =
@@ -123,7 +123,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
       forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
       forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
       forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
-        toList (run3 backend A.scatter mapV defaultV inputV)
+        toList (runN backend A.scatter mapV defaultV inputV)
         ~?=
         IArray.elems (scatterRef (toIArray mapV) (toIArray defaultV) (toIArray inputV))
 
@@ -134,7 +134,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
     --   forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
     --   forAll (arbitraryArray (Z:.n))                    $ \(maskV :: Vector Int) ->
     --   forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
-    --     toList (run4 backend (\p v d x -> A.scatterIf p v A.even d x) mapV maskV defaultV inputV)
+    --     toList (runN backend (\p v d x -> A.scatterIf p v A.even d x) mapV maskV defaultV inputV)
     --     ~?=
     --     IArray.elems (scatterIfRef (toIArray mapV) (toIArray maskV) P.even (toIArray defaultV) (toIArray inputV))
 

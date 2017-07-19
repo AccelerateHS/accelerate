@@ -48,7 +48,7 @@ test_saxpy backend opt = testGroup "saxpy" $ catMaybes
       $ testProperty (show (typeOf (undefined :: a))) (run_saxpy :: a -> Vector a -> Vector a -> Property)
 
     run_saxpy alpha xs ys =
-      toList (run2 backend (saxpy (constant alpha)) xs ys)
+      toList (runN backend (saxpy (constant alpha)) xs ys)
       ~?=
       [ alpha * x + y | x <- toList xs | y <- toList ys ]
 
