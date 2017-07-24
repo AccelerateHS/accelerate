@@ -1127,19 +1127,25 @@ hashOpenExp = hashPreOpenExp hashOpenAcc
 hashPreOpenExp :: forall acc env aenv exp. HashAcc acc -> PreOpenExp acc env aenv exp -> Int
 hashPreOpenExp hashAcc exp =
   let
-    hashA :: Int -> acc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashAcc
+    hashA :: forall aenv' a. Arrays a => Int -> acc aenv' a -> Int
+    hashA salt
+      = hashWithSalt salt
+      . hashWithSalt (hashArraysType (arrays (undefined::a)))
+      . hashAcc
 
-    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
+    hashE :: forall env' aenv' e. Elt e => Int -> PreOpenExp acc env' aenv' e -> Int
+    hashE salt
+      = hashWithSalt salt
+      . hashWithSalt (hashTupleType (eltType (undefined::e)))
+      . hashPreOpenExp hashAcc
 
   in case exp of
     Let bnd body                -> hash "Let"           `hashE` bnd `hashE` body
-    Var ix                      -> hash "Var"           `hashWithSalt` hashIdx ix
+    Var ix                      -> hash "Var"           `hashWithSalt` hashTupleType (eltType (undefined::exp)) `hashWithSalt` hashIdx ix
     Const c                     -> hash "Const"         `hashWithSalt` show (toElt c :: exp)
     Tuple t                     -> hash "Tuple"         `hashWithSalt` hashTuple hashAcc t
-    Prj i e                     -> hash "Prj"           `hashWithSalt` hashTupleIdx i `hashE` e
-    IndexAny                    -> hash "IndexAny"
+    Prj i e                     -> hash "Prj"           `hashWithSalt` hashTupleIdx i `hashWithSalt` hashTupleType (eltType (undefined::exp)) `hashE` e
+    IndexAny                    -> hash "IndexAny"      `hashWithSalt` hashTupleType (eltType (undefined::exp))
     IndexNil                    -> hash "IndexNil"
     IndexCons sl a              -> hash "IndexCons"     `hashE` sl `hashE` a
     IndexHead sl                -> hash "IndexHead"     `hashE` sl
@@ -1171,9 +1177,9 @@ hashTuple h (SnocTup t e)       = hash "SnocTup"        `hashWithSalt` hashTuple
 
 
 hashPrimConst :: PrimConst c -> Int
-hashPrimConst (PrimMinBound t)    = hash "PrimMinBound" `hashWithSalt` hashBoundedType t
-hashPrimConst (PrimMaxBound t)    = hash "PrimMaxBound" `hashWithSalt` hashBoundedType t
-hashPrimConst (PrimPi t)          = hash "PrimPi"       `hashWithSalt` hashFloatingType t
+hashPrimConst (PrimMinBound t)  = hash "PrimMinBound"   `hashWithSalt` hashBoundedType t
+hashPrimConst (PrimMaxBound t)  = hash "PrimMaxBound"   `hashWithSalt` hashBoundedType t
+hashPrimConst (PrimPi t)        = hash "PrimPi"         `hashWithSalt` hashFloatingType t
 
 hashPrimFun :: PrimFun f -> Int
 hashPrimFun (PrimAdd a)                = hash "PrimAdd"                `hashWithSalt` hashNumType a
