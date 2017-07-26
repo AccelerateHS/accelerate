@@ -58,6 +58,7 @@ import Prelude                                          hiding ( until )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( Val(..) )
+import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Error

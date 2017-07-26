@@ -287,6 +287,7 @@ Library
 
         -- For backend development
         Data.Array.Accelerate.AST
+        Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
         Data.Array.Accelerate.Analysis.Shape
         Data.Array.Accelerate.Analysis.Stencil
