@@ -38,12 +38,13 @@ module Data.Array.Accelerate.Analysis.Match (
 ) where
 
 -- standard library
-import Prelude                                          hiding ( exp )
+import Data.Hashable
 import Data.Maybe
 import Data.Typeable
-import Data.Hashable
-import System.Mem.StableName
+import Foreign.C.Types
 import System.IO.Unsafe                                 ( unsafePerformIO )
+import System.Mem.StableName
+import Prelude                                          hiding ( exp )
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -1040,7 +1041,10 @@ hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs 
 hashPreOpenAcc hashAcc pacc =
   let
     hashA :: forall aenv' a. Arrays a => Int -> acc aenv' a -> Int
-    hashA salt acc = salt `hashWithSalt` hashArraysType (arrays (undefined::a)) `hashWithSalt` hashAcc acc
+    hashA salt
+      = hashWithSalt salt
+      . hashWithSalt (hashArraysType (arrays (undefined::a)))
+      . hashAcc
 
     hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
@@ -1054,44 +1058,47 @@ hashPreOpenAcc hashAcc pacc =
     -- hashS :: Int -> PreOpenSeq acc aenv senv arrs -> Int
     -- hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
+    hashP :: (Arrays arrs, Hashable a) => a -> Int
+    hashP = hashWithSalt (hashArraysType (arrays (undefined::arrs)))
+
   in case pacc of
-    Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
-    Avar v                      -> hash "Avar"          `hashWithSalt` hashIdx v
-    Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple hashAcc t
-    Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix    `hashA` a
-    Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun hashAcc f `hashA` a
-    Aforeign _ f a              -> hash "Aforeign"      `hashWithSalt` hashAfun hashAcc f `hashA` a
-    Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
-    Awhile p f a                -> hash "Awhile"        `hashWithSalt` hashAfun hashAcc f `hashWithSalt` hashAfun hashAcc p `hashA` a
-    Unit e                      -> hash "Unit"          `hashE` e  `hashWithSalt` hashArraysType (arrays (undefined::arrs))
-    Generate e f                -> hash "Generate"      `hashE` e  `hashF` f  `hashWithSalt` hashArraysType (arrays (undefined::arrs))
-    Acond e a1 a2               -> hash "Acond"         `hashE` e  `hashA` a1 `hashA` a2
-    Reshape sh a                -> hash "Reshape"       `hashE` sh `hashA` a
-    Transform sh f1 f2 a        -> hash "Transform"     `hashE` sh `hashF` f1 `hashF` f2 `hashA` a
-    Replicate spec ix a         -> hash "Replicate"     `hashE` ix `hashA` a  `hashWithSalt` show spec
-    Slice spec a ix             -> hash "Slice"         `hashE` ix `hashA` a  `hashWithSalt` show spec
-    Map f a                     -> hash "Map"           `hashF` f  `hashA` a
-    ZipWith f a1 a2             -> hash "ZipWith"       `hashF` f  `hashA` a1 `hashA` a2
-    Fold f e a                  -> hash "Fold"          `hashF` f  `hashE` e  `hashA` a
-    Fold1 f a                   -> hash "Fold1"         `hashF` f  `hashA` a
-    FoldSeg f e a s             -> hash "FoldSeg"       `hashF` f  `hashE` e  `hashA` a  `hashA` s
-    Fold1Seg f a s              -> hash "Fold1Seg"      `hashF` f  `hashA` a  `hashA` s
-    Scanl f e a                 -> hash "Scanl"         `hashF` f  `hashE` e  `hashA` a
-    Scanl' f e a                -> hash "Scanl'"        `hashF` f  `hashE` e  `hashA` a
-    Scanl1 f a                  -> hash "Scanl1"        `hashF` f  `hashA` a
-    Scanr f e a                 -> hash "Scanr"         `hashF` f  `hashE` e  `hashA` a
-    Scanr' f e a                -> hash "Scanr'"        `hashF` f  `hashE` e  `hashA` a
-    Scanr1 f a                  -> hash "Scanr1"        `hashF` f  `hashA` a
-    Backpermute sh f a          -> hash "Backpermute"   `hashF` f  `hashE` sh `hashA` a
-    Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
-    Stencil f b a               -> hash "Stencil"       `hashF` f  `hashB` b  `hashA` a
-    Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashB` b1 `hashA` a1 `hashB` b2 `hashA` a2
-    -- Collect s                   -> hash "Seq"           `hashS` s
+    Alet bnd body               -> hashP "Alet"         `hashA` bnd `hashA` body
+    Avar v                      -> hashP "Avar"         `hashWithSalt` hashIdx v
+    Atuple t                    -> hashP "Atuple"       `hashWithSalt` hashAtuple hashAcc t
+    Aprj ix a                   -> hashP "Aprj"         `hashWithSalt` hashTupleIdx ix    `hashA` a
+    Apply f a                   -> hashP "Apply"        `hashWithSalt` hashAfun hashAcc f `hashA` a
+    Aforeign _ f a              -> hashP "Aforeign"     `hashWithSalt` hashAfun hashAcc f `hashA` a
+    Use a                       -> hashP "Use"          `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
+    Awhile p f a                -> hashP "Awhile"       `hashWithSalt` hashAfun hashAcc f `hashWithSalt` hashAfun hashAcc p `hashA` a
+    Unit e                      -> hashP "Unit"         `hashE` e
+    Generate e f                -> hashP "Generate"     `hashE` e  `hashF` f
+    Acond e a1 a2               -> hashP "Acond"        `hashE` e  `hashA` a1 `hashA` a2
+    Reshape sh a                -> hashP "Reshape"      `hashE` sh `hashA` a
+    Transform sh f1 f2 a        -> hashP "Transform"    `hashE` sh `hashF` f1 `hashF` f2 `hashA` a
+    Replicate spec ix a         -> hashP "Replicate"    `hashE` ix `hashA` a  `hashWithSalt` show spec
+    Slice spec a ix             -> hashP "Slice"        `hashE` ix `hashA` a  `hashWithSalt` show spec
+    Map f a                     -> hashP "Map"          `hashF` f  `hashA` a
+    ZipWith f a1 a2             -> hashP "ZipWith"      `hashF` f  `hashA` a1 `hashA` a2
+    Fold f e a                  -> hashP "Fold"         `hashF` f  `hashE` e  `hashA` a
+    Fold1 f a                   -> hashP "Fold1"        `hashF` f  `hashA` a
+    FoldSeg f e a s             -> hashP "FoldSeg"      `hashF` f  `hashE` e  `hashA` a  `hashA` s
+    Fold1Seg f a s              -> hashP "Fold1Seg"     `hashF` f  `hashA` a  `hashA` s
+    Scanl f e a                 -> hashP "Scanl"        `hashF` f  `hashE` e  `hashA` a
+    Scanl' f e a                -> hashP "Scanl'"       `hashF` f  `hashE` e  `hashA` a
+    Scanl1 f a                  -> hashP "Scanl1"       `hashF` f  `hashA` a
+    Scanr f e a                 -> hashP "Scanr"        `hashF` f  `hashE` e  `hashA` a
+    Scanr' f e a                -> hashP "Scanr'"       `hashF` f  `hashE` e  `hashA` a
+    Scanr1 f a                  -> hashP "Scanr1"       `hashF` f  `hashA` a
+    Backpermute sh f a          -> hashP "Backpermute"  `hashF` f  `hashE` sh `hashA` a
+    Permute f1 a1 f2 a2         -> hashP "Permute"      `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
+    Stencil f b a               -> hashP "Stencil"      `hashF` f  `hashB` b  `hashA` a
+    Stencil2 f b1 a1 b2 a2      -> hashP "Stencil2"     `hashF` f  `hashB` b1 `hashA` a1 `hashB` b2 `hashA` a2
+    -- Collect s                   -> hashP "Seq"          `hashS` s
 
 
 hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()
-hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
+hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2 )
 hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
 
 hashArraysType :: forall a. ArraysR a -> Int
@@ -1114,7 +1121,7 @@ hashPreBoundary :: forall acc aenv sh e. HashAcc acc -> PreBoundary acc aenv (Ar
 hashPreBoundary _ Wrap          = hash "Wrap"
 hashPreBoundary _ Clamp         = hash "Clamp"
 hashPreBoundary _ Mirror        = hash "Mirror"
-hashPreBoundary _ (Constant v)  = hash "Constant" `hashWithSalt` show (toElt v :: e)
+hashPreBoundary _ (Constant c)  = hash "Constant" `hashWithSalt` hashConst (eltType (undefined::e)) c
 hashPreBoundary h (Function f)  = hash "Function" `hashWithSalt` hashPreOpenFun h f
 
 
@@ -1133,53 +1140,107 @@ hashPreOpenExp hashAcc exp =
       . hashWithSalt (hashArraysType (arrays (undefined::a)))
       . hashAcc
 
-    hashE :: forall env' aenv' e. Elt e => Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt
-      = hashWithSalt salt
-      . hashWithSalt (hashTupleType (eltType (undefined::e)))
-      . hashPreOpenExp hashAcc
+    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
+    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
+
+    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
+    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
+
+    hashP :: (Elt exp, Hashable a) => a -> Int
+    hashP = hashWithSalt (hashTupleType (eltType (undefined::exp)))
 
   in case exp of
-    Let bnd body                -> hash "Let"           `hashE` bnd `hashE` body
-    Var ix                      -> hash "Var"           `hashWithSalt` hashTupleType (eltType (undefined::exp)) `hashWithSalt` hashIdx ix
-    Const c                     -> hash "Const"         `hashWithSalt` show (toElt c :: exp)
-    Tuple t                     -> hash "Tuple"         `hashWithSalt` hashTuple hashAcc t
-    Prj i e                     -> hash "Prj"           `hashWithSalt` hashTupleIdx i `hashWithSalt` hashTupleType (eltType (undefined::exp)) `hashE` e
-    IndexAny                    -> hash "IndexAny"      `hashWithSalt` hashTupleType (eltType (undefined::exp))
-    IndexNil                    -> hash "IndexNil"
-    IndexCons sl a              -> hash "IndexCons"     `hashE` sl `hashE` a
-    IndexHead sl                -> hash "IndexHead"     `hashE` sl
-    IndexTail sl                -> hash "IndexTail"     `hashE` sl
-    IndexSlice spec ix sh       -> hash "IndexSlice"    `hashE` ix `hashE` sh `hashWithSalt` show spec
-    IndexFull  spec ix sl       -> hash "IndexFull"     `hashE` ix `hashE` sl `hashWithSalt` show spec
-    ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
-    FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i
-    Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t  `hashE` e
-    While p f x                 -> hash "While"         `hashWithSalt` hashPreOpenFun hashAcc p  `hashWithSalt` hashPreOpenFun hashAcc f  `hashE` x
-    PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
-    PrimConst c                 -> hash "PrimConst"     `hashWithSalt` hashPrimConst c
-    Index a ix                  -> hash "Index"         `hashA` a  `hashE` ix
-    LinearIndex a ix            -> hash "LinearIndex"   `hashA` a  `hashE` ix
-    Shape a                     -> hash "Shape"         `hashA` a
-    ShapeSize sh                -> hash "ShapeSize"     `hashE` sh
-    Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
-    Union sa sb                 -> hash "Union"         `hashE` sa `hashE` sb
-    Foreign _ f e               -> hash "Foreign"       `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
+    Let bnd body                -> hashP "Let"          `hashE` bnd `hashE` body
+    Var ix                      -> hashP "Var"          `hashWithSalt` hashIdx ix
+    Const c                     -> hashP "Const"        `hashWithSalt` hashConst (eltType (undefined::exp)) c
+    Tuple t                     -> hashP "Tuple"        `hashWithSalt` hashTuple hashAcc t
+    Prj i e                     -> hashP "Prj"          `hashWithSalt` hashTupleIdx i `hashE` e
+    IndexAny                    -> hashP "IndexAny"
+    IndexNil                    -> hashP "IndexNil"
+    IndexCons sl a              -> hashP "IndexCons"    `hashE` sl `hashE` a
+    IndexHead sl                -> hashP "IndexHead"    `hashE` sl
+    IndexTail sl                -> hashP "IndexTail"    `hashE` sl
+    IndexSlice spec ix sh       -> hashP "IndexSlice"   `hashE` ix `hashE` sh `hashWithSalt` show spec
+    IndexFull  spec ix sl       -> hashP "IndexFull"    `hashE` ix `hashE` sl `hashWithSalt` show spec
+    ToIndex sh i                -> hashP "ToIndex"      `hashE` sh `hashE` i
+    FromIndex sh i              -> hashP "FromIndex"    `hashE` sh `hashE` i
+    Cond c t e                  -> hashP "Cond"         `hashE` c  `hashE` t  `hashE` e
+    While p f x                 -> hashP "While"        `hashF` p  `hashF` f  `hashE` x
+    PrimApp f x                 -> hashP "PrimApp"      `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
+    PrimConst c                 -> hashP "PrimConst"    `hashWithSalt` hashPrimConst c
+    Index a ix                  -> hashP "Index"        `hashA` a  `hashE` ix
+    LinearIndex a ix            -> hashP "LinearIndex"  `hashA` a  `hashE` ix
+    Shape a                     -> hashP "Shape"        `hashA` a
+    ShapeSize sh                -> hashP "ShapeSize"    `hashE` sh
+    Intersect sa sb             -> hashP "Intersect"    `hashE` sa `hashE` sb
+    Union sa sb                 -> hashP "Union"        `hashE` sa `hashE` sb
+    Foreign _ f e               -> hashP "Foreign"      `hashF` f  `hashE` e
 
 
 hashPreOpenFun :: HashAcc acc -> PreOpenFun acc env aenv f -> Int
 hashPreOpenFun h (Body e)       = hash "Body"           `hashWithSalt` hashPreOpenExp h e
-hashPreOpenFun h (Lam f)        = hash "Lam"            `hashWithSalt` hashPreOpenFun h f
+hashPreOpenFun h (Lam f)        = hash "Lam"            `hashWithSalt` hashPreOpenFun h f `hashWithSalt` hashArgType f
+  where
+    hashArgType :: forall acc env aenv a b. Elt a => PreOpenFun acc (env,a) aenv b -> Int
+    hashArgType _ = hashTupleType (eltType (undefined::a))
 
 hashTuple :: HashAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Int
 hashTuple _ NilTup              = hash "NilTup"
 hashTuple h (SnocTup t e)       = hash "SnocTup"        `hashWithSalt` hashTuple h t `hashWithSalt` hashPreOpenExp h e
 
 
+hashConst :: TupleType t -> t -> Int
+hashConst UnitTuple         ()    = hash "()"
+hashConst (SingleTuple t)   c     = hashScalarConst t c
+hashConst (PairTuple ta tb) (a,b) = hash (hashConst ta a, hashConst tb b)
+
+hashScalarConst :: ScalarType t -> t -> Int
+hashScalarConst (NumScalarType t)    = hashNumConst t
+hashScalarConst (NonNumScalarType t) = hashNonNumConst t
+
+hashNonNumConst :: NonNumType t -> t -> Int
+hashNonNumConst TypeBool{}   x          = hash "Bool"   `hashWithSalt` x
+hashNonNumConst TypeChar{}   x          = hash "Char"   `hashWithSalt` x
+hashNonNumConst TypeCChar{}  (CChar  x) = hash "CChar"  `hashWithSalt` x
+hashNonNumConst TypeCSChar{} (CSChar x) = hash "CSChar" `hashWithSalt` x
+hashNonNumConst TypeCUChar{} (CUChar x) = hash "CUChar" `hashWithSalt` x
+
+hashNumConst :: NumType t -> t -> Int
+hashNumConst (IntegralNumType t) = hashIntegralConst t
+hashNumConst (FloatingNumType t) = hashFloatingConst t
+
+hashIntegralConst :: IntegralType t -> t -> Int
+hashIntegralConst TypeInt{}     x           = hash "Int"     `hashWithSalt` x
+hashIntegralConst TypeInt8{}    x           = hash "Int8"    `hashWithSalt` x
+hashIntegralConst TypeInt16{}   x           = hash "Int16"   `hashWithSalt` x
+hashIntegralConst TypeInt32{}   x           = hash "Int32"   `hashWithSalt` x
+hashIntegralConst TypeInt64{}   x           = hash "Int64"   `hashWithSalt` x
+hashIntegralConst TypeWord{}    x           = hash "Word"    `hashWithSalt` x
+hashIntegralConst TypeWord8{}   x           = hash "Word8"   `hashWithSalt` x
+hashIntegralConst TypeWord16{}  x           = hash "Word16"  `hashWithSalt` x
+hashIntegralConst TypeWord32{}  x           = hash "Word32"  `hashWithSalt` x
+hashIntegralConst TypeWord64{}  x           = hash "Word64"  `hashWithSalt` x
+hashIntegralConst TypeCShort{}  (CShort x)  = hash "CShort"  `hashWithSalt` x
+hashIntegralConst TypeCUShort{} (CUShort x) = hash "CUShort" `hashWithSalt` x
+hashIntegralConst TypeCInt{}    (CInt x)    = hash "CInt"    `hashWithSalt` x
+hashIntegralConst TypeCUInt{}   (CUInt x)   = hash "CUInt"   `hashWithSalt` x
+hashIntegralConst TypeCLong{}   (CLong x)   = hash "CLong"   `hashWithSalt` x
+hashIntegralConst TypeCULong{}  (CULong x)  = hash "CULong"  `hashWithSalt` x
+hashIntegralConst TypeCLLong{}  (CLLong x)  = hash "CLLong"  `hashWithSalt` x
+hashIntegralConst TypeCULLong{} (CULLong x) = hash "CULLong" `hashWithSalt` x
+
+hashFloatingConst :: FloatingType t -> t -> Int
+hashFloatingConst TypeFloat{}   x           = hash "Float"   `hashWithSalt` x
+hashFloatingConst TypeDouble{}  x           = hash "Double"  `hashWithSalt` x
+hashFloatingConst TypeCFloat{}  (CFloat x)  = hash "CFloat"  `hashWithSalt` x
+hashFloatingConst TypeCDouble{} (CDouble x) = hash "CDouble" `hashWithSalt` x
+
+
 hashPrimConst :: PrimConst c -> Int
-hashPrimConst (PrimMinBound t)  = hash "PrimMinBound"   `hashWithSalt` hashBoundedType t
-hashPrimConst (PrimMaxBound t)  = hash "PrimMaxBound"   `hashWithSalt` hashBoundedType t
-hashPrimConst (PrimPi t)        = hash "PrimPi"         `hashWithSalt` hashFloatingType t
+hashPrimConst (PrimMinBound t)  = hash "PrimMinBound" `hashWithSalt` hashBoundedType t
+hashPrimConst (PrimMaxBound t)  = hash "PrimMaxBound" `hashWithSalt` hashBoundedType t
+hashPrimConst (PrimPi t)        = hash "PrimPi"       `hashWithSalt` hashFloatingType t
+
 
 hashPrimFun :: PrimFun f -> Int
 hashPrimFun (PrimAdd a)                = hash "PrimAdd"                `hashWithSalt` hashNumType a
@@ -1250,10 +1311,19 @@ hashPrimFun PrimChr                    = hash "PrimChr"
 hashPrimFun PrimBoolToInt              = hash "PrimBoolToInt"
 
 
+-- TLM: We need to include the depth of the branches in the pair case, otherwise
+--      we are getting a collision at @hash t == hash (t,(t,t))@.
+--
 hashTupleType :: TupleType t -> Int
 hashTupleType UnitTuple       = hash "UnitTuple"
 hashTupleType (SingleTuple t) = hash "SingleTuple" `hashWithSalt` hashScalarType t
-hashTupleType (PairTuple a b) = hash "PairTuple"   `hashWithSalt` hashTupleType a `hashWithSalt` hashTupleType b
+hashTupleType (PairTuple a b) = hash "PairTuple"   `hashWithSalt` hashTupleType a `hashWithSalt` depthTupleType a
+                                                   `hashWithSalt` hashTupleType b `hashWithSalt` depthTupleType b
+
+depthTupleType :: TupleType t -> Int
+depthTupleType UnitTuple       = 0
+depthTupleType SingleTuple{}   = 1
+depthTupleType (PairTuple a b) = depthTupleType a + depthTupleType b
 
 hashScalarType :: ScalarType t -> Int
 hashScalarType (NumScalarType t)    = hash "NumScalarType"    `hashWithSalt` hashNumType t
