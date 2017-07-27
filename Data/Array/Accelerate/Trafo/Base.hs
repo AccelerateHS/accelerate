@@ -199,8 +199,8 @@ instance NFData (DelayedOpenAcc aenv t) where
 --   rnf = rnfDelayedSeq
 
 hashDelayedOpenAcc :: HashAcc DelayedOpenAcc
-hashDelayedOpenAcc (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
-hashDelayedOpenAcc Delayed{..}         = hash "Delayed"  `hashE` extentD `hashF` indexD `hashF` linearIndexD
+hashDelayedOpenAcc (Manifest pacc)     = $(hashQ "Manifest") `hashWithSalt` hashPreOpenAcc hashAcc pacc
+hashDelayedOpenAcc Delayed{..}         = $(hashQ "Delayed")  `hashE` extentD `hashF` indexD `hashF` linearIndexD
   where
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
