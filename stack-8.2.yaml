@@ -1,0 +1,206 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+# vim: nospell
+
+resolver: ghc-8.2
+allow-newer: true # repa, repa-io, gloss-rendering
+
+packages:
+- '.'
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate.git
+    commit: aee5f0232e2cfdcf030e2a7ca0570e9ced017d63
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate-llvm.git
+    commit: 3bc4216e527fa77149259dd19d3d4103ffed9518
+  extra-dep: true
+  subdirs:
+    - 'accelerate-llvm'
+    - 'accelerate-llvm-native'
+    - 'accelerate-llvm-ptx'
+
+- location:
+    git:    https://github.com/tmcdonell/cuda.git
+    commit: c39da756025d7a6fd9fb3fd368736ee05ced5df2
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/nvvm.git
+    commit: 632323e2a7c3c75bb07a3edb35de47273dc4cd07
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/colour-accelerate.git
+    commit: d36d7b524817a682c51f0f3046c538a21826c5de
+  extra-dep: true
+
+extra-deps:
+- 'abstract-deque-0.3'
+- 'abstract-par-0.3.3'
+- 'accelerate-fft-1.0.0.0'
+- 'accelerate-io-1.0.0.0'
+- 'adjunctions-4.3'
+- 'aeson-1.2.1.0'
+- 'ansi-terminal-0.6.3.1'
+- 'ansi-wl-pprint-0.6.8.1'
+- 'atomic-primops-0.8.1'
+- 'attoparsec-0.13.2.0'
+- 'base-compat-0.9.3'
+- 'base-orphans-0.6'
+- 'bifunctors-5.4.2'
+- 'blaze-builder-0.4.0.2'
+- 'bmp-1.2.6.3'
+- 'bytes-0.15.3'
+- 'bytestring-lexing-0.5.0.2'
+- 'cabal-doctest-1.0.2'
+- 'call-stack-0.1.0'
+- 'carray-0.1.6.8'
+- 'cassava-0.4.5.1'
+- 'cereal-0.5.4.0'
+- 'chaselev-deque-0.5.0.5'
+- 'code-page-0.1.3'
+- 'comonad-5.0.2'
+- 'contravariant-1.4'
+- 'criterion-1.2.2.0'
+- 'cufft-0.7.5.0'
+- 'data-default-class-0.1.2.0'
+- 'distributive-0.5.3'
+- 'dlist-0.8.0.3'
+- 'erf-2.0.0.0'
+- 'exceptions-0.8.3'
+- 'extensible-exceptions-0.1.1.4'
+- 'fail-4.9.0.0'
+- 'fclabels-2.0.3.2'
+- 'fft-0.1.8.6'
+- 'file-embed-0.0.10'
+- 'fixed-0.2.1.1'
+- 'free-4.12.4'
+- 'Glob-0.8.0'
+- 'gloss-1.11.1.1'
+- 'gloss-accelerate-2.0.0.0'
+- 'gloss-raster-accelerate-2.0.0.0'
+- 'gloss-rendering-1.11.1.1'
+- 'GLURaw-2.0.0.3'
+- 'GLUT-2.7.0.12'
+- 'half-0.2.2.3'
+- 'hashable-1.2.6.1'
+- 'hashtables-1.2.1.1'
+- 'hostname-1.0'
+- 'HUnit-1.6.0.0'
+- 'integer-logarithms-1.0.2'
+- 'ix-shapable-0.1.0'
+- 'js-flot-0.8.3'
+- 'js-jquery-3.2.1'
+- 'kan-extensions-5.0.2'
+- 'lens-4.15.4'
+- 'lens-accelerate-0.1.0.0'
+- 'libffi-0.1'
+- 'linear-1.20.7'
+- 'linear-accelerate-0.5'
+- 'llvm-hs-4.2.0'
+- 'llvm-hs-pure-4.1.0.0'
+- 'math-functions-0.2.1.0'
+- 'matrix-market-attoparsec-0.1.0.8'
+- 'microstache-1.0.1.1'
+- 'mmorph-1.1.0'
+- 'monad-par-0.3.4.8'
+- 'monad-par-extras-0.3.3'
+- 'mtl-2.2.1'
+- 'mwc-random-0.13.6.0'
+- 'normaldistribution-1.1.0.3'
+- 'ObjectName-1.1.0.1'
+- 'old-locale-1.0.0.7'
+- 'old-time-1.1.0.3'
+- 'OpenGL-3.0.2.0'
+- 'OpenGLRaw-3.2.5.0'
+- 'optparse-applicative-0.14.0.0'
+- 'parallel-3.2.1.1'
+- 'parsec-3.1.11'
+- 'pipes-4.3.4'
+- 'prelude-extras-0.4.0.3'
+- 'primitive-0.6.2.0'
+- 'profunctors-5.2.1'
+- 'QuickCheck-2.10.0.1'
+- 'random-1.1'
+- 'reflection-2.1.2'
+- 'regex-base-0.93.2'
+- 'regex-posix-0.95.2'
+- 'repa-3.4.1.2'
+- 'repa-io-3.4.1.1'
+- 'scientific-0.3.5.1'
+- 'semigroupoids-5.2.1'
+- 'semigroups-0.18.3'
+- 'StateVar-1.1.0.4'
+- 'statistics-0.14.0.2'
+- 'stm-2.4.4.1'
+- 'storable-complex-0.2.2'
+- 'syb-0.7'
+- 'tagged-0.8.5'
+- 'test-framework-0.8.1.1'
+- 'test-framework-hunit-0.3.0.2'
+- 'test-framework-quickcheck2-0.3.0.4'
+- 'text-1.2.2.2'
+- 'tf-random-0.5'
+- 'th-abstraction-0.2.5.0'
+- 'time-locale-compat-0.1.1.3'
+- 'transformers-compat-0.5.1.4'
+- 'unique-0'
+- 'unordered-containers-0.2.8.0'
+- 'utf8-string-1.0.1.1'
+- 'uuid-types-1.0.3'
+- 'vector-0.12.0.1'
+- 'vector-algorithms-0.7.0.1'
+- 'vector-binary-instances-0.2.3.5'
+- 'vector-th-unbox-0.2.1.6'
+- 'void-0.7.2'
+- 'xml-1.3.14'
+
+# Override default flag values for local packages and extra-deps
+flags:
+  time-locale-compat:
+    old-time: false
+  accelerate-examples:
+    llvm-cpu:   true
+    llvm-ptx:   true
+    gui:        true
+    ekg:        false
+    codespeed:  false
+    nofib:      true
+    smvm:       true
+    crystal:    true
+    tunnel:     true
+    canny:      true
+    mandelbrot: true
+    fluid:      true
+    nbody:      true
+    smoothlife: true
+    hashcat:    true
+    fft:        true
+    pagerank:   true
+    ray:        true
+    kmeans:     true
+
+# Extra package databases containing global packages
+extra-package-dbs: []
+
+# Extra global and per-package GHC options
+ghc-options:
+  '*': -fdiagnostics-color=always
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.4.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]
+

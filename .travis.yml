@@ -58,6 +58,15 @@ matrix:
             - *apt_packages
             - cabal-install-1.24
 
+    - env: GHC=8.2.1 CABAL=2.0 LLVM=4.0.0 CUDA=8.0.61-1
+      compiler: "GHC 8.2"
+      addons:
+        apt:
+          sources: *apt_sources
+          packages:
+            - *apt_packages
+            - cabal-install-2.0
+
   fast_finish: true
 
 before_install:
@@ -82,7 +91,7 @@ install:
       if [ ${GHC} == head -o ! -e stack.yaml ]; then
         travis_retry cabal install --only-dependencies || exit 1
       else
-        travis_retry stack build --fast --only-dependencies --no-terminal || exit 1
+        travis_retry stack build --fast --only-dependencies --no-terminal --ghc-options="-j +RTS -A128M -n4m -RTS" || exit 1
       fi
 
 script:
@@ -90,7 +99,7 @@ script:
       if [ ${GHC} == head -o ! -e stack.yaml ]; then
         cabal install || exit 1
       else
-        stack build --fast --no-terminal || exit 1
+        stack build --fast --no-terminal --ghc-options="-j +RTS -A128M -n4m -RTS" || exit 1
       fi
 
 after_success:
