@@ -1,5 +1,5 @@
 Name:                   accelerate-examples
-Version:                1.0.0.0
+Version:                1.1.0.0
 Cabal-version:          >=1.8
 Tested-with:            GHC >= 7.8
 Build-type:             Simple
@@ -129,7 +129,7 @@ Library
   hs-source-dirs:       lib
   Build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
+        , accelerate                      == 1.1.*
         , ansi-wl-pprint                  >= 0.6
         , containers                      >= 0.5
         , criterion                       >= 1.0
@@ -174,12 +174,12 @@ Library
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
     build-depends:
-        accelerate-llvm-native            == 1.0.*
+        accelerate-llvm-native            == 1.1.*
 
   if flag(llvm-ptx)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
-        accelerate-llvm-ptx               == 1.0.*
+        accelerate-llvm-ptx               == 1.1.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -299,10 +299,10 @@ Executable accelerate-nofib
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-fft                  == 1.0.*
-        , accelerate-io                   == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-fft                  >= 1.0
+        , accelerate-io                   >= 1.0
         , array                           >= 0.3
         , containers                      >= 0.5
         , fclabels                        >= 2.0
@@ -347,9 +347,9 @@ Executable accelerate-smvm
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , fclabels                        >= 2.0
         , matrix-market-attoparsec        >= 0.1
         , mwc-random                      >= 0.8
@@ -386,8 +386,8 @@ Executable accelerate-crystal
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss-raster-accelerate         >= 2.0
@@ -421,8 +421,8 @@ Executable accelerate-tunnel
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , fclabels                        >= 2.0
         , gloss-raster-accelerate         >= 2.0
         , lens-accelerate                 >= 0.1
@@ -458,9 +458,9 @@ Executable accelerate-canny
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , repa                            >= 3.1
@@ -496,9 +496,9 @@ Executable accelerate-mandelbrot
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
@@ -533,9 +533,9 @@ Executable accelerate-fluid
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , bmp                             >= 1.2
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
@@ -585,8 +585,8 @@ Executable accelerate-nbody
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
         , lens-accelerate                 >= 0.1
@@ -633,9 +633,9 @@ Executable accelerate-smoothlife
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-fft                  == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-fft                  >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
@@ -671,8 +671,8 @@ Executable accelerate-hashcat
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , bytestring                      >= 0.9
         , bytestring-lexing               >= 0.5
         , cereal                          >= 0.3
@@ -709,10 +709,10 @@ Executable accelerate-fft
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-fft                  == 1.0.*
-        , accelerate-io                   == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-fft                  >= 1.0
+        , accelerate-io                   >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , filepath                        >= 1.0
@@ -752,9 +752,9 @@ Executable accelerate-pagerank
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , bytestring                      >= 0.9.2
         , containers                      >= 0.4.2
         , directory                       >= 1.1
@@ -801,8 +801,8 @@ Executable accelerate-ray
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , colour-accelerate               >= 0.1
         , fclabels                        >= 1.0
         , gloss                           >= 1.8
@@ -840,8 +840,8 @@ Executable accelerate-kmeans
   else
     build-depends:
           base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , binary                          >= 0.7
         , directory                       >= 1.1
         , fclabels                        >= 1.0
@@ -855,7 +855,7 @@ source-repository head
 
 source-repository this
   type:                 git
-  tag:                  1.0.0.0
+  tag:                  1.1.0.0
   location:             https://github.com/AccelerateHS/accelerate-examples
 
 -- vim: nospell
