@@ -1,19 +1,20 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-8.0
+resolver: lts-9.0
+allow-newer: true # repa-io
 
 packages:
 - '.'
 
 - location:
     git:    https://github.com/tmcdonell/accelerate.git
-    commit: a4e5d51334f303a32ee45979f342f8c391b43da3
+    commit: aee5f0232e2cfdcf030e2a7ca0570e9ced017d63
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: c042c80388dac6b15fdb17d1f4f66b10d6c47e0a
+    commit: 3bc4216e527fa77149259dd19d3d4103ffed9518
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -22,53 +23,33 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/cuda.git
-    commit: 1bff17152088384b71a439b01ec993a54e2618c9
+    commit: c39da756025d7a6fd9fb3fd368736ee05ced5df2
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/nvvm.git
+    commit: 632323e2a7c3c75bb07a3edb35de47273dc4cd07
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: 2c7ce095282b2d0ef33cc1e73ca865cc3cc3211b
+    commit: d36d7b524817a682c51f0f3046c538a21826c5de
   extra-dep: true
 
 extra-deps:
-# - 'accelerate-1.0.0.0'
 - 'accelerate-fft-1.0.0.0'
 - 'accelerate-io-1.0.0.0'
-# - 'accelerate-llvm-1.0.0.0'
-# - 'accelerate-llvm-native-1.0.0.0'
-# - 'accelerate-llvm-ptx-1.0.0.0'
-- 'chaselev-deque-0.5.0.5'
-# - 'colour-accelerate-0.1.0.0'
-# - 'cuda-0.7.5.3'
 - 'cufft-0.7.5.0'
 - 'gloss-accelerate-2.0.0.0'
 - 'gloss-raster-accelerate-2.0.0.0'
 - 'lens-accelerate-0.1.0.0'
-- 'libffi-0.1'
-- 'linear-accelerate-0.3'
-- 'llvm-hs-4.1.0.0'
-- 'llvm-hs-pure-4.1.0.0'
-- 'matrix-market-attoparsec-0.1.0.5'
+- 'linear-accelerate-0.5'
 - 'normaldistribution-1.1.0.3'
-- 'nvvm-0.7.5.2'
-- 'unique-0'
+- 'repa-3.4.1.2'
+- 'repa-io-3.4.1.1'
 
 # Override default flag values for local packages and extra-deps
 flags:
-  llvm-hs:
-    shared-llvm: true
-  accelerate:
-    debug: true
-    ekg:   false
-  accelerate-llvm-native:
-    debug: true
-  accelerate-llvm-ptx:
-    debug: true
-    nvvm:  false
-  accelerate-fft:
-    cuda:     false
-    llvm-cpu: true
-    llvm-ptx: true
   accelerate-examples:
     llvm-cpu:   true
     llvm-ptx:   true
