@@ -18,7 +18,7 @@ import qualified Prelude                                as P
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
-import Data.Array.Accelerate.Data.Colour.RGB            hiding ( clamp )
+import Data.Array.Accelerate.Data.Colour.RGB
 
 
 -- Canny algorithm -------------------------------------------------------------
@@ -183,10 +183,10 @@ nonMaximumSuppression low high magdir =
         offsetx         = dir > orient' Vert  ? (-1, dir < orient' Vert ? (1, 0))
         offsety         = dir < orient' Horiz ? (-1, 0)
 
-        (fwd, _)        = unlift $ magdir ! lift (clamp (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
-        (rev, _)        = unlift $ magdir ! lift (clamp (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
+        (fwd, _)        = unlift $ magdir ! lift (limit (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
+        (rev, _)        = unlift $ magdir ! lift (limit (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
 
-        clamp (Z:.u:.v) = Z :. 0 `max` u `min` (h-1) :. 0 `max` v `min` (w-1)
+        limit (Z:.u:.v) = Z :. 0 `max` u `min` (h-1) :. 0 `max` v `min` (w-1)
 
         -- Try to avoid doing explicit tests to avoid warp divergence.
         --

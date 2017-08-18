@@ -13,7 +13,7 @@ import Prelude                                                  as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
-import Test.QuickCheck
+import Test.QuickCheck                                          ( Arbitrary )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 

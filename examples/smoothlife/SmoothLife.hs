@@ -16,7 +16,7 @@ import Config
 
 import qualified Prelude                                as P
 import Data.Label
-import Data.Array.Accelerate                            as A hiding ( size )
+import Data.Array.Accelerate                            as A hiding ( size, clamp )
 import Data.Array.Accelerate.Examples.Internal          as A hiding ( nf )
 import Data.Array.Accelerate.Math.FFT
 import Data.Array.Accelerate.Math.DFT.Centre

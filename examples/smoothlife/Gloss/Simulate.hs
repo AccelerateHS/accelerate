@@ -2,11 +2,13 @@
 
 module Gloss.Simulate (
 
-  Simulate(..),
+  Mode(..),
+  Simulate, sigmoidMode, mixingMode,
+  initialise,
 
 ) where
 
-import Config
+import Config                                             ( Config )
 import Data.Label
 
 

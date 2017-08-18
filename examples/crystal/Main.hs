@@ -13,7 +13,7 @@ import Config
 
 import Data.Label                                       ( get )
 
-import Data.Array.Accelerate                            as A hiding ( size, (==) )
+import Data.Array.Accelerate                            as A hiding ( (==), size, wrap )
 import Data.Array.Accelerate.Examples.Internal          as A
 import Data.Array.Accelerate.Data.Colour.RGBA
 

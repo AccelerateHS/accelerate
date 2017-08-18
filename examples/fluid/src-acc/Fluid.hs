@@ -10,8 +10,8 @@ module Fluid (
 ) where
 
 import Type
-import Data.Array.Accelerate                              as A
 
+import Data.Array.Accelerate                              as A hiding ( clamp )
 import qualified Prelude                                  as P
 
 

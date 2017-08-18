@@ -551,7 +551,6 @@ Executable accelerate-nbody
   Main-is:              Main.hs
   other-modules:
         Common.Body
-        Common.Dump
         Common.Tree
         Common.Type
         Common.World
@@ -818,7 +817,7 @@ Executable accelerate-ray
 Executable accelerate-kmeans
   hs-source-dirs:       examples/kmeans
   Main-is:              Main.hs
-  other-modules:        Config Main Kmeans GenSamples
+  other-modules:        Config Kmeans
 
   ghc-options:
         -Wall
