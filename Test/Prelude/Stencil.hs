@@ -14,8 +14,8 @@ import Prelude                                                  as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
-import Test.QuickCheck
-import Test.HUnit                                               ((@?=))
+import Test.QuickCheck                                          ( Arbitrary )
+import Test.HUnit                                               ( (@?=) )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.Framework.Providers.HUnit
