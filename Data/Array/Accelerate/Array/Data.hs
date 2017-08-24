@@ -802,6 +802,7 @@ __mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocPlainForeignPtrBytes
 -- to add a finaliser to the plain ForeignPtr. For our purposes this is fine,
 -- since in Accelerate finalisers are handled using Lifetime
 --
+{-# INLINE mallocPlainForeignPtrBytesAligned #-}
 mallocPlainForeignPtrBytesAligned :: Int -> IO (ForeignPtr a)
 mallocPlainForeignPtrBytesAligned (I# size) = IO $ \s ->
   case newAlignedPinnedByteArray# size 16# s of

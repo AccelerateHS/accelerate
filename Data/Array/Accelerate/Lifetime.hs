@@ -61,6 +61,7 @@ instance Eq a => Eq (Lifetime a) where
 
 -- | Construct a new 'Lifetime' from the given value.
 --
+{-# INLINE newLifetime #-}
 newLifetime :: a -> IO (Lifetime a)
 newLifetime a = do
   ref  <- newIORef []
@@ -72,6 +73,7 @@ newLifetime a = do
 -- throughout its execution. It is important to not let the value /leak/ outside
 -- the function, either by returning it or by lazy IO.
 --
+{-# INLINE withLifetime #-}
 withLifetime :: Lifetime a -> (a -> IO b) -> IO b
 withLifetime (Lifetime ref _ a) f = do
   r <- f a
@@ -81,6 +83,7 @@ withLifetime (Lifetime ref _ a) f = do
 -- | Ensure that the lifetime is alive at the given place in a sequence of IO
 -- actions. Does not force the payload.
 --
+{-# INLINE touchLifetime #-}
 touchLifetime :: Lifetime a -> IO ()
 touchLifetime (Lifetime ref _ _) = touchIORef ref
 
@@ -138,6 +141,7 @@ mkWeakPtr l = mkWeak l l
 -- 'Lifetime' is still reachable, the finalizers may fire, potentially
 -- invalidating the value.
 --
+{-# INLINE unsafeGetValue #-}
 unsafeGetValue :: Lifetime a -> a
 unsafeGetValue (Lifetime _ _ a) = a
 
@@ -151,6 +155,7 @@ finalizer ref = do
 -- Touch an 'IORef', ensuring that it is alive at this point in a sequence of IO
 -- actions.
 --
+{-# INLINE touchIORef #-}
 touchIORef :: IORef a -> IO ()
 touchIORef r = IO $ \s -> case touch# r s of s' -> (# s', () #)
 
