@@ -39,10 +39,6 @@ Description:
       greater. See the following table for supported GPUs:
       <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
   .
-    * @accelerate-cuda@: Backend targeting CUDA-enabled NVIDIA GPUs. Requires
-      a GPU with compute compatibility 1.2 or greater. /NOTE: This backend is
-      being deprecated in favour of @accelerate-llvm-ptx@./
-  .
     * @accelerate-examples@: Computational kernels and applications showcasing
       the use of Accelerate as well as a regression test suite, supporting
       function and performance testing.

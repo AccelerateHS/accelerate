@@ -19,13 +19,15 @@ Requirements:
   * For the CUDA backend, CUDA version 5.0 or later
   * Haskell libraries as specified in the relevant cabal files
 
-A standard source installation is to clone the individual repositories you are interested in, and add those to a local cabal sandbox. For example:
+The recommended way to install from source is to use [`stack`](https://www.haskellstack.org), for example by including the following in the `stack.yaml` file for your project:
 
-    $ git clone https://github.com/AccelerateHS/accelerate.git
-    $ git clone https://github.com/AccelerateHS/accelerate-cuda.git
-    $ cabal sandbox init
-    $ cabal sandbox add-source accelerate accelerate-cuda
-    $ cabal install accelerate-cuda
+```yaml
+resolver: lts-9.0
+extra-deps:
+- 'accelerate-llvm-1.1.0.0'
+- 'accelerate-llvm-native-1.1.0.0'
+- 'accelerate-llvm-ptx-1.1.0.0'
+```
 
 
 New backends
