@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
-## [1.1.0.0]
+## [1.1.0.0] - 2017-09-21
 ### Added
   * Additional EKG monitoring hooks ([#340])
   * Operations from `RealFloat`
