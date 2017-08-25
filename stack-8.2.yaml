@@ -6,40 +6,15 @@ resolver: ghc-8.2
 packages:
 - '.'
 
-- location:
-    git:    https://github.com/tmcdonell/accelerate.git
-    commit: aee5f0232e2cfdcf030e2a7ca0570e9ced017d63
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 3bc4216e527fa77149259dd19d3d4103ffed9518
-  extra-dep: true
-  subdirs:
-    - 'accelerate-llvm'
-    - 'accelerate-llvm-native'
-    - 'accelerate-llvm-ptx'
-
-- location:
-    git:    https://github.com/tmcdonell/cuda.git
-    commit: c39da756025d7a6fd9fb3fd368736ee05ced5df2
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/nvvm.git
-    commit: 632323e2a7c3c75bb07a3edb35de47273dc4cd07
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: d36d7b524817a682c51f0f3046c538a21826c5de
-  extra-dep: true
-
 extra-deps:
 - 'abstract-deque-0.3'
 - 'abstract-par-0.3.3'
-- 'accelerate-fft-1.0.0.0'
+- 'accelerate-1.1.0.0'
+- 'accelerate-fft-1.1.0.0'
 - 'accelerate-io-1.0.0.0'
+- 'accelerate-llvm-1.1.0.0'
+- 'accelerate-llvm-native-1.1.0.0'
+- 'accelerate-llvm-ptx-1.1.0.0'
 - 'adjunctions-4.3'
 - 'aeson-1.2.1.0'
 - 'ansi-terminal-0.6.3.1'
@@ -61,10 +36,12 @@ extra-deps:
 - 'cereal-0.5.4.0'
 - 'chaselev-deque-0.5.0.5'
 - 'code-page-0.1.3'
+- 'colour-accelerate-0.2.0.0'
 - 'comonad-5.0.2'
 - 'contravariant-1.4'
 - 'criterion-1.2.2.0'
-- 'cufft-0.7.5.0'
+- 'cuda-0.8.0.0'
+- 'cufft-0.8.0.0'
 - 'data-default-class-0.1.2.0'
 - 'distributive-0.5.3'
 - 'dlist-0.8.0.3'
@@ -111,6 +88,7 @@ extra-deps:
 - 'mtl-2.2.1'
 - 'mwc-random-0.13.6.0'
 - 'normaldistribution-1.1.0.3'
+- 'nvvm-0.8.0.0'
 - 'ObjectName-1.1.0.1'
 - 'old-locale-1.0.0.7'
 - 'old-time-1.1.0.3'
@@ -162,26 +140,6 @@ extra-deps:
 flags:
   time-locale-compat:
     old-locale: false
-  accelerate-examples:
-    llvm-cpu:   true
-    llvm-ptx:   true
-    gui:        true
-    ekg:        false
-    codespeed:  false
-    nofib:      true
-    smvm:       true
-    crystal:    true
-    tunnel:     true
-    canny:      true
-    mandelbrot: true
-    fluid:      true
-    nbody:      true
-    smoothlife: true
-    hashcat:    true
-    fft:        true
-    pagerank:   true
-    ray:        true
-    kmeans:     true
 
 # Extra package databases containing global packages
 extra-package-dbs: []

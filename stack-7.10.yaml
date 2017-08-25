@@ -6,42 +6,19 @@ resolver: lts-6.30
 packages:
 - '.'
 
-- location:
-    git:    https://github.com/tmcdonell/accelerate.git
-    commit: aee5f0232e2cfdcf030e2a7ca0570e9ced017d63
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 3bc4216e527fa77149259dd19d3d4103ffed9518
-  extra-dep: true
-  subdirs:
-    - 'accelerate-llvm'
-    - 'accelerate-llvm-native'
-    - 'accelerate-llvm-ptx'
-
-- location:
-    git:    https://github.com/tmcdonell/cuda.git
-    commit: c39da756025d7a6fd9fb3fd368736ee05ced5df2
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/nvvm.git
-    commit: 632323e2a7c3c75bb07a3edb35de47273dc4cd07
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/colour-accelerate.git
-    commit: d36d7b524817a682c51f0f3046c538a21826c5de
-  extra-dep: true
-
 extra-deps:
-- 'accelerate-fft-1.0.0.0'
+- 'accelerate-1.1.0.0'
+- 'accelerate-fft-1.1.0.0'
 - 'accelerate-io-1.0.0.0'
-- 'Cabal-1.24.2.0'
+- 'accelerate-llvm-1.1.0.0'
+- 'accelerate-llvm-native-1.1.0.0'
+- 'accelerate-llvm-ptx-1.1.0.0'
+- 'Cabal-2.0.0.2'
 - 'cabal-doctest-1.0.2'
 - 'chaselev-deque-0.5.0.5'
-- 'cufft-0.7.5.0'
+- 'colour-accelerate-0.2.0.0'
+- 'cuda-0.8.0.0'
+- 'cufft-0.8.0.0'
 - 'gloss-1.11.1.1'
 - 'gloss-accelerate-2.0.0.0'
 - 'gloss-raster-accelerate-2.0.0.0'
@@ -53,6 +30,7 @@ extra-deps:
 - 'llvm-hs-pure-4.1.0.0'
 - 'matrix-market-attoparsec-0.1.0.5'
 - 'normaldistribution-1.1.0.3'
+- 'nvvm-0.8.0.0'
 - 'process-1.4.3.0'
 - 'unique-0'
 
@@ -63,27 +41,6 @@ flags:
     semigroups: true
   llvm-hs-pure:
     semigroups: true
-  accelerate-examples:
-    cuda:       false
-    llvm-cpu:   true
-    llvm-ptx:   true
-    gui:        true
-    ekg:        false
-    codespeed:  false
-    nofib:      true
-    smvm:       true
-    crystal:    true
-    tunnel:     true
-    canny:      true
-    mandelbrot: true
-    fluid:      true
-    nbody:      true
-    smoothlife: true
-    hashcat:    true
-    fft:        true
-    pagerank:   true
-    ray:        true
-    kmeans:     true
 
 # Extra package databases containing global packages
 extra-package-dbs: []
