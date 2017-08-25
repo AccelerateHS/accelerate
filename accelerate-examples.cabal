@@ -25,6 +25,7 @@ Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
 Extra-source-files:
+    README.md
     data/matrices/README.md
     examples/canny/README.md
     examples/fluid/README.md
