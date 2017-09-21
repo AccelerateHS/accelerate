@@ -30,7 +30,7 @@ import Data.Bits
 import Data.Char
 import Data.Monoid
 import GHC.Float                                        ( float2Double, double2Float )
-import Text.PrettyPrint
+import Text.PrettyPrint.ANSI.Leijen
 import Unsafe.Coerce
 import qualified Prelude                                as P
 

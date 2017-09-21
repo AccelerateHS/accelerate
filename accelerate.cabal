@@ -263,7 +263,7 @@ Library
         , hashable                      >= 1.1
         , hashtables                    >= 1.0
         , mtl                           >= 2.0
-        , pretty                        >= 1.0
+        , ansi-wl-pprint                >= 0.6
         , template-haskell
         , time                          >= 1.4
         , transformers                  >= 0.3

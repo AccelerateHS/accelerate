@@ -12,13 +12,7 @@ extra-deps:
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps
-flags:
-  accelerate:
-    unsafe-checks: false
-    bounds-checks: true
-    debug: false
-    ekg: false
-    internal-checks: false
+flags: {}
 
 # Extra package databases containing global packages
 extra-package-dbs: []
