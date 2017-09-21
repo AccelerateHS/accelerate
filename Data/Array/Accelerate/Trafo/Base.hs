@@ -253,7 +253,7 @@ prettyDelayedOpenAcc wrap aenv acc = case acc of
     -> prettyDelayedOpenAcc wrap aenv a
 
     | otherwise
-    -> wrap $ hang 2 (sep [text "Delayed"
+    -> wrap $ hang 2 (sep [green (text "delayed")
                           , parens (align (prettyPreExp prettyDelayedOpenAcc (parens . align) aenv sh))
                           , parens (align (prettyPreFun prettyDelayedOpenAcc aenv f))
                           ])

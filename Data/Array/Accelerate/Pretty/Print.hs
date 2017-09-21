@@ -103,13 +103,14 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppE = prettyPreExp prettyAcc parens aenv
 
     ppSh :: PreExp acc aenv sh -> Doc
-    ppSh x = if isVar x
-               then x'
-               else parens x'
+    ppSh x = encase (prettyPreExp prettyAcc noParens aenv x)
       where
-        x'          = prettyPreExp prettyAcc noParens aenv x
-        isVar Var{} = True
-        isVar _     = False
+        encase = case x of
+                   Var{}    -> id
+                   IndexNil -> id
+                   IndexAny -> id
+                   Const{}  -> id
+                   _        -> parens
 
     ppF :: PreFun acc aenv f -> Doc
     ppF = parens . prettyPreFun prettyAcc aenv
@@ -130,7 +131,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppB (Function f) = ppF f
 
     -- pretty print a named array operation with its arguments
-    name .$ docs = wrap $ hang 2 (sep (text name : docs))
+    name .$ docs = wrap $ hang 2 (sep (manifest (text name) : docs))
 
     -- The main pretty-printer
     -- -----------------------
@@ -139,11 +140,11 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     pp (Alet acc1 acc2)
       | isAlet acc2'
       = if isAlet acc1'
-          then wrap $ vsep [ text "let" <+> a <+> equals <$> indent 2 acc1' <+> text "in", acc2' ]
-          else wrap $ vsep [ text "let" <+> a <+> equals <+>          acc1' <+> text "in", acc2' ]
+          then wrap $ vsep [ let_ <+> a <+> equals <$> indent 2 acc1'    <+> in_, acc2' ]
+          else wrap $ vsep [ hang 2 (sep [let_ <+> a <+> equals, acc1']) <+> in_, acc2' ]
 
       | otherwise
-      = wrap $ vsep [ hang 2 (sep [text "let" <+> a <+> equals, acc1']), text "in" <+> acc2' ]
+      = wrap $ vsep [ hang 2 (sep [let_ <+> a <+> equals, acc1']), in_ </> acc2' ]
       where
         -- TLM: derp, can't unwrap into a PreOpenAcc to pattern match on Alet
         render doc  = displayS (renderCompact (plain doc)) ""
@@ -158,7 +159,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     pp (Aprj ix arrs)           = wrap $ prettyTupleIdx ix <+> ppA arrs
     pp (Apply afun acc)         = wrap $ sep [ ppAF afun, ppA acc ]
     pp (Acond e acc1 acc2)      = wrap $ sep [ ppE e, text "?|", tupled [ppA acc1, ppA acc2] ]
-    pp (Slice _ty acc ix)       = wrap $ sep [ ppA acc, char '!', prettyPreExp prettyAcc noParens aenv ix ]
+    pp (Slice _ty acc ix)       = "slice"       .$ [ ppA acc, ppE ix ]
     pp (Use arrs)               = "use"         .$ [ prettyArrays (arrays (undefined :: arrs)) arrs ]
     pp (Unit e)                 = "unit"        .$ [ ppE e ]
     pp (Generate sh f)          = "generate"    .$ [ ppSh sh, ppF f ]
@@ -310,13 +311,15 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     ppE  = prettyPreOpenExp prettyAcc parens env aenv
     ppE' = prettyPreOpenExp prettyAcc noParens env aenv
 
-    ppSh :: PreOpenExp acc env aenv sh -> Doc
-    ppSh x = if isVar x
-               then ppE' x
-               else parens (ppE' x)
+    ppE'' :: PreOpenExp acc env aenv sh -> Doc
+    ppE'' x = encase (ppE' x)
       where
-        isVar Var{} = True
-        isVar _     = False
+        encase = case x of
+                   Var{}    -> id
+                   IndexNil -> id
+                   IndexAny -> id
+                   Const{}  -> id
+                   _        -> parens
 
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreOpenFun prettyAcc env aenv
@@ -334,11 +337,10 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     pp (Let e1 e2)
       | isLet e2
       = if isLet e1
-          then wrap $ vsep [ text "let" <+> x <+> equals <$> indent 2 e1' <+> text "in", e2' ]
-          else wrap $ vsep [ text "let" <+> x <+> equals <+>          e1' <+> text "in", e2' ]
+          then wrap $ vsep [ let_ <+> x <+> equals <$> indent 2 e1'    <+> in_, e2' ]
+          else wrap $ vsep [ hang 2 (sep [let_ <+> x <+> equals, e1']) <+> in_, e2' ]
       | otherwise
-      = wrap $ vsep [ hang 2 (text "let" <+> x <+> equals <+> e1')
-                    , text "in" <+> e2' ]
+      = wrap $ vsep [ hang 2 (sep [let_ <+> x <+> equals, e1']), in_ </> e2' ]
       where
         isLet (Let _ _)     = True
         isLet _             = False
@@ -347,8 +349,10 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
         x                   = char 'x' <> int (sizeEnv env)
 
     pp (PrimApp p a)
-      | infixOp, Tuple (NilTup `SnocTup` x `SnocTup` y) <- a
-      = wrap $ sep [ppE x, f, ppE y]
+      | Tuple (NilTup `SnocTup` x `SnocTup` y) <- a
+      = if infixOp
+          then wrap $ sep [ppE x, f, ppE y]
+          else hang 2 (sep [f, ppE'' x, ppE'' y])
       | otherwise
       = wrap $ hang 2 (sep [f', ppE a])
       where
@@ -371,16 +375,16 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     pp (IndexTail ix)           = "indexTail"  .$ [ ppE ix ]
     pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppE slix, ppE sh ]
     pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppE slix, ppE sl ]
-    pp (ToIndex sh ix)          = "toIndex"    .$ [ ppSh sh, ppSh ix ]
-    pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppSh sh, ppE ix ]
+    pp (ToIndex sh ix)          = "toIndex"    .$ [ ppE'' sh, ppE'' ix ]
+    pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppE'' sh, ppE ix ]
     pp (While p f x)            = "while"      .$ [ ppF p, ppF f, ppE x ]
     pp (Foreign ff _f e)        = "foreign"    .$ [ text (strForeign ff), {- ppF f, -} ppE e ]
     pp (Shape idx)              = "shape"      .$ [ ppA idx ]
-    pp (ShapeSize idx)          = "shapeSize"  .$ [ ppSh idx ]
-    pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppSh sh1, ppSh sh2 ]
-    pp (Union sh1 sh2)          = "union"      .$ [ ppSh sh1, ppSh sh2 ]
-    pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppSh i ]
-    pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppSh i ]
+    pp (ShapeSize idx)          = "shapeSize"  .$ [ ppE'' idx ]
+    pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppE'' sh1, ppE'' sh2 ]
+    pp (Union sh1 sh2)          = "union"      .$ [ ppE'' sh1, ppE'' sh2 ]
+    pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppE'' i ]
+    pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppE'' i ]
 
 
 -- Pretty print nested pairs as a proper tuple.
@@ -540,6 +544,23 @@ noParens = id
 
 tupled :: [Doc] -> Doc
 tupled = PP.tupled . map align
+
+
+-- ANSI colourisation
+--
+
+control :: Doc -> Doc
+control = dullyellow
+
+manifest :: Doc -> Doc
+manifest = blue
+
+-- delayed :: Doc -> Doc
+-- delayed = green
+
+let_, in_ :: Doc
+let_ = control (text "let")
+in_  = control (text "in")
 
 
 -- Environments
