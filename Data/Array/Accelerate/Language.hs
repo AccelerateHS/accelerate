@@ -68,7 +68,9 @@ module Data.Array.Accelerate.Language (
   stencil, stencil2,
 
   -- ** Stencil specification
-  Boundary(..), Stencil,
+  Boundary, Stencil,
+  clamp, mirror, wrap, function,
+
 
   -- ** Common stencil types
   Stencil3, Stencil5, Stencil7, Stencil9,
@@ -106,14 +108,19 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
-import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, toIndex, fromIndex, intersect, union )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar
+
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Fractional
+import Data.Array.Accelerate.Classes.Integral
+import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Ord
 
 -- standard libraries
-import Prelude                                          ( ($), (.) )
+import Prelude                                                      ( ($), (.) )
 
 
 -- Array introduction
@@ -279,7 +286,7 @@ generate = Acc $$ Generate
 --
 -- > precondition: shapeSize sh == shapeSize sh'
 --
--- If the argument array is manifest in memory, 'reshape' is a NOP. If the
+-- If the argument array is manifest in memory, 'reshape' is a no-op. If the
 -- argument is to be fused into a subsequent operation, 'reshape' corresponds to
 -- an index transformation in the fused code.
 --
@@ -293,9 +300,9 @@ reshape = Acc $$ Reshape
 -- Extraction of sub-arrays
 -- ------------------------
 
--- | Index an array with a /generalised/ array index, supplied as the
--- second argument. The result is a new array (possibly a singleton)
--- containing the selected dimensions (`All`s) in their entirety.
+-- | Index an array with a /generalised/ array index, supplied as the second
+-- argument. The result is a new array (possibly a singleton) containing the
+-- selected dimensions ('All's) in their entirety.
 --
 -- 'slice' is the opposite of 'replicate', and can be used to /cut out/ entire
 -- dimensions. For example, for the two dimensional array 'mat':
@@ -362,9 +369,16 @@ slice = Acc $$ Slice
 -- Map-like functions
 -- ------------------
 
--- | Apply the given function element-wise to an array.
+-- | Apply the given function element-wise to an array. Denotationally we have:
 --
 -- > map f [x1, x2, ... xn] = [f x1, f x2, ... f xn]
+--
+-- >>> let xs = fromList (Z:.10) [0..]
+-- >>> xs
+-- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
+--
+-- >>> map (+1) (use xs)
+-- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
 map :: (Shape sh, Elt a, Elt b)
     => (Exp a -> Exp b)
@@ -375,6 +389,28 @@ map = Acc $$ Map
 -- | Apply the given binary function element-wise to the two arrays. The extent
 -- of the resulting array is the intersection of the extents of the two source
 -- arrays.
+--
+-- >>> let xs = fromList (Z:.3:.5) [0..]
+-- >>> xs
+-- Matrix (Z :. 3 :. 5)
+--   [ 0, 1, 2, 3, 4,
+--     5, 6, 7, 8, 9,
+--    10,11,12,13,14]
+--
+-- >>> let ys = fromList (Z:.5:.10) [1..]
+-- >>> ys
+-- Matrix (Z :. 5 :. 10)
+--   [ 1, 2, 3, 4, 5, 6, 7, 8, 9,10,
+--    11,12,13,14,15,16,17,18,19,20,
+--    21,22,23,24,25,26,27,28,29,30,
+--    31,32,33,34,35,36,37,38,39,40,
+--    41,42,43,44,45,46,47,48,49,50]
+--
+-- >>> zipWith (+) (use xs) (use ys)
+-- Matrix (Z :. 3 :. 5)
+--   [ 1, 3, 5, 7, 9,
+--    16,18,20,22,24,
+--    31,33,35,37,39]
 --
 zipWith :: (Shape sh, Elt a, Elt b, Elt c)
         => (Exp a -> Exp b -> Exp c)
@@ -558,8 +594,8 @@ scanl' :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
-       -> (Acc (Array (sh:.Int) a), Acc (Array sh a))
-scanl' = unatup2 . Acc $$$ Scanl'
+       -> Acc (Array (sh:.Int) a, Array sh a)
+scanl' = Acc $$$ Scanl'
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
 -- initial value (aka inclusive scan). The array must not be empty. The first
@@ -567,7 +603,8 @@ scanl' = unatup2 . Acc $$$ Scanl'
 --
 -- > scanl1 f e arr = tail (scanl f e arr)
 --
--- >>> scanl (+) (use $ fromList (Z:.4:.10) [0..])
+-- >>> let mat = fromList (Z:.4:.10) [0..]
+-- >>> scanl (+) (use mat)
 -- Matrix (Z :. 4 :. 10)
 --   [  0,  1,  3,   6,  10,  15,  21,  28,  36,  45,
 --     10, 21, 33,  46,  60,  75,  91, 108, 126, 145,
@@ -595,8 +632,8 @@ scanr' :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
-       -> (Acc (Array (sh:.Int) a), Acc (Array sh a))
-scanr' = unatup2 . Acc $$$ Scanr'
+       -> Acc (Array (sh:.Int) a, Array sh a)
+scanr' = Acc $$$ Scanr'
 
 -- | Right-to-left variant of 'scanl1'.
 --
@@ -620,6 +657,9 @@ scanr1 = Acc $$ Scanr1
 -- that are mapped to the magic value 'ignore' by the permutation function are
 -- dropped.
 --
+-- The combination function is given the new value being permuted as its first
+-- argument, and the current value of the array as its second.
+--
 -- For example, we can use 'permute' to compute the occurrence count (histogram)
 -- for an array of values in the range @[0,10)@:
 --
@@ -634,6 +674,25 @@ scanr1 = Acc $$ Scanr1
 -- >>> histogram (use xs)
 -- Vector (Z :. 10) [2,4,4,3,2,2,0,0,2,1]
 --
+-- As a second example, note that the dimensionality of the source and
+-- destination arrays can differ. In this way, we can use 'permute' to create an
+-- identity matrix by overwriting elements along the diagonal:
+--
+-- > identity :: Num a => Exp Int -> Acc (Array DIM2 a)
+-- > identity n =
+-- >   let zeros = fill (index2 n n) 0
+-- >       ones  = fill (index1 n)   1
+-- >   in
+-- >   permute const zeros (\(unindex1 -> i) -> index2 i i) ones
+--
+-- >>> identity 5
+-- Matrix (Z :. 5 :. 5)
+--   [1,0,0,0,0,
+--    0,1,0,0,0,
+--    0,0,1,0,0,
+--    0,0,0,1,0,
+--    0,0,0,0,1]
+--
 -- [/Note:/]
 --
 -- Regarding array fusion:
@@ -646,6 +705,9 @@ scanr1 = Acc $$ Scanr1
 --      values must be evaluated. However, other operations may fuse into this.
 --
 --   3. The array of source values can fuse into the permutation operation.
+--
+--   4. If the array of default values is only used once, it will be updated
+--      in-place.
 --
 permute
     :: (Shape sh, Shape sh', Elt a)
@@ -756,8 +818,8 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 --
 -- > s33 :: Stencil3x3 a -> Exp a
 -- > s33 ((_,t,_)
---       ,(l,c,r)
---       ,(_,b,_)) = ...
+-- >     ,(l,c,r)
+-- >     ,(_,b,_)) = ...
 --
 -- ...where @c@ is again the focal point and @t@, @b@, @l@ and @r@ are the
 -- elements to the top, bottom, left, and right of the focal point, respectively
@@ -781,16 +843,16 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- > gaussian = [0.06136,0.24477,0.38774,0.24477,0.06136]
 -- >
 -- > blur :: Num a => Acc (Array DIM2 a) -> Acc (Array DIM2 a)
--- > blur = stencil (convolve5x1 gaussian) Clamp
--- >      . stencil (convolve1x5 gaussian) Clamp
+-- > blur = stencil (convolve5x1 gaussian) clamp
+-- >      . stencil (convolve1x5 gaussian) clamp
 --
 stencil
     :: (Stencil sh a stencil, Elt b)
     => (stencil -> Exp b)                     -- ^ stencil function
-    -> Boundary a                             -- ^ boundary condition
+    -> Boundary (Array sh a)                  -- ^ boundary condition
     -> Acc (Array sh a)                       -- ^ source array
     -> Acc (Array sh b)                       -- ^ destination array
-stencil = Acc $$$ Stencil
+stencil f (Boundary b) a = Acc $ Stencil f b a
 
 -- | Map a binary stencil of an array. The extent of the resulting array is the
 -- intersection of the extents of the two source arrays. This is the stencil
@@ -799,12 +861,68 @@ stencil = Acc $$$ Stencil
 stencil2
     :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> Exp c)        -- ^ binary stencil function
-    -> Boundary a                             -- ^ boundary condition #1
+    -> Boundary (Array sh a)                  -- ^ boundary condition #1
     -> Acc (Array sh a)                       -- ^ source array #1
-    -> Boundary b                             -- ^ boundary condition #2
+    -> Boundary (Array sh b)                  -- ^ boundary condition #2
     -> Acc (Array sh b)                       -- ^ source array #2
     -> Acc (Array sh c)                       -- ^ destination array
-stencil2 = Acc $$$$$ Stencil2
+stencil2 f (Boundary b1) a1 (Boundary b2) a2 = Acc $ Stencil2 f b1 a1 b2 a2
+
+-- | Boundary condition where elements of the stencil which would be
+-- out-of-bounds are instead clamped to the edges of the array.
+--
+-- In the following 3x3 stencil, the out-of-bounds element @b@ will instead
+-- return the value at position @c@:
+--
+-- >   +------------+
+-- >   |a           |
+-- >  b|cd          |
+-- >   |e           |
+-- >   +------------+
+--
+clamp :: Boundary (Array sh e)
+clamp = Boundary Clamp
+
+-- | Stencil boundary condition where coordinates beyond the array extent are
+-- instead mirrored
+--
+-- In the following 5x3 stencil, the out-of-bounds element @c@ will instead
+-- return the value at position @d@, and similarly the element at @b@ will
+-- return the value at @e@:
+--
+-- >   +------------+
+-- >   |a           |
+-- > bc|def         |
+-- >   |g           |
+-- >   +------------+
+--
+mirror :: Boundary (Array sh e)
+mirror = Boundary Mirror
+
+-- | Stencil boundary condition where coordinates beyond the array extent
+-- instead wrap around the array.
+--
+-- In the following 3x3 stencil, the out of bounds elements will be read as in
+-- the pattern on the right.
+--
+-- >  a bc
+-- >   +------------+      +------------+
+-- >  d|ef          |      |ef         d|
+-- >  g|hi          |  ->  |hi         g|
+-- >   |            |      |bc         a|
+-- >   +------------+      +------------+
+--
+wrap :: Boundary (Array sh e)
+wrap = Boundary Wrap
+
+-- | Stencil boundary condition where the given function is applied to any
+-- outlying coordinates.
+--
+function
+    :: (Shape sh, Elt e)
+    => (Exp sh -> Exp e)
+    -> Boundary (Array sh e)
+function = Boundary . Function
 
 
 {--
@@ -923,7 +1041,7 @@ collect = Acc . Collect
 -- In case the operation is being executed on a backend which does not support
 -- this foreign implementation, the fallback implementation is used instead,
 -- which itself could be a foreign implementation for a (presumably) different
--- backend, or an implementation of pure Accelerate. In this way, multiple
+-- backend, or an implementation in pure Accelerate. In this way, multiple
 -- foreign implementations can be supplied, and will be tested for suitability
 -- against the target backend in sequence.
 --
@@ -968,6 +1086,9 @@ foreignExp = Exp $$$ Foreign
 -- > (acc1 >-> acc2) arrs = let tmp = acc1 arrs
 -- >                        in  tmp `seq` acc2 tmp
 --
+-- For an example use of this operation see the 'Data.Array.Accelerate.compute'
+-- function.
+--
 infixl 1 >->
 (>->) :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
 (>->) = Acc $$$ Pipe
@@ -977,6 +1098,9 @@ infixl 1 >->
 -- -----------------------
 
 -- | An array-level if-then-else construct.
+--
+-- Enabling the @RebindableSyntax@ extension will allow you to use the standard
+-- if-then-else syntax instead.
 --
 acond :: Arrays a
       => Exp Bool               -- ^ if-condition
@@ -1000,7 +1124,15 @@ awhile = Acc $$$ Awhile
 -- Shapes and indices
 -- ------------------
 
--- | Get the innermost dimension of a shape
+-- | Get the innermost dimension of a shape.
+--
+-- The innermost dimension (right-most component of the shape) is the index of
+-- the array which varies most rapidly, and corresponds to elements of the array
+-- which are adjacent in memory.
+--
+-- Another way to think of this is, for example when writing nested loops over
+-- an array in C, this index corresponds to the index iterated over by the
+-- innermost nested loop.
 --
 indexHead :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp a
 indexHead = Exp . IndexHead
@@ -1040,6 +1172,9 @@ union = Exp $$ Union
 -- ------------
 
 -- | A scalar-level if-then-else construct.
+--
+-- Enabling the @RebindableSyntax@ extension will allow you to use the standard
+-- if-then-else syntax instead.
 --
 cond :: Elt t
      => Exp Bool                -- ^ condition

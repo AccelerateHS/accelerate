@@ -1,13 +1,12 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-8.0
+resolver: lts-9.0
 
 packages:
 - '.'
 
-extra-deps:
-- 'unique-0'
+extra-deps: []
 
 # Override default flag values for local packages and extra-deps
 flags:

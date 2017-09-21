@@ -3,7 +3,6 @@
 {-# LANGUAGE DeriveDataTypeable   #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
-{-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
@@ -83,6 +82,7 @@ import Foreign.C.Types (
   CLLong, CULLong, CFloat, CDouble)
   -- in the future, CHalf
 
+
 -- Scalar types
 -- ------------
 
@@ -103,6 +103,7 @@ data FloatingDict a where
 data NonNumDict a where
   NonNumDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a, Storable a )
              => NonNumDict a
+
 
 -- Scalar type representation
 --
@@ -212,10 +213,6 @@ instance Show (ScalarType a) where
   show (NumScalarType ty)    = show ty
   show (NonNumScalarType ty) = show ty
 
-instance Show (TupleType a) where
-  show UnitTuple = "()"
-  show (SingleTuple scalarTy) = show scalarTy
-  show (PairTuple a b) = "("++show a++", "++show b++")"
 
 -- Querying scalar type representations
 --
@@ -592,6 +589,11 @@ data TupleType a where
   SingleTuple :: ScalarType a               -> TupleType a
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
 
+instance Show (TupleType a) where
+  show UnitTuple              = "()"
+  show (SingleTuple scalarTy) = show scalarTy
+  show (PairTuple a b)        = "("++show a++", "++show b++")"
+
 
 -- Type-level bit sizes
 -- --------------------
@@ -643,23 +645,11 @@ type instance BitSize CLong  = $( case finiteBitSize (undefined::CLong) of
                                     64 -> [t| 64 |]
                                     _  -> error "I don't know what architecture I am"  )
 
-
 type instance BitSize CULong = $( case finiteBitSize (undefined::CULong) of
                                     32 -> [t| 32 |]
                                     64 -> [t| 64 |]
                                     _  -> error "I don't know what architecture I am"  )
 
-
--- Stencil support
--- ---------------
-
--- |Boundary condition specification for stencil operations.
---
-data Boundary a = Clamp               -- ^clamp coordinates to the extent of the array
-                | Mirror              -- ^mirror coordinates beyond the array extent
-                | Wrap                -- ^wrap coordinates around on each dimension
-                | Constant a          -- ^use a constant value for outlying coordinates
-                deriving (Show, Read)
 
 {-
 -- Vector GPU data types

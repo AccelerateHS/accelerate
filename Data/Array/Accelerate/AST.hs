@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE QuasiQuotes           #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
@@ -90,7 +91,7 @@ module Data.Array.Accelerate.AST (
 
   -- * Accelerated array expressions
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
-  Stencil(..), StencilR(..),
+  PreBoundary(..), Boundary, Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
   -- PreOpenSeq(..), Seq,
@@ -104,21 +105,41 @@ module Data.Array.Accelerate.AST (
   NFDataAcc,
   rnfPreOpenAfun, rnfPreOpenAcc, rnfPreOpenFun, rnfPreOpenExp,
 
+  -- TemplateHaskell
+  LiftAcc,
+  liftIdx, liftTupleIdx, liftArrays,
+  liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
+  liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
+
   -- debugging
   showPreAccOp, showPreExpOp,
 
 ) where
 
 --standard library
+import Control.DeepSeq
 import Data.List
 import Data.Typeable
-import Control.DeepSeq
+import Foreign.ForeignPtr
+import Foreign.Marshal
+import Foreign.Ptr
+import Foreign.Storable
+import GHC.Ptr                                                      ( Ptr(..) )
+import System.IO.Unsafe
+import Language.Haskell.TH                                          ( Q, TExp )
+import qualified Language.Haskell.TH                                as TH
+import qualified Language.Haskell.TH.Syntax                         as TH
+#if __GLASGOW_HASKELL__ <= 708
+import Instances.TH.Lift                                            () -- Int8, Int16...
+#endif
 
 -- friends
-import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..), size )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( size )
+import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                as Sugar
+import Data.Array.Accelerate.Type
 #if __GLASGOW_HASKELL__ < 800
 import Data.Array.Accelerate.Error
 #endif
@@ -175,7 +196,7 @@ prj _             _            = $internalError "prj" "inconsistent valuation"
 -- Projection of a value from a valuation of array elements using a de Bruijn index
 --
 prjElt :: Idx env t -> ValElt env -> t
-prjElt ZeroIdx       (PushElt _   v) = Sugar.toElt v
+prjElt ZeroIdx       (PushElt _   v) = toElt v
 prjElt (SuccIdx idx) (PushElt val _) = prjElt idx val
 #if __GLASGOW_HASKELL__ < 800
 prjElt _             _               = $internalError "prjElt" "inconsistent valuation"
@@ -470,22 +491,19 @@ data PreOpenAcc acc aenv a where
   -- Map a stencil over an array.  In contrast to 'map', the domain of a stencil function is an
   -- entire /neighbourhood/ of each array element.
   Stencil     :: (Elt e, Elt e', Stencil sh e stencil)
-              => PreFun     acc aenv (stencil -> e')            -- stencil function
-              -> Boundary            (EltRepr e)                -- boundary condition
-              -> acc            aenv (Array sh e)               -- source array
-              -> PreOpenAcc acc aenv (Array sh e')
+              => PreFun      acc aenv (stencil -> e')           -- stencil function
+              -> PreBoundary acc aenv (Array sh e)              -- boundary condition
+              -> acc             aenv (Array sh e)              -- source array
+              -> PreOpenAcc  acc aenv (Array sh e')
 
   -- Map a binary stencil over an array.
-  Stencil2    :: (Elt e1, Elt e2, Elt e',
-                  Stencil sh e1 stencil1,
-                  Stencil sh e2 stencil2)
-              => PreFun     acc aenv (stencil1 ->
-                                      stencil2 -> e')           -- stencil function
-              -> Boundary            (EltRepr e1)               -- boundary condition #1
-              -> acc            aenv (Array sh e1)              -- source array #1
-              -> Boundary            (EltRepr e2)               -- boundary condition #2
-              -> acc            aenv (Array sh e2)              -- source array #2
-              -> PreOpenAcc acc aenv (Array sh e')
+  Stencil2    :: (Elt a, Elt b, Elt c, Stencil sh a stencil1, Stencil sh b stencil2)
+              => PreFun      acc aenv (stencil1 -> stencil2 -> c) -- stencil function
+              -> PreBoundary acc aenv (Array sh a)                -- boundary condition #1
+              -> acc             aenv (Array sh a)                -- source array #1
+              -> PreBoundary acc aenv (Array sh b)                -- boundary condition #2
+              -> acc             aenv (Array sh b)                -- source array #2
+              -> PreOpenAcc acc  aenv (Array sh c)
 
   -- A sequence of operations.
   -- Collect     :: Arrays arrs
@@ -610,28 +628,52 @@ type Seq = PreOpenSeq OpenAcc () ()
 --}
 
 
--- |Operations on stencils.
+-- | Vanilla stencil boundary condition
+--
+type Boundary = PreBoundary OpenAcc
+
+-- | Boundary condition specification for stencil operations
+--
+data PreBoundary (acc :: * -> * -> *) aenv t where
+  -- Clamp coordinates to the extent of the array
+  Clamp     :: PreBoundary acc aenv t
+
+  -- Mirror coordinates beyond the array extent
+  Mirror    :: PreBoundary acc aenv t
+
+  -- Wrap coordinates around on each dimension
+  Wrap      :: PreBoundary acc aenv t
+
+  -- Use a constant value for outlying coordinates
+  Constant  :: Elt e
+            => EltRepr e
+            -> PreBoundary acc aenv (Array sh e)
+
+  -- Apply the given function to outlying coordinates
+  Function  :: (Shape sh, Elt e)
+            => PreFun acc aenv (sh -> e)
+            -> PreBoundary acc aenv (Array sh e)
+
+
+-- | Operations on stencils
 --
 class (Shape sh, Elt e, IsTuple stencil, Elt stencil) => Stencil sh e stencil where
-  stencil       :: StencilR sh e stencil
-  stencilAccess :: (sh -> e) -> sh -> stencil
+  stencil :: StencilR sh e stencil
 
--- |GADT reifying the 'Stencil' class.
+-- | GADT reifying the 'Stencil' class
 --
 data StencilR sh e pat where
-  StencilRunit3 :: (Elt e)
-                => StencilR DIM1 e (e,e,e)
-  StencilRunit5 :: (Elt e)
-                => StencilR DIM1 e (e,e,e,e,e)
-  StencilRunit7 :: (Elt e)
-                => StencilR DIM1 e (e,e,e,e,e,e,e)
-  StencilRunit9 :: (Elt e)
-                => StencilR DIM1 e (e,e,e,e,e,e,e,e,e)
+  StencilRunit3 :: Elt e => StencilR DIM1 e (e,e,e)
+  StencilRunit5 :: Elt e => StencilR DIM1 e (e,e,e,e,e)
+  StencilRunit7 :: Elt e => StencilR DIM1 e (e,e,e,e,e,e,e)
+  StencilRunit9 :: Elt e => StencilR DIM1 e (e,e,e,e,e,e,e,e,e)
+
   StencilRtup3  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
                 -> StencilR sh e pat3
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3)
+
   StencilRtup5  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -639,6 +681,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat4
                 -> StencilR sh e pat5
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5)
+
   StencilRtup7  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -648,6 +691,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat6
                 -> StencilR sh e pat7
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7)
+
   StencilRtup9  :: (Shape sh, Elt e)
                 => StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -661,75 +705,33 @@ data StencilR sh e pat where
                 -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7,pat8,pat9)
 
 
--- NB: We cannot start with 'DIM0'.  The 'IsTuple stencil' superclass would at 'DIM0' imply that
---     the types of individual array elements are in 'IsTuple'.  (That would only possible if we
---     could have (degenerate) 1-tuple, but we can't as we can't distinguish between a 1-tuple of a
---     pair and a simple pair.)  Hence, we need to start from 'DIM1' and use 'sh:.Int:.Int' in the
---     recursive case (to avoid overlapping instances).
+-- Note: [Stencil reification class]
+--
+-- We cannot start with 'DIM0'.  The 'IsTuple stencil' superclass would at
+-- 'DIM0' imply that the types of individual array elements are in 'IsTuple'.
+-- (That would only possible if we could have (degenerate) 1-tuple, but we can't
+-- as we can't distinguish between a 1-tuple of a pair and a simple pair.)
+-- Hence, we need to start from 'DIM1' and use 'sh:.Int:.Int' in the recursive
+-- case (to avoid overlapping instances).
 
 -- DIM1
 instance Elt e => Stencil DIM1 e (e, e, e) where
   stencil = StencilRunit3
-  stencilAccess rf (Z:.y) = (rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1))
-    where
-      rf' d = rf (Z:.d)
 
 instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
   stencil = StencilRunit5
-  stencilAccess rf (Z:.y) = (rf' (y - 2),
-                             rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2))
-    where
-      rf' d = rf (Z:.d)
+
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
   stencil = StencilRunit7
-  stencilAccess rf (Z:.y) = (rf' (y - 3),
-                             rf' (y - 2),
-                             rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2),
-                             rf' (y + 3))
-    where
-      rf' d = rf (Z:.d)
+
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
   stencil = StencilRunit9
-  stencilAccess rf (Z:.y) = (rf' (y - 4),
-                             rf' (y - 3),
-                             rf' (y - 2),
-                             rf' (y - 1),
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2),
-                             rf' (y + 3),
-                             rf' (y + 4))
-    where
-      rf' d = rf (Z:.d)
 
--- DIM(n+1), where n>0
+-- DIM(n+1), where n>1
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3) => Stencil (sh:.Int:.Int) a (row1, row2, row3) where
   stencil = StencilRtup3 stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix)
-
-    where
-      -- Invert then re-invert to ensure each recursive step gets a shape in the
-      -- standard scoc (right-recursive) ordering
-      --
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-
-      -- Inject this dimension innermost
-      --
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
-
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -737,15 +739,6 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
   stencil = StencilRtup5 stencil stencil stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 2)) ix,
-                         stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix,
-                         stencilAccess (rf' (i + 2)) ix)
-    where
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -756,17 +749,6 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row7)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
   stencil = StencilRtup7 stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 3)) ix,
-                         stencilAccess (rf' (i - 2)) ix,
-                         stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix,
-                         stencilAccess (rf' (i + 2)) ix,
-                         stencilAccess (rf' (i + 3)) ix)
-    where
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -779,37 +761,6 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row9)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
   stencil = StencilRtup9 stencil stencil stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf xi = (stencilAccess (rf' (i - 4)) ix,
-                         stencilAccess (rf' (i - 3)) ix,
-                         stencilAccess (rf' (i - 2)) ix,
-                         stencilAccess (rf' (i - 1)) ix,
-                         stencilAccess (rf'  i     ) ix,
-                         stencilAccess (rf' (i + 1)) ix,
-                         stencilAccess (rf' (i + 2)) ix,
-                         stencilAccess (rf' (i + 3)) ix,
-                         stencilAccess (rf' (i + 4)) ix)
-    where
-      ix' :. i  = invertShape xi
-      ix        = invertShape ix'
-      rf' d ds  = rf $ invertShape (invertShape ds :. d)
-
-
--- For stencilAccess to match how the user draws the stencil in code as a series
--- of nested tuples, we need to recurse from the left. That is, we desire the
--- following 2D stencil to represent elements to the top, bottom, left, and
--- right of the focus as follows:
---
--- stencil2D ( (_, t, _)
---           , (l, _, r)
---           , (_, b, _) ) = ...
---
--- This function is used to reverse all components of a shape so that the
--- innermost component, now the head, can be picked off.
---
--- ...but needing to go via lists is unfortunate.
---
-invertShape :: Shape sh => sh -> sh
-invertShape =  listToShape . reverse . shapeToList
 
 
 -- Embedded expressions
@@ -1064,8 +1015,9 @@ data PrimFun sig where
   -- PrimProperFraction :: FloatingType a -> IntegralType b -> PrimFun (a -> (b, a))
 
   -- operators from RealFloat
-  PrimIsNaN :: FloatingType a -> PrimFun (a -> Bool)
-  PrimAtan2 :: FloatingType a -> PrimFun ((a, a) -> a)
+  PrimAtan2          :: FloatingType a -> PrimFun ((a, a) -> a)
+  PrimIsNaN          :: FloatingType a -> PrimFun (a -> Bool)
+  PrimIsInfinite     :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimFloatRadix     :: FloatingType a -> PrimFun (a -> Int)         -- Integer?
   -- PrimFloatDigits    :: FloatingType a -> PrimFun (a -> Int)
   -- PrimFloatRange     :: FloatingType a -> PrimFun (a -> (Int, Int))
@@ -1074,7 +1026,6 @@ data PrimFun sig where
   -- PrimExponent       :: FloatingType a -> PrimFun (a -> Int)
   -- PrimSignificand    :: FloatingType a -> PrimFun (a -> a)
   -- PrimScaleFloat     :: FloatingType a -> PrimFun ((Int, a) -> a)
-  -- PrimIsInfinite     :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimIsDenormalized :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimIsNegativeZero :: FloatingType a -> PrimFun (a -> Bool)
   -- PrimIsIEEE         :: FloatingType a -> PrimFun (a -> Bool)
@@ -1175,8 +1126,8 @@ rnfPreOpenAcc rnfA pacc =
       -- rnfS :: PreOpenSeq acc aenv' senv' t' -> ()
       -- rnfS = rnfPreOpenSeq rnfA
 
-      rnfB :: forall aenv' sh e. Elt e => acc aenv' (Array sh e) -> Boundary (EltRepr e) -> ()
-      rnfB _ = rnfBoundary (eltType (undefined::e))
+      rnfB :: PreBoundary acc aenv' (Array sh e) -> ()
+      rnfB = rnfBoundary rnfA
   in
   case pacc of
     Alet bnd body             -> rnfA bnd `seq` rnfA body
@@ -1208,8 +1159,8 @@ rnfPreOpenAcc rnfA pacc =
     Scanr' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
     Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
     Backpermute sh f a        -> rnfE sh `seq` rnfF f `seq` rnfA a
-    Stencil f b a             -> rnfF f `seq` rnfB a b `seq` rnfA a
-    Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB a1 b1 `seq` rnfB a2 b2 `seq` rnfA a1 `seq` rnfA a2
+    Stencil f b a             -> rnfF f `seq` rnfB b  `seq` rnfA a
+    Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB b1 `seq` rnfB b2 `seq` rnfA a1 `seq` rnfA a2
     -- Collect s                 -> rnfS s
 
 
@@ -1222,11 +1173,12 @@ rnfArrays ArraysRunit           ()      = ()
 rnfArrays ArraysRarray          arr     = rnf arr
 rnfArrays (ArraysRpair ar1 ar2) (a1,a2) = rnfArrays ar1 a1 `seq` rnfArrays ar2 a2
 
-rnfBoundary :: TupleType t -> Boundary t -> ()
-rnfBoundary _ Clamp        = ()
-rnfBoundary _ Mirror       = ()
-rnfBoundary _ Wrap         = ()
-rnfBoundary t (Constant c) = rnfConst t c
+rnfBoundary :: forall acc aenv sh e. NFDataAcc acc -> PreBoundary acc aenv (Array sh e) -> ()
+rnfBoundary _    Clamp        = ()
+rnfBoundary _    Mirror       = ()
+rnfBoundary _    Wrap         = ()
+rnfBoundary _    (Constant c) = rnfConst (eltType (undefined::e)) c
+rnfBoundary rnfA (Function f) = rnfPreOpenFun rnfA f
 
 
 {--
@@ -1401,6 +1353,7 @@ rnfPrimFun (PrimRound f i)            = rnfFloatingType f `seq` rnfIntegralType 
 rnfPrimFun (PrimFloor f i)            = rnfFloatingType f `seq` rnfIntegralType i
 rnfPrimFun (PrimCeiling f i)          = rnfFloatingType f `seq` rnfIntegralType i
 rnfPrimFun (PrimIsNaN t)              = rnfFloatingType t
+rnfPrimFun (PrimIsInfinite t)         = rnfFloatingType t
 rnfPrimFun (PrimAtan2 t)              = rnfFloatingType t
 rnfPrimFun (PrimLt t)                 = rnfScalarType t
 rnfPrimFun (PrimGt t)                 = rnfScalarType t
@@ -1471,8 +1424,390 @@ rnfFloatingType (TypeCFloat  FloatingDict) = ()
 rnfFloatingType (TypeCDouble FloatingDict) = ()
 
 
+-- Template Haskell
+-- ================
+
+type LiftAcc acc = forall aenv a. acc aenv a -> Q (TExp (acc aenv a))
+
+liftIdx :: Idx env t -> Q (TExp (Idx env t))
+liftIdx ZeroIdx      = [|| ZeroIdx ||]
+liftIdx (SuccIdx ix) = [|| SuccIdx $$(liftIdx ix) ||]
+
+liftTupleIdx :: TupleIdx t e -> Q (TExp (TupleIdx t e))
+liftTupleIdx ZeroTupIdx       = [|| ZeroTupIdx ||]
+liftTupleIdx (SuccTupIdx tix) = [|| SuccTupIdx $$(liftTupleIdx tix) ||]
+
+
+liftPreOpenAfun :: LiftAcc acc -> PreOpenAfun acc aenv t -> Q (TExp (PreOpenAfun acc aenv t))
+liftPreOpenAfun liftA (Alam f)  = [|| Alam  $$(liftPreOpenAfun liftA f) ||]
+liftPreOpenAfun liftA (Abody b) = [|| Abody $$(liftA b) ||]
+
+liftPreOpenAcc
+    :: forall acc aenv a.
+       LiftAcc acc
+    -> PreOpenAcc acc aenv a
+    -> Q (TExp (PreOpenAcc acc aenv a))
+liftPreOpenAcc liftA pacc =
+  let
+      liftE :: PreOpenExp acc env aenv t -> Q (TExp (PreOpenExp acc env aenv t))
+      liftE = liftPreOpenExp liftA
+
+      liftF :: PreOpenFun acc env aenv t -> Q (TExp (PreOpenFun acc env aenv t))
+      liftF = liftPreOpenFun liftA
+
+      liftAF :: PreOpenAfun acc aenv f -> Q (TExp (PreOpenAfun acc aenv f))
+      liftAF = liftPreOpenAfun liftA
+
+      liftB :: PreBoundary acc aenv (Array sh e) -> Q (TExp (PreBoundary acc aenv (Array sh e)))
+      liftB = liftBoundary liftA
+
+      liftAtuple :: Atuple (acc aenv) t -> Q (TExp (Atuple (acc aenv) t))
+      liftAtuple NilAtup          = [|| NilAtup ||]
+      liftAtuple (SnocAtup tup a) = [|| SnocAtup $$(liftAtuple tup) $$(liftA a) ||]
+  in
+  case pacc of
+    Alet bnd body             -> [|| Alet $$(liftA bnd) $$(liftA body) ||]
+    Avar ix                   -> [|| Avar $$(liftIdx ix) ||]
+    Atuple tup                -> [|| Atuple $$(liftAtuple tup) ||]
+    Aprj tix a                -> [|| Aprj $$(liftTupleIdx tix) $$(liftA a) ||]
+    Apply f a                 -> [|| Apply $$(liftAF f) $$(liftA a) ||]
+    Aforeign asm f a          -> [|| Aforeign $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
+    Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
+    Awhile p f a              -> [|| Awhile $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
+    Use a                     -> [|| Use $$(liftArrays (arrays (undefined::a)) a) ||]
+    Unit e                    -> [|| Unit $$(liftE e) ||]
+    Reshape sh a              -> [|| Reshape $$(liftE sh) $$(liftA a) ||]
+    Generate sh f             -> [|| Generate $$(liftE sh) $$(liftF f) ||]
+    Transform sh p f a        -> [|| Transform $$(liftE sh) $$(liftF p) $$(liftF f) $$(liftA a) ||]
+    Replicate slix sl a       -> [|| Replicate $$(liftSliceIndex slix) $$(liftE sl) $$(liftA a) ||]
+    Slice slix a sh           -> [|| Slice $$(liftSliceIndex slix) $$(liftA a) $$(liftE sh) ||]
+    Map f a                   -> [|| Map $$(liftF f) $$(liftA a) ||]
+    ZipWith f a b             -> [|| ZipWith $$(liftF f) $$(liftA a) $$(liftA b) ||]
+    Fold f z a                -> [|| Fold $$(liftF f) $$(liftE z) $$(liftA a) ||]
+    Fold1 f a                 -> [|| Fold1 $$(liftF f) $$(liftA a) ||]
+    FoldSeg f z a s           -> [|| FoldSeg $$(liftF f) $$(liftE z) $$(liftA a) $$(liftA s) ||]
+    Fold1Seg f a s            -> [|| Fold1Seg $$(liftF f) $$(liftA a) $$(liftA s) ||]
+    Scanl f z a               -> [|| Scanl $$(liftF f) $$(liftE z) $$(liftA a) ||]
+    Scanl1 f a                -> [|| Scanl1 $$(liftF f) $$(liftA a) ||]
+    Scanl' f z a              -> [|| Scanl' $$(liftF f) $$(liftE z) $$(liftA a) ||]
+    Scanr f z a               -> [|| Scanr $$(liftF f) $$(liftE z) $$(liftA a) ||]
+    Scanr1 f a                -> [|| Scanr1 $$(liftF f) $$(liftA a) ||]
+    Scanr' f z a              -> [|| Scanr' $$(liftF f) $$(liftE z) $$(liftA a) ||]
+    Permute f d p a           -> [|| Permute $$(liftF f) $$(liftA d) $$(liftF p) $$(liftA a) ||]
+    Backpermute sh p a        -> [|| Backpermute $$(liftE sh) $$(liftF p) $$(liftA a) ||]
+    Stencil f b a             -> [|| Stencil $$(liftF f) $$(liftB b) $$(liftA a) ||]
+    Stencil2 f b1 a1 b2 a2    -> [|| Stencil2 $$(liftF f) $$(liftB b1) $$(liftA a1) $$(liftB b2) $$(liftA a2) ||]
+
+
+liftPreOpenFun
+    :: LiftAcc acc
+    -> PreOpenFun acc env aenv t
+    -> Q (TExp (PreOpenFun acc env aenv t))
+liftPreOpenFun liftA (Lam f)  = [|| Lam  $$(liftPreOpenFun liftA f) ||]
+liftPreOpenFun liftA (Body b) = [|| Body $$(liftPreOpenExp liftA b) ||]
+
+liftPreOpenExp
+    :: forall acc env aenv t.
+       LiftAcc acc
+    -> PreOpenExp acc env aenv t
+    -> Q (TExp (PreOpenExp acc env aenv t))
+liftPreOpenExp liftA pexp =
+  let
+      liftE :: PreOpenExp acc env aenv e -> Q (TExp (PreOpenExp acc env aenv e))
+      liftE = liftPreOpenExp liftA
+
+      liftF :: PreOpenFun acc env aenv f -> Q (TExp (PreOpenFun acc env aenv f))
+      liftF = liftPreOpenFun liftA
+
+      liftT :: Tuple (PreOpenExp acc env aenv) e -> Q (TExp (Tuple (PreOpenExp acc env aenv) e))
+      liftT NilTup          = [|| NilTup ||]
+      liftT (SnocTup tup e) = [|| SnocTup $$(liftT tup) $$(liftE e) ||]
+  in
+  case pexp of
+    Let bnd body              -> [|| Let $$(liftPreOpenExp liftA bnd) $$(liftPreOpenExp liftA body) ||]
+    Var ix                    -> [|| Var $$(liftIdx ix) ||]
+    Foreign asm f x           -> [|| Foreign $$(liftForeign asm) $$(liftPreOpenFun liftA f) $$(liftE x) ||]
+    Const c                   -> [|| Const $$(liftConst (eltType (undefined::t)) c) ||]
+    Tuple tup                 -> [|| Tuple $$(liftT tup) ||]
+    Prj tix e                 -> [|| Prj $$(liftTupleIdx tix) $$(liftE e) ||]
+    IndexNil                  -> [|| IndexNil ||]
+    IndexCons sh sz           -> [|| IndexCons $$(liftE sh) $$(liftE sz) ||]
+    IndexHead sh              -> [|| IndexHead $$(liftE sh) ||]
+    IndexTail sh              -> [|| IndexTail $$(liftE sh) ||]
+    IndexAny                  -> [|| IndexAny ||]
+    IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
+    IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
+    ToIndex sh ix             -> [|| ToIndex $$(liftE sh) $$(liftE ix) ||]
+    FromIndex sh ix           -> [|| FromIndex $$(liftE sh) $$(liftE ix) ||]
+    Cond p t e                -> [|| Cond $$(liftE p) $$(liftE t) $$(liftE e) ||]
+    While p f x               -> [|| While $$(liftF p) $$(liftF f) $$(liftE x) ||]
+    PrimConst t               -> [|| PrimConst $$(liftPrimConst t) ||]
+    PrimApp f x               -> [|| PrimApp $$(liftPrimFun f) $$(liftE x) ||]
+    Index a ix                -> [|| Index $$(liftA a) $$(liftE ix) ||]
+    LinearIndex a ix          -> [|| LinearIndex $$(liftA a) $$(liftE ix) ||]
+    Shape a                   -> [|| Shape $$(liftA a) ||]
+    ShapeSize ix              -> [|| ShapeSize $$(liftE ix) ||]
+    Intersect sh1 sh2         -> [|| Intersect $$(liftE sh1) $$(liftE sh2) ||]
+    Union sh1 sh2             -> [|| Union $$(liftE sh1) $$(liftE sh2) ||]
+
+
+liftArrays :: ArraysR arr -> arr -> Q (TExp arr)
+liftArrays ArraysRunit ()              = [|| () ||]
+liftArrays ArraysRarray arr            = [|| $$(liftArray arr) ||]
+liftArrays (ArraysRpair r1 r2) (a1,a2) = [|| ($$(liftArrays r1 a1), $$(liftArrays r2 a2)) ||]
+
+liftArray :: forall sh e. Array sh e -> Q (TExp (Array sh e))
+liftArray (Array sh adata) =
+  [|| Array $$(liftConst (eltType (undefined::sh)) sh) $$(go arrayElt adata) ||] `sigE` typeRepToType (typeOf (undefined::Array sh e))
+  where
+    sz :: Int
+    sz = size sh
+
+    sigE :: Q (TExp t) -> Q TH.Type -> Q (TExp t)
+    sigE e t = TH.unsafeTExpCoerce $ TH.sigE (TH.unTypeQ e) t
+
+    typeRepToType :: TypeRep -> Q TH.Type
+    typeRepToType trep = do
+      let (con, args)     = splitTyConApp trep
+          name            = TH.Name (TH.OccName (tyConName con)) (TH.NameG TH.TcClsName (TH.PkgName (tyConPackage con)) (TH.ModName (tyConModule con)))
+          --
+          appsT x []      = x
+          appsT x (y:xs)  = appsT (TH.AppT x y) xs
+          --
+      resultArgs <- mapM typeRepToType args
+      return (appsT (TH.ConT name) resultArgs)
+
+    -- TODO: make sure that the resulting array is 16-byte aligned...
+    arr :: forall a. (ArrayElt a, Storable a) => UniqueArray a -> Q (TExp (UniqueArray a))
+    arr ua = do
+      bytes <- TH.runIO $ peekArray (sizeOf (undefined::a) * sz) (castPtr (unsafeUniqueArrayPtr ua) :: Ptr Word8)
+      [|| unsafePerformIO $ do
+           fp  <- newForeignPtr_ $$( TH.unsafeTExpCoerce [| Ptr $(TH.litE (TH.StringPrimL bytes)) |] )
+           ua' <- newUniqueArray (castForeignPtr fp)
+           return ua'
+       ||]
+
+    go :: ArrayEltR e' -> ArrayData e' -> Q (TExp (ArrayData e'))
+    go ArrayEltRunit         AD_Unit         = [|| AD_Unit ||]
+    go ArrayEltRint          (AD_Int ua)     = [|| AD_Int $$(arr ua) ||]
+    go ArrayEltRint8         (AD_Int8 ua)    = [|| AD_Int8 $$(arr ua) ||]
+    go ArrayEltRint16        (AD_Int16 ua)   = [|| AD_Int16 $$(arr ua) ||]
+    go ArrayEltRint32        (AD_Int32 ua)   = [|| AD_Int32 $$(arr ua) ||]
+    go ArrayEltRint64        (AD_Int64 ua)   = [|| AD_Int64 $$(arr ua) ||]
+    go ArrayEltRword         (AD_Word ua)    = [|| AD_Word $$(arr ua) ||]
+    go ArrayEltRword8        (AD_Word8 ua)   = [|| AD_Word8 $$(arr ua) ||]
+    go ArrayEltRword16       (AD_Word16 ua)  = [|| AD_Word16 $$(arr ua) ||]
+    go ArrayEltRword32       (AD_Word32 ua)  = [|| AD_Word32 $$(arr ua) ||]
+    go ArrayEltRword64       (AD_Word64 ua)  = [|| AD_Word64 $$(arr ua) ||]
+    go ArrayEltRcshort       (AD_CShort ua)  = [|| AD_CShort $$(arr ua) ||]
+    go ArrayEltRcushort      (AD_CUShort ua) = [|| AD_CUShort $$(arr ua) ||]
+    go ArrayEltRcint         (AD_CInt ua)    = [|| AD_CInt $$(arr ua) ||]
+    go ArrayEltRcuint        (AD_CUInt ua)   = [|| AD_CUInt $$(arr ua) ||]
+    go ArrayEltRclong        (AD_CLong ua)   = [|| AD_CLong $$(arr ua) ||]
+    go ArrayEltRculong       (AD_CULong ua)  = [|| AD_CULong $$(arr ua) ||]
+    go ArrayEltRcllong       (AD_CLLong ua)  = [|| AD_CLLong $$(arr ua) ||]
+    go ArrayEltRcullong      (AD_CULLong ua) = [|| AD_CULLong $$(arr ua) ||]
+    go ArrayEltRfloat        (AD_Float ua)   = [|| AD_Float $$(arr ua) ||]
+    go ArrayEltRdouble       (AD_Double ua)  = [|| AD_Double $$(arr ua) ||]
+    go ArrayEltRcfloat       (AD_CFloat ua)  = [|| AD_CFloat $$(arr ua) ||]
+    go ArrayEltRcdouble      (AD_CDouble ua) = [|| AD_CDouble $$(arr ua) ||]
+    go ArrayEltRbool         (AD_Bool ua)    = [|| AD_Bool $$(arr ua) ||]
+    go ArrayEltRchar         (AD_Char ua)    = [|| AD_Char $$(arr ua) ||]
+    go ArrayEltRcchar        (AD_CChar ua)   = [|| AD_CChar $$(arr ua) ||]
+    go ArrayEltRcschar       (AD_CSChar ua)  = [|| AD_CSChar $$(arr ua) ||]
+    go ArrayEltRcuchar       (AD_CUChar ua)  = [|| AD_CUChar $$(arr ua) ||]
+    go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = [|| AD_Pair $$(go r1 a1) $$(go r2 a2) ||]
+
+
+liftBoundary
+    :: forall acc aenv sh e.
+       LiftAcc acc
+    -> PreBoundary acc aenv (Array sh e)
+    -> Q (TExp (PreBoundary acc aenv (Array sh e)))
+liftBoundary _     Clamp        = [|| Clamp ||]
+liftBoundary _     Mirror       = [|| Mirror ||]
+liftBoundary _     Wrap         = [|| Wrap ||]
+liftBoundary _     (Constant v) = [|| Constant $$(liftConst (eltType (undefined::e)) v) ||]
+liftBoundary liftA (Function f) = [|| Function $$(liftPreOpenFun liftA f) ||]
+
+liftSliceIndex :: SliceIndex ix slice coSlice sliceDim -> Q (TExp (SliceIndex ix slice coSlice sliceDim))
+liftSliceIndex SliceNil          = [|| SliceNil ||]
+liftSliceIndex (SliceAll rest)   = [|| SliceAll $$(liftSliceIndex rest) ||]
+liftSliceIndex (SliceFixed rest) = [|| SliceFixed $$(liftSliceIndex rest) ||]
+
+liftPrimConst :: PrimConst c -> Q (TExp (PrimConst c))
+liftPrimConst (PrimMinBound t) = [|| PrimMinBound $$(liftBoundedType t) ||]
+liftPrimConst (PrimMaxBound t) = [|| PrimMaxBound $$(liftBoundedType t) ||]
+liftPrimConst (PrimPi t)       = [|| PrimPi $$(liftFloatingType t) ||]
+
+liftPrimFun :: PrimFun f -> Q (TExp (PrimFun f))
+liftPrimFun (PrimAdd t)                = [|| PrimAdd $$(liftNumType t) ||]
+liftPrimFun (PrimSub t)                = [|| PrimSub $$(liftNumType t) ||]
+liftPrimFun (PrimMul t)                = [|| PrimMul $$(liftNumType t) ||]
+liftPrimFun (PrimNeg t)                = [|| PrimNeg $$(liftNumType t) ||]
+liftPrimFun (PrimAbs t)                = [|| PrimAbs $$(liftNumType t) ||]
+liftPrimFun (PrimSig t)                = [|| PrimSig $$(liftNumType t) ||]
+liftPrimFun (PrimQuot t)               = [|| PrimQuot $$(liftIntegralType t) ||]
+liftPrimFun (PrimRem t)                = [|| PrimRem $$(liftIntegralType t) ||]
+liftPrimFun (PrimQuotRem t)            = [|| PrimQuotRem $$(liftIntegralType t) ||]
+liftPrimFun (PrimIDiv t)               = [|| PrimIDiv $$(liftIntegralType t) ||]
+liftPrimFun (PrimMod t)                = [|| PrimMod $$(liftIntegralType t) ||]
+liftPrimFun (PrimDivMod t)             = [|| PrimDivMod $$(liftIntegralType t) ||]
+liftPrimFun (PrimBAnd t)               = [|| PrimBAnd $$(liftIntegralType t) ||]
+liftPrimFun (PrimBOr t)                = [|| PrimBOr $$(liftIntegralType t) ||]
+liftPrimFun (PrimBXor t)               = [|| PrimBXor $$(liftIntegralType t) ||]
+liftPrimFun (PrimBNot t)               = [|| PrimBNot $$(liftIntegralType t) ||]
+liftPrimFun (PrimBShiftL t)            = [|| PrimBShiftL $$(liftIntegralType t) ||]
+liftPrimFun (PrimBShiftR t)            = [|| PrimBShiftR $$(liftIntegralType t) ||]
+liftPrimFun (PrimBRotateL t)           = [|| PrimBRotateL $$(liftIntegralType t) ||]
+liftPrimFun (PrimBRotateR t)           = [|| PrimBRotateR $$(liftIntegralType t) ||]
+liftPrimFun (PrimPopCount t)           = [|| PrimPopCount $$(liftIntegralType t) ||]
+liftPrimFun (PrimCountLeadingZeros t)  = [|| PrimCountLeadingZeros $$(liftIntegralType t) ||]
+liftPrimFun (PrimCountTrailingZeros t) = [|| PrimCountTrailingZeros $$(liftIntegralType t) ||]
+liftPrimFun (PrimFDiv t)               = [|| PrimFDiv $$(liftFloatingType t) ||]
+liftPrimFun (PrimRecip t)              = [|| PrimRecip $$(liftFloatingType t) ||]
+liftPrimFun (PrimSin t)                = [|| PrimSin $$(liftFloatingType t) ||]
+liftPrimFun (PrimCos t)                = [|| PrimCos $$(liftFloatingType t) ||]
+liftPrimFun (PrimTan t)                = [|| PrimTan $$(liftFloatingType t) ||]
+liftPrimFun (PrimAsin t)               = [|| PrimAsin $$(liftFloatingType t) ||]
+liftPrimFun (PrimAcos t)               = [|| PrimAcos $$(liftFloatingType t) ||]
+liftPrimFun (PrimAtan t)               = [|| PrimAtan $$(liftFloatingType t) ||]
+liftPrimFun (PrimSinh t)               = [|| PrimSinh $$(liftFloatingType t) ||]
+liftPrimFun (PrimCosh t)               = [|| PrimCosh $$(liftFloatingType t) ||]
+liftPrimFun (PrimTanh t)               = [|| PrimTanh $$(liftFloatingType t) ||]
+liftPrimFun (PrimAsinh t)              = [|| PrimAsinh $$(liftFloatingType t) ||]
+liftPrimFun (PrimAcosh t)              = [|| PrimAcosh $$(liftFloatingType t) ||]
+liftPrimFun (PrimAtanh t)              = [|| PrimAtanh $$(liftFloatingType t) ||]
+liftPrimFun (PrimExpFloating t)        = [|| PrimExpFloating $$(liftFloatingType t) ||]
+liftPrimFun (PrimSqrt t)               = [|| PrimSqrt $$(liftFloatingType t) ||]
+liftPrimFun (PrimLog t)                = [|| PrimLog $$(liftFloatingType t) ||]
+liftPrimFun (PrimFPow t)               = [|| PrimFPow $$(liftFloatingType t) ||]
+liftPrimFun (PrimLogBase t)            = [|| PrimLogBase $$(liftFloatingType t) ||]
+liftPrimFun (PrimTruncate ta tb)       = [|| PrimTruncate $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+liftPrimFun (PrimRound ta tb)          = [|| PrimRound $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+liftPrimFun (PrimFloor ta tb)          = [|| PrimFloor $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+liftPrimFun (PrimCeiling ta tb)        = [|| PrimCeiling $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+liftPrimFun (PrimIsNaN t)              = [|| PrimIsNaN $$(liftFloatingType t) ||]
+liftPrimFun (PrimIsInfinite t)         = [|| PrimIsInfinite $$(liftFloatingType t) ||]
+liftPrimFun (PrimAtan2 t)              = [|| PrimAtan2 $$(liftFloatingType t) ||]
+liftPrimFun (PrimLt t)                 = [|| PrimLt $$(liftScalarType t) ||]
+liftPrimFun (PrimGt t)                 = [|| PrimGt $$(liftScalarType t) ||]
+liftPrimFun (PrimLtEq t)               = [|| PrimLtEq $$(liftScalarType t) ||]
+liftPrimFun (PrimGtEq t)               = [|| PrimGtEq $$(liftScalarType t) ||]
+liftPrimFun (PrimEq t)                 = [|| PrimEq $$(liftScalarType t) ||]
+liftPrimFun (PrimNEq t)                = [|| PrimNEq $$(liftScalarType t) ||]
+liftPrimFun (PrimMax t)                = [|| PrimMax $$(liftScalarType t) ||]
+liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftScalarType t) ||]
+liftPrimFun PrimLAnd                   = [|| PrimLAnd ||]
+liftPrimFun PrimLOr                    = [|| PrimLOr ||]
+liftPrimFun PrimLNot                   = [|| PrimLNot ||]
+liftPrimFun PrimOrd                    = [|| PrimOrd ||]
+liftPrimFun PrimChr                    = [|| PrimChr ||]
+liftPrimFun PrimBoolToInt              = [|| PrimBoolToInt ||]
+liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
+liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
+liftPrimFun (PrimCoerce ta tb)         = [|| PrimCoerce $$(liftScalarType ta) $$(liftScalarType tb) ||]
+
+
+liftConst :: TupleType t -> t -> Q (TExp t)
+liftConst UnitTuple         ()    = [|| () ||]
+liftConst (SingleTuple t)   x     = [|| $$(liftScalar t x) ||]
+liftConst (PairTuple ta tb) (a,b) = [|| ($$(liftConst ta a), $$(liftConst tb b)) ||]
+
+liftScalar :: ScalarType t -> t -> Q (TExp t)
+liftScalar (NumScalarType t)    x = liftNum t x
+liftScalar (NonNumScalarType t) x = liftNonNum t x
+
+liftNum :: NumType t -> t -> Q (TExp t)
+liftNum (IntegralNumType t) x = liftIntegral t x
+liftNum (FloatingNumType t) x = liftFloating t x
+
+liftNonNum :: NonNumType t -> t -> Q (TExp t)
+liftNonNum TypeBool{}   x = [|| x ||]
+liftNonNum TypeChar{}   x = [|| x ||]
+liftNonNum TypeCChar{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftNonNum TypeCSChar{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftNonNum TypeCUChar{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+
+liftIntegral :: IntegralType t -> t -> Q (TExp t)
+liftIntegral TypeInt{}     x = [|| x ||]
+liftIntegral TypeInt8{}    x = [|| x ||]
+liftIntegral TypeInt16{}   x = [|| x ||]
+liftIntegral TypeInt32{}   x = [|| x ||]
+liftIntegral TypeInt64{}   x = [|| x ||]
+#if __GLASGOW_HASKELL__ >= 710
+liftIntegral TypeWord{}    x = [|| x ||]
+#else
+liftIntegral TypeWord{}    x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+#endif
+liftIntegral TypeWord8{}   x = [|| x ||]
+liftIntegral TypeWord16{}  x = [|| x ||]
+liftIntegral TypeWord32{}  x = [|| x ||]
+liftIntegral TypeWord64{}  x = [|| x ||]
+liftIntegral TypeCShort{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeCUShort{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeCInt{}    x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeCUInt{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeCLong{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeCULong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeCLLong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeCULLong{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+
+liftFloating :: FloatingType t -> t -> Q (TExp t)
+liftFloating TypeFloat{}   x = [|| x ||]
+liftFloating TypeDouble{}  x = [|| x ||]
+liftFloating TypeCFloat{}  x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
+liftFloating TypeCDouble{} x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
+
+
+liftIntegralType :: IntegralType t -> Q (TExp (IntegralType t))
+liftIntegralType TypeInt{}     = [|| TypeInt IntegralDict ||]
+liftIntegralType TypeInt8{}    = [|| TypeInt8 IntegralDict ||]
+liftIntegralType TypeInt16{}   = [|| TypeInt16 IntegralDict ||]
+liftIntegralType TypeInt32{}   = [|| TypeInt32 IntegralDict ||]
+liftIntegralType TypeInt64{}   = [|| TypeInt64 IntegralDict ||]
+liftIntegralType TypeWord{}    = [|| TypeWord IntegralDict ||]
+liftIntegralType TypeWord8{}   = [|| TypeWord8 IntegralDict ||]
+liftIntegralType TypeWord16{}  = [|| TypeWord16 IntegralDict ||]
+liftIntegralType TypeWord32{}  = [|| TypeWord32 IntegralDict ||]
+liftIntegralType TypeWord64{}  = [|| TypeWord64 IntegralDict ||]
+liftIntegralType TypeCShort{}  = [|| TypeCShort IntegralDict ||]
+liftIntegralType TypeCUShort{} = [|| TypeCUShort IntegralDict ||]
+liftIntegralType TypeCInt{}    = [|| TypeCInt IntegralDict ||]
+liftIntegralType TypeCUInt{}   = [|| TypeCUInt IntegralDict ||]
+liftIntegralType TypeCLong{}   = [|| TypeCLong IntegralDict ||]
+liftIntegralType TypeCULong{}  = [|| TypeCULong IntegralDict ||]
+liftIntegralType TypeCLLong{}  = [|| TypeCLLong IntegralDict ||]
+liftIntegralType TypeCULLong{} = [|| TypeCULLong IntegralDict ||]
+
+liftFloatingType :: FloatingType t -> Q (TExp (FloatingType t))
+liftFloatingType TypeFloat{}   = [|| TypeFloat FloatingDict ||]
+liftFloatingType TypeDouble{}  = [|| TypeDouble FloatingDict ||]
+liftFloatingType TypeCFloat{}  = [|| TypeCFloat FloatingDict ||]
+liftFloatingType TypeCDouble{} = [|| TypeCDouble FloatingDict ||]
+
+liftNonNumType :: NonNumType t -> Q (TExp (NonNumType t))
+liftNonNumType TypeBool{}   = [|| TypeBool NonNumDict ||]
+liftNonNumType TypeChar{}   = [|| TypeChar NonNumDict ||]
+liftNonNumType TypeCChar{}  = [|| TypeCChar NonNumDict ||]
+liftNonNumType TypeCSChar{} = [|| TypeCSChar NonNumDict ||]
+liftNonNumType TypeCUChar{} = [|| TypeCUChar NonNumDict ||]
+
+liftNumType :: NumType t -> Q (TExp (NumType t))
+liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]
+liftNumType (FloatingNumType t) = [|| FloatingNumType $$(liftFloatingType t) ||]
+
+liftBoundedType :: BoundedType t -> Q (TExp (BoundedType t))
+liftBoundedType (IntegralBoundedType t) = [|| IntegralBoundedType $$(liftIntegralType t) ||]
+liftBoundedType (NonNumBoundedType t)   = [|| NonNumBoundedType $$(liftNonNumType t) ||]
+
+liftScalarType :: ScalarType t -> Q (TExp (ScalarType t))
+liftScalarType (NumScalarType t)    = [|| NumScalarType $$(liftNumType t) ||]
+liftScalarType (NonNumScalarType t) = [|| NonNumScalarType $$(liftNonNumType t) ||]
+
+
 -- Debugging
--- ---------
+-- =========
 
 showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
 showPreAccOp Alet{}             = "Alet"
@@ -1525,7 +1860,7 @@ showShortendArr :: Elt e => Array sh e -> String
 showShortendArr arr
   = show (take cutoff l) ++ if length l > cutoff then ".." else ""
   where
-    l      = Sugar.toList arr
+    l      = toList arr
     cutoff = 5
 
 

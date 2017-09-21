@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -63,14 +64,15 @@ module Data.Array.Accelerate.Array.Sugar (
 import Control.DeepSeq
 import Data.List                                                ( intercalate, transpose )
 import Data.Typeable
-
 import GHC.Exts                                                 ( IsList )
+import Language.Haskell.TH                                      hiding ( Foreign )
 import qualified GHC.Exts                                       as GHC
 
 -- friends
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 
@@ -552,7 +554,7 @@ liftToElt2 :: (Elt a, Elt b, Elt c)
            => (EltRepr a -> EltRepr b -> EltRepr c)
            -> (a -> b -> c)
 {-# INLINE liftToElt2 #-}
-liftToElt2 f = \x y -> toElt $ f (fromElt x) (fromElt y)
+liftToElt2 f x y = toElt $ f (fromElt x) (fromElt y)
 
 sinkFromElt :: (Elt a, Elt b)
             => (a -> b)
@@ -564,7 +566,7 @@ sinkFromElt2 :: (Elt a, Elt b, Elt c)
              => (a -> b -> c)
              -> (EltRepr a -> EltRepr b -> EltRepr c)
 {-# INLINE sinkFromElt2 #-}
-sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
+sinkFromElt2 f x y = fromElt $ f (toElt x) (toElt y)
 
 -- {-# RULES
 -- "fromElt/toElt" forall e. fromElt (toElt e) = e
@@ -584,6 +586,12 @@ class Typeable asm => Foreign asm where
   -- Backends should be able to produce a string representation of the foreign
   -- function for pretty printing, typically the name of the function.
   strForeign :: asm args -> String
+  strForeign _ = "<foreign>"
+
+  -- Backends which want to support compile-time embedding must be able to lift
+  -- the foreign function into Template Haskell
+  liftForeign :: asm args -> Q (TExp (asm args))
+  liftForeign _ = $internalError "liftForeign" "not supported by this backend"
 
 
 -- Surface arrays
@@ -943,6 +951,7 @@ instance NFData (Array sh e) where
       go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 
+
 -- |Scalars arrays hold a single element
 --
 type Scalar e = Array DIM0 e
@@ -1007,9 +1016,6 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- |Inverse of 'toIndex'.
   fromIndex :: sh -> Int -> sh
 
-  -- |Apply a boundary condition to an index.
-  bound  :: sh -> sh -> Boundary a -> Either a sh
-
   -- |Iterate through the entire shape, applying the function; third argument
   -- combines results and fourth is returned in case of an empty iteration
   -- space; the index space is traversed in row-major order.
@@ -1047,10 +1053,6 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   union sh1 sh2         = toElt (Repr.union (fromElt sh1) (fromElt sh2))
   fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
   toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)
-
-  bound sh ix bndy      = case Repr.bound (fromElt sh) (fromElt ix) bndy of
-                            Left v    -> Left v
-                            Right ix' -> Right $ toElt ix'
 
   iter sh f c r         = Repr.iter  (fromElt sh) (f . toElt) c r
   iter1 sh f r          = Repr.iter1 (fromElt sh) (f . toElt) r

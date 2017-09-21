@@ -1,7 +1,6 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -29,6 +28,7 @@ module Data.Array.Accelerate.Product (
   TupleIdx(..), IsProduct(..), ProdR(..)
 
 ) where
+
 
 -- |Type-safe projection indices for tuples.
 --

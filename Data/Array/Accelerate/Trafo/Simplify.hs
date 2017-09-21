@@ -37,6 +37,7 @@ import Prelude                                          hiding ( exp, iterate )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
@@ -45,7 +46,7 @@ import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
+import Data.Array.Accelerate.Array.Sugar                ( Array, Elt(eltType), Shape, Slice, toElt, fromElt, Z(..), (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -237,7 +238,7 @@ simplifyOpenExp env = first getAny . cvtE
           (v, fx) = evalPrimApp env f x'
       Index a sh                -> Index a <$> cvtE sh
       LinearIndex a i           -> LinearIndex a <$> cvtE i
-      Shape a                   -> pure $ Shape a
+      Shape a                   -> shape a
       ShapeSize sh              -> shapeSize (cvtE sh)
       Intersect s t             -> cvtE s `intersect` cvtE t
       Union s t                 -> cvtE s `union` cvtE t
@@ -390,6 +391,13 @@ simplifyOpenExp env = first getAny . cvtE
       | sl :. _ <- toElt c :: sl :. sz  = Stats.ruleFired "indexTail/const"     $ yes (Const (fromElt sl))
     indexTail (_, IndexCons sl _)       = Stats.ruleFired "indexTail/indexCons" $ yes sl
     indexTail sh                        = IndexTail <$> sh
+
+    shape :: forall sh t. (Shape sh, Elt t) => acc aenv (Array sh t) -> (Any, PreOpenExp acc env aenv sh)
+    shape _
+      | Just Refl <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::Z))
+      = Stats.ruleFired "shape/Z" $ yes (Const (fromElt Z))
+    shape a
+      = pure $ Shape a
 
     shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
     shapeSize (_, Const c) = Stats.ruleFired "shapeSize/const" $ yes (Const (product (shapeToList (toElt c :: sh))))
@@ -671,6 +679,7 @@ summariseOpenExp = modify terms (+1) . goE
             PrimFloor            f i -> travFloatingType f +++ travIntegralType i
             PrimCeiling          f i -> travFloatingType f +++ travIntegralType i
             PrimIsNaN              t -> travFloatingType t
+            PrimIsInfinite         t -> travFloatingType t
             PrimAtan2              t -> travFloatingType t
             PrimLt                 t -> travScalarType t
             PrimGt                 t -> travScalarType t

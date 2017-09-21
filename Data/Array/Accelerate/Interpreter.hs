@@ -42,7 +42,8 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run, run1,
+  Sugar.Acc, Arrays,
+  run, run1, runN,
 
   -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj
@@ -61,7 +62,8 @@ import Unsafe.Coerce                                                ( unsafeCoer
 import Prelude                                                      hiding ( sum )
 
 -- friends
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST                                    hiding ( Boundary, PreBoundary(..) )
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
@@ -69,6 +71,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.AST                          as AST
 import qualified Data.Array.Accelerate.Array.Representation         as R
 import qualified Data.Array.Accelerate.Smart                        as Sugar
 import qualified Data.Array.Accelerate.Trafo                        as AST
@@ -90,17 +93,27 @@ run a = unsafePerformIO execute
       D.dumpSimplStats
       phase "execute" D.elapsed (evaluate (evalOpenAcc acc Empty))
 
--- | Prepare and run an embedded array program of one argument
+-- | This is 'runN' specialised to an array program of one argument.
 --
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
-run1 f = \a -> unsafePerformIO (execute a)
+run1 = runN
+
+-- | Prepare and execute an embedded array program.
+--
+runN :: Afunction f => f -> AfunctionR f
+runN f = go
   where
     !acc    = convertAfunWith config f
     !afun   = unsafePerformIO $ do
                 D.dumpGraph $!! acc
                 D.dumpSimplStats
                 return acc
-    execute x = phase "execute" D.elapsed (evaluate (evalOpenAfun afun Empty x))
+    !go     = eval afun Empty
+    --
+    eval :: DelayedOpenAfun aenv f -> Val aenv -> f
+    eval (Alam f)  aenv = \a -> eval f (aenv `Push` a)
+    eval (Abody b) aenv = unsafePerformIO $ phase "execute" D.elapsed (evaluate (evalOpenAcc b aenv))
+
 
 -- -- | Stream a lazily read list of input arrays through the given program,
 -- -- collecting results as we go
@@ -177,6 +190,9 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
       evalF :: DelayedFun aenv f -> f
       evalF fun = evalPreFun evalOpenAcc fun aenv
+
+      evalB :: AST.PreBoundary DelayedOpenAcc aenv t -> Boundary t
+      evalB bnd = evalPreBoundary evalOpenAcc bnd aenv
   in
   case pacc of
     Avar ix                     -> prj ix aenv
@@ -226,8 +242,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Scanr' f z acc              -> scanr'Op (evalF f) (evalE z) (delayed acc)
     Scanr1 f acc                -> scanr1Op (evalF f) (delayed acc)
     Permute f def p acc         -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
-    Stencil sten b acc          -> stencilOp (evalF sten) b (manifest acc)
-    Stencil2 sten b1 acc1 b2 acc2-> stencil2Op (evalF sten) b1 (manifest acc1) b2 (manifest acc2)
+    Stencil sten b acc          -> stencilOp (evalF sten) (evalB b) (manifest acc)
+    Stencil2 sten b1 a1 b2 a2   -> stencil2Op (evalF sten) (evalB b1) (manifest a1) (evalB b2) (manifest a2)
 
 -- Array tuple construction and projection
 --
@@ -626,46 +642,239 @@ backpermuteOp sh' p (Delayed _ arr _)
 stencilOp
     :: (Stencil sh a stencil, Elt b)
     => (stencil -> b)
-    -> Boundary (EltRepr a)
+    -> Boundary (Array sh a)
     -> Array sh a
     -> Array sh b
-stencilOp stencil boundary arr
+stencilOp stencil bnd arr
   = fromFunction sh f
   where
-    f           = stencil . stencilAccess bounded
-    sh          = shape arr
-    --
-    bounded ix  =
-      case bound sh ix boundary of
-        Left v    -> toElt v
-        Right ix' -> arr ! ix'
+    sh  = shape arr
+    f   = stencil . stencilAccess (bounded bnd arr)
 
 
 stencil2Op
     :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> c)
-    -> Boundary (EltRepr a)
+    -> Boundary (Array sh a)
     -> Array sh a
-    -> Boundary (EltRepr b)
+    -> Boundary (Array sh b)
     -> Array sh b
     -> Array sh c
-stencil2Op stencil boundary1 arr1 boundary2 arr2
+stencil2Op stencil bnd1 arr1 bnd2 arr2
   = fromFunction (sh1 `intersect` sh2) f
   where
-    sh1         = shape arr1
-    sh2         = shape arr2
-    f ix        = stencil (stencilAccess bounded1 ix)
-                          (stencilAccess bounded2 ix)
+    sh1   = shape arr1
+    sh2   = shape arr2
+    f ix  = stencil (stencilAccess (bounded bnd1 arr1) ix)
+                    (stencilAccess (bounded bnd2 arr2) ix)
 
-    bounded1 ix =
-      case bound sh1 ix boundary1 of
-        Left v    -> toElt v
-        Right ix' -> arr1 ! ix'
+stencilAccess
+    :: Stencil sh e stencil
+    => (sh -> e)
+    -> sh
+    -> stencil
+stencilAccess = goR stencil
+  where
+    -- Base cases, nothing interesting to do here since we know the lower
+    -- dimension is Z.
+    --
+    goR :: StencilR sh e stencil -> (sh -> e) -> sh -> stencil
+    goR StencilRunit3 rf ix =
+      let
+          z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-1)
+      , rf'   0
+      , rf'   1
+      )
 
-    bounded2 ix =
-      case bound sh2 ix boundary2 of
-        Left v    -> toElt v
-        Right ix' -> arr2 ! ix'
+    goR StencilRunit5 rf ix =
+      let z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-2)
+      , rf' (-1)
+      , rf'   0
+      , rf'   1
+      , rf'   2
+      )
+
+    goR StencilRunit7 rf ix =
+      let z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-3)
+      , rf' (-2)
+      , rf' (-1)
+      , rf'   0
+      , rf'   1
+      , rf'   2
+      , rf'   3
+      )
+
+    goR StencilRunit9 rf ix =
+      let z :. i = ix
+          rf' d  = rf (z :. i+d)
+      in
+      ( rf' (-4)
+      , rf' (-3)
+      , rf' (-2)
+      , rf' (-1)
+      , rf'   0
+      , rf'   1
+      , rf'   2
+      , rf'   3
+      , rf'   4
+      )
+
+    -- Recursive cases. Note that because the stencil pattern is defined with
+    -- cons ordering, whereas shapes (and indices) are defined as a snoc-list,
+    -- when we recurse on the stencil structure we must manipulate the
+    -- _left-most_ index component.
+    --
+    goR (StencilRtup3 s1 s2 s3) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-1)) ix'
+      , goR s2 (rf'   0)  ix'
+      , goR s3 (rf'   1)  ix'
+      )
+
+    goR (StencilRtup5 s1 s2 s3 s4 s5) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-2)) ix'
+      , goR s2 (rf' (-1)) ix'
+      , goR s3 (rf'   0)  ix'
+      , goR s4 (rf'   1)  ix'
+      , goR s5 (rf'   2)  ix'
+      )
+
+    goR (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-3)) ix'
+      , goR s2 (rf' (-2)) ix'
+      , goR s3 (rf' (-1)) ix'
+      , goR s4 (rf'   0)  ix'
+      , goR s5 (rf'   1)  ix'
+      , goR s6 (rf'   2)  ix'
+      , goR s7 (rf'   3)  ix'
+      )
+
+    goR (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) rf ix =
+      let (i, ix') = uncons ix
+          rf' d ds = rf (cons (i+d) ds)
+      in
+      ( goR s1 (rf' (-4)) ix'
+      , goR s2 (rf' (-3)) ix'
+      , goR s3 (rf' (-2)) ix'
+      , goR s4 (rf' (-1)) ix'
+      , goR s5 (rf'   0)  ix'
+      , goR s6 (rf'   1)  ix'
+      , goR s7 (rf'   2)  ix'
+      , goR s8 (rf'   3)  ix'
+      , goR s9 (rf'   4)  ix'
+      )
+
+    -- Add a left-most component to an index
+    --
+    cons :: forall sh. Shape sh => Int -> sh -> (sh :. Int)
+    cons ix extent = toElt $ go (eltType (undefined::sh)) (fromElt extent)
+      where
+        go :: TupleType t -> t -> (t, Int)
+        go UnitTuple         ()       = ((), ix)
+        go (PairTuple th tz) (sh, sz)
+          | SingleTuple t <- tz
+          , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
+          = (go th sh, sz)
+        go _ _
+          = $internalError "cons" "expected index with Int components"
+
+    -- Remove the left-most index of an index, and return the remainder
+    --
+    uncons :: forall sh. Shape sh => sh :. Int -> (Int, sh)
+    uncons extent = let (i,ix) = go (eltType (undefined::(sh:.Int))) (fromElt extent)
+                    in  (i, toElt ix)
+      where
+        go :: TupleType (t, Int) -> (t, Int) -> (Int, t)
+        go (PairTuple UnitTuple _)           ((), v) = (v, ())
+        go (PairTuple t1@(PairTuple _ t2) _) (v1,v3)
+          | SingleTuple t <- t2
+          , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
+          = let (i, v1') = go t1 v1
+            in  (i, (v1', v3))
+        go _ _
+          = $internalError "uncons" "expected index with Int components"
+
+
+bounded
+    :: (Shape sh, Elt e)
+    => Boundary (Array sh e)
+    -> Array sh e
+    -> sh
+    -> e
+bounded bnd arr ix =
+  if inside (shape arr) ix
+    then arr ! ix
+    else
+      case bnd of
+        Function f -> f ix
+        Constant v -> toElt v
+        _          -> arr ! bound (shape arr) ix
+
+  where
+    -- Whether the index (second argument) is inside the bounds of the given
+    -- shape (first argument).
+    --
+    inside :: forall sh. Shape sh => sh -> sh -> Bool
+    inside sh1 ix1 = go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
+      where
+        go :: TupleType t -> t -> t -> Bool
+        go UnitTuple          ()       ()      = True
+        go (PairTuple tsh ti) (sh, sz) (ih,iz)
+          = if go ti sz iz
+              then go tsh sh ih
+              else False
+        go (SingleTuple t) sz iz
+          | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
+          = if iz < 0 || iz >= sz
+              then False
+              else True
+          --
+          | otherwise
+          = $internalError "inside" "expected index with Int components"
+
+    -- Return the index (second argument), updated to obey the given boundary
+    -- conditions when outside the bounds of the given shape (first argument)
+    --
+    bound :: forall sh. Shape sh => sh -> sh -> sh
+    bound sh1 ix1 = toElt $ go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
+      where
+        go :: TupleType t -> t -> t -> t
+        go UnitTuple          ()       ()       = ()
+        go (PairTuple tsh ti) (sh, sz) (ih, iz) = (go tsh sh ih, go ti sz iz)
+        go (SingleTuple t)    sz       iz
+          | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
+          = let i | iz < 0    = case bnd of
+                                  Clamp  -> 0
+                                  Mirror -> -iz
+                                  Wrap   -> sz + iz
+                                  _      -> $internalError "bound" "unexpected boundary condition"
+                  | iz >= sz  = case bnd of
+                                  Clamp  -> sz - 1
+                                  Mirror -> sz - (iz - sz + 2)
+                                  Wrap   -> iz - sz
+                                  _      -> $internalError "bound" "unexpected boundary condition"
+                  | otherwise = iz
+            in i
+          | otherwise
+          = $internalError "bound" "expected index with Int components"
+
 
 -- toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
 --         => SliceIndex (EltRepr slix)
@@ -677,6 +886,28 @@ stencil2Op stencil boundary1 arr1 boundary2 arr2
 --         -> [Array sl e]
 -- toSeqOp sliceIndex _ arr = map (sliceOp sliceIndex arr :: slix -> Array sl e)
 --                                (enumSlices sliceIndex (shape arr))
+
+
+-- Stencil boundary conditions
+-- ---------------------------
+
+data Boundary t where
+  Clamp    :: Boundary t
+  Mirror   :: Boundary t
+  Wrap     :: Boundary t
+  Constant :: Elt t => EltRepr t -> Boundary (Array sh t)
+  Function :: (Shape sh, Elt e) => (sh -> e) -> Boundary (Array sh e)
+
+
+evalPreBoundary :: EvalAcc acc -> AST.PreBoundary acc aenv t -> Val aenv -> Boundary t
+evalPreBoundary evalAcc bnd aenv =
+  case bnd of
+    AST.Clamp      -> Clamp
+    AST.Mirror     -> Mirror
+    AST.Wrap       -> Wrap
+    AST.Constant v -> Constant v
+    AST.Function f -> Function (evalPreFun evalAcc f aenv)
+
 
 -- Scalar expression evaluation
 -- ----------------------------
@@ -845,6 +1076,7 @@ evalPrim (PrimFloor           ta tb) = evalFloor ta tb
 evalPrim (PrimCeiling         ta tb) = evalCeiling ta tb
 evalPrim (PrimAtan2              ty) = evalAtan2 ty
 evalPrim (PrimIsNaN              ty) = evalIsNaN ty
+evalPrim (PrimIsInfinite         ty) = evalIsInfinite ty
 evalPrim (PrimLt                 ty) = evalLt ty
 evalPrim (PrimGt                 ty) = evalGt ty
 evalPrim (PrimLtEq               ty) = evalLtEq ty
@@ -1034,6 +1266,9 @@ evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
 
 evalIsNaN :: FloatingType a -> (a -> Bool)
 evalIsNaN ty | FloatingDict <- floatingDict ty = isNaN
+
+evalIsInfinite :: FloatingType a -> (a -> Bool)
+evalIsInfinite ty | FloatingDict <- floatingDict ty = isInfinite
 
 
 -- Methods of Num

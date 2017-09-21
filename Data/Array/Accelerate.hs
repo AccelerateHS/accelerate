@@ -55,10 +55,6 @@
 -- * <http://hackage.haskell.org/package/accelerate-llvm-ptx accelerate-llvm-ptx>:
 --   implementation supporting parallel execution on CUDA-capable NVIDIA GPUs.
 --
--- * <http://hackage.haskell.org/package/accelerate-cuda accelerate-cuda>:
---   an older implementation supporting parallel execution on CUDA-capable
---   NVIDIA GPUs. /__NOTE:__ This backend is being deprecated in favour of @accelerate-llvm-ptx@./
---
 -- [/Examples:/]
 --
 -- * The <http://hackage.haskell.org/package/accelerate-examples accelerate-examples>
@@ -94,6 +90,9 @@
 --
 -- * <https://hackage.haskell.org/package/accelerate-fft accelerate-fft>: Fast
 -- Fourier transform, with FFI bindings to optimised implementations.
+--
+-- * <https://hackage.haskell.org/package/accelerate-blas accelerate-blas>: BLAS
+-- and LAPACK operations, with FFI bindings to optimised implementations.
 --
 -- * <https://hackage.haskell.org/package/accelerate-bignum accelerate-bignum>:
 -- Fixed-width large integer arithmetic.
@@ -261,7 +260,8 @@ module Data.Array.Accelerate (
   stencil, stencil2,
 
   -- *** Stencil specification
-  Stencil, Boundary(..),
+  Stencil, Boundary,
+  clamp, mirror, wrap, function,
 
   -- *** Common stencil patterns
   Stencil3, Stencil5, Stencil7, Stencil9,

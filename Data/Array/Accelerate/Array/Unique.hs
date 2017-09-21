@@ -57,6 +57,7 @@ instance NFData (UniqueArray e) where
 
 -- | Create a new UniqueArray
 --
+{-# INLINE newUniqueArray #-}
 newUniqueArray :: ForeignPtr e -> IO (UniqueArray e)
 newUniqueArray fp = UniqueArray <$> newUnique <*> newLifetime fp
 
@@ -67,6 +68,7 @@ newUniqueArray fp = UniqueArray <$> newUnique <*> newLifetime fp
 -- the action and use it after the action completes. All uses of the pointer
 -- should be inside the bracketed function.
 --
+{-# INLINE withUniqueArrayPtr #-}
 withUniqueArrayPtr :: UniqueArray a -> (Ptr a -> IO b) -> IO b
 withUniqueArrayPtr ua go =
   withLifetime (uniqueArrayData ua) $ \fp -> withForeignPtr fp go
@@ -80,6 +82,7 @@ withUniqueArrayPtr ua go =
 --
 -- See also: 'unsafeGetValue', 'unsafeForeignPtrToPtr'.
 --
+{-# INLINE unsafeUniqueArrayPtr #-}
 unsafeUniqueArrayPtr :: UniqueArray a -> Ptr a
 unsafeUniqueArrayPtr = unsafeForeignPtrToPtr . unsafeGetValue . uniqueArrayData
 
@@ -89,6 +92,7 @@ unsafeUniqueArrayPtr = unsafeForeignPtrToPtr . unsafeGetValue . uniqueArrayData
 --
 -- See: [Unique array strictness]
 --
+{-# INLINE touchUniqueArray #-}
 touchUniqueArray :: UniqueArray a -> IO ()
 touchUniqueArray = touchLifetime . uniqueArrayData
 

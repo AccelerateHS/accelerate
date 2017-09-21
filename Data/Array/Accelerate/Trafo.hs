@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE MonoLocalBinds       #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -20,9 +21,15 @@ module Data.Array.Accelerate.Trafo (
   -- * HOAS -> de Bruijn conversion
   Phase(..), phases,
 
-  convertAcc,  convertAccWith,
+  -- ** Array computations
+  convertAcc, convertAccWith,
+
+  -- ** Array functions
+  Afunction, AfunctionR,
   convertAfun, convertAfunWith,
-  -- convertSeq,  convertSeqWith,
+
+  -- ** Sequence computations
+  -- convertSeq, convertSeqWith,
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
@@ -33,6 +40,9 @@ module Data.Array.Accelerate.Trafo (
 
   -- * Term equality
   Match(..), (:~:)(..),
+
+  -- ** Auxiliary
+  matchDelayedOpenAcc, hashDelayedOpenAcc,
 
 ) where
 

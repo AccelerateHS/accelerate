@@ -2,7 +2,6 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -30,28 +29,22 @@ module Data.Array.Accelerate.Analysis.Match (
   matchIdx, matchTupleType,
   matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
 
-  -- hashing expressions
-  HashAcc,
-  hashPreOpenAcc, hashOpenAcc,
-  hashPreOpenExp, hashOpenExp,
-  hashPreOpenFun,
-
 ) where
 
 -- standard library
-import Prelude                                          hiding ( exp )
 import Data.Maybe
 import Data.Typeable
-import Data.Hashable
-import System.Mem.StableName
 import System.IO.Unsafe                                 ( unsafePerformIO )
+import System.Mem.StableName
+import Prelude                                          hiding ( exp )
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
+import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Type
 
 
 -- The type of matching array computations
@@ -246,20 +239,18 @@ matchPreOpenAcc matchAcc hashAcc = match
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Stencil f1 b1 (a1 :: acc aenv (Array sh1 e1)))
-          (Stencil f2 b2 (a2 :: acc aenv (Array sh2 e2)))
+    match (Stencil f1 b1 a1) (Stencil f2 b2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
-      , matchBoundary (eltType (undefined::e1)) b1 b2
+      , matchBoundary matchAcc hashAcc b1 b2
       = Just Refl
 
-    match (Stencil2 f1 b1  (a1  :: acc aenv (Array sh1  e1 )) b2  (a2 :: acc aenv (Array sh2  e2 )))
-          (Stencil2 f2 b1' (a1' :: acc aenv (Array sh1' e1')) b2' (a2':: acc aenv (Array sh2' e2')))
+    match (Stencil2 f1 b1  a1  b2  a2) (Stencil2 f2 b1' a1' b2' a2')
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a1'
       , Just Refl <- matchAcc a2 a2'
-      , matchBoundary (eltType (undefined::e1)) b1 b1'
-      , matchBoundary (eltType (undefined::e2)) b2 b2'
+      , matchBoundary matchAcc hashAcc b1 b1'
+      , matchBoundary matchAcc hashAcc b2 b2'
       = Just Refl
 
     -- match (Collect s1) (Collect s2)
@@ -313,12 +304,22 @@ matchPreOpenAfun _ _         _         = Nothing
 
 -- Match stencil boundaries
 --
-matchBoundary :: TupleType e -> Boundary e -> Boundary e -> Bool
-matchBoundary ty (Constant s) (Constant t) = matchConst ty s t
-matchBoundary _  Wrap         Wrap         = True
-matchBoundary _  Clamp        Clamp        = True
-matchBoundary _  Mirror       Mirror       = True
-matchBoundary _  _            _            = False
+matchBoundary
+    :: forall acc aenv sh t. Elt t
+    => MatchAcc acc
+    -> HashAcc acc
+    -> PreBoundary acc aenv (Array sh t)
+    -> PreBoundary acc aenv (Array sh t)
+    -> Bool
+matchBoundary _ _ Clamp        Clamp        = True
+matchBoundary _ _ Mirror       Mirror       = True
+matchBoundary _ _ Wrap         Wrap         = True
+matchBoundary _ _ (Constant s) (Constant t) = matchConst (eltType (undefined::t)) s t
+matchBoundary m h (Function f) (Function g)
+  | Just Refl <- matchPreOpenFun m h f g
+  = True
+matchBoundary _ _ _ _
+  = False
 
 
 {--
@@ -752,6 +753,7 @@ matchPrimFun (PrimRound _ s)            (PrimRound _ t)            = matchIntegr
 matchPrimFun (PrimFloor _ s)            (PrimFloor _ t)            = matchIntegralType s t
 matchPrimFun (PrimCeiling _ s)          (PrimCeiling _ t)          = matchIntegralType s t
 matchPrimFun (PrimIsNaN _)              (PrimIsNaN _)              = Just Refl
+matchPrimFun (PrimIsInfinite _)         (PrimIsInfinite _)         = Just Refl
 matchPrimFun (PrimLt _)                 (PrimLt _)                 = Just Refl
 matchPrimFun (PrimGt _)                 (PrimGt _)                 = Just Refl
 matchPrimFun (PrimLtEq _)               (PrimLtEq _)               = Just Refl
@@ -823,6 +825,7 @@ matchPrimFun' (PrimRound s _)            (PrimRound t _)            = matchFloat
 matchPrimFun' (PrimFloor s _)            (PrimFloor t _)            = matchFloatingType s t
 matchPrimFun' (PrimCeiling s _)          (PrimCeiling t _)          = matchFloatingType s t
 matchPrimFun' (PrimIsNaN s)              (PrimIsNaN t)              = matchFloatingType s t
+matchPrimFun' (PrimIsInfinite s)         (PrimIsInfinite t)         = matchFloatingType s t
 matchPrimFun' (PrimMax _)                (PrimMax _)                = Just Refl
 matchPrimFun' (PrimMin _)                (PrimMin _)                = Just Refl
 matchPrimFun' (PrimFromIntegral s _)     (PrimFromIntegral t _)     = matchIntegralType s t
@@ -928,296 +931,4 @@ matchNonNumType (TypeCChar _)  (TypeCChar _)  = Just Refl
 matchNonNumType (TypeCSChar _) (TypeCSChar _) = Just Refl
 matchNonNumType (TypeCUChar _) (TypeCUChar _) = Just Refl
 matchNonNumType _              _              = Nothing
-
-
--- Discriminate binary functions that commute, and if so return the operands in
--- a stable ordering such that matching recognises expressions modulo
--- commutativity.
---
-commutes
-    :: forall acc env aenv a r.
-       HashAcc acc
-    -> PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> Maybe (PreOpenExp acc env aenv a)
-commutes h f x = case f of
-  PrimAdd _     -> Just (swizzle x)
-  PrimMul _     -> Just (swizzle x)
-  PrimBAnd _    -> Just (swizzle x)
-  PrimBOr _     -> Just (swizzle x)
-  PrimBXor _    -> Just (swizzle x)
-  PrimEq _      -> Just (swizzle x)
-  PrimNEq _     -> Just (swizzle x)
-  PrimMax _     -> Just (swizzle x)
-  PrimMin _     -> Just (swizzle x)
-  PrimLAnd      -> Just (swizzle x)
-  PrimLOr       -> Just (swizzle x)
-  _             -> Nothing
-  where
-    swizzle :: PreOpenExp acc env aenv (a',a') -> PreOpenExp acc env aenv (a',a')
-    swizzle exp
-      | Tuple (NilTup `SnocTup` a `SnocTup` b)  <- exp
-      , hashPreOpenExp h a > hashPreOpenExp h b = Tuple (NilTup `SnocTup` b `SnocTup` a)
-      --
-      | otherwise                               = exp
-
-
--- Hashing
--- =======
-
-hashIdx :: Idx env t -> Int
-hashIdx = hash . idxToInt
-
-hashTupleIdx :: TupleIdx tup e -> Int
-hashTupleIdx = hash . tupleIdxToInt
-
-
--- Array computations
--- ------------------
-
-type HashAcc acc = forall aenv a. acc aenv a -> Int
-
-
-hashOpenAcc :: OpenAcc aenv arrs -> Int
-hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
-
-{--
-hashPreOpenSeq :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSeq acc aenv senv arrs -> Int
-hashPreOpenSeq hashAcc s =
-  let
-    hashA :: Int -> acc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashAcc
-
-    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
-
-    hashAF :: Int -> PreOpenAfun acc aenv' f -> Int
-    hashAF salt = hashWithSalt salt . hashAfun hashAcc
-
-    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
-    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
-
-    hashS :: Int -> PreOpenSeq acc aenv senv' arrs' -> Int
-    hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
-
-    hashVar :: Int -> Idx senv' a -> Int
-    hashVar salt = hashWithSalt salt . idxToInt
-
-    hashP :: Int -> Producer acc aenv senv a -> Int
-    hashP salt p =
-      case p of
-        StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
-        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq"         `hashA`  acc `hashWithSalt` show spec
-        MapSeq f x          -> hashWithSalt salt "MapSeq"        `hashAF` f   `hashVar` x
-        ChunkedMapSeq f x   -> hashWithSalt salt "ChunkedMapSeq" `hashAF` f   `hashVar` x
-        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq"    `hashAF` f   `hashVar` x `hashVar` y
-        ScanSeq f e x       -> hashWithSalt salt "ScanSeq"       `hashF`  f   `hashE`   e `hashVar` x
-
-    hashC :: Int -> Consumer acc aenv senv' a -> Int
-    hashC salt c =
-      case c of
-        FoldSeq f e x          -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
-        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
-        Stuple t               -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
-
-  in case s of
-    Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
-    Consumer   c    -> hash "Consumer"   `hashC` c
-    Reify      ix   -> hash "Reify"      `hashVar` ix
---}
-
-
-hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
-hashPreOpenAcc hashAcc pacc =
-  let
-    hashA :: Int -> acc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashAcc
-
-    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
-
-    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
-    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
-
-    -- hashS :: Int -> PreOpenSeq acc aenv senv arrs -> Int
-    -- hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
-
-  in case pacc of
-    Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
-    Avar v                      -> hash "Avar"          `hashWithSalt` hashIdx v
-    Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple hashAcc t
-    Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix    `hashA` a
-    Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun hashAcc f `hashA` a
-    Aforeign _ f a              -> hash "Aforeign"      `hashWithSalt` hashAfun hashAcc f `hashA` a
-    Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
-    Awhile p f a                -> hash "Awhile"        `hashWithSalt` hashAfun hashAcc f `hashWithSalt` hashAfun hashAcc p `hashA` a
-    Unit e                      -> hash "Unit"          `hashE` e
-    Generate e f                -> hash "Generate"      `hashE` e  `hashF` f
-    Acond e a1 a2               -> hash "Acond"         `hashE` e  `hashA` a1 `hashA` a2
-    Reshape sh a                -> hash "Reshape"       `hashE` sh `hashA` a
-    Transform sh f1 f2 a        -> hash "Transform"     `hashE` sh `hashF` f1 `hashF` f2 `hashA` a
-    Replicate spec ix a         -> hash "Replicate"     `hashE` ix `hashA` a  `hashWithSalt` show spec
-    Slice spec a ix             -> hash "Slice"         `hashE` ix `hashA` a  `hashWithSalt` show spec
-    Map f a                     -> hash "Map"           `hashF` f  `hashA` a
-    ZipWith f a1 a2             -> hash "ZipWith"       `hashF` f  `hashA` a1 `hashA` a2
-    Fold f e a                  -> hash "Fold"          `hashF` f  `hashE` e  `hashA` a
-    Fold1 f a                   -> hash "Fold1"         `hashF` f  `hashA` a
-    FoldSeg f e a s             -> hash "FoldSeg"       `hashF` f  `hashE` e  `hashA` a  `hashA` s
-    Fold1Seg f a s              -> hash "Fold1Seg"      `hashF` f  `hashA` a  `hashA` s
-    Scanl f e a                 -> hash "Scanl"         `hashF` f  `hashE` e  `hashA` a
-    Scanl' f e a                -> hash "Scanl'"        `hashF` f  `hashE` e  `hashA` a
-    Scanl1 f a                  -> hash "Scanl1"        `hashF` f  `hashA` a
-    Scanr f e a                 -> hash "Scanr"         `hashF` f  `hashE` e  `hashA` a
-    Scanr' f e a                -> hash "Scanr'"        `hashF` f  `hashE` e  `hashA` a
-    Scanr1 f a                  -> hash "Scanr1"        `hashF` f  `hashA` a
-    Backpermute sh f a          -> hash "Backpermute"   `hashF` f  `hashE` sh `hashA` a
-    Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
-    Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
-    Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    -- Collect s                   -> hash "Seq"           `hashS` s
-
-
-hashArrays :: ArraysR a -> a -> Int
-hashArrays ArraysRunit         ()       = hash ()
-hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
-hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
-
-hashAtuple :: HashAcc acc -> Atuple (acc aenv) a -> Int
-hashAtuple _ NilAtup            = hash "NilAtup"
-hashAtuple h (SnocAtup t a)     = hash "SnocAtup"       `hashWithSalt` hashAtuple h t `hashWithSalt` h a
-
-hashAfun :: HashAcc acc -> PreOpenAfun acc aenv f -> Int
-hashAfun h (Abody b)            = hash "Abody"          `hashWithSalt` h b
-hashAfun h (Alam f)             = hash "Alam"           `hashWithSalt` hashAfun h f
-
-hashBoundary :: forall acc aenv sh e. Elt e => acc aenv (Array sh e) -> Boundary (EltRepr e) -> Int
-hashBoundary _ Wrap             = hash "Wrap"
-hashBoundary _ Clamp            = hash "Clamp"
-hashBoundary _ Mirror           = hash "Mirror"
-hashBoundary _ (Constant c)     = hash "Constant"       `hashWithSalt` show (toElt c :: e)
-
-
--- Scalar expressions
--- ------------------
-
-hashOpenExp :: OpenExp env aenv exp -> Int
-hashOpenExp = hashPreOpenExp hashOpenAcc
-
-hashPreOpenExp :: forall acc env aenv exp. HashAcc acc -> PreOpenExp acc env aenv exp -> Int
-hashPreOpenExp hashAcc exp =
-  let
-    hashA :: Int -> acc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashAcc
-
-    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
-
-  in case exp of
-    Let bnd body                -> hash "Let"           `hashE` bnd `hashE` body
-    Var ix                      -> hash "Var"           `hashWithSalt` hashIdx ix
-    Const c                     -> hash "Const"         `hashWithSalt` show (toElt c :: exp)
-    Tuple t                     -> hash "Tuple"         `hashWithSalt` hashTuple hashAcc t
-    Prj i e                     -> hash "Prj"           `hashWithSalt` hashTupleIdx i `hashE` e
-    IndexAny                    -> hash "IndexAny"
-    IndexNil                    -> hash "IndexNil"
-    IndexCons sl a              -> hash "IndexCons"     `hashE` sl `hashE` a
-    IndexHead sl                -> hash "IndexHead"     `hashE` sl
-    IndexTail sl                -> hash "IndexTail"     `hashE` sl
-    IndexSlice spec ix sh       -> hash "IndexSlice"    `hashE` ix `hashE` sh `hashWithSalt` show spec
-    IndexFull  spec ix sl       -> hash "IndexFull"     `hashE` ix `hashE` sl `hashWithSalt` show spec
-    ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
-    FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i
-    Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t  `hashE` e
-    While p f x                 -> hash "While"         `hashWithSalt` hashPreOpenFun hashAcc p  `hashWithSalt` hashPreOpenFun hashAcc f  `hashE` x
-    PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
-    PrimConst c                 -> hash "PrimConst"     `hashWithSalt` hashPrimConst c
-    Index a ix                  -> hash "Index"         `hashA` a  `hashE` ix
-    LinearIndex a ix            -> hash "LinearIndex"   `hashA` a  `hashE` ix
-    Shape a                     -> hash "Shape"         `hashA` a
-    ShapeSize sh                -> hash "ShapeSize"     `hashE` sh
-    Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
-    Union sa sb                 -> hash "Union"         `hashE` sa `hashE` sb
-    Foreign _ f e               -> hash "Foreign"       `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
-
-
-hashPreOpenFun :: HashAcc acc -> PreOpenFun acc env aenv f -> Int
-hashPreOpenFun h (Body e)       = hash "Body"           `hashWithSalt` hashPreOpenExp h e
-hashPreOpenFun h (Lam f)        = hash "Lam"            `hashWithSalt` hashPreOpenFun h f
-
-hashTuple :: HashAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Int
-hashTuple _ NilTup              = hash "NilTup"
-hashTuple h (SnocTup t e)       = hash "SnocTup"        `hashWithSalt` hashTuple h t `hashWithSalt` hashPreOpenExp h e
-
-
-hashPrimConst :: PrimConst c -> Int
-hashPrimConst PrimMinBound{}    = hash "PrimMinBound"
-hashPrimConst PrimMaxBound{}    = hash "PrimMaxBound"
-hashPrimConst PrimPi{}          = hash "PrimPi"
-
-hashPrimFun :: PrimFun f -> Int
-hashPrimFun PrimAdd{}                = hash "PrimAdd"
-hashPrimFun PrimSub{}                = hash "PrimSub"
-hashPrimFun PrimMul{}                = hash "PrimMul"
-hashPrimFun PrimNeg{}                = hash "PrimNeg"
-hashPrimFun PrimAbs{}                = hash "PrimAbs"
-hashPrimFun PrimSig{}                = hash "PrimSig"
-hashPrimFun PrimQuot{}               = hash "PrimQuot"
-hashPrimFun PrimRem{}                = hash "PrimRem"
-hashPrimFun PrimQuotRem{}            = hash "PrimQuotRem"
-hashPrimFun PrimIDiv{}               = hash "PrimIDiv"
-hashPrimFun PrimMod{}                = hash "PrimMod"
-hashPrimFun PrimDivMod{}             = hash "PrimDivMod"
-hashPrimFun PrimBAnd{}               = hash "PrimBAnd"
-hashPrimFun PrimBOr{}                = hash "PrimBOr"
-hashPrimFun PrimBXor{}               = hash "PrimBXor"
-hashPrimFun PrimBNot{}               = hash "PrimBNot"
-hashPrimFun PrimBShiftL{}            = hash "PrimBShiftL"
-hashPrimFun PrimBShiftR{}            = hash "PrimBShiftR"
-hashPrimFun PrimBRotateL{}           = hash "PrimBRotateL"
-hashPrimFun PrimBRotateR{}           = hash "PrimBRotateR"
-hashPrimFun PrimPopCount{}           = hash "PrimPopCount"
-hashPrimFun PrimCountLeadingZeros{}  = hash "PrimCountLeadingZeros"
-hashPrimFun PrimCountTrailingZeros{} = hash "PrimCountTrailingZeros"
-hashPrimFun PrimFDiv{}               = hash "PrimFDiv"
-hashPrimFun PrimRecip{}              = hash "PrimRecip"
-hashPrimFun PrimSin{}                = hash "PrimSin"
-hashPrimFun PrimCos{}                = hash "PrimCos"
-hashPrimFun PrimTan{}                = hash "PrimTan"
-hashPrimFun PrimAsin{}               = hash "PrimAsin"
-hashPrimFun PrimAcos{}               = hash "PrimAcos"
-hashPrimFun PrimAtan{}               = hash "PrimAtan"
-hashPrimFun PrimSinh{}               = hash "PrimSinh"
-hashPrimFun PrimCosh{}               = hash "PrimCosh"
-hashPrimFun PrimTanh{}               = hash "PrimTanh"
-hashPrimFun PrimAsinh{}              = hash "PrimAsinh"
-hashPrimFun PrimAcosh{}              = hash "PrimAcosh"
-hashPrimFun PrimAtanh{}              = hash "PrimAtanh"
-hashPrimFun PrimExpFloating{}        = hash "PrimExpFloating"
-hashPrimFun PrimSqrt{}               = hash "PrimSqrt"
-hashPrimFun PrimLog{}                = hash "PrimLog"
-hashPrimFun PrimFPow{}               = hash "PrimFPow"
-hashPrimFun PrimLogBase{}            = hash "PrimLogBase"
-hashPrimFun PrimAtan2{}              = hash "PrimAtan2"
-hashPrimFun PrimTruncate{}           = hash "PrimTruncate"
-hashPrimFun PrimRound{}              = hash "PrimRound"
-hashPrimFun PrimFloor{}              = hash "PrimFloor"
-hashPrimFun PrimCeiling{}            = hash "PrimCeiling"
-hashPrimFun PrimIsNaN{}              = hash "PrimIsNaN"
-hashPrimFun PrimLt{}                 = hash "PrimLt"
-hashPrimFun PrimGt{}                 = hash "PrimGt"
-hashPrimFun PrimLtEq{}               = hash "PrimLtEq"
-hashPrimFun PrimGtEq{}               = hash "PrimGtEq"
-hashPrimFun PrimEq{}                 = hash "PrimEq"
-hashPrimFun PrimNEq{}                = hash "PrimNEq"
-hashPrimFun PrimMax{}                = hash "PrimMax"
-hashPrimFun PrimMin{}                = hash "PrimMin"
-hashPrimFun PrimFromIntegral{}       = hash "PrimFromIntegral"
-hashPrimFun PrimToFloating{}         = hash "PrimToFloating"
-hashPrimFun PrimCoerce{}             = hash "PrimCoerce"
-hashPrimFun PrimLAnd                 = hash "PrimLAnd"
-hashPrimFun PrimLOr                  = hash "PrimLOr"
-hashPrimFun PrimLNot                 = hash "PrimLNot"
-hashPrimFun PrimOrd                  = hash "PrimOrd"
-hashPrimFun PrimChr                  = hash "PrimChr"
-hashPrimFun PrimBoolToInt            = hash "PrimBoolToInt"
 

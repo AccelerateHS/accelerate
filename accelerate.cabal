@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                1.0.0.0
+Version:                1.1.0.0
 Cabal-version:          >= 1.8
 Tested-with:            GHC >= 7.8
 Build-type:             Simple
@@ -38,10 +38,6 @@ Description:
       CUDA-capable NVIDIA GPUs. Requires a GPU with compute capability 2.0 or
       greater. See the following table for supported GPUs:
       <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
-  .
-    * @accelerate-cuda@: Backend targeting CUDA-enabled NVIDIA GPUs. Requires
-      a GPU with compute compatibility 1.2 or greater. /NOTE: This backend is
-      being deprecated in favour of @accelerate-llvm-ptx@./
   .
     * @accelerate-examples@: Computational kernels and applications showcasing
       the use of Accelerate as well as a regression test suite, supporting
@@ -129,7 +125,9 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
-Extra-source-files:     changelog.md
+Extra-source-files:
+    README.md
+    CHANGELOG.md
 
 Flag debug
   Default:              False
@@ -153,6 +151,8 @@ Flag debug
       * @simplify@: Enable program simplification phase (True).
     .
       * @flush-cache@: Clear any persistent caches on program startup (False).
+    .
+      * @force-recomp@: Force recompilation of array programs (False).
     .
       * @fast-math@: Allow algebraically equivalent transformations which may
         change floating point results (e.g., reassociate) (True).
@@ -206,7 +206,12 @@ Flag ekg
   Description:
     Enable hooks for monitoring the running application using EKG. Implies
     @debug@ mode. In order to view the metrics, your application will need to
-    initialise the EKG server like so:
+    call @Data.Array.Accelerate.Debug.beginMonitoring@ before running any
+    Accelerate computations. This will launch the server on the local machine at
+    port 8000.
+    .
+    Alternatively, if you wish to configure the EKG monitoring server you can
+    initialise it like so:
     .
     > import Data.Array.Accelerate.Debug
     >
@@ -223,7 +228,7 @@ Flag ekg
     >   ...
     .
     Note that, as with any program utilising EKG, in order to collect Haskell GC
-    statistics collection, you must either run the program with:
+    statistics, you must either run the program with:
     .
     > +RTS -T -RTS
     .
@@ -246,7 +251,7 @@ Flag internal-checks
 
 Library
   Build-depends:
-          base                          >= 4.7 && < 4.10
+          base                          >= 4.7 && < 4.11
         , base-orphans                  >= 0.3
         , containers                    >= 0.3
         , deepseq                       >= 1.3
@@ -278,6 +283,7 @@ Library
 
         -- For backend development
         Data.Array.Accelerate.AST
+        Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
         Data.Array.Accelerate.Analysis.Shape
         Data.Array.Accelerate.Analysis.Stencil
@@ -303,6 +309,7 @@ Library
 
   Other-modules:
         Data.Atomic
+        Data.Array.Accelerate.Analysis.Hash.TH
         Data.Array.Accelerate.Array.Lifted
         Data.Array.Accelerate.Array.Remote.Nursery
         Data.Array.Accelerate.Classes
@@ -383,6 +390,10 @@ Library
   if impl(ghc >= 8.0)
     ghc-options:        -freduction-depth=35
 
+  if impl(ghc < 7.10)
+    build-depends:
+          th-lift-instances             >= 0.1
+
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
   -- project loads in GHCi, and avoids extension clashes.
@@ -395,7 +406,7 @@ source-repository head
 
 source-repository this
   Type:                 git
-  Tag:                  1.0.0.0
+  Tag:                  1.1.0.0
   Location:             git://github.com/AccelerateHS/accelerate.git
 
 -- vim: nospell

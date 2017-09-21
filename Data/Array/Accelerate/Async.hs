@@ -75,7 +75,7 @@ wait (Async _ var) = either throwIO return =<< readMVar var
 {-# INLINE poll #-}
 poll :: Async a -> IO (Maybe a)
 poll (Async _ var) =
-  maybe (return Nothing) (either throwIO (return . Just)) =<< tryTakeMVar var
+  maybe (return Nothing) (either throwIO (return . Just)) =<< tryReadMVar var
 
 -- | Cancel a running asynchronous computation.
 --

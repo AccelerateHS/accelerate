@@ -2,6 +2,7 @@ An Embedded Language for Accelerated Array Computations
 =======================================================
 
 [![Build Status](https://travis-ci.org/AccelerateHS/accelerate.svg?branch=master)](https://travis-ci.org/AccelerateHS/accelerate)
+[![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
@@ -60,10 +61,10 @@ The following supported add-ons are available as separate packages:
 
   * [accelerate-llvm-native][accelerate-llvm-native]: Backend targeting multicore CPUs
   * [accelerate-llvm-ptx][accelerate-llvm-ptx]: Backend targeting CUDA-enabled NVIDIA GPUs. Requires a GPU with compute capability 2.0 or greater (see the [table on Wikipedia][wiki-cc])
-  * [accelerate-cuda][accelerate-cuda]: Backend targeting CUDA-enabled NVIDA GPUs. Requires a GPU with compute capability 1.2 or greater. _NOTE:_ This backend is being deprecated in favour of `accelerate-llvm-ptx`
   * [accelerate-examples][accelerate-examples]: Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
   * [accelerate-io][accelerate-io]: Fast conversion between Accelerate arrays and other array formats (for example, Repa and Vector)
-  * [accelerate-fft][accelerate-fft]: Fast Fourier transform implementation, with bindings to optimised FFI implementations
+  * [accelerate-fft][accelerate-fft]: Fast Fourier transform implementation, with FFI bindings to optimised implementations
+  * [accelerate-blas][accelerate-blas]: BLAS and LAPACK operations, with FFI bindings to optimised implementations
   * [accelerate-bignum][accelerate-bignum]: Fixed-width large integer arithmetic
   * [colour-accelerate][colour-accelerate]: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL)
   * [gloss-accelerate][gloss-accelerate]: Generate [gloss][gloss] pictures from Accelerate
@@ -193,6 +194,7 @@ Here is a list of features that are currently missing:
   [accelerate-examples]:        https://github.com/AccelerateHS/accelerate-examples
   [accelerate-io]:              https://github.com/AccelerateHS/accelerate-io
   [accelerate-fft]:             https://github.com/AccelerateHS/accelerate-fft
+  [accelerate-blas]:            https://github.com/tmcdonell/accelerate-blas
   [accelerate-backend-kit]:     https://github.com/AccelerateHS/accelerate-backend-kit
   [accelerate-buildbot]:        https://github.com/AccelerateHS/accelerate-buildbot
   [accelerate-repa]:            https://github.com/blambo/accelerate-repa
