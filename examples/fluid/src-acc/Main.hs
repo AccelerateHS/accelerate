@@ -52,9 +52,9 @@ main = do
       -- Critically, we use the run1 execution form to ensure we bypass all
       -- front-end conversion phases.
       --
+      step           =  run1 backend (fluid steps dt dp dn)
       simulate world =
-        let step        = run1 backend (fluid steps dt dp dn)
-            ds          = sources (densitySource world)
+        let ds          = sources (densitySource world)
             vs          = sources (velocitySource world)
             (df', vf')  = step ( ds, vs, densityField world, velocityField world )
         in

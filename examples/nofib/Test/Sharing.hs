@@ -124,7 +124,7 @@ sortKey keyFun arr =  foldl sortOneBit arr (P.map lift ([0..31] :: [Int]))
         bits    = A.map (\a -> (A.testBit a bitNum) ? (1, 0)) keys
         bitsInv = A.map (\b -> (b A.== 0) ? (1, 0)) bits
 
-        (falses, numZeroes) = A.scanl' (+) 0 bitsInv
+        (falses, numZeroes) = unlift (A.scanl' (+) 0 bitsInv)
         trues               = A.map (\x -> (A.the numZeroes) + (A.fst x) - (A.snd x))
                             $ A.zip ixs falses
 
@@ -195,19 +195,19 @@ varUse = (first, both, second)
     fs = fromList (Z:.10:.10) [0..]
 
     -- Ignoring the first parameter
-    first = stencil2 centre Clamp (use fs) Clamp (use is)
+    first = stencil2 centre clamp (use fs) clamp (use is)
       where
         centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Int
         centre _ (_,(_,y,_),_)  = y
 
     -- Using both
-    both = stencil2 centre Clamp (use fs) Clamp (use is)
+    both = stencil2 centre clamp (use fs) clamp (use is)
       where
         centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Float
         centre (_,(_,x,_),_) (_,(_,y,_),_)  = x + A.fromIntegral y
 
     -- Not using the second parameter
-    second = stencil2 centre Clamp (use fs) Clamp (use is)
+    second = stencil2 centre clamp (use fs) clamp (use is)
       where
         centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Float
         centre (_,(_,x,_),_) _  = x

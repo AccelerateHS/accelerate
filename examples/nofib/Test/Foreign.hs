@@ -15,11 +15,11 @@ import Data.Array.Accelerate.Examples.Internal
 
 
 test_foreign :: Backend -> Config -> Test
-test_foreign be conf =
+test_foreign _be _conf =
   testGroup "foreign"
     [
 #ifdef ACCELERATE_CUDA_BACKEND
-      test_cuda be conf
+      test_cuda _be _conf
 #endif
     ]
 

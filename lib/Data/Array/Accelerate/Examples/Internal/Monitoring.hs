@@ -16,7 +16,9 @@ module Data.Array.Accelerate.Examples.Internal.Monitoring (
 
 ) where
 
+#ifdef ACCELERATE_ENABLE_EKG
 import qualified Data.Array.Accelerate.Debug                        as Debug
+#endif
 
 
 -- | Launch a monitoring server that will collect statistics on the running

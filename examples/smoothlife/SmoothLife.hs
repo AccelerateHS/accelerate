@@ -16,7 +16,7 @@ import Config
 
 import qualified Prelude                                as P
 import Data.Label
-import Data.Array.Accelerate                            as A hiding ( size )
+import Data.Array.Accelerate                            as A hiding ( size, clamp )
 import Data.Array.Accelerate.Examples.Internal          as A hiding ( nf )
 import Data.Array.Accelerate.Math.FFT
 import Data.Array.Accelerate.Math.DFT.Centre
@@ -63,8 +63,8 @@ smoothlife conf opts aa
 
     -- initial state
     --
-    kflr        = sum kr
-    kfld        = sum kd
+    kflr        = sum (flatten kr)
+    kfld        = sum (flatten kd)
     krf         = fft2D' Forward sh (shift2D (complex kr))
     kdf         = fft2D' Forward sh (shift2D (complex kd))
 
@@ -102,7 +102,8 @@ smoothlife conf opts aa
     timestepModes f g
       = [ f
         , g + dt*(2.0*f-1.0)
-        , g + dt*(f-g) ]
+        , g + dt*(f-g)
+        ]
 
 
 -- Equation 6: s(n,m)

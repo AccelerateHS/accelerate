@@ -90,23 +90,23 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "max"          (test_max :: Array sh a -> Array sh a -> Property)
           ]
           where
-            test_quot xs ys     = run2 backend (A.zipWith quot) xs ys ~?= zipWithRef quot xs ys
-            test_rem xs ys      = run2 backend (A.zipWith rem) xs ys ~?= zipWithRef rem xs ys
-            test_quotRem xs ys  = run2 backend (A.zipWith (lift $$ quotRem)) xs ys ~?= zipWithRef quotRem xs ys
-            test_div xs ys      = run2 backend (A.zipWith div) xs ys ~?= zipWithRef div xs ys
-            test_mod xs ys      = run2 backend (A.zipWith mod) xs ys ~?= zipWithRef mod xs ys
-            test_divMod xs ys   = run2 backend (A.zipWith (lift $$ divMod)) xs ys ~?= zipWithRef divMod xs ys
+            test_quot xs ys     = runN backend (A.zipWith quot) xs ys ~?= zipWithRef quot xs ys
+            test_rem xs ys      = runN backend (A.zipWith rem) xs ys ~?= zipWithRef rem xs ys
+            test_quotRem xs ys  = runN backend (A.zipWith (lift $$ quotRem)) xs ys ~?= zipWithRef quotRem xs ys
+            test_div xs ys      = runN backend (A.zipWith div) xs ys ~?= zipWithRef div xs ys
+            test_mod xs ys      = runN backend (A.zipWith mod) xs ys ~?= zipWithRef mod xs ys
+            test_divMod xs ys   = runN backend (A.zipWith (lift $$ divMod)) xs ys ~?= zipWithRef divMod xs ys
 
-            test_band xs ys     = run2 backend (A.zipWith (A..&.)) xs ys ~?= zipWithRef (P..&.) xs ys
-            test_bor xs ys      = run2 backend (A.zipWith (A..|.)) xs ys ~?= zipWithRef (P..|.) xs ys
-            test_xor xs ys      = run2 backend (A.zipWith A.xor) xs ys ~?= zipWithRef P.xor xs ys
+            test_band xs ys     = runN backend (A.zipWith (A..&.)) xs ys ~?= zipWithRef (P..&.) xs ys
+            test_bor xs ys      = runN backend (A.zipWith (A..|.)) xs ys ~?= zipWithRef (P..|.) xs ys
+            test_xor xs ys      = runN backend (A.zipWith A.xor) xs ys ~?= zipWithRef P.xor xs ys
 
-            test_shift xs ys    = run2 backend (A.zipWith A.shift) xs ys ~?= zipWithRef P.shift xs ys
-            test_shiftL xs ys   = run2 backend (A.zipWith A.shiftL) xs ys ~?= zipWithRef P.shiftL xs ys
-            test_shiftR xs ys   = run2 backend (A.zipWith A.shiftR) xs ys ~?= zipWithRef P.shiftR xs ys
-            test_rotate xs ys   = run2 backend (A.zipWith A.rotate) xs ys ~?= zipWithRef P.rotate xs ys
-            test_rotateL xs ys  = run2 backend (A.zipWith A.rotateL) xs ys ~?= zipWithRef P.rotateL xs ys
-            test_rotateR xs ys  = run2 backend (A.zipWith A.rotateR) xs ys ~?= zipWithRef P.rotateR xs ys
+            test_shift xs ys    = runN backend (A.zipWith A.shift) xs ys ~?= zipWithRef P.shift xs ys
+            test_shiftL xs ys   = runN backend (A.zipWith A.shiftL) xs ys ~?= zipWithRef P.shiftL xs ys
+            test_shiftR xs ys   = runN backend (A.zipWith A.shiftR) xs ys ~?= zipWithRef P.shiftR xs ys
+            test_rotate xs ys   = runN backend (A.zipWith A.rotate) xs ys ~?= zipWithRef P.rotate xs ys
+            test_rotateL xs ys  = runN backend (A.zipWith A.rotateL) xs ys ~?= zipWithRef P.rotateL xs ys
+            test_rotateR xs ys  = runN backend (A.zipWith A.rotateR) xs ys ~?= zipWithRef P.rotateR xs ys
 
     testFloatingElt :: forall a. (P.RealFrac a, P.RealFloat a, A.RealFloat a, A.RealFrac a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
     testFloatingElt ok _
@@ -142,23 +142,23 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "max"          (test_max :: Array sh a -> Array sh a -> Property)
           ]
           where
-            test_div xs ys      = run2 backend (A.zipWith (/)) xs ys ~?= zipWithRef (/) xs ys
-            test_pow xs ys      = run2 backend (A.zipWith (**)) xs ys ~?= zipWithRef (**) xs ys
-            test_atan2 xs ys    = run2 backend (A.zipWith A.atan2) xs ys ~?= zipWithRef P.atan2 xs ys
-            test_logBase xs ys  = run2 backend (A.zipWith logBase) xs ys ~?= zipWithRef logBase xs ys
+            test_div xs ys      = runN backend (A.zipWith (/)) xs ys ~?= zipWithRef (/) xs ys
+            test_pow xs ys      = runN backend (A.zipWith (**)) xs ys ~?= zipWithRef (**) xs ys
+            test_atan2 xs ys    = runN backend (A.zipWith A.atan2) xs ys ~?= zipWithRef P.atan2 xs ys
+            test_logBase xs ys  = runN backend (A.zipWith logBase) xs ys ~?= zipWithRef logBase xs ys
 
-    test_plus xs ys     = run2 backend (A.zipWith (+)) xs ys ~?= zipWithRef (+) xs ys
-    test_minus xs ys    = run2 backend (A.zipWith (-)) xs ys ~?= zipWithRef (-) xs ys
-    test_mult xs ys     = run2 backend (A.zipWith (*)) xs ys ~?= zipWithRef (*) xs ys
+    test_plus xs ys     = runN backend (A.zipWith (+)) xs ys ~?= zipWithRef (+) xs ys
+    test_minus xs ys    = runN backend (A.zipWith (-)) xs ys ~?= zipWithRef (-) xs ys
+    test_mult xs ys     = runN backend (A.zipWith (*)) xs ys ~?= zipWithRef (*) xs ys
 
-    test_lt xs ys       = run2 backend (A.zipWith (A.<))  xs ys ~?= zipWithRef (P.<) xs ys
-    test_gt xs ys       = run2 backend (A.zipWith (A.>))  xs ys ~?= zipWithRef (P.>) xs ys
-    test_lte xs ys      = run2 backend (A.zipWith (A.<=)) xs ys ~?= zipWithRef (P.<=) xs ys
-    test_gte xs ys      = run2 backend (A.zipWith (A.>=)) xs ys ~?= zipWithRef (P.>=) xs ys
-    test_eq xs ys       = run2 backend (A.zipWith (A.==)) xs ys ~?= zipWithRef (P.==) xs ys
-    test_neq xs ys      = run2 backend (A.zipWith (A./=)) xs ys ~?= zipWithRef (P./=) xs ys
-    test_min xs ys      = run2 backend (A.zipWith (A.min)) xs ys ~?= zipWithRef (P.min) xs ys
-    test_max xs ys      = run2 backend (A.zipWith (A.max)) xs ys ~?= zipWithRef (P.max) xs ys
+    test_lt xs ys       = runN backend (A.zipWith (A.<))  xs ys ~?= zipWithRef (P.<) xs ys
+    test_gt xs ys       = runN backend (A.zipWith (A.>))  xs ys ~?= zipWithRef (P.>) xs ys
+    test_lte xs ys      = runN backend (A.zipWith (A.<=)) xs ys ~?= zipWithRef (P.<=) xs ys
+    test_gte xs ys      = runN backend (A.zipWith (A.>=)) xs ys ~?= zipWithRef (P.>=) xs ys
+    test_eq xs ys       = runN backend (A.zipWith (A.==)) xs ys ~?= zipWithRef (P.==) xs ys
+    test_neq xs ys      = runN backend (A.zipWith (A./=)) xs ys ~?= zipWithRef (P./=) xs ys
+    test_min xs ys      = runN backend (A.zipWith (A.min)) xs ys ~?= zipWithRef (P.min) xs ys
+    test_max xs ys      = runN backend (A.zipWith (A.max)) xs ys ~?= zipWithRef (P.max) xs ys
 
     {-# INLINE denom #-}
     denom f = forAllShrink arbitrary shrink $ \xs ->

@@ -1,5 +1,5 @@
 Name:                   accelerate-examples
-Version:                1.0.0.0
+Version:                1.1.0.0
 Cabal-version:          >=1.8
 Tested-with:            GHC >= 7.8
 Build-type:             Simple
@@ -25,6 +25,7 @@ Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
 Extra-source-files:
+    README.md
     data/matrices/README.md
     examples/canny/README.md
     examples/fluid/README.md
@@ -51,21 +52,13 @@ Flag codespeed
 
 -- Flags that control which Accelerate backends that are linked against
 --
-Flag cuda
-  Description:          Enable the CUDA parallel backend for NVIDIA GPUs
-  Default:              False
-
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
-  Default:              False
+  Default:              True
 
 Flag llvm-ptx
   Description:          Enable the LLVM PTX backend for NVIDIA GPUs
-  Default:              False
-
-Flag cilk
-  Description:          Enable the Cilk backend for multicore CPUs
-  Default:              False
+  Default:              True
 
 -- Flags to specify which programs to build
 --
@@ -132,8 +125,8 @@ Flag kmeans
 Library
   hs-source-dirs:       lib
   Build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
         , ansi-wl-pprint                  >= 0.6
         , containers                      >= 0.5
         , criterion                       >= 1.0
@@ -170,25 +163,20 @@ Library
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
 
-  if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:
-        accelerate-cuda                   == 0.17.*
+  -- if flag(cuda)
+  --   CPP-options:        -DACCELERATE_CUDA_BACKEND
+  --   build-depends:
+  --       accelerate-cuda                   == 0.17.*
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
     build-depends:
-        accelerate-llvm-native            == 1.0.*
+        accelerate-llvm-native            == 1.1.*
 
   if flag(llvm-ptx)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
-        accelerate-llvm-ptx               == 1.0.*
-
-  if flag(cilk)
-    CPP-options:        -DACCELERATE_CILK_BACKEND
-    build-depends:
-        accelerate-icc-opencl             == 1.0.*
+        accelerate-llvm-ptx               == 1.1.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -283,6 +271,7 @@ Executable accelerate-nofib
         -rtsopts
         -with-rtsopts=-n2M
         -with-rtsopts=-A64M
+        -with-rtsopts=-qg
 
   ghc-prof-options:
         -auto-all
@@ -291,13 +280,13 @@ Executable accelerate-nofib
   c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
                         examples/nofib/Test/Spectral/BlackScholes.cpp
 
-  if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:
-        accelerate-cuda                   == 0.17.*
-
-    other-modules:
-        Test.Foreign.CUDA
+  -- if flag(cuda)
+  --   CPP-options:        -DACCELERATE_CUDA_BACKEND
+  --   build-depends:
+  --       accelerate-cuda                   == 0.17.*
+  --
+  --   other-modules:
+  --       Test.Foreign.CUDA
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -306,11 +295,11 @@ Executable accelerate-nofib
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-fft                  == 1.0.*
-        , accelerate-io                   == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-fft                  >= 1.0
+        , accelerate-io                   >= 1.0
         , array                           >= 0.3
         , containers                      >= 0.5
         , fclabels                        >= 2.0
@@ -332,8 +321,17 @@ Executable accelerate-smvm
   Main-is:              Main.hs
   other-modules:        Config Matrix SMVM
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if impl(ghc >= 7.6)
     ghc-options:        -fsimpl-tick-factor=130
@@ -345,10 +343,10 @@ Executable accelerate-smvm
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , fclabels                        >= 2.0
         , matrix-market-attoparsec        >= 0.1
         , mwc-random                      >= 0.8
@@ -365,8 +363,17 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -375,12 +382,12 @@ Executable accelerate-crystal
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
-        , gloss-raster-accelerate         >= 0.2
+        , gloss-raster-accelerate         >= 2.0
 
 
 -- The slit-scan effect creating a Doctor Who time vortex
@@ -391,8 +398,17 @@ Executable accelerate-tunnel
   Main-is:              Main.hs
   other-modules:        Config
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -401,11 +417,11 @@ Executable accelerate-tunnel
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , fclabels                        >= 2.0
-        , gloss-raster-accelerate         >= 0.2
+        , gloss-raster-accelerate         >= 2.0
         , lens-accelerate                 >= 0.1
         , linear-accelerate               >= 0.3
 
@@ -418,8 +434,18 @@ Executable accelerate-canny
   Main-is:              Main.hs
   other-modules:        Config Canny Wildfire
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -Odph -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -Odph
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -428,10 +454,10 @@ Executable accelerate-canny
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , repa                            >= 3.1
@@ -447,8 +473,17 @@ Executable accelerate-mandelbrot
   Main-is:              Main.hs
   other-modules:        Config Mandel World
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -457,14 +492,14 @@ Executable accelerate-mandelbrot
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
-        , gloss-accelerate                >= 0.2
+        , gloss-accelerate                >= 2.0
 
 
 -- A stable fluid simulation
@@ -475,8 +510,17 @@ Executable accelerate-fluid
   hs-source-dirs:       examples/fluid/src-acc
   other-modules:        Config Event Fluid Type World
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -485,10 +529,10 @@ Executable accelerate-fluid
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , bmp                             >= 1.2
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
@@ -504,7 +548,6 @@ Executable accelerate-nbody
   Main-is:              Main.hs
   other-modules:
         Common.Body
-        Common.Dump
         Common.Tree
         Common.Type
         Common.World
@@ -518,8 +561,17 @@ Executable accelerate-nbody
         Solver.Naive2
         Test
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -528,9 +580,9 @@ Executable accelerate-nbody
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
         , lens-accelerate                 >= 0.1
@@ -552,13 +604,22 @@ Executable accelerate-smoothlife
         Random.Splat
         SmoothLife
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
 
-  if flag(cuda)
-    cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:
-        accelerate-cuda                   == 0.17.*
+  ghc-prof-options:
+        -auto-all
+
+  -- if flag(cuda)
+  --   cpp-options:        -DACCELERATE_CUDA_BACKEND
+  --   build-depends:
+  --       accelerate-cuda                   == 0.17.*
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -567,14 +628,14 @@ Executable accelerate-smoothlife
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-fft                  == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-fft                  >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , gloss                           >= 1.7
-        , gloss-accelerate                >= 0.2
+        , gloss-accelerate                >= 2.0
         , mwc-random                      >= 0.8
 
 
@@ -586,8 +647,17 @@ Executable accelerate-hashcat
   Main-is:              Main.hs
   other-modules:        Config Digest MD5
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -596,9 +666,9 @@ Executable accelerate-hashcat
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , bytestring                      >= 0.9
         , bytestring-lexing               >= 0.5
         , cereal                          >= 0.3
@@ -615,8 +685,17 @@ Executable accelerate-fft
   hs-source-dirs:       examples/fft/src-acc
   other-modules:        Config HighPass FFT
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -625,11 +704,11 @@ Executable accelerate-fft
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-fft                  == 1.0.*
-        , accelerate-io                   == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-fft                  >= 1.0
+        , accelerate-io                   >= 1.0
         , colour-accelerate               >= 0.1
         , fclabels                        >= 2.0
         , filepath                        >= 1.0
@@ -649,8 +728,17 @@ Executable accelerate-pagerank
         Rank
         Step
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -659,10 +747,10 @@ Executable accelerate-pagerank
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
-        , accelerate-io                   == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
+        , accelerate-io                   >= 1.0
         , bytestring                      >= 0.9.2
         , containers                      >= 0.4.2
         , directory                       >= 1.1
@@ -689,8 +777,17 @@ Executable accelerate-ray
         Scene.State
         Scene.World
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -699,14 +796,14 @@ Executable accelerate-ray
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , colour-accelerate               >= 0.1
         , fclabels                        >= 1.0
         , gloss                           >= 1.8
-        , gloss-accelerate                >= 0.2
-        , gloss-raster-accelerate         >= 0.2
+        , gloss-accelerate                >= 2.0
+        , gloss-raster-accelerate         >= 2.0
         , lens-accelerate                 >= 0.1
         , linear-accelerate               >= 0.3
 
@@ -717,10 +814,19 @@ Executable accelerate-ray
 Executable accelerate-kmeans
   hs-source-dirs:       examples/kmeans
   Main-is:              Main.hs
-  other-modules:        Config Main Kmeans GenSamples
+  other-modules:        Config Kmeans
 
-  ghc-prof-options:     -auto-all
-  ghc-options:          -Wall -threaded -eventlog -rtsopts -with-rtsopts=-n2M -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -threaded
+        -eventlog
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -with-rtsopts=-qg
+
+  ghc-prof-options:
+        -auto-all
 
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
@@ -729,9 +835,9 @@ Executable accelerate-kmeans
     buildable:          False
   else
     build-depends:
-          base                            >= 4.7 && < 4.10
-        , accelerate                      == 1.0.*
-        , accelerate-examples             == 1.0.*
+          base                            >= 4.7 && < 4.11
+        , accelerate                      == 1.1.*
+        , accelerate-examples
         , binary                          >= 0.7
         , directory                       >= 1.1
         , fclabels                        >= 1.0
@@ -745,7 +851,7 @@ source-repository head
 
 source-repository this
   type:                 git
-  tag:                  1.0.0.0
+  tag:                  1.1.0.0
   location:             https://github.com/AccelerateHS/accelerate-examples
 
 -- vim: nospell

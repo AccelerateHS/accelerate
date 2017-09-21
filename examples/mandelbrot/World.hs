@@ -56,17 +56,17 @@ data World where
 
 initialWorld :: Config -> Options -> World
 initialWorld conf opts
-  = setPrecision opts Float
+  = setPrecision opts Double
   $ loadPreset 0
   $ World { worldDirty      = True
-          , worldPrecision  = Float
+          , worldPrecision  = Double
           , worldPicture    = blank
           , worldPalette    = run (get optBackend opts) (ultraPalette 2048)
           , worldSizeX      = get configWidth conf
           , worldSizeY      = get configHeight conf
           , worldPanning    = Nothing
           , worldZooming    = Nothing
-          , worldPosX       = unit 0 :: Scalar Float
+          , worldPosX       = unit 0 :: Scalar Double
           , worldPosY       = unit 0
           , worldWidth      = unit 0
           , worldRadius     = unit 0

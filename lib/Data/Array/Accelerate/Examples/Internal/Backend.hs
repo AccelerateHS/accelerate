@@ -17,30 +17,23 @@
 module Data.Array.Accelerate.Examples.Internal.Backend
   where
 
-import Prelude                                          as P
+import Prelude                                                      as P
 import Data.Label
 import System.Console.GetOpt
 
 import Data.Array.Accelerate
-import qualified Data.Array.Accelerate                  as A
-import qualified Data.Array.Accelerate.Interpreter      as Interp
+import Data.Array.Accelerate.Trafo                                  ( Afunction, AfunctionR )
+import qualified Data.Array.Accelerate.Interpreter                  as Interp
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-import qualified Data.Array.Accelerate.LLVM.Native      as CPU
+import qualified Data.Array.Accelerate.LLVM.Native                  as CPU
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
-#endif
-#ifdef ACCELERATE_CUDA_BACKEND
-import qualified Data.Array.Accelerate.CUDA             as CUDA
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-import qualified Data.Array.Accelerate.Cilk             as Cilk
+import qualified Data.Array.Accelerate.LLVM.PTX                     as PTX
 #endif
 
 
 -- | Execute Accelerate expressions
 --
-{-# INLINE run #-}
 run :: Arrays a => Backend -> Acc a -> a
 run Interpreter = Interp.run
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
@@ -49,48 +42,18 @@ run CPU         = CPU.run
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run PTX         = PTX.run
 #endif
-#ifdef ACCELERATE_CUDA_BACKEND
-run CUDA        = CUDA.run
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-run Cilk        = Cilk.run
-#endif
 
-
-{-# INLINE run1 #-}
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
-run1 Interpreter f = Interp.run1 f
+run1 = runN
+
+runN :: Afunction f => Backend -> f -> AfunctionR f
+runN Interpreter = Interp.runN
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run1 CPU         f = CPU.run1 f
+runN CPU         = CPU.runN
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-run1 PTX         f = PTX.run1 f
+runN PTX         = PTX.runN
 #endif
-#ifdef ACCELERATE_CUDA_BACKEND
-run1 CUDA        f = CUDA.run1 f
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-run1 Cilk        f = Cilk.run . f . use
-#endif
-
-{-# INLINE run2 #-}
-run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
-run2 backend f x y = go (x,y)
-  where
-    !go = run1 backend (A.uncurry f)
-
-{-# INLINE run3 #-}
-run3 :: (Arrays a, Arrays b, Arrays c, Arrays d) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d) -> a -> b -> c -> d
-run3 backend f x y z = go (x,y,z)
-  where
-    !go = run1 backend (\t -> let (a,b,c) = unlift t in f a b c)
-
-
-{-# INLINE run4 #-}
-run4 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Backend -> (Acc a -> Acc b -> Acc c -> Acc d -> Acc e) -> a -> b -> c -> d -> e
-run4 backend f x y z w = go (x,y,z,w)
-  where
-    !go = run1 backend (\t -> let (a,b,c,d) = unlift t in f a b c d)
 
 
 -- | The set of backends available to execute the program.
@@ -101,15 +64,6 @@ data Backend = Interpreter
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
              | PTX
-#endif
-#ifdef ACCELERATE_CUDA_BACKEND
-             | CUDA
-#endif
-#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
-             | Multi
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-             | Cilk
 #endif
   deriving (P.Eq, P.Enum, P.Bounded)
 
@@ -124,15 +78,6 @@ instance Show Backend where
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
   show PTX              = "llvm-ptx"
-#endif
-#ifdef ACCELERATE_CUDA_BACKEND
-  show CUDA             = "cuda"
-#endif
-#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
-  show Multi            = "llvm-multi"
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-  show Cilk             = "cilk"
 #endif
 
 
@@ -153,8 +98,7 @@ availableBackends :: (options :-> Backend) -> [OptDescr (options -> options)]
 availableBackends optBackend =
   [ Option  [] [show Interpreter]
             (NoArg (set optBackend Interpreter))
-            "reference implementation (sequential)"
-
+            "reference implementation (sequential, slow)"
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   , Option  [] [show CPU]
             (NoArg (set optBackend CPU))
@@ -164,21 +108,6 @@ availableBackends optBackend =
   , Option  [] [show PTX]
             (NoArg (set optBackend PTX))
             "LLVM based implementation for NVIDIA GPUs (parallel)"
-#endif
-#ifdef ACCELERATE_CUDA_BACKEND
-  , Option  [] [show CUDA]
-            (NoArg (set optBackend CUDA))
-            "CUDA based implementation for NVIDIA GPUs (parallel)"
-#endif
-#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
-  , Option  [] [show Multi]
-            (NoArg (set optBackend Multi))
-            "LLVM based multi-device implementation using CPUs and GPUs (parallel)"
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-  , Option  [] [show Cilk]
-            (NoArg (set optBackend Cilk))
-            "Cilk based implementation for multicore CPUs (parallel)"
 #endif
   ]
 
@@ -211,11 +140,5 @@ concurrentBackends CPU          = Nothing
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 concurrentBackends PTX          = Nothing
-#endif
-#ifdef ACCELERATE_CUDA_BACKEND
-concurrentBackends CUDA         = Just 1      -- not thread safe
-#endif
-#ifdef ACCELERATE_CILK_BACKEND
-concurrentBackends Cilk         = Just 1      -- not thread safe
 #endif
 

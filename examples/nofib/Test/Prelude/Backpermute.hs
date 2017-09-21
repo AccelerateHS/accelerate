@@ -92,7 +92,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
         test_drop xs =
           let n = arraySize (arrayShape xs)
           in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-                toList (run2 backend (\i' -> A.drop (the i')) (scalar i) xs)
+                toList (runN backend (\i' -> A.drop (the i')) (scalar i) xs)
                 ~?=
                 P.drop i (toList xs)
 
@@ -100,7 +100,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
         test_take xs@(Array _ adata) =
           let Z :. n = arrayShape xs
           in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-                run2 backend (\i' -> A.take (the i')) (scalar i) xs
+                runN backend (\i' -> A.take (the i')) (scalar i) xs
                 ~?=
                 Array ((),i) adata
 
@@ -109,7 +109,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           let n = arraySize (arrayShape xs)
           in  forAll (choose (0, 0 `P.max` (n-1)))   $ \i ->
               forAll (choose (0, 0 `P.max` (n-1-i))) $ \j ->
-                toList (run3 backend (\i' j' -> A.slit (the i') (the j')) (scalar i) (scalar j) xs)
+                toList (runN backend (\i' j' -> A.slit (the i') (the j')) (scalar i) (scalar j) xs)
                 ~?=
                 P.take j (P.drop i (toList xs))
 
@@ -121,7 +121,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           in  n P.> 0 ==>
                 forAll arbitrary                               $ \(sh' :: DIM1) ->
                 forAll (arbitraryArrayOf sh' (choose (0,n-1))) $ \mapv          ->
-                  toList (run2 backend A.gather mapv xs)
+                  toList (runN backend A.gather mapv xs)
                   ~?=
                   [ xs `indexArray` (Z:.i) | i <- toList mapv ]
 
@@ -134,7 +134,7 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
         --   forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
         --   forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
         --   forAll (arbitraryArray sh')                   $ \defaultv ->
-        --     toList (run4 backend (\p m d x -> A.gatherIf p m A.even d x) mapv maskv defaultv xs)
+        --     toList (runN backend (\p m d x -> A.gatherIf p m A.even d x) mapv maskv defaultv xs)
         --     ~?=
         --     gatherIfRef P.even mapv maskv defaultv xs
 

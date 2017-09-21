@@ -18,7 +18,7 @@ import qualified Prelude                                as P
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
-import Data.Array.Accelerate.Data.Colour.RGB            hiding ( clamp )
+import Data.Array.Accelerate.Data.Colour.RGB
 
 
 -- Canny algorithm -------------------------------------------------------------
@@ -82,12 +82,12 @@ toGreyscale = map (\rgba -> 255 * luminance (unpackRGB rgba))
 -- Separable Gaussian blur in the x- and y-directions
 --
 gaussianX :: Acc (Image Float) -> Acc (Image Float)
-gaussianX = stencil (convolve5x1 gaussian) Clamp
+gaussianX = stencil (convolve5x1 gaussian) A.clamp
   where
     gaussian = P.map (/16) [ 1, 4, 6, 4, 1 ]
 
 gaussianY :: Acc (Image Float) -> Acc (Image Float)
-gaussianY = stencil (convolve1x5 gaussian) Clamp
+gaussianY = stencil (convolve1x5 gaussian) A.clamp
   where
     gaussian = P.map (/16) [ 1, 4, 6, 4, 1 ]
 
@@ -95,7 +95,7 @@ gaussianY = stencil (convolve1x5 gaussian) Clamp
 -- Gradients in the x- and y- directions
 --
 gradientX :: Acc (Image Float) -> Acc (Image Float)
-gradientX = stencil grad Clamp
+gradientX = stencil grad A.clamp
   where
     grad :: Stencil3x3 Float -> Exp Float
     grad ((u, _, x)
@@ -103,7 +103,7 @@ gradientX = stencil grad Clamp
          ,(w, _, z)) = x + (2*y) + z - u - (2*v) - w
 
 gradientY :: Acc (Image Float) -> Acc (Image Float)
-gradientY = stencil grad Clamp
+gradientY = stencil grad A.clamp
   where
     grad :: Stencil3x3 Float -> Exp Float
     grad ((x, y, z)
@@ -121,7 +121,7 @@ gradientMagDir
     :: Exp Float
     -> Acc (Image Float)
     -> Acc (Array DIM2 (Float,Int))
-gradientMagDir low = stencil magdir Clamp
+gradientMagDir low = stencil magdir A.clamp
   where
     magdir :: Stencil3x3 Float -> Exp (Float,Int)
     magdir ((v0, v1, v2)
@@ -183,10 +183,10 @@ nonMaximumSuppression low high magdir =
         offsetx         = dir > orient' Vert  ? (-1, dir < orient' Vert ? (1, 0))
         offsety         = dir < orient' Horiz ? (-1, 0)
 
-        (fwd, _)        = unlift $ magdir ! lift (clamp (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
-        (rev, _)        = unlift $ magdir ! lift (clamp (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
+        (fwd, _)        = unlift $ magdir ! lift (limit (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
+        (rev, _)        = unlift $ magdir ! lift (limit (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
 
-        clamp (Z:.u:.v) = Z :. 0 `max` u `min` (h-1) :. 0 `max` v `min` (w-1)
+        limit (Z:.u:.v) = Z :. 0 `max` u `min` (h-1) :. 0 `max` v `min` (w-1)
 
         -- Try to avoid doing explicit tests to avoid warp divergence.
         --
@@ -203,7 +203,7 @@ selectStrong
   -> Acc (Array DIM1 Int)
 selectStrong img =
   let strong            = map (\x -> boolToInt (x == edge' Strong)) (flatten img)
-      (targetIdx, len)  = scanl' (+) 0 strong
+      (targetIdx, len)  = unlift (scanl' (+) 0 strong)
       indices           = enumFromN (index1 $ size img) 0
       zeros             = fill (index1 $ the len) 0
   in

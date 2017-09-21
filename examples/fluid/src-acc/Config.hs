@@ -201,7 +201,7 @@ initialiseConfig (conf, opts, rest) = do
 makeField_empty :: FieldElt e => Backend -> Int -> Int -> Field e
 makeField_empty backend width height
   = run backend
-  $ A.fill (constant (Z:.height:.width)) (constant zero)
+  $ A.fill (constant (Z:.height:.width)) zero
 
 
 makeDensity_checks :: Backend -> Int -> Int -> DensityField
