@@ -29,17 +29,18 @@ module Data.Array.Accelerate.Pretty.Graphviz (
 ) where
 
 -- standard libraries
+import Control.Applicative                              hiding ( Const, empty )
+import Control.Arrow                                    ( (&&&) )
+import Control.Monad.State                              ( modify, gets, state )
+import Data.HashSet                                     ( HashSet )
 import Data.List
 import Data.Maybe
-import Data.HashSet                                     ( HashSet )
-import Text.PrettyPrint
-import Control.Monad.State                              ( modify, gets, state )
-import Control.Arrow                                    ( (&&&) )
 import System.IO.Unsafe                                 ( unsafePerformIO )
-import Control.Applicative                              hiding ( Const, empty )
+import Text.PrettyPrint.ANSI.Leijen                     hiding ( (<$>), parens )
 import Prelude                                          hiding ( exp )
 import qualified Data.Sequence                          as Seq
 import qualified Data.HashSet                           as Set
+import qualified Text.PrettyPrint.ANSI.Leijen           as PP
 
 -- friends
 import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), Idx(..) )
@@ -218,14 +219,14 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       f'    <- prettyDelayedAfun detail aenv f
       --
       let PNode _ (Leaf (Nothing,xb)) fvs = x'
-          loop                            = wrap $ hang "awhile" 2 (sep [ text p', text f', xb ])
+          loop                            = wrap $ hang 2 (sep ["awhile", text p', text f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
     Atuple atup             -> prettyDelayedAtuple detail wrap aenv atup
     Aprj ix atup            -> do
       ident                     <- mkNodeId atop
       PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail parens aenv atup
-      return $ PNode ident (Leaf (p, wrap (char '#' <> prettyTupleIdx ix <+> nest 2 d))) deps
+      return $ PNode ident (Leaf (p, wrap (prettyTupleIdx ix <+> nest 2 d))) deps
 
     Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays (undefined::arrs)) arrs) [] ]
     Unit e                  -> "unit"        .$ [ ppE e ]
@@ -263,7 +264,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       docs' <- sequence docs
       let args = [ x | PDoc x _ <- docs' ]
           fvs  = [ x | PDoc _ x <- docs' ]
-      return $ PDoc (wrap $ hang (text name) 2 (if simple detail then empty else sep args))
+      return $ PDoc (wrap $ hang 2 (sep [text name, if simple detail then empty else sep args]))
                     (concat fvs)
 
     pnode :: PDoc -> Dot PNode
@@ -313,11 +314,11 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     ppB :: forall sh e. (Shape sh, Elt e)
         => PreBoundary DelayedOpenAcc aenv (Array sh e)
         -> Dot PDoc
-    ppB Clamp        = return (PDoc "Clamp"  [])
-    ppB Mirror       = return (PDoc "Mirror" [])
-    ppB Wrap         = return (PDoc "Wrap"   [])
-    ppB (Constant e) = return (PDoc (parens $ "Constant" <+> text (show (toElt e :: e))) [])
-    ppB (Function f) = "Function" `fmt` [ ppF f ]
+    ppB Clamp        = return (PDoc "clamp"  [])
+    ppB Mirror       = return (PDoc "mirror" [])
+    ppB Wrap         = return (PDoc "wrap"   [])
+    ppB (Constant e) = return (PDoc (parens $ "constant" <+> text (show (toElt e :: e))) [])
+    ppB (Function f) = ppF f
 
     ppF :: DelayedFun aenv t -> Dot PDoc
     ppF = return . uncurry PDoc . (parens . prettyDelayedFun aenv' &&& fvF)
@@ -343,6 +344,9 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
                  Forest ts  -> Forest (Leaf (Nothing,text f) : ts)
       in
       PNode ident x' vs
+
+    parens :: Doc -> Doc
+    parens = PP.parens . align
 
 
 -- Pretty print array functions as separate sub-graphs, and return the name of
@@ -424,7 +428,7 @@ prettyDelayedAtuple detail wrap aenv atup = do
     -- simply tuple-up all of the elements.
     --
     forest :: [Tree (Maybe Port, Doc)] -> Tree (Maybe Port, Doc)
-    forest leaves = Leaf (Nothing, tuple [ d | Leaf (Nothing,d) <- leaves ])
+    forest leaves = Leaf (Nothing, tupled [ align d | Leaf (Nothing,d) <- leaves ])
 
 
 -- Lift out anything that isn't a Leaf node and output it to the graph
