@@ -45,14 +45,14 @@ import Data.Label.Derive
 import Data.List
 import System.Environment
 import System.IO.Unsafe
-import Text.PrettyPrint                         hiding ( Mode )
-import qualified Control.Monad                  as M ( when, unless )
+import Text.PrettyPrint.ANSI.Leijen
+import qualified Control.Monad                                      as M ( when, unless )
 
 import Foreign.C
 import Foreign.Marshal
 import Foreign.Ptr
-import GHC.Foreign                              as GHC
-import GHC.IO.Encoding                          ( getFileSystemEncoding )
+import GHC.Foreign                                                  as GHC
+import GHC.IO.Encoding                                              ( getFileSystemEncoding )
 
 import Debug.Trace
 
@@ -239,9 +239,9 @@ initialiseFlags = do
         (prefix,rest)   = break (== '=') this
         suffix          = if null rest then [] else tail rest
 
-        unknown         = render $ text "Unknown option:" <+> quotes (text this)
-        ambiguous alts  = render $
-          vcat [ text "Ambiguous option:" <+> quotes (text this)
+        unknown         = show $ text "Unknown option:" <+> squotes (text this)
+        ambiguous alts  = show $
+          vcat [ text "Ambiguous option:" <+> squotes (text this)
                , text ""
                , text "Did you mean one of these?"
                , nest 4 $ vcat (map (\(Option s _) -> text s) alts)

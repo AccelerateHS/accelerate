@@ -29,7 +29,7 @@ import Data.IORef
 import Data.List                                ( groupBy, sortBy )
 import Data.Ord                                 ( comparing )
 import Data.Map                                 ( Map )
-import Text.PrettyPrint
+import Text.PrettyPrint.ANSI.Leijen
 import System.IO.Unsafe
 
 import qualified Data.Map                       as Map
@@ -80,7 +80,7 @@ data SimplStats
     }
 
 instance Show SimplStats where
-  show = render . pprSimplCount
+  show = show . pprSimplCount
 
 
 -- Stores the current statistics counters
@@ -170,13 +170,13 @@ pprTickCount counts =
     sameTag = (==) `on` tickToTag . fst
 
 pprTickGroup :: [(Tick,Int)] -> Doc
-pprTickGroup []    = error "pprTickGroup"
-pprTickGroup group =
-  hang (int groupTotal <+> text groupName)
-     2 (vcat [ int n <+> pprTickCtx t | (t,n) <- sortBy (flip (comparing snd)) group ])
+pprTickGroup []  = error "pprTickGroup"
+pprTickGroup grp =
+  hang 2 (vcat $ (int groupTotal <+> text groupName)
+               : [ int n <+> pprTickCtx t | (t,n) <- sortBy (flip (comparing snd)) grp ])
   where
-    groupName  = tickToStr (fst (head group))
-    groupTotal = sum [n | (_,n) <- group]
+    groupName  = tickToStr (fst (head grp))
+    groupTotal = sum [n | (_,n) <- grp]
 
 tickToTag :: Tick -> Int
 tickToTag Inline{}              = 0
