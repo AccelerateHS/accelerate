@@ -158,7 +158,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     pp (Avar idx)               = prj idx aenv
     pp (Aprj ix arrs)           = wrap $ prettyTupleIdx ix <+> ppA arrs
     pp (Apply afun acc)         = wrap $ sep [ ppAF afun, ppA acc ]
-    pp (Acond e acc1 acc2)      = wrap $ sep [ ppE e, text "?|", tupled [ppA acc1, ppA acc2] ]
+    pp (Acond e acc1 acc2)      = wrap $ hang 3 (vsep [if_ <+> ppE e, then_ <+> ppA acc1, else_ <+> ppA acc2])
     pp (Slice _ty acc ix)       = "slice"       .$ [ ppA acc, ppE ix ]
     pp (Use arrs)               = "use"         .$ [ prettyArrays (arrays (undefined :: arrs)) arrs ]
     pp (Unit e)                 = "unit"        .$ [ ppE e ]
@@ -367,7 +367,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     pp (Var idx)                = prj idx env
     pp (Const v)                = text $ show (toElt v :: t)
     pp (Prj idx e)              = wrap $ prettyTupleIdx idx <+> ppE e
-    pp (Cond c t e)             = wrap $ sep [ ppE c, char '?' , tupled [ ppE' t, ppE' e ]]
+    pp (Cond c t e)             = wrap $ hang 3 (vsep [ if_ <+> ppE' c, then_ <+> ppE' t, else_ <+> ppE' e ])
     pp IndexNil                 = char 'Z'
     pp IndexAny                 = text "indexAny"
     pp (IndexCons t h)          = sep [ ppE' t, text ":.", ppE' h ]
@@ -561,6 +561,11 @@ manifest = blue
 let_, in_ :: Doc
 let_ = control (text "let")
 in_  = control (text "in")
+
+if_, then_, else_ :: Doc
+if_   = control (text "if")
+then_ = control (text "then")
+else_ = control (text "else")
 
 
 -- Environments
