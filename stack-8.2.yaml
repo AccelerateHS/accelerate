@@ -7,13 +7,14 @@ packages:
 - '.'
 
 extra-deps:
-- 'ansi-terminal-0.6.3.1'
+- 'ansi-terminal-0.7.1.1'
 - 'ansi-wl-pprint-0.6.8.1'
 - 'base-orphans-0.6'
+- 'colour-2.3.3'
 - 'exceptions-0.8.3'
 - 'fclabels-2.0.3.2'
 - 'hashable-1.2.6.1'
-- 'hashtables-1.2.1.1'
+- 'hashtables-1.2.2.0'
 - 'mtl-2.2.1'
 - 'primitive-0.6.2.0'
 - 'stm-2.4.4.1'
