@@ -53,7 +53,7 @@ import Control.Applicative
 import Control.DeepSeq
 import Data.Hashable
 import Data.Type.Equality
-import Text.PrettyPrint
+import Text.PrettyPrint.ANSI.Leijen                     hiding ( (<$>) )
 import Prelude                                          hiding ( until )
 
 -- friends
@@ -253,11 +253,10 @@ prettyDelayedOpenAcc wrap aenv acc = case acc of
     -> prettyDelayedOpenAcc wrap aenv a
 
     | otherwise
-    -> wrap $ hang (text "Delayed") 2
-            $ sep [ prettyPreExp prettyDelayedOpenAcc parens aenv sh
-                  , parens (prettyPreFun prettyDelayedOpenAcc aenv f)
-                  ]
-
+    -> wrap $ hang 2 (sep [ green (text "delayed")
+                          , parens (align (prettyPreExp prettyDelayedOpenAcc (parens . align) aenv sh))
+                          , parens (align (prettyPreFun prettyDelayedOpenAcc aenv f))
+                          ])
 
 {--
 -- Pretty print delayed sequences

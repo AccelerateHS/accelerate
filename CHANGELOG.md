@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
+
+## [1.1.1.0] - 2017-09-26
+### Changed
+  * Improve and colourise the pretty-printer
+
 ## [1.1.0.0] - 2017-09-21
 ### Added
   * Additional EKG monitoring hooks ([#340])
@@ -86,7 +91,8 @@ Policy (PVP)](https://pvp.haskell.org)
   * Initial release of the CUDA backend
 
 
-[1.1.0.0]:          https://github.com/AccelerateHS/accelerate/compare/1.0.0.0...1.1.0.0
+[1.1.1.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.1.1.0
+[1.1.0.0]:          https://github.com/AccelerateHS/accelerate/compare/1.0.0.0...v1.1.0.0
 [1.0.0.0]:          https://github.com/AccelerateHS/accelerate/compare/0.15.1.0...1.0.0.0
 [0.15.1.0]:         https://github.com/AccelerateHS/accelerate/compare/0.15.0.0...0.15.1.0
 [0.15.0.0]:         https://github.com/AccelerateHS/accelerate/compare/0.14.0.0...0.15.0.0

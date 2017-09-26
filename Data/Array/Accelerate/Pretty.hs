@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Pretty (
 ) where
 
 -- standard libraries
-import Text.PrettyPrint
+import Text.PrettyPrint.ANSI.Leijen
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -34,11 +34,9 @@ import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty.Print
 import Data.Array.Accelerate.Pretty.Graphviz
 
--- |Show instances
--- ---------------
 
-wide :: Style
-wide = style { lineLength = 150 }
+-- Show
+-- ----
 
 -- Explicitly enumerate Show instances for the Accelerate array AST types. If we
 -- instead use a generic instance of the form:
@@ -49,10 +47,10 @@ wide = style { lineLength = 150 }
 -- interacting with other packages. See Issue #108.
 --
 instance PrettyEnv aenv => Show (OpenAcc aenv a) where
-  show c = renderStyle wide $ prettyAcc noParens prettyEnv c
+  showsPrec _ = displayS . renderStyle . pretty
 
 instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
-  show c = renderStyle wide $ prettyAcc noParens prettyEnv c
+  showsPrec _ = displayS . renderStyle . pretty
 
 -- These parameterised instances are fine because there is a concrete kind
 --
@@ -61,14 +59,35 @@ instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
 --      tuples, but our type parameter 'env' doesn't capture that.
 --
 instance (Kit acc, PrettyEnv aenv) => Show (PreOpenAfun acc aenv f) where
-  show f = renderStyle wide $ prettyPreOpenAfun prettyAcc prettyEnv f
+  showsPrec _ = displayS . renderStyle . pretty
 
 instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenFun acc env aenv f) where
-  show f = renderStyle wide $ prettyPreOpenFun prettyAcc prettyEnv prettyEnv f
+  showsPrec _ = displayS . renderStyle . pretty
 
 instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenExp acc env aenv t) where
-  show e = renderStyle wide $ prettyPreOpenExp prettyAcc noParens prettyEnv prettyEnv e
+  showsPrec _ = displayS . renderStyle . pretty
 
 -- instance Kit acc => Show (PreOpenSeq acc aenv senv t) where
 --   show s = renderStyle wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
+
+renderStyle :: Doc -> SimpleDoc
+renderStyle = renderSmart 0.7 120
+
+-- Pretty
+-- ------
+
+instance PrettyEnv aenv => Pretty (OpenAcc aenv a) where
+  pretty c = prettyAcc noParens prettyEnv c
+
+instance PrettyEnv aenv => Pretty (DelayedOpenAcc aenv a) where
+  pretty c = prettyAcc noParens prettyEnv c
+
+instance (Kit acc, PrettyEnv aenv) => Pretty (PreOpenAfun acc aenv f) where
+  pretty f = prettyPreOpenAfun prettyAcc prettyEnv f
+
+instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Pretty (PreOpenFun acc env aenv f) where
+  pretty f = prettyPreOpenFun prettyAcc prettyEnv prettyEnv f
+
+instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Pretty (PreOpenExp acc env aenv t) where
+  pretty e = prettyPreOpenExp prettyAcc noParens prettyEnv prettyEnv e
 

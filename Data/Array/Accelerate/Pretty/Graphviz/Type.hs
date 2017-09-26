@@ -17,9 +17,8 @@ module Data.Array.Accelerate.Pretty.Graphviz.Type
 
 import Data.Maybe
 import Data.Hashable
-import Data.List
 import Text.Printf
-import Text.PrettyPrint
+import Text.PrettyPrint.ANSI.Leijen
 
 
 -- Rose tree, with all information at the leaves.
@@ -103,8 +102,8 @@ ppNode (Node label nid body) =
        , brackets
        $ hcat
        $ punctuate comma
-       $ catMaybes [ fmap ((text "xlabel" <> equals <>) . doubleQuotes . text) label
-                   , Just ( text "label"  <> equals <>    doubleQuotes (ppNodeTree body))
+       $ catMaybes [ fmap ((\x -> text "xlabel" <> equals <> x) . dquotes . text) label
+                   , Just (       text "label"  <> equals <>      dquotes (ppNodeTree body))
                    ]
        ]
 
@@ -116,18 +115,31 @@ ppNodeTree (Leaf (port, body)) = maybe empty (\p -> char '<' <> p <> char '>') (
     -- escape some special characters. If the text takes up more than one line,
     -- then newlines '\n' need be be replaced with '\l', to ensure that the text
     -- is left justified rather than centred. The last line also needs a final
-    -- '\l'. Single lines of text are left centred, which provides better
+    -- '\l'. Single lines of text remain centred, which provides better
     -- formatting for short statements and port labels.
     --
     pp :: Doc -> Doc
-    pp (lines . concatMap escape . renderStyle wide -> doc) =
-      case doc of
-        []  -> empty
-        [x] -> text x
-        xs  -> text (intercalate "\\l" xs) <> text "\\l"  -- [1] left justify
+    pp = encode . renderSmart 0.7 120
 
-    wide :: Style
-    wide = style { lineLength = 200 }
+    encode :: SimpleDoc -> Doc
+    encode doc =
+      let
+          go SFail         = error "unexpected failure rendering SimpleDoc"
+          go SEmpty        = (empty, False)
+          go (SChar c x)   = let (x',m) = go x in (text (escape c) <> x', m)
+          go (SText _ t x) = let (x',m) = go x in (text (concatMap escape t) <> x', m)
+          go (SLine i x)   = let (x',_) = go x in (text "\\l" <> spaces i <> x', True)  -- [1] left justify
+          go (SSGR _ x)    = go x
+
+          (doc',multiline) = go doc
+      in
+      doc' <> if multiline
+                then text "\\l"
+                else empty
+
+    spaces :: Int -> Doc
+    spaces i | i <= 0    = empty
+             | otherwise = text (concat (replicate i "\\ "))
 
     escape :: Char -> String
     escape ' '  = "\\ "         -- don't collapse multiple spaces
