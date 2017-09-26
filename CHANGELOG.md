@@ -10,6 +10,8 @@ Policy (PVP)](https://pvp.haskell.org)
 ## [next]
 ### Added
 ### Changed
+  * Improve and colourise the pretty-printer
+
 ### Fixed
 ### Removed
 ### Deprecated
@@ -94,7 +96,7 @@ Policy (PVP)](https://pvp.haskell.org)
   * Initial release of the CUDA backend
 
 
-[next]:             https://github.com/AccelerateHS/accelerate/compare/1.1.0.0...HEAD
+[next]:             https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...HEAD
 [1.1.0.0]:          https://github.com/AccelerateHS/accelerate/compare/1.0.0.0...1.1.0.0
 [1.0.0.0]:          https://github.com/AccelerateHS/accelerate/compare/0.15.1.0...1.0.0.0
 [0.15.1.0]:         https://github.com/AccelerateHS/accelerate/compare/0.15.0.0...0.15.1.0
