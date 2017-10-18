@@ -248,15 +248,17 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
     *r++ = argv[0];
 
     /* environment variables */
-    while (*p) {
-      while (*p && isspace(*p)) ++p;
+    if (p) {
+      while (*p) {
+        while (*p && isspace(*p)) ++p;
 
-      if (*p) {
-        *r++ = p;
-        while (*p && !isspace(*p)) ++p;
+        if (*p) {
+          *r++ = p;
+          while (*p && !isspace(*p)) ++p;
 
-        if (isspace(*p)) {
-          *p++ = '\0';
+          if (isspace(*p)) {
+            *p++ = '\0';
+          }
         }
       }
     }
@@ -279,12 +281,32 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
    * (we can not update the argc count passed to main).
    */
   if (cl_start < argc) {
-    int remaining = argc-cl_end;
+    int remaining = cl_end >= argc ? 0 : argc-cl_end-1;
 
-    if (cl_end < argc) {
-      memmove(&argv[cl_start], &argv[cl_end+1], remaining * sizeof(char*));
+    for (i = 0; i < argc; ++i) {
+      printf("  %d: %s\n", i, argv[i]);
     }
-    memset(&argv[cl_start+remaining], 0, (cl_end-cl_start) * sizeof(char*));
+
+    /* Shuffle the arguments we wish to keep to the front of the list. We need
+     * to swap the entries here because we will overwrite the (now defunct)
+     * Accelerate options in the next step.
+     */
+    for (i = 0; i < remaining; ++i) {
+      int from   = cl_end  +i+1;
+      int to     = cl_start+i;
+      char* p    = argv[to];
+      argv[to]   = argv[from];
+      argv[from] = p;
+    }
+
+    /* Delete the Accelerate flags. We can't remove them in the sensible fashion
+     * by updating the argc count (now that all the unused flags are at the end)
+     * but we can pull a small sleight-of-hand by rewriting them into -RTS, so
+     * that they will be deleted when the Haskell environment is initialised
+     */
+    for (i = cl_start+remaining; i < argc; ++i) {
+      strcpy(argv[i], "-RTS");
+    }
   }
 }
 
