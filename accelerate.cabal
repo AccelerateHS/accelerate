@@ -85,8 +85,6 @@ Description:
   .
     * A simple interactive ray tracer
   .
-    * A particle based simulation of stable fluid flows
-  .
     * A cellular automata simulation
   .
     * A \"password recovery\" tool, for dictionary lookup of MD5 hashes
