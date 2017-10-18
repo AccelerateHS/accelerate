@@ -17,6 +17,7 @@
  * simply set to NULL.
  */
 
+#include <ctype.h>
 #include <getopt.h>
 #include <libgen.h>
 #include <stdint.h>
@@ -91,40 +92,20 @@ static const struct option longopts[] =
   };
 
 
-/* This function will be run before main() and process the command line options
- * before the Haskell environment is initialised. This prevents the flags from
- * interfering with the regular Haskell program (in the same way as the RTS
- * options).
+/* Parse the given vector of command line arguments and set the corresponding
+ * flags. The vector should contain no non-option arguments (aside from the name
+ * of the program as the first entry, which is required for getopt()).
  */
-__attribute__((constructor)) void process_options(int argc, char *argv[])
+static void parse_options(int argc, char *argv[])
 {
   const struct option* opt;
   char* this;
   int   did_show_banner;
-  int   end;
   int   prefix;
   int   result;
-  int   start;
   int   longindex;
 
-  /* Determine the subset of the options which we should process. Note that
-   * getopt() implicitly skips the first element of the input vector (as this is
-   * usually the name of the program) so when calling getopt() we point to the
-   * +ACC entry, rather than the first proper option.
-   */
-  for (start = 1; start < argc; ++start) {
-    if (0 == strncmp("+ACC", argv[start], 4)) {
-      break;
-    }
-  }
-
-  for (end = start+1; end < argc; ++end) {
-    if (0 == strncmp("-ACC", argv[end], 4)) {
-      break;
-    }
-  }
-
-  while (-1 != (result = getopt_long_only(end-start, &argv[start], shortopts, longopts, &longindex)))
+  while (-1 != (result = getopt_long_only(argc, argv, shortopts, longopts, &longindex)))
   {
     switch(result)
     {
@@ -153,7 +134,7 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
     case ':':
     case '?':
       opt             = longopts;
-      this            = argv[start+optind-1];
+      this            = argv[optind-1];
       did_show_banner = 0;
 
       /* drop the leading '-' from the input command line argument */
@@ -189,19 +170,121 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
       abort();
     }
   }
+}
 
-  /* After stripping out the options flags, shuffle the remaining options to the
-   * front of the vector. This still leaves some empty fields at the end of the
-   * argument vector (as we can not update argc), but that is probably better
-   * than having them in the middle..?
+
+/* This function will be run automatically before main() to process options sent
+ * to the Accelerate runtime system.
+ *
+ * This processes both command line flags as well as those specified via the
+ * environment variable "ACCELERATE_FLAGS" (with precedence to the former).
+ *
+ * The input 'argv' vector is mutated to remove the entries processed by this
+ * module. This prevents the flags from interfering with the regular Haskell
+ * program (in the same way as the RTS options). Note however that since we can
+ * not update the 'argc' length of the vector, the removed entries are simply
+ * set to NULL (and moved to the end of the vector).
+ */
+__attribute__((constructor)) void process_options(int argc, char *argv[])
+{
+  int i;
+
+  /* Find the command line options which need to be processed. These will be
+   * between +ACC ... [-ACC] (similar to the Haskell RTS options).
    */
-  if (start < argc) {
-    int remaining = argc-end;
+  int cl_start;
+  int cl_end;
+  int num_cl_options = 0;
 
-    if (end < argc) {
-      memmove(&argv[start], &argv[end+1], remaining * sizeof(char*));
+  for (cl_start = 1; cl_start < argc; ++cl_start) {
+    if (0 == strncmp("+ACC", argv[cl_start], 4)) {
+      break;
     }
-    memset(&argv[start+remaining], 0, (end-start) * sizeof(char*));
+  }
+
+  for (cl_end = cl_start+1; cl_end < argc; ++cl_end) {
+    if (0 == strncmp("-ACC", argv[cl_end], 4)) {
+      break;
+    }
+  }
+  num_cl_options = cl_end-cl_start-1;
+
+  /* Gather options from the ACCELERATE_FLAGS environment variable. Note that we
+   * must not modify this variable, otherwise subsequent invocations of getenv()
+   * will get the modified version.
+   */
+  char *env            = getenv("ACCELERATE_FLAGS");
+  int  num_env_options = 0;
+
+  if (NULL != env) {
+    /* copy the environment string, as we will mutate it during tokenisation */
+    char *p = env = strdup(env);
+
+    /* first count how many tokens there are, so that we can allocate memory for
+     * the combined options vector
+     */
+    while (*p) {
+      while (*p && isspace(*p)) ++p;
+
+      if (*p) {
+        ++num_env_options;
+        while (*p && !isspace(*p)) ++p;
+      }
+    }
+  }
+
+  /* Create the combined options vector containing both the environment and
+   * command line options for parsing. The command line options are placed at
+   * the end, so that they may override environment options.
+   */
+  int    argc2 = num_cl_options + num_env_options + 1;
+  char** argv2 = NULL;
+
+  if (argc2 > 1) {
+    char*  p = env;
+    char** r = argv2 = malloc(argc2 * sizeof(char*));
+
+    /* program name */
+    *r++ = argv[0];
+
+    /* environment variables */
+    while (*p) {
+      while (*p && isspace(*p)) ++p;
+
+      if (*p) {
+        *r++ = p;
+        while (*p && !isspace(*p)) ++p;
+
+        if (isspace(*p)) {
+          *p++ = '\0';
+        }
+      }
+    }
+
+    /* command line flags */
+    for (i = cl_start+1; i < cl_end; ++i)
+      *r++ = argv[i];
+
+    /* finally process command lines */
+    parse_options(argc2, argv2);
+
+    /* cleanup */
+    if (argv2) free(argv2);
+    if (env)   free(env);
+  }
+
+  /* Remove the Accelerte options from the command line arguments which will be
+   * passed to main(). This shuffles the remaining options to the front of the
+   * vector, but will leave some empty fields at the end of the argument vector
+   * (we can not update the argc count passed to main).
+   */
+  if (cl_start < argc) {
+    int remaining = argc-cl_end;
+
+    if (cl_end < argc) {
+      memmove(&argv[cl_start], &argv[cl_end+1], remaining * sizeof(char*));
+    }
+    memset(&argv[cl_start+remaining], 0, (cl_end-cl_start) * sizeof(char*));
   }
 }
 
