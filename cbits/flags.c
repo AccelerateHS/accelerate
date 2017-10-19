@@ -191,6 +191,11 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
 
   /* Find the command line options which need to be processed. These will be
    * between +ACC ... [-ACC] (similar to the Haskell RTS options).
+   *
+   * Note that this only recognises a single +ACC ... -ACC group. Should we be
+   * able to handle multiple (disjoint) groups of flags? To do this properly we
+   * probably want to collect the arguments (from both sources) into a linked
+   * list. This would not be particularly difficult, just tedious... \:
    */
   int cl_start;
   int cl_end;
@@ -269,16 +274,28 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
 
     /* finally process command lines */
     parse_options(argc2, argv2);
-
-    /* cleanup */
-    if (argv2) free(argv2);
-    if (env)   free(env);
   }
 
   /* Remove the Accelerte options from the command line arguments which will be
    * passed to main(). We can't do this in a sensible fashion by updating argc,
    * but we can pull a small sleight-of-hand by rewriting them to -RTS, so that
-   * they will be deleted when the Haskell environment is initialised.
+   * they will be deleted by the GHC RTS when it is initialised.
+   *
+   * In this method, we can also updated them in place, without permuting the
+   * order of the options to place the (now unused) Accelerate flags at the end
+   * of the vector. This does create a slight change in behaviour though, where
+   * the application will become more lenient to the user not (correctly)
+   * closing the RTS group, for example:
+   *
+   * > ./foo +RTS -... +ACC -... -ACC
+   *
+   * is rewritten to:
+   *
+   * > ./foo +RTS -... -RTS -... -RTS
+   *
+   * Previously, since the RTS group was not terminated corcetly the GHC RTS
+   * would complain that the trailing Accelerate options (+ACC -...) were
+   * unknown RTS flags.
    */
   for (i = cl_start; i < cl_end+1 && i < argc; ++i) {
     if (strlen(argv[i]) >= 4) {
@@ -287,6 +304,10 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
       argv[i][0] = '\0';
     }
   }
+
+  /* cleanup */
+  if (argv2) free(argv2);
+  if (env)   free(env);
 }
 
 
