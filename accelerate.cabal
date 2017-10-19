@@ -346,7 +346,9 @@ Library
         Data.Array.Accelerate.Trafo.Substitution
         -- Data.Array.Accelerate.Trafo.Vectorise
 
-  c-sources:            cbits/atomic.c
+  c-sources:
+        cbits/atomic.c
+        cbits/flags.c
 
   if flag(debug) || flag(ekg)
     cpp-options:        -DACCELERATE_DEBUG

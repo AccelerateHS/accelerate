@@ -6,5 +6,6 @@ DISTDIR=$(stack path --dist-dir)
 stack exec ghci -- \
   -j +RTS -N -A64M -n2m -RTS \
   ${DISTDIR}/build/cbits/atomic.o \
+  ${DISTDIR}/build/cbits/flags.o \
   $@
 

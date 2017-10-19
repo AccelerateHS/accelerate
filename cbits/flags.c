@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 /* These globals will be accessed from the Haskell side to implement the
  * corresponding behaviour.
  */
@@ -36,9 +37,12 @@ int32_t __unfolding_use_threshold   = 1;
 int32_t __fast_math                 = 1;
 int32_t __flush_cache               = 0;
 int32_t __force_recomp              = 0;
+int32_t __debug                     = 0;
 
 int32_t __verbose                   = 0;
 int32_t __dump_phases               = 0;
+int32_t __dump_sharing              = 0;
+int32_t __dump_fusion               = 0;
 int32_t __dump_simpl_stats          = 0;
 int32_t __dump_simpl_iterations     = 0;
 int32_t __dump_vectorisation        = 0;
@@ -56,6 +60,8 @@ static const char*         shortopts  = "";
 static const struct option longopts[] =
   { { "dverbose",                     no_argument,       &__verbose,               1    }
   , { "ddump-phases",                 no_argument,       &__dump_phases,           1    }
+  , { "ddump-sharing",                no_argument,       &__dump_sharing,          1    }
+  , { "ddump-fusion",                 no_argument,       &__dump_fusion,           1    }
   , { "ddump-simpl-stats",            no_argument,       &__dump_simpl_stats,      1    }
   , { "ddump-simpl-iterations",       no_argument,       &__dump_simpl_iterations, 1    }
   , { "ddump-vectorisation",          no_argument,       &__dump_vectorisation,    1    }
@@ -76,6 +82,7 @@ static const struct option longopts[] =
   , { "fflush-cache",                 no_argument,       &__flush_cache,           1    }
   , { "fforce-recomp",                no_argument,       &__force_recomp,          1    }
   , { "ffast-math",                   no_argument,       &__fast_math,             1    }
+  , { "fdebug",                       no_argument,       &__debug,                 1    }
 
   , { "fno-acc-sharing",              no_argument,       &__acc_sharing,           0    }
   , { "fno-exp-sharing",              no_argument,       &__exp_sharing,           0    }
@@ -84,6 +91,7 @@ static const struct option longopts[] =
   , { "fno-flush-cache",              no_argument,       &__flush_cache,           0    }
   , { "fno-force-recomp",             no_argument,       &__force_recomp,          0    }
   , { "fno-fast-math",                no_argument,       &__fast_math,             0    }
+  , { "fno-debug",                    no_argument,       &__debug,                 0    }
 
   , { "funfolding-use-threshold=INT", required_argument, NULL,                     1000 }
 
@@ -104,6 +112,12 @@ static void parse_options(int argc, char *argv[])
   int   prefix;
   int   result;
   int   longindex;
+
+#ifndef ACCELERATE_DEBUG
+  fprintf(stderr, "Data.Array.Accelerate: Debugging options are disabled.\n");
+  fprintf(stderr, "Reinstall package 'accelerate' with '-fdebug' to enable them.\n");
+  return;
+#endif
 
   while (-1 != (result = getopt_long_only(argc, argv, shortopts, longopts, &longindex)))
   {

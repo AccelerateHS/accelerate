@@ -62,7 +62,7 @@ showFFloatSIBase prec !base !k
 -- the debug mode indicated by the first argument is enabled, before returning
 -- the third argument as its result. The message is prefixed with a time stamp.
 --
-trace :: Mode -> String -> a -> a
+trace :: Flag -> String -> a -> a
 #ifdef ACCELERATE_DEBUG
 {-# NOINLINE trace #-}
 trace f msg expr = unsafePerformIO $ do
@@ -82,7 +82,7 @@ trace _ _ expr = expr
 --        * prefix with a description of the mode (e.g. "gc: foo")
 --        * align multi-line messages
 --
-traceIO :: Mode -> String -> IO ()
+traceIO :: Flag -> String -> IO ()
 #ifdef ACCELERATE_DEBUG
 traceIO f msg = when f $ putTraceMsg msg
 #else
@@ -95,7 +95,7 @@ traceIO _ _   = return ()
 -- message is emitted to the eventlog, if eventlog profiling is enabled at
 -- runtime.
 --
-traceEvent :: Mode -> String -> a -> a
+traceEvent :: Flag -> String -> a -> a
 #ifdef ACCELERATE_DEBUG
 {-# NOINLINE traceEvent #-}
 traceEvent f msg expr = unsafePerformIO $ do
@@ -126,7 +126,7 @@ putTraceMsg _   = return ()
 -- Compared to 'traceEvent', 'traceEventIO' sequences the event with respect to
 -- other IO actions.
 --
-traceEventIO :: Mode -> String -> IO ()
+traceEventIO :: Flag -> String -> IO ()
 #ifdef ACCELERATE_DEBUG
 traceEventIO f msg = do
   when f $ D.traceEventIO msg

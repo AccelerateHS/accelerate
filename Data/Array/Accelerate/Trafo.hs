@@ -232,7 +232,7 @@ withSimplStats x = x
 phase :: NFData b => String -> (a -> b) -> a -> b
 #ifdef ACCELERATE_DEBUG
 phase n f x = unsafePerformIO $ do
-  enabled <- queryFlag dump_phases
+  enabled <- getFlag dump_phases
   if enabled
     then timed dump_phases (\wall cpu -> printf "phase %s: %s" n (elapsed wall cpu)) (return $!! f x)
     else return (f x)
