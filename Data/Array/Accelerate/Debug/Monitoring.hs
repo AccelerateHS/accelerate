@@ -1,7 +1,8 @@
-{-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE BangPatterns             #-}
+{-# LANGUAGE CPP                      #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE OverloadedStrings        #-}
+{-# LANGUAGE RecordWildCards          #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Monitoring
@@ -33,27 +34,22 @@ module Data.Array.Accelerate.Debug.Monitoring (
 ) where
 
 #ifdef ACCELERATE_MONITORING
-import Data.Atomic                                                  ( Atomic )
-import qualified Data.Atomic                                        as Atomic
-
 import System.Metrics
-import System.Metrics.Counter                                       ( Counter )
-import System.Metrics.Gauge                                         ( Gauge )
-import qualified System.Metrics.Counter                             as Counter
-import qualified System.Metrics.Gauge                               as Gauge
+import System.Remote.Monitoring
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Monad
 import Data.IORef
 import Data.Text                                                    ( Text )
 import Data.Time.Clock
-import System.IO.Unsafe
-import System.Remote.Monitoring
 import Text.Printf
 import qualified Data.HashMap.Strict                                as Map
 #endif
 
+import Data.Atomic                                                  ( Atomic )
+import qualified Data.Atomic                                        as Atomic
+
+import Control.Monad
 import Data.Int
 import Prelude
 
@@ -142,23 +138,24 @@ beginMonitoring = return ()
 --
 #ifndef ACCELERATE_MONITORING
 initAccMetrics :: IO a
-initAccMetrics = error "Data.Array.Accelerate: Monitoring is disabled. Reinstall package 'accelerate' with '-fekg' to enable it."
+initAccMetrics = error $ unlines [ "Data.Array.Accelerate: Monitoring is disabled."
+                                 , "Reinstall package 'accelerate' with '-fekg' to enable it." ]
 #else
 initAccMetrics :: IO Store
 initAccMetrics = do
   store <- newStore
 
-  registerRate    "acc.load.llvm_native"              (estimateProcessorLoad _active_ns_llvm_native)           store
-  registerRate    "acc.load.llvm_ptx"                 (estimateProcessorLoad _active_ns_llvm_ptx)              store
-  registerGauge   "acc.gc.current_bytes_remote"       (Gauge.read _current_bytes_remote)                       store
-  registerGauge   "acc.gc.current_bytes_nursery"      (Gauge.read _current_bytes_nursery)                      store
-  registerCounter "acc.gc.bytes_allocated_local"      (Counter.read _total_bytes_allocated_local)              store
-  registerCounter "acc.gc.bytes_allocated_remote"     (Counter.read _total_bytes_allocated_remote)             store
-  registerCounter "acc.gc.bytes_copied_to_remote"     (Counter.read _total_bytes_copied_to_remote)             store
-  registerCounter "acc.gc.bytes_copied_from_remote"   (Counter.read _total_bytes_copied_from_remote)           store
-  registerCounter "acc.gc.bytes_evicted_from_remote"  (Counter.read _total_bytes_evicted_from_remote)          store
-  registerCounter "acc.gc.num_gcs"                    (Counter.read _num_remote_gcs)                           store
-  registerCounter "acc.gc.num_lru_evict"              (Counter.read _num_evictions)                            store
+  registerRate    "acc.load.llvm_native"             (estimateProcessorLoad __active_ns_llvm_native) store
+  registerRate    "acc.load.llvm_ptx"                (estimateProcessorLoad __active_ns_llvm_ptx)    store
+  registerGauge   "acc.gc.current_bytes_remote"      (Atomic.read __current_bytes_remote)            store
+  registerGauge   "acc.gc.current_bytes_nursery"     (Atomic.read __current_bytes_nursery)           store
+  registerCounter "acc.gc.bytes_allocated_local"     (Atomic.read __total_bytes_allocated_local)     store
+  registerCounter "acc.gc.bytes_allocated_remote"    (Atomic.read __total_bytes_allocated_remote)    store
+  registerCounter "acc.gc.bytes_copied_to_remote"    (Atomic.read __total_bytes_copied_to_remote)    store
+  registerCounter "acc.gc.bytes_copied_from_remote"  (Atomic.read __total_bytes_copied_from_remote)  store
+  registerCounter "acc.gc.bytes_evicted_from_remote" (Atomic.read __total_bytes_evicted_from_remote) store
+  registerCounter "acc.gc.num_gcs"                   (Atomic.read __num_remote_gcs)                  store
+  registerCounter "acc.gc.num_lru_evict"             (Atomic.read __num_evictions)                   store
 
   return store
 
@@ -186,8 +183,8 @@ withProcessor :: Processor -> IO a -> IO a
 #ifndef ACCELERATE_MONITORING
 withProcessor _      = id
 #else
-withProcessor Native = withProcessor' _active_ns_llvm_native
-withProcessor PTX    = withProcessor' _active_ns_llvm_ptx
+withProcessor Native = withProcessor' __active_ns_llvm_native
+withProcessor PTX    = withProcessor' __active_ns_llvm_ptx
 
 withProcessor' :: Atomic -> IO a -> IO a
 withProcessor' var action = do
@@ -206,8 +203,8 @@ addProcessorTime :: Processor -> Double -> IO ()
 #ifndef ACCELERATE_MONITORING
 addProcessorTime _ _    = return ()
 #else
-addProcessorTime Native = addProcessorTime' _active_ns_llvm_native
-addProcessorTime PTX    = addProcessorTime' _active_ns_llvm_ptx
+addProcessorTime Native = addProcessorTime' __active_ns_llvm_native
+addProcessorTime PTX    = addProcessorTime' __active_ns_llvm_ptx
 
 addProcessorTime' :: Atomic -> Double -> IO ()
 addProcessorTime' var secs =
@@ -219,55 +216,55 @@ addProcessorTime' var secs =
 -- | Allocated the number of bytes in the local memory space
 --
 didAllocateBytesLocal :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 didAllocateBytesLocal _ = return ()
 #else
 didAllocateBytesLocal n = do
-  -- void $ Atomic.add _active_bytes_allocated_local n
-  Counter.add _total_bytes_allocated_local n
+  -- void $ Atomic.add __active_bytes_allocated_local n
+  void $ Atomic.add __total_bytes_allocated_local n
 #endif
 
 -- | Allocated the number of bytes of /new/ memory in the remote memory space
 --
 didAllocateBytesRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 didAllocateBytesRemote _ = return ()
 #else
 didAllocateBytesRemote n = do
- -- void $ Atomic.add _active_bytes_allocated_remote n
- Counter.add _total_bytes_allocated_remote n
+ -- void $ Atomic.add __active_bytes_allocated_remote n
+ void $ Atomic.add __total_bytes_allocated_remote n
 #endif
 
 {-# INLINE increaseCurrentBytesRemote #-}
 increaseCurrentBytesRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 increaseCurrentBytesRemote _ = return ()
 #else
-increaseCurrentBytesRemote n = Gauge.add _current_bytes_remote n
+increaseCurrentBytesRemote n = void $ Atomic.add __current_bytes_remote n
 #endif
 
 {-# INLINE decreaseCurrentBytesRemote #-}
 decreaseCurrentBytesRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 decreaseCurrentBytesRemote _ = return ()
 #else
-decreaseCurrentBytesRemote n = Gauge.subtract _current_bytes_remote n
+decreaseCurrentBytesRemote n = void $ Atomic.subtract __current_bytes_remote n
 #endif
 
 -- | Copied data between the local and remote memory spaces
 --
 didCopyBytesToRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 didCopyBytesToRemote _ = return ()
 #else
-didCopyBytesToRemote n = Counter.add _total_bytes_copied_to_remote n
+didCopyBytesToRemote n = void $ Atomic.add __total_bytes_copied_to_remote n
 #endif
 
 didCopyBytesFromRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 didCopyBytesFromRemote _ = return ()
 #else
-didCopyBytesFromRemote n = Counter.add _total_bytes_copied_from_remote n
+didCopyBytesFromRemote n = void $ Atomic.add __total_bytes_copied_from_remote n
 #endif
 
 
@@ -278,31 +275,31 @@ didCopyBytesFromRemote n = Counter.add _total_bytes_copied_from_remote n
 --
 {-# INLINE setCurrentBytesNursery #-}
 setCurrentBytesNursery :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 setCurrentBytesNursery _ = return ()
 #else
-setCurrentBytesNursery n = Gauge.set _current_bytes_nursery n
+setCurrentBytesNursery n = Atomic.write __current_bytes_nursery n
 #endif
 
 
 -- | Performed a major GC of the remote memory space
 --
 didRemoteGC :: IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 didRemoteGC = return ()
 #else
-didRemoteGC = Counter.inc _num_remote_gcs
+didRemoteGC = void $ Atomic.add __num_remote_gcs 1
 #endif
 
 -- | Performed an eviction of a remote array of the given number of bytes
 --
 didEvictBytes :: Int64 -> IO ()
-#ifndef ACCELERATE_MONITORING
+#ifndef ACCELERATE_DEBUG
 didEvictBytes _ = return ()
 #else
 didEvictBytes n = do
-  Counter.inc _num_evictions
-  Counter.add _total_bytes_evicted_from_remote n
+  void $ Atomic.add __num_evictions 1
+  void $ Atomic.add __total_bytes_evicted_from_remote n
 #endif
 
 
@@ -383,6 +380,7 @@ ema !alpha !dt !old_ema !old_sample !new_sample =
   in
   (u * old_ema) + ((v-u) * old_sample) + ((1-v) * new_sample)
 
+#endif
 
 -- Monitoring variables
 -- --------------------
@@ -391,69 +389,17 @@ ema !alpha !dt !old_ema !old_sample !new_sample =
 -- check. This is an integer amount because there are no built-in functions for
 -- atomic memory access on double precision (as specified by the Intel docs).
 --
-{-# NOINLINE _active_ns_llvm_native #-}
-_active_ns_llvm_native :: Atomic
-_active_ns_llvm_native = unsafePerformIO (Atomic.new 0)
+foreign import ccall "&__active_ns_llvm_native"           __active_ns_llvm_native           :: Atomic
+foreign import ccall "&__active_ns_llvm_ptx"              __active_ns_llvm_ptx              :: Atomic
 
-{-# NOINLINE _active_ns_llvm_ptx #-}
-_active_ns_llvm_ptx :: Atomic
-_active_ns_llvm_ptx = unsafePerformIO (Atomic.new 0)
+foreign import ccall "&__current_bytes_remote"            __current_bytes_remote            :: Atomic -- current working size of the remote memory space (active memory)
+foreign import ccall "&__current_bytes_nursery"           __current_bytes_nursery           :: Atomic -- current size of the remote nursery (inactive memory)
 
-{-# NOINLINE _active_ns_cuda #-}
-_active_ns_cuda :: Atomic
-_active_ns_cuda = unsafePerformIO (Atomic.new 0)
-
--- Total number of bytes allocated in the local and remote (e.g. on the GPU)
--- address spaces
---
-{-# NOINLINE _total_bytes_allocated_local #-}
-_total_bytes_allocated_local :: Counter
-_total_bytes_allocated_local = unsafePerformIO Counter.new
-
-{-# NOINLINE _total_bytes_allocated_remote #-}
-_total_bytes_allocated_remote :: Counter
-_total_bytes_allocated_remote = unsafePerformIO Counter.new
-
--- Total number of bytes copied to and from the remote memory space
---
-{-# NOINLINE _total_bytes_copied_to_remote #-}
-_total_bytes_copied_to_remote :: Counter
-_total_bytes_copied_to_remote = unsafePerformIO Counter.new
-
-{-# NOINLINE _total_bytes_copied_from_remote #-}
-_total_bytes_copied_from_remote :: Counter
-_total_bytes_copied_from_remote = unsafePerformIO Counter.new
-
--- Total number of bytes copied out of the remote memory space due to evictions.
---
-{-# NOINLINE _total_bytes_evicted_from_remote #-}
-_total_bytes_evicted_from_remote :: Counter
-_total_bytes_evicted_from_remote = unsafePerformIO Counter.new
-
--- Current working remote memory size
---
-{-# NOINLINE _current_bytes_remote #-}
-_current_bytes_remote :: Gauge
-_current_bytes_remote = unsafePerformIO Gauge.new
-
--- Current size of the nursery
---
-{-# NOINLINE _current_bytes_nursery #-}
-_current_bytes_nursery :: Gauge
-_current_bytes_nursery = unsafePerformIO Gauge.new
-
--- Number of times the remote memory was forcibly garbage collected, and nursery
--- flushed.
---
-{-# NOINLINE _num_remote_gcs #-}
-_num_remote_gcs :: Counter
-_num_remote_gcs = unsafePerformIO Counter.new
-
--- number of LRU eviction events
---
-{-# NOINLINE _num_evictions #-}
-_num_evictions :: Counter
-_num_evictions = unsafePerformIO Counter.new
-
-#endif
+foreign import ccall "&__total_bytes_allocated_local"     __total_bytes_allocated_local     :: Atomic -- bytes allocated in the local (CPU) memory space
+foreign import ccall "&__total_bytes_allocated_remote"    __total_bytes_allocated_remote    :: Atomic -- bytes allocated in the remote memory space (if it is separate, e.g. GPU)
+foreign import ccall "&__total_bytes_copied_to_remote"    __total_bytes_copied_to_remote    :: Atomic -- bytes copied to the remote memory space
+foreign import ccall "&__total_bytes_copied_from_remote"  __total_bytes_copied_from_remote  :: Atomic -- bytes copied from the remote memory space
+foreign import ccall "&__total_bytes_evicted_from_remote" __total_bytes_evicted_from_remote :: Atomic -- total bytes copied from the remote due to evictions
+foreign import ccall "&__num_remote_gcs"                  __num_remote_gcs                  :: Atomic -- number of times the remote memory space was forcibly garbage collected
+foreign import ccall "&__num_evictions"                   __num_evictions                   :: Atomic -- number of LRU eviction events
 

@@ -1,4 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE MagicHash                #-}
+{-# LANGUAGE UnboxedTuples            #-}
 -- |
 -- Module      : Data.Atomic
 -- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -13,48 +15,49 @@
 
 module Data.Atomic (
 
-  Atomic,
-  new,
-  add, and,
+  Atomic(..),
+  new, read, write, add, and, subtract,
 
 ) where
 
 import Data.Int
-import Foreign.Ptr
-import Foreign.ForeignPtr
-import Foreign.Storable
 import Prelude                                                      ( ($), IO, return )
+
+import GHC.Ptr
+import GHC.Base
 
 
 -- | A mutable atomic integer
 --
-newtype Atomic = Atomic ( ForeignPtr Int64 )
+newtype Atomic = Atomic ( Ptr Int64 )
 
 -- | Create a new atomic variable initialised to the given value
 --
 new :: Int64 -> IO Atomic
 new v = do
-  fp <- mallocForeignPtr
-  withForeignPtr fp $ \p -> poke p v
-  return $ Atomic fp
+  -- TLM: is this valid, or will the result be GC'd immediately?
+  a <- IO $ \s -> case newPinnedByteArray# 8# s of
+                    (# s', mbarr# #) -> (# s', Atomic (Ptr (byteArrayContents# (unsafeCoerce# mbarr#))) #)
+  write a v
+  return a
+
+-- | Get the current value.
+--
+foreign import ccall unsafe "atomic_read_64" read :: Atomic -> IO Int64
+
+-- | Set the atomic to the given value.
+--
+foreign import ccall unsafe "atomic_write_64" write :: Atomic -> Int64 -> IO ()
 
 -- | Increase the atomic by the given amount. Returns the old value.
 --
-add :: Atomic -> Int64 -> IO Int64
-add (Atomic fp) v =
-  withForeignPtr fp $ \p -> atomic_fetch_and_add_64 p v
+foreign import ccall unsafe "atomic_fetch_and_add_64" add :: Atomic -> Int64 -> IO Int64
 
 -- | Bitwise AND the atomic with the given value. Return the old value.
 --
-and :: Atomic -> Int64 -> IO Int64
-and (Atomic fp) v =
-  withForeignPtr fp $ \p -> atomic_fetch_and_and_64 p v
+foreign import ccall unsafe "atomic_fetch_and_and_64" and :: Atomic -> Int64 -> IO Int64
 
-
--- Perform the operation suggested by the name and return the old value
+-- | Decrement the atomic value by the given amount. Return the old value.
 --
--- > { tmp = *ptr; *ptr op= value; return tmp; }
---
-foreign import ccall unsafe "hs_atomic_fetch_and_add_64" atomic_fetch_and_add_64 :: Ptr Int64 -> Int64 -> IO Int64
-foreign import ccall unsafe "hs_atomic_fetch_and_and_64" atomic_fetch_and_and_64 :: Ptr Int64 -> Int64 -> IO Int64
+foreign import ccall unsafe "atomic_fetch_and_sub_64" subtract :: Atomic -> Int64 -> IO Int64
 

@@ -349,6 +349,7 @@ Library
   c-sources:
         cbits/atomic.c
         cbits/flags.c
+        cbits/monitoring.c
 
   if flag(debug) || flag(ekg)
     cc-options:         -DACCELERATE_DEBUG
