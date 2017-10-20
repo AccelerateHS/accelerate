@@ -425,6 +425,15 @@ test-suite doctest
         -threaded
         -rtsopts
 
+  if impl(ghc >= 7.0)
+    ghc-options:        -fspec-constr-count=25
+
+  if impl(ghc == 7.*)
+    ghc-options:        -fcontext-stack=35
+
+  if impl(ghc >= 8.0)
+    ghc-options:        -freduction-depth=35
+
 source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
