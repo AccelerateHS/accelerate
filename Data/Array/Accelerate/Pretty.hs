@@ -75,10 +75,16 @@ instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenExp acc env ae
 --   show s = renderForTerminal wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
 
 renderForTerminal :: Doc -> ShowS
-renderForTerminal
-  = displayS
-  . renderSmart 0.7 (maybe 120 Term.width (unsafePerformIO Term.size))
-  . if (unsafePerformIO (Term.hSupportsANSI stdout)) then id else plain
+renderForTerminal doc next =
+  unsafePerformIO $ do
+    term <- Term.size
+    ansi <- Term.hSupportsANSI stdout
+    let
+        w             = maybe 120 Term.width term
+        d | ansi      = doc
+          | otherwise = plain doc
+    --
+    return $ displayS (renderSmart 0.7 w d) next
 
 -- Pretty
 -- ------
