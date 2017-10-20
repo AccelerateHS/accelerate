@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TypeOperators            #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports   #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 #if __GLASGOW_HASKELL__ >= 800
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 #endif
