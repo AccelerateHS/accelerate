@@ -155,7 +155,7 @@ module Data.Array.Accelerate (
   Acc,
 
   -- *** Arrays
-  Array, Arrays, Scalar, Vector, Segments,
+  Array, Arrays, Scalar, Vector, Matrix, Segments,
 
   -- *** Array elements
   Elt,

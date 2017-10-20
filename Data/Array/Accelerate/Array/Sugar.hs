@@ -32,7 +32,7 @@
 module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
-  Array(..), Scalar, Vector, Segments,
+  Array(..), Scalar, Vector, Matrix, Segments,
   Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr,
 
   -- * Class of supported surface element types and their mapping to representation types
@@ -960,6 +960,10 @@ type Scalar e = Array DIM0 e
 --
 type Vector e = Array DIM1 e
 
+-- |Matrices are two-dimensional arrays
+--
+type Matrix e = Array DIM2 e
+
 -- |Segment descriptor (vector of segment lengths).
 --
 -- To represent nested one-dimensional arrays, we use a flat array of data
@@ -1215,7 +1219,7 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
 -- Note that we pull elements off the list lazily, so infinite lists are
 -- accepted:
 --
--- >>> fromList (Z:.5:.10) (repeat 0) :: Array DIM2 Float
+-- >>> fromList (Z:.5:.10) (repeat 0) :: Matrix Float
 -- Matrix (Z :. 5 :. 10)
 --   [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 --     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
