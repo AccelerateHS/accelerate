@@ -8,6 +8,7 @@ packages:
 
 extra-deps:
 - 'base-orphans-0.4.4'
+- 'cabal-doctest-1.0.2'
 - 'th-lift-instances-0.1.11'
 - 'unique-0'
 
