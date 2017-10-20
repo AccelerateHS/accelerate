@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -111,7 +112,10 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, fromInteger, flip, undefined, fail )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, fromInteger, flip, undefined )
+#if __GLASGOW_HASKELL__ == 800
+import Prelude                                                      ( fail )
+#endif
 
 -- friends
 import Data.Array.Accelerate.Analysis.Match
