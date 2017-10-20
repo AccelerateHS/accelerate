@@ -1310,10 +1310,10 @@ odd n = n `rem` 2 /= 0
 -- | @'gcd' x y@ is the non-negative factor of both @x@ and @y@ of which every
 -- common factor of both @x@ and @y@ is also a factor; for example:
 --
--- >>> gcd 4 2 = 2
--- >>> gcd (-4) 6 = 2
--- >>> gcd 0 4 = 4
--- >>> gcd 0 0 = 0
+-- > gcd 4 2 = 2
+-- > gcd (-4) 6 = 2
+-- > gcd 0 4 = 4
+-- > gcd 0 0 = 0
 --
 -- That is, the common divisor that is \"greatest\" in the divisibility
 -- preordering.
