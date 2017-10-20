@@ -425,10 +425,6 @@ test-suite doctest
         -threaded
         -rtsopts
 
-  if impl(ghc > 8.0)
-    x-doctest-options: -fdiagnostics-color=never
-
-
 source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
