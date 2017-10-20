@@ -351,6 +351,7 @@ Library
         cbits/flags.c
 
   if flag(debug) || flag(ekg)
+    cc-options:         -DACCELERATE_DEBUG
     cpp-options:        -DACCELERATE_DEBUG
 
   if flag(ekg)

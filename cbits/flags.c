@@ -113,11 +113,7 @@ static void parse_options(int argc, char *argv[])
   int   result;
   int   longindex;
 
-#ifndef ACCELERATE_DEBUG
-  fprintf(stderr, "Data.Array.Accelerate: Debugging options are disabled.\n");
-  fprintf(stderr, "Reinstall package 'accelerate' with '-fdebug' to enable them.\n");
-  return;
-#endif
+#if defined(ACCELERATE_DEBUG)
 
   while (-1 != (result = getopt_long_only(argc, argv, shortopts, longopts, &longindex)))
   {
@@ -142,8 +138,7 @@ static void parse_options(int argc, char *argv[])
      *
      * TLM: longindex is not being updated correctly on my system for the case
      *      of an ambiguous argument, which makes it tricker to directly test
-     *      whether the option we got here due to a missing argument or
-     *      ambiguous option.
+     *      whether we got here due to a missing argument or ambiguous option.
      */
     case ':':
     case '?':
@@ -184,6 +179,13 @@ static void parse_options(int argc, char *argv[])
       abort();
     }
   }
+
+#else
+
+  fprintf(stderr, "Data.Array.Accelerate: Debugging options are disabled.\n");
+  fprintf(stderr, "Reinstall package 'accelerate' with '-fdebug' to enable them.\n");
+
+#endif
 }
 
 
@@ -322,14 +324,5 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
   /* cleanup */
   if (argv2) free(argv2);
   if (env)   free(env);
-}
-
-
-/*
- * This function runs after main(), and is used to print final GC and memory
- * statistics (if enabled). This is similar to the +RTS -s option.
- */
-__attribute__((destructor)) void dump_gc_stats(void)
-{
 }
 
