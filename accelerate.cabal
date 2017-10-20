@@ -250,6 +250,8 @@ Flag internal-checks
 Library
   Build-depends:
           base                          >= 4.7 && < 4.11
+        , ansi-terminal                 >= 0.6.2
+        , ansi-wl-pprint                >= 0.6
         , base-orphans                  >= 0.3
         , containers                    >= 0.3
         , deepseq                       >= 1.3
@@ -260,8 +262,8 @@ Library
         , hashable                      >= 1.1
         , hashtables                    >= 1.0
         , mtl                           >= 2.0
-        , ansi-wl-pprint                >= 0.6
         , template-haskell
+        , terminal-size                 >= 0.3
         , time                          >= 1.4
         , transformers                  >= 0.3
         , unique
