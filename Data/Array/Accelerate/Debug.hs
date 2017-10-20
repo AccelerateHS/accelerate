@@ -22,8 +22,11 @@ module Data.Array.Accelerate.Debug (
   dumpGraph,
   dumpSimplStats,
 
-  monitoringIsEnabled,
   debuggingIsEnabled,
+  monitoringIsEnabled,
+  boundsChecksAreEnabled,
+  unsafeChecksAreEnabled,
+  internalChecksAreEnabled,
 
 ) where
 
@@ -37,7 +40,7 @@ import Data.Array.Accelerate.Pretty.Graphviz
 
 import Control.Monad.Trans                              ( MonadIO )
 
-#if ACCELERATE_DEBUG
+#ifdef ACCELERATE_DEBUG
 import Control.Exception                                ( bracket )
 import Control.Monad.Trans                              ( liftIO )
 import System.Directory                                 ( getTemporaryDirectory, createDirectoryIfMissing )
@@ -54,18 +57,44 @@ import System.Win32.Process                             ( ProcessId )
 #endif
 
 
+{-# INLINE debuggingIsEnabled #-}
 debuggingIsEnabled :: Bool
-#if ACCELERATE_DEBUG
+#ifdef ACCELERATE_DEBUG
 debuggingIsEnabled = True
 #else
 debuggingIsEnabled = False
 #endif
 
+{-# INLINE monitoringIsEnabled #-}
 monitoringIsEnabled :: Bool
-#if ACCELERATE_MONITORING
+#ifdef ACCELERATE_MONITORING
 monitoringIsEnabled = True
 #else
 monitoringIsEnabled = False
+#endif
+
+{-# INLINE boundsChecksAreEnabled #-}
+boundsChecksAreEnabled :: Bool
+#ifdef ACCELERATE_BOUNDS_CHECKS
+boundsChecksAreEnabled = True
+#else
+boundsChecksAreEnabled = False
+#endif
+
+{-# INLINE unsafeChecksAreEnabled #-}
+unsafeChecksAreEnabled :: Bool
+#ifdef ACCELERATE_UNSAFE_CHECKS
+unsafeChecksAreEnabled = True
+#else
+unsafeChecksAreEnabled = False
+#endif
+
+{-# INLINE internalChecksAreEnabled #-}
+internalChecksAreEnabled :: Bool
+#ifdef ACCELERATE_INTERNAL_CHECKS
+internalChecksAreEnabled = True
+#else
+internalChecksAreEnabled = False
 #endif
 
 
@@ -73,7 +102,7 @@ monitoringIsEnabled = False
 --
 {-# INLINEABLE dumpSimplStats #-}
 dumpSimplStats :: MonadIO m => m ()
-#if ACCELERATE_DEBUG
+#ifdef ACCELERATE_DEBUG
 dumpSimplStats = do
   liftIO $ Debug.when dump_simpl_stats $ do
     stats <- simplCount
@@ -89,7 +118,7 @@ dumpSimplStats = return ()
 --
 {-# INLINEABLE dumpGraph #-}
 dumpGraph :: (MonadIO m, PrettyGraph g) => g -> m ()
-#if ACCELERATE_DEBUG
+#ifdef ACCELERATE_DEBUG
 dumpGraph g =
   liftIO $ do
     Debug.when dump_dot       $ writeGraph Full   g
@@ -98,7 +127,7 @@ dumpGraph g =
 dumpGraph _ = return ()
 #endif
 
-#if ACCELERATE_DEBUG
+#ifdef ACCELERATE_DEBUG
 writeGraph :: PrettyGraph g => Detail -> g -> IO ()
 writeGraph simple g = do
   withTemporaryFile "acc.dot" $ \path hdl -> do

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
+## [next]
+### Changed
+  * Internal debugging/RTS options handling has been changed. Compiling this
+    package now implies that backends are also compiled in debug mode (no need
+    to set the -fdebug cabal flag for those packages as well).
 
 ## [1.1.1.0] - 2017-09-26
 ### Changed
@@ -91,6 +96,7 @@ Policy (PVP)](https://pvp.haskell.org)
   * Initial release of the CUDA backend
 
 
+[next]:             https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...HEAD
 [1.1.1.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.1.1.0
 [1.1.0.0]:          https://github.com/AccelerateHS/accelerate/compare/1.0.0.0...v1.1.0.0
 [1.0.0.0]:          https://github.com/AccelerateHS/accelerate/compare/0.15.1.0...1.0.0.0

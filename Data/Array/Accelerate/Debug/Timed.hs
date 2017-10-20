@@ -39,13 +39,13 @@ import GHC.Stats
 -- otherwise only timing information is shown.
 --
 {-# INLINEABLE timed #-}
-timed :: MonadIO m => Mode -> (Double -> Double -> String) -> m a -> m a
+timed :: MonadIO m => Flag -> (Double -> Double -> String) -> m a -> m a
 #ifdef ACCELERATE_DEBUG
-timed mode fmt action = do
-  enabled <- liftIO $ queryFlag mode
+timed f fmt action = do
+  enabled <- liftIO $ getFlag f
   if enabled
     then do
-      with_gc <- liftIO $ (&&) <$> getRTSStatsEnabled <*> queryFlag verbose
+      with_gc <- liftIO $ (&&) <$> getRTSStatsEnabled <*> getFlag verbose
       if with_gc
         then timed_gc    fmt action
         else timed_simpl fmt action

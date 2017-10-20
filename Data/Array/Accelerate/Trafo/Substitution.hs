@@ -336,7 +336,7 @@ class SyntacticExp f where
   varIn         :: Elt t => Idx env t        -> f acc env aenv t
   expOut        :: Elt t => f acc env aenv t -> PreOpenExp acc env aenv t
   weakenExp     :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc (env, s) aenv t
-  weakenExpAcc  :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc env (aenv, s) t
+  -- weakenExpAcc  :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc env (aenv, s) t
 
 newtype IdxE (acc :: * -> * -> *) env aenv t = IE { unIE :: Idx env t }
 
@@ -344,13 +344,13 @@ instance SyntacticExp IdxE where
   varIn          = IE
   expOut         = Var . unIE
   weakenExp _    = IE . SuccIdx . unIE
-  weakenExpAcc _ = IE . unIE
+  -- weakenExpAcc _ = IE . unIE
 
 instance SyntacticExp PreOpenExp where
   varIn          = Var
   expOut         = id
   weakenExp k    = runIdentity . rebuildPreOpenExp k (Identity . weakenExp k . IE) (Identity . IA)
-  weakenExpAcc k = runIdentity . rebuildPreOpenExp k (Identity . IE) (Identity . weakenAcc k . IA)
+  -- weakenExpAcc k = runIdentity . rebuildPreOpenExp k (Identity . IE) (Identity . weakenAcc k . IA)
 
 {-# INLINEABLE shiftE #-}
 shiftE

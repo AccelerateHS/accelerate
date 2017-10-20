@@ -95,7 +95,7 @@ statistics = unsafePerformIO $ newIORef =<< initSimplCount
 initSimplCount :: IO SimplStats
 #ifdef ACCELERATE_DEBUG
 initSimplCount = do
-  d <- queryFlag dump_simpl_stats
+  d <- getFlag dump_simpl_stats
   return $! if d then Detail { ticks = 0, details = Map.empty }
                  else Simple 0
 #else
