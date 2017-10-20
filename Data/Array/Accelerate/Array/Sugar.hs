@@ -75,6 +75,8 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
+-- $setup
+-- >>> :seti -XOverloadedLists
 
 -- Surface types representing array indices and slices
 -- ---------------------------------------------------
@@ -895,7 +897,7 @@ instance Show (Array DIM2 e) where
       ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
       ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
         where
-          extra = 0
+          extra = 1
           width = maximum . map length
           pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
 #endif
@@ -952,19 +954,19 @@ instance NFData (Array sh e) where
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 
 
--- |Scalars arrays hold a single element
+-- | Scalar arrays hold a single element
 --
 type Scalar e = Array DIM0 e
 
--- |Vectors are one-dimensional arrays
+-- | Vectors are one-dimensional arrays
 --
 type Vector e = Array DIM1 e
 
--- |Matrices are two-dimensional arrays
+-- | Matrices are two-dimensional arrays
 --
 type Matrix e = Array DIM2 e
 
--- |Segment descriptor (vector of segment lengths).
+-- | Segment descriptor (vector of segment lengths).
 --
 -- To represent nested one-dimensional arrays, we use a flat array of data
 -- values in conjunction with a /segment descriptor/, which stores the lengths

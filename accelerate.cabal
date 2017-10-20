@@ -409,8 +409,11 @@ Library
 
 test-suite doctest
   type:                 exitcode-stdio-1.0
-  main-is:              Main.hs
   hs-source-dirs:       doctest
+  main-is:              Main.hs
+
+  other-modules:
+        Build_doctests
 
   build-depends:
           base                          >= 4.7
