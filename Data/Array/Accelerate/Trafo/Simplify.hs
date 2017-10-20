@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
+{-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
@@ -26,7 +27,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 ) where
 
 -- standard library
-import Data.Label
+import Data.Functor.Identity
 import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
@@ -522,34 +523,49 @@ instance Show Stats where
   show (Stats a b c d e) =
     printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
 
--- Rather than using the TH deriving mechanism, otherwise the summarise*
--- functions will not be in scope for the above.
+-- Define a mini-lens infrastructure. Maybe it would be better to just pull in
+-- the ekmett-verse...
 --
-terms, types, binders, vars, ops :: Stats :-> Int
-terms   = lens _terms   (\f Stats{..} -> Stats { _terms   = f _terms, ..})
-types   = lens _types   (\f Stats{..} -> Stats { _types   = f _types, ..})
-binders = lens _binders (\f Stats{..} -> Stats { _binders = f _binders, ..})
-vars    = lens _vars    (\f Stats{..} -> Stats { _vars    = f _vars, ..})
-ops     = lens _ops     (\f Stats{..} -> Stats { _ops     = f _ops, ..})
+type Lens' s a       = Lens s s a a
+type Lens s t a b    = forall f. Functor f => (a -> f b) -> s -> f t
+type ASetter s t a b = (a -> Identity b) -> s -> Identity t
+
+lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b
+lens sa sbt afb s = sbt s <$> afb (sa s)
+{-# INLINE lens #-}
 
 infixl 1 &
 (&) :: a -> (a -> b) -> b
 (&) x f = f x
+{-# INLINE (&) #-}
 
 infixr 4 +~
-(+~) :: Num a => f :-> a -> a -> f -> f
-(+~) l c s = modify l (+c) s
+(+~) :: Num a => ASetter s t a a -> a -> s -> t
+(+~) l n = over l (+n)
+{-# INLINE (+~) #-}
+
+over :: ASetter s t a b -> (a -> b) -> s -> t
+over l f = runIdentity . l (Identity . f)
+{-# INLINE over #-}
 
 infixl 6 +++
 (+++) :: Stats -> Stats -> Stats
 Stats a1 b1 c1 d1 e1 +++ Stats a2 b2 c2 d2 e2 = Stats (a1+a2) (b1+b2) (c1+c2) (d1+d2) (e1+e2)
+{-# INLINE (+++) #-}
+
+terms, types, binders, vars, ops :: Lens' Stats Int
+terms   = lens _terms   (\Stats{..} v -> Stats { _terms   = v, ..})
+types   = lens _types   (\Stats{..} v -> Stats { _types   = v, ..})
+binders = lens _binders (\Stats{..} v -> Stats { _binders = v, ..})
+vars    = lens _vars    (\Stats{..} v -> Stats { _vars    = v, ..})
+ops     = lens _ops     (\Stats{..} v -> Stats { _ops     = v, ..})
 
 summariseOpenFun :: PreOpenFun acc env aenv f -> Stats
 summariseOpenFun (Body e) = summariseOpenExp e & terms +~ 1
 summariseOpenFun (Lam f)  = summariseOpenFun f & terms +~ 1 & binders +~ 1
 
 summariseOpenExp :: PreOpenExp acc env aenv t -> Stats
-summariseOpenExp = modify terms (+1) . goE
+summariseOpenExp = (terms +~ 1) . goE
   where
     zero = Stats 0 0 0 0 0
 
@@ -627,7 +643,7 @@ summariseOpenExp = modify terms (+1) . goE
         PrimApp f x           -> travPrimFun f +++ travE x
 
     travPrimFun :: PrimFun f -> Stats
-    travPrimFun = modify ops (+1) . goF
+    travPrimFun = (ops +~ 1) . goF
       where
         goF :: PrimFun f -> Stats
         goF fun =

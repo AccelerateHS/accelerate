@@ -255,7 +255,6 @@ Library
         , deepseq                       >= 1.3
         , directory                     >= 1.0
         , exceptions                    >= 0.6
-        , fclabels                      >= 2.0
         , filepath                      >= 1.0
         , ghc-prim
         , hashable                      >= 1.1
