@@ -2,7 +2,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TypeOperators            #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports   #-}
+#if __GLASGOW_HASKELL__ >= 800
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
