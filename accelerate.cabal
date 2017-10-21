@@ -426,6 +426,11 @@ test-suite doctest
         -threaded
         -rtsopts
 
+  -- older ghc does not support the dimension-specialised show instances for
+  -- arrays, which the doctests use
+  if impl(ghc < 7.10)
+    buildable:          False
+
   -- doctest only supports a single x-doctest-options line
   if impl(ghc == 7.*)
     x-doctest-options:  -fspec-constr-count=25 -fcontext-stack=35
