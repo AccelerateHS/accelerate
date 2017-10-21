@@ -407,6 +407,7 @@ Library
   --
   -- Extensions:
 
+
 test-suite doctest
   type:                 exitcode-stdio-1.0
   hs-source-dirs:       doctest
@@ -426,13 +427,14 @@ test-suite doctest
         -rtsopts
 
   if impl(ghc >= 7.0)
-    ghc-options:        -fspec-constr-count=25
+    x-doctest-options:  -fspec-constr-count=25
 
   if impl(ghc == 7.*)
-    ghc-options:        -fcontext-stack=35
+    x-doctest-options:  -fcontext-stack=35
 
   if impl(ghc >= 8.0)
-    ghc-options:        -freduction-depth=35
+    x-doctest-options:  -freduction-depth=35
+
 
 source-repository head
   Type:                 git
