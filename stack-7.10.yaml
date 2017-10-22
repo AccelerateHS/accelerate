@@ -7,6 +7,7 @@ packages:
 - '.'
 
 extra-deps:
+- 'cabal-doctest-1.0.2'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps

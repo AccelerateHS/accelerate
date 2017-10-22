@@ -133,22 +133,29 @@ import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Bits
 
+-- $setup
+-- >>> import Data.Array.Accelerate
+-- >>> import Data.Array.Accelerate.Interpreter
+-- >>> :{
+--   let runExp :: Elt e => Exp e -> e
+--       runExp e = indexArray (run (unit e)) Z
+-- :}
 
 -- Element-wise operations
 -- -----------------------
 
 -- | Pair each element with its index
 --
--- >>> let xs = fromList (Z:.5) [0..]
--- >>> indexed (use xs)
+-- >>> let xs = fromList (Z:.5) [0..] :: Vector Float
+-- >>> run $ indexed (use xs)
 -- Vector (Z :. 5) [(Z :. 0,0.0),(Z :. 1,1.0),(Z :. 2,2.0),(Z :. 3,3.0),(Z :. 4,4.0)]
 --
--- >>> let mat = fromList (Z:.3:.4) [0..]
--- >>> indexed (use mat)
+-- >>> let mat = fromList (Z:.3:.4) [0..] :: Matrix Float
+-- >>> run $ indexed (use mat)
 -- Matrix (Z :. 3 :. 4)
---   [(Z :. 0 :. 0,0.0),(Z :. 0 :. 1,1.0), (Z :. 0 :. 2,2.0), (Z :. 0 :. 3,3.0),
---    (Z :. 1 :. 0,4.0),(Z :. 1 :. 1,5.0), (Z :. 1 :. 2,6.0), (Z :. 1 :. 3,7.0),
---    (Z :. 2 :. 0,8.0),(Z :. 2 :. 1,9.0),(Z :. 2 :. 2,10.0),(Z :. 2 :. 3,11.0)]
+--   [ (Z :. 0 :. 0,0.0), (Z :. 0 :. 1,1.0),  (Z :. 0 :. 2,2.0),  (Z :. 0 :. 3,3.0),
+--     (Z :. 1 :. 0,4.0), (Z :. 1 :. 1,5.0),  (Z :. 1 :. 2,6.0),  (Z :. 1 :. 3,7.0),
+--     (Z :. 2 :. 0,8.0), (Z :. 2 :. 1,9.0), (Z :. 2 :. 2,10.0), (Z :. 2 :. 3,11.0)]
 --
 indexed :: (Shape sh, Elt a) => Acc (Array sh a) -> Acc (Array sh (sh, a))
 indexed xs = zip (generate (shape xs) id) xs
@@ -434,6 +441,16 @@ izipWith9 f as bs cs ds es fs gs hs is
 -- | Combine the elements of two arrays pairwise. The shape of the result is the
 -- intersection of the two argument shapes.
 --
+-- >>> let m1 = fromList (Z:.5:.10) [0..] :: Matrix Int
+-- >>> let m2 = fromList (Z:.10:.5) [0..] :: Matrix Float
+-- >>> run $ zip (use m1) (use m2)
+-- Matrix (Z :. 5 :. 5)
+--   [   (0,0.0),   (1,1.0),   (2,2.0),   (3,3.0),   (4,4.0),
+--      (10,5.0),  (11,6.0),  (12,7.0),  (13,8.0),  (14,9.0),
+--     (20,10.0), (21,11.0), (22,12.0), (23,13.0), (24,14.0),
+--     (30,15.0), (31,16.0), (32,17.0), (33,18.0), (34,19.0),
+--     (40,20.0), (41,21.0), (42,22.0), (43,23.0), (44,24.0)]
+--
 zip :: (Shape sh, Elt a, Elt b)
     => Acc (Array sh a)
     -> Acc (Array sh b)
@@ -655,13 +672,13 @@ unzip9 xs = ( map get1 xs, map get2 xs, map get3 xs
 -- argument needs to be an /associative/ function to enable efficient parallel
 -- implementation. The initial element does not need to be an identity element.
 --
--- >>> let vec = fromList (Z:.10) [0..]
--- >>> foldAll (+) 42 (use vec)
--- Scalar Z [87]
+-- >>> let vec = fromList (Z:.10) [0..] :: Vector Float
+-- >>> run $ foldAll (+) 42 (use vec)
+-- Scalar Z [87.0]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
--- >>> foldAll (+) 0 (use mat)
--- Scalar Z [1225]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Float
+-- >>> run $ foldAll (+) 0 (use mat)
+-- Scalar Z [1225.0]
 --
 foldAll
     :: (Shape sh, Elt a)
@@ -691,7 +708,7 @@ fold1All f arr = fold1 f (flatten arr)
 
 -- | Check if all elements along the innermost dimension satisfy a predicate.
 --
--- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
+-- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 4 :. 10)
 --   [ 1, 2, 3, 4,  5,  6,  7,  8,  9, 10,
@@ -699,7 +716,7 @@ fold1All f arr = fold1 f (flatten arr)
 --     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
 --     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
 --
--- >>> all even (use mat)
+-- >>> run $ all even (use mat)
 -- Vector (Z :. 4) [False,False,True,False]
 --
 all :: (Shape sh, Elt e)
@@ -710,7 +727,7 @@ all f = and . map f
 
 -- | Check if any element along the innermost dimension satisfies the predicate.
 --
--- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
+-- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 4 :. 10)
 --   [ 1, 2, 3, 4,  5,  6,  7,  8,  9, 10,
@@ -718,7 +735,7 @@ all f = and . map f
 --     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
 --     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
 --
--- >>> any even (use mat)
+-- >>> run $ any even (use mat)
 -- Vector (Z :. 4) [True,True,True,False]
 --
 any :: (Shape sh, Elt e)
@@ -744,7 +761,8 @@ or = fold (||) (constant False)
 -- | Compute the sum of elements along the innermost dimension of the array. To
 -- find the sum of the entire array, 'flatten' it first.
 --
--- >>> let mat = fromList (Z:.2:.5) [0..]
+-- >>> let mat = fromList (Z:.2:.5) [0..] :: Matrix Int
+-- >>> run $ sum (use mat)
 -- Vector (Z :. 2) [10,35]
 --
 sum :: (Shape sh, Num e)
@@ -755,7 +773,8 @@ sum = fold (+) 0
 -- | Compute the product of the elements along the innermost dimension of the
 -- array. To find the product of the entire array, 'flatten' it first.
 --
--- >>> let mat = fromList (Z:.2:.5) [0..]
+-- >>> let mat = fromList (Z:.2:.5) [0..] :: Matrix Int
+-- >>> run $ product (use mat)
 -- Vector (Z :. 2) [0,15120]
 --
 product
@@ -769,14 +788,14 @@ product = fold (*) 1
 --
 -- The array must not be empty. See also 'fold1'.
 --
--- >>> let mat = fromList (Z :. 3 :. 4) [1,4,3,8, 0,2,8,4, 7,9,8,8]
+-- >>> let mat = fromList (Z :. 3 :. 4) [1,4,3,8, 0,2,8,4, 7,9,8,8] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 3 :. 4)
 --   [ 1, 4, 3, 8,
 --     0, 2, 8, 4,
 --     7, 9, 8, 8]
 --
--- >>> minimum (use mat)
+-- >>> run $ minimum (use mat)
 -- Vector (Z :. 3) [1,0,7]
 --
 minimum
@@ -790,14 +809,14 @@ minimum = fold1 min
 --
 -- The array must not be empty. See also 'fold1'.
 --
--- >>> let mat = fromList (Z :. 3 :. 4) [1,4,3,8, 0,2,8,4, 7,9,8,8]
+-- >>> let mat = fromList (Z :. 3 :. 4) [1,4,3,8, 0,2,8,4, 7,9,8,8] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 3 :. 4)
 --   [ 1, 4, 3, 8,
 --     0, 2, 8, 4,
 --     7, 9, 8, 8]
 --
--- >>> maximum (use mat)
+-- >>> run $ maximum (use mat)
 -- Vector (Z :. 3) [8,8,9]
 --
 maximum
@@ -815,8 +834,8 @@ maximum = fold1 max
 --
 -- > prescanl f e = afst . scanl' f e
 --
--- >>> let vec = fromList (Z:.10) [1..10]
--- >>> prescanl (+) 0 (use vec)
+-- >>> let vec = fromList (Z:.10) [1..10] :: Vector Int
+-- >>> run $ prescanl (+) 0 (use vec)
 -- Vector (Z :. 10) [0,1,3,6,10,15,21,28,36,45]
 --
 prescanl
@@ -832,8 +851,8 @@ prescanl f e = afst . scanl' f e
 --
 -- > postscanl f e = map (e `f`) . scanl1 f
 --
--- >>> let vec = fromList (Z:.10) [1..10]
--- >>> postscanl (+) 42 (use vec)
+-- >>> let vec = fromList (Z:.10) [1..10] :: Vector Int
+-- >>> run $ postscanl (+) 42 (use vec)
 -- Vector (Z :. 10) [43,45,48,52,57,63,70,78,87,97]
 --
 postscanl
@@ -878,11 +897,11 @@ postscanr f e = map (`f` e) . scanr1 f
 -- innermost dimension must have at least as many elements as the sum of the
 -- segment descriptor.
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
 -- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -891,7 +910,7 @@ postscanr f e = map (`f` e) . scanr1 f
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> scanlSeg (+) 0 (use mat) (use seg)
+-- >>> run $ scanlSeg (+) 0 (use mat) (use seg)
 -- Matrix (Z :. 5 :. 12)
 --   [ 0,  0, 0,  1,  3,   6,  10, 0, 0,  5, 11,  18,
 --     0, 10, 0, 11, 23,  36,  50, 0, 0, 15, 31,  48,
@@ -945,11 +964,11 @@ scanlSeg f z arr seg =
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
 -- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -958,7 +977,7 @@ scanlSeg f z arr seg =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> let (res,sums) = scanl'Seg (+) 0 (use mat) (use seg)
+-- >>> let (res,sums) = run $ scanl'Seg (+) 0 (use mat) (use seg)
 -- >>> res
 -- Matrix (Z :. 5 :. 8)
 --   [ 0, 0,  1,  3,   6, 0,  5, 11,
@@ -1041,11 +1060,11 @@ scanl'Seg f z arr seg =
 --
 -- > scanl1Seg f xs [n,0,0] == scanl1Seg f xs [n]   where n /= 0
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
 -- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1054,7 +1073,7 @@ scanl'Seg f z arr seg =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> scanl1Seg (+) (use mat) (use seg)
+-- >>> run $ scanl1Seg (+) (use mat) (use seg)
 -- Matrix (Z :. 5 :. 8)
 --   [  0,  1,  3,   6,  10,  5, 11,  18,
 --     10, 11, 23,  36,  50, 15, 31,  48,
@@ -1103,11 +1122,11 @@ postscanlSeg f e vec seg
 -- innermost dimension must have at least as many elements as the sum of the
 -- segment descriptor.
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
 -- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1116,7 +1135,7 @@ postscanlSeg f e vec seg
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> scanrSeg (+) 0 (use mat) (use seg)
+-- >>> run $ scanrSeg (+) 0 (use mat) (use seg)
 -- Matrix (Z :. 5 :. 12)
 --   [  2, 0,  18,  15, 11,  6, 0, 0,  24, 17,  9, 0,
 --     12, 0,  58,  45, 31, 16, 0, 0,  54, 37, 19, 0,
@@ -1155,11 +1174,11 @@ scanrSeg f z arr seg =
 
 -- | Segmented version of 'scanr''.
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
 -- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1168,7 +1187,7 @@ scanrSeg f z arr seg =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> let (res,sums) = scanr'Seg (+) 0 (use mat) (use seg)
+-- >>> let (res,sums) = run $ scanr'Seg (+) 0 (use mat) (use seg)
 -- >>> res
 -- Matrix (Z :. 5 :. 8)
 --   [ 0,  15, 11,  6, 0, 17,  9, 0,
@@ -1221,11 +1240,11 @@ scanr'Seg f z arr seg =
 
 -- | Segmented version of 'scanr1'.
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
 -- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1234,7 +1253,7 @@ scanr'Seg f z arr seg =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> scanr1Seg (+) (use mat) (use seg)
+-- >>> run $ scanr1Seg (+) (use mat) (use seg)
 -- Matrix (Z :. 5 :. 8)
 --   [  0,  10,   9,  7,  4,  18, 13,  7,
 --     10,  50,  39, 27, 14,  48, 33, 17,
@@ -1368,7 +1387,7 @@ flatten a
 
 -- | Create an array where all elements are the same value.
 --
--- >>> let zeros = fill (Z:.10) 0
+-- >>> run $ fill (constant (Z:.10)) 0 :: Vector Float
 -- Vector (Z :. 10) [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
 --
 fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
@@ -1377,7 +1396,7 @@ fill sh c = generate sh (const c)
 -- | Create an array of the given shape containing the values @x@, @x+1@, etc.
 -- (in row-major order).
 --
--- >>> enumFromN (constant (Z:.5:.10)) 0 :: Array DIM2 Int
+-- >>> run $ enumFromN (constant (Z:.5:.10)) 0 :: Matrix Int
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
 --     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
@@ -1395,7 +1414,7 @@ enumFromN sh x = enumFromStepN sh x 1
 -- | Create an array of the given shape containing the values @x@, @x+y@,
 -- @x+y+y@ etc. (in row-major order).
 --
--- >>> enumFromStepN (constant (Z:.5:.10)) 0 0.5 :: Array DIM2 Float
+-- >>> run $ enumFromStepN (constant (Z:.5:.10)) 0 0.5 :: Matrix Float
 -- Matrix (Z :. 5 :. 10)
 --   [  0.0,  0.5,  1.0,  1.5,  2.0,  2.5,  3.0,  3.5,  4.0,  4.5,
 --      5.0,  5.5,  6.0,  6.5,  7.0,  7.5,  8.0,  8.5,  9.0,  9.5,
@@ -1420,7 +1439,7 @@ enumFromStepN sh x y
 -- | Concatenate innermost component of two arrays. The extent of the lower
 --   dimensional component is the intersection of the two arrays.
 --
--- >>> let m1 = fromList (Z:.5:.10) [0..]
+-- >>> let m1 = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> m1
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1429,7 +1448,7 @@ enumFromStepN sh x y
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> let m2 = fromList (Z:.10:.3) [0..]
+-- >>> let m2 = fromList (Z:.10:.3) [0..] :: Matrix Int
 -- >>> m2
 -- Matrix (Z :. 10 :. 3)
 --   [  0,  1,  2,
@@ -1443,7 +1462,7 @@ enumFromStepN sh x y
 --     24, 25, 26,
 --     27, 28, 29]
 --
--- >>> use m1 ++ use m2
+-- >>> run $ use m1 ++ use m2
 -- Matrix (Z :. 5 :. 13)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  0,  1,  2,
 --     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,  3,  4,  5,
@@ -1479,10 +1498,10 @@ infixr 5 ++
 -- >>> vec
 -- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
--- >>> filter even (use vec)
--- (Vector (Z :. 5) [2,4,6,8,10], Scalar Z [5])
+-- >>> run $ filter even (use vec)
+-- (Vector (Z :. 5) [2,4,6,8,10],Scalar Z [5])
 --
--- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Array DIM2 Int
+-- >>> let mat = fromList (Z :. 4 :. 10) [1,2,3,4,5,6,7,8,9,10,1,1,1,1,1,2,2,2,2,2,2,4,6,8,10,12,14,16,18,20,1,3,5,7,9,11,13,15,17,19] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 4 :. 10)
 --   [ 1, 2, 3, 4,  5,  6,  7,  8,  9, 10,
@@ -1490,8 +1509,8 @@ infixr 5 ++
 --     2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
 --     1, 3, 5, 7,  9, 11, 13, 15, 17, 19]
 --
--- >>> filter odd (use mat)
--- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19], Vector (Z :. 4) [5,5,0,10])
+-- >>> run $ filter odd (use mat)
+-- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19],Vector (Z :. 4) [5,5,0,10])
 --
 filter :: forall sh e. (Shape sh, Slice sh, Elt e)
        => (Exp e -> Exp Bool)
@@ -1552,9 +1571,9 @@ filter p arr
 
 -- | Gather elements from a source array by reading values at the given indices.
 --
--- >>> let input = fromList (Z:.9) [1,9,6,4,4,2,0,1,2]
--- >>> let from  = fromList (Z:.6) [1,3,7,2,5,3]
--- >>> gather (use from) (use input)
+-- >>> let input = fromList (Z:.9) [1,9,6,4,4,2,0,1,2] :: Vector Int
+-- >>> let from  = fromList (Z:.6) [1,3,7,2,5,3] :: Vector Int
+-- >>> run $ gather (use from) (use input)
 -- Vector (Z :. 6) [9,4,1,6,2,4]
 --
 gather
@@ -1575,12 +1594,12 @@ gather indices input = map (input !!) indices
 -- In addition, the 'mask' vector and associated predication function specifies
 -- whether the element is copied or a default value is used instead.
 --
--- >>> let defaults = fromList (Z :. 6) [6,6,6,6,6,6]
--- >>> let from     = fromList (Z :. 6) [1,3,7,2,5,3]
--- >>> let mask     = fromList (Z :. 6) [3,4,9,2,7,5]
--- >>> let input    = fromList (Z :. 9) [1,9,6,4,4,2,0,1,2]
--- >>> gatherIf (use from) (use mask) (> 4) (use defaults) (use input)
--- Vector (Z :. 6) [6,6,1,6,2,4]
+-- >>> let defaults = fromList (Z :. 6) [6,6,6,6,6,6] :: Vector Float
+-- >>> let from     = fromList (Z :. 6) [1,3,7,2,5,3] :: Vector Int
+-- >>> let mask     = fromList (Z :. 6) [3,4,9,2,7,5] :: Vector Int
+-- >>> let input    = fromList (Z :. 9) [1,9,6,4,4,2,0,1,2] :: Vector Float
+-- >>> run $ gatherIf (use from) (use mask) (> 4) (use defaults) (use input)
+-- Vector (Z :. 6) [6.0,6.0,1.0,6.0,2.0,4.0]
 --
 gatherIf
     :: (Elt a, Elt b)
@@ -1606,9 +1625,9 @@ gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
 -- Note that if the destination index appears more than once in the mapping the
 -- result is undefined.
 --
--- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8]
--- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5]
--- >>> scatter (use to) (fill (constant (Z:.10)) 0) (use input)
+-- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8] :: Vector Int
+-- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5] :: Vector Int
+-- >>> run $ scatter (use to) (fill (constant (Z:.10)) 0) (use input)
 -- Vector (Z :. 10) [0,1,4,9,0,4,0,6,2,0]
 --
 scatter
@@ -1630,20 +1649,20 @@ scatter to defaults input = permute const defaults pf input'
 -- Note that if the destination index appears more than once in the mapping the
 -- result is undefined.
 --
--- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8]
--- >>> let mask  = fromList (Z :. 6) [3,4,9,2,7,5]
--- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5]
--- >>> scatterIf (use to) (use mask) (> 4) (fill (constant (Z:.10)) 0) (use input)
+-- >>> let to    = fromList (Z :. 6) [1,3,7,2,5,8] :: Vector Int
+-- >>> let mask  = fromList (Z :. 6) [3,4,9,2,7,5] :: Vector Int
+-- >>> let input = fromList (Z :. 7) [1,9,6,4,4,2,5] :: Vector Int
+-- >>> run $ scatterIf (use to) (use mask) (> 4) (fill (constant (Z:.10)) 0) (use input)
 -- Vector (Z :. 10) [0,0,0,0,0,4,0,6,2,0]
 --
 scatterIf
-    :: (Elt e, Elt e')
+    :: (Elt a, Elt b)
     => Acc (Vector Int)           -- ^ destination indices to scatter into
-    -> Acc (Vector e)             -- ^ mask vector
-    -> (Exp e -> Exp Bool)        -- ^ predicate function
-    -> Acc (Vector e')            -- ^ default values
-    -> Acc (Vector e')            -- ^ source values
-    -> Acc (Vector e')
+    -> Acc (Vector a)             -- ^ mask vector
+    -> (Exp a -> Exp Bool)        -- ^ predicate function
+    -> Acc (Vector b)             -- ^ default values
+    -> Acc (Vector b)             -- ^ source values
+    -> Acc (Vector b)
 scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
     pf ix       = pred (maskV ! ix) ? ( index1 (to ! ix), ignore )
@@ -1675,7 +1694,7 @@ transpose mat =
 -- | Yield the first @n@ elements in the innermost dimension of the array (plus
 -- all lower dimensional elements).
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1684,7 +1703,7 @@ transpose mat =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> take 5 (use mat)
+-- >>> run $ take 5 (use mat)
 -- Matrix (Z :. 5 :. 5)
 --   [  0,  1,  2,  3,  4,
 --     10, 11, 12, 13, 14,
@@ -1706,7 +1725,7 @@ take n acc =
 -- | Yield all but the first @n@ elements along the innermost dimension of the
 -- array (plus all lower dimensional elements).
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1715,7 +1734,7 @@ take n acc =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> drop 7 (use mat)
+-- >>> run $ drop 7 (use mat)
 -- Matrix (Z :. 5 :. 3)
 --   [  7,  8,  9,
 --     17, 18, 19,
@@ -1738,7 +1757,7 @@ drop n acc =
 
 -- | Yield all but the elements in the last index of the innermost dimension.
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1747,7 +1766,7 @@ drop n acc =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> init (use mat)
+-- >>> run $ init (use mat)
 -- Matrix (Z :. 5 :. 9)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,
 --     10, 11, 12, 13, 14, 15, 16, 17, 18,
@@ -1766,7 +1785,7 @@ init acc =
 -- | Yield all but the first element along the innermost dimension of an array.
 -- The innermost dimension must not be empty.
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1775,7 +1794,7 @@ init acc =
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> tail (use mat)
+-- >>> run $ tail (use mat)
 -- Matrix (Z :. 5 :. 9)
 --   [  1,  2,  3,  4,  5,  6,  7,  8,  9,
 --     11, 12, 13, 14, 15, 16, 17, 18, 19,

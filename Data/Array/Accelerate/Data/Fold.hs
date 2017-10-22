@@ -39,13 +39,13 @@ import qualified Prelude                                            as P
 -- 'o'utput type, via a reduction using some intermediate Monoid 'w'. For
 -- example, both 'sum' and 'length' below use the 'Sum' monoid:
 --
--- >>> let sum = Fold (lift . Sum) (getSum . unlift)
--- >>> let length = Fold (\_ -> 1) (getSum . unlift)
+-- > sum = Fold (lift . Sum) (getSum . unlift)
+-- > length = Fold (\_ -> 1) (getSum . unlift)
 --
 -- The key is that 'Fold's can be combined using 'Applicative' in order to
 -- produce multiple outputs from a /single/ reduction of the array. For example:
 --
--- >>> let average = (/) <$> sum <*> length
+-- > average = (/) <$> sum <*> length
 --
 -- This computes both the sum of the array as well as its length in a single
 -- traversal, then combines both results to compute the average.
@@ -53,12 +53,12 @@ import qualified Prelude                                            as P
 -- Because 'Fold' has some numeric instances, this can also be defined more
 -- succinctly as:
 --
--- >>> let average = sum / length
+-- > average = sum / length
 --
 -- A more complex example:
 --
--- >>> let sumOfSquares = Fold (lift . Sum . (^2)) (getSum . unlift)
--- >>> let standardDeviation = sqrt ((sumOfSquares / length) - (sum / length) ^ 2)
+-- > sumOfSquares = Fold (lift . Sum . (^2)) (getSum . unlift)
+-- > standardDeviation = sqrt ((sumOfSquares / length) - (sum / length) ^ 2)
 --
 -- These will all execute with a single reduction kernel and a single map to
 -- summarise (combine) the results.

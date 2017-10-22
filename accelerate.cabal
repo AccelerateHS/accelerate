@@ -2,7 +2,7 @@ Name:                   accelerate
 Version:                1.2.0.0
 Cabal-version:          >= 1.8
 Tested-with:            GHC >= 7.8
-Build-type:             Simple
+Build-type:             Custom
 
 Synopsis:               An embedded language for accelerated array processing
 
@@ -126,6 +126,12 @@ Stability:              Experimental
 Extra-source-files:
     README.md
     CHANGELOG.md
+
+custom-setup
+  setup-depends:
+      base              >= 4.7
+    , Cabal
+    , cabal-doctest     >= 1.0
 
 Flag debug
   Default:              False
@@ -402,6 +408,38 @@ Library
   -- project loads in GHCi, and avoids extension clashes.
   --
   -- Extensions:
+
+
+test-suite doctest
+  type:                 exitcode-stdio-1.0
+  hs-source-dirs:       doctest
+  main-is:              Main.hs
+
+  other-modules:
+        Build_doctests
+
+  build-depends:
+          base                          >= 4.7
+        , accelerate
+        , doctest                       >= 0.11
+
+  ghc-options:
+        -Wall
+        -threaded
+        -rtsopts
+
+  -- older ghc does not support the dimension-specialised show instances for
+  -- arrays, which the doctests use
+  if impl(ghc < 7.10)
+    buildable:          False
+
+  -- doctest only supports a single x-doctest-options line
+  if impl(ghc == 7.*)
+    x-doctest-options:  -fspec-constr-count=25 -fcontext-stack=35
+
+  if impl(ghc >= 8.0)
+    x-doctest-options:  -fspec-constr-count=25 -freduction-depth=35
+
 
 source-repository head
   Type:                 git

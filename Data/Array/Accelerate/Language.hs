@@ -122,6 +122,17 @@ import Data.Array.Accelerate.Classes.Ord
 -- standard libraries
 import Prelude                                                      ( ($), (.) )
 
+-- $setup
+-- >>> :seti -XFlexibleContexts
+-- >>> :seti -XScopedTypeVariables
+-- >>> :seti -XTypeOperators
+-- >>> :seti -XViewPatterns
+-- >>> import Data.Array.Accelerate
+-- >>> import Data.Array.Accelerate.Interpreter
+-- >>> :{
+--   let runExp :: Elt e => Exp e -> e
+--       runExp e = indexArray (run (unit e)) Z
+-- :}
 
 -- Array introduction
 -- ------------------
@@ -134,10 +145,11 @@ import Prelude                                                      ( ($), (.) )
 --
 -- 'use' is overloaded so that it can accept tuples of 'Arrays':
 --
--- >>> let vec = fromList (Z:.10) [0..]  :: Array DIM1 Int
+-- >>> let vec = fromList (Z:.10) [0..] :: Vector Int
+-- >>> vec
 -- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]  :: Array DIM2 Int
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -146,9 +158,9 @@ import Prelude                                                      ( ($), (.) )
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> let vec' = use vec         :: Acc (Array DIM1 Int)
--- >>> let mat' = use mat         :: Acc (Array DIM2 Int)
--- >>> let tup  = use (vec, mat)  :: Acc (Array DIM1 Int, Array DIM2 Int)
+-- >>> let vec' = use vec         :: Acc (Vector Int)
+-- >>> let mat' = use mat         :: Acc (Matrix Int)
+-- >>> let tup  = use (vec, mat)  :: Acc (Vector Int, Matrix Int)
 --
 use :: Arrays arrays => arrays -> Acc arrays
 use = Acc . Use
@@ -164,13 +176,14 @@ unit = Acc . Unit
 --
 -- For example, given the following vector:
 --
--- >>> let vec = fromList (Z:.10) [0..]
+-- >>> let vec = fromList (Z:.10) [0..] :: Vector Int
+-- >>> vec
 -- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
 --
 -- ...we can replicate these elements to form a two-dimensional array either by
 -- replicating those elements as new rows:
 --
--- >>> replicate (lift (Z :. 4 :. All)) (use vec)
+-- >>> run $ replicate (constant (Z :. (4::Int) :. All)) (use vec)
 -- Matrix (Z :. 4 :. 10)
 --   [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 --     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
@@ -179,7 +192,7 @@ unit = Acc . Unit
 --
 -- ...or as columns:
 --
--- >>> replicate (lift (Z :. All :. 4)) (use vec)
+-- >>> run $ replicate (lift (Z :. All :. (4::Int))) (use vec)
 -- Matrix (Z :. 10 :. 4)
 --   [ 0, 0, 0, 0,
 --     1, 1, 1, 1,
@@ -195,21 +208,23 @@ unit = Acc . Unit
 -- Replication along more than one dimension is also possible. Here we replicate
 -- twice across the first dimension and three times across the third dimension:
 --
--- >>> replicate (lift (Z :. 2 :. All :. 3)) (use vec)
+-- >>> run $ replicate (constant (Z :. (2::Int) :. All :. (3::Int))) (use vec)
 -- Array (Z :. 2 :. 10 :. 3) [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9,0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9]
 --
 -- The marker 'Any' can be used in the slice specification to match against some
 -- arbitrary dimension. For example, here 'Any' matches against whatever shape
 -- type variable @sh@ takes.
 --
--- > rep0 :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
--- > rep0 n a = replicate (lift (Any :. n)) a
+-- >>> :{
+--   let rep0 :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
+--       rep0 n a = replicate (lift (Any :. n)) a
+-- :}
 --
--- >>> let x = unit 42  :: Acc (Scalar Int)
--- >>> rep0 10 x
+-- >>> let x = unit 42 :: Acc (Scalar Int)
+-- >>> run $ rep0 10 x
 -- Vector (Z :. 10) [42,42,42,42,42,42,42,42,42,42]
 --
--- >>> rep0 5 (use vec)
+-- >>> run $ rep0 5 (use vec)
 -- Matrix (Z :. 10 :. 5)
 --   [ 0, 0, 0, 0, 0,
 --     1, 1, 1, 1, 1,
@@ -224,10 +239,12 @@ unit = Acc . Unit
 --
 -- Of course, 'Any' and 'All' can be used together.
 --
--- > rep1 :: (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
--- > rep1 n a = A.replicate (lift (Any :. n :. All)) a
+-- >>> :{
+--   let rep1 :: (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
+--       rep1 n a = replicate (lift (Any :. n :. All)) a
+-- :}
 --
--- >>> rep1 5 (use vec)
+-- >>> run $ rep1 5 (use vec)
 -- Matrix (Z :. 5 :. 10)
 --   [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 --     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
@@ -247,17 +264,17 @@ replicate = Acc $$ Replicate
 -- For example, the following will generate a one-dimensional array
 -- (`Vector`) of three floating point numbers:
 --
--- >>> generate (index1 3) (\_ -> 1.2)
+-- >>> run $ generate (index1 3) (\_ -> 1.2) :: Vector Float
 -- Vector (Z :. 3) [1.2,1.2,1.2]
 --
 -- Or equivalently:
 --
--- >>> fill (constant (Z :. 3)) 1.2
+-- >>> run $ fill (constant (Z :. 3)) 1.2 :: Vector Float
 -- Vector (Z :. 3) [1.2,1.2,1.2]
 --
 -- The following will create a vector with the elements @[1..10]@:
 --
--- >>> generate (index1 10) (\ix -> unindex1 ix + 1)
+-- >>> run $ generate (index1 10) (\ix -> unindex1 ix + 1) :: Vector Int
 -- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
 -- [/NOTE:/]
@@ -269,7 +286,7 @@ replicate = Acc $$ Replicate
 -- parallel work, whose result is returned into 'Exp' terms by array indexing
 -- operations such as ('!') or 'Data.Array.Accelerate.Prelude.the', the program
 -- will fail with the error:
--- '.\/Data\/Array\/Accelerate\/Trafo\/Sharing.hs:447 (convertSharingExp): inconsistent valuation \@ shared \'Exp\' tree ...'.
+-- @.\/Data\/Array\/Accelerate\/Trafo\/Sharing.hs:447 (convertSharingExp): inconsistent valuation \@ shared \'Exp\' tree ...@.
 --
 generate
     :: (Shape sh, Elt a)
@@ -307,7 +324,7 @@ reshape = Acc $$ Reshape
 -- 'slice' is the opposite of 'replicate', and can be used to /cut out/ entire
 -- dimensions. For example, for the two dimensional array 'mat':
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -319,42 +336,47 @@ reshape = Acc $$ Reshape
 -- ...will can select a specific row to yield a one dimensional result by fixing
 -- the row index (2) while allowing the column index to vary (via 'All'):
 --
--- >>> slice (use mat) (lift (Z :. 2 :. All))
+-- >>> run $ slice (use mat) (constant (Z :. (2::Int) :. All))
 -- Vector (Z :. 10) [20,21,22,23,24,25,26,27,28,29]
 --
 -- A fully specified index (with no 'All's) returns a single element (zero
 -- dimensional array).
 --
--- >>> slice (use mat) (lift (Z :. 4 :. 2))
+-- >>> run $ slice (use mat) (constant (Z :. 4 :. 2 :: DIM2))
 -- Scalar Z [42]
 --
 -- The marker 'Any' can be used in the slice specification to match against some
 -- arbitrary (lower) dimension. Here 'Any' matches whatever shape type variable
 -- @sh@ takes:
 --
--- > sl0 :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
--- > sl0 a n = A.slice a (lift (Any :. n))
+-- >>> :{
+--   let
+--       sl0 :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
+--       sl0 a n = slice a (lift (Any :. n))
+-- :}
 --
--- >>> let vec = fromList (Z:.10) [0..]
--- >>> sl0 (use vec) 4
+-- >>> let vec = fromList (Z:.10) [0..] :: Vector Int
+-- >>> run $ sl0 (use vec) 4
 -- Scalar Z [4]
 --
--- >>> sl0 (use mat) 4
+-- >>> run $ sl0 (use mat) 4
 -- Vector (Z :. 5) [4,14,24,34,44]
 --
 -- Of course, 'Any' and 'All' can be used together.
 --
--- > sl1 :: (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
--- > sl1 a n = A.slice a (lift (Any :. n :. All))
+-- >>> :{
+--   let sl1 :: (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
+--       sl1 a n = slice a (lift (Any :. n :. All))
+-- :}
 --
--- >>> sl1 (use mat) 4
+-- >>> run $ sl1 (use mat) 4
 -- Vector (Z :. 10) [40,41,42,43,44,45,46,47,48,49]
 --
--- >>> let cube = fromList (Z:.3:.4:.5) [0..]
+-- >>> let cube = fromList (Z:.3:.4:.5) [0..] :: Array DIM3 Int
 -- >>> cube
 -- Array (Z :. 3 :. 4 :. 5) [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59]
 --
--- >>> sl1 (use cube) 2
+-- >>> run $ sl1 (use cube) 2
 -- Matrix (Z :. 3 :. 5)
 --   [ 10, 11, 12, 13, 14,
 --     30, 31, 32, 33, 34,
@@ -373,11 +395,11 @@ slice = Acc $$ Slice
 --
 -- > map f [x1, x2, ... xn] = [f x1, f x2, ... f xn]
 --
--- >>> let xs = fromList (Z:.10) [0..]
+-- >>> let xs = fromList (Z:.10) [0..] :: Vector Int
 -- >>> xs
 -- Vector (Z :. 10) [0,1,2,3,4,5,6,7,8,9]
 --
--- >>> map (+1) (use xs)
+-- >>> run $ map (+1) (use xs)
 -- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
 map :: (Shape sh, Elt a, Elt b)
@@ -390,27 +412,27 @@ map = Acc $$ Map
 -- of the resulting array is the intersection of the extents of the two source
 -- arrays.
 --
--- >>> let xs = fromList (Z:.3:.5) [0..]
+-- >>> let xs = fromList (Z:.3:.5) [0..] :: Matrix Int
 -- >>> xs
 -- Matrix (Z :. 3 :. 5)
---   [ 0, 1, 2, 3, 4,
---     5, 6, 7, 8, 9,
---    10,11,12,13,14]
+--   [  0,  1,  2,  3,  4,
+--      5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14]
 --
--- >>> let ys = fromList (Z:.5:.10) [1..]
+-- >>> let ys = fromList (Z:.5:.10) [1..] :: Matrix Int
 -- >>> ys
 -- Matrix (Z :. 5 :. 10)
---   [ 1, 2, 3, 4, 5, 6, 7, 8, 9,10,
---    11,12,13,14,15,16,17,18,19,20,
---    21,22,23,24,25,26,27,28,29,30,
---    31,32,33,34,35,36,37,38,39,40,
---    41,42,43,44,45,46,47,48,49,50]
+--   [  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
+--     11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+--     21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+--     31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+--     41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
 --
--- >>> zipWith (+) (use xs) (use ys)
+-- >>> run $ zipWith (+) (use xs) (use ys)
 -- Matrix (Z :. 3 :. 5)
---   [ 1, 3, 5, 7, 9,
---    16,18,20,22,24,
---    31,33,35,37,39]
+--   [  1,  3,  5,  7,  9,
+--     16, 18, 20, 22, 24,
+--     31, 33, 35, 37, 39]
 --
 zipWith :: (Shape sh, Elt a, Elt b, Elt c)
         => (Exp a -> Exp b -> Exp c)
@@ -427,7 +449,7 @@ zipWith = Acc $$$ ZipWith
 -- parallel implementation. The initial element does not need to be an identity
 -- element of the combination function.
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -436,7 +458,7 @@ zipWith = Acc $$$ ZipWith
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> fold (+) 42 (use mat)
+-- >>> run $ fold (+) 42 (use mat)
 -- Vector (Z :. 5) [87,187,287,387,487]
 --
 -- Reductions with non-commutative operators are supported. For example, the
@@ -445,32 +467,34 @@ zipWith = Acc $$$ ZipWith
 --
 -- <https://en.wikipedia.org/wiki/Maximum_subarray_problem>
 --
--- > maximumSegmentSum
--- >     :: forall sh e. (Shape sh, Num e, Ord e)
--- >     => Acc (Array (sh :. Int) e)
--- >     -> Acc (Array sh e)
--- > maximumSegmentSum
--- >   = map (\v -> let (x,_,_,_) = unlift v :: (Exp e, Exp e, Exp e, Exp e) in x)
--- >   . fold1 f
--- >   . map g
--- >   where
--- >     f :: (Num a, Ord a) => Exp (a,a,a,a) -> Exp (a,a,a,a) -> Exp (a,a,a,a)
--- >     f x y =
--- >       let (mssx, misx, mcsx, tsx) = unlift x
--- >           (mssy, misy, mcsy, tsy) = unlift y
--- >       in
--- >       lift ( mssx `max` (mssy `max` (mcsx+misy))
--- >            , misx `max` (tsx+misy)
--- >            , mcsy `max` (mcsx+tsy)
--- >            , tsx+tsy
--- >            )
--- >
--- >     g :: (Num a, Ord a) => Exp a -> Exp (a,a,a,a)
--- >     g x = let y = max x 0
--- >           in  lift (y,y,y,x)
+-- >>> :{
+--   let maximumSegmentSum
+--           :: forall sh e. (Shape sh, Num e, Ord e)
+--           => Acc (Array (sh :. Int) e)
+--           -> Acc (Array sh e)
+--       maximumSegmentSum
+--         = map (\v -> let (x,_,_,_) = unlift v :: (Exp e, Exp e, Exp e, Exp e) in x)
+--         . fold1 f
+--         . map g
+--         where
+--           f :: (Num a, Ord a) => Exp (a,a,a,a) -> Exp (a,a,a,a) -> Exp (a,a,a,a)
+--           f x y =
+--             let (mssx, misx, mcsx, tsx) = unlift x
+--                 (mssy, misy, mcsy, tsy) = unlift y
+--             in
+--             lift ( mssx `max` (mssy `max` (mcsx+misy))
+--                  , misx `max` (tsx+misy)
+--                  , mcsy `max` (mcsx+tsy)
+--                  , tsx+tsy
+--                  )
+--           --
+--           g :: (Num a, Ord a) => Exp a -> Exp (a,a,a,a)
+--           g x = let y = max x 0
+--                 in  lift (y,y,y,x)
+-- :}
 --
--- >>> let vec = fromList (Z:.10) [-2,1,-3,4,-1,2,1,-5,4,0]
--- >>> maximumSegmentSum (use vec)
+-- >>> let vec = fromList (Z:.10) [-2,1,-3,4,-1,2,1,-5,4,0] :: Vector Int
+-- >>> run $ maximumSegmentSum (use vec)
 -- Scalar Z [6]
 --
 -- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
@@ -499,11 +523,11 @@ fold1 = Acc $$ Fold1
 -- reduced independently. The innermost dimension must contain at least as many
 -- elements as required by the segment descriptor (sum thereof).
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3]
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
 -- >>> seg
 -- Vector (Z :. 4) [1,4,0,3]
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -512,7 +536,7 @@ fold1 = Acc $$ Fold1
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> foldSeg (+) 0 (use mat) (use seg)
+-- >>> run $ foldSeg (+) 0 (use mat) (use seg)
 -- Matrix (Z :. 5 :. 4)
 --   [  0,  10, 0,  18,
 --     10,  50, 0,  48,
@@ -549,10 +573,12 @@ fold1Seg = Acc $$$ Fold1Seg
 -- function to enable efficient parallel implementation. The initial value
 -- (second argument) may be arbitrary.
 --
--- >>> scanl (+) 10 (use $ fromList (Z :. 10) [0..])
--- Array (Z :. 11) [10,10,11,13,16,20,25,31,38,46,55]
+-- >>> let vec = fromList (Z :. 10) [0..] :: Vector Int
+-- >>> run $ scanl (+) 10 (use vec)
+-- Vector (Z :. 11) [10,10,11,13,16,20,25,31,38,46,55]
 --
--- >>> scanl (+) 0 (use $ fromList (Z :. 4 :. 10) [0..])
+-- >>> let mat = fromList (Z :. 4 :. 10) [0..] :: Matrix Int
+-- >>> run $ scanl (+) 0 (use mat)
 -- Matrix (Z :. 4 :. 11)
 --   [ 0,  0,  1,  3,   6,  10,  15,  21,  28,  36,  45,
 --     0, 10, 21, 33,  46,  60,  75,  91, 108, 126, 145,
@@ -574,13 +600,15 @@ scanl = Acc $$$ Scanl
 -- >     len = shape arr
 -- >     res = scanl f e arr
 --
--- >>> let (res,sum) = scanl' (+) 0 (use $ fromList (Z:.10) [0..])
+-- >>> let vec       = fromList (Z:.10) [0..] :: Vector Int
+-- >>> let (res,sum) = run $ scanl' (+) 0 (use vec)
 -- >>> res
 -- Vector (Z :. 10) [0,0,1,3,6,10,15,21,28,36]
 -- >>> sum
 -- Scalar Z [45]
 --
--- >>> let (res,sums) = scanl' (+) 0 (use $ fromList (Z:.4:.10) [0..])
+-- >>> let mat        = fromList (Z:.4:.10) [0..] :: Matrix Int
+-- >>> let (res,sums) = run $ scanl' (+) 0 (use mat)
 -- >>> res
 -- Matrix (Z :. 4 :. 10)
 --   [ 0,  0,  1,  3,   6,  10,  15,  21,  28,  36,
@@ -603,8 +631,8 @@ scanl' = Acc $$$ Scanl'
 --
 -- > scanl1 f e arr = tail (scanl f e arr)
 --
--- >>> let mat = fromList (Z:.4:.10) [0..]
--- >>> scanl (+) (use mat)
+-- >>> let mat = fromList (Z:.4:.10) [0..] :: Matrix Int
+-- >>> run $ scanl1 (+) (use mat)
 -- Matrix (Z :. 4 :. 10)
 --   [  0,  1,  3,   6,  10,  15,  21,  28,  36,  45,
 --     10, 21, 33,  46,  60,  75,  91, 108, 126, 145,
@@ -663,35 +691,39 @@ scanr1 = Acc $$ Scanr1
 -- For example, we can use 'permute' to compute the occurrence count (histogram)
 -- for an array of values in the range @[0,10)@:
 --
--- > histogram :: Acc (Vector Int) -> Acc (Vector Int)
--- > histogram xs =
--- >   let zeros = fill (constant (Z:.10)) 0
--- >       ones  = fill (shape xs)         1
--- >   in
--- >   permute (+) zeros (\ix -> index1 (xs!ix)) ones
+-- >>> :{
+--   let histogram :: Acc (Vector Int) -> Acc (Vector Int)
+--       histogram xs =
+--         let zeros = fill (constant (Z:.10)) 0
+--             ones  = fill (shape xs)         1
+--         in
+--         permute (+) zeros (\ix -> index1 (xs!ix)) ones
+-- :}
 --
--- >>> let xs = fromList (Z :. 20) [0,0,1,2,1,1,2,4,8,3,4,9,8,3,2,5,5,3,1,2]
--- >>> histogram (use xs)
+-- >>> let xs = fromList (Z :. 20) [0,0,1,2,1,1,2,4,8,3,4,9,8,3,2,5,5,3,1,2] :: Vector Int
+-- >>> run $ histogram (use xs)
 -- Vector (Z :. 10) [2,4,4,3,2,2,0,0,2,1]
 --
 -- As a second example, note that the dimensionality of the source and
 -- destination arrays can differ. In this way, we can use 'permute' to create an
 -- identity matrix by overwriting elements along the diagonal:
 --
--- > identity :: Num a => Exp Int -> Acc (Array DIM2 a)
--- > identity n =
--- >   let zeros = fill (index2 n n) 0
--- >       ones  = fill (index1 n)   1
--- >   in
--- >   permute const zeros (\(unindex1 -> i) -> index2 i i) ones
+-- >>> :{
+--   let identity :: Num a => Exp Int -> Acc (Matrix a)
+--       identity n =
+--         let zeros = fill (index2 n n) 0
+--             ones  = fill (index1 n)   1
+--         in
+--         permute const zeros (\(unindex1 -> i) -> index2 i i) ones
+-- :}
 --
--- >>> identity 5
+-- >>> run $ identity 5 :: Matrix Int
 -- Matrix (Z :. 5 :. 5)
---   [1,0,0,0,0,
---    0,1,0,0,0,
---    0,0,1,0,0,
---    0,0,0,1,0,
---    0,0,0,0,1]
+--   [ 1, 0, 0, 0, 0,
+--     0, 1, 0, 0, 0,
+--     0, 0, 1, 0, 0,
+--     0, 0, 0, 1, 0,
+--     0, 0, 0, 0, 1]
 --
 -- [/Note:/]
 --
@@ -730,10 +762,15 @@ permute = Acc $$$$ Permute
 -- in the result array, we get the value at that index by reading from the
 -- source array at index @Z:.x:.y@:
 --
--- > swap :: Exp DIM2 -> Exp DIM2
--- > swap = lift1 $ \(Z:.y:.x) -> Z:.x:.y
+-- >>> :{
+--   let swap :: Exp DIM2 -> Exp DIM2
+--       swap = lift1 f
+--         where
+--           f :: Z :. Exp Int :. Exp Int -> Z :. Exp Int :. Exp Int
+--           f (Z:.y:.x) = Z :. x :. y
+-- :}
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -743,7 +780,7 @@ permute = Acc $$$$ Permute
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
 -- >>> let mat' = use mat
--- >>> backpermute (swap (shape mat')) swap mat'
+-- >>> run $ backpermute (swap (shape mat')) swap mat'
 -- Matrix (Z :. 10 :. 5)
 --   [ 0, 10, 20, 30, 40,
 --     1, 11, 21, 31, 41,
@@ -842,7 +879,7 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- >
 -- > gaussian = [0.06136,0.24477,0.38774,0.24477,0.06136]
 -- >
--- > blur :: Num a => Acc (Array DIM2 a) -> Acc (Array DIM2 a)
+-- > blur :: Num a => Acc (Matrix a) -> Acc (Matrix a)
 -- > blur = stencil (convolve5x1 gaussian) clamp
 -- >      . stencil (convolve1x5 gaussian) clamp
 --
@@ -1200,7 +1237,7 @@ while = Exp $$$ While
 -- | Multidimensional array indexing. Extract the value from an array at the
 -- specified zero-based index.
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1209,7 +1246,7 @@ while = Exp $$$ While
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> mat ! Z:.1:.2
+-- >>> runExp $ use mat ! constant (Z:.1:.2)
 -- 12
 --
 infixl 9 !
@@ -1220,7 +1257,7 @@ infixl 9 !
 -- Multidimensional arrays in Accelerate are stored in row-major order with
 -- zero-based indexing.
 --
--- >>> let mat = fromList (Z:.5:.10) [0..]
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
 -- Matrix (Z :. 5 :. 10)
 --   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1229,7 +1266,7 @@ infixl 9 !
 --     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
--- >>> mat !! 12
+-- >>> runExp $ use mat !! 12
 -- 12
 --
 infixl 9 !!
@@ -1273,10 +1310,10 @@ odd n = n `rem` 2 /= 0
 -- | @'gcd' x y@ is the non-negative factor of both @x@ and @y@ of which every
 -- common factor of both @x@ and @y@ is also a factor; for example:
 --
--- >>> gcd 4 2 = 2
--- >>> gcd (-4) 6 = 2
--- >>> gcd 0 4 = 4
--- >>> gcd 0 0 = 0
+-- > gcd 4 2 = 2
+-- > gcd (-4) 6 = 2
+-- > gcd 0 4 = 4
+-- > gcd 0 0 = 0
 --
 -- That is, the common divisor that is \"greatest\" in the divisibility
 -- preordering.

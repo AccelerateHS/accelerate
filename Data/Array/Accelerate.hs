@@ -155,7 +155,7 @@ module Data.Array.Accelerate (
   Acc,
 
   -- *** Arrays
-  Array, Arrays, Scalar, Vector, Segments,
+  Array, Arrays, Scalar, Vector, Matrix, Segments,
 
   -- *** Array elements
   Elt,
@@ -393,6 +393,13 @@ import qualified Data.Array.Accelerate.Array.Sugar                  as S
 -- re-exported from D.A.A.Classes.Num but not found (GHC<8 bug)
 import Prelude                                                      ( (.), ($), undefined, error, const, fromInteger )
 
+-- $setup
+-- >>> :seti -XTypeOperators
+-- >>> import Data.Array.Accelerate.Interpreter
+-- >>> :{
+--   let runExp :: Elt e => Exp e -> e
+--       runExp e = indexArray (run (unit e)) Z
+-- :}
 
 -- Renamings
 -- ---------
@@ -489,8 +496,10 @@ arraySize = S.size
 -- >>> let Z :. x :. y = unlift sh        :: Z :. Exp Int :. Exp Int
 -- >>> let t = lift (x,y)                 :: Exp (Int, Int)
 --
--- >>> let r  = scanl' f z xs             :: (Acc (Vector Int), Acc (Scalar Int))
--- >>> let r' = lift r                    :: Acc (Vector Int, Scalar Int)
+-- >>> let xs = use $ fromList (Z:.10) [0..]   :: Acc (Vector Int)
+-- >>> let ys = use $ fromList (Z:.3:.4) [0..] :: Acc (Matrix Int)
+-- >>> let r  = (xs,ys)                        :: (Acc (Vector Int), Acc (Matrix Int))
+-- >>> let r' = lift r                         :: Acc (Vector Int, Matrix Int)
 --
 -- [/Note:/]
 --
