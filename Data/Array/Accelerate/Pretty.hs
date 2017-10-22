@@ -25,8 +25,12 @@ module Data.Array.Accelerate.Pretty (
 
 ) where
 
--- standard libraries
+-- libraries
+import System.IO
+import System.IO.Unsafe
 import Text.PrettyPrint.ANSI.Leijen
+import qualified System.Console.ANSI                                as Term
+import qualified System.Console.Terminal.Size                       as Term
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -47,10 +51,10 @@ import Data.Array.Accelerate.Pretty.Graphviz
 -- interacting with other packages. See Issue #108.
 --
 instance PrettyEnv aenv => Show (OpenAcc aenv a) where
-  showsPrec _ = displayS . renderStyle . pretty
+  showsPrec _ = renderForTerminal . pretty
 
 instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
-  showsPrec _ = displayS . renderStyle . pretty
+  showsPrec _ = renderForTerminal . pretty
 
 -- These parameterised instances are fine because there is a concrete kind
 --
@@ -59,19 +63,28 @@ instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
 --      tuples, but our type parameter 'env' doesn't capture that.
 --
 instance (Kit acc, PrettyEnv aenv) => Show (PreOpenAfun acc aenv f) where
-  showsPrec _ = displayS . renderStyle . pretty
+  showsPrec _ = renderForTerminal . pretty
 
 instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenFun acc env aenv f) where
-  showsPrec _ = displayS . renderStyle . pretty
+  showsPrec _ = renderForTerminal . pretty
 
 instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenExp acc env aenv t) where
-  showsPrec _ = displayS . renderStyle . pretty
+  showsPrec _ = renderForTerminal . pretty
 
 -- instance Kit acc => Show (PreOpenSeq acc aenv senv t) where
---   show s = renderStyle wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
+--   show s = renderForTerminal wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
 
-renderStyle :: Doc -> SimpleDoc
-renderStyle = renderSmart 0.7 120
+renderForTerminal :: Doc -> ShowS
+renderForTerminal doc next =
+  unsafePerformIO $ do
+    term <- Term.size
+    ansi <- Term.hSupportsANSI stdout
+    let
+        w             = maybe 120 Term.width term
+        d | ansi      = doc
+          | otherwise = plain doc
+    --
+    return $ displayS (renderSmart 0.7 w d) next
 
 -- Pretty
 -- ------
