@@ -274,6 +274,7 @@ Library
         , transformers                  >= 0.3
         , unique
         , unordered-containers          >= 0.2
+        , vector                        >= 0.10
 
   Exposed-modules:
         -- The core language and reference implementation

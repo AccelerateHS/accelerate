@@ -62,11 +62,12 @@ module Data.Array.Accelerate.Array.Sugar (
 
 -- standard library
 import Control.DeepSeq
-import Data.List                                                ( intercalate, transpose )
 import Data.Typeable
 import GHC.Exts                                                 ( IsList )
+import Prelude                                                  hiding ( (!!) )
 import Language.Haskell.TH                                      hiding ( Foreign )
 import qualified GHC.Exts                                       as GHC
+import qualified Data.Vector.Unboxed                            as U
 
 -- friends
 import Data.Array.Accelerate.Array.Data
@@ -883,23 +884,35 @@ instance Show (Vector e) where
 
 instance Show (Array DIM2 e) where
   show arr@Array{} =
-    "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat (toMatrix (toList arr))
+    "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat
     where
-      Z :. _ :. cols    = shape arr
-      toMatrix []       = []
-      toMatrix xs       = let (r,rs) = splitAt cols xs
-                          in  r : toMatrix rs
+      Z :. rows :. cols = shape arr
+      !lengths          = U.generate (rows*cols) (\i -> length (show (arr !! i)))
+      !widths           = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
       --
-      showMat []        = "[]"
-      showMat mat       = "\n  " ++ ppMat (map (map show) mat)
+      showMat
+        | rows * cols == 0 = "[]"
+        | otherwise        = "\n  [" ++ ppMat 0 0
       --
-      ppRow row         = concatMap (++",") row
-      ppMat mat         = "[" ++ init (intercalate "\n   " (map ppRow (ppColumns mat))) ++ "]"
-      ppColumns         = transpose . map (\col -> pad (width col) col) . transpose
-        where
-          extra = 1
-          width = maximum . map length
-          pad w = map (\x -> replicate (w - length x + extra) ' ' ++ x)
+      ppMat :: Int -> Int -> String
+      ppMat !r !c | c >= cols = ppMat (r+1) 0
+      ppMat !r !c             =
+        let
+            !i    = r*cols+c
+            !l    = lengths U.! i
+            !w    = widths  U.! c
+            !pad  = 1
+            cell  = replicate (w-l+pad) ' ' ++ show (arr !! i)
+            --
+            before
+              | r > 0 && c == 0 = "\n   "
+              | otherwise       = ""
+            --
+            after
+              | r >= rows-1 && c >= cols-1 = "]"
+              | otherwise                  = ',' : ppMat r (c+1)
+        in
+        before ++ cell ++ after
 #endif
 
 -- This is a bit unfortunate, but we need to use an INCOHERENT instance because
@@ -1169,6 +1182,10 @@ infixl 9 !
 -- (Array sh adata) ! ix = toElt (adata `indexArrayData` index sh ix)
 -- FIXME: using this due to a bug in 6.10.x
 (!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` toIndex (toElt sh) ix)
+
+infixl 9 !!
+(!!) :: Array sh e -> Int -> e
+(!!) (Array _ adata) i = toElt (adata `unsafeIndexArrayData` i)
 
 -- | Create an array from its representation function, applied at each index of
 -- the array.
