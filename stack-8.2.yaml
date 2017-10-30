@@ -13,7 +13,7 @@ flags: {}
 
 # Extra global and per-package GHC options
 ghc-options:
-  '*': -fdiagnostics-color=always
+  $everything: -fdiagnostics-color=always
 
 # Extra package databases containing global packages
 extra-package-dbs: []
