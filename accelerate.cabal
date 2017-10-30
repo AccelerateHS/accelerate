@@ -416,7 +416,7 @@ Library
 
 test-suite doctest
   type:                 exitcode-stdio-1.0
-  hs-source-dirs:       doctest
+  hs-source-dirs:       test/doctest
   main-is:              Main.hs
 
   other-modules:
