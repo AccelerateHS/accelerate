@@ -1,5 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE MagicHash                #-}
+{-# LANGUAGE NoImplicitPrelude        #-}
 {-# LANGUAGE UnboxedTuples            #-}
 -- |
 -- Module      : Data.Atomic
@@ -16,12 +17,11 @@
 module Data.Atomic (
 
   Atomic(..),
-  new, read, write, add, and, subtract,
+  read, write, add, and, subtract,
 
 ) where
 
 import Data.Int
-import Prelude                                                      ( ($), IO, return )
 
 import GHC.Ptr
 import GHC.Base
@@ -31,15 +31,20 @@ import GHC.Base
 --
 newtype Atomic = Atomic ( Ptr Int64 )
 
--- | Create a new atomic variable initialised to the given value
---
-new :: Int64 -> IO Atomic
-new v = do
-  -- TLM: is this valid, or will the result be GC'd immediately?
-  a <- IO $ \s -> case newPinnedByteArray# 8# s of
-                    (# s', mbarr# #) -> (# s', Atomic (Ptr (byteArrayContents# (unsafeCoerce# mbarr#))) #)
-  write a v
-  return a
+-- -- | Create a new atomic variable initialised to the given value
+-- --
+-- -- TLM: This is not correct because we need to keep the MutableByteArray#
+-- --      around so that it does not get GC'ed. This would have been stored as
+-- --      the ForeignPtrContents. Since we don't use this function at the
+-- --      moment (all of the atomics we care about are defined in C code) we
+-- --      just drop this function for now.
+-- --
+-- new :: Int64 -> IO Atomic
+-- new v = do
+--   a <- IO $ \s -> case newPinnedByteArray# 8# s of
+--                     (# s', mbarr# #) -> (# s', Atomic (Ptr (byteArrayContents# (unsafeCoerce# mbarr#))) #)
+--   write a v
+--   return a
 
 -- | Get the current value.
 --
