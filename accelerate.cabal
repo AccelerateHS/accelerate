@@ -267,6 +267,7 @@ Library
         , ghc-prim
         , hashable                      >= 1.1
         , hashtables                    >= 1.0
+        , hedgehog                      >= 0.5
         , mtl                           >= 2.0
         , template-haskell
         , terminal-size                 >= 0.3
@@ -312,6 +313,10 @@ Library
         Data.Array.Accelerate.Smart
         Data.Array.Accelerate.Trafo
         Data.Array.Accelerate.Type
+
+        -- For testing
+        Data.Array.Accelerate.Hedgehog.Gen.Shape
+        Data.Array.Accelerate.Hedgehog.Gen.Array
 
   Other-modules:
         Data.Atomic
