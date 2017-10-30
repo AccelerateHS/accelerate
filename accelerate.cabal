@@ -317,6 +317,7 @@ Library
         -- For testing
         Data.Array.Accelerate.Hedgehog.Gen.Shape
         Data.Array.Accelerate.Hedgehog.Gen.Array
+        Data.Array.Accelerate.Hedgehog.Similar
 
   Other-modules:
         Data.Atomic
