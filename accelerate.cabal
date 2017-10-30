@@ -354,6 +354,9 @@ Library
         Data.Array.Accelerate.Trafo.Substitution
         -- Data.Array.Accelerate.Trafo.Vectorise
 
+  hs-source-dirs:
+        src
+
   c-sources:
         cbits/atomic.c
         cbits/flags.c
