@@ -13,10 +13,6 @@ cache:
 
 matrix:
   include:
-    - env: GHC=7.8.4 CABAL=1.18
-      compiler: "GHC 7.8"
-      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
-
     - env: GHC=7.10.3 CABAL=1.22
       compiler: "GHC 7.10"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
