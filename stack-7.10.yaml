@@ -8,7 +8,11 @@ packages:
 
 extra-deps:
 - 'cabal-doctest-1.0.2'
+- 'hedgehog-0.5'
+- 'transformers-0.5.5.0'
+- 'transformers-compat-0.5.1.4'
 - 'unique-0'
+- 'wl-pprint-annotated-0.1.0.0'
 
 # Override default flag values for local packages and extra-deps
 flags: {}
