@@ -9,6 +9,8 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
+-- This module is meant to be imported qualified
+--
 
 module Data.Array.Accelerate.Hedgehog.Gen.Shape
   where
@@ -21,12 +23,12 @@ import Hedgehog.Gen                                       ( int )
 
 -- Generate a randomly sized shape of the given dimensionality
 --
-class GenShape sh where
+class Shape sh where
   shape :: Range Int -> Gen sh
 
-instance GenShape Z where
+instance Shape Z where
   shape _ = return Z
 
-instance GenShape sh => GenShape (sh :. Int) where
+instance Shape sh => Shape (sh :. Int) where
   shape r = (:.) <$> shape r <*> int r
 

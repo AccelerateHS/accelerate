@@ -7,6 +7,8 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
+-- This module is meant to be imported qualified
+--
 
 module Data.Array.Accelerate.Hedgehog.Gen.Array
   where
