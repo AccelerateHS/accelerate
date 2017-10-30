@@ -104,6 +104,7 @@ module Data.Array.Accelerate.AST (
   -- NFData
   NFDataAcc,
   rnfPreOpenAfun, rnfPreOpenAcc, rnfPreOpenFun, rnfPreOpenExp,
+  rnfArrays,
 
   -- TemplateHaskell
   LiftAcc,

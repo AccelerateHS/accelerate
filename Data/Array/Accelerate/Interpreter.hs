@@ -178,8 +178,10 @@ evalOpenAcc
 evalOpenAcc AST.Delayed{}       _    = $internalError "evalOpenAcc" "expected manifest array"
 evalOpenAcc (AST.Manifest pacc) aenv =
   let
-      manifest :: DelayedOpenAcc aenv a' -> a'
-      manifest acc = evalOpenAcc acc aenv
+      manifest :: Arrays a' => DelayedOpenAcc aenv a' -> a'
+      manifest acc =
+        let a' = evalOpenAcc acc aenv
+        in  rnfArrays (arrays a') (fromArr a') `seq` a'
 
       delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
       delayed AST.Manifest{}  = $internalError "evalOpenAcc" "expected delayed array"
