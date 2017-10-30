@@ -53,7 +53,7 @@ import Prelude
 -- friends
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                as Sugar
+import Data.Array.Accelerate.Array.Sugar                as Sugar hiding ( (!!) )
 import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..), OpenAcc(..), Acc
                                                                , PreOpenExp(..), OpenExp, PreExp, Exp
                                                                , PreBoundary(..), Boundary, Stencil(..)

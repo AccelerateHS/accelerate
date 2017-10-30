@@ -48,7 +48,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
-  shape, (!), allocateArray, fromFunction, fromFunctionM, fromList, toList, concatVectors,
+  shape, (!), (!!), allocateArray, fromFunction, fromFunctionM, fromList, toList, concatVectors,
 
   -- * Tuples
   TupleR, TupleRepr, tuple,
