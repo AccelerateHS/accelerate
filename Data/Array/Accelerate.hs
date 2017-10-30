@@ -357,6 +357,7 @@ module Data.Array.Accelerate (
 
   -- *** Function
   fromFunction,
+  fromFunctionM,
 
   -- *** Lists
   fromList, toList,

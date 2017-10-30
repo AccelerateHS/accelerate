@@ -48,7 +48,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
-  shape, (!), allocateArray, fromFunction, fromList, toList, concatVectors,
+  shape, (!), allocateArray, fromFunction, fromFunctionM, fromList, toList, concatVectors,
 
   -- * Tuples
   TupleR, TupleRepr, tuple,
@@ -64,6 +64,7 @@ module Data.Array.Accelerate.Array.Sugar (
 import Control.DeepSeq
 import Data.Typeable
 import GHC.Exts                                                 ( IsList )
+import System.IO.Unsafe                                         ( unsafePerformIO )
 import Prelude                                                  hiding ( (!!) )
 import Language.Haskell.TH                                      hiding ( Foreign )
 import qualified GHC.Exts                                       as GHC
@@ -547,28 +548,28 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 singletonScalarType :: IsScalar a => a -> TupleType a
 singletonScalarType _ = SingleTuple scalarType
 
+{-# INLINE liftToElt #-}
 liftToElt :: (Elt a, Elt b)
           => (EltRepr a -> EltRepr b)
           -> (a -> b)
-{-# INLINE liftToElt #-}
 liftToElt f = toElt . f . fromElt
 
+{-# INLINE liftToElt2 #-}
 liftToElt2 :: (Elt a, Elt b, Elt c)
            => (EltRepr a -> EltRepr b -> EltRepr c)
            -> (a -> b -> c)
-{-# INLINE liftToElt2 #-}
 liftToElt2 f x y = toElt $ f (fromElt x) (fromElt y)
 
+{-# INLINE sinkFromElt #-}
 sinkFromElt :: (Elt a, Elt b)
             => (a -> b)
             -> (EltRepr a -> EltRepr b)
-{-# INLINE sinkFromElt #-}
 sinkFromElt f = fromElt . f . toElt
 
+{-# INLINE sinkFromElt2 #-}
 sinkFromElt2 :: (Elt a, Elt b, Elt c)
              => (a -> b -> c)
              -> (EltRepr a -> EltRepr b -> EltRepr c)
-{-# INLINE sinkFromElt2 #-}
 sinkFromElt2 f x y = fromElt $ f (toElt x) (toElt y)
 
 -- {-# RULES
@@ -1177,35 +1178,45 @@ shape (Array sh _) = toElt sh
 -- | Array indexing
 --
 infixl 9 !
-(!) :: Array sh e -> sh -> e
 {-# INLINE (!) #-}
--- (Array sh adata) ! ix = toElt (adata `indexArrayData` index sh ix)
--- FIXME: using this due to a bug in 6.10.x
+(!) :: Array sh e -> sh -> e
 (!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` toIndex (toElt sh) ix)
 
 infixl 9 !!
+{-# INLINE (!!) #-}
 (!!) :: Array sh e -> Int -> e
 (!!) (Array _ adata) i = toElt (adata `unsafeIndexArrayData` i)
 
 -- | Create an array from its representation function, applied at each index of
 -- the array.
 --
-fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
 {-# INLINE fromFunction #-}
-fromFunction sh f = adata `seq` Array (fromElt sh) adata
-  where
-    (adata, _) = runArrayData $ do
-                   arr <- newArrayData (size sh)
-                   let write ix = unsafeWriteArrayData arr (toIndex sh ix)
-                                                           (fromElt (f ix))
-                   iter sh write (>>) (return ())
-                   return (arr, undefined)
+fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
+fromFunction sh f = unsafePerformIO $! fromFunctionM sh (return . f)
+
+-- | Create an array using a monadic function applied at each index.
+--
+{-# INLINE fromFunctionM #-}
+fromFunctionM :: (Shape sh, Elt e) => sh -> (sh -> IO e) -> IO (Array sh e)
+fromFunctionM sh f = do
+  let !n = size sh
+  arr <- newArrayData n
+  --
+  let write !i
+        | i >= n    = return ()
+        | otherwise = do
+            v <- f (fromIndex sh i)
+            unsafeWriteArrayData arr i (fromElt v)
+            write (i+1)
+  --
+  write 0
+  return $! arr `seq` Array (fromElt sh) arr
 
 
 -- | Create a vector from the concatenation of the given list of vectors.
 --
-concatVectors :: Elt e => [Vector e] -> Vector e
 {-# INLINE concatVectors #-}
+concatVectors :: Elt e => [Vector e] -> Vector e
 concatVectors vs = adata `seq` Array ((), len) adata
   where
     offsets     = scanl (+) 0 (map (size . shape) vs)
@@ -1219,8 +1230,8 @@ concatVectors vs = adata `seq` Array ((), len) adata
 
 -- | Creates a new, uninitialized Accelerate array.
 --
-allocateArray :: (Shape sh, Elt e) => sh -> IO (Array sh e)
 {-# INLINE allocateArray #-}
+allocateArray :: (Shape sh, Elt e) => sh -> IO (Array sh e)
 allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
   where
     (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
@@ -1256,8 +1267,8 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
 -- and then traversing it a second time to collect the elements into the array,
 -- thus forcing the spine of the list to be manifest on the heap.
 --
-fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 {-# INLINE fromList #-}
+fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 fromList sh xs = adata `seq` Array (fromElt sh) adata
   where
     -- Assume the array is in dense row-major order. This is safe because
@@ -1275,8 +1286,8 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
 
 -- | Convert an accelerated 'Array' to a list in row-major order.
 --
-toList :: forall sh e. Array sh e -> [e]
 {-# INLINE toList #-}
+toList :: forall sh e. Array sh e -> [e]
 toList (Array sh adata) = go 0
   where
     -- Assume underling array is in row-major order. This is safe because
