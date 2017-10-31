@@ -168,7 +168,7 @@ instance (Similar e, Eq sh, Shape sh) => Similar (Array sh e) where
       n     = size (shape a1)
       go !i
         | i >= n              = True
-        | a1 !! n ~= a2 !! n  = go (i+1)
+        | a1 !! i ~= a2 !! i  = go (i+1)
         | otherwise           = False
 
 {-# INLINEABLE absRelTol #-}
