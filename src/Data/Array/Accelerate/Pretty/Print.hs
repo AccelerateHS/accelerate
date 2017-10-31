@@ -311,8 +311,8 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     ppE  = prettyPreOpenExp prettyAcc parens env aenv
     ppE' = prettyPreOpenExp prettyAcc noParens env aenv
 
-    ppE'' :: PreOpenExp acc env aenv sh -> Doc
-    ppE'' x = encase (ppE' x)
+    ppSh :: PreOpenExp acc env aenv sh -> Doc
+    ppSh x = encase (ppE' x)
       where
         encase = case x of
                    Var{}    -> id
@@ -352,7 +352,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
       | Tuple (NilTup `SnocTup` x `SnocTup` y) <- a
       = if infixOp
           then wrap $ sep [ppE x, f, ppE y]
-          else hang 2 (sep [f, ppE'' x, ppE'' y])
+          else hang 2 (sep [f, ppSh x, ppSh y])
       | otherwise
       = wrap $ hang 2 (sep [f', ppE a])
       where
@@ -373,18 +373,18 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     pp (IndexCons t h)          = sep [ ppE' t, text ":.", ppE' h ]
     pp (IndexHead ix)           = "indexHead"  .$ [ ppE ix ]
     pp (IndexTail ix)           = "indexTail"  .$ [ ppE ix ]
-    pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppE slix, ppE sh ]
-    pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppE slix, ppE sl ]
-    pp (ToIndex sh ix)          = "toIndex"    .$ [ ppE'' sh, ppE'' ix ]
-    pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppE'' sh, ppE ix ]
+    pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppSh slix, ppSh sh ]
+    pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppSh slix, ppSh sl ]
+    pp (ToIndex sh ix)          = "toIndex"    .$ [ ppSh sh, ppSh ix ]
+    pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppSh sh, ppSh ix ]
     pp (While p f x)            = "while"      .$ [ ppF p, ppF f, ppE x ]
     pp (Foreign ff _f e)        = "foreign"    .$ [ text (strForeign ff), {- ppF f, -} ppE e ]
     pp (Shape idx)              = "shape"      .$ [ ppA idx ]
-    pp (ShapeSize idx)          = "shapeSize"  .$ [ ppE'' idx ]
-    pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppE'' sh1, ppE'' sh2 ]
-    pp (Union sh1 sh2)          = "union"      .$ [ ppE'' sh1, ppE'' sh2 ]
-    pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppE'' i ]
-    pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppE'' i ]
+    pp (ShapeSize idx)          = "shapeSize"  .$ [ ppSh idx ]
+    pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppSh sh1, ppSh sh2 ]
+    pp (Union sh1 sh2)          = "union"      .$ [ ppSh sh1, ppSh sh2 ]
+    pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppSh i ]
+    pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppSh i ]
 
 
 -- Pretty print nested pairs as a proper tuple.

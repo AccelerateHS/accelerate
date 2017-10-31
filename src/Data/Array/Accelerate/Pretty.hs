@@ -83,8 +83,11 @@ renderForTerminal doc next =
         w             = maybe 120 Term.width term
         d | ansi      = doc
           | otherwise = plain doc
+        f | w <= 100  = 0.7
+          | w <= 120  = 0.6
+          | otherwise = 0.5
     --
-    return $ displayS (renderSmart 0.7 w d) next
+    return $ displayS (renderSmart f w d) next
 
 -- Pretty
 -- ------
