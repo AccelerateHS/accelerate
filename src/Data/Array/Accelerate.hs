@@ -350,7 +350,8 @@ module Data.Array.Accelerate (
   -- ---------------------------------------------------------------------------
   -- * Plain arrays
   -- ** Operations
-  arrayRank, arrayShape, arraySize, indexArray,
+  arrayRank, arrayShape, arraySize,
+  indexArray, linearIndexArray,
 
   -- ** Getting data in
   -- $getting_data_in
@@ -383,7 +384,7 @@ module Data.Array.Accelerate (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), rank, shape, size, toIndex, fromIndex, intersect, ignore )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, size, toIndex, fromIndex, intersect, ignore )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Prelude
@@ -413,6 +414,11 @@ import Prelude                                                      ( (.), ($), 
 --
 indexArray :: Array sh e -> sh -> e
 indexArray = (S.!)
+
+-- | Linear array indexing in plain Haskell code.
+--
+linearIndexArray :: Array sh e -> Int -> e
+linearIndexArray = (S.!!)
 
 -- | Rank of an array.
 --
