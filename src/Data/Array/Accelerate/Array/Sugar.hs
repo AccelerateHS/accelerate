@@ -48,7 +48,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
-  shape, (!), (!!), allocateArray, fromFunction, fromFunctionM, fromList, toList, concatVectors,
+  shape, reshape, (!), (!!), allocateArray, fromFunction, fromFunctionM, fromList, toList, concatVectors,
 
   -- * Tuples
   TupleR, TupleRepr, tuple,
@@ -1170,10 +1170,18 @@ instance (Shape sh, Slice sh) => Division (Divide sh) where
 -- Array operations
 -- ----------------
 
--- |Yield an array's shape
+-- | Yield an array's shape
 --
 shape :: Shape sh => Array sh e -> sh
 shape (Array sh _) = toElt sh
+
+-- | Change the shape of an array without altering its contents. The 'size' of
+-- the source and result arrays must be identical.
+--
+reshape :: (Shape sh, Shape sh', Elt e) => sh -> Array sh' e -> Array sh e
+reshape sh (Array sh' adata)
+  = $boundsCheck "reshape" "shape mismatch" (size sh == Repr.size sh')
+  $ Array (fromElt sh) adata
 
 -- | Array indexing
 --

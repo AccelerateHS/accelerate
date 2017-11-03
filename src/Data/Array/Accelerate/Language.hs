@@ -108,7 +108,7 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), ignore, shape, size, toIndex, fromIndex, intersect, union )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), ignore, shape, reshape, size, toIndex, fromIndex, intersect, union )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar

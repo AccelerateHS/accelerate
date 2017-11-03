@@ -350,7 +350,7 @@ module Data.Array.Accelerate (
   -- ---------------------------------------------------------------------------
   -- * Plain arrays
   -- ** Operations
-  arrayRank, arrayShape, arraySize,
+  arrayRank, arrayShape, arraySize, arrayReshape,
   indexArray, linearIndexArray,
 
   -- ** Getting data in
@@ -384,7 +384,7 @@ module Data.Array.Accelerate (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, size, toIndex, fromIndex, intersect, ignore )
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, reshape, size, toIndex, fromIndex, intersect, ignore )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Prelude
@@ -435,6 +435,13 @@ arrayShape = S.shape
 --
 arraySize :: Shape sh => sh -> Int
 arraySize = S.size
+
+-- | Change the shape of an array without altering its contents. The 'arraySize'
+-- of the source and result arrays must be identical.
+--
+arrayReshape :: (Shape sh, Shape sh', Elt e) => sh -> Array sh' e -> Array sh e
+arrayReshape = S.reshape
+
 
 -- Named documentation chunks
 -- --------------------------
