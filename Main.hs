@@ -4,7 +4,6 @@ module Main where
 import Data.Label
 
 import Config
-import Test.IO
 import Test.Prelude
 import Test.Sharing
 import Test.Imaginary
@@ -35,7 +34,6 @@ main = do
   runTests opts rest
     [ test_prelude backend conf
     , test_sharing conf
-    , test_io conf
     , test_imaginary backend conf
     , test_spectral backend conf
     , test_foreign backend conf
