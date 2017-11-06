@@ -4,7 +4,6 @@ module Main where
 import Data.Label
 
 import Config
-import Test.FFT
 import Test.IO
 import Test.Prelude
 import Test.Sharing
@@ -39,7 +38,6 @@ main = do
     , test_io conf
     , test_imaginary backend conf
     , test_spectral backend conf
-    , test_fft backend conf
     , test_foreign backend conf
     , test_issues backend conf
     ]
