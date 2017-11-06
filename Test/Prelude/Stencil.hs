@@ -24,7 +24,8 @@ import Config
 import QuickCheck.Arbitrary.Array                               ()
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.IO                                 as A
+import Data.Array.Accelerate.IO.Data.Array.IArray               as A
+import Data.Array.Accelerate.IO.Data.Array.Unboxed              as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Unboxed                                       as IArray hiding ( Array )
 import qualified Data.Array.IArray                              as IArray
@@ -71,7 +72,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
     -- 1D Stencil
     --
     test_stencil1D :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Vector a -> Property
-    test_stencil1D vec = toList (acc vec) ~?= elems (ref (toIArray vec))
+    test_stencil1D vec = toList (acc vec) ~?= elems (ref (toUArray vec))
       where
         pattern (x,y,z) = x + z - 2 * y
 
@@ -87,7 +88,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
     -- 2D Stencil
     --
     test_stencil2D1 :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Array DIM2 a -> Property
-    test_stencil2D1 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
+    test_stencil2D1 vec = toList (acc vec) ~?= elems (ref (toUArray vec))
       where
         pattern ( (t1, t2, t3)
                 , (l , m,  r )
@@ -110,7 +111,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
 
 
     test_stencil2D2 :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Array DIM2 a -> Property
-    test_stencil2D2 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
+    test_stencil2D2 vec = toList (acc vec) ~?= elems (ref (toUArray vec))
       where
         pattern ( (_, t, _)
                 , (l, m, r)

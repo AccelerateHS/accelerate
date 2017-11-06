@@ -10,7 +10,7 @@ import Test.Framework.Providers.HUnit
 
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A hiding ( (>->), (==) )
-import Data.Array.Accelerate.IO                                 as A
+import Data.Array.Accelerate.IO.Data.Vector.Storable            as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 
 import Pipes

@@ -14,7 +14,7 @@ import Test.Framework
 
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.IO                                 as A
+import Data.Array.Accelerate.IO.Data.Array.Unboxed              as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Unboxed                                       as IArray hiding ( Array )
 import Data.Label
@@ -56,7 +56,7 @@ test_replicate backend opt = testGroup "replicate" $ catMaybes
         arr :: Acc (Array DIM2 e)
         arr = use $ fromList (Z:.2:.2) [1,2,3,4]
 
-        run' = toIArray . run backend
+        run' = toUArray . run backend
 
         -- Replicate into z-axis
         -- should produce [1,2,3,4,1,2,3,4]

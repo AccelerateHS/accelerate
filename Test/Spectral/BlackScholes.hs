@@ -15,7 +15,7 @@ import Control.Applicative
 import Data.Label
 import Data.Maybe
 import Data.Typeable
-import Foreign.Marshal
+import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable
 import System.Random
@@ -28,8 +28,9 @@ import Config
 import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as A
+import Data.Array.Accelerate.Array.Data                         as A
 import Data.Array.Accelerate.Examples.Internal                  as A
-import Data.Array.Accelerate.IO                                 as A
+import Data.Array.Accelerate.IO.Foreign.ForeignPtr              as A
 
 
 test_blackscholes :: Backend -> Config -> Test
@@ -38,8 +39,7 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
   , testElt configDouble c_BlackScholes_d
   ]
   where
-    testElt :: forall a. ( P.Floating a, A.Floating a, A.Ord a, Similar a, Arbitrary a, Random a, Storable a
-                         , BlockPtrs (EltRepr a) ~ Ptr a )
+    testElt :: forall a. (P.Floating a, A.Floating a, A.Ord a, Similar a, Arbitrary a, Random a, Storable a, ForeignPtrs (EltRepr a) ~ ForeignPtr a)
             => (Config :-> Bool)
             -> BlackScholes a
             -> Maybe Test
@@ -51,8 +51,7 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
     opts :: (P.Floating a, Random a) => Gen (a,a,a)
     opts = (,,) <$> choose (5,30) <*> choose (1,100) <*> choose (0.25,10)
 
-    run_blackscholes :: forall a. ( P.Floating a, A.Floating a, A.Ord a, Similar a, Storable a, Random a
-                                  , BlockPtrs (EltRepr a) ~ Ptr a )
+    run_blackscholes :: forall a. (P.Floating a, A.Floating a, A.Ord a, Similar a, Storable a, Random a, ForeignPtrs (EltRepr a) ~ ForeignPtr a)
                      => BlackScholes a
                      -> Property
     run_blackscholes cfun =
@@ -112,21 +111,26 @@ blackscholes = A.map go
 type BlackScholes a = Ptr a -> Ptr a -> Ptr a -> Ptr a -> Ptr a -> a -> a -> Int32 -> IO ()
 
 blackScholesRef
-    :: forall a. (Storable a, P.Floating a, A.Floating a, BlockPtrs (EltRepr a) ~ Ptr a)
+    :: forall a. (Storable a, P.Floating a, A.Floating a, ForeignPtrs (EltRepr a) ~ ForeignPtr a)
     => BlackScholes a
     -> Vector (a,a,a)
     -> IO (Vector (a,a))
-blackScholesRef cfun xs =
-  let (Z :. n)  = arrayShape xs
-  in
-  allocaArray n $ \p_call ->
-  allocaArray n $ \p_put ->
-  allocaArray n $ \p_price ->
-  allocaArray n $ \p_strike ->
-  allocaArray n $ \p_years -> do
-    toPtr xs ((((), p_price), p_strike), p_years)
-    cfun p_call p_put p_price p_strike p_years riskfree volatility (P.fromIntegral n)
-    fromPtr (Z :. n) (((), p_call), p_put)
+blackScholesRef cfun xs = do
+  let Z :. n = arrayShape xs
+  --
+  r_adata <- newArrayData n
+  let res                                   = Array ((), n) r_adata
+      ((((), f_price), f_strike), f_years)  = toForeignPtrs xs
+      (((), f_call), f_put)                 = toForeignPtrs res
+  --
+  withForeignPtr f_price   $ \p_price  ->
+   withForeignPtr f_strike $ \p_strike ->
+    withForeignPtr f_years $ \p_years  ->
+     withForeignPtr f_call $ \p_call   ->
+      withForeignPtr f_put $ \p_put    ->
+       cfun p_call p_put p_price p_strike p_years riskfree volatility (P.fromIntegral n)
+  --
+  return res
 
 
 foreign import ccall unsafe "BlackScholes_f" c_BlackScholes_f :: Ptr Float  -> Ptr Float  -> Ptr Float  -> Ptr Float  -> Ptr Float  -> Float  -> Float  -> Int32 -> IO ()
