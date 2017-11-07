@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Hedgehog.Gen.Shape
 import Data.Array.Accelerate.Array.Sugar                  ( Z(..), (:.)(..) )
 
 import Hedgehog                                           ( Gen, Range )
-import Hedgehog.Gen                                       ( int )
+import qualified Hedgehog.Gen                             as Gen
 
 
 -- Generate a randomly sized shape of the given dimensionality
@@ -31,5 +31,5 @@ instance Shape Z where
   shape _ = return Z
 
 instance Shape sh => Shape (sh :. Int) where
-  shape r = (:.) <$> shape r <*> int r
+  shape r = (:.) <$> Gen.small (shape r) <*> Gen.int r
 
