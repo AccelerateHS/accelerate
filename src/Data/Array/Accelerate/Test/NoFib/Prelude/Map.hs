@@ -21,11 +21,9 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Map (
 
 ) where
 
-import Control.Monad
+import Data.Proxy
 import Data.Bits                                                as P
-import Data.Maybe
 import Data.Typeable
-import Lens.Micro
 import Prelude                                                  as P
 
 import Data.Array.Accelerate                                    as A
@@ -48,191 +46,274 @@ import Test.Tasty.Hedgehog
 -- Map -------------------------------------------------------------------------
 --
 
-test_map :: RunN -> Config -> TestTree
-test_map runN opt =
-  testGroup "map" $ catMaybes
-    [ testIntegralElt configInt8   i8
-    , testIntegralElt configInt16  i16
-    , testIntegralElt configInt32  i32
-    , testIntegralElt configInt64  i64
-    , testIntegralElt configWord8  w8
-    , testIntegralElt configWord16 w16
-    , testIntegralElt configWord32 w32
-    , testIntegralElt configWord64 w64
-    , testFloatingElt configFloat  Gen.float
-    , testFloatingElt configDouble Gen.double
+test_map :: RunN -> TestTree
+test_map runN =
+  testGroup "map"
+    [ at (Proxy::Proxy TestInt8)   $ testIntegralElt i8
+    , at (Proxy::Proxy TestInt16)  $ testIntegralElt i16
+    , at (Proxy::Proxy TestInt32)  $ testIntegralElt i32
+    , at (Proxy::Proxy TestInt64)  $ testIntegralElt i64
+    , at (Proxy::Proxy TestWord8)  $ testIntegralElt w8
+    , at (Proxy::Proxy TestWord16) $ testIntegralElt w16
+    , at (Proxy::Proxy TestWord32) $ testIntegralElt w32
+    , at (Proxy::Proxy TestWord64) $ testIntegralElt w64
+    , at (Proxy::Proxy TestFloat)  $ testFloatingElt Gen.float
+    , at (Proxy::Proxy TestDouble) $ testFloatingElt Gen.double
     ]
   where
     testIntegralElt
         :: forall a. ( P.Integral a, P.FiniteBits a
                      , A.Integral a, A.FiniteBits a
-                     , A.FromIntegral a Double, Similar a)
-        => (Config :-> Bool)
-        -> Gen a
-        -> Maybe TestTree
-    testIntegralElt ok e
-      | P.not (opt ^. ok) = Nothing
-      | otherwise         = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim0
-          , testDim dim1
-          , testDim dim2
-          ]
+                     , A.FromIntegral a Double, Similar a )
+        => Gen a
+        -> TestTree
+    testIntegralElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim0
+        , testDim dim1
+        , testDim dim2
+        ]
       where
         testDim
-            :: forall sh. (A.Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, P.Eq sh)
             => Gen sh
             -> TestTree
         testDim sh =
           testGroup ("DIM" P.++ show (rank (undefined::sh)))
             [ -- operators on Num
-              testProperty "neg"                $ test_negate sh e
-            , testProperty "abs"                $ test_abs sh e
-            , testProperty "signum"             $ test_signum sh e
+              testProperty "neg"                $ test_negate runN sh e
+            , testProperty "abs"                $ test_abs runN sh e
+            , testProperty "signum"             $ test_signum runN sh e
 
               -- operators on Integral & Bits
-            , testProperty "complement"         $ test_complement sh e
-            , testProperty "popCount"           $ test_popCount sh e
-            , testProperty "countLeadingZeros"  $ test_countLeadingZeros sh e
-            , testProperty "countTrailingZeros" $ test_countTrailingZeros sh e
+            , testProperty "complement"         $ test_complement runN sh e
+            , testProperty "popCount"           $ test_popCount runN sh e
+            , testProperty "countLeadingZeros"  $ test_countLeadingZeros runN sh e
+            , testProperty "countTrailingZeros" $ test_countTrailingZeros runN sh e
 
               -- conversions
-            , testProperty "fromIntegral"       $ test_fromIntegral sh e
+            , testProperty "fromIntegral"       $ test_fromIntegral runN sh e
             ]
 
     testFloatingElt
         :: forall a. (P.RealFloat a, A.Floating a, A.RealFrac a, Similar a)
-        => (Config :-> Bool)
-        -> (Range a -> Gen a)
-        -> Maybe TestTree
-    testFloatingElt ok e
-      | P.not (opt ^. ok) = Nothing
-      | otherwise         = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim0
-          , testDim dim1
-          , testDim dim2
-          ]
+        => (Range a -> Gen a)
+        -> TestTree
+    testFloatingElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim0
+        , testDim dim1
+        , testDim dim2
+        ]
       where
         testDim
-            :: forall sh. (A.Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, P.Eq sh)
             => Gen sh
             -> TestTree
         testDim sh =
           testGroup ("DIM" P.++ show (rank (undefined::sh)))
             [ -- operators on Num
-              testProperty "neg"        $ test_negate sh (fullrange e)
-            , testProperty "abs"        $ test_abs sh (fullrange e)
-            , testProperty "signum"     $ test_abs sh (fullrange e)
+              testProperty "neg"        $ test_negate runN sh (fullrange e)
+            , testProperty "abs"        $ test_abs runN sh (fullrange e)
+            , testProperty "signum"     $ test_abs runN sh (fullrange e)
 
               -- operators on Fractional, Floating, RealFrac & RealFloat
-            , testProperty "recip"      $ test_recip sh (fullrange e)
-            , testProperty "sin"        $ test_sin sh (fullrange e)
-            , testProperty "cos"        $ test_cos sh (fullrange e)
-            , testProperty "tan"        $ test_tan sh (fullrange e `except` \v -> sin v ~= 1)
-            , testProperty "asin"       $ test_asin sh (e (Range.linearFracFrom 0 (-1) 1))
-            , testProperty "acos"       $ test_acos sh (e (Range.linearFracFrom 0 (-1) 1))
-            , testProperty "atan"       $ test_atan sh (fullrange e)
-            , testProperty "asinh"      $ test_asinh sh (fullrange e)
-            , testProperty "acosh"      $ test_acosh sh (e (Range.linearFrac 1 flt_max))
-            , testProperty "atanh"      $ test_atanh sh (e (Range.linearFracFrom 0 (-1) 1))
-            , testProperty "exp"        $ test_exp sh (fullrange e)
-            , testProperty "sqrt"       $ test_sqrt sh (e (Range.linearFrac 0 flt_max))
-            , testProperty "log"        $ test_log sh (e (Range.linearFrac 0 flt_max) `except` \v -> v P.== 0)
-            , testProperty "truncate"   $ test_truncate sh (fullrange e)
-            , testProperty "round"      $ test_round sh (fullrange e)
-            , testProperty "floor"      $ test_floor sh (fullrange e)
-            , testProperty "ceiling"    $ test_ceiling sh (fullrange e)
+            , testProperty "recip"      $ test_recip runN sh (fullrange e)
+            , testProperty "sin"        $ test_sin runN sh (fullrange e)
+            , testProperty "cos"        $ test_cos runN sh (fullrange e)
+            , testProperty "tan"        $ test_tan runN sh (fullrange e `except` \v -> cos v ~= 0)
+            , testProperty "asin"       $ test_asin runN sh (e (Range.linearFracFrom 0 (-1) 1))
+            , testProperty "acos"       $ test_acos runN sh (e (Range.linearFracFrom 0 (-1) 1))
+            , testProperty "atan"       $ test_atan runN sh (fullrange e)
+            , testProperty "asinh"      $ test_asinh runN sh (fullrange e)
+            , testProperty "acosh"      $ test_acosh runN sh (e (Range.linearFrac 1 flt_max))
+            , testProperty "atanh"      $ test_atanh runN sh (e (Range.linearFracFrom 0 (-1) 1))
+            , testProperty "exp"        $ test_exp runN sh (fullrange e)
+            , testProperty "sqrt"       $ test_sqrt runN sh (e (Range.linearFrac 0 flt_max))
+            , testProperty "log"        $ test_log runN sh (e (Range.linearFrac 0 flt_max) `except` \v -> v P.== 0)
+            , testProperty "truncate"   $ test_truncate runN sh (e (Range.linearFracFrom 0 (P.fromIntegral (minBound :: Int)) (P.fromIntegral (maxBound :: Int))))
+            , testProperty "round"      $ test_round runN sh (e (Range.linearFracFrom 0 (P.fromIntegral (minBound :: Int)) (P.fromIntegral (maxBound :: Int))))
+            , testProperty "floor"      $ test_floor runN sh (e (Range.linearFracFrom 0 (P.fromIntegral (minBound :: Int)) (P.fromIntegral (maxBound :: Int))))
+            , testProperty "ceiling"    $ test_ceiling runN sh (e (Range.linearFracFrom 0 (P.fromIntegral (minBound :: Int)) (P.fromIntegral (maxBound :: Int))))
             ]
 
-    testMap :: (A.Shape sh, P.Eq sh, Elt e, Similar e) => (Array sh e -> PropertyT IO ()) -> Gen sh -> Gen e -> Property
-    testMap doit dim e =
-      property $ do
-        sh  <- forAll dim
-        arr <- forAll (Gen.array sh e)
-        doit arr
+        fullrange :: P.RealFloat e => (Range e -> Gen e) -> Gen e
+        fullrange gen = gen (Range.linearFracFrom 0 flt_min flt_max)
 
-    test_negate :: (A.Shape sh, A.Num e, P.Num e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
-    test_negate = testMap $ \xs -> runN (A.map negate) xs ~~~ mapRef negate xs
+test_negate :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
+test_negate runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map negate) xs ~~~ mapRef negate xs
 
-    test_abs :: (A.Shape sh, A.Num e, P.Num e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
-    test_abs = testMap $ \xs -> runN (A.map abs) xs ~~~ mapRef abs xs
+test_abs :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
+test_abs runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map abs) xs ~~~ mapRef abs xs
 
-    test_signum :: (A.Shape sh, A.Num e, P.Num e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
-    test_signum = testMap $ \xs -> runN (A.map signum) xs ~~~ mapRef signum xs
+test_signum :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
+test_signum runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map signum) xs ~~~ mapRef signum xs
 
-    test_complement :: (A.Shape sh, A.Bits e, P.Bits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
-    test_complement = testMap $ \xs -> runN (A.map A.complement) xs ~~~ mapRef P.complement xs
+test_complement :: (Shape sh, Similar e, A.Bits e, P.Bits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
+test_complement runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.complement) xs ~~~ mapRef P.complement xs
 
-    test_popCount :: (A.Shape sh, A.Bits e, P.Bits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
-    test_popCount = testMap $ \xs -> runN (A.map A.popCount) xs ~~~ mapRef P.popCount xs
+test_popCount :: (Shape sh, Similar e, A.Bits e, P.Bits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
+test_popCount runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.popCount) xs ~~~ mapRef P.popCount xs
 
-    test_countLeadingZeros :: (A.Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
-    test_countLeadingZeros = testMap $ \xs -> runN (A.map A.countLeadingZeros) xs ~~~ mapRef countLeadingZerosRef xs
+test_countLeadingZeros :: (Shape sh, Similar e, A.FiniteBits e, P.FiniteBits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
+test_countLeadingZeros runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.countLeadingZeros) xs ~~~ mapRef countLeadingZerosRef xs
 
-    test_countTrailingZeros :: (A.Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
-    test_countTrailingZeros = testMap $ \xs -> runN (A.map A.countTrailingZeros) xs ~~~ mapRef countTrailingZerosRef xs
+test_countTrailingZeros :: (Shape sh, Similar e, A.FiniteBits e, P.FiniteBits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
+test_countTrailingZeros runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.countTrailingZeros) xs ~~~ mapRef countTrailingZerosRef xs
 
-    test_fromIntegral :: forall sh e. (A.Shape sh, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double, Similar e) => Gen sh -> Gen e -> Property
-    test_fromIntegral = testMap $ \xs -> runN (A.map A.fromIntegral) xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
+test_fromIntegral :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double) => RunN -> Gen sh -> Gen e -> Property
+test_fromIntegral runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.fromIntegral) xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
 
-    test_recip :: (A.Shape sh, P.Eq sh, P.Fractional e, A.Fractional e, Similar e) => Gen sh -> Gen e -> Property
-    test_recip = testMap $ \xs -> runN (A.map recip) xs ~~~ mapRef recip xs
+test_recip :: (Shape sh, Similar e, P.Eq sh, P.Fractional e, A.Fractional e) => RunN -> Gen sh -> Gen e -> Property
+test_recip runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map recip) xs ~~~ mapRef recip xs
 
-    test_sin :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_sin = testMap $ \xs -> runN (A.map sin) xs ~~~ mapRef sin xs
+test_sin :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_sin runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map sin) xs ~~~ mapRef sin xs
 
-    test_cos :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_cos = testMap $ \xs -> runN (A.map cos) xs ~~~ mapRef cos xs
+test_cos :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_cos runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map cos) xs ~~~ mapRef cos xs
 
-    test_tan :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_tan = testMap $ \xs -> runN (A.map tan) xs ~~~ mapRef tan xs
+test_tan :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_tan runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map tan) xs ~~~ mapRef tan xs
 
-    test_asin :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_asin = testMap $ \xs -> runN (A.map asin) xs ~~~ mapRef asin xs
+test_asin :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_asin runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map asin) xs ~~~ mapRef asin xs
 
-    test_acos :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_acos = testMap $ \xs -> runN (A.map acos) xs ~~~ mapRef acos xs
+test_acos :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_acos runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map acos) xs ~~~ mapRef acos xs
 
-    test_atan :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_atan = testMap $ \xs -> runN (A.map atan) xs ~~~ mapRef atan xs
+test_atan :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_atan runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map atan) xs ~~~ mapRef atan xs
 
-    test_asinh :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_asinh = testMap $ \xs -> runN (A.map asinh) xs ~~~ mapRef asinh xs
+test_asinh :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_asinh runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map asinh) xs ~~~ mapRef asinh xs
 
-    test_acosh :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_acosh = testMap $ \xs -> runN (A.map acosh) xs ~~~ mapRef acosh xs
+test_acosh :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_acosh runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map acosh) xs ~~~ mapRef acosh xs
 
-    test_atanh :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_atanh = testMap $ \xs -> runN (A.map atanh) xs ~~~ mapRef atanh xs
+test_atanh :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_atanh runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map atanh) xs ~~~ mapRef atanh xs
 
-    test_exp :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_exp = testMap $ \xs -> runN (A.map exp) xs ~~~ mapRef exp xs
+test_exp :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_exp runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map exp) xs ~~~ mapRef exp xs
 
-    test_sqrt :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_sqrt = testMap $ \xs -> runN (A.map sqrt) xs ~~~ mapRef sqrt xs
+test_sqrt :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_sqrt runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map sqrt) xs ~~~ mapRef sqrt xs
 
-    test_log :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
-    test_log = testMap $ \xs -> runN (A.map log) xs ~~~ mapRef log xs
+test_log :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_log runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map log) xs ~~~ mapRef log xs
 
-    test_truncate :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
-    test_truncate = testMap $ \xs -> runN (A.map A.truncate) xs ~~~ mapRef (P.truncate :: e -> Int) xs
+test_truncate :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
+test_truncate runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.truncate) xs ~~~ mapRef (P.truncate :: e -> Int) xs
 
-    test_round :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
-    test_round = testMap $ \xs -> runN (A.map A.round) xs ~~~ mapRef (P.round :: e -> Int) xs
+test_round :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
+test_round runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.round) xs ~~~ mapRef (P.round :: e -> Int) xs
 
-    test_floor :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
-    test_floor = testMap $ \xs -> runN (A.map A.floor) xs ~~~ mapRef (P.floor :: e -> Int) xs
+test_floor :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
+test_floor runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.floor) xs ~~~ mapRef (P.floor :: e -> Int) xs
 
-    test_ceiling :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
-    test_ceiling = testMap $ \xs -> runN (A.map A.ceiling) xs ~~~ mapRef (P.ceiling :: e -> Int) xs
-
-    fullrange :: P.RealFloat e => (Range e -> Gen e) -> Gen e
-    fullrange gen = gen (Range.linearFracFrom 0 flt_min flt_max)
-
-    except :: Gen e -> (e -> Bool) -> Gen e
-    except gen f  = do
-      v <- gen
-      when (f v) Gen.discard
-      return v
+test_ceiling :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
+test_ceiling runN dim e =
+  property $ do
+    sh <- forAll dim
+    xs <- forAll (Gen.array sh e)
+    runN (A.map A.ceiling) xs ~~~ mapRef (P.ceiling :: e -> Int) xs
 
 
 -- Reference Implementation
