@@ -559,6 +559,11 @@ types   = lens _types   (\Stats{..} v -> Stats { _types   = v, ..})
 binders = lens _binders (\Stats{..} v -> Stats { _binders = v, ..})
 vars    = lens _vars    (\Stats{..} v -> Stats { _vars    = v, ..})
 ops     = lens _ops     (\Stats{..} v -> Stats { _ops     = v, ..})
+{-# INLINE terms   #-}
+{-# INLINE types   #-}
+{-# INLINE binders #-}
+{-# INLINE vars    #-}
+{-# INLINE ops     #-}
 
 summariseOpenFun :: PreOpenFun acc env aenv f -> Stats
 summariseOpenFun (Body e) = summariseOpenExp e & terms +~ 1

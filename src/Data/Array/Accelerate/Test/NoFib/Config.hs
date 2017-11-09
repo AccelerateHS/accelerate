@@ -19,7 +19,6 @@ import Data.Proxy
 import Data.Typeable
 
 import Test.Tasty
-import Test.Tasty.Hedgehog
 import Test.Tasty.Ingredients
 import Test.Tasty.Options
 
