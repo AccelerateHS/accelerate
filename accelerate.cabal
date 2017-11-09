@@ -323,6 +323,8 @@ Library
         Data.Array.Accelerate.Hedgehog.Gen.Array
         Data.Array.Accelerate.Hedgehog.Similar
 
+        Data.Array.Accelerate.Test.NoFib
+
   Other-modules:
         Data.Atomic
         Data.Array.Accelerate.Analysis.Hash.TH
@@ -460,6 +462,21 @@ test-suite doctest
   if impl(ghc >= 8.0)
     x-doctest-options:  -fspec-constr-count=25 -freduction-depth=35
 
+
+test-suite nofib-interpreter
+  type:                 exitcode-stdio-1.0
+  hs-source-dirs:       test/nofib
+  main-is:              Main.hs
+
+  build-depends:
+          base                          >= 4.7
+        , accelerate
+
+  ghc-options:
+        -Wall
+        -O2
+        -threaded
+        -rtsopts
 
 source-repository head
   Type:                 git

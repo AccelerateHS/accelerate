@@ -20,6 +20,7 @@ import Data.Array.Accelerate.Trafo.Sharing                          ( Afunction,
 
 import Data.Int
 import Data.Word
+import Control.Monad
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -101,6 +102,13 @@ flt_min = x
     b      = floatRadix x
     (l, _) = floatRange x
     x      = encodeFloat (b^n - 1) (l - n - 1)
+
+except :: Gen e -> (e -> Bool) -> Gen e
+except gen f  = do
+  v <- gen
+  when (f v) Gen.discard
+  return v
+
 
 
 {--

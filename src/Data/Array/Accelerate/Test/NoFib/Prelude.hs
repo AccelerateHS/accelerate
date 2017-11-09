@@ -9,13 +9,17 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Test.NoFib.Prelude
-  where
+module Data.Array.Accelerate.Test.NoFib.Prelude (
+
+  test_prelude,
+
+  module Data.Array.Accelerate.Test.NoFib.Prelude.Map,
+
+) where
 
 import Test.Tasty
 
 import Data.Array.Accelerate.Test.NoFib.Base
-import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.NoFib.Prelude.Map
 
 -- import Test.Prelude.Backpermute
@@ -29,20 +33,20 @@ import Data.Array.Accelerate.Test.NoFib.Prelude.Map
 -- import Test.Prelude.ZipWith
 
 
-test_prelude :: RunN -> Config -> TestTree
-test_prelude runN opt =
+test_prelude :: RunN -> TestTree
+test_prelude runN =
   testGroup "Prelude"
-    [ test_map runN opt
-    -- , test_zipWith runN opt
-    -- , test_foldAll runN opt
-    -- , test_fold runN opt
-    -- , test_backpermute runN opt
-    -- , test_permute runN opt
-    -- , test_scan runN opt              -- requires fold
-    -- , test_foldSeg runN opt           -- requires scan
-    -- , test_stencil runN opt
-    -- , test_replicate runN opt
-    -- , test_filter runN opt
-    -- , test_sequences runN opt
+    [ test_map runN
+    -- , test_zipWith runN conf
+    -- , test_foldAll runN conf
+    -- , test_fold runN conf
+    -- , test_backpermute runN conf
+    -- , test_permute runN conf
+    -- , test_scan runN conf             -- requires fold
+    -- , test_foldSeg runN conf          -- requires scan
+    -- , test_stencil runN conf
+    -- , test_replicate runN conf
+    -- , test_filter runN conf
+    -- , test_sequences runN conf
     ]
 
