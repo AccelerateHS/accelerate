@@ -320,10 +320,7 @@ test_ceiling runN dim e =
 -- ------------------------
 
 mapRef :: (Shape sh, Elt b) => (a -> b) -> Array sh a -> Array sh b
-mapRef f xs
-  = fromList (arrayShape xs)
-  $ P.map f
-  $ toList xs
+mapRef f xs = fromFunction (arrayShape xs) (\ix -> f (xs Sugar.! ix))
 
 countLeadingZerosRef :: P.FiniteBits a => a -> Int
 #if __GLASGOW_HASKELL__ >= 710
