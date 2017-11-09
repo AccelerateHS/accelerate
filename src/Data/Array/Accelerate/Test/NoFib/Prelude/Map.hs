@@ -1,173 +1,238 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Map
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Prelude.Map (
+module Data.Array.Accelerate.Test.NoFib.Prelude.Map (
 
   test_map
 
 ) where
 
-import Prelude                                                  as P
+import Control.Monad
 import Data.Bits                                                as P
-import Data.Label
 import Data.Maybe
 import Data.Typeable
-import System.Random
-import Test.QuickCheck                                          hiding ( (.&.), suchThat )
-import Test.Framework
-import Test.Framework.Providers.QuickCheck2
+import Lens.Micro
+import Prelude                                                  as P
 
-import Config
-import Test.Base
-import QuickCheck.Arbitrary.Array
-import QuickCheck.Arbitrary.Shape
-import Data.Array.Accelerate                                    as A hiding ( Ord(..) )
+import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Data.Bits                          as A
-import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
+import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
+
+import Data.Array.Accelerate.Hedgehog.Similar
+import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+
+import Hedgehog
+import qualified Hedgehog.Gen                                   as Gen
+import qualified Hedgehog.Range                                 as Range
+
+import Test.Tasty
+import Test.Tasty.Hedgehog
 
 --
 -- Map -------------------------------------------------------------------------
 --
 
-test_map :: Backend -> Config -> Test
-test_map backend opt = testGroup "map" $ catMaybes
-  [ testIntegralElt configInt8   (undefined :: Int8)
-  , testIntegralElt configInt16  (undefined :: Int16)
-  , testIntegralElt configInt32  (undefined :: Int32)
-  , testIntegralElt configInt64  (undefined :: Int64)
-  , testIntegralElt configWord8  (undefined :: Word8)
-  , testIntegralElt configWord16 (undefined :: Word16)
-  , testIntegralElt configWord32 (undefined :: Word32)
-  , testIntegralElt configWord64 (undefined :: Word64)
-  , testFloatingElt configFloat  (undefined :: Float)
-  , testFloatingElt configDouble (undefined :: Double)
-  ]
+test_map :: RunN -> Config -> TestTree
+test_map runN opt =
+  testGroup "map" $ catMaybes
+    [ testIntegralElt configInt8   i8
+    , testIntegralElt configInt16  i16
+    , testIntegralElt configInt32  i32
+    , testIntegralElt configInt64  i64
+    , testIntegralElt configWord8  w8
+    , testIntegralElt configWord16 w16
+    , testIntegralElt configWord32 w32
+    , testIntegralElt configWord64 w64
+    , testFloatingElt configFloat  Gen.float
+    , testFloatingElt configDouble Gen.double
+    ]
   where
-    testIntegralElt :: forall a. (P.Integral a, P.FiniteBits a, A.Integral a, A.FiniteBits a, Arbitrary a, Similar a, A.FromIntegral a Float) => (Config :-> Bool) -> a -> Maybe Test
-    testIntegralElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
+    testIntegralElt
+        :: forall a. ( P.Integral a, P.FiniteBits a
+                     , A.Integral a, A.FiniteBits a
+                     , A.FromIntegral a Double, Similar a)
+        => (Config :-> Bool)
+        -> Gen a
+        -> Maybe TestTree
+    testIntegralElt ok e
+      | P.not (opt ^. ok) = Nothing
+      | otherwise         = Just $ testGroup (show (typeOf (undefined :: a)))
           [ testDim dim0
           , testDim dim1
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (rank sh))
-          [ -- operators on Num
-            testProperty "neg"                (test_negate :: Array sh a -> Property)
-          , testProperty "abs"                (test_abs    :: Array sh a -> Property)
-          , testProperty "signum"             (test_signum :: Array sh a -> Property)
+        testDim
+            :: forall sh. (A.Shape sh, P.Eq sh)
+            => Gen sh
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+            [ -- operators on Num
+              testProperty "neg"                $ test_negate sh e
+            , testProperty "abs"                $ test_abs sh e
+            , testProperty "signum"             $ test_signum sh e
 
-            -- operators on Integral & Bits
-          , testProperty "complement"         (test_complement :: Array sh a -> Property)
-          , testProperty "popCount"           (test_popCount   :: Array sh a -> Property)
-          , testProperty "countLeadingZeros"  (test_countLeadingZeros  :: Array sh a -> Property)
-          , testProperty "countTrailingZeros" (test_countTrailingZeros :: Array sh a -> Property)
+              -- operators on Integral & Bits
+            , testProperty "complement"         $ test_complement sh e
+            , testProperty "popCount"           $ test_popCount sh e
+            , testProperty "countLeadingZeros"  $ test_countLeadingZeros sh e
+            , testProperty "countTrailingZeros" $ test_countTrailingZeros sh e
 
-            -- conversions
-          , testProperty "fromIntegral"       (test_fromIntegral :: Array sh a -> Property)
-          ]
-          where
-            test_fromIntegral xs = run1 backend (A.map A.fromIntegral) xs ~?= mapRef (P.fromIntegral :: a -> Float) xs
+              -- conversions
+            , testProperty "fromIntegral"       $ test_fromIntegral sh e
+            ]
 
-    testFloatingElt :: forall a. (P.Floating a, P.RealFloat a, A.Floating a, A.RealFloat a, Random a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
-    testFloatingElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
+    testFloatingElt
+        :: forall a. (P.RealFloat a, A.Floating a, A.RealFrac a, Similar a)
+        => (Config :-> Bool)
+        -> (Range a -> Gen a)
+        -> Maybe TestTree
+    testFloatingElt ok e
+      | P.not (opt ^. ok) = Nothing
+      | otherwise         = Just $ testGroup (show (typeOf (undefined :: a)))
           [ testDim dim0
           , testDim dim1
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Random a, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim _ = testGroup ("DIM" P.++ show (rank (undefined::sh)))
-          [ -- operators on Num
-            testProperty "neg"          (test_negate :: Array sh a -> Property)
-          , testProperty "abs"          (test_abs    :: Array sh a -> Property)
-          , testProperty "signum"       (test_signum :: Array sh a -> Property)
+        testDim
+            :: forall sh. (A.Shape sh, P.Eq sh)
+            => Gen sh
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+            [ -- operators on Num
+              testProperty "neg"        $ test_negate sh (fullrange e)
+            , testProperty "abs"        $ test_abs sh (fullrange e)
+            , testProperty "signum"     $ test_abs sh (fullrange e)
 
-            -- operators on Fractional, Floating, RealFrac & RealFloat
-          , testProperty "recip"        (test_recip  :: Array sh a -> Property)
-          , testProperty "sin"          (test_sin    :: Array sh a -> Property)
-          , testProperty "cos"          (test_cos    :: Array sh a -> Property)
-          , testProperty "tan"          (requiring (\x -> P.not (sin x ~= 1)) (test_tan  :: Array sh a -> Property))
-          , testProperty "asin"         (forAll (sized arbitraryShape)                $ \sh ->
-                                         forAll (arbitraryArrayOf sh (choose (-1,1))) $ \(xs :: Array sh a) -> test_asin xs)
-          , testProperty "acos"         (forAll (sized arbitraryShape)                $ \sh ->
-                                         forAll (arbitraryArrayOf sh (choose (-1,1))) $ \(xs :: Array sh a) -> test_acos xs)
-          , testProperty "atan"         (test_atan  :: Array sh a -> Property)
-          , testProperty "asinh"        (test_asinh :: Array sh a -> Property)
-          , testProperty "acosh"        (requiring (>= 1) (test_acosh :: Array sh a -> Property))
-          , testProperty "atanh"        (forAll (sized arbitraryShape)                $ \sh ->
-                                         forAll (arbitraryArrayOf sh (choose (-1,1))) $ \(xs :: Array sh a) -> test_atanh xs)
-          , testProperty "exp"          (test_exp :: Array sh a -> Property)
-          , testProperty "sqrt"         (requiring (>= 0) (test_sqrt :: Array sh a -> Property))
-          , testProperty "log"          (requiring (> 0)  (test_log  :: Array sh a -> Property))
-          , testProperty "truncate"     (test_truncate :: Array sh a -> Property)
-          , testProperty "round"        (test_round :: Array sh a -> Property)
-          , testProperty "floor"        (test_floor :: Array sh a -> Property)
-          , testProperty "ceiling"      (test_ceiling :: Array sh a -> Property)
-          ]
-          where
-            test_truncate xs = run1 backend (A.map A.truncate) xs ~?= mapRef (P.truncate :: a -> Int) xs
-            test_round xs    = run1 backend (A.map A.round) xs ~?= mapRef (P.round :: a -> Int) xs
-            test_floor xs    = run1 backend (A.map A.floor) xs ~?= mapRef (P.floor :: a -> Int) xs
-            test_ceiling xs  = run1 backend (A.map A.ceiling) xs ~?= mapRef (P.ceiling :: a -> Int) xs
+              -- operators on Fractional, Floating, RealFrac & RealFloat
+            , testProperty "recip"      $ test_recip sh (fullrange e)
+            , testProperty "sin"        $ test_sin sh (fullrange e)
+            , testProperty "cos"        $ test_cos sh (fullrange e)
+            , testProperty "tan"        $ test_tan sh (fullrange e `except` \v -> sin v ~= 1)
+            , testProperty "asin"       $ test_asin sh (e (Range.linearFracFrom 0 (-1) 1))
+            , testProperty "acos"       $ test_acos sh (e (Range.linearFracFrom 0 (-1) 1))
+            , testProperty "atan"       $ test_atan sh (fullrange e)
+            , testProperty "asinh"      $ test_asinh sh (fullrange e)
+            , testProperty "acosh"      $ test_acosh sh (e (Range.linearFrac 1 flt_max))
+            , testProperty "atanh"      $ test_atanh sh (e (Range.linearFracFrom 0 (-1) 1))
+            , testProperty "exp"        $ test_exp sh (fullrange e)
+            , testProperty "sqrt"       $ test_sqrt sh (e (Range.linearFrac 0 flt_max))
+            , testProperty "log"        $ test_log sh (e (Range.linearFrac 0 flt_max) `except` \v -> v P.== 0)
+            , testProperty "truncate"   $ test_truncate sh (fullrange e)
+            , testProperty "round"      $ test_round sh (fullrange e)
+            , testProperty "floor"      $ test_floor sh (fullrange e)
+            , testProperty "ceiling"    $ test_ceiling sh (fullrange e)
+            ]
 
-    test_negate xs     = run1 backend (A.map negate) xs ~?= mapRef negate xs
-    test_abs    xs     = run1 backend (A.map abs) xs    ~?= mapRef abs xs
-    test_signum xs     = run1 backend (A.map signum) xs ~?= mapRef signum xs
+    testMap :: (A.Shape sh, P.Eq sh, Elt e, Similar e) => (Array sh e -> PropertyT IO ()) -> Gen sh -> Gen e -> Property
+    testMap doit dim e =
+      property $ do
+        sh  <- forAll dim
+        arr <- forAll (Gen.array sh e)
+        doit arr
 
-    test_complement xs          = run1 backend (A.map A.complement) xs ~?= mapRef P.complement xs
-    test_popCount   xs          = run1 backend (A.map A.popCount)   xs ~?= mapRef P.popCount xs
-    test_countLeadingZeros xs   = run1 backend (A.map A.countLeadingZeros) xs  ~?= mapRef countLeadingZerosRef xs
-    test_countTrailingZeros xs  = run1 backend (A.map A.countTrailingZeros) xs ~?= mapRef countTrailingZerosRef xs
+    test_negate :: (A.Shape sh, A.Num e, P.Num e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
+    test_negate = testMap $ \xs -> runN (A.map negate) xs ~~~ mapRef negate xs
 
-    test_recip xs      = run1 backend (A.map recip) xs ~?= mapRef recip xs
-    test_sin xs        = run1 backend (A.map sin) xs ~?= mapRef sin xs
-    test_cos xs        = run1 backend (A.map cos) xs ~?= mapRef cos xs
-    test_tan xs        = run1 backend (A.map tan) xs ~?= mapRef tan xs
-    test_asin xs       = run1 backend (A.map asin) xs ~?= mapRef asin xs
-    test_acos xs       = run1 backend (A.map acos) xs ~?= mapRef acos xs
-    test_atan xs       = run1 backend (A.map atan) xs ~?= mapRef atan xs
-    test_asinh xs      = run1 backend (A.map asinh) xs ~?= mapRef asinh xs
-    test_acosh xs      = run1 backend (A.map acosh) xs ~?= mapRef acosh xs
-    test_atanh xs      = run1 backend (A.map atanh) xs ~?= mapRef atanh xs
-    test_exp xs        = run1 backend (A.map exp) xs ~?= mapRef exp xs
-    test_sqrt xs       = run1 backend (A.map sqrt) xs ~?= mapRef sqrt xs
-    test_log xs        = run1 backend (A.map log) xs ~?= mapRef log xs
+    test_abs :: (A.Shape sh, A.Num e, P.Num e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
+    test_abs = testMap $ \xs -> runN (A.map abs) xs ~~~ mapRef abs xs
 
+    test_signum :: (A.Shape sh, A.Num e, P.Num e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
+    test_signum = testMap $ \xs -> runN (A.map signum) xs ~~~ mapRef signum xs
 
-suchThat :: Gen a -> (a -> Bool) -> Gen a
-suchThat gen p = do
-  x <- gen
-  case p x of
-    True  -> return x
-    False -> sized $ \n -> resize (n+1) (suchThat gen p)
+    test_complement :: (A.Shape sh, A.Bits e, P.Bits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
+    test_complement = testMap $ \xs -> runN (A.map A.complement) xs ~~~ mapRef P.complement xs
 
+    test_popCount :: (A.Shape sh, A.Bits e, P.Bits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
+    test_popCount = testMap $ \xs -> runN (A.map A.popCount) xs ~~~ mapRef P.popCount xs
 
-{-# INLINE requiring #-}
-requiring
-    :: (Elt e, Shape sh, Arbitrary e, Arbitrary sh, Testable prop)
-    => (e -> Bool)
-    -> (Array sh e -> prop)
-    -> Property
-requiring f go =
-  let
-      shrinkRequiring arr       = [ fromList (Sugar.shape arr) sl | sl <- shrinkOneRequiring (toList arr) ]
-      shrinkOneRequiring []     = []
-      shrinkOneRequiring (x:xs) = [ x':xs | x'  <- shrink x, f x' ]
-                             P.++ [ x:xs' | xs' <- shrinkOneRequiring xs ]
-  in
-  forAllShrink arbitrary                                      shrink          $ \sh ->
-  forAllShrink (arbitraryArrayOf sh (arbitrary `suchThat` f)) shrinkRequiring $ \arr ->
-    go arr
+    test_countLeadingZeros :: (A.Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
+    test_countLeadingZeros = testMap $ \xs -> runN (A.map A.countLeadingZeros) xs ~~~ mapRef countLeadingZerosRef xs
+
+    test_countTrailingZeros :: (A.Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh, Similar e) => Gen sh -> Gen e -> Property
+    test_countTrailingZeros = testMap $ \xs -> runN (A.map A.countTrailingZeros) xs ~~~ mapRef countTrailingZerosRef xs
+
+    test_fromIntegral :: forall sh e. (A.Shape sh, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double, Similar e) => Gen sh -> Gen e -> Property
+    test_fromIntegral = testMap $ \xs -> runN (A.map A.fromIntegral) xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
+
+    test_recip :: (A.Shape sh, P.Eq sh, P.Fractional e, A.Fractional e, Similar e) => Gen sh -> Gen e -> Property
+    test_recip = testMap $ \xs -> runN (A.map recip) xs ~~~ mapRef recip xs
+
+    test_sin :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_sin = testMap $ \xs -> runN (A.map sin) xs ~~~ mapRef sin xs
+
+    test_cos :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_cos = testMap $ \xs -> runN (A.map cos) xs ~~~ mapRef cos xs
+
+    test_tan :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_tan = testMap $ \xs -> runN (A.map tan) xs ~~~ mapRef tan xs
+
+    test_asin :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_asin = testMap $ \xs -> runN (A.map asin) xs ~~~ mapRef asin xs
+
+    test_acos :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_acos = testMap $ \xs -> runN (A.map acos) xs ~~~ mapRef acos xs
+
+    test_atan :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_atan = testMap $ \xs -> runN (A.map atan) xs ~~~ mapRef atan xs
+
+    test_asinh :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_asinh = testMap $ \xs -> runN (A.map asinh) xs ~~~ mapRef asinh xs
+
+    test_acosh :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_acosh = testMap $ \xs -> runN (A.map acosh) xs ~~~ mapRef acosh xs
+
+    test_atanh :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_atanh = testMap $ \xs -> runN (A.map atanh) xs ~~~ mapRef atanh xs
+
+    test_exp :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_exp = testMap $ \xs -> runN (A.map exp) xs ~~~ mapRef exp xs
+
+    test_sqrt :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_sqrt = testMap $ \xs -> runN (A.map sqrt) xs ~~~ mapRef sqrt xs
+
+    test_log :: (A.Shape sh, P.Eq sh, P.Floating e, A.Floating e, Similar e) => Gen sh -> Gen e -> Property
+    test_log = testMap $ \xs -> runN (A.map log) xs ~~~ mapRef log xs
+
+    test_truncate :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
+    test_truncate = testMap $ \xs -> runN (A.map A.truncate) xs ~~~ mapRef (P.truncate :: e -> Int) xs
+
+    test_round :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
+    test_round = testMap $ \xs -> runN (A.map A.round) xs ~~~ mapRef (P.round :: e -> Int) xs
+
+    test_floor :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
+    test_floor = testMap $ \xs -> runN (A.map A.floor) xs ~~~ mapRef (P.floor :: e -> Int) xs
+
+    test_ceiling :: forall sh e. (A.Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e, Similar e) => Gen sh -> Gen e -> Property
+    test_ceiling = testMap $ \xs -> runN (A.map A.ceiling) xs ~~~ mapRef (P.ceiling :: e -> Int) xs
+
+    fullrange :: P.RealFloat e => (Range e -> Gen e) -> Gen e
+    fullrange gen = gen (Range.linearFracFrom 0 flt_min flt_max)
+
+    except :: Gen e -> (e -> Bool) -> Gen e
+    except gen f  = do
+      v <- gen
+      when (f v) Gen.discard
+      return v
 
 
 -- Reference Implementation

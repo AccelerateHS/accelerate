@@ -1,23 +1,33 @@
-{-# LANGUAGE PatternGuards   #-}
-{-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
-{-# LANGUAGE ViewPatterns    #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Config
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Config where
+module Data.Array.Accelerate.Test.NoFib.Config
+  where
 
-import Data.Label
 import Data.Maybe
 import Data.Bits
+import Lens.Micro
+import Lens.Micro.TH
 import System.Console.GetOpt
 
 
+type a :-> b = Getting b a b
+
+
+-- Which test types should be enabled?
+--
 data Config
   = Config
-  {
-    -- Which QuickCheck test types to enable?
-    _configDouble       :: Bool
+  { _configDouble       :: Bool
   , _configFloat        :: Bool
   , _configInt64        :: Bool
   , _configInt32        :: Bool
@@ -29,8 +39,7 @@ data Config
   , _configWord8        :: Bool
   }
 
-$(mkLabel ''Config)
-
+makeLenses ''Config
 
 defaults :: Config
 defaults = Config
@@ -111,16 +120,5 @@ options =
   ]
   where
     describe f msg
-      = msg ++ " (" ++ show (get f defaults) ++ ")"
-
-header :: [String]
-header =
-  [ "accelerate-nofib (c) [2013] The Accelerate Team"
-  , ""
-  , "Usage: accelerate-nofib [OPTIONS]"
-  , ""
-  ]
-
-footer :: [String]
-footer = [ "" ]
+      = msg ++ " (" ++ show (defaults ^. f) ++ ")"
 

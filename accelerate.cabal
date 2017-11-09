@@ -269,7 +269,10 @@ Library
         , hashtables                    >= 1.0
         , hedgehog                      >= 0.5
         , microlens                     >= 0.4
+        , microlens-th                  >= 0.4
         , mtl                           >= 2.0
+        , tasty                         >= 0.11
+        , tasty-hedgehog                >= 0.1
         , template-haskell
         , terminal-size                 >= 0.3
         , time                          >= 1.4
@@ -360,6 +363,12 @@ Library
         Data.Array.Accelerate.Trafo.Simplify
         Data.Array.Accelerate.Trafo.Substitution
         -- Data.Array.Accelerate.Trafo.Vectorise
+
+        -- nofib test suite
+        Data.Array.Accelerate.Test.NoFib.Base
+        Data.Array.Accelerate.Test.NoFib.Config
+        Data.Array.Accelerate.Test.NoFib.Prelude
+        Data.Array.Accelerate.Test.NoFib.Prelude.Map
 
   hs-source-dirs:
         src
