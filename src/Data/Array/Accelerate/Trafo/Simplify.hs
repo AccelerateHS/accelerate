@@ -26,12 +26,12 @@ module Data.Array.Accelerate.Trafo.Simplify (
 
 ) where
 
--- other libraries
+-- standard library
+import Data.Functor.Identity
 import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
 import Data.Typeable
-import Lens.Micro                                       hiding ( ix )
 import Text.Printf
 import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, iterate )
@@ -523,10 +523,30 @@ instance Show Stats where
   show (Stats a b c d e) =
     printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
 
+-- Define a mini-lens infrastructure. Maybe it would be better to just pull in
+-- the ekmett-verse...
+--
+type Lens' s a       = Lens s s a a
+type Lens s t a b    = forall f. Functor f => (a -> f b) -> s -> f t
+type ASetter s t a b = (a -> Identity b) -> s -> Identity t
+
+lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b
+lens sa sbt afb s = sbt s <$> afb (sa s)
+{-# INLINE lens #-}
+
+infixl 1 &
+(&) :: a -> (a -> b) -> b
+(&) x f = f x
+{-# INLINE (&) #-}
+
 infixr 4 +~
 (+~) :: Num a => ASetter s t a a -> a -> s -> t
 (+~) l n = over l (+n)
 {-# INLINE (+~) #-}
+
+over :: ASetter s t a b -> (a -> b) -> s -> t
+over l f = runIdentity . l (Identity . f)
+{-# INLINE over #-}
 
 infixl 6 +++
 (+++) :: Stats -> Stats -> Stats
@@ -539,11 +559,6 @@ types   = lens _types   (\Stats{..} v -> Stats { _types   = v, ..})
 binders = lens _binders (\Stats{..} v -> Stats { _binders = v, ..})
 vars    = lens _vars    (\Stats{..} v -> Stats { _vars    = v, ..})
 ops     = lens _ops     (\Stats{..} v -> Stats { _ops     = v, ..})
-{-# INLINE terms   #-}
-{-# INLINE types   #-}
-{-# INLINE binders #-}
-{-# INLINE vars    #-}
-{-# INLINE ops     #-}
 
 summariseOpenFun :: PreOpenFun acc env aenv f -> Stats
 summariseOpenFun (Body e) = summariseOpenExp e & terms +~ 1
