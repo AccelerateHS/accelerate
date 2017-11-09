@@ -1,5 +1,6 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE TypeOperators      #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Config
 -- Copyright   : [2009..2017] Trevor L. McDonell
@@ -13,112 +14,151 @@
 module Data.Array.Accelerate.Test.NoFib.Config
   where
 
-import Data.Maybe
 import Data.Bits
-import Lens.Micro
-import Lens.Micro.TH
-import System.Console.GetOpt
+import Data.Proxy
+import Data.Typeable
+
+import Test.Tasty
+import Test.Tasty.Hedgehog
+import Test.Tasty.Ingredients
+import Test.Tasty.Options
 
 
-type a :-> b = Getting b a b
+nofibIngredient :: Ingredient
+nofibIngredient =
+  includingOptions
+    [ Option (Proxy::Proxy TestDouble)
+    , Option (Proxy::Proxy TestFloat)
+    , Option (Proxy::Proxy TestInt8)
+    , Option (Proxy::Proxy TestInt16)
+    , Option (Proxy::Proxy TestInt32)
+    , Option (Proxy::Proxy TestInt64)
+    , Option (Proxy::Proxy TestWord8)
+    , Option (Proxy::Proxy TestWord16)
+    , Option (Proxy::Proxy TestWord32)
+    , Option (Proxy::Proxy TestWord64)
+    ]
+
+newtype TestAll    = TestAll    Bool deriving (Eq, Show, Typeable)
+newtype TestDouble = TestDouble Bool deriving (Eq, Show, Typeable)
+newtype TestFloat  = TestFloat  Bool deriving (Eq, Show, Typeable)
+newtype TestInt8   = TestInt8   Bool deriving (Eq, Show, Typeable)
+newtype TestInt16  = TestInt16  Bool deriving (Eq, Show, Typeable)
+newtype TestInt32  = TestInt32  Bool deriving (Eq, Show, Typeable)
+newtype TestInt64  = TestInt64  Bool deriving (Eq, Show, Typeable)
+newtype TestWord8  = TestWord8  Bool deriving (Eq, Show, Typeable)
+newtype TestWord16 = TestWord16 Bool deriving (Eq, Show, Typeable)
+newtype TestWord32 = TestWord32 Bool deriving (Eq, Show, Typeable)
+newtype TestWord64 = TestWord64 Bool deriving (Eq, Show, Typeable)
+
+instance IsOption TestAll where
+  defaultValue = TestAll False
+  parseValue = fmap TestAll . safeRead
+  optionName = return "all-types"
+  optionHelp = return "Enable tests on all primitive types"
+  optionCLParser = flagCLParser Nothing (TestAll True)
+
+instance IsOption TestDouble where
+  defaultValue = TestDouble True
+  parseValue = fmap TestDouble . safeRead
+  optionName = return "double"
+  optionHelp = return "Enable double-precision tests"
+  optionCLParser = flagCLParser Nothing (TestDouble True)
+
+instance IsOption TestFloat where
+  defaultValue = TestFloat False
+  parseValue = fmap TestFloat . safeRead
+  optionName = return "float"
+  optionHelp = return "Enable single-precision tests"
+  optionCLParser = flagCLParser Nothing (TestFloat True)
+
+instance IsOption TestInt8 where
+  defaultValue = TestInt8 False
+  parseValue = fmap TestInt8 . safeRead
+  optionName = return "int8"
+  optionHelp = return "Enable 8-bit signed integer tests"
+  optionCLParser = flagCLParser Nothing (TestInt8 True)
+
+instance IsOption TestInt16 where
+  defaultValue = TestInt16 False
+  parseValue = fmap TestInt16 . safeRead
+  optionName = return "int16"
+  optionHelp = return "Enable 16-bit signed integer tests"
+  optionCLParser = flagCLParser Nothing (TestInt16 True)
+
+instance IsOption TestInt32 where
+  defaultValue = TestInt32 $( [e| finiteBitSize (undefined::Int) == 64 |] )
+  parseValue = fmap TestInt32 . safeRead
+  optionName = return "int32"
+  optionHelp = return "Enable 32-bit signed integer tests"
+  optionCLParser = flagCLParser Nothing (TestInt32 True)
+
+instance IsOption TestInt64 where
+  defaultValue = TestInt64 $( [e| finiteBitSize (undefined::Int) == 32 |] )
+  parseValue = fmap TestInt64 . safeRead
+  optionName = return "int64"
+  optionHelp = return "Enable 64-bit signed integer tests"
+  optionCLParser = flagCLParser Nothing (TestInt64 True)
+
+instance IsOption TestWord8 where
+  defaultValue = TestWord8 False
+  parseValue = fmap TestWord8 . safeRead
+  optionName = return "word8"
+  optionHelp = return "Enable 8-bit unsigned integer tests"
+  optionCLParser = flagCLParser Nothing (TestWord8 True)
+
+instance IsOption TestWord16 where
+  defaultValue = TestWord16 False
+  parseValue = fmap TestWord16 . safeRead
+  optionName = return "word16"
+  optionHelp = return "Enable 16-bit unsigned integer tests"
+  optionCLParser = flagCLParser Nothing (TestWord16 True)
+
+instance IsOption TestWord32 where
+  defaultValue = TestWord32 False
+  parseValue = fmap TestWord32 . safeRead
+  optionName = return "word32"
+  optionHelp = return "Enable 32-bit unsigned integer tests"
+  optionCLParser = flagCLParser Nothing (TestWord32 True)
+
+instance IsOption TestWord64 where
+  defaultValue = TestWord64 False
+  parseValue = fmap TestWord64 . safeRead
+  optionName = return "word64"
+  optionHelp = return "Enable 64-bit unsigned integer tests"
+  optionCLParser = flagCLParser Nothing (TestWord64 True)
 
 
--- Which test types should be enabled?
---
-data Config
-  = Config
-  { _configDouble       :: Bool
-  , _configFloat        :: Bool
-  , _configInt64        :: Bool
-  , _configInt32        :: Bool
-  , _configInt16        :: Bool
-  , _configInt8         :: Bool
-  , _configWord64       :: Bool
-  , _configWord32       :: Bool
-  , _configWord16       :: Bool
-  , _configWord8        :: Bool
-  }
+class IsOption a => TestConfig a where
+  at :: Proxy a -> TestTree -> TestTree
 
-makeLenses ''Config
+instance TestConfig TestFloat where
+  at _ t = askOption $ \(TestFloat v)  -> if v then t else testGroup "Float" []
 
-defaults :: Config
-defaults = Config
-  {
-    _configDouble       = True
-  , _configFloat        = False
-  , _configInt64        = $( [e| finiteBitSize (undefined::Int) == 64 |] )
-  , _configInt32        = $( [e| finiteBitSize (undefined::Int) == 32 |] )
-  , _configInt16        = False
-  , _configInt8         = False
-  , _configWord64       = False
-  , _configWord32       = False
-  , _configWord16       = False
-  , _configWord8        = False
-  }
+instance TestConfig TestDouble where
+  at _ t = askOption $ \(TestDouble v) -> if v then t else testGroup "Double" []
 
-extensive :: Config
-extensive = Config
-  {
-    _configDouble       = True
-  , _configFloat        = True
-  , _configInt64        = True
-  , _configInt32        = True
-  , _configInt16        = True
-  , _configInt8         = True
-  , _configWord64       = True
-  , _configWord32       = True
-  , _configWord16       = True
-  , _configWord8        = True
-  }
+instance TestConfig TestInt8 where
+  at _ t = askOption $ \(TestInt8 v)   -> if v then t else testGroup "Int8" []
 
+instance TestConfig TestInt16 where
+  at _ t = askOption $ \(TestInt16 v)  -> if v then t else testGroup "Int16" []
 
-options :: [OptDescr (Config -> Config)]
-options =
-  [ Option  [] ["all"]
-            (NoArg (const extensive))
-            "enable tests on all primitive types"
+instance TestConfig TestInt32 where
+  at _ t = askOption $ \(TestInt32 v)  -> if v then t else testGroup "Int32" []
 
-  , Option  [] ["double"]
-            (OptArg (set configDouble . read . fromMaybe "True") "BOOL")
-            (describe configDouble "enable double-precision tests")
+instance TestConfig TestInt64 where
+  at _ t = askOption $ \(TestInt64 v)  -> if v then t else testGroup "Int64" []
 
-  , Option  [] ["float"]
-            (OptArg (set configFloat . read . fromMaybe "True") "BOOL")
-            (describe configFloat "enable single-precision tests")
+instance TestConfig TestWord8 where
+  at _ t = askOption $ \(TestWord8 v)  -> if v then t else testGroup "Word8" []
 
-  , Option  [] ["int64"]
-            (OptArg (set configInt64 . read . fromMaybe "True") "BOOL")
-            (describe configInt64 "enable 64-bit integer tests")
+instance TestConfig TestWord16 where
+  at _ t = askOption $ \(TestWord16 v) -> if v then t else testGroup "Word16" []
 
-  , Option  [] ["int32"]
-            (OptArg (set configInt32 . read . fromMaybe "True") "BOOL")
-            (describe configInt32 "enable 32-bit integer tests")
+instance TestConfig TestWord32 where
+  at _ t = askOption $ \(TestWord32 v) -> if v then t else testGroup "Word32" []
 
-  , Option  [] ["int16"]
-            (OptArg (set configInt16 . read . fromMaybe "True") "BOOL")
-            (describe configInt16 "enable 16-bit integer tests")
-
-  , Option  [] ["int8"]
-            (OptArg (set configInt8 . read . fromMaybe "True") "BOOL")
-            (describe configInt8 "enable 8-bit integer tests")
-
-  , Option  [] ["word64"]
-            (OptArg (set configWord64 . read . fromMaybe "True") "BOOL")
-            (describe configWord64 "enable 64-bit unsigned integer tests")
-
-  , Option  [] ["word32"]
-            (OptArg (set configWord32 . read . fromMaybe "True") "BOOL")
-            (describe configWord32 "enable 32-bit unsigned integer tests")
-
-  , Option  [] ["word16"]
-            (OptArg (set configWord16 . read . fromMaybe "True") "BOOL")
-            (describe configWord16 "enable 16-bit unsigned integer tests")
-
-  , Option  [] ["word8"]
-            (OptArg (set configWord8 . read . fromMaybe "True") "BOOL")
-            (describe configWord8 "enable 8-bit unsigned integer tests")
-  ]
-  where
-    describe f msg
-      = msg ++ " (" ++ show (defaults ^. f) ++ ")"
+instance TestConfig TestWord64 where
+  at _ t = askOption $ \(TestWord64 v) -> if v then t else testGroup "Word64" []
 
