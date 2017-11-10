@@ -3,35 +3,356 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Scan
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Prelude.Scan (
+module Data.Array.Accelerate.Test.NoFib.Prelude.Scan (
 
-  test_scan,
+  test_scanl,
+  test_scanl1,
+  test_scanl',
+
+  test_scanr,
+  test_scanr1,
+  test_scanr',
 
 ) where
 
-import Prelude                                                  as P
-import Test.QuickCheck
-import Data.Label
-import Data.Maybe
+import Data.Proxy
 import Data.Typeable
-import Test.Framework
-import Test.Framework.Providers.QuickCheck2
+import Prelude                                                  as P
 
-import Config
-import Test.Base
-import QuickCheck.Arbitrary.Array
-import QuickCheck.Arbitrary.Shape                               ()
-import Data.Array.Accelerate                                    as A hiding ( Ord(..) )
-import Data.Array.Accelerate.Examples.Internal                  as A
-import Data.Array.Accelerate.Array.Sugar                        as Sugar
-import qualified Data.Array.Accelerate                          as A
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Array.Sugar                        as S
+import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
+
+import Data.Array.Accelerate.Hedgehog.Similar
+import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+
+import Hedgehog
+import qualified Hedgehog.Gen                                   as Gen
+import qualified Hedgehog.Range                                 as Range
+
+import Test.Tasty
+import Test.Tasty.Hedgehog
+
+
+test_scanl :: RunN -> TestTree
+test_scanl runN =
+  testGroup "scanl"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanl_sum runN sh e
+            , testProperty "non-commutative"  $ test_scanl_interval runN sh e
+            ]
+
+test_scanl1 :: RunN -> TestTree
+test_scanl1 runN =
+  testGroup "scanl1"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanl1_sum runN sh e
+            , testProperty "non-commutative"  $ test_scanl1_interval runN sh e
+            ]
+
+test_scanl' :: RunN -> TestTree
+test_scanl' runN =
+  testGroup "scanl'"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanl'_sum runN sh e
+            , testProperty "non-commutative"  $ test_scanl'_interval runN sh e
+            ]
+
+test_scanr :: RunN -> TestTree
+test_scanr runN =
+  testGroup "scanr"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanr_sum runN sh e
+            , testProperty "non-commutative"  $ test_scanr_interval runN sh e
+            ]
+
+test_scanr1 :: RunN -> TestTree
+test_scanr1 runN =
+  testGroup "scanr1"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanr1_sum runN sh e
+            , testProperty "non-commutative"  $ test_scanr1_interval runN sh e
+            ]
+
+test_scanr' :: RunN -> TestTree
+test_scanr' runN =
+  testGroup "scanr'"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanr'_sum runN sh e
+            , testProperty "non-commutative"  $ test_scanr'_interval runN sh e
+            ]
+
+
+scalar :: Elt e => e -> Scalar e
+scalar x = fromFunction Z (const x)
+
+test_scanl_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl_sum runN dim e =
+  property $ do
+    z   <- forAll e
+    sh  <- forAll dim
+    arr <- forAll (Gen.array sh e)
+    runN (\v -> A.scanl (+) (the v)) (scalar z) arr ~~~ scanlRef (+) z arr
+
+test_scanl1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl1_sum runN dim e =
+  property $ do
+    sh  <- forAll (dim `except` \v -> S.size v P.== 0)
+    arr <- forAll (Gen.array sh e)
+    runN (A.scanl1 (+)) arr ~~~ scanl1Ref (+) arr
+
+test_scanl'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl'_sum runN dim e =
+  property $ do
+    z   <- forAll e
+    sh  <- forAll dim
+    arr <- forAll (Gen.array sh e)
+    runN (\v -> A.scanl' (+) (the v)) (scalar z) arr ~~~ scanl'Ref (+) z arr
+
+test_scanr_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr_sum runN dim e =
+  property $ do
+    z   <- forAll e
+    sh  <- forAll dim
+    arr <- forAll (Gen.array sh e)
+    runN (\v -> A.scanr (+) (the v)) (scalar z) arr ~~~ scanrRef (+) z arr
+
+test_scanr1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr1_sum runN dim e =
+  property $ do
+    sh  <- forAll (dim `except` \v -> S.size v P.== 0)
+    arr <- forAll (Gen.array sh e)
+    runN (A.scanr1 (+)) arr ~~~ scanr1Ref (+) arr
+
+test_scanr'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr'_sum runN dim e =
+  property $ do
+    z   <- forAll e
+    sh  <- forAll dim
+    arr <- forAll (Gen.array sh e)
+    runN (\v -> A.scanr' (+) (the v)) (scalar z) arr ~~~ scanr'Ref (+) z arr
+
+test_scanl_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl_interval runN dim e =
+  property $ do
+    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    let arr  = intervalArray sh n e
+    runN (A.scanl iappend (constant one)) arr ~~~ scanlRef iappendRef one arr
+
+test_scanl1_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl1_interval runN dim e =
+  property $ do
+    sh :. n <- forAll (dim `except` \v -> S.size v P.== 0)
+    let arr  = intervalArray sh n e
+    runN (A.scanl1 iappend) arr ~~~ scanl1Ref iappendRef arr
+
+test_scanl'_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl'_interval runN dim e =
+  property $ do
+    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    let arr  = intervalArray sh n e
+    runN (A.scanl' iappend (constant one)) arr ~~~ scanl'Ref iappendRef one arr
+
+test_scanr_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr_interval runN dim e =
+  property $ do
+    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    let arr  = intervalArray sh n e
+    runN (A.scanr iappend (constant one)) arr ~~~ scanrRef iappendRef one arr
+
+test_scanr1_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr1_interval runN dim e =
+  property $ do
+    sh :. n <- forAll (dim `except` \v -> S.size v P.== 0)
+    let arr  = intervalArray sh n e
+    runN (A.scanr1 iappend) arr ~~~ scanr1Ref iappendRef arr
+
+test_scanr'_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr'_interval runN dim e =
+  property $ do
+    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    let arr  = intervalArray sh n e
+    runN (A.scanr' iappend (constant one)) arr ~~~ scanr'Ref iappendRef one arr
 
 
 --
 -- scan ------------------------------------------------------------------------
 --
 
+{--
 test_scan :: Backend -> Config -> Test
 test_scan backend opt = testGroup "scan" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
@@ -176,38 +497,37 @@ test_scan backend opt = testGroup "scan" $ catMaybes
                 (runN backend (A.scanr'Seg (+) 0)) xs seg
                 ~?=
                 scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
+--}
 
-            -- interval of summations monoid
-            --
-            one,top :: (e,e)
-            one = (-1,-1)
-            top = (-2,-2)
+-- interval of summations monoid
+--
+one, top :: P.Num e => (e,e)
+one = (-1,-1)
+top = (-2,-2)
 
-            iappend :: (e,e) -> (e,e) -> (e,e)
-            iappend x y
-              | x P.== one                 = y
-              | y P.== one                 = x
-              | x P.== top P.|| y P.== top = top
-            iappend (x1,x2) (y1,y2)
-              | x2 + 1 P.== y1             = (x1,y2)
-              | otherwise                  = top
+iappendRef :: (P.Num e, P.Eq e) => (e,e) -> (e,e) -> (e,e)
+iappendRef x y
+  | x P.== one                 = y
+  | y P.== one                 = x
+  | x P.== top P.|| y P.== top = top
+iappendRef (x1,x2) (y1,y2)
+  | x2 + 1 P.== y1             = (x1,y2)
+  | otherwise                  = top
 
-            iappend' :: Exp (e,e) -> Exp (e,e) -> Exp (e,e)
-            iappend' x y
-              = x A.== constant one ? ( y
-              , y A.== constant one ? ( x
-              , x A.== constant top ? ( constant top -- A.|| y A.== constant top; see AccelerateHS/accelerate#364
-              , let
-                    (x1,x2) = unlift x :: (Exp e, Exp e)
-                    (y1,y2) = unlift y :: (Exp e, Exp e)
-                in
-                x2 + 1 A.== y1 ? ( lift (x1,y2) , constant top )
-              )))
+iappend :: forall e. (A.Eq e, A.Num e, P.Num e) => Exp (e,e) -> Exp (e,e) -> Exp (e,e)
+iappend x y
+  = x A.== constant one ? ( y
+  , y A.== constant one ? ( x
+  , x A.== constant top ? ( constant top -- A.|| y A.== constant top; see AccelerateHS/accelerate#364
+  , let
+        (x1,x2) = unlift x :: (Exp e, Exp e)
+        (y1,y2) = unlift y :: (Exp e, Exp e)
+    in
+    x2 + 1 A.== y1 ? ( lift (x1,y2) , constant top )
+  )))
 
-            intervalArray :: sh -> Int -> Array (sh:.Int) (e,e)
-            intervalArray sh n = fromList (sh:.n)
-                               . concat
-                               $ P.replicate (Sugar.size sh) [ (i,i) | i <- [0.. (P.fromIntegral n-1)] ]
+intervalArray :: (Shape sh, Elt e, P.Num e) => sh -> Int -> proxy e -> Array (sh:.Int) (e,e)
+intervalArray sh n _ = fromFunction (sh:.n) (\(_:.i) -> let x = P.fromIntegral i in (x,x))
 
 
 -- Reference implementation

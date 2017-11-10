@@ -16,6 +16,7 @@ module Data.Array.Accelerate.Test.NoFib.Prelude (
   module Data.Array.Accelerate.Test.NoFib.Prelude.Map,
   module Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith,
   module Data.Array.Accelerate.Test.NoFib.Prelude.Fold,
+  module Data.Array.Accelerate.Test.NoFib.Prelude.Scan,
 
 ) where
 
@@ -25,15 +26,7 @@ import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Prelude.Map
 import Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
 import Data.Array.Accelerate.Test.NoFib.Prelude.Fold
-
--- import Test.Prelude.Backpermute
--- import Test.Prelude.Filter
--- import Test.Prelude.Permute
--- import Test.Prelude.Replicate
--- import Test.Prelude.Scan
--- import Test.Prelude.Sequences
--- import Test.Prelude.Stencil
-
+import Data.Array.Accelerate.Test.NoFib.Prelude.Scan
 
 test_prelude :: RunN -> TestTree
 test_prelude runN =
@@ -44,8 +37,12 @@ test_prelude runN =
     , test_foldSeg runN
     -- , test_backpermute runN conf
     -- , test_permute runN conf
-    -- , test_scan runN conf             -- requires fold
-    -- , test_foldSeg runN conf          -- requires scan
+    , test_scanl runN
+    , test_scanl1 runN
+    , test_scanl' runN
+    , test_scanr runN
+    , test_scanr1 runN
+    , test_scanr' runN
     -- , test_stencil runN conf
     -- , test_replicate runN conf
     -- , test_filter runN conf

@@ -371,6 +371,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Prelude.Map
         Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
         Data.Array.Accelerate.Test.NoFib.Prelude.Fold
+        Data.Array.Accelerate.Test.NoFib.Prelude.Scan
 
   hs-source-dirs:
         src
