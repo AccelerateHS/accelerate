@@ -9,6 +9,7 @@ packages:
 extra-deps:
 - 'cabal-doctest-1.0.2'
 - 'hedgehog-0.5'
+- 'tasty-hedgehog-0.1.0.1'
 - 'transformers-0.5.5.0'
 - 'transformers-compat-0.5.1.4'
 - 'unique-0'
