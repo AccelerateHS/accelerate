@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -477,14 +478,14 @@ test_scanl_sum runN dim z e =
     x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanl (+) (the v)) (scalar x) arr ~~~ scanlRef (+) x arr
+    let !go = runN (\v -> A.scanl (+) (the v)) in go (scalar x) arr ~~~ scanlRef (+) x arr
 
 test_scanl1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanl1_sum runN dim e =
   property $ do
     sh  <- forAll (dim `except` \v -> S.size v P.== 0)
     arr <- forAll (Gen.array sh e)
-    runN (A.scanl1 (+)) arr ~~~ scanl1Ref (+) arr
+    let !go = runN (A.scanl1 (+)) in go arr ~~~ scanl1Ref (+) arr
 
 test_scanl'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_scanl'_sum runN dim z e =
@@ -492,7 +493,7 @@ test_scanl'_sum runN dim z e =
     x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanl' (+) (the v)) (scalar x) arr ~~~ scanl'Ref (+) x arr
+    let !go = runN (\v -> A.scanl' (+) (the v)) in go (scalar x) arr ~~~ scanl'Ref (+) x arr
 
 test_scanr_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_scanr_sum runN dim z e =
@@ -500,14 +501,14 @@ test_scanr_sum runN dim z e =
     x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanr (+) (the v)) (scalar x) arr ~~~ scanrRef (+) x arr
+    let !go = runN (\v -> A.scanr (+) (the v)) in go (scalar x) arr ~~~ scanrRef (+) x arr
 
 test_scanr1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanr1_sum runN dim e =
   property $ do
     sh  <- forAll (dim `except` \v -> S.size v P.== 0)
     arr <- forAll (Gen.array sh e)
-    runN (A.scanr1 (+)) arr ~~~ scanr1Ref (+) arr
+    let !go = runN (A.scanr1 (+)) in go arr ~~~ scanr1Ref (+) arr
 
 test_scanr'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_scanr'_sum runN dim z e =
@@ -515,49 +516,49 @@ test_scanr'_sum runN dim z e =
     x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanr' (+) (the v)) (scalar x) arr ~~~ scanr'Ref (+) x arr
+    let !go = runN (\v -> A.scanr' (+) (the v)) in go (scalar x) arr ~~~ scanr'Ref (+) x arr
 
 test_scanl_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanl_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
-    runN (A.scanl iappend (constant one)) arr ~~~ scanlRef iappendRef one arr
+    let !go = runN (A.scanl iappend (constant one)) in go arr ~~~ scanlRef iappendRef one arr
 
 test_scanl1_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanl1_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \v -> S.size v P.== 0)
     let arr  = intervalArray sh n e
-    runN (A.scanl1 iappend) arr ~~~ scanl1Ref iappendRef arr
+    let !go = runN (A.scanl1 iappend) in go arr ~~~ scanl1Ref iappendRef arr
 
 test_scanl'_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanl'_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
-    runN (A.scanl' iappend (constant one)) arr ~~~ scanl'Ref iappendRef one arr
+    let !go = runN (A.scanl' iappend (constant one)) in go arr ~~~ scanl'Ref iappendRef one arr
 
 test_scanr_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanr_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
-    runN (A.scanr iappend (constant one)) arr ~~~ scanrRef iappendRef one arr
+    let !go = runN (A.scanr iappend (constant one)) in go arr ~~~ scanrRef iappendRef one arr
 
 test_scanr1_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanr1_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \v -> S.size v P.== 0)
     let arr  = intervalArray sh n e
-    runN (A.scanr1 iappend) arr ~~~ scanr1Ref iappendRef arr
+    let !go = runN (A.scanr1 iappend) in go arr ~~~ scanr1Ref iappendRef arr
 
 test_scanr'_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanr'_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
-    runN (A.scanr' iappend (constant one)) arr ~~~ scanr'Ref iappendRef one arr
+    let !go = runN (A.scanr' iappend (constant one)) in go arr ~~~ scanr'Ref iappendRef one arr
 
 test_scanlSeg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_scanlSeg_sum runN dim z e =
@@ -566,7 +567,7 @@ test_scanlSeg_sum runN dim z e =
     sh:.n   <- forAll (Gen.small dim)
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (\v -> A.scanlSeg (+) (the v)) (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
+    let !go = runN (\v -> A.scanlSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
 
 test_scanl1Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanl1Seg_sum runN dim e =
@@ -574,7 +575,7 @@ test_scanl1Seg_sum runN dim e =
     sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (A.scanl1Seg (+)) arr seg ~~~ scanl1SegRef (+) arr seg
+    let !go = runN (A.scanl1Seg (+)) in go arr seg ~~~ scanl1SegRef (+) arr seg
 
 test_scanl'Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_scanl'Seg_sum runN dim z e =
@@ -583,7 +584,7 @@ test_scanl'Seg_sum runN dim z e =
     sh:.n   <- forAll (Gen.small dim)
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (\v -> A.scanl'Seg (+) (the v)) (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
+    let !go = runN (\v -> A.scanl'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
 
 test_scanrSeg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_scanrSeg_sum runN dim z e =
@@ -592,7 +593,7 @@ test_scanrSeg_sum runN dim z e =
     sh:.n   <- forAll (Gen.small dim)
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (\v -> A.scanrSeg (+) (the v)) (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
+    let !go = runN (\v -> A.scanrSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
 
 test_scanr1Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanr1Seg_sum runN dim e =
@@ -600,7 +601,7 @@ test_scanr1Seg_sum runN dim e =
     sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (A.scanr1Seg (+)) arr seg ~~~ scanr1SegRef (+) arr seg
+    let !go = runN (A.scanr1Seg (+)) in go arr seg ~~~ scanr1SegRef (+) arr seg
 
 test_scanr'Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_scanr'Seg_sum runN dim z e =
@@ -609,7 +610,7 @@ test_scanr'Seg_sum runN dim z e =
     sh:.n   <- forAll (Gen.small dim)
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (\v -> A.scanr'Seg (+) (the v)) (scalar x) arr seg ~~~ scanr'SegRef (+) x arr seg
+    let !go = runN (\v -> A.scanr'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanr'SegRef (+) x arr seg
 
 
 -- Interval of summations monoid

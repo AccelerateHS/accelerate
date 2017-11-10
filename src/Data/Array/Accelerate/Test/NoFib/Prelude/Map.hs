@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
@@ -142,175 +143,175 @@ test_negate runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map negate) xs ~~~ mapRef negate xs
+    let !go = runN (A.map negate) in go xs ~~~ mapRef negate xs
 
 test_abs :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
 test_abs runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map abs) xs ~~~ mapRef abs xs
+    let !go = runN (A.map abs) in go xs ~~~ mapRef abs xs
 
 test_signum :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
 test_signum runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map signum) xs ~~~ mapRef signum xs
+    let !go = runN (A.map signum) in go xs ~~~ mapRef signum xs
 
 test_complement :: (Shape sh, Similar e, A.Bits e, P.Bits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
 test_complement runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.complement) xs ~~~ mapRef P.complement xs
+    let !go = runN (A.map A.complement) in go xs ~~~ mapRef P.complement xs
 
 test_popCount :: (Shape sh, Similar e, A.Bits e, P.Bits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
 test_popCount runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.popCount) xs ~~~ mapRef P.popCount xs
+    let !go = runN (A.map A.popCount) in go xs ~~~ mapRef P.popCount xs
 
 test_countLeadingZeros :: (Shape sh, Similar e, A.FiniteBits e, P.FiniteBits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
 test_countLeadingZeros runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.countLeadingZeros) xs ~~~ mapRef countLeadingZerosRef xs
+    let !go = runN (A.map A.countLeadingZeros) in go xs ~~~ mapRef countLeadingZerosRef xs
 
 test_countTrailingZeros :: (Shape sh, Similar e, A.FiniteBits e, P.FiniteBits e, P.Eq sh) => RunN -> Gen sh -> Gen e -> Property
 test_countTrailingZeros runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.countTrailingZeros) xs ~~~ mapRef countTrailingZerosRef xs
+    let !go = runN (A.map A.countTrailingZeros) in go xs ~~~ mapRef countTrailingZerosRef xs
 
 test_fromIntegral :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double) => RunN -> Gen sh -> Gen e -> Property
 test_fromIntegral runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.fromIntegral) xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
+    let !go = runN (A.map A.fromIntegral) in go xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
 
 test_recip :: (Shape sh, Similar e, P.Eq sh, P.Fractional e, A.Fractional e) => RunN -> Gen sh -> Gen e -> Property
 test_recip runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map recip) xs ~~~ mapRef recip xs
+    let !go = runN (A.map recip) in go xs ~~~ mapRef recip xs
 
 test_sin :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_sin runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map sin) xs ~~~ mapRef sin xs
+    let !go = runN (A.map sin) in go xs ~~~ mapRef sin xs
 
 test_cos :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_cos runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map cos) xs ~~~ mapRef cos xs
+    let !go = runN (A.map cos) in go xs ~~~ mapRef cos xs
 
 test_tan :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_tan runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map tan) xs ~~~ mapRef tan xs
+    let !go = runN (A.map tan) in go xs ~~~ mapRef tan xs
 
 test_asin :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_asin runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map asin) xs ~~~ mapRef asin xs
+    let !go = runN (A.map asin) in go xs ~~~ mapRef asin xs
 
 test_acos :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_acos runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map acos) xs ~~~ mapRef acos xs
+    let !go = runN (A.map acos) in go xs ~~~ mapRef acos xs
 
 test_atan :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_atan runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map atan) xs ~~~ mapRef atan xs
+    let !go = runN (A.map atan) in go xs ~~~ mapRef atan xs
 
 test_asinh :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_asinh runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map asinh) xs ~~~ mapRef asinh xs
+    let !go = runN (A.map asinh) in go xs ~~~ mapRef asinh xs
 
 test_acosh :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_acosh runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map acosh) xs ~~~ mapRef acosh xs
+    let !go = runN (A.map acosh) in go xs ~~~ mapRef acosh xs
 
 test_atanh :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_atanh runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map atanh) xs ~~~ mapRef atanh xs
+    let !go = runN (A.map atanh) in go xs ~~~ mapRef atanh xs
 
 test_exp :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_exp runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map exp) xs ~~~ mapRef exp xs
+    let !go = runN (A.map exp) in go xs ~~~ mapRef exp xs
 
 test_sqrt :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_sqrt runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map sqrt) xs ~~~ mapRef sqrt xs
+    let !go = runN (A.map sqrt) in go xs ~~~ mapRef sqrt xs
 
 test_log :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_log runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map log) xs ~~~ mapRef log xs
+    let !go = runN (A.map log) in go xs ~~~ mapRef log xs
 
 test_truncate :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
 test_truncate runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.truncate) xs ~~~ mapRef (P.truncate :: e -> Int) xs
+    let !go = runN (A.map A.truncate) in go xs ~~~ mapRef (P.truncate :: e -> Int) xs
 
 test_round :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
 test_round runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.round) xs ~~~ mapRef (P.round :: e -> Int) xs
+    let !go = runN (A.map A.round) in go xs ~~~ mapRef (P.round :: e -> Int) xs
 
 test_floor :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
 test_floor runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.floor) xs ~~~ mapRef (P.floor :: e -> Int) xs
+    let !go = runN (A.map A.floor) in go xs ~~~ mapRef (P.floor :: e -> Int) xs
 
 test_ceiling :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e) => RunN -> Gen sh -> Gen e -> Property
 test_ceiling runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (A.map A.ceiling) xs ~~~ mapRef (P.ceiling :: e -> Int) xs
+    let !go = runN (A.map A.ceiling) in go xs ~~~ mapRef (P.ceiling :: e -> Int) xs
 
 
 -- Reference Implementation

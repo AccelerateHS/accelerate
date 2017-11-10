@@ -130,28 +130,28 @@ test_sum runN dim z e =
     x  <- forAll z
     sh <- forAll dim
     xs <- forAll (Gen.array sh e)
-    runN (\v -> A.fold (+) (the v)) (scalar x) xs ~~~ foldRef (+) x xs
+    let !go = runN (\v -> A.fold (+) (the v)) in go (scalar x) xs ~~~ foldRef (+) x xs
 
 test_mss :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_mss runN dim e =
   property $ do
     sh <- forAll (dim `except` \(_:.v) -> v P.== 0)
     xs <- forAll (Gen.array sh e)
-    runN maximumSegmentSum xs ~~~ maximumSegmentSumRef xs
+    let !go = runN maximumSegmentSum in go xs ~~~ maximumSegmentSumRef xs
 
 test_minimum :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_minimum runN dim e =
   property $ do
     sh <- forAll (dim `except` \(_:.v) -> v P.== 0)
     xs <- forAll (Gen.array sh e)
-    runN A.minimum xs ~~~ fold1Ref P.min xs
+    let !go = runN A.minimum in go xs ~~~ fold1Ref P.min xs
 
 test_maximum :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_maximum runN dim e =
   property $ do
     sh <- forAll (dim `except` \(_:.v) -> v P.== 0)
     xs <- forAll (Gen.array sh e)
-    runN A.maximum xs ~~~ fold1Ref P.max xs
+    let !go = runN A.maximum in go xs ~~~ fold1Ref P.max xs
 
 test_segmented_sum :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
 test_segmented_sum runN dim z e =
@@ -160,7 +160,7 @@ test_segmented_sum runN dim z e =
     sh:.n     <- forAll (Gen.small dim)
     seg       <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     xs        <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (\v -> A.foldSeg (+) (the v)) (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
+    let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
 
 test_segmented_minimum :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_segmented_minimum runN dim e =
@@ -168,7 +168,7 @@ test_segmented_minimum runN dim e =
     sh:.n     <- forAll (Gen.small dim)
     seg       <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     xs        <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (A.fold1Seg A.min) xs seg ~~~ fold1SegRef P.min xs seg
+    let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
 
 test_segmented_maximum :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_segmented_maximum runN dim e =
@@ -176,7 +176,7 @@ test_segmented_maximum runN dim e =
     sh:.n     <- forAll (Gen.small dim)
     seg       <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     xs        <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
-    runN (A.fold1Seg A.max) xs seg ~~~ fold1SegRef P.max xs seg
+    let !go = runN (A.fold1Seg A.max) in go xs seg ~~~ fold1SegRef P.max xs seg
 
 
 -- Reference implementation

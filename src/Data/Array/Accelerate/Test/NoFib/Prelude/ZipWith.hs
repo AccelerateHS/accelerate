@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE MonoLocalBinds      #-}
@@ -163,7 +164,7 @@ test_plus runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (+)) xs ys ~~~ zipWithRef (+) xs ys
+    let !go = runN (A.zipWith (+)) in go xs ys ~~~ zipWithRef (+) xs ys
 
 test_minus :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen sh -> Gen e -> Property
 test_minus runN dim e =
@@ -172,7 +173,7 @@ test_minus runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (-)) xs ys ~~~ zipWithRef (-) xs ys
+    let !go = runN (A.zipWith (-)) in go xs ys ~~~ zipWithRef (-) xs ys
 
 test_mult :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen sh -> Gen e -> Property
 test_mult runN dim e =
@@ -181,7 +182,7 @@ test_mult runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (*)) xs ys ~~~ zipWithRef (*) xs ys
+    let !go = runN (A.zipWith (*)) in go xs ys ~~~ zipWithRef (*) xs ys
 
 test_quot :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
 test_quot runN dim e =
@@ -190,7 +191,7 @@ test_quot runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (e `except` zero))
-    runN (A.zipWith quot) xs ys ~~~ zipWithRef quot xs ys
+    let !go = runN (A.zipWith quot) in go xs ys ~~~ zipWithRef quot xs ys
 
 test_rem :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
 test_rem runN dim e =
@@ -199,7 +200,7 @@ test_rem runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (e `except` zero))
-    runN (A.zipWith rem) xs ys ~~~ zipWithRef rem xs ys
+    let !go = runN (A.zipWith rem) in go xs ys ~~~ zipWithRef rem xs ys
 
 test_quotRem :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
 test_quotRem runN dim e =
@@ -208,7 +209,7 @@ test_quotRem runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (e `except` zero))
-    runN (A.zipWith (lift $$ quotRem)) xs ys ~~~ zipWithRef quotRem xs ys
+    let !go = runN (A.zipWith (lift $$ quotRem)) in go xs ys ~~~ zipWithRef quotRem xs ys
 
 test_idiv :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
 test_idiv runN dim e =
@@ -217,7 +218,7 @@ test_idiv runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (e `except` zero))
-    runN (A.zipWith div) xs ys ~~~ zipWithRef div xs ys
+    let !go = runN (A.zipWith div) in go xs ys ~~~ zipWithRef div xs ys
 
 test_fdiv :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Fractional e, A.Fractional e) => RunN -> Gen sh -> Gen e -> Property
 test_fdiv runN dim e =
@@ -226,7 +227,7 @@ test_fdiv runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (e `except` zero))
-    runN (A.zipWith (/)) xs ys ~~~ zipWithRef (/) xs ys
+    let !go = runN (A.zipWith (/)) in go xs ys ~~~ zipWithRef (/) xs ys
 
 test_pow :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_pow runN dim e =
@@ -235,7 +236,7 @@ test_pow runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (**)) xs ys ~~~ zipWithRef (**) xs ys
+    let !go = runN (A.zipWith (**)) in go xs ys ~~~ zipWithRef (**) xs ys
 
 test_logBase :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
 test_logBase runN dim e =
@@ -244,7 +245,7 @@ test_logBase runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith logBase) xs ys ~~~ zipWithRef logBase xs ys
+    let !go = runN (A.zipWith logBase) in go xs ys ~~~ zipWithRef logBase xs ys
 
 test_atan2 :: (Shape sh, Similar e, P.Eq sh, P.RealFloat e, A.RealFloat e) => RunN -> Gen sh -> Gen e -> Property
 test_atan2 runN dim e =
@@ -253,7 +254,7 @@ test_atan2 runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith A.atan2) xs ys ~~~ zipWithRef P.atan2 xs ys
+    let !go = runN (A.zipWith A.atan2) in go xs ys ~~~ zipWithRef P.atan2 xs ys
 
 test_mod :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
 test_mod runN dim e =
@@ -262,7 +263,7 @@ test_mod runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (e `except` zero))
-    runN (A.zipWith mod) xs ys ~~~ zipWithRef mod xs ys
+    let !go = runN (A.zipWith mod) in go xs ys ~~~ zipWithRef mod xs ys
 
 test_divMod :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
 test_divMod runN dim e =
@@ -271,7 +272,7 @@ test_divMod runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (e `except` zero))
-    runN (A.zipWith (lift $$ divMod)) xs ys ~~~ zipWithRef divMod xs ys
+    let !go = runN (A.zipWith (lift $$ divMod)) in go xs ys ~~~ zipWithRef divMod xs ys
 
 test_band :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e) => RunN -> Gen sh -> Gen e -> Property
 test_band runN dim e =
@@ -280,7 +281,7 @@ test_band runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A..&.)) xs ys ~~~ zipWithRef (P..&.) xs ys
+    let !go = runN (A.zipWith (A..&.)) in go xs ys ~~~ zipWithRef (P..&.) xs ys
 
 test_bor :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e) => RunN -> Gen sh -> Gen e -> Property
 test_bor runN dim e =
@@ -289,7 +290,7 @@ test_bor runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A..|.)) xs ys ~~~ zipWithRef (P..|.) xs ys
+    let !go = runN (A.zipWith (A..|.)) in go xs ys ~~~ zipWithRef (P..|.) xs ys
 
 test_xor :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e) => RunN -> Gen sh -> Gen e -> Property
 test_xor runN dim e =
@@ -298,7 +299,7 @@ test_xor runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith A.xor) xs ys ~~~ zipWithRef P.xor xs ys
+    let !go = runN (A.zipWith A.xor) in go xs ys ~~~ zipWithRef P.xor xs ys
 
 test_shift :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
 test_shift runN dim e =
@@ -308,7 +309,7 @@ test_shift runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (Gen.int (Range.linearFrom 0 (-s) s)))
-    runN (A.zipWith A.shift) xs ys ~~~ zipWithRef P.shift xs ys
+    let !go = runN (A.zipWith A.shift) in go xs ys ~~~ zipWithRef P.shift xs ys
 
 test_shiftL :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
 test_shiftL runN dim e =
@@ -318,7 +319,7 @@ test_shiftL runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
-    runN (A.zipWith A.shiftL) xs ys ~~~ zipWithRef P.shiftL xs ys
+    let !go = runN (A.zipWith A.shiftL) in go xs ys ~~~ zipWithRef P.shiftL xs ys
 
 test_shiftR :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
 test_shiftR runN dim e =
@@ -328,7 +329,7 @@ test_shiftR runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
-    runN (A.zipWith A.shiftR) xs ys ~~~ zipWithRef P.shiftR xs ys
+    let !go = runN (A.zipWith A.shiftR) in go xs ys ~~~ zipWithRef P.shiftR xs ys
 
 test_rotate :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
 test_rotate runN dim e =
@@ -338,7 +339,7 @@ test_rotate runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (Gen.int (Range.linearFrom 0 (-s) s)))
-    runN (A.zipWith A.rotate) xs ys ~~~ zipWithRef P.rotate xs ys
+    let !go = runN (A.zipWith A.rotate) in go xs ys ~~~ zipWithRef P.rotate xs ys
 
 test_rotateL :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
 test_rotateL runN dim e =
@@ -348,7 +349,7 @@ test_rotateL runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
-    runN (A.zipWith A.rotateL) xs ys ~~~ zipWithRef P.rotateL xs ys
+    let !go = runN (A.zipWith A.rotateL) in go xs ys ~~~ zipWithRef P.rotateL xs ys
 
 test_rotateR :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
 test_rotateR runN dim e =
@@ -358,7 +359,7 @@ test_rotateR runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
-    runN (A.zipWith A.rotateR) xs ys ~~~ zipWithRef P.rotateR xs ys
+    let !go = runN (A.zipWith A.rotateR) in go xs ys ~~~ zipWithRef P.rotateR xs ys
 
 test_lt :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_lt runN dim e =
@@ -367,7 +368,7 @@ test_lt runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A.<)) xs ys ~~~ zipWithRef (P.<) xs ys
+    let !go = runN (A.zipWith (A.<)) in go xs ys ~~~ zipWithRef (P.<) xs ys
 
 test_gt :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_gt runN dim e =
@@ -376,7 +377,7 @@ test_gt runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A.>)) xs ys ~~~ zipWithRef (P.>) xs ys
+    let !go = runN (A.zipWith (A.>)) in go xs ys ~~~ zipWithRef (P.>) xs ys
 
 test_lte :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_lte runN dim e =
@@ -385,7 +386,7 @@ test_lte runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A.<=)) xs ys ~~~ zipWithRef (P.<=) xs ys
+    let !go = runN (A.zipWith (A.<=)) in go xs ys ~~~ zipWithRef (P.<=) xs ys
 
 test_gte :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_gte runN dim e =
@@ -394,7 +395,7 @@ test_gte runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A.>=)) xs ys ~~~ zipWithRef (P.>=) xs ys
+    let !go = runN (A.zipWith (A.>=)) in go xs ys ~~~ zipWithRef (P.>=) xs ys
 
 test_eq :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_eq runN dim e =
@@ -403,7 +404,7 @@ test_eq runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A.==)) xs ys ~~~ zipWithRef (P.==) xs ys
+    let !go = runN (A.zipWith (A.==)) in go xs ys ~~~ zipWithRef (P.==) xs ys
 
 test_neq :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_neq runN dim e =
@@ -412,7 +413,7 @@ test_neq runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A./=)) xs ys ~~~ zipWithRef (P./=) xs ys
+    let !go = runN (A.zipWith (A./=)) in go xs ys ~~~ zipWithRef (P./=) xs ys
 
 test_min :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_min runN dim e =
@@ -421,7 +422,7 @@ test_min runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A.min)) xs ys ~~~ zipWithRef (P.min) xs ys
+    let !go = runN (A.zipWith (A.min)) in go xs ys ~~~ zipWithRef (P.min) xs ys
 
 test_max :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
 test_max runN dim e =
@@ -430,7 +431,7 @@ test_max runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (Gen.array sh1 e)
     ys  <- forAll (Gen.array sh2 e)
-    runN (A.zipWith (A.max)) xs ys ~~~ zipWithRef (P.max) xs ys
+    let !go = runN (A.zipWith (A.max)) in go xs ys ~~~ zipWithRef (P.max) xs ys
 
 
 -- Reference Implementation
