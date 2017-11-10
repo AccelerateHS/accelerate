@@ -55,77 +55,66 @@ instance IsOption TestAll where
   parseValue = fmap TestAll . safeRead
   optionName = return "all-types"
   optionHelp = return "Enable tests on all primitive types"
-  optionCLParser = flagCLParser Nothing (TestAll True)
 
 instance IsOption TestDouble where
   defaultValue = TestDouble True
   parseValue = fmap TestDouble . safeRead
   optionName = return "double"
   optionHelp = return "Enable double-precision tests"
-  optionCLParser = flagCLParser Nothing (TestDouble True)
 
 instance IsOption TestFloat where
   defaultValue = TestFloat False
   parseValue = fmap TestFloat . safeRead
   optionName = return "float"
   optionHelp = return "Enable single-precision tests"
-  optionCLParser = flagCLParser Nothing (TestFloat True)
 
 instance IsOption TestInt8 where
   defaultValue = TestInt8 False
   parseValue = fmap TestInt8 . safeRead
   optionName = return "int8"
   optionHelp = return "Enable 8-bit signed integer tests"
-  optionCLParser = flagCLParser Nothing (TestInt8 True)
 
 instance IsOption TestInt16 where
   defaultValue = TestInt16 False
   parseValue = fmap TestInt16 . safeRead
   optionName = return "int16"
   optionHelp = return "Enable 16-bit signed integer tests"
-  optionCLParser = flagCLParser Nothing (TestInt16 True)
 
 instance IsOption TestInt32 where
   defaultValue = TestInt32 $( [e| finiteBitSize (undefined::Int) == 32 |] )
   parseValue = fmap TestInt32 . safeRead
   optionName = return "int32"
   optionHelp = return "Enable 32-bit signed integer tests"
-  optionCLParser = flagCLParser Nothing (TestInt32 True)
 
 instance IsOption TestInt64 where
   defaultValue = TestInt64 $( [e| finiteBitSize (undefined::Int) == 64 |] )
   parseValue = fmap TestInt64 . safeRead
   optionName = return "int64"
   optionHelp = return "Enable 64-bit signed integer tests"
-  optionCLParser = flagCLParser Nothing (TestInt64 True)
 
 instance IsOption TestWord8 where
   defaultValue = TestWord8 False
   parseValue = fmap TestWord8 . safeRead
   optionName = return "word8"
   optionHelp = return "Enable 8-bit unsigned integer tests"
-  optionCLParser = flagCLParser Nothing (TestWord8 True)
 
 instance IsOption TestWord16 where
   defaultValue = TestWord16 False
   parseValue = fmap TestWord16 . safeRead
   optionName = return "word16"
   optionHelp = return "Enable 16-bit unsigned integer tests"
-  optionCLParser = flagCLParser Nothing (TestWord16 True)
 
 instance IsOption TestWord32 where
   defaultValue = TestWord32 False
   parseValue = fmap TestWord32 . safeRead
   optionName = return "word32"
   optionHelp = return "Enable 32-bit unsigned integer tests"
-  optionCLParser = flagCLParser Nothing (TestWord32 True)
 
 instance IsOption TestWord64 where
   defaultValue = TestWord64 False
   parseValue = fmap TestWord64 . safeRead
   optionName = return "word64"
   optionHelp = return "Enable 64-bit unsigned integer tests"
-  optionCLParser = flagCLParser Nothing (TestWord64 True)
 
 
 class IsOption a => TestConfig a where
