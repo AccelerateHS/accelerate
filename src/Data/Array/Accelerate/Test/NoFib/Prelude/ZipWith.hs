@@ -1,193 +1,436 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Prelude.ZipWith (
+module Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith (
 
   test_zipWith
 
 ) where
 
-import Prelude                                                  as P
 import Data.Bits                                                as P
-import Data.Label
-import Data.Maybe
+import Data.Proxy
 import Data.Typeable
-import Test.QuickCheck                                          hiding ( (.&.), suchThat )
-import Test.Framework
-import Test.Framework.Providers.QuickCheck2
+import Prelude                                                  as P
 
-import Config
-import Test.Base
-import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Data.Bits                          as A
-import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
-import qualified Data.Array.Accelerate.Array.Representation     as R
+import Data.Array.Accelerate.Data.Bits                          as A
+import Data.Array.Accelerate.Smart                              ( ($$) )
+import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
 
---
--- ZipWith ---------------------------------------------------------------------
---
+import Data.Array.Accelerate.Hedgehog.Similar
+import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
 
-test_zipWith :: Backend -> Config -> Test
-test_zipWith backend opt = testGroup "zipWith" $ catMaybes
-  [ testIntegralElt configInt8   (undefined :: Int8)
-  , testIntegralElt configInt16  (undefined :: Int16)
-  , testIntegralElt configInt32  (undefined :: Int32)
-  , testIntegralElt configInt64  (undefined :: Int64)
-  , testIntegralElt configWord8  (undefined :: Word8)
-  , testIntegralElt configWord16 (undefined :: Word16)
-  , testIntegralElt configWord32 (undefined :: Word32)
-  , testIntegralElt configWord64 (undefined :: Word64)
-  , testFloatingElt configFloat  (undefined :: Float)
-  , testFloatingElt configDouble (undefined :: Double)
-  ]
+import Hedgehog
+import qualified Hedgehog.Gen                                   as Gen
+import qualified Hedgehog.Range                                 as Range
+
+import Test.Tasty
+import Test.Tasty.Hedgehog
+
+
+test_zipWith :: RunN -> TestTree
+test_zipWith runN =
+  testGroup "zipWith"
+    [ at (Proxy::Proxy TestInt8)   $ testIntegralElt i8
+    , at (Proxy::Proxy TestInt16)  $ testIntegralElt i16
+    , at (Proxy::Proxy TestInt32)  $ testIntegralElt i32
+    , at (Proxy::Proxy TestInt64)  $ testIntegralElt i64
+    , at (Proxy::Proxy TestWord8)  $ testIntegralElt w8
+    , at (Proxy::Proxy TestWord16) $ testIntegralElt w16
+    , at (Proxy::Proxy TestWord32) $ testIntegralElt w32
+    , at (Proxy::Proxy TestWord64) $ testIntegralElt w64
+    , at (Proxy::Proxy TestFloat)  $ testFloatingElt Gen.float
+    , at (Proxy::Proxy TestDouble) $ testFloatingElt Gen.double
+    ]
   where
-    testIntegralElt :: forall a. (P.Integral a, P.Bits a, A.Integral a, A.Bits a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
-    testIntegralElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim0
-          , testDim dim1
-          , testDim dim2
-          ]
+    testIntegralElt
+        :: forall a. ( P.Integral a, P.FiniteBits a
+                     , A.Integral a, A.FiniteBits a
+                     , Similar a )
+        => Gen a
+        -> TestTree
+    testIntegralElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim0
+        , testDim dim1
+        , testDim dim2
+        ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh a), Arbitrary (Array sh Int)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (rank sh))
-          [ -- operators on Num
-            testProperty "(+)"          (test_plus  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(-)"          (test_minus :: Array sh a -> Array sh a -> Property)
-          , testProperty "(*)"          (test_mult  :: Array sh a -> Array sh a -> Property)
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen sh
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+            [ -- operators on Num
+              testProperty "(+)"          $ test_plus runN sh e
+            , testProperty "(-)"          $ test_minus runN sh e
+            , testProperty "(*)"          $ test_mult runN sh e
 
-            -- operators on Integral & Bits
-          , testProperty "quot"         (denom (test_quot    :: Array sh a -> Array sh a -> Property))
-          , testProperty "rem"          (denom (test_rem     :: Array sh a -> Array sh a -> Property))
-          , testProperty "quotRem"      (denom (test_quotRem :: Array sh a -> Array sh a -> Property))
-          , testProperty "div"          (denom (test_div     :: Array sh a -> Array sh a -> Property))
-          , testProperty "mod"          (denom (test_mod     :: Array sh a -> Array sh a -> Property))
-          , testProperty "divMod"       (denom (test_divMod  :: Array sh a -> Array sh a -> Property))
-          , testProperty "(.&.)"        (test_band :: Array sh a -> Array sh a -> Property)
-          , testProperty "(.|.)"        (test_bor  :: Array sh a -> Array sh a -> Property)
-          , testProperty "xor"          (test_xor  :: Array sh a -> Array sh a -> Property)
-          , testProperty "shift"        (test_shift :: Array sh a -> Array sh Int -> Property)
-          , testProperty "shiftL"       (requiring (P.>= 0) (flip test_shiftL :: Array sh Int -> Array sh a -> Property))
-          , testProperty "shiftR"       (requiring (P.>= 0) (flip test_shiftR :: Array sh Int -> Array sh a -> Property))
-          , testProperty "rotate"       (test_rotate :: Array sh a -> Array sh Int -> Property)
-          , testProperty "rotateL"      (requiring (P.>= 0) (flip test_rotateL :: Array sh Int -> Array sh a -> Property))
-          , testProperty "rotateR"      (requiring (P.>= 0) (flip test_rotateR :: Array sh Int -> Array sh a -> Property))
+              -- operators on Integral & Bits
+            , testProperty "quot"         $ test_quot runN sh e
+            , testProperty "rem"          $ test_rem runN sh e
+            , testProperty "quotRem"      $ test_quotRem runN sh e
+            , testProperty "div"          $ test_idiv runN sh e
+            , testProperty "mod"          $ test_mod runN sh e
+            , testProperty "divMod"       $ test_divMod runN sh e
+            , testProperty "(.&.)"        $ test_band runN sh e
+            , testProperty "(.|.)"        $ test_bor runN sh e
+            , testProperty "xor"          $ test_xor runN sh e
+            , testProperty "shift"        $ test_shift runN sh e
+            , testProperty "shiftL"       $ test_shiftL runN sh e
+            , testProperty "shiftR"       $ test_shiftR runN sh e
+            , testProperty "rotate"       $ test_rotate runN sh e
+            , testProperty "rotateL"      $ test_rotateL runN sh e
+            , testProperty "rotateR"      $ test_rotateR runN sh e
 
-            -- relational and equality operators
-          , testProperty "(<)"          (test_lt  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(>)"          (test_gt  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(<=)"         (test_lte :: Array sh a -> Array sh a -> Property)
-          , testProperty "(>=)"         (test_gte :: Array sh a -> Array sh a -> Property)
-          , testProperty "(==)"         (test_eq  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(/=)"         (test_neq :: Array sh a -> Array sh a -> Property)
-          , testProperty "min"          (test_min :: Array sh a -> Array sh a -> Property)
-          , testProperty "max"          (test_max :: Array sh a -> Array sh a -> Property)
-          ]
-          where
-            test_quot xs ys     = runN backend (A.zipWith quot) xs ys ~?= zipWithRef quot xs ys
-            test_rem xs ys      = runN backend (A.zipWith rem) xs ys ~?= zipWithRef rem xs ys
-            test_quotRem xs ys  = runN backend (A.zipWith (lift $$ quotRem)) xs ys ~?= zipWithRef quotRem xs ys
-            test_div xs ys      = runN backend (A.zipWith div) xs ys ~?= zipWithRef div xs ys
-            test_mod xs ys      = runN backend (A.zipWith mod) xs ys ~?= zipWithRef mod xs ys
-            test_divMod xs ys   = runN backend (A.zipWith (lift $$ divMod)) xs ys ~?= zipWithRef divMod xs ys
+              -- relational and equality operators
+            , testProperty "(<)"          $ test_lt runN sh e
+            , testProperty "(>)"          $ test_gt runN sh e
+            , testProperty "(<=)"         $ test_lte runN sh e
+            , testProperty "(>=)"         $ test_gte runN sh e
+            , testProperty "(==)"         $ test_eq runN sh e
+            , testProperty "(/=)"         $ test_neq runN sh e
+            , testProperty "min"          $ test_min runN sh e
+            , testProperty "max"          $ test_max runN sh e
+            ]
 
-            test_band xs ys     = runN backend (A.zipWith (A..&.)) xs ys ~?= zipWithRef (P..&.) xs ys
-            test_bor xs ys      = runN backend (A.zipWith (A..|.)) xs ys ~?= zipWithRef (P..|.) xs ys
-            test_xor xs ys      = runN backend (A.zipWith A.xor) xs ys ~?= zipWithRef P.xor xs ys
-
-            test_shift xs ys    = runN backend (A.zipWith A.shift) xs ys ~?= zipWithRef P.shift xs ys
-            test_shiftL xs ys   = runN backend (A.zipWith A.shiftL) xs ys ~?= zipWithRef P.shiftL xs ys
-            test_shiftR xs ys   = runN backend (A.zipWith A.shiftR) xs ys ~?= zipWithRef P.shiftR xs ys
-            test_rotate xs ys   = runN backend (A.zipWith A.rotate) xs ys ~?= zipWithRef P.rotate xs ys
-            test_rotateL xs ys  = runN backend (A.zipWith A.rotateL) xs ys ~?= zipWithRef P.rotateL xs ys
-            test_rotateR xs ys  = runN backend (A.zipWith A.rotateR) xs ys ~?= zipWithRef P.rotateR xs ys
-
-    testFloatingElt :: forall a. (P.RealFrac a, P.RealFloat a, A.RealFloat a, A.RealFrac a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
-    testFloatingElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim0
-          , testDim dim1
-          , testDim dim2
-          ]
+    testFloatingElt
+        :: forall a. (P.RealFloat a, A.RealFloat a, Similar a)
+        => (Range a -> Gen a)
+        -> TestTree
+    testFloatingElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim0
+        , testDim dim1
+        , testDim dim2
+        ]
       where
-        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (rank sh))
-          [ -- operators on Num
-            testProperty "(+)"          (test_plus  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(-)"          (test_minus :: Array sh a -> Array sh a -> Property)
-          , testProperty "(*)"          (test_mult  :: Array sh a -> Array sh a -> Property)
+        testDim
+            :: forall sh. (Shape sh, P.Eq sh)
+            => Gen sh
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+            [ -- operators on Num
+              testProperty "(+)"          $ test_plus runN sh (full e)
+            , testProperty "(-)"          $ test_minus runN sh (full e)
+            , testProperty "(*)"          $ test_mult runN sh (full e)
 
-            -- operators on Fractional, Floating, RealFrac & RealFloat
-          , testProperty "(/)"          (denom (test_div :: Array sh a -> Array sh a -> Property))
-          , testProperty "(**)"         (test_pow :: Array sh a -> Array sh a -> Property)
-          , testProperty "atan2"        (test_atan2 :: Array sh a -> Array sh a -> Property)
-          , testProperty "logBase"      (requiring (P.> 0) $ \(xs :: Array sh a) ->
-                                         requiring (P.> 0) $ \(ys :: Array sh a) -> test_logBase xs ys)
+              -- operators on Fractional, Floating, RealFrac & RealFloat
+            , testProperty "(/)"          $ test_fdiv runN sh (full e)
+            , testProperty "(**)"         $ test_pow runN sh (full e)
+            , testProperty "atan2"        $ test_atan2 runN sh (full e)
+            , testProperty "logBase"      $ test_logBase runN sh (e (Range.linearFrac 0 flt_max) `except` zero)
 
-            -- relational and equality operators
-          , testProperty "(<)"          (test_lt  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(>)"          (test_gt  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(<=)"         (test_lte :: Array sh a -> Array sh a -> Property)
-          , testProperty "(>=)"         (test_gte :: Array sh a -> Array sh a -> Property)
-          , testProperty "(==)"         (test_eq  :: Array sh a -> Array sh a -> Property)
-          , testProperty "(/=)"         (test_neq :: Array sh a -> Array sh a -> Property)
-          , testProperty "min"          (test_min :: Array sh a -> Array sh a -> Property)
-          , testProperty "max"          (test_max :: Array sh a -> Array sh a -> Property)
-          ]
-          where
-            test_div xs ys      = runN backend (A.zipWith (/)) xs ys ~?= zipWithRef (/) xs ys
-            test_pow xs ys      = runN backend (A.zipWith (**)) xs ys ~?= zipWithRef (**) xs ys
-            test_atan2 xs ys    = runN backend (A.zipWith A.atan2) xs ys ~?= zipWithRef P.atan2 xs ys
-            test_logBase xs ys  = runN backend (A.zipWith logBase) xs ys ~?= zipWithRef logBase xs ys
+              -- relational and equality operators
+            , testProperty "(<)"          $ test_lt runN sh (full e)
+            , testProperty "(>)"          $ test_gt runN sh (full e)
+            , testProperty "(<=)"         $ test_lte runN sh (full e)
+            , testProperty "(>=)"         $ test_gte runN sh (full e)
+            , testProperty "(==)"         $ test_eq runN sh (full e)
+            , testProperty "(/=)"         $ test_neq runN sh (full e)
+            , testProperty "min"          $ test_min runN sh (full e)
+            , testProperty "max"          $ test_max runN sh (full e)
+            ]
 
-    test_plus xs ys     = runN backend (A.zipWith (+)) xs ys ~?= zipWithRef (+) xs ys
-    test_minus xs ys    = runN backend (A.zipWith (-)) xs ys ~?= zipWithRef (-) xs ys
-    test_mult xs ys     = runN backend (A.zipWith (*)) xs ys ~?= zipWithRef (*) xs ys
-
-    test_lt xs ys       = runN backend (A.zipWith (A.<))  xs ys ~?= zipWithRef (P.<) xs ys
-    test_gt xs ys       = runN backend (A.zipWith (A.>))  xs ys ~?= zipWithRef (P.>) xs ys
-    test_lte xs ys      = runN backend (A.zipWith (A.<=)) xs ys ~?= zipWithRef (P.<=) xs ys
-    test_gte xs ys      = runN backend (A.zipWith (A.>=)) xs ys ~?= zipWithRef (P.>=) xs ys
-    test_eq xs ys       = runN backend (A.zipWith (A.==)) xs ys ~?= zipWithRef (P.==) xs ys
-    test_neq xs ys      = runN backend (A.zipWith (A./=)) xs ys ~?= zipWithRef (P./=) xs ys
-    test_min xs ys      = runN backend (A.zipWith (A.min)) xs ys ~?= zipWithRef (P.min) xs ys
-    test_max xs ys      = runN backend (A.zipWith (A.max)) xs ys ~?= zipWithRef (P.max) xs ys
-
-    {-# INLINE denom #-}
-    denom f = forAllShrink arbitrary shrink $ \xs ->
-              requiring (P./= 0)            $ \ys -> f xs ys
+        full :: P.RealFloat e => (Range e -> Gen e) -> Gen e
+        full gen = gen (Range.linearFracFrom 0 flt_min flt_max)
 
 
-suchThat :: Gen a -> (a -> Bool) -> Gen a
-suchThat gen p = do
-  x <- gen
-  case p x of
-    True  -> return x
-    False -> sized $ \n -> resize (n+1) (suchThat gen p)
+zero :: (P.Num a, P.Eq a) => a -> Bool
+zero x = x P.== 0
 
-{-# INLINE requiring #-}
-requiring
-    :: (Elt e, Shape sh, Arbitrary e, Arbitrary sh, Testable prop)
-    => (e -> Bool)
-    -> (Array sh e -> prop)
-    -> Property
-requiring f go =
-  let
-      shrinkRequiring arr       = [ fromList (Sugar.shape arr) sl | sl <- shrinkOneRequiring (toList arr) ]
-      shrinkOneRequiring []     = []
-      shrinkOneRequiring (x:xs) = [ x':xs | x'  <- shrink x, f x' ]
-                             P.++ [ x:xs' | xs' <- shrinkOneRequiring xs ]
-  in
-  forAllShrink arbitrary                                      shrink          $ \sh ->
-  forAllShrink (arbitraryArrayOf sh (arbitrary `suchThat` f)) shrinkRequiring $ \arr ->
-    go arr
+test_plus :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen sh -> Gen e -> Property
+test_plus runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (+)) xs ys ~~~ zipWithRef (+) xs ys
+
+test_minus :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen sh -> Gen e -> Property
+test_minus runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (-)) xs ys ~~~ zipWithRef (-) xs ys
+
+test_mult :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen sh -> Gen e -> Property
+test_mult runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (*)) xs ys ~~~ zipWithRef (*) xs ys
+
+test_quot :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
+test_quot runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (e `except` zero))
+    runN (A.zipWith quot) xs ys ~~~ zipWithRef quot xs ys
+
+test_rem :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
+test_rem runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (e `except` zero))
+    runN (A.zipWith rem) xs ys ~~~ zipWithRef rem xs ys
+
+test_quotRem :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
+test_quotRem runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (e `except` zero))
+    runN (A.zipWith (lift $$ quotRem)) xs ys ~~~ zipWithRef quotRem xs ys
+
+test_idiv :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
+test_idiv runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (e `except` zero))
+    runN (A.zipWith div) xs ys ~~~ zipWithRef div xs ys
+
+test_fdiv :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Fractional e, A.Fractional e) => RunN -> Gen sh -> Gen e -> Property
+test_fdiv runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (e `except` zero))
+    runN (A.zipWith (/)) xs ys ~~~ zipWithRef (/) xs ys
+
+test_pow :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_pow runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (**)) xs ys ~~~ zipWithRef (**) xs ys
+
+test_logBase :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e) => RunN -> Gen sh -> Gen e -> Property
+test_logBase runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith logBase) xs ys ~~~ zipWithRef logBase xs ys
+
+test_atan2 :: (Shape sh, Similar e, P.Eq sh, P.RealFloat e, A.RealFloat e) => RunN -> Gen sh -> Gen e -> Property
+test_atan2 runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith A.atan2) xs ys ~~~ zipWithRef P.atan2 xs ys
+
+test_mod :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
+test_mod runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (e `except` zero))
+    runN (A.zipWith mod) xs ys ~~~ zipWithRef mod xs ys
+
+test_divMod :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e) => RunN -> Gen sh -> Gen e -> Property
+test_divMod runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (e `except` zero))
+    runN (A.zipWith (lift $$ divMod)) xs ys ~~~ zipWithRef divMod xs ys
+
+test_band :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e) => RunN -> Gen sh -> Gen e -> Property
+test_band runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A..&.)) xs ys ~~~ zipWithRef (P..&.) xs ys
+
+test_bor :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e) => RunN -> Gen sh -> Gen e -> Property
+test_bor runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A..|.)) xs ys ~~~ zipWithRef (P..|.) xs ys
+
+test_xor :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e) => RunN -> Gen sh -> Gen e -> Property
+test_xor runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith A.xor) xs ys ~~~ zipWithRef P.xor xs ys
+
+test_shift :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
+test_shift runN dim e =
+  property $ do
+    let s = P.finiteBitSize (undefined::e)
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (Gen.int (Range.linearFrom 0 (-s) s)))
+    runN (A.zipWith A.shift) xs ys ~~~ zipWithRef P.shift xs ys
+
+test_shiftL :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
+test_shiftL runN dim e =
+  property $ do
+    let s = P.finiteBitSize (undefined::e)
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
+    runN (A.zipWith A.shiftL) xs ys ~~~ zipWithRef P.shiftL xs ys
+
+test_shiftR :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
+test_shiftR runN dim e =
+  property $ do
+    let s = P.finiteBitSize (undefined::e)
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
+    runN (A.zipWith A.shiftR) xs ys ~~~ zipWithRef P.shiftR xs ys
+
+test_rotate :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
+test_rotate runN dim e =
+  property $ do
+    let s = P.finiteBitSize (undefined::e)
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (Gen.int (Range.linearFrom 0 (-s) s)))
+    runN (A.zipWith A.rotate) xs ys ~~~ zipWithRef P.rotate xs ys
+
+test_rotateL :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
+test_rotateL runN dim e =
+  property $ do
+    let s = P.finiteBitSize (undefined::e)
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
+    runN (A.zipWith A.rotateL) xs ys ~~~ zipWithRef P.rotateL xs ys
+
+test_rotateR :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e) => RunN -> Gen sh -> Gen e -> Property
+test_rotateR runN dim e =
+  property $ do
+    let s = P.finiteBitSize (undefined::e)
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 (Gen.int (Range.linear 0 s)))
+    runN (A.zipWith A.rotateR) xs ys ~~~ zipWithRef P.rotateR xs ys
+
+test_lt :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_lt runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A.<)) xs ys ~~~ zipWithRef (P.<) xs ys
+
+test_gt :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_gt runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A.>)) xs ys ~~~ zipWithRef (P.>) xs ys
+
+test_lte :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_lte runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A.<=)) xs ys ~~~ zipWithRef (P.<=) xs ys
+
+test_gte :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_gte runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A.>=)) xs ys ~~~ zipWithRef (P.>=) xs ys
+
+test_eq :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_eq runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A.==)) xs ys ~~~ zipWithRef (P.==) xs ys
+
+test_neq :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_neq runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A./=)) xs ys ~~~ zipWithRef (P./=) xs ys
+
+test_min :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_min runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A.min)) xs ys ~~~ zipWithRef (P.min) xs ys
+
+test_max :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e) => RunN -> Gen sh -> Gen e -> Property
+test_max runN dim e =
+  property $ do
+    sh1 <- forAll dim
+    sh2 <- forAll dim
+    xs  <- forAll (Gen.array sh1 e)
+    ys  <- forAll (Gen.array sh2 e)
+    runN (A.zipWith (A.max)) xs ys ~~~ zipWithRef (P.max) xs ys
 
 
 -- Reference Implementation
@@ -195,9 +438,7 @@ requiring f go =
 
 zipWithRef :: (Shape sh, Elt c) => (a -> b -> c) -> Array sh a -> Array sh b -> Array sh c
 zipWithRef f xs ys =
-  let shx       = fromElt (arrayShape xs)
-      shy       = fromElt (arrayShape ys)
-      sh        = toElt (R.intersect shx shy)
-  in
-  fromFunction sh (\ix -> f (xs Sugar.! ix) (ys Sugar.! ix))
+  fromFunction
+    (Sugar.shape xs `Sugar.intersect` Sugar.shape ys)
+    (\ix -> f (xs Sugar.! ix) (ys Sugar.! ix))
 

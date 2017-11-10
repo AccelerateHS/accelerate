@@ -369,6 +369,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Config
         Data.Array.Accelerate.Test.NoFib.Prelude
         Data.Array.Accelerate.Test.NoFib.Prelude.Map
+        Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
 
   hs-source-dirs:
         src

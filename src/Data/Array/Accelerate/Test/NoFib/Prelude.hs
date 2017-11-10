@@ -14,6 +14,7 @@ module Data.Array.Accelerate.Test.NoFib.Prelude (
   test_prelude,
 
   module Data.Array.Accelerate.Test.NoFib.Prelude.Map,
+  module Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith,
 
 ) where
 
@@ -21,6 +22,7 @@ import Test.Tasty
 
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Prelude.Map
+import Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
 
 -- import Test.Prelude.Backpermute
 -- import Test.Prelude.Filter
@@ -30,14 +32,13 @@ import Data.Array.Accelerate.Test.NoFib.Prelude.Map
 -- import Test.Prelude.Scan
 -- import Test.Prelude.Sequences
 -- import Test.Prelude.Stencil
--- import Test.Prelude.ZipWith
 
 
 test_prelude :: RunN -> TestTree
 test_prelude runN =
   testGroup "Prelude"
     [ test_map runN
-    -- , test_zipWith runN conf
+    , test_zipWith runN
     -- , test_foldAll runN conf
     -- , test_fold runN conf
     -- , test_backpermute runN conf

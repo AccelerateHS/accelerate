@@ -42,9 +42,6 @@ import qualified Hedgehog.Range                                 as Range
 import Test.Tasty
 import Test.Tasty.Hedgehog
 
---
--- Map -------------------------------------------------------------------------
---
 
 test_map :: RunN -> TestTree
 test_map runN =
