@@ -15,6 +15,7 @@ module Data.Array.Accelerate.Test.NoFib.Prelude (
 
   module Data.Array.Accelerate.Test.NoFib.Prelude.Map,
   module Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith,
+  module Data.Array.Accelerate.Test.NoFib.Prelude.Fold,
 
 ) where
 
@@ -23,10 +24,10 @@ import Test.Tasty
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Prelude.Map
 import Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
+import Data.Array.Accelerate.Test.NoFib.Prelude.Fold
 
 -- import Test.Prelude.Backpermute
 -- import Test.Prelude.Filter
--- import Test.Prelude.Fold
 -- import Test.Prelude.Permute
 -- import Test.Prelude.Replicate
 -- import Test.Prelude.Scan
@@ -39,8 +40,8 @@ test_prelude runN =
   testGroup "Prelude"
     [ test_map runN
     , test_zipWith runN
-    -- , test_foldAll runN conf
-    -- , test_fold runN conf
+    , test_fold runN
+    , test_foldSeg runN
     -- , test_backpermute runN conf
     -- , test_permute runN conf
     -- , test_scan runN conf             -- requires fold

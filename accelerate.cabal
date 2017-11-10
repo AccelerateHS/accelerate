@@ -370,6 +370,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Prelude
         Data.Array.Accelerate.Test.NoFib.Prelude.Map
         Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
+        Data.Array.Accelerate.Test.NoFib.Prelude.Fold
 
   hs-source-dirs:
         src
@@ -476,6 +477,8 @@ test-suite nofib-interpreter
         -O2
         -threaded
         -rtsopts
+        -with-rtsopts=-A128M
+        -with-rtsopts=-n4M
 
 source-repository head
   Type:                 git

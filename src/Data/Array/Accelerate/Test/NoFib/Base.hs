@@ -47,7 +47,7 @@ dim4 :: Gen DIM4
 dim4 = shape
 
 shape :: forall sh. (Gen.Shape sh, Shape sh) => Gen sh
-shape = Gen.shape (Range.linear 1 (512 `quot` (2 ^ r)))
+shape = Gen.shape (Range.linear 0 (512 `quot` (2 ^ r)))
   where
     r = rank (undefined::sh)
 
@@ -111,16 +111,14 @@ except gen f  = do
 
 
 
-{--
-indexHead :: sh:.Int -> Int
-indexHead (_ :. sz) = sz
+-- indexHead :: sh:.Int -> Int
+-- indexHead (_ :. sz) = sz
 
-indexTail :: sh:.Int -> sh
-indexTail (sh :. _) = sh
+-- indexTail :: sh:.Int -> sh
+-- indexTail (sh :. _) = sh
 
-isEmptyArray :: Shape sh => Array sh e -> Bool
-isEmptyArray arr = size (shape arr) == 0
-
+-- isEmptyArray :: Shape sh => Array sh e -> Bool
+-- isEmptyArray arr = size (shape arr) == 0
 
 splitEvery :: Int -> [a] -> [[a]]
 splitEvery _ [] = cycle [[]]
@@ -133,5 +131,4 @@ splitPlaces []     _  = []
 splitPlaces (i:is) vs =
   let (h,t) = splitAt (fromIntegral i) vs
   in  h : splitPlaces is t
---}
 
