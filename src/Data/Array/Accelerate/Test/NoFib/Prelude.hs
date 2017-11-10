@@ -43,6 +43,12 @@ test_prelude runN =
     , test_scanr runN
     , test_scanr1 runN
     , test_scanr' runN
+    , test_scanlSeg runN
+    , test_scanl1Seg runN
+    , test_scanl'Seg runN
+    , test_scanrSeg runN
+    , test_scanr1Seg runN
+    , test_scanr'Seg runN
     -- , test_stencil runN conf
     -- , test_replicate runN conf
     -- , test_filter runN conf

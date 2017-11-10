@@ -23,7 +23,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Fold (
 
 import Data.Proxy
 import Data.Typeable
-import Data.List                                                ( foldl', foldl1' )
 import Prelude                                                  as P
 
 import Data.Array.Accelerate                                    as A
@@ -187,28 +186,34 @@ foldRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Arr
 foldRef f z arr =
   let (sh :. n) = arrayShape arr
       sh'       = listToShape . P.map (P.max 1) . shapeToList $ sh
-  in  fromList sh' [ foldl' f z sub | sub <- splitEvery n (toList arr) ]
+  in  fromList sh' [ foldl f z sub | sub <- splitEvery n (toList arr) ]
 
 fold1Ref :: (Shape sh, Elt e) => (e -> e -> e) -> Array (sh :. Int) e -> Array sh e
 fold1Ref f arr =
   let (sh :. n) = arrayShape arr
-  in  fromList sh [ foldl1' f sub | sub <- splitEvery n (toList arr) ]
+  in  fromList sh [ foldl1 f sub | sub <- splitEvery n (toList arr) ]
 
 foldSegRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Segments Int -> Array (sh :. Int) e
-foldSegRef f z arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
-  where
-    (sh :. n)   = arrayShape arr
-    (Z  :. sz)  = arrayShape seg
-    seg'        = toList seg
-    foldseg xs  = P.map (foldl' f z) (splitPlaces seg' xs)
+foldSegRef f z arr seg =
+  let
+      (sh :. n)   = arrayShape arr
+      (Z  :. sz)  = arrayShape seg
+      seg'        = toList seg
+      arr'        = [ foldl f z sec | sub <- splitEvery n (toList arr)
+                                    , sec <- splitPlaces seg' sub ]
+  in
+  fromList (sh :. sz) arr'
 
 fold1SegRef :: (Shape sh, Elt e, P.Integral i) => (e -> e -> e) -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
-fold1SegRef f arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
-  where
-    (sh :. n)   = arrayShape arr
-    (Z  :. sz)  = arrayShape seg
-    seg'        = toList seg
-    foldseg xs  = P.map (foldl1' f) (splitPlaces seg' xs)
+fold1SegRef f arr seg =
+  let
+      (sh :. n)   = arrayShape arr
+      (Z  :. sz)  = arrayShape seg
+      seg'        = toList seg
+      arr'        = [ foldl1 f sec | sub <- splitEvery n (toList arr)
+                                   , sec <- splitPlaces seg' sub ]
+  in
+  fromList (sh :. sz) arr'
 
 maximumSegmentSum :: forall sh e. (Shape sh, A.Num e, A.Ord e) => Acc (Array (sh :. Int) e) -> Acc (Array sh e)
 maximumSegmentSum

@@ -15,13 +15,13 @@
 
 module Data.Array.Accelerate.Test.NoFib.Prelude.Scan (
 
-  test_scanl,
-  test_scanl1,
-  test_scanl',
+  test_scanl, test_scanlSeg,
+  test_scanl1, test_scanl1Seg,
+  test_scanl', test_scanl'Seg,
 
-  test_scanr,
-  test_scanr1,
-  test_scanr',
+  test_scanr, test_scanrSeg,
+  test_scanr1, test_scanr1Seg,
+  test_scanr', test_scanr'Seg,
 
 ) where
 
@@ -76,7 +76,8 @@ test_scanl runN =
             -> TestTree
         testDim sh =
           testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
-            [ testProperty "sum"              $ test_scanl_sum runN sh e
+            [ testProperty "sum"              $ test_scanl_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanl_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanl_interval runN sh e
             ]
 
@@ -146,7 +147,8 @@ test_scanl' runN =
             -> TestTree
         testDim sh =
           testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
-            [ testProperty "sum"              $ test_scanl'_sum runN sh e
+            [ testProperty "sum"              $ test_scanl'_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanl'_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanl'_interval runN sh e
             ]
 
@@ -181,7 +183,8 @@ test_scanr runN =
             -> TestTree
         testDim sh =
           testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
-            [ testProperty "sum"              $ test_scanr_sum runN sh e
+            [ testProperty "sum"              $ test_scanr_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanr_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanr_interval runN sh e
             ]
 
@@ -251,21 +254,230 @@ test_scanr' runN =
             -> TestTree
         testDim sh =
           testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
-            [ testProperty "sum"              $ test_scanr'_sum runN sh e
+            [ testProperty "sum"              $ test_scanr'_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanr'_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanr'_interval runN sh e
+            ]
+
+test_scanlSeg :: RunN -> TestTree
+test_scanlSeg runN =
+  testGroup "scanlSeg"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanlSeg_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanlSeg_sum runN sh e e
+            ]
+
+test_scanl1Seg :: RunN -> TestTree
+test_scanl1Seg runN =
+  testGroup "scanl1Seg"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"  $ test_scanl1Seg_sum runN sh e
+            ]
+
+test_scanl'Seg :: RunN -> TestTree
+test_scanl'Seg runN =
+  testGroup "scanl'Seg"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanl'Seg_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanl'Seg_sum runN sh e e
+            ]
+
+test_scanrSeg :: RunN -> TestTree
+test_scanrSeg runN =
+  testGroup "scanrSeg"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanrSeg_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanrSeg_sum runN sh e e
+            ]
+
+test_scanr1Seg :: RunN -> TestTree
+test_scanr1Seg runN =
+  testGroup "scanr1Seg"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"  $ test_scanr1Seg_sum runN sh e
+            ]
+
+test_scanr'Seg :: RunN -> TestTree
+test_scanr'Seg runN =
+  testGroup "scanr'Seg"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
+  where
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testGroup (show (typeOf (undefined :: a)))
+        [ testDim dim1
+        , testDim dim2
+        , testDim dim3
+        ]
+      where
+        testDim
+            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            => Gen (sh:.Int)
+            -> TestTree
+        testDim sh =
+          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+            [ testProperty "sum"              $ test_scanr'Seg_sum runN sh (return 0) e
+            , testProperty "non-neutral sum"  $ test_scanr'Seg_sum runN sh e e
             ]
 
 
 scalar :: Elt e => e -> Scalar e
 scalar x = fromFunction Z (const x)
 
-test_scanl_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
-test_scanl_sum runN dim e =
+test_scanl_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanl_sum runN dim z e =
   property $ do
-    z   <- forAll e
+    x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanl (+) (the v)) (scalar z) arr ~~~ scanlRef (+) z arr
+    runN (\v -> A.scanl (+) (the v)) (scalar x) arr ~~~ scanlRef (+) x arr
 
 test_scanl1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanl1_sum runN dim e =
@@ -274,21 +486,21 @@ test_scanl1_sum runN dim e =
     arr <- forAll (Gen.array sh e)
     runN (A.scanl1 (+)) arr ~~~ scanl1Ref (+) arr
 
-test_scanl'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
-test_scanl'_sum runN dim e =
+test_scanl'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanl'_sum runN dim z e =
   property $ do
-    z   <- forAll e
+    x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanl' (+) (the v)) (scalar z) arr ~~~ scanl'Ref (+) z arr
+    runN (\v -> A.scanl' (+) (the v)) (scalar x) arr ~~~ scanl'Ref (+) x arr
 
-test_scanr_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
-test_scanr_sum runN dim e =
+test_scanr_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanr_sum runN dim z e =
   property $ do
-    z   <- forAll e
+    x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanr (+) (the v)) (scalar z) arr ~~~ scanrRef (+) z arr
+    runN (\v -> A.scanr (+) (the v)) (scalar x) arr ~~~ scanrRef (+) x arr
 
 test_scanr1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanr1_sum runN dim e =
@@ -297,13 +509,13 @@ test_scanr1_sum runN dim e =
     arr <- forAll (Gen.array sh e)
     runN (A.scanr1 (+)) arr ~~~ scanr1Ref (+) arr
 
-test_scanr'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
-test_scanr'_sum runN dim e =
+test_scanr'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanr'_sum runN dim z e =
   property $ do
-    z   <- forAll e
+    x   <- forAll z
     sh  <- forAll dim
     arr <- forAll (Gen.array sh e)
-    runN (\v -> A.scanr' (+) (the v)) (scalar z) arr ~~~ scanr'Ref (+) z arr
+    runN (\v -> A.scanr' (+) (the v)) (scalar x) arr ~~~ scanr'Ref (+) x arr
 
 test_scanl_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
 test_scanl_interval runN dim e =
@@ -347,159 +559,60 @@ test_scanr'_interval runN dim e =
     let arr  = intervalArray sh n e
     runN (A.scanr' iappend (constant one)) arr ~~~ scanr'Ref iappendRef one arr
 
+test_scanlSeg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanlSeg_sum runN dim z e =
+  property $ do
+    x       <- forAll z
+    sh:.n   <- forAll (Gen.small dim)
+    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    runN (\v -> A.scanlSeg (+) (the v)) (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
 
---
--- scan ------------------------------------------------------------------------
---
+test_scanl1Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl1Seg_sum runN dim e =
+  property $ do
+    sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
+    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    runN (A.scanl1Seg (+)) arr seg ~~~ scanl1SegRef (+) arr seg
 
-{--
-test_scan :: Backend -> Config -> Test
-test_scan backend opt = testGroup "scan" $ catMaybes
-  [ testElt configInt8   (undefined :: Int8)
-  , testElt configInt16  (undefined :: Int16)
-  , testElt configInt32  (undefined :: Int32)
-  , testElt configInt64  (undefined :: Int64)
-  , testElt configWord8  (undefined :: Word8)
-  , testElt configWord16 (undefined :: Word16)
-  , testElt configWord32 (undefined :: Word32)
-  , testElt configWord64 (undefined :: Word64)
-  , testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
-  ]
-  where
-    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, P.Enum e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
-    testElt ok _
-      | P.not (get ok opt)  = Nothing
-      | otherwise           = Just $ testGroup (show (typeOf (undefined :: e)))
-          [ testDim dim1
-          , testDim dim2
-          ]
-      where
-        testDim :: forall sh. (Shape sh, Slice sh, P.Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => sh:.Int -> Test
-        testDim _sh = testGroup ("DIM" P.++ show (rank _sh))
-          [ testGroup "scanl"
-            [ testProperty "sum"        (test_scanl  :: Array (sh:.Int) e -> Property)
-            , testProperty "interval"   (intv_scanl  :: sh -> NonNegative Int -> Property)
-            ]
-          , testGroup "scanl'"
-            [ testProperty "sum"        (test_scanl' :: Array (sh:.Int) e -> Property)
-            , testProperty "interval"   (intv_scanl' :: sh -> NonNegative Int -> Property)
-            ]
-          , testGroup "scanl1"
-            [ testProperty "sum"        (test_scanl1 :: Array (sh:.Int) e -> Property)
-            , testProperty "interval"   (intv_scanl1 :: sh -> Positive Int -> Property)
-            ]
-          , testGroup "scanr"
-            [ testProperty "sum"        (test_scanr  :: Array (sh:.Int) e -> Property)
-            , testProperty "interval"   (intv_scanr  :: sh -> NonNegative Int -> Property)
-            ]
-          , testGroup "scanr'"
-            [ testProperty "sum"        (test_scanr' :: Array (sh:.Int) e -> Property)
-            , testProperty "interval"   (intv_scanr' :: sh -> NonNegative Int -> Property)
-            ]
-          , testGroup "scanr1"
-            [ testProperty "sum"        (test_scanr1 :: Array (sh:.Int) e -> Property)
-            , testProperty "interval"   (intv_scanr1 :: sh -> Positive Int -> Property)
-            ]
-          --
-          , testProperty "scanl1Seg"    (test_scanl1seg (undefined::Array (sh:.Int) e))
-          , testProperty "scanr1Seg"    (test_scanr1seg (undefined::Array (sh:.Int) e))
-          , testProperty "scanlSeg"     (test_scanlseg  (undefined::Array (sh:.Int) e))
-          , testProperty "scanrSeg"     (test_scanrseg  (undefined::Array (sh:.Int) e))
-          , testProperty "scanl'Seg"    (test_scanl'seg (undefined::Array (sh:.Int) e))
-          , testProperty "scanr'Seg"    (test_scanr'seg (undefined::Array (sh:.Int) e))
-          ]
-          where
-            -- left scan
-            --
-            test_scanl  xs = (run1 backend (A.scanl (+) 0)) xs           ~?= scanlRef (+) 0 xs
-            test_scanl' xs = (run1 backend (A.lift . A.scanl' (+) 0)) xs ~?= scanl'Ref (+) 0 xs
-            test_scanl1 xs =
-              arraySize (arrayShape xs) > 0 ==>
-                (run1 backend (A.scanl1 A.min)) xs ~?= scanl1Ref P.min xs
+test_scanl'Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanl'Seg_sum runN dim z e =
+  property $ do
+    x       <- forAll z
+    sh:.n   <- forAll (Gen.small dim)
+    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    runN (\v -> A.scanl'Seg (+) (the v)) (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
 
-            intv_scanl sh (NonNegative sz) =
-              let xs = intervalArray sh sz
-              in (run1 backend (A.scanl iappend' (constant one))) xs ~?= scanlRef iappend one xs
+test_scanrSeg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanrSeg_sum runN dim z e =
+  property $ do
+    x       <- forAll z
+    sh:.n   <- forAll (Gen.small dim)
+    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    runN (\v -> A.scanrSeg (+) (the v)) (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
 
-            intv_scanl' sh (NonNegative sz) =
-              let xs = intervalArray sh sz
-              in (run1 backend (A.lift . A.scanl' iappend' (constant one))) xs ~?= scanl'Ref iappend one xs
+test_scanr1Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr1Seg_sum runN dim e =
+  property $ do
+    sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
+    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    runN (A.scanr1Seg (+)) arr seg ~~~ scanr1SegRef (+) arr seg
 
-            intv_scanl1 sh (Positive sz) =
-              arraySize sh > 0 ==>
-                let xs = intervalArray sh sz
-                in (run1 backend (A.scanl1 iappend')) xs ~?= scanl1Ref iappend xs
+test_scanr'Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanr'Seg_sum runN dim z e =
+  property $ do
+    x       <- forAll z
+    sh:.n   <- forAll (Gen.small dim)
+    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    runN (\v -> A.scanr'Seg (+) (the v)) (scalar x) arr seg ~~~ scanr'SegRef (+) x arr seg
 
-            -- right scan
-            --
-            test_scanr  xs = run1 backend (A.scanr (+) 0) xs           ~?= scanrRef (+) 0 xs
-            test_scanr' xs = run1 backend (A.lift . A.scanr' (+) 0) xs ~?= scanr'Ref (+) 0 xs
-            test_scanr1 xs =
-              arraySize (arrayShape xs) > 0 ==>
-              (run1 backend (A.scanr1 A.max)) xs ~?= scanr1Ref P.max xs
 
-            intv_scanr sh (NonNegative sz) =
-              let xs = intervalArray sh sz
-              in (run1 backend (A.scanr iappend' (constant one))) xs ~?= scanrRef iappend one xs
-
-            intv_scanr' sh (NonNegative sz) =
-              let xs = intervalArray sh sz
-              in (run1 backend (A.lift . A.scanr' iappend' (constant one))) xs ~?= scanr'Ref iappend one xs
-
-            intv_scanr1 sh (Positive sz) =
-              arraySize sh > 0 ==>
-                let xs = intervalArray sh sz
-                in (run1 backend (A.scanr1 iappend')) xs ~?= scanr1Ref iappend xs
-
-            -- segmented left/right scan
-            --
-            test_scanl1seg elt =
-              forAllShrink arbitrarySegments1            shrinkSegments1      $ \(seg :: Vector Int32) ->
-              forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
-                arraySize (arrayShape xs) > 0 ==>
-                  (runN backend (A.scanl1Seg (+))) xs seg
-                  ~?=
-                  scanl1SegRef (+) (xs `asTypeOf` elt) seg
-
-            test_scanr1seg elt =
-              forAllShrink arbitrarySegments1            shrinkSegments1      $ \(seg :: Vector Int32) ->
-              forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
-                arraySize (arrayShape xs) > 0 ==>
-                  (runN backend (A.scanr1Seg (+))) xs seg
-                  ~?=
-                  scanr1SegRef (+) (xs `asTypeOf` elt) seg
-
-            test_scanlseg elt =
-              forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
-              forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
-                (runN backend (A.scanlSeg (+) 0)) xs seg
-                ~?=
-                scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
-
-            test_scanrseg elt =
-              forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
-              forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
-                (runN backend (A.scanrSeg (+) 0)) xs seg
-                ~?=
-                scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
-
-            test_scanl'seg elt =
-              forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
-              forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
-                (runN backend (A.scanl'Seg (+) 0)) xs seg
-                ~?=
-                scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
-
-            test_scanr'seg elt =
-              forAllShrink arbitrarySegments             shrinkSegments       $ \(seg :: Vector Int32) ->
-              forAllShrink (arbitrarySegmentedArray seg) shrinkSegmentedArray $ \xs  ->
-                (runN backend (A.scanr'Seg (+) 0)) xs seg
-                ~?=
-                scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
---}
-
--- interval of summations monoid
+-- Interval of summations monoid
 --
 one, top :: P.Num e => (e,e)
 one = (-1,-1)
