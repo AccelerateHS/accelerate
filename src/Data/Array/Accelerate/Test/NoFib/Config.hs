@@ -86,14 +86,14 @@ instance IsOption TestInt16 where
   optionCLParser = flagCLParser Nothing (TestInt16 True)
 
 instance IsOption TestInt32 where
-  defaultValue = TestInt32 $( [e| finiteBitSize (undefined::Int) == 64 |] )
+  defaultValue = TestInt32 $( [e| finiteBitSize (undefined::Int) == 32 |] )
   parseValue = fmap TestInt32 . safeRead
   optionName = return "int32"
   optionHelp = return "Enable 32-bit signed integer tests"
   optionCLParser = flagCLParser Nothing (TestInt32 True)
 
 instance IsOption TestInt64 where
-  defaultValue = TestInt64 $( [e| finiteBitSize (undefined::Int) == 32 |] )
+  defaultValue = TestInt64 $( [e| finiteBitSize (undefined::Int) == 64 |] )
   parseValue = fmap TestInt64 . safeRead
   optionName = return "int64"
   optionHelp = return "Enable 64-bit signed integer tests"
