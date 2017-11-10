@@ -73,7 +73,7 @@ The following supported add-ons are available as separate packages:
   * [linear-accelerate][linear-accelerate]: [Linear][linear] vector spaces in Accelerate
   * [mwc-random-accelerate][mwc-random-accelerate]: Generate Accelerate arrays filled with high quality pseudorandom numbers
   * [numeric-prelude-accelerate][numeric-prelude-accelerate]: Lifting the [numeric-prelude][numeric-prelude] to Accelerate
-  * [wigner-ville-accelerate][wigner-ville-accelerate]: Wigner-Ville time-frequency distribution.
+  * [wigner-ville-accelerate](https://github.com/Haskell-mouse/wigner-ville-accelerate): Wigner-Ville time-frequency distribution.
 
 Install them from Hackage with `cabal install PACKAGENAME`.
 
