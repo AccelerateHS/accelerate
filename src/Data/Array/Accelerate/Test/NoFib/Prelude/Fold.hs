@@ -124,7 +124,13 @@ test_foldSeg runN =
 scalar :: Elt e => e -> Scalar e
 scalar x = fromFunction Z (const x)
 
-test_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_sum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_sum runN dim z e =
   property $ do
     x  <- forAll z
@@ -132,28 +138,49 @@ test_sum runN dim z e =
     xs <- forAll (Gen.array sh e)
     let !go = runN (\v -> A.fold (+) (the v)) in go (scalar x) xs ~~~ foldRef (+) x xs
 
-test_mss :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_mss
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_mss runN dim e =
   property $ do
     sh <- forAll (dim `except` \(_:.v) -> v P.== 0)
     xs <- forAll (Gen.array sh e)
     let !go = runN maximumSegmentSum in go xs ~~~ maximumSegmentSumRef xs
 
-test_minimum :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_minimum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_minimum runN dim e =
   property $ do
     sh <- forAll (dim `except` \(_:.v) -> v P.== 0)
     xs <- forAll (Gen.array sh e)
     let !go = runN A.minimum in go xs ~~~ fold1Ref P.min xs
 
-test_maximum :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_maximum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_maximum runN dim e =
   property $ do
     sh <- forAll (dim `except` \(_:.v) -> v P.== 0)
     xs <- forAll (Gen.array sh e)
     let !go = runN A.maximum in go xs ~~~ fold1Ref P.max xs
 
-test_segmented_sum :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_segmented_sum
+    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_segmented_sum runN dim z e =
   property $ do
     x         <- forAll z
@@ -162,7 +189,12 @@ test_segmented_sum runN dim z e =
     xs        <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
 
-test_segmented_minimum :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_segmented_minimum
+    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_segmented_minimum runN dim e =
   property $ do
     sh:.n     <- forAll (Gen.small dim)
@@ -170,7 +202,12 @@ test_segmented_minimum runN dim e =
     xs        <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
 
-test_segmented_maximum :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_segmented_maximum
+    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_segmented_maximum runN dim e =
   property $ do
     sh:.n     <- forAll (Gen.small dim)
@@ -182,18 +219,33 @@ test_segmented_maximum runN dim e =
 -- Reference implementation
 -- ------------------------
 
-foldRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Array sh e
+foldRef
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> e
+    -> Array (sh :. Int) e
+    -> Array sh e
 foldRef f z arr =
   let (sh :. n) = arrayShape arr
       sh'       = listToShape . P.map (P.max 1) . shapeToList $ sh
   in  fromList sh' [ foldl f z sub | sub <- splitEvery n (toList arr) ]
 
-fold1Ref :: (Shape sh, Elt e) => (e -> e -> e) -> Array (sh :. Int) e -> Array sh e
+fold1Ref
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> Array (sh :. Int) e
+    -> Array sh e
 fold1Ref f arr =
   let (sh :. n) = arrayShape arr
   in  fromList sh [ foldl1 f sub | sub <- splitEvery n (toList arr) ]
 
-foldSegRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Segments Int -> Array (sh :. Int) e
+foldSegRef
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> e
+    -> Array (sh :. Int) e
+    -> Segments Int
+    -> Array (sh :. Int) e
 foldSegRef f z arr seg =
   let
       (sh :. n)   = arrayShape arr
@@ -204,7 +256,12 @@ foldSegRef f z arr seg =
   in
   fromList (sh :. sz) arr'
 
-fold1SegRef :: (Shape sh, Elt e, P.Integral i) => (e -> e -> e) -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
+fold1SegRef
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> Array (sh :. Int) e
+    -> Segments Int
+    -> Array (sh :. Int) e
 fold1SegRef f arr seg =
   let
       (sh :. n)   = arrayShape arr
@@ -215,7 +272,10 @@ fold1SegRef f arr seg =
   in
   fromList (sh :. sz) arr'
 
-maximumSegmentSum :: forall sh e. (Shape sh, A.Num e, A.Ord e) => Acc (Array (sh :. Int) e) -> Acc (Array sh e)
+maximumSegmentSum
+    :: forall sh e. (Shape sh, A.Num e, A.Ord e)
+    => Acc (Array (sh :. Int) e)
+    -> Acc (Array sh e)
 maximumSegmentSum
   = A.map (\v -> let (x,_,_,_) = unlift v :: (Exp e, Exp e, Exp e, Exp e) in x)
   . A.fold1 f
@@ -236,7 +296,10 @@ maximumSegmentSum
     g x = let y = A.max x 0
           in  lift (y,y,y,x)
 
-maximumSegmentSumRef :: (P.Num e, P.Ord e, Shape sh, Elt e) => Array (sh :. Int) e -> Array sh e
+maximumSegmentSumRef
+    :: (P.Num e, P.Ord e, Shape sh, Elt e)
+    => Array (sh :. Int) e
+    -> Array sh e
 maximumSegmentSumRef arr = fromList sh [ go 0 0 sub | sub <- splitEvery n (toList arr) ]
   where
     sh :. n       = arrayShape arr

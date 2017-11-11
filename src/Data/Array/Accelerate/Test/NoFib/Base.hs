@@ -109,8 +109,6 @@ except gen f  = do
   when (f v) Gen.discard
   return v
 
-
-
 -- indexHead :: sh:.Int -> Int
 -- indexHead (_ :. sz) = sz
 
@@ -126,9 +124,9 @@ splitEvery n xs =
   let (h,t) = splitAt n xs
   in  h : splitEvery n t
 
-splitPlaces :: Integral i => [i] -> [a] -> [[a]]
+splitPlaces :: [Int] -> [a] -> [[a]]
 splitPlaces []     _  = []
 splitPlaces (i:is) vs =
-  let (h,t) = splitAt (fromIntegral i) vs
+  let (h,t) = splitAt i vs
   in  h : splitPlaces is t
 

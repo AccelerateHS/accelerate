@@ -472,7 +472,13 @@ test_scanr'Seg runN =
 scalar :: Elt e => e -> Scalar e
 scalar x = fromFunction Z (const x)
 
-test_scanl_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanl_sum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_scanl_sum runN dim z e =
   property $ do
     x   <- forAll z
@@ -480,14 +486,25 @@ test_scanl_sum runN dim z e =
     arr <- forAll (Gen.array sh e)
     let !go = runN (\v -> A.scanl (+) (the v)) in go (scalar x) arr ~~~ scanlRef (+) x arr
 
-test_scanl1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl1_sum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanl1_sum runN dim e =
   property $ do
     sh  <- forAll (dim `except` \v -> S.size v P.== 0)
     arr <- forAll (Gen.array sh e)
     let !go = runN (A.scanl1 (+)) in go arr ~~~ scanl1Ref (+) arr
 
-test_scanl'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanl'_sum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_scanl'_sum runN dim z e =
   property $ do
     x   <- forAll z
@@ -495,7 +512,12 @@ test_scanl'_sum runN dim z e =
     arr <- forAll (Gen.array sh e)
     let !go = runN (\v -> A.scanl' (+) (the v)) in go (scalar x) arr ~~~ scanl'Ref (+) x arr
 
-test_scanr_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanr_sum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e -> Property
 test_scanr_sum runN dim z e =
   property $ do
     x   <- forAll z
@@ -503,14 +525,25 @@ test_scanr_sum runN dim z e =
     arr <- forAll (Gen.array sh e)
     let !go = runN (\v -> A.scanr (+) (the v)) in go (scalar x) arr ~~~ scanrRef (+) x arr
 
-test_scanr1_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr1_sum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanr1_sum runN dim e =
   property $ do
     sh  <- forAll (dim `except` \v -> S.size v P.== 0)
     arr <- forAll (Gen.array sh e)
     let !go = runN (A.scanr1 (+)) in go arr ~~~ scanr1Ref (+) arr
 
-test_scanr'_sum :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanr'_sum
+    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_scanr'_sum runN dim z e =
   property $ do
     x   <- forAll z
@@ -518,49 +551,85 @@ test_scanr'_sum runN dim z e =
     arr <- forAll (Gen.array sh e)
     let !go = runN (\v -> A.scanr' (+) (the v)) in go (scalar x) arr ~~~ scanr'Ref (+) x arr
 
-test_scanl_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl_interval
+    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanl_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl iappend (constant one)) in go arr ~~~ scanlRef iappendRef one arr
 
-test_scanl1_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl1_interval
+    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanl1_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \v -> S.size v P.== 0)
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl1 iappend) in go arr ~~~ scanl1Ref iappendRef arr
 
-test_scanl'_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl'_interval
+    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanl'_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl' iappend (constant one)) in go arr ~~~ scanl'Ref iappendRef one arr
 
-test_scanr_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr_interval
+    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanr_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr iappend (constant one)) in go arr ~~~ scanrRef iappendRef one arr
 
-test_scanr1_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr1_interval
+    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanr1_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \v -> S.size v P.== 0)
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr1 iappend) in go arr ~~~ scanr1Ref iappendRef arr
 
-test_scanr'_interval :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr'_interval
+    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanr'_interval runN dim e =
   property $ do
     sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr' iappend (constant one)) in go arr ~~~ scanr'Ref iappendRef one arr
 
-test_scanlSeg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanlSeg_sum
+    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_scanlSeg_sum runN dim z e =
   property $ do
     x       <- forAll z
@@ -569,7 +638,12 @@ test_scanlSeg_sum runN dim z e =
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanlSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
 
-test_scanl1Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanl1Seg_sum
+    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanl1Seg_sum runN dim e =
   property $ do
     sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
@@ -577,7 +651,13 @@ test_scanl1Seg_sum runN dim e =
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanl1Seg (+)) in go arr seg ~~~ scanl1SegRef (+) arr seg
 
-test_scanl'Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanl'Seg_sum
+    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_scanl'Seg_sum runN dim z e =
   property $ do
     x       <- forAll z
@@ -586,7 +666,13 @@ test_scanl'Seg_sum runN dim z e =
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanl'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
 
-test_scanrSeg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanrSeg_sum
+    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_scanrSeg_sum runN dim z e =
   property $ do
     x       <- forAll z
@@ -595,7 +681,12 @@ test_scanrSeg_sum runN dim z e =
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanrSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
 
-test_scanr1Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Property
+test_scanr1Seg_sum
+    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Property
 test_scanr1Seg_sum runN dim e =
   property $ do
     sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
@@ -603,7 +694,13 @@ test_scanr1Seg_sum runN dim e =
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanr1Seg (+)) in go arr seg ~~~ scanr1SegRef (+) arr seg
 
-test_scanr'Seg_sum :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e) => RunN -> Gen (sh:.Int) -> Gen e -> Gen e -> Property
+test_scanr'Seg_sum
+    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    => RunN
+    -> Gen (sh:.Int)
+    -> Gen e
+    -> Gen e
+    -> Property
 test_scanr'Seg_sum runN dim z e =
   property $ do
     x       <- forAll z
@@ -647,42 +744,70 @@ intervalArray sh n _ = fromFunction (sh:.n) (\(_:.i) -> let x = P.fromIntegral i
 -- Reference implementation
 -- ------------------------
 
-scanlRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh:.Int) e -> Array (sh:.Int) e
+scanlRef
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> e
+    -> Array (sh:.Int) e
+    -> Array (sh:.Int) e
 scanlRef f z arr =
   let sz :. n     = arrayShape arr
       arr'        = [ P.scanl f z sub | sub <- splitEvery n (toList arr) ]
   in
   A.fromList (sz :. n+1) (concat arr')
 
-scanl'Ref :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh:.Int) e -> (Array (sh:.Int) e, Array sh e)
+scanl'Ref
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> e
+    -> Array (sh:.Int) e
+    -> (Array (sh:.Int) e, Array sh e)
 scanl'Ref f z arr =
   let sz :. n     = arrayShape arr
       (arr',sums) = P.unzip [ P.splitAt n (P.scanl f z sub) | sub <- splitEvery n (toList arr) ]
   in
   ( A.fromList (sz:.n) (concat arr'), A.fromList sz (concat sums) )
 
-scanl1Ref :: (Shape sh, Elt e) => (e -> e -> e) -> Array (sh:.Int) e -> Array (sh:.Int) e
+scanl1Ref
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> Array (sh:.Int) e
+    -> Array (sh:.Int) e
 scanl1Ref f arr =
   let sz :. n     = arrayShape arr
       arr'        = [ P.scanl1 f sub | sub <- splitEvery n (toList arr) ]
   in
   A.fromList (sz:.n) (concat arr')
 
-scanrRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh:.Int) e -> Array (sh:.Int) e
+scanrRef
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> e
+    -> Array (sh:.Int) e
+    -> Array (sh:.Int) e
 scanrRef f z arr =
   let sz :. n     = arrayShape arr
       arr'        = [ P.scanr f z sub | sub <- splitEvery n (toList arr) ]
   in
   A.fromList (sz :. n+1) (concat arr')
 
-scanr'Ref :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh:.Int) e -> (Array (sh:.Int) e, Array sh e)
+scanr'Ref
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> e
+    -> Array (sh:.Int) e
+    -> (Array (sh:.Int) e, Array sh e)
 scanr'Ref f z arr =
   let sz :. n     = arrayShape arr
       (sums,arr') = P.unzip [ P.splitAt 1 (P.scanr f z sub) | sub <- splitEvery n (toList arr) ]
   in
   ( A.fromList (sz:.n) (concat arr'), A.fromList sz (concat sums) )
 
-scanr1Ref :: (Shape sh, Elt e) => (e -> e -> e) -> Array (sh:.Int) e -> Array (sh:.Int) e
+scanr1Ref
+    :: (Shape sh, Elt e)
+    => (e -> e -> e)
+    -> Array (sh:.Int) e
+    -> Array (sh:.Int) e
 scanr1Ref f arr =
   let sz :. n     = arrayShape arr
       arr'        = [ P.scanr1 f sub | sub <- splitEvery n (toList arr) ]
@@ -693,11 +818,11 @@ scanr1Ref f arr =
 -- segmented operations
 --
 scanlSegRef
-    :: (Shape sh, Elt e, P.Integral i)
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
     -> Array (sh:.Int) e
-    -> Segments i
+    -> Segments Int
     -> Array (sh:.Int) e
 scanlSegRef f z arr seg =
   let
@@ -710,10 +835,10 @@ scanlSegRef f z arr seg =
   A.fromList (sz:.n') (concat arr')
 
 scanl1SegRef
-    :: (Shape sh, Elt e, P.Integral i)
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> Array (sh:.Int) e
-    -> Segments i
+    -> Segments Int
     -> Array (sh:.Int) e
 scanl1SegRef f arr seg =
   let
@@ -726,11 +851,11 @@ scanl1SegRef f arr seg =
   A.fromList (sz:.n') (concat arr')
 
 scanl'SegRef
-    :: (Shape sh, Elt e, P.Integral i)
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
     -> Array (sh:.Int) e
-    -> Segments i
+    -> Segments Int
     -> (Array (sh:.Int) e, Array (sh:.Int) e)
 scanl'SegRef f z arr seg =
   let
@@ -743,11 +868,11 @@ scanl'SegRef f z arr seg =
   ( A.fromList (sz:.n) (concat arr'), A.fromList (sz:.s) (concat sums) )
 
 scanrSegRef
-    :: (Shape sh, Elt e, P.Integral i)
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
     -> Array (sh:.Int) e
-    -> Segments i
+    -> Segments Int
     -> Array (sh:.Int) e
 scanrSegRef f z arr seg =
   let
@@ -760,10 +885,10 @@ scanrSegRef f z arr seg =
   A.fromList (sz:.n') (concat arr')
 
 scanr1SegRef
-    :: (Shape sh, Elt e, P.Integral i)
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> Array (sh:.Int) e
-    -> Segments i
+    -> Segments Int
     -> Array (sh:.Int) e
 scanr1SegRef f arr seg =
   let sz :. n   = arrayShape arr
@@ -775,11 +900,11 @@ scanr1SegRef f arr seg =
   A.fromList (sz:.n') (concat arr')
 
 scanr'SegRef
-    :: (Shape sh, Elt e, P.Integral i)
+    :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
     -> Array (sh:.Int) e
-    -> Segments i
+    -> Segments Int
     -> (Array (sh:.Int) e, Array (sh:.Int) e)
 scanr'SegRef f z arr seg =
   let
