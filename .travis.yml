@@ -56,7 +56,8 @@ script:
         cabal haddock
       else
         stack build --fast --no-terminal --haddock --no-haddock-deps --test --no-run-tests
-        stack test
+        stack test accelerate:doctest
+        stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 50'
       fi
 
 after_success:
