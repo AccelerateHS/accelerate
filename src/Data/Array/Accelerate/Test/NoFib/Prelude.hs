@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Test.NoFib.Prelude (
   module Data.Array.Accelerate.Test.NoFib.Prelude.Fold,
   module Data.Array.Accelerate.Test.NoFib.Prelude.Scan,
   module Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute,
+  module Data.Array.Accelerate.Test.NoFib.Prelude.Permute,
 
 ) where
 
@@ -29,6 +30,8 @@ import Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
 import Data.Array.Accelerate.Test.NoFib.Prelude.Fold
 import Data.Array.Accelerate.Test.NoFib.Prelude.Scan
 import Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
+import Data.Array.Accelerate.Test.NoFib.Prelude.Permute
+
 
 test_prelude :: RunN -> TestTree
 test_prelude runN =
@@ -38,7 +41,7 @@ test_prelude runN =
     , test_fold runN
     , test_foldSeg runN
     , test_backpermute runN
-    -- , test_permute runN conf
+    , test_permute runN
     , test_scanl runN
     , test_scanl1 runN
     , test_scanl' runN
