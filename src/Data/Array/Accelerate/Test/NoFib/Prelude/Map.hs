@@ -123,8 +123,8 @@ test_map runN =
             , testProperty "asin"       $ test_asin runN sh (e (Range.linearFracFrom 0 (-1) 1))
             , testProperty "acos"       $ test_acos runN sh (e (Range.linearFracFrom 0 (-1) 1))
             , testProperty "atan"       $ test_atan runN sh (fullrange e)
-            , testProperty "asinh"      $ test_asinh runN sh (fullrange e)
-            , testProperty "acosh"      $ test_acosh runN sh (e (Range.linearFrac 1 flt_max))
+            , testProperty "asinh"      $ test_asinh runN sh (e (Range.linearFracFrom 0 (- log flt_max) (log flt_max)))
+            , testProperty "acosh"      $ test_acosh runN sh (e (Range.linearFrac 1 (sqrt flt_max)))
             , testProperty "atanh"      $ test_atanh runN sh (e (Range.linearFracFrom 0 (-1) 1))
             , testProperty "exp"        $ test_exp runN sh (fullrange e)
             , testProperty "sqrt"       $ test_sqrt runN sh (e (Range.linearFrac 0 flt_max))
@@ -134,6 +134,12 @@ test_map runN =
             , testProperty "floor"      $ test_floor runN sh (e (Range.linearFracFrom 0 (P.fromIntegral (minBound :: Int)) (P.fromIntegral (maxBound :: Int))))
             , testProperty "ceiling"    $ test_ceiling runN sh (e (Range.linearFracFrom 0 (P.fromIntegral (minBound :: Int)) (P.fromIntegral (maxBound :: Int))))
             ]
+
+        -- NOTE: [asinh and acosh]
+        --
+        -- GHC uses an approximation for asinh and acosh which gives incorrect
+        -- answers for extremely large values. I guess I should submit a bug
+        -- report for that, but "for now" just test with a reduced range.
 
         fullrange :: P.RealFloat e => (Range e -> Gen e) -> Gen e
         fullrange gen = gen (Range.linearFracFrom 0 (-flt_max) flt_max)
