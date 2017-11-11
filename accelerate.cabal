@@ -372,6 +372,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
         Data.Array.Accelerate.Test.NoFib.Prelude.Fold
         Data.Array.Accelerate.Test.NoFib.Prelude.Scan
+        Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
 
   hs-source-dirs:
         src
