@@ -136,7 +136,7 @@ test_map runN =
             ]
 
         fullrange :: P.RealFloat e => (Range e -> Gen e) -> Gen e
-        fullrange gen = gen (Range.linearFracFrom 0 flt_min flt_max)
+        fullrange gen = gen (Range.linearFracFrom 0 (-flt_max) flt_max)
 
 
 test_negate

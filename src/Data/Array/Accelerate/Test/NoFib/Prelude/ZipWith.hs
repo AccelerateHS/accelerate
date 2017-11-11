@@ -151,7 +151,7 @@ test_zipWith runN =
             ]
 
         full :: P.RealFloat e => (Range e -> Gen e) -> Gen e
-        full gen = gen (Range.linearFracFrom 0 flt_min flt_max)
+        full gen = gen (Range.linearFracFrom 0 (-flt_max) flt_max)
 
 
 zero :: (P.Num a, P.Eq a) => a -> Bool
