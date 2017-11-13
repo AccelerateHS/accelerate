@@ -270,7 +270,9 @@ Library
         , hedgehog                      >= 0.5
         , mtl                           >= 2.0
         , tasty                         >= 0.11
+        , tasty-expected-failure        >= 0.11
         , tasty-hedgehog                >= 0.1
+        , tasty-hunit                   >= 0.9
         , template-haskell
         , terminal-size                 >= 0.3
         , time                          >= 1.4
@@ -367,6 +369,7 @@ Library
         -- nofib test suite
         Data.Array.Accelerate.Test.NoFib.Base
         Data.Array.Accelerate.Test.NoFib.Config
+        Data.Array.Accelerate.Test.NoFib.Sharing
         Data.Array.Accelerate.Test.NoFib.Prelude
         Data.Array.Accelerate.Test.NoFib.Prelude.Map
         Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith

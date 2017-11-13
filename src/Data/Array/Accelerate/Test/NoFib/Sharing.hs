@@ -1,46 +1,78 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Sharing
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Sharing (
+module Data.Array.Accelerate.Test.NoFib.Sharing (
 
   test_sharing
 
 ) where
 
-import Config
+import Data.Array.Accelerate                                        as A hiding ( exp )
+import Data.Array.Accelerate.Trafo.Sharing
+import Data.Array.Accelerate.Data.Bits                              as A
 
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.Data.Bits          as A
-import Test.Framework
-import Test.Framework.Providers.HUnit
+import Control.DeepSeq
+import Control.Exception
+import Test.Tasty
+import Test.Tasty.ExpectedFailure
+import Test.Tasty.HUnit
+import Prelude                                                      as P hiding ( exp )
 
 
-test_sharing :: Config -> Test
-test_sharing _ =
-  testGroup "sharing recovery"
-    [
-      sharing "simple"                  simple
-    , sharing "order fail"              orderFail
-    , sharing "test sort"               testSort
-    , sharing "much sharing"            (muchSharing 20)
-    , sharing "bfs fail"                bfsFail
-    , sharing "two lets same level"     twoLetsSameLevel
-    , sharing "two lets same level"     twoLetsSameLevel2
-    , sharing "no let at top"           noLetAtTop
-    , sharing "no let at top"           noLetAtTop2
-    , sharing "pipe"                    pipe
-    , sharing "bound variables"         varUse
-    , sharing "big tuple"               bigTuple
-    , iteration
+test_sharing :: TestTree
+test_sharing =
+  testGroup "sharing"
+    [ testCase  "simple"                $ sharingAcc test_simple
+    , testCase  "ordering"              $ sharingAcc test_ordering
+    , testCase  "sort"                  $ sharingAcc test_sort
+    , testCase  "blowup"                $ sharingAcc (test_blowup 20)
+    , testCase  "bfs"                   $ sharingAcc test_bfs
+    , testGroup "same level"
+      [ testCase "1"                    $ sharingAcc test_two_lets_same_level_1
+      , testCase "2"                    $ sharingAcc test_two_lets_same_level_2
+      ]
+    , testGroup "empty top"
+      [ testCase "1"                    $ sharingAcc test_no_let_at_top_1
+      , testCase "2"                    $ sharingAcc test_no_let_at_top_2
+      ]
+    , testCase  "pipe"                  $ sharingAcc test_pipe
+    , testCase  "bound variables"       $ sharingAcc test_bound_variables
+    , testCase  "big tuple"             $ sharingExp test_big_tuple
+    , testGroup "iteration"
+      [ testCase "simple"               $ sharingAcc test_iteration_simple
+      , testCase "outside"              $ sharingAcc test_iteration_outside
+      , testCase "body and condition"   $ sharingAcc test_iteration_body_condition
+      , testCase "awhile"               $ sharingAcc test_awhile
+      , testCase "iterate"              $ sharingAcc test_iterate
+      , testCase "nested"               $ sharingExp test_nested_iteration
+      , testCase "unused"               $ sharingExp test_unused_iteration
+      ]
+    , testGroup "nested data-parallelism"
+      [ expectFail $ testCase "mvm"     $ sharingAcc test_nested_data_praallelism
+      ]
     ]
-    where
-      sharing :: Show a => TestName -> a -> Test
-      sharing name acc =
-        testCase name (P.length (show acc) `seq` return ())
+  where
+    sharingAcc :: Arrays a => Acc a -> Assertion
+    sharingAcc acc =
+      catch (rnf (convertAcc True True True True acc) `seq` return ())
+            (\(e :: SomeException) -> assertFailure (show e))
 
+    sharingExp :: Elt e => Exp e -> Assertion
+    sharingExp exp =
+      catch (rnf (convertExp True exp) `seq` return ())
+            (\(e :: SomeException) -> assertFailure (show e))
 
 
 --------------------------------------------------------------------------------
@@ -51,18 +83,18 @@ test_sharing _ =
 mkArray :: Int -> Acc (Array DIM1 Int)
 mkArray n = use $ fromList (Z:.1) [n]
 
-muchSharing :: Int -> Acc (Array DIM1 Int)
-muchSharing 0 = (mkArray 0)
-muchSharing n = A.map (\_ -> newArr ! (lift (Z:.(0::Int))) +
+test_blowup :: Int -> Acc (Array DIM1 Int)
+test_blowup 0 = (mkArray 0)
+test_blowup n = A.map (\_ -> newArr ! (lift (Z:.(0::Int))) +
                              newArr ! (lift (Z:.(1::Int)))) (mkArray n)
   where
-    newArr = muchSharing (n-1)
+    newArr = test_blowup (n-1)
 
 idx :: Int -> Exp DIM1
 idx i = lift (Z:.i)
 
-bfsFail :: Acc (Array DIM1 Int)
-bfsFail = A.map (\x -> (map2 ! (idx 1)) +  (map1 ! (idx 2)) + x) arr
+test_bfs :: Acc (Array DIM1 Int)
+test_bfs = A.map (\x -> (map2 ! (idx 1)) +  (map1 ! (idx 2)) + x) arr
   where
     map1 :: Acc (Array DIM1 Int)
     map1 =  A.map (\y -> (map2 ! (idx 3)) + y) arr
@@ -73,14 +105,14 @@ bfsFail = A.map (\x -> (map2 ! (idx 1)) +  (map1 ! (idx 2)) + x) arr
     arr :: Acc (Array DIM1 Int)
     arr =  mkArray 666
 
-twoLetsSameLevel :: Acc (Array DIM1 Int)
-twoLetsSameLevel =
+test_two_lets_same_level_1 :: Acc (Array DIM1 Int)
+test_two_lets_same_level_1 =
   let arr1 = mkArray 1
   in let arr2 = mkArray 2
      in  A.map (\_ -> arr1!(idx 1) + arr1!(idx 2) + arr2!(idx 3) + arr2!(idx 4)) (mkArray 3)
 
-twoLetsSameLevel2 :: Acc (Array DIM1 Int)
-twoLetsSameLevel2 =
+test_two_lets_same_level_2 :: Acc (Array DIM1 Int)
+test_two_lets_same_level_2 =
  let arr2 = mkArray 2
  in let arr1 = mkArray 1
     in  A.map (\_ -> arr1!(idx 1) + arr1!(idx 2) + arr2!(idx 3) + arr2!(idx 4)) (mkArray 3)
@@ -89,19 +121,19 @@ twoLetsSameLevel2 =
 -- These two programs test that lets can be introduced not just at the top of a AST
 -- but in intermediate nodes.
 --
-noLetAtTop :: Acc (Array DIM1 Int)
-noLetAtTop = A.map (\x -> x + 1) bfsFail
+test_no_let_at_top_1 :: Acc (Array DIM1 Int)
+test_no_let_at_top_1 = A.map (\x -> x + 1) test_bfs
 
-noLetAtTop2 :: Acc (Array DIM1 Int)
-noLetAtTop2
+test_no_let_at_top_2 :: Acc (Array DIM1 Int)
+test_no_let_at_top_2
   = A.map (\x -> x + 2)
-  $ A.map (\x -> x + 1) bfsFail
+  $ A.map (\x -> x + 1) test_bfs
 
 --
 --
 --
-simple :: Acc (Array DIM1 (Int,Int))
-simple = A.map (\_ -> a ! (idx 1))  d
+test_simple :: Acc (Array DIM1 (Int,Int))
+test_simple = A.map (\_ -> a ! (idx 1))  d
   where
     c = use $ A.fromList (Z :. 3) [1..]
     d = A.map (+1) c
@@ -138,16 +170,11 @@ sortKey keyFun arr =  foldl sortOneBit arr (P.map lift ([0..31] :: [Int]))
 -- Create an array where each element is the value of its corresponding
 -- row-major index.
 --
---enumeratedArray :: (Shape sh) => Exp sh -> Acc (Array sh Int)
---enumeratedArray sh = A.reshape sh
---                   $ A.generate (index1 $ shapeSize sh) unindex1
-
 enumeratedArray :: Exp DIM1 -> Acc (Array DIM1 Int)
 enumeratedArray sh = A.generate sh unindex1
 
-testSort :: Acc (Vector Int)
-testSort = sortKey id $ use $ fromList (Z:.10) [9,8,7,6,5,4,3,2,1,0]
-
+test_sort :: Acc (Vector Int)
+test_sort = sortKey id $ use $ fromList (Z:.10) [9,8,7,6,5,4,3,2,1,0]
 
 -- map1 has children map3 and map2.
 -- map2 has child map3.
@@ -155,8 +182,8 @@ testSort = sortKey id $ use $ fromList (Z:.10) [9,8,7,6,5,4,3,2,1,0]
 -- you would be merging [1,3,2] with [2,3] which violated precondition of (+++).
 -- This tests that the new algorithm works just fine on this.
 --
-orderFail :: Acc (Array DIM1 Int)
-orderFail = A.map (\_ -> map1 ! (idx 1) + map2 ! (idx 1)) arr
+test_ordering :: Acc (Array DIM1 Int)
+test_ordering = A.map (\_ -> map1 ! (idx 1) + map2 ! (idx 1)) arr
   where
     map1 = A.map (\_ -> map3 ! (idx 1) + map2 ! (idx 2)) arr
     map2 = A.map (\_ -> map3 ! (idx 3)) arr
@@ -166,8 +193,8 @@ orderFail = A.map (\_ -> map1 ! (idx 1) + map2 ! (idx 1)) arr
 
 -- Tests array-valued lambdas in conjunction with sharing recovery.
 --
-pipe :: Acc (Vector Int)
-pipe = (acc1 >-> acc2) xs
+test_pipe :: Acc (Vector Int)
+test_pipe = (acc1 >-> acc2) xs
   where
     z :: Acc (Scalar Int)
     z = unit 0
@@ -185,8 +212,8 @@ pipe = (acc1 >-> acc2) xs
 
 -- Test for bound variables
 --
-varUse :: (Acc (Array DIM2 Int), Acc (Array DIM2 Float), Acc (Array DIM2 Float))
-varUse = (first, both, second)
+test_bound_variables :: Acc (Array DIM2 Int, Array DIM2 Float, Array DIM2 Float)
+test_bound_variables = lift (first, both, second)
   where
     is :: Array DIM2 Int
     is = fromList (Z:.10:.10) [0..]
@@ -214,9 +241,10 @@ varUse = (first, both, second)
 
 -- Test for 8 and 9 tuples
 --
-bigTuple :: (Exp (Int,Int,Int,Int,Int,Int,Int,Int), Exp (Int,Int,Int,Int,Int,Int,Int,Int,Int))
-bigTuple = (A.constant (0,0,0,0,0,0,0,0), A.constant (0,0,0,0,0,0,0,0,0))
+test_big_tuple :: Exp ((Int,Int,Int,Int,Int,Int,Int,Int), (Int,Int,Int,Int,Int,Int,Int,Int,Int))
+test_big_tuple = lift (A.constant (0,0,0,0,0,0,0,0), A.constant (0,0,0,0,0,0,0,0,0))
 
+{--
 -- Tests for sharing recovery of iteration
 --
 iteration :: Test
@@ -233,53 +261,60 @@ iteration = testGroup "iteration"
   where
     iter :: Show a => TestName -> a -> Test
     iter name acc = testCase name (P.length (show acc) `seq` return ())
+--}
 
-    vec :: Acc (Vector Float)
-    vec = use $ fromList (Z:.10) [0..]
+v1 :: Acc (Vector Float)
+v1 = use $ fromList (Z:.10) [0..]
 
-    test1 :: Acc (Vector Float)
-    test1 = flip A.map vec
-      $ \x -> A.while (A.< x) (+1) 0
+test_iteration_simple :: Acc (Vector Float)
+test_iteration_simple
+  = flip A.map v1
+  $ \x -> A.while (A.< x) (+1) 0
 
-    test2 :: Acc (Vector Float)
-    test2 = flip A.map vec
-      $ \x -> let y = 2*pi
-              in  y + A.while (A.< 10) (+y) x
+test_iteration_outside :: Acc (Vector Float)
+test_iteration_outside
+  = flip A.map v1
+  $ \x -> let y = 2*pi
+          in  y + A.while (A.< 10) (+y) x
 
-    test3 :: Acc (Vector Float)
-    test3 = flip A.map vec
-      $ \x -> A.while (A.< x) (+x) 0
+test_iteration_body_condition :: Acc (Vector Float)
+test_iteration_body_condition
+  = flip A.map v1
+  $ \x -> A.while (A.< x) (+x) 0
 
-    awhile_test :: Acc (Vector Float)
-    awhile_test = A.awhile (\a -> A.unit (the (A.sum a) A.< 200)) (A.map (+1)) vec
+test_awhile :: Acc (Vector Float)
+test_awhile = A.awhile (\a -> A.unit (the (A.sum a) A.< 200)) (A.map (+1)) v1
 
-    iterate_test :: Acc (Vector Float)
-    iterate_test = flip A.map vec
-        $ \x -> let y = 2*x
-                in  y + A.iterate (constant 10) (\x' -> y + x' + 10) x
+test_iterate :: Acc (Vector Float)
+test_iterate
+  = flip A.map v1
+  $ \x -> let y = 2*x
+          in  y + A.iterate (constant 10) (\x' -> y + x' + 10) x
 
-    for :: Elt a => Exp Int -> (Exp Int -> Exp a -> Exp a) -> Exp a -> Exp a
-    for n f seed
-      = A.snd
-      $ A.iterate n (\v -> let (i, x) = unlift v
-                           in  lift (i+1, f i x))
-                    (lift (constant 0, seed))
+test_for :: Elt a => Exp Int -> (Exp Int -> Exp a -> Exp a) -> Exp a -> Exp a
+test_for n f seed
+  = A.snd
+  $ A.iterate n (\v -> let (i, x) = unlift v
+                       in  lift (i+1, f i x))
+                (lift (constant 0, seed))
 
-    nested :: Exp Int
-    nested
-      = for 64 (\i _ ->
-          for 64 (\j acc' -> i + j + acc') 0) 0
+test_nested_iteration :: Exp Int
+test_nested_iteration =
+  test_for 64 (\i _ ->
+    test_for 64 (\j acc' -> i + j + acc') 0) 0
 
-    unused :: Exp Int
-      = A.while (A.== 10) (const 10) 5
+test_unused_iteration :: Exp Int
+test_unused_iteration =
+  A.while (A.== 10) (const 10) 5
 
 ----------------------------------------------------------------------
 
 -- This program contains nested data-parallelism and thus sharing recovery
 -- will fail.
 --
-_shouldFail :: Acc (Vector Float)
-_shouldFail = mvm (use $ fromList (Z:.10:.10) [0..]) (use $ fromList (Z:.10) [0..])
+test_nested_data_praallelism :: Acc (Vector Float)
+test_nested_data_praallelism =
+  mvm (use $ fromList (Z:.10:.10) [0..]) (use $ fromList (Z:.10) [0..])
   where
     dotp :: A.Num e => Acc (Vector e) -> Acc (Vector e) -> Acc (Scalar e)
     dotp xs ys = A.fold (+) 0 $ A.zipWith (*) xs ys
@@ -296,6 +331,4 @@ _shouldFail = mvm (use $ fromList (Z:.10:.10) [0..]) (use $ fromList (Z:.10) [0.
       let Z :. rows :. _ = unlift (shape mat) :: Z :. Exp Int :. Exp Int
       in generate (index1 rows)
                   (\ix -> the (vec `dotp` takeRow (unindex1 ix) mat))
-
-
 

@@ -14,12 +14,14 @@ module Data.Array.Accelerate.Test.NoFib (
   nofib,
   nofibIngredient,
 
+  module Data.Array.Accelerate.Test.NoFib.Sharing,
   module Data.Array.Accelerate.Test.NoFib.Prelude,
 
 ) where
 
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
+import Data.Array.Accelerate.Test.NoFib.Sharing
 import Data.Array.Accelerate.Test.NoFib.Prelude
 
 import Test.Tasty
@@ -31,6 +33,7 @@ nofib runN = do
   me <- getProgName
   defaultMainWithIngredients (nofibIngredient : defaultIngredients) $
     testGroup me
-      [ test_prelude runN
+      [ test_sharing
+      , test_prelude runN
       ]
 
