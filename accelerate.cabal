@@ -375,6 +375,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
         Data.Array.Accelerate.Test.NoFib.Prelude.Permute
         Data.Array.Accelerate.Test.NoFib.Prelude.Filter
+        Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
 
   hs-source-dirs:
         src
