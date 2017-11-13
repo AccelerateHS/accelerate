@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.Test.NoFib.Base
   where
 
-import Data.Array.Accelerate.Array.Sugar                            ( Arrays, Shape, DIM0, DIM1, DIM2, DIM3, DIM4, rank )
+import Data.Array.Accelerate.Array.Sugar                            ( Arrays, DIM0, DIM1, DIM2, DIM3, Z(..), (:.)(..) )
 import Data.Array.Accelerate.Smart                                  ( Acc )
 import Data.Array.Accelerate.Trafo.Sharing                          ( Afunction, AfunctionR )
 
@@ -25,31 +25,29 @@ import Control.Monad
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
 import qualified Hedgehog.Range                                     as Range
-import qualified Data.Array.Accelerate.Hedgehog.Gen.Shape           as Gen
 
 
 type Run  = forall a. Arrays a => Acc a -> a
 type RunN = forall f. Afunction f => f -> AfunctionR f
 
 dim0 :: Gen DIM0
-dim0 = shape
+dim0 = return Z
 
 dim1 :: Gen DIM1
-dim1 = shape
+dim1 = (Z :.) <$> Gen.int (Range.linear 0 1024)
 
 dim2 :: Gen DIM2
-dim2 = shape
+dim2 = do
+  x <- Gen.int (Range.linear 0 128)
+  y <- Gen.int (Range.linear 0 48)
+  return (Z :. y :. x)
 
 dim3 :: Gen DIM3
-dim3 = shape
-
-dim4 :: Gen DIM4
-dim4 = shape
-
-shape :: forall sh. (Gen.Shape sh, Shape sh) => Gen sh
-shape = Gen.shape (Range.linear 0 (512 `quot` (2 ^ r)))
-  where
-    r = rank (undefined::sh)
+dim3 = do
+  x <- Gen.int (Range.linear 0 64)
+  y <- Gen.int (Range.linear 0 32)
+  z <- Gen.int (Range.linear 0 16)
+  return (Z :. z :. y :. x)
 
 int :: Gen Int
 int = Gen.int Range.linearBounded
@@ -111,15 +109,6 @@ except gen f  = do
   v <- gen
   when (f v) Gen.discard
   return v
-
--- indexHead :: sh:.Int -> Int
--- indexHead (_ :. sz) = sz
-
--- indexTail :: sh:.Int -> sh
--- indexTail (sh :. _) = sh
-
--- isEmptyArray :: Shape sh => Array sh e -> Bool
--- isEmptyArray arr = size (shape arr) == 0
 
 splitEvery :: Int -> [a] -> [[a]]
 splitEvery _ [] = cycle [[]]
