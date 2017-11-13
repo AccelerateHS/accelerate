@@ -82,10 +82,10 @@ w64 :: Gen Word64
 w64 = Gen.word64 Range.linearBounded
 
 f32 :: Gen Float
-f32 = Gen.float (Range.linearFracFrom 0 flt_min flt_max)
+f32 = Gen.float (Range.linearFracFrom 0 (-flt_max) flt_max)
 
 f64 :: Gen Double
-f64 = Gen.double (Range.linearFracFrom 0 flt_min flt_max)
+f64 = Gen.double (Range.linearFracFrom 0 (-flt_max) flt_max)
 
 flt_max :: RealFloat a => a
 flt_max = x
