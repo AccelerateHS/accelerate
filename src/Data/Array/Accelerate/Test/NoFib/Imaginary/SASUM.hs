@@ -1,58 +1,77 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Imaginary.SASUM (
+module Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM (
 
-  test_sasum,
+  test_sasum
 
 ) where
 
-import Config
-import QuickCheck.Arbitrary.Array                               ()
-
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
-
-import Data.Label
-import Data.Maybe
+import Data.Proxy
 import Data.Typeable
-import Test.QuickCheck
+import Prelude                                                  as P
+
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Array.Sugar                        as S
+import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
+import Data.Array.Accelerate.Test.Similar
+
+import Hedgehog
+import qualified Hedgehog.Gen                                   as Gen
+import qualified Hedgehog.Range                                 as Range
+
+import Test.Tasty
+import Test.Tasty.Hedgehog
 
 
-test_sasum :: Backend -> Config -> Test
-test_sasum backend opt = testGroup "sasum" $ catMaybes
-  [ testElt configInt8   (undefined :: Int8)
-  , testElt configInt16  (undefined :: Int16)
-  , testElt configInt32  (undefined :: Int32)
-  , testElt configInt64  (undefined :: Int64)
-  , testElt configWord8  (undefined :: Word8)
-  , testElt configWord16 (undefined :: Word16)
-  , testElt configWord32 (undefined :: Word32)
-  , testElt configWord64 (undefined :: Word64)
-  , testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
-  ]
+test_sasum :: RunN -> TestTree
+test_sasum runN =
+  testGroup "sasum"
+    [ at (Proxy::Proxy TestInt8)   $ testElt i8
+    , at (Proxy::Proxy TestInt16)  $ testElt i16
+    , at (Proxy::Proxy TestInt32)  $ testElt i32
+    , at (Proxy::Proxy TestInt64)  $ testElt i64
+    , at (Proxy::Proxy TestWord8)  $ testElt w8
+    , at (Proxy::Proxy TestWord16) $ testElt w16
+    , at (Proxy::Proxy TestWord32) $ testElt w32
+    , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a)
-            => (Config :-> Bool)
-            -> a
-            -> Maybe Test
-    testElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just
-      $ testProperty (show (typeOf (undefined :: a))) (run_sasum :: Vector a -> Property)
-
-    run_sasum xs =
-      run1 backend sasum xs `indexArray` Z
-      ~?=
-      P.sum (P.map abs (toList xs))
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testProperty (show (typeOf (undefined :: a))) $ test_sasum' runN e
 
 
--- Accelerate implementation ---------------------------------------------------
+test_sasum'
+    :: (P.Num e, A.Num e, Similar e)
+    => RunN
+    -> Gen e
+    -> Property
+test_sasum' runN e =
+  property $ do
+    sh <- forAll ((Z:.) <$> Gen.int (Range.linear 0 16384))
+    xs <- forAll (array sh e)
+    let !go = runN sasum in go xs S.! Z ~~~ sasumRef xs
 
 sasum :: A.Num e => Acc (Vector e) -> Acc (Scalar e)
 sasum = A.fold (+) 0 . A.map abs
+
+sasumRef :: P.Num e => Vector e -> e
+sasumRef xs = P.sum [ abs x | x <- toList xs ]
 

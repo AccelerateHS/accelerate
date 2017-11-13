@@ -376,6 +376,10 @@ Library
         Data.Array.Accelerate.Test.NoFib.Prelude.Permute
         Data.Array.Accelerate.Test.NoFib.Prelude.Filter
         Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
+        Data.Array.Accelerate.Test.NoFib.Imaginary
+        Data.Array.Accelerate.Test.NoFib.Imaginary.DotP
+        Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
+        Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
 
   hs-source-dirs:
         src

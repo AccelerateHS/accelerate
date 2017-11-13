@@ -1,25 +1,37 @@
+{-# LANGUAGE RankNTypes #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Imaginary
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Imaginary (
+module Data.Array.Accelerate.Test.NoFib.Imaginary (
 
-  test_imaginary
+  test_imaginary,
+
+  module Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM,
+  module Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY,
+  module Data.Array.Accelerate.Test.NoFib.Imaginary.DotP,
 
 ) where
 
-import Config
+import Test.Tasty
 
-import Test.Framework
-import Test.Imaginary.DotP
-import Test.Imaginary.SASUM
-import Test.Imaginary.SAXPY
-
-import Data.Array.Accelerate.Examples.Internal
+import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
+import Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
+import Data.Array.Accelerate.Test.NoFib.Imaginary.DotP
 
 
-test_imaginary :: Backend -> Config -> Test
-test_imaginary be conf =
+test_imaginary :: RunN -> TestTree
+test_imaginary runN =
   testGroup "imaginary"
-    [ test_sasum be conf
-    , test_saxpy be conf
-    , test_dotp be conf
+    [ test_sasum runN
+    , test_saxpy runN
+    , test_dotp runN
     ]
 

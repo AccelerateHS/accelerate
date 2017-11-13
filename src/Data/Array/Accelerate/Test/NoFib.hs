@@ -17,6 +17,7 @@ module Data.Array.Accelerate.Test.NoFib (
 
   module Data.Array.Accelerate.Test.NoFib.Sharing,
   module Data.Array.Accelerate.Test.NoFib.Prelude,
+  module Data.Array.Accelerate.Test.NoFib.Imaginary,
 
 ) where
 
@@ -24,6 +25,7 @@ import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.NoFib.Sharing
 import Data.Array.Accelerate.Test.NoFib.Prelude
+import Data.Array.Accelerate.Test.NoFib.Imaginary
 
 import Test.Tasty
 import System.Environment
@@ -36,5 +38,6 @@ nofib runN = do
     testGroup me
       [ test_sharing
       , test_prelude runN
+      , test_imaginary runN
       ]
 

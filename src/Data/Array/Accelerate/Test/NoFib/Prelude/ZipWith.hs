@@ -27,7 +27,7 @@ import Data.Typeable
 import Prelude                                                  as P
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        as Sugar
+import Data.Array.Accelerate.Array.Sugar                        as S
 import Data.Array.Accelerate.Data.Bits                          as A
 import Data.Array.Accelerate.Smart                              ( ($$) )
 import Data.Array.Accelerate.Test.NoFib.Base
@@ -593,6 +593,6 @@ zipWithRef
     -> Array sh c
 zipWithRef f xs ys =
   fromFunction
-    (Sugar.shape xs `Sugar.intersect` Sugar.shape ys)
-    (\ix -> f (xs Sugar.! ix) (ys Sugar.! ix))
+    (S.shape xs `S.intersect` S.shape ys)
+    (\ix -> f (xs S.! ix) (ys S.! ix))
 
