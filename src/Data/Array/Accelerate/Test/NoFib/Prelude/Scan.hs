@@ -633,7 +633,9 @@ test_scanlSeg_sum
 test_scanlSeg_sum runN dim z e =
   property $ do
     x       <- forAll z
-    sh:.n   <- forAll (Gen.small dim)
+    sh:.n1  <- forAll dim
+    n2      <- forAll (Gen.int (Range.linear 0 64))
+    n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanlSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
@@ -646,7 +648,9 @@ test_scanl1Seg_sum
     -> Property
 test_scanl1Seg_sum runN dim e =
   property $ do
-    sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
+    sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
+    n2      <- forAll (Gen.int (Range.linear 1 64))
+    n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanl1Seg (+)) in go arr seg ~~~ scanl1SegRef (+) arr seg
@@ -661,7 +665,9 @@ test_scanl'Seg_sum
 test_scanl'Seg_sum runN dim z e =
   property $ do
     x       <- forAll z
-    sh:.n   <- forAll (Gen.small dim)
+    sh:.n1  <- forAll dim
+    n2      <- forAll (Gen.int (Range.linear 0 64))
+    n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanl'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
@@ -676,7 +682,9 @@ test_scanrSeg_sum
 test_scanrSeg_sum runN dim z e =
   property $ do
     x       <- forAll z
-    sh:.n   <- forAll (Gen.small dim)
+    sh:.n1  <- forAll dim
+    n2      <- forAll (Gen.int (Range.linear 0 64))
+    n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanrSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
@@ -689,7 +697,9 @@ test_scanr1Seg_sum
     -> Property
 test_scanr1Seg_sum runN dim e =
   property $ do
-    sh:.n   <- forAll (Gen.small dim `except` \v -> S.size v P.== 0)
+    sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
+    n2      <- forAll (Gen.int (Range.linear 1 64))
+    n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanr1Seg (+)) in go arr seg ~~~ scanr1SegRef (+) arr seg
@@ -704,7 +714,9 @@ test_scanr'Seg_sum
 test_scanr'Seg_sum runN dim z e =
   property $ do
     x       <- forAll z
-    sh:.n   <- forAll (Gen.small dim)
+    sh:.n1  <- forAll dim
+    n2      <- forAll (Gen.int (Range.linear 0 64))
+    n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
     arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanr'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanr'SegRef (+) x arr seg
