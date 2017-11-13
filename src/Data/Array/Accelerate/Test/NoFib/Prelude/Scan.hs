@@ -34,9 +34,7 @@ import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-
-import Data.Array.Accelerate.Hedgehog.Similar
-import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
 import qualified Hedgehog.Gen                                   as Gen
@@ -483,7 +481,7 @@ test_scanl_sum runN dim z e =
   property $ do
     x   <- forAll z
     sh  <- forAll dim
-    arr <- forAll (Gen.array sh e)
+    arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanl (+) (the v)) in go (scalar x) arr ~~~ scanlRef (+) x arr
 
 test_scanl1_sum
@@ -495,7 +493,7 @@ test_scanl1_sum
 test_scanl1_sum runN dim e =
   property $ do
     sh  <- forAll (dim `except` \v -> S.size v P.== 0)
-    arr <- forAll (Gen.array sh e)
+    arr <- forAll (array sh e)
     let !go = runN (A.scanl1 (+)) in go arr ~~~ scanl1Ref (+) arr
 
 test_scanl'_sum
@@ -509,7 +507,7 @@ test_scanl'_sum runN dim z e =
   property $ do
     x   <- forAll z
     sh  <- forAll dim
-    arr <- forAll (Gen.array sh e)
+    arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanl' (+) (the v)) in go (scalar x) arr ~~~ scanl'Ref (+) x arr
 
 test_scanr_sum
@@ -522,7 +520,7 @@ test_scanr_sum runN dim z e =
   property $ do
     x   <- forAll z
     sh  <- forAll dim
-    arr <- forAll (Gen.array sh e)
+    arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanr (+) (the v)) in go (scalar x) arr ~~~ scanrRef (+) x arr
 
 test_scanr1_sum
@@ -534,7 +532,7 @@ test_scanr1_sum
 test_scanr1_sum runN dim e =
   property $ do
     sh  <- forAll (dim `except` \v -> S.size v P.== 0)
-    arr <- forAll (Gen.array sh e)
+    arr <- forAll (array sh e)
     let !go = runN (A.scanr1 (+)) in go arr ~~~ scanr1Ref (+) arr
 
 test_scanr'_sum
@@ -548,7 +546,7 @@ test_scanr'_sum runN dim z e =
   property $ do
     x   <- forAll z
     sh  <- forAll dim
-    arr <- forAll (Gen.array sh e)
+    arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanr' (+) (the v)) in go (scalar x) arr ~~~ scanr'Ref (+) x arr
 
 test_scanl_interval
@@ -636,8 +634,8 @@ test_scanlSeg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
-    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanlSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
 
 test_scanl1Seg_sum
@@ -651,8 +649,8 @@ test_scanl1Seg_sum runN dim e =
     sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
     n2      <- forAll (Gen.int (Range.linear 1 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
-    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanl1Seg (+)) in go arr seg ~~~ scanl1SegRef (+) arr seg
 
 test_scanl'Seg_sum
@@ -668,8 +666,8 @@ test_scanl'Seg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
-    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanl'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
 
 test_scanrSeg_sum
@@ -685,8 +683,8 @@ test_scanrSeg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
-    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanrSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
 
 test_scanr1Seg_sum
@@ -700,8 +698,8 @@ test_scanr1Seg_sum runN dim e =
     sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
     n2      <- forAll (Gen.int (Range.linear 1 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
-    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanr1Seg (+)) in go arr seg ~~~ scanr1SegRef (+) arr seg
 
 test_scanr'Seg_sum
@@ -717,8 +715,8 @@ test_scanr'Seg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (Gen.array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
-    arr     <- forAll (Gen.array (sh:.P.sum (toList seg)) e)
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanr'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanr'SegRef (+) x arr seg
 
 

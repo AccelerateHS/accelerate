@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeOperators     #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Hedgehog.Similar
+-- Module      : Data.Array.Accelerate.Test.Similar
 -- Copyright   : [2017] Trevor L. McDonell
 -- License     : BSD3
 --
@@ -14,7 +14,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Hedgehog.Similar
+module Data.Array.Accelerate.Test.Similar
   where
 
 import Data.Array.Accelerate.Array.Sugar

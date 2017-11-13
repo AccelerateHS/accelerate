@@ -32,9 +32,7 @@ import Data.Array.Accelerate.Data.Bits                          as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-
-import Data.Array.Accelerate.Hedgehog.Similar
-import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
 import qualified Hedgehog.Gen                                   as Gen
@@ -154,7 +152,7 @@ test_negate
 test_negate runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map negate) in go xs ~~~ mapRef negate xs
 
 test_abs
@@ -166,7 +164,7 @@ test_abs
 test_abs runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map abs) in go xs ~~~ mapRef abs xs
 
 test_signum
@@ -178,7 +176,7 @@ test_signum
 test_signum runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map signum) in go xs ~~~ mapRef signum xs
 
 test_complement
@@ -190,7 +188,7 @@ test_complement
 test_complement runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.complement) in go xs ~~~ mapRef P.complement xs
 
 test_popCount
@@ -202,7 +200,7 @@ test_popCount
 test_popCount runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.popCount) in go xs ~~~ mapRef P.popCount xs
 
 test_countLeadingZeros
@@ -214,7 +212,7 @@ test_countLeadingZeros
 test_countLeadingZeros runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.countLeadingZeros) in go xs ~~~ mapRef countLeadingZerosRef xs
 
 test_countTrailingZeros
@@ -226,7 +224,7 @@ test_countTrailingZeros
 test_countTrailingZeros runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.countTrailingZeros) in go xs ~~~ mapRef countTrailingZerosRef xs
 
 test_fromIntegral
@@ -238,7 +236,7 @@ test_fromIntegral
 test_fromIntegral runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.fromIntegral) in go xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
 
 test_recip
@@ -250,7 +248,7 @@ test_recip
 test_recip runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map recip) in go xs ~~~ mapRef recip xs
 
 test_sin
@@ -262,7 +260,7 @@ test_sin
 test_sin runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map sin) in go xs ~~~ mapRef sin xs
 
 test_cos
@@ -274,7 +272,7 @@ test_cos
 test_cos runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map cos) in go xs ~~~ mapRef cos xs
 
 test_tan
@@ -286,7 +284,7 @@ test_tan
 test_tan runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map tan) in go xs ~~~ mapRef tan xs
 
 test_asin
@@ -298,7 +296,7 @@ test_asin
 test_asin runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map asin) in go xs ~~~ mapRef asin xs
 
 test_acos
@@ -310,7 +308,7 @@ test_acos
 test_acos runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map acos) in go xs ~~~ mapRef acos xs
 
 test_atan
@@ -322,7 +320,7 @@ test_atan
 test_atan runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map atan) in go xs ~~~ mapRef atan xs
 
 test_asinh
@@ -334,7 +332,7 @@ test_asinh
 test_asinh runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map asinh) in go xs ~~~ mapRef asinh xs
 
 test_acosh
@@ -346,7 +344,7 @@ test_acosh
 test_acosh runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map acosh) in go xs ~~~ mapRef acosh xs
 
 test_atanh
@@ -358,7 +356,7 @@ test_atanh
 test_atanh runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map atanh) in go xs ~~~ mapRef atanh xs
 
 test_exp
@@ -370,7 +368,7 @@ test_exp
 test_exp runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map exp) in go xs ~~~ mapRef exp xs
 
 test_sqrt
@@ -382,7 +380,7 @@ test_sqrt
 test_sqrt runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map sqrt) in go xs ~~~ mapRef sqrt xs
 
 test_log
@@ -394,7 +392,7 @@ test_log
 test_log runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map log) in go xs ~~~ mapRef log xs
 
 test_truncate
@@ -406,7 +404,7 @@ test_truncate
 test_truncate runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.truncate) in go xs ~~~ mapRef (P.truncate :: e -> Int) xs
 
 test_round
@@ -418,7 +416,7 @@ test_round
 test_round runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.round) in go xs ~~~ mapRef (P.round :: e -> Int) xs
 
 test_floor
@@ -430,7 +428,7 @@ test_floor
 test_floor runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.floor) in go xs ~~~ mapRef (P.floor :: e -> Int) xs
 
 test_ceiling
@@ -442,7 +440,7 @@ test_ceiling
 test_ceiling runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.map A.ceiling) in go xs ~~~ mapRef (P.ceiling :: e -> Int) xs
 
 

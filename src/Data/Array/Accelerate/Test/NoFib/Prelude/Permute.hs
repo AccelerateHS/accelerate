@@ -32,9 +32,7 @@ import Data.Array.Accelerate.Array.Sugar                        as S
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-
-import Data.Array.Accelerate.Hedgehog.Similar
-import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
 import qualified Hedgehog.Gen                                   as Gen
@@ -112,8 +110,8 @@ test_scatter runN dim dim' e =
                 True  -> return (S.ignore          : ts)
                 False -> return (S.fromIndex sh' t : ts)
     --
-    def <- forAll (Gen.array sh' e)
-    new <- forAll (Gen.array sh  e)
+    def <- forAll (array sh' e)
+    new <- forAll (array sh  e)
     ix  <- forAll (fromList sh <$> shfl (Set.singleton (-1)) 0)
     --
     let !go = runN $ \i d v -> A.permute const d (i A.!) v
@@ -135,10 +133,10 @@ test_accumulate runN dim dim' e =
         n'  = S.size sh'
         def = S.fromFunction sh' (const 0)
     --
-    xs  <- forAll (Gen.array sh e)
-    ix  <- forAll (Gen.array sh (Gen.choice [ return S.ignore
-                                            , S.fromIndex sh' <$> Gen.int (Range.linear 0 (n'-1))
-                                            ]))
+    xs  <- forAll (array sh e)
+    ix  <- forAll (array sh (Gen.choice [ return S.ignore
+                                        , S.fromIndex sh' <$> Gen.int (Range.linear 0 (n'-1))
+                                        ]))
     let !go = runN $ \i d v -> A.permute (+) d (i A.!) v
     go ix def xs ~~~ permuteRef (+) def (ix S.!) xs
 

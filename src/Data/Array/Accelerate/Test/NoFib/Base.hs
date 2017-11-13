@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.Test.NoFib.Base
   where
 
-import Data.Array.Accelerate.Array.Sugar                            ( Arrays, DIM0, DIM1, DIM2, DIM3, Z(..), (:.)(..) )
+import Data.Array.Accelerate.Array.Sugar                            ( Arrays, Array, Shape, Elt, DIM0, DIM1, DIM2, DIM3, Z(..), (:.)(..), fromList, size )
 import Data.Array.Accelerate.Smart                                  ( Acc )
 import Data.Array.Accelerate.Trafo.Sharing                          ( Afunction, AfunctionR )
 
@@ -48,6 +48,9 @@ dim3 = do
   y <- Gen.int (Range.linear 0 32)
   z <- Gen.int (Range.linear 0 16)
   return (Z :. z :. y :. x)
+
+array :: (Shape sh, Elt e) => sh -> Gen e -> Gen (Array sh e)
+array sh gen = fromList sh <$> Gen.list (Range.singleton (size sh)) gen
 
 int :: Gen Int
 int = Gen.int Range.linearBounded

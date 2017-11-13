@@ -319,11 +319,8 @@ Library
         Data.Array.Accelerate.Type
 
         -- For testing
-        Data.Array.Accelerate.Hedgehog.Gen.Shape
-        Data.Array.Accelerate.Hedgehog.Gen.Array
-        Data.Array.Accelerate.Hedgehog.Similar
-
         Data.Array.Accelerate.Test.NoFib
+        Data.Array.Accelerate.Test.Similar
 
   Other-modules:
         Data.Atomic

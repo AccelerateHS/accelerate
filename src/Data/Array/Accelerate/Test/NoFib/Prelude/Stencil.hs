@@ -33,9 +33,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-
-import Data.Array.Accelerate.Hedgehog.Similar
-import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
 import qualified Hedgehog.Gen                                   as Gen
@@ -104,7 +102,7 @@ test_stencil3
 test_stencil3 runN e =
   property $ do
     sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 2 256))
-    xs        <- forAll (Gen.array sh e)
+    xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P3 _ a r  <- forAll pattern3
     let !go = case b of
@@ -123,7 +121,7 @@ test_stencil5
 test_stencil5 runN e =
   property $ do
     sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 3 256))
-    xs        <- forAll (Gen.array sh e)
+    xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P5 _ a r  <- forAll pattern5
     let !go = case b of
@@ -142,7 +140,7 @@ test_stencil7
 test_stencil7 runN e =
   property $ do
     sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 4 256))
-    xs        <- forAll (Gen.array sh e)
+    xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P7 _ a r  <- forAll pattern7
     let !go = case b of
@@ -161,7 +159,7 @@ test_stencil9
 test_stencil9 runN e =
   property $ do
     sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 5 256))
-    xs        <- forAll (Gen.array sh e)
+    xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P9 _ a r  <- forAll pattern9
     let !go = case b of
@@ -183,7 +181,7 @@ test_stencil3x3 runN e =
     sy <- forAll (Gen.int (Range.linear 2 96))
     sx <- forAll (Gen.int (Range.linear 2 96))
     let sh = Z :. sy :. sx
-    xs          <- forAll (Gen.array sh e)
+    xs          <- forAll (array sh e)
     b           <- forAll (boundary e)
     P3x3 _ a r  <- forAll pattern3x3
     let !go = case b of
@@ -204,7 +202,7 @@ test_stencil5x5 runN e =
     sy <- forAll (Gen.int (Range.linear 3 96))
     sx <- forAll (Gen.int (Range.linear 3 96))
     let sh = Z :. sy :. sx
-    xs          <- forAll (Gen.array sh e)
+    xs          <- forAll (array sh e)
     b           <- forAll (boundary e)
     P5x5 _ a r  <- forAll pattern5x5
     let !go = case b of
@@ -225,7 +223,7 @@ test_stencil7x7 runN e =
     sy <- forAll (Gen.int (Range.linear 4 96))
     sx <- forAll (Gen.int (Range.linear 4 96))
     let sh = Z :. sy :. sx
-    xs          <- forAll (Gen.array sh e)
+    xs          <- forAll (array sh e)
     b           <- forAll (boundary e)
     P7x7 _ a r  <- forAll pattern7x7
     let !go = case b of
@@ -246,7 +244,7 @@ test_stencil9x9 runN e =
     sy <- forAll (Gen.int (Range.linear 5 96))
     sx <- forAll (Gen.int (Range.linear 5 96))
     let sh = Z :. sy :. sx
-    xs          <- forAll (Gen.array sh e)
+    xs          <- forAll (array sh e)
     b           <- forAll (boundary e)
     P9x9 _ a r  <- forAll pattern9x9
     let !go = case b of
@@ -268,7 +266,7 @@ test_stencil3x3x3 runN e =
     sy <- forAll (Gen.int (Range.linear 2 32))
     sx <- forAll (Gen.int (Range.linear 2 32))
     let sh = Z :. sz :. sy :. sx
-    xs            <- forAll (Gen.array sh e)
+    xs            <- forAll (array sh e)
     b             <- forAll (boundary e)
     P3x3x3 _ a r  <- forAll pattern3x3x3
     let !go = case b of

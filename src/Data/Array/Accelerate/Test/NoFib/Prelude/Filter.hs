@@ -30,9 +30,7 @@ import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-
-import Data.Array.Accelerate.Hedgehog.Similar
-import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
 
@@ -105,7 +103,7 @@ test_even
 test_even runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.filter A.even) in go xs ~~~ filterRef P.even xs
 
 test_positive
@@ -117,7 +115,7 @@ test_positive
 test_positive runN dim e =
   property $ do
     sh <- forAll dim
-    xs <- forAll (Gen.array sh e)
+    xs <- forAll (array sh e)
     let !go = runN (A.filter (A.> 0)) in go xs ~~~ filterRef (P.> 0) xs
 
 

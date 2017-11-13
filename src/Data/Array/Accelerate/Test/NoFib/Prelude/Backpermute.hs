@@ -28,9 +28,7 @@ import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-
-import Data.Array.Accelerate.Hedgehog.Similar
-import qualified Data.Array.Accelerate.Hedgehog.Gen.Array       as Gen
+import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
 import qualified Hedgehog.Gen                                   as Gen
@@ -88,7 +86,7 @@ test_take
 test_take runN dim e =
   property $ do
     sh@(_:.n) <- forAll dim
-    xs        <- forAll (Gen.array sh e)
+    xs        <- forAll (array sh e)
     i         <- forAll (Gen.int (Range.linear 0 (n-1)))
     let !go = runN (\v -> A.take (the v)) in go (scalar i) xs ~~~ takeRef i xs
 
@@ -101,7 +99,7 @@ test_drop
 test_drop runN dim e =
   property $ do
     sh@(_:.n) <- forAll dim
-    xs        <- forAll (Gen.array sh e)
+    xs        <- forAll (array sh e)
     i         <- forAll (Gen.int (Range.linear 0 (n-1)))
     let !go = runN (\v -> A.drop (the v)) in go (scalar i) xs ~~~ dropRef i xs
 
@@ -121,7 +119,7 @@ test_gather runN dim dim' e =
         n'      = S.size sh'
         toIxArr = fromList sh' . P.map (S.fromIndex sh)
     --
-    xs  <- forAll (Gen.array sh e)
+    xs  <- forAll (array sh e)
     ix  <- forAll (toIxArr <$> Gen.list (Range.singleton n') (Gen.int (Range.linear 0 (n-1))))
     --
     let !go = runN $ \i -> A.backpermute (A.shape i) (i A.!)

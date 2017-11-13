@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib
 -- Copyright   : [2009..2017] Trevor L. McDonell
