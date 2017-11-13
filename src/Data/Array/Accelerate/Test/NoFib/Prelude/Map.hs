@@ -123,7 +123,7 @@ test_map runN =
             , testProperty "asin"       $ test_asin runN sh (e (Range.linearFracFrom 0 (-1) 1))
             , testProperty "acos"       $ test_acos runN sh (e (Range.linearFracFrom 0 (-1) 1))
             , testProperty "atan"       $ test_atan runN sh (fullrange e)
-            , testProperty "asinh"      $ test_asinh runN sh (e (Range.linearFracFrom 0 (- log flt_max) (log flt_max)))
+            , testProperty "asinh"      $ test_asinh runN sh (e (Range.linearFracFrom 0 (-log_flt_max) (log_flt_max)))
             , testProperty "acosh"      $ test_acosh runN sh (e (Range.linearFrac 1 (sqrt flt_max)))
             , testProperty "atanh"      $ test_atanh runN sh (e (Range.linearFracFrom 0 (-1) 1))
             , testProperty "exp"        $ test_exp runN sh (fullrange e)
