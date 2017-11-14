@@ -42,23 +42,27 @@ install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - cabal --version
   - stack --version
-  - |
-      if [ ${GHC} == head -o ! -e stack.yaml ]; then
-        travis_retry cabal install --only-dependencies
-      else
-        travis_retry stack build --only-dependencies --fast --no-terminal --test
-      fi
+  - travis_retry stack build --only-dependencies --fast --no-terminal --test
+  # - |
+  #     if [ ${GHC} == head -o ! -e stack.yaml ]; then
+  #       travis_retry cabal install --only-dependencies
+  #     else
+  #       travis_retry stack build --only-dependencies --fast --no-terminal --test
+  #     fi
 
 script:
-  - |
-      if [ ${GHC} == head -o ! -e stack.yaml ]; then
-        cabal install
-        cabal haddock
-      else
-        travis_wait 30 stack build --fast --no-terminal --haddock --no-haddock-deps --test --no-run-tests
-        stack test accelerate:doctest
-        stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
-      fi
+  - travis_wait 30 stack build --fast --no-terminal --haddock --no-haddock-deps --test --no-run-tests
+  - stack test accelerate:doctest
+  - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
+  # - |
+  #     if [ ${GHC} == head -o ! -e stack.yaml ]; then
+  #       cabal install
+  #       cabal haddock
+  #     else
+  #       travis_wait 30 stack build --fast --no-terminal --haddock --no-haddock-deps --test --no-run-tests
+  #       stack test accelerate:doctest
+  #       stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
+  #     fi
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh
