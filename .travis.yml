@@ -57,7 +57,7 @@ script:
       else
         travis_wait 30 stack build --fast --no-terminal --haddock --no-haddock-deps --test --no-run-tests
         stack test accelerate:doctest
-        stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 50'
+        stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
       fi
 
 after_success:
