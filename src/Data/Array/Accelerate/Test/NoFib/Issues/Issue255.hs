@@ -36,7 +36,7 @@ test_issue255 :: RunN -> TestTree
 test_issue255 runN =
   askOption $ \(Interpreter slow) ->
     if slow
-      then testGroup "255 (skipped due to slow interpreter backend)" []
+      then testGroup "255 (skipped due to interpreter backend)" []
       else testGroup "255"
             [ within lIMIT $ testCase "0"   (force $ total (as P.!! 0))
             , within lIMIT $ testCase "2"   (force $ total (as P.!! 2))

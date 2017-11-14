@@ -122,7 +122,7 @@ instance IsOption Interpreter where
   defaultValue = Interpreter False
   parseValue = fmap Interpreter . safeRead
   optionName = return "interpreter"
-  optionHelp = return "I am an interpreter, and thus slow (skip timeout tests)"
+  optionHelp = return "I am an interpreter (skip some tests)"
 
 
 class IsOption a => TestConfig a where

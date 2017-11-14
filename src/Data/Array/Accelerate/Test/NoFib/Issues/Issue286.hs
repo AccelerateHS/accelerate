@@ -26,6 +26,7 @@ import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Lifetime
 import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
 import qualified Data.Array.Accelerate.Array.Representation         as R
 
 import Test.Tasty
@@ -39,12 +40,15 @@ import Data.Vector.Storable                                         as S
 
 test_issue286 :: RunN -> TestTree
 test_issue286 runN =
-  testGroup "286 (check heap profile)"
-    [ testCase "hs.hs"    (void $ runEffect $ hs_producer sh  >-> hs_consume_sv)
-    , testCase "hs.acc"   (void $ runEffect $ hs_producer sh  >-> acc_consume_sv runN sh)
-    , testCase "acc.hs"   (void $ runEffect $ acc_producer sh >-> hs_consume_acc)
-    , testCase "acc.acc"  (void $ runEffect $ acc_producer sh >-> acc_consume_acc runN)
-    ]
+  askOption $ \(Interpreter slow) ->
+    if slow
+      then testGroup "286 (skipped due to interpreter backend)" []
+      else testGroup "286 (check heap profile)"
+            [ testCase "hs.hs"    (void $ runEffect $ hs_producer sh  >-> hs_consume_sv)
+            , testCase "hs.acc"   (void $ runEffect $ hs_producer sh  >-> acc_consume_sv runN sh)
+            , testCase "acc.hs"   (void $ runEffect $ acc_producer sh >-> hs_consume_acc)
+            , testCase "acc.acc"  (void $ runEffect $ acc_producer sh >-> acc_consume_acc runN)
+            ]
     where
       sh :: DIM2
       sh = Z :. 120 :. 659
@@ -119,7 +123,7 @@ acc_consume_sv runN sh = consumer' 0 0
 acc_consume_acc :: RunN -> Consumer (Array DIM2 Word8) IO ()
 acc_consume_acc runN = consumer' 0 0
   where
-    go = runN (A.sum . A.flatten . A.map A.fromIntegral)
+    !go = runN (A.sum . A.flatten . A.map A.fromIntegral)
 
     consumer' :: Int -> Float -> Consumer (Array DIM2 Word8) IO ()
     consumer' n acc = do
