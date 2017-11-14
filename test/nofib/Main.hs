@@ -13,6 +13,10 @@ module Main where
 import Data.Array.Accelerate.Test.NoFib
 import Data.Array.Accelerate.Interpreter
 
+import System.Environment
+
 main :: IO ()
-main = nofib runN
+main = do
+  setEnv "TASTY_INTERPRETER" "True"
+  nofib runN
 

@@ -23,6 +23,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue255 (
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -33,15 +34,18 @@ import Prelude                                                      as P
 
 test_issue255 :: RunN -> TestTree
 test_issue255 runN =
-  testGroup "255"
-    [ within lIMIT $ testCase "0"   (force $ total (as P.!! 0))
-    , within lIMIT $ testCase "2"   (force $ total (as P.!! 2))
-    , within lIMIT $ testCase "4"   (force $ total (as P.!! 4))
-    , within lIMIT $ testCase "20"  (force $ total (as P.!! 20))
-    , within lIMIT $ testCase "100" (force $ total (as P.!! 100))
-    -- , within lIMIT $ testCase "200" (force $ total (as P.!! 200))
-    -- , within lIMIT $ testCase "300" (force $ total (as P.!! 300))
-    ]
+  askOption $ \(Interpreter slow) ->
+    if slow
+      then testGroup "255 (skipped due to slow interpreter backend)" []
+      else testGroup "255"
+            [ within lIMIT $ testCase "0"   (force $ total (as P.!! 0))
+            , within lIMIT $ testCase "2"   (force $ total (as P.!! 2))
+            , within lIMIT $ testCase "4"   (force $ total (as P.!! 4))
+            , within lIMIT $ testCase "20"  (force $ total (as P.!! 20))
+            , within lIMIT $ testCase "100" (force $ total (as P.!! 100))
+            -- , within lIMIT $ testCase "200" (force $ total (as P.!! 200))
+            -- , within lIMIT $ testCase "300" (force $ total (as P.!! 300))
+            ]
   where
     lIMIT = 30 * 1000 * 1000  -- microseconds
     n     = 20 * 1024 * 1024  -- 160 * MiB (8 bytes per Double)

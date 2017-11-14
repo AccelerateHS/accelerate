@@ -36,19 +36,21 @@ nofibIngredient =
     , Option (Proxy::Proxy TestWord16)
     , Option (Proxy::Proxy TestWord32)
     , Option (Proxy::Proxy TestWord64)
+    , Option (Proxy::Proxy Interpreter)
     ]
 
-newtype TestAll    = TestAll    Bool deriving (Eq, Show, Typeable)
-newtype TestDouble = TestDouble Bool deriving (Eq, Show, Typeable)
-newtype TestFloat  = TestFloat  Bool deriving (Eq, Show, Typeable)
-newtype TestInt8   = TestInt8   Bool deriving (Eq, Show, Typeable)
-newtype TestInt16  = TestInt16  Bool deriving (Eq, Show, Typeable)
-newtype TestInt32  = TestInt32  Bool deriving (Eq, Show, Typeable)
-newtype TestInt64  = TestInt64  Bool deriving (Eq, Show, Typeable)
-newtype TestWord8  = TestWord8  Bool deriving (Eq, Show, Typeable)
-newtype TestWord16 = TestWord16 Bool deriving (Eq, Show, Typeable)
-newtype TestWord32 = TestWord32 Bool deriving (Eq, Show, Typeable)
-newtype TestWord64 = TestWord64 Bool deriving (Eq, Show, Typeable)
+newtype TestAll     = TestAll     Bool deriving (Eq, Show, Typeable)
+newtype TestDouble  = TestDouble  Bool deriving (Eq, Show, Typeable)
+newtype TestFloat   = TestFloat   Bool deriving (Eq, Show, Typeable)
+newtype TestInt8    = TestInt8    Bool deriving (Eq, Show, Typeable)
+newtype TestInt16   = TestInt16   Bool deriving (Eq, Show, Typeable)
+newtype TestInt32   = TestInt32   Bool deriving (Eq, Show, Typeable)
+newtype TestInt64   = TestInt64   Bool deriving (Eq, Show, Typeable)
+newtype TestWord8   = TestWord8   Bool deriving (Eq, Show, Typeable)
+newtype TestWord16  = TestWord16  Bool deriving (Eq, Show, Typeable)
+newtype TestWord32  = TestWord32  Bool deriving (Eq, Show, Typeable)
+newtype TestWord64  = TestWord64  Bool deriving (Eq, Show, Typeable)
+newtype Interpreter = Interpreter Bool deriving (Eq, Show, Typeable)
 
 instance IsOption TestAll where
   defaultValue = TestAll False
@@ -115,6 +117,12 @@ instance IsOption TestWord64 where
   parseValue = fmap TestWord64 . safeRead
   optionName = return "word64"
   optionHelp = return "Enable 64-bit unsigned integer tests"
+
+instance IsOption Interpreter where
+  defaultValue = Interpreter False
+  parseValue = fmap Interpreter . safeRead
+  optionName = return "interpreter"
+  optionHelp = return "I am an interpreter, and thus slow (skip timeout tests)"
 
 
 class IsOption a => TestConfig a where
