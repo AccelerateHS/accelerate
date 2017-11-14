@@ -23,20 +23,20 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Map (
 ) where
 
 import Data.Proxy
-import Data.Bits                                                as P
+import Data.Bits                                                    as P
 import Data.Typeable
-import Prelude                                                  as P
+import Prelude                                                      as P
 
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Data.Bits                          as A
-import Data.Array.Accelerate.Array.Sugar                        as Sugar
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Data.Bits                              as A
+import Data.Array.Accelerate.Array.Sugar                            as Sugar
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
-import qualified Hedgehog.Gen                                   as Gen
-import qualified Hedgehog.Range                                 as Range
+import qualified Hedgehog.Gen                                       as Gen
+import qualified Hedgehog.Range                                     as Range
 
 import Test.Tasty
 import Test.Tasty.Hedgehog

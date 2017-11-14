@@ -25,10 +25,10 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Stencil (
 
 import Data.Proxy
 import Data.Typeable
-import Prelude                                                  as P
+import Prelude                                                      as P
 
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        as S
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Array.Sugar                            as S
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Test.NoFib.Base
@@ -36,8 +36,8 @@ import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
 
 import Hedgehog
-import qualified Hedgehog.Gen                                   as Gen
-import qualified Hedgehog.Range                                 as Range
+import qualified Hedgehog.Gen                                       as Gen
+import qualified Hedgehog.Range                                     as Range
 
 import Test.Tasty
 import Test.Tasty.Hedgehog
