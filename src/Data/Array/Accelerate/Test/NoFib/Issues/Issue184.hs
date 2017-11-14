@@ -1,22 +1,37 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE RankNTypes        #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue184
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/184
+--
 
-module Test.Issues.Issue184 (test_issue184)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue184 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue184
 
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 
-test_issue184 :: Backend -> Config -> Test
-test_issue184 backend _conf = testGroup "184"
-  [ testCase "A" (assertEqual ref1 $ run backend test1)
-  , testCase "B" (assertEqual ref2 $ run backend test2)
-  , testCase "C" (assertEqual ref3 $ run backend test3)
-  ]
+test_issue184 :: RunN -> TestTree
+test_issue184 runN =
+  testGroup "184"
+    [ testCase "A"  $ ref1 @=? runN test1
+    , testCase "B"  $ ref2 @=? runN test2
+    , testCase "C"  $ ref3 @=? runN test3
+    ]
 
 
 ref1 :: Vector Int

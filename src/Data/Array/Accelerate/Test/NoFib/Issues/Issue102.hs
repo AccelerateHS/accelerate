@@ -1,20 +1,33 @@
-{-# LANGUAGE TypeOperators  #-}
+{-# LANGUAGE RankNTypes    #-}
+{-# LANGUAGE TypeOperators #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue102
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/102
+--
 
-module Test.Issues.Issue102 (test_issue102)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue102 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue102
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 
-test_issue102 :: Backend -> Config -> Test
-test_issue102 backend _conf =
-  testCase "102" (assertEqual ref1 $ run backend test1)
+test_issue102 :: RunN -> TestTree
+test_issue102 runN =
+  testCase "102"  $ ref1 @=? runN test1
 
 
 ref1 :: Array DIM3 Int

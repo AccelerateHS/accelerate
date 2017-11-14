@@ -1,30 +1,46 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE OverloadedLists     #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue185
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/185
+--
 
-module Test.Issues.Issue185 (test_issue185)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue185 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue185
 
-import Prelude                                          as P
-import Data.Array.Accelerate                            as A
-import Data.Array.Accelerate.Examples.Internal          as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
+
+import Prelude                                                      as P
 
 
-test_issue185 :: Backend -> Config -> Test
-test_issue185 backend _conf = testGroup "185"
-  [ testCase "A" (assertEqual ref1 (run backend acc1 :: Vector Int))
-  , testCase "B" (assertEqual ref2 (run backend acc2 :: Vector Int))
-  , testCase "C" (assertEqual ref3 (run backend acc3 :: Vector Int))
-  , testCase "D" (assertEqual ref4 (run backend acc4 :: Vector Int))
-  , testCase "E" (assertEqual ref5 (run backend acc5 :: Vector Int))
-  , testCase "F" (assertEqual ref6 (run backend acc6 :: Vector Int))
-  ]
+test_issue185 :: RunN -> TestTree
+test_issue185 runN =
+  testGroup "185"
+    [ testCase "A"  $ ref1 @=? (runN acc1 :: Vector Int)
+    , testCase "B"  $ ref2 @=? (runN acc2 :: Vector Int)
+    , testCase "C"  $ ref3 @=? (runN acc3 :: Vector Int)
+    , testCase "D"  $ ref4 @=? (runN acc4 :: Vector Int)
+    , testCase "E"  $ ref5 @=? (runN acc5 :: Vector Int)
+    , testCase "F"  $ ref6 @=? (runN acc6 :: Vector Int)
+    ]
 
 
 ref1 :: (Elt a, P.Num a) => Vector a

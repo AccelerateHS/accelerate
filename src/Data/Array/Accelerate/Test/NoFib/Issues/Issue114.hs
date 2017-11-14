@@ -1,21 +1,45 @@
+{-# LANGUAGE RankNTypes #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue114
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/114
+--
 
-module Test.Issues.Issue114 (test_issue114)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue114 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue114
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.Similar
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
+
+import Control.Monad
+import Prelude                                                      as P
 
 
-test_issue114 :: Backend -> Config -> Test
-test_issue114 backend _conf = testGroup "114"
-  [ testCase "A" (assertEqual ref1 $ run backend test1)
-  , testCase "B" (assertEqual ref2 $ run backend test2)
-  ]
+test_issue114 :: RunN -> TestTree
+test_issue114 runN =
+  testGroup "114"
+    [ testCase "A"  $ ref1 @~? runN test1
+    , testCase "B"  $ ref2 @~? runN test2
+    ]
+
+
+(@~?) :: (Similar a, Show a) => a -> a -> Assertion
+expected @~? actual =
+  unless (expected ~= actual) $
+    assertFailure $ "expected: " P.++ show expected P.++ "\n but got: " P.++ show actual
 
 
 type EFloat = (Float, Float) -- Represents a real number with a value and error

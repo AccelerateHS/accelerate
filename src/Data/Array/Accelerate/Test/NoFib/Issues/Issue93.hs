@@ -1,20 +1,32 @@
+{-# LANGUAGE RankNTypes #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue93
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/93
+--
 
-module Test.Issues.Issue93 (test_issue93)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue93 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue93
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 
-test_issue93 :: Backend -> Config -> Test
-test_issue93 backend _conf =
-  testCase "93" (assertEqual xs $ run backend test1)
-
+test_issue93 :: RunN -> TestTree
+test_issue93 runN =
+  testCase "93" $ xs @=? runN test1
 
 xs :: Array DIM2 Int
 xs = fromList (Z :. 1 :. 1) [5]

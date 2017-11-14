@@ -1,24 +1,34 @@
-
+{-# LANGUAGE RankNTypes #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue362
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 -- https://github.com/AccelerateHS/accelerate-llvm/issues/12
 --
 
-module Test.Issues.Issue362 (test_issue362)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue362 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue362
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 
-test_issue362 :: Backend -> Config -> Test
-test_issue362 backend _conf =
+test_issue362 :: RunN -> TestTree
+test_issue362 runN =
   testGroup "362"
-    [ testCase "A" (assertEqual e1 $ run backend t1)
-    , testCase "B" (assertEqual e2 $ run backend t2)
+    [ testCase "A"  $ e1 @=? runN t1
+    , testCase "B"  $ e2 @=? runN t2
     ]
 
 -- should work

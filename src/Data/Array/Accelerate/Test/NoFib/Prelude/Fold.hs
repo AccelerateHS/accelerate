@@ -54,7 +54,8 @@ test_fold runN =
     , at (Proxy::Proxy TestDouble) $ testElt f64 f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt
+        :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
         => Gen a
         -> Gen a
         -> TestTree

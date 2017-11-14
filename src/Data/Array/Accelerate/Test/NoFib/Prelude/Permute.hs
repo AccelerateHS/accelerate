@@ -57,7 +57,8 @@ test_permute runN =
     , at (Proxy::Proxy TestDouble) $ testElt f64
     ]
   where
-    testElt :: forall a. (Similar a, P.Num a, A.Num a)
+    testElt
+        :: forall a. (Similar a, P.Num a, A.Num a)
         => Gen a
         -> TestTree
     testElt e =

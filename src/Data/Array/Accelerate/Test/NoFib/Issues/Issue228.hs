@@ -1,26 +1,40 @@
 {-# LANGUAGE ConstraintKinds  #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue228
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 -- https://github.com/AccelerateHS/accelerate/issues/228
 --
 
-module Test.Issues.Issue228 (test_issue228)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue228 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue228
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
+
+import Prelude                                                    as P
 
 
-test_issue228 :: Backend -> Config -> Test
-test_issue228 backend _conf =
+test_issue228 :: RunN -> TestTree
+test_issue228 runN =
   testGroup "228"
-    [ testCase "A" (assertEqual ref1 $ run backend (A.fold  mergeExp z1 (use test1)))
-    , testCase "B" (assertEqual ref1 $ run backend (A.fold1 mergeExp    (use test1)))
+    [ testCase "A"  $ ref1 @=? runN (A.fold  mergeExp z1 (use test1))
+    , testCase "B"  $ ref1 @=? runN (A.fold1 mergeExp    (use test1))
     ]
+
 
 test1 :: Vector (Int,Int)
 test1 = fromList (Z:.3) [(1,1),(0,0),(1,1)]

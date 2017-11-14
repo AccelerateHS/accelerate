@@ -1,30 +1,44 @@
+{-# LANGUAGE RankNTypes #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue119
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/119
+--
 
-module Test.Issues.Issue119 (test_issue119)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue119 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue119
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 
-test_issue119 :: Backend -> Config -> Test
-test_issue119 backend _conf = testGroup "119"
-  [ testCase "A" (assertEqual ref1 (run backend test1))
-  , testCase "B" (assertEqual ref2 (run backend test2))
-  , testCase "C" (assertEqual ref3 (run backend test3))
-  , testCase "D" (assertEqual ref4 (run backend test4))
-  , testCase "E" (assertEqual ref5 (run backend test5))
-  , testCase "F" (assertEqual ref6 (run backend test6))
-  , testCase "G" (assertEqual ref7 (run backend test7))
-  , testCase "H" (assertEqual ref8 (run backend test8))
-  , testCase "I" (assertEqual ref9 (run backend test9))
-  , testCase "J" (assertEqual ref10 (run backend test10))
-  , testCase "K" (assertEqual ref11 (run backend test11))
-  ]
+test_issue119 :: RunN -> TestTree
+test_issue119 runN =
+  testGroup "119"
+    [ testCase "A"  $ ref1  @=? runN test1
+    , testCase "B"  $ ref2  @=? runN test2
+    , testCase "C"  $ ref3  @=? runN test3
+    , testCase "D"  $ ref4  @=? runN test4
+    , testCase "E"  $ ref5  @=? runN test5
+    , testCase "F"  $ ref6  @=? runN test6
+    , testCase "G"  $ ref7  @=? runN test7
+    , testCase "H"  $ ref8  @=? runN test8
+    , testCase "I"  $ ref9  @=? runN test9
+    , testCase "J"  $ ref10 @=? runN test10
+    , testCase "K"  $ ref11 @=? runN test11
+    ]
 
 
 -- Fold tests

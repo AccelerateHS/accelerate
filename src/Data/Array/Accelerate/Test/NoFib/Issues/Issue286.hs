@@ -1,30 +1,49 @@
+{-# LANGUAGE BangPatterns    #-}
+{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE TemplateHaskell #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue286
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 -- https://github.com/AccelerateHS/accelerate/issues/286
 --
 
-module Test.Issues.Issue286 (test_issue286)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue286 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue286
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A hiding ( (>->), (==) )
-import Data.Array.Accelerate.IO.Data.Vector.Storable            as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A hiding ( (>->), (==) )
+import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Sugar                            as Sugar
+import Data.Array.Accelerate.Array.Unique
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Lifetime
+import Data.Array.Accelerate.Test.NoFib.Base
+import qualified Data.Array.Accelerate.Array.Representation         as R
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 import Pipes
-import Data.Vector.Storable                                     as S
+import System.IO.Unsafe
+import Prelude                                                      as P
+import Data.Vector.Storable                                         as S
 
 
-test_issue286 :: Backend -> Config -> Test
-test_issue286 backend _conf =
-  testGroup "286 (run with +RTS -M4M -RTS or check heap profile in EKG or similar)"
-    [
-      testCase "hs.hs"    (void $ runEffect $ hs_producer sh  >-> hs_consume_sv)
-    , testCase "hs.acc"   (void $ runEffect $ hs_producer sh  >-> acc_consume_sv sh backend)
+test_issue286 :: RunN -> TestTree
+test_issue286 runN =
+  testGroup "286 (check heap profile)"
+    [ testCase "hs.hs"    (void $ runEffect $ hs_producer sh  >-> hs_consume_sv)
+    , testCase "hs.acc"   (void $ runEffect $ hs_producer sh  >-> acc_consume_sv runN sh)
     , testCase "acc.hs"   (void $ runEffect $ acc_producer sh >-> hs_consume_acc)
-    , testCase "acc.acc"  (void $ runEffect $ acc_producer sh >-> acc_consume_acc backend)
+    , testCase "acc.acc"  (void $ runEffect $ acc_producer sh >-> acc_consume_acc runN)
     ]
     where
       sh :: DIM2
@@ -59,10 +78,10 @@ hs_consume_acc = consumer' 0 0
   where
     consumer' :: Int -> Float -> Consumer (Array DIM2 Word8) IO ()
     consumer' n acc = do
-      v <- await
+      a <- await
       let
-          a  = toVectors v      :: S.Vector Word8
-          i  = S.sum $ S.map P.fromIntegral a
+          v  = toVectors a      :: S.Vector Word8
+          i  = S.sum $ S.map P.fromIntegral v
           i' = i + acc
           n' = n + 1
       if i' `seq` n' `seq` (n == lIMIT)
@@ -80,10 +99,10 @@ acc_producer sh = producer' 0
           then producer' 0
           else producer' (i+1)
 
-acc_consume_sv :: DIM2 -> Backend -> Consumer (S.Vector Word8) IO ()
-acc_consume_sv sh backend = consumer' 0 0
+acc_consume_sv :: RunN -> DIM2 -> Consumer (S.Vector Word8) IO ()
+acc_consume_sv runN sh = consumer' 0 0
   where
-    go = run1 backend (A.sum . A.flatten . A.map A.fromIntegral)
+    !go = runN (A.sum . A.flatten . A.map A.fromIntegral)
 
     consumer' :: Int -> Float -> Consumer (S.Vector Word8) IO ()
     consumer' n acc = do
@@ -97,10 +116,10 @@ acc_consume_sv sh backend = consumer' 0 0
         then acc `seq` return ()
         else consumer' n' i'
 
-acc_consume_acc :: Backend -> Consumer (Array DIM2 Word8) IO ()
-acc_consume_acc backend = consumer' 0 0
+acc_consume_acc :: RunN -> Consumer (Array DIM2 Word8) IO ()
+acc_consume_acc runN = consumer' 0 0
   where
-    go = run1 backend (A.sum . A.flatten . A.map A.fromIntegral)
+    go = runN (A.sum . A.flatten . A.map A.fromIntegral)
 
     consumer' :: Int -> Float -> Consumer (Array DIM2 Word8) IO ()
     consumer' n acc = do
@@ -113,10 +132,23 @@ acc_consume_acc backend = consumer' 0 0
         then acc `seq` return ()
         else consumer' n' i'
 
-
 lIMIT :: Int
 lIMIT = 50000
 
 the' :: Scalar a -> a
 the' x = indexArray x Z
+
+
+-- Minimally stolen from accelerate-io
+--
+toVectors :: Shape sh => A.Array sh Word8 -> S.Vector Word8
+toVectors (Array sh (AD_Word8 ua)) =
+  unsafeFromForeignPtr0 (unsafeGetValue (uniqueArrayData ua)) (R.size sh)
+
+fromVectors :: Shape sh => sh -> S.Vector Word8 -> A.Array sh Word8
+fromVectors sh v = Array (fromElt sh) adata
+  where
+    (fp,vsize)  = unsafeToForeignPtr0 v
+    adata       = $boundsCheck "fromVectors" "shape mismatch" (vsize P.== Sugar.size sh)
+                $ AD_Word8 (unsafePerformIO $ newUniqueArray fp)
 

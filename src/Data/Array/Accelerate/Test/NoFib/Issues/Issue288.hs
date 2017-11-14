@@ -1,21 +1,34 @@
+{-# LANGUAGE RankNTypes #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue288
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 -- https://github.com/AccelerateHS/accelerate/issues/288
 --
 
-module Test.Issues.Issue288 (test_issue288)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue288 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue288
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
+
+import Prelude                                                      as P
 
 
-test_issue288 :: Backend -> Config -> Test
-test_issue288 backend _conf =
-  testCase "288" (assertEqual xs $ run1 backend (A.map f) xs)
+test_issue288 :: RunN -> TestTree
+test_issue288 runN =
+  testCase "288"  $ xs @=? runN (A.map f) xs
 
 f :: Exp (Int, Int) -> Exp (Int, Int)
 f e = while (const (lift False)) id e

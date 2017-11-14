@@ -1,22 +1,38 @@
+{-# LANGUAGE RankNTypes #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue168
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/168
+--
 
-module Test.Issues.Issue168 (test_issue168)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue168 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue168
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
+
+import Prelude                                                      as P
 
 
-test_issue168 :: Backend -> Config -> Test
-test_issue168 backend _conf = testGroup "168"
-  [ testCase "A" (assertEqual ref1 $ run backend (A.fill sh test1))
-  , testCase "B" (assertEqual ref2 $ run backend (A.fill sh test2))
-  , testCase "C" (assertEqual ref3 $ run backend (A.fill sh test3))
-  ]
+test_issue168 :: RunN -> TestTree
+test_issue168 runN =
+  testGroup "168"
+    [ testCase "A"  $ ref1 @=? runN (A.fill sh test1)
+    , testCase "B"  $ ref2 @=? runN (A.fill sh test2)
+    , testCase "C"  $ ref3 @=? runN (A.fill sh test3)
+    ]
   where
     sh          = index1 (constant 1) :: Exp DIM1
 

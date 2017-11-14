@@ -1,21 +1,36 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE RankNTypes        #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue187
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/187
+--
 
-module Test.Issues.Issue187 (test_issue187)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue187 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue187
 
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 
-test_issue187 :: Backend -> Config -> Test
-test_issue187 backend _conf = testGroup "187"
-  [ testCase "A" (assertEqual ref1 $ run backend test1)
-  , testCase "B" (assertEqual ref2 $ run backend test2)
-  ]
+test_issue187 :: RunN -> TestTree
+test_issue187 runN =
+  testGroup "187"
+    [ testCase "A"  $ ref1 @=? runN test1
+    , testCase "B"  $ ref2 @=? runN test2
+    ]
 
 
 ref1 :: Scalar Bool

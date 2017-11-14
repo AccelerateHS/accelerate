@@ -1,28 +1,39 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes          #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue287
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 -- https://github.com/AccelerateHS/accelerate/issues/287
 -- https://gist.github.com/cpdurham/7c11134bc345f12a8863
 --
 
-module Test.Issues.Issue287 (test_issue287)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue287 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue287
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 
-test_issue287 :: Backend -> Config -> Test
-test_issue287 backend _conf =
+test_issue287 :: RunN -> TestTree
+test_issue287 runN =
   testGroup "287"
-    [ testCase "A" (assertEqual ref1 $ run1 backend (\x -> A.scanl1 f x) arr1)
-    , testCase "B" (assertEqual ref1 $ run1 backend (\x -> A.scanl1Seg (\_ b -> b) x (use segs)) arr1)
-    , testCase "C" (assertEqual ref1 $ run1 backend (\x -> A.scanl1Seg f x (use segs)) arr1)
+    [ testCase "A"  $ ref1 @=? runN (\x -> A.scanl1 f x) arr1
+    , testCase "B"  $ ref1 @=? runN (\x -> A.scanl1Seg (\_ b -> b) x (use segs)) arr1
+    , testCase "C"  $ ref1 @=? runN (\x -> A.scanl1Seg f x (use segs)) arr1
     ]
 
 ref1 :: Vector (Int,Int,Int,Int,Int,Int)

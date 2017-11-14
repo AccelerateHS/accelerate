@@ -1,21 +1,36 @@
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue137
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- https://github.com/AccelerateHS/accelerate/issues/137
+--
 
-module Test.Issues.Issue137 (test_issue137)
-  where
+module Data.Array.Accelerate.Test.NoFib.Issues.Issue137 (
 
-import Config
-import Test.Framework
-import Test.Framework.Providers.HUnit
+  test_issue137
 
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
+) where
+
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Test.NoFib.Base
+
+import Test.Tasty
+import Test.Tasty.HUnit
+
+import Prelude                                                      as P
 
 
-test_issue137 :: Backend -> Config -> Test
-test_issue137 backend _conf =
-  testCase "137" (assertEqual ref1 $ run backend test1)
+test_issue137 :: RunN -> TestTree
+test_issue137 runN =
+  testCase "137"  $ ref1 @=? runN test1
 
 
 ref1 :: Vector (Int,Int)
