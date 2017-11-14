@@ -1,71 +1,73 @@
-{-# LANGUAGE ConstraintKinds          #-}
-{-# LANGUAGE FlexibleContexts         #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE ScopedTypeVariables      #-}
-{-# LANGUAGE TypeFamilies             #-}
-{-# LANGUAGE TypeOperators            #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Spectral.BlackScholes (
+module Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes (
 
-  test_blackscholes
+  test_blackscholes,
 
 ) where
 
-import Control.Applicative
-import Data.Label
-import Data.Maybe
+import Data.Proxy
 import Data.Typeable
-import Foreign.ForeignPtr
-import Foreign.Ptr
-import Foreign.Storable
-import System.Random
-import Test.Framework
-import Test.Framework.Providers.QuickCheck2
-import Test.QuickCheck
-import Prelude                                                  as P
+import Prelude                                                      as P
 
-import Config
-import QuickCheck.Arbitrary.Array
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        as A
-import Data.Array.Accelerate.Array.Data                         as A
-import Data.Array.Accelerate.Examples.Internal                  as A
-import Data.Array.Accelerate.IO.Foreign.ForeignPtr              as A
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
+import Data.Array.Accelerate.Test.Similar
+
+import Hedgehog
+import qualified Hedgehog.Gen                                       as Gen
+import qualified Hedgehog.Range                                     as Range
+
+import Test.Tasty
+import Test.Tasty.Hedgehog
 
 
-test_blackscholes :: Backend -> Config -> Test
-test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
-  [ testElt configFloat  c_BlackScholes_f
-  , testElt configDouble c_BlackScholes_d
-  ]
+test_blackscholes :: RunN -> TestTree
+test_blackscholes runN =
+  testGroup "blackscholes"
+    [ at (Proxy::Proxy TestFloat)  $ testElt Gen.float
+    , at (Proxy::Proxy TestDouble) $ testElt Gen.double
+    ]
   where
-    testElt :: forall a. (P.Floating a, A.Floating a, A.Ord a, Similar a, Arbitrary a, Random a, Storable a, ForeignPtrs (EltRepr a) ~ ForeignPtr a)
-            => (Config :-> Bool)
-            -> BlackScholes a
-            -> Maybe Test
-    testElt ok cfun
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just
-      $ testProperty (show (typeOf (undefined :: a))) (run_blackscholes cfun)
-
-    opts :: (P.Floating a, Random a) => Gen (a,a,a)
-    opts = (,,) <$> choose (5,30) <*> choose (1,100) <*> choose (0.25,10)
-
-    run_blackscholes :: forall a. (P.Floating a, A.Floating a, A.Ord a, Similar a, Storable a, Random a, ForeignPtrs (EltRepr a) ~ ForeignPtr a)
-                     => BlackScholes a
-                     -> Property
-    run_blackscholes cfun =
-      forAll (sized return)                     $ \nmax ->
-      forAll (choose (0,nmax))                  $ \n ->
-      forAll (arbitraryArrayOf (Z:.n) opts)     $ \psy -> ioProperty $ do
-        let actual = run1 backend blackscholes psy
-        expected  <- blackScholesRef cfun psy
-        return     $ expected ~?= actual
+    testElt
+        :: forall a. (P.Floating a, P.Ord a, A.Floating a, A.Ord a , Similar a)
+        => (Range a -> Gen a)
+        -> TestTree
+    testElt e =
+      testProperty (show (typeOf (undefined :: a))) $ test_blackscholes' runN e
 
 
---
--- Black-Scholes option pricing ------------------------------------------------
---
+test_blackscholes'
+    :: (P.Floating a, P.Ord a, A.Floating a, A.Ord a, Similar a)
+    => RunN
+    -> (Range a -> Gen a)
+    -> Property
+test_blackscholes' runN e =
+  property $ do
+    sh  <- forAll ((Z :.) <$> Gen.int (Range.linear 0 16384))
+    psy <- forAll (array sh ((,,) <$> e (Range.linearFrac 5 30)
+                                  <*> e (Range.linearFrac 1 100)
+                                  <*> e (Range.linearFrac 0.25 10)))
+    --
+    let !go = runN blackscholes in go psy ~~~ blackscholesRef psy
+
 
 riskfree, volatility :: P.Floating a => a
 riskfree   = 0.02
@@ -89,8 +91,8 @@ cnd' d =
 blackscholes :: (P.Floating a, A.Floating a, A.Ord a) => Acc (Vector (a, a, a)) -> Acc (Vector (a, a))
 blackscholes = A.map go
   where
-  go x =
-    let (price, strike, years) = A.unlift x
+  go (A.unlift -> (price,strike,years)) =
+    let
         r       = A.constant riskfree
         v       = A.constant volatility
         v_sqrtT = v * sqrt years
@@ -105,34 +107,24 @@ blackscholes = A.map go
            , x_expRT * (1.0 - cndD2) - price * (1.0 - cndD1))
 
 
--- Reference implementation, stolen from the CUDA SDK examples reference
--- implementation and modified for our purposes.
---
-type BlackScholes a = Ptr a -> Ptr a -> Ptr a -> Ptr a -> Ptr a -> a -> a -> Int32 -> IO ()
-
-blackScholesRef
-    :: forall a. (Storable a, P.Floating a, A.Floating a, ForeignPtrs (EltRepr a) ~ ForeignPtr a)
-    => BlackScholes a
-    -> Vector (a,a,a)
-    -> IO (Vector (a,a))
-blackScholesRef cfun xs = do
-  let Z :. n = arrayShape xs
-  --
-  r_adata <- newArrayData n
-  let res                                   = Array ((), n) r_adata
-      ((((), f_price), f_strike), f_years)  = toForeignPtrs xs
-      (((), f_call), f_put)                 = toForeignPtrs res
-  --
-  withForeignPtr f_price   $ \p_price  ->
-   withForeignPtr f_strike $ \p_strike ->
-    withForeignPtr f_years $ \p_years  ->
-     withForeignPtr f_call $ \p_call   ->
-      withForeignPtr f_put $ \p_put    ->
-       cfun p_call p_put p_price p_strike p_years riskfree volatility (P.fromIntegral n)
-  --
-  return res
-
-
-foreign import ccall unsafe "BlackScholes_f" c_BlackScholes_f :: Ptr Float  -> Ptr Float  -> Ptr Float  -> Ptr Float  -> Ptr Float  -> Float  -> Float  -> Int32 -> IO ()
-foreign import ccall unsafe "BlackScholes_d" c_BlackScholes_d :: Ptr Double -> Ptr Double -> Ptr Double -> Ptr Double -> Ptr Double -> Double -> Double -> Int32 -> IO ()
+blackscholesRef :: (P.Floating a, P.Ord a, Elt a) => Vector (a, a, a) -> Vector (a, a)
+blackscholesRef psy = fromFunction (S.shape psy) (go . indexArray psy)
+  where
+    go (price, strike, years) =
+      let
+          r       = riskfree
+          v       = volatility
+          v_sqrtT = v * sqrt years
+          d1      = (log (price / strike) + (r + 0.5 * v * v) * years) / v_sqrtT
+          d2      = d1 - v_sqrtT
+          cnd d   = let c = cnd' d in if d P.> 0
+                                        then 1.0 - c
+                                        else c
+          cndD1   = cnd d1
+          cndD2   = cnd d2
+          x_expRT = strike * exp (-r * years)
+      in
+      ( price * cndD1 - x_expRT * cndD2
+      , x_expRT * (1.0 - cndD2) - price * (1.0 - cndD1)
+      )
 

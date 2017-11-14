@@ -380,6 +380,10 @@ Library
         Data.Array.Accelerate.Test.NoFib.Imaginary.DotP
         Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
         Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
+        Data.Array.Accelerate.Test.NoFib.Spectral
+        Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
+        Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort
+        Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes
 
   hs-source-dirs:
         src

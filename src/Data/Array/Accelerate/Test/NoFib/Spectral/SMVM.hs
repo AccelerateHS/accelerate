@@ -1,72 +1,92 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
+-- Copyright   : [2009..2017] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Spectral.SMVM (
+module Data.Array.Accelerate.Test.NoFib.Spectral.SMVM (
 
-  test_smvm
+  test_smvm,
 
 ) where
 
--- from the accelerate-smvm program
-import SMVM
-
-import Prelude                                                  as P
-import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Examples.Internal                  as A
-import Data.Label
-import Data.Maybe
+import Data.Proxy
 import Data.Typeable
-import Test.QuickCheck
+import Prelude                                                      as P
 
-import Config
-import Test.Base
-import QuickCheck.Arbitrary.Array
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Test.NoFib.Base
+import Data.Array.Accelerate.Test.NoFib.Config
+import Data.Array.Accelerate.Test.Similar
+
+import Hedgehog
+import qualified Hedgehog.Gen                                       as Gen
+import qualified Hedgehog.Range                                     as Range
+
+import Test.Tasty
+import Test.Tasty.Hedgehog
 
 
-test_smvm :: Backend -> Config -> Test
-test_smvm backend opt = testGroup "smvm" $ catMaybes
---  [ testElt configInt8   (undefined :: Int8)
---  , testElt configInt16  (undefined :: Int16)
---  , testElt configInt32  (undefined :: Int32)
---  , testElt configInt64  (undefined :: Int64)
---  , testElt configWord8  (undefined :: Word8)
---  , testElt configWord16 (undefined :: Word16)
---  , testElt configWord32 (undefined :: Word32)
---  , testElt configWord64 (undefined :: Word64)
-  [ testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
-  ]
+test_smvm :: RunN -> TestTree
+test_smvm runN =
+  testGroup "smvm"
+    [ at (Proxy::Proxy TestFloat)  $ testElt f32
+    , at (Proxy::Proxy TestDouble) $ testElt f64
+    ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a)
-            => (Config :-> Bool)
-            -> a
-            -> Maybe Test
-    testElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just
-      $ testProperty (show (typeOf (undefined :: a))) (run_smvm (undefined :: a))
-
-    run_smvm :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a) => a -> Property
-    run_smvm _ =
-      forAll arbitraryCSRMatrix           $ \(segd, svec :: Vector (Int32,a), cols) ->
-      forAll (arbitraryArray (Z :. cols)) $ \vec ->
-        runN backend smvm (segd, svec) vec
-        ~?=
-        smvmRef segd svec vec
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        => Gen a
+        -> TestTree
+    testElt e =
+      testProperty (show (typeOf (undefined :: a))) $ test_smvm' runN e
 
 
--- Reference implementation
--- ------------------------
+test_smvm' :: (A.Num e, P.Num e, Similar e) => RunN -> Gen e -> Property
+test_smvm' runN e =
+  property $ do
+    (smat, cols) <- forAll (sparseMatrix e)
+    vec          <- forAll (array (Z:.cols) e)
+    --
+    let !go = runN smvm in go smat vec ~~~ smvmRef smat vec
 
-smvmRef :: (Elt a, P.Num a)
-        => Segments Int32
-        -> Vector (Int32, a)
-        -> Vector a
-        -> Vector a
-smvmRef segd smat vec =
-  fromList (arrayShape segd)
-           [ P.sum [ val * indexArray vec (Z :. P.fromIntegral i) | (i,val) <- row ]
+
+sparseMatrix :: Elt e => Gen e -> Gen (SparseMatrix e, Int)
+sparseMatrix e = do
+  rows  <- Gen.int (Range.linear 1 256)
+  cols  <- Gen.int (Range.linear 1 256)
+  seg   <- array (Z:.rows) (Gen.int (Range.linear 0 cols))
+  let nnz = P.sum (S.toList seg)
+  smat  <- array (Z:.nnz) ((,) <$> Gen.int (Range.linear 0 (cols-1)) <*> e)
+  return ((seg,smat), cols)
+
+
+type SparseVector e = Vector (Int, e)
+type SparseMatrix e = (Segments Int, SparseVector e)
+
+smvm :: A.Num a => Acc (SparseMatrix a) -> Acc (Vector a) -> Acc (Vector a)
+smvm smat vec
+  = let (segd, svec)    = unlift smat
+        (inds, vals)    = A.unzip svec
+
+        vecVals         = A.gather inds vec
+        products        = A.zipWith (*) vecVals vals
+    in
+    foldSeg (+) 0 products segd
+
+smvmRef :: (Elt a, P.Num a) => SparseMatrix a -> Vector a -> Vector a
+smvmRef (segd, smat) vec =
+  fromList (S.shape segd)
+           [ P.sum [ val * indexArray vec (Z :. i) | (i,val) <- row ]
                    | row <- splitPlaces (toList segd) (toList smat) ]
 
