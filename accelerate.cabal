@@ -269,6 +269,10 @@ Library
         , hashtables                    >= 1.0
         , hedgehog                      >= 0.5
         , mtl                           >= 2.0
+        , tasty                         >= 0.11
+        , tasty-expected-failure        >= 0.11
+        , tasty-hedgehog                >= 0.1
+        , tasty-hunit                   >= 0.9
         , template-haskell
         , terminal-size                 >= 0.3
         , time                          >= 1.4
@@ -276,6 +280,9 @@ Library
         , unique
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
+
+        -- nofib test suite
+        , pipes                         >= 4.1.6
 
   Exposed-modules:
         -- The core language and reference implementation
@@ -315,9 +322,8 @@ Library
         Data.Array.Accelerate.Type
 
         -- For testing
-        Data.Array.Accelerate.Hedgehog.Gen.Shape
-        Data.Array.Accelerate.Hedgehog.Gen.Array
-        Data.Array.Accelerate.Hedgehog.Similar
+        Data.Array.Accelerate.Test.NoFib
+        Data.Array.Accelerate.Test.Similar
 
   Other-modules:
         Data.Atomic
@@ -359,6 +365,46 @@ Library
         Data.Array.Accelerate.Trafo.Simplify
         Data.Array.Accelerate.Trafo.Substitution
         -- Data.Array.Accelerate.Trafo.Vectorise
+
+        -- nofib test suite
+        Data.Array.Accelerate.Test.NoFib.Base
+        Data.Array.Accelerate.Test.NoFib.Config
+        Data.Array.Accelerate.Test.NoFib.Sharing
+        Data.Array.Accelerate.Test.NoFib.Prelude
+        Data.Array.Accelerate.Test.NoFib.Prelude.Map
+        Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
+        Data.Array.Accelerate.Test.NoFib.Prelude.Fold
+        Data.Array.Accelerate.Test.NoFib.Prelude.Scan
+        Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
+        Data.Array.Accelerate.Test.NoFib.Prelude.Permute
+        Data.Array.Accelerate.Test.NoFib.Prelude.Filter
+        Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
+        Data.Array.Accelerate.Test.NoFib.Imaginary
+        Data.Array.Accelerate.Test.NoFib.Imaginary.DotP
+        Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
+        Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
+        Data.Array.Accelerate.Test.NoFib.Spectral
+        Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
+        Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort
+        Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes
+        Data.Array.Accelerate.Test.NoFib.Issues
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue93
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue102
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue114
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue119
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue123
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue137
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue168
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue184
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue185
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue187
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue228
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue255
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue264
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue286
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue287
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue288
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue362
 
   hs-source-dirs:
         src
@@ -450,6 +496,23 @@ test-suite doctest
   if impl(ghc >= 8.0)
     x-doctest-options:  -fspec-constr-count=25 -freduction-depth=35
 
+
+test-suite nofib-interpreter
+  type:                 exitcode-stdio-1.0
+  hs-source-dirs:       test/nofib
+  main-is:              Main.hs
+
+  build-depends:
+          base                          >= 4.7
+        , accelerate
+
+  ghc-options:
+        -Wall
+        -O2
+        -threaded
+        -rtsopts
+        -with-rtsopts=-A128M
+        -with-rtsopts=-n4M
 
 source-repository head
   Type:                 git
