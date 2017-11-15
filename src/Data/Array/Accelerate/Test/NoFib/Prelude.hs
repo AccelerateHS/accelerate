@@ -39,7 +39,7 @@ import Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
 
 test_prelude :: RunN -> TestTree
 test_prelude runN =
-  testGroup "Prelude"
+  testGroup "prelude"
     [ test_map runN
     , test_zipWith runN
     , test_fold runN
