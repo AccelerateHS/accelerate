@@ -42,7 +42,13 @@ install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - cabal --version
   - stack --version
-  - travis_retry stack build --only-dependencies --fast --no-terminal --test
+  - |
+      case ${GHC%.*} in
+        7.10) ;;
+        8.0)  ;;
+        8.2)  export HADDOCK="--haddock --no-haddock-deps" ;;
+      esac
+  - travis_retry stack build --fast --jobs=2 --test --only-dependencies --no-terminal --no-copy-bins
   # - |
   #     if [ ${GHC} == head -o ! -e stack.yaml ]; then
   #       travis_retry cabal install --only-dependencies
@@ -51,18 +57,9 @@ install:
   #     fi
 
 script:
-  - travis_wait 30 stack build --fast --no-terminal --haddock --no-haddock-deps --test --no-run-tests
+  - stack build --fast --jobs=2 --test --no-terminal --no-copy-bins --no-run-tests ${HADDOCK}
   - stack test accelerate:doctest
   - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
-  # - |
-  #     if [ ${GHC} == head -o ! -e stack.yaml ]; then
-  #       cabal install
-  #       cabal haddock
-  #     else
-  #       travis_wait 30 stack build --fast --no-terminal --haddock --no-haddock-deps --test --no-run-tests
-  #       stack test accelerate:doctest
-  #       stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
-  #     fi
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh
