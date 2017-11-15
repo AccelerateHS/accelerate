@@ -176,8 +176,8 @@ hashArraysType ArraysRarray        = $(hashQ "ArraysRarray") `hashWithSalt` hash
     hashArrayType _ = hashTupleType (eltType (undefined::sh)) `hashWithSalt` hashTupleType (eltType (undefined::e))
 
 hashAtuple :: HashAcc acc -> Atuple (acc aenv) a -> Int
-hashAtuple _ NilAtup            = $(hashQ "NilAtup")
-hashAtuple h (SnocAtup t a)     = $(hashQ "SnocAtup") `hashWithSalt` hashAtuple h t `hashWithSalt` h a
+hashAtuple _ NilAtup        = $(hashQ "NilAtup")
+hashAtuple h (SnocAtup t a) = $(hashQ "SnocAtup") `hashWithSalt` hashAtuple h t `hashWithSalt` h a
 
 hashAfun :: forall acc aenv f. HashAcc acc -> PreOpenAfun acc aenv f -> Int
 hashAfun hashAcc afun =
@@ -285,8 +285,8 @@ hashPreOpenFun hashAcc fun =
 
 
 hashTuple :: HashAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Int
-hashTuple _ NilTup              = $(hashQ "NilTup")
-hashTuple h (SnocTup t e)       = $(hashQ "SnocTup") `hashWithSalt` hashTuple h t `hashWithSalt` hashPreOpenExp h e
+hashTuple _ NilTup        = $(hashQ "NilTup")
+hashTuple h (SnocTup t e) = $(hashQ "SnocTup") `hashWithSalt` hashTuple h t `hashWithSalt` hashPreOpenExp h e
 
 
 hashConst :: TupleType t -> t -> Int
