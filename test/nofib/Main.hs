@@ -18,5 +18,6 @@ import System.Environment
 main :: IO ()
 main = do
   setEnv "TASTY_INTERPRETER" "True"
+  setEnv "TASTY_HEDGEHOG_TESTS" "50"
   nofib runN
 
