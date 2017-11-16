@@ -80,7 +80,7 @@ hashPreOpenAcc hashAcc pacc =
     Alet bnd body               -> $(hashQ "Alet")        `hashA` bnd `hashA` body
     Avar v                      -> $(hashQ "Avar")        `hashWithSalt` nacl `hashWithSalt` hashIdx v
     Atuple t                    -> $(hashQ "Atuple")      `hashWithSalt` nacl `hashWithSalt` hashAtuple hashAcc t
-    Aprj ix a                   -> $(hashQ "Aprj")        `hashWithSalt` nacl `hashWithSalt` hashTupleIdx ix    `hashA` a
+    Aprj ix a                   -> $(hashQ "Aprj")        `hashWithSalt` nacl * hashTupleIdx ix `hashA` a
     Apply f a                   -> $(hashQ "Apply")       `hashWithSalt` nacl `hashWithSalt` hashAfun hashAcc f `hashA` a
     Aforeign _ f a              -> $(hashQ "Aforeign")    `hashWithSalt` nacl `hashWithSalt` hashAfun hashAcc f `hashA` a
     Use a                       -> $(hashQ "Use")         `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
@@ -238,10 +238,10 @@ hashPreOpenExp hashAcc exp =
 
   in case exp of
     Let bnd body                -> $(hashQ "Let")         `hashE` bnd `hashE` body
-    Const c                     -> $(hashQ "Const")       `hashWithSalt` hashConst (eltType (undefined::exp)) c
     Var ix                      -> $(hashQ "Var")         `hashWithSalt` nacl `hashWithSalt` hashIdx ix
     Tuple t                     -> $(hashQ "Tuple")       `hashWithSalt` nacl `hashWithSalt` hashTuple hashAcc t
-    Prj i e                     -> $(hashQ "Prj")         `hashWithSalt` nacl `hashWithSalt` hashTupleIdx i `hashE` e
+    Prj i e                     -> $(hashQ "Prj")         `hashWithSalt` nacl * hashTupleIdx i `hashE` e
+    Const c                     -> $(hashQ "Const")       `hashWithSalt` hashConst (eltType (undefined::exp)) c
     IndexAny                    -> $(hashQ "IndexAny")    `hashWithSalt` nacl
     IndexNil                    -> $(hashQ "IndexNil")
     IndexCons sl a              -> $(hashQ "IndexCons")   `hashE` sl `hashE` a
@@ -286,7 +286,8 @@ hashPreOpenFun hashAcc fun =
 
 hashTuple :: HashAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Int
 hashTuple _ NilTup        = $(hashQ "NilTup")
-hashTuple h (SnocTup t e) = $(hashQ "SnocTup") `hashWithSalt` hashTuple h t `hashWithSalt` hashPreOpenExp h e
+hashTuple h (SnocTup t e) = $(hashQ "SnocTup") `hashWithSalt` hashTuple h t
+                                               `hashWithSalt` hashPreOpenExp h e
 
 
 hashConst :: TupleType t -> t -> Int
