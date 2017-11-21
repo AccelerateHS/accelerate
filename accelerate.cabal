@@ -313,7 +313,6 @@ Library
         Data.Array.Accelerate.Async
         Data.Array.Accelerate.Debug
         Data.Array.Accelerate.Error
-        Data.Array.Accelerate.FullList
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Product
