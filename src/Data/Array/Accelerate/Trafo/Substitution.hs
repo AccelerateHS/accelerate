@@ -137,9 +137,9 @@ class Rebuildable f where
 
   {-# INLINEABLE rebuildA #-}
   rebuildA :: (SyntacticAcc fa)
-              => (forall a'. Arrays a' => Idx aenv a' -> fa (AccClo f) aenv' a')
-              -> f aenv  a
-              -> f aenv' a
+           => (forall a'. Arrays a' => Idx aenv a' -> fa (AccClo f) aenv' a')
+           -> f aenv  a
+           -> f aenv' a
   rebuildA av = runIdentity . rebuildPartial (Identity . av)
 
 -- A class for rebuilding scalar terms.
