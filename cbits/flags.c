@@ -13,8 +13,8 @@
  *
  * This processes flags between +ACC ... -ACC on the command line. The
  * corresponding fields are removed from the command line. Note that we can't at
- * this stage update the number of command line arguments, so the entries are
- * simply set to NULL.
+ * this stage update the number of command line arguments, but with some tricks
+ * they can be mostly deleted.
  */
 
 #include <ctype.h>
@@ -292,7 +292,7 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
     parse_options(argc2, argv2);
   }
 
-  /* Remove the Accelerte options from the command line arguments which will be
+  /* Remove the Accelerate options from the command line arguments which will be
    * passed to main(). We can't do this in a sensible fashion by updating argc,
    * but we can pull a small sleight-of-hand by rewriting them to -RTS, so that
    * they will be deleted by the GHC RTS when it is initialised.
@@ -309,7 +309,7 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
    *
    * > ./foo +RTS -... -RTS -... -RTS
    *
-   * Previously, since the RTS group was not terminated corcetly the GHC RTS
+   * Previously, since the RTS group was not terminated correctly the GHC RTS
    * would complain that the trailing Accelerate options (+ACC -...) were
    * unknown RTS flags.
    */
