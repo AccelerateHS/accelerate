@@ -1,6 +1,6 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP          #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# LANGUAGE BangPatterns             #-}
+{-# LANGUAGE CPP                      #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Trace
 -- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
@@ -16,16 +16,25 @@
 -- in performance code.
 --
 
-module Data.Array.Accelerate.Debug.Trace
-  where
+module Data.Array.Accelerate.Debug.Trace (
+
+  showFFloatSIBase,
+
+  putTraceMsg,
+  trace, traceIO,
+  traceEvent, traceEventIO,
+
+) where
 
 import Data.Array.Accelerate.Debug.Flags
 
 import Numeric
-import System.CPUTime
+
+#ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe
 import Text.Printf
 import qualified Debug.Trace                            as D
+#endif
 
 
 -- | Show a signed 'RealFloat' value using SI unit prefixes. In the call to:
@@ -107,14 +116,13 @@ traceEvent _ _ expr = expr
 #endif
 
 
--- | Print a message prefixed with the current CPU time.
+-- | Print a message prefixed with the current elapsed wall-clock time.
 --
 putTraceMsg :: String -> IO ()
 #ifdef ACCELERATE_DEBUG
 putTraceMsg msg = do
-  psec        <- getCPUTime
-  let secs    = fromIntegral psec * 1E-12 :: Double
-  D.traceIO   $ printf "[%8.3f] %s" secs msg
+  timestamp <- getProgramTime
+  D.traceIO  $ printf "[%8.3f] %s" timestamp msg
 #else
 putTraceMsg _   = return ()
 #endif
@@ -133,5 +141,9 @@ traceEventIO f msg = do
 #else
 {-# INLINE traceEventIO #-}
 traceEventIO _ _ = return ()
+#endif
+
+#ifdef ACCELERATE_DEBUG
+foreign import ccall unsafe "clock_gettime_elapsed_seconds" getProgramTime :: IO Double
 #endif
 
