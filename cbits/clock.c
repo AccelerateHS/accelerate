@@ -15,6 +15,8 @@
  * <https://github.com/corsis/clock/tree/0.5.1>
  */
 
+#if defined(ACCELERATE_DEBUG)
+
 #if defined(__MACH__) && defined(__APPLE__)
 /*
  * macOS
@@ -102,7 +104,7 @@ double clock_gettime_monotonic_seconds()
     return (double) t.tv_sec + (double) t.tv_nsec * 1.0E-9;
 }
 
-#endif
+#endif /* OS */
 
 
 static double __program_epoch;
@@ -119,4 +121,6 @@ __attribute__((constructor)) void initialise_program_epoch(void)
 {
     __program_epoch = clock_gettime_monotonic_seconds();
 }
+
+#endif /* ACCELERATE_DEBUG */
 

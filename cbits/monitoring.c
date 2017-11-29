@@ -36,13 +36,14 @@ int64_t __num_evictions                     = 0;
 extern int32_t __dump_gc;
 extern int32_t __dump_gc_stats;
 
+#if defined(ACCELERATE_DEBUG)
+
 /*
  * This function runs after main(), and is used to print final GC and memory
  * statistics (if enabled). This is similar to the +RTS -s option.
  */
 __attribute__((destructor)) void dump_gc_stats(void)
 {
-#if defined(ACCELERATE_DEBUG)
   if (__dump_gc_stats) {
     struct lconv* lc = localeconv();
     double time      = (double) clock() / (double) CLOCKS_PER_SEC;
@@ -56,6 +57,7 @@ __attribute__((destructor)) void dump_gc_stats(void)
     lc->thousands_sep = comma;
     lc->grouping      = thousands;
 
+    printf("\n");
     printf("[%8.3f] gc: %'lld bytes allocated locally\n", time, __total_bytes_allocated_local);
     printf("[%8.3f] gc: %'lld bytes allocated on the remote device\n", time, __total_bytes_allocated_remote);
     printf("[%8.3f] gc: %'lld bytes copied to the remote device\n", time, __total_bytes_copied_to_remote);
@@ -65,6 +67,7 @@ __attribute__((destructor)) void dump_gc_stats(void)
     lc->thousands_sep = old_sep;
     lc->grouping      = old_grp;
   }
-#endif
 }
+
+#endif /* ACCELERATE_DEBUG */
 

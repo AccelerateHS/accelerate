@@ -56,6 +56,8 @@ int32_t __dump_asm                  = 0;
 int32_t __dump_exec                 = 0;
 int32_t __dump_sched                = 0;
 
+#if defined(ACCELERATE_DEBUG)
+
 static const char*         shortopts  = "";
 static const struct option longopts[] =
   { { "dverbose",                     no_argument,       &__verbose,               1    }
@@ -99,6 +101,8 @@ static const struct option longopts[] =
   , { NULL, 0, NULL, 0 }
   };
 
+#endif /* ACCELERATE_DEBUG */
+
 
 /* Parse the given vector of command line arguments and set the corresponding
  * flags. The vector should contain no non-option arguments (aside from the name
@@ -106,14 +110,14 @@ static const struct option longopts[] =
  */
 static void parse_options(int argc, char *argv[])
 {
+#if defined(ACCELERATE_DEBUG)
+
   const struct option* opt;
   char* this;
   int   did_show_banner;
   int   prefix;
   int   result;
   int   longindex;
-
-#if defined(ACCELERATE_DEBUG)
 
   while (-1 != (result = getopt_long_only(argc, argv, shortopts, longopts, &longindex)))
   {
