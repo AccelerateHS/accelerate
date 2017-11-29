@@ -10,10 +10,8 @@
  * Support for runtime system monitoring
  */
 
-#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
 
 
 /* These monitoring counters are globals which  will be accessed from the
@@ -38,7 +36,78 @@ extern int32_t __dump_gc_stats;
 
 #if defined(ACCELERATE_DEBUG)
 
+/* cbits/clock.c */
 double clock_gettime_elapsed_seconds(void);
+
+/*
+ * Format a large number, using comma separators.
+ */
+static char* format_int64(char *buffer, int64_t x)
+{
+  char *s = buffer;
+
+  if (x < 0)
+  {
+    *s++  = '-';
+    x     = -x;
+  }
+
+  if (x < 1000)
+  {
+    sprintf(s, "%lld", x);
+  }
+  else if (x < 1000000)
+  {
+    sprintf(s, "%lld,%03lld", x/1000, x%1000);
+  }
+  else if (x < 1000000000)
+  {
+    sprintf(s, "%lld,%03lld,%03lld"
+             ,  x/1000000
+             , (x/1000)%1000
+             ,  x%1000);
+  }
+  else if (x < 1000000000000)
+  {
+    sprintf(s, "%lld,%03lld,%03lld,%03lld"
+             ,  x/1000000000
+             , (x/1000000)%1000
+             , (x/1000)%1000
+             ,  x%1000);
+  }
+  else if (x < 1000000000000000)
+  {
+    sprintf(s, "%lld,%03lld,%03lld,%03lld,%03lld"
+             ,  x/1000000000000
+             , (x/1000000000)%1000
+             , (x/1000000)%1000
+             , (x/1000)%1000
+             ,  x%1000);
+  }
+  else if (x < 1000000000000000000)
+  {
+    sprintf(s, "%lld,%03lld,%03lld,%03lld,%03lld,%03lld"
+             ,  x/1000000000000000
+             , (x/1000000000000)%1000
+             , (x/1000000000)%1000
+             , (x/1000000)%1000
+             , (x/1000)%1000
+             ,  x%1000);
+  }
+  else
+  {
+    sprintf(s, "%lld,%03lld,%03lld,%03lld,%03lld,%03lld,%03lld"
+             ,  x/1000000000000000000
+             , (x/1000000000000000)%1000
+             , (x/1000000000000)%1000
+             , (x/1000000000)%1000
+             , (x/1000000)%1000
+             , (x/1000)%1000
+             ,  x%1000);
+  }
+
+  return buffer;
+}
 
 /*
  * This function runs after main(), and is used to print final GC and memory
@@ -47,30 +116,20 @@ double clock_gettime_elapsed_seconds(void);
 __attribute__((destructor)) void dump_gc_stats(void)
 {
   if (__dump_gc_stats) {
-    struct lconv* lc = localeconv();
-    char comma[]     = ",";
-    char thousands[] = { 3, 0 };
-    char *old_sep    = lc->thousands_sep;
-    char *old_grp    = lc->grouping;
-
-    /* elapsed wallclock time; see cbits/clock.c
+    /*
+     * int64 ranges from -9223372036854775807..9223372036854775807, so we need a
+     * buffer size of at least 27 characters (including the terminating \0) to
+     * format any numbers with commas.
      */
-    double time      = clock_gettime_elapsed_seconds();
-
-    /* set locale so that numbers are printed with a thousands separator
-     */
-    lc->thousands_sep = comma;
-    lc->grouping      = thousands;
+    char buffer[27];
+    double timestamp = clock_gettime_elapsed_seconds();
 
     printf("\n");
-    printf("[%8.3f] gc: %'lld bytes allocated locally\n", time, __total_bytes_allocated_local);
-    printf("[%8.3f] gc: %'lld bytes allocated on the remote device\n", time, __total_bytes_allocated_remote);
-    printf("[%8.3f] gc: %'lld bytes copied to the remote device\n", time, __total_bytes_copied_to_remote);
-    printf("[%8.3f] gc: %'lld bytes copied from the remote device\n", time, __total_bytes_copied_from_remote);
-    printf("[%8.3f] gc: %'lld bytes evicted from the remote (%lld evictions, %lld GCs)\n", time, __total_bytes_evicted_from_remote, __num_evictions, __num_remote_gcs);
-
-    lc->thousands_sep = old_sep;
-    lc->grouping      = old_grp;
+    printf("[%8.3f] gc: %s bytes allocated locally\n", timestamp, format_int64(buffer, __total_bytes_allocated_local));
+    printf("[%8.3f] gc: %s bytes allocated on the remote device\n", timestamp, format_int64(buffer, __total_bytes_allocated_remote));
+    printf("[%8.3f] gc: %s bytes copied to the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_to_remote));
+    printf("[%8.3f] gc: %s bytes copied from the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_from_remote));
+    printf("[%8.3f] gc: %s bytes evicted from the remote (%lld evictions, %lld GCs)\n", timestamp, format_int64(buffer, __total_bytes_evicted_from_remote), __num_evictions, __num_remote_gcs);
   }
 }
 
