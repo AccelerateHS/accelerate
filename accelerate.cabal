@@ -275,7 +275,6 @@ Library
         , tasty-hunit                   >= 0.9
         , template-haskell
         , terminal-size                 >= 0.3
-        , time                          >= 1.4
         , transformers                  >= 0.3
         , unique
         , unordered-containers          >= 0.2
@@ -410,12 +409,19 @@ Library
 
   c-sources:
         cbits/atomic.c
+        cbits/clock.c
         cbits/flags.c
         cbits/monitoring.c
 
   if flag(debug) || flag(ekg)
-    cc-options:         -DACCELERATE_DEBUG
-    cpp-options:        -DACCELERATE_DEBUG
+    cc-options:
+        -DACCELERATE_DEBUG
+
+    ghc-options:
+        -optc-DACCELERATE_DEBUG
+
+    cpp-options:
+        -DACCELERATE_DEBUG
 
   if flag(ekg)
     cpp-options:        -DACCELERATE_MONITORING
@@ -427,10 +433,12 @@ Library
         , time                          >= 1.4
 
   if flag(bounds-checks)
-    cpp-options:        -DACCELERATE_BOUNDS_CHECKS
+    cpp-options:
+        -DACCELERATE_BOUNDS_CHECKS
 
   if flag(unsafe-checks)
-    cpp-options:        -DACCELERATE_UNSAFE_CHECKS
+    cpp-options:
+        -DACCELERATE_UNSAFE_CHECKS
 
   if flag(internal-checks)
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
@@ -442,17 +450,31 @@ Library
     cpp-options:        -DUNIX
     build-depends:      unix
 
-  ghc-options:          -O2 -Wall -funbox-strict-fields -fno-warn-name-shadowing
-  ghc-prof-options:     -caf-all -auto-all
+  cc-options:
+        -O3
+        -Wall
+
+  ghc-options:
+        -O2
+        -Wall
+        -funbox-strict-fields
+        -fno-warn-name-shadowing
+
+  ghc-prof-options:
+        -caf-all
+        -auto-all
 
   if impl(ghc >= 7.0)
-    ghc-options:        -fspec-constr-count=25
+    ghc-options:
+        -fspec-constr-count=25
 
   if impl(ghc == 7.*)
-    ghc-options:        -fcontext-stack=35
+    ghc-options:
+        -fcontext-stack=35
 
   if impl(ghc >= 8.0)
-    ghc-options:        -freduction-depth=35
+    ghc-options:
+        -freduction-depth=35
 
   if impl(ghc < 7.10)
     build-depends:

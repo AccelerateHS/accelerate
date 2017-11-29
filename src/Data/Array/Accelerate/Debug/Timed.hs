@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP                      #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Timed
 -- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -26,7 +27,6 @@ import Text.Printf
 import Control.Applicative
 import Control.Monad.Trans                              ( liftIO )
 import Data.List
-import Data.Time.Clock
 import System.CPUTime
 import Prelude
 
@@ -58,18 +58,19 @@ timed _ _ action = action
 #ifdef ACCELERATE_DEBUG
 timed_simpl :: MonadIO m => (Double -> Double -> String) -> m a -> m a
 timed_simpl fmt action = do
-  wall0 <- liftIO getCurrentTime
+  wall0 <- liftIO getMonotonicTime
   cpu0  <- liftIO getCPUTime
   res   <- action
-  wall1 <- liftIO getCurrentTime
+  wall1 <- liftIO getMonotonicTime
   cpu1  <- liftIO getCPUTime
   --
-  let wallTime = realToFrac (diffUTCTime wall1 wall0)
+  let wallTime = wall1 - wall0
       cpuTime  = fromIntegral (cpu1 - cpu0) * 1E-12
   --
   liftIO $ putTraceMsg (fmt wallTime cpuTime)
   return res
 
+foreign import ccall unsafe "clock_gettime_monotonic_seconds" getMonotonicTime :: IO Double
 
 timed_gc :: MonadIO m => (Double -> Double -> String) -> m a -> m a
 timed_gc fmt action = do

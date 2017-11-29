@@ -21,7 +21,7 @@ matrix:
       compiler: "GHC 8.0"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
 
-    - env: GHC=8.2.1 CABAL=2.0
+    - env: GHC=8.2.2 CABAL=2.0
       compiler: "GHC 8.2"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-2.0, happy-1.19.5, alex-3.1.7 ] }}
 

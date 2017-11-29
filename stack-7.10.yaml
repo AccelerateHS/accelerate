@@ -1,13 +1,12 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-6.30
+resolver: lts-6.35
 
 packages:
 - '.'
 
 extra-deps:
-- 'cabal-doctest-1.0.2'
 - 'hedgehog-0.5'
 - 'tasty-hedgehog-0.1.0.1'
 - 'transformers-0.5.5.0'
