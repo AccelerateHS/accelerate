@@ -38,6 +38,8 @@ extern int32_t __dump_gc_stats;
 
 #if defined(ACCELERATE_DEBUG)
 
+double clock_gettime_elapsed_seconds(void);
+
 /*
  * This function runs after main(), and is used to print final GC and memory
  * statistics (if enabled). This is similar to the +RTS -s option.
@@ -46,14 +48,17 @@ __attribute__((destructor)) void dump_gc_stats(void)
 {
   if (__dump_gc_stats) {
     struct lconv* lc = localeconv();
-    double time      = (double) clock() / (double) CLOCKS_PER_SEC;
     char comma[]     = ",";
     char thousands[] = { 3, 0 };
     char *old_sep    = lc->thousands_sep;
     char *old_grp    = lc->grouping;
 
-    /* set locale parameters so that numbers are printed with a thousands
-     * separator */
+    /* elapsed wallclock time; see cbits/clock.c
+     */
+    double time      = clock_gettime_elapsed_seconds();
+
+    /* set locale so that numbers are printed with a thousands separator
+     */
     lc->thousands_sep = comma;
     lc->grouping      = thousands;
 
