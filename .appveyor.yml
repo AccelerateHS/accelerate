@@ -7,6 +7,10 @@ clone_folder: "c:\\work"
 environment:
   global:
     STACK_ROOT: "c:\\stack"
+  matrix:
+    - GHC: "7.10"
+    - GHC: "8.0"
+    - GHC: "8.2"
 
 before_test:
   # http://help.appveyor.com/discussions/problems/6312-curl-command-not-found
@@ -17,7 +21,7 @@ before_test:
   - 7z x stack.zip stack.exe
   - stack --version
 
-  - ln -s stack-8.2.yaml stack.yaml
+  - ln -s stack-%GHC%.yaml stack.yaml
   - stack setup --no-terminal
   - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test
 
