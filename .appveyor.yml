@@ -29,5 +29,5 @@ before_test:
 test_script:
   - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test --no-run-tests
   - stack test accelerate:doctest
-  - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
+  - stack test accelerate:nofib-interpreter --test-arguments="--hedgehog-tests 25"
 
