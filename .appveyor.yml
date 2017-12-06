@@ -1,0 +1,34 @@
+# vim: nospell
+
+build: off
+
+clone_folder: "c:\\work"
+
+environment:
+  global:
+    STACK_ROOT: "c:\\stack"
+  matrix:
+    - GHC: "7.10"
+    - GHC: "8.0"
+    - GHC: "8.2"
+
+before_test:
+  # http://help.appveyor.com/discussions/problems/6312-curl-command-not-found
+  - set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
+  - set PATH=C:\Users\appveyor\AppData\Roaming\local\bin;%PATH%
+
+  # install stack
+  - curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-i386
+  - 7z x stack.zip stack.exe
+  - stack --version
+
+  - ln -s stack-%GHC%.yaml stack.yaml
+  - stack setup --no-terminal > NUL
+  - stack build --no-terminal --copy-bins --fast happy
+  - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test
+
+test_script:
+  - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test --no-run-tests
+  - stack test accelerate:doctest
+  - stack test accelerate:nofib-interpreter --test-arguments="--hedgehog-tests 25"
+
