@@ -23,7 +23,7 @@ before_test:
 
   - ln -s stack-%GHC%.yaml stack.yaml
   - stack setup --no-terminal > NUL
-  - stack build --no-terminal --fast happy
+  - stack build --no-terminal --copy-bins --fast happy
   - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test
 
 test_script:
