@@ -403,6 +403,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Issues.Issue287
         Data.Array.Accelerate.Test.NoFib.Issues.Issue288
         Data.Array.Accelerate.Test.NoFib.Issues.Issue362
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue407
 
   hs-source-dirs:
         src
