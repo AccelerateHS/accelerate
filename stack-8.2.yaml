@@ -9,14 +9,13 @@ packages:
 extra-deps: []
 
 # Override default flag values for local packages and extra-deps
-flags: {}
+# flags: {}
 
 # Extra global and per-package GHC options
-ghc-options:
-  "*": -fdiagnostics-color=always
+# ghc-options: {}
 
 # Extra package databases containing global packages
-extra-package-dbs: []
+# extra-package-dbs: []
 
 # Control whether we use the GHC we find on the path
 # system-ghc: true
