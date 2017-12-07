@@ -1,18 +1,14 @@
 # vim: nospell
 
-build: off
-
-clone_folder: "c:\\work"
-
 environment:
   global:
-    STACK_ROOT: "c:\\stack"
+    STACK_ROOT: "c:\\sr"
   matrix:
     - GHC: "7.10"
     - GHC: "8.0"
     - GHC: "8.2"
 
-before_test:
+before_build:
   # http://help.appveyor.com/discussions/problems/6312-curl-command-not-found
   - set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
   - set PATH=C:\Users\appveyor\AppData\Roaming\local\bin;%PATH%
@@ -27,8 +23,10 @@ before_test:
   - stack build --no-terminal --copy-bins --fast happy
   - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test
 
-test_script:
+build_script:
   - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test --no-run-tests
+
+test_script:
   - stack test accelerate:doctest
   - stack test accelerate:nofib-interpreter --test-arguments="--hedgehog-tests 25"
 
