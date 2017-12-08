@@ -1,5 +1,7 @@
 # vim: nospell
 
+clone_folder: "c:\\accelerate"
+
 environment:
   global:
     STACK_ROOT: "c:\\sr"
