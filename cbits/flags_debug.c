@@ -8,5 +8,6 @@
  * Portability : non-portable (GHC extensions)
  */
 
+#define ACCELERATE_DEBUG
 #include "flags.inc"
 

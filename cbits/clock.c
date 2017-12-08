@@ -15,8 +15,6 @@
  * <https://github.com/corsis/clock/tree/0.5.1>
  */
 
-#if defined(ACCELERATE_DEBUG)
-
 #if defined(__MACH__) && defined(__APPLE__)
 /*
  * macOS
@@ -121,6 +119,4 @@ __attribute__((constructor)) void initialise_program_epoch(void)
 {
     __program_epoch = clock_gettime_monotonic_seconds();
 }
-
-#endif /* ACCELERATE_DEBUG */
 
