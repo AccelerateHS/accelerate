@@ -2,6 +2,9 @@
 
 clone_folder: "c:\\accelerate"
 
+skip_commits:
+  message: /\[ci skip\]/
+
 environment:
   global:
     STACK_ROOT: "c:\\sr"
