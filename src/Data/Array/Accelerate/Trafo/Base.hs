@@ -39,10 +39,9 @@ module Data.Array.Accelerate.Trafo.Base (
   matchDelayedOpenAcc, hashDelayedOpenAcc,
 
   -- Environments
-  Gamma(..), incExp, prjExp, lookupExp,
-  Extend(..), append, bind, Sink(..), sink, sink1,
-  weakenGamma1, sinkGamma,
-
+  Gamma(..), incExp, prjExp,
+  Extend(..), append, bind,
+  Sink(..), sink, sink1,
   Supplement(..), bindExps,
 
 ) where
@@ -289,33 +288,55 @@ prettyDelayedSeq wrap (DelayedSeq aenv s)
 data Gamma acc env env' aenv where
   EmptyExp :: Gamma      acc env env'      aenv
 
-  PushExp  :: Gamma      acc env env'      aenv
+  PushExp  :: Elt t
+           => Gamma      acc env env'      aenv
            -> PreOpenExp acc env           aenv t
            -> Gamma      acc env (env', t) aenv
 
-incExp :: RebuildableAcc acc => Gamma acc env env' aenv -> Gamma acc (env, s) env' aenv
+-- XXX: The simplifier calls this function every time it moves under a let
+-- binding. This means we have a number of calls to 'weakenE' exponential in the
+-- depth of nested let bindings, which quickly causes problems.
+--
+-- <https://github.com/AccelerateHS/accelerate-llvm/issues/20>
+--
+incExp
+    :: Kit acc
+    => Gamma acc env     env' aenv
+    -> Gamma acc (env,s) env' aenv
 incExp EmptyExp        = EmptyExp
 incExp (PushExp env e) = incExp env `PushExp` weakenE SuccIdx e
 
 prjExp :: Idx env' t -> Gamma acc env env' aenv -> PreOpenExp acc env aenv t
-prjExp ZeroIdx      (PushExp _   v) = v
+prjExp ZeroIdx      (PushExp _   e) = e
 prjExp (SuccIdx ix) (PushExp env _) = prjExp ix env
 prjExp _            _               = $internalError "prjExp" "inconsistent valuation"
 
-weakenGamma1 :: Kit acc => Gamma acc env env' aenv -> Gamma acc env env' (aenv,t)
-weakenGamma1 EmptyExp        = EmptyExp
-weakenGamma1 (PushExp env e) = PushExp (weakenGamma1 env) (weaken SuccIdx e)
-
-sinkGamma :: Kit acc => Extend acc aenv aenv' -> Gamma acc env env' aenv -> Gamma acc env env' aenv'
-sinkGamma _   EmptyExp        = EmptyExp
-sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
-
-lookupExp :: Kit acc => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Maybe (Idx env' t)
+{--
+lookupExp
+    :: Kit acc
+    => Gamma      acc env env' aenv
+    -> PreOpenExp acc env      aenv t
+    -> Maybe (Idx env' t)
 lookupExp EmptyExp        _ = Nothing
 lookupExp (PushExp env e) x
   | Just Refl <- match e x  = Just ZeroIdx
   | otherwise               = SuccIdx `fmap` lookupExp env x
 
+weakenGamma1
+    :: Kit acc
+    => Gamma acc env env' aenv
+    -> Gamma acc env env' (aenv,t)
+weakenGamma1 EmptyExp        = EmptyExp
+weakenGamma1 (PushExp env e) = PushExp (weakenGamma1 env) (weaken SuccIdx e)
+
+sinkGamma
+    :: Kit acc
+    => Extend acc aenv aenv'
+    -> Gamma acc env env' aenv
+    -> Gamma acc env env' aenv'
+sinkGamma _   EmptyExp        = EmptyExp
+sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
+--}
 
 -- As part of various transformations we often need to lift out array valued
 -- inputs to be let-bound at a higher point.
@@ -339,9 +360,9 @@ append x (PushEnv as a) = x `append` as `PushEnv` a
 -- converts a term in the inner environment (aenv') into the outer (aenv).
 --
 bind :: (Kit acc, Arrays a)
-     => Extend acc aenv aenv'
-     -> PreOpenAcc acc aenv' a
-     -> PreOpenAcc acc aenv  a
+     => Extend     acc aenv aenv'
+     -> PreOpenAcc acc      aenv' a
+     -> PreOpenAcc acc aenv       a
 bind BaseEnv         = id
 bind (PushEnv env a) = bind env . Alet a . inject
 
@@ -367,18 +388,15 @@ sink1 env = weaken (k env)
     split ZeroIdx      = ZeroIdx
     split (SuccIdx ix) = SuccIdx (SuccIdx ix)
 
--- This is the same as above, however for the scalar environment.
---
--- RCE: This is much the same as `Gamma` above. The main difference being that the expressions
--- stored in a `Gamma` can not depend on each other, whereas in `Supplement` they can. We should
--- perhaps look at using `Supplement` wherever possible.
+
+-- This is the same as Extend, but for the scalar environment.
 --
 data Supplement acc env env' aenv where
   BaseSup :: Supplement acc env env aenv
 
   PushSup :: Elt e
-          => Supplement acc env env' aenv
-          -> PreOpenExp acc env' aenv e
+          => Supplement acc env env'      aenv
+          -> PreOpenExp acc     env'      aenv e
           -> Supplement acc env (env', e) aenv
 
 bindExps :: (Kit acc, Elt e)

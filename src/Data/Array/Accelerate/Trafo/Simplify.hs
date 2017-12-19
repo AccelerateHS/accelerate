@@ -45,7 +45,6 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
-import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar                ( Array, Elt(eltType), Shape, Slice, toElt, fromElt, Z(..), (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
@@ -65,6 +64,7 @@ instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
 -- Scalar optimisations
 -- ====================
 
+{--
 -- Common subexpression elimination finds computations that are performed at
 -- least twice on a given execution path and eliminates the second and later
 -- occurrences, replacing them with uses of saved values. This implements a
@@ -94,7 +94,8 @@ localCSE :: (Kit acc, Elt a)
 localCSE env bnd body
   | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline body (Var ix)
   | otherwise                    = Nothing
-
+--}
+{--
 -- Common subexpression elimination, which attempts to match the given
 -- expression against something already bound in the environment. This can occur
 -- due to simplification, in which case we replace the entire subterm with x.
@@ -108,7 +109,7 @@ globalCSE :: (Kit acc, Elt t)
 globalCSE env exp
   | Just ix <- lookupExp env exp = Stats.ruleFired "CSE" . Just $ Var ix
   | otherwise                    = Nothing
-
+--}
 
 {--
 -- Compared to regular Haskell, the scalar expression language of Accelerate is
@@ -207,12 +208,11 @@ simplifyOpenExp
 simplifyOpenExp env = first getAny . cvtE
   where
     cvtE :: Elt t => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
-    cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
-        -- Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | Just reduct <- localCSE env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | otherwise                                          -> Let <$> bnd' <*> body'
+        -- | Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        -- | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
+        | otherwise -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
           env'  = PushExp env (snd bnd')

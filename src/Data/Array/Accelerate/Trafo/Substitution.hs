@@ -154,7 +154,7 @@ class RebuildableExp f where
   {-# INLINABLE rebuildE #-}
   rebuildE :: SyntacticExp fe
            => (forall e'. Elt e' => Idx env e' -> fe (AccClo (f env)) env' aenv e')
-           -> f env aenv  e
+           -> f env  aenv e
            -> f env' aenv e
   rebuildE v = runIdentity . rebuildPartialE (Identity . v)
 
