@@ -131,8 +131,7 @@ instance Shape sh => IsProduct Elt (None sh) where
   prod _ _ = ProdRsnoc ProdRunit
 
 -- Lifting terms
--- ---------------
---
+-- -------------
 
 -- |The size parameter in the lifting transform.
 --
@@ -1771,7 +1770,7 @@ embedContext (PushAccC d)  | EmbedContext d wk <- embedContext d
 embedContext (PushLAccC d) | EmbedContext d wk <- embedContext d
                            = EmbedContext (PushLAccC d) (newTop wk)
 
--- Vector' operations.
+-- Vector' operations
 -- ------------------
 
 values :: forall sh e. (Shape sh, Elt e) => S.Acc (LiftedArray sh e) -> S.Acc (Vector e)
@@ -2170,9 +2169,9 @@ liftedIndexC
 liftedIndexC = fromHOAS liftedIndex
 
 
--- Duplicating and sinking simple scalar expressions down the AST so as to avoid unecessary
--- vectorisation.
--- ------------------------------------------------------------------------
+-- Duplicating and sinking simple scalar expressions down the AST so as to avoid
+-- unnecessary vectorisation.
+-- -----------------------------------------------------------------------------
 
 --type SinkExps acc = forall env env' aenv t. Supplement acc env env' aenv -> acc aenv t -> acc aenv
 
@@ -2373,6 +2372,12 @@ instance (Arrays a, Convertible b) => Convertible (S.Acc a -> b) where
       as (Alam f) = \a -> applyable (undefined :: b) (rebindIndex f ZeroIdx `inlineA` extract a)
       as _        = $internalError "applyable" "Inconsistent valuation"
 
+-- | Replace all occurrences of the first variable with the given array
+-- expression. The environment shrinks.
+--
+inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
+inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f
+
 rebindIndex
     :: forall acc aenv f a. (Kit acc, Arrays a)
     => PreOpenAfun acc aenv f
@@ -2391,7 +2396,7 @@ rebindIndex (Abody b) ix
       | otherwise                    = SuccIdx ix'
 
 -- Utility functions
--- ------------------
+-- -----------------
 
 fstA :: forall acc aenv a b. (Kit acc, Arrays a, Arrays b)
      => acc aenv (a,b)
@@ -2556,6 +2561,16 @@ rebuildToLift d = rebuildPartial (liftA Avar . unliftA d)
 cvtS :: S.Afunction f => f -> OpenAfun aenv (S.AfunctionR f)
 cvtS = weaken undefined . S.convertAfun True True True True
 
+-- Application via let binding.
+--
+subApply
+    :: (RebuildableAcc acc, Arrays a)
+    => PreOpenAfun acc aenv (a -> b)
+    -> acc             aenv a
+    -> PreOpenAcc  acc aenv b
+subApply (Alam (Abody f)) a = Alet a f
+subApply _                _ = error "subApply: inconsistent evaluation"
+
 subApply2
     :: (Kit acc, Arrays a)
     => PreOpenAfun acc aenv (a -> b -> c)
@@ -2614,16 +2629,9 @@ infixr 0 $^
      -> t
 ($^) f a = f $ inject a
 
--- Debugging
--- ----------
-trace :: String -> String -> a -> a
-trace header msg
-  = Debug.trace Debug.dump_vectorisation
-  $ header ++ ": " ++ msg
-
 
 -- Sequence vectorisation
--- ------------------------
+-- ----------------------
 sequenceFreeAfun :: OpenAfun aenv t -> Bool
 sequenceFreeAfun afun =
   case afun of
@@ -2939,4 +2947,12 @@ vectoriseSeqOpenAfun strength ctx afun =
   case afun of
     Abody b -> Abody (vectoriseSeqOpenAcc strength ctx b)
     Alam f  -> Alam (vectoriseSeqOpenAfun strength (PushAccC ctx) f)
+
+
+-- Debugging
+-- ---------
+trace :: String -> String -> a -> a
+trace header msg
+  = Debug.trace Debug.dump_vectorisation
+  $ header ++ ": " ++ msg
 

@@ -42,9 +42,8 @@ module Data.Array.Accelerate.Trafo.Base (
   Gamma(..), incExp, prjExp, lookupExp,
   Extend(..), append, bind, Sink(..), sink, sink1,
   weakenGamma1, sinkGamma,
-  Supplement(..), bindExps,
 
-  subApply, inlineA,
+  Supplement(..), bindExps,
 
 ) where
 
@@ -376,6 +375,7 @@ sink1 env = weaken (k env)
 --
 data Supplement acc env env' aenv where
   BaseSup :: Supplement acc env env aenv
+
   PushSup :: Elt e
           => Supplement acc env env' aenv
           -> PreOpenExp acc env' aenv e
@@ -384,22 +384,7 @@ data Supplement acc env env' aenv where
 bindExps :: (Kit acc, Elt e)
          => Supplement acc env env' aenv
          -> PreOpenExp acc env' aenv e
-         -> PreOpenExp acc env aenv e
+         -> PreOpenExp acc env  aenv e
 bindExps BaseSup       = id
 bindExps (PushSup g b) = bindExps g . Let b
-
--- Application via let binding.
---
-subApply :: (RebuildableAcc acc, Arrays a)
-         => PreOpenAfun acc aenv (a -> b)
-         -> acc             aenv a
-         -> PreOpenAcc  acc aenv b
-subApply (Alam (Abody f)) a = Alet a f
-subApply _                _ = error "subApply: inconsistent evaluation"
-
--- | Replace all occurrences of the first variable with the given array
--- expression. The environment shrinks.
---
-inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
-inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f
 
