@@ -39,7 +39,7 @@ module Data.Array.Accelerate.Trafo.Base (
   matchDelayedOpenAcc, hashDelayedOpenAcc,
 
   -- Environments
-  Gamma(..), incExp, prjExp,
+  Gamma(..), incExp, prjExp, pushExp,
   Extend(..), append, bind,
   Sink(..), sink, sink1,
   Supplement(..), bindExps,
@@ -286,16 +286,27 @@ prettyDelayedSeq wrap (DelayedSeq aenv s)
 -- index when looking up in the environment congruent expressions.
 --
 data Gamma acc env env' aenv where
-  EmptyExp :: Gamma      acc env env'      aenv
+  EmptyExp :: Gamma acc env env' aenv
 
   PushExp  :: Elt t
-           => Gamma      acc env env'      aenv
-           -> PreOpenExp acc env           aenv t
-           -> Gamma      acc env (env', t) aenv
+           => Gamma acc env env' aenv
+           -> WeakPreOpenExp acc env aenv t
+           -> Gamma acc env (env', t) aenv
+
+data WeakPreOpenExp acc env aenv t where
+  Subst    :: env :> env'
+           -> PreOpenExp     acc env  aenv t
+           -> PreOpenExp     acc env' aenv t {- LAZY -}
+           -> WeakPreOpenExp acc env' aenv t
 
 -- XXX: The simplifier calls this function every time it moves under a let
 -- binding. This means we have a number of calls to 'weakenE' exponential in the
 -- depth of nested let bindings, which quickly causes problems.
+--
+-- We can improve the situation slightly by observing that weakening by a single
+-- variable does no less work than weaking by multiple variables at once; both
+-- require a deep copy of the AST. By exploiting laziness (or, an IORef) we can
+-- queue up multiple weakenings to happen in a single step.
 --
 -- <https://github.com/AccelerateHS/accelerate-llvm/issues/20>
 --
@@ -304,12 +315,21 @@ incExp
     => Gamma acc env     env' aenv
     -> Gamma acc (env,s) env' aenv
 incExp EmptyExp        = EmptyExp
-incExp (PushExp env e) = incExp env `PushExp` weakenE SuccIdx e
+incExp (PushExp env w) = incExp env `PushExp` subs w
+  where
+    subs :: forall acc env aenv s t. Kit acc => WeakPreOpenExp acc env aenv t -> WeakPreOpenExp acc (env,s) aenv t
+    subs (Subst k (e :: PreOpenExp acc env_ aenv t) _) = Subst k' e (weakenE k' e)
+      where
+        k' :: env_ :> (env,s)
+        k' = SuccIdx . k
 
 prjExp :: Idx env' t -> Gamma acc env env' aenv -> PreOpenExp acc env aenv t
-prjExp ZeroIdx      (PushExp _   e) = e
-prjExp (SuccIdx ix) (PushExp env _) = prjExp ix env
-prjExp _            _               = $internalError "prjExp" "inconsistent valuation"
+prjExp ZeroIdx      (PushExp _   (Subst _ _ e)) = e
+prjExp (SuccIdx ix) (PushExp env _)             = prjExp ix env
+prjExp _            _                           = $internalError "prjExp" "inconsistent valuation"
+
+pushExp :: Elt t => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Gamma acc env (env',t) aenv
+pushExp env e = env `PushExp` Subst id e e
 
 {--
 lookupExp

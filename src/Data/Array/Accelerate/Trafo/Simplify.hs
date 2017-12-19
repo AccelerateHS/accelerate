@@ -215,7 +215,7 @@ simplifyOpenExp env = first getAny . cvtE
         | otherwise -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
-          env'  = PushExp env (snd bnd')
+          env'  = env `pushExp` snd bnd'
           body' = cvtE' (incExp env') body
 
       Var ix                    -> pure $ Var ix
@@ -358,7 +358,7 @@ simplifyOpenExp env = first getAny . cvtE
              -> PreOpenExp acc (env',a) aenv t
              -> Maybe (PreOpenExp acc env' aenv s)
         prjL a b
-          | (Any True, c) <- prj (incExp $ PushExp env' a) ix (pure b) = Just (Let a c)
+          | (Any True, c) <- prj (incExp $ pushExp env' a) ix (pure b) = Just (Let a c)
         prjL _ _                                                       = Nothing
 
 
@@ -431,7 +431,7 @@ simplifyOpenFun
 simplifyOpenFun env (Body e) = Body <$> simplifyOpenExp env  e
 simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
   where
-    env' = incExp env `PushExp` Var ZeroIdx
+    env' = incExp env `pushExp` Var ZeroIdx
 
 
 -- Simplify closed expressions and functions. The process is applied
