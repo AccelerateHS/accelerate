@@ -26,7 +26,7 @@ before_build:
   - ln -s stack-%GHC%.yaml stack.yaml
   - stack setup --no-terminal > NUL
   - stack build --no-terminal --copy-bins --fast happy
-  - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test
+  - stack build --no-terminal --no-copy-bins --fast --jobs=1 --only-dependencies --test
 
 build_script:
   - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test --no-run-tests
