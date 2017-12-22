@@ -118,9 +118,12 @@ subAtop _ (SuccIdx idx) = Avar idx
 data Identity a = Identity { runIdentity :: a }
 
 instance Functor Identity where
+  {-# INLINE fmap #-}
   fmap f (Identity a) = Identity (f a)
 
 instance Applicative Identity where
+  {-# INLINE (<*>) #-}
+  {-# INLINE pure  #-}
   Identity f <*> Identity a = Identity (f a)
   pure a                    = Identity a
 
