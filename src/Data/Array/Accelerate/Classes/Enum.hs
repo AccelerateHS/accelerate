@@ -40,7 +40,7 @@ instance P.Enum (Exp a) where
   fromEnum = preludeError "fromEnum"
 
 preludeError :: String -> a
-preludeError x = error (printf "Prelude.%s not supported Accelerate types" x)
+preludeError x = error (printf "Prelude.%s not supported for Accelerate types" x)
 
 -- instance Enum (Exp Int8)
 -- instance Enum (Exp Int16)
