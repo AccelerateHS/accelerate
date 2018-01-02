@@ -31,6 +31,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues (
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue288,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue362,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue407,
+  module Data.Array.Accelerate.Test.NoFib.Issues.Issue409,
 
 ) where
 
@@ -55,6 +56,7 @@ import Data.Array.Accelerate.Test.NoFib.Issues.Issue287
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue288
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue362
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue407
+import Data.Array.Accelerate.Test.NoFib.Issues.Issue409
 
 
 test_issues :: RunN -> TestTree
@@ -78,5 +80,6 @@ test_issues runN =
     , test_issue288 runN
     , test_issue362 runN
     , test_issue407 runN
+    , test_issue409 runN
     ]
 
