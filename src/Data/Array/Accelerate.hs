@@ -57,6 +57,9 @@
 --
 -- [/Examples:/]
 --
+-- * A short tutorial-style example for generating a <https://en.wikipedia.org/wiki/Mandelbrot_set Mandelbrot set>:
+--   http://www.acceleratehs.org/examples/mandelbrot.html
+--
 -- * The <http://hackage.haskell.org/package/accelerate-examples accelerate-examples>
 --   package demonstrates a range of computational kernels and several complete
 --   applications:
@@ -82,6 +85,15 @@
 --      - For more information on LULESH: <https://codesign.llnl.gov/lulesh.php>.
 --
 --      <<https://codesign.llnl.gov/images/sedov-3d-LLNL.png>>
+--
+-- [/Starting a new project:/]
+--
+-- Accelerate and its associated packages are available on both Hackage and
+-- Stackage. A project template is available to help create a new projects using
+-- the <https://docs.haskellstack.org/en/stable/README/ stack> build tool. To
+-- create a new project using the template:
+--
+-- > stack new PROJECT_NAME https://github.com/AccelerateHS/accelerate/raw/stable/accelerate.hsfiles
 --
 -- [/Additional components:/]
 --

@@ -26,6 +26,8 @@ Description:
   online-compiled for performance - for example, using
   @Data.Array.Accelerate.LLVM.PTX@ it may be on-the-fly off-loaded to the GPU.
   .
+  See the "Data.Array.Accelerate" module for further information.
+  .
   [/Additional components/]
   .
   The following supported add-ons are available as separate packages. Install
@@ -128,6 +130,9 @@ Extra-source-files:
     CHANGELOG.md
     cbits/flags.inc
     cbits/monitoring.inc
+
+Extra-doc-files:
+    images/*.png
 
 custom-setup
   setup-depends:

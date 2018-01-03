@@ -444,7 +444,7 @@ zipWith = Acc $$$ ZipWith
 -- Reductions
 -- ----------
 
--- | Reduction of the innermost dimension of an array of arbitrary rank.  The
+-- | Reduction of the innermost dimension of an array of arbitrary rank. The
 -- first argument needs to be an /associative/ function to enable an efficient
 -- parallel implementation. The initial element does not need to be an identity
 -- element of the combination function.

@@ -105,7 +105,9 @@ import qualified Data.Array.Accelerate.AST      as AST
 -- 'Acc' helps statically exclude /nested data parallelism/, which is difficult
 -- to execute efficiently on constrained hardware such as GPUs.
 --
--- For example, to compute a vector dot product we could write:
+-- [/A simple example/]
+--
+-- As a simple example, to compute a vector dot product we can write:
 --
 -- > dotp :: Num a => Vector a -> Vector a -> Acc (Scalar a)
 -- > dotp xs ys =
@@ -135,7 +137,64 @@ import qualified Data.Array.Accelerate.AST      as AST
 --
 -- See also 'Exp', which encapsulates embedded /scalar/ computations.
 --
--- [/Fusion:/]
+-- [/Avoiding nested parallelism/]
+--
+-- As mentioned above, embedded scalar computations of type 'Exp' can not
+-- initiate further collective operations.
+--
+-- Suppose we wanted to extend our above @dotp@ function to matrix-vector
+-- multiplication. First, let's rewrite our @dotp@ function to take 'Acc' arrays
+-- as input (which is typically what we want):
+--
+-- > dotp :: Num a => Acc (Vector a) -> Acc (Vector a) -> Acc (Scalar a)
+-- > dotp xs ys = fold (+) 0 ( zipWith (*) xs ys )
+--
+-- We might then be inclined to lift our dot-product program to the following
+-- (incorrect) matrix-vector product, by applying @dotp@ to each row of the
+-- input matrix:
+--
+-- > mvm_ndp :: Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
+-- > mvm_ndp mat vec =
+-- >   let Z :. rows :. cols  = unlift (shape mat)  :: Z :. Exp Int :. Exp Int
+-- >   in  generate (index1 rows)
+-- >                (\row -> the $ dotp vec (slice mat (lift (row :. All))))
+--
+-- Here, we use 'Data.Array.Accelerate.generate' to create a one-dimensional
+-- vector by applying at each index a function to 'Data.Array.Accelerate.slice'
+-- out the corresponding @row@ of the matrix to pass to the @dotp@ function.
+-- However, since both 'Data.Array.Accelerate.generate' and
+-- 'Data.Array.Accelerate.slice' are data-parallel operations, and moreover that
+-- 'Data.Array.Accelerate.slice' /depends on/ the argument @row@ given to it by
+-- the 'Data.Array.Accelerate.generate' function, this definition requires
+-- nested data-parallelism, and is thus not permitted. The clue that this
+-- definition is invalid is that in order to create a program which will be
+-- accepted by the type checker, we must use the function
+-- 'Data.Array.Accelerate.the' to retrieve the result of the @dotp@ operation,
+-- effectively concealing that @dotp@ is a collective array computation in order
+-- to match the type expected by 'Data.Array.Accelerate.generate', which is that
+-- of scalar expressions. Additionally, since we have fooled the type-checker,
+-- this problem will only be discovered at program runtime.
+--
+-- In order to avoid this problem, we can make use of the fact that operations
+-- in Accelerate are /rank polymorphic/. The 'Data.Array.Accelerate.fold'
+-- operation reduces along the innermost dimension of an array of arbitrary
+-- rank, reducing the rank (dimensionality) of the array by one. Thus, we can
+-- 'Data.Array.Accelerate.replicate' the input vector to as many @rows@ there
+-- are in the input matrix, and perform the dot-product of the vector with every
+-- row simultaneously:
+--
+-- > mvm :: A.Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
+-- > mvm mat vec =
+-- >   let Z :. rows :. cols = unlift (shape mat) :: Z :. Exp Int :. Exp Int
+-- >       vec'              = A.replicate (lift (Z :. rows :. All)) vec
+-- >   in
+-- >   A.fold (+) 0 ( A.zipWith (*) mat vec' )
+--
+-- Note that the intermediate, replicated array @vec'@ is never actually created
+-- in memory; it will be fused directly into the operation which consumes it. We
+-- discuss fusion next.
+--
+-- [/Fusion/]
 --
 -- Array computations of type 'Acc' will be subject to /array fusion/;
 -- Accelerate will combine individual 'Acc' computations into a single
@@ -160,11 +219,9 @@ import qualified Data.Array.Accelerate.AST      as AST
 -- their inputs into themselves, as well be fused into later operations. Both
 -- these examples should fuse into a single loop:
 --
--- > map -> reverse -> reshape -> map -> map
+-- <<images/fusion_example_1.png>>
 --
--- > map -> backpermute ->
--- >                       zipWith -> map
--- >           generate ->
+-- <<images/fusion_example_2.png>>
 --
 -- If the consumer operation uses more than one element of the input array
 -- (typically, via 'Data.Array.Accelerate.generate' indexing an array multiple
@@ -176,9 +233,7 @@ import qualified Data.Array.Accelerate.AST      as AST
 -- themselves, but on output always evaluate to an array; collective operations
 -- will not be fused into a later step. For example:
 --
--- >      use ->
--- >             zipWith -> fold |-> map
--- > generate ->
+-- <<images/fusion_example_3.png>>
 --
 -- Here the element-wise sequence ('Data.Array.Accelerate.use'
 -- + 'Data.Array.Accelerate.generate' + 'Data.Array.Accelerate.zipWith') will
@@ -201,7 +256,7 @@ import qualified Data.Array.Accelerate.AST      as AST
 -- 'Data.Array.Accelerate.reshape', when applied to a real array, are executed
 -- in constant time, so in this situation these operations will not be fused.
 --
--- [/Tips:/]
+-- [/Tips/]
 --
 --  * Since 'Acc' represents embedded computations that will only be executed
 --    when evaluated by a backend, we can programatically generate these
@@ -211,7 +266,7 @@ import qualified Data.Array.Accelerate.AST      as AST
 --  * It is usually best to keep all intermediate computations in 'Acc', and
 --    only 'run' the computation at the very end to produce the final result.
 --    This enables optimisations between intermediate results (e.g. array
---    fusion) and, if the target architecture has a separate memory space as is
+--    fusion) and, if the target architecture has a separate memory space, as is
 --    the case of GPUs, to prevent excessive data transfers.
 --
 newtype Acc a = Acc (PreAcc Acc Exp a)
