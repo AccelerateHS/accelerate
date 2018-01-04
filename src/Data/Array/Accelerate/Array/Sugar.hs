@@ -1198,13 +1198,13 @@ infixl 9 !!
 -- | Create an array from its representation function, applied at each index of
 -- the array.
 --
--- {-# INLINE fromFunction #-}
+{-# INLINEABLE fromFunction #-}
 fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
 fromFunction sh f = unsafePerformIO $! fromFunctionM sh (return . f)
 
 -- | Create an array using a monadic function applied at each index.
 --
--- {-# INLINE fromFunctionM #-}
+{-# INLINEABLE fromFunctionM #-}
 fromFunctionM :: (Shape sh, Elt e) => sh -> (sh -> IO e) -> IO (Array sh e)
 fromFunctionM sh f = do
   let !n = size sh
@@ -1223,7 +1223,7 @@ fromFunctionM sh f = do
 
 -- | Create a vector from the concatenation of the given list of vectors.
 --
--- {-# INLINE concatVectors #-}
+{-# INLINEABLE concatVectors #-}
 concatVectors :: Elt e => [Vector e] -> Vector e
 concatVectors vs = adata `seq` Array ((), len) adata
   where
@@ -1238,7 +1238,7 @@ concatVectors vs = adata `seq` Array ((), len) adata
 
 -- | Creates a new, uninitialized Accelerate array.
 --
--- {-# INLINE allocateArray #-}
+{-# INLINEABLE allocateArray #-}
 allocateArray :: (Shape sh, Elt e) => sh -> IO (Array sh e)
 allocateArray sh = do
   adata  <- newArrayData (size sh)
@@ -1275,7 +1275,7 @@ allocateArray sh = do
 -- and then traversing it a second time to collect the elements into the array,
 -- thus forcing the spine of the list to be manifest on the heap.
 --
--- {-# INLINE fromList #-}
+{-# INLINEABLE fromList #-}
 fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 fromList sh xs = adata `seq` Array (fromElt sh) adata
   where
@@ -1294,7 +1294,7 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
 
 -- | Convert an accelerated 'Array' to a list in row-major order.
 --
-{-# INLINE toList #-}
+{-# INLINEABLE toList #-}
 toList :: forall sh e. Array sh e -> [e]
 toList (Array sh adata) = go 0
   where

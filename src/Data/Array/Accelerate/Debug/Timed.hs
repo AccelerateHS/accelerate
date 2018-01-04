@@ -56,6 +56,7 @@ timed _ _ action = action
 #endif
 
 #ifdef ACCELERATE_DEBUG
+{-# INLINEABLE timed_simpl #-}
 timed_simpl :: MonadIO m => (Double -> Double -> String) -> m a -> m a
 timed_simpl fmt action = do
   wall0 <- liftIO getMonotonicTime
@@ -72,6 +73,8 @@ timed_simpl fmt action = do
 
 foreign import ccall unsafe "clock_gettime_monotonic_seconds" getMonotonicTime :: IO Double
 
+
+{-# INLINEABLE timed_gc #-}
 timed_gc :: MonadIO m => (Double -> Double -> String) -> m a -> m a
 timed_gc fmt action = do
 #if __GLASGOW_HASKELL__ < 802
