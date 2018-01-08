@@ -53,15 +53,12 @@ import Prelude                                                      hiding ( exp
 
 type Hash = Digest SHA3_256
 
-{-# INLINE hashPreOpenAcc #-}
 hashPreOpenAcc :: EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
 hashPreOpenAcc encodeAcc = hashlazy . toLazyByteString . encodePreOpenAcc encodeAcc
 
-{-# INLINE hashPreOpenFun #-}
 hashPreOpenFun :: EncodeAcc acc -> PreOpenFun acc env aenv f -> Hash
 hashPreOpenFun encodeAcc = hashlazy . toLazyByteString . encodePreOpenFun encodeAcc
 
-{-# INLINE hashPreOpenExp #-}
 hashPreOpenExp :: EncodeAcc acc -> PreOpenExp acc env aenv t -> Hash
 hashPreOpenExp encodeAcc = hashlazy . toLazyByteString . encodePreOpenExp encodeAcc
 

@@ -200,7 +200,6 @@ instance NFData (DelayedOpenAcc aenv t) where
 --   rnf = rnfDelayedSeq
 
 
-{-# INLINE hashDelayedOpenAcc #-}
 hashDelayedOpenAcc :: DelayedOpenAcc aenv a -> Hash
 hashDelayedOpenAcc = hashlazy . toLazyByteString . encodeDelayedOpenAcc
 
