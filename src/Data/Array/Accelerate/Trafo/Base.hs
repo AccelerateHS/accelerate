@@ -52,8 +52,9 @@ import Control.DeepSeq
 import Crypto.Hash
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
+import Data.Monoid
 import Data.Type.Equality
-import Text.PrettyPrint.ANSI.Leijen                     hiding ( (<$>) )
+import Text.PrettyPrint.ANSI.Leijen                     hiding ( (<$>), (<>) )
 import Prelude                                          hiding ( until )
 
 -- friends
