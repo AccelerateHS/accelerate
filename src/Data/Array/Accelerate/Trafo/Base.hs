@@ -206,12 +206,15 @@ hashDelayedOpenAcc = hashlazy . toLazyByteString . encodeDelayedOpenAcc
 
 {-# INLINEABLE encodeDelayedOpenAcc #-}
 encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
-encodeDelayedOpenAcc (Manifest pacc)     = intHost $(hashQ "Manifest") <> encodePreOpenAcc encodeDelayedOpenAcc pacc
-encodeDelayedOpenAcc Delayed{..}         = intHost $(hashQ "Delayed")  <> travE extentD <> travF indexD <> travF linearIndexD
+encodeDelayedOpenAcc (Manifest pacc) = intHost $(hashQ "Manifest") <> encodePreOpenAcc encodeDelayedOpenAcc pacc
+encodeDelayedOpenAcc Delayed{..}     = intHost $(hashQ "Delayed")  <> travE extentD <> travF indexD <> travF linearIndexD
   where
     {-# INLINE travE #-}
-    {-# INLINE travF #-}
+    travE :: DelayedExp aenv sh -> Builder
     travE = encodePreOpenExp encodeDelayedOpenAcc
+
+    {-# INLINE travF #-}
+    travF :: DelayedFun aenv f -> Builder
     travF = encodePreOpenFun encodeDelayedOpenAcc
 
 {-# INLINEABLE matchDelayedOpenAcc #-}
