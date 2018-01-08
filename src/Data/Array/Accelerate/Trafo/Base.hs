@@ -34,9 +34,9 @@ module Data.Array.Accelerate.Trafo.Base (
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
-  DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
-  -- DelayedSeq(..), DelayedOpenSeq,
-  matchDelayedOpenAcc, hashDelayedOpenAcc,
+  DelayedExp,  DelayedOpenExp,
+  DelayedFun,  DelayedOpenFun,
+  matchDelayedOpenAcc, encodeDelayedOpenAcc, hashDelayedOpenAcc,
 
   -- Environments
   Gamma(..), incExp, prjExp, pushExp,
@@ -49,7 +49,9 @@ module Data.Array.Accelerate.Trafo.Base (
 -- standard library
 import Control.Applicative
 import Control.DeepSeq
-import Data.Hashable
+import Crypto.Hash
+import Data.ByteString.Builder
+import Data.ByteString.Builder.Extra
 import Data.Type.Equality
 import Text.PrettyPrint.ANSI.Leijen                     hiding ( (<$>) )
 import Prelude                                          hiding ( until )
@@ -78,7 +80,7 @@ class (RebuildableAcc acc, Sink acc) => Kit acc where
   fromOpenAcc   :: OpenAcc aenv a -> acc aenv a
   --
   matchAcc      :: MatchAcc acc
-  hashAcc       :: HashAcc acc
+  encodeAcc     :: EncodeAcc acc
   prettyAcc     :: PrettyAcc acc
 
 instance Kit OpenAcc where
@@ -86,12 +88,12 @@ instance Kit OpenAcc where
   extract (OpenAcc pacc) = pacc
   fromOpenAcc            = id
   --
-  {-# INLINEABLE hashAcc   #-}
+  {-# INLINEABLE encodeAcc #-}
   {-# INLINEABLE matchAcc  #-}
   {-# INLINEABLE prettyAcc #-}
-  hashAcc                = hashOpenAcc
-  matchAcc               = matchOpenAcc
-  prettyAcc              = prettyOpenAcc
+  encodeAcc (OpenAcc pacc)                  = encodePreOpenAcc encodeAcc pacc
+  matchAcc  (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
+  prettyAcc                                 = prettyOpenAcc
 
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
 avarIn = inject  . Avar
@@ -115,15 +117,15 @@ instance Match (Idx env) where
 
 instance Kit acc => Match (PreOpenExp acc env aenv) where
   {-# INLINEABLE match #-}
-  match = matchPreOpenExp matchAcc hashAcc
+  match = matchPreOpenExp matchAcc encodeAcc
 
 instance Kit acc => Match (PreOpenFun acc env aenv) where
   {-# INLINEABLE match #-}
-  match = matchPreOpenFun matchAcc hashAcc
+  match = matchPreOpenFun matchAcc encodeAcc
 
 instance Kit acc => Match (PreOpenAcc acc aenv) where
   {-# INLINEABLE match #-}
-  match = matchPreOpenAcc matchAcc hashAcc
+  match = matchPreOpenAcc matchAcc encodeAcc
 
 instance {-# INCOHERENT #-} Kit acc => Match (acc aenv) where
   {-# INLINEABLE match #-}
@@ -180,10 +182,10 @@ instance Kit DelayedOpenAcc where
   extract Delayed{}       = error "DelayedAcc.extract"
   fromOpenAcc             = error "DelayedAcc.fromOpenAcc"
   --
-  {-# INLINEABLE hashAcc   #-}
+  {-# INLINEABLE encodeAcc #-}
   {-# INLINEABLE matchAcc  #-}
   {-# INLINEABLE prettyAcc #-}
-  hashAcc                 = hashDelayedOpenAcc
+  encodeAcc               = encodeDelayedOpenAcc
   matchAcc                = matchDelayedOpenAcc
   prettyAcc               = prettyDelayedOpenAcc
 
@@ -196,21 +198,30 @@ instance NFData (DelayedOpenAcc aenv t) where
 -- instance NFData (DelayedSeq t) where
 --   rnf = rnfDelayedSeq
 
-hashDelayedOpenAcc :: HashAcc DelayedOpenAcc
-hashDelayedOpenAcc (Manifest pacc)     = $(hashQ "Manifest") `hashWithSalt` hashPreOpenAcc hashAcc pacc
-hashDelayedOpenAcc Delayed{..}         = $(hashQ "Delayed")  `hashE` extentD `hashF` indexD `hashF` linearIndexD
-  where
-    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
-    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
+{-# INLINE hashDelayedOpenAcc #-}
+hashDelayedOpenAcc :: DelayedOpenAcc aenv a -> Hash
+hashDelayedOpenAcc = hashlazy . toLazyByteString . encodeDelayedOpenAcc
+
+{-# INLINEABLE encodeDelayedOpenAcc #-}
+encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
+encodeDelayedOpenAcc (Manifest pacc)     = intHost $(hashQ "Manifest") <> encodePreOpenAcc encodeDelayedOpenAcc pacc
+encodeDelayedOpenAcc Delayed{..}         = intHost $(hashQ "Delayed")  <> travE extentD <> travF indexD <> travF linearIndexD
+  where
+    {-# INLINE travE #-}
+    {-# INLINE travF #-}
+    travE = encodePreOpenExp encodeDelayedOpenAcc
+    travF = encodePreOpenFun encodeDelayedOpenAcc
+
+{-# INLINEABLE matchDelayedOpenAcc #-}
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
 matchDelayedOpenAcc (Manifest pacc1) (Manifest pacc2)
-  = matchPreOpenAcc matchAcc hashAcc pacc1 pacc2
+  = matchPreOpenAcc matchDelayedOpenAcc encodeDelayedOpenAcc pacc1 pacc2
 
 matchDelayedOpenAcc (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
-  | Just Refl <- matchPreOpenExp matchAcc hashAcc sh1 sh2
-  , Just Refl <- matchPreOpenFun matchAcc hashAcc ix1 ix2
-  , Just Refl <- matchPreOpenFun matchAcc hashAcc lx1 lx2
+  | Just Refl <- matchPreOpenExp matchDelayedOpenAcc encodeDelayedOpenAcc sh1 sh2
+  , Just Refl <- matchPreOpenFun matchDelayedOpenAcc encodeDelayedOpenAcc ix1 ix2
+  , Just Refl <- matchPreOpenFun matchDelayedOpenAcc encodeDelayedOpenAcc lx1 lx2
   = Just Refl
 
 matchDelayedOpenAcc _ _

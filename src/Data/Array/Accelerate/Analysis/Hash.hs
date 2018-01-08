@@ -17,14 +17,17 @@
 module Data.Array.Accelerate.Analysis.Hash (
 
   -- hashing expressions
-  HashAcc,
-  hashPreOpenAcc, hashOpenAcc,
-  hashPreOpenExp, hashOpenExp,
+  Hash,
+  hashPreOpenAcc,
   hashPreOpenFun,
+  hashPreOpenExp,
 
   -- auxiliary
+  EncodeAcc,
+  encodePreOpenAcc, encodeOpenAcc,
+  encodePreOpenExp, encodeOpenExp,
+  encodePreOpenFun,
   hashQ,
-  commutes,
 
 ) where
 
@@ -35,473 +38,475 @@ import Data.Array.Accelerate.Array.Representation                   ( SliceIndex
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
-import Data.Hashable
+import Crypto.Hash
+import Data.ByteString.Builder
+import Data.ByteString.Builder.Extra
+import Data.Monoid
 import Foreign.C.Types
-import Data.Maybe                                                   ( fromMaybe )
-import System.Mem.StableName                                        ( hashStableName, makeStableName )
 import System.IO.Unsafe                                             ( unsafePerformIO )
+import System.Mem.StableName                                        ( hashStableName, makeStableName )
 import Prelude                                                      hiding ( exp )
+
+
+-- Hashing
+-- -------
+
+type Hash = Digest SHA3_256
+
+{-# INLINE hashPreOpenAcc #-}
+hashPreOpenAcc :: EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
+hashPreOpenAcc encodeAcc = hashlazy . toLazyByteString . encodePreOpenAcc encodeAcc
+
+{-# INLINE hashPreOpenFun #-}
+hashPreOpenFun :: EncodeAcc acc -> PreOpenFun acc env aenv f -> Hash
+hashPreOpenFun encodeAcc = hashlazy . toLazyByteString . encodePreOpenFun encodeAcc
+
+{-# INLINE hashPreOpenExp #-}
+hashPreOpenExp :: EncodeAcc acc -> PreOpenExp acc env aenv t -> Hash
+hashPreOpenExp encodeAcc = hashlazy . toLazyByteString . encodePreOpenExp encodeAcc
 
 
 -- Array computations
 -- ------------------
 
-type HashAcc acc = forall aenv a. acc aenv a -> Int
+type EncodeAcc acc = forall aenv a. acc aenv a -> Builder
 
+{-# INLINE encodeOpenAcc #-}
+encodeOpenAcc :: OpenAcc aenv arrs -> Builder
+encodeOpenAcc (OpenAcc pacc) = encodePreOpenAcc encodeOpenAcc pacc
 
-hashOpenAcc :: OpenAcc aenv arrs -> Int
-hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
-
-hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
-hashPreOpenAcc hashAcc pacc =
+{-# INLINE encodePreOpenAcc #-}
+encodePreOpenAcc
+    :: forall acc aenv arrs.
+       EncodeAcc acc
+    -> PreOpenAcc acc aenv arrs
+    -> Builder
+encodePreOpenAcc encodeAcc pacc =
   let
-    hashA :: forall aenv' a. Arrays a => Int -> acc aenv' a -> Int
-    hashA salt
-      = hashWithSalt salt
-      . hashWithSalt (hashArraysType (arrays (undefined::a)))
-      . hashAcc
+      {-# INLINE travA #-}
+      travA :: forall aenv' a. Arrays a => acc aenv' a -> Builder
+      travA a = encodeArraysType (arrays (undefined::a)) <> encodeAcc a
 
-    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
+      {-# INLINE travE #-}
+      travE :: PreOpenExp acc env' aenv' e -> Builder
+      travE = encodePreOpenExp encodeAcc
 
-    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
-    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
+      {-# INLINE travF #-}
+      travF :: PreOpenFun acc env' aenv' f -> Builder
+      travF = encodePreOpenFun encodeAcc
 
-    hashB :: Int -> PreBoundary acc aenv' (Array sh e) -> Int
-    hashB salt = hashWithSalt salt . hashPreBoundary hashAcc
+      {-# INLINE travB #-}
+      travB :: PreBoundary acc aenv' (Array sh e) -> Builder
+      travB = encodePreBoundary encodeAcc
 
-    -- hashS :: Int -> PreOpenSeq acc aenv senv arrs -> Int
-    -- hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
-
-    nacl :: Arrays arrs => Int
-    nacl = hashArraysType (arrays (undefined::arrs))
-
-  in case pacc of
-    Alet bnd body               -> $(hashQ "Alet")        `hashA` bnd `hashA` body
-    Avar v                      -> $(hashQ "Avar")        `hashWithSalt` nacl `hashWithSalt` hashIdx v
-    Atuple t                    -> $(hashQ "Atuple")      `hashWithSalt` nacl `hashWithSalt` hashAtuple hashAcc t
-    Aprj ix a                   -> $(hashQ "Aprj")        `hashWithSalt` nacl * hashTupleIdx ix `hashA` a
-    Apply f a                   -> $(hashQ "Apply")       `hashWithSalt` nacl `hashWithSalt` hashAfun hashAcc f `hashA` a
-    Aforeign _ f a              -> $(hashQ "Aforeign")    `hashWithSalt` nacl `hashWithSalt` hashAfun hashAcc f `hashA` a
-    Use a                       -> $(hashQ "Use")         `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
-    Awhile p f a                -> $(hashQ "Awhile")      `hashWithSalt` hashAfun hashAcc f `hashWithSalt` hashAfun hashAcc p `hashA` a
-    Unit e                      -> $(hashQ "Unit")        `hashE` e
-    Generate e f                -> $(hashQ "Generate")    `hashE` e  `hashF` f
-    Acond e a1 a2               -> $(hashQ "Acond")       `hashE` e  `hashA` a1 `hashA` a2
-    Reshape sh a                -> $(hashQ "Reshape")     `hashE` sh `hashA` a
-    Transform sh f1 f2 a        -> $(hashQ "Transform")   `hashE` sh `hashF` f1 `hashF` f2 `hashA` a
-    Replicate spec ix a         -> $(hashQ "Replicate")   `hashE` ix `hashA` a  `hashWithSalt` hashSliceIndex spec
-    Slice spec a ix             -> $(hashQ "Slice")       `hashE` ix `hashA` a  `hashWithSalt` hashSliceIndex spec
-    Map f a                     -> $(hashQ "Map")         `hashF` f  `hashA` a
-    ZipWith f a1 a2             -> $(hashQ "ZipWith")     `hashF` f  `hashA` a1 `hashA` a2
-    Fold f e a                  -> $(hashQ "Fold")        `hashF` f  `hashE` e  `hashA` a
-    Fold1 f a                   -> $(hashQ "Fold1")       `hashF` f  `hashA` a
-    FoldSeg f e a s             -> $(hashQ "FoldSeg")     `hashF` f  `hashE` e  `hashA` a  `hashA` s
-    Fold1Seg f a s              -> $(hashQ "Fold1Seg")    `hashF` f  `hashA` a  `hashA` s
-    Scanl f e a                 -> $(hashQ "Scanl")       `hashF` f  `hashE` e  `hashA` a
-    Scanl' f e a                -> $(hashQ "Scanl'")      `hashF` f  `hashE` e  `hashA` a
-    Scanl1 f a                  -> $(hashQ "Scanl1")      `hashF` f  `hashA` a
-    Scanr f e a                 -> $(hashQ "Scanr")       `hashF` f  `hashE` e  `hashA` a
-    Scanr' f e a                -> $(hashQ "Scanr'")      `hashF` f  `hashE` e  `hashA` a
-    Scanr1 f a                  -> $(hashQ "Scanr1")      `hashF` f  `hashA` a
-    Backpermute sh f a          -> $(hashQ "Backpermute") `hashF` f  `hashE` sh `hashA` a
-    Permute f1 a1 f2 a2         -> $(hashQ "Permute")     `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
-    Stencil f b a               -> $(hashQ "Stencil")     `hashF` f  `hashB` b  `hashA` a
-    Stencil2 f b1 a1 b2 a2      -> $(hashQ "Stencil2")    `hashF` f  `hashB` b1 `hashA` a1 `hashB` b2 `hashA` a2
+      {-# INLINE nacl #-}
+      nacl :: Arrays arrs => Builder
+      nacl = encodeArraysType (arrays (undefined::arrs))
+  in
+  case pacc of
+    Alet bnd body               -> intHost $(hashQ "Alet")        <> travA bnd <> travA body
+    Avar v                      -> intHost $(hashQ "Avar")        <> nacl <> encodeIdx v
+    Atuple t                    -> intHost $(hashQ "Atuple")      <> nacl <> encodeAtuple encodeAcc t
+    Aprj ix a                   -> intHost $(hashQ "Aprj")        <> nacl <> encodeTupleIdx ix <> travA a
+    Apply f a                   -> intHost $(hashQ "Apply")       <> nacl <> encodePreOpenAfun encodeAcc f <> travA a
+    Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> nacl <> encodePreOpenAfun encodeAcc f <> travA a
+    Use a                       -> intHost $(hashQ "Use")         <> encodeArrays (arrays (undefined::arrs)) a
+    Awhile p f a                -> intHost $(hashQ "Awhile")      <> encodePreOpenAfun encodeAcc f <> encodePreOpenAfun encodeAcc p <> travA a
+    Unit e                      -> intHost $(hashQ "Unit")        <> travE e
+    Generate e f                -> intHost $(hashQ "Generate")    <> travE e  <> travF f
+    Acond e a1 a2               -> intHost $(hashQ "Acond")       <> travE e  <> travA a1 <> travA a2
+    Reshape sh a                -> intHost $(hashQ "Reshape")     <> travE sh <> travA a
+    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> travE sh <> travF f1 <> travF f2 <> travA a
+    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> travE ix <> travA a  <> encodeSliceIndex spec
+    Slice spec a ix             -> intHost $(hashQ "Slice")       <> travE ix <> travA a  <> encodeSliceIndex spec
+    Map f a                     -> intHost $(hashQ "Map")         <> travF f  <> travA a
+    ZipWith f a1 a2             -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
+    Fold f e a                  -> intHost $(hashQ "Fold")        <> travF f  <> travE e  <> travA a
+    Fold1 f a                   -> intHost $(hashQ "Fold1")       <> travF f  <> travA a
+    FoldSeg f e a s             -> intHost $(hashQ "FoldSeg")     <> travF f  <> travE e  <> travA a  <> travA s
+    Fold1Seg f a s              -> intHost $(hashQ "Fold1Seg")    <> travF f  <> travA a  <> travA s
+    Scanl f e a                 -> intHost $(hashQ "Scanl")       <> travF f  <> travE e  <> travA a
+    Scanl' f e a                -> intHost $(hashQ "Scanl'")      <> travF f  <> travE e  <> travA a
+    Scanl1 f a                  -> intHost $(hashQ "Scanl1")      <> travF f  <> travA a
+    Scanr f e a                 -> intHost $(hashQ "Scanr")       <> travF f  <> travE e  <> travA a
+    Scanr' f e a                -> intHost $(hashQ "Scanr'")      <> travF f  <> travE e  <> travA a
+    Scanr1 f a                  -> intHost $(hashQ "Scanr1")      <> travF f  <> travA a
+    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> travF f  <> travE sh <> travA a
+    Permute f1 a1 f2 a2         -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
+    Stencil f b a               -> intHost $(hashQ "Stencil")     <> travF f  <> travB b  <> travA a
+    Stencil2 f b1 a1 b2 a2      -> intHost $(hashQ "Stencil2")    <> travF f  <> travB b1 <> travA a1 <> travB b2 <> travA a2
 
 {--
-hashPreOpenSeq :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSeq acc aenv senv arrs -> Int
-hashPreOpenSeq hashAcc s =
+encodePreOpenSeq :: forall acc aenv senv arrs. EncodeAcc acc -> PreOpenSeq acc aenv senv arrs -> Int
+encodePreOpenSeq encodeAcc s =
   let
-    hashA :: Int -> acc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashAcc
+      travA :: acc aenv' a -> Builder
+      travA = encodeAcc -- XXX: plus type information?
 
-    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
+      travE :: PreOpenExp acc env' aenv' e -> Builder
+      travE = encodePreOpenExp encodeAcc
 
-    hashAF :: Int -> PreOpenAfun acc aenv' f -> Int
-    hashAF salt = hashWithSalt salt . hashAfun hashAcc
+      travAF :: PreOpenAfun acc aenv' f -> Builder
+      travAF = encodePreOpenAfun encodeAcc
 
-    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
-    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
+      travF :: PreOpenFun acc env' aenv' f -> Builder
+      travF = encodePreOpenFun encodeAcc
 
-    hashS :: Int -> PreOpenSeq acc aenv senv' arrs' -> Int
-    hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
+      travS :: PreOpenSeq acc aenv senv' arrs' -> Builder
+      travS = encodePreOpenSeq encodeAcc
 
-    hashVar :: Int -> Idx senv' a -> Int
-    hashVar salt = hashWithSalt salt . idxToInt
+      travV :: forall a. Arrays a => Idx senv' a -> Builder
+      travV v = encodeArraysType (arrays (undefined::a)) <> encodeIdx v
 
-    hashP :: Int -> Producer acc aenv senv a -> Int
-    hashP salt p =
-      case p of
-        StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
-        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq"         `hashA`  acc `hashWithSalt` show spec
-        MapSeq f x          -> hashWithSalt salt "MapSeq"        `hashAF` f   `hashVar` x
-        ChunkedMapSeq f x   -> hashWithSalt salt "ChunkedMapSeq" `hashAF` f   `hashVar` x
-        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq"    `hashAF` f   `hashVar` x `hashVar` y
-        ScanSeq f e x       -> hashWithSalt salt "ScanSeq"       `hashF`  f   `hashE`   e `hashVar` x
+      travP :: Producer acc aenv senv a -> Builder
+      travP p =
+        case p of
+          StreamIn arrs       -> intHost . unsafePerformIO $! hashStableName `fmap` makeStableName arrs
+          ToSeq spec _ acc    -> intHost $(hashQ "ToSeq")         <> travA  acc <> stringUtf8 (show spec)
+          MapSeq f x          -> intHost $(hashQ "MapSeq")        <> travAF f   <> travV x
+          ChunkedMapSeq f x   -> intHost $(hashQ "ChunkedMapSeq") <> travAF f   <> travV x
+          ZipWithSeq f x y    -> intHost $(hashQ "ZipWithSeq")    <> travAF f   <> travV x <> travV y
+          ScanSeq f e x       -> intHost $(hashQ "ScanSeq")       <> travF  f   <> travE e <> travV x
 
-    hashC :: Int -> Consumer acc aenv senv' a -> Int
-    hashC salt c =
-      case c of
-        FoldSeq f e x          -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
-        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
-        Stuple t               -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
-
-  in case s of
-    Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
-    Consumer   c    -> hash "Consumer"   `hashC` c
-    Reify      ix   -> hash "Reify"      `hashVar` ix
+      travC :: Consumer acc aenv senv' a -> Builder
+      travC c =
+        case c of
+          FoldSeq f e x          -> intHost $(hashQ "FoldSeq")        <> travF  f <> travE e   <> travV x
+          FoldSeqFlatten f acc x -> intHost $(hashQ "FoldSeqFlatten") <> travAF f <> travA acc <> travV x
+          Stuple t               -> intHost $(hashQ "Stuple")         <> encodeAtuple travC t
+  in
+  case s of
+    Producer p s' -> intHost $(hashQ "Producer")   <> travP p <> travS s'
+    Consumer c    -> intHost $(hashQ "Consumer")   <> travC c
+    Reify ix      -> intHost $(hashQ "Reify")      <> travV ix
 --}
 
+{-# INLINE encodeIdx #-}
+encodeIdx :: Idx env t -> Builder
+encodeIdx = intHost . idxToInt
 
-hashIdx :: Idx env t -> Int
-hashIdx = hash . idxToInt
+{-# INLINE encodeTupleIdx #-}
+encodeTupleIdx :: TupleIdx tup e -> Builder
+encodeTupleIdx = intHost . tupleIdxToInt
 
-hashTupleIdx :: TupleIdx tup e -> Int
-hashTupleIdx = hash . tupleIdxToInt
+{-# INLINE encodeArrays #-}
+encodeArrays :: ArraysR a -> a -> Builder
+encodeArrays ArraysRunit         ()       = mempty
+encodeArrays (ArraysRpair r1 r2) (a1, a2) = encodeArrays r1 a1 <> encodeArrays r2 a2
+encodeArrays ArraysRarray        ad       = intHost . unsafePerformIO $! hashStableName `fmap` makeStableName ad
 
-
-hashArrays :: ArraysR a -> a -> Int
-hashArrays ArraysRunit         ()       = hash ()
-hashArrays (ArraysRpair r1 r2) (a1, a2) = hash (hashArrays r1 a1, hashArrays r2 a2)
-hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
-
-hashArraysType :: forall a. ArraysR a -> Int
-hashArraysType ArraysRunit         = $(hashQ "ArraysRunit")
-hashArraysType (ArraysRpair r1 r2) = $(hashQ "ArraysRpair")  `hashWithSalt` hashArraysType r1 `hashWithSalt` hashArraysType r2
-hashArraysType ArraysRarray        = $(hashQ "ArraysRarray") `hashWithSalt` hashArrayType (undefined::a)
+{-# INLINE encodeArraysType #-}
+encodeArraysType :: forall a. ArraysR a -> Builder
+encodeArraysType ArraysRunit         = intHost $(hashQ "ArraysRunit")
+encodeArraysType (ArraysRpair r1 r2) = intHost $(hashQ "ArraysRpair")  <> encodeArraysType r1 <> encodeArraysType r2
+encodeArraysType ArraysRarray        = intHost $(hashQ "ArraysRarray") <> encodeArrayType (undefined::a)
   where
-    hashArrayType :: forall sh e. (Shape sh, Elt e) => Array sh e -> Int
-    hashArrayType _ = hashTupleType (eltType (undefined::sh)) `hashWithSalt` hashTupleType (eltType (undefined::e))
+    {-# INLINE encodeArrayType #-}
+    encodeArrayType :: forall sh e. (Shape sh, Elt e) => Array sh e -> Builder
+    encodeArrayType _ = encodeTupleType (eltType (undefined::sh)) <> encodeTupleType (eltType (undefined::e))
 
-hashAtuple :: HashAcc acc -> Atuple (acc aenv) a -> Int
-hashAtuple _ NilAtup        = $(hashQ "NilAtup")
-hashAtuple h (SnocAtup t a) = $(hashQ "SnocAtup") `hashWithSalt` hashAtuple h t `hashWithSalt` h a
+{-# INLINE encodeAtuple #-}
+encodeAtuple :: EncodeAcc acc -> Atuple (acc aenv) a -> Builder
+encodeAtuple _     NilAtup        = intHost $(hashQ "NilAtup")
+encodeAtuple travA (SnocAtup t a) = intHost $(hashQ "SnocAtup") <> encodeAtuple travA t <> travA a
 
-hashAfun :: forall acc aenv f. HashAcc acc -> PreOpenAfun acc aenv f -> Int
-hashAfun hashAcc afun =
+{-# INLINE encodePreOpenAfun #-}
+encodePreOpenAfun :: forall acc aenv f. EncodeAcc acc -> PreOpenAfun acc aenv f -> Builder
+encodePreOpenAfun travA afun =
   let
-    hashA :: forall aenv' a. Arrays a => Int -> acc aenv' a -> Int
-    hashA salt
-      = hashWithSalt salt
-      . hashWithSalt (hashArraysType (arrays (undefined::a)))
-      . hashAcc
+      {-# INLINE travB #-}
+      travB :: forall aenv' a. Arrays a => acc aenv' a -> Builder
+      travB b = encodeArraysType (arrays (undefined::a)) <> travA b
 
-    hashL :: forall aenv' a b. Arrays a => Int -> PreOpenAfun acc (aenv',a) b -> Int
-    hashL salt
-       = hashWithSalt salt
-       . hashWithSalt (hashArraysType (arrays (undefined::a)))
-       . hashAfun hashAcc
-
-  in case afun of
-    Abody b -> $(hashQ "Abody") `hashA` b
-    Alam  l -> $(hashQ "Alam")  `hashL` l
+      {-# INLINE travL #-}
+      travL :: forall aenv' a b. Arrays a => PreOpenAfun acc (aenv',a) b -> Builder
+      travL l = encodeArraysType (arrays (undefined::a)) <> encodePreOpenAfun travA l
+  in
+  case afun of
+    Abody b -> intHost $(hashQ "Abody") <> travB b
+    Alam  l -> intHost $(hashQ "Alam")  <> travL l
 
 
-hashPreBoundary :: forall acc aenv sh e. HashAcc acc -> PreBoundary acc aenv (Array sh e) -> Int
-hashPreBoundary _ Wrap          = $(hashQ "Wrap")
-hashPreBoundary _ Clamp         = $(hashQ "Clamp")
-hashPreBoundary _ Mirror        = $(hashQ "Mirror")
-hashPreBoundary _ (Constant c)  = $(hashQ "Constant") `hashWithSalt` hashConst (eltType (undefined::e)) c
-hashPreBoundary h (Function f)  = $(hashQ "Function") `hashWithSalt` hashPreOpenFun h f
+{-# INLINE encodePreBoundary #-}
+encodePreBoundary :: forall acc aenv sh e. EncodeAcc acc -> PreBoundary acc aenv (Array sh e) -> Builder
+encodePreBoundary _ Wrap          = intHost $(hashQ "Wrap")
+encodePreBoundary _ Clamp         = intHost $(hashQ "Clamp")
+encodePreBoundary _ Mirror        = intHost $(hashQ "Mirror")
+encodePreBoundary _ (Constant c)  = intHost $(hashQ "Constant") <> encodeConst (eltType (undefined::e)) c
+encodePreBoundary h (Function f)  = intHost $(hashQ "Function") <> encodePreOpenFun h f
 
-hashSliceIndex :: SliceIndex slix sl co sh -> Int
-hashSliceIndex SliceNil         = $(hashQ "SliceNil")
-hashSliceIndex (SliceAll r)     = $(hashQ "SliceAll")   `hashWithSalt` hashSliceIndex r
-hashSliceIndex (SliceFixed r)   = $(hashQ "sliceFixed") `hashWithSalt` hashSliceIndex r
+{-# INLINE encodeSliceIndex #-}
+encodeSliceIndex :: SliceIndex slix sl co sh -> Builder
+encodeSliceIndex SliceNil         = intHost $(hashQ "SliceNil")
+encodeSliceIndex (SliceAll r)     = intHost $(hashQ "SliceAll")   <> encodeSliceIndex r
+encodeSliceIndex (SliceFixed r)   = intHost $(hashQ "sliceFixed") <> encodeSliceIndex r
 
 
 -- Scalar expressions
 -- ------------------
 
-hashOpenExp :: OpenExp env aenv exp -> Int
-hashOpenExp = hashPreOpenExp hashOpenAcc
+{-# INLINE encodeOpenExp #-}
+encodeOpenExp :: OpenExp env aenv exp -> Builder
+encodeOpenExp = encodePreOpenExp encodeOpenAcc
 
-hashPreOpenExp :: forall acc env aenv exp. HashAcc acc -> PreOpenExp acc env aenv exp -> Int
-hashPreOpenExp hashAcc exp =
+{-# INLINE encodePreOpenExp #-}
+encodePreOpenExp :: forall acc env aenv exp. EncodeAcc acc -> PreOpenExp acc env aenv exp -> Builder
+encodePreOpenExp travA exp =
   let
-    hashE :: forall env' aenv' e. Elt e => Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt
-      = hashWithSalt salt
-      . hashWithSalt (hashTupleType (eltType (undefined::e)))
-      . hashPreOpenExp hashAcc
+      {-# INLINE travE #-}
+      travE :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
+      travE e =  encodeTupleType (eltType (undefined::e)) <> encodePreOpenExp travA e
 
-    hashA :: Int -> acc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashAcc
+      {-# INLINE travF #-}
+      travF :: PreOpenFun acc env' aenv' f -> Builder
+      travF = encodePreOpenFun travA
 
-    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
-    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
-
-    nacl :: Elt exp => Int
-    nacl = hashTupleType (eltType (undefined::exp))
-
-  in case exp of
-    Let bnd body                -> $(hashQ "Let")         `hashE` bnd `hashE` body
-    Var ix                      -> $(hashQ "Var")         `hashWithSalt` nacl `hashWithSalt` hashIdx ix
-    Tuple t                     -> $(hashQ "Tuple")       `hashWithSalt` nacl `hashWithSalt` hashTuple hashAcc t
-    Prj i e                     -> $(hashQ "Prj")         `hashWithSalt` nacl * hashTupleIdx i `hashE` e
-    Const c                     -> $(hashQ "Const")       `hashWithSalt` hashConst (eltType (undefined::exp)) c
-    IndexAny                    -> $(hashQ "IndexAny")    `hashWithSalt` nacl
-    IndexNil                    -> $(hashQ "IndexNil")
-    IndexCons sl a              -> $(hashQ "IndexCons")   `hashE` sl `hashE` a
-    IndexHead sl                -> $(hashQ "IndexHead")   `hashE` sl
-    IndexTail sl                -> $(hashQ "IndexTail")   `hashE` sl
-    IndexSlice spec ix sh       -> $(hashQ "IndexSlice")  `hashE` ix `hashE` sh `hashWithSalt` hashSliceIndex spec
-    IndexFull  spec ix sl       -> $(hashQ "IndexFull")   `hashE` ix `hashE` sl `hashWithSalt` hashSliceIndex spec
-    ToIndex sh i                -> $(hashQ "ToIndex")     `hashE` sh `hashE` i
-    FromIndex sh i              -> $(hashQ "FromIndex")   `hashE` sh `hashE` i
-    Cond c t e                  -> $(hashQ "Cond")        `hashE` c  `hashE` t  `hashE` e
-    While p f x                 -> $(hashQ "While")       `hashF` p  `hashF` f  `hashE` x
-    PrimApp f x                 -> $(hashQ "PrimApp")     `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
-    PrimConst c                 -> $(hashQ "PrimConst")   `hashWithSalt` hashPrimConst c
-    Index a ix                  -> $(hashQ "Index")       `hashA` a  `hashE` ix
-    LinearIndex a ix            -> $(hashQ "LinearIndex") `hashA` a  `hashE` ix
-    Shape a                     -> $(hashQ "Shape")       `hashA` a
-    ShapeSize sh                -> $(hashQ "ShapeSize")   `hashE` sh
-    Intersect sa sb             -> $(hashQ "Intersect")   `hashE` sa `hashE` sb
-    Union sa sb                 -> $(hashQ "Union")       `hashE` sa `hashE` sb
-    Foreign _ f e               -> $(hashQ "Foreign")     `hashF` f  `hashE` e
+      {-# INLINE nacl #-}
+      nacl :: Elt exp => Builder
+      nacl = encodeTupleType (eltType (undefined::exp))
+  in
+  case exp of
+    Let bnd body                -> intHost $(hashQ "Let")         <> travE bnd <> travE body
+    Var ix                      -> intHost $(hashQ "Var")         <> nacl <> encodeIdx ix
+    Tuple t                     -> intHost $(hashQ "Tuple")       <> nacl <> encodeTuple travA t
+    Prj i e                     -> intHost $(hashQ "Prj")         <> nacl <> encodeTupleIdx i <> travE e -- XXX: here multiplied nacl by hashTupleIdx
+    Const c                     -> intHost $(hashQ "Const")       <> encodeConst (eltType (undefined::exp)) c
+    IndexAny                    -> intHost $(hashQ "IndexAny")    <> nacl
+    IndexNil                    -> intHost $(hashQ "IndexNil")
+    IndexCons sh sz             -> intHost $(hashQ "IndexCons")   <> travE sh <> travE sz
+    IndexHead sl                -> intHost $(hashQ "IndexHead")   <> travE sl
+    IndexTail sl                -> intHost $(hashQ "IndexTail")   <> travE sl
+    IndexSlice spec ix sh       -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec
+    IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
+    ToIndex sh i                -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
+    FromIndex sh i              -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
+    Cond c t e                  -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
+    While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
+    PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
+    PrimConst c                 -> intHost $(hashQ "PrimConst")   <> encodePrimConst c
+    Index a ix                  -> intHost $(hashQ "Index")       <> travA a  <> travE ix
+    LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> travA a  <> travE ix
+    Shape a                     -> intHost $(hashQ "Shape")       <> travA a
+    ShapeSize sh                -> intHost $(hashQ "ShapeSize")   <> travE sh
+    Intersect sa sb             -> intHost $(hashQ "Intersect")   <> travE sa <> travE sb
+    Union sa sb                 -> intHost $(hashQ "Union")       <> travE sa <> travE sb
+    Foreign _ f e               -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
 
 
-hashPreOpenFun :: forall acc env aenv f. HashAcc acc -> PreOpenFun acc env aenv f -> Int
-hashPreOpenFun hashAcc fun =
+{-# INLINE encodePreOpenFun #-}
+encodePreOpenFun :: forall acc env aenv f. EncodeAcc acc -> PreOpenFun acc env aenv f -> Builder
+encodePreOpenFun travA fun =
   let
-    hashE :: forall env' aenv' e. Elt e => Int -> PreOpenExp acc env' aenv' e -> Int
-    hashE salt
-      = hashWithSalt salt
-      . hashWithSalt (hashTupleType (eltType (undefined::e)))
-      . hashPreOpenExp hashAcc
+      travB :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
+      travB b = encodeTupleType (eltType (undefined::e)) <> encodePreOpenExp travA b
 
-    hashL :: forall env' aenv' a b. Elt a => Int -> PreOpenFun acc (env',a) aenv' b -> Int
-    hashL salt
-      = hashWithSalt salt
-      . hashWithSalt (hashTupleType (eltType (undefined::a)))
-      . hashPreOpenFun hashAcc
+      travL :: forall env' aenv' a b. Elt a => PreOpenFun acc (env',a) aenv' b -> Builder
+      travL l = encodeTupleType (eltType (undefined::a)) <> encodePreOpenFun travA l
+  in
+  case fun of
+    Body b -> intHost $(hashQ "Body") <> travB b
+    Lam l  -> intHost $(hashQ "Lam")  <> travL l
 
-  in case fun of
-    Body b -> $(hashQ "Body") `hashE` b
-    Lam f  -> $(hashQ "Lam")  `hashL` f
-
-
-hashTuple :: HashAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Int
-hashTuple _ NilTup        = $(hashQ "NilTup")
-hashTuple h (SnocTup t e) = $(hashQ "SnocTup") `hashWithSalt` hashTuple h t
-                                               `hashWithSalt` hashPreOpenExp h e
+{-# INLINE encodeTuple #-}
+encodeTuple :: EncodeAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Builder
+encodeTuple _ NilTup        = intHost $(hashQ "NilTup")
+encodeTuple h (SnocTup t e) = intHost $(hashQ "SnocTup") <> encodeTuple h t <> encodePreOpenExp h e
 
 
-hashConst :: TupleType t -> t -> Int
-hashConst UnitTuple         ()    = hash ()
-hashConst (PairTuple ta tb) (a,b) = hash (hashConst ta a, hashConst tb b)
-hashConst (SingleTuple t)   c     = hashScalarConst t c
+{-# INLINE encodeConst #-}
+encodeConst :: TupleType t -> t -> Builder
+encodeConst UnitTuple         ()    = mempty
+encodeConst (SingleTuple t)   c     = encodeScalarConst t c
+encodeConst (PairTuple ta tb) (a,b) = encodeConst ta a <> encodeConst tb b
 
-hashScalarConst :: ScalarType t -> t -> Int
-hashScalarConst (NumScalarType t)    = hashNumConst t
-hashScalarConst (NonNumScalarType t) = hashNonNumConst t
+{-# INLINE encodeScalarConst #-}
+encodeScalarConst :: ScalarType t -> t -> Builder
+encodeScalarConst (NumScalarType t)    = encodeNumConst t
+encodeScalarConst (NonNumScalarType t) = encodeNonNumConst t
 
-hashNonNumConst :: NonNumType t -> t -> Int
-hashNonNumConst TypeBool{}   x          = $(hashQ "Bool")   `hashWithSalt` x
-hashNonNumConst TypeChar{}   x          = $(hashQ "Char")   `hashWithSalt` x
-hashNonNumConst TypeCChar{}  (CChar  x) = $(hashQ "CChar")  `hashWithSalt` x
-hashNonNumConst TypeCSChar{} (CSChar x) = $(hashQ "CSChar") `hashWithSalt` x
-hashNonNumConst TypeCUChar{} (CUChar x) = $(hashQ "CUChar") `hashWithSalt` x
+{-# INLINE encodeNonNumConst #-}
+encodeNonNumConst :: NonNumType t -> t -> Builder
+encodeNonNumConst TypeBool{}   x          = intHost $(hashQ "Bool")   <> word8 (fromBool x)
+encodeNonNumConst TypeChar{}   x          = intHost $(hashQ "Char")   <> charUtf8 x
+encodeNonNumConst TypeCChar{}  (CChar  x) = intHost $(hashQ "CChar")  <> int8 x
+encodeNonNumConst TypeCSChar{} (CSChar x) = intHost $(hashQ "CSChar") <> int8 x
+encodeNonNumConst TypeCUChar{} (CUChar x) = intHost $(hashQ "CUChar") <> word8 x
 
-hashNumConst :: NumType t -> t -> Int
-hashNumConst (IntegralNumType t) = hashIntegralConst t
-hashNumConst (FloatingNumType t) = hashFloatingConst t
+{-# INLINE fromBool #-}
+fromBool :: Bool -> Word8
+fromBool True  = 1
+fromBool False = 0
 
-hashIntegralConst :: IntegralType t -> t -> Int
-hashIntegralConst TypeInt{}     x           = $(hashQ "Int")     `hashWithSalt` x
-hashIntegralConst TypeInt8{}    x           = $(hashQ "Int8")    `hashWithSalt` x
-hashIntegralConst TypeInt16{}   x           = $(hashQ "Int16")   `hashWithSalt` x
-hashIntegralConst TypeInt32{}   x           = $(hashQ "Int32")   `hashWithSalt` x
-hashIntegralConst TypeInt64{}   x           = $(hashQ "Int64")   `hashWithSalt` x
-hashIntegralConst TypeWord{}    x           = $(hashQ "Word")    `hashWithSalt` x
-hashIntegralConst TypeWord8{}   x           = $(hashQ "Word8")   `hashWithSalt` x
-hashIntegralConst TypeWord16{}  x           = $(hashQ "Word16")  `hashWithSalt` x
-hashIntegralConst TypeWord32{}  x           = $(hashQ "Word32")  `hashWithSalt` x
-hashIntegralConst TypeWord64{}  x           = $(hashQ "Word64")  `hashWithSalt` x
-hashIntegralConst TypeCShort{}  (CShort x)  = $(hashQ "CShort")  `hashWithSalt` x
-hashIntegralConst TypeCUShort{} (CUShort x) = $(hashQ "CUShort") `hashWithSalt` x
-hashIntegralConst TypeCInt{}    (CInt x)    = $(hashQ "CInt")    `hashWithSalt` x
-hashIntegralConst TypeCUInt{}   (CUInt x)   = $(hashQ "CUInt")   `hashWithSalt` x
-hashIntegralConst TypeCLong{}   (CLong x)   = $(hashQ "CLong")   `hashWithSalt` x
-hashIntegralConst TypeCULong{}  (CULong x)  = $(hashQ "CULong")  `hashWithSalt` x
-hashIntegralConst TypeCLLong{}  (CLLong x)  = $(hashQ "CLLong")  `hashWithSalt` x
-hashIntegralConst TypeCULLong{} (CULLong x) = $(hashQ "CULLong") `hashWithSalt` x
+{-# INLINE encodeNumConst #-}
+encodeNumConst :: NumType t -> t -> Builder
+encodeNumConst (IntegralNumType t) = encodeIntegralConst t
+encodeNumConst (FloatingNumType t) = encodeFloatingConst t
 
-hashFloatingConst :: FloatingType t -> t -> Int
-hashFloatingConst TypeFloat{}   x           = $(hashQ "Float")   `hashWithSalt` x
-hashFloatingConst TypeDouble{}  x           = $(hashQ "Double")  `hashWithSalt` x
-hashFloatingConst TypeCFloat{}  (CFloat x)  = $(hashQ "CFloat")  `hashWithSalt` x
-hashFloatingConst TypeCDouble{} (CDouble x) = $(hashQ "CDouble") `hashWithSalt` x
+{-# INLINE encodeIntegralConst #-}
+encodeIntegralConst :: IntegralType t -> t -> Builder
+encodeIntegralConst TypeInt{}     x           = intHost $(hashQ "Int")     <> intHost x
+encodeIntegralConst TypeInt8{}    x           = intHost $(hashQ "Int8")    <> int8 x
+encodeIntegralConst TypeInt16{}   x           = intHost $(hashQ "Int16")   <> int16Host x
+encodeIntegralConst TypeInt32{}   x           = intHost $(hashQ "Int32")   <> int32Host x
+encodeIntegralConst TypeInt64{}   x           = intHost $(hashQ "Int64")   <> int64Host x
+encodeIntegralConst TypeWord{}    x           = intHost $(hashQ "Word")    <> wordHost x
+encodeIntegralConst TypeWord8{}   x           = intHost $(hashQ "Word8")   <> word8 x
+encodeIntegralConst TypeWord16{}  x           = intHost $(hashQ "Word16")  <> word16Host x
+encodeIntegralConst TypeWord32{}  x           = intHost $(hashQ "Word32")  <> word32Host x
+encodeIntegralConst TypeWord64{}  x           = intHost $(hashQ "Word64")  <> word64Host x
+encodeIntegralConst TypeCShort{}  (CShort x)  = intHost $(hashQ "CShort")  <> int16Host x
+encodeIntegralConst TypeCUShort{} (CUShort x) = intHost $(hashQ "CUShort") <> word16Host x
+encodeIntegralConst TypeCInt{}    (CInt x)    = intHost $(hashQ "CInt")    <> int32Host x
+encodeIntegralConst TypeCUInt{}   (CUInt x)   = intHost $(hashQ "CUInt")   <> word32Host x
+encodeIntegralConst TypeCLong{}   (CLong x)   = intHost $(hashQ "CLong")   <> int64Host x
+encodeIntegralConst TypeCULong{}  (CULong x)  = intHost $(hashQ "CULong")  <> word64Host x
+encodeIntegralConst TypeCLLong{}  (CLLong x)  = intHost $(hashQ "CLLong")  <> int64Host x
+encodeIntegralConst TypeCULLong{} (CULLong x) = intHost $(hashQ "CULLong") <> word64Host x
 
-hashPrimConst :: PrimConst c -> Int
-hashPrimConst (PrimMinBound t)  = $(hashQ "PrimMinBound") `hashWithSalt` hashBoundedType t
-hashPrimConst (PrimMaxBound t)  = $(hashQ "PrimMaxBound") `hashWithSalt` hashBoundedType t
-hashPrimConst (PrimPi t)        = $(hashQ "PrimPi")       `hashWithSalt` hashFloatingType t
+{-# INLINE encodeFloatingConst #-}
+encodeFloatingConst :: FloatingType t -> t -> Builder
+encodeFloatingConst TypeFloat{}   x           = intHost $(hashQ "Float")   <> floatHost x
+encodeFloatingConst TypeDouble{}  x           = intHost $(hashQ "Double")  <> doubleHost x
+encodeFloatingConst TypeCFloat{}  (CFloat x)  = intHost $(hashQ "CFloat")  <> floatHost x
+encodeFloatingConst TypeCDouble{} (CDouble x) = intHost $(hashQ "CDouble") <> doubleHost x
+
+{-# INLINE encodePrimConst #-}
+encodePrimConst :: PrimConst c -> Builder
+encodePrimConst (PrimMinBound t)  = intHost $(hashQ "PrimMinBound") <> encodeBoundedType t
+encodePrimConst (PrimMaxBound t)  = intHost $(hashQ "PrimMaxBound") <> encodeBoundedType t
+encodePrimConst (PrimPi t)        = intHost $(hashQ "PrimPi")       <> encodeFloatingType t
+
+{-# INLINE encodePrimFun #-}
+encodePrimFun :: PrimFun f -> Builder
+encodePrimFun (PrimAdd a)                = intHost $(hashQ "PrimAdd")                <> encodeNumType a
+encodePrimFun (PrimSub a)                = intHost $(hashQ "PrimSub")                <> encodeNumType a
+encodePrimFun (PrimMul a)                = intHost $(hashQ "PrimMul")                <> encodeNumType a
+encodePrimFun (PrimNeg a)                = intHost $(hashQ "PrimNeg")                <> encodeNumType a
+encodePrimFun (PrimAbs a)                = intHost $(hashQ "PrimAbs")                <> encodeNumType a
+encodePrimFun (PrimSig a)                = intHost $(hashQ "PrimSig")                <> encodeNumType a
+encodePrimFun (PrimQuot a)               = intHost $(hashQ "PrimQuot")               <> encodeIntegralType a
+encodePrimFun (PrimRem a)                = intHost $(hashQ "PrimRem")                <> encodeIntegralType a
+encodePrimFun (PrimQuotRem a)            = intHost $(hashQ "PrimQuotRem")            <> encodeIntegralType a
+encodePrimFun (PrimIDiv a)               = intHost $(hashQ "PrimIDiv")               <> encodeIntegralType a
+encodePrimFun (PrimMod a)                = intHost $(hashQ "PrimMod")                <> encodeIntegralType a
+encodePrimFun (PrimDivMod a)             = intHost $(hashQ "PrimDivMod")             <> encodeIntegralType a
+encodePrimFun (PrimBAnd a)               = intHost $(hashQ "PrimBAnd")               <> encodeIntegralType a
+encodePrimFun (PrimBOr a)                = intHost $(hashQ "PrimBOr")                <> encodeIntegralType a
+encodePrimFun (PrimBXor a)               = intHost $(hashQ "PrimBXor")               <> encodeIntegralType a
+encodePrimFun (PrimBNot a)               = intHost $(hashQ "PrimBNot")               <> encodeIntegralType a
+encodePrimFun (PrimBShiftL a)            = intHost $(hashQ "PrimBShiftL")            <> encodeIntegralType a
+encodePrimFun (PrimBShiftR a)            = intHost $(hashQ "PrimBShiftR")            <> encodeIntegralType a
+encodePrimFun (PrimBRotateL a)           = intHost $(hashQ "PrimBRotateL")           <> encodeIntegralType a
+encodePrimFun (PrimBRotateR a)           = intHost $(hashQ "PrimBRotateR")           <> encodeIntegralType a
+encodePrimFun (PrimPopCount a)           = intHost $(hashQ "PrimPopCount")           <> encodeIntegralType a
+encodePrimFun (PrimCountLeadingZeros a)  = intHost $(hashQ "PrimCountLeadingZeros")  <> encodeIntegralType a
+encodePrimFun (PrimCountTrailingZeros a) = intHost $(hashQ "PrimCountTrailingZeros") <> encodeIntegralType a
+encodePrimFun (PrimFDiv a)               = intHost $(hashQ "PrimFDiv")               <> encodeFloatingType a
+encodePrimFun (PrimRecip a)              = intHost $(hashQ "PrimRecip")              <> encodeFloatingType a
+encodePrimFun (PrimSin a)                = intHost $(hashQ "PrimSin")                <> encodeFloatingType a
+encodePrimFun (PrimCos a)                = intHost $(hashQ "PrimCos")                <> encodeFloatingType a
+encodePrimFun (PrimTan a)                = intHost $(hashQ "PrimTan")                <> encodeFloatingType a
+encodePrimFun (PrimAsin a)               = intHost $(hashQ "PrimAsin")               <> encodeFloatingType a
+encodePrimFun (PrimAcos a)               = intHost $(hashQ "PrimAcos")               <> encodeFloatingType a
+encodePrimFun (PrimAtan a)               = intHost $(hashQ "PrimAtan")               <> encodeFloatingType a
+encodePrimFun (PrimSinh a)               = intHost $(hashQ "PrimSinh")               <> encodeFloatingType a
+encodePrimFun (PrimCosh a)               = intHost $(hashQ "PrimCosh")               <> encodeFloatingType a
+encodePrimFun (PrimTanh a)               = intHost $(hashQ "PrimTanh")               <> encodeFloatingType a
+encodePrimFun (PrimAsinh a)              = intHost $(hashQ "PrimAsinh")              <> encodeFloatingType a
+encodePrimFun (PrimAcosh a)              = intHost $(hashQ "PrimAcosh")              <> encodeFloatingType a
+encodePrimFun (PrimAtanh a)              = intHost $(hashQ "PrimAtanh")              <> encodeFloatingType a
+encodePrimFun (PrimExpFloating a)        = intHost $(hashQ "PrimExpFloating")        <> encodeFloatingType a
+encodePrimFun (PrimSqrt a)               = intHost $(hashQ "PrimSqrt")               <> encodeFloatingType a
+encodePrimFun (PrimLog a)                = intHost $(hashQ "PrimLog")                <> encodeFloatingType a
+encodePrimFun (PrimFPow a)               = intHost $(hashQ "PrimFPow")               <> encodeFloatingType a
+encodePrimFun (PrimLogBase a)            = intHost $(hashQ "PrimLogBase")            <> encodeFloatingType a
+encodePrimFun (PrimAtan2 a)              = intHost $(hashQ "PrimAtan2")              <> encodeFloatingType a
+encodePrimFun (PrimTruncate a b)         = intHost $(hashQ "PrimTruncate")           <> encodeFloatingType a <> encodeIntegralType b
+encodePrimFun (PrimRound a b)            = intHost $(hashQ "PrimRound")              <> encodeFloatingType a <> encodeIntegralType b
+encodePrimFun (PrimFloor a b)            = intHost $(hashQ "PrimFloor")              <> encodeFloatingType a <> encodeIntegralType b
+encodePrimFun (PrimCeiling a b)          = intHost $(hashQ "PrimCeiling")            <> encodeFloatingType a <> encodeIntegralType b
+encodePrimFun (PrimIsNaN a)              = intHost $(hashQ "PrimIsNaN")              <> encodeFloatingType a
+encodePrimFun (PrimIsInfinite a)         = intHost $(hashQ "PrimIsInfinite")         <> encodeFloatingType a
+encodePrimFun (PrimLt a)                 = intHost $(hashQ "PrimLt")                 <> encodeScalarType a
+encodePrimFun (PrimGt a)                 = intHost $(hashQ "PrimGt")                 <> encodeScalarType a
+encodePrimFun (PrimLtEq a)               = intHost $(hashQ "PrimLtEq")               <> encodeScalarType a
+encodePrimFun (PrimGtEq a)               = intHost $(hashQ "PrimGtEq")               <> encodeScalarType a
+encodePrimFun (PrimEq a)                 = intHost $(hashQ "PrimEq")                 <> encodeScalarType a
+encodePrimFun (PrimNEq a)                = intHost $(hashQ "PrimNEq")                <> encodeScalarType a
+encodePrimFun (PrimMax a)                = intHost $(hashQ "PrimMax")                <> encodeScalarType a
+encodePrimFun (PrimMin a)                = intHost $(hashQ "PrimMin")                <> encodeScalarType a
+encodePrimFun (PrimFromIntegral a b)     = intHost $(hashQ "PrimFromIntegral")       <> encodeIntegralType a <> encodeNumType b
+encodePrimFun (PrimToFloating a b)       = intHost $(hashQ "PrimToFloating")         <> encodeNumType a      <> encodeFloatingType b
+encodePrimFun (PrimCoerce a b)           = intHost $(hashQ "PrimCoerce")             <> encodeScalarType a   <> encodeScalarType b
+encodePrimFun PrimLAnd                   = intHost $(hashQ "PrimLAnd")
+encodePrimFun PrimLOr                    = intHost $(hashQ "PrimLOr")
+encodePrimFun PrimLNot                   = intHost $(hashQ "PrimLNot")
+encodePrimFun PrimOrd                    = intHost $(hashQ "PrimOrd")
+encodePrimFun PrimChr                    = intHost $(hashQ "PrimChr")
+encodePrimFun PrimBoolToInt              = intHost $(hashQ "PrimBoolToInt")
 
 
-hashPrimFun :: PrimFun f -> Int
-hashPrimFun (PrimAdd a)                = $(hashQ "PrimAdd")                `hashWithSalt` hashNumType a
-hashPrimFun (PrimSub a)                = $(hashQ "PrimSub")                `hashWithSalt` hashNumType a
-hashPrimFun (PrimMul a)                = $(hashQ "PrimMul")                `hashWithSalt` hashNumType a
-hashPrimFun (PrimNeg a)                = $(hashQ "PrimNeg")                `hashWithSalt` hashNumType a
-hashPrimFun (PrimAbs a)                = $(hashQ "PrimAbs")                `hashWithSalt` hashNumType a
-hashPrimFun (PrimSig a)                = $(hashQ "PrimSig")                `hashWithSalt` hashNumType a
-hashPrimFun (PrimQuot a)               = $(hashQ "PrimQuot")               `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimRem a)                = $(hashQ "PrimRem")                `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimQuotRem a)            = $(hashQ "PrimQuotRem")            `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimIDiv a)               = $(hashQ "PrimIDiv")               `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimMod a)                = $(hashQ "PrimMod")                `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimDivMod a)             = $(hashQ "PrimDivMod")             `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBAnd a)               = $(hashQ "PrimBAnd")               `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBOr a)                = $(hashQ "PrimBOr")                `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBXor a)               = $(hashQ "PrimBXor")               `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBNot a)               = $(hashQ "PrimBNot")               `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBShiftL a)            = $(hashQ "PrimBShiftL")            `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBShiftR a)            = $(hashQ "PrimBShiftR")            `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBRotateL a)           = $(hashQ "PrimBRotateL")           `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimBRotateR a)           = $(hashQ "PrimBRotateR")           `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimPopCount a)           = $(hashQ "PrimPopCount")           `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimCountLeadingZeros a)  = $(hashQ "PrimCountLeadingZeros")  `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimCountTrailingZeros a) = $(hashQ "PrimCountTrailingZeros") `hashWithSalt` hashIntegralType a
-hashPrimFun (PrimFDiv a)               = $(hashQ "PrimFDiv")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimRecip a)              = $(hashQ "PrimRecip")              `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimSin a)                = $(hashQ "PrimSin")                `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimCos a)                = $(hashQ "PrimCos")                `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimTan a)                = $(hashQ "PrimTan")                `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimAsin a)               = $(hashQ "PrimAsin")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimAcos a)               = $(hashQ "PrimAcos")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimAtan a)               = $(hashQ "PrimAtan")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimSinh a)               = $(hashQ "PrimSinh")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimCosh a)               = $(hashQ "PrimCosh")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimTanh a)               = $(hashQ "PrimTanh")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimAsinh a)              = $(hashQ "PrimAsinh")              `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimAcosh a)              = $(hashQ "PrimAcosh")              `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimAtanh a)              = $(hashQ "PrimAtanh")              `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimExpFloating a)        = $(hashQ "PrimExpFloating")        `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimSqrt a)               = $(hashQ "PrimSqrt")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimLog a)                = $(hashQ "PrimLog")                `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimFPow a)               = $(hashQ "PrimFPow")               `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimLogBase a)            = $(hashQ "PrimLogBase")            `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimAtan2 a)              = $(hashQ "PrimAtan2")              `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimTruncate a b)         = $(hashQ "PrimTruncate")           `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
-hashPrimFun (PrimRound a b)            = $(hashQ "PrimRound")              `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
-hashPrimFun (PrimFloor a b)            = $(hashQ "PrimFloor")              `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
-hashPrimFun (PrimCeiling a b)          = $(hashQ "PrimCeiling")            `hashWithSalt` hashFloatingType a `hashWithSalt` hashIntegralType b
-hashPrimFun (PrimIsNaN a)              = $(hashQ "PrimIsNaN")              `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimIsInfinite a)         = $(hashQ "PrimIsInfinite")         `hashWithSalt` hashFloatingType a
-hashPrimFun (PrimLt a)                 = $(hashQ "PrimLt")                 `hashWithSalt` hashScalarType a
-hashPrimFun (PrimGt a)                 = $(hashQ "PrimGt")                 `hashWithSalt` hashScalarType a
-hashPrimFun (PrimLtEq a)               = $(hashQ "PrimLtEq")               `hashWithSalt` hashScalarType a
-hashPrimFun (PrimGtEq a)               = $(hashQ "PrimGtEq")               `hashWithSalt` hashScalarType a
-hashPrimFun (PrimEq a)                 = $(hashQ "PrimEq")                 `hashWithSalt` hashScalarType a
-hashPrimFun (PrimNEq a)                = $(hashQ "PrimNEq")                `hashWithSalt` hashScalarType a
-hashPrimFun (PrimMax a)                = $(hashQ "PrimMax")                `hashWithSalt` hashScalarType a
-hashPrimFun (PrimMin a)                = $(hashQ "PrimMin")                `hashWithSalt` hashScalarType a
-hashPrimFun (PrimFromIntegral a b)     = $(hashQ "PrimFromIntegral")       `hashWithSalt` hashIntegralType a `hashWithSalt` hashNumType b
-hashPrimFun (PrimToFloating a b)       = $(hashQ "PrimToFloating")         `hashWithSalt` hashNumType a      `hashWithSalt` hashFloatingType b
-hashPrimFun (PrimCoerce a b)           = $(hashQ "PrimCoerce")             `hashWithSalt` hashScalarType a   `hashWithSalt` hashScalarType b
-hashPrimFun PrimLAnd                   = $(hashQ "PrimLAnd")
-hashPrimFun PrimLOr                    = $(hashQ "PrimLOr")
-hashPrimFun PrimLNot                   = $(hashQ "PrimLNot")
-hashPrimFun PrimOrd                    = $(hashQ "PrimOrd")
-hashPrimFun PrimChr                    = $(hashQ "PrimChr")
-hashPrimFun PrimBoolToInt              = $(hashQ "PrimBoolToInt")
+{-# INLINE encodeTupleType #-}
+encodeTupleType :: TupleType t -> Builder
+encodeTupleType UnitTuple       = intHost $(hashQ "UnitTuple")
+encodeTupleType (SingleTuple t) = intHost $(hashQ "SingleTuple") <> encodeScalarType t
+encodeTupleType (PairTuple a b) = intHost $(hashQ "PairTuple")   <> encodeTupleType a <> intHost (depthTupleType a)
+                                                                 <> encodeTupleType b <> intHost (depthTupleType b)
 
-
--- TLM: We need to include the depth of the branches in the pair case, otherwise
---      we are getting a collision at @hash t == hash (t,(t,t))@.
---
-hashTupleType :: TupleType t -> Int
-hashTupleType UnitTuple       = $(hashQ "UnitTuple")
-hashTupleType (SingleTuple t) = $(hashQ "SingleTuple") `hashWithSalt` hashScalarType t
-hashTupleType (PairTuple a b) = $(hashQ "PairTuple")   `hashWithSalt` hashTupleType a `hashWithSalt` depthTupleType a
-                                                       `hashWithSalt` hashTupleType b `hashWithSalt` depthTupleType b
-
+{-# INLINE depthTupleType #-}
 depthTupleType :: TupleType t -> Int
 depthTupleType UnitTuple       = 0
 depthTupleType SingleTuple{}   = 1
 depthTupleType (PairTuple a b) = depthTupleType a + depthTupleType b
 
-hashScalarType :: ScalarType t -> Int
-hashScalarType (NumScalarType t)    = $(hashQ "NumScalarType")    `hashWithSalt` hashNumType t
-hashScalarType (NonNumScalarType t) = $(hashQ "NonNumScalarType") `hashWithSalt` hashNonNumType t
+{-# INLINE encodeScalarType #-}
+encodeScalarType :: ScalarType t -> Builder
+encodeScalarType (NumScalarType t)    = intHost $(hashQ "NumScalarType")    <> encodeNumType t
+encodeScalarType (NonNumScalarType t) = intHost $(hashQ "NonNumScalarType") <> encodeNonNumType t
 
-hashBoundedType :: BoundedType t -> Int
-hashBoundedType (IntegralBoundedType t) = $(hashQ "IntegralBoundedType") `hashWithSalt` hashIntegralType t
-hashBoundedType (NonNumBoundedType t)   = $(hashQ "NonNumBoundedType")   `hashWithSalt` hashNonNumType t
+{-# INLINE encodeBoundedType #-}
+encodeBoundedType :: BoundedType t -> Builder
+encodeBoundedType (IntegralBoundedType t) = intHost $(hashQ "IntegralBoundedType") <> encodeIntegralType t
+encodeBoundedType (NonNumBoundedType t)   = intHost $(hashQ "NonNumBoundedType")   <> encodeNonNumType t
 
-hashNonNumType :: NonNumType t -> Int
-hashNonNumType TypeBool{}   = $(hashQ "Bool")
-hashNonNumType TypeChar{}   = $(hashQ "Char")
-hashNonNumType TypeCChar{}  = $(hashQ "CChar")
-hashNonNumType TypeCSChar{} = $(hashQ "CSChar")
-hashNonNumType TypeCUChar{} = $(hashQ "CUChar")
+{-# INLINE encodeNonNumType #-}
+encodeNonNumType :: NonNumType t -> Builder
+encodeNonNumType TypeBool{}   = intHost $(hashQ "Bool")
+encodeNonNumType TypeChar{}   = intHost $(hashQ "Char")
+encodeNonNumType TypeCChar{}  = intHost $(hashQ "CChar")
+encodeNonNumType TypeCSChar{} = intHost $(hashQ "CSChar")
+encodeNonNumType TypeCUChar{} = intHost $(hashQ "CUChar")
 
-hashNumType :: NumType t -> Int
-hashNumType (IntegralNumType t) = $(hashQ "IntegralNumType") `hashWithSalt` hashIntegralType t
-hashNumType (FloatingNumType t) = $(hashQ "FloatingNumType") `hashWithSalt` hashFloatingType t
+{-# INLINE encodeNumType #-}
+encodeNumType :: NumType t -> Builder
+encodeNumType (IntegralNumType t) = intHost $(hashQ "IntegralNumType") <> encodeIntegralType t
+encodeNumType (FloatingNumType t) = intHost $(hashQ "FloatingNumType") <> encodeFloatingType t
 
-hashIntegralType :: IntegralType t -> Int
-hashIntegralType TypeInt{}     = $(hashQ "Int")
-hashIntegralType TypeInt8{}    = $(hashQ "Int8")
-hashIntegralType TypeInt16{}   = $(hashQ "Int16")
-hashIntegralType TypeInt32{}   = $(hashQ "Int32")
-hashIntegralType TypeInt64{}   = $(hashQ "Int64")
-hashIntegralType TypeWord{}    = $(hashQ "Word")
-hashIntegralType TypeWord8{}   = $(hashQ "Word8")
-hashIntegralType TypeWord16{}  = $(hashQ "Word16")
-hashIntegralType TypeWord32{}  = $(hashQ "Word32")
-hashIntegralType TypeWord64{}  = $(hashQ "Word64")
-hashIntegralType TypeCShort{}  = $(hashQ "CShort")
-hashIntegralType TypeCUShort{} = $(hashQ "CUShort")
-hashIntegralType TypeCInt{}    = $(hashQ "CInt")
-hashIntegralType TypeCUInt{}   = $(hashQ "CUInt")
-hashIntegralType TypeCLong{}   = $(hashQ "CLong")
-hashIntegralType TypeCULong{}  = $(hashQ "CULong")
-hashIntegralType TypeCLLong{}  = $(hashQ "CLLong")
-hashIntegralType TypeCULLong{} = $(hashQ "CULLong")
+{-# INLINE encodeIntegralType #-}
+encodeIntegralType :: IntegralType t -> Builder
+encodeIntegralType TypeInt{}     = intHost $(hashQ "Int")
+encodeIntegralType TypeInt8{}    = intHost $(hashQ "Int8")
+encodeIntegralType TypeInt16{}   = intHost $(hashQ "Int16")
+encodeIntegralType TypeInt32{}   = intHost $(hashQ "Int32")
+encodeIntegralType TypeInt64{}   = intHost $(hashQ "Int64")
+encodeIntegralType TypeWord{}    = intHost $(hashQ "Word")
+encodeIntegralType TypeWord8{}   = intHost $(hashQ "Word8")
+encodeIntegralType TypeWord16{}  = intHost $(hashQ "Word16")
+encodeIntegralType TypeWord32{}  = intHost $(hashQ "Word32")
+encodeIntegralType TypeWord64{}  = intHost $(hashQ "Word64")
+encodeIntegralType TypeCShort{}  = intHost $(hashQ "CShort")
+encodeIntegralType TypeCUShort{} = intHost $(hashQ "CUShort")
+encodeIntegralType TypeCInt{}    = intHost $(hashQ "CInt")
+encodeIntegralType TypeCUInt{}   = intHost $(hashQ "CUInt")
+encodeIntegralType TypeCLong{}   = intHost $(hashQ "CLong")
+encodeIntegralType TypeCULong{}  = intHost $(hashQ "CULong")
+encodeIntegralType TypeCLLong{}  = intHost $(hashQ "CLLong")
+encodeIntegralType TypeCULLong{} = intHost $(hashQ "CULLong")
 
-hashFloatingType :: FloatingType t -> Int
-hashFloatingType TypeFloat{}   = $(hashQ "Float")
-hashFloatingType TypeDouble{}  = $(hashQ "Double")
-hashFloatingType TypeCFloat{}  = $(hashQ "CFloat")
-hashFloatingType TypeCDouble{} = $(hashQ "CDouble")
-
-
--- Auxiliary
--- ---------
-
--- Discriminate binary functions that commute, and if so return the operands in
--- a stable ordering such that matching recognises expressions modulo
--- commutativity.
---
-commutes
-    :: forall acc env aenv a r.
-       HashAcc acc
-    -> PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> Maybe (PreOpenExp acc env aenv a)
-commutes h f x = case f of
-  PrimAdd{}     -> Just (swizzle x)
-  PrimMul{}     -> Just (swizzle x)
-  PrimBAnd{}    -> Just (swizzle x)
-  PrimBOr{}     -> Just (swizzle x)
-  PrimBXor{}    -> Just (swizzle x)
-  PrimEq{}      -> Just (swizzle x)
-  PrimNEq{}     -> Just (swizzle x)
-  PrimMax{}     -> Just (swizzle x)
-  PrimMin{}     -> Just (swizzle x)
-  PrimLAnd      -> Just (swizzle x)
-  PrimLOr       -> Just (swizzle x)
-  _             -> Nothing
-  where
-    swizzle :: PreOpenExp acc env aenv (a',a') -> PreOpenExp acc env aenv (a',a')
-    swizzle exp
-      | Tuple (NilTup `SnocTup` a `SnocTup` b)  <- exp
-      , hashPreOpenExp h a > hashPreOpenExp h b = Tuple (NilTup `SnocTup` b `SnocTup` a)
-      --
-      | otherwise                               = exp
+{-# INLINE encodeFloatingType #-}
+encodeFloatingType :: FloatingType t -> Builder
+encodeFloatingType TypeFloat{}   = intHost $(hashQ "Float")
+encodeFloatingType TypeDouble{}  = intHost $(hashQ "Double")
+encodeFloatingType TypeCFloat{}  = intHost $(hashQ "CFloat")
+encodeFloatingType TypeCDouble{} = intHost $(hashQ "CDouble")
 

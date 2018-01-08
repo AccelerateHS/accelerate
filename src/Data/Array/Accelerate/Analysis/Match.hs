@@ -19,10 +19,10 @@ module Data.Array.Accelerate.Analysis.Match (
   -- matching expressions
   MatchAcc,
   (:~:)(..),
-  matchOpenAcc,  matchPreOpenAcc,
-  matchOpenAfun, matchPreOpenAfun,
-  matchOpenExp,  matchPreOpenExp,
-  matchOpenFun,  matchPreOpenFun,
+  matchPreOpenAcc,
+  matchPreOpenAfun,
+  matchPreOpenExp,
+  matchPreOpenFun,
   matchPrimFun,  matchPrimFun',
 
   -- auxiliary
@@ -55,29 +55,21 @@ type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :~: t)
 -- Compute the congruence of two array computations. The nodes are congruent if
 -- they have the same operator and their operands are congruent.
 --
-{-# INLINEABLE matchOpenAcc #-}
-matchOpenAcc
-    :: OpenAcc aenv s
-    -> OpenAcc aenv t
-    -> Maybe (s :~: t)
-matchOpenAcc (OpenAcc acc1) (OpenAcc acc2) =
-  matchPreOpenAcc matchOpenAcc hashOpenAcc acc1 acc2
-
-
+{-# INLINEABLE matchPreOpenAcc #-}
 matchPreOpenAcc
     :: forall acc aenv s t.
-       MatchAcc acc
-    -> HashAcc  acc
+       MatchAcc  acc
+    -> EncodeAcc acc
     -> PreOpenAcc acc aenv s
     -> PreOpenAcc acc aenv t
     -> Maybe (s :~: t)
-matchPreOpenAcc matchAcc hashAcc = match
+matchPreOpenAcc matchAcc encodeAcc = match
   where
     matchFun :: PreOpenFun acc env' aenv' u -> PreOpenFun acc env' aenv' v -> Maybe (u :~: v)
-    matchFun = matchPreOpenFun matchAcc hashAcc
+    matchFun = matchPreOpenFun matchAcc encodeAcc
 
     matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :~: v)
-    matchExp = matchPreOpenExp matchAcc hashAcc
+    matchExp = matchPreOpenExp matchAcc encodeAcc
 
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :~: t)
     match (Alet x1 a1) (Alet x2 a2)
@@ -242,19 +234,19 @@ matchPreOpenAcc matchAcc hashAcc = match
     match (Stencil f1 b1 a1) (Stencil f2 b2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
-      , matchBoundary matchAcc hashAcc b1 b2
+      , matchBoundary matchAcc encodeAcc b1 b2
       = Just Refl
 
     match (Stencil2 f1 b1  a1  b2  a2) (Stencil2 f2 b1' a1' b2' a2')
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a1'
       , Just Refl <- matchAcc a2 a2'
-      , matchBoundary matchAcc hashAcc b1 b1'
-      , matchBoundary matchAcc hashAcc b2 b2'
+      , matchBoundary matchAcc encodeAcc b1 b1'
+      , matchBoundary matchAcc encodeAcc b2 b2'
       = Just Refl
 
     -- match (Collect s1) (Collect s2)
-    --   = matchSeq matchAcc hashAcc s1 s2
+    --   = matchSeq matchAcc encodeAcc s1 s2
 
     match _ _
       = Nothing
@@ -262,6 +254,7 @@ matchPreOpenAcc matchAcc hashAcc = match
 
 -- Array tuples
 --
+{-# INLINEABLE matchAtuple #-}
 matchAtuple
     :: MatchAcc acc
     -> Atuple (acc aenv) s
@@ -278,12 +271,7 @@ matchAtuple _ _       _       = Nothing
 
 -- Array functions
 --
-matchOpenAfun
-    :: OpenAfun aenv s
-    -> OpenAfun aenv t
-    -> Maybe (s :~: t)
-matchOpenAfun = matchPreOpenAfun matchOpenAcc
-
+{-# INLINEABLE matchPreOpenAfun #-}
 matchPreOpenAfun
     :: MatchAcc acc
     -> PreOpenAfun acc aenv s
@@ -304,10 +292,11 @@ matchPreOpenAfun _ _         _         = Nothing
 
 -- Match stencil boundaries
 --
+{-# INLINEABLE matchBoundary #-}
 matchBoundary
     :: forall acc aenv sh t. Elt t
-    => MatchAcc acc
-    -> HashAcc acc
+    => MatchAcc  acc
+    -> EncodeAcc acc
     -> PreBoundary acc aenv (Array sh t)
     -> PreBoundary acc aenv (Array sh t)
     -> Bool
@@ -325,10 +314,11 @@ matchBoundary _ _ _ _
 {--
 -- Match sequences
 --
+{-# INLINEABLE matchSeq #-}
 matchSeq
     :: forall acc aenv senv s t.
-       MatchAcc acc
-    -> HashAcc acc
+       MatchAcc  acc
+    -> EncodeAcc acc
     -> PreOpenSeq acc aenv senv s
     -> PreOpenSeq acc aenv senv t
     -> Maybe (s :~: t)
@@ -405,6 +395,7 @@ matchSeq m h = match
 -- As a convenience, we are just comparing the stable names, but we could also
 -- walk the structure comparing the underlying ptrsOfArrayData.
 --
+{-# INLINEABLE matchArrays #-}
 matchArrays :: ArraysR s -> ArraysR t -> s -> t -> Maybe (s :~: t)
 matchArrays ArraysRunit ArraysRunit () ()
   = Just Refl
@@ -434,20 +425,15 @@ matchArrays _ _ _ _
 -- The below attempts to use real typed equality, but occasionally still needs
 -- to use a cast, particularly when we can only match the representation types.
 --
-matchOpenExp
-    :: OpenExp env aenv s
-    -> OpenExp env aenv t
-    -> Maybe (s :~: t)
-matchOpenExp = matchPreOpenExp matchOpenAcc hashOpenAcc
-
+{-# INLINEABLE matchPreOpenExp #-}
 matchPreOpenExp
     :: forall acc env aenv s t.
-       MatchAcc acc
-    -> HashAcc  acc
+       MatchAcc  acc
+    -> EncodeAcc acc
     -> PreOpenExp acc env aenv s
     -> PreOpenExp acc env aenv t
     -> Maybe (s :~: t)
-matchPreOpenExp matchAcc hashAcc = match
+matchPreOpenExp matchAcc encodeAcc = match
   where
     match :: forall env' aenv' s' t'.
              PreOpenExp acc env' aenv' s'
@@ -475,7 +461,7 @@ matchPreOpenExp matchAcc hashAcc = match
       = gcast Refl  -- surface/representation type
 
     match (Tuple t1) (Tuple t2)
-      | Just Refl <- matchTuple matchAcc hashAcc t1 t2
+      | Just Refl <- matchTuple matchAcc encodeAcc t1 t2
       = gcast Refl  -- surface/representation type
 
     match (Prj ix1 t1) (Prj ix2 t2)
@@ -532,16 +518,16 @@ matchPreOpenExp matchAcc hashAcc = match
 
     match (While p1 f1 x1) (While p2 f2 x2)
       | Just Refl <- match x1 x2
-      , Just Refl <- matchPreOpenFun matchAcc hashAcc p1 p2
-      , Just Refl <- matchPreOpenFun matchAcc hashAcc f1 f2
+      , Just Refl <- matchPreOpenFun matchAcc encodeAcc p1 p2
+      , Just Refl <- matchPreOpenFun matchAcc encodeAcc f1 f2
       = Just Refl
 
     match (PrimConst c1) (PrimConst c2)
       = matchPrimConst c1 c2
 
     match (PrimApp f1 x1) (PrimApp f2 x2)
-      | Just x1'  <- commutes hashAcc f1 x1
-      , Just x2'  <- commutes hashAcc f2 x2
+      | Just x1'  <- commutes encodeAcc f1 x1
+      , Just x2'  <- commutes encodeAcc f2 x2
       , Just Refl <- match        x1' x2'
       , Just Refl <- matchPrimFun f1  f2
       = Just Refl
@@ -584,15 +570,10 @@ matchPreOpenExp matchAcc hashAcc = match
 
 -- Match scalar functions
 --
-matchOpenFun
-    :: OpenFun env aenv s
-    -> OpenFun env aenv t
-    -> Maybe (s :~: t)
-matchOpenFun = matchPreOpenFun matchOpenAcc hashOpenAcc
-
+{-# INLINEABLE matchPreOpenFun #-}
 matchPreOpenFun
-    :: MatchAcc acc
-    -> HashAcc  acc
+    :: MatchAcc  acc
+    -> EncodeAcc acc
     -> PreOpenFun acc env aenv s
     -> PreOpenFun acc env aenv t
     -> Maybe (s :~: t)
@@ -609,6 +590,7 @@ matchPreOpenFun _ _ _        _        = Nothing
 
 -- Matching constants
 --
+{-# INLINEABLE matchConst #-}
 matchConst :: TupleType a -> a -> a -> Bool
 matchConst UnitTuple         ()      ()      = True
 matchConst (SingleTuple ty)  a       b       = evalEq ty (a,b)
@@ -622,6 +604,7 @@ evalEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = 
 
 -- Environment projection indices
 --
+{-# INLINEABLE matchIdx #-}
 matchIdx :: Idx env s -> Idx env t -> Maybe (s :~: t)
 matchIdx ZeroIdx     ZeroIdx     = Just Refl
 matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
@@ -631,6 +614,7 @@ matchIdx _           _           = Nothing
 -- Tuple projection indices. Given the same tuple expression structure (tup),
 -- check that the indices project identical elements.
 --
+{-# INLINEABLE matchTupleIdx #-}
 matchTupleIdx :: TupleIdx tup s -> TupleIdx tup t -> Maybe (s :~: t)
 matchTupleIdx ZeroTupIdx     ZeroTupIdx     = Just Refl
 matchTupleIdx (SuccTupIdx s) (SuccTupIdx t) = matchTupleIdx s t
@@ -638,9 +622,10 @@ matchTupleIdx _              _              = Nothing
 
 -- Tuples
 --
+{-# INLINEABLE matchTuple #-}
 matchTuple
-    :: MatchAcc acc
-    -> HashAcc  acc
+    :: MatchAcc  acc
+    -> EncodeAcc acc
     -> Tuple (PreOpenExp acc env aenv) s
     -> Tuple (PreOpenExp acc env aenv) t
     -> Maybe (s :~: t)
@@ -655,6 +640,7 @@ matchTuple _ _ _               _                = Nothing
 
 -- Slice specifications
 --
+{-# INLINEABLE matchSliceRestrict #-}
 matchSliceRestrict
     :: SliceIndex slix s co  sh
     -> SliceIndex slix t co' sh
@@ -674,6 +660,7 @@ matchSliceRestrict _ _
   = Nothing
 
 
+{-# INLINEABLE matchSliceExtend #-}
 matchSliceExtend
     :: SliceIndex slix sl co  s
     -> SliceIndex slix sl co' t
@@ -695,6 +682,7 @@ matchSliceExtend _ _
 
 -- Primitive constants and functions
 --
+{-# INLINEABLE matchPrimConst #-}
 matchPrimConst :: PrimConst s -> PrimConst t -> Maybe (s :~: t)
 matchPrimConst (PrimMinBound s) (PrimMinBound t) = matchBoundedType s t
 matchPrimConst (PrimMaxBound s) (PrimMaxBound t) = matchBoundedType s t
@@ -704,6 +692,7 @@ matchPrimConst _                _                = Nothing
 
 -- Covariant function matching
 --
+{-# INLINEABLE matchPrimFun #-}
 matchPrimFun :: PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :~: t)
 matchPrimFun (PrimAdd _)                (PrimAdd _)                = Just Refl
 matchPrimFun (PrimSub _)                (PrimSub _)                = Just Refl
@@ -776,6 +765,7 @@ matchPrimFun _                          _                          = Nothing
 
 -- Contravariant function matching
 --
+{-# INLINEABLE matchPrimFun' #-}
 matchPrimFun' :: PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :~: t)
 matchPrimFun' (PrimAdd _)                (PrimAdd _)                = Just Refl
 matchPrimFun' (PrimSub _)                (PrimSub _)                = Just Refl
@@ -867,6 +857,7 @@ matchPrimFun' _ _
 
 -- Match reified types
 --
+{-# INLINEABLE matchTupleType #-}
 matchTupleType :: TupleType s -> TupleType t -> Maybe (s :~: t)
 matchTupleType UnitTuple         UnitTuple         = Just Refl
 matchTupleType (SingleTuple s)   (SingleTuple t)   = matchScalarType s t
@@ -881,21 +872,25 @@ matchTupleType _ _
 
 -- Match reified type dictionaries
 --
+{-# INLINEABLE matchScalarType #-}
 matchScalarType :: ScalarType s -> ScalarType t -> Maybe (s :~: t)
 matchScalarType (NumScalarType s)    (NumScalarType t)    = matchNumType s t
 matchScalarType (NonNumScalarType s) (NonNumScalarType t) = matchNonNumType s t
 matchScalarType _                    _                    = Nothing
 
+{-# INLINEABLE matchNumType #-}
 matchNumType :: NumType s -> NumType t -> Maybe (s :~: t)
 matchNumType (IntegralNumType s) (IntegralNumType t) = matchIntegralType s t
 matchNumType (FloatingNumType s) (FloatingNumType t) = matchFloatingType s t
 matchNumType _                   _                   = Nothing
 
+{-# INLINEABLE matchBoundedType #-}
 matchBoundedType :: BoundedType s -> BoundedType t -> Maybe (s :~: t)
 matchBoundedType (IntegralBoundedType s) (IntegralBoundedType t) = matchIntegralType s t
 matchBoundedType (NonNumBoundedType s)   (NonNumBoundedType t)   = matchNonNumType s t
 matchBoundedType _                       _                       = Nothing
 
+{-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
 matchIntegralType (TypeInt _)     (TypeInt _)     = Just Refl
 matchIntegralType (TypeInt8 _)    (TypeInt8 _)    = Just Refl
@@ -917,6 +912,7 @@ matchIntegralType (TypeCLLong _)  (TypeCLLong _)  = Just Refl
 matchIntegralType (TypeCULLong _) (TypeCULLong _) = Just Refl
 matchIntegralType _               _               = Nothing
 
+{-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
 matchFloatingType (TypeFloat _)   (TypeFloat _)   = Just Refl
 matchFloatingType (TypeDouble _)  (TypeDouble _)  = Just Refl
@@ -924,6 +920,7 @@ matchFloatingType (TypeCFloat _)  (TypeCFloat _)  = Just Refl
 matchFloatingType (TypeCDouble _) (TypeCDouble _) = Just Refl
 matchFloatingType _               _               = Nothing
 
+{-# INLINEABLE matchNonNumType #-}
 matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
 matchNonNumType (TypeBool _)   (TypeBool _)   = Just Refl
 matchNonNumType (TypeChar _)   (TypeChar _)   = Just Refl
@@ -931,4 +928,39 @@ matchNonNumType (TypeCChar _)  (TypeCChar _)  = Just Refl
 matchNonNumType (TypeCSChar _) (TypeCSChar _) = Just Refl
 matchNonNumType (TypeCUChar _) (TypeCUChar _) = Just Refl
 matchNonNumType _              _              = Nothing
+
+
+-- Auxiliary
+-- ---------
+
+-- Discriminate binary functions that commute, and if so return the operands in
+-- a stable ordering such that matching recognises expressions modulo
+-- commutativity.
+--
+commutes
+    :: forall acc env aenv a r.
+       EncodeAcc acc
+    -> PrimFun (a -> r)
+    -> PreOpenExp acc env aenv a
+    -> Maybe (PreOpenExp acc env aenv a)
+commutes h f x = case f of
+  PrimAdd{}     -> Just (swizzle x)
+  PrimMul{}     -> Just (swizzle x)
+  PrimBAnd{}    -> Just (swizzle x)
+  PrimBOr{}     -> Just (swizzle x)
+  PrimBXor{}    -> Just (swizzle x)
+  PrimEq{}      -> Just (swizzle x)
+  PrimNEq{}     -> Just (swizzle x)
+  PrimMax{}     -> Just (swizzle x)
+  PrimMin{}     -> Just (swizzle x)
+  PrimLAnd      -> Just (swizzle x)
+  PrimLOr       -> Just (swizzle x)
+  _             -> Nothing
+  where
+    swizzle :: PreOpenExp acc env aenv (a',a') -> PreOpenExp acc env aenv (a',a')
+    swizzle exp
+      | Tuple (NilTup `SnocTup` a `SnocTup` b)  <- exp
+      , hashPreOpenExp h a > hashPreOpenExp h b = Tuple (NilTup `SnocTup` b `SnocTup` a)
+      --
+      | otherwise                               = exp
 

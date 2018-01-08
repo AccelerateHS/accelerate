@@ -33,7 +33,6 @@ module Data.Array.Accelerate.Trafo (
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
-  -- DelayedSeq(..), Extend(..),
 
   -- * Substitution
   module Data.Array.Accelerate.Trafo.Substitution,
@@ -42,7 +41,7 @@ module Data.Array.Accelerate.Trafo (
   Match(..), (:~:)(..),
 
   -- ** Auxiliary
-  matchDelayedOpenAcc, hashDelayedOpenAcc,
+  matchDelayedOpenAcc, encodeDelayedOpenAcc, hashDelayedOpenAcc,
 
 ) where
 
