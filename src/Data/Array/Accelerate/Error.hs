@@ -66,7 +66,7 @@ indexCheck = withLocation
   [| \format fn i n x ->
         case not (doChecks Bounds) || (i >= 0 && i < n) of
            True  -> x
-           False -> error (format Bounds (call fn ("index out of bounds: " ++ show (i,n)))) x |]
+           False -> errorWithoutStackTrace (format Bounds (call fn ("index out of bounds: " ++ show (i,n)))) x |]
 
 
 -- | Print a warning message if the condition evaluates to False.
@@ -91,14 +91,14 @@ call f m = concat ["(", f, "): ", m]
 
 errorQ :: Q Exp
 errorQ = withLocation
-  [| \format kind fn msg -> error (format kind (call fn msg)) |]
+  [| \format kind fn msg -> errorWithoutStackTrace (format kind (call fn msg)) |]
 
 checkQ :: Q Exp
 checkQ = withLocation
   [| \format kind fn msg cond x ->
         case not (doChecks kind) || cond of
           True  -> x
-          False -> error (format kind (call fn msg)) |]
+          False -> errorWithoutStackTrace (format kind (call fn msg)) |]
 
 warningQ :: Q Exp
 warningQ = withLocation
@@ -131,6 +131,11 @@ message kind msg = unlines header ++ msg
                     ,"*** Internal error in package accelerate ***"
                     ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]
         _        -> []
+
+#if __GLASGOW_HASKELL__ < 800
+errorWithoutStackTrace :: String -> a
+errorWithoutStackTrace = error
+#endif
 
 
 -- CPP malarky
