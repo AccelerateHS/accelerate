@@ -44,6 +44,7 @@ import Data.Hashable
 import Data.Typeable
 import System.Mem.StableName
 import System.IO.Unsafe                                 ( unsafePerformIO )
+import Text.Printf
 import qualified Data.HashTable.IO                      as Hash
 import qualified Data.IntMap                            as IntMap
 import qualified Data.HashMap.Strict                    as Map
@@ -90,24 +91,28 @@ data Layout env env' where
 
 -- Project the nth index out of an environment layout.
 --
--- The first argument provides context information for error messages in the case of failure.
+-- The first argument provides context information for error messages in the
+-- case of failure.
 --
-prjIdx :: forall t env env'. Typeable t => String -> Int -> Layout env env' -> Idx env t
-prjIdx ctxt 0 (PushLayout _ (ix :: Idx env0 t0))
-  = flip fromMaybe (gcast ix)
-  $ possiblyNestedErr ctxt $
-      "Couldn't match expected type `" ++ show (typeOf (undefined::t)) ++
-      "' with actual type `" ++ show (typeOf (undefined::t0)) ++ "'" ++
-      "\n  Type mismatch"
-prjIdx ctxt n (PushLayout l _)  = prjIdx ctxt (n - 1) l
-prjIdx ctxt _ EmptyLayout       = possiblyNestedErr ctxt "Environment doesn't contain index"
+prjIdx :: Typeable t
+       => String
+       -> Int
+       -> Layout env env'
+       -> Idx env t
+prjIdx context = go
+  where
+    go :: forall env env' t. Typeable t => Int -> Layout env env' -> Idx env t
+    go _ EmptyLayout                        = no "environment does not contain index"
+    go 0 (PushLayout _ (ix :: Idx env0 s))
+      | Just ix' <- gcast ix                = ix'
+      | otherwise                           = no $ printf "couldn't match expected type `%s' with actual type `%s'"
+                                                          (show (typeOf (undefined::t)))
+                                                          (show (typeOf (undefined::s)))
+    go n (PushLayout l _)                   = go (n-1) l
 
-possiblyNestedErr :: String -> String -> a
-possiblyNestedErr ctxt failreason
-  = error $ "Fatal error in Sharing.prjIdx:"
-      ++ "\n  " ++ failreason ++ " at " ++ ctxt
-      ++ "\n  Possible reason: nested data parallelism — array computation that depends on a"
-      ++ "\n    scalar variable of type 'Exp a'"
+    no :: String -> a
+    no reason = $internalError "prjIdx" (printf "%s\nin the context: %s" reason context)
+
 
 -- Add an entry to a layout, incrementing all indices
 --
@@ -656,15 +661,53 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
     cvt :: Elt t' => ScopedExp t' -> AST.OpenExp env aenv t'
     cvt (ScopedExp _ (VarSharing se))
-      | Just i <- findIndex (matchStableExp se) env'
-      = AST.Var (prjIdx (ctxt ++ "; i = " ++ show i) i lyt)
-      | null env'
-      = error $ "Cyclic definition of a value of type 'Exp' (sa = " ++ show (hashStableNameHeight se) ++ ")"
-      | otherwise
-      = $internalError "convertSharingExp" err
+      | Just i <- findIndex (matchStableExp se) env' = AST.Var (prjIdx (ctx i) i lyt)
+      | otherwise                                    = $internalError "convertSharingExp" msg
       where
-        ctxt = "shared 'Exp' tree with stable name " ++ show (hashStableNameHeight se)
-        err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env' = " ++ show env'
+        ctx i = printf "shared 'Exp' tree with stable name %d; i=%d" (hashStableNameHeight se) i
+        msg   = unlines
+          [ if null env'
+               then printf "cyclic definition of a value of type 'Exp' (sa=%d)" (hashStableNameHeight se)
+               else printf "inconsistent valuation at shared 'Exp' tree (sa=%d; env=%s)" (hashStableNameHeight se) (show env')
+          , ""
+          , "Note that this error usually arises due to the presence of nested data"
+          , "parallelism; when a parallel computation attempts to initiate new parallel"
+          , "work _which depends on_ a scalar variable given by the first computation."
+          , ""
+          , "For example, suppose we wish to sum the columns of a two-dimensional array."
+          , "You might think to do this in the following (incorrect) way: by constructing"
+          , "a vector using 'generate' where at each index we 'slice' out the"
+          , "corresponding column of the matrix and 'sum' it:"
+          , ""
+          , "> sum_columns_ndp :: Num a => Acc (Matrix a) -> Acc (Vector a)"
+          , "> sum_columns_ndp mat ="
+          , ">   let Z :. rows :. cols = unlift (shape mat) :: Z :. Exp Int :. Exp Int"
+          , ">   in  generate (index1 cols)"
+          , ">                (\\col -> the $ sum (slice mat (lift (Z :. All :. unindex1 col))))"
+          , ""
+          , "However, since both 'generate' and 'slice' are data-parallel operators, and"
+          , "moreover that 'slice' _depends on_ the argument 'col' given to it by the"
+          , "'generate' function, this operation requires nested parallelism and is thus"
+          , "not (at this time) permitted. The clue that this definition is invalid is"
+          , "that in order to create a program which will be accepted by the type checker,"
+          , "we had to use the function 'the' to retrieve the result of the parallel"
+          , "'sum', effectively concealing that this is a collective operation in order to"
+          , "match the match the type expected by 'generate'."
+          , ""
+          , "To solve this particular example, we can make use of the fact that (most)"
+          , "collective operations in Accelerate are _rank polymorphic_. The 'sum'"
+          , "operation reduces along the innermost dimension of an array of arbitrary"
+          , "rank, reducing the dimensionality of the array by one. To reduce the array"
+          , "column-wise then, we first need to simply 'transpose' the array:"
+          , ""
+          , "> sum_columns :: Num a => Acc (Matrix a) -> Acc (Vector a)"
+          , "> sum_columns = sum . transpose"
+          , ""
+          , "If you feel like this is not the cause of your error, or you would like some"
+          , "advice locating the problem and perhaps with a workaround, feel free to"
+          , "submit an issue at the above URL."
+          ]
+
     cvt (ScopedExp _ (LetSharing se@(StableSharingExp _ boundExp) bodyExp))
       = let lyt' = incLayout lyt `PushLayout` ZeroIdx
         in
