@@ -101,16 +101,14 @@ timed_gc fmt action = do
       gcCPU       = gcCpuSeconds gc1 - gcCpuSeconds gc0
       totalGCs    = numGcs gc1 - numGcs gc0
 #else
-      gc0         = gc rts0
-      gc1         = gc rts1
-      allocated   = toDouble (gcdetails_allocated_bytes gc1 - gcdetails_allocated_bytes gc0)
-      copied      = toDouble (gcdetails_copied_bytes gc1 - gcdetails_copied_bytes gc0)
+      allocated   = toDouble (allocated_bytes rts1 - allocated_bytes rts0)
+      copied      = toDouble (copied_bytes rts1 - copied_bytes rts0)
       totalWall   = toDouble (elapsed_ns rts1 - elapsed_ns rts0) * 1.0E-9
       totalCPU    = toDouble (cpu_ns rts1 - cpu_ns rts0) * 1.0E-9
       mutatorWall = toDouble (mutator_elapsed_ns rts1 - mutator_elapsed_ns rts0) * 1.0E-9
       mutatorCPU  = toDouble (mutator_cpu_ns rts1 - mutator_cpu_ns rts0) * 1.0E-9
-      gcWall      = toDouble (gcdetails_elapsed_ns gc1 - gcdetails_elapsed_ns gc0) * 1.0E-9
-      gcCPU       = toDouble (gcdetails_cpu_ns gc1 - gcdetails_cpu_ns gc0) * 1.0E-9
+      gcWall      = toDouble (gc_elapsed_ns rts1 - gc_elapsed_ns rts0) * 1.0E-9
+      gcCPU       = toDouble (gc_cpu_ns rts1 - gc_cpu_ns rts0) * 1.0E-9
       totalGCs    = gcs rts1 - gcs rts0
 #endif
 
