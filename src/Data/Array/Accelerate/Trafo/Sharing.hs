@@ -692,7 +692,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           , "that in order to create a program which will be accepted by the type checker,"
           , "we had to use the function 'the' to retrieve the result of the parallel"
           , "'sum', effectively concealing that this is a collective operation in order to"
-          , "match the match the type expected by 'generate'."
+          , "match the type expected by 'generate'."
           , ""
           , "To solve this particular example, we can make use of the fact that (most)"
           , "collective operations in Accelerate are _rank polymorphic_. The 'sum'"
