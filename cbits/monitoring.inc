@@ -16,7 +16,7 @@
 #include <stdio.h>
 
 
-/* These monitoring counters are globals which  will be accessed from the
+/* These monitoring counters are globals which will be accessed from the
  * Haskell side.
  */
 int64_t __active_ns_llvm_native             = 0;
@@ -123,7 +123,7 @@ __attribute__((destructor)) void dump_gc_stats(void)
      * buffer size of at least 27 characters (including the terminating \0) to
      * format any numbers with commas.
      */
-    char buffer[27];
+    char buffer[96];
     double timestamp = clock_gettime_elapsed_seconds();
 
     printf("\n");
@@ -131,7 +131,7 @@ __attribute__((destructor)) void dump_gc_stats(void)
     printf("[%8.3f] gc: %s bytes allocated on the remote device\n", timestamp, format_int64(buffer, __total_bytes_allocated_remote));
     printf("[%8.3f] gc: %s bytes copied to the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_to_remote));
     printf("[%8.3f] gc: %s bytes copied from the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_from_remote));
-    printf("[%8.3f] gc: %s bytes evicted from the remote (%s evictions, %s GCs)\n", timestamp, format_int64(buffer, __total_bytes_evicted_from_remote), format_int64(buffer, __num_evictions), format_int64(buffer, __num_remote_gcs));
+    printf("[%8.3f] gc: %s bytes evicted from the remote (%s evictions, %s GCs)\n", timestamp, format_int64(&buffer[0], __total_bytes_evicted_from_remote), format_int64(&buffer[32], __num_evictions), format_int64(&buffer[64], __num_remote_gcs));
   }
 }
 
