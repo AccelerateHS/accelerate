@@ -39,6 +39,7 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
 import Crypto.Hash
+import Data.Bits
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
 import Data.Monoid
@@ -325,9 +326,11 @@ encodeScalarConst (NonNumScalarType t) = encodeNonNumConst t
 encodeNonNumConst :: NonNumType t -> t -> Builder
 encodeNonNumConst TypeBool{}   x          = intHost $(hashQ "Bool")   <> word8 (fromBool x)
 encodeNonNumConst TypeChar{}   x          = intHost $(hashQ "Char")   <> charUtf8 x
-encodeNonNumConst TypeCChar{}  (CChar  x) = intHost $(hashQ "CChar")  <> int8 x
 encodeNonNumConst TypeCSChar{} (CSChar x) = intHost $(hashQ "CSChar") <> int8 x
 encodeNonNumConst TypeCUChar{} (CUChar x) = intHost $(hashQ "CUChar") <> word8 x
+encodeNonNumConst TypeCChar{}  (CChar  x) = intHost $(hashQ "CChar")  <> $( case isSigned (undefined::CChar) of
+                                                                              True  -> [e| int8  |]
+                                                                              False -> [e| word8 |] ) x
 
 {-# INLINE fromBool #-}
 fromBool :: Bool -> Word8
@@ -355,10 +358,16 @@ encodeIntegralConst TypeCShort{}  (CShort x)  = intHost $(hashQ "CShort")  <> in
 encodeIntegralConst TypeCUShort{} (CUShort x) = intHost $(hashQ "CUShort") <> word16Host x
 encodeIntegralConst TypeCInt{}    (CInt x)    = intHost $(hashQ "CInt")    <> int32Host x
 encodeIntegralConst TypeCUInt{}   (CUInt x)   = intHost $(hashQ "CUInt")   <> word32Host x
-encodeIntegralConst TypeCLong{}   (CLong x)   = intHost $(hashQ "CLong")   <> int64Host x
-encodeIntegralConst TypeCULong{}  (CULong x)  = intHost $(hashQ "CULong")  <> word64Host x
 encodeIntegralConst TypeCLLong{}  (CLLong x)  = intHost $(hashQ "CLLong")  <> int64Host x
 encodeIntegralConst TypeCULLong{} (CULLong x) = intHost $(hashQ "CULLong") <> word64Host x
+encodeIntegralConst TypeCLong{}   (CLong x)   = intHost $(hashQ "CLong")   <> $( case finiteBitSize (undefined::CLong) of
+                                                                                   32 -> [e| int32Host |]
+                                                                                   64 -> [e| int64Host |]
+                                                                                   _  -> error "I don't know what architecture I am" ) x
+encodeIntegralConst TypeCULong{}  (CULong x)  = intHost $(hashQ "CULong")  <> $( case finiteBitSize (undefined::CULong) of
+                                                                                   32 -> [e| word32Host |]
+                                                                                   64 -> [e| word64Host |]
+                                                                                   _  -> error "I don't know what architecture I am" ) x
 
 {-# INLINE encodeFloatingConst #-}
 encodeFloatingConst :: FloatingType t -> t -> Builder
