@@ -295,9 +295,9 @@ instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l
 -- the return type is fixed to 'Bool'. This instance is provided to provide
 -- a useful error message.
 --
-instance P.Eq (Exp a) where
-  (==) = preludeError "Eq.==" "(==)"
-  (/=) = preludeError "Eq./=" "(/=)"
+instance Eq a => P.Eq (Exp a) where
+  (==) = preludeError "Eq.(==)" "(==)"
+  (/=) = preludeError "Eq.(/=)" "(/=)"
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)

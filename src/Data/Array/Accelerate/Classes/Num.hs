@@ -39,6 +39,12 @@ import qualified Prelude                                            as P
 --
 -- A light-weight alternative is the following constraint kind:
 --
+-- UPDATE TLM 2018-01-12: I attempted separating the two class hierarchies, and
+-- while in principle it works, has very poor ergonomics in modules which use
+-- both Accelerate and standard Haskell types. RebindableSyntax only helps for
+-- Accelerate-only modules. For mixed-mode files, we need to use every operation
+-- qualified, which is a pain...
+--
 
 -- | Basic numeric class
 --

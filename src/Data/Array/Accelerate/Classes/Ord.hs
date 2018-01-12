@@ -22,7 +22,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Text.Printf
-import Prelude                                                      ( ($), String, error)
+import Prelude                                                      ( ($), String, error, unlines )
 import qualified Prelude                                            as P
 
 
@@ -480,14 +480,20 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g, Ord h, Ord i, Ord j, 
 -- 'Prelude.minimum' and 'Prelude.maximum'.
 --
 instance Ord a => P.Ord (Exp a) where
-  compare = error "Prelude.Ord.compare applied to EDSL types"
-  (<)     = preludeError "Ord.<"  "(<)"
-  (<=)    = preludeError "Ord.<=" "(<=)"
-  (>)     = preludeError "Ord.>"  "(>)"
-  (>=)    = preludeError "Ord.>=" "(>=)"
+  (<)     = preludeError "Ord.(<)"  "(<)"
+  (<=)    = preludeError "Ord.(<=)" "(<=)"
+  (>)     = preludeError "Ord.(>)"  "(>)"
+  (>=)    = preludeError "Ord.(>=)" "(>=)"
   min     = min
   max     = max
 
 preludeError :: String -> String -> a
-preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
+preludeError x y
+  = error
+  $ unlines [ printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y
+            , ""
+            , "These Prelude.Ord instances are present only to fulfil superclass"
+            , "constraints for subsequent classes in the standard Haskell numeric"
+            , "hierarchy."
+            ]
 
