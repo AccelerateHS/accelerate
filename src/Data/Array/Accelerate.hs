@@ -405,7 +405,7 @@ import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
 -- re-exported from D.A.A.Classes.Num but not found (GHC<8 bug)
-import Prelude                                                      ( (.), ($), undefined, error, const, fromInteger )
+import Prelude                                                      ( (.), ($), undefined, error, const )
 
 -- $setup
 -- >>> :seti -XTypeOperators

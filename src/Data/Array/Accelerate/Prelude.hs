@@ -112,7 +112,7 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, fromInteger, flip, undefined )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined )
 #if __GLASGOW_HASKELL__ == 800
 import Prelude                                                      ( fail )
 #endif
@@ -1938,7 +1938,7 @@ iterate n f z
   = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
         step (i, acc)   = ( i+1, f acc )
     in
-    snd $ while (\v -> fst v < n) (lift1 step) (lift (constant 0, z))
+    snd $ while (\v -> fst v < n) (lift1 step) (lift (0, z))
 
 
 -- Scalar bulk operations
@@ -1958,7 +1958,7 @@ sfoldl f z ix xs
         step (i, acc)   = ( i+1, acc `f` (xs ! lift (ix :. i)) )
         (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
     in
-    snd $ while (\v -> fst v < n) (lift1 step) (lift (constant 0, z))
+    snd $ while (\v -> fst v < n) (lift1 step) (lift (0, z))
 
 
 -- Tuples
