@@ -41,10 +41,11 @@ module Data.Array.Accelerate.Data.Complex (
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Classes                                as A
+import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Data.Functor
 
 import Prelude                                                      ( ($), undefined )
 import Data.Complex                                                 ( Complex(..) )
@@ -76,7 +77,7 @@ instance Elt a => Unlift Exp (Complex (Exp a)) where
       in
       r :+ i
 
-instance A.Eq a => A.Eq (Complex a) where
+instance Eq a => Eq (Complex a) where
   x == y = let r1 :+ c1 = unlift x
                r2 :+ c2 = unlift y
            in  r1 == r2 && c1 == c2
@@ -84,7 +85,7 @@ instance A.Eq a => A.Eq (Complex a) where
                r2 :+ c2 = unlift y
            in  r1 /= r2 || c1 /= c2
 
-instance A.RealFloat a => P.Num (Exp (Complex a)) where
+instance RealFloat a => P.Num (Exp (Complex a)) where
   (+)           = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (-)           = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (*)           = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
@@ -98,7 +99,7 @@ instance A.RealFloat a => P.Num (Exp (Complex a)) where
   abs z         = lift (magnitude z :+ 0)
   fromInteger n = lift (fromInteger n :+ 0)
 
-instance A.RealFloat a => P.Fractional (Exp (Complex a)) where
+instance RealFloat a => P.Fractional (Exp (Complex a)) where
   fromRational x  = lift (fromRational x :+ 0)
   z / z'          = lift ((x*x''+y*y'') / d :+ (y*x''-x*y'') / d)
     where
@@ -110,7 +111,7 @@ instance A.RealFloat a => P.Fractional (Exp (Complex a)) where
       k   = - max (exponent x') (exponent y')
       d   = x'*x'' + y'*y''
 
-instance A.RealFloat a => P.Floating (Exp (Complex a)) where
+instance RealFloat a => P.Floating (Exp (Complex a)) where
   pi                      = lift $ pi :+ 0
 
   exp (unlift -> x :+ y)  = let expx = exp x
@@ -180,8 +181,12 @@ instance A.RealFloat a => P.Floating (Exp (Complex a)) where
   atanh z =  0.5 * log ((1.0+z) / (1.0-z))
 
 
-instance (A.FromIntegral a b, A.Num b) => A.FromIntegral a (Complex b) where
+instance (FromIntegral a b, Num b) => FromIntegral a (Complex b) where
   fromIntegral x = lift (fromIntegral x :+ 0)
+
+-- | @since 1.2.0.0
+instance Functor Complex where
+  fmap f (unlift -> r :+ i) = lift (f r :+ f i)
 
 
 -- Helper function to fix the types for lift (ugh)
