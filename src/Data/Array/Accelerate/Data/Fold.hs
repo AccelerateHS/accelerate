@@ -78,7 +78,7 @@ runFold
     -> Acc (Array sh o)
 runFold (Fold tally summarise) is
   = A.map summarise
-  $ A.fold (<>) mempty
+  $ A.fold mappend mempty
   $ A.map tally is
 
 
