@@ -15,7 +15,7 @@
 module Data.Array.Accelerate.Classes.Num (
 
   Num,
-  (P.+), (P.-), (P.*), P.negate, P.abs, P.signum, P.fromInteger,
+  (P.+), (P.-), (P.*), P.negate, P.abs, P.signum, fromInteger,
 
 ) where
 
@@ -23,10 +23,12 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( (.) )
+import Prelude                                                      ( Integer, (.) )
 import qualified Prelude                                            as P
 
 
+-- Note: [Haskell/Accelerate numeric hierarchy]
+--
 -- Should we replace 'Prelude.Num' with our own version, as we did with 'Ord'
 -- and 'Eq'? That might require clients to enable RebindableSyntax in order to
 -- get the correct 'fromInteger' (or miss out on special magic and need to add
@@ -39,6 +41,25 @@ import qualified Prelude                                            as P
 --
 -- A light-weight alternative is the following constraint kind:
 --
+-- UPDATE TLM 2018-01-12: I attempted separating the two class hierarchies, and
+-- while in principle it works, has very poor ergonomics in modules which use
+-- both Accelerate and standard Haskell types. RebindableSyntax only helps for
+-- Accelerate-only modules; for mixed-mode files, we need to use every operation
+-- qualified, which is a pain. On the other hand, type inference appears to be
+-- much, _much_ better.
+--
+
+
+-- | Conversion from an 'Integer'.
+--
+-- An integer literal represents the application of the function 'fromInteger'
+-- to the appropriate value of type 'Integer'. We export this specialised
+-- version where the return type is fixed to an 'Exp' term in order to improve
+-- type checking in Accelerate modules when @RebindableSyntax@ is enabled.
+--
+fromInteger :: Num a => Integer -> Exp a
+fromInteger = P.fromInteger
+
 
 -- | Basic numeric class
 --

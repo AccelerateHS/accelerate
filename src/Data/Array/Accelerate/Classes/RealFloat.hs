@@ -37,7 +37,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.RealFrac
 
 import Text.Printf
-import Prelude                                                      ( (.), ($), String, error, undefined, otherwise )
+import Prelude                                                      ( (.), ($), String, error, undefined, unlines, otherwise )
 import qualified Prelude                                            as P
 
 
@@ -116,7 +116,7 @@ class (RealFrac a, Floating a) => RealFloat a where
   -- | 'True' if the argument is an IEEE floating point number
   isIEEE         :: Exp a -> Exp Bool
   default isIEEE :: P.RealFloat a => Exp a -> Exp Bool
-  isIEEE _        = constant (P.isIEEE (undefined::Float))
+  isIEEE _        = constant (P.isIEEE (undefined::a))
 
   -- | A version of arctangent taking two real floating-point arguments.
   -- For real floating @x@ and @y@, @'atan2' y x@ computes the angle (from the
@@ -175,7 +175,13 @@ instance RealFloat a => P.RealFloat (Exp a) where
   isIEEE         = preludeError "isIEEE"
 
 preludeError :: String -> a
-preludeError x = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x x)
+preludeError x
+  = error
+  $ unlines [ printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x x
+            , ""
+            , "These Prelude.RealFloat instances are present only to fulfil superclass"
+            , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
+            ]
 
 
 ieee754 :: forall a b. P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b

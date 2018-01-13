@@ -301,6 +301,7 @@ Library
         Data.Array.Accelerate.Data.Bits
         Data.Array.Accelerate.Data.Complex
         Data.Array.Accelerate.Data.Fold
+        Data.Array.Accelerate.Data.Functor
         Data.Array.Accelerate.Data.Monoid
 
         -- For backend development
@@ -414,6 +415,10 @@ Library
         Data.Array.Accelerate.Test.NoFib.Issues.Issue362
         Data.Array.Accelerate.Test.NoFib.Issues.Issue407
         Data.Array.Accelerate.Test.NoFib.Issues.Issue409
+
+  if impl(ghc >= 8.0)
+    exposed-modules:
+        Data.Array.Accelerate.Data.Semigroup
 
   hs-source-dirs:
         src

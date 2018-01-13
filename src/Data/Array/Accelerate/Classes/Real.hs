@@ -25,6 +25,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
+import Prelude                                                      hiding ( Real, Num, Ord )
 import qualified Prelude                                            as P
 
 
@@ -37,5 +38,11 @@ type Real a = (Num a, Ord a, P.Real (Exp a))
 -- computations.
 --
 instance (Num a, Ord a) => P.Real (Exp a) where
-  toRational = P.error "Prelude.toRational not supported for Accelerate types"
+  toRational
+    = error
+    $ unlines [ "Prelude.toRational is not supported for Accelerate types"
+              , ""
+              , "These Prelude.Real instances are present only to fulfil superclass"
+              , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
+              ]
 

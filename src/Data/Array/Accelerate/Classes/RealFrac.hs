@@ -33,7 +33,7 @@ import Data.Array.Accelerate.Classes.Real
 import Data.Array.Accelerate.Classes.ToFloating
 
 import Text.Printf
-import Prelude                                                      ( ($), String, error )
+import Prelude                                                      ( ($), String, error, unlines )
 import qualified Prelude                                            as P
 
 
@@ -162,5 +162,11 @@ instance RealFrac a => P.RealFrac (Exp a) where
   floor          = preludeError "floor"
 
 preludeError :: String -> a
-preludeError x = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x x)
+preludeError x
+  = error
+  $ unlines [ printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x x
+            , ""
+            , "These Prelude.RealFrac instances are present only to fulfil superclass"
+            , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
+            ]
 

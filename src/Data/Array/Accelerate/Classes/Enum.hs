@@ -2,8 +2,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MonoLocalBinds    #-}
-{-# OPTIONS_GHC -fno-warn-missing-methods #-}
-{-# OPTIONS_GHC -fno-warn-orphans         #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Enum
 -- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -17,13 +16,15 @@
 module Data.Array.Accelerate.Classes.Enum (
 
   Enum,
+  succ, pred,
 
 ) where
 
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Type
 import Text.Printf
 
-import Prelude                                                      ( String, error )
+import Prelude                                                      hiding ( Enum )
 import qualified Prelude                                            as P
 
 
@@ -32,40 +33,151 @@ import qualified Prelude                                            as P
 type Enum a = P.Enum (Exp a)
 
 
--- Instances of 'Enum' don't make sense in Accelerate at the moment. These are
--- only provided to fulfil superclass constraints; e.g. Integral.
---
-instance P.Enum (Exp a) where
-  toEnum   = preludeError "toEnum"
-  fromEnum = preludeError "fromEnum"
+instance P.Enum (Exp Int) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Int8) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Int16) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Int32) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Int64) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Word) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Word8) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Word16) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Word32) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Word64) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CInt) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CUInt) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CLong) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CULong) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CLLong) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CULLong) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CShort) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CUShort) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Float) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp Double) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CFloat) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+instance P.Enum (Exp CDouble) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
+
+defaultToEnum :: Int -> a
+defaultToEnum = preludeError "toEnum"
+
+defaultFromEnum :: a -> Int
+defaultFromEnum = preludeError "fromEnum"
 
 preludeError :: String -> a
-preludeError x = error (printf "Prelude.%s not supported for Accelerate types" x)
-
--- instance Enum (Exp Int8)
--- instance Enum (Exp Int16)
--- instance Enum (Exp Int32)
--- instance Enum (Exp Int64)
--- instance Enum (Exp Word)
--- instance Enum (Exp Word8)
--- instance Enum (Exp Word16)
--- instance Enum (Exp Word32)
--- instance Enum (Exp Word64)
--- instance Enum (Exp CInt)
--- instance Enum (Exp CUInt)
--- instance Enum (Exp CLong)
--- instance Enum (Exp CULong)
--- instance Enum (Exp CLLong)
--- instance Enum (Exp CULLong)
--- instance Enum (Exp CShort)
--- instance Enum (Exp CUShort)
--- instance Enum (Exp Bool)
--- instance Enum (Exp Char)
--- instance Enum (Exp CChar)
--- instance Enum (Exp CUChar)
--- instance Enum (Exp CSChar)
--- instance Enum (Exp Float)
--- instance Enum (Exp Double)
--- instance Enum (Exp CFloat)
--- instance Enum (Exp CDouble)
+preludeError x
+  = error
+  $ unlines [ printf "Prelude.%s is not supported for Accelerate types" x
+            , ""
+            , "These Prelude.Enum instances are present only to fulfil superclass"
+            , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
+            ]
 

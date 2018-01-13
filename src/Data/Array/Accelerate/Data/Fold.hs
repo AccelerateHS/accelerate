@@ -78,7 +78,7 @@ runFold
     -> Acc (Array sh o)
 runFold (Fold tally summarise) is
   = A.map summarise
-  $ A.fold (<>) mempty
+  $ A.fold mappend mempty
   $ A.map tally is
 
 
@@ -126,12 +126,12 @@ instance A.Num b => P.Num (Fold a (Exp b)) where
   negate        = fmap negate
   abs           = fmap abs
   signum        = fmap signum
-  fromInteger n = pure (fromInteger n)
+  fromInteger n = pure (A.fromInteger n)
 
 instance A.Fractional b => P.Fractional (Fold a (Exp b)) where
   (/)            = liftA2 (/)
   recip          = fmap recip
-  fromRational n = pure (fromRational n)
+  fromRational n = pure (A.fromRational n)
 
 instance A.Floating b => P.Floating (Fold a (Exp b)) where
   pi      = pure pi

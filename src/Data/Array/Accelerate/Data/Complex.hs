@@ -3,10 +3,12 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Complex
@@ -39,14 +41,13 @@ module Data.Array.Accelerate.Data.Complex (
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Classes                                as A
-import Data.Array.Accelerate.Language
-import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Data.Functor
+import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( ($), undefined, fromInteger )
+import Prelude                                                      ( ($), undefined )
 import Data.Complex                                                 ( Complex(..) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
@@ -61,22 +62,22 @@ instance Elt a => Elt (Complex a) where
 
 instance cst a => IsProduct cst (Complex a) where
   type ProdRepr (Complex a) = ProdRepr (a, a)
-  fromProd cst (x :+ y) = fromProd cst (x, y)
-  toProd cst p          = let (x, y) = toProd cst p in (x :+ y)
+  fromProd cst (r :+ i) = fromProd cst (r, i)
+  toProd cst p          = let (r, i) = toProd cst p in (r :+ i)
   prod cst _            = prod cst (undefined :: (a, a))
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
-  lift (x1 :+ x2)       = Exp $ Tuple (NilTup `SnocTup` lift x1 `SnocTup` lift x2)
+  lift (r :+ i)          = Exp $ Tuple (NilTup `SnocTup` lift r `SnocTup` lift i)
 
 instance Elt a => Unlift Exp (Complex (Exp a)) where
   unlift e
-    = let x     = Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-          y     = Exp $ ZeroTupIdx `Prj` e
+    = let r     = Exp $ SuccTupIdx ZeroTupIdx `Prj` e
+          i     = Exp $ ZeroTupIdx `Prj` e
       in
-      x :+ y
+      r :+ i
 
-instance A.Eq a => A.Eq (Complex a) where
+instance Eq a => Eq (Complex a) where
   x == y = let r1 :+ c1 = unlift x
                r2 :+ c2 = unlift y
            in  r1 == r2 && c1 == c2
@@ -84,74 +85,133 @@ instance A.Eq a => A.Eq (Complex a) where
                r2 :+ c2 = unlift y
            in  r1 /= r2 || c1 /= c2
 
-instance A.RealFloat a => P.Num (Exp (Complex a)) where
+instance RealFloat a => P.Num (Exp (Complex a)) where
   (+)           = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (-)           = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (*)           = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   negate        = lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
-  signum        = lift1 (signum :: Complex (Exp a) -> Complex (Exp a))
-  abs           = lift1 (abs :: Complex (Exp a) -> Complex (Exp a))
-  fromInteger n = lift ((fromInteger n :: Exp a) :+ 0)
+  signum z      = if z == 0
+                    then z
+                    else let x :+ y = unlift z
+                             r      = magnitude z
+                         in
+                         lift (x/r :+ y/r)
+  abs z         = lift (magnitude z :+ 0)
+  fromInteger n = lift (fromInteger n :+ 0)
 
-instance A.RealFloat a => P.Fractional (Exp (Complex a)) where
-  c / c'
-    = let x  :+ y       = unlift c
-          x' :+ y'      = unlift c'     :: Complex (Exp a)
-          den           = x' P.^ (2 :: Int) + y' P.^ (2 :: Int)
-          re            = (x * x' + y * y') / den
-          im            = (y * x' - x * y') / den
-      in
-      lift (re :+ im)
+instance RealFloat a => P.Fractional (Exp (Complex a)) where
+  fromRational x  = lift (fromRational x :+ 0)
+  z / z'          = lift ((x*x''+y*y'') / d :+ (y*x''-x*y'') / d)
+    where
+      x  :+ y   = unlift z
+      x' :+ y'  = unlift z'
+      --
+      x'' = scaleFloat k x'
+      y'' = scaleFloat k y'
+      k   = - max (exponent x') (exponent y')
+      d   = x'*x'' + y'*y''
 
-  fromRational x
-    = lift ((fromRational x :: Exp a) :+ 0)
+instance RealFloat a => P.Floating (Exp (Complex a)) where
+  pi                      = lift $ pi :+ 0
 
-instance A.RealFloat a => P.Floating (Exp (Complex a)) where
-  sqrt z
-    = let
-          x :+ y        = unlift z
-          v'            = abs y / (u'*2)
-          u'            = sqrt ((magnitude z + abs x) / 2)
-          (u, v)        = unlift $ cond (x < 0) (lift (v',u')) (lift (u',v'))
-      in
-      cond (x == 0 && y == 0)
-        {- then -} 0
-        {- else -} (lift (u :+ (cond (y < 0) (-v) v)))
+  exp (unlift -> x :+ y)  = let expx = exp x
+                            in  complex $ expx * cos y :+ expx * sin y
 
-  pi            = lift (pi :: Complex (Exp a))
-  log z         = lift (log (magnitude z) :+ phase z)
-  exp           = lift1 (exp :: Complex (Exp a) -> Complex (Exp a))
-  sin           = lift1 (sin :: Complex (Exp a) -> Complex (Exp a))
-  cos           = lift1 (cos :: Complex (Exp a) -> Complex (Exp a))
-  tan           = lift1 (tan :: Complex (Exp a) -> Complex (Exp a))
-  sinh          = lift1 (sinh :: Complex (Exp a) -> Complex (Exp a))
-  cosh          = lift1 (cosh :: Complex (Exp a) -> Complex (Exp a))
-  tanh          = lift1 (tanh :: Complex (Exp a) -> Complex (Exp a))
-  asin          = lift1 (asin :: Complex (Exp a) -> Complex (Exp a))
-  acos          = lift1 (acos :: Complex (Exp a) -> Complex (Exp a))
-  atan          = lift1 (atan :: Complex (Exp a) -> Complex (Exp a))
-  asinh         = lift1 (asinh :: Complex (Exp a) -> Complex (Exp a))
-  acosh         = lift1 (acosh :: Complex (Exp a) -> Complex (Exp a))
-  atanh         = lift1 (atanh :: Complex (Exp a) -> Complex (Exp a))
+  log z                   = lift $ log (magnitude z) :+ phase z
 
-instance (A.FromIntegral a b, A.Num b) => A.FromIntegral a (Complex b) where
-  fromIntegral x = lift (fromIntegral x :+ (0 :: Exp b))
+  sqrt z@(unlift -> x :+ y) =
+    if z == 0
+      then 0
+      else lift $ u :+ (y < 0 ? (-v, v))
+    where
+      (u,v) = unlift (x < 0 ? (lift (v',u'), lift (u',v')))
+      v'    = abs y / (u'*2)
+      u'    = sqrt ((magnitude z + abs x) / 2)
 
+  x ** y  =
+    if y == 0 then 1 else
+    if x == 0 then if exp_r > 0 then 0 else
+                   if exp_r < 0 then lift (inf :+ 0)
+                                else lift (nan :+ nan)
+              else if isInfinite r || isInfinite i
+                     then if exp_r > 0 then lift (inf :+ 0) else
+                          if exp_r < 0 then 0
+                                       else lift (nan :+ nan)
+                     else exp (log x * y)
+    where
+      r     :+ i  = unlift x
+      exp_r :+ _  = unlift y
+      --
+      inf = 1 / 0
+      nan = 0 / 0
+
+  sin (unlift -> x :+ y)  = complex $ sin x * cosh y :+ cos x * sinh y
+  cos (unlift -> x :+ y)  = complex $ cos x * cosh y :+ (- sin x * sinh y)
+  tan (unlift -> x :+ y)  = (complex $ sinx*coshy :+ cosx*sinhy) / (complex $ cosx*coshy :+ (-sinx*sinhy))
+    where
+      sinx  = sin x
+      cosx  = cos x
+      sinhy = sinh y
+      coshy = cosh y
+
+  sinh (unlift -> x :+ y) = complex $ cos y * sinh x :+ sin  y * cosh x
+  cosh (unlift -> x :+ y) = complex $ cos y * cosh x :+ sin y * sinh x
+  tanh (unlift -> x :+ y) = (complex $ cosy*sinhx :+ siny*coshx) / (complex $ cosy*coshx :+ siny*sinhx)
+    where
+      siny  = sin y
+      cosy  = cos y
+      sinhx = sinh x
+      coshx = cosh x
+
+  asin z@(unlift -> x :+ y) = complex $ y' :+ (-x')
+    where
+      x' :+ y' = unlift $ log ((complex ((-y):+x)) + sqrt (1 - z*z))
+
+  acos z                    = complex $ y'' :+ (-x'')
+    where
+      x'' :+ y''  = unlift $ log (z + (complex ((-y') :+ x')))
+      x'  :+ y'   = unlift $ sqrt (1 - z*z)
+
+  atan z@(unlift -> x :+ y) = complex $ y' :+ (-x')
+    where
+      x' :+ y' = unlift $ log ((complex ((1-y):+x)) / sqrt (1+z*z))
+
+  asinh z =  log (z + sqrt (1+z*z))
+  acosh z =  log (z + (z+1) * sqrt ((z-1)/(z+1)))
+  atanh z =  0.5 * log ((1.0+z) / (1.0-z))
+
+
+instance (FromIntegral a b, Num b) => FromIntegral a (Complex b) where
+  fromIntegral x = lift (fromIntegral x :+ 0)
+
+-- | @since 1.2.0.0
+instance Functor Complex where
+  fmap f (unlift -> r :+ i) = lift (f r :+ f i)
+
+
+-- Helper function to fix the types for lift (ugh)
+--
+complex :: Elt a => Complex (Exp a) -> Exp (Complex a)
+complex = lift
 
 -- | The non-negative magnitude of a complex number
 --
 magnitude :: RealFloat a => Exp (Complex a) -> Exp a
-magnitude c =
-  let r :+ i    = unlift c
-  in sqrt (r*r + i*i)
+-- magnitude (unlift -> r :+ i) = sqrt (r*r + i*i)
+magnitude (unlift -> r :+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
+  where
+    k     = max (exponent r) (exponent i)
+    mk    = -k
+    sqr z = z * z
 
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
 phase :: RealFloat a => Exp (Complex a) -> Exp a
-phase c =
-  let x :+ y    = unlift c
-  in atan2 y x
+phase z@(unlift -> r :+ i) =
+  if z == 0
+    then 0
+    else atan2 i r
 
 -- | The function 'polar' takes a complex number and returns a (magnitude,
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
@@ -182,16 +242,12 @@ cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 -- | Return the real part of a complex number
 --
 real :: Elt a => Exp (Complex a) -> Exp a
-real c =
-  let r :+ _    = unlift c
-  in  r
+real (unlift -> r :+ _) = r
 
 -- | Return the imaginary part of a complex number
 --
 imag :: Elt a => Exp (Complex a) -> Exp a
-imag c =
-  let _ :+ i    = unlift c
-  in  i
+imag (unlift -> _ :+ i) = i
 
 -- | Return the complex conjugate of a complex number, defined as
 --
