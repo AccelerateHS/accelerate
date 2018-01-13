@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -26,15 +27,19 @@ module Data.Array.Accelerate.Data.Monoid (
 
 ) where
 
-import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Type                                   as A
-import Data.Array.Accelerate.Smart                                  as A ( Exp(..), PreExp(..) )
-import Data.Array.Accelerate.Product                                as A
-import Data.Array.Accelerate.Array.Sugar                            as A
+import Data.Array.Accelerate
+import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Smart                                  ( Exp(..), PreExp(..) )
+import Data.Array.Accelerate.Type
 
 import Data.Function
-import Data.Monoid                                                  hiding ( mconcat, (<>) )
+#if __GLASGOW_HASKELL__ >= 800
+import Data.Monoid                                                  hiding ( (<>) )
 import Data.Semigroup
+#else
+import Data.Monoid
+#endif
 import qualified Prelude                                            as P
 
 
@@ -90,10 +95,12 @@ instance Num a => Monoid (Exp (Sum a)) where
   mempty  = 0
   mappend = lift2 (mappend :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
 
+#if __GLASGOW_HASKELL__ >= 800
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
   (<>)       = (+)
   -- stimes n x = lift . Sum $ n * getSum (unlift x)
+#endif
 
 
 -- Product: Monoid under multiplication
@@ -148,10 +155,12 @@ instance Num a => Monoid (Exp (Product a)) where
   mempty  = 1
   mappend = lift2 (mappend :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
 
+#if __GLASGOW_HASKELL__ >= 800
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
   (<>)       = (*)
   -- stimes n x = lift . Product $ getProduct (unlift x) ^ constant n
+#endif
 
 
 -- Instances for unit and tuples

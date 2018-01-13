@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP              #-}
 {-# LANGUAGE RebindableSyntax #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Functor
@@ -28,8 +29,10 @@ module Data.Array.Accelerate.Data.Functor (
 import Data.Array.Accelerate
 
 import Data.Monoid
-import Data.Semigroup
 import Prelude                                                      ( flip )
+#if __GLASGOW_HASKELL__ >= 800
+import Data.Semigroup
+#endif
 
 
 -- | The 'Functor' class is used for scalar types which can be mapped over.
@@ -85,9 +88,11 @@ instance Functor Sum where
 instance Functor Product where
   fmap f = lift1 (fmap f)
 
+#if __GLASGOW_HASKELL__ >= 800
 instance Functor Min where
   fmap f = lift1 (fmap f)
 
 instance Functor Max where
   fmap f = lift1 (fmap f)
+#endif
 

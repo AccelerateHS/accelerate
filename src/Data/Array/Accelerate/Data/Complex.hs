@@ -42,10 +42,10 @@ module Data.Array.Accelerate.Data.Complex (
 
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Data.Functor
 
 import Prelude                                                      ( ($), undefined )
 import Data.Complex                                                 ( Complex(..) )
