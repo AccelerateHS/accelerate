@@ -40,7 +40,7 @@ If suggesting a change or improvement, explain the difference from the current b
 <!--
 Please provide as much information as possible so that somebody can understand and reproduce the bug. Only bugs which are understood can be fixed.
 
-Providing [a link to] a minimal example which shows the faulty behaviour is best. https://gist.github.com is useful for pasting longer code snippets. If your program requires any additional libraries, please include `.cabal` and `stack.yaml` files so that it is easy to build.
+Providing a link to a minimal example which shows the faulty behaviour is best. https://gist.github.com is useful for pasting longer code snippets. If your program requires any additional libraries, please include `.cabal` and `stack.yaml` files so that it is easy to build.
 
 Please describe any additional steps to reproducing the bug.
 -->
