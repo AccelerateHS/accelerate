@@ -4,6 +4,10 @@ An Embedded Language for Accelerated Array Computations
 [![Travis](https://img.shields.io/travis/AccelerateHS/accelerate/master.svg?label=linux)](https://travis-ci.org/AccelerateHS/accelerate)
 [![AppVeyor](https://img.shields.io/appveyor/ci/tmcdonell/accelerate/master.svg?label=windows)](https://ci.appveyor.com/project/tmcdonell/accelerate)
 [![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
+[![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)
+[![Stackage Nightly](https://stackage.org/package/accelerate/badge/nightly)](https://stackage.org/nightly/package/accelerate)
+[![Gitter chat](https://badges.gitter.im/AccelerateHS/Lobby.png)](https://gitter.im/AccelerateHS/Lobby)
+
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
