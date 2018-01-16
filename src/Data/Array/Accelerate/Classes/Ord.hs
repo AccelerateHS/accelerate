@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RebindableSyntax  #-}
+{-# LANGUAGE TypeFamilies      #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Ord
@@ -14,15 +16,18 @@
 module Data.Array.Accelerate.Classes.Ord (
 
   Ord(..),
+  Ordering(..),
 
 ) where
 
-import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
+import Data.Array.Accelerate.Classes.Eq
+
 import Text.Printf
-import Prelude                                                      ( ($), String, error, unlines )
+import Prelude                                                      ( ($), (.), Ordering(..), String, error, unlines )
 import qualified Prelude                                            as P
 
 
@@ -34,29 +39,41 @@ infix 4 >=
 -- | The 'Ord' class for totally ordered datatypes
 --
 class Eq a => Ord a where
-  {-# MINIMAL (<=) #-}
-  (<)  :: Exp a -> Exp a -> Exp Bool
-  (>)  :: Exp a -> Exp a -> Exp Bool
-  (<=) :: Exp a -> Exp a -> Exp Bool
-  (>=) :: Exp a -> Exp a -> Exp Bool
-  min  :: Exp a -> Exp a -> Exp a
-  max  :: Exp a -> Exp a -> Exp a
-  --
-  x <  y  = x /= y && x <= y
-  x >  y  = not (x <= y)
-  x <= y  = not (x > y)
-  x >= y  = x == y || not (x <= y)
-  min x y = Exp $ Cond (x <= y) x y
-  max x y = Exp $ Cond (x <= y) y x
+  {-# MINIMAL (<=) | compare #-}
+  (<)     :: Exp a -> Exp a -> Exp Bool
+  (>)     :: Exp a -> Exp a -> Exp Bool
+  (<=)    :: Exp a -> Exp a -> Exp Bool
+  (>=)    :: Exp a -> Exp a -> Exp Bool
+  min     :: Exp a -> Exp a -> Exp a
+  max     :: Exp a -> Exp a -> Exp a
+  compare :: Exp a -> Exp a -> Exp Ordering
 
+  x <  y = if compare x y == constant LT then constant True  else constant False
+  x <= y = if compare x y == constant GT then constant False else constant True
+  x >  y = if compare x y == constant GT then constant True  else constant False
+  x >= y = if compare x y == constant LT then constant False else constant True
+
+  min x y = if x <= y then x else y
+  max x y = if x <= y then y else x
+
+  compare x y =
+    if x == y then constant EQ else
+    if x <= y then constant LT
+              else constant GT
+
+-- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
+--
+ifThenElse :: Elt a => Exp Bool -> Exp a -> Exp a -> Exp a
+ifThenElse = Exp $$$ Cond
 
 instance Ord () where
-  (<)  _ _ = constant False
-  (>)  _ _ = constant False
-  (>=) _ _ = constant True
-  (<=) _ _ = constant True
-  min  _ _ = constant ()
-  max  _ _ = constant ()
+  (<)     _ _ = constant False
+  (>)     _ _ = constant False
+  (>=)    _ _ = constant True
+  (<=)    _ _ = constant True
+  min     _ _ = constant ()
+  max     _ _ = constant ()
+  compare _ _ = constant EQ
 
 instance Ord Int where
   (<)  = mkLt
@@ -469,6 +486,26 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g, Ord h, Ord i, Ord j, 
   x > y  = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1) = untup15 x; x' = tup14 (b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1)
                (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2) = untup15 y; y' = tup14 (b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2)
            in a1 > a2 || (a1 == a2 && x' > y')
+
+
+type instance EltRepr Ordering = Int8
+
+instance Elt Ordering where
+  eltType _ = SingleTuple scalarType
+  fromElt = P.fromIntegral . P.fromEnum
+  toElt   = P.toEnum . P.fromIntegral
+
+instance Eq Ordering where
+  x == y = mkBitcast x == (mkBitcast y :: Exp Int8)
+  x /= y = mkBitcast x /= (mkBitcast y :: Exp Int8)
+
+instance Ord Ordering where
+  x < y   = mkBitcast x < (mkBitcast y :: Exp Int8)
+  x > y   = mkBitcast x > (mkBitcast y :: Exp Int8)
+  x <= y  = mkBitcast x <= (mkBitcast y :: Exp Int8)
+  x >= y  = mkBitcast x >= (mkBitcast y :: Exp Int8)
+  min x y = mkBitcast $ min (mkBitcast x) (mkBitcast y :: Exp Int8)
+  max x y = mkBitcast $ max (mkBitcast x) (mkBitcast y :: Exp Int8)
 
 
 -- Instances of 'Prelude.Ord' (mostly) don't make sense with the standard
