@@ -33,7 +33,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Integral                       ()
 
-import Prelude                                                      ( ($), (.), undefined, otherwise )
+import Prelude                                                      ( ($), undefined, otherwise )
 import qualified Data.Bits                                          as B
 
 
@@ -724,7 +724,7 @@ rotateDefault =
     TypeCULLong{} -> rotateDefault' (undefined::CULLong)
 
 rotateDefault'
-    :: forall i w. (Elt w, FiniteBits i, IsIntegral i, IsIntegral w, BitSizeEq i w, BitSizeEq w i)
+    :: forall i w. (Elt w, FiniteBits i, IsIntegral i, IsIntegral w, IsIntegral (EltRepr i), IsIntegral (EltRepr w), BitSizeEq (EltRepr i) (EltRepr w), BitSizeEq (EltRepr w) (EltRepr i))
     => w {- dummy -}
     -> Exp i
     -> Exp Int
@@ -753,6 +753,7 @@ rotateRDefault x i
 isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
 isSignedDefault _ = constant (B.isSigned (undefined::b))
 
+{--
 _popCountDefault :: forall a. (B.FiniteBits a, IsScalar a, Bits a, Num a) => Exp a -> Exp Int
 _popCountDefault =
   $( [e| case B.finiteBitSize (undefined::a) of
@@ -803,4 +804,5 @@ popCnt64 v1 = mkFromIntegral c
     v3 = (v2 .&. 0x3333333333333333) + ((v2 `unsafeShiftR` 2) .&. 0x3333333333333333)
     v4 = (v3 + (v3 `unsafeShiftR` 4)) .&. 0X0F0F0F0F0F0F0F0F
     c  = (v4 * 0x0101010101010101) `unsafeShiftR` 56
+--}
 

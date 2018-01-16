@@ -693,7 +693,7 @@ matchPrimConst _                _                = Nothing
 -- Covariant function matching
 --
 {-# INLINEABLE matchPrimFun #-}
-matchPrimFun :: PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :~: t)
+matchPrimFun :: (Typeable s, Typeable t) => PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :~: t)
 matchPrimFun (PrimAdd _)                (PrimAdd _)                = Just Refl
 matchPrimFun (PrimSub _)                (PrimSub _)                = Just Refl
 matchPrimFun (PrimMul _)                (PrimMul _)                = Just Refl
@@ -753,20 +753,25 @@ matchPrimFun (PrimMax _)                (PrimMax _)                = Just Refl
 matchPrimFun (PrimMin _)                (PrimMin _)                = Just Refl
 matchPrimFun (PrimFromIntegral _ s)     (PrimFromIntegral _ t)     = matchNumType s t
 matchPrimFun (PrimToFloating _ s)       (PrimToFloating _ t)       = matchFloatingType s t
-matchPrimFun (PrimCoerce _ s)           (PrimCoerce _ t)           = matchScalarType s t
 matchPrimFun PrimLAnd                   PrimLAnd                   = Just Refl
 matchPrimFun PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun PrimLNot                   PrimLNot                   = Just Refl
 matchPrimFun PrimOrd                    PrimOrd                    = Just Refl
 matchPrimFun PrimChr                    PrimChr                    = Just Refl
 matchPrimFun PrimBoolToInt              PrimBoolToInt              = Just Refl
-matchPrimFun _                          _                          = Nothing
+
+matchPrimFun (PrimCoerce _ s) (PrimCoerce _ t)
+  | Just Refl <- matchScalarType s t
+  = gcast Refl
+
+matchPrimFun _ _
+  = Nothing
 
 
 -- Contravariant function matching
 --
 {-# INLINEABLE matchPrimFun' #-}
-matchPrimFun' :: PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :~: t)
+matchPrimFun' :: (Typeable s, Typeable t) => PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :~: t)
 matchPrimFun' (PrimAdd _)                (PrimAdd _)                = Just Refl
 matchPrimFun' (PrimSub _)                (PrimSub _)                = Just Refl
 matchPrimFun' (PrimMul _)                (PrimMul _)                = Just Refl
@@ -820,13 +825,17 @@ matchPrimFun' (PrimMax _)                (PrimMax _)                = Just Refl
 matchPrimFun' (PrimMin _)                (PrimMin _)                = Just Refl
 matchPrimFun' (PrimFromIntegral s _)     (PrimFromIntegral t _)     = matchIntegralType s t
 matchPrimFun' (PrimToFloating s _)       (PrimToFloating t _)       = matchNumType s t
-matchPrimFun' (PrimCoerce s _)           (PrimCoerce t _)           = matchScalarType s t
 matchPrimFun' PrimLAnd                   PrimLAnd                   = Just Refl
 matchPrimFun' PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun' PrimLNot                   PrimLNot                   = Just Refl
 matchPrimFun' PrimOrd                    PrimOrd                    = Just Refl
 matchPrimFun' PrimChr                    PrimChr                    = Just Refl
 matchPrimFun' PrimBoolToInt              PrimBoolToInt              = Just Refl
+
+matchPrimFun' (PrimCoerce s _) (PrimCoerce t _)
+  | Just Refl <- matchScalarType s t
+  = gcast Refl
+
 matchPrimFun' (PrimLt s) (PrimLt t)
   | Just Refl <- matchScalarType s t
   = Just Refl

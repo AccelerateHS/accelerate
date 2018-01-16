@@ -39,7 +39,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
-import Data.Array.Accelerate.Array.Sugar                ( (:.)(..), Elt(..), Tuple(..), fromTuple )
+import Data.Array.Accelerate.Array.Sugar                ( (:.)(..), Elt(..), Tuple(..), EltRepr, fromTuple )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 
@@ -715,7 +715,7 @@ evalToFloating (FloatingNumType ta) tb x env
   | FloatingDict <- floatingDict ta
   , FloatingDict <- floatingDict tb = eval1 realToFrac x env
 
-evalCoerce :: Elt b => ScalarType a -> ScalarType b -> a :-> b
+evalCoerce :: Elt b => ScalarType (EltRepr a) -> ScalarType (EltRepr b) -> a :-> b
 evalCoerce _ _ = eval1 unsafeCoerce
 
 
