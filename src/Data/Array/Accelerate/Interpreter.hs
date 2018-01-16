@@ -1029,7 +1029,7 @@ evalPrimConst (PrimMinBound ty) = evalMinBound ty
 evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
 evalPrimConst (PrimPi       ty) = evalPi ty
 
-evalPrim :: PrimFun p -> p
+evalPrim :: (Elt a, Elt r) => PrimFun (a -> r) -> (a -> r)
 evalPrim (PrimAdd                ty) = evalAdd ty
 evalPrim (PrimSub                ty) = evalSub ty
 evalPrim (PrimMul                ty) = evalMul ty
@@ -1095,7 +1095,7 @@ evalPrim PrimChr                     = evalChr
 evalPrim PrimBoolToInt               = evalBoolToInt
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
-evalPrim PrimCoerce{}                = unsafeCoerce
+evalPrim PrimCoerce{}                = liftToElt unsafeCoerce
 
 
 -- Tuple construction and projection
