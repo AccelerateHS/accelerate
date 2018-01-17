@@ -613,7 +613,7 @@ type instance BitSize Word16  = 16
 type instance BitSize Word32  = 32
 type instance BitSize Word64  = 64
 type instance BitSize Char    = 32
-type instance BitSize Bool    = 1
+type instance BitSize Bool    = 1      -- but actually stored as Word8 |:
 
 type instance BitSize CShort  = 16
 type instance BitSize CUShort = 16

@@ -2063,10 +2063,10 @@ mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b
 
 -- NOTE: BitSizeEq constraint is used to make this version "safe"
-mkBitcast :: (Elt a, Elt b, IsScalar a, IsScalar b, BitSizeEq a b) => Exp a -> Exp b
+mkBitcast :: (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b), BitSizeEq (EltRepr a) (EltRepr b)) => Exp a -> Exp b
 mkBitcast = mkUnsafeCoerce
 
-mkUnsafeCoerce :: (Elt a, Elt b, IsScalar a, IsScalar b) => Exp a -> Exp b
+mkUnsafeCoerce :: (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b)) => Exp a -> Exp b
 mkUnsafeCoerce x = Exp $ PrimCoerce scalarType scalarType `PrimApp` x
 
 

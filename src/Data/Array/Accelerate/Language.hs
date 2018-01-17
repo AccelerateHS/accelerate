@@ -1396,7 +1396,10 @@ boolToInt = mkBoolToInt
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.
 --
-bitcast :: (Elt a, Elt b, IsScalar a, IsScalar b, BitSizeEq a b) => Exp a -> Exp b
+bitcast
+    :: (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b), BitSizeEq (EltRepr a) (EltRepr b))
+    => Exp a
+    -> Exp b
 bitcast = mkBitcast
 
 

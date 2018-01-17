@@ -302,7 +302,7 @@ module Data.Array.Accelerate (
   -- ** Type classes
   -- *** Basic type classes
   Eq(..),
-  Ord(..),
+  Ord(..), Ordering(..),
   Enum, succ, pred,
   Bounded, minBound, maxBound,
 
@@ -404,7 +404,6 @@ import Data.Array.Accelerate.Trafo                                  () -- show i
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
--- re-exported from D.A.A.Classes.Num but not found (GHC<8 bug)
 import Prelude                                                      ( (.), ($), undefined, error, const )
 
 -- $setup

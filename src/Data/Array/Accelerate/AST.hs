@@ -1060,7 +1060,7 @@ data PrimFun sig where
 
   -- reinterpret the bits of a value as a different type
   -- (the two types must have the same bit size)
-  PrimCoerce :: ScalarType a -> ScalarType b -> PrimFun (a -> b)
+  PrimCoerce :: ScalarType (EltRepr a) -> ScalarType (EltRepr b) -> PrimFun (a -> b)
 
   -- FIXME: Conversions between various integer types: should we have overloaded
   -- functions like 'toInt'? (or 'fromEnum' for enums?)
