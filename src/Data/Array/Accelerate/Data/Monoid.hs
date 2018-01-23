@@ -29,6 +29,9 @@ module Data.Array.Accelerate.Data.Monoid (
 
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Array.Sugar
+#if __GLASGOW_HASKELL__ >= 800
+import Data.Array.Accelerate.Data.Semigroup                         ()
+#endif
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart                                  ( Exp(..), PreExp(..) )
 import Data.Array.Accelerate.Type
