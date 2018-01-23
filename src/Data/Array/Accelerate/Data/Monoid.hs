@@ -29,6 +29,7 @@ module Data.Array.Accelerate.Data.Monoid (
 
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Data.Semigroup                         ()
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart                                  ( Exp(..), PreExp(..) )
 import Data.Array.Accelerate.Type
@@ -198,31 +199,3 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Monoid (Exp a), Monoid (Exp b), Mon
                 in
                 lift (a1 `mappend` a2, b1 `mappend` b2, c1 `mappend` c2, d1 `mappend` d2, e1 `mappend` e2)
 
-#if __GLASGOW_HASKELL__ >= 800
-instance Semigroup (Exp ()) where
-  _ <> _ = constant ()
-
-instance (Elt a, Elt b, Semigroup (Exp a), Semigroup (Exp b)) => Semigroup (Exp (a,b)) where
-  x <> y      = let (a1,b1) = unlift x  :: (Exp a, Exp b)
-                    (a2,b2) = unlift y
-                in
-                lift (a1 <> a2, b1 <> b2)
-
-instance (Elt a, Elt b, Elt c, Semigroup (Exp a), Semigroup (Exp b), Semigroup (Exp c)) => Semigroup (Exp (a,b,c)) where
-  x <> y      = let (a1,b1,c1) = unlift x  :: (Exp a, Exp b, Exp c)
-                    (a2,b2,c2) = unlift y
-                in
-                lift (a1 <> a2, b1 <> b2, c1 <> c2)
-
-instance (Elt a, Elt b, Elt c, Elt d, Semigroup (Exp a), Semigroup (Exp b), Semigroup (Exp c), Semigroup (Exp d)) => Semigroup (Exp (a,b,c,d)) where
-  x <> y      = let (a1,b1,c1,d1) = unlift x  :: (Exp a, Exp b, Exp c, Exp d)
-                    (a2,b2,c2,d2) = unlift y
-                in
-                lift (a1 <> a2, b1 <> b2, c1 <> c2, d1 <> d2)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Semigroup (Exp a), Semigroup (Exp b), Semigroup (Exp c), Semigroup (Exp d), Semigroup (Exp e)) => Semigroup (Exp (a,b,c,d,e)) where
-  x <> y      = let (a1,b1,c1,d1,e1) = unlift x  :: (Exp a, Exp b, Exp c, Exp d, Exp e)
-                    (a2,b2,c2,d2,e2) = unlift y
-                in
-                lift (a1 <> a2, b1 <> b2, c1 <> c2, d1 <> d2, e1 <> e2)
-#endif
