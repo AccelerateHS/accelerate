@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ <= 708
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif
@@ -229,6 +230,7 @@ type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l) = TupleRepr (EltRepr 
 type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m)
 type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n)
 type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n, EltRepr o)
+type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n, EltRepr o, EltRepr p)
 
 type IsTuple = IsProduct Elt
 
@@ -550,6 +552,14 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   toElt (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toElt abcdefghijklmn
                               in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toElt o)
 
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
+  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  eltType _
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)))
+                (eltType (undefined :: p))
+  fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromElt p)
+  toElt (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toElt abcdefghijklmno
+                               in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toElt p)
 
 -- |Convenience functions
 --
@@ -631,6 +641,7 @@ type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l) = TupleRepr (ArrRepr 
 type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m)
 type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n)
 type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o)
+type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o, ArrRepr p)
 
 type IsAtuple = IsProduct Arrays
 
@@ -785,6 +796,14 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   --
   toArr    (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toArr abcdefghijklmn in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toArr o)
   fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromArr o)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
+  => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o))) (arrays (undefined::p))
+  flavour _             = ArraysFtuple
+  --
+  toArr    (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toArr abcdefghijklmno in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toArr p)
+  fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromArr p)
 
 
 -- {-# RULES
@@ -1348,4 +1367,10 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
+
+
+-- | Orphans
+--
+deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show h, Show i, Show j, Show k, Show l, Show m, Show n, Show o, Show p)
+  => Show (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
