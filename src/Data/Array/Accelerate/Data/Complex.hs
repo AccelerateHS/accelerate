@@ -63,8 +63,8 @@ import qualified Prelude                                            as P
 -- type instance EltRepr (Complex Half)    = V2 Half
 type instance EltRepr (Complex Float)   = V2 Float
 type instance EltRepr (Complex Double)  = V2 Double
--- type instance EltRepr (Complex CFloat)  = V2 CFloat
--- type instance EltRepr (Complex CDouble) = V2 CDouble
+type instance EltRepr (Complex CFloat)  = V2 CFloat
+type instance EltRepr (Complex CDouble) = V2 CDouble
 
 instance Elt (Complex Float) where
   eltType _        = TypeRscalar scalarType
@@ -72,6 +72,16 @@ instance Elt (Complex Float) where
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex Double) where
+  eltType _        = TypeRscalar scalarType
+  toElt (V2 r i)   = r :+ i
+  fromElt (r :+ i) = V2 r i
+
+instance Elt (Complex CFloat) where
+  eltType _        = TypeRscalar scalarType
+  toElt (V2 r i)   = r :+ i
+  fromElt (r :+ i) = V2 r i
+
+instance Elt (Complex CDouble) where
   eltType _        = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i

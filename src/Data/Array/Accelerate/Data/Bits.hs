@@ -566,7 +566,7 @@ instance Bits CUShort where
 -- ------------------------
 
 instance FiniteBits Bool where
-  finiteBitSize _      = constant (B.finiteBitSize (undefined::Bool))
+  finiteBitSize _      = constant 8 -- stored as Word8 {- (B.finiteBitSize (undefined::Bool)) -}
   countLeadingZeros  x = cond x 0 1
   countTrailingZeros x = cond x 0 1
 

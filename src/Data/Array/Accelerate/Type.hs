@@ -6,13 +6,12 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Type
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
+-- Copyright   : [2008..2018] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2018] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
@@ -85,6 +84,7 @@ import Data.Type.Equality
 import Data.Typeable
 import Data.Word
 import GHC.TypeLits
+import Language.Haskell.TH
 import Numeric.Half
 import Text.Printf
 import Foreign.Storable
@@ -249,445 +249,41 @@ instance Show (ScalarType a) where
 
 -- Querying scalar type representations
 --
--- TODO: generate these automatically using TH. It would be better if we could
--- use the digItOut trick (see FromIntegral.hs), but then we'd have to shuffle
--- things around to different modules.
---
 
 -- | Integral types
 --
 class (IsSingle a, IsNum a, IsBounded a) => IsIntegral a where
   integralType :: IntegralType a
 
-instance IsIntegral Int where
-  integralType = TypeInt IntegralDict
-
-instance IsIntegral Int8 where
-  integralType = TypeInt8 IntegralDict
-
-instance IsIntegral Int16 where
-  integralType = TypeInt16 IntegralDict
-
-instance IsIntegral Int32 where
-  integralType = TypeInt32 IntegralDict
-
-instance IsIntegral Int64 where
-  integralType = TypeInt64 IntegralDict
-
-instance IsIntegral Word where
-  integralType = TypeWord IntegralDict
-
-instance IsIntegral Word8 where
-  integralType = TypeWord8 IntegralDict
-
-instance IsIntegral Word16 where
-  integralType = TypeWord16 IntegralDict
-
-instance IsIntegral Word32 where
-  integralType = TypeWord32 IntegralDict
-
-instance IsIntegral Word64 where
-  integralType = TypeWord64 IntegralDict
-
-instance IsIntegral CShort where
-  integralType = TypeCShort IntegralDict
-
-instance IsIntegral CUShort where
-  integralType = TypeCUShort IntegralDict
-
-instance IsIntegral CInt where
-  integralType = TypeCInt IntegralDict
-
-instance IsIntegral CUInt where
-  integralType = TypeCUInt IntegralDict
-
-instance IsIntegral CLong where
-  integralType = TypeCLong IntegralDict
-
-instance IsIntegral CULong where
-  integralType = TypeCULong IntegralDict
-
-instance IsIntegral CLLong where
-  integralType = TypeCLLong IntegralDict
-
-instance IsIntegral CULLong where
-  integralType = TypeCULLong IntegralDict
-
 -- | Floating types
 --
 class (Floating a, IsSingle a, IsNum a) => IsFloating a where
   floatingType :: FloatingType a
-
-instance IsFloating Half where
-  floatingType = TypeHalf FloatingDict
-
-instance IsFloating Float where
-  floatingType = TypeFloat FloatingDict
-
-instance IsFloating Double where
-  floatingType = TypeDouble FloatingDict
-
-instance IsFloating CFloat where
-  floatingType = TypeCFloat FloatingDict
-
-instance IsFloating CDouble where
-  floatingType = TypeCDouble FloatingDict
 
 -- | Non-numeric types
 --
 class IsNonNum a where
   nonNumType :: NonNumType a
 
-instance IsNonNum Bool where
-  nonNumType = TypeBool NonNumDict
-
-instance IsNonNum Char where
-  nonNumType = TypeChar NonNumDict
-
-instance IsNonNum CChar where
-  nonNumType = TypeCChar NonNumDict
-
-instance IsNonNum CSChar where
-  nonNumType = TypeCSChar NonNumDict
-
-instance IsNonNum CUChar where
-  nonNumType = TypeCUChar NonNumDict
-
 -- | Numeric types
 --
 class (Num a, IsSingle a) => IsNum a where
   numType :: NumType a
-
-instance IsNum Int where
-  numType = IntegralNumType integralType
-
-instance IsNum Int8 where
-  numType = IntegralNumType integralType
-
-instance IsNum Int16 where
-  numType = IntegralNumType integralType
-
-instance IsNum Int32 where
-  numType = IntegralNumType integralType
-
-instance IsNum Int64 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word where
-  numType = IntegralNumType integralType
-
-instance IsNum Word8 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word16 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word32 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word64 where
-  numType = IntegralNumType integralType
-
-instance IsNum CShort where
-  numType = IntegralNumType integralType
-
-instance IsNum CUShort where
-  numType = IntegralNumType integralType
-
-instance IsNum CInt where
-  numType = IntegralNumType integralType
-
-instance IsNum CUInt where
-  numType = IntegralNumType integralType
-
-instance IsNum CLong where
-  numType = IntegralNumType integralType
-
-instance IsNum CULong where
-  numType = IntegralNumType integralType
-
-instance IsNum CLLong where
-  numType = IntegralNumType integralType
-
-instance IsNum CULLong where
-  numType = IntegralNumType integralType
-
-instance IsNum Half where
-  numType = FloatingNumType floatingType
-
-instance IsNum Float where
-  numType = FloatingNumType floatingType
-
-instance IsNum Double where
-  numType = FloatingNumType floatingType
-
-instance IsNum CFloat where
-  numType = FloatingNumType floatingType
-
-instance IsNum CDouble where
-  numType = FloatingNumType floatingType
 
 -- | Bounded types
 --
 class IsBounded a where
   boundedType :: BoundedType a
 
-instance IsBounded Int where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Int8 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Int16 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Int32 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Int64 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word8 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word16 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word32 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word64 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CShort where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CUShort where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CInt where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CUInt where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CLong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CULong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CLLong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CULLong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Bool where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded Char where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded CChar where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded CSChar where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded CUChar where
-  boundedType = NonNumBoundedType nonNumType
-
 -- | All single value types
 --
 class IsScalar a => IsSingle a where
   singleType :: SingleType a
 
-instance IsSingle Int where
-  singleType = NumSingleType numType
-
-instance IsSingle Int8 where
-  singleType = NumSingleType numType
-
-instance IsSingle Int16 where
-  singleType = NumSingleType numType
-
-instance IsSingle Int32 where
-  singleType = NumSingleType numType
-
-instance IsSingle Int64 where
-  singleType = NumSingleType numType
-
-instance IsSingle Word where
-  singleType = NumSingleType numType
-
-instance IsSingle Word8 where
-  singleType = NumSingleType numType
-
-instance IsSingle Word16 where
-  singleType = NumSingleType numType
-
-instance IsSingle Word32 where
-  singleType = NumSingleType numType
-
-instance IsSingle Word64 where
-  singleType = NumSingleType numType
-
-instance IsSingle CShort where
-  singleType = NumSingleType numType
-
-instance IsSingle CUShort where
-  singleType = NumSingleType numType
-
-instance IsSingle CInt where
-  singleType = NumSingleType numType
-
-instance IsSingle CUInt where
-  singleType = NumSingleType numType
-
-instance IsSingle CLong where
-  singleType = NumSingleType numType
-
-instance IsSingle CULong where
-  singleType = NumSingleType numType
-
-instance IsSingle CLLong where
-  singleType = NumSingleType numType
-
-instance IsSingle CULLong where
-  singleType = NumSingleType numType
-
-instance IsSingle Half where
-  singleType = NumSingleType numType
-
-instance IsSingle Float where
-  singleType = NumSingleType numType
-
-instance IsSingle Double where
-  singleType = NumSingleType numType
-
-instance IsSingle CFloat where
-  singleType = NumSingleType numType
-
-instance IsSingle CDouble where
-  singleType = NumSingleType numType
-
-instance IsSingle Bool where
-  singleType = NonNumSingleType nonNumType
-
-instance IsSingle Char where
-  singleType = NonNumSingleType nonNumType
-
-instance IsSingle CChar where
-  singleType = NonNumSingleType nonNumType
-
-instance IsSingle CSChar where
-  singleType = NonNumSingleType nonNumType
-
-instance IsSingle CUChar where
-  singleType = NonNumSingleType nonNumType
-
-
 -- | All scalar types
 --
 class Typeable a => IsScalar a where
   scalarType :: ScalarType a
-
-instance IsScalar Int where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Int8 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Int16 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Int32 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Int64 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Word where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Word8 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Word16 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Word32 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Word64 where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CShort where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CUShort where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CInt where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CUInt where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CLong where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CULong where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CLLong where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CULLong where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Half where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Float where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Double where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CFloat where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CDouble where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Bool where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar Char where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CChar where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CSChar where
-  scalarType = SingleScalarType singleType
-
-instance IsScalar CUChar where
-  scalarType = SingleScalarType singleType
-
-
--- XXX: Temporary to build D.A.A.Data.Complex module.
---      Replace with auto-generated instances.
-instance IsScalar (V2 Float) where
-  scalarType = VectorScalarType (Vector2Type singleType)
-
-instance IsScalar (V2 Double) where
-  scalarType = VectorScalarType (Vector2Type singleType)
 
 
 -- Extract reified dictionaries
@@ -762,59 +358,6 @@ type BitSizeEq a b = (BitSize a == BitSize b) ~ 'True
 
 type family BitSize a :: Nat
 
-type instance BitSize Int8    = 8
-type instance BitSize Int16   = 16
-type instance BitSize Int32   = 32
-type instance BitSize Int64   = 64
-type instance BitSize Word8   = 8
-type instance BitSize Word16  = 16
-type instance BitSize Word32  = 32
-type instance BitSize Word64  = 64
-type instance BitSize Char    = 32
-type instance BitSize Bool    = 1      -- but actually stored as Word8 |:
-
-type instance BitSize CShort  = 16
-type instance BitSize CUShort = 16
-type instance BitSize CInt    = 32
-type instance BitSize CUInt   = 32
-type instance BitSize CLLong  = 64
-type instance BitSize CULLong = 64
-type instance BitSize CChar   = 8
-type instance BitSize CUChar  = 8
-type instance BitSize CSChar  = 8
-
-type instance BitSize Half    = 16
-type instance BitSize Float   = 32
-type instance BitSize CFloat  = 32
-type instance BitSize Double  = 64
-type instance BitSize CDouble = 64
-
-type instance BitSize (V2 a)  = 2  * BitSize a
-type instance BitSize (V3 a)  = 3  * BitSize a
-type instance BitSize (V4 a)  = 4  * BitSize a
-type instance BitSize (V8 a)  = 8  * BitSize a
-type instance BitSize (V16 a) = 16 * BitSize a
-
-type instance BitSize Int    = $( case finiteBitSize (undefined::Int) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
-
-type instance BitSize Word   = $( case finiteBitSize (undefined::Word) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
-
-type instance BitSize CLong  = $( case finiteBitSize (undefined::CLong) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
-
-type instance BitSize CULong = $( case finiteBitSize (undefined::CULong) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
-
 
 -- SIMD vector types
 -- -----------------
@@ -853,4 +396,145 @@ instance Show a => Show (V16 a) where
     printf "<%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s>"
       (show a) (show b) (show c) (show d) (show e) (show f) (show g) (show h)
       (show i) (show j) (show k) (show l) (show m) (show n) (show o) (show p)
+
+
+-- Instances
+-- ---------
+--
+-- Generate instances for the IsX classes. It would be preferable to do this
+-- automatically based on the members of the IntegralType (etc.) representations
+-- (see for example FromIntegral.hs) but TH phase restrictions would require us
+-- to split this into a separate module.
+--
+
+$( runQ $ do
+  let
+      bits :: FiniteBits b => b -> Integer
+      bits = toInteger . finiteBitSize
+
+      integralTypes :: [(Name, Integer)]
+      integralTypes =
+        [ (''Int,     bits (undefined::Int))
+        , (''Int8,    8)
+        , (''Int16,   16)
+        , (''Int32,   32)
+        , (''Int64,   64)
+        , (''Word,    bits (undefined::Word))
+        , (''Word8,   8)
+        , (''Word16,  16)
+        , (''Word32,  32)
+        , (''Word64,  64)
+        , (''CShort,  16)
+        , (''CUShort, 16)
+        , (''CInt,    32)
+        , (''CUInt,   32)
+        , (''CLong,   bits (undefined::CLong))
+        , (''CULong,  bits (undefined::CULong))
+        , (''CLLong,  64)
+        , (''CULLong, 64)
+        ]
+
+      floatingTypes :: [(Name, Integer)]
+      floatingTypes =
+        [ (''Half,    16)
+        , (''Float,   32)
+        , (''Double,  64)
+        , (''CFloat,  32)
+        , (''CDouble, 64)
+        ]
+
+      nonNumTypes :: [(Name, Integer)]
+      nonNumTypes =
+        [ (''Bool,   8)    -- stored as Word8
+        , (''Char,   32)
+        , (''CChar,  8)
+        , (''CSChar, 8)
+        , (''CUChar, 8)
+        ]
+
+      mkIntegral :: Name -> Integer -> Q [Dec]
+      mkIntegral t n =
+        [d| instance IsIntegral $(conT t) where
+              integralType = $(conE (mkName ("Type" ++ nameBase t))) IntegralDict
+
+            instance IsNum $(conT t) where
+              numType = IntegralNumType integralType
+
+            instance IsBounded $(conT t) where
+              boundedType = IntegralBoundedType integralType
+
+            instance IsSingle $(conT t) where
+              singleType = NumSingleType numType
+
+            instance IsScalar $(conT t) where
+              scalarType = SingleScalarType singleType
+
+            type instance BitSize $(conT t) = $(litT (numTyLit n))
+          |]
+
+      mkFloating :: Name -> Integer -> Q [Dec]
+      mkFloating t n =
+        [d| instance IsFloating $(conT t) where
+              floatingType = $(conE (mkName ("Type" ++ nameBase t))) FloatingDict
+
+            instance IsNum $(conT t) where
+              numType = FloatingNumType floatingType
+
+            instance IsSingle $(conT t) where
+              singleType = NumSingleType numType
+
+            instance IsScalar $(conT t) where
+              scalarType = SingleScalarType singleType
+
+            type instance BitSize $(conT t) = $(litT (numTyLit n))
+          |]
+
+      mkNonNum :: Name -> Integer -> Q [Dec]
+      mkNonNum t n =
+        [d| instance IsNonNum $(conT t) where
+              nonNumType = $(conE (mkName ("Type" ++ nameBase t))) NonNumDict
+
+            instance IsBounded $(conT t) where
+              boundedType = NonNumBoundedType nonNumType
+
+            instance IsSingle $(conT t) where
+              singleType = NonNumSingleType nonNumType
+
+            instance IsScalar $(conT t) where
+              scalarType = SingleScalarType singleType
+
+            type instance BitSize $(conT t) = $(litT (numTyLit n))
+          |]
+
+      mkVector :: Name -> Integer -> Q [Dec]
+      mkVector t n =
+        [d| instance IsScalar (V2 $(conT t)) where
+              scalarType = VectorScalarType (Vector2Type singleType)
+
+            instance IsScalar (V3 $(conT t)) where
+              scalarType = VectorScalarType (Vector3Type singleType)
+
+            instance IsScalar (V4 $(conT t)) where
+              scalarType = VectorScalarType (Vector4Type singleType)
+
+            instance IsScalar (V8 $(conT t)) where
+              scalarType = VectorScalarType (Vector8Type singleType)
+
+            instance IsScalar (V16 $(conT t)) where
+              scalarType = VectorScalarType (Vector16Type singleType)
+
+            type instance BitSize (V2 $(conT t))  = $(litT (numTyLit (2*n)))
+            type instance BitSize (V3 $(conT t))  = $(litT (numTyLit (3*n)))
+            type instance BitSize (V4 $(conT t))  = $(litT (numTyLit (4*n)))
+            type instance BitSize (V8 $(conT t))  = $(litT (numTyLit (8*n)))
+            type instance BitSize (V16 $(conT t)) = $(litT (numTyLit (16*n)))
+          |]
+      --
+  is <- mapM (uncurry mkIntegral) integralTypes
+  fs <- mapM (uncurry mkFloating) floatingTypes
+  ns <- mapM (uncurry mkNonNum)   nonNumTypes
+  vs <- mapM (uncurry mkVector)  (integralTypes ++ floatingTypes ++ nonNumTypes)
+  --
+  return (concat is ++ concat fs ++ concat ns ++ concat vs)
+ )
 
