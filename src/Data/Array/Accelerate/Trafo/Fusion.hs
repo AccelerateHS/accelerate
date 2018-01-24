@@ -58,8 +58,9 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
                                                         , Elt, EltRepr, Shape, Tuple(..), Atuple(..)
-                                                        , IsAtuple, TupleRepr )
+                                                        , IsAtuple, TupleRepr, eltType )
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Type
 
 import qualified Data.Array.Accelerate.Debug            as Stats
 #ifdef ACCELERATE_DEBUG
@@ -908,7 +909,7 @@ generateD sh f
 -- Fuse a unary function into a delayed array. Also looks for unzips which can
 -- be executed in constant time; SEE [unzipD]
 --
-mapD :: (Kit acc, Shape sh, Elt b)
+mapD :: (Kit acc, Shape sh, Elt a, Elt b)
      => PreFun acc aenv (a -> b)
      -> Embed  acc aenv (Array sh a)
      -> Embed  acc aenv (Array sh b)
@@ -934,14 +935,17 @@ mapD f (Embed env cc)
 -- Note that this is a speculative operation, since we could dig under several
 -- levels of projection before discovering that the operation can not be
 -- unzipped. This should be fine though because digging through the terms is
--- relatively cheap; no environment changing operations are required.
+-- cheap; no environment changing operations are required.
 --
 unzipD
-    :: (Kit acc, Shape sh, Elt b)
+    :: forall acc aenv sh a b. (Kit acc, Shape sh, Elt a, Elt b)
     => PreFun acc aenv (a -> b)
     -> Embed  acc aenv (Array sh a)
     -> Maybe (Embed acc aenv (Array sh b))
 unzipD f (Embed env (Done v))
+  | TypeRscalar VectorScalarType{} <- eltType (undefined::a)
+  = Nothing
+
   | Lam (Body (Prj tix (Var ZeroIdx))) <- f
   = Stats.ruleFired "unzipD"
   $ let f' = Lam (Body (Prj tix (Var ZeroIdx)))
@@ -979,7 +983,7 @@ backpermuteD sh' p = Stats.ruleFired "backpermuteD" . go
 -- Transform as a combined map and backwards permutation
 --
 transformD
-    :: (Kit acc, Shape sh, Shape sh', Elt b)
+    :: (Kit acc, Shape sh, Shape sh', Elt a, Elt b)
     => PreExp acc aenv sh'
     -> PreFun acc aenv (sh' -> sh)
     -> PreFun acc aenv (a   -> b)
