@@ -592,14 +592,36 @@ matchPreOpenFun _ _ _        _        = Nothing
 --
 {-# INLINEABLE matchConst #-}
 matchConst :: TupleType a -> a -> a -> Bool
-matchConst UnitTuple         ()      ()      = True
-matchConst (SingleTuple ty)  a       b       = evalEq ty (a,b)
-matchConst (PairTuple ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
+matchConst TypeRunit         ()      ()      = True
+matchConst (TypeRscalar ty)  a       b       = evalEq ty (a,b)
+matchConst (TypeRpair ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
 
 evalEq :: ScalarType a -> (a, a) -> Bool
-evalEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (==)
-evalEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (==)
-evalEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (==)
+evalEq (SingleScalarType t) = evalEqSingle t
+evalEq (VectorScalarType t) = evalEqVector t
+
+evalEqSingle :: SingleType a -> (a, a) -> Bool
+evalEqSingle (NumSingleType t)                                  = evalEqNum t
+evalEqSingle (NonNumSingleType t) | NonNumDict <- nonNumDict t  = uncurry (==)
+
+evalEqVector :: VectorType a -> (a, a) -> Bool
+evalEqVector (Vector2Type t) (V2 a1 b1, V2 a2 b2)             = evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2)
+evalEqVector (Vector3Type t) (V3 a1 b1 c1, V3 a2 b2 c2)       = evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2)
+evalEqVector (Vector4Type t) (V4 a1 b1 c1 d1, V4 a2 b2 c2 d2) = evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2) && evalEqSingle t (d1,d2)
+evalEqVector (Vector8Type t) ( V8 a1 b1 c1 d1 e1 f1 g1 h1
+                             , V8 a2 b2 c2 d2 e2 f2 g2 h2 ) =
+  evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2) && evalEqSingle t (d1,d2) &&
+  evalEqSingle t (e1,e2) && evalEqSingle t (f1,f2) && evalEqSingle t (g1,g2) && evalEqSingle t (h1,h2)
+evalEqVector (Vector16Type t) ( V16 a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1 m1 n1 o1 p1
+                              , V16 a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 k2 l2 m2 n2 o2 p2 ) =
+  evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2) && evalEqSingle t (d1,d2) &&
+  evalEqSingle t (e1,e2) && evalEqSingle t (f1,f2) && evalEqSingle t (g1,g2) && evalEqSingle t (h1,h2) &&
+  evalEqSingle t (i1,i2) && evalEqSingle t (j1,j2) && evalEqSingle t (k1,k2) && evalEqSingle t (l1,l2) &&
+  evalEqSingle t (m1,m2) && evalEqSingle t (n1,n2) && evalEqSingle t (o1,o2) && evalEqSingle t (p1,p2)
+
+evalEqNum :: NumType a -> (a, a) -> Bool
+evalEqNum (IntegralNumType t) | IntegralDict <- integralDict t  = uncurry (==)
+evalEqNum (FloatingNumType t) | FloatingDict <- floatingDict t  = uncurry (==)
 
 
 -- Environment projection indices
@@ -837,27 +859,27 @@ matchPrimFun' (PrimCoerce s _) (PrimCoerce t _)
   = gcast Refl
 
 matchPrimFun' (PrimLt s) (PrimLt t)
-  | Just Refl <- matchScalarType s t
+  | Just Refl <- matchSingleType s t
   = Just Refl
 
 matchPrimFun' (PrimGt s) (PrimGt t)
-  | Just Refl <- matchScalarType s t
+  | Just Refl <- matchSingleType s t
   = Just Refl
 
 matchPrimFun' (PrimLtEq s) (PrimLtEq t)
-  | Just Refl <- matchScalarType s t
+  | Just Refl <- matchSingleType s t
   = Just Refl
 
 matchPrimFun' (PrimGtEq s) (PrimGtEq t)
-  | Just Refl <- matchScalarType s t
+  | Just Refl <- matchSingleType s t
   = Just Refl
 
 matchPrimFun' (PrimEq s) (PrimEq t)
-  | Just Refl <- matchScalarType s t
+  | Just Refl <- matchSingleType s t
   = Just Refl
 
 matchPrimFun' (PrimNEq s) (PrimNEq t)
-  | Just Refl <- matchScalarType s t
+  | Just Refl <- matchSingleType s t
   = Just Refl
 
 matchPrimFun' _ _
@@ -868,9 +890,9 @@ matchPrimFun' _ _
 --
 {-# INLINEABLE matchTupleType #-}
 matchTupleType :: TupleType s -> TupleType t -> Maybe (s :~: t)
-matchTupleType UnitTuple         UnitTuple         = Just Refl
-matchTupleType (SingleTuple s)   (SingleTuple t)   = matchScalarType s t
-matchTupleType (PairTuple s1 s2) (PairTuple t1 t2)
+matchTupleType TypeRunit         TypeRunit         = Just Refl
+matchTupleType (TypeRscalar s)   (TypeRscalar t)   = matchScalarType s t
+matchTupleType (TypeRpair s1 s2) (TypeRpair t1 t2)
   | Just Refl <- matchTupleType s1 t1
   , Just Refl <- matchTupleType s2 t2
   = Just Refl
@@ -883,9 +905,35 @@ matchTupleType _ _
 --
 {-# INLINEABLE matchScalarType #-}
 matchScalarType :: ScalarType s -> ScalarType t -> Maybe (s :~: t)
-matchScalarType (NumScalarType s)    (NumScalarType t)    = matchNumType s t
-matchScalarType (NonNumScalarType s) (NonNumScalarType t) = matchNonNumType s t
+matchScalarType (SingleScalarType s) (SingleScalarType t) = matchSingleType s t
+matchScalarType (VectorScalarType s) (VectorScalarType t) = matchVectorType s t
 matchScalarType _                    _                    = Nothing
+
+{-# INLINEABLE matchSingleType #-}
+matchSingleType :: SingleType s -> SingleType t -> Maybe (s :~: t)
+matchSingleType (NumSingleType s)    (NumSingleType t)    = matchNumType s t
+matchSingleType (NonNumSingleType s) (NonNumSingleType t) = matchNonNumType s t
+matchSingleType _                    _                    = Nothing
+
+{-# INLINEABLE matchVectorType #-}
+matchVectorType :: VectorType s -> VectorType t -> Maybe (s :~: t)
+matchVectorType (Vector2Type s) (Vector2Type t)
+  | Just Refl <- matchSingleType s t
+  = Just Refl
+matchVectorType (Vector3Type s) (Vector3Type t)
+  | Just Refl <- matchSingleType s t
+  = Just Refl
+matchVectorType (Vector4Type s) (Vector4Type t)
+  | Just Refl <- matchSingleType s t
+  = Just Refl
+matchVectorType (Vector8Type s) (Vector8Type t)
+  | Just Refl <- matchSingleType s t
+  = Just Refl
+matchVectorType (Vector16Type s) (Vector16Type t)
+  | Just Refl <- matchSingleType s t
+  = Just Refl
+matchVectorType _ _
+  = Nothing
 
 {-# INLINEABLE matchNumType #-}
 matchNumType :: NumType s -> NumType t -> Maybe (s :~: t)

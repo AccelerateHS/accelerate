@@ -58,7 +58,6 @@ import Data.Bits
 import Data.Char                                                    ( chr, ord )
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
-import Unsafe.Coerce                                                ( unsafeCoerce )
 import Prelude                                                      hiding ( sum )
 
 -- friends
@@ -70,6 +69,7 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
+import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.AST                          as AST
 import qualified Data.Array.Accelerate.Array.Representation         as R
@@ -305,7 +305,8 @@ replicateOp slice slix arr
            -> slix
            -> sl
            -> (dim, dim -> sl)
-    extend SliceNil              ()        ()       = ((), const ())
+    extend SliceNil              ()        ()
+      = ((), const ())
     extend (SliceAll sliceIdx)   (slx, ()) (sl, sz)
       = let (dim', f') = extend sliceIdx slx sl
         in  ((dim', sz), \(ix, i) -> (f' ix, i))
@@ -329,7 +330,8 @@ sliceOp slice arr slix
              -> slix
              -> sh
              -> (sl, sl -> sh)
-    restrict SliceNil              ()        ()       = ((), const ())
+    restrict SliceNil              ()        ()
+      = ((), const ())
     restrict (SliceAll sliceIdx)   (slx, ()) (sl, sz)
       = let (sl', f') = restrict sliceIdx slx sl
         in  ((sl', sz), \(ix, i) -> (f' ix, i))
@@ -789,9 +791,9 @@ stencilAccess = goR stencil
     cons ix extent = toElt $ go (eltType (undefined::sh)) (fromElt extent)
       where
         go :: TupleType t -> t -> (t, Int)
-        go UnitTuple         ()       = ((), ix)
-        go (PairTuple th tz) (sh, sz)
-          | SingleTuple t <- tz
+        go TypeRunit         ()       = ((), ix)
+        go (TypeRpair th tz) (sh, sz)
+          | TypeRscalar t <- tz
           , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
           = (go th sh, sz)
         go _ _
@@ -804,9 +806,9 @@ stencilAccess = goR stencil
                     in  (i, toElt ix)
       where
         go :: TupleType (t, Int) -> (t, Int) -> (Int, t)
-        go (PairTuple UnitTuple _)           ((), v) = (v, ())
-        go (PairTuple t1@(PairTuple _ t2) _) (v1,v3)
-          | SingleTuple t <- t2
+        go (TypeRpair TypeRunit _)           ((), v) = (v, ())
+        go (TypeRpair t1@(TypeRpair _ t2) _) (v1,v3)
+          | TypeRscalar t <- t2
           , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
           = let (i, v1') = go t1 v1
             in  (i, (v1', v3))
@@ -837,12 +839,12 @@ bounded bnd arr ix =
     inside sh1 ix1 = go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
       where
         go :: TupleType t -> t -> t -> Bool
-        go UnitTuple          ()       ()      = True
-        go (PairTuple tsh ti) (sh, sz) (ih,iz)
+        go TypeRunit          ()       ()      = True
+        go (TypeRpair tsh ti) (sh, sz) (ih,iz)
           = if go ti sz iz
               then go tsh sh ih
               else False
-        go (SingleTuple t) sz iz
+        go (TypeRscalar t) sz iz
           | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
           = if iz < 0 || iz >= sz
               then False
@@ -858,9 +860,9 @@ bounded bnd arr ix =
     bound sh1 ix1 = toElt $ go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
       where
         go :: TupleType t -> t -> t -> t
-        go UnitTuple          ()       ()       = ()
-        go (PairTuple tsh ti) (sh, sz) (ih, iz) = (go tsh sh ih, go ti sz iz)
-        go (SingleTuple t)    sz       iz
+        go TypeRunit          ()       ()       = ()
+        go (TypeRpair tsh ti) (sh, sz) (ih, iz) = (go tsh sh ih, go ti sz iz)
+        go (TypeRscalar t)    sz       iz
           | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
           = let i | iz < 0    = case bnd of
                                   Clamp  -> 0
@@ -1095,7 +1097,7 @@ evalPrim PrimChr                     = evalChr
 evalPrim PrimBoolToInt               = evalBoolToInt
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
-evalPrim PrimCoerce{}                = liftToElt unsafeCoerce
+evalPrim (PrimCoerce ta tb)          = evalCoerce ta tb
 
 
 -- Tuple construction and projection
@@ -1133,7 +1135,8 @@ evalChr :: Int -> Char
 evalChr = chr
 
 evalBoolToInt :: Bool -> Int
-evalBoolToInt = fromEnum
+evalBoolToInt True  = 1
+evalBoolToInt False = 0
 
 evalFromIntegral :: IntegralType a -> NumType b -> a -> b
 evalFromIntegral ta (IntegralNumType tb)
@@ -1381,45 +1384,45 @@ evalRecip :: FloatingType a -> (a -> a)
 evalRecip ty | FloatingDict <- floatingDict ty = recip
 
 
-evalLt :: ScalarType a -> ((a, a) -> Bool)
-evalLt (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<)
-evalLt (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<)
-evalLt (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<)
+evalLt :: SingleType a -> ((a, a) -> Bool)
+evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<)
+evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<)
+evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<)
 
-evalGt :: ScalarType a -> ((a, a) -> Bool)
-evalGt (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>)
-evalGt (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>)
-evalGt (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>)
+evalGt :: SingleType a -> ((a, a) -> Bool)
+evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>)
+evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>)
+evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>)
 
-evalLtEq :: ScalarType a -> ((a, a) -> Bool)
-evalLtEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<=)
-evalLtEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<=)
-evalLtEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<=)
+evalLtEq :: SingleType a -> ((a, a) -> Bool)
+evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<=)
+evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<=)
+evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<=)
 
-evalGtEq :: ScalarType a -> ((a, a) -> Bool)
-evalGtEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>=)
-evalGtEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>=)
-evalGtEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>=)
+evalGtEq :: SingleType a -> ((a, a) -> Bool)
+evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>=)
+evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>=)
+evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>=)
 
-evalEq :: ScalarType a -> ((a, a) -> Bool)
-evalEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (==)
-evalEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (==)
-evalEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (==)
+evalEq :: SingleType a -> ((a, a) -> Bool)
+evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (==)
+evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (==)
+evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (==)
 
-evalNEq :: ScalarType a -> ((a, a) -> Bool)
-evalNEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (/=)
-evalNEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (/=)
-evalNEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (/=)
+evalNEq :: SingleType a -> ((a, a) -> Bool)
+evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (/=)
+evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (/=)
+evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (/=)
 
-evalMax :: ScalarType a -> ((a, a) -> a)
-evalMax (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry max
-evalMax (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry max
-evalMax (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry max
+evalMax :: SingleType a -> ((a, a) -> a)
+evalMax (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry max
+evalMax (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry max
+evalMax (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry max
 
-evalMin :: ScalarType a -> ((a, a) -> a)
-evalMin (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry min
-evalMin (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry min
-evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry min
+evalMin :: SingleType a -> ((a, a) -> a)
+evalMin (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry min
+evalMin (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry min
+evalMin (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry min
 
 
 {--

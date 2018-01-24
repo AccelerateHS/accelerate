@@ -1,8 +1,10 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
@@ -21,27 +23,33 @@
 
 module Data.Array.Accelerate.Trafo.Algebra (
 
-  evalPrimApp
+  evalPrimApp,
+  evalCoerce,
 
 ) where
 
-import Prelude                                          hiding ( exp )
 import Data.Bits
 import Data.Char
 import Data.Monoid
+import Foreign.ForeignPtr
 import GHC.Float                                        ( float2Double, double2Float )
 import Text.PrettyPrint.ANSI.Leijen
-import Unsafe.Coerce
+import Prelude                                          hiding ( exp )
 import qualified Prelude                                as P
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
-import Data.Array.Accelerate.Array.Sugar                ( (:.)(..), Elt(..), Tuple(..), EltRepr, fromTuple, liftToElt )
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Analysis.Type
+import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Sugar                hiding ( Any )
+import Data.Array.Accelerate.Array.Unique
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Lifetime
+import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Type
 
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -164,7 +172,7 @@ evalPrimApp env f x
       PrimBoolToInt             -> evalBoolToInt x env
       PrimFromIntegral ta tb    -> evalFromIntegral ta tb x env
       PrimToFloating ta tb      -> evalToFloating ta tb x env
-      PrimCoerce ta tb          -> evalCoerce ta tb x env
+      PrimCoerce ta tb          -> evalPrimCoerce ta tb x env
 
 
 -- Discriminate binary functions that commute, and if so return the operands in
@@ -610,45 +618,98 @@ evalIsInfinite ty | FloatingDict <- floatingDict ty = eval1 isInfinite
 -- Relational & Equality
 -- ---------------------
 
-evalLt :: ScalarType a -> (a,a) :-> Bool
-evalLt (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (<)
-evalLt (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (<)
-evalLt (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (<)
+evalLt :: SingleType a -> (a,a) :-> Bool
+evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (<)
+evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (<)
+evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (<)
 
-evalGt :: ScalarType a -> (a,a) :-> Bool
-evalGt (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (>)
-evalGt (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (>)
-evalGt (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (>)
+-- evalLt (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (<)
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (<)
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (<)
+-- evalLt (VectorScalarType (Vector2Type s)) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- t -> eval2 (<)
+--     NumSingleType (FloatingNumType t) | FloatingDict <- t -> eval2 (<)
+--     NonNumSingleType t                | NonNumDict   <- t -> eval2 (<)
 
-evalLtEq :: ScalarType a -> (a,a) :-> Bool
-evalLtEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (<=)
-evalLtEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (<=)
-evalLtEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (<=)
+evalGt :: SingleType a -> (a,a) :-> Bool
+evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (>)
+evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (>)
+evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (>)
 
-evalGtEq :: ScalarType a -> (a,a) :-> Bool
-evalGtEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (>=)
-evalGtEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (>=)
-evalGtEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (>=)
+-- evalGt (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (>)
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (>)
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (>)
 
-evalEq :: ScalarType a -> (a,a) :-> Bool
-evalEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (==)
-evalEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (==)
-evalEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (==)
+evalLtEq :: SingleType a -> (a,a) :-> Bool
+evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (<=)
+evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (<=)
+evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (<=)
 
-evalNEq :: ScalarType a -> (a,a) :-> Bool
-evalNEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (/=)
-evalNEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (/=)
-evalNEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (/=)
+-- evalLtEq (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (<=)
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (<=)
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (<=)
 
-evalMax :: Elt a => ScalarType a -> (a,a) :-> a
-evalMax (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 max
-evalMax (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 max
-evalMax (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 max
+evalGtEq :: SingleType a -> (a,a) :-> Bool
+evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (>=)
+evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (>=)
+evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (>=)
 
-evalMin :: Elt a => ScalarType a -> (a,a) :-> a
-evalMin (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 min
-evalMin (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 min
-evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 min
+-- evalGtEq (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (>=)
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (>=)
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (>=)
+
+evalEq :: SingleType a -> (a,a) :-> Bool
+evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (==)
+evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (==)
+evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (==)
+
+-- evalEq (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (==)
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (==)
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (==)
+
+evalNEq :: SingleType a -> (a,a) :-> Bool
+evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (/=)
+evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (/=)
+evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (/=)
+
+-- evalNEq (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (/=)
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (/=)
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (/=)
+
+evalMax :: Elt a => SingleType a -> (a,a) :-> a
+evalMax (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 max
+evalMax (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 max
+evalMax (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 max
+
+-- evalMax (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 max
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 max
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 max
+
+evalMin :: Elt a => SingleType a -> (a,a) :-> a
+evalMin (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 min
+evalMin (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 min
+evalMin (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 min
+
+-- evalMin (SingleScalarType s) =
+--   case s of
+--     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 min
+--     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 min
+--     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 min
 
 
 -- Logical operators
@@ -715,8 +776,101 @@ evalToFloating (FloatingNumType ta) tb x env
   | FloatingDict <- floatingDict ta
   , FloatingDict <- floatingDict tb = eval1 realToFrac x env
 
-evalCoerce :: forall a b. (Elt a, Elt b) => ScalarType (EltRepr a) -> ScalarType (EltRepr b) -> a :-> b
-evalCoerce _ _ = eval1 (liftToElt unsafeCoerce)
+evalPrimCoerce :: (Elt a, Elt b) => ScalarType (EltRepr a) -> ScalarType (EltRepr b) -> a :-> b
+evalPrimCoerce ta tb = eval1 (evalCoerce ta tb)
+
+-- Coerce a value by writing that data into memory and reading it back at
+-- a different type. This seems the most robust way to do it in the presence of
+-- packed vector types (which Haskell does not represent in the same way as
+-- C due to alignment of the fields, even at specialised UNPACKed types).
+--
+evalCoerce :: forall a b. (Elt a, Elt b) => ScalarType (EltRepr a) -> ScalarType (EltRepr b) -> a -> b
+evalCoerce ta tb x
+  = $internalCheck "evalCoerce" "sizes not equal" (sizeOf (TypeRscalar ta) == sizeOf (TypeRscalar tb))
+  $ toElt (unsafeIndexArrayData adata' 0)
+  where
+    Array () adata  = fromList Z [x]  :: Scalar a
+    adata'          = fromUA arrayElt (toUA arrayElt adata)
+
+    toUA :: ArrayEltR e -> ArrayData e -> UniqueArray ()
+    toUA ArrayEltRint       (AD_Int ua)     = castUniqueArray ua
+    toUA ArrayEltRint8      (AD_Int8 ua)    = castUniqueArray ua
+    toUA ArrayEltRint16     (AD_Int16 ua)   = castUniqueArray ua
+    toUA ArrayEltRint32     (AD_Int32 ua)   = castUniqueArray ua
+    toUA ArrayEltRint64     (AD_Int64 ua)   = castUniqueArray ua
+    toUA ArrayEltRword      (AD_Word ua)    = castUniqueArray ua
+    toUA ArrayEltRword8     (AD_Word8 ua)   = castUniqueArray ua
+    toUA ArrayEltRword16    (AD_Word16 ua)  = castUniqueArray ua
+    toUA ArrayEltRword32    (AD_Word32 ua)  = castUniqueArray ua
+    toUA ArrayEltRword64    (AD_Word64 ua)  = castUniqueArray ua
+    toUA ArrayEltRcshort    (AD_CShort ua)  = castUniqueArray ua
+    toUA ArrayEltRcushort   (AD_CUShort ua) = castUniqueArray ua
+    toUA ArrayEltRcint      (AD_CInt ua)    = castUniqueArray ua
+    toUA ArrayEltRcuint     (AD_CUInt ua)   = castUniqueArray ua
+    toUA ArrayEltRclong     (AD_CLong ua)   = castUniqueArray ua
+    toUA ArrayEltRculong    (AD_CULong ua)  = castUniqueArray ua
+    toUA ArrayEltRcllong    (AD_CLLong ua)  = castUniqueArray ua
+    toUA ArrayEltRcullong   (AD_CULLong ua) = castUniqueArray ua
+    toUA ArrayEltRhalf      (AD_Half ua)    = castUniqueArray ua
+    toUA ArrayEltRfloat     (AD_Float ua)   = castUniqueArray ua
+    toUA ArrayEltRdouble    (AD_Double ua)  = castUniqueArray ua
+    toUA ArrayEltRcfloat    (AD_CFloat ua)  = castUniqueArray ua
+    toUA ArrayEltRcdouble   (AD_CDouble ua) = castUniqueArray ua
+    toUA ArrayEltRbool      (AD_Bool ua)    = castUniqueArray ua
+    toUA ArrayEltRchar      (AD_Char ua)    = castUniqueArray ua
+    toUA ArrayEltRcchar     (AD_CChar ua)   = castUniqueArray ua
+    toUA ArrayEltRcschar    (AD_CSChar ua)  = castUniqueArray ua
+    toUA ArrayEltRcuchar    (AD_CUChar ua)  = castUniqueArray ua
+    toUA (ArrayEltRvec2 r)  (AD_V2 a)       = toUA r a
+    toUA (ArrayEltRvec3 r)  (AD_V3 a)       = toUA r a
+    toUA (ArrayEltRvec4 r)  (AD_V4 a)       = toUA r a
+    toUA (ArrayEltRvec8 r)  (AD_V8 a)       = toUA r a
+    toUA (ArrayEltRvec16 r) (AD_V16 a)      = toUA r a
+    --
+    toUA ArrayEltRunit      _               = error "What sane person could live in this world and not be crazy?"
+    toUA ArrayEltRpair{}    _               = error "  --- Ursula K. Le Guin"
+
+    fromUA :: ArrayEltR e -> UniqueArray () -> ArrayData e
+    fromUA ArrayEltRint       = AD_Int     . castUniqueArray
+    fromUA ArrayEltRint8      = AD_Int8    . castUniqueArray
+    fromUA ArrayEltRint16     = AD_Int16   . castUniqueArray
+    fromUA ArrayEltRint32     = AD_Int32   . castUniqueArray
+    fromUA ArrayEltRint64     = AD_Int64   . castUniqueArray
+    fromUA ArrayEltRword      = AD_Word    . castUniqueArray
+    fromUA ArrayEltRword8     = AD_Word8   . castUniqueArray
+    fromUA ArrayEltRword16    = AD_Word16  . castUniqueArray
+    fromUA ArrayEltRword32    = AD_Word32  . castUniqueArray
+    fromUA ArrayEltRword64    = AD_Word64  . castUniqueArray
+    fromUA ArrayEltRcshort    = AD_CShort  . castUniqueArray
+    fromUA ArrayEltRcushort   = AD_CUShort . castUniqueArray
+    fromUA ArrayEltRcint      = AD_CInt    . castUniqueArray
+    fromUA ArrayEltRcuint     = AD_CUInt   . castUniqueArray
+    fromUA ArrayEltRclong     = AD_CLong   . castUniqueArray
+    fromUA ArrayEltRculong    = AD_CULong  . castUniqueArray
+    fromUA ArrayEltRcllong    = AD_CLLong  . castUniqueArray
+    fromUA ArrayEltRcullong   = AD_CULLong . castUniqueArray
+    fromUA ArrayEltRhalf      = AD_Half    . castUniqueArray
+    fromUA ArrayEltRfloat     = AD_Float   . castUniqueArray
+    fromUA ArrayEltRdouble    = AD_Double  . castUniqueArray
+    fromUA ArrayEltRcfloat    = AD_CFloat  . castUniqueArray
+    fromUA ArrayEltRcdouble   = AD_CDouble . castUniqueArray
+    fromUA ArrayEltRbool      = AD_Bool    . castUniqueArray
+    fromUA ArrayEltRchar      = AD_Char    . castUniqueArray
+    fromUA ArrayEltRcchar     = AD_CChar   . castUniqueArray
+    fromUA ArrayEltRcschar    = AD_CSChar  . castUniqueArray
+    fromUA ArrayEltRcuchar    = AD_CUChar  . castUniqueArray
+    fromUA (ArrayEltRvec2 r)  = AD_V2      . fromUA r
+    fromUA (ArrayEltRvec3 r)  = AD_V3      . fromUA r
+    fromUA (ArrayEltRvec4 r)  = AD_V4      . fromUA r
+    fromUA (ArrayEltRvec8 r)  = AD_V8      . fromUA r
+    fromUA (ArrayEltRvec16 r) = AD_V16     . fromUA r
+    --
+    fromUA ArrayEltRunit      = error "I talk about the gods, I am an atheist. But I am an artist too, and therefore a liar. Distrust everything I say. I am telling the truth."
+    fromUA ArrayEltRpair{}    = error "  --- Ursula K. Le Guin, The Left Hand of Darkness"
+
+    castUniqueArray :: UniqueArray x -> UniqueArray y
+    castUniqueArray (UniqueArray uid (Lifetime r w p)) =
+      UniqueArray uid (Lifetime r w (castForeignPtr p))
 
 
 -- Scalar primitives

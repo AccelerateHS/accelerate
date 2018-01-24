@@ -632,9 +632,9 @@ bound bnd sh0 ix0 =
     Right ix' -> Right (toElt ix')
   where
     go :: TupleType t -> t -> t -> Either e t
-    go UnitTuple           ()      ()      = Right ()
-    go (PairTuple tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
-    go (SingleTuple t)     sh      i
+    go TypeRunit           ()      ()      = Right ()
+    go (TypeRpair tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
+    go (TypeRscalar t)     sh      i
       | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
       = if i P.< 0
           then case bnd of

@@ -19,7 +19,8 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- Complex numbers
+-- Complex numbers, stored in the usual C-style array-of-struct representation,
+-- for easy interoperability.
 --
 module Data.Array.Accelerate.Data.Complex (
 
@@ -46,6 +47,7 @@ import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Type
 
 import Prelude                                                      ( ($), undefined )
 import Data.Complex                                                 ( Complex(..) )
@@ -53,31 +55,46 @@ import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
 
 
-type instance EltRepr (Complex a) = EltRepr (a, a)
+-- Use an array-of-structs representation for complex numbers. This matches the
+-- standard C-style layout, but means that we can define instances only at
+-- specific types (not for any type 'a') as we can only have vectors of
+-- primitive type.
+--
+-- type instance EltRepr (Complex Half)    = V2 Half
+type instance EltRepr (Complex Float)   = V2 Float
+type instance EltRepr (Complex Double)  = V2 Double
+-- type instance EltRepr (Complex CFloat)  = V2 CFloat
+-- type instance EltRepr (Complex CDouble) = V2 CDouble
 
-instance Elt a => Elt (Complex a) where
-  eltType _             = eltType (undefined :: (a,a))
-  toElt p               = let (a, b) = toElt p in a :+ b
-  fromElt (a :+ b)      = fromElt (a, b)
+instance Elt (Complex Float) where
+  eltType _        = TypeRscalar scalarType
+  toElt (V2 r i)   = r :+ i
+  fromElt (r :+ i) = V2 r i
+
+instance Elt (Complex Double) where
+  eltType _        = TypeRscalar scalarType
+  toElt (V2 r i)   = r :+ i
+  fromElt (r :+ i) = V2 r i
 
 instance cst a => IsProduct cst (Complex a) where
-  type ProdRepr (Complex a) = ProdRepr (a, a)
-  fromProd cst (r :+ i) = fromProd cst (r, i)
-  toProd cst p          = let (r, i) = toProd cst p in (r :+ i)
-  prod cst _            = prod cst (undefined :: (a, a))
+  type ProdRepr (Complex a) = ProdRepr (V2 a)
+  fromProd cst (r :+ i) = fromProd cst (V2 r i)
+  toProd cst p          = let (V2 r i) = toProd cst p in (r :+ i)
+  prod cst _            = prod cst (undefined :: (V2 a))
 
-instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
+instance (Lift Exp a, Elt (Plain a), Elt (Complex (Plain a))) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
   lift (r :+ i)          = Exp $ Tuple (NilTup `SnocTup` lift r `SnocTup` lift i)
 
-instance Elt a => Unlift Exp (Complex (Exp a)) where
+instance (Elt a, Elt (Complex a)) => Unlift Exp (Complex (Exp a)) where
   unlift e
     = let r     = Exp $ SuccTupIdx ZeroTupIdx `Prj` e
           i     = Exp $ ZeroTupIdx `Prj` e
       in
       r :+ i
 
-instance Eq a => Eq (Complex a) where
+
+instance (Eq a, Elt (Complex a)) => Eq (Complex a) where
   x == y = let r1 :+ c1 = unlift x
                r2 :+ c2 = unlift y
            in  r1 == r2 && c1 == c2
@@ -85,7 +102,7 @@ instance Eq a => Eq (Complex a) where
                r2 :+ c2 = unlift y
            in  r1 /= r2 || c1 /= c2
 
-instance RealFloat a => P.Num (Exp (Complex a)) where
+instance (RealFloat a, Elt (Complex a)) => P.Num (Exp (Complex a)) where
   (+)           = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (-)           = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (*)           = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
@@ -99,7 +116,7 @@ instance RealFloat a => P.Num (Exp (Complex a)) where
   abs z         = lift (magnitude z :+ 0)
   fromInteger n = lift (fromInteger n :+ 0)
 
-instance RealFloat a => P.Fractional (Exp (Complex a)) where
+instance (RealFloat a, Elt (Complex a)) => P.Fractional (Exp (Complex a)) where
   fromRational x  = lift (fromRational x :+ 0)
   z / z'          = lift ((x*x''+y*y'') / d :+ (y*x''-x*y'') / d)
     where
@@ -111,7 +128,7 @@ instance RealFloat a => P.Fractional (Exp (Complex a)) where
       k   = - max (exponent x') (exponent y')
       d   = x'*x'' + y'*y''
 
-instance RealFloat a => P.Floating (Exp (Complex a)) where
+instance (RealFloat a, Elt (Complex a)) => P.Floating (Exp (Complex a)) where
   pi                      = lift $ pi :+ 0
 
   exp (unlift -> x :+ y)  = let expx = exp x
@@ -128,7 +145,7 @@ instance RealFloat a => P.Floating (Exp (Complex a)) where
       v'    = abs y / (u'*2)
       u'    = sqrt ((magnitude z + abs x) / 2)
 
-  x ** y  =
+  x ** y =
     if y == 0 then 1 else
     if x == 0 then if exp_r > 0 then 0 else
                    if exp_r < 0 then lift (inf :+ 0)
@@ -181,7 +198,7 @@ instance RealFloat a => P.Floating (Exp (Complex a)) where
   atanh z =  0.5 * log ((1.0+z) / (1.0-z))
 
 
-instance (FromIntegral a b, Num b) => FromIntegral a (Complex b) where
+instance (FromIntegral a b, Num b, Elt (Complex b)) => FromIntegral a (Complex b) where
   fromIntegral x = lift (fromIntegral x :+ 0)
 
 -- | @since 1.2.0.0
@@ -191,12 +208,12 @@ instance Functor Complex where
 
 -- Helper function to fix the types for lift (ugh)
 --
-complex :: Elt a => Complex (Exp a) -> Exp (Complex a)
+complex :: (Elt a, Elt (Complex a)) => Complex (Exp a) -> Exp (Complex a)
 complex = lift
 
 -- | The non-negative magnitude of a complex number
 --
-magnitude :: RealFloat a => Exp (Complex a) -> Exp a
+magnitude :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
 -- magnitude (unlift -> r :+ i) = sqrt (r*r + i*i)
 magnitude (unlift -> r :+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
   where
@@ -207,7 +224,7 @@ magnitude (unlift -> r :+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
-phase :: RealFloat a => Exp (Complex a) -> Exp a
+phase :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
 phase z@(unlift -> r :+ i) =
   if z == 0
     then 0
@@ -217,15 +234,15 @@ phase z@(unlift -> r :+ i) =
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
-polar :: RealFloat a => Exp (Complex a) -> Exp (a,a)
+polar :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp (a,a)
 polar z =  lift (magnitude z, phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
 #if __GLASGOW_HASKELL__ <= 708
-mkPolar :: forall a. RealFloat a => Exp a -> Exp a -> Exp (Complex a)
+mkPolar :: forall a. (RealFloat a, Elt (Complex a)) => Exp a -> Exp a -> Exp (Complex a)
 #else
-mkPolar :: forall a. Floating a  => Exp a -> Exp a -> Exp (Complex a)
+mkPolar :: forall a. (Floating a,  Elt (Complex a)) => Exp a -> Exp a -> Exp (Complex a)
 #endif
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
@@ -233,26 +250,26 @@ mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 -- @2*'pi'@).
 --
 #if __GLASGOW_HASKELL__ <= 708
-cis :: forall a. RealFloat a => Exp a -> Exp (Complex a)
+cis :: forall a. (RealFloat a, Elt (Complex a)) => Exp a -> Exp (Complex a)
 #else
-cis :: forall a. Floating a  => Exp a -> Exp (Complex a)
+cis :: forall a. (Floating a,  Elt (Complex a)) => Exp a -> Exp (Complex a)
 #endif
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
 --
-real :: Elt a => Exp (Complex a) -> Exp a
+real :: (Elt a, Elt (Complex a)) => Exp (Complex a) -> Exp a
 real (unlift -> r :+ _) = r
 
 -- | Return the imaginary part of a complex number
 --
-imag :: Elt a => Exp (Complex a) -> Exp a
+imag :: (Elt a, Elt (Complex a)) => Exp (Complex a) -> Exp a
 imag (unlift -> _ :+ i) = i
 
 -- | Return the complex conjugate of a complex number, defined as
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: Num a => Exp (Complex a) -> Exp (Complex a)
+conjugate :: (Num a, Elt (Complex a)) => Exp (Complex a) -> Exp (Complex a)
 conjugate z = lift $ real z :+ (- imag z)
 

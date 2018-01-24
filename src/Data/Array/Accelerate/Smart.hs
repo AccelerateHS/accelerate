@@ -604,6 +604,11 @@ data PreExp acc exp t where
                 -> exp t
                 -> PreExp acc exp e
 
+  -- Extract       :: (Elt e, IsTuple (v e))
+  --               => TupleIdx (TupleRepr (v e)) e
+  --               -> exp (v e)
+  --               -> PreExp acc exp e
+
   IndexNil      :: PreExp acc exp Z
 
   IndexCons     :: (Slice sl, Elt a)
@@ -2006,29 +2011,29 @@ mkIsInfinite x = Exp $ PrimIsInfinite floatingType `PrimApp` x
 
 -- Relational and equality operators
 
-mkLt :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkLt x y = Exp $ PrimLt scalarType `PrimApp` tup2 (x, y)
+mkLt :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkLt x y = Exp $ PrimLt singleType `PrimApp` tup2 (x, y)
 
-mkGt :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkGt x y = Exp $ PrimGt scalarType `PrimApp` tup2 (x, y)
+mkGt :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkGt x y = Exp $ PrimGt singleType `PrimApp` tup2 (x, y)
 
-mkLtEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkLtEq x y = Exp $ PrimLtEq scalarType `PrimApp` tup2 (x, y)
+mkLtEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkLtEq x y = Exp $ PrimLtEq singleType `PrimApp` tup2 (x, y)
 
-mkGtEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkGtEq x y = Exp $ PrimGtEq scalarType `PrimApp` tup2 (x, y)
+mkGtEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkGtEq x y = Exp $ PrimGtEq singleType `PrimApp` tup2 (x, y)
 
-mkEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkEq x y = Exp $ PrimEq scalarType `PrimApp` tup2 (x, y)
+mkEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkEq x y = Exp $ PrimEq singleType `PrimApp` tup2 (x, y)
 
-mkNEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkNEq x y = Exp $ PrimNEq scalarType `PrimApp` tup2 (x, y)
+mkNEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkNEq x y = Exp $ PrimNEq singleType `PrimApp` tup2 (x, y)
 
-mkMax :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
-mkMax x y = Exp $ PrimMax scalarType `PrimApp` tup2 (x, y)
+mkMax :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp t
+mkMax x y = Exp $ PrimMax singleType `PrimApp` tup2 (x, y)
 
-mkMin :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
-mkMin x y = Exp $ PrimMin scalarType `PrimApp` tup2 (x, y)
+mkMin :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp t
+mkMin x y = Exp $ PrimMin singleType `PrimApp` tup2 (x, y)
 
 -- Logical operators
 

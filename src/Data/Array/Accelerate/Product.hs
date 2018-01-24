@@ -29,6 +29,8 @@ module Data.Array.Accelerate.Product (
 
 ) where
 
+import Data.Array.Accelerate.Type
+
 
 -- |Type-safe projection indices for tuples.
 --
@@ -174,4 +176,17 @@ instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, 
     = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
   prod p _
     = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n)))
+
+instance cst a => IsProduct cst (V2 a) where
+  type ProdRepr (V2 a) = (((), a), a)
+  fromProd _ (V2 a b)     = (((), a), b)
+  toProd _ (((), a), b)   = V2 a b
+  prod _ _                = ProdRsnoc (ProdRsnoc ProdRunit)
+
+instance cst a => IsProduct cst (V3 a) where
+  type ProdRepr (V3 a) = ((((), a), a), a)
+  fromProd _ (V3 a b c)      = ((((), a), b), c)
+  toProd _ ((((), a), b), c) = V3 a b c
+  prod _ _                   = ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit))
+
 

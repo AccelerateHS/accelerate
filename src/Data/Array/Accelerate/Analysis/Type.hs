@@ -17,9 +17,9 @@
 --
 -- The Accelerate AST does not explicitly store much type information.  Most of
 -- it is only indirectly through type class constraints -especially, 'Elt'
--- constraints- available.  This module provides functions that reify that
--- type information in the form of a 'TupleType' value.  This is, for example,
--- needed to emit type information in a backend.
+-- constraints- available. This module provides functions that reify that type
+-- information in the form of a 'TupleType value. This is, for example, needed
+-- to emit type information in a backend.
 --
 
 module Data.Array.Accelerate.Analysis.Type (
@@ -31,15 +31,14 @@ module Data.Array.Accelerate.Analysis.Type (
 
 ) where
 
+-- friends
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Type
+
 -- standard library
 import qualified Foreign.Storable as F
-
--- friends
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Trafo
-
 
 
 -- |Determine an array type
@@ -192,13 +191,30 @@ preExpType k e =
 -- |Size of a tuple type, in bytes
 --
 sizeOf :: TupleType a -> Int
-sizeOf UnitTuple       = 0
-sizeOf (PairTuple a b) = sizeOf a + sizeOf b
+sizeOf TypeRunit       = 0
+sizeOf (TypeRpair a b) = sizeOf a + sizeOf b
+sizeOf (TypeRscalar t) = sizeOfScalarType t
 
-sizeOf (SingleTuple (NumScalarType (IntegralNumType t)))
-  | IntegralDict <- integralDict t = F.sizeOf $ (undefined :: IntegralType a -> a) t
-sizeOf (SingleTuple (NumScalarType (FloatingNumType t)))
-  | FloatingDict <- floatingDict t = F.sizeOf $ (undefined :: FloatingType a -> a) t
-sizeOf (SingleTuple (NonNumScalarType t))
-  | NonNumDict   <- nonNumDict t   = F.sizeOf $ (undefined :: NonNumType a   -> a) t
+sizeOfScalarType :: ScalarType t -> Int
+sizeOfScalarType (SingleScalarType t) = sizeOfSingleType t
+sizeOfScalarType (VectorScalarType t) = sizeOfVectorType t
+
+sizeOfSingleType :: SingleType t -> Int
+sizeOfSingleType (NumSingleType t)    = sizeOfNumType t
+sizeOfSingleType (NonNumSingleType t) = sizeOfNonNumType t
+
+sizeOfVectorType :: VectorType t -> Int
+sizeOfVectorType (Vector2Type t)  = 2 * sizeOfSingleType t
+sizeOfVectorType (Vector3Type t)  = 3 * sizeOfSingleType t
+sizeOfVectorType (Vector4Type t)  = 4 * sizeOfSingleType t
+sizeOfVectorType (Vector8Type t)  = 8 * sizeOfSingleType t
+sizeOfVectorType (Vector16Type t) = 16 * sizeOfSingleType t
+
+sizeOfNumType :: forall t. NumType t -> Int
+sizeOfNumType (IntegralNumType t) | IntegralDict <- integralDict t = F.sizeOf (undefined::t)
+sizeOfNumType (FloatingNumType t) | FloatingDict <- floatingDict t = F.sizeOf (undefined::t)
+
+sizeOfNonNumType :: forall t. NonNumType t -> Int
+sizeOfNonNumType TypeBool{} = 1 -- stored as Word8
+sizeOfNonNumType t | NonNumDict <- nonNumDict t = F.sizeOf (undefined::t)
 

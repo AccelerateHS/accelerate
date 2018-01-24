@@ -42,14 +42,14 @@ import Data.Semigroup
 -- > fmap (f . g) == fmap f . fmap g
 --
 class Functor f where
-  fmap :: (Elt a, Elt b) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
+  fmap :: (Elt a, Elt b, Elt (f a), Elt (f b)) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
 
   -- | Replace all locations in the input with the same value. The default
   -- definition is @fmap . const@, but this may be overridden with a more
   -- efficient version.
   --
   infixl 4 <$
-  (<$) :: (Elt a, Elt b) => Exp a -> Exp (f b) -> Exp (f a)
+  (<$) :: (Elt a, Elt b, Elt (f a), Elt (f b)) => Exp a -> Exp (f b) -> Exp (f a)
   (<$) = fmap . const
 
 
@@ -65,20 +65,20 @@ class Functor f where
 -- lifted over a 'Functor'.
 --
 infixl 4 <$>
-(<$>) :: (Functor f, Elt a, Elt b) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
+(<$>) :: (Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
 (<$>) = fmap
 
 
 -- | A flipped version of '(<$)'.
 --
 infixl 4 $>
-($>) :: (Functor f, Elt a, Elt b) => Exp (f a) -> Exp b -> Exp (f b)
+($>) :: (Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => Exp (f a) -> Exp b -> Exp (f b)
 ($>) = flip (<$)
 
 
 -- | @'void' value@ discards or ignores the result of evaluation.
 --
-void :: (Functor f, Elt a) => Exp (f a) -> Exp (f ())
+void :: (Functor f, Elt a, Elt (f a), Elt (f ())) => Exp (f a) -> Exp (f ())
 void x = constant () <$ x
 
 

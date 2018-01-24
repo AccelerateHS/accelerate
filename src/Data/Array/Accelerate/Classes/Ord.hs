@@ -491,7 +491,7 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g, Ord h, Ord i, Ord j, 
 type instance EltRepr Ordering = Int8
 
 instance Elt Ordering where
-  eltType _ = SingleTuple scalarType
+  eltType _ = TypeRscalar scalarType
   fromElt = P.fromIntegral . P.fromEnum
   toElt   = P.toEnum . P.fromIntegral
 
