@@ -290,6 +290,14 @@ instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l
                (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2) = untup15 y
            in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2 || l1 /= l2 || m1 /= m2 || n1 /= n2 || o1 /= o2
 
+instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l, Eq m, Eq n, Eq o, Eq p) => Eq (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1,p1) = untup16 x
+               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2,p2) = untup16 y
+           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2 && k1 == k2 && l1 == l2 && m1 == m2 && n1 == n2 && o1 == o2 && p1 == p2
+  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1,p1) = untup16 x
+               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2,p2) = untup16 y
+           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2 || l1 /= l2 || m1 /= m2 || n1 /= n2 || o1 /= o2 || p1 /= p2
+
 
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
