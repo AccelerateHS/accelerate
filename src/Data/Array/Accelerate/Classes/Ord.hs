@@ -259,6 +259,14 @@ instance Ord CSChar where
   min  = mkMin
   max  = mkMax
 
+instance Ord Half where
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
+
 instance Ord Float where
   (<)  = mkLt
   (>)  = mkGt

@@ -162,6 +162,10 @@ instance Eq CSChar where
   (==) = mkEq
   (/=) = mkNEq
 
+instance Eq Half where
+  (==) = mkEq
+  (/=) = mkNEq
+
 instance Eq Float where
   (==) = mkEq
   (/=) = mkNEq

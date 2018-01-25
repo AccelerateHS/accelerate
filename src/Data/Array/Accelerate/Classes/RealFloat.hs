@@ -125,6 +125,16 @@ class (RealFrac a, Floating a) => RealFloat a where
   atan2          :: Exp a -> Exp a -> Exp a
 
 
+instance RealFloat Half where
+  atan2           = mkAtan2
+  isNaN           = mkIsNaN
+  isInfinite      = mkIsInfinite
+  floatRange _    = (-13,16)    -- bug in half <= 2.2.3
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f16_is_denormalized . mkUnsafeCoerce)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f16_is_negative_zero . mkUnsafeCoerce)
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f16_decode (mkUnsafeCoerce x)
+                                                    in  (fromIntegral m, n))
+
 instance RealFloat Float where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
@@ -207,6 +217,11 @@ ieee754_f32_is_denormalized x =
   ieee754_f32_mantissa x == 0 &&
   ieee754_f32_exponent x /= 0
 
+ieee754_f16_is_denormalized :: Exp Word16 -> Exp Bool
+ieee754_f16_is_denormalized x =
+  ieee754_f16_mantissa x == 0 &&
+  ieee754_f16_exponent x /= 0
+
 -- Negative zero if only the sign bit is set
 --
 ieee754_f64_is_negative_zero :: Exp Word64 -> Exp Bool
@@ -220,6 +235,12 @@ ieee754_f32_is_negative_zero x =
   ieee754_f32_negative x &&
   ieee754_f32_exponent x == 0 &&
   ieee754_f32_mantissa x == 0
+
+ieee754_f16_is_negative_zero :: Exp Word16 -> Exp Bool
+ieee754_f16_is_negative_zero x =
+  ieee754_f16_negative x &&
+  ieee754_f16_exponent x == 0 &&
+  ieee754_f16_mantissa x == 0
 
 
 -- Assume the host processor stores integers and floating point numbers in the
@@ -256,14 +277,64 @@ ieee754_f32_exponent x = fromIntegral (x `unsafeShiftR` 23)
 ieee754_f32_negative :: Exp Word32 -> Exp Bool
 ieee754_f32_negative x = testBit x 31
 
+-- Representation of half precision IEEE floating point number:
+--
+-- sign         15           sign bit (0==positive, 1==negative)
+-- exponent     14-10        exponent (biased by 15)
+-- fraction     9-0          fraction (bits to right of binary point)
+--
+ieee754_f16_mantissa :: Exp Word16 -> Exp Word16
+ieee754_f16_mantissa x = x .&. 0x3FF
+
+ieee754_f16_exponent :: Exp Word16 -> Exp Word8
+ieee754_f16_exponent x = fromIntegral (x `unsafeShiftR` 10) .&. 0x1F
+
+ieee754_f16_negative :: Exp Word16 -> Exp Bool
+ieee754_f16_negative x = testBit x 15
+
+
+-- reverse engineered following the below
+
+ieee754_f16_decode :: Exp Word16 -> Exp (Int16, Int)
+ieee754_f16_decode i =
+  let
+      _HHIGHBIT                       = 0x0400
+      _HMSBIT                         = 0x8000
+      _HMINEXP                        = ((_HALF_MIN_EXP) - (_HALF_MANT_DIG) - 1)
+      _HALF_MANT_DIG                  = floatDigits (undefined::Exp Half)
+      (_HALF_MIN_EXP, _HALF_MAX_EXP)  = floatRange  (undefined::Exp Half)
+
+      high1 = fromIntegral i
+      high2 = high1 .&. (_HHIGHBIT - 1)
+
+      exp1  = ((fromIntegral high1 `unsafeShiftR` 10) .&. 0x1F) + _HMINEXP
+      exp2  = exp1 + 1
+
+      (high3, exp3)
+            = untup2
+            $ Exp $ Cond (exp1 /= _HMINEXP)
+                         -- don't add hidden bit to denorms
+                         (tup2 (high2 .|. _HHIGHBIT, exp1))
+                         -- a denorm, normalise the mantissa
+                         (Exp $ While (\(untup2 -> (h,_)) -> (h .&. _HHIGHBIT) /= 0 )
+                                      (\(untup2 -> (h,e)) -> tup2 (h `unsafeShiftL` 1, e-1))
+                                      (tup2 (high2, exp2)))
+
+      high4 = Exp $ Cond (fromIntegral i < (0 :: Exp Int16)) (-high3) high3
+  in
+  Exp $ Cond (high1 .&. complement _HMSBIT == 0)
+             (tup2 (0,0))
+             (tup2 (high4, exp3))
+
+
 -- From: ghc/rts/StgPrimFloat.c
 -- ----------------------------
 
 ieee754_f32_decode :: Exp Word32 -> Exp (Int32, Int)
 ieee754_f32_decode i =
   let
-      _FMSBIT                       = 0x80000000
       _FHIGHBIT                     = 0x00800000
+      _FMSBIT                       = 0x80000000
       _FMINEXP                      = ((_FLT_MIN_EXP) - (_FLT_MANT_DIG) - 1)
       _FLT_MANT_DIG                 = floatDigits (undefined::Exp Float)
       (_FLT_MIN_EXP, _FLT_MAX_EXP)  = floatRange  (undefined::Exp Float)

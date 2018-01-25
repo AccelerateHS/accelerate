@@ -141,6 +141,12 @@ instance P.Enum (Exp CUShort) where
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
+instance P.Enum (Exp Half) where
+  succ x    = mkAdd x (constant 1)
+  pred x    = mkSub x (constant 1)
+  toEnum    = defaultToEnum
+  fromEnum  = defaultFromEnum
+
 instance P.Enum (Exp Float) where
   succ x    = mkAdd x (constant 1)
   pred x    = mkSub x (constant 1)

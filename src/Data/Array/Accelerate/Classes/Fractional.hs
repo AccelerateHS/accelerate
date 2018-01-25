@@ -44,6 +44,11 @@ fromRational = P.fromRational
 type Fractional a = (Num a, P.Fractional (Exp a))
 
 
+instance P.Fractional (Exp Half) where
+  (/)          = mkFDiv
+  recip        = mkRecip
+  fromRational = constant . P.fromRational
+
 instance P.Fractional (Exp Float) where
   (/)          = mkFDiv
   recip        = mkRecip

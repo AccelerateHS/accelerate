@@ -41,6 +41,26 @@ import qualified Prelude                                            as P
 type Floating a = (Fractional a, P.Floating (Exp a))
 
 
+instance P.Floating (Exp Half) where
+  pi      = mkPi
+  sin     = mkSin
+  cos     = mkCos
+  tan     = mkTan
+  asin    = mkAsin
+  acos    = mkAcos
+  atan    = mkAtan
+  sinh    = mkSinh
+  cosh    = mkCosh
+  tanh    = mkTanh
+  asinh   = mkAsinh
+  acosh   = mkAcosh
+  atanh   = mkAtanh
+  exp     = mkExpFloating
+  sqrt    = mkSqrt
+  log     = mkLog
+  (**)    = mkFPow
+  logBase = mkLogBase
+
 instance P.Floating (Exp Float) where
   pi      = mkPi
   sin     = mkSin
