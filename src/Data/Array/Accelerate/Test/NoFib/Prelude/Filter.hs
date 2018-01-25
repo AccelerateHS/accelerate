@@ -49,6 +49,7 @@ test_filter runN =
     , at (Proxy::Proxy TestWord16) $ testIntegralElt w16
     , at (Proxy::Proxy TestWord32) $ testIntegralElt w32
     , at (Proxy::Proxy TestWord64) $ testIntegralElt w64
+    , at (Proxy::Proxy TestHalf)   $ testFloatingElt f16
     , at (Proxy::Proxy TestFloat)  $ testFloatingElt f32
     , at (Proxy::Proxy TestDouble) $ testFloatingElt f64
     ]

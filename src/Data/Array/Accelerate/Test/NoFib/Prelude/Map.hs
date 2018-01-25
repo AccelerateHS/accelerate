@@ -33,6 +33,7 @@ import Data.Array.Accelerate.Array.Sugar                            as Sugar
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import Data.Array.Accelerate.Type
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -53,6 +54,7 @@ test_map runN =
     , at (Proxy::Proxy TestWord16) $ testIntegralElt w16
     , at (Proxy::Proxy TestWord32) $ testIntegralElt w32
     , at (Proxy::Proxy TestWord64) $ testIntegralElt w64
+    , at (Proxy::Proxy TestHalf)   $ testFloatingElt (Gen.realFloat :: Range Half -> Gen Half)
     , at (Proxy::Proxy TestFloat)  $ testFloatingElt Gen.float
     , at (Proxy::Proxy TestDouble) $ testFloatingElt Gen.double
     ]

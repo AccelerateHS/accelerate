@@ -30,6 +30,7 @@ import Data.Array.Accelerate.Array.Sugar                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import Data.Array.Accelerate.Type
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -42,7 +43,8 @@ import Test.Tasty.Hedgehog
 test_blackscholes :: RunN -> TestTree
 test_blackscholes runN =
   testGroup "blackscholes"
-    [ at (Proxy::Proxy TestFloat)  $ testElt Gen.float
+    [ at (Proxy::Proxy TestHalf)   $ testElt (Gen.realFloat :: Range Half -> Gen Half)
+    , at (Proxy::Proxy TestFloat)  $ testElt Gen.float
     , at (Proxy::Proxy TestDouble) $ testElt Gen.double
     ]
   where

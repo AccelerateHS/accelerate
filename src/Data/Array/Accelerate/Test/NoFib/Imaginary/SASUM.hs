@@ -48,6 +48,7 @@ test_sasum runN =
     , at (Proxy::Proxy TestWord16) $ testElt w16
     , at (Proxy::Proxy TestWord32) $ testElt w32
     , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestHalf)   $ testElt f16
     , at (Proxy::Proxy TestFloat)  $ testElt f32
     , at (Proxy::Proxy TestDouble) $ testElt f64
     ]
