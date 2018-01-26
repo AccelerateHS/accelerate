@@ -949,42 +949,43 @@ matchBoundedType _                       _                       = Nothing
 
 {-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
-matchIntegralType (TypeInt _)     (TypeInt _)     = Just Refl
-matchIntegralType (TypeInt8 _)    (TypeInt8 _)    = Just Refl
-matchIntegralType (TypeInt16 _)   (TypeInt16 _)   = Just Refl
-matchIntegralType (TypeInt32 _)   (TypeInt32 _)   = Just Refl
-matchIntegralType (TypeInt64 _)   (TypeInt64 _)   = Just Refl
-matchIntegralType (TypeWord _)    (TypeWord _)    = Just Refl
-matchIntegralType (TypeWord8 _)   (TypeWord8 _)   = Just Refl
-matchIntegralType (TypeWord16 _)  (TypeWord16 _)  = Just Refl
-matchIntegralType (TypeWord32 _)  (TypeWord32 _)  = Just Refl
-matchIntegralType (TypeWord64 _)  (TypeWord64 _)  = Just Refl
-matchIntegralType (TypeCShort _)  (TypeCShort _)  = Just Refl
-matchIntegralType (TypeCUShort _) (TypeCUShort _) = Just Refl
-matchIntegralType (TypeCInt _)    (TypeCInt _)    = Just Refl
-matchIntegralType (TypeCUInt _)   (TypeCUInt _)   = Just Refl
-matchIntegralType (TypeCLong _)   (TypeCLong _)   = Just Refl
-matchIntegralType (TypeCULong _)  (TypeCULong _)  = Just Refl
-matchIntegralType (TypeCLLong _)  (TypeCLLong _)  = Just Refl
-matchIntegralType (TypeCULLong _) (TypeCULLong _) = Just Refl
-matchIntegralType _               _               = Nothing
+matchIntegralType TypeInt{}     TypeInt{}     = Just Refl
+matchIntegralType TypeInt8{}    TypeInt8{}    = Just Refl
+matchIntegralType TypeInt16{}   TypeInt16{}   = Just Refl
+matchIntegralType TypeInt32{}   TypeInt32{}   = Just Refl
+matchIntegralType TypeInt64{}   TypeInt64{}   = Just Refl
+matchIntegralType TypeWord{}    TypeWord{}    = Just Refl
+matchIntegralType TypeWord8{}   TypeWord8{}   = Just Refl
+matchIntegralType TypeWord16{}  TypeWord16{}  = Just Refl
+matchIntegralType TypeWord32{}  TypeWord32{}  = Just Refl
+matchIntegralType TypeWord64{}  TypeWord64{}  = Just Refl
+matchIntegralType TypeCShort{}  TypeCShort{}  = Just Refl
+matchIntegralType TypeCUShort{} TypeCUShort{} = Just Refl
+matchIntegralType TypeCInt{}    TypeCInt{}    = Just Refl
+matchIntegralType TypeCUInt{}   TypeCUInt{}   = Just Refl
+matchIntegralType TypeCLong{}   TypeCLong{}   = Just Refl
+matchIntegralType TypeCULong{}  TypeCULong{}  = Just Refl
+matchIntegralType TypeCLLong{}  TypeCLLong{}  = Just Refl
+matchIntegralType TypeCULLong{} TypeCULLong{} = Just Refl
+matchIntegralType _             _             = Nothing
 
 {-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
-matchFloatingType (TypeFloat _)   (TypeFloat _)   = Just Refl
-matchFloatingType (TypeDouble _)  (TypeDouble _)  = Just Refl
-matchFloatingType (TypeCFloat _)  (TypeCFloat _)  = Just Refl
-matchFloatingType (TypeCDouble _) (TypeCDouble _) = Just Refl
-matchFloatingType _               _               = Nothing
+matchFloatingType TypeHalf{}    TypeHalf{}    = Just Refl
+matchFloatingType TypeFloat{}   TypeFloat{}   = Just Refl
+matchFloatingType TypeDouble{}  TypeDouble{}  = Just Refl
+matchFloatingType TypeCFloat{}  TypeCFloat{}  = Just Refl
+matchFloatingType TypeCDouble{} TypeCDouble{} = Just Refl
+matchFloatingType _             _             = Nothing
 
 {-# INLINEABLE matchNonNumType #-}
 matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
-matchNonNumType (TypeBool _)   (TypeBool _)   = Just Refl
-matchNonNumType (TypeChar _)   (TypeChar _)   = Just Refl
-matchNonNumType (TypeCChar _)  (TypeCChar _)  = Just Refl
-matchNonNumType (TypeCSChar _) (TypeCSChar _) = Just Refl
-matchNonNumType (TypeCUChar _) (TypeCUChar _) = Just Refl
-matchNonNumType _              _              = Nothing
+matchNonNumType TypeBool{}   TypeBool{}   = Just Refl
+matchNonNumType TypeChar{}   TypeChar{}   = Just Refl
+matchNonNumType TypeCChar{}  TypeCChar{}  = Just Refl
+matchNonNumType TypeCSChar{} TypeCSChar{} = Just Refl
+matchNonNumType TypeCUChar{} TypeCUChar{} = Just Refl
+matchNonNumType _            _            = Nothing
 
 
 -- Auxiliary

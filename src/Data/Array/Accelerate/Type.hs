@@ -310,10 +310,10 @@ integralDict (TypeCLLong  dict) = dict
 integralDict (TypeCULLong dict) = dict
 
 floatingDict :: FloatingType a -> FloatingDict a
-floatingDict (TypeHalf dict)    = dict
-floatingDict (TypeFloat dict)   = dict
-floatingDict (TypeDouble dict)  = dict
-floatingDict (TypeCFloat dict)  = dict
+floatingDict (TypeHalf    dict) = dict
+floatingDict (TypeFloat   dict) = dict
+floatingDict (TypeDouble  dict) = dict
+floatingDict (TypeCFloat  dict) = dict
 floatingDict (TypeCDouble dict) = dict
 
 nonNumDict :: NonNumType a -> NonNumDict a

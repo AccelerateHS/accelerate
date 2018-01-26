@@ -761,6 +761,9 @@ evalToFloating (IntegralNumType ta) tb x env
   , FloatingDict <- floatingDict tb = eval1 realToFrac x env
 
 evalToFloating (FloatingNumType ta) tb x env
+  | TypeHalf   FloatingDict <- ta
+  , TypeHalf   FloatingDict <- tb = Just x
+
   | TypeFloat  FloatingDict <- ta
   , TypeFloat  FloatingDict <- tb = Just x
 
