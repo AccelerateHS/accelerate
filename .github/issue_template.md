@@ -54,6 +54,7 @@ Please describe any additional steps to reproducing the bug.
 
 - Version used:
 - Backend(s) used and version:
+- GHC version:
 - Operating system and version:
 - Link to your project:
 - If this is a bug with the GPU backend, include the output of `nvidia-device-query`:
