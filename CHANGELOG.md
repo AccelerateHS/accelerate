@@ -11,6 +11,12 @@ Policy (PVP)](https://pvp.haskell.org)
   * Internal debugging/RTS options handling has been changed. Compiling this
     package now implies that backends are also compiled in debug mode (no need
     to set the -fdebug cabal flag for those packages as well).
+  * Complex numbers are stored in the C-style array-of-struct representation
+
+### Added
+  * Support for half-precision floating-point numbers.
+  * Support for struct-of-array-of-struct representations. Currently this is
+    limited to fields of 2,3,4,8, or 16-elements wide.
 
 ## [1.1.1.0] - 2017-09-26
 ### Changed
