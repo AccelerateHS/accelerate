@@ -53,6 +53,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen           as PP
 import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Type
 
 
 -- Pretty printing
@@ -363,7 +364,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
         f'           = if infixOp then parens f else f
 
     pp (PrimConst a)            = prettyConst a
-    pp (Tuple tup)              = prettyTuple prettyAcc env aenv tup
+    pp (Tuple tup)              = prettyTuple (eltType (undefined::t)) prettyAcc env aenv tup
     pp (Var idx)                = prj idx env
     pp (Const v)                = text $ show (toElt v :: t)
     pp (Prj idx e)              = wrap $ prettyTupleIdx idx <+> ppE e
@@ -395,24 +396,29 @@ prettyAtuple
     -> Val aenv
     -> Atuple (acc aenv) t
     -> Doc
-prettyAtuple pp aenv = tupled . collect
+prettyAtuple pp aenv = tupled False . collect
   where
     collect :: Atuple (acc aenv) t' -> [Doc]
     collect NilAtup          = []
     collect (SnocAtup tup a) = collect tup ++ [pp noParens aenv a]
 
 prettyTuple
-    :: forall acc env aenv t.
-       PrettyAcc acc
+    :: forall acc env aenv t p.
+       TupleType t
+    -> PrettyAcc acc
     -> Val env
     -> Val aenv
-    -> Tuple (PreOpenExp acc env aenv) t
+    -> Tuple (PreOpenExp acc env aenv) p
     -> Doc
-prettyTuple pp env aenv = tupled . collect
+prettyTuple tt pp env aenv = tupled simd . collect
   where
     collect :: Tuple (PreOpenExp acc env aenv) t' -> [Doc]
     collect NilTup          = []
     collect (SnocTup tup e) = collect tup ++ [prettyPreOpenExp pp noParens env aenv e]
+
+    simd :: Bool
+    simd | TypeRscalar VectorScalarType{} <- tt = True
+         | otherwise                            = False
 
 
 -- Pretty print an index for a tuple projection
@@ -512,7 +518,7 @@ prettyAnyType ty = text $ show ty
 -- TLM: seems to flatten the nesting structure
 --
 prettyArrays :: ArraysR arrs -> arrs -> Doc
-prettyArrays arrs = tupled . collect arrs
+prettyArrays arrs = tupled False . collect arrs
   where
     collect :: ArraysR arrs -> arrs -> [Doc]
     collect ArraysRunit         _        = []
@@ -542,8 +548,9 @@ parens = PP.parens . align
 noParens :: Doc -> Doc
 noParens = id
 
-tupled :: [Doc] -> Doc
-tupled = PP.tupled . map align
+tupled :: Bool -> [Doc] -> Doc
+tupled True  = encloseSep langle rangle comma . map align
+tupled False = encloseSep lparen rparen comma . map align
 
 
 -- ANSI colourisation
