@@ -30,7 +30,6 @@ import Data.Array.Accelerate.Array.Sugar                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
-import Data.Array.Accelerate.Type
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
