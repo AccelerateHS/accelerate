@@ -19,13 +19,11 @@ module Data.Array.Accelerate.Test.Similar
 
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Data.Complex
+import Data.Array.Accelerate.Type
 
 import Hedgehog
 import Hedgehog.Internal.Source                           ( HasCallStack, withFrozenCallStack )
 
-import Data.Int
-import Data.Word
-import Foreign.C.Types
 import Prelude                                            hiding ( (!!) )
 
 
@@ -86,6 +84,7 @@ instance                   Similar (Any Z)
 instance (Eq sh, Eq sz) => Similar (sh:.sz)
 instance (Eq sh)        => Similar (Any (sh:.Int))
 
+instance Similar Half    where (~=) = absRelTol 0.05    0.5
 instance Similar Float   where (~=) = absRelTol 0.00005 0.005
 instance Similar Double  where (~=) = absRelTol 0.00005 0.005
 instance Similar CFloat  where (~=) = absRelTol 0.00005 0.005
@@ -154,6 +153,11 @@ instance (Similar a, Similar b, Similar c, Similar d, Similar e, Similar f, Simi
     => Similar (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
   (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) ~= (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15) =
     x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4 && x5 ~= y5 && x6 ~= y6 && x7 ~= y7 && x8 ~= y8 && x9 ~= y9 && x10 ~= y10 && x11 ~= y11 && x12 ~= y12 && x13 ~= y13 && x14 ~= y14 && x15 ~= y15
+
+instance (Similar a, Similar b, Similar c, Similar d, Similar e, Similar f, Similar g, Similar h, Similar i, Similar j, Similar k, Similar l, Similar m, Similar n, Similar o, Similar p)
+    => Similar (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16) ~= (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15, y16) =
+    x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4 && x5 ~= y5 && x6 ~= y6 && x7 ~= y7 && x8 ~= y8 && x9 ~= y9 && x10 ~= y10 && x11 ~= y11 && x12 ~= y12 && x13 ~= y13 && x14 ~= y14 && x15 ~= y15 && x16 ~= y16
 
 instance Similar e => Similar (Complex e) where
   (r1 :+ i1) ~= (r2 :+ i2) = r1 ~= r2 && i1 ~= i2

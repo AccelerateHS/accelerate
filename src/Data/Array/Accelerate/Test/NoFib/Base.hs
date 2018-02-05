@@ -17,9 +17,8 @@ module Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Array.Sugar                            ( Arrays, Array, Shape, Elt, DIM0, DIM1, DIM2, DIM3, Z(..), (:.)(..), fromList, size )
 import Data.Array.Accelerate.Smart                                  ( Acc )
 import Data.Array.Accelerate.Trafo.Sharing                          ( Afunction, AfunctionR )
+import Data.Array.Accelerate.Type
 
-import Data.Int
-import Data.Word
 import Control.Monad
 
 import Hedgehog
@@ -82,6 +81,9 @@ w32 = Gen.word32 Range.linearBounded
 w64 :: Gen Word64
 w64 = Gen.word64 Range.linearBounded
 
+f16 :: Gen Half
+f16 = Gen.realFloat (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
+
 f32 :: Gen Float
 f32 = Gen.float (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
 
@@ -94,18 +96,18 @@ log_flt_max = log flt_max
 flt_max :: RealFloat a => a
 flt_max = x
   where
-    n      = floatDigits x
-    b      = floatRadix x
-    (_, u) = floatRange x
-    x      = encodeFloat (b^n - 1) (u - n)
+    n   = floatDigits x
+    b   = floatRadix x
+    inf = let (u,v) = floatRange x in max u v   -- bug in half <= 0.2.2.3
+    x   = encodeFloat (b^n - 1) (inf - n)
 
 flt_min :: RealFloat a => a
 flt_min = x
   where
-    n      = floatDigits x
-    b      = floatRadix x
-    (l, _) = floatRange x
-    x      = encodeFloat (b^n - 1) (l - n - 1)
+    n   = floatDigits x
+    b   = floatRadix x
+    sup = let (u,v) = floatRange x in min u v   -- bug in half <= 0.2.2.3
+    x   = encodeFloat (b^n - 1) (sup - n - 1)
 
 except :: Gen e -> (e -> Bool) -> Gen e
 except gen f  = do

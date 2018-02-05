@@ -118,7 +118,7 @@ expDim _ = ndim (eltType (undefined :: sh))
 -- Count the number of components to a tuple type
 --
 ndim :: TupleType a -> Int
-ndim UnitTuple       = 0
-ndim (SingleTuple _) = 1
-ndim (PairTuple a b) = ndim a + ndim b
+ndim TypeRunit       = 0
+ndim TypeRscalar{}   = 1
+ndim (TypeRpair a b) = ndim a + ndim b
 

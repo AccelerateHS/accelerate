@@ -50,6 +50,7 @@ test_fold runN =
     , at (Proxy::Proxy TestWord16) $ testElt w16 (Gen.word16 (Range.linear 0 10))
     , at (Proxy::Proxy TestWord32) $ testElt w32 (Gen.word32 (Range.linear 0 1000))
     , at (Proxy::Proxy TestWord64) $ testElt w64 (Gen.word64 (Range.linear 0 10000))
+    , at (Proxy::Proxy TestHalf)   $ testElt f16 f16
     , at (Proxy::Proxy TestFloat)  $ testElt f32 f32
     , at (Proxy::Proxy TestDouble) $ testElt f64 f64
     ]

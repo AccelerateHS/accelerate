@@ -125,8 +125,8 @@ import Foreign.ForeignPtr
 import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
-import GHC.Ptr                                                      ( Ptr(..) )
 import System.IO.Unsafe
+import GHC.Ptr                                                      ( Ptr(..) )
 import Language.Haskell.TH                                          ( Q, TExp )
 import qualified Language.Haskell.TH                                as TH
 import qualified Language.Haskell.TH.Syntax                         as TH
@@ -1032,14 +1032,14 @@ data PrimFun sig where
   -- PrimIsIEEE         :: FloatingType a -> PrimFun (a -> Bool)
 
   -- relational and equality operators
-  PrimLt   :: ScalarType a -> PrimFun ((a, a) -> Bool)
-  PrimGt   :: ScalarType a -> PrimFun ((a, a) -> Bool)
-  PrimLtEq :: ScalarType a -> PrimFun ((a, a) -> Bool)
-  PrimGtEq :: ScalarType a -> PrimFun ((a, a) -> Bool)
-  PrimEq   :: ScalarType a -> PrimFun ((a, a) -> Bool)
-  PrimNEq  :: ScalarType a -> PrimFun ((a, a) -> Bool)
-  PrimMax  :: ScalarType a -> PrimFun ((a, a) -> a   )
-  PrimMin  :: ScalarType a -> PrimFun ((a, a) -> a   )
+  PrimLt   :: SingleType a -> PrimFun ((a, a) -> Bool)
+  PrimGt   :: SingleType a -> PrimFun ((a, a) -> Bool)
+  PrimLtEq :: SingleType a -> PrimFun ((a, a) -> Bool)
+  PrimGtEq :: SingleType a -> PrimFun ((a, a) -> Bool)
+  PrimEq   :: SingleType a -> PrimFun ((a, a) -> Bool)
+  PrimNEq  :: SingleType a -> PrimFun ((a, a) -> Bool)
+  PrimMax  :: SingleType a -> PrimFun ((a, a) -> a   )
+  PrimMin  :: SingleType a -> PrimFun ((a, a) -> a   )
 
   -- logical operators
   PrimLAnd :: PrimFun ((Bool, Bool) -> Bool)
@@ -1297,9 +1297,9 @@ rnfTuple _    NilTup        = ()
 rnfTuple rnfA (SnocTup t e) = rnfTuple rnfA t `seq` rnfPreOpenExp rnfA e
 
 rnfConst :: TupleType t -> t -> ()
-rnfConst UnitTuple          ()    = ()
-rnfConst (SingleTuple t)    !_    = rnfScalarType t  -- scalars should have (nf == whnf)
-rnfConst (PairTuple ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
+rnfConst TypeRunit          ()    = ()
+rnfConst (TypeRscalar t)    !_    = rnfScalarType t  -- scalars should have (nf == whnf)
+rnfConst (TypeRpair ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
 
 rnfPrimConst :: PrimConst c -> ()
 rnfPrimConst (PrimMinBound t) = rnfBoundedType t
@@ -1356,14 +1356,14 @@ rnfPrimFun (PrimCeiling f i)          = rnfFloatingType f `seq` rnfIntegralType 
 rnfPrimFun (PrimIsNaN t)              = rnfFloatingType t
 rnfPrimFun (PrimIsInfinite t)         = rnfFloatingType t
 rnfPrimFun (PrimAtan2 t)              = rnfFloatingType t
-rnfPrimFun (PrimLt t)                 = rnfScalarType t
-rnfPrimFun (PrimGt t)                 = rnfScalarType t
-rnfPrimFun (PrimLtEq t)               = rnfScalarType t
-rnfPrimFun (PrimGtEq t)               = rnfScalarType t
-rnfPrimFun (PrimEq t)                 = rnfScalarType t
-rnfPrimFun (PrimNEq t)                = rnfScalarType t
-rnfPrimFun (PrimMax t)                = rnfScalarType t
-rnfPrimFun (PrimMin t)                = rnfScalarType t
+rnfPrimFun (PrimLt t)                 = rnfSingleType t
+rnfPrimFun (PrimGt t)                 = rnfSingleType t
+rnfPrimFun (PrimLtEq t)               = rnfSingleType t
+rnfPrimFun (PrimGtEq t)               = rnfSingleType t
+rnfPrimFun (PrimEq t)                 = rnfSingleType t
+rnfPrimFun (PrimNEq t)                = rnfSingleType t
+rnfPrimFun (PrimMax t)                = rnfSingleType t
+rnfPrimFun (PrimMin t)                = rnfSingleType t
 rnfPrimFun PrimLAnd                   = ()
 rnfPrimFun PrimLOr                    = ()
 rnfPrimFun PrimLNot                   = ()
@@ -1380,8 +1380,19 @@ rnfSliceIndex (SliceAll sh)   = rnfSliceIndex sh
 rnfSliceIndex (SliceFixed sh) = rnfSliceIndex sh
 
 rnfScalarType :: ScalarType t -> ()
-rnfScalarType (NumScalarType t)    = rnfNumType t
-rnfScalarType (NonNumScalarType t) = rnfNonNumType t
+rnfScalarType (SingleScalarType t) = rnfSingleType t
+rnfScalarType (VectorScalarType t) = rnfVectorType t
+
+rnfSingleType :: SingleType t -> ()
+rnfSingleType (NumSingleType t)    = rnfNumType t
+rnfSingleType (NonNumSingleType t) = rnfNonNumType t
+
+rnfVectorType :: VectorType t -> ()
+rnfVectorType (Vector2Type t)  = rnfSingleType t
+rnfVectorType (Vector3Type t)  = rnfSingleType t
+rnfVectorType (Vector4Type t)  = rnfSingleType t
+rnfVectorType (Vector8Type t)  = rnfSingleType t
+rnfVectorType (Vector16Type t) = rnfSingleType t
 
 rnfBoundedType :: BoundedType t -> ()
 rnfBoundedType (IntegralBoundedType t) = rnfIntegralType t
@@ -1419,6 +1430,7 @@ rnfIntegralType (TypeCLLong  IntegralDict) = ()
 rnfIntegralType (TypeCULLong IntegralDict) = ()
 
 rnfFloatingType :: FloatingType t -> ()
+rnfFloatingType (TypeHalf    FloatingDict) = ()
 rnfFloatingType (TypeFloat   FloatingDict) = ()
 rnfFloatingType (TypeDouble  FloatingDict) = ()
 rnfFloatingType (TypeCFloat  FloatingDict) = ()
@@ -1608,6 +1620,7 @@ liftArray (Array sh adata) =
     go ArrayEltRculong       (AD_CULong ua)  = [|| AD_CULong $$(arr ua) ||]
     go ArrayEltRcllong       (AD_CLLong ua)  = [|| AD_CLLong $$(arr ua) ||]
     go ArrayEltRcullong      (AD_CULLong ua) = [|| AD_CULLong $$(arr ua) ||]
+    go ArrayEltRhalf         (AD_Half ua)    = [|| AD_Half $$(arr ua) ||]
     go ArrayEltRfloat        (AD_Float ua)   = [|| AD_Float $$(arr ua) ||]
     go ArrayEltRdouble       (AD_Double ua)  = [|| AD_Double $$(arr ua) ||]
     go ArrayEltRcfloat       (AD_CFloat ua)  = [|| AD_CFloat $$(arr ua) ||]
@@ -1617,6 +1630,11 @@ liftArray (Array sh adata) =
     go ArrayEltRcchar        (AD_CChar ua)   = [|| AD_CChar $$(arr ua) ||]
     go ArrayEltRcschar       (AD_CSChar ua)  = [|| AD_CSChar $$(arr ua) ||]
     go ArrayEltRcuchar       (AD_CUChar ua)  = [|| AD_CUChar $$(arr ua) ||]
+    go (ArrayEltRvec2 r)     (AD_V2 a)       = [|| AD_V2 $$(go r a) ||]
+    go (ArrayEltRvec3 r)     (AD_V3 a)       = [|| AD_V3 $$(go r a) ||]
+    go (ArrayEltRvec4 r)     (AD_V4 a)       = [|| AD_V4 $$(go r a) ||]
+    go (ArrayEltRvec8 r)     (AD_V8 a)       = [|| AD_V8 $$(go r a) ||]
+    go (ArrayEltRvec16 r)    (AD_V16 a)      = [|| AD_V16 $$(go r a) ||]
     go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = [|| AD_Pair $$(go r1 a1) $$(go r2 a2) ||]
 
 
@@ -1691,14 +1709,14 @@ liftPrimFun (PrimCeiling ta tb)        = [|| PrimCeiling $$(liftFloatingType ta)
 liftPrimFun (PrimIsNaN t)              = [|| PrimIsNaN $$(liftFloatingType t) ||]
 liftPrimFun (PrimIsInfinite t)         = [|| PrimIsInfinite $$(liftFloatingType t) ||]
 liftPrimFun (PrimAtan2 t)              = [|| PrimAtan2 $$(liftFloatingType t) ||]
-liftPrimFun (PrimLt t)                 = [|| PrimLt $$(liftScalarType t) ||]
-liftPrimFun (PrimGt t)                 = [|| PrimGt $$(liftScalarType t) ||]
-liftPrimFun (PrimLtEq t)               = [|| PrimLtEq $$(liftScalarType t) ||]
-liftPrimFun (PrimGtEq t)               = [|| PrimGtEq $$(liftScalarType t) ||]
-liftPrimFun (PrimEq t)                 = [|| PrimEq $$(liftScalarType t) ||]
-liftPrimFun (PrimNEq t)                = [|| PrimNEq $$(liftScalarType t) ||]
-liftPrimFun (PrimMax t)                = [|| PrimMax $$(liftScalarType t) ||]
-liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftScalarType t) ||]
+liftPrimFun (PrimLt t)                 = [|| PrimLt $$(liftSingleType t) ||]
+liftPrimFun (PrimGt t)                 = [|| PrimGt $$(liftSingleType t) ||]
+liftPrimFun (PrimLtEq t)               = [|| PrimLtEq $$(liftSingleType t) ||]
+liftPrimFun (PrimGtEq t)               = [|| PrimGtEq $$(liftSingleType t) ||]
+liftPrimFun (PrimEq t)                 = [|| PrimEq $$(liftSingleType t) ||]
+liftPrimFun (PrimNEq t)                = [|| PrimNEq $$(liftSingleType t) ||]
+liftPrimFun (PrimMax t)                = [|| PrimMax $$(liftSingleType t) ||]
+liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftSingleType t) ||]
 liftPrimFun PrimLAnd                   = [|| PrimLAnd ||]
 liftPrimFun PrimLOr                    = [|| PrimLOr ||]
 liftPrimFun PrimLNot                   = [|| PrimLNot ||]
@@ -1711,13 +1729,30 @@ liftPrimFun (PrimCoerce ta tb)         = [|| PrimCoerce $$(liftScalarType ta) $$
 
 
 liftConst :: TupleType t -> t -> Q (TExp t)
-liftConst UnitTuple         ()    = [|| () ||]
-liftConst (SingleTuple t)   x     = [|| $$(liftScalar t x) ||]
-liftConst (PairTuple ta tb) (a,b) = [|| ($$(liftConst ta a), $$(liftConst tb b)) ||]
+liftConst TypeRunit         ()    = [|| () ||]
+liftConst (TypeRscalar t)   x     = [|| $$(liftScalar t x) ||]
+liftConst (TypeRpair ta tb) (a,b) = [|| ($$(liftConst ta a), $$(liftConst tb b)) ||]
 
 liftScalar :: ScalarType t -> t -> Q (TExp t)
-liftScalar (NumScalarType t)    x = liftNum t x
-liftScalar (NonNumScalarType t) x = liftNonNum t x
+liftScalar (SingleScalarType t) x = liftSingle t x
+liftScalar (VectorScalarType t) x = liftVector t x
+
+liftSingle :: SingleType t -> t -> Q (TExp t)
+liftSingle (NumSingleType t)    x = liftNum t x
+liftSingle (NonNumSingleType t) x = liftNonNum t x
+
+liftVector :: VectorType v -> v -> Q (TExp v)
+liftVector (Vector2Type t) (V2 a b)     = [|| V2 $$(liftSingle t a) $$(liftSingle t b) ||]
+liftVector (Vector3Type t) (V3 a b c)   = [|| V3 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) ||]
+liftVector (Vector4Type t) (V4 a b c d) = [|| V4 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d) ||]
+liftVector (Vector8Type t) (V8 a b c d e f g h) =
+  [|| V8 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d)
+         $$(liftSingle t e) $$(liftSingle t f) $$(liftSingle t g) $$(liftSingle t h) ||]
+liftVector (Vector16Type t) (V16 a b c d e f g h i j k l m n o p) =
+  [|| V16 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d)
+          $$(liftSingle t e) $$(liftSingle t f) $$(liftSingle t g) $$(liftSingle t h)
+          $$(liftSingle t i) $$(liftSingle t j) $$(liftSingle t k) $$(liftSingle t l)
+          $$(liftSingle t m) $$(liftSingle t n) $$(liftSingle t o) $$(liftSingle t p) ||]
 
 liftNum :: NumType t -> t -> Q (TExp t)
 liftNum (IntegralNumType t) x = liftIntegral t x
@@ -1755,6 +1790,7 @@ liftIntegral TypeCLLong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger 
 liftIntegral TypeCULLong{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
 
 liftFloating :: FloatingType t -> t -> Q (TExp t)
+liftFloating TypeHalf{}    x = [|| Half $$( liftIntegral integralType (getHalf x)) ||]
 liftFloating TypeFloat{}   x = [|| x ||]
 liftFloating TypeDouble{}  x = [|| x ||]
 liftFloating TypeCFloat{}  x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
@@ -1782,6 +1818,7 @@ liftIntegralType TypeCLLong{}  = [|| TypeCLLong IntegralDict ||]
 liftIntegralType TypeCULLong{} = [|| TypeCULLong IntegralDict ||]
 
 liftFloatingType :: FloatingType t -> Q (TExp (FloatingType t))
+liftFloatingType TypeHalf{}    = [|| TypeHalf FloatingDict ||]
 liftFloatingType TypeFloat{}   = [|| TypeFloat FloatingDict ||]
 liftFloatingType TypeDouble{}  = [|| TypeDouble FloatingDict ||]
 liftFloatingType TypeCFloat{}  = [|| TypeCFloat FloatingDict ||]
@@ -1803,8 +1840,19 @@ liftBoundedType (IntegralBoundedType t) = [|| IntegralBoundedType $$(liftIntegra
 liftBoundedType (NonNumBoundedType t)   = [|| NonNumBoundedType $$(liftNonNumType t) ||]
 
 liftScalarType :: ScalarType t -> Q (TExp (ScalarType t))
-liftScalarType (NumScalarType t)    = [|| NumScalarType $$(liftNumType t) ||]
-liftScalarType (NonNumScalarType t) = [|| NonNumScalarType $$(liftNonNumType t) ||]
+liftScalarType (SingleScalarType t) = [|| SingleScalarType $$(liftSingleType t) ||]
+liftScalarType (VectorScalarType t) = [|| VectorScalarType $$(liftVectorType t) ||]
+
+liftSingleType :: SingleType t -> Q (TExp (SingleType t))
+liftSingleType (NumSingleType t)    = [|| NumSingleType $$(liftNumType t) ||]
+liftSingleType (NonNumSingleType t) = [|| NonNumSingleType $$(liftNonNumType t) ||]
+
+liftVectorType :: VectorType t -> Q (TExp (VectorType t))
+liftVectorType (Vector2Type t)  = [|| Vector2Type $$(liftSingleType t) ||]
+liftVectorType (Vector3Type t)  = [|| Vector3Type $$(liftSingleType t) ||]
+liftVectorType (Vector4Type t)  = [|| Vector4Type $$(liftSingleType t) ||]
+liftVectorType (Vector8Type t)  = [|| Vector8Type $$(liftSingleType t) ||]
+liftVectorType (Vector16Type t) = [|| Vector16Type $$(liftSingleType t) ||]
 
 
 -- Debugging

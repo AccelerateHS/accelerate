@@ -52,7 +52,7 @@ import qualified Prelude                                            as P
 type instance EltRepr (Sum a) = ((), EltRepr a)
 
 instance Elt a => Elt (Sum a) where
-  eltType _       = PairTuple UnitTuple (eltType (undefined::a))
+  eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
   toElt ((),x)    = Sum (toElt x)
   fromElt (Sum x) = ((), fromElt x)
 
@@ -112,7 +112,7 @@ instance Num a => Semigroup (Exp (Sum a)) where
 type instance EltRepr (Product a) = ((), EltRepr a)
 
 instance Elt a => Elt (Product a) where
-  eltType _       = PairTuple UnitTuple (eltType (undefined::a))
+  eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
   toElt ((),x)    = Product (toElt x)
   fromElt (Product x) = ((), fromElt x)
 

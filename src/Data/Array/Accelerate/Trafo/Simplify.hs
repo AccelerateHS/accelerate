@@ -614,8 +614,19 @@ summariseOpenExp = (terms +~ 1) . goE
     travBoundedType (NonNumBoundedType t)   = travNonNumType t & types +~ 1
 
     travScalarType :: ScalarType t -> Stats
-    travScalarType (NumScalarType t)    = travNumType t & types +~ 1
-    travScalarType (NonNumScalarType t) = travNonNumType t & types +~ 1
+    travScalarType (SingleScalarType t) = travSingleType t & types +~ 1
+    travScalarType (VectorScalarType t) = travVectorType t & types +~ 1
+
+    travSingleType :: SingleType t -> Stats
+    travSingleType (NumSingleType t)    = travNumType t & types +~ 1
+    travSingleType (NonNumSingleType t) = travNonNumType t & types +~ 1
+
+    travVectorType :: VectorType t -> Stats
+    travVectorType (Vector2Type t)  = travSingleType t & types +~ 1
+    travVectorType (Vector3Type t)  = travSingleType t & types +~ 1
+    travVectorType (Vector4Type t)  = travSingleType t & types +~ 1
+    travVectorType (Vector8Type t)  = travSingleType t & types +~ 1
+    travVectorType (Vector16Type t) = travSingleType t & types +~ 1
 
     -- The scrutinee has already been counted
     goE :: PreOpenExp acc env aenv t -> Stats
@@ -702,14 +713,14 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimIsNaN              t -> travFloatingType t
             PrimIsInfinite         t -> travFloatingType t
             PrimAtan2              t -> travFloatingType t
-            PrimLt                 t -> travScalarType t
-            PrimGt                 t -> travScalarType t
-            PrimLtEq               t -> travScalarType t
-            PrimGtEq               t -> travScalarType t
-            PrimEq                 t -> travScalarType t
-            PrimNEq                t -> travScalarType t
-            PrimMax                t -> travScalarType t
-            PrimMin                t -> travScalarType t
+            PrimLt                 t -> travSingleType t
+            PrimGt                 t -> travSingleType t
+            PrimLtEq               t -> travSingleType t
+            PrimGtEq               t -> travSingleType t
+            PrimEq                 t -> travSingleType t
+            PrimNEq                t -> travSingleType t
+            PrimMax                t -> travSingleType t
+            PrimMin                t -> travSingleType t
             PrimLAnd                 -> zero
             PrimLOr                  -> zero
             PrimLNot                 -> zero

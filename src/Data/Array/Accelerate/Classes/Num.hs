@@ -228,6 +228,15 @@ instance P.Num (Exp CUShort) where
   signum      = mkSig
   fromInteger = constant . P.fromInteger
 
+instance P.Num (Exp Half) where
+  (+)         = mkAdd
+  (-)         = mkSub
+  (*)         = mkMul
+  negate      = mkNeg
+  abs         = mkAbs
+  signum      = mkSig
+  fromInteger = constant . P.fromInteger
+
 instance P.Num (Exp Float) where
   (+)         = mkAdd
   (-)         = mkSub

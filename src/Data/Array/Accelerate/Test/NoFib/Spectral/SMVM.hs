@@ -41,7 +41,8 @@ import Test.Tasty.Hedgehog
 test_smvm :: RunN -> TestTree
 test_smvm runN =
   testGroup "smvm"
-    [ at (Proxy::Proxy TestFloat)  $ testElt f32
+    [ at (Proxy::Proxy TestHalf)   $ testElt f16
+    , at (Proxy::Proxy TestFloat)  $ testElt f32
     , at (Proxy::Proxy TestDouble) $ testElt f64
     ]
   where

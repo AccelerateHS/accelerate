@@ -107,6 +107,13 @@ class (Real a, Fractional a) => RealFrac a where
   floor          :: (Elt b, IsIntegral b) => Exp a -> Exp b
 
 
+instance RealFrac Half where
+  properFraction  = defaultProperFraction
+  truncate        = mkTruncate
+  round           = mkRound
+  ceiling         = mkCeiling
+  floor           = mkFloor
+
 instance RealFrac Float where
   properFraction  = defaultProperFraction
   truncate        = mkTruncate

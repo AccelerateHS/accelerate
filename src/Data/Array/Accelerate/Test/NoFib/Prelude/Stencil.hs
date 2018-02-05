@@ -54,6 +54,7 @@ test_stencil runN =
     , at (Proxy::Proxy TestWord16) $ testElt w16
     , at (Proxy::Proxy TestWord32) $ testElt w32
     , at (Proxy::Proxy TestWord64) $ testElt w64
+    , at (Proxy::Proxy TestHalf)   $ testElt f16
     , at (Proxy::Proxy TestFloat)  $ testElt f32
     , at (Proxy::Proxy TestDouble) $ testElt f64
     ]
@@ -632,9 +633,9 @@ bound bnd sh0 ix0 =
     Right ix' -> Right (toElt ix')
   where
     go :: TupleType t -> t -> t -> Either e t
-    go UnitTuple           ()      ()      = Right ()
-    go (PairTuple tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
-    go (SingleTuple t)     sh      i
+    go TypeRunit           ()      ()      = Right ()
+    go (TypeRpair tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
+    go (TypeRscalar t)     sh      i
       | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
       = if i P.< 0
           then case bnd of

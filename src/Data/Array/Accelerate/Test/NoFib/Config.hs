@@ -26,8 +26,9 @@ import Test.Tasty.Options
 nofibIngredient :: Ingredient
 nofibIngredient =
   includingOptions
-    [ Option (Proxy::Proxy TestDouble)
+    [ Option (Proxy::Proxy TestHalf)
     , Option (Proxy::Proxy TestFloat)
+    , Option (Proxy::Proxy TestDouble)
     , Option (Proxy::Proxy TestInt8)
     , Option (Proxy::Proxy TestInt16)
     , Option (Proxy::Proxy TestInt32)
@@ -40,8 +41,9 @@ nofibIngredient =
     ]
 
 newtype TestAll     = TestAll     Bool deriving (Eq, Show, Typeable)
-newtype TestDouble  = TestDouble  Bool deriving (Eq, Show, Typeable)
+newtype TestHalf    = TestHalf    Bool deriving (Eq, Show, Typeable)
 newtype TestFloat   = TestFloat   Bool deriving (Eq, Show, Typeable)
+newtype TestDouble  = TestDouble  Bool deriving (Eq, Show, Typeable)
 newtype TestInt8    = TestInt8    Bool deriving (Eq, Show, Typeable)
 newtype TestInt16   = TestInt16   Bool deriving (Eq, Show, Typeable)
 newtype TestInt32   = TestInt32   Bool deriving (Eq, Show, Typeable)
@@ -58,17 +60,23 @@ instance IsOption TestAll where
   optionName = return "all-types"
   optionHelp = return "Enable tests on all primitive types"
 
-instance IsOption TestDouble where
-  defaultValue = TestDouble True
-  parseValue = fmap TestDouble . safeRead
-  optionName = return "double"
-  optionHelp = return "Enable double-precision tests"
+instance IsOption TestHalf where
+  defaultValue = TestHalf False
+  parseValue = fmap TestHalf . safeRead
+  optionName = return "half"
+  optionHelp = return "Enable half-precision tests"
 
 instance IsOption TestFloat where
   defaultValue = TestFloat False
   parseValue = fmap TestFloat . safeRead
   optionName = return "float"
   optionHelp = return "Enable single-precision tests"
+
+instance IsOption TestDouble where
+  defaultValue = TestDouble True
+  parseValue = fmap TestDouble . safeRead
+  optionName = return "double"
+  optionHelp = return "Enable double-precision tests"
 
 instance IsOption TestInt8 where
   defaultValue = TestInt8 False
@@ -127,6 +135,9 @@ instance IsOption Interpreter where
 
 class IsOption a => TestConfig a where
   at :: Proxy a -> TestTree -> TestTree
+
+instance TestConfig TestHalf where
+  at _ t = askOption $ \(TestHalf v)   -> if v then t else testGroup "Half" []
 
 instance TestConfig TestFloat where
   at _ t = askOption $ \(TestFloat v)  -> if v then t else testGroup "Float" []

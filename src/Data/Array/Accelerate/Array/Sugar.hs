@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ <= 708
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif
@@ -170,6 +171,9 @@ data Divide sh = Divide
 
 -- Representation change for array element types
 -- ---------------------------------------------
+--
+-- TLM: Why is EltRepr not an associated type of Elt?
+--
 
 -- | Type representation mapping
 --
@@ -202,6 +206,7 @@ type instance EltRepr CLong           = CLong
 type instance EltRepr CULong          = CULong
 type instance EltRepr CLLong          = CLLong
 type instance EltRepr CULLong         = CULLong
+type instance EltRepr Half            = Half
 type instance EltRepr Float           = Float
 type instance EltRepr Double          = Double
 type instance EltRepr CFloat          = CFloat
@@ -211,6 +216,11 @@ type instance EltRepr Char            = Char
 type instance EltRepr CChar           = CChar
 type instance EltRepr CSChar          = CSChar
 type instance EltRepr CUChar          = CUChar
+type instance EltRepr (V2 a)          = V2 a    -- we can only store primitive types in SIMD vectors
+type instance EltRepr (V3 a)          = V3 a
+type instance EltRepr (V4 a)          = V4 a
+type instance EltRepr (V8 a)          = V8 a
+type instance EltRepr (V16 a)         = V16 a
 type instance EltRepr (a, b)          = TupleRepr (EltRepr a, EltRepr b)
 type instance EltRepr (a, b, c)       = TupleRepr (EltRepr a, EltRepr b, EltRepr c)
 type instance EltRepr (a, b, c, d)    = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d)
@@ -225,6 +235,7 @@ type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l) = TupleRepr (EltRepr 
 type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m)
 type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n)
 type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n, EltRepr o)
+type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n, EltRepr o, EltRepr p)
 
 type IsTuple = IsProduct Elt
 
@@ -246,7 +257,7 @@ toTuple = toProd (Proxy :: Proxy Elt)
 -- without pointers. It roughly consists of:
 --
 --  * Signed and unsigned integers (8, 16, 32, and 64-bits wide)
---  * Floating point numbers (single and double precision)
+--  * Floating point numbers (half, single, and double precision)
 --  * 'Char'
 --  * 'Bool'
 --  * ()
@@ -269,32 +280,32 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
   toElt    :: EltRepr a -> a
 
 instance Elt () where
-  eltType _ = UnitTuple
+  eltType _ = TypeRunit
   fromElt   = id
   toElt     = id
 
 instance Elt Z where
-  eltType _  = UnitTuple
+  eltType _  = TypeRunit
   fromElt Z  = ()
   toElt ()   = Z
 
 instance (Elt t, Elt h) => Elt (t:.h) where
-  eltType (_::(t:.h))   = PairTuple (eltType (undefined :: t)) (eltType (undefined :: h))
+  eltType (_::(t:.h))   = TypeRpair (eltType (undefined :: t)) (eltType (undefined :: h))
   fromElt (t:.h)        = (fromElt t, fromElt h)
   toElt (t, h)          = toElt t :. toElt h
 
 instance Elt All where
-  eltType _     = UnitTuple
+  eltType _     = TypeRunit
   fromElt All   = ()
   toElt ()      = All
 
 instance Elt (Any Z) where
-  eltType _     = UnitTuple
+  eltType _     = TypeRunit
   fromElt _     = ()
   toElt _       = Any
 
 instance Shape sh => Elt (Any (sh:.Int)) where
-  eltType _     = PairTuple (eltType (undefined::Any sh)) UnitTuple
+  eltType _     = TypeRpair (eltType (undefined::Any sh)) TypeRunit
   fromElt _     = (fromElt (undefined :: Any sh), ())
   toElt _       = Any
 
@@ -388,6 +399,11 @@ instance Elt CULLong where
   fromElt       = id
   toElt         = id
 
+instance Elt Half where
+  eltType       = singletonScalarType
+  fromElt       = id
+  toElt         = id
+
 instance Elt Float where
   eltType       = singletonScalarType
   fromElt       = id
@@ -434,28 +450,28 @@ instance Elt CUChar where
   toElt         = id
 
 instance (Elt a, Elt b) => Elt (a, b) where
-  eltType _             = PairTuple (PairTuple UnitTuple (eltType (undefined::a))) (eltType (undefined::b))
+  eltType _             = TypeRpair (TypeRpair TypeRunit (eltType (undefined::a))) (eltType (undefined::b))
   fromElt (a,b)         = (((), fromElt a), fromElt b)
   toElt (((),a),b)      = (toElt a, toElt b)
 
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
-  eltType _             = PairTuple (eltType (undefined :: (a, b))) (eltType (undefined :: c))
+  eltType _             = TypeRpair (eltType (undefined :: (a, b))) (eltType (undefined :: c))
   fromElt (a, b, c)     = (fromElt (a, b), fromElt c)
   toElt (ab, c)         = let (a, b) = toElt ab in (a, b, toElt c)
 
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
-  eltType _             = PairTuple (eltType (undefined :: (a, b, c))) (eltType (undefined :: d))
+  eltType _             = TypeRpair (eltType (undefined :: (a, b, c))) (eltType (undefined :: d))
   fromElt (a, b, c, d)  = (fromElt (a, b, c), fromElt d)
   toElt (abc, d)        = let (a, b, c) = toElt abc in (a, b, c, toElt d)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
-  eltType _               = PairTuple (eltType (undefined :: (a, b, c, d))) (eltType (undefined :: e))
+  eltType _               = TypeRpair (eltType (undefined :: (a, b, c, d))) (eltType (undefined :: e))
   fromElt (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt e)
   toElt (abcd, e)         = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt e)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e)))
                 (eltType (undefined :: f))
   fromElt (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt f)
   toElt (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt f)
@@ -463,7 +479,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) wh
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   => Elt (a, b, c, d, e, f, g) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f)))
                 (eltType (undefined :: g))
   fromElt (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt g)
   toElt (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef
@@ -472,7 +488,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Elt (a, b, c, d, e, f, g, h) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g)))
                 (eltType (undefined :: h))
   fromElt (a, b, c, d, e, f, g, h) = (fromElt (a, b, c, d, e, f, g), fromElt h)
   toElt (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg
@@ -481,7 +497,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Elt (a, b, c, d, e, f, g, h, i) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h)))
                 (eltType (undefined :: i))
   fromElt (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt i)
   toElt (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
@@ -490,7 +506,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
   => Elt (a, b, c, d, e, f, g, h, i, j) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i)))
                 (eltType (undefined :: j))
   fromElt (a, b, c, d, e, f, g, h, i, j) = (fromElt (a, b, c, d, e, f, g, h, i), fromElt j)
   toElt (abcdefghi, j) = let (a, b, c, d, e, f, g, h, i) = toElt abcdefghi
@@ -499,7 +515,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
   => Elt (a, b, c, d, e, f, g, h, i, j, k) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j)))
                 (eltType (undefined :: k))
   fromElt (a, b, c, d, e, f, g, h, i, j, k) = (fromElt (a, b, c, d, e, f, g, h, i, j), fromElt k)
   toElt (abcdefghij, k) = let (a, b, c, d, e, f, g, h, i, j) = toElt abcdefghij
@@ -508,7 +524,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k)))
                 (eltType (undefined :: l))
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l) = (fromElt (a, b, c, d, e, f, g, h, i, j, k), fromElt l)
   toElt (abcdefghijk, l) = let (a, b, c, d, e, f, g, h, i, j, k) = toElt abcdefghijk
@@ -517,7 +533,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l)))
                 (eltType (undefined :: m))
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l), fromElt m)
   toElt (abcdefghijkl, m) = let (a, b, c, d, e, f, g, h, i, j, k, l) = toElt abcdefghijkl
@@ -526,7 +542,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m)))
                 (eltType (undefined :: n))
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m), fromElt n)
   toElt (abcdefghijklm, n) = let (a, b, c, d, e, f, g, h, i, j, k, l, m) = toElt abcdefghijklm
@@ -535,18 +551,26 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
   eltType _
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n)))
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n)))
                 (eltType (undefined :: o))
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromElt o)
   toElt (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toElt abcdefghijklmn
                               in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toElt o)
 
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
+  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  eltType _
+    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)))
+                (eltType (undefined :: p))
+  fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromElt p)
+  toElt (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toElt abcdefghijklmno
+                               in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toElt p)
 
 -- |Convenience functions
 --
 
 singletonScalarType :: IsScalar a => a -> TupleType a
-singletonScalarType _ = SingleTuple scalarType
+singletonScalarType _ = TypeRscalar scalarType
 
 {-# INLINE liftToElt #-}
 liftToElt :: (Elt a, Elt b)
@@ -622,6 +646,7 @@ type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l) = TupleRepr (ArrRepr 
 type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m)
 type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n)
 type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o)
+type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o, ArrRepr p)
 
 type IsAtuple = IsProduct Arrays
 
@@ -776,6 +801,14 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   --
   toArr    (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toArr abcdefghijklmn in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toArr o)
   fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromArr o)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
+  => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o))) (arrays (undefined::p))
+  flavour _             = ArraysFtuple
+  --
+  toArr    (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toArr abcdefghijklmno in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toArr p)
+  fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromArr p)
 
 
 -- {-# RULES
@@ -956,6 +989,7 @@ instance NFData (Array sh e) where
       go ArrayEltRculong       (AD_CULong ua)  = rnf ua
       go ArrayEltRcllong       (AD_CLLong ua)  = rnf ua
       go ArrayEltRcullong      (AD_CULLong ua) = rnf ua
+      go ArrayEltRhalf         (AD_Half ua)    = rnf ua
       go ArrayEltRfloat        (AD_Float ua)   = rnf ua
       go ArrayEltRdouble       (AD_Double ua)  = rnf ua
       go ArrayEltRcfloat       (AD_CFloat ua)  = rnf ua
@@ -965,6 +999,11 @@ instance NFData (Array sh e) where
       go ArrayEltRcchar        (AD_CChar ua)   = rnf ua
       go ArrayEltRcschar       (AD_CSChar ua)  = rnf ua
       go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
+      go (ArrayEltRvec2 r)     (AD_V2 a)       = go r a `seq` ()
+      go (ArrayEltRvec3 r)     (AD_V3 a)       = go r a `seq` ()
+      go (ArrayEltRvec4 r)     (AD_V4 a)       = go r a `seq` ()
+      go (ArrayEltRvec8 r)     (AD_V8 a)       = go r a `seq` ()
+      go (ArrayEltRvec16 r)    (AD_V16 a)      = go r a `seq` ()
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 
 
@@ -1333,4 +1372,10 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
+
+
+-- | Orphans
+--
+deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show h, Show i, Show j, Show k, Show l, Show m, Show n, Show o, Show p)
+  => Show (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 

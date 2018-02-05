@@ -10,8 +10,8 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Type
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
+-- Copyright   : [2008..2018] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2018] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
@@ -41,6 +41,7 @@
 --    * CULLong
 --
 --  Floating types:
+--    * Half
 --    * Float
 --    * Double
 --    * CFloat
@@ -53,13 +54,20 @@
 --    * CSChar
 --    * CUChar
 --
---  Note that 'Int' has the same bit width as in plain Haskell computations, and
---  'Float' and 'Double' represent IEEE single and double precision floating
---  point numbers, respectively.
+--  SIMD vector types:
+--    * V2
+--    * V3
+--    * V4
+--    * V8
+--    * V16
+--
+-- Note that 'Int' has the same bit width as in plain Haskell computations.
+-- 'Float' and 'Double' represent IEEE single and double precision floating
+-- point numbers, respectively.
 --
 
 module Data.Array.Accelerate.Type (
-  Float, Double, Char, Bool(..),
+  Half(..), Float, Double, Char, Bool(..),
   module Data.Int,
   module Data.Word,
   module Foreign.C.Types,
@@ -76,11 +84,12 @@ import Data.Type.Equality
 import Data.Typeable
 import Data.Word
 import GHC.TypeLits
+import Language.Haskell.TH
+import Numeric.Half
+import Text.Printf
 import Foreign.Storable
-import Foreign.C.Types (
-  CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
-  CLLong, CULLong, CFloat, CDouble)
-  -- in the future, CHalf
+import Foreign.C.Types
+    (CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong, CFloat, CDouble)
 
 
 -- Scalar types
@@ -90,25 +99,25 @@ import Foreign.C.Types (
 --
 
 data IntegralDict a where
-  IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
+  IntegralDict :: ( Bounded a, Eq a, Ord a, Show a
                   , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
                => IntegralDict a
 
 data FloatingDict a where
-  FloatingDict :: ( Enum a, Eq a, Ord a, Show a
+  FloatingDict :: ( Eq a, Ord a, Show a
                   , Floating a, Fractional a, Num a, Real a, RealFrac a
                   , RealFloat a, Storable a )
                => FloatingDict a
 
 data NonNumDict a where
-  NonNumDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a, Storable a )
+  NonNumDict :: ( Bounded a, Eq a, Ord a, Show a, Storable a )
              => NonNumDict a
 
 
 -- Scalar type representation
 --
 
--- |Integral types supported in array computations.
+-- | Integral types supported in array computations.
 --
 data IntegralType a where
   TypeInt     :: IntegralDict Int     -> IntegralType Int
@@ -130,15 +139,16 @@ data IntegralType a where
   TypeCLLong  :: IntegralDict CLLong  -> IntegralType CLLong
   TypeCULLong :: IntegralDict CULLong -> IntegralType CULLong
 
--- |Floating-point types supported in array computations.
+-- | Floating-point types supported in array computations.
 --
 data FloatingType a where
+  TypeHalf    :: FloatingDict Half    -> FloatingType Half
   TypeFloat   :: FloatingDict Float   -> FloatingType Float
   TypeDouble  :: FloatingDict Double  -> FloatingType Double
   TypeCFloat  :: FloatingDict CFloat  -> FloatingType CFloat
   TypeCDouble :: FloatingDict CDouble -> FloatingType CDouble
 
--- |Non-numeric types supported in array computations.
+-- | Non-numeric types supported in array computations.
 --
 data NonNumType a where
   TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to Word8
@@ -147,23 +157,34 @@ data NonNumType a where
   TypeCSChar  :: NonNumDict CSChar    -> NonNumType CSChar
   TypeCUChar  :: NonNumDict CUChar    -> NonNumType CUChar
 
--- |Numeric element types implement Num & Real
+-- | Numeric element types implement Num & Real
 --
 data NumType a where
   IntegralNumType :: IntegralType a -> NumType a
   FloatingNumType :: FloatingType a -> NumType a
 
--- |Bounded element types implement Bounded
+-- | Bounded element types implement Bounded
 --
 data BoundedType a where
   IntegralBoundedType :: IntegralType a -> BoundedType a
   NonNumBoundedType   :: NonNumType a   -> BoundedType a
 
--- |All scalar element types implement Eq, Ord & Enum
+-- | All scalar element types implement Eq & Ord
 --
 data ScalarType a where
-  NumScalarType    :: NumType a    -> ScalarType a
-  NonNumScalarType :: NonNumType a -> ScalarType a
+  SingleScalarType :: SingleType a     -> ScalarType a
+  VectorScalarType :: VectorType (v a) -> ScalarType (v a)
+
+data SingleType a where
+  NumSingleType    :: NumType a    -> SingleType a
+  NonNumSingleType :: NonNumType a -> SingleType a
+
+data VectorType v where
+  Vector2Type   :: SingleType a -> VectorType (V2 a)
+  Vector3Type   :: SingleType a -> VectorType (V3 a)
+  Vector4Type   :: SingleType a -> VectorType (V4 a)
+  Vector8Type   :: SingleType a -> VectorType (V8 a)
+  Vector16Type  :: SingleType a -> VectorType (V16 a)
 
 -- Showing type names
 --
@@ -189,6 +210,7 @@ instance Show (IntegralType a) where
   show (TypeCULLong _) = "CULLong"
 
 instance Show (FloatingType a) where
+  show (TypeHalf _)    = "Half"
   show (TypeFloat _)   = "Float"
   show (TypeDouble _)  = "Double"
   show (TypeCFloat _)  = "CFloat"
@@ -209,340 +231,60 @@ instance Show (BoundedType a) where
   show (IntegralBoundedType ty) = show ty
   show (NonNumBoundedType ty)   = show ty
 
+instance Show (SingleType a) where
+  show (NumSingleType ty)    = show ty
+  show (NonNumSingleType ty) = show ty
+
+instance Show (VectorType a) where
+  show (Vector2Type t)  = printf "<2 x %s>" (show t)
+  show (Vector3Type t)  = printf "<3 x %s>" (show t)
+  show (Vector4Type t)  = printf "<4 x %s>" (show t)
+  show (Vector8Type t)  = printf "<8 x %s>" (show t)
+  show (Vector16Type t) = printf "<16 x %s>" (show t)
+
 instance Show (ScalarType a) where
-  show (NumScalarType ty)    = show ty
-  show (NonNumScalarType ty) = show ty
+  show (SingleScalarType ty) = show ty
+  show (VectorScalarType ty) = show ty
 
 
 -- Querying scalar type representations
 --
 
--- |Integral types
+-- | Integral types
 --
-class (IsScalar a, IsNum a, IsBounded a) => IsIntegral a where
+class (IsSingle a, IsNum a, IsBounded a) => IsIntegral a where
   integralType :: IntegralType a
 
-instance IsIntegral Int where
-  integralType = TypeInt IntegralDict
-
-instance IsIntegral Int8 where
-  integralType = TypeInt8 IntegralDict
-
-instance IsIntegral Int16 where
-  integralType = TypeInt16 IntegralDict
-
-instance IsIntegral Int32 where
-  integralType = TypeInt32 IntegralDict
-
-instance IsIntegral Int64 where
-  integralType = TypeInt64 IntegralDict
-
-instance IsIntegral Word where
-  integralType = TypeWord IntegralDict
-
-instance IsIntegral Word8 where
-  integralType = TypeWord8 IntegralDict
-
-instance IsIntegral Word16 where
-  integralType = TypeWord16 IntegralDict
-
-instance IsIntegral Word32 where
-  integralType = TypeWord32 IntegralDict
-
-instance IsIntegral Word64 where
-  integralType = TypeWord64 IntegralDict
-
-instance IsIntegral CShort where
-  integralType = TypeCShort IntegralDict
-
-instance IsIntegral CUShort where
-  integralType = TypeCUShort IntegralDict
-
-instance IsIntegral CInt where
-  integralType = TypeCInt IntegralDict
-
-instance IsIntegral CUInt where
-  integralType = TypeCUInt IntegralDict
-
-instance IsIntegral CLong where
-  integralType = TypeCLong IntegralDict
-
-instance IsIntegral CULong where
-  integralType = TypeCULong IntegralDict
-
-instance IsIntegral CLLong where
-  integralType = TypeCLLong IntegralDict
-
-instance IsIntegral CULLong where
-  integralType = TypeCULLong IntegralDict
-
--- |Floating types
+-- | Floating types
 --
-class (Floating a, IsScalar a, IsNum a) => IsFloating a where
+class (Floating a, IsSingle a, IsNum a) => IsFloating a where
   floatingType :: FloatingType a
 
-instance IsFloating Float where
-  floatingType = TypeFloat FloatingDict
-
-instance IsFloating Double where
-  floatingType = TypeDouble FloatingDict
-
-instance IsFloating CFloat where
-  floatingType = TypeCFloat FloatingDict
-
-instance IsFloating CDouble where
-  floatingType = TypeCDouble FloatingDict
-
--- |Non-numeric types
+-- | Non-numeric types
 --
 class IsNonNum a where
   nonNumType :: NonNumType a
 
-instance IsNonNum Bool where
-  nonNumType = TypeBool NonNumDict
-
-instance IsNonNum Char where
-  nonNumType = TypeChar NonNumDict
-
-instance IsNonNum CChar where
-  nonNumType = TypeCChar NonNumDict
-
-instance IsNonNum CSChar where
-  nonNumType = TypeCSChar NonNumDict
-
-instance IsNonNum CUChar where
-  nonNumType = TypeCUChar NonNumDict
-
--- |Numeric types
+-- | Numeric types
 --
-class (Num a, IsScalar a) => IsNum a where
+class (Num a, IsSingle a) => IsNum a where
   numType :: NumType a
 
-instance IsNum Int where
-  numType = IntegralNumType integralType
-
-instance IsNum Int8 where
-  numType = IntegralNumType integralType
-
-instance IsNum Int16 where
-  numType = IntegralNumType integralType
-
-instance IsNum Int32 where
-  numType = IntegralNumType integralType
-
-instance IsNum Int64 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word where
-  numType = IntegralNumType integralType
-
-instance IsNum Word8 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word16 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word32 where
-  numType = IntegralNumType integralType
-
-instance IsNum Word64 where
-  numType = IntegralNumType integralType
-
-instance IsNum CShort where
-  numType = IntegralNumType integralType
-
-instance IsNum CUShort where
-  numType = IntegralNumType integralType
-
-instance IsNum CInt where
-  numType = IntegralNumType integralType
-
-instance IsNum CUInt where
-  numType = IntegralNumType integralType
-
-instance IsNum CLong where
-  numType = IntegralNumType integralType
-
-instance IsNum CULong where
-  numType = IntegralNumType integralType
-
-instance IsNum CLLong where
-  numType = IntegralNumType integralType
-
-instance IsNum CULLong where
-  numType = IntegralNumType integralType
-
-instance IsNum Float where
-  numType = FloatingNumType floatingType
-
-instance IsNum Double where
-  numType = FloatingNumType floatingType
-
-instance IsNum CFloat where
-  numType = FloatingNumType floatingType
-
-instance IsNum CDouble where
-  numType = FloatingNumType floatingType
-
--- |Bounded types
+-- | Bounded types
 --
 class IsBounded a where
   boundedType :: BoundedType a
 
-instance IsBounded Int where
-  boundedType = IntegralBoundedType integralType
+-- | All single value types
+--
+class IsScalar a => IsSingle a where
+  singleType :: SingleType a
 
-instance IsBounded Int8 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Int16 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Int32 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Int64 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word8 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word16 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word32 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Word64 where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CShort where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CUShort where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CInt where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CUInt where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CLong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CULong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CLLong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded CULLong where
-  boundedType = IntegralBoundedType integralType
-
-instance IsBounded Bool where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded Char where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded CChar where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded CSChar where
-  boundedType = NonNumBoundedType nonNumType
-
-instance IsBounded CUChar where
-  boundedType = NonNumBoundedType nonNumType
-
--- |All scalar types
+-- | All scalar types
 --
 class Typeable a => IsScalar a where
   scalarType :: ScalarType a
 
-instance IsScalar Int where
-  scalarType = NumScalarType numType
-
-instance IsScalar Int8 where
-  scalarType = NumScalarType numType
-
-instance IsScalar Int16 where
-  scalarType = NumScalarType numType
-
-instance IsScalar Int32 where
-  scalarType = NumScalarType numType
-
-instance IsScalar Int64 where
-  scalarType = NumScalarType numType
-
-instance IsScalar Word where
-  scalarType = NumScalarType numType
-
-instance IsScalar Word8 where
-  scalarType = NumScalarType numType
-
-instance IsScalar Word16 where
-  scalarType = NumScalarType numType
-
-instance IsScalar Word32 where
-  scalarType = NumScalarType numType
-
-instance IsScalar Word64 where
-  scalarType = NumScalarType numType
-
-instance IsScalar CShort where
-  scalarType = NumScalarType numType
-
-instance IsScalar CUShort where
-  scalarType = NumScalarType numType
-
-instance IsScalar CInt where
-  scalarType = NumScalarType numType
-
-instance IsScalar CUInt where
-  scalarType = NumScalarType numType
-
-instance IsScalar CLong where
-  scalarType = NumScalarType numType
-
-instance IsScalar CULong where
-  scalarType = NumScalarType numType
-
-instance IsScalar CLLong where
-  scalarType = NumScalarType numType
-
-instance IsScalar CULLong where
-  scalarType = NumScalarType numType
-
-instance IsScalar Float where
-  scalarType = NumScalarType numType
-
-instance IsScalar Double where
-  scalarType = NumScalarType numType
-
-instance IsScalar CFloat where
-  scalarType = NumScalarType numType
-
-instance IsScalar CDouble where
-  scalarType = NumScalarType numType
-
-instance IsScalar Bool where
-  scalarType = NonNumScalarType nonNumType
-
-instance IsScalar Char where
-  scalarType = NonNumScalarType nonNumType
-
-instance IsScalar CChar where
-  scalarType = NonNumScalarType nonNumType
-
-instance IsScalar CSChar where
-  scalarType = NonNumScalarType nonNumType
-
-instance IsScalar CUChar where
-  scalarType = NonNumScalarType nonNumType
 
 -- Extract reified dictionaries
 --
@@ -568,9 +310,10 @@ integralDict (TypeCLLong  dict) = dict
 integralDict (TypeCULLong dict) = dict
 
 floatingDict :: FloatingType a -> FloatingDict a
-floatingDict (TypeFloat dict) = dict
-floatingDict (TypeDouble dict) = dict
-floatingDict (TypeCFloat dict) = dict
+floatingDict (TypeHalf    dict) = dict
+floatingDict (TypeFloat   dict) = dict
+floatingDict (TypeDouble  dict) = dict
+floatingDict (TypeCFloat  dict) = dict
 floatingDict (TypeCDouble dict) = dict
 
 nonNumDict :: NonNumType a -> NonNumDict a
@@ -581,18 +324,29 @@ nonNumDict (TypeCSChar dict) = dict
 nonNumDict (TypeCUChar dict) = dict
 
 
--- Tuple types
--- -----------
-
+-- Type representation
+-- -------------------
+--
+-- Representation of product types, consisting of:
+--
+--   * unit (void)
+--
+--   * scalar types: values which go in registers. These may be single value
+--     types such as int and float, or SIMD vectors of single value types such
+--     as <4 * float>. We do not allow vectors-of-vectors.
+--
+--   * pairs: representing compound values (i.e. tuples) where each component
+--     will be stored in a separate array.
+--
 data TupleType a where
-  UnitTuple   ::                               TupleType ()
-  SingleTuple :: ScalarType a               -> TupleType a
-  PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
+  TypeRunit   ::                               TupleType ()
+  TypeRscalar :: ScalarType a               -> TupleType a
+  TypeRpair   :: TupleType a -> TupleType b -> TupleType (a, b)
 
 instance Show (TupleType a) where
-  show UnitTuple              = "()"
-  show (SingleTuple scalarTy) = show scalarTy
-  show (PairTuple a b)        = "("++show a++", "++show b++")"
+  show TypeRunit        = "()"
+  show (TypeRscalar t)  = show t
+  show (TypeRpair a b)  = printf "(%s,%s)" (show a) (show b)
 
 
 -- Type-level bit sizes
@@ -604,109 +358,183 @@ type BitSizeEq a b = (BitSize a == BitSize b) ~ 'True
 
 type family BitSize a :: Nat
 
-type instance BitSize Int8    = 8
-type instance BitSize Int16   = 16
-type instance BitSize Int32   = 32
-type instance BitSize Int64   = 64
-type instance BitSize Word8   = 8
-type instance BitSize Word16  = 16
-type instance BitSize Word32  = 32
-type instance BitSize Word64  = 64
-type instance BitSize Char    = 32
-type instance BitSize Bool    = 1      -- but actually stored as Word8 |:
 
-type instance BitSize CShort  = 16
-type instance BitSize CUShort = 16
-type instance BitSize CInt    = 32
-type instance BitSize CUInt   = 32
-type instance BitSize CLLong  = 64
-type instance BitSize CULLong = 64
-type instance BitSize CChar   = 8
-type instance BitSize CUChar  = 8
-type instance BitSize CSChar  = 8
+-- SIMD vector types
+-- -----------------
 
-type instance BitSize Float   = 32
-type instance BitSize CFloat  = 32
-type instance BitSize Double  = 64
-type instance BitSize CDouble = 64
+data V2 a  = V2 !a !a
+  deriving (Typeable, Eq, Ord)
 
-type instance BitSize Int    = $( case finiteBitSize (undefined::Int) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
+data V3 a  = V3 !a !a !a
+  deriving (Typeable, Eq, Ord)
 
-type instance BitSize Word   = $( case finiteBitSize (undefined::Word) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
+data V4 a  = V4 !a !a !a !a
+  deriving (Typeable, Eq, Ord)
 
-type instance BitSize CLong  = $( case finiteBitSize (undefined::CLong) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
+data V8 a  = V8 !a !a !a !a !a !a !a !a
+  deriving (Typeable, Eq, Ord)
 
-type instance BitSize CULong = $( case finiteBitSize (undefined::CULong) of
-                                    32 -> [t| 32 |]
-                                    64 -> [t| 64 |]
-                                    _  -> error "I don't know what architecture I am"  )
+data V16 a = V16 !a !a !a !a !a !a !a !a !a !a !a !a !a !a !a !a
+  deriving (Typeable, Eq, Ord)
+
+instance Show a => Show (V2 a) where
+  show (V2 a b) = printf "<%s,%s>" (show a) (show b)
+
+instance Show a => Show (V3 a) where
+  show (V3 a b c) = printf "<%s,%s,%s>" (show a) (show b) (show c)
+
+instance Show a => Show (V4 a) where
+  show (V4 a b c d) = printf "<%s,%s,%s,%s>" (show a) (show b) (show c) (show d)
+
+instance Show a => Show (V8 a) where
+  show (V8 a b c d e f g h) =
+    printf "<%s,%s,%s,%s,%s,%s,%s,%s>"
+      (show a) (show b) (show c) (show d) (show e) (show f) (show g) (show h)
+
+instance Show a => Show (V16 a) where
+  show (V16 a b c d e f g h i j k l m n o p) =
+    printf "<%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s>"
+      (show a) (show b) (show c) (show d) (show e) (show f) (show g) (show h)
+      (show i) (show j) (show k) (show l) (show m) (show n) (show o) (show p)
 
 
-{-
--- Vector GPU data types
--- ---------------------
+-- Instances
+-- ---------
+--
+-- Generate instances for the IsX classes. It would be preferable to do this
+-- automatically based on the members of the IntegralType (etc.) representations
+-- (see for example FromIntegral.hs) but TH phase restrictions would require us
+-- to split this into a separate module.
+--
 
-data CChar1 = CChar1 CChar
-data CChar2 = CChar2 CChar CChar
-data CChar3 = CChar3 CChar CChar CChar
-data CChar4 = CChar4 CChar CChar CChar CChar
-data CSChar1 = CSChar1 CSChar
-data CSChar2 = CSChar2 CSChar CSChar
-data CSChar3 = CSChar3 CSChar CSChar CSChar
-data CSChar4 = CSChar4 CSChar CSChar CSChar CSChar
-data CUChar1 = CUChar1 CUChar
-data CUChar2 = CUChar2 CUChar CUChar
-data CUChar3 = CUChar3 CUChar CUChar CUChar
-data CUChar4 = CUChar4 CUChar CUChar CUChar CUChar
-data CShort1 = CShort1 CShort
-data CShort2 = CShort2 CShort CShort
-data CShort3 = CShort3 CShort CShort CShort
-data CShort4 = CShort4 CShort CShort CShort CShort
-data CUShort1 = CUShort1 CUShort
-data CUShort2 = CUShort2 CUShort CUShort
-data CUShort3 = CUShort3 CUShort CUShort CUShort
-data CUShort4 = CUShort4 CUShort CUShort CUShort CUShort
-data CInt1 = CInt1 CInt
-data CInt2 = CInt2 CInt CInt
-data CInt3 = CInt3 CInt CInt CInt
-data CInt4 = CInt4 CInt CInt CInt CInt
-data CUInt1 = CUInt1 CUInt
-data CUInt2 = CUInt2 CUInt CUInt
-data CUInt3 = CUInt3 CUInt CUInt CUInt
-data CUInt4 = CUInt4 CUInt CUInt CUInt CUInt
-data CLong1 = CLong1 CLong
-data CLong2 = CLong2 CLong CLong
-data CLong3 = CLong3 CLong CLong CLong
-data CLong4 = CLong4 CLong CLong CLong CLong
-data CULong1 = CULong1 CULong
-data CULong2 = CULong2 CULong CULong
-data CULong3 = CULong3 CULong CULong CULong
-data CULong4 = CULong4 CULong CULong CULong CULong
-data CLLong1 = CLLong1 CLLong
-data CLLong2 = CLLong2 CLLong CLLong
-data CLLong3 = CLLong3 CLLong CLLong CLLong
-data CLLong4 = CLLong4 CLLong CLLong CLLong CLLong
-data CULLong1 = CULLong1 CULLong
-data CULLong2 = CULLong2 CULLong CULLong
-data CULLong3 = CULLong3 CULLong CULLong CULLong
-data CULLong4 = CULLong4 CULLong CULLong CULLong CULLong
-data CFloat1 = CFloat1 CFloat
-data CFloat2 = CFloat2 CFloat CFloat
-data CFloat3 = CFloat3 CFloat CFloat CFloat
-data CFloat4 = CFloat4 CFloat CFloat CFloat CFloat
-data CDouble1 = CDouble1 CDouble
-data CDouble2 = CDouble2 CDouble CDouble
-data CDouble3 = CDouble3 CDouble CDouble CDouble
-data CDouble4 = CDouble4 CDouble CDouble CDouble CDouble
--- in the future, vector types for CHalf
- -}
+$( runQ $ do
+  let
+      bits :: FiniteBits b => b -> Integer
+      bits = toInteger . finiteBitSize
+
+      integralTypes :: [(Name, Integer)]
+      integralTypes =
+        [ (''Int,     bits (undefined::Int))
+        , (''Int8,    8)
+        , (''Int16,   16)
+        , (''Int32,   32)
+        , (''Int64,   64)
+        , (''Word,    bits (undefined::Word))
+        , (''Word8,   8)
+        , (''Word16,  16)
+        , (''Word32,  32)
+        , (''Word64,  64)
+        , (''CShort,  16)
+        , (''CUShort, 16)
+        , (''CInt,    32)
+        , (''CUInt,   32)
+        , (''CLong,   bits (undefined::CLong))
+        , (''CULong,  bits (undefined::CULong))
+        , (''CLLong,  64)
+        , (''CULLong, 64)
+        ]
+
+      floatingTypes :: [(Name, Integer)]
+      floatingTypes =
+        [ (''Half,    16)
+        , (''Float,   32)
+        , (''Double,  64)
+        , (''CFloat,  32)
+        , (''CDouble, 64)
+        ]
+
+      nonNumTypes :: [(Name, Integer)]
+      nonNumTypes =
+        [ (''Bool,   8)    -- stored as Word8
+        , (''Char,   32)
+        , (''CChar,  8)
+        , (''CSChar, 8)
+        , (''CUChar, 8)
+        ]
+
+      mkIntegral :: Name -> Integer -> Q [Dec]
+      mkIntegral t n =
+        [d| instance IsIntegral $(conT t) where
+              integralType = $(conE (mkName ("Type" ++ nameBase t))) IntegralDict
+
+            instance IsNum $(conT t) where
+              numType = IntegralNumType integralType
+
+            instance IsBounded $(conT t) where
+              boundedType = IntegralBoundedType integralType
+
+            instance IsSingle $(conT t) where
+              singleType = NumSingleType numType
+
+            instance IsScalar $(conT t) where
+              scalarType = SingleScalarType singleType
+
+            type instance BitSize $(conT t) = $(litT (numTyLit n))
+          |]
+
+      mkFloating :: Name -> Integer -> Q [Dec]
+      mkFloating t n =
+        [d| instance IsFloating $(conT t) where
+              floatingType = $(conE (mkName ("Type" ++ nameBase t))) FloatingDict
+
+            instance IsNum $(conT t) where
+              numType = FloatingNumType floatingType
+
+            instance IsSingle $(conT t) where
+              singleType = NumSingleType numType
+
+            instance IsScalar $(conT t) where
+              scalarType = SingleScalarType singleType
+
+            type instance BitSize $(conT t) = $(litT (numTyLit n))
+          |]
+
+      mkNonNum :: Name -> Integer -> Q [Dec]
+      mkNonNum t n =
+        [d| instance IsNonNum $(conT t) where
+              nonNumType = $(conE (mkName ("Type" ++ nameBase t))) NonNumDict
+
+            instance IsBounded $(conT t) where
+              boundedType = NonNumBoundedType nonNumType
+
+            instance IsSingle $(conT t) where
+              singleType = NonNumSingleType nonNumType
+
+            instance IsScalar $(conT t) where
+              scalarType = SingleScalarType singleType
+
+            type instance BitSize $(conT t) = $(litT (numTyLit n))
+          |]
+
+      mkVector :: Name -> Integer -> Q [Dec]
+      mkVector t n =
+        [d| instance IsScalar (V2 $(conT t)) where
+              scalarType = VectorScalarType (Vector2Type singleType)
+
+            instance IsScalar (V3 $(conT t)) where
+              scalarType = VectorScalarType (Vector3Type singleType)
+
+            instance IsScalar (V4 $(conT t)) where
+              scalarType = VectorScalarType (Vector4Type singleType)
+
+            instance IsScalar (V8 $(conT t)) where
+              scalarType = VectorScalarType (Vector8Type singleType)
+
+            instance IsScalar (V16 $(conT t)) where
+              scalarType = VectorScalarType (Vector16Type singleType)
+
+            type instance BitSize (V2 $(conT t))  = $(litT (numTyLit (2*n)))
+            type instance BitSize (V3 $(conT t))  = $(litT (numTyLit (3*n)))
+            type instance BitSize (V4 $(conT t))  = $(litT (numTyLit (4*n)))
+            type instance BitSize (V8 $(conT t))  = $(litT (numTyLit (8*n)))
+            type instance BitSize (V16 $(conT t)) = $(litT (numTyLit (16*n)))
+          |]
+      --
+  is <- mapM (uncurry mkIntegral) integralTypes
+  fs <- mapM (uncurry mkFloating) floatingTypes
+  ns <- mapM (uncurry mkNonNum)   nonNumTypes
+  vs <- mapM (uncurry mkVector)  (integralTypes ++ floatingTypes ++ nonNumTypes)
+  --
+  return (concat is ++ concat fs ++ concat ns ++ concat vs)
+ )
 

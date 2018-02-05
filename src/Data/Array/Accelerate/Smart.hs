@@ -34,11 +34,11 @@ module Data.Array.Accelerate.Smart (
   constant,
 
   -- * Smart constructors and destructors for tuples
-  tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9, tup10, tup11, tup12, tup13, tup14, tup15,
-  untup2, untup3, untup4, untup5, untup6, untup7, untup8, untup9, untup10, untup11, untup12, untup13, untup14, untup15,
+  tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9, tup10, tup11, tup12, tup13, tup14, tup15, tup16,
+  untup2, untup3, untup4, untup5, untup6, untup7, untup8, untup9, untup10, untup11, untup12, untup13, untup14, untup15, untup16,
 
-  atup2, atup3, atup4, atup5, atup6, atup7, atup8, atup9, atup10, atup11, atup12, atup13, atup14, atup15,
-  unatup2, unatup3, unatup4, unatup5, unatup6, unatup7, unatup8, unatup9, unatup10, unatup11, unatup12, unatup13, unatup14, unatup15,
+  atup2, atup3, atup4, atup5, atup6, atup7, atup8, atup9, atup10, atup11, atup12, atup13, atup14, atup15, atup16,
+  unatup2, unatup3, unatup4, unatup5, unatup6, unatup7, unatup8, unatup9, unatup10, unatup11, unatup12, unatup13, unatup14, unatup15, unatup16,
 
   -- * Smart constructors for constants
   mkMinBound, mkMaxBound, mkPi,
@@ -907,6 +907,29 @@ atup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
             `SnocAtup` n
             `SnocAtup` o
 
+atup16 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
+       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p)
+       -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+atup16 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+  = Acc
+  $ Atuple
+  $ NilAtup `SnocAtup` a
+            `SnocAtup` b
+            `SnocAtup` c
+            `SnocAtup` d
+            `SnocAtup` e
+            `SnocAtup` f
+            `SnocAtup` g
+            `SnocAtup` h
+            `SnocAtup` i
+            `SnocAtup` j
+            `SnocAtup` k
+            `SnocAtup` l
+            `SnocAtup` m
+            `SnocAtup` n
+            `SnocAtup` o
+            `SnocAtup` p
+
 unatup2 :: (Arrays a, Arrays b)
         => Acc (a, b)
         -> (Acc a, Acc b)
@@ -1093,6 +1116,28 @@ unatup15
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
 unatup15 e =
   ( Acc $ tix14 `Aprj` e
+  , Acc $ tix13 `Aprj` e
+  , Acc $ tix12 `Aprj` e
+  , Acc $ tix11 `Aprj` e
+  , Acc $ tix10 `Aprj` e
+  , Acc $ tix9  `Aprj` e
+  , Acc $ tix8  `Aprj` e
+  , Acc $ tix7  `Aprj` e
+  , Acc $ tix6  `Aprj` e
+  , Acc $ tix5  `Aprj` e
+  , Acc $ tix4  `Aprj` e
+  , Acc $ tix3  `Aprj` e
+  , Acc $ tix2  `Aprj` e
+  , Acc $ tix1  `Aprj` e
+  , Acc $ tix0  `Aprj` e )
+
+unatup16
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
+    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p)
+unatup16 e =
+  ( Acc $ tix15 `Aprj` e
+  , Acc $ tix14 `Aprj` e
   , Acc $ tix13 `Aprj` e
   , Acc $ tix12 `Aprj` e
   , Acc $ tix11 `Aprj` e
@@ -1300,6 +1345,9 @@ tix13 = SuccTupIdx tix12
 
 tix14 :: TupleIdx (((((((((((((((t, s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s14
 tix14 = SuccTupIdx tix13
+
+tix15 :: TupleIdx ((((((((((((((((t, s15), s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s15
+tix15 = SuccTupIdx tix14
 
 {--
 -- Smart constructors for array tuples in sequence computations
@@ -1637,6 +1685,29 @@ tup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
            `SnocTup` n
            `SnocTup` o
 
+tup16 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
+      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o, Exp p)
+      -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+tup16 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+  = Exp
+  $ Tuple
+  $ NilTup `SnocTup` a
+           `SnocTup` b
+           `SnocTup` c
+           `SnocTup` d
+           `SnocTup` e
+           `SnocTup` f
+           `SnocTup` g
+           `SnocTup` h
+           `SnocTup` i
+           `SnocTup` j
+           `SnocTup` k
+           `SnocTup` l
+           `SnocTup` m
+           `SnocTup` n
+           `SnocTup` o
+           `SnocTup` p
+
 untup2 :: (Elt a, Elt b) => Exp (a, b) -> (Exp a, Exp b)
 untup2 e =
   ( Exp $ tix1 `Prj` e
@@ -1807,6 +1878,27 @@ untup15 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j
         -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o)
 untup15 e =
   ( Exp $ tix14 `Prj` e
+  , Exp $ tix13 `Prj` e
+  , Exp $ tix12 `Prj` e
+  , Exp $ tix11 `Prj` e
+  , Exp $ tix10 `Prj` e
+  , Exp $ tix9  `Prj` e
+  , Exp $ tix8  `Prj` e
+  , Exp $ tix7  `Prj` e
+  , Exp $ tix6  `Prj` e
+  , Exp $ tix5  `Prj` e
+  , Exp $ tix4  `Prj` e
+  , Exp $ tix3  `Prj` e
+  , Exp $ tix2  `Prj` e
+  , Exp $ tix1  `Prj` e
+  , Exp $ tix0  `Prj` e )
+
+untup16 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
+        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o, Exp p)
+untup16 e =
+  ( Exp $ tix15 `Prj` e
+  , Exp $ tix14 `Prj` e
   , Exp $ tix13 `Prj` e
   , Exp $ tix12 `Prj` e
   , Exp $ tix11 `Prj` e
@@ -2006,29 +2098,29 @@ mkIsInfinite x = Exp $ PrimIsInfinite floatingType `PrimApp` x
 
 -- Relational and equality operators
 
-mkLt :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkLt x y = Exp $ PrimLt scalarType `PrimApp` tup2 (x, y)
+mkLt :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkLt x y = Exp $ PrimLt singleType `PrimApp` tup2 (x, y)
 
-mkGt :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkGt x y = Exp $ PrimGt scalarType `PrimApp` tup2 (x, y)
+mkGt :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkGt x y = Exp $ PrimGt singleType `PrimApp` tup2 (x, y)
 
-mkLtEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkLtEq x y = Exp $ PrimLtEq scalarType `PrimApp` tup2 (x, y)
+mkLtEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkLtEq x y = Exp $ PrimLtEq singleType `PrimApp` tup2 (x, y)
 
-mkGtEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkGtEq x y = Exp $ PrimGtEq scalarType `PrimApp` tup2 (x, y)
+mkGtEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkGtEq x y = Exp $ PrimGtEq singleType `PrimApp` tup2 (x, y)
 
-mkEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkEq x y = Exp $ PrimEq scalarType `PrimApp` tup2 (x, y)
+mkEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkEq x y = Exp $ PrimEq singleType `PrimApp` tup2 (x, y)
 
-mkNEq :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkNEq x y = Exp $ PrimNEq scalarType `PrimApp` tup2 (x, y)
+mkNEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
+mkNEq x y = Exp $ PrimNEq singleType `PrimApp` tup2 (x, y)
 
-mkMax :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
-mkMax x y = Exp $ PrimMax scalarType `PrimApp` tup2 (x, y)
+mkMax :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp t
+mkMax x y = Exp $ PrimMax singleType `PrimApp` tup2 (x, y)
 
-mkMin :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
-mkMin x y = Exp $ PrimMin scalarType `PrimApp` tup2 (x, y)
+mkMin :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp t
+mkMin x y = Exp $ PrimMin singleType `PrimApp` tup2 (x, y)
 
 -- Logical operators
 

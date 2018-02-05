@@ -29,6 +29,8 @@ module Data.Array.Accelerate.Product (
 
 ) where
 
+import Data.Array.Accelerate.Type
+
 
 -- |Type-safe projection indices for tuples.
 --
@@ -174,4 +176,46 @@ instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, 
     = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
   prod p _
     = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n)))
+
+instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m, cst n, cst o, cst p)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), p)
+  fromProd _ (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+    = (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
+  toProd _ (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
+    = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)))
+
+instance cst a => IsProduct cst (V2 a) where
+  type ProdRepr (V2 a)  = (((), a), a)
+  fromProd _ (V2 a b)   = (((), a), b)
+  toProd _ (((), a), b) = V2 a b
+  prod _ _              = ProdRsnoc (ProdRsnoc ProdRunit)
+
+instance cst a => IsProduct cst (V3 a) where
+  type ProdRepr (V3 a)       = ((((), a), a), a)
+  fromProd _ (V3 a b c)      = ((((), a), b), c)
+  toProd _ ((((), a), b), c) = V3 a b c
+  prod _ _                   = ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit))
+
+instance cst a => IsProduct cst (V4 a) where
+  type ProdRepr (V4 a)            = (((((), a), a), a), a)
+  fromProd _ (V4 a b c d)         = (((((), a), b), c), d)
+  toProd _ (((((), a), b), c), d) = V4 a b c d
+  prod _ _                        = ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit)))
+
+instance cst a => IsProduct cst (V8 a) where
+  type ProdRepr (V8 a)            = (((((((((), a), a), a), a), a), a), a), a)
+  fromProd _ (V8 a b c d e f g h) = (((((((((), a), b), c), d), e), f), g), h)
+  toProd _ (((((((((), a), b), c), d), e), f), g), h) = V8 a b c d e f g h
+  prod _ _                        = ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit)))))))
+
+instance cst a => IsProduct cst (V16 a) where
+  type ProdRepr (V16 a)            = (((((((((((((((((), a), a), a), a), a), a), a), a), a), a), a), a), a), a), a), a)
+  fromProd _ (V16 a b c d e f g h i j k l m n o p) =
+    (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
+  toProd _ (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p) =
+    V16 a b c d e f g h i j k l m n o p
+  prod _ _                        = ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit)))))))))))))))
 

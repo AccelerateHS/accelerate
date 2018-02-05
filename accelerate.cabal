@@ -274,6 +274,7 @@ Library
         , exceptions                    >= 0.6
         , filepath                      >= 1.0
         , ghc-prim
+        , half                          >= 0.2
         , hashable                      >= 1.1
         , hashtables                    >= 1.0
         , hedgehog                      >= 0.5
