@@ -188,34 +188,40 @@ instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, 
     = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)))
 
 instance cst a => IsProduct cst (V2 a) where
-  type ProdRepr (V2 a)  = (((), a), a)
-  fromProd _ (V2 a b)   = (((), a), b)
-  toProd _ (((), a), b) = V2 a b
-  prod _ _              = ProdRsnoc (ProdRsnoc ProdRunit)
+  type ProdRepr (V2 a)  = ProdRepr (a, a)
+  fromProd cst (V2 a b) = fromProd cst (a, b)
+  toProd cst p          = let (a, b) = toProd cst p in V2 a b
+  prod cst _            = prod cst (undefined :: (a,a))
 
 instance cst a => IsProduct cst (V3 a) where
-  type ProdRepr (V3 a)       = ((((), a), a), a)
-  fromProd _ (V3 a b c)      = ((((), a), b), c)
-  toProd _ ((((), a), b), c) = V3 a b c
-  prod _ _                   = ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit))
+  type ProdRepr (V3 a)    = ProdRepr (a, a, a)
+  fromProd cst (V3 a b c) = fromProd cst (a, b, c)
+  toProd cst p            = let (a, b, c) = toProd cst p in V3 a b c
+  prod cst _              = prod cst (undefined :: (a,a,a))
 
 instance cst a => IsProduct cst (V4 a) where
-  type ProdRepr (V4 a)            = (((((), a), a), a), a)
-  fromProd _ (V4 a b c d)         = (((((), a), b), c), d)
-  toProd _ (((((), a), b), c), d) = V4 a b c d
-  prod _ _                        = ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit)))
+  type ProdRepr (V4 a)      = ProdRepr (a, a, a, a)
+  fromProd cst (V4 a b c d) = fromProd cst (a, b, c, d)
+  toProd cst p              = let (a, b, c, d) = toProd cst p in V4 a b c d
+  prod cst _                = prod cst (undefined :: (a,a,a,a))
 
 instance cst a => IsProduct cst (V8 a) where
-  type ProdRepr (V8 a)            = (((((((((), a), a), a), a), a), a), a), a)
-  fromProd _ (V8 a b c d e f g h) = (((((((((), a), b), c), d), e), f), g), h)
-  toProd _ (((((((((), a), b), c), d), e), f), g), h) = V8 a b c d e f g h
-  prod _ _                        = ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit)))))))
+  type ProdRepr (V8 a) = ProdRepr (a, a, a, a, a, a, a, a)
+  fromProd cst (V8 a b c d e f g h)
+    = fromProd cst (a, b, c, d, e, f, g, h)
+  toProd cst p
+    = let (a, b, c, d, e, f, g, h) = toProd cst p
+      in  V8 a b c d e f g h
+  prod cst _
+    = prod cst (undefined :: (a,a,a,a,a,a,a,a))
 
 instance cst a => IsProduct cst (V16 a) where
-  type ProdRepr (V16 a)            = (((((((((((((((((), a), a), a), a), a), a), a), a), a), a), a), a), a), a), a), a)
-  fromProd _ (V16 a b c d e f g h i j k l m n o p) =
-    (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
-  toProd _ (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p) =
-    V16 a b c d e f g h i j k l m n o p
-  prod _ _                        = ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit)))))))))))))))
+  type ProdRepr (V16 a) = ProdRepr (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
+  fromProd cst (V16 a b c d e f g h i j k l m n o p)
+    = fromProd cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+  toProd cst x
+    = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = toProd cst x
+      in  V16 a b c d e f g h i j k l m n o p
+  prod cst _
+    = prod cst (undefined :: (a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a))
 
