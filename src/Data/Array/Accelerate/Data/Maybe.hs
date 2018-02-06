@@ -21,7 +21,7 @@
 module Data.Array.Accelerate.Data.Maybe (
 
   Maybe(..),
-  maybe, fromMaybe, isJust, isNothing,
+  maybe, isJust, isNothing, fromMaybe, fromJust,
 
 ) where
 
@@ -62,7 +62,14 @@ isJust x = tag x == 1
 -- the value contained in the 'Maybe'.
 --
 fromMaybe :: Elt a => Exp a -> Exp (Maybe a) -> Exp a
-fromMaybe d x = cond (isNothing x) d (val x)
+fromMaybe d x = cond (isNothing x) d (fromJust x)
+
+-- | The 'fromJust' function extracts the element out of the 'Just' constructor.
+-- If the argument was actually 'Nothing', you will get an undefined value
+-- instead.
+--
+fromJust :: Elt a => Exp (Maybe a) -> Exp a
+fromJust x = Exp $ ZeroTupIdx `Prj` x
 
 -- | The 'maybe' function takes a default value, a function, and a 'Maybe'
 -- value. If the 'Maybe' value is nothing, the default value is returned;
@@ -70,41 +77,38 @@ fromMaybe d x = cond (isNothing x) d (val x)
 -- the result
 --
 maybe :: (Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
-maybe d f x = cond (isNothing x) d (f (val x))
+maybe d f x = cond (isNothing x) d (f (fromJust x))
 
 
 instance Functor Maybe where
-  fmap f x = cond (isNothing x) (constant Nothing) (lift (Just (f (val x))))
+  fmap f x = cond (isNothing x) (constant Nothing) (lift (Just (f (fromJust x))))
 
 instance Eq a => Eq (Maybe a) where
   ma == mb = cond (isNothing ma && isNothing mb) (constant True)
-           $ cond (isJust ma    && isJust mb)    (val ma == val mb)
+           $ cond (isJust ma    && isJust mb)    (fromJust ma == fromJust mb)
            $ constant False
 
 instance Ord a => Ord (Maybe a) where
   compare ma mb = cond (isJust ma && isJust mb)
-                       (compare (val ma) (val mb))
+                       (compare (fromJust ma) (fromJust mb))
                        (compare (tag ma) (tag mb))
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
   mempty        = constant Nothing
   mappend ma mb = cond (isNothing ma) mb
                 $ cond (isNothing mb) ma
-                $ lift (Just (val ma `mappend` val mb))
+                $ lift (Just (fromJust ma `mappend` fromJust mb))
 
 #if __GLASGOW_HASKELL__ >= 800
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
   ma <> mb = cond (isNothing ma) mb
            $ cond (isNothing mb) mb
-           $ lift (Just (val ma <> val mb))
+           $ lift (Just (fromJust ma <> fromJust mb))
 #endif
 
 
 tag :: Elt a => Exp (Maybe a) -> Exp Word8
 tag x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
-
-val :: Elt a => Exp (Maybe a) -> Exp a
-val x = Exp $ ZeroTupIdx `Prj` x
 
 
 type instance EltRepr (Maybe a) = (Word8, EltRepr a)
