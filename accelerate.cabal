@@ -303,6 +303,7 @@ Library
         Data.Array.Accelerate.Data.Complex
         Data.Array.Accelerate.Data.Fold
         Data.Array.Accelerate.Data.Functor
+        Data.Array.Accelerate.Data.Maybe
         Data.Array.Accelerate.Data.Monoid
 
         -- For backend development
