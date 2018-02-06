@@ -17,6 +17,8 @@
 --
 -- Monoid instances for Accelerate
 --
+-- @since 1.2.0.0
+--
 
 module Data.Array.Accelerate.Data.Monoid (
 

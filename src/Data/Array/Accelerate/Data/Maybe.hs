@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
@@ -14,6 +15,8 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
+-- @since 1.2.0.0
+--
 
 module Data.Array.Accelerate.Data.Maybe (
 
@@ -23,12 +26,20 @@ module Data.Array.Accelerate.Data.Maybe (
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Language                               hiding ( chr )
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
+
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Ord
+
+import Data.Array.Accelerate.Data.Functor
+import Data.Array.Accelerate.Data.Monoid
+#if __GLASGOW_HASKELL__ >= 800
+import Data.Array.Accelerate.Data.Semigroup
+#endif
 
 import Data.Char
 import Data.Maybe                                                   ( Maybe(..) )
@@ -39,27 +50,19 @@ import Prelude                                                      ( (.), ($), 
 -- | Returns 'True' if the argument is 'Nothing'
 --
 isNothing :: Elt a => Exp (Maybe a) -> Exp Bool
-isNothing x =
-  let t = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
-  in  t == 0
+isNothing x = tag x == 0
 
 -- | Returns 'True' if the argument is of the form @Just _@
 --
 isJust :: Elt a => Exp (Maybe a) -> Exp Bool
-isJust x =
-  let t = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
-  in  t /= 0
+isJust x = tag x == 1
 
 -- | The 'fromMaybe' function takes a default value and a 'Maybe' value. If the
 -- 'Maybe' is 'Nothing', the default value is returned; otherwise, it returns
 -- the value contained in the 'Maybe'.
 --
 fromMaybe :: Elt a => Exp a -> Exp (Maybe a) -> Exp a
-fromMaybe d x =
-  let t = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
-      v = Exp $ ZeroTupIdx `Prj` x
-  in
-  cond (t == 0) d v
+fromMaybe d x = cond (isNothing x) d (val x)
 
 -- | The 'maybe' function takes a default value, a function, and a 'Maybe'
 -- value. If the 'Maybe' value is nothing, the default value is returned;
@@ -67,11 +70,41 @@ fromMaybe d x =
 -- the result
 --
 maybe :: (Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
-maybe d f x =
-  let t = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
-      v = Exp $ ZeroTupIdx `Prj` x
-  in
-  cond (t == 0) d (f v)
+maybe d f x = cond (isNothing x) d (f (val x))
+
+
+instance Functor Maybe where
+  fmap f x = cond (isNothing x) (constant Nothing) (lift (Just (f (val x))))
+
+instance Eq a => Eq (Maybe a) where
+  ma == mb = cond (isNothing ma && isNothing mb) (constant True)
+           $ cond (isJust ma    && isJust mb)    (val ma == val mb)
+           $ constant False
+
+instance Ord a => Ord (Maybe a) where
+  compare ma mb = cond (isJust ma && isJust mb)
+                       (compare (val ma) (val mb))
+                       (compare (tag ma) (tag mb))
+
+instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
+  mempty        = constant Nothing
+  mappend ma mb = cond (isNothing ma) mb
+                $ cond (isNothing mb) ma
+                $ lift (Just (val ma `mappend` val mb))
+
+#if __GLASGOW_HASKELL__ >= 800
+instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
+  ma <> mb = cond (isNothing ma) mb
+           $ cond (isNothing mb) mb
+           $ lift (Just (val ma <> val mb))
+#endif
+
+
+tag :: Elt a => Exp (Maybe a) -> Exp Word8
+tag x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
+
+val :: Elt a => Exp (Maybe a) -> Exp a
+val x = Exp $ ZeroTupIdx `Prj` x
 
 
 type instance EltRepr (Maybe a) = (Word8, EltRepr a)
