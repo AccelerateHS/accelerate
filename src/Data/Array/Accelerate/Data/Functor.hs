@@ -26,13 +26,16 @@ module Data.Array.Accelerate.Data.Functor (
 
 ) where
 
-import Data.Array.Accelerate
+import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Smart
 
 import Data.Monoid
 import Prelude                                                      ( flip )
 #if __GLASGOW_HASKELL__ >= 800
 import Data.Semigroup
 #endif
+import Prelude                                                      ( (.), const )
 
 
 -- | The 'Functor' class is used for scalar types which can be mapped over.

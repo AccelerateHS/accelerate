@@ -30,15 +30,20 @@ module Data.Array.Accelerate.Data.Semigroup (
 
 ) where
 
-import Data.Array.Accelerate
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Classes.Bounded
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Ord
+import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Smart                                  ( Exp(..), PreExp(..) )
+import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Function
 import Data.Monoid                                                  ( Monoid(..) )
 import Data.Semigroup
+import Prelude                                                      ( undefined )
 import qualified Prelude                                            as P
 
 
