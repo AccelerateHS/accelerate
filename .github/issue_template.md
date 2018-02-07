@@ -6,7 +6,7 @@ Thanks for trying out Accelerate! We are sorry that you have run into trouble ):
 The following schema may help when filing your report:
 -->
 
-<!-- Put an `x` in the box which applies: -->
+<!-- Put an `x` into each box that applies (replacing the existing space character): -->
 I am submitting a...
 - [ ] bug report
 - [ ] feature request
@@ -50,12 +50,18 @@ Please describe any additional steps to reproducing the bug.
  3.
 
 ## Your environment
-<!-- Include any relevant details about the environment you experienced the bug in -->
+<!--
+Include any relevant details about the environment you experienced the bug in.
 
-- Version used:
-- Backend(s) used and version:
+When reporting the versions of Accelerate packages used, please include either the release version number, or the commit SHA if building from source (e.g. `AccelerateHS/accelerate-llvm@0123456`).
+
+If you built your project using `stack`, the `nvidia-device-query` program may be available via `stack exec nvidia-device-query`.
+-->
+
+- Accelerate version:
+- Accelerate backend(s) used:
 - GHC version:
 - Operating system and version:
-- Link to your project:
+- Link to your project/example:
 - If this is a bug with the GPU backend, include the output of `nvidia-device-query`:
 
