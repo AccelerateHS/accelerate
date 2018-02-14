@@ -332,7 +332,7 @@ estimateProcessorLoad !var !ref = do
   --
   let
       active_ns   = fromIntegral sample
-      elapsed_s   = realToFrac (old_time - time)
+      elapsed_s   = old_time - time
       elapsed_ns  = 1.0E9 * elapsed_s
       --
       new_inst    = 100 * (active_ns / elapsed_ns)                -- instantaneous load
