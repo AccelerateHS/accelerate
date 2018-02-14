@@ -41,7 +41,6 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Data.IORef
 import Data.Text                                                    ( Text )
-import Data.Time.Clock
 import Text.Printf
 import qualified Data.HashMap.Strict                                as Map
 #endif
@@ -164,7 +163,7 @@ initAccMetrics = do
 --
 registerRate :: Text -> (IORef EMAState -> IO Int64) -> Store -> IO ()
 registerRate name sample store = do
-  now <- getCurrentTime
+  now <- getMonotonicTime
   st  <- newIORef (ES now 0 0)
   registerGroup (Map.singleton name Gauge) (sample st) store
 #endif
@@ -188,10 +187,10 @@ withProcessor PTX    = withProcessor' __active_ns_llvm_ptx
 
 withProcessor' :: Atomic -> IO a -> IO a
 withProcessor' var action = do
-  wall0 <- getCurrentTime
+  wall0 <- getMonotonicTime
   !r    <- action
-  wall1 <- getCurrentTime
-  addProcessorTime' var (realToFrac (diffUTCTime wall1 wall0))
+  wall1 <- getMonotonicTime
+  addProcessorTime' var (wall1 - wall0)
   return r
 #endif
 
@@ -317,7 +316,7 @@ didEvictBytes n = do
 -- in the background, we should be okay.
 --
 data EMAState = ES
-  { old_time  :: {-# UNPACK #-} !UTCTime
+  { old_time  :: {-# UNPACK #-} !Double
   , old_inst  :: {-# UNPACK #-} !Double
   , old_avg   :: {-# UNPACK #-} !Double
   }
@@ -328,12 +327,12 @@ data EMAState = ES
 estimateProcessorLoad :: Atomic -> IORef EMAState -> IO Int64
 estimateProcessorLoad !var !ref = do
   ES{..} <- readIORef ref
-  time   <- getCurrentTime
+  time   <- getMonotonicTime
   sample <- Atomic.and var 0
   --
   let
       active_ns   = fromIntegral sample
-      elapsed_s   = realToFrac (diffUTCTime time old_time)
+      elapsed_s   = realToFrac (old_time - time)
       elapsed_ns  = 1.0E9 * elapsed_s
       --
       new_inst    = 100 * (active_ns / elapsed_ns)                -- instantaneous load
@@ -342,6 +341,8 @@ estimateProcessorLoad !var !ref = do
   writeIORef ref (ES time new_inst new_avg)
   return (round new_avg)
 
+-- cbits/clock.c
+foreign import ccall unsafe "clock_gettime_monotonic_seconds" getMonotonicTime :: IO Double
 
 {--
 -- Compute the current load on a processor as a percentage of time spent working
@@ -381,6 +382,7 @@ ema !alpha !dt !old_ema !old_sample !new_sample =
   (u * old_ema) + ((v-u) * old_sample) + ((1-v) * new_sample)
 
 #endif
+
 
 -- Monitoring variables
 -- --------------------

@@ -262,7 +262,7 @@ Flag internal-checks
 
 Library
   Build-depends:
-          base                          >= 4.7 && < 4.11
+          base                          >= 4.7 && < 4.12
         , ansi-terminal                 >= 0.6.2
         , ansi-wl-pprint                >= 0.6
         , base-orphans                  >= 0.3
@@ -452,7 +452,6 @@ Library
         , ekg                           >= 0.1
         , ekg-core                      >= 0.1
         , text                          >= 1.0
-        , time                          >= 1.4
 
   if flag(bounds-checks)
     cpp-options:
