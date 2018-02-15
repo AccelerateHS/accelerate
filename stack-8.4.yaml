@@ -1,0 +1,134 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+# vim: nospell
+
+resolver: ghc-8.4.0.20180204 # rc3
+compiler: ghc-8.4.0.20180204
+compiler-check: match-exact
+
+allow-newer: true
+
+setup-info:
+  ghc:
+    macosx:
+      8.4.0.20180204:
+        url: https://downloads.haskell.org/~ghc/8.4.1-alpha3/ghc-8.4.0.20180204-x86_64-apple-darwin.tar.xz
+        sha256: 80d08f67a3c420a3048c52e8ec541cbe3bdc6372fa2d564bdd91ae7b470da854
+    linux64:
+      8.4.0.20180204:
+        url: https://downloads.haskell.org/~ghc/8.4.1-alpha3/ghc-8.4.0.20180204-x86_64-unknown-linux.tar.xz
+        sha256: 4526441619f96fe7f7452613fbdae9221d76d479ac2bd90192a1f4b91c68068b
+    windows32:
+      8.4.0.20180204:
+        url: https://downloads.haskell.org/~ghc/8.4.1-alpha3/ghc-8.4.0.20180204-i386-unknown-mingw32.tar.xz
+        sha256: f1e8f671d9d8f1fbbb27130b6e6015bf15a1f719a25a72ca9246002d8ffaddfb
+    windows64:
+      8.4.0.20180204:
+        url: https://downloads.haskell.org/~ghc/8.4.1-alpha3/ghc-8.4.0.20180204-x86_64-unknown-mingw32.tar.xz
+        sha256: c8ce832c0af2f2c639905ea6bf9678ec2e22e945e74189434252cb0c9c0b75fc
+    linux32-nopie:
+      8.4.0.20180204:
+        url: https://downloads.haskell.org/~ghc/8.4.1-alpha3/ghc-8.4.0.20180204-i386-deb8-linux.tar.xz
+        sha256: c29aa58ffbc14366afc39b471eab085e3deb640bc945356d5e7ebf2539498779
+    linux64-nopie:
+      8.4.0.20180204:
+        url: https://downloads.haskell.org/~ghc/8.4.1-alpha3/ghc-8.4.0.20180204-x86_64-deb8-linux.tar.xz
+        sha256: cd45ddd6108ad48ba4e9cd64c346f6281d5f2cb3b6096932f332cf486eb78f0d
+
+packages:
+- '.'
+
+extra-deps:
+- 'adjunctions-4.4'
+- 'ansi-terminal-0.8.0.1'
+- 'ansi-wl-pprint-0.6.8.2'
+- 'async-2.2.1'
+- 'base-compat-0.9.3'
+- 'base-orphans-0.6'
+- 'basement-0.0.6'
+- 'bifunctors-5.5.2'
+- 'cabal-doctest-1.0.6'
+- 'call-stack-0.1.0'
+- 'clock-0.7.2'
+- 'code-page-0.1.3'
+- 'colour-2.3.4'
+- 'comonad-5.0.3'
+- 'concurrent-output-1.10.3'
+- 'constraints-0.10'
+- 'contravariant-1.4.1'
+- 'cryptonite-0.25'
+- 'distributive-0.5.3'
+- 'doctest-0.14.0'
+- 'exceptions-0.8.3'
+- 'fail-4.9.0.0'
+- 'foundation-0.0.19'
+- 'free-5'
+- 'ghc-paths-0.1.0.9'
+- 'half-0.2.2.3'
+- 'hashable-1.2.6.1'
+# - 'hashtables-1.2.2.1'
+- git:    https://github.com/deepfire/hashtables.git
+  commit: b9eb4b10a50bd6250330422afecc065339a32412
+- 'haskell-lexer-1.0.1'
+- 'hedgehog-0.5.2'
+- 'kan-extensions-5.1'
+- 'lens-4.16'
+- 'lifted-async-0.10.0'
+- 'lifted-base-0.2.3.11'
+- 'memory-0.14.14'
+- 'mmorph-1.1.0'
+- 'monad-control-1.0.2.2'
+- 'optparse-applicative-0.14.0.0'
+- 'parallel-3.2.1.1'
+- 'pipes-4.3.7'
+- 'pretty-show-1.7'
+- 'primitive-0.6.3.0'
+- 'profunctors-5.2.2'
+- 'random-1.1'
+- 'reflection-2.1.3'
+- 'resourcet-1.2.0'
+- 'semigroupoids-5.2.2'
+- 'semigroups-0.18.4'
+- 'StateVar-1.1.0.4'
+- 'syb-0.7'
+- 'tagged-0.8.5'
+- 'tasty-1.0.1'
+- 'tasty-expected-failure-0.11.0.4'
+- 'tasty-hedgehog-0.1.0.2'
+- 'tasty-hunit-0.10.0.1'
+- 'terminal-size-0.3.2.1'
+- 'th-abstraction-0.2.6.0'
+- 'th-lift-0.7.8'
+- 'transformers-base-0.4.4'
+- 'transformers-compat-0.5.1.4'
+- 'unbounded-delays-0.1.1.0'
+- 'unique-0'
+- 'unliftio-core-0.1.1.0'
+- 'unordered-containers-0.2.9.0'
+- 'vector-0.12.0.1'
+- 'void-0.7.2'
+- 'wl-pprint-annotated-0.1.0.0'
+
+# Override default flag values for local packages and extra-deps
+# flags: {}
+
+# Extra global and per-package GHC options
+# ghc-options: {}
+
+# Extra package databases containing global packages
+# extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.4.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]
+
