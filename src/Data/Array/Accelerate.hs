@@ -198,7 +198,7 @@ module Data.Array.Accelerate (
   enumFromN, enumFromStepN,
 
   -- *** Concatenation
-  (++),
+  (++), concatOn,
 
   -- ** Composition
   -- *** Flow control
@@ -234,6 +234,7 @@ module Data.Array.Accelerate (
   -- *** Extracting sub-arrays
   slice,
   init, tail, take, drop, slit,
+  initOn, tailOn, takeOn, dropOn, slitOn,
 
   -- *** Permutations
   -- **** Forward permutation (scatter)
@@ -247,6 +248,7 @@ module Data.Array.Accelerate (
 
   -- **** Specialised permutations
   reverse, transpose,
+  reverseOn, transposeOn,
 
   -- *** Filtering
   filter,

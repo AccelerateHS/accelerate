@@ -27,13 +27,13 @@ module Data.Array.Accelerate.Trafo.Simplify (
 ) where
 
 -- standard library
-import Data.Functor.Identity
+import Control.Applicative                              hiding ( Const )
+import Control.Lens                                     hiding ( Const, ix )
 import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
 import Data.Typeable
 import Text.Printf
-import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, iterate )
 
 -- friends
@@ -522,31 +522,6 @@ data Stats = Stats
 instance Show Stats where
   show (Stats a b c d e) =
     printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
-
--- Define a mini-lens infrastructure. Maybe it would be better to just pull in
--- the ekmett-verse...
---
-type Lens' s a       = Lens s s a a
-type Lens s t a b    = forall f. Functor f => (a -> f b) -> s -> f t
-type ASetter s t a b = (a -> Identity b) -> s -> Identity t
-
-lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b
-lens sa sbt afb s = sbt s <$> afb (sa s)
-{-# INLINE lens #-}
-
-infixl 1 &
-(&) :: a -> (a -> b) -> b
-(&) x f = f x
-{-# INLINE (&) #-}
-
-infixr 4 +~
-(+~) :: Num a => ASetter s t a a -> a -> s -> t
-(+~) l n = over l (+n)
-{-# INLINE (+~) #-}
-
-over :: ASetter s t a b -> (a -> b) -> s -> t
-over l f = runIdentity . l (Identity . f)
-{-# INLINE over #-}
 
 infixl 6 +++
 (+++) :: Stats -> Stats -> Stats

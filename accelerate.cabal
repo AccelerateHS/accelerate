@@ -278,6 +278,7 @@ Library
         , hashable                      >= 1.1
         , hashtables                    >= 1.0
         , hedgehog                      >= 0.5
+        , lens                          >= 4.0
         , mtl                           >= 2.0
         , tasty                         >= 0.11
         , tasty-expected-failure        >= 0.11

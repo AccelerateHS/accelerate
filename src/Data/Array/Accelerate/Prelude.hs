@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -56,7 +57,7 @@ module Data.Array.Accelerate.Prelude (
   fill, enumFromN, enumFromStepN,
 
   -- * Concatenation
-  (++),
+  (++), concatOn,
 
   -- * Working with predicates
   -- ** Filtering
@@ -68,9 +69,11 @@ module Data.Array.Accelerate.Prelude (
 
   -- * Permutations
   reverse, transpose,
+  reverseOn, transposeOn,
 
   -- * Extracting sub-vectors
   init, tail, take, drop, slit,
+  initOn, tailOn, takeOn, dropOn, slitOn,
 
   -- * Controlling execution
   compute,
@@ -110,6 +113,7 @@ module Data.Array.Accelerate.Prelude (
 
 -- avoid clashes with Prelude functions
 --
+import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
 import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
 import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined )
@@ -1475,13 +1479,82 @@ infixr 5 ++
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-(++) xs ys
-  = let sh1 :. n        = unlift (shape xs)     :: Exp sh :. Exp Int
-        sh2 :. m        = unlift (shape ys)     :: Exp sh :. Exp Int
-    in
-    generate (lift (intersect sh1 sh2 :. n + m))
-             (\ix -> let sh :. i = unlift ix    :: Exp sh :. Exp Int
-                     in  i < n ? ( xs ! ix, ys ! lift (sh :. i-n)) )
+(++) = concatOn _1
+
+
+-- | Generalised version of '(++)' where the argument 'Lens'' specifies which
+-- dimension to concatenate along.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+-- >>> let m1 = fromList (Z:.5:.10) [0..] :: Matrix Int
+-- >>> m1
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> let m2 = fromList (Z:.10:.5) [0..] :: Matrix Int
+-- >>> m2
+-- Matrix (Z :. 10 :. 5)
+--   [  0,  1,  2,  3,  4,
+--      5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14,
+--     15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24,
+--     25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34,
+--     35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44,
+--     45, 46, 47, 48, 49]
+--
+-- >>> run $ concatOn _1 (use m1) (use m2)
+-- Matrix (Z :. 5 :. 15)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  0,  1,  2,  3,  4,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,  5,  6,  7,  8,  9,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 10, 11, 12, 13, 14,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 15, 16, 17, 18, 19,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 20, 21, 22, 23, 24]
+--
+-- >>> run $ concatOn _2 (use m1) (use m2)
+-- Matrix (Z :. 15 :. 5)
+--   [  0,  1,  2,  3,  4,
+--     10, 11, 12, 13, 14,
+--     20, 21, 22, 23, 24,
+--     30, 31, 32, 33, 34,
+--     40, 41, 42, 43, 44,
+--      0,  1,  2,  3,  4,
+--      5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14,
+--     15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24,
+--     25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34,
+--     35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44,
+--     45, 46, 47, 48, 49]
+--
+concatOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+concatOn dim xs ys =
+  let
+      shx   = shape xs
+      shy   = shape ys
+      m     = shx ^. dim
+      n     = shy ^. dim
+      shx'  = shx & dim .~ m+n
+      shy'  = shy & dim .~ m+n
+  in
+  generate (shx' `intersect` shy')
+           (\ix -> let i = ix ^. dim in
+                   if  i < m then xs ! ix
+                             else ys ! (ix & dim -~ m))
 
 -- TLM: If we have something like (concat . split) then the source array will
 --      have two use sites, but is actually safe (and better) to inline.
@@ -1675,17 +1748,108 @@ scatterIf to maskV pred defaults input = permute const defaults pf input'
 -- | Reverse the elements of a vector.
 --
 reverse :: Elt e => Acc (Vector e) -> Acc (Vector e)
-reverse xs =
-  let len       = unindex1 (shape xs)
-      pf i      = len - i - 1
-  in  backpermute (shape xs) (ilift1 pf) xs
+reverse = reverseOn _1
 
 -- | Transpose the rows and columns of a matrix.
 --
 transpose :: Elt e => Acc (Array DIM2 e) -> Acc (Array DIM2 e)
-transpose mat =
-  let swap = lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z:.Exp Int:.Exp Int
-  in  backpermute (swap $ shape mat) swap mat
+transpose = transposeOn _1 _2
+
+
+-- | Generalised version of 'reverse' where the argument 'Lens'' specifies which
+-- dimension to reverse.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> run $ reverseOn _1 (use mat)
+-- Matrix (Z :. 5 :. 10)
+--   [  9,  8,  7,  6,  5,  4,  3,  2,  1,  0,
+--     19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+--     29, 28, 27, 26, 25, 24, 23, 22, 21, 20,
+--     39, 38, 37, 36, 35, 34, 33, 32, 31, 30,
+--     49, 48, 47, 46, 45, 44, 43, 42, 41, 40]
+--
+-- >>> run $ reverseOn _2 (use mat)
+-- Matrix (Z :. 5 :. 10)
+--   [ 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--      0,  1,  2,  3,  4,  5,  6,  7,  8,  9]
+--
+reverseOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+reverseOn dim xs =
+  let
+      sh = shape xs
+      n  = sh ^. dim
+  in
+  backpermute sh (over dim $ \i -> n - i - 1) xs
+
+-- | Generalised version of 'transpose' where the argument 'Lens''s specify
+-- which two dimensions to transpose.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> run $ transposeOn _1 _2 (use mat)
+-- Matrix (Z :. 10 :. 5)
+--   [ 0, 10, 20, 30, 40,
+--     1, 11, 21, 31, 41,
+--     2, 12, 22, 32, 42,
+--     3, 13, 23, 33, 43,
+--     4, 14, 24, 34, 44,
+--     5, 15, 25, 35, 45,
+--     6, 16, 26, 36, 46,
+--     7, 17, 27, 37, 47,
+--     8, 18, 28, 38, 48,
+--     9, 19, 29, 39, 49]
+--
+-- >>> let box = fromList (Z:.2:.3:.5) [0..] :: Array DIM3 Int
+-- >>> box
+-- Array (Z :. 2 :. 3 :. 5) [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
+--
+-- >>> run $ transposeOn _1 _2 (use box)
+-- Array (Z :. 2 :. 5 :. 3) [0,5,10,1,6,11,2,7,12,3,8,13,4,9,14,15,20,25,16,21,26,17,22,27,18,23,28,19,24,29]
+--
+-- >>> run $ transposeOn _2 _3 (use box)
+-- Array (Z :. 3 :. 2 :. 5) [0,1,2,3,4,15,16,17,18,19,5,6,7,8,9,20,21,22,23,24,10,11,12,13,14,25,26,27,28,29]
+--
+-- >>> run $ transposeOn _1 _3 (use box)
+-- Array (Z :. 5 :. 3 :. 2) [0,15,5,20,10,25,1,16,6,21,11,26,2,17,7,22,12,27,3,18,8,23,13,28,4,19,9,24,14,29]
+--
+transposeOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Lens' (Exp sh) (Exp Int)
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+transposeOn dim1 dim2 xs =
+  let
+      swap ix = ix & dim2 .~ ix ^. dim1
+                   & dim1 .~ ix ^. dim2
+  in
+  backpermute (swap (shape xs)) swap xs
 
 
 -- Extracting sub-vectors
@@ -1715,11 +1879,7 @@ take :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-take n acc =
-  let n'        = the (unit (n `min` sz))
-      sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
-  in
-  backpermute (lift (sh :. n')) id acc
+take = takeOn _1
 
 
 -- | Yield all but the first @n@ elements along the innermost dimension of the
@@ -1746,13 +1906,7 @@ drop :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-drop n acc =
-  let n'        = the (unit n)
-      sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
-      index ix  = let j :. i = unlift ix        :: Exp sh :. Exp Int
-                  in  lift (j :. i + n')
-  in
-  backpermute (lift (sh :. 0 `max` (sz - n'))) index acc
+drop = dropOn _1
 
 
 -- | Yield all but the elements in the last index of the innermost dimension.
@@ -1777,9 +1931,7 @@ drop n acc =
 init :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-init acc =
-  let sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
-  in  backpermute (lift (sh :. sz `min` (sz - 1))) id acc
+init = initOn _1
 
 
 -- | Yield all but the first element along the innermost dimension of an array.
@@ -1805,12 +1957,7 @@ init acc =
 tail :: forall sh e. (Slice sh, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-tail acc =
-  let sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
-      index ix  = let j :. i = unlift ix        :: Exp sh :. Exp Int
-                  in  lift (j :. i + 1)
-  in
-  backpermute (lift (sh :. 0 `max` (sz - 1))) index acc
+tail = tailOn _1
 
 
 -- | Yield a slit (slice) of the innermost indices of an array. Denotationally,
@@ -1819,18 +1966,100 @@ tail acc =
 -- > slit i n = take n . drop i
 --
 slit :: forall sh e. (Slice sh, Shape sh, Elt e)
-     => Exp Int
-     -> Exp Int
+     => Exp Int                     -- ^ starting index
+     -> Exp Int                     -- ^ length
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-slit m n acc =
-  let m'        = the (unit m)
-      n'        = the (unit n)
-      sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
-      index ix  = let j :. i = unlift ix        :: Exp sh :. Exp Int
-                  in  lift (j :. i + m')
+slit = slitOn _1
+
+
+-- | Generalised version of 'init' where the argument 'Lens'' specifies which
+-- dimension to operate over.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+initOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+initOn dim xs =
+  let
+      sh  = shape xs
+      sh' = over dim (\i -> 0 `max` (i-1)) sh
   in
-  backpermute (lift (sh :. (n' `min` ((sz - m') `max` 0)))) index acc
+  backpermute sh' id xs
+
+
+-- | Generalised version of 'tail' where the argument 'Lens'' specifies which
+-- dimension to operate over.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+tailOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+tailOn dim xs =
+  let
+      sh  = shape xs
+      sh' = over dim (\i -> 0 `max` (i-1)) sh
+  in
+  backpermute sh' (& dim +~ 1) xs
+
+
+-- | Generalised version of 'take' where the argument 'Lens'' specifies which
+-- dimension to operate over.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+takeOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Exp Int
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+takeOn dim n xs =
+  let
+      sh = shape xs
+      m  = sh ^. dim
+  in
+  backpermute (sh & dim .~ min m n) id xs
+
+
+-- | Generalised version of 'drop' where the argument 'Lens'' specifies which
+-- dimension to operate over.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+dropOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Exp Int
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+dropOn dim n xs =
+  let
+      sh = shape xs
+      m  = sh ^. dim
+  in
+  backpermute (sh & dim .~ max 0 (m-n)) (& dim +~ n) xs
+
+
+-- | Generalised version of 'drop' where the argument 'Lens'' specifies which
+-- dimension to operate over.
+--
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+slitOn
+    :: (Shape sh, Elt e)
+    => Lens' (Exp sh) (Exp Int)
+    -> Exp Int                      -- ^ starting index
+    -> Exp Int                      -- ^ length
+    -> Acc (Array sh e)
+    -> Acc (Array sh e)
+slitOn dim i n = takeOn dim n . dropOn dim i
 
 
 -- Controlling execution
@@ -2123,9 +2352,6 @@ emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = use (fromList empty [])
 
 
--- Utilities
--- ---------
-
 matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
 matchShapeType _ _
   | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
@@ -2133,4 +2359,22 @@ matchShapeType _ _
 
 matchShapeType _ _
   = Nothing
+
+
+-- Lenses
+-- ------
+--
+-- Imported from `lens-accelerate` (which provides proper Field instances)
+--
+_1 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int)) (Exp Int)
+_1 = lens (\ix   -> let _  :. x = unlift ix :: Exp sh :. Exp Int in x)
+          (\ix x -> let sh :. _ = unlift ix :: Exp sh :. Exp Int in lift (sh :. x))
+
+_2 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int:.Int)) (Exp Int)
+_2 = lens (\ix   -> let _  :. y :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int in y)
+          (\ix y -> let sh :. _ :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int in lift (sh :. y :. x))
+
+_3 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
+_3 = lens (\ix   -> let _  :. z :. _ :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in z)
+          (\ix z -> let sh :. _ :. y :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in lift (sh :. z :. y :. x))
 

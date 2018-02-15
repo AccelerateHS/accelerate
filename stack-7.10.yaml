@@ -7,8 +7,14 @@ packages:
 - '.'
 
 extra-deps:
+- 'comonad-5.0.3'
 - 'hedgehog-0.5'
+- 'kan-extensions-5.1'
+- 'lens-4.16'
+- 'profunctors-5.2.2'
+- 'tagged-0.8.5'
 - 'tasty-hedgehog-0.1.0.1'
+- 'th-abstraction-0.2.6.0'
 - 'transformers-0.5.5.0'
 - 'transformers-compat-0.5.1.4'
 - 'unique-0'
