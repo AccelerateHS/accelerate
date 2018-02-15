@@ -1786,6 +1786,8 @@ transpose = transposeOn _1 _2
 --     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
 --      0,  1,  2,  3,  4,  5,  6,  7,  8,  9]
 --
+-- @since 1.2.0.0
+--
 reverseOn
     :: (Shape sh, Elt e)
     => Lens' (Exp sh) (Exp Int)
@@ -1837,6 +1839,8 @@ reverseOn dim xs =
 --
 -- >>> run $ transposeOn _1 _3 (use box)
 -- Array (Z :. 5 :. 3 :. 2) [0,15,5,20,10,25,1,16,6,21,11,26,2,17,7,22,12,27,3,18,8,23,13,28,4,19,9,24,14,29]
+--
+-- @since 1.2.0.0
 --
 transposeOn
     :: (Shape sh, Elt e)
@@ -1978,6 +1982,8 @@ slit = slitOn _1
 --
 -- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
 --
+-- @since 1.2.0.0
+--
 initOn
     :: (Shape sh, Elt e)
     => Lens' (Exp sh) (Exp Int)
@@ -1996,6 +2002,8 @@ initOn dim xs =
 --
 -- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
 --
+-- @since 1.2.0.0
+--
 tailOn
     :: (Shape sh, Elt e)
     => Lens' (Exp sh) (Exp Int)
@@ -2013,6 +2021,8 @@ tailOn dim xs =
 -- dimension to operate over.
 --
 -- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+-- @since 1.2.0.0
 --
 takeOn
     :: (Shape sh, Elt e)
@@ -2033,6 +2043,8 @@ takeOn dim n xs =
 --
 -- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
 --
+-- @since 1.2.0.0
+--
 dropOn
     :: (Shape sh, Elt e)
     => Lens' (Exp sh) (Exp Int)
@@ -2046,11 +2058,23 @@ dropOn dim n xs =
   in
   backpermute (sh & dim .~ max 0 (m-n)) (& dim +~ n) xs
 
+-- Note: [embedding constants in take & drop]
+--
+-- Previously the 'take' and 'drop functions prevented the value of the
+-- take/drop amount from being embedded directly in the generated code. This was
+-- done by writing the value into a scalar array and reading that value out,
+-- rather than using it directly. Although that is better from a code
+-- cache/reuse standpoint, I've now removed this as it prevents the user from
+-- specialising their code, and in a real program this extra indirection is
+-- probably not necessary anyway.
+--
 
 -- | Generalised version of 'drop' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
 -- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+--
+-- @since 1.2.0.0
 --
 slitOn
     :: (Shape sh, Elt e)
