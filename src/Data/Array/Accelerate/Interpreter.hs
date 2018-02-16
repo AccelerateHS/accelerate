@@ -56,6 +56,7 @@ import Control.Exception
 import Control.Monad
 import Data.Bits
 import Data.Char                                                    ( chr, ord )
+import Foreign.C.Types
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Prelude                                                      hiding ( sum )
@@ -966,6 +967,7 @@ evalPreOpenExp evalAcc pexp env aenv =
                                    in  evalPreOpenExp evalAcc exp2 env' aenv
     Var ix                      -> prjElt ix env
     Const c                     -> toElt c
+    Undef                       -> evalUndef
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
     Tuple tup                   -> toTuple $ evalTuple evalAcc tup env aenv
@@ -1021,6 +1023,44 @@ evalPreOpenExp evalAcc pexp env aenv =
     Intersect sh1 sh2           -> intersect (evalE sh1) (evalE sh2)
     Union sh1 sh2               -> union (evalE sh1) (evalE sh2)
     Foreign _ f e               -> evalPreOpenFun evalAcc f EmptyElt Empty $ evalE e
+
+
+-- Constant values
+-- ---------------
+
+evalUndef :: forall a. Elt a => a
+evalUndef = toElt (undef (eltType (undefined::a)))
+  where
+    undef :: TupleType t -> t
+    undef TypeRunit       = ()
+    undef (TypeRpair a b) = (undef a, undef b)
+    undef (TypeRscalar t) = scalar t
+
+    scalar :: ScalarType t -> t
+    scalar (SingleScalarType t) = single t
+    scalar (VectorScalarType t) = vector t
+
+    single :: SingleType t -> t
+    single (NumSingleType    t) = num t
+    single (NonNumSingleType t) = nonnum t
+
+    vector :: VectorType t -> t
+    vector (Vector2Type t)  = let x = single t in V2 x x
+    vector (Vector3Type t)  = let x = single t in V3 x x x
+    vector (Vector4Type t)  = let x = single t in V4 x x x x
+    vector (Vector8Type t)  = let x = single t in V8 x x x x x x x x
+    vector (Vector16Type t) = let x = single t in V16 x x x x x x x x x x x x x x x x
+
+    num :: NumType t -> t
+    num (IntegralNumType t) | IntegralDict <- integralDict t = 0
+    num (FloatingNumType t) | FloatingDict <- floatingDict t = 0
+
+    nonnum :: NonNumType t -> t
+    nonnum TypeBool{}   = False
+    nonnum TypeChar{}   = chr 0
+    nonnum TypeCChar{}  = CChar 0
+    nonnum TypeCSChar{} = CSChar 0
+    nonnum TypeCUChar{} = CUChar 0
 
 
 -- Scalar primitives

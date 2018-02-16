@@ -164,6 +164,7 @@ preExpType k e =
     Let _ _           -> eltType (undefined::t)
     Var _             -> eltType (undefined::t)
     Const _           -> eltType (undefined::t)
+    Undef             -> eltType (undefined::t)
     Tuple _           -> eltType (undefined::t)
     Prj _ _           -> eltType (undefined::t)
     IndexNil          -> eltType (undefined::t)

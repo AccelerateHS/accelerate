@@ -269,6 +269,7 @@ encodePreOpenExp travA exp =
     Tuple t                     -> intHost $(hashQ "Tuple")       <> nacl <> encodeTuple travA t
     Prj i e                     -> intHost $(hashQ "Prj")         <> nacl <> encodeTupleIdx i <> travE e -- XXX: here multiplied nacl by hashTupleIdx
     Const c                     -> intHost $(hashQ "Const")       <> encodeConst (eltType (undefined::exp)) c
+    Undef                       -> intHost $(hashQ "Undef")
     IndexAny                    -> intHost $(hashQ "IndexAny")    <> nacl
     IndexNil                    -> intHost $(hashQ "IndexNil")
     IndexCons sh sz             -> intHost $(hashQ "IndexCons")   <> travE sh <> travE sz

@@ -828,6 +828,9 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => EltRepr t
                 -> PreOpenExp acc env aenv t
 
+  Undef         :: Elt t
+                => PreOpenExp acc env aenv t
+
   -- Tuples
   Tuple         :: (Elt t, IsTuple t)
                 => Tuple (PreOpenExp acc env aenv) (TupleRepr t)
@@ -1270,6 +1273,7 @@ rnfPreOpenExp rnfA topExp =
     Var ix                    -> rnfIdx ix
     Foreign asm f x           -> rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
     Const t                   -> rnfConst (eltType (undefined::t)) t
+    Undef                     -> ()
     Tuple t                   -> rnfTuple rnfA t
     Prj ix e                  -> rnfTupleIdx ix `seq` rnfE e
     IndexNil                  -> ()
@@ -1541,6 +1545,7 @@ liftPreOpenExp liftA pexp =
     Var ix                    -> [|| Var $$(liftIdx ix) ||]
     Foreign asm f x           -> [|| Foreign $$(liftForeign asm) $$(liftPreOpenFun liftA f) $$(liftE x) ||]
     Const c                   -> [|| Const $$(liftConst (eltType (undefined::t)) c) ||]
+    Undef                     -> [|| Undef ||]
     Tuple tup                 -> [|| Tuple $$(liftT tup) ||]
     Prj tix e                 -> [|| Prj $$(liftTupleIdx tix) $$(liftE e) ||]
     IndexNil                  -> [|| IndexNil ||]
@@ -1917,6 +1922,7 @@ showPreExpOp :: forall acc env aenv t. PreOpenExp acc env aenv t -> String
 showPreExpOp Let{}              = "Let"
 showPreExpOp (Var ix)           = "Var x" ++ show (idxToInt ix)
 showPreExpOp (Const c)          = "Const " ++ show (toElt c :: t)
+showPreExpOp Undef              = "Undef"
 showPreExpOp Foreign{}          = "Foreign"
 showPreExpOp Tuple{}            = "Tuple"
 showPreExpOp Prj{}              = "Prj"

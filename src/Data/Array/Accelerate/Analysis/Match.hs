@@ -460,6 +460,10 @@ matchPreOpenExp matchAcc encodeAcc = match
       , matchConst (eltType (undefined::s')) c1 c2
       = gcast Refl  -- surface/representation type
 
+    match Undef Undef
+      | Just Refl <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
+      = gcast Refl
+
     match (Tuple t1) (Tuple t2)
       | Just Refl <- matchTuple matchAcc encodeAcc t1 t2
       = gcast Refl  -- surface/representation type

@@ -117,32 +117,31 @@ instance Elt a => Elt (Maybe a) where
   eltType _ = TypeRpair (eltType (undefined::Word8)) (eltType (undefined::a))
   toElt (0,_) = Nothing
   toElt (_,x) = Just (toElt x)
-  fromElt Nothing  = (0, undef (eltType (undefined::a)))
+  fromElt Nothing  = (0, undef' (eltType (undefined::a)))
   fromElt (Just a) = (1, fromElt a)
 
 instance Elt a => IsProduct Elt (Maybe a) where
   type ProdRepr (Maybe a) = ProdRepr (Word8, a)
   toProd _ (((),0),_) = Nothing
   toProd _ (_,     x) = Just x
-  fromProd _ Nothing  = (((), 0), toElt (undef (eltType (undefined::a))))
+  fromProd _ Nothing  = (((), 0), toElt (undef' (eltType (undefined::a))))
   fromProd _ (Just a) = (((), 1), a)
   prod cst _ = prod cst (undefined :: (Word8,a))
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  lift Nothing  = Exp . Tuple $ NilTup `SnocTup` constant 0 `SnocTup` constant (toElt (undef (eltType (undefined::Plain a))))
+  lift Nothing  = Exp . Tuple $ NilTup `SnocTup` constant 0 `SnocTup` undef
   lift (Just x) = Exp . Tuple $ NilTup `SnocTup` constant 1 `SnocTup` lift x
 
 
--- Sometimes we need a default value for the Nothing case. We just fill this
--- with zeros, though it would be better if we can actually do nothing, and
--- leave those value in memory undefined.
+-- We need an undefined value for the Nothing case. We just fill this with
+-- zeros, though it would be better if we can actually do nothing, and leave
+-- those value in memory undefined.
 --
-
-undef :: TupleType t -> t
-undef TypeRunit         = ()
-undef (TypeRpair ta tb) = (undef ta, undef tb)
-undef (TypeRscalar s)   = scalar s
+undef' :: TupleType t -> t
+undef' TypeRunit         = ()
+undef' (TypeRpair ta tb) = (undef' ta, undef' tb)
+undef' (TypeRscalar s)   = scalar s
 
 scalar :: ScalarType t -> t
 scalar (SingleScalarType t) = single t
