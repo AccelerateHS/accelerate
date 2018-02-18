@@ -56,8 +56,16 @@ just x = lift (Just x)
 -- | The 'Nothing' constructor
 --
 nothing :: forall a. Elt a => Exp (Maybe a)
-nothing = lift (Nothing :: Maybe (Exp a)) -- the lift instance uses 'undef'
-
+nothing = lift (Nothing :: Maybe (Exp a))
+--
+-- Note: [lifting Nothing]
+--
+-- The lift instance for 'Nothing' uses our magic 'undef' term, meaning that our
+-- backends will know that we can leave this slot in the values array undefined.
+-- If we had instead written 'constant Nothing' this would result in writing an
+-- actual (unspecified) value into the values array, which is what we want to
+-- avoid.
+--
 
 -- | Returns 'True' if the argument is 'Nothing'
 --
