@@ -1597,7 +1597,7 @@ filter p arr
         keep            = map p arr
         (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
         prj ix          = keep!ix ? ( index1 (target!ix), ignore )
-        dummy           = backpermute (index1 (the len)) id arr
+        dummy           = fill (index1 (the len)) undef
         result          = permute const dummy prj arr
     in
     if null arr
@@ -1613,24 +1613,12 @@ filter p arr
         prj ix          = if keep!ix
                             then index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
                             else ignore
-        dummy           = backpermute (index1 (the valid)) id (flatten arr)
+        dummy           = fill (index1 (the valid)) undef
         result          = permute const dummy prj arr
     in
     if null arr
       then lift (emptyArray, fill sz 0)
       else lift (result, len)
-
--- FIXME: [Permute in the filter operation]
---
--- This is abusing 'permute' in that the first two arguments, the combination
--- function and array of default values, are only justified because we know the
--- permutation function will write to each location in the target exactly once.
---
--- Instead, we should have a primitive that directly encodes the compaction
--- pattern of the permutation function. This may be more efficient to compute,
--- and avoids the computation of the defaults array, which is ultimately wasted
--- work.
---
 
 {-# NOINLINE filter #-}
 {-# RULES
@@ -2373,7 +2361,7 @@ generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
 -- ---------
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = use (fromList empty [])
+emptyArray = fill (constant empty) undef
 
 
 matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
@@ -2388,7 +2376,7 @@ matchShapeType _ _
 -- Lenses
 -- ------
 --
--- Imported from `lens-accelerate` (which provides proper Field instances)
+-- Imported from `lens-accelerate` (which provides more general Field instances)
 --
 _1 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int)) (Exp Int)
 _1 = lens (\ix   -> let _  :. x = unlift ix :: Exp sh :. Exp Int in x)

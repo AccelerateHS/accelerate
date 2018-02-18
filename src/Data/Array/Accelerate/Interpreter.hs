@@ -46,7 +46,8 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalPrj
+  evalPrj,
+  evalPrim, evalPrimConst, evalUndef,
 
 ) where
 

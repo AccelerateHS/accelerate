@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Language (
   Acc, Exp,                                 -- re-exporting from 'Smart'
 
   -- * Scalar introduction
-  constant,                                 -- re-exporting from 'Smart'
+  constant, undef,                          -- re-exporting from 'Smart'
 
   -- * Array construction
   use, unit, replicate, generate,
@@ -682,7 +682,7 @@ scanr1 = Acc $$ Scanr1
 -- array are added to the current value using the given combination function.
 --
 -- The combination function must be /associative/ and /commutative/. Elements
--- that are mapped to the magic value 'ignore' by the permutation function are
+-- that are mapped to the magic index 'ignore' by the permutation function are
 -- dropped.
 --
 -- The combination function is given the new value being permuted as its first
