@@ -21,6 +21,7 @@
 module Data.Array.Accelerate.Data.Maybe (
 
   Maybe(..),
+  just, nothing,
   maybe, isJust, isNothing, fromMaybe, fromJust,
 
 ) where
@@ -45,6 +46,17 @@ import Data.Char
 import Data.Maybe                                                   ( Maybe(..) )
 import Foreign.C.Types
 import Prelude                                                      ( (.), ($), undefined )
+
+
+-- | Lift a value into a 'Just' constructor
+--
+just :: Elt a => Exp a -> Exp (Maybe a)
+just x = lift (Just x)
+
+-- | The 'Nothing' constructor
+--
+nothing :: forall a. Elt a => Exp (Maybe a)
+nothing = lift (Nothing :: Maybe (Exp a)) -- the lift instance uses 'undef'
 
 
 -- | Returns 'True' if the argument is 'Nothing'
