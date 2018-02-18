@@ -111,14 +111,14 @@ tag :: Elt a => Exp (Maybe a) -> Exp Word8
 tag x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
 
 
-type instance EltRepr (Maybe a) = (Word8, EltRepr a)
+type instance EltRepr (Maybe a) = (((), Word8), EltRepr a)
 
 instance Elt a => Elt (Maybe a) where
-  eltType _ = TypeRpair (eltType (undefined::Word8)) (eltType (undefined::a))
-  toElt (0,_) = Nothing
-  toElt (_,x) = Just (toElt x)
-  fromElt Nothing  = (0, undef' (eltType (undefined::a)))
-  fromElt (Just a) = (1, fromElt a)
+  eltType _ = TypeRpair (TypeRpair TypeRunit (eltType (undefined::Word8))) (eltType (undefined::a))
+  toElt (((),0),_) = Nothing
+  toElt (_     ,x) = Just (toElt x)
+  fromElt Nothing  = (((),0), undef' (eltType (undefined::a)))
+  fromElt (Just a) = (((),1), fromElt a)
 
 instance Elt a => IsProduct Elt (Maybe a) where
   type ProdRepr (Maybe a) = ProdRepr (Word8, a)
