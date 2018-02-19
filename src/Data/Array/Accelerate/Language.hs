@@ -741,6 +741,13 @@ scanr1 = Acc $$ Scanr1
 --   4. If the array of default values is only used once, it will be updated
 --      in-place.
 --
+-- Regarding the defaults array:
+--
+-- If you are sure that the default values are not necessary---they are not used
+-- by the combination function and every element will be overwritten---a default
+-- array created by 'Data.Array.Accelerate.Prelude.fill'ing with the value
+-- 'undef' will give you a new uninitialised array.
+--
 permute
     :: (Shape sh, Shape sh', Elt a)
     => (Exp a -> Exp a -> Exp a)        -- ^ combination function
