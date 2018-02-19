@@ -8,23 +8,38 @@ Policy (PVP)](https://pvp.haskell.org)
 
 ## [next]
 ### Changed
-  * Internal debugging/RTS options handling has been changed. Compiling this
-    package now implies that backends are also compiled in debug mode (no need
-    to set the -fdebug cabal flag for those packages as well).
-  * Complex numbers are stored in the C-style array-of-struct representation
+  * Internal debugging/RTS options handling has been changed. Compiling this package now implies that backends are also compiled in debug mode (no need to set the `-fdebug` cabal flag for those packages as well).
+  * Complex numbers are stored in the C-style array-of-struct representation.
+  * Improve numeric handling of complex numbers.
+  * Coercions (`bitcast`) now occur between the underlying representation types
+  * Front-end performance improvements
 
 ### Added
   * Support for half-precision floating-point numbers.
-  * Support for struct-of-array-of-struct representations. Currently this is
-    limited to fields of 2,3,4,8, or 16-elements wide.
+  * Support for struct-of-array-of-struct representations. Currently this is limited to fields of 2,3,4,8, or 16-elements wide.
+  * Add equivalents for `Data.Functor`, `Data.Semigroup` (ghc-8+)
+  * Add instances and helper functions for `Maybe` and `Either` types
+  * Add rank generalised versions of `take`, `drop`, `head`, `tail`, `init`, `slit`, `reverse` and `transpose`.
+  * Implement counters and reporting for `-ddump-gc-stats`
+
+### Contributors
+
+Special thanks to those who contributed patches as part of this release:
+
+  * Trevor L. McDonell (@tmcdonell)
+  * Ryan Scott (@ryanglscott)
+  * Rinat Striungis (@Haskell-mouse)
+
 
 ## [1.1.1.0] - 2017-09-26
 ### Changed
   * Improve and colourise the pretty-printer
 
+
 ## [1.1.0.0] - 2017-09-21
 ### Added
   * Additional EKG monitoring hooks ([#340])
+
   * Operations from `RealFloat`
 
 ### Changed
@@ -40,15 +55,19 @@ Policy (PVP)](https://pvp.haskell.org)
 ### Fixed
   * [#390]: Wrong number of arguments in printf
 
+
 ## [1.0.0.0] - 2017-03-31
   * Many API and internal changes
   * Bug fixes and other enhancements
 
+
 ## [0.15.1.0]
   * Fix type of `allocateArray`
 
+
 ## [0.15.0.0]
   * Bug fixes and performance improvements.
+
 
 ## [0.14.0.0]
   * New iteration constructs.
@@ -57,12 +76,14 @@ Policy (PVP)](https://pvp.haskell.org)
   * Concurrent kernel execution in the CUDA backend.
   * Bug fixes.
 
+
 ## [0.13.0.0]
   * New array fusion optimisation.
   * New foreign function interface for array and scalar expressions.
   * Additional Prelude-like functions.
   * New example programs.
   * Bug fixes and performance improvements.
+
 
 ## [0.12.0.0]
   * Full sharing recovery in scalar expressions and array computations.
@@ -71,15 +92,18 @@ Policy (PVP)](https://pvp.haskell.org)
     * An interactive fluid flow simulator
   * Bug fixes.
 
+
 ## [0.11.0.0]
   * New Prelude-like functions `zip*`, `unzip*`, `fill`, `enumFrom*`, `tail`,
     `init`, `drop`, `take`, `slit`, `gather*`, `scatter*`, and `shapeSize`.
   * New simplified AST (in package `accelerate-backend-kit`) for backend writers
     who want to avoid the complexities of the type-safe AST.
 
+
 ## [0.10.0.0]
   * Complete sharing recovery for scalar expressions (but currently disabled by default).
   * Also bug fixes in array sharing recovery and a few new convenience functions.
+
 
 ## [0.9.0.0]
   * Streaming computations
@@ -90,13 +114,16 @@ Policy (PVP)](https://pvp.haskell.org)
   * Conversions to other array formats
   * Bug fixes
 
+
 ## 0.8.1.0
   * Bug fixes and some performance tweaks.
+
 
 ## 0.8.0.0
   * More collective operations supported by the CUDA backend: `replicate`,
     `slice` and `foldSeg`. Frontend and interpreter support for `stencil`.
   * Bug fixes.
+
 
 ## [0.7.1.0]
   * Initial release of the CUDA backend
