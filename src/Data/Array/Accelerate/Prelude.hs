@@ -1485,7 +1485,7 @@ infixr 5 ++
 -- | Generalised version of '(++)' where the argument 'Lens'' specifies which
 -- dimension to concatenate along.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- >>> let m1 = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> m1
@@ -1747,7 +1747,7 @@ transpose = transposeOn _1 _2
 -- | Generalised version of 'reverse' where the argument 'Lens'' specifies which
 -- dimension to reverse.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
@@ -1791,7 +1791,7 @@ reverseOn dim xs =
 -- | Generalised version of 'transpose' where the argument 'Lens''s specify
 -- which two dimensions to transpose.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
@@ -1968,7 +1968,7 @@ slit = slitOn _1
 -- | Generalised version of 'init' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -1988,7 +1988,7 @@ initOn dim xs =
 -- | Generalised version of 'tail' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2008,7 +2008,7 @@ tailOn dim xs =
 -- | Generalised version of 'take' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2029,7 +2029,7 @@ takeOn dim n xs =
 -- | Generalised version of 'drop' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2060,7 +2060,7 @@ dropOn dim n xs =
 -- | Generalised version of 'drop' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --

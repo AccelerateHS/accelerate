@@ -1476,9 +1476,11 @@ constant = Exp . Const
 --
 -- This is useful because a store of an undefined value can be assumed to not
 -- have any effect; we can assume that the value is overwritten with bits that
--- happen to match what was already there. However, a store _to_ an undefined
+-- happen to match what was already there. However, a store /to/ an undefined
 -- location could clobber arbitrary memory, therefore, it has undefined
 -- behaviour.
+--
+-- @since 1.2.0.0
 --
 undef :: Elt t => Exp t
 undef = Exp Undef
