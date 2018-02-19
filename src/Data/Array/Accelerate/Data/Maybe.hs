@@ -154,6 +154,9 @@ instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   lift (Just x) = Exp . Tuple $ NilTup `SnocTup` constant 1 `SnocTup` lift x
 
 
+-- Utilities
+-- ---------
+
 -- We need an undefined value for the Nothing case. We just fill this with
 -- zeros, though it would be better if we can actually do nothing, and leave
 -- those value in memory undefined.

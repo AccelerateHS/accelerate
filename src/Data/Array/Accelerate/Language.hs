@@ -1413,7 +1413,7 @@ bitcast = mkBitcast
 -- Constants
 -- ---------
 
--- |Magic value identifying elements that are ignored in a forward permutation.
+-- | Magic index identifying elements that are ignored in a forward permutation.
 --
 ignore :: Shape sh => Exp sh
 ignore = constant Sugar.ignore

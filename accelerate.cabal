@@ -302,6 +302,7 @@ Library
         -- Prelude-like
         Data.Array.Accelerate.Data.Bits
         Data.Array.Accelerate.Data.Complex
+        Data.Array.Accelerate.Data.Either
         Data.Array.Accelerate.Data.Fold
         Data.Array.Accelerate.Data.Functor
         Data.Array.Accelerate.Data.Maybe
