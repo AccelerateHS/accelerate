@@ -4,6 +4,7 @@
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -21,18 +22,21 @@
 module Data.Array.Accelerate.Data.Maybe (
 
   Maybe(..),
-  maybe, isJust, isNothing, fromMaybe, fromJust,
+  just, nothing,
+  maybe, isJust, isNothing, fromMaybe, fromJust, justs,
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), shape, ignore, toIndex )
 import Data.Array.Accelerate.Language                               hiding ( chr )
-import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Prelude                                hiding ( filter )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
@@ -43,9 +47,29 @@ import Data.Array.Accelerate.Data.Semigroup
 
 import Data.Char
 import Data.Maybe                                                   ( Maybe(..) )
+import Data.Typeable
 import Foreign.C.Types
-import Prelude                                                      ( (.), ($), undefined )
+import Prelude                                                      ( (.), ($), const, undefined, otherwise )
 
+
+-- | Lift a value into a 'Just' constructor
+--
+just :: Elt a => Exp a -> Exp (Maybe a)
+just x = lift (Just x)
+
+-- | The 'Nothing' constructor
+--
+nothing :: forall a. Elt a => Exp (Maybe a)
+nothing = lift (Nothing :: Maybe (Exp a))
+--
+-- Note: [lifting Nothing]
+--
+-- The lift instance for 'Nothing' uses our magic 'undef' term, meaning that our
+-- backends will know that we can leave this slot in the values array undefined.
+-- If we had instead written 'constant Nothing' this would result in writing an
+-- actual (unspecified) value into the values array, which is what we want to
+-- avoid.
+--
 
 -- | Returns 'True' if the argument is 'Nothing'
 --
@@ -80,6 +104,15 @@ maybe :: (Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
 maybe d f x = cond (isNothing x) d (f (fromJust x))
 
 
+-- | Extract from an array all of the 'Just' values, together with a segment
+-- descriptor indicating how many elements along each dimension were returned.
+--
+justs :: (Shape sh, Slice sh, Elt a)
+      => Acc (Array (sh:.Int) (Maybe a))
+      -> Acc (Vector a, Array sh Int)
+justs xs = filter' (map isJust xs) (map fromJust xs)
+
+
 instance Functor Maybe where
   fmap f x = cond (isNothing x) (constant Nothing) (lift (Just (f (fromJust x))))
 
@@ -111,38 +144,40 @@ tag :: Elt a => Exp (Maybe a) -> Exp Word8
 tag x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
 
 
-type instance EltRepr (Maybe a) = (Word8, EltRepr a)
+type instance EltRepr (Maybe a) = TupleRepr (Word8, EltRepr a)
 
 instance Elt a => Elt (Maybe a) where
-  eltType _ = TypeRpair (eltType (undefined::Word8)) (eltType (undefined::a))
-  toElt (0,_) = Nothing
-  toElt (_,x) = Just (toElt x)
-  fromElt Nothing  = (0, undef (eltType (undefined::a)))
-  fromElt (Just a) = (1, fromElt a)
+  eltType _        = eltType (undefined::(Word8,a))
+  toElt (((),0),_) = Nothing
+  toElt (_     ,x) = Just (toElt x)
+  fromElt Nothing  = (((),0), undef' (eltType (undefined::a)))
+  fromElt (Just a) = (((),1), fromElt a)
 
 instance Elt a => IsProduct Elt (Maybe a) where
   type ProdRepr (Maybe a) = ProdRepr (Word8, a)
   toProd _ (((),0),_) = Nothing
   toProd _ (_,     x) = Just x
-  fromProd _ Nothing  = (((), 0), toElt (undef (eltType (undefined::a))))
+  fromProd _ Nothing  = (((), 0), toElt (undef' (eltType (undefined::a))))
   fromProd _ (Just a) = (((), 1), a)
   prod cst _ = prod cst (undefined :: (Word8,a))
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  lift Nothing  = Exp . Tuple $ NilTup `SnocTup` constant 0 `SnocTup` constant (toElt (undef (eltType (undefined::Plain a))))
+  lift Nothing  = Exp . Tuple $ NilTup `SnocTup` constant 0 `SnocTup` undef
   lift (Just x) = Exp . Tuple $ NilTup `SnocTup` constant 1 `SnocTup` lift x
 
 
--- Sometimes we need a default value for the Nothing case. We just fill this
--- with zeros, though it would be better if we can actually do nothing, and
--- leave those value in memory undefined.
---
+-- Utilities
+-- ---------
 
-undef :: TupleType t -> t
-undef TypeRunit         = ()
-undef (TypeRpair ta tb) = (undef ta, undef tb)
-undef (TypeRscalar s)   = scalar s
+-- We need an undefined value for the Nothing case. We just fill this with
+-- zeros, though it would be better if we can actually do nothing, and leave
+-- those value in memory undefined.
+--
+undef' :: TupleType t -> t
+undef' TypeRunit         = ()
+undef' (TypeRpair ta tb) = (undef' ta, undef' tb)
+undef' (TypeRscalar s)   = scalar s
 
 scalar :: ScalarType t -> t
 scalar (SingleScalarType t) = single t
@@ -169,4 +204,47 @@ nonnum TypeChar{}   = chr 0
 nonnum TypeCChar{}  = CChar 0
 nonnum TypeCSChar{} = CSChar 0
 nonnum TypeCUChar{} = CUChar 0
+
+
+filter'
+    :: forall sh e. (Shape sh, Slice sh, Elt e)
+    => Acc (Array (sh:.Int) Bool)     -- tags
+    -> Acc (Array (sh:.Int) e)        -- values
+    -> Acc (Vector e, Array sh Int)
+filter' keep arr
+  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
+  = let
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
+        dummy           = fill (index1 (the len)) undef
+        result          = permute const dummy prj arr
+    in
+    null keep ?| ( lift (emptyArray, fill (constant Z) 0)
+                 , lift (result, len)
+                 )
+  | otherwise
+  = let
+        sz              = indexTail (shape arr)
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
+        prj ix          = cond (keep!ix)
+                               (index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix)
+                               ignore
+        dummy           = fill (index1 (the valid)) undef
+        result          = permute const dummy prj arr
+    in
+    null keep ?| ( lift (emptyArray, fill sz 0)
+                 , lift (result, len)
+                 )
+
+emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
+emptyArray = fill (constant empty) undef
+
+matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
+matchShapeType _ _
+  | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
+  = gcast Refl
+
+matchShapeType _ _
+  = Nothing
 

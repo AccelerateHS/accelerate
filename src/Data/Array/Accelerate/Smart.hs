@@ -31,7 +31,7 @@ module Data.Array.Accelerate.Smart (
   Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), PreBoundary(..), Stencil(..), Level,
 
   -- * Smart constructors for literals
-  constant,
+  constant, undef,
 
   -- * Smart constructors and destructors for tuples
   tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9, tup10, tup11, tup12, tup13, tup14, tup15, tup16,
@@ -594,6 +594,9 @@ data PreExp acc exp t where
   Const         :: Elt t
                 => t
                 -> PreExp acc exp t
+
+  Undef         :: Elt t
+                => PreExp acc exp t
 
   Tuple         :: (Elt t, IsTuple t)
                 => Tuple exp (TupleRepr t)
@@ -1468,6 +1471,20 @@ stup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 constant :: Elt t => t -> Exp t
 constant = Exp . Const
 
+-- | 'undef' can be used anywhere a constant is expected, and indicates that the
+-- consumer of the value can receive an unspecified bit pattern.
+--
+-- This is useful because a store of an undefined value can be assumed to not
+-- have any effect; we can assume that the value is overwritten with bits that
+-- happen to match what was already there. However, a store /to/ an undefined
+-- location could clobber arbitrary memory, therefore, it has undefined
+-- behaviour.
+--
+-- @since 1.2.0.0
+--
+undef :: Elt t => Exp t
+undef = Exp Undef
+
 -- Smart constructor and destructors for scalar tuples
 --
 tup2 :: (Elt a, Elt b) => (Exp a, Exp b) -> Exp (a, b)
@@ -2251,8 +2268,9 @@ showShortendArr arr
 
 
 showPreExpOp :: PreExp acc exp t -> String
-showPreExpOp (Const c)          = "Const " ++ show c
 showPreExpOp (Tag i)            = "Tag" ++ show i
+showPreExpOp (Const c)          = "Const " ++ show c
+showPreExpOp Undef              = "Undef"
 showPreExpOp Tuple{}            = "Tuple"
 showPreExpOp Prj{}              = "Prj"
 showPreExpOp IndexNil           = "IndexNil"

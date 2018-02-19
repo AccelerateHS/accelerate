@@ -97,6 +97,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       --
       Var idx                   -> pure (Var idx)
       Const c                   -> pure (Const c)
+      Undef                     -> pure Undef
       Tuple t                   -> Tuple <$> shrinkT t
       Prj tup e                 -> Prj tup <$> shrinkE e
       IndexNil                  -> pure IndexNil
@@ -227,6 +228,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Let bnd body              -> Let (shrinkE bnd) (shrinkE body)
       Var idx                   -> Var idx
       Const c                   -> Const c
+      Undef                     -> Undef
       Tuple t                   -> Tuple (shrinkT t)
       Prj tup e                 -> Prj tup (shrinkE e)
       IndexNil                  -> IndexNil
@@ -310,6 +312,7 @@ usesOfExp idx = countE
       --
       Let bnd body              -> countE bnd + usesOfExp (SuccIdx idx) body
       Const _                   -> 0
+      Undef                     -> 0
       Tuple t                   -> countT t
       Prj _ e                   -> countE e
       IndexNil                  -> 0
@@ -403,6 +406,7 @@ usesOfPreAcc withShape countAcc idx = count
       Let bnd body              -> countE bnd + countE body
       Var _                     -> 0
       Const _                   -> 0
+      Undef                     -> 0
       Tuple t                   -> countT t
       Prj _ e                   -> countE e
       IndexNil                  -> 0

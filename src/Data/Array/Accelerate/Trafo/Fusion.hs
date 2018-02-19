@@ -247,6 +247,7 @@ convertOpenExp fuseAcc exp =
     Let bnd body            -> Let (cvtE bnd) (cvtE body)
     Var ix                  -> Var ix
     Const c                 -> Const c
+    Undef                   -> Undef
     Tuple tup               -> Tuple (cvtT tup)
     Prj ix t                -> Prj ix (cvtE t)
     IndexNil                -> IndexNil
@@ -1284,6 +1285,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Var i                           -> Var i
         Foreign ff f e                  -> Foreign ff f (cvtE e)
         Const c                         -> Const c
+        Undef                           -> Undef
         Tuple t                         -> Tuple (cvtT t)
         Prj ix e                        -> Prj ix (cvtE e)
         IndexNil                        -> IndexNil

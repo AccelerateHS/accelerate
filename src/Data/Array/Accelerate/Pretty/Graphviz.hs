@@ -534,6 +534,7 @@ fvPreOpenExp fvA env aenv = fv
     --
     fv (Let e1 e2)              = concat [ fv e1, fvPreOpenExp fvA (env `Push` (char 'x' <> int (sizeEnv env))) aenv e2 ]
     fv Var{}                    = []
+    fv Undef                    = []
     fv Const{}                  = []
     fv PrimConst{}              = []
     fv (PrimApp _ x)            = fv x

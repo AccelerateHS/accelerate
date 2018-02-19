@@ -1485,7 +1485,7 @@ infixr 5 ++
 -- | Generalised version of '(++)' where the argument 'Lens'' specifies which
 -- dimension to concatenate along.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- >>> let m1 = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> m1
@@ -1597,7 +1597,7 @@ filter p arr
         keep            = map p arr
         (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
         prj ix          = keep!ix ? ( index1 (target!ix), ignore )
-        dummy           = backpermute (index1 (the len)) id arr
+        dummy           = fill (index1 (the len)) undef
         result          = permute const dummy prj arr
     in
     if null arr
@@ -1613,24 +1613,12 @@ filter p arr
         prj ix          = if keep!ix
                             then index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
                             else ignore
-        dummy           = backpermute (index1 (the valid)) id (flatten arr)
+        dummy           = fill (index1 (the valid)) undef
         result          = permute const dummy prj arr
     in
     if null arr
       then lift (emptyArray, fill sz 0)
       else lift (result, len)
-
--- FIXME: [Permute in the filter operation]
---
--- This is abusing 'permute' in that the first two arguments, the combination
--- function and array of default values, are only justified because we know the
--- permutation function will write to each location in the target exactly once.
---
--- Instead, we should have a primitive that directly encodes the compaction
--- pattern of the permutation function. This may be more efficient to compute,
--- and avoids the computation of the defaults array, which is ultimately wasted
--- work.
---
 
 {-# NOINLINE filter #-}
 {-# RULES
@@ -1759,7 +1747,7 @@ transpose = transposeOn _1 _2
 -- | Generalised version of 'reverse' where the argument 'Lens'' specifies which
 -- dimension to reverse.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
@@ -1803,7 +1791,7 @@ reverseOn dim xs =
 -- | Generalised version of 'transpose' where the argument 'Lens''s specify
 -- which two dimensions to transpose.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
@@ -1980,7 +1968,7 @@ slit = slitOn _1
 -- | Generalised version of 'init' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2000,7 +1988,7 @@ initOn dim xs =
 -- | Generalised version of 'tail' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2020,7 +2008,7 @@ tailOn dim xs =
 -- | Generalised version of 'take' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2041,7 +2029,7 @@ takeOn dim n xs =
 -- | Generalised version of 'drop' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2072,7 +2060,7 @@ dropOn dim n xs =
 -- | Generalised version of 'drop' where the argument 'Lens'' specifies which
 -- dimension to operate over.
 --
--- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>
+-- Appropriate lenses are available from <https://hackage.haskell.org/package/lens-accelerate lens-accelerate>.
 --
 -- @since 1.2.0.0
 --
@@ -2373,7 +2361,7 @@ generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
 -- ---------
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = use (fromList empty [])
+emptyArray = fill (constant empty) undef
 
 
 matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
@@ -2388,7 +2376,7 @@ matchShapeType _ _
 -- Lenses
 -- ------
 --
--- Imported from `lens-accelerate` (which provides proper Field instances)
+-- Imported from `lens-accelerate` (which provides more general Field instances)
 --
 _1 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int)) (Exp Int)
 _1 = lens (\ix   -> let _  :. x = unlift ix :: Exp sh :. Exp Int in x)

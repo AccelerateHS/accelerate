@@ -377,6 +377,7 @@ rebuildPreOpenExp k v av exp =
   case exp of
     Const c             -> pure (Const c)
     PrimConst c         -> pure (PrimConst c)
+    Undef               -> pure Undef
     IndexNil            -> pure IndexNil
     IndexAny            -> pure IndexAny
     Var ix              -> expOut       <$> v ix

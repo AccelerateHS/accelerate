@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Language (
   Acc, Exp,                                 -- re-exporting from 'Smart'
 
   -- * Scalar introduction
-  constant,                                 -- re-exporting from 'Smart'
+  constant, undef,                          -- re-exporting from 'Smart'
 
   -- * Array construction
   use, unit, replicate, generate,
@@ -682,7 +682,7 @@ scanr1 = Acc $$ Scanr1
 -- array are added to the current value using the given combination function.
 --
 -- The combination function must be /associative/ and /commutative/. Elements
--- that are mapped to the magic value 'ignore' by the permutation function are
+-- that are mapped to the magic index 'ignore' by the permutation function are
 -- dropped.
 --
 -- The combination function is given the new value being permuted as its first
@@ -740,6 +740,13 @@ scanr1 = Acc $$ Scanr1
 --
 --   4. If the array of default values is only used once, it will be updated
 --      in-place.
+--
+-- Regarding the defaults array:
+--
+-- If you are sure that the default values are not necessary---they are not used
+-- by the combination function and every element will be overwritten---a default
+-- array created by 'Data.Array.Accelerate.Prelude.fill'ing with the value
+-- 'undef' will give you a new uninitialised array.
 --
 permute
     :: (Shape sh, Shape sh', Elt a)
@@ -1406,7 +1413,7 @@ bitcast = mkBitcast
 -- Constants
 -- ---------
 
--- |Magic value identifying elements that are ignored in a forward permutation.
+-- | Magic index identifying elements that are ignored in a forward permutation.
 --
 ignore :: Shape sh => Exp sh
 ignore = constant Sugar.ignore
