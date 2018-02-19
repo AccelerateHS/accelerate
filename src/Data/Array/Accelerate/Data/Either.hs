@@ -118,37 +118,6 @@ rights :: (Shape sh, Slice sh, Elt a, Elt b)
 rights es = filter' (map isRight es) (map fromRight es)
 
 
-filter'
-    :: forall sh e. (Shape sh, Slice sh, Elt e)
-    => Acc (Array (sh:.Int) Bool)     -- tags
-    -> Acc (Array (sh:.Int) e)        -- values
-    -> Acc (Vector e, Array sh Int)
-filter' keep arr
-  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
-  = let
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
-        dummy           = fill (index1 (the len)) undef
-        result          = permute const dummy prj arr
-    in
-    null keep ?| ( lift (emptyArray, fill (constant Z) 0)
-                 , lift (result, len)
-                 )
-  | otherwise
-  = let
-        sz              = indexTail (shape arr)
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
-        prj ix          = cond (keep!ix)
-                               (index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix)
-                               ignore
-        dummy           = fill (index1 (the valid)) undef
-        result          = permute const dummy prj arr
-    in
-    null keep ?| ( lift (emptyArray, fill sz 0)
-                 , lift (result, len)
-                 )
-
 instance Elt a => Functor (Either a) where
   fmap f = either left (right . f)
 
@@ -231,6 +200,37 @@ nonnum TypeCChar{}  = CChar 0
 nonnum TypeCSChar{} = CSChar 0
 nonnum TypeCUChar{} = CUChar 0
 
+
+filter'
+    :: forall sh e. (Shape sh, Slice sh, Elt e)
+    => Acc (Array (sh:.Int) Bool)     -- tags
+    -> Acc (Array (sh:.Int) e)        -- values
+    -> Acc (Vector e, Array sh Int)
+filter' keep arr
+  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
+  = let
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
+        dummy           = fill (index1 (the len)) undef
+        result          = permute const dummy prj arr
+    in
+    null keep ?| ( lift (emptyArray, fill (constant Z) 0)
+                 , lift (result, len)
+                 )
+  | otherwise
+  = let
+        sz              = indexTail (shape arr)
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
+        prj ix          = cond (keep!ix)
+                               (index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix)
+                               ignore
+        dummy           = fill (index1 (the valid)) undef
+        result          = permute const dummy prj arr
+    in
+    null keep ?| ( lift (emptyArray, fill sz 0)
+                 , lift (result, len)
+                 )
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = fill (constant empty) undef

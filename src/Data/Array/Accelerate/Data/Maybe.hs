@@ -4,6 +4,7 @@
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -22,18 +23,20 @@ module Data.Array.Accelerate.Data.Maybe (
 
   Maybe(..),
   just, nothing,
-  maybe, isJust, isNothing, fromMaybe, fromJust,
+  maybe, isJust, isNothing, fromMaybe, fromJust, justs,
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), shape, ignore, toIndex )
 import Data.Array.Accelerate.Language                               hiding ( chr )
-import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Prelude                                hiding ( filter )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
@@ -44,8 +47,9 @@ import Data.Array.Accelerate.Data.Semigroup
 
 import Data.Char
 import Data.Maybe                                                   ( Maybe(..) )
+import Data.Typeable
 import Foreign.C.Types
-import Prelude                                                      ( (.), ($), undefined )
+import Prelude                                                      ( (.), ($), const, undefined, otherwise )
 
 
 -- | Lift a value into a 'Just' constructor
@@ -98,6 +102,15 @@ fromJust x = Exp $ ZeroTupIdx `Prj` x
 --
 maybe :: (Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
 maybe d f x = cond (isNothing x) d (f (fromJust x))
+
+
+-- | Extract from an array all of the 'Just' values, together with a segment
+-- descriptor indicating how many elements along each dimension were returned.
+--
+justs :: (Shape sh, Slice sh, Elt a)
+      => Acc (Array (sh:.Int) (Maybe a))
+      -> Acc (Vector a, Array sh Int)
+justs xs = filter' (map isJust xs) (map fromJust xs)
 
 
 instance Functor Maybe where
@@ -191,4 +204,47 @@ nonnum TypeChar{}   = chr 0
 nonnum TypeCChar{}  = CChar 0
 nonnum TypeCSChar{} = CSChar 0
 nonnum TypeCUChar{} = CUChar 0
+
+
+filter'
+    :: forall sh e. (Shape sh, Slice sh, Elt e)
+    => Acc (Array (sh:.Int) Bool)     -- tags
+    -> Acc (Array (sh:.Int) e)        -- values
+    -> Acc (Vector e, Array sh Int)
+filter' keep arr
+  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
+  = let
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
+        dummy           = fill (index1 (the len)) undef
+        result          = permute const dummy prj arr
+    in
+    null keep ?| ( lift (emptyArray, fill (constant Z) 0)
+                 , lift (result, len)
+                 )
+  | otherwise
+  = let
+        sz              = indexTail (shape arr)
+        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
+        prj ix          = cond (keep!ix)
+                               (index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix)
+                               ignore
+        dummy           = fill (index1 (the valid)) undef
+        result          = permute const dummy prj arr
+    in
+    null keep ?| ( lift (emptyArray, fill sz 0)
+                 , lift (result, len)
+                 )
+
+emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
+emptyArray = fill (constant empty) undef
+
+matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
+matchShapeType _ _
+  | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
+  = gcast Refl
+
+matchShapeType _ _
+  = Nothing
 
