@@ -1022,17 +1022,6 @@ data PrimFun sig where
   PrimAtan2          :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimIsNaN          :: FloatingType a -> PrimFun (a -> Bool)
   PrimIsInfinite     :: FloatingType a -> PrimFun (a -> Bool)
-  -- PrimFloatRadix     :: FloatingType a -> PrimFun (a -> Int)         -- Integer?
-  -- PrimFloatDigits    :: FloatingType a -> PrimFun (a -> Int)
-  -- PrimFloatRange     :: FloatingType a -> PrimFun (a -> (Int, Int))
-  -- PrimDecodeFloat    :: FloatingType a -> PrimFun (a -> (Int, Int))  -- Integer?
-  -- PrimEncodeFloat    :: FloatingType a -> PrimFun ((Int, Int) -> a)  -- Integer?
-  -- PrimExponent       :: FloatingType a -> PrimFun (a -> Int)
-  -- PrimSignificand    :: FloatingType a -> PrimFun (a -> a)
-  -- PrimScaleFloat     :: FloatingType a -> PrimFun ((Int, a) -> a)
-  -- PrimIsDenormalized :: FloatingType a -> PrimFun (a -> Bool)
-  -- PrimIsNegativeZero :: FloatingType a -> PrimFun (a -> Bool)
-  -- PrimIsIEEE         :: FloatingType a -> PrimFun (a -> Bool)
 
   -- relational and equality operators
   PrimLt   :: SingleType a -> PrimFun ((a, a) -> Bool)
