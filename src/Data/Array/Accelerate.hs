@@ -330,7 +330,7 @@ module Data.Array.Accelerate (
 
   -- ** Scalar operations
   -- *** Introduction
-  constant, undef,
+  constant,
 
   -- *** Tuples
   fst, afst, snd, asnd, curry, uncurry,

@@ -307,8 +307,9 @@ Library
         Data.Array.Accelerate.Data.Functor
         Data.Array.Accelerate.Data.Maybe
         Data.Array.Accelerate.Data.Monoid
+        Data.Array.Accelerate.Unsafe
 
-        -- For backend development
+        -- For backend development (hidden)
         Data.Array.Accelerate.AST
         Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match

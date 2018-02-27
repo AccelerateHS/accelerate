@@ -1477,8 +1477,20 @@ constant = Exp . Const
 -- This is useful because a store of an undefined value can be assumed to not
 -- have any effect; we can assume that the value is overwritten with bits that
 -- happen to match what was already there. However, a store /to/ an undefined
--- location could clobber arbitrary memory, therefore, it has undefined
--- behaviour.
+-- location could clobber arbitrary memory, therefore, its use in such a context
+-- would introduce undefined /behaviour/.
+--
+-- There are (at least) two cases where you may want to use this:
+--
+--   1. The 'Data.Array.Accelerate.Language.permute' function requires an array
+--      of default values, into which the new values are combined. However, if
+--      you are sure the default values are not used, and will (eventually) be
+--      completely overwritten, then 'Data.Array.Accelerate.Prelude.fill'ing an
+--      array with this value will give you a new uninitialised array.
+--
+--   2. In the definition of sum data types. See for example
+--      "Data.Array.Accelerate.Data.Maybe" and
+--      "Data.Array.Accelerate.Data.Either".
 --
 -- @since 1.2.0.0
 --
