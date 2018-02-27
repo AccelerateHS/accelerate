@@ -12,6 +12,8 @@
 --
 -- Operations which may be unsafe. Use with care.
 --
+-- @since 1.2.0.0
+--
 
 module Data.Array.Accelerate.Unsafe (
 
@@ -30,6 +32,8 @@ import Data.Array.Accelerate.Type
 --
 -- This is equivalent to 'Data.Array.Accelerate.Language.bitcast', but does not
 -- include the type-level equality check of this requirement.
+--
+-- @since 1.2.0.0
 --
 coerce :: (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b)) => Exp a -> Exp b
 coerce = mkUnsafeCoerce
