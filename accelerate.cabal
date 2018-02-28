@@ -268,7 +268,7 @@ Library
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2
         , containers                    >= 0.3
-        , constraints                   >= 0.1
+        , constraints                   >= 0.9
         , cryptonite                    >= 0.21
         , deepseq                       >= 1.3
         , directory                     >= 1.0
