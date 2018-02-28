@@ -47,7 +47,7 @@ module Data.Array.Accelerate.Interpreter (
 
   -- Internal (hidden)
   evalPrj,
-  evalPrim, evalPrimConst, evalUndef,
+  evalPrim, evalPrimConst, evalUndef, evalCoerce,
 
 ) where
 
