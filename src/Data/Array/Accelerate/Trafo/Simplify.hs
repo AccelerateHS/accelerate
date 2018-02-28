@@ -246,6 +246,7 @@ simplifyOpenExp env = first getAny . cvtE
       Union s t                 -> cvtE s `union` cvtE t
       Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
+      Coerce e                  -> Coerce <$> cvtE e
 
     cvtT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     cvtT NilTup        = pure NilTup
@@ -589,20 +590,20 @@ summariseOpenExp = (terms +~ 1) . goE
     travBoundedType (IntegralBoundedType t) = travIntegralType t & types +~ 1
     travBoundedType (NonNumBoundedType t)   = travNonNumType t & types +~ 1
 
-    travScalarType :: ScalarType t -> Stats
-    travScalarType (SingleScalarType t) = travSingleType t & types +~ 1
-    travScalarType (VectorScalarType t) = travVectorType t & types +~ 1
+    -- travScalarType :: ScalarType t -> Stats
+    -- travScalarType (SingleScalarType t) = travSingleType t & types +~ 1
+    -- travScalarType (VectorScalarType t) = travVectorType t & types +~ 1
 
     travSingleType :: SingleType t -> Stats
     travSingleType (NumSingleType t)    = travNumType t & types +~ 1
     travSingleType (NonNumSingleType t) = travNonNumType t & types +~ 1
 
-    travVectorType :: VectorType t -> Stats
-    travVectorType (Vector2Type t)  = travSingleType t & types +~ 1
-    travVectorType (Vector3Type t)  = travSingleType t & types +~ 1
-    travVectorType (Vector4Type t)  = travSingleType t & types +~ 1
-    travVectorType (Vector8Type t)  = travSingleType t & types +~ 1
-    travVectorType (Vector16Type t) = travSingleType t & types +~ 1
+    -- travVectorType :: VectorType t -> Stats
+    -- travVectorType (Vector2Type t)  = travSingleType t & types +~ 1
+    -- travVectorType (Vector3Type t)  = travSingleType t & types +~ 1
+    -- travVectorType (Vector4Type t)  = travSingleType t & types +~ 1
+    -- travVectorType (Vector8Type t)  = travSingleType t & types +~ 1
+    -- travVectorType (Vector16Type t) = travSingleType t & types +~ 1
 
     -- The scrutinee has already been counted
     goE :: PreOpenExp acc env aenv t -> Stats
@@ -634,6 +635,7 @@ summariseOpenExp = (terms +~ 1) . goE
         Intersect sh1 sh2     -> travE sh1 +++ travE sh2
         Union sh1 sh2         -> travE sh1 +++ travE sh2
         PrimApp f x           -> travPrimFun f +++ travE x
+        Coerce e              -> travE e
 
     travPrimFun :: PrimFun f -> Stats
     travPrimFun = (ops +~ 1) . goF
@@ -706,5 +708,4 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimBoolToInt            -> zero
             PrimFromIntegral     i n -> travIntegralType i +++ travNumType n
             PrimToFloating       n f -> travNumType n +++ travFloatingType f
-            PrimCoerce           a b -> travScalarType a +++ travScalarType b
 

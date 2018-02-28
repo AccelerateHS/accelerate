@@ -401,6 +401,7 @@ rebuildPreOpenExp k v av exp =
     Intersect s t       -> Intersect    <$> rebuildPreOpenExp k v av s  <*> rebuildPreOpenExp k v av t
     Union s t           -> Union        <$> rebuildPreOpenExp k v av s  <*> rebuildPreOpenExp k v av t
     Foreign ff f e      -> Foreign ff f <$> rebuildPreOpenExp k v av e
+    Coerce e            -> Coerce       <$> rebuildPreOpenExp k v av e
 
 {-# INLINEABLE rebuildTup #-}
 rebuildTup

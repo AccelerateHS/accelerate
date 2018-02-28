@@ -270,6 +270,7 @@ convertOpenExp fuseAcc exp =
     Intersect s t           -> Intersect (cvtE s) (cvtE t)
     Union s t               -> Union (cvtE s) (cvtE t)
     Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
+    Coerce e                -> Coerce (cvtE e)
   where
     cvtT :: Tuple (OpenExp env aenv) t -> Tuple (DelayedOpenExp env aenv) t
     cvtT NilTup        = NilTup
@@ -1304,6 +1305,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Intersect sh sl                 -> Intersect (cvtE sh) (cvtE sl)
         Union s t                       -> Union (cvtE s) (cvtE t)
         While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
+        Coerce e                        -> Coerce (cvtE e)
 
         Shape a
           | Just Refl <- match a a'     -> Stats.substitution "replaceE/shape" sh'

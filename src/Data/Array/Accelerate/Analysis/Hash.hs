@@ -290,6 +290,7 @@ encodePreOpenExp travA exp =
     Intersect sa sb             -> intHost $(hashQ "Intersect")   <> travE sa <> travE sb
     Union sa sb                 -> intHost $(hashQ "Union")       <> travE sa <> travE sb
     Foreign _ f e               -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
+    Coerce e                    -> intHost $(hashQ "Coerce")      <> travE e
 
 
 {-# INLINE encodePreOpenFun #-}
@@ -464,7 +465,6 @@ encodePrimFun (PrimMax a)                = intHost $(hashQ "PrimMax")           
 encodePrimFun (PrimMin a)                = intHost $(hashQ "PrimMin")                <> encodeSingleType a
 encodePrimFun (PrimFromIntegral a b)     = intHost $(hashQ "PrimFromIntegral")       <> encodeIntegralType a <> encodeNumType b
 encodePrimFun (PrimToFloating a b)       = intHost $(hashQ "PrimToFloating")         <> encodeNumType a      <> encodeFloatingType b
-encodePrimFun (PrimCoerce a b)           = intHost $(hashQ "PrimCoerce")             <> encodeScalarType a   <> encodeScalarType b
 encodePrimFun PrimLAnd                   = intHost $(hashQ "PrimLAnd")
 encodePrimFun PrimLOr                    = intHost $(hashQ "PrimLOr")
 encodePrimFun PrimLNot                   = intHost $(hashQ "PrimLNot")

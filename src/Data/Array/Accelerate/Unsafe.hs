@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Unsafe
 -- Copyright   : [2009..2018] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -24,17 +21,29 @@ module Data.Array.Accelerate.Unsafe (
 
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Type
 
 
 -- | The function 'coerce' allows you to convert a value between any two types
--- whose underlying representations have the same bit size.
+-- whose underlying representations have the same bit size at each component.
 --
--- This is equivalent to 'Data.Array.Accelerate.Language.bitcast', but does not
--- include the type-level equality check of this requirement.
+-- For example:
+--
+-- > coerce (x :: Exp Double)         :: Exp Word64
+-- > coerce (x :: Exp (Int64,Float))  :: Exp (Complex Float, Word32)
+--
+-- Furthermore, as we typically declare newtype wrappers similarly to:
+--
+-- > type instance EltRepr (Sum a) = ((), EltRepr a)
+--
+-- This can be used instead of the newtype constructor, to go from the newtype's
+-- abstract type to the concrete type by dropping the extra @()@ from the
+-- representation, and vice-versa.
+--
+-- You will get a runtime error if it fails to find a coercion between the two
+-- representations.
 --
 -- @since 1.2.0.0
 --
-coerce :: (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b)) => Exp a -> Exp b
+coerce :: (Elt a, Elt b) => Exp a -> Exp b
 coerce = mkUnsafeCoerce
 

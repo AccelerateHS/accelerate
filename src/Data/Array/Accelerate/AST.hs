@@ -418,7 +418,6 @@ data PreOpenAcc acc aenv a where
               -> PreExp     acc aenv e                          -- initial value
               -> acc            aenv (Array (sh:.Int) e)
               -> PreOpenAcc acc aenv (Array (sh:.Int) e)
-    -- FIXME: Make the scans rank-polymorphic?
 
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
@@ -818,18 +817,10 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Apply a backend-specific foreign function
   Foreign       :: (Foreign asm, Elt x, Elt y)
-                => asm           (x -> y)
-                -> PreFun acc () (x -> y)
+                => asm           (x -> y)           -- foreign function
+                -> PreFun acc () (x -> y)           -- alternate implementation (for other backends)
                 -> PreOpenExp acc env aenv x
                 -> PreOpenExp acc env aenv y
-
-  -- Constant values
-  Const         :: Elt t
-                => EltRepr t
-                -> PreOpenExp acc env aenv t
-
-  Undef         :: Elt t
-                => PreOpenExp acc env aenv t
 
   -- Tuples
   Tuple         :: (Elt t, IsTuple t)
@@ -897,7 +888,11 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv a            -- initial value
                 -> PreOpenExp acc env aenv a
 
-  -- Primitive constants
+  -- Constant values
+  Const         :: Elt t
+                => EltRepr t
+                -> PreOpenExp acc env aenv t
+
   PrimConst     :: Elt t
                 => PrimConst t
                 -> PreOpenExp acc env aenv t
@@ -942,6 +937,16 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
+
+  -- Unsafe operations (may fail or result in undefined behaviour)
+  -- An unspecified bit pattern
+  Undef         :: Elt t
+                => PreOpenExp acc env aenv t
+
+  -- Reinterpret the bits of a value as a different type
+  Coerce        :: (Elt a, Elt b)
+                => PreOpenExp acc env aenv a
+                -> PreOpenExp acc env aenv b
 
 
 -- |Primitive constant values
@@ -1039,7 +1044,6 @@ data PrimFun sig where
   PrimLNot :: PrimFun (Bool         -> Bool)
 
   -- character conversions
-  -- FIXME: use IntegralType?
   PrimOrd  :: PrimFun (Char -> Int)
   PrimChr  :: PrimFun (Int  -> Char)
 
@@ -1049,17 +1053,6 @@ data PrimFun sig where
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
   PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
-
-  -- reinterpret the bits of a value as a different type
-  -- (the two types must have the same bit size)
-  PrimCoerce :: ScalarType (EltRepr a) -> ScalarType (EltRepr b) -> PrimFun (a -> b)
-
-  -- FIXME: Conversions between various integer types: should we have overloaded
-  -- functions like 'toInt'? (or 'fromEnum' for enums?)
-
-  -- FIXME: What do we want to do about Enum? 'succ' and 'pred' are only
-  -- moderately useful without user-defined enumerations, but we want the range
-  -- constructs for arrays (but that's not scalar primitives)
 
 
 -- NFData instances
@@ -1284,6 +1277,7 @@ rnfPreOpenExp rnfA topExp =
     ShapeSize sh              -> rnfE sh
     Intersect sh1 sh2         -> rnfE sh1 `seq` rnfE sh2
     Union sh1 sh2             -> rnfE sh1 `seq` rnfE sh2
+    Coerce e                  -> rnfE e
 
 rnfTuple :: NFDataAcc acc -> Tuple (PreOpenExp acc env aenv) t -> ()
 rnfTuple _    NilTup        = ()
@@ -1365,7 +1359,6 @@ rnfPrimFun PrimChr                    = ()
 rnfPrimFun PrimBoolToInt              = ()
 rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
 rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
-rnfPrimFun (PrimCoerce a b)           = rnfScalarType a `seq` rnfScalarType b
 
 rnfSliceIndex :: SliceIndex ix slice co sh -> ()
 rnfSliceIndex SliceNil        = ()
@@ -1556,6 +1549,7 @@ liftPreOpenExp liftA pexp =
     ShapeSize ix              -> [|| ShapeSize $$(liftE ix) ||]
     Intersect sh1 sh2         -> [|| Intersect $$(liftE sh1) $$(liftE sh2) ||]
     Union sh1 sh2             -> [|| Union $$(liftE sh1) $$(liftE sh2) ||]
+    Coerce e                  -> [|| Coerce $$(liftE e) ||]
 
 
 liftArrays :: ArraysR arr -> arr -> Q (TExp arr)
@@ -1719,7 +1713,6 @@ liftPrimFun PrimChr                    = [|| PrimChr ||]
 liftPrimFun PrimBoolToInt              = [|| PrimBoolToInt ||]
 liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
-liftPrimFun (PrimCoerce ta tb)         = [|| PrimCoerce $$(liftScalarType ta) $$(liftScalarType tb) ||]
 
 
 liftConst :: TupleType t -> t -> Q (TExp t)
@@ -1833,20 +1826,20 @@ liftBoundedType :: BoundedType t -> Q (TExp (BoundedType t))
 liftBoundedType (IntegralBoundedType t) = [|| IntegralBoundedType $$(liftIntegralType t) ||]
 liftBoundedType (NonNumBoundedType t)   = [|| NonNumBoundedType $$(liftNonNumType t) ||]
 
-liftScalarType :: ScalarType t -> Q (TExp (ScalarType t))
-liftScalarType (SingleScalarType t) = [|| SingleScalarType $$(liftSingleType t) ||]
-liftScalarType (VectorScalarType t) = [|| VectorScalarType $$(liftVectorType t) ||]
+-- liftScalarType :: ScalarType t -> Q (TExp (ScalarType t))
+-- liftScalarType (SingleScalarType t) = [|| SingleScalarType $$(liftSingleType t) ||]
+-- liftScalarType (VectorScalarType t) = [|| VectorScalarType $$(liftVectorType t) ||]
 
 liftSingleType :: SingleType t -> Q (TExp (SingleType t))
 liftSingleType (NumSingleType t)    = [|| NumSingleType $$(liftNumType t) ||]
 liftSingleType (NonNumSingleType t) = [|| NonNumSingleType $$(liftNonNumType t) ||]
 
-liftVectorType :: VectorType t -> Q (TExp (VectorType t))
-liftVectorType (Vector2Type t)  = [|| Vector2Type $$(liftSingleType t) ||]
-liftVectorType (Vector3Type t)  = [|| Vector3Type $$(liftSingleType t) ||]
-liftVectorType (Vector4Type t)  = [|| Vector4Type $$(liftSingleType t) ||]
-liftVectorType (Vector8Type t)  = [|| Vector8Type $$(liftSingleType t) ||]
-liftVectorType (Vector16Type t) = [|| Vector16Type $$(liftSingleType t) ||]
+-- liftVectorType :: VectorType t -> Q (TExp (VectorType t))
+-- liftVectorType (Vector2Type t)  = [|| Vector2Type $$(liftSingleType t) ||]
+-- liftVectorType (Vector3Type t)  = [|| Vector3Type $$(liftSingleType t) ||]
+-- liftVectorType (Vector4Type t)  = [|| Vector4Type $$(liftSingleType t) ||]
+-- liftVectorType (Vector8Type t)  = [|| Vector8Type $$(liftSingleType t) ||]
+-- liftVectorType (Vector16Type t) = [|| Vector16Type $$(liftSingleType t) ||]
 
 
 -- Debugging
@@ -1934,4 +1927,5 @@ showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Intersect{}        = "Intersect"
 showPreExpOp Union{}            = "Union"
+showPreExpOp Coerce{}           = "Coerce"
 

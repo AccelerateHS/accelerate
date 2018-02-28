@@ -595,9 +595,6 @@ data PreExp acc exp t where
                 => t
                 -> PreExp acc exp t
 
-  Undef         :: Elt t
-                => PreExp acc exp t
-
   Tuple         :: (Elt t, IsTuple t)
                 => Tuple exp (TupleRepr t)
                 -> PreExp acc exp t
@@ -689,6 +686,14 @@ data PreExp acc exp t where
                 -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
                 -> exp x
                 -> PreExp acc exp y
+
+  Undef         :: Elt t
+                => PreExp acc exp t
+
+  Coerce        :: (Elt a, Elt b)
+                => exp a
+                -> PreExp acc exp b
+
 
 
 -- Smart constructors and destructors for array tuples
@@ -2183,12 +2188,13 @@ mkToFloating x = Exp $ PrimToFloating numType floatingType `PrimApp` x
 mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b
 
--- NOTE: BitSizeEq constraint is used to make this version "safe"
+-- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
+-- make this version "safe"
 mkBitcast :: (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b), BitSizeEq (EltRepr a) (EltRepr b)) => Exp a -> Exp b
 mkBitcast = mkUnsafeCoerce
 
-mkUnsafeCoerce :: (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b)) => Exp a -> Exp b
-mkUnsafeCoerce x = Exp $ PrimCoerce scalarType scalarType `PrimApp` x
+mkUnsafeCoerce :: (Elt a, Elt b) => Exp a -> Exp b
+mkUnsafeCoerce = Exp . Coerce
 
 
 -- Auxiliary functions
@@ -2303,4 +2309,5 @@ showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Intersect{}        = "Intersect"
 showPreExpOp Union{}            = "Union"
 showPreExpOp Foreign{}          = "Foreign"
+showPreExpOp Coerce{}           = "Coerce"
 

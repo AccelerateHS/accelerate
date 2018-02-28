@@ -555,4 +555,5 @@ fvPreOpenExp fvA env aenv = fv
     fv Foreign{}                = []
     fv (Cond p t e)             = concat [ fv p, fv t, fv e ]
     fv (While p f x)            = concat [ fvF p, fvF f, fv x ]
+    fv (Coerce e)               = fv e
 
