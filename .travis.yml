@@ -35,9 +35,8 @@ matrix:
     #   compiler: "GHC HEAD"
     #   addons: { apt: { sources: [ hvr-ghc ], packages: [ ghc-head, cabal-install-head, happy-1.19.5, alex-3.1.7 ] }}
 
-  allow_failures:
-    - env: GHC=8.4.0 CABAL=2.0
-    # - env: GHC=head CABAL=head
+  # allow_failures:
+  #   - env: GHC=head CABAL=head
 
   fast_finish: true
 
@@ -46,7 +45,7 @@ before_install:
   - source .travis/install-stack.sh
 
 install:
-  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - cabal --version
   - stack --version
   - |
