@@ -75,7 +75,6 @@ extra-deps:
 - 'monad-control-1.0.2.2'
 - 'optparse-applicative-0.14.0.0'
 - 'parallel-3.2.1.1'
-- 'pipes-4.3.7'
 - 'pretty-show-1.7'
 - 'primitive-0.6.3.0'
 - 'profunctors-5.2.2'

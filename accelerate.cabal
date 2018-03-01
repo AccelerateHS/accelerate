@@ -293,7 +293,7 @@ Library
         , vector                        >= 0.10
 
         -- nofib test suite
-        , pipes                         >= 4.1.6
+        -- , pipes                         >= 4.1.6   -- #286
 
   Exposed-modules:
         -- The core language and reference implementation
@@ -415,7 +415,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Issues.Issue228
         Data.Array.Accelerate.Test.NoFib.Issues.Issue255
         Data.Array.Accelerate.Test.NoFib.Issues.Issue264
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue286
+        -- Data.Array.Accelerate.Test.NoFib.Issues.Issue286
         Data.Array.Accelerate.Test.NoFib.Issues.Issue287
         Data.Array.Accelerate.Test.NoFib.Issues.Issue288
         Data.Array.Accelerate.Test.NoFib.Issues.Issue362

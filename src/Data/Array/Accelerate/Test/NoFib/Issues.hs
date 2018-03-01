@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues (
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue228,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue255,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue264,
-  module Data.Array.Accelerate.Test.NoFib.Issues.Issue286,
+  -- module Data.Array.Accelerate.Test.NoFib.Issues.Issue286,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue287,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue288,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue362,
@@ -51,7 +51,7 @@ import Data.Array.Accelerate.Test.NoFib.Issues.Issue187
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue228
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue255
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue264
-import Data.Array.Accelerate.Test.NoFib.Issues.Issue286
+-- import Data.Array.Accelerate.Test.NoFib.Issues.Issue286
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue287
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue288
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue362
@@ -75,7 +75,7 @@ test_issues runN =
     , test_issue228 runN
     , test_issue255 runN
     , test_issue264 runN
-    , test_issue286 runN
+    -- , test_issue286 runN
     , test_issue287 runN
     , test_issue288 runN
     , test_issue362 runN
