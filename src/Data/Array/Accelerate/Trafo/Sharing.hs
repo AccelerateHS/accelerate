@@ -737,6 +737,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Intersect sh1 sh2     -> AST.Intersect (cvt sh1) (cvt sh2)
           Union sh1 sh2         -> AST.Union (cvt sh1) (cvt sh2)
           Foreign ff f e        -> AST.Foreign ff (convertFun (recoverExpSharing config) f) (cvt e)
+          Coerce e              -> AST.Coerce (cvt e)
 
     cvtA :: Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
@@ -1707,6 +1708,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Foreign ff f e      -> reconstruct $ do
                                       (e', h) <- travE lvl e
                                       return  (Foreign ff f e', h+1)
+            Coerce e            -> reconstruct $ travE1 Coerce e
 
       where
         traverseAcc :: Typeable arrs => Level -> Acc arrs -> IO (UnscopedAcc arrs, Int)
@@ -2572,6 +2574,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Intersect sh1 sh2     -> travE2 Intersect sh1 sh2
           Union sh1 sh2         -> travE2 Union sh1 sh2
           Foreign ff f e        -> travE1 (Foreign ff f) e
+          Coerce e              -> travE1 Coerce e
       where
         travTup :: Tuple UnscopedExp tup -> (Tuple ScopedExp tup, NodeCounts)
         travTup NilTup          = (NilTup, noNodeCounts)

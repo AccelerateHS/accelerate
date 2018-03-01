@@ -47,7 +47,7 @@ module Data.Array.Accelerate.Interpreter (
 
   -- Internal (hidden)
   evalPrj,
-  evalPrim, evalPrimConst, evalUndef,
+  evalPrim, evalPrimConst, evalUndef, evalCoerce,
 
 ) where
 
@@ -57,7 +57,10 @@ import Control.Exception
 import Control.Monad
 import Data.Bits
 import Data.Char                                                    ( chr, ord )
+import Data.Constraint
+import Data.Typeable
 import Foreign.C.Types
+import Foreign.ForeignPtr
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Prelude                                                      hiding ( sum )
@@ -65,13 +68,15 @@ import Prelude                                                      hiding ( sum
 -- friends
 import Data.Array.Accelerate.AST                                    hiding ( Boundary, PreBoundary(..) )
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Lifetime
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
-import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.AST                          as AST
 import qualified Data.Array.Accelerate.Array.Representation         as R
@@ -1024,6 +1029,7 @@ evalPreOpenExp evalAcc pexp env aenv =
     Intersect sh1 sh2           -> intersect (evalE sh1) (evalE sh2)
     Union sh1 sh2               -> union (evalE sh1) (evalE sh2)
     Foreign _ f e               -> evalPreOpenFun evalAcc f EmptyElt Empty $ evalE e
+    Coerce e                    -> evalCoerce (evalE e)
 
 
 -- Constant values
@@ -1062,6 +1068,181 @@ evalUndef = toElt (undef (eltType (undefined::a)))
     nonnum TypeCChar{}  = CChar 0
     nonnum TypeCSChar{} = CSChar 0
     nonnum TypeCUChar{} = CUChar 0
+
+
+-- Coercions
+-- ---------
+
+evalCoerce :: forall a b. (Elt a, Elt b) => a -> b
+evalCoerce = toElt . go (eltType (undefined::a)) (eltType (undefined::b)) . fromElt
+  where
+    go :: TupleType s -> TupleType t -> s -> t
+    go TypeRunit        TypeRunit          ()    = ()
+    go (TypeRscalar s)   (TypeRscalar t)   x     = evalCoerceScalar s t x
+    go (TypeRpair s1 s2) (TypeRpair t1 t2) (x,y) = (go s1 t1 x, go s2 t2 y)
+    --
+    -- newtype wrappers are typically declared similarly to `EltRepr (T a) = ((), EltRepr a)'
+    --
+    go (TypeRpair TypeRunit s) t@TypeRscalar{}         ((), x) = go s t x
+    go s@TypeRscalar{}         (TypeRpair TypeRunit t) x       = ((), go s t x)
+    --
+    go _ _ _
+      = error $ printf "could not coerce type `%s' to `%s'"
+                  (show (typeOf (undefined::a)))
+                  (show (typeOf (undefined::b)))
+
+
+-- Coerce a value by writing that data into memory and reading it back at
+-- a different type. This seems the most robust way to do it in the presence of
+-- packed vector types (which Haskell does not represent in the same way as
+-- C due to alignment of the fields, even at specialised UNPACKed types).
+--
+evalCoerceScalar :: ScalarType a -> ScalarType b -> a -> b
+evalCoerceScalar ta tb a
+  = $internalCheck "evalCoerce" "sizes not equal" (sizeOf (TypeRscalar ta) == sizeOf (TypeRscalar tb))
+  $ withDict (scalar ta)
+  $ withDict (scalar tb)
+  $ let (adata, _)  = runArrayData $ do
+                        arr <- newArrayData 1
+                        unsafeWriteArrayData arr 0 a
+                        return (arr, undefined)
+        adata'      = fromUA arrayElt (toUA arrayElt adata)
+    in
+    unsafeIndexArrayData adata' 0
+  where
+
+    toUA :: ArrayEltR e -> ArrayData e -> UniqueArray ()
+    toUA ArrayEltRint       (AD_Int ua)     = castUniqueArray ua
+    toUA ArrayEltRint8      (AD_Int8 ua)    = castUniqueArray ua
+    toUA ArrayEltRint16     (AD_Int16 ua)   = castUniqueArray ua
+    toUA ArrayEltRint32     (AD_Int32 ua)   = castUniqueArray ua
+    toUA ArrayEltRint64     (AD_Int64 ua)   = castUniqueArray ua
+    toUA ArrayEltRword      (AD_Word ua)    = castUniqueArray ua
+    toUA ArrayEltRword8     (AD_Word8 ua)   = castUniqueArray ua
+    toUA ArrayEltRword16    (AD_Word16 ua)  = castUniqueArray ua
+    toUA ArrayEltRword32    (AD_Word32 ua)  = castUniqueArray ua
+    toUA ArrayEltRword64    (AD_Word64 ua)  = castUniqueArray ua
+    toUA ArrayEltRcshort    (AD_CShort ua)  = castUniqueArray ua
+    toUA ArrayEltRcushort   (AD_CUShort ua) = castUniqueArray ua
+    toUA ArrayEltRcint      (AD_CInt ua)    = castUniqueArray ua
+    toUA ArrayEltRcuint     (AD_CUInt ua)   = castUniqueArray ua
+    toUA ArrayEltRclong     (AD_CLong ua)   = castUniqueArray ua
+    toUA ArrayEltRculong    (AD_CULong ua)  = castUniqueArray ua
+    toUA ArrayEltRcllong    (AD_CLLong ua)  = castUniqueArray ua
+    toUA ArrayEltRcullong   (AD_CULLong ua) = castUniqueArray ua
+    toUA ArrayEltRhalf      (AD_Half ua)    = castUniqueArray ua
+    toUA ArrayEltRfloat     (AD_Float ua)   = castUniqueArray ua
+    toUA ArrayEltRdouble    (AD_Double ua)  = castUniqueArray ua
+    toUA ArrayEltRcfloat    (AD_CFloat ua)  = castUniqueArray ua
+    toUA ArrayEltRcdouble   (AD_CDouble ua) = castUniqueArray ua
+    toUA ArrayEltRbool      (AD_Bool ua)    = castUniqueArray ua
+    toUA ArrayEltRchar      (AD_Char ua)    = castUniqueArray ua
+    toUA ArrayEltRcchar     (AD_CChar ua)   = castUniqueArray ua
+    toUA ArrayEltRcschar    (AD_CSChar ua)  = castUniqueArray ua
+    toUA ArrayEltRcuchar    (AD_CUChar ua)  = castUniqueArray ua
+    toUA (ArrayEltRvec2 r)  (AD_V2 a)       = toUA r a
+    toUA (ArrayEltRvec3 r)  (AD_V3 a)       = toUA r a
+    toUA (ArrayEltRvec4 r)  (AD_V4 a)       = toUA r a
+    toUA (ArrayEltRvec8 r)  (AD_V8 a)       = toUA r a
+    toUA (ArrayEltRvec16 r) (AD_V16 a)      = toUA r a
+    --
+    toUA ArrayEltRunit      _               = error "What sane person could live in this world and not be crazy?"
+    toUA ArrayEltRpair{}    _               = error "  --- Ursula K. Le Guin"
+
+    fromUA :: ArrayEltR e -> UniqueArray () -> ArrayData e
+    fromUA ArrayEltRint       = AD_Int     . castUniqueArray
+    fromUA ArrayEltRint8      = AD_Int8    . castUniqueArray
+    fromUA ArrayEltRint16     = AD_Int16   . castUniqueArray
+    fromUA ArrayEltRint32     = AD_Int32   . castUniqueArray
+    fromUA ArrayEltRint64     = AD_Int64   . castUniqueArray
+    fromUA ArrayEltRword      = AD_Word    . castUniqueArray
+    fromUA ArrayEltRword8     = AD_Word8   . castUniqueArray
+    fromUA ArrayEltRword16    = AD_Word16  . castUniqueArray
+    fromUA ArrayEltRword32    = AD_Word32  . castUniqueArray
+    fromUA ArrayEltRword64    = AD_Word64  . castUniqueArray
+    fromUA ArrayEltRcshort    = AD_CShort  . castUniqueArray
+    fromUA ArrayEltRcushort   = AD_CUShort . castUniqueArray
+    fromUA ArrayEltRcint      = AD_CInt    . castUniqueArray
+    fromUA ArrayEltRcuint     = AD_CUInt   . castUniqueArray
+    fromUA ArrayEltRclong     = AD_CLong   . castUniqueArray
+    fromUA ArrayEltRculong    = AD_CULong  . castUniqueArray
+    fromUA ArrayEltRcllong    = AD_CLLong  . castUniqueArray
+    fromUA ArrayEltRcullong   = AD_CULLong . castUniqueArray
+    fromUA ArrayEltRhalf      = AD_Half    . castUniqueArray
+    fromUA ArrayEltRfloat     = AD_Float   . castUniqueArray
+    fromUA ArrayEltRdouble    = AD_Double  . castUniqueArray
+    fromUA ArrayEltRcfloat    = AD_CFloat  . castUniqueArray
+    fromUA ArrayEltRcdouble   = AD_CDouble . castUniqueArray
+    fromUA ArrayEltRbool      = AD_Bool    . castUniqueArray
+    fromUA ArrayEltRchar      = AD_Char    . castUniqueArray
+    fromUA ArrayEltRcchar     = AD_CChar   . castUniqueArray
+    fromUA ArrayEltRcschar    = AD_CSChar  . castUniqueArray
+    fromUA ArrayEltRcuchar    = AD_CUChar  . castUniqueArray
+    fromUA (ArrayEltRvec2 r)  = AD_V2      . fromUA r
+    fromUA (ArrayEltRvec3 r)  = AD_V3      . fromUA r
+    fromUA (ArrayEltRvec4 r)  = AD_V4      . fromUA r
+    fromUA (ArrayEltRvec8 r)  = AD_V8      . fromUA r
+    fromUA (ArrayEltRvec16 r) = AD_V16     . fromUA r
+    --
+    fromUA ArrayEltRunit      = error "I talk about the gods, I am an atheist. But I am an artist too, and therefore a liar. Distrust everything I say. I am telling the truth."
+    fromUA ArrayEltRpair{}    = error "  --- Ursula K. Le Guin, The Left Hand of Darkness"
+
+    castUniqueArray :: UniqueArray x -> UniqueArray y
+    castUniqueArray (UniqueArray uid (Lifetime r w p)) =
+      UniqueArray uid (Lifetime r w (castForeignPtr p))
+
+    scalar :: ScalarType e -> Dict (ArrayElt e)
+    scalar (SingleScalarType t) = single t
+    scalar (VectorScalarType t) = vector t
+
+    single :: SingleType e -> Dict (ArrayElt e)
+    single (NumSingleType t)    = num t
+    single (NonNumSingleType t) = nonnum t
+
+    vector :: VectorType e -> Dict (ArrayElt e)
+    vector (Vector2Type t)  = withDict (single t) Dict
+    vector (Vector3Type t)  = withDict (single t) Dict
+    vector (Vector4Type t)  = withDict (single t) Dict
+    vector (Vector8Type t)  = withDict (single t) Dict
+    vector (Vector16Type t) = withDict (single t) Dict
+
+    num :: NumType e -> Dict (ArrayElt e)
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
+
+    integral :: IntegralType e -> Dict (ArrayElt e)
+    integral TypeInt{}     = Dict
+    integral TypeInt8{}    = Dict
+    integral TypeInt16{}   = Dict
+    integral TypeInt32{}   = Dict
+    integral TypeInt64{}   = Dict
+    integral TypeWord{}    = Dict
+    integral TypeWord8{}   = Dict
+    integral TypeWord16{}  = Dict
+    integral TypeWord32{}  = Dict
+    integral TypeWord64{}  = Dict
+    integral TypeCShort{}  = Dict
+    integral TypeCUShort{} = Dict
+    integral TypeCInt{}    = Dict
+    integral TypeCUInt{}   = Dict
+    integral TypeCLong{}   = Dict
+    integral TypeCULong{}  = Dict
+    integral TypeCLLong{}  = Dict
+    integral TypeCULLong{} = Dict
+
+    floating :: FloatingType e -> Dict (ArrayElt e)
+    floating TypeHalf{}    = Dict
+    floating TypeFloat{}   = Dict
+    floating TypeDouble{}  = Dict
+    floating TypeCFloat{}  = Dict
+    floating TypeCDouble{} = Dict
+
+    nonnum :: NonNumType e -> Dict (ArrayElt e)
+    nonnum TypeBool{}   = Dict
+    nonnum TypeChar{}   = Dict
+    nonnum TypeCChar{}  = Dict
+    nonnum TypeCSChar{} = Dict
+    nonnum TypeCUChar{} = Dict
 
 
 -- Scalar primitives
@@ -1138,7 +1319,6 @@ evalPrim PrimChr                     = evalChr
 evalPrim PrimBoolToInt               = evalBoolToInt
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
-evalPrim (PrimCoerce ta tb)          = evalCoerce ta tb
 
 
 -- Tuple construction and projection

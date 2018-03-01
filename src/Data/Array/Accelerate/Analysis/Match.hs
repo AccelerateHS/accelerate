@@ -464,6 +464,11 @@ matchPreOpenExp matchAcc encodeAcc = match
       | Just Refl <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
       = gcast Refl
 
+    match (Coerce e1) (Coerce e2)
+      | Just Refl <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
+      , Just Refl <- match e1 e2
+      = gcast Refl
+
     match (Tuple t1) (Tuple t2)
       | Just Refl <- matchTuple matchAcc encodeAcc t1 t2
       = gcast Refl  -- surface/representation type
@@ -786,10 +791,6 @@ matchPrimFun PrimOrd                    PrimOrd                    = Just Refl
 matchPrimFun PrimChr                    PrimChr                    = Just Refl
 matchPrimFun PrimBoolToInt              PrimBoolToInt              = Just Refl
 
-matchPrimFun (PrimCoerce _ s) (PrimCoerce _ t)
-  | Just Refl <- matchScalarType s t
-  = gcast Refl
-
 matchPrimFun _ _
   = Nothing
 
@@ -857,10 +858,6 @@ matchPrimFun' PrimLNot                   PrimLNot                   = Just Refl
 matchPrimFun' PrimOrd                    PrimOrd                    = Just Refl
 matchPrimFun' PrimChr                    PrimChr                    = Just Refl
 matchPrimFun' PrimBoolToInt              PrimBoolToInt              = Just Refl
-
-matchPrimFun' (PrimCoerce s _) (PrimCoerce t _)
-  | Just Refl <- matchScalarType s t
-  = gcast Refl
 
 matchPrimFun' (PrimLt s) (PrimLt t)
   | Just Refl <- matchSingleType s t

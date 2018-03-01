@@ -187,6 +187,7 @@ preExpType k e =
     Intersect _ _     -> eltType (undefined::t)
     Union _ _         -> eltType (undefined::t)
     Foreign _ _ _     -> eltType (undefined::t)
+    Coerce _          -> eltType (undefined::t)
 
 
 -- |Size of a tuple type, in bytes

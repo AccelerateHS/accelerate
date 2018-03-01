@@ -46,6 +46,7 @@ module Data.Array.Accelerate.Pretty.Print (
 -- standard libraries
 import Prelude                                          hiding ( (<$>), exp, seq )
 import Data.List                                        ( isPrefixOf )
+import Data.Typeable                                    ( typeOf, showsTypeRep )
 import Text.PrettyPrint.ANSI.Leijen                     hiding ( parens, tupled )
 import qualified Text.PrettyPrint.ANSI.Leijen           as PP
 
@@ -132,6 +133,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppB (Function f) = ppF f
 
     -- pretty print a named array operation with its arguments
+    infixr 0 .$
     name .$ docs = wrap $ hang 2 (sep (manifest (text name) : docs))
 
     -- The main pretty-printer
@@ -329,6 +331,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     ppA = prettyAcc parens aenv
 
     -- pretty print a named array operation with its arguments
+    infixr 0 .$
     name .$ docs = wrap $ hang 2 (sep (text name : docs))
 
     -- The main pretty-printer
@@ -387,6 +390,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     pp (Union sh1 sh2)          = "union"      .$ [ ppSh sh1, ppSh sh2 ]
     pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppSh i ]
     pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppSh i ]
+    pp (Coerce x)               = "coerce<" ++ showsTypeRep (typeOf (undefined::t)) ">" .$ [ ppE x ]
 
 
 -- Pretty print nested pairs as a proper tuple.
@@ -507,7 +511,6 @@ prettyPrim PrimChr                  = (False, text "chr")
 prettyPrim PrimBoolToInt            = (False, text "boolToInt")
 prettyPrim PrimFromIntegral{}       = (False, text "fromIntegral")
 prettyPrim PrimToFloating{}         = (False, text "toFloating")
-prettyPrim (PrimCoerce _ t)         = (False, text "reinterpret_cast" <> char '<' <> text (show t) <> char '>')
 
 {-
 -- Pretty print type

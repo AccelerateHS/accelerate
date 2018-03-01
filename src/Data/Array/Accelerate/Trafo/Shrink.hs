@@ -120,6 +120,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       Intersect sh sz           -> Intersect <$> shrinkE sh <*> shrinkE sz
       Union sh sz               -> Union <$> shrinkE sh <*> shrinkE sz
       Foreign ff f e            -> Foreign ff <$> shrinkF f <*> shrinkE e
+      Coerce e                  -> Coerce <$> shrinkE e
 
     shrinkT :: Kit acc => Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     shrinkT NilTup        = pure NilTup
@@ -251,6 +252,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Intersect sh sz           -> Intersect (shrinkE sh) (shrinkE sz)
       Union sh sz               -> Union (shrinkE sh) (shrinkE sz)
       Foreign ff f e            -> Foreign ff (shrinkF f) (shrinkE e)
+      Coerce e                  -> Coerce (shrinkE e)
 
     shrinkF :: PreOpenFun acc env aenv' f -> PreOpenFun acc env aenv' f
     shrinkF (Lam f)  = Lam (shrinkF f)
@@ -335,6 +337,7 @@ usesOfExp idx = countE
       Intersect sh sz           -> countE sh + countE sz
       Union sh sz               -> countE sh + countE sz
       Foreign _ _ e             -> countE e
+      Coerce e                  -> countE e
 
     countF :: Idx env' s -> PreOpenFun acc env' aenv f -> Int
     countF idx' (Lam  f) = countF (SuccIdx idx') f
@@ -431,6 +434,7 @@ usesOfPreAcc withShape countAcc idx = count
         | withShape             -> countA a
         | otherwise             -> 0
       Foreign _ _ e             -> countE e
+      Coerce e                  -> countE e
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
