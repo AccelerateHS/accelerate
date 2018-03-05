@@ -251,8 +251,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Scanr' f z acc              -> scanr'Op (evalF f) (evalE z) (delayed acc)
     Scanr1 f acc                -> scanr1Op (evalF f) (delayed acc)
     Permute f def p acc         -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
-    Stencil sten b acc          -> stencilOp (evalF sten) (evalB b) (manifest acc)
-    Stencil2 sten b1 a1 b2 a2   -> stencil2Op (evalF sten) (evalB b1) (manifest a1) (evalB b2) (manifest a2)
+    Stencil sten b acc          -> stencilOp (evalF sten) (evalB b) (delayed acc)
+    Stencil2 sten b1 a1 b2 a2   -> stencil2Op (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
 
 -- Array tuple construction and projection
 --
@@ -654,28 +654,24 @@ stencilOp
     :: (Stencil sh a stencil, Elt b)
     => (stencil -> b)
     -> Boundary (Array sh a)
-    -> Array sh a
+    -> Delayed  (Array sh a)
     -> Array sh b
-stencilOp stencil bnd arr
-  = fromFunction sh f
-  where
-    sh  = shape arr
-    f   = stencil . stencilAccess (bounded bnd arr)
+stencilOp stencil bnd arr@(Delayed sh _ _)
+  = fromFunction sh
+  $ stencil . stencilAccess (bounded bnd arr)
 
 
 stencil2Op
     :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> c)
     -> Boundary (Array sh a)
-    -> Array sh a
+    -> Delayed  (Array sh a)
     -> Boundary (Array sh b)
-    -> Array sh b
+    -> Delayed  (Array sh b)
     -> Array sh c
-stencil2Op stencil bnd1 arr1 bnd2 arr2
+stencil2Op stencil bnd1 arr1@(Delayed sh1 _ _) bnd2 arr2@(Delayed sh2 _ _)
   = fromFunction (sh1 `intersect` sh2) f
   where
-    sh1   = shape arr1
-    sh2   = shape arr2
     f ix  = stencil (stencilAccess (bounded bnd1 arr1) ix)
                     (stencilAccess (bounded bnd2 arr2) ix)
 
@@ -826,17 +822,17 @@ stencilAccess = goR stencil
 bounded
     :: (Shape sh, Elt e)
     => Boundary (Array sh e)
-    -> Array sh e
+    -> Delayed (Array sh e)
     -> sh
     -> e
-bounded bnd arr ix =
-  if inside (shape arr) ix
-    then arr ! ix
+bounded bnd (Delayed sh f _) ix =
+  if inside sh ix
+    then f ix
     else
       case bnd of
-        Function f -> f ix
+        Function g -> g ix
         Constant v -> toElt v
-        _          -> arr ! bound (shape arr) ix
+        _          -> f (bound sh ix)
 
   where
     -- Whether the index (second argument) is inside the bounds of the given
@@ -1884,9 +1880,10 @@ minCursor s = travS s 0
         ExecStuple t      -> travT t i
 
 
-evalDelayedSeq :: SeqConfig
-               -> DelayedSeq arrs
-               -> arrs
+evalDelayedSeq
+    :: SeqConfig
+    -> DelayedSeq arrs
+    -> arrs
 evalDelayedSeq cfg (DelayedSeq aenv s) | aenv' <- evalExtend aenv Empty
                                        = evalSeq cfg s aenv'
 

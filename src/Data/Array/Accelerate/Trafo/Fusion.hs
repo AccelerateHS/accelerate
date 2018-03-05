@@ -198,8 +198,8 @@ manifest fuseAcc (OpenAcc pacc) =
     Scanr1 f a              -> Scanr1   (cvtF f) (delayed fuseAcc a)
     Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed fuseAcc a)
     Permute f d p a         -> Permute  (cvtF f) (manifest fuseAcc d) (cvtF p) (delayed fuseAcc a)
-    Stencil f x a           -> Stencil  (cvtF f) (cvtB x) (manifest fuseAcc a)
-    Stencil2 f x a y b      -> Stencil2 (cvtF f) (cvtB x) (manifest fuseAcc a) (cvtB y) (manifest fuseAcc b)
+    Stencil f x a           -> Stencil  (cvtF f) (cvtB x) (delayed fuseAcc a)
+    Stencil2 f x a y b      -> Stencil2 (cvtF f) (cvtB x) (delayed fuseAcc a) (cvtB y) (delayed fuseAcc b)
     -- Collect s               -> Collect  (cvtS s)
 
     where
@@ -445,8 +445,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Scanr1 f a          -> embed  (into  Scanr1        (cvtF f)) a
     Scanr' f z a        -> embed  (into2 Scanr'        (cvtF f) (cvtE z)) a
     Permute f d p a     -> embed2 (into2 permute       (cvtF f) (cvtF p)) d a
-    Stencil f x a       -> lift   (into2 Stencil       (cvtF f) (cvtB x)) a
-    Stencil2 f x a y b  -> lift2  (into3 stencil2      (cvtF f) (cvtB x) (cvtB y)) a b
+    Stencil f x a       -> stencil  (cvtF f) (cvtB x) a
+    Stencil2 f x a y b  -> stencil2 (cvtF f) (cvtB x) (cvtB y) a b
 
   where
     -- If fusion is not enabled, force terms to the manifest representation
@@ -470,7 +470,38 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- Helpers to shuffle the order of arguments to a constructor
     --
     permute f p d a     = Permute f d p a
-    stencil2 f x y a b  = Stencil2 f x a y b
+
+    -- Stencils can delay their argument arrays
+    --
+    stencil
+        :: Stencil sh a stencil
+        => PreFun      acc aenv (stencil -> b)
+        -> PreBoundary acc aenv (Array sh a)
+        ->             acc aenv (Array sh a)
+        -> Embed       acc aenv (Array sh b)
+    stencil f@(Lam (Body e)) x =
+      trav1 (if ua <= lIMIT then id else force) (into2 Stencil f x)
+      where
+        ua    = usesOfExp ZeroIdx e
+        lIMIT = 1
+
+    stencil2
+        :: (Stencil sh a stencil1, Stencil sh b stencil2)
+        => PreFun      acc aenv (stencil1 -> stencil2 -> c)
+        -> PreBoundary acc aenv (Array sh a)
+        -> PreBoundary acc aenv (Array sh b)
+        ->             acc aenv (Array sh a)
+        ->             acc aenv (Array sh b)
+        -> Embed       acc aenv (Array sh c)
+    stencil2 f@(Lam (Lam (Body e))) x y =
+      trav2 (if ua <= lIMIT then id else force)
+            (if ub <= lIMIT then id else force)
+            (into3 op f x y)
+      where
+        op f x y a b  = Stencil2 f x a y b
+        ua            = usesOfExp (SuccIdx ZeroIdx) e
+        ub            = usesOfExp ZeroIdx           e
+        lIMIT         = 1
 
     -- Conversions for closed scalar functions and expressions. This just
     -- applies scalar simplifications.
@@ -531,19 +562,6 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
            -> Embed acc aenv cs
     embed2 = trav2 id id
 
-    lift :: (Arrays as, Arrays bs)
-         => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
-         ->       acc aenv as
-         -> Embed acc aenv bs
-    lift = trav1 bind
-
-    lift2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
-          => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
-          ->       acc aenv as
-          ->       acc aenv bs
-          -> Embed acc aenv cs
-    lift2 = trav2 bind bind
-
     trav1 :: (Arrays as, Arrays bs)
           => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
           -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
@@ -565,21 +583,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       , acc0    <- inject . compute' $ cc0
       = Embed (env `PushEnv` inject (op env acc1 acc0)) (Done ZeroIdx)
 
-    -- Helper functions to lift out and let-bind a manifest array. That is,
-    -- instead of the sequence
-    --
-    -- > stencil s (map f a)
-    --
-    -- we get:
-    --
-    -- > let a' = map f a
-    -- > in  stencil s a'
-    --
-    -- This is required for the LLVM backend's default implementation of
-    -- stencil operations.
-    --
-    bind :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
-    bind (Embed env cc)
+    force :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
+    force (Embed env cc)
       | Done{} <- cc = Embed env                                  cc
       | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
