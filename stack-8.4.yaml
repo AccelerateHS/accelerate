@@ -1,34 +1,8 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: ghc-8.4.0.20180224 # 8.4.1-rc1
-compiler: ghc-8.4.0.20180224
-compiler-check: match-exact
-
+resolver: ghc-8.4.1
 allow-newer: true
-
-setup-info:
-  ghc:
-    macosx:
-      8.4.0.20180224:
-        url:    https://downloads.haskell.org/~ghc/8.4.1-rc1/ghc-8.4.0.20180224-x86_64-apple-darwin.tar.xz
-        sha256: 4cf1afc5c6672e4628ba84c775a081fc4cf08bddd07f30fcc57d909fc5939c06
-    linux32:
-      8.4.0.20180224:
-        url:    https://downloads.haskell.org/~ghc/8.4.1-rc1/ghc-8.4.0.20180224-i386-deb8-linux.tar.xz
-        sha256: ce2f7583c64b700b22281a488e9a950ee50ec756a83520e3360748f67e14bfa2
-    linux64:
-      8.4.0.20180224:
-        url:    https://downloads.haskell.org/~ghc/8.4.1-rc1/ghc-8.4.0.20180224-x86_64-deb8-linux.tar.xz
-        sha256: a83b57a600b513f689716e98b53badfb2e2aa1117bff7c5bab12c07854eecb07
-    windows32:
-      8.4.0.20180224:
-        url:    https://downloads.haskell.org/~ghc/8.4.1-rc1/ghc-8.4.0.20180224-i386-unknown-mingw32.tar.xz
-        sha256: 28799a8ceee197a050fa1ef0740a78b01bf93b13f5a7b8e7ef5061b231c270dc
-    windows64:
-      8.4.0.20180224:
-        url:    https://downloads.haskell.org/~ghc/8.4.1-rc1/ghc-8.4.0.20180224-x86_64-unknown-mingw32.tar.xz
-        sha256: 7d125b3bbaa2ec4022215787a259a41bf944ec02736c9555f2a19432eef21cad
 
 packages:
 - '.'
@@ -60,7 +34,7 @@ extra-deps:
 - 'free-5'
 - 'ghc-paths-0.1.0.9'
 - 'half-0.2.2.3'
-- 'hashable-1.2.6.1'
+- 'hashable-1.2.7.0'
 # - 'hashtables-1.2.2.1'
 - git:    https://github.com/deepfire/hashtables.git
   commit: b9eb4b10a50bd6250330422afecc065339a32412
