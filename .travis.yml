@@ -13,6 +13,10 @@ cache:
     - $HOME/.stack/snapshots
     - .stack-work/install
 
+before_cache:
+  - rm -vrf $(stack path --local-install-root)/bin
+  - rm -rf  $(stack path --local-install-root)/doc
+
 matrix:
   include:
     - env: GHC=7.10.3 CABAL=1.22
