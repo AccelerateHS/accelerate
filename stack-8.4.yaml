@@ -2,7 +2,6 @@
 # vim: nospell
 
 resolver: ghc-8.4.1
-allow-newer: true # tasty-hedgehog
 
 packages:
 - '.'
