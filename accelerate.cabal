@@ -1,6 +1,6 @@
 Name:                   accelerate
 Version:                1.2.0.0
-Cabal-version:          >= 1.8
+Cabal-version:          >= 1.18
 Tested-with:            GHC >= 7.8
 Build-type:             Custom
 
@@ -426,6 +426,9 @@ Library
     exposed-modules:
         Data.Array.Accelerate.Data.Semigroup
 
+  default-language:
+        Haskell2010
+
   hs-source-dirs:
         src
 
@@ -514,6 +517,7 @@ Library
 
 test-suite doctest
   type:                 exitcode-stdio-1.0
+  default-language:     Haskell2010
   hs-source-dirs:       test/doctest
   main-is:              Main.hs
 
@@ -545,6 +549,7 @@ test-suite doctest
 
 test-suite nofib-interpreter
   type:                 exitcode-stdio-1.0
+  default-language:     Haskell2010
   hs-source-dirs:       test/nofib
   main-is:              Main.hs
 
