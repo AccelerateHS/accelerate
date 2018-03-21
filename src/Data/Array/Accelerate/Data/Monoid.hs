@@ -34,6 +34,7 @@ import Data.Array.Accelerate.Classes.Bounded
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
+import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
@@ -115,7 +116,7 @@ instance Num a => Monoid (Exp (Sum a)) where
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
   (<>)       = (+)
-  -- stimes n x = lift . Sum $ n * getSum (unlift x)
+  stimes n x = lift . Sum $ P.fromIntegral n * getSum (unlift x :: Sum (Exp a))
 #endif
 
 
@@ -181,7 +182,7 @@ instance Num a => Monoid (Exp (Product a)) where
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
   (<>)       = (*)
-  -- stimes n x = lift . Product $ getProduct (unlift x) ^ constant n
+  stimes n x = lift . Product $ getProduct (unlift x :: Product (Exp a)) ^ (P.fromIntegral n :: Exp Int)
 #endif
 
 
