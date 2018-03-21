@@ -485,6 +485,7 @@ Library
   ghc-options:
         -O2
         -Wall
+        -Wcompat
         -funbox-strict-fields
         -fno-warn-name-shadowing
 
@@ -531,6 +532,7 @@ test-suite doctest
 
   ghc-options:
         -Wall
+        -Wcompat
         -threaded
         -rtsopts
 
@@ -558,8 +560,9 @@ test-suite nofib-interpreter
         , accelerate
 
   ghc-options:
-        -Wall
         -O2
+        -Wall
+        -Wcompat
         -threaded
         -rtsopts
         -with-rtsopts=-A128M

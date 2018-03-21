@@ -128,9 +128,11 @@ instance Ord a => Ord (Maybe a) where
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
   mempty        = constant Nothing
+#if __GLASGOW_HASKELL__ < 804
   mappend ma mb = cond (isNothing ma) mb
                 $ cond (isNothing mb) ma
                 $ lift (Just (fromJust ma `mappend` fromJust mb))
+#endif
 
 #if __GLASGOW_HASKELL__ >= 800
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
