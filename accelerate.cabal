@@ -485,7 +485,6 @@ Library
   ghc-options:
         -O2
         -Wall
-        -Wcompat
         -funbox-strict-fields
         -fno-warn-name-shadowing
 
@@ -503,6 +502,7 @@ Library
 
   if impl(ghc >= 8.0)
     ghc-options:
+        -Wcompat
         -freduction-depth=35
 
   if impl(ghc < 7.10)
