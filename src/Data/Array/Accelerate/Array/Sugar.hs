@@ -921,8 +921,8 @@ instance Show (Array DIM2 e) where
     "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat
     where
       Z :. rows :. cols = shape arr
-      !lengths          = U.generate (rows*cols) (\i -> length (show (arr !! i)))
-      !widths           = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
+      lengths           = U.generate (rows*cols) (\i -> length (show (arr !! i)))
+      widths            = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
       --
       showMat
         | rows * cols == 0 = "[]"
