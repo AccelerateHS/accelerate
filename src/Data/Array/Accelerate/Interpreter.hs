@@ -387,10 +387,6 @@ foldOp
     -> Delayed (Array (sh :. Int) e)
     -> Array sh e
 foldOp f z (Delayed (sh :. n) arr _)
-  | size sh == 0
-  = fromFunction (listToShape . map (max 1) . shapeToList $ sh) (const z)
-
-  | otherwise
   = fromFunction sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr (ix :. i)) f z)
 
 
@@ -460,7 +456,7 @@ scanl1Op f (Delayed sh@(_ :. n) ain _)
             y <- return $ fromElt (ain (sz:.i))
             unsafeWriteArrayData aout (toIndex sh (sz:.i)) (f' x y)
 
-      iter1 sh write (>>)
+      iter sh write (>>) (return ())
       return (aout, undefined)
 
 
@@ -564,7 +560,7 @@ scanr1Op f (Delayed sh@(_ :. n) ain _)
             y <- unsafeReadArrayData aout (toIndex sh (sz:.n-i))
             unsafeWriteArrayData aout (toIndex sh (sz:.n-i-1)) (f' x y)
 
-      iter1 sh write (>>)
+      iter sh write (>>) (return ())
       return (aout, undefined)
 
 
