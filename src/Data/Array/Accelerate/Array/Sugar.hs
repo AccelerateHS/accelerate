@@ -1009,15 +1009,15 @@ instance NFData (Array sh e) where
 
 -- | Scalar arrays hold a single element
 --
-type Scalar e = Array DIM0 e
+type Scalar = Array DIM0
 
 -- | Vectors are one-dimensional arrays
 --
-type Vector e = Array DIM1 e
+type Vector = Array DIM1
 
 -- | Matrices are two-dimensional arrays
 --
-type Matrix e = Array DIM2 e
+type Matrix = Array DIM2
 
 -- | Segment descriptor (vector of segment lengths).
 --
@@ -1025,7 +1025,7 @@ type Matrix e = Array DIM2 e
 -- values in conjunction with a /segment descriptor/, which stores the lengths
 -- of the subarrays.
 --
-type Segments i = Vector i
+type Segments = Vector
 
 -- Shorthand for common shape types
 --
