@@ -233,8 +233,7 @@ foldRef
     -> Array sh e
 foldRef f z arr =
   let (sh :. n) = arrayShape arr
-      sh'       = listToShape . P.map (P.max 1) . shapeToList $ sh
-  in  fromList sh' [ foldl f z sub | sub <- splitEvery n (toList arr) ]
+  in  fromList sh [ foldl f z sub | sub <- splitEvery n (toList arr) ]
 
 fold1Ref
     :: (Shape sh, Elt e)

@@ -444,10 +444,15 @@ zipWith = Acc $$$ ZipWith
 -- Reductions
 -- ----------
 
--- | Reduction of the innermost dimension of an array of arbitrary rank. The
--- first argument needs to be an /associative/ function to enable an efficient
--- parallel implementation. The initial element does not need to be an identity
--- element of the combination function.
+-- | Reduction of the innermost dimension of an array of arbitrary rank.
+--
+-- The shape of the result obeys the property:
+--
+-- > shape (fold f z xs) == indexTail (shape xs)
+--
+-- The first argument needs to be an /associative/ function to enable an
+-- efficient parallel implementation. The initial element does not need to be an
+-- identity element of the combination function.
 --
 -- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
 -- >>> mat
@@ -507,10 +512,15 @@ fold :: (Shape sh, Elt a)
      -> Acc (Array sh a)
 fold = Acc $$$ Fold
 
--- | Variant of 'fold' that requires the reduced array to be non-empty and
--- doesn't need an default value.  The first argument needs to be an
--- /associative/ function to enable an efficient parallel implementation. The
--- initial element does not need to be an identity element.
+-- | Variant of 'fold' that requires the innermost dimension of the array to be
+-- non-empty and doesn't need an default value.
+--
+-- The shape of the result obeys the property:
+--
+-- > shape (fold f z xs) == indexTail (shape xs)
+--
+-- The first argument needs to be an /associative/ function to enable an
+-- efficient parallel implementation, but does not need to be commutative.
 --
 fold1 :: (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
@@ -626,10 +636,8 @@ scanl' :: (Shape sh, Elt a)
 scanl' = Acc $$$ Scanl'
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
--- initial value (aka inclusive scan). The array must not be empty. The first
--- argument needs to be an /associative/ function. Denotationally, we have:
---
--- > scanl1 f e arr = tail (scanl f e arr)
+-- initial value (aka inclusive scan). The innermost dimension of the array must
+-- not be empty. The first argument must be an /associative/ function.
 --
 -- >>> let mat = fromList (Z:.4:.10) [0..] :: Matrix Int
 -- >>> run $ scanl1 (+) (use mat)
