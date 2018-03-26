@@ -81,7 +81,7 @@ import qualified Data.Array.Accelerate.Debug                    as D
 -- return Nothing. References from 'val' to the key are ignored (see the
 -- semantics of weak pointers in the documentation).
 --
-type HashTable key val  = HT.BasicHashTable key val
+type HashTable key val  = HT.CuckooHashTable key val
 type MT p               = MVar ( HashTable StableArray (RemoteArray p) )
 data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Weak (MT p))
@@ -122,11 +122,10 @@ new release = do
 
 -- | Look for the remote pointer corresponding to a given host-side array.
 --
-lookup
-    :: (PrimElt a b)
-    => MemoryTable p
-    -> ArrayData a
-    -> IO (Maybe (p b))
+lookup :: PrimElt a b
+       => MemoryTable p
+       -> ArrayData a
+       -> IO (Maybe (p b))
 lookup (MemoryTable !ref _ _ _) !arr = do
   sa <- makeStableArray arr
   mw <- withMVar ref (`HT.lookup` sa)
@@ -136,7 +135,7 @@ lookup (MemoryTable !ref _ _ _) !arr = do
       mv <- deRefWeak w
       case mv of
         Just _ | Just p' <- gcast p -> trace ("lookup/found: " ++ show sa) $ return (Just p')
-               | otherwise          -> $internalError "lookup" $ "type mismatch"
+               | otherwise          -> $internalError "lookup" "type mismatch"
 
         -- Note: [Weak pointer weirdness]
         --
@@ -150,7 +149,7 @@ lookup (MemoryTable !ref _ _ _) !arr = do
         -- pointers, is why we can not reuse the stable name 'sa' computed
         -- above in the error message.
         --
-        Nothing                     ->
+        Nothing ->
           makeStableArray arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
 
 
@@ -238,15 +237,18 @@ freeStable
     -> StableArray
     -> IO ()
 freeStable proxy (MemoryTable !ref _ !nrs _) !sa =
-  withMVar ref $ \mt -> do
-    mw <- mt `HT.lookup` sa
+  withMVar ref      $ \mt ->
+  HT.mutateIO mt sa $ \mw -> do
     case mw of
-      Nothing                        -> message ("free/already-removed: " ++ show sa)
+      Nothing ->
+        message ("free/already-removed: " ++ show sa)
+
       Just (RemoteArray _ !p !bytes) -> do
         message ("free/evict: " ++ show sa ++ " of " ++ showBytes bytes)
         N.insert bytes (castRemotePtr proxy p) nrs
         D.decreaseCurrentBytesRemote (fromIntegral bytes)
-        mt `HT.delete` sa
+
+    return (Nothing, ())
 
 
 -- Record an association between a host-side array and a new device memory area.
