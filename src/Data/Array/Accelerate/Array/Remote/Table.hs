@@ -135,7 +135,7 @@ lookup (MemoryTable !ref _ _ _) !arr = do
       mv <- deRefWeak w
       case mv of
         Just _ | Just p' <- gcast p -> trace ("lookup/found: " ++ show sa) $ return (Just p')
-               | otherwise          -> $internalError "lookup" $ "type mismatch"
+               | otherwise          -> $internalError "lookup" "type mismatch"
 
         -- Note: [Weak pointer weirdness]
         --
@@ -149,7 +149,7 @@ lookup (MemoryTable !ref _ _ _) !arr = do
         -- pointers, is why we can not reuse the stable name 'sa' computed
         -- above in the error message.
         --
-        Nothing                     ->
+        Nothing ->
           makeStableArray arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
 
 
