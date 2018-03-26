@@ -122,11 +122,10 @@ new release = do
 
 -- | Look for the remote pointer corresponding to a given host-side array.
 --
-lookup
-    :: (PrimElt a b)
-    => MemoryTable p
-    -> ArrayData a
-    -> IO (Maybe (p b))
+lookup :: PrimElt a b
+       => MemoryTable p
+       -> ArrayData a
+       -> IO (Maybe (p b))
 lookup (MemoryTable !ref _ _ _) !arr = do
   sa <- makeStableArray arr
   mw <- withMVar ref (`HT.lookup` sa)
@@ -238,15 +237,18 @@ freeStable
     -> StableArray
     -> IO ()
 freeStable proxy (MemoryTable !ref _ !nrs _) !sa =
-  withMVar ref $ \mt -> do
-    mw <- mt `HT.lookup` sa
+  withMVar ref      $ \mt ->
+  HT.mutateIO mt sa $ \mw -> do
     case mw of
-      Nothing                        -> message ("free/already-removed: " ++ show sa)
+      Nothing ->
+        message ("free/already-removed: " ++ show sa)
+
       Just (RemoteArray _ !p !bytes) -> do
         message ("free/evict: " ++ show sa ++ " of " ++ showBytes bytes)
         N.insert bytes (castRemotePtr proxy p) nrs
         D.decreaseCurrentBytesRemote (fromIntegral bytes)
-        mt `HT.delete` sa
+
+    return (Nothing, ())
 
 
 -- Record an association between a host-side array and a new device memory area.

@@ -1,15 +1,12 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: nightly-2018-03-18
+resolver: nightly-2018-03-25
 
 packages:
 - '.'
 
 extra-deps:
-- git:    https://github.com/deepfire/hashtables.git
-  commit: b9eb4b10a50bd6250330422afecc065339a32412
-
 - 'tasty-hedgehog-0.2.0.0'
 
 # Override default flag values for local packages and extra-deps

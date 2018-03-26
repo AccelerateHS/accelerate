@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable   #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE StandaloneDeriving   #-}
@@ -987,11 +988,11 @@ newASTHashTable = Hash.new
 --
 enterOcc :: OccMapHash c -> StableASTName c -> Int -> IO (Maybe Int)
 enterOcc occMap sa height
-  = do
-      entry <- Hash.lookup occMap sa
-      case entry of
-        Nothing           -> Hash.insert occMap sa (1    , height)  >> return Nothing
-        Just (n, heightS) -> Hash.insert occMap sa (n + 1, heightS) >> return (Just heightS)
+  = Hash.mutate occMap sa
+  $ \case
+      Nothing           -> (Just (1,   height),  Nothing)
+      Just (n, heightS) -> (Just (n+1, heightS), Just heightS)
+
 
 -- Immutable occurrence map
 -- ------------------------

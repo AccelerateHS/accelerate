@@ -277,7 +277,7 @@ Library
         , ghc-prim
         , half                          >= 0.2
         , hashable                      >= 1.1
-        , hashtables                    >= 1.0
+        , hashtables                    >= 1.2.3
         , hedgehog                      >= 0.5
         , lens                          >= 4.0
         , mtl                           >= 2.0

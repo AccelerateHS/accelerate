@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DoAndIfThenElse     #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -34,7 +35,7 @@ module Data.Array.Accelerate.Array.Remote.LRU (
 
 ) where
 
-import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
+import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, withMVar, mkWeakMVar )
 import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
@@ -122,7 +123,7 @@ new release = do
 -- The continuation passed as the third argument needs to obey some precise
 -- properties. As with all bracketed functions, the supplied remote pointer must
 -- not leak out of the function, as it is only guaranteed to be valid within it.
--- If it is required that it does leak (e.g. the backend is uses concurrency to
+-- If it is required that it does leak (e.g. the backend uses concurrency to
 -- interleave execution of different parts of the program), then `completed` on
 -- the returned task should not return true until it is guaranteed there are no
 -- more accesses of the remote pointer.
@@ -134,51 +135,53 @@ withRemote
     -> (RemotePtr m b -> m (task, c))
     -> m (Maybe c)
 withRemote (MemoryTable !mt !ref _) !arr run = do
-  key <- Basic.makeStableArray arr
-  mp  <- withMVar' ref $ \utbl -> do
-    mu <- liftIO $ HT.lookup utbl key
+  withMVar' ref $ \utbl -> do
+    key <- Basic.makeStableArray arr
+    mu  <- liftIO . HT.mutate utbl key $ \case
+      Nothing -> (Nothing,           Nothing)
+      Just u  -> (Just (incCount u), Just u)
+    --
     case mu of
-      Nothing -> do message ("withRemote/array has never been malloc'd: " ++ show key)
-                    return Nothing
-      Just u  -> do
-        mp <- liftIO $ do HT.insert utbl key (incCount u)
-                          Basic.lookup mt arr
-        case mp of
-          Nothing | isEvicted u -> Just <$> copy utbl (incCount u)
-          Just p                -> return (Just p)
-          _                     -> do message ("lost array " ++ show key)
-                                      $internalError "withRemote" "non-evicted array has been lost"
-  --
-  case mp of
-    Just p  -> Just <$> run' p
-    Nothing -> return Nothing -- The array was never in the table.
-  where
-    updateTask :: Maybe (Used task) -> task -> IO (Used task)
-    updateTask mu task = do
-      ts  <- getCPUTime
-      case mu of
-        Nothing -> $internalError "withRemote" "Invariant violated"
-        Just (Used _ status count tasks n weak_arr) -> do
-          tasks'  <- cleanUses tasks
-          return (Used ts status (count - 1) (task : tasks') n weak_arr)
+      Nothing -> do
+        message ("withRemote/array has never been malloc'd: " ++ show key)
+        return Nothing -- The array was never in the table
 
-    copy :: UT task -> Used task -> m (RemotePtr m b)
-    copy utbl (Used ts _ count tasks n weak_arr) = do
+      Just u  -> do
+        mp  <- liftIO $ Basic.lookup mt arr
+        ptr <- case mp of
+                 Just p          -> return p
+                 Nothing
+                   | isEvicted u -> copyBack utbl (incCount u)
+                   | otherwise   -> do message ("lost array " ++ show key)
+                                       $internalError "withRemote" "non-evicted array has been lost"
+        Just <$> go key ptr
+  where
+    updateTask :: Used task -> task -> IO (Used task)
+    updateTask (Used _ status count tasks n weak_arr) task = do
+      ts      <- getCPUTime
+      tasks'  <- cleanUses tasks
+      return (Used ts status (count - 1) (task : tasks') n weak_arr)
+
+    copyBack :: UT task -> Used task -> m (RemotePtr m b)
+    copyBack utbl (Used ts _ count tasks n weak_arr) = do
       message "withRemote/reuploading-evicted-array"
       p <- mallocWithUsage mt utbl arr (Used ts Clean count tasks n weak_arr)
       pokeRemote n p arr
       return p
 
-    run' :: RemotePtr m b -> m c
-    run' p = do
-      key <- Basic.makeStableArray arr
+    go :: StableArray -> RemotePtr m b -> m c
+    go key ptr = do
       message ("withRemote/using: " ++ show key)
-      (task, c) <- run p
-      withMVar' ref $ \utbl -> liftIO $ do
-        mu       <- HT.lookup utbl key
-        u        <- updateTask mu task
-        HT.insert utbl key u
-      liftIO $ touchArrayData arr
+      (task, c) <- run ptr
+      liftIO $ do
+        withMVar ref $ \utbl -> do
+          HT.mutateIO utbl key $ \case
+            Nothing -> $internalError "withRemote" "Invariant violated"
+            Just u  -> do
+              u' <- updateTask u task
+              return (Just u', ())
+        --
+        touchArrayData arr
       return c
 
 
@@ -331,10 +334,10 @@ insertUnmanaged
     -> p a
     -> m ()
 insertUnmanaged (MemoryTable mt ref weak_utbl) !arr !ptr = liftIO . withMVar' ref $ \utbl -> do
-  key <- Basic.makeStableArray arr
-  Basic.insertUnmanaged mt arr ptr
-  ts <- getCPUTime
-  weak_arr <- makeWeakArrayData arr arr (Just $ finalizer key weak_utbl)
+  key       <- Basic.makeStableArray arr
+  ()        <- Basic.insertUnmanaged mt arr ptr
+  ts        <- getCPUTime
+  weak_arr  <- makeWeakArrayData arr arr (Just $ finalizer key weak_utbl)
   HT.insert utbl key (Used ts Unmanaged 0 [] 0 weak_arr)
 
 
@@ -349,11 +352,8 @@ finalizer !key !weak_utbl = do
     Just ref -> trace  ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
 
 delete :: UT task -> StableArray -> IO ()
-delete utbl key = do
-  mu <- HT.lookup utbl key
-  case mu of
-    Nothing -> return ()
-    Just _  -> HT.delete utbl key
+delete = HT.delete
+
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
@@ -367,8 +367,7 @@ reclaim (MemoryTable !mt _ _) = Basic.reclaim mt
 cache_finalizer :: UT task -> IO ()
 cache_finalizer !tbl
   = trace "cache finaliser"
-  $ HT.mapM_ (\(_,u) -> f u)
-             tbl
+  $ HT.mapM_ (\(_,u) -> f u) tbl
   where
     f :: Used task -> IO ()
     f (Used _ _ _ _ _ w) = finalize w
