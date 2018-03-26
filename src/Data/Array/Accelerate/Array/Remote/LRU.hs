@@ -67,7 +67,7 @@ data MemoryTable p task = MemoryTable {-# UNPACK #-} !(Basic.MemoryTable p)
                                       {-# UNPACK #-} !(UseTable task)
                                       {-# UNPACK #-} !(Weak (UseTable task))
 
-type UT task            = HT.BasicHashTable StableArray (Used task)
+type UT task            = HT.CuckooHashTable StableArray (Used task)
 type UseTable task      = MVar (UT task)
 
 data Status = Clean     -- Array in remote memory matches array in host memory.

@@ -81,7 +81,7 @@ import qualified Data.Array.Accelerate.Debug                    as D
 -- return Nothing. References from 'val' to the key are ignored (see the
 -- semantics of weak pointers in the documentation).
 --
-type HashTable key val  = HT.BasicHashTable key val
+type HashTable key val  = HT.CuckooHashTable key val
 type MT p               = MVar ( HashTable StableArray (RemoteArray p) )
 data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Weak (MT p))
