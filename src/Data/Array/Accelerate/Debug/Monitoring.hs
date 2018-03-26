@@ -27,7 +27,7 @@ module Data.Array.Accelerate.Debug.Monitoring (
   didAllocateBytesLocal, didAllocateBytesRemote,
   didCopyBytesToRemote, didCopyBytesFromRemote,
   increaseCurrentBytesRemote, decreaseCurrentBytesRemote,
-  setCurrentBytesNursery,
+  increaseCurrentBytesNursery, decreaseCurrentBytesNursery, getCurrentBytesNursery, setCurrentBytesNursery,
   didRemoteGC,
   didEvictBytes,
 
@@ -214,6 +214,7 @@ addProcessorTime' var secs =
 
 -- | Allocated the number of bytes in the local memory space
 --
+{-# INLINE didAllocateBytesLocal #-}
 didAllocateBytesLocal :: Int64 -> IO ()
 #ifndef ACCELERATE_DEBUG
 didAllocateBytesLocal _ = return ()
@@ -223,66 +224,68 @@ didAllocateBytesLocal n = do
   void $ Atomic.add __total_bytes_allocated_local n
 #endif
 
--- | Allocated the number of bytes of /new/ memory in the remote memory space
+-- Allocations in the number of bytes of /new/ memory in the remote memory space
 --
-didAllocateBytesRemote :: Int64 -> IO ()
+{-# INLINE didAllocateBytesRemote #-}
+{-# INLINE increaseCurrentBytesRemote #-}
+{-# INLINE decreaseCurrentBytesRemote #-}
+didAllocateBytesRemote     :: Int64 -> IO ()
+decreaseCurrentBytesRemote :: Int64 -> IO ()
+increaseCurrentBytesRemote :: Int64 -> IO ()
 #ifndef ACCELERATE_DEBUG
-didAllocateBytesRemote _ = return ()
+didAllocateBytesRemote     _ = return ()
+increaseCurrentBytesRemote _ = return ()
+decreaseCurrentBytesRemote _ = return ()
 #else
 didAllocateBytesRemote n = do
  -- void $ Atomic.add __active_bytes_allocated_remote n
  void $ Atomic.add __total_bytes_allocated_remote n
-#endif
 
-{-# INLINE increaseCurrentBytesRemote #-}
-increaseCurrentBytesRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_DEBUG
-increaseCurrentBytesRemote _ = return ()
-#else
 increaseCurrentBytesRemote n = void $ Atomic.add __current_bytes_remote n
-#endif
-
-{-# INLINE decreaseCurrentBytesRemote #-}
-decreaseCurrentBytesRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_DEBUG
-decreaseCurrentBytesRemote _ = return ()
-#else
 decreaseCurrentBytesRemote n = void $ Atomic.subtract __current_bytes_remote n
 #endif
 
+
 -- | Copied data between the local and remote memory spaces
 --
-didCopyBytesToRemote :: Int64 -> IO ()
-#ifndef ACCELERATE_DEBUG
-didCopyBytesToRemote _ = return ()
-#else
-didCopyBytesToRemote n = void $ Atomic.add __total_bytes_copied_to_remote n
-#endif
-
+{-# INLINE didCopyBytesToRemote   #-}
+{-# INLINE didCopyBytesFromRemote #-}
 didCopyBytesFromRemote :: Int64 -> IO ()
+didCopyBytesToRemote   :: Int64 -> IO ()
 #ifndef ACCELERATE_DEBUG
+didCopyBytesToRemote   _ = return ()
 didCopyBytesFromRemote _ = return ()
 #else
+didCopyBytesToRemote   n = void $ Atomic.add __total_bytes_copied_to_remote n
 didCopyBytesFromRemote n = void $ Atomic.add __total_bytes_copied_from_remote n
 #endif
 
 
--- TLM: This is required for the 'cleanup' function (which deletes everything
--- from the nursery) and is somewhat useful for the add/remove functions, since
--- we keep track of the size anyway, but we do lose track of the number of
--- allocations/deletions to/from the nursery.
+-- Allocations in the nursery
 --
-{-# INLINE setCurrentBytesNursery #-}
-setCurrentBytesNursery :: Int64 -> IO ()
+{-# INLINE increaseCurrentBytesNursery #-}
+{-# INLINE decreaseCurrentBytesNursery #-}
+{-# INLINE setCurrentBytesNursery      #-}
+increaseCurrentBytesNursery :: Int64 -> IO ()
+decreaseCurrentBytesNursery :: Int64 -> IO ()
+setCurrentBytesNursery      :: Int64 -> IO ()
+getCurrentBytesNursery      :: IO Int64
 #ifndef ACCELERATE_DEBUG
-setCurrentBytesNursery _ = return ()
+increaseCurrentBytesNursery _ = return ()
+decreaseCurrentBytesNursery _ = return ()
+setCurrentBytesNursery      _ = return ()
+getCurrentBytesNursery        = return 0
 #else
-setCurrentBytesNursery n = Atomic.write __current_bytes_nursery n
+increaseCurrentBytesNursery n = void $ Atomic.add      __current_bytes_nursery n
+decreaseCurrentBytesNursery n = void $ Atomic.subtract __current_bytes_nursery n
+setCurrentBytesNursery      n =        Atomic.write    __current_bytes_nursery n
+getCurrentBytesNursery        =        Atomic.read     __current_bytes_nursery
 #endif
 
 
 -- | Performed a major GC of the remote memory space
 --
+{-# INLINE didRemoteGC #-}
 didRemoteGC :: IO ()
 #ifndef ACCELERATE_DEBUG
 didRemoteGC = return ()
@@ -292,6 +295,7 @@ didRemoteGC = void $ Atomic.add __num_remote_gcs 1
 
 -- | Performed an eviction of a remote array of the given number of bytes
 --
+{-# INLINE didEvictBytes #-}
 didEvictBytes :: Int64 -> IO ()
 #ifndef ACCELERATE_DEBUG
 didEvictBytes _ = return ()

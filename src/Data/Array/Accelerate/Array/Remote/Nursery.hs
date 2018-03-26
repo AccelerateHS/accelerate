@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns    #-}
+{-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Nursery
@@ -25,12 +26,11 @@ import qualified Data.Array.Accelerate.Debug                    as Debug
 -- libraries
 import Control.Concurrent.MVar
 import Data.Int
-import Data.IntMap                                              ( IntMap )
 import Data.Sequence                                            ( Seq )
 import Data.Word
 import System.Mem.Weak                                          ( Weak )
 import Prelude                                                  hiding ( lookup )
-import qualified Data.IntMap.Strict                             as IM
+import qualified Data.HashTable.IO                              as HT
 import qualified Data.Sequence                                  as Seq
 import qualified Data.Traversable                               as Seq
 
@@ -42,12 +42,10 @@ import qualified Data.Traversable                               as Seq
 -- The nursery is wrapped in an MVar so that several threads may safely access
 -- it concurrently.
 --
+type HashTable key val  = HT.CuckooHashTable key val
+type NRS ptr            = MVar ( HashTable Int (Seq (ptr Word8)) )  -- #bytes -> available memory
 data Nursery ptr        = Nursery {-# UNPACK #-} !(NRS ptr)
                                   {-# UNPACK #-} !(Weak (NRS ptr))
-type NRS ptr            = MVar (N ptr)
-
-data N ptr              = N !(IntMap (Seq (ptr Word8)))       -- #bytes -> ptr
-                            {-# UNPACK #-} !Int64             -- total allocated bytes
 
 
 -- | Create a fresh nursery.
@@ -59,7 +57,8 @@ data N ptr              = N !(IntMap (Seq (ptr Word8)))       -- #bytes -> ptr
 new :: (ptr Word8 -> IO ()) -> IO (Nursery ptr)
 new delete = do
   message "initialise nursery"
-  ref    <- newMVar ( N IM.empty 0 )
+  nrs    <- HT.new
+  ref    <- newMVar nrs
   weak   <- mkWeakMVar ref (cleanup delete ref)
   return $! Nursery ref weak
 
@@ -69,20 +68,18 @@ new delete = do
 {-# INLINEABLE lookup #-}
 lookup :: Int -> Nursery ptr -> IO (Maybe (ptr Word8))
 lookup !key (Nursery !ref !_) =
-  modifyMVar ref $ \nrs@( N im sz ) ->
-    let
-        (mv, nrs')  = IM.updateLookupWithKey f key im         -- returns _original_ value, if located
-        f _k v      =
-          case Seq.viewl v of
-            Seq.EmptyL  -> $internalError "lookup" "expected non-empty sequence"
-            _ Seq.:< vs -> if Seq.null vs then Nothing        -- delete this entry in the map
-                                          else Just vs        -- re-insert the tail
-    in
-    case fmap Seq.viewl mv of
-      Just (v Seq.:< _) -> let sz' = sz - fromIntegral key in do
-                           Debug.setCurrentBytesNursery sz'
-                           return ( N nrs' sz', Just v  )
-      _                 -> return ( nrs,        Nothing )
+  withMVar ref $ \nrs ->
+    HT.mutateIO nrs key $ \case
+      Nothing -> return (Nothing, Nothing)
+      Just r  ->
+        case Seq.viewl r of
+          v Seq.:< vs -> do
+            Debug.decreaseCurrentBytesNursery (fromIntegral key)
+            if Seq.null vs
+              then return (Nothing, Just v)   -- delete this entry from the map
+              else return (Just vs, Just v)   -- re-insert the tail
+          --
+          Seq.EmptyL  -> $internalError "lookup" "expected non-empty sequence"
 
 
 -- | Add an entry to the nursery
@@ -90,14 +87,11 @@ lookup !key (Nursery !ref !_) =
 {-# INLINEABLE insert #-}
 insert :: Int -> ptr Word8 -> Nursery ptr -> IO ()
 insert !key !val (Nursery !ref _) =
-  let
-      f Nothing   = Just (Seq.singleton val)
-      f (Just vs) = Just (vs Seq.|> val)
-  in
-  modifyMVar_ ref $ \(N im sz) -> do
-    let sz' = sz + fromIntegral key
-    Debug.setCurrentBytesNursery sz'
-    return $! N (IM.alter f key im) sz'
+  withMVar ref $ \nrs -> do
+    Debug.increaseCurrentBytesRemote (fromIntegral key)
+    HT.mutate nrs key $ \case
+      Nothing -> (Just (Seq.singleton val), ())
+      Just vs -> (Just (vs Seq.|> val),     ())
 
 
 -- | Delete all entries from the nursery
@@ -106,16 +100,20 @@ insert !key !val (Nursery !ref _) =
 cleanup :: (ptr Word8 -> IO ()) -> NRS ptr -> IO ()
 cleanup delete !ref = do
   message "nursery cleanup"
-  modifyMVar_ ref $ \(N nrs _) -> do mapM_ (Seq.mapM delete) (IM.elems nrs)
-                                     Debug.setCurrentBytesNursery 0
-                                     return ( N IM.empty 0 )
+  modifyMVar_ ref $ \nrs -> do
+    HT.mapM_ (Seq.mapM delete . snd) nrs
+    Debug.setCurrentBytesNursery 0
+    nrs'   <- HT.new
+    return nrs'
 
 
 -- | The total number of bytes retained by the nursery
 --
 {-# INLINEABLE size #-}
 size :: Nursery ptr -> IO Int64
-size (Nursery ref _) = withMVar ref $ \(N _ sz) -> return sz
+size (Nursery ref _)
+  = withMVar ref
+  $ HT.foldM (\s (k,v) -> return $ s + fromIntegral (k * (Seq.length v))) 0
 
 
 -- Debug
