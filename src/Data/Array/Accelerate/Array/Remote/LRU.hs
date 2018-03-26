@@ -35,7 +35,7 @@ module Data.Array.Accelerate.Array.Remote.LRU (
 
 ) where
 
-import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, withMVar, mkWeakMVar )
+import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
 import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
@@ -154,7 +154,7 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
                    | isEvicted u -> copyBack utbl (incCount u)
                    | otherwise   -> do message ("lost array " ++ show key)
                                        $internalError "withRemote" "non-evicted array has been lost"
-        Just <$> go key ptr
+        Just <$> go utbl key ptr
   where
     updateTask :: Used task -> task -> IO (Used task)
     updateTask (Used _ status count tasks n weak_arr) task = do
@@ -169,17 +169,16 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
       pokeRemote n p arr
       return p
 
-    go :: StableArray -> RemotePtr m b -> m c
-    go key ptr = do
+    go :: UT task -> StableArray -> RemotePtr m b -> m c
+    go utbl key ptr = do
       message ("withRemote/using: " ++ show key)
       (task, c) <- run ptr
       liftIO $ do
-        withMVar ref $ \utbl -> do
-          HT.mutateIO utbl key $ \case
-            Nothing -> $internalError "withRemote" "Invariant violated"
-            Just u  -> do
-              u' <- updateTask u task
-              return (Just u', ())
+        HT.mutateIO utbl key $ \case
+          Nothing -> $internalError "withRemote" "invariant violated"
+          Just u  -> do
+            u' <- updateTask u task
+            return (Just u', ())
         --
         touchArrayData arr
       return c
