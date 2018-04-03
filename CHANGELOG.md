@@ -88,7 +88,7 @@ Special thanks to those who contributed patches as part of this release:
 ## [0.12.0.0]
   * Full sharing recovery in scalar expressions and array computations.
   * Two new example applications in package `accelerate-examples` (both including a graphical frontend):
-    * A real-time Canny edge detection 
+    * A real-time Canny edge detection
     * An interactive fluid flow simulator
   * Bug fixes.
 
