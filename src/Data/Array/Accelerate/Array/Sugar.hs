@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ <= 708
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
@@ -70,6 +71,8 @@ import Prelude                                                  hiding ( (!!) )
 import Language.Haskell.TH                                      hiding ( Foreign )
 import qualified GHC.Exts                                       as GHC
 import qualified Data.Vector.Unboxed                            as U
+import qualified Data.Vector.Generic                            as VG
+import qualified Data.Vector.Generic.Mutable.Base               as VGM
 
 -- friends
 import Data.Array.Accelerate.Array.Data
@@ -965,6 +968,10 @@ instance Elt e => IsList (Vector e) where
   toList         = toList
   fromListN n xs = fromList (Z:.n) xs
   fromList xs    = GHC.fromListN (length xs) xs
+
+instance (VGM.MVector (VG.Mutable (Array DIM1)) e, Elt e) => VG.Vector (Array DIM1) e where
+  basicLength = length . toList
+  
 
 instance NFData (Array sh e) where
   rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
