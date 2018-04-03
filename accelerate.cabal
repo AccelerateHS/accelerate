@@ -537,9 +537,6 @@ test-suite doctest
   hs-source-dirs:       test/doctest
   main-is:              Main.hs
 
-  other-modules:
-        Build_doctests
-
   build-depends:
           base                          >= 4.7
         , accelerate
@@ -587,7 +584,7 @@ source-repository head
 
 source-repository this
   Type:                 git
-  Tag:                  1.2.0.0
+  Tag:                  v1.2.0.0
   Location:             git://github.com/AccelerateHS/accelerate.git
 
 -- vim: nospell
