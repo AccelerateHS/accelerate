@@ -8,15 +8,17 @@ dist: trusty
 sudo: false
 
 cache:
+  timeout: 600
   directories:
-    - $HOME/.stack
+    - $HOME/.stack/snapshots
+    - .stack-work/install
+
+before_cache:
+  - rm -vrf $(stack path --local-install-root)/bin
+  - rm -rf  $(stack path --local-install-root)/doc
 
 matrix:
   include:
-    - env: GHC=7.8.4 CABAL=1.18
-      compiler: "GHC 7.8"
-      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
-
     - env: GHC=7.10.3 CABAL=1.22
       compiler: "GHC 7.10"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
@@ -25,9 +27,13 @@ matrix:
       compiler: "GHC 8.0"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
 
-    - env: GHC=8.2.1 CABAL=1.24
+    - env: GHC=8.2.2 CABAL=2.0
       compiler: "GHC 8.2"
-      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-2.0, happy-1.19.5, alex-3.1.7 ] }}
+
+    - env: GHC=8.4.1 CABAL=2.0
+      compiler: "GHC 8.4"
+      addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-2.0, happy-1.19.5, alex-3.1.7 ] }}
 
     # - env: GHC=head CABAL=head
     #   compiler: "GHC HEAD"
@@ -43,24 +49,25 @@ before_install:
   - source .travis/install-stack.sh
 
 install:
-  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - cabal --version
   - stack --version
   - |
-      if [ ${GHC} == head -o ! -e stack.yaml ]; then
-        travis_retry cabal install --only-dependencies
-      else
-        travis_retry stack build --only-dependencies --fast --no-terminal --no-haddock-deps
-      fi
+      case ${GHC%.*} in
+        8.2)  export HADDOCK="--haddock --no-haddock-deps" ;;
+      esac
+  - travis_retry stack build --fast --jobs=2 --test --only-dependencies --no-terminal --no-copy-bins
+  # - |
+  #     if [ ${GHC} == head -o ! -e stack.yaml ]; then
+  #       travis_retry cabal install --only-dependencies
+  #     else
+  #       travis_retry stack build --only-dependencies --fast --no-terminal --test
+  #     fi
 
 script:
-  - |
-      if [ ${GHC} == head -o ! -e stack.yaml ]; then
-        cabal install
-        cabal haddock
-      else
-        stack build --fast --no-terminal --haddock --no-haddock-deps
-      fi
+  - stack build --fast --jobs=2 --test --no-terminal --no-copy-bins --no-run-tests ${HADDOCK}
+  - stack test accelerate:doctest
+  - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh

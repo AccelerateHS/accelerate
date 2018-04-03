@@ -1,8 +1,13 @@
 An Embedded Language for Accelerated Array Computations
 =======================================================
 
-[![Build Status](https://travis-ci.org/AccelerateHS/accelerate.svg?branch=master)](https://travis-ci.org/AccelerateHS/accelerate)
+[![Travis](https://img.shields.io/travis/AccelerateHS/accelerate/master.svg?label=linux)](https://travis-ci.org/AccelerateHS/accelerate)
+[![AppVeyor](https://img.shields.io/appveyor/ci/tmcdonell/accelerate/master.svg?label=windows)](https://ci.appveyor.com/project/tmcdonell/accelerate)
+[![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)
+[![Stackage Nightly](https://stackage.org/package/accelerate/badge/nightly)](https://stackage.org/nightly/package/accelerate)
 [![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
+[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
+
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
@@ -73,6 +78,7 @@ The following supported add-ons are available as separate packages:
   * [linear-accelerate][linear-accelerate]: [Linear][linear] vector spaces in Accelerate
   * [mwc-random-accelerate][mwc-random-accelerate]: Generate Accelerate arrays filled with high quality pseudorandom numbers
   * [numeric-prelude-accelerate][numeric-prelude-accelerate]: Lifting the [numeric-prelude][numeric-prelude] to Accelerate
+  * [wigner-ville-accelerate](https://github.com/Haskell-mouse/wigner-ville-accelerate): Wigner-Ville time-frequency distribution.
 
 Install them from Hackage with `cabal install PACKAGENAME`.
 

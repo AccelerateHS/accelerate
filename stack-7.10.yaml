@@ -1,13 +1,18 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-6.30
+resolver: lts-6.35
 
 packages:
 - '.'
 
 extra-deps:
+- 'constraints-0.9.1'
+- 'hashtables-1.2.3.0'
+- 'hedgehog-0.5.3'
+- 'tasty-hedgehog-0.2.0.0'
 - 'unique-0'
+- 'wl-pprint-annotated-0.1.0.0'
 
 # Override default flag values for local packages and extra-deps
 flags: {}

@@ -1,8 +1,8 @@
 Name:                   accelerate
-Version:                1.1.1.0
-Cabal-version:          >= 1.8
+Version:                1.2.0.0
+Cabal-version:          >= 1.18
 Tested-with:            GHC >= 7.8
-Build-type:             Simple
+Build-type:             Custom
 
 Synopsis:               An embedded language for accelerated array processing
 
@@ -25,6 +25,8 @@ Description:
   code on lists of floats. The types indicate that the computation may be
   online-compiled for performance - for example, using
   @Data.Array.Accelerate.LLVM.PTX@ it may be on-the-fly off-loaded to the GPU.
+  .
+  See the "Data.Array.Accelerate" module for further information.
   .
   [/Additional components/]
   .
@@ -85,8 +87,6 @@ Description:
   .
     * A simple interactive ray tracer
   .
-    * A particle based simulation of stable fluid flows
-  .
     * A cellular automata simulation
   .
     * A \"password recovery\" tool, for dictionary lookup of MD5 hashes
@@ -128,6 +128,17 @@ Stability:              Experimental
 Extra-source-files:
     README.md
     CHANGELOG.md
+    cbits/flags.inc
+    cbits/monitoring.inc
+
+Extra-doc-files:
+    images/*.png
+
+custom-setup
+  setup-depends:
+      base              >= 4.7
+    , Cabal
+    , cabal-doctest     >= 1.0
 
 Flag debug
   Default:              False
@@ -249,26 +260,43 @@ Flag internal-checks
   Description:          Enable internal consistency checks
   Default:              False
 
+Flag nofib
+  Default:              True
+  Description:
+    You can disable building the nofib test suite with this flag. Disabling this
+    is an unsupported configuration, but is useful for accelerating builds.
+
 Library
   Build-depends:
-          base                          >= 4.7 && < 4.11
+          base                          >= 4.7 && < 4.12
+        , ansi-terminal                 >= 0.6.2
+        , ansi-wl-pprint                >= 0.6
         , base-orphans                  >= 0.3
+        , bytestring                    >= 0.10.2
         , containers                    >= 0.3
+        , constraints                   >= 0.9
+        , cryptonite                    >= 0.21
         , deepseq                       >= 1.3
         , directory                     >= 1.0
         , exceptions                    >= 0.6
-        , fclabels                      >= 2.0
         , filepath                      >= 1.0
         , ghc-prim
+        , half                          >= 0.2
         , hashable                      >= 1.1
-        , hashtables                    >= 1.0
+        , hashtables                    >= 1.2.3
+        , hedgehog                      >= 0.5
+        , lens                          >= 4.0
         , mtl                           >= 2.0
-        , ansi-wl-pprint                >= 0.6
+        , tasty                         >= 0.11
+        , tasty-expected-failure        >= 0.11
+        , tasty-hedgehog                >= 0.1
+        , tasty-hunit                   >= 0.9
         , template-haskell
-        , time                          >= 1.4
+        , terminal-size                 >= 0.3
         , transformers                  >= 0.3
         , unique
         , unordered-containers          >= 0.2
+        , vector                        >= 0.10
 
   Exposed-modules:
         -- The core language and reference implementation
@@ -278,10 +306,14 @@ Library
         -- Prelude-like
         Data.Array.Accelerate.Data.Bits
         Data.Array.Accelerate.Data.Complex
+        Data.Array.Accelerate.Data.Either
         Data.Array.Accelerate.Data.Fold
+        Data.Array.Accelerate.Data.Functor
+        Data.Array.Accelerate.Data.Maybe
         Data.Array.Accelerate.Data.Monoid
+        Data.Array.Accelerate.Unsafe
 
-        -- For backend development
+        -- For backend development (hidden)
         Data.Array.Accelerate.AST
         Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
@@ -299,13 +331,16 @@ Library
         Data.Array.Accelerate.Async
         Data.Array.Accelerate.Debug
         Data.Array.Accelerate.Error
-        Data.Array.Accelerate.FullList
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Product
         Data.Array.Accelerate.Smart
         Data.Array.Accelerate.Trafo
         Data.Array.Accelerate.Type
+
+        -- For testing
+        Data.Array.Accelerate.Test.NoFib
+        Data.Array.Accelerate.Test.Similar
 
   Other-modules:
         Data.Atomic
@@ -348,28 +383,108 @@ Library
         Data.Array.Accelerate.Trafo.Substitution
         -- Data.Array.Accelerate.Trafo.Vectorise
 
-  c-sources:            cbits/atomic.c
+        -- nofib test suite
+        Data.Array.Accelerate.Test.NoFib.Base
+        Data.Array.Accelerate.Test.NoFib.Config
+
+  if flag(nofib)
+    -- build-depends:
+    --     , pipes                         >= 4.1.6   -- #286
+
+    other-modules:
+        Data.Array.Accelerate.Test.NoFib.Sharing
+        Data.Array.Accelerate.Test.NoFib.Prelude
+        Data.Array.Accelerate.Test.NoFib.Prelude.Map
+        Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
+        Data.Array.Accelerate.Test.NoFib.Prelude.Fold
+        Data.Array.Accelerate.Test.NoFib.Prelude.Scan
+        Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
+        Data.Array.Accelerate.Test.NoFib.Prelude.Permute
+        Data.Array.Accelerate.Test.NoFib.Prelude.Filter
+        Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
+        Data.Array.Accelerate.Test.NoFib.Imaginary
+        Data.Array.Accelerate.Test.NoFib.Imaginary.DotP
+        Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
+        Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
+        Data.Array.Accelerate.Test.NoFib.Spectral
+        Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
+        Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort
+        Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes
+        Data.Array.Accelerate.Test.NoFib.Issues
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue93
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue102
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue114
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue119
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue123
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue137
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue168
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue184
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue185
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue187
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue228
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue255
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue264
+        -- Data.Array.Accelerate.Test.NoFib.Issues.Issue286
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue287
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue288
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue362
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue407
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue409
+  else
+    cpp-options:
+        -DACCELERATE_DISABLE_NOFIB
+
+  if impl(ghc >= 8.0)
+    exposed-modules:
+        Data.Array.Accelerate.Data.Semigroup
+
+  default-language:
+        Haskell2010
+
+  hs-source-dirs:
+        src
 
   if flag(debug) || flag(ekg)
-    cpp-options:        -DACCELERATE_DEBUG
+    ghc-options:
+        -optc-DACCELERATE_DEBUG
+
+    cpp-options:
+        -DACCELERATE_DEBUG
+
+    -- Weird handling of C files because Cabal is not recompile C files on
+    -- changes to cc-options: <https://github.com/haskell/cabal/issues/4937>
+    c-sources:
+        cbits/atomic.c
+        cbits/clock.c
+        cbits/flags_debug.c
+        cbits/monitoring_debug.c
+  else
+    c-sources:
+        cbits/atomic.c
+        cbits/flags.c
+        cbits/monitoring.c
 
   if flag(ekg)
-    cpp-options:        -DACCELERATE_MONITORING
+    cpp-options:
+        -DACCELERATE_MONITORING
+
     build-depends:
           async                         >= 2.0
         , ekg                           >= 0.1
         , ekg-core                      >= 0.1
         , text                          >= 1.0
-        , time                          >= 1.4
 
   if flag(bounds-checks)
-    cpp-options:        -DACCELERATE_BOUNDS_CHECKS
+    cpp-options:
+        -DACCELERATE_BOUNDS_CHECKS
 
   if flag(unsafe-checks)
-    cpp-options:        -DACCELERATE_UNSAFE_CHECKS
+    cpp-options:
+        -DACCELERATE_UNSAFE_CHECKS
 
   if flag(internal-checks)
-    cpp-options:        -DACCELERATE_INTERNAL_CHECKS
+    cpp-options:
+        -DACCELERATE_INTERNAL_CHECKS
 
   if os(windows)
     cpp-options:        -DWIN32
@@ -378,17 +493,32 @@ Library
     cpp-options:        -DUNIX
     build-depends:      unix
 
-  ghc-options:          -O2 -Wall -funbox-strict-fields -fno-warn-name-shadowing
-  ghc-prof-options:     -caf-all -auto-all
+  cc-options:
+        -O3
+        -Wall
+
+  ghc-options:
+        -O2
+        -Wall
+        -funbox-strict-fields
+        -fno-warn-name-shadowing
+
+  ghc-prof-options:
+        -caf-all
+        -auto-all
 
   if impl(ghc >= 7.0)
-    ghc-options:        -fspec-constr-count=25
+    ghc-options:
+        -fspec-constr-count=25
 
   if impl(ghc == 7.*)
-    ghc-options:        -fcontext-stack=35
+    ghc-options:
+        -fcontext-stack=35
 
   if impl(ghc >= 8.0)
-    ghc-options:        -freduction-depth=35
+    ghc-options:
+        -Wcompat
+        -freduction-depth=35
 
   if impl(ghc < 7.10)
     build-depends:
@@ -400,13 +530,61 @@ Library
   --
   -- Extensions:
 
+
+test-suite doctest
+  type:                 exitcode-stdio-1.0
+  default-language:     Haskell2010
+  hs-source-dirs:       test/doctest
+  main-is:              Main.hs
+
+  build-depends:
+          base                          >= 4.7
+        , accelerate
+        , doctest                       >= 0.11
+
+  ghc-options:
+        -Wall
+        -threaded
+        -rtsopts
+
+  -- older ghc does not support the dimension-specialised show instances for
+  -- arrays, which the doctests use
+  if impl(ghc < 7.10)
+    buildable:          False
+
+  -- doctest only supports a single x-doctest-options line
+  if impl(ghc == 7.*)
+    x-doctest-options:  -fspec-constr-count=25 -fcontext-stack=35
+
+  if impl(ghc >= 8.0)
+    x-doctest-options:  -fspec-constr-count=25 -freduction-depth=35
+
+
+test-suite nofib-interpreter
+  type:                 exitcode-stdio-1.0
+  default-language:     Haskell2010
+  hs-source-dirs:       test/nofib
+  main-is:              Main.hs
+
+  build-depends:
+          base                          >= 4.7
+        , accelerate
+
+  ghc-options:
+        -O2
+        -Wall
+        -threaded
+        -rtsopts
+        -with-rtsopts=-A128M
+        -with-rtsopts=-n4M
+
 source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
 
 source-repository this
   Type:                 git
-  Tag:                  1.1.1.0
+  Tag:                  v1.2.0.0
   Location:             git://github.com/AccelerateHS/accelerate.git
 
 -- vim: nospell

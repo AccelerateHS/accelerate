@@ -6,7 +6,9 @@ resolver: lts-9.0
 packages:
 - '.'
 
-extra-deps: []
+extra-deps:
+- 'hashtables-1.2.3.0'
+- 'tasty-hedgehog-0.2.0.0'
 
 # Override default flag values for local packages and extra-deps
 flags: {}
