@@ -260,6 +260,12 @@ Flag internal-checks
   Description:          Enable internal consistency checks
   Default:              False
 
+Flag nofib
+  Default:              True
+  Description:
+    You can disable building the nofib test suite with this flag. Disabling this
+    is an unsupported configuration, but is useful for accelerating builds.
+
 Library
   Build-depends:
           base                          >= 4.7 && < 4.12
@@ -291,9 +297,6 @@ Library
         , unique
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
-
-        -- nofib test suite
-        -- , pipes                         >= 4.1.6   -- #286
 
   Exposed-modules:
         -- The core language and reference implementation
@@ -383,6 +386,12 @@ Library
         -- nofib test suite
         Data.Array.Accelerate.Test.NoFib.Base
         Data.Array.Accelerate.Test.NoFib.Config
+
+  if flag(nofib)
+    -- build-depends:
+    --     , pipes                         >= 4.1.6   -- #286
+
+    other-modules:
         Data.Array.Accelerate.Test.NoFib.Sharing
         Data.Array.Accelerate.Test.NoFib.Prelude
         Data.Array.Accelerate.Test.NoFib.Prelude.Map
@@ -421,6 +430,9 @@ Library
         Data.Array.Accelerate.Test.NoFib.Issues.Issue362
         Data.Array.Accelerate.Test.NoFib.Issues.Issue407
         Data.Array.Accelerate.Test.NoFib.Issues.Issue409
+  else
+    cpp-options:
+        -DACCELERATE_DISABLE_NOFIB
 
   if impl(ghc >= 8.0)
     exposed-modules:
@@ -453,7 +465,9 @@ Library
         cbits/monitoring.c
 
   if flag(ekg)
-    cpp-options:        -DACCELERATE_MONITORING
+    cpp-options:
+        -DACCELERATE_MONITORING
+
     build-depends:
           async                         >= 2.0
         , ekg                           >= 0.1
@@ -469,7 +483,8 @@ Library
         -DACCELERATE_UNSAFE_CHECKS
 
   if flag(internal-checks)
-    cpp-options:        -DACCELERATE_INTERNAL_CHECKS
+    cpp-options:
+        -DACCELERATE_INTERNAL_CHECKS
 
   if os(windows)
     cpp-options:        -DWIN32
