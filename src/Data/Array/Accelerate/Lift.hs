@@ -243,6 +243,10 @@ instance Lift Exp CULLong where
   type Plain CULLong = CULLong
   lift = Exp . Const
 
+instance Lift Exp Half where
+  type Plain Half = Half
+  lift = Exp . Const
+
 instance Lift Exp Float where
   type Plain Float = Float
   lift = Exp . Const
