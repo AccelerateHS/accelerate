@@ -99,7 +99,7 @@ data Z = Z
 --  used to construct both values and types.
 --
 infixl 3 :.
-data tail :. head = tail :. head
+data tail :. head = !tail :. !head
   deriving (Typeable, Eq)
 
 -- We don't we use a derived Show instance for (:.) because this will insert
