@@ -9,7 +9,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Array.Remote.Cache
+-- Module      : Data.Array.Accelerate.Array.Remote.LRU
 -- Copyright   : [2015..2017] Manuel M T Chakravarty, Gabriele Keller, Robert Clifton-Everest
 --               [2016..2017] Trevor L. McDonell
 -- License     : BSD3
