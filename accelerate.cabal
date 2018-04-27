@@ -128,8 +128,6 @@ Stability:              Experimental
 Extra-source-files:
     README.md
     CHANGELOG.md
-    cbits/flags.inc
-    cbits/monitoring.inc
 
 Extra-doc-files:
     images/*.png
@@ -444,6 +442,10 @@ Library
   hs-source-dirs:
         src
 
+  c-sources:
+        cbits/atomic.c
+        cbits/clock.c
+
   if flag(debug) || flag(ekg)
     ghc-options:
         -optc-DACCELERATE_DEBUG
@@ -454,13 +456,10 @@ Library
     -- Weird handling of C files because Cabal is not recompile C files on
     -- changes to cc-options: <https://github.com/haskell/cabal/issues/4937>
     c-sources:
-        cbits/atomic.c
-        cbits/clock.c
         cbits/flags_debug.c
         cbits/monitoring_debug.c
   else
     c-sources:
-        cbits/atomic.c
         cbits/flags.c
         cbits/monitoring.c
 

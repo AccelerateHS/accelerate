@@ -9,5 +9,5 @@
  */
 
 #define ACCELERATE_DEBUG
-#include "monitoring.inc"
+#include "monitoring.c"
 

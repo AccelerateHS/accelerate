@@ -9,5 +9,5 @@
  */
 
 #define ACCELERATE_DEBUG
-#include "flags.inc"
+#include "flags.c"
 
