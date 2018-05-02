@@ -3,7 +3,7 @@
 # Basic template to test with GHC=[7.8, 7.10, 8.0]. Caches the 'stack' build
 # directory to speed subsequent compilations.
 #
-language: generic
+language: minimal
 dist: trusty
 sudo: false
 
@@ -31,7 +31,7 @@ matrix:
       compiler: "GHC 8.2"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-2.0, happy-1.19.5, alex-3.1.7 ] }}
 
-    - env: GHC=8.4.1 CABAL=2.0
+    - env: GHC=8.4.2 CABAL=2.0
       compiler: "GHC 8.4"
       addons: { apt: { sources: [ hvr-ghc ], packages: [ libgmp-dev, cabal-install-2.0, happy-1.19.5, alex-3.1.7 ] }}
 
