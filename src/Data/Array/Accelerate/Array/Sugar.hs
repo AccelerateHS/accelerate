@@ -1243,6 +1243,8 @@ fromFunction sh f = unsafePerformIO $! fromFunctionM sh (return . f)
 
 -- | Create an array using a monadic function applied at each index.
 --
+-- @since 1.2.0.0
+--
 {-# INLINEABLE fromFunctionM #-}
 fromFunctionM :: (Shape sh, Elt e) => sh -> (sh -> IO e) -> IO (Array sh e)
 fromFunctionM sh f = do
