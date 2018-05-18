@@ -129,7 +129,6 @@ instance RealFloat Half where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
-  floatRange _    = (-13,16)    -- bug in half <= 2.2.3
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f16_is_denormalized . mkUnsafeCoerce)
   isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f16_is_negative_zero . mkUnsafeCoerce)
   decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f16_decode (mkUnsafeCoerce x)

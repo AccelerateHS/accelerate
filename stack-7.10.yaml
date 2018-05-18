@@ -8,6 +8,7 @@ packages:
 
 extra-deps:
 - 'constraints-0.9.1'
+- 'half-0.3'
 - 'hashtables-1.2.3.0'
 - 'hedgehog-0.5.3'
 - 'tasty-hedgehog-0.2.0.0'
@@ -15,10 +16,10 @@ extra-deps:
 - 'wl-pprint-annotated-0.1.0.0'
 
 # Override default flag values for local packages and extra-deps
-flags: {}
+# flags: {}
 
 # Extra package databases containing global packages
-extra-package-dbs: []
+# extra-package-dbs: []
 
 # Control whether we use the GHC we find on the path
 # system-ghc: true

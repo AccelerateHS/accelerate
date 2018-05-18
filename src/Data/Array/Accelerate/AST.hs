@@ -1777,7 +1777,7 @@ liftIntegral TypeCLLong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger 
 liftIntegral TypeCULLong{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
 
 liftFloating :: FloatingType t -> t -> Q (TExp t)
-liftFloating TypeHalf{}    x = [|| Half $$( liftIntegral integralType (getHalf x)) ||]
+liftFloating TypeHalf{}    x = [|| x ||]
 liftFloating TypeFloat{}   x = [|| x ||]
 liftFloating TypeDouble{}  x = [|| x ||]
 liftFloating TypeCFloat{}  x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
