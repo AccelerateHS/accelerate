@@ -101,8 +101,8 @@ instance Shape sh => Shape (sh, Int) where
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
 
-  size (sh, sz)                     = $boundsCheck "size" "negative shape dimension" (sz >= 0)
-                                    $ size sh * sz
+  size (sh, sz) | sz <= 0           = 0
+                | otherwise         = size sh * sz
 
   toIndex (sh, sz) (ix, i)          = $indexCheck "toIndex" i sz
                                     $ toIndex sh ix * sz + i
@@ -154,12 +154,14 @@ instance Shape sh => Shape (sh, Int) where
 
   rangeToShape ((sh1, sz1), (sh2, sz2))
     = (rangeToShape (sh1, sh2), sz2 - sz1 + 1)
+
   shapeToRange (sh, sz)
     = let (low, high) = shapeToRange sh
       in
       ((low, 0), (high, sz - 1))
 
   shapeToList (sh,sz) = sz : shapeToList sh
+
   listToShape []      = $internalError "listToShape" "empty list when converting to Ix"
   listToShape (x:xs)  = (listToShape xs,x)
 
