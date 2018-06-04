@@ -126,12 +126,12 @@ __attribute__((destructor)) void dump_gc_stats(void)
     char buffer[96];
     double timestamp = clock_gettime_elapsed_seconds();
 
-    printf("\n");
-    printf("[%8.3f] gc: %s bytes allocated locally\n", timestamp, format_int64(buffer, __total_bytes_allocated_local));
-    printf("[%8.3f] gc: %s bytes allocated on the remote device\n", timestamp, format_int64(buffer, __total_bytes_allocated_remote));
-    printf("[%8.3f] gc: %s bytes copied to the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_to_remote));
-    printf("[%8.3f] gc: %s bytes copied from the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_from_remote));
-    printf("[%8.3f] gc: %s bytes evicted from the remote (%s evictions, %s GCs)\n", timestamp, format_int64(&buffer[0], __total_bytes_evicted_from_remote), format_int64(&buffer[32], __num_evictions), format_int64(&buffer[64], __num_remote_gcs));
+    fprintf(stderr, "\n");
+    fprintf(stderr, "[%8.3f] gc: %s bytes allocated locally\n", timestamp, format_int64(buffer, __total_bytes_allocated_local));
+    fprintf(stderr, "[%8.3f] gc: %s bytes allocated on the remote device\n", timestamp, format_int64(buffer, __total_bytes_allocated_remote));
+    fprintf(stderr, "[%8.3f] gc: %s bytes copied to the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_to_remote));
+    fprintf(stderr, "[%8.3f] gc: %s bytes copied from the remote device\n", timestamp, format_int64(buffer, __total_bytes_copied_from_remote));
+    fprintf(stderr, "[%8.3f] gc: %s bytes evicted from the remote (%s evictions, %s GCs)\n", timestamp, format_int64(&buffer[0], __total_bytes_evicted_from_remote), format_int64(&buffer[32], __num_evictions), format_int64(&buffer[64], __num_remote_gcs));
   }
 }
 

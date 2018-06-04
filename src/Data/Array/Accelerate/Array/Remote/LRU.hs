@@ -89,7 +89,7 @@ data Used task where
        -> {-# UNPACK #-} !(Weak (ArrayData e))
        -> Used task
 
--- |A Task represents a process executing asynchronously that can be polled for
+-- | A Task represents a process executing asynchronously that can be polled for
 -- its status. This is necessary for backends that work asynchronously (i.e.
 -- the CUDA backend). If a backend is synchronous, the () instance can be used.
 --
@@ -100,7 +100,7 @@ class Task task where
 instance Task () where
   completed () = return True
 
--- |Create a new memory cache from host to remote arrays.
+-- | Create a new memory cache from host to remote arrays.
 --
 -- The function supplied should be the `free` for the remote pointers being
 -- stored. This function will be called by the GC, which typically runs on a
@@ -115,7 +115,7 @@ new release = do
   weak_utbl <- mkWeakMVar ref (cache_finalizer utbl)
   return    $! MemoryTable mt ref weak_utbl
 
--- |Perform some action that requires the remote pointer corresponding to
+-- | Perform some action that requires the remote pointer corresponding to
 -- the given array. Returns `Nothing` if the array have NEVER been in the
 -- cache. If the array was previously in the cache, but was evicted due to its
 -- age, then the array will be copied back from host memory.
@@ -331,7 +331,7 @@ free proxy (MemoryTable !mt !ref _) !arr
       delete utbl key
       Basic.freeStable proxy mt key
 
--- |Record an association between a host-side array and a remote memory area
+-- | Record an association between a host-side array and a remote memory area
 -- that was not allocated by accelerate. The remote memory will NOT be re-used
 -- once the host-side array is garbage collected.
 --
@@ -368,7 +368,7 @@ delete :: UT task -> StableArray -> IO ()
 delete = HT.delete
 
 
--- |Initiate garbage collection and `free` any remote arrays that no longer
+-- | Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
 --
 reclaim

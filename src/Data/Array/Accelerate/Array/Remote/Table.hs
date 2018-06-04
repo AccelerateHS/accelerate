@@ -47,11 +47,12 @@ import Data.Functor
 import Data.Hashable                                            ( hash, Hashable )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
-import Data.Typeable                                            ( Typeable, gcast )
+import Data.Typeable                                            ( Typeable, gcast, typeOf )
 import Data.Word
 import Foreign.Storable                                         ( sizeOf )
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, deRefWeak )
+import Text.Printf
 import Prelude                                                  hiding ( lookup, id )
 import qualified Data.HashTable.IO                              as HT
 
@@ -90,9 +91,9 @@ data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
 
 data RemoteArray p where
   RemoteArray :: Typeable e
-              => {-# UNPACK #-} !(Weak ())  -- Keep track of host array liveness
-              -> !(p e)                     -- The actual remote pointer
+              => !(p e)                     -- The actual remote pointer
               -> {-# UNPACK #-} !Int        -- The array size in bytes
+              -> {-# UNPACK #-} !(Weak ())  -- Keep track of host array liveness
               -> RemoteArray p
 
 -- | An untyped reference to an array, similar to a StableName.
@@ -103,7 +104,7 @@ newtype StableArray = StableArray Unique
 instance Show StableArray where
   show (StableArray u) = show (hash u)
 
--- |Create a new memory table from host to remote arrays.
+-- | Create a new memory table from host to remote arrays.
 --
 -- The function supplied should be the `free` for the remote pointers being
 -- stored. This function will be called by the GC, which typically runs on a
@@ -130,11 +131,11 @@ lookup (MemoryTable !ref _ _ _) !arr = do
   sa <- makeStableArray arr
   mw <- withMVar ref (`HT.lookup` sa)
   case mw of
-    Nothing              -> trace ("lookup/not found: " ++ show sa) $ return Nothing
-    Just (RemoteArray w p _) -> do
+    Nothing                   -> trace ("lookup/not found: " ++ show sa) $ return Nothing
+    Just (RemoteArray p _ w)  -> do
       mv <- deRefWeak w
       case mv of
-        Just _ | Just p' <- gcast p -> trace ("lookup/found: " ++ show sa) $ return (Just p')
+        Just{} | Just p' <- gcast p -> trace ("lookup/found: " ++ show sa) $ return (Just p')
                | otherwise          -> $internalError "lookup" "type mismatch"
 
         -- Note: [Weak pointer weirdness]
@@ -174,10 +175,11 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   --
   chunk <- remoteAllocationSize
   let -- next highest multiple of f from x
-      multiple x f      = (x + (f-1)) `div` f
+      multiple x f      = (x + (f-1)) `quot` f
       bytes             = chunk * multiple (n * sizeOf (undefined::b)) chunk
   --
-  message ("malloc: " ++ showBytes bytes)
+  message $ printf "malloc %d bytes (%d x %d bytes, type=%s, pagesize=%d)" bytes n (sizeOf (undefined::b)) (show (typeOf (undefined::a))) chunk
+  --
   mp <-
     fmap (castRemotePtr (Proxy :: Proxy m))
     <$> attempt "malloc/nursery" (liftIO $ N.lookup bytes nursery)
@@ -195,22 +197,24 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
     Nothing -> return Nothing
     Just p' -> do
       insert mt ad p' bytes
-      return (Just p')
+      return mp
 
   where
+    {-# INLINE orElse #-}
     orElse :: m (Maybe x) -> m (Maybe x) -> m (Maybe x)
-    orElse ra rb = do
-      ma <- ra
-      case ma of
-        Nothing -> rb
-        Just a  -> return (Just a)
+    orElse this next = do
+      result <- this
+      case result of
+        Just{}  -> return result
+        Nothing -> next
 
+    {-# INLINE attempt #-}
     attempt :: String -> m (Maybe x) -> m (Maybe x)
-    attempt msg next = do
-      ma <- next
-      case ma of
+    attempt msg this = do
+      result <- this
+      case result of
+        Just{}  -> trace msg (return result)
         Nothing -> return Nothing
-        Just a  -> trace msg (return (Just a))
 
 
 
@@ -243,16 +247,17 @@ freeStable proxy (MemoryTable !ref _ !nrs _) !sa =
       Nothing ->
         message ("free/already-removed: " ++ show sa)
 
-      Just (RemoteArray _ !p !bytes) -> do
-        message ("free/evict: " ++ show sa ++ " of " ++ showBytes bytes)
+      Just (RemoteArray !p !bytes _) -> do
+        message ("free/nursery: " ++ show sa ++ " of " ++ showBytes bytes)
         N.insert bytes (castRemotePtr proxy p) nrs
         D.decreaseCurrentBytesRemote (fromIntegral bytes)
 
     return (Nothing, ())
 
 
--- Record an association between a host-side array and a new device memory area.
--- The device memory will be freed when the host array is garbage collected.
+-- | Record an association between a host-side array and a new device memory
+-- area. The device memory will be freed when the host array is garbage
+-- collected.
 --
 insert :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
        => MemoryTable (RemotePtr m)
@@ -265,10 +270,10 @@ insert mt@(MemoryTable !ref _ _ _) !arr !ptr !bytes = do
   weak <- liftIO $ makeWeakArrayData arr () (Just $ freeStable (Proxy :: Proxy m) mt key)
   message $ "insert: " ++ show key
   liftIO  $ D.increaseCurrentBytesRemote (fromIntegral bytes)
-  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr bytes)
+  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray ptr bytes weak)
 
 
--- |Record an association between a host-side array and a remote memory area
+-- | Record an association between a host-side array and a remote memory area
 -- that was not allocated by accelerate. The remote memory will NOT be re-used
 -- once the host-side array is garbage collected.
 --
@@ -284,14 +289,14 @@ insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   key  <- makeStableArray  arr
   weak <- liftIO $ makeWeakArrayData arr () (Just $ remoteFinalizer weak_ref key)
   message $ "insertUnmanaged: " ++ show key
-  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr 0)
+  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray ptr 0 weak)
 
 
 -- Removing entries
 -- ----------------
 
--- |Initiate garbage collection and mark any arrays that no longer have host-side
--- equivalents as reusable.
+-- | Initiate garbage collection and mark any arrays that no longer have
+-- host-side equivalents as reusable.
 --
 clean :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePtr m) -> m ()
 clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
@@ -311,7 +316,7 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
       rs <- withMVar ref $ HT.foldM removable []  -- collect arrays that can be removed
       mapM_ (freeStable (Proxy :: Proxy m) mt) rs -- remove them all
   where
-    removable rs (sa, RemoteArray w _ _) = do
+    removable rs (sa, RemoteArray _ _ w) = do
       alive <- isJust <$> deRefWeak w
       if alive
         then return rs
@@ -327,7 +332,7 @@ purge (MemoryTable _ _ nursery@(Nursery nrs _) release)
   $ liftIO (N.cleanup release nrs)
 
 
--- |Initiate garbage collection and `free` any remote arrays that no longer
+-- | Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
 --
 reclaim :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePtr m) -> m ()
@@ -395,7 +400,7 @@ makeStableArray !ad = return $! StableArray (id arrayElt ad)
 -- Weak arrays
 -- ----------------------
 
--- |Make a weak pointer using an array as a key. Unlike the standard `mkWeak`,
+-- | Make a weak pointer using an array as a key. Unlike the standard `mkWeak`,
 -- this guarantees finalisers won't fire early.
 --
 makeWeakArrayData
@@ -472,16 +477,24 @@ message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
 {-# INLINE management #-}
 management :: (RemoteMemory m, MonadIO m) => String -> Nursery p -> m a -> m a
 management msg nrs next = do
-  before     <- availableRemoteMem
-  before_nrs <- liftIO $ N.size nrs
-  total      <- totalRemoteMem
-  r          <- next
-  D.when D.dump_gc $ do
-    after     <- availableRemoteMem
-    after_nrs <- liftIO $ N.size nrs
-    message $ msg ++ " (freed: "     ++ showBytes (after - before)
-                  ++ ", stashed: "   ++ showBytes (before_nrs - after_nrs)
-                  ++ ", remaining: " ++ showBytes after
-                  ++ " of "          ++ showBytes total ++ ")"
-  return r
+  yes <- liftIO $ D.getFlag D.dump_gc
+  if yes
+    then do
+      total       <- totalRemoteMem
+      before      <- availableRemoteMem
+      before_nrs  <- liftIO $ N.size nrs
+      r           <- next
+      after       <- availableRemoteMem
+      after_nrs   <- liftIO $ N.size nrs
+      message $ printf "%s (freed: %s, stashed: %s, remaining: %s of %s)"
+                  msg
+                  (showBytes (before - after))
+                  (showBytes (after_nrs - before_nrs))
+                  (showBytes after)
+                  (showBytes total)
+      --
+      return r
+
+    else
+      next
 
