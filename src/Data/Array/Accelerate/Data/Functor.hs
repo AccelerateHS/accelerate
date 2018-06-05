@@ -12,7 +12,7 @@
 -- A functor performs a uniform action over a parameterised type
 --
 -- This is essentially the same as the standard Haskell 'Prelude.Functor' class,
--- lifted to Accelarete 'Exp' terms.
+-- lifted to Accelerate 'Exp' terms.
 --
 -- @since 1.2.0.0
 --
