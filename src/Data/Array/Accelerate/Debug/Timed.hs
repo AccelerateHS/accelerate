@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE MagicHash                #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Timed
 -- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -30,7 +31,11 @@ import Data.List
 import System.CPUTime
 import Prelude
 
+import GHC.Base
+import GHC.Int
+import GHC.Num
 import GHC.Stats
+import GHC.Word
 #endif
 
 
@@ -66,7 +71,7 @@ timed_simpl fmt action = do
   cpu1  <- liftIO getCPUTime
   --
   let wallTime = wall1 - wall0
-      cpuTime  = fromIntegral (cpu1 - cpu0) * 1E-12
+      cpuTime  = D# (doubleFromInteger (cpu1 - cpu0) *## 1E-12##)
   --
   liftIO $ putTraceMsg (fmt wallTime cpuTime)
   return res
@@ -87,12 +92,13 @@ timed_gc fmt action = do
   rts1  <- liftIO getRTSStats
 #endif
   --
-  let toDouble :: Integral a => a -> Double
-      toDouble = fromIntegral
+  let
+      w64 (W64# w#) = D# (word2Double# w#)
+      i64 (I64# i#) = D# (int2Double# i#)
       --
 #if __GLASGOW_HASKELL__ < 802
-      allocated   = toDouble (bytesAllocated gc1 - bytesAllocated gc0)
-      copied      = toDouble (bytesCopied gc1 - bytesCopied gc0)
+      allocated   = i64 (bytesAllocated gc1 - bytesAllocated gc0)
+      copied      = i64 (bytesCopied gc1 - bytesCopied gc0)
       totalWall   = wallSeconds gc1 - wallSeconds gc0
       totalCPU    = cpuSeconds gc1 - cpuSeconds gc0
       mutatorWall = mutatorWallSeconds gc1 - mutatorWallSeconds gc0
@@ -101,14 +107,14 @@ timed_gc fmt action = do
       gcCPU       = gcCpuSeconds gc1 - gcCpuSeconds gc0
       totalGCs    = numGcs gc1 - numGcs gc0
 #else
-      allocated   = toDouble (allocated_bytes rts1 - allocated_bytes rts0)
-      copied      = toDouble (copied_bytes rts1 - copied_bytes rts0)
-      totalWall   = toDouble (elapsed_ns rts1 - elapsed_ns rts0) * 1.0E-9
-      totalCPU    = toDouble (cpu_ns rts1 - cpu_ns rts0) * 1.0E-9
-      mutatorWall = toDouble (mutator_elapsed_ns rts1 - mutator_elapsed_ns rts0) * 1.0E-9
-      mutatorCPU  = toDouble (mutator_cpu_ns rts1 - mutator_cpu_ns rts0) * 1.0E-9
-      gcWall      = toDouble (gc_elapsed_ns rts1 - gc_elapsed_ns rts0) * 1.0E-9
-      gcCPU       = toDouble (gc_cpu_ns rts1 - gc_cpu_ns rts0) * 1.0E-9
+      allocated   = w64 (allocated_bytes rts1 - allocated_bytes rts0)
+      copied      = w64 (copied_bytes rts1 - copied_bytes rts0)
+      totalWall   = i64 (elapsed_ns rts1 - elapsed_ns rts0) * 1.0E-9
+      totalCPU    = i64 (cpu_ns rts1 - cpu_ns rts0) * 1.0E-9
+      mutatorWall = i64 (mutator_elapsed_ns rts1 - mutator_elapsed_ns rts0) * 1.0E-9
+      mutatorCPU  = i64 (mutator_cpu_ns rts1 - mutator_cpu_ns rts0) * 1.0E-9
+      gcWall      = i64 (gc_elapsed_ns rts1 - gc_elapsed_ns rts0) * 1.0E-9
+      gcCPU       = i64 (gc_cpu_ns rts1 - gc_cpu_ns rts0) * 1.0E-9
       totalGCs    = gcs rts1 - gcs rts0
 #endif
 
