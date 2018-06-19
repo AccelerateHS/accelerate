@@ -226,7 +226,7 @@ didAllocateBytesLocal n = do
 
 -- Allocations in the number of bytes of /new/ memory in the remote memory space
 --
-{-# INLINE didAllocateBytesRemote #-}
+{-# INLINE didAllocateBytesRemote     #-}
 {-# INLINE increaseCurrentBytesRemote #-}
 {-# INLINE decreaseCurrentBytesRemote #-}
 didAllocateBytesRemote     :: Int64 -> IO ()
