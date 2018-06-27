@@ -32,7 +32,7 @@ addons:
 matrix:
   fast_finish: true
   include:
-    - env: GHC=8.4.2 CABAL=2.0
+    - env: GHC=8.4.3 CABAL=2.0
       compiler: "GHC 8.4"
 
     - env: GHC=8.2.2 CABAL=2.0
