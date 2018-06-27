@@ -444,8 +444,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Scanr1 f a          -> embed  (into  Scanr1        (cvtF f)) a
     Scanr' f z a        -> embed  (into2 Scanr'        (cvtF f) (cvtE z)) a
     Permute f d p a     -> embed2 (into2 permute       (cvtF f) (cvtF p)) d a
-    Stencil f x a       -> stencil  (cvtF f) (cvtB x) a
-    Stencil2 f x a y b  -> stencil2 (cvtF f) (cvtB x) (cvtB y) a b
+    Stencil f x a       -> embed  (into2 stencil1      (cvtF f) (cvtB x)) a
+    Stencil2 f x a y b  -> embed2 (into3 stencil2      (cvtF f) (cvtB x) (cvtB y)) a b
 
   where
     -- If fusion is not enabled, force terms to the manifest representation
@@ -470,37 +470,16 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     --
     permute f p d a     = Permute f d p a
 
-    -- Stencils can delay their argument arrays
+    -- Note: [Stencil fusion]
     --
-    stencil
-        :: Stencil sh a stencil
-        => PreFun      acc aenv (stencil -> b)
-        -> PreBoundary acc aenv (Array sh a)
-        ->             acc aenv (Array sh a)
-        -> Embed       acc aenv (Array sh b)
-    stencil f@(Lam (Body e)) x =
-      trav1 (if ua <= lIMIT then id else force) (into2 Stencil f x)
-      where
-        ua    = usesOfExp ZeroIdx e
-        lIMIT = 1
-
-    stencil2
-        :: (Stencil sh a stencil1, Stencil sh b stencil2)
-        => PreFun      acc aenv (stencil1 -> stencil2 -> c)
-        -> PreBoundary acc aenv (Array sh a)
-        -> PreBoundary acc aenv (Array sh b)
-        ->             acc aenv (Array sh a)
-        ->             acc aenv (Array sh b)
-        -> Embed       acc aenv (Array sh c)
-    stencil2 f@(Lam (Lam (Body e))) x y =
-      trav2 (if ua <= lIMIT then id else force)
-            (if ub <= lIMIT then id else force)
-            (into3 op f x y)
-      where
-        op f x y a b  = Stencil2 f x a y b
-        ua            = usesOfExp (SuccIdx ZeroIdx) e
-        ub            = usesOfExp ZeroIdx           e
-        lIMIT         = 1
+    -- We allow stencils to delay their argument arrays with no special
+    -- considerations. This means that the delayed function will be evaluated
+    -- _at every element_ of the stencil pattern. We should do some analysis of
+    -- when this duplication is beneficial (keeping in mind that the stencil
+    -- implementations themselves may share neighbouring elements).
+    --
+    stencil1 f x a      = Stencil  f x a
+    stencil2 f x y a b  = Stencil2 f x a y b
 
     -- Conversions for closed scalar functions and expressions. This just
     -- applies scalar simplifications.
@@ -582,10 +561,10 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       , acc0    <- inject . compute' $ cc0
       = Embed (env `PushEnv` inject (op env acc1 acc0)) (Done ZeroIdx)
 
-    force :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
-    force (Embed env cc)
-      | Done{} <- cc = Embed env                                  cc
-      | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
+    -- force :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
+    -- force (Embed env cc)
+    --   | Done{} <- cc = Embed env                                  cc
+    --   | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
     -- -- Move additional bindings for producers outside of the sequence, so that
     -- -- producers may fuse with their arguments resulting in actual sequencing
