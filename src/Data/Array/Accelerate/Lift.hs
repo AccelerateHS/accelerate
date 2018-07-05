@@ -8,6 +8,9 @@
 {-# LANGUAGE OverlappingInstances  #-}
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif
+#if __GLASGOW_HASKELL__ >= 806
+{-# LANGUAGE UndecidableInstances  #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Lift
 -- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell

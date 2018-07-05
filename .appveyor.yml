@@ -9,10 +9,11 @@ environment:
   global:
     STACK_ROOT: "c:\\sr"
   matrix:
-    - GHC: "7.10"
-    - GHC: "8.0"
-    - GHC: "8.2"
+    - GHC: "8.6"
     - GHC: "8.4"
+    - GHC: "8.2"
+    - GHC: "8.0"
+    - GHC: "7.10"
 
 before_build:
   # http://help.appveyor.com/discussions/problems/6312-curl-command-not-found
