@@ -6,37 +6,6 @@ compiler: ghc-8.6.0.20180627
 compiler-check: match-exact
 allow-newer: true
 
-setup-info:
-  ghc:
-    linux64-nopie:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-deb8-linux.tar.xz
-        sha256: e891e9e6ad0d53382e79b5c1005af6123501fbc95088ed849c3a1c22979db319
-    linux64-tinfo:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-fedora-linux.tar.xz
-        sha256: d87816e85d34320b7d3678b14643b3ffdbcef3ac87cd37b2c46a2c954e2b66ef
-    linux64-tinfo-nopie:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-fedora-linux.tar.xz
-        sha256: d87816e85d34320b7d3678b14643b3ffdbcef3ac87cd37b2c46a2c954e2b66ef
-    linux32-nopie:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-i386-deb8-linux.tar.xz
-        sha256: 259019896e7081bced44a349a752721432aa59d324846f3fa52d5c178e1e36c9
-    macosx:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-darwin.tar.xz
-        sha256: b5861e1c2822bb9236243b650bd5c2a933ce86277396af0c9b6494eca2770b02
-    windows32:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-i386-unknown-mingw32.tar.xz
-        sha256: 6cc739c10335c757e11a4fbdea8667c3ab6d8cce52e6d4b38cc21f3c45b55d9e
-    windows64:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-unknown-mingw32.tar.xz
-        sha256: ccff1f896425f932581c804e1fd6dd14dea7b7423f7f4970ff1d99ab03c97504
-
 packages:
 - '.'
 
