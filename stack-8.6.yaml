@@ -1,0 +1,145 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+# vim: nospell
+
+resolver: ghc-8.6.0.20180627
+compiler: ghc-8.6.0.20180627
+compiler-check: match-exact
+allow-newer: true
+
+setup-info:
+  ghc:
+    linux64-nopie:
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-deb8-linux.tar.xz
+        sha256: e891e9e6ad0d53382e79b5c1005af6123501fbc95088ed849c3a1c22979db319
+    linux64-tinfo:
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-fedora-linux.tar.xz
+        sha256: d87816e85d34320b7d3678b14643b3ffdbcef3ac87cd37b2c46a2c954e2b66ef
+    linux64-tinfo-nopie:
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-fedora-linux.tar.xz
+        sha256: d87816e85d34320b7d3678b14643b3ffdbcef3ac87cd37b2c46a2c954e2b66ef
+    linux32-nopie:
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-i386-deb8-linux.tar.xz
+        sha256: 259019896e7081bced44a349a752721432aa59d324846f3fa52d5c178e1e36c9
+    macosx:
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-darwin.tar.xz
+        sha256: b5861e1c2822bb9236243b650bd5c2a933ce86277396af0c9b6494eca2770b02
+    windows32:
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-i386-unknown-mingw32.tar.xz
+        sha256: 6cc739c10335c757e11a4fbdea8667c3ab6d8cce52e6d4b38cc21f3c45b55d9e
+    windows64:
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-unknown-mingw32.tar.xz
+        sha256: ccff1f896425f932581c804e1fd6dd14dea7b7423f7f4970ff1d99ab03c97504
+
+packages:
+- '.'
+
+extra-deps:
+- git:    https://github.com/tmcdonell/hs-memory.git
+  commit: feee6256e19ed178dc75b071dc54983bc6320f26
+
+- git:    https://github.com/tmcdonell/foundation.git
+  commit: 9743bb1eb5cd76c22d8c119c21b359ba4984e642
+  subdirs:
+    - basement
+
+- git:    https://github.com/tmcdonell/tasty.git
+  commit: 06539fa5577d44eee3bf3fae5caf3aadfd9806f7
+  subdirs:
+    - core
+
+- adjunctions-4.4
+- ansi-terminal-0.8.0.4
+- ansi-wl-pprint-0.6.8.2
+- async-2.2.1
+- base-compat-0.10.4
+- base-orphans-0.8
+- bifunctors-5.5.3
+- cabal-doctest-1.0.6
+- call-stack-0.1.0
+- clock-0.7.2
+- code-page-0.1.3
+- colour-2.3.4
+- comonad-5.0.4
+- concurrent-output-1.10.6
+- constraints-0.10.1
+- contravariant-1.5
+- cryptonite-0.25
+- distributive-0.6
+- doctest-0.16.0
+- exceptions-0.10.0
+- foundation-0.0.20
+- free-5.1
+- ghc-paths-0.1.0.9
+- half-0.3
+- hashable-1.2.7.0
+- hashtables-1.2.3.1
+- haskell-lexer-1.0.1
+- hedgehog-0.6
+- invariant-0.5
+- kan-extensions-5.2
+- lens-4.17
+- lifted-async-0.10.0.2
+- lifted-base-0.2.3.12
+- mmorph-1.1.2
+- monad-control-1.0.2.3
+- optparse-applicative-0.14.2.0
+- parallel-3.2.1.1
+- pretty-show-1.7
+- primitive-0.6.4.0
+- profunctors-5.3
+- random-1.1
+- reflection-2.1.4
+- resourcet-1.2.1
+- semigroupoids-5.3.1
+- semigroups-0.18.5
+- StateVar-1.1.1.0
+- syb-0.7
+- tagged-0.8.6
+- tasty-expected-failure-0.11.1.1
+- tasty-hedgehog-0.2.0.0
+- tasty-hunit-0.10.0.1
+- terminal-size-0.3.2.1
+- th-abstraction-0.2.8.0
+- th-lift-0.7.10
+- transformers-base-0.4.5.2
+- transformers-compat-0.6.2
+- unbounded-delays-0.1.1.0
+- unique-0
+- unliftio-core-0.1.1.0
+- unordered-containers-0.2.9.0
+- vector-0.12.0.1
+- void-0.7.2
+- wcwidth-0.0.2
+- wl-pprint-annotated-0.1.0.0
+
+# Override default flag values for local packages and extra-deps
+# flags: {}
+
+# Extra global and per-package GHC options
+# ghc-options: {}
+
+# Extra package databases containing global packages
+# extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.4.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]
+

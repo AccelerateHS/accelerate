@@ -6,6 +6,9 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+#if __GLASGOW_HASKELL__ >= 806
+{-# LANGUAGE UndecidableInstances  #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Data.Monoid
 -- Copyright   : [2016..2017] Trevor L. McDonell
