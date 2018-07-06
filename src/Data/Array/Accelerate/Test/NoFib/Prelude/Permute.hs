@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Permute
@@ -74,7 +75,7 @@ test_permute runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [
               testProperty "scatter->DIM1"      $ test_scatter runN sh dim1 e
             , testProperty "scatter->DIM2"      $ test_scatter runN sh dim2 e

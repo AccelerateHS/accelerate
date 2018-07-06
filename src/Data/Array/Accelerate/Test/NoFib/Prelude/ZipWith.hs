@@ -4,6 +4,7 @@
 {-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
@@ -76,7 +77,7 @@ test_zipWith runN =
             => Gen sh
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+          testGroup ("DIM" P.++ show (rank @sh))
             [ -- operators on Num
               testProperty "(+)"          $ test_plus runN sh e
             , testProperty "(-)"          $ test_minus runN sh e
@@ -126,7 +127,7 @@ test_zipWith runN =
             => Gen sh
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+          testGroup ("DIM" P.++ show (rank @sh))
             [ -- operators on Num
               testProperty "(+)"          $ test_plus runN sh (full e)
             , testProperty "(-)"          $ test_minus runN sh (full e)

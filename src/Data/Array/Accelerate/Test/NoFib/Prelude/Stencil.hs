@@ -6,6 +6,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
@@ -628,7 +629,7 @@ stencil3x3x3Ref st bnd arr =
 
 bound :: forall sh e. Shape sh => SimpleBoundary e -> sh -> sh -> Either e sh
 bound bnd sh0 ix0 =
-  case go (eltType sh0) (fromElt sh0) (fromElt ix0) of
+  case go (eltType @sh) (fromElt sh0) (fromElt ix0) of
     Left e    -> Left e
     Right ix' -> Right (toElt ix')
   where

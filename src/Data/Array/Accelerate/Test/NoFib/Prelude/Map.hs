@@ -5,6 +5,7 @@
 {-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Map
@@ -76,7 +77,7 @@ test_map runN =
             => Gen sh
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+          testGroup ("DIM" P.++ show (rank @sh))
             [ -- operators on Num
               testProperty "neg"                $ test_negate runN sh e
             , testProperty "abs"                $ test_abs runN sh e
@@ -108,7 +109,7 @@ test_map runN =
             => Gen sh
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::sh)))
+          testGroup ("DIM" P.++ show (rank @sh))
             [ -- operators on Num
               testProperty "neg"        $ test_negate runN sh (fullrange e)
             , testProperty "abs"        $ test_abs runN sh (fullrange e)

@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -48,9 +49,8 @@ import Data.Array.Accelerate.Data.Semigroup
 import Data.Char
 import Data.Either                                                  ( Either(..) )
 import Data.Maybe
-import Data.Typeable
 import Foreign.C.Types
-import Prelude                                                      ( (.), ($), const, undefined, otherwise )
+import Prelude                                                      ( (.), ($), const, otherwise )
 
 
 -- | Lift a value into the 'Left' constructor
@@ -142,19 +142,19 @@ tag x = Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` x
 type instance EltRepr (Either a b) = TupleRepr (Word8, EltRepr a, EltRepr b)
 
 instance (Elt a, Elt b) => Elt (Either a b) where
-  eltType _ = eltType (undefined::(Word8,a,b))
+  eltType = eltType @(Word8,a,b)
   toElt ((((),0),a),_)  = Left  (toElt a)
   toElt (_         ,b)  = Right (toElt b)
-  fromElt (Left a)      = ((((),0), fromElt a), undef' (eltType (undefined::b)))
-  fromElt (Right b)     = ((((),1), undef' (eltType (undefined::a))), fromElt b)
+  fromElt (Left a)      = ((((),0), fromElt a), undef' (eltType @b))
+  fromElt (Right b)     = ((((),1), undef' (eltType @a)), fromElt b)
 
 instance (Elt a, Elt b) => IsProduct Elt (Either a b) where
   type ProdRepr (Either a b) = ProdRepr (Word8, a, b)
-  toProd _ ((((),0),a),_) = Left a
-  toProd _ (_         ,b) = Right b
-  fromProd _ (Left a)   = ((((), 0), a), toElt (undef' (eltType (undefined::b))))
-  fromProd _ (Right b)  = ((((), 1), toElt (undef' (eltType (undefined::a)))), b)
-  prod cst _ = prod cst (undefined::(Word8,a,b))
+  toProd ((((),0),a),_) = Left a
+  toProd (_         ,b) = Right b
+  fromProd (Left a)   = ((((), 0), a), toElt (undef' (eltType @b)))
+  fromProd (Right b)  = ((((), 1), toElt (undef' (eltType @a))), b)
+  prod = prod @Elt @(Word8,a,b)
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)
@@ -207,7 +207,7 @@ filter'
     -> Acc (Array (sh:.Int) e)        -- values
     -> Acc (Vector e, Array sh Int)
 filter' keep arr
-  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
+  | Just Refl <- matchShapeType @sh @Z
   = let
         (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
         prj ix          = keep!ix ? ( index1 (target!ix), ignore )
@@ -234,12 +234,4 @@ filter' keep arr
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = fill (constant empty) undef
-
-matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
-matchShapeType _ _
-  | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
-  = gcast Refl
-
-matchShapeType _ _
-  = Nothing
 

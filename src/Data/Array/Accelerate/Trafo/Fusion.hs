@@ -9,6 +9,7 @@
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE ViewPatterns         #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
@@ -809,7 +810,7 @@ shape cc
 -- Reified type of a delayed array representation.
 --
 accType :: forall acc aenv a. Arrays a => Cunctation acc aenv a -> ArraysR (ArrRepr a)
-accType _ = arrays (undefined :: a)
+accType _ = arrays @a
 
 
 -- Environment manipulation
@@ -949,7 +950,7 @@ unzipD
     -> Embed  acc aenv (Array sh a)
     -> Maybe (Embed acc aenv (Array sh b))
 unzipD f (Embed env (Done v))
-  | TypeRscalar VectorScalarType{} <- eltType (undefined::a)
+  | TypeRscalar VectorScalarType{} <- eltType @a
   = Nothing
 
   | Lam (Body (Prj tix (Var ZeroIdx))) <- f

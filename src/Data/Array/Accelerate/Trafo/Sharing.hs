@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# OPTIONS_GHC -fno-warn-orphans        #-}
@@ -548,17 +549,13 @@ mkIndex :: forall slix e aenv. (Slice slix, Elt e)
         => AST.OpenAcc                aenv (Array (FullShape  slix) e)
         -> AST.Exp                    aenv slix
         -> AST.PreOpenAcc AST.OpenAcc aenv (Array (SliceShape slix) e)
-mkIndex = AST.Slice (sliceIndex slix)
-  where
-    slix = undefined :: slix
+mkIndex = AST.Slice (sliceIndex @slix)
 
 mkReplicate :: forall slix e aenv. (Slice slix, Elt e)
         => AST.Exp                    aenv slix
         -> AST.OpenAcc                aenv (Array (SliceShape slix) e)
         -> AST.PreOpenAcc AST.OpenAcc aenv (Array (FullShape  slix) e)
-mkReplicate = AST.Replicate (sliceIndex slix)
-  where
-    slix = undefined :: slix
+mkReplicate = AST.Replicate (sliceIndex @slix)
 
 -- mkToSeq :: forall slsix slix e aenv senv. (Division slsix, DivisionSlice slsix ~ slix, Elt e, Elt slix, Slice slix)
 --         => slsix
@@ -832,7 +829,7 @@ convertSharingStencilFun1 config _ alyt aenv stencilFun = Lam (Body openStencilF
               (ZeroIdx :: Idx ((), StencilRepr sh stencil)
                               (StencilRepr sh stencil))
 
-    body = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil)
+    body            = stencilFun (stencilPrj @sh @a stencil)
     openStencilFun  = convertSharingExp config lyt alyt [] aenv body
 
 -- | Convert a binary stencil function
@@ -863,8 +860,7 @@ convertSharingStencilFun2 config _ _ alyt aenv stencilFun = Lam (Lam (Body openS
                                             StencilRepr sh stencil2)
                                        (StencilRepr sh stencil2))
 
-    body = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil1)
-                      (stencilPrj (undefined::sh) (undefined::b) stencil2)
+    body            = stencilFun (stencilPrj @sh @a stencil1) (stencilPrj @sh @b stencil2)
     openStencilFun  = convertSharingExp config lyt alyt [] aenv body
 
 
@@ -1586,7 +1582,7 @@ makeOccMapStencil1
     -> IO (stencil -> RootExp b, Int)
 makeOccMapStencil1 config accOccMap _ lvl stencil = do
   let x = Exp (Tag lvl)
-      f = stencil . stencilPrj (undefined::sh) (undefined::a)
+      f = stencil . stencilPrj @sh @a
   --
   (body, height) <- makeOccMapRootExp config accOccMap (lvl+1) [lvl] (f x)
   return (const body, height)
@@ -1603,8 +1599,8 @@ makeOccMapStencil2
 makeOccMapStencil2 config accOccMap _ _ lvl stencil = do
   let x         = Exp (Tag (lvl+1))
       y         = Exp (Tag lvl)
-      f a b     = stencil (stencilPrj (undefined::sh) (undefined::a) a)
-                          (stencilPrj (undefined::sh) (undefined::b) b)
+      f a b     = stencil (stencilPrj @sh @a a)
+                          (stencilPrj @sh @b b)
   --
   (body, height) <- makeOccMapRootExp config accOccMap (lvl+2) [lvl, lvl+1] (f x y)
   return (\_ _ -> body, height)

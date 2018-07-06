@@ -5,6 +5,7 @@
 {-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Filter
@@ -70,7 +71,7 @@ test_filter runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "even"     $ test_even runN sh e
             ]
 
@@ -90,7 +91,7 @@ test_filter runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "positive" $ test_positive runN sh e
             ]
 

@@ -4,6 +4,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Print
@@ -163,7 +164,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     pp (Apply afun acc)         = wrap $ sep [ ppAF afun, ppA acc ]
     pp (Acond e acc1 acc2)      = wrap $ hang 3 (vsep [if_ <+> ppE e, then_ <+> ppA acc1, else_ <+> ppA acc2])
     pp (Slice _ty acc ix)       = "slice"       .$ [ ppA acc, ppE ix ]
-    pp (Use arrs)               = "use"         .$ [ prettyArrays (arrays (undefined :: arrs)) arrs ]
+    pp (Use arrs)               = "use"         .$ [ prettyArrays (arrays @arrs) arrs ]
     pp (Unit e)                 = "unit"        .$ [ ppE e ]
     pp (Generate sh f)          = "generate"    .$ [ ppSh sh, ppF f ]
     pp (Transform sh ix f acc)  = "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppA acc ]
@@ -367,7 +368,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
         f'           = if infixOp then parens f else f
 
     pp (PrimConst a)            = prettyConst a
-    pp (Tuple tup)              = prettyTuple (eltType (undefined::t)) prettyAcc env aenv tup
+    pp (Tuple tup)              = prettyTuple (eltType @t) prettyAcc env aenv tup
     pp (Var idx)                = prj idx env
     pp (Const v)                = text $ show (toElt v :: t)
     pp (Prj idx e)              = wrap $ prettyTupleIdx idx <+> ppE e

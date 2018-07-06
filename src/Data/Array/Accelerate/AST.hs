@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
@@ -1124,7 +1125,7 @@ rnfPreOpenAcc rnfA pacc =
     Aforeign asm afun a       -> rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
     Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
-    Use arrs                  -> rnfArrays (arrays (undefined::t)) arrs
+    Use arrs                  -> rnfArrays (arrays @t) arrs
     Unit x                    -> rnfE x
     Reshape sh a              -> rnfE sh `seq` rnfA a
     Generate sh f             -> rnfE sh `seq` rnfF f
@@ -1163,7 +1164,7 @@ rnfBoundary :: forall acc aenv sh e. NFDataAcc acc -> PreBoundary acc aenv (Arra
 rnfBoundary _    Clamp        = ()
 rnfBoundary _    Mirror       = ()
 rnfBoundary _    Wrap         = ()
-rnfBoundary _    (Constant c) = rnfConst (eltType (undefined::e)) c
+rnfBoundary _    (Constant c) = rnfConst (eltType @e) c
 rnfBoundary rnfA (Function f) = rnfPreOpenFun rnfA f
 
 
@@ -1193,7 +1194,7 @@ rnfSeqProducer rnfA topSeq =
   let
       rnfArrs :: forall a. Arrays a => [a] -> ()
       rnfArrs []     = ()
-      rnfArrs (a:as) = rnfArrays (arrays (undefined::a)) (fromArr a) `seq` rnfArrs as
+      rnfArrs (a:as) = rnfArrays (arrays @a) (fromArr a) `seq` rnfArrs as
 
       rnfAF :: PreOpenAfun acc aenv' t' -> ()
       rnfAF = rnfPreOpenAfun rnfA
@@ -1254,7 +1255,7 @@ rnfPreOpenExp rnfA topExp =
     Let bnd body              -> rnfE bnd `seq` rnfE body
     Var ix                    -> rnfIdx ix
     Foreign asm f x           -> rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
-    Const t                   -> rnfConst (eltType (undefined::t)) t
+    Const t                   -> rnfConst (eltType @t) t
     Undef                     -> ()
     Tuple t                   -> rnfTuple rnfA t
     Prj ix e                  -> rnfTupleIdx ix `seq` rnfE e
@@ -1473,7 +1474,7 @@ liftPreOpenAcc liftA pacc =
     Aforeign asm f a          -> [|| Aforeign $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
     Awhile p f a              -> [|| Awhile $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
-    Use a                     -> [|| Use $$(liftArrays (arrays (undefined::a)) a) ||]
+    Use a                     -> [|| Use $$(liftArrays (arrays @a) a) ||]
     Unit e                    -> [|| Unit $$(liftE e) ||]
     Reshape sh a              -> [|| Reshape $$(liftE sh) $$(liftA a) ||]
     Generate sh f             -> [|| Generate $$(liftE sh) $$(liftF f) ||]
@@ -1526,7 +1527,7 @@ liftPreOpenExp liftA pexp =
     Let bnd body              -> [|| Let $$(liftPreOpenExp liftA bnd) $$(liftPreOpenExp liftA body) ||]
     Var ix                    -> [|| Var $$(liftIdx ix) ||]
     Foreign asm f x           -> [|| Foreign $$(liftForeign asm) $$(liftPreOpenFun liftA f) $$(liftE x) ||]
-    Const c                   -> [|| Const $$(liftConst (eltType (undefined::t)) c) ||]
+    Const c                   -> [|| Const $$(liftConst (eltType @t) c) ||]
     Undef                     -> [|| Undef ||]
     Tuple tup                 -> [|| Tuple $$(liftT tup) ||]
     Prj tix e                 -> [|| Prj $$(liftTupleIdx tix) $$(liftE e) ||]
@@ -1559,7 +1560,7 @@ liftArrays (ArraysRpair r1 r2) (a1,a2) = [|| ($$(liftArrays r1 a1), $$(liftArray
 
 liftArray :: forall sh e. Array sh e -> Q (TExp (Array sh e))
 liftArray (Array sh adata) =
-  [|| Array $$(liftConst (eltType (undefined::sh)) sh) $$(go arrayElt adata) ||] `sigE` typeRepToType (typeOf (undefined::Array sh e))
+  [|| Array $$(liftConst (eltType @sh) sh) $$(go arrayElt adata) ||] `sigE` typeRepToType (typeOf (undefined::Array sh e))
   where
     sz :: Int
     sz = size sh
@@ -1634,7 +1635,7 @@ liftBoundary
 liftBoundary _     Clamp        = [|| Clamp ||]
 liftBoundary _     Mirror       = [|| Mirror ||]
 liftBoundary _     Wrap         = [|| Wrap ||]
-liftBoundary _     (Constant v) = [|| Constant $$(liftConst (eltType (undefined::e)) v) ||]
+liftBoundary _     (Constant v) = [|| Constant $$(liftConst (eltType @e) v) ||]
 liftBoundary liftA (Function f) = [|| Function $$(liftPreOpenFun liftA f) ||]
 
 liftSliceIndex :: SliceIndex ix slice coSlice sliceDim -> Q (TExp (SliceIndex ix slice coSlice sliceDim))
@@ -1880,7 +1881,7 @@ showPreAccOp Stencil2{}         = "Stencil2"
 -- showPreAccOp Collect{}          = "Collect"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
-showArrays = display . collect (arrays (undefined::arrs)) . fromArr
+showArrays = display . collect (arrays @arrs) . fromArr
   where
     collect :: ArraysR a -> a -> [String]
     collect ArraysRunit         _        = []

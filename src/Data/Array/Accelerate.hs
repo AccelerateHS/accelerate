@@ -1,3 +1,6 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate
 -- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
@@ -435,8 +438,8 @@ linearIndexArray = (S.!!)
 
 -- | Rank of an array.
 --
-arrayRank :: Shape sh => sh -> Int
-arrayRank = S.rank
+arrayRank :: forall sh. Shape sh => Int
+arrayRank = S.rank @sh
 
 -- |Array shape in plain Haskell code.
 --

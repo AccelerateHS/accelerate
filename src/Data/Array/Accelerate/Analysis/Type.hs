@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -47,7 +48,7 @@ import qualified Foreign.Storable as F
 -- |Reify the element type of an array.
 --
 arrayType :: forall sh e. Array sh e -> TupleType (EltRepr e)
-arrayType (Array _ _) = eltType (undefined::e)
+arrayType (Array _ _) = eltType @e
 
 
 -- |Determine the type of an expressions
@@ -81,39 +82,39 @@ preAccType k pacc =
     -- The following all contain impossible pattern matches, but GHC's type
     -- checker does no grok that
     --
-    Avar _              -> case arrays (undefined :: (Array sh e)) of
-                             ArraysRarray -> eltType (undefined::e)
+    Avar _              -> case arrays @(Array sh e) of
+                             ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "When I get sad, I stop being sad and be AWESOME instead."
 #endif
 
-    Apply _ _           -> case arrays (undefined :: Array sh e) of
-                             ArraysRarray -> eltType (undefined::e)
+    Apply _ _           -> case arrays @(Array sh e) of
+                             ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "TRUE STORY."
 #endif
 
-    Atuple _            -> case arrays (undefined :: Array sh e) of
-                             ArraysRarray -> eltType (undefined::e)
+    Atuple _            -> case arrays @(Array sh e) of
+                             ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "I made you a cookie, but I eated it."
 #endif
 
-    Aprj _ _            -> case arrays (undefined :: Array sh e) of
-                             ArraysRarray -> eltType (undefined::e)
+    Aprj _ _            -> case arrays @(Array sh e) of
+                             ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "Hey look! even the leaves are falling for you."
 #endif
 
-    Aforeign _ _ _      -> case arrays (undefined :: Array sh e) of
-                             ArraysRarray -> eltType (undefined::e)
+    Aforeign _ _ _      -> case arrays @(Array sh e) of
+                             ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "Who on earth wrote all these weird error messages?"
 #endif
 
 {--
-    Collect _           -> case arrays (undefined :: Array sh e) of
-                             ArraysRarray -> eltType (undefined::e)
+    Collect _           -> case arrays @(Array sh e) of
+                             ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "rob you are terrible at this game"
 #endif
@@ -122,14 +123,14 @@ preAccType k pacc =
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc
     Use a               -> arrayType a
-    Unit _              -> eltType (undefined::e)
-    Generate _ _        -> eltType (undefined::e)
-    Transform _ _ _ _   -> eltType (undefined::e)
+    Unit _              -> eltType @e
+    Generate _ _        -> eltType @e
+    Transform _ _ _ _   -> eltType @e
     Reshape _ acc       -> k acc
     Replicate _ _ acc   -> k acc
     Slice _ acc _       -> k acc
-    Map _ _             -> eltType (undefined::e)
-    ZipWith _ _ _       -> eltType (undefined::e)
+    Map _ _             -> eltType @e
+    ZipWith _ _ _       -> eltType @e
     Fold _ _ acc        -> k acc
     FoldSeg _ _ acc _   -> k acc
     Fold1 _ acc         -> k acc
@@ -140,8 +141,8 @@ preAccType k pacc =
     Scanr1 _ acc        -> k acc
     Permute _ _ _ acc   -> k acc
     Backpermute _ _ acc -> k acc
-    Stencil _ _ _       -> eltType (undefined::e)
-    Stencil2 _ _ _ _ _  -> eltType (undefined::e)
+    Stencil _ _ _       -> eltType @e
+    Stencil2 _ _ _ _ _  -> eltType @e
 
 
 -- |Reify the result type of a scalar expression.
@@ -161,33 +162,33 @@ preExpType :: forall acc aenv env t.
            -> TupleType (EltRepr t)
 preExpType k e =
   case e of
-    Let _ _           -> eltType (undefined::t)
-    Var _             -> eltType (undefined::t)
-    Const _           -> eltType (undefined::t)
-    Undef             -> eltType (undefined::t)
-    Tuple _           -> eltType (undefined::t)
-    Prj _ _           -> eltType (undefined::t)
-    IndexNil          -> eltType (undefined::t)
-    IndexCons _ _     -> eltType (undefined::t)
-    IndexHead _       -> eltType (undefined::t)
-    IndexTail _       -> eltType (undefined::t)
-    IndexAny          -> eltType (undefined::t)
-    IndexSlice _ _ _  -> eltType (undefined::t)
-    IndexFull _ _ _   -> eltType (undefined::t)
-    ToIndex _ _       -> eltType (undefined::t)
-    FromIndex _ _     -> eltType (undefined::t)
+    Let _ _           -> eltType @t
+    Var _             -> eltType @t
+    Const _           -> eltType @t
+    Undef             -> eltType @t
+    Tuple _           -> eltType @t
+    Prj _ _           -> eltType @t
+    IndexNil          -> eltType @t
+    IndexCons _ _     -> eltType @t
+    IndexHead _       -> eltType @t
+    IndexTail _       -> eltType @t
+    IndexAny          -> eltType @t
+    IndexSlice _ _ _  -> eltType @t
+    IndexFull _ _ _   -> eltType @t
+    ToIndex _ _       -> eltType @t
+    FromIndex _ _     -> eltType @t
     Cond _ t _        -> preExpType k t
-    While _ _ _       -> eltType (undefined::t)
-    PrimConst _       -> eltType (undefined::t)
-    PrimApp _ _       -> eltType (undefined::t)
+    While _ _ _       -> eltType @t
+    PrimConst _       -> eltType @t
+    PrimApp _ _       -> eltType @t
     Index acc _       -> k acc
     LinearIndex acc _ -> k acc
-    Shape _           -> eltType (undefined::t)
-    ShapeSize _       -> eltType (undefined::t)
-    Intersect _ _     -> eltType (undefined::t)
-    Union _ _         -> eltType (undefined::t)
-    Foreign _ _ _     -> eltType (undefined::t)
-    Coerce _          -> eltType (undefined::t)
+    Shape _           -> eltType @t
+    ShapeSize _       -> eltType @t
+    Intersect _ _     -> eltType @t
+    Union _ _         -> eltType @t
+    Foreign _ _ _     -> eltType @t
+    Coerce _          -> eltType @t
 
 
 -- |Size of a tuple type, in bytes

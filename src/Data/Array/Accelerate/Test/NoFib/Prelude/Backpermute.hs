@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
@@ -70,7 +71,7 @@ test_backpermute runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [
               testProperty "take"         $ test_take runN sh e
             , testProperty "drop"         $ test_drop runN sh e
