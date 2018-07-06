@@ -6,6 +6,13 @@ compiler: ghc-8.6.0.20180627
 compiler-check: match-exact
 allow-newer: true
 
+setup-info:
+  ghc:
+    linux64: # x86_64-unknown-linux
+      8.6.0.20180627:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-deb8-linux.tar.xz
+        sha256: e891e9e6ad0d53382e79b5c1005af6123501fbc95088ed849c3a1c22979db319
+
 packages:
 - '.'
 
