@@ -27,7 +27,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Scan (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -48,17 +47,17 @@ import Test.Tasty.Hedgehog
 test_scanl :: RunN -> TestTree
 test_scanl runN =
   testGroup "scanl"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestHalf)   $ testElt f16
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestHalf   $ testElt f16
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt
@@ -86,16 +85,16 @@ test_scanl runN =
 test_scanl1 :: RunN -> TestTree
 test_scanl1 runN =
   testGroup "scanl1"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -121,16 +120,16 @@ test_scanl1 runN =
 test_scanl' :: RunN -> TestTree
 test_scanl' runN =
   testGroup "scanl'"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -157,16 +156,16 @@ test_scanl' runN =
 test_scanr :: RunN -> TestTree
 test_scanr runN =
   testGroup "scanr"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -193,16 +192,16 @@ test_scanr runN =
 test_scanr1 :: RunN -> TestTree
 test_scanr1 runN =
   testGroup "scanr1"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -228,16 +227,16 @@ test_scanr1 runN =
 test_scanr' :: RunN -> TestTree
 test_scanr' runN =
   testGroup "scanr'"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -264,16 +263,16 @@ test_scanr' runN =
 test_scanlSeg :: RunN -> TestTree
 test_scanlSeg runN =
   testGroup "scanlSeg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -299,16 +298,16 @@ test_scanlSeg runN =
 test_scanl1Seg :: RunN -> TestTree
 test_scanl1Seg runN =
   testGroup "scanl1Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -333,16 +332,16 @@ test_scanl1Seg runN =
 test_scanl'Seg :: RunN -> TestTree
 test_scanl'Seg runN =
   testGroup "scanl'Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -368,16 +367,16 @@ test_scanl'Seg runN =
 test_scanrSeg :: RunN -> TestTree
 test_scanrSeg runN =
   testGroup "scanrSeg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -403,16 +402,16 @@ test_scanrSeg runN =
 test_scanr1Seg :: RunN -> TestTree
 test_scanr1Seg runN =
   testGroup "scanr1Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -437,16 +436,16 @@ test_scanr1Seg runN =
 test_scanr'Seg :: RunN -> TestTree
 test_scanr'Seg runN =
   testGroup "scanr'Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -750,7 +749,7 @@ iappend x y
     x2 + 1 A.== y1 ? ( lift (x1,y2) , constant top )
   )))
 
-intervalArray :: (Shape sh, Elt e, P.Num e) => sh -> Int -> proxy e -> Array (sh:.Int) (e,e)
+intervalArray :: (Shape sh, Elt e, P.Num e) => sh -> Int -> Gen e -> Array (sh:.Int) (e,e)
 intervalArray sh n _ = fromFunction (sh:.n) (\(_:.i) -> let x = P.fromIntegral i in (x,x))
 
 

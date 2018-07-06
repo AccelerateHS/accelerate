@@ -22,7 +22,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Permute (
 ) where
 
 import Control.Monad
-import Data.Proxy
 import Data.Typeable
 import System.IO.Unsafe
 import Prelude                                                      as P
@@ -46,17 +45,17 @@ import Test.Tasty.Hedgehog
 test_permute :: RunN -> TestTree
 test_permute runN =
   testGroup "permute"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestHalf)   $ testElt f16
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestHalf   $ testElt f16
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt

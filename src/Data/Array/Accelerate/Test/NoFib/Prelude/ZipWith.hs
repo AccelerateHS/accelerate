@@ -23,7 +23,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith (
 ) where
 
 import Data.Bits                                                    as P
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -46,17 +45,17 @@ import Test.Tasty.Hedgehog
 test_zipWith :: RunN -> TestTree
 test_zipWith runN =
   testGroup "zipWith"
-    [ at (Proxy::Proxy TestInt8)   $ testIntegralElt i8
-    , at (Proxy::Proxy TestInt16)  $ testIntegralElt i16
-    , at (Proxy::Proxy TestInt32)  $ testIntegralElt i32
-    , at (Proxy::Proxy TestInt64)  $ testIntegralElt i64
-    , at (Proxy::Proxy TestWord8)  $ testIntegralElt w8
-    , at (Proxy::Proxy TestWord16) $ testIntegralElt w16
-    , at (Proxy::Proxy TestWord32) $ testIntegralElt w32
-    , at (Proxy::Proxy TestWord64) $ testIntegralElt w64
-    , at (Proxy::Proxy TestHalf)   $ testFloatingElt (Gen.realFloat :: Range Half -> Gen Half)
-    , at (Proxy::Proxy TestFloat)  $ testFloatingElt Gen.float
-    , at (Proxy::Proxy TestDouble) $ testFloatingElt Gen.double
+    [ at @TestInt8   $ testIntegralElt i8
+    , at @TestInt16  $ testIntegralElt i16
+    , at @TestInt32  $ testIntegralElt i32
+    , at @TestInt64  $ testIntegralElt i64
+    , at @TestWord8  $ testIntegralElt w8
+    , at @TestWord16 $ testIntegralElt w16
+    , at @TestWord32 $ testIntegralElt w32
+    , at @TestWord64 $ testIntegralElt w64
+    , at @TestHalf   $ testFloatingElt (Gen.realFloat :: Range Half -> Gen Half)
+    , at @TestFloat  $ testFloatingElt Gen.float
+    , at @TestDouble $ testFloatingElt Gen.double
     ]
   where
     testIntegralElt
