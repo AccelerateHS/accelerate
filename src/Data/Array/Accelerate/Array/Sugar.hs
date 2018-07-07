@@ -284,56 +284,54 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
   toElt    :: EltRepr a -> a
 
   default eltType
-    :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a ()))
+    :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => a
     -> TupleType (EltRepr a)
-  eltType _ = geltType TypeRunit (undefined :: Rep a ())
+  eltType _ = geltType TypeRunit (undefined :: Rep a p)
 
   default fromElt
-    :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a ()))
+    :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => a
     -> EltRepr a
   fromElt = gfromElt () . from @a @()
 
   default toElt
-    :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a ()))
+    :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => EltRepr a
     -> a
   toElt = to @a @() . snd . gtoElt @(Rep a) @()
 
 
-type family GEltRepr t a where
-  GEltRepr t (U1 p)        = t
-  GEltRepr t (K1 i a p)    = (t, EltRepr a)
-  GEltRepr t (M1 i c a p)  = GEltRepr t (a p)
-  GEltRepr t ((a :*: b) p) = GEltRepr (GEltRepr t (a p)) (b p)
-
-
-class GElt f where
-  geltType :: TupleType t -> {-dummy-} f a -> TupleType (GEltRepr t (f a))
-  gfromElt :: t -> f a -> GEltRepr t (f a)
-  gtoElt   :: GEltRepr t (f a) -> (t, f a)
+class GElt (f :: * -> *) where
+  type GEltRepr t f
+  geltType :: TupleType t -> {-dummy-} f a -> TupleType (GEltRepr t f)
+  gfromElt :: t -> f a -> GEltRepr t f
+  gtoElt   :: GEltRepr t f -> (t, f a)
 
 instance GElt U1 where
+  type GEltRepr t U1 = t
   geltType t  _  =  t
   gfromElt t  U1 =  t
   gtoElt      t  =  (t, U1)
 
 instance GElt a => GElt (M1 i c a) where
+  type GEltRepr t (M1 i c a) = GEltRepr t a
   geltType :: forall t i c a p. GElt a
-           => TupleType t -> M1 i c a p -> TupleType (GEltRepr t (M1 i c a p))
+           => TupleType t -> M1 i c a p -> TupleType (GEltRepr t (M1 i c a))
   geltType t     _  = geltType t (undefined :: a p)
   gfromElt t (M1 x) = gfromElt t x
   gtoElt         x  = let (t, x1) = gtoElt x in (t, M1 x1)
 
 instance Elt a => GElt (K1 i a) where
+  type GEltRepr t (K1 i a) = (t, EltRepr a)
   geltType  t     _  = TypeRpair t (eltType (undefined :: a))
   gfromElt  t (K1 x) = (t, fromElt x)
   gtoElt      (t, x) = (t, K1 (toElt x))
 
 instance (GElt a, GElt b) => GElt (a :*: b) where
+  type GEltRepr t ((:*:) a b) = GEltRepr (GEltRepr t a) b
   geltType :: forall t a b p. (GElt a, GElt b)
-           => TupleType t -> (:*:) a b p -> TupleType (GEltRepr t ((:*:) a b p))
+           => TupleType t -> (:*:) a b p -> TupleType (GEltRepr t ((:*:) a b))
   geltType t        _  = geltType (geltType t (undefined :: a p)) (undefined :: b p)
   gfromElt t (a :*: b) = gfromElt (gfromElt t a) b
   gtoElt t =
@@ -344,10 +342,10 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
       (t2, a :*: b)
 
 
-type instance EltRepr (U1 p)        = GEltRepr () (U1 p)
-type instance EltRepr (K1 i a p)    = GEltRepr () (K1 i a p)
-type instance EltRepr (M1 i c a p)  = GEltRepr () (M1 i c a p)
-type instance EltRepr ((a :*: b) p) = GEltRepr () ((a :*: b) p)
+type instance EltRepr (U1 p)        = GEltRepr ()  U1
+type instance EltRepr (K1 i a p)    = GEltRepr () (K1 i a)
+type instance EltRepr (M1 i c a p)  = GEltRepr () (M1 i c a)
+type instance EltRepr ((a :*: b) p) = GEltRepr () (a :*: b)
 
 
 instance Elt Z where
