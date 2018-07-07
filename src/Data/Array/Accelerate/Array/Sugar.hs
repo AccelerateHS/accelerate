@@ -350,11 +350,6 @@ type instance EltRepr (M1 i c a p)  = GEltRepr () (M1 i c a p)
 type instance EltRepr ((a :*: b) p) = GEltRepr () ((a :*: b) p)
 
 
-instance Elt () where
-  eltType _ = TypeRunit
-  fromElt   = id
-  toElt     = id
-
 instance Elt Z where
   eltType _  = TypeRunit
   fromElt Z  = ()
@@ -520,42 +515,22 @@ instance Elt CUChar where
   fromElt       = id
   toElt         = id
 
-instance (Elt a, Elt b) => Elt (a, b) where
-  eltType _             = TypeRpair (TypeRpair TypeRunit (eltType (undefined::a))) (eltType (undefined::b))
-  fromElt (a,b)         = (((), fromElt a), fromElt b)
-  toElt (((),a),b)      = (toElt a, toElt b)
+instance Elt ()
 
-instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
-  eltType _             = TypeRpair (eltType (undefined :: (a, b))) (eltType (undefined :: c))
-  fromElt (a, b, c)     = (fromElt (a, b), fromElt c)
-  toElt (ab, c)         = let (a, b) = toElt ab in (a, b, toElt c)
+instance (Elt a, Elt b) => Elt (a, b)
 
-instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
-  eltType _             = TypeRpair (eltType (undefined :: (a, b, c))) (eltType (undefined :: d))
-  fromElt (a, b, c, d)  = (fromElt (a, b, c), fromElt d)
-  toElt (abc, d)        = let (a, b, c) = toElt abc in (a, b, c, toElt d)
+instance (Elt a, Elt b, Elt c) => Elt (a, b, c)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
-  eltType _               = TypeRpair (eltType (undefined :: (a, b, c, d))) (eltType (undefined :: e))
-  fromElt (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt e)
-  toElt (abcd, e)         = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt e)
+instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e)))
-                (eltType (undefined :: f))
-  fromElt (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt f)
-  toElt (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt f)
+instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e)
+
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-  => Elt (a, b, c, d, e, f, g) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f)))
-                (eltType (undefined :: g))
-  fromElt (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt g)
-  toElt (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef
-                      in  (a, b, c, d, e, f, toElt g)
+  => Elt (a, b, c, d, e, f, g)
 
+-- GHC does not have `Generic` instances for tuples larger than 7.
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Elt (a, b, c, d, e, f, g, h) where
   eltType _
