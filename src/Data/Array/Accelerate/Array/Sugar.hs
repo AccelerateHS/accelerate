@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE BangPatterns          #-}
@@ -287,7 +288,7 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => a
     -> TupleType (EltRepr a)
-  eltType _ = geltType TypeRunit (undefined :: Rep a p)
+  eltType _ = geltType @(Rep a) TypeRunit
 
   default fromElt
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
@@ -304,35 +305,31 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
 
 class GElt (f :: * -> *) where
   type GEltRepr t f
-  geltType :: TupleType t -> {-dummy-} f a -> TupleType (GEltRepr t f)
+  geltType :: TupleType t -> TupleType (GEltRepr t f)
   gfromElt :: t -> f a -> GEltRepr t f
   gtoElt   :: GEltRepr t f -> (t, f a)
 
 instance GElt U1 where
   type GEltRepr t U1 = t
-  geltType t  _  =  t
+  geltType t     =  t
   gfromElt t  U1 =  t
   gtoElt      t  =  (t, U1)
 
 instance GElt a => GElt (M1 i c a) where
   type GEltRepr t (M1 i c a) = GEltRepr t a
-  geltType :: forall t i c a p. GElt a
-           => TupleType t -> M1 i c a p -> TupleType (GEltRepr t (M1 i c a))
-  geltType t     _  = geltType t (undefined :: a p)
+  geltType          = geltType @a
   gfromElt t (M1 x) = gfromElt t x
   gtoElt         x  = let (t, x1) = gtoElt x in (t, M1 x1)
 
 instance Elt a => GElt (K1 i a) where
   type GEltRepr t (K1 i a) = (t, EltRepr a)
-  geltType  t     _  = TypeRpair t (eltType (undefined :: a))
+  geltType  t        = TypeRpair t (eltType (undefined :: a))
   gfromElt  t (K1 x) = (t, fromElt x)
   gtoElt      (t, x) = (t, K1 (toElt x))
 
 instance (GElt a, GElt b) => GElt (a :*: b) where
-  type GEltRepr t ((:*:) a b) = GEltRepr (GEltRepr t a) b
-  geltType :: forall t a b p. (GElt a, GElt b)
-           => TupleType t -> (:*:) a b p -> TupleType (GEltRepr t ((:*:) a b))
-  geltType t        _  = geltType (geltType t (undefined :: a p)) (undefined :: b p)
+  type GEltRepr t (a :*: b) = GEltRepr (GEltRepr t a) b
+  geltType t           = geltType @b (geltType @a t)
   gfromElt t (a :*: b) = gfromElt (gfromElt t a) b
   gtoElt t =
     let
