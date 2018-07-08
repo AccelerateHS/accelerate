@@ -174,15 +174,6 @@ data Divide sh = Divide
   deriving (Typeable, Show, Eq)
 
 
--- Representation change for array element types
--- ---------------------------------------------
---
--- | Type representation mapping
---
--- We represent tuples by using '()' and '(,)' as type-level nil and snoc to
--- construct snoc-lists of types, and are flattened all the way down to
--- primitive types.
---
 -- type instance EltRepr (V2 a)          = V2 a    -- we can only store primitive types in SIMD vectors
 -- type instance EltRepr (V3 a)          = V3 a
 -- type instance EltRepr (V4 a)          = V4 a
@@ -200,6 +191,12 @@ toTuple = toProd (Proxy :: Proxy Elt)
 
 -- Array elements (tuples of scalars)
 -- ----------------------------------
+
+-- | Type representation mapping
+--
+-- We represent tuples by using '()' and '(,)' as type-level nil and snoc to
+-- construct snoc-lists of types, and are flattened all the way down to
+-- primitive types.
 
 -- | The 'Elt' class characterises the allowable array element types, and hence
 -- the types which can appear in scalar Accelerate expressions.
