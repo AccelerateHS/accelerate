@@ -30,7 +30,7 @@ extra-deps:
     - basement
 
 - git:    https://github.com/tmcdonell/tasty.git
-  commit: 06539fa5577d44eee3bf3fae5caf3aadfd9806f7
+  commit: 540c85d14e6601bb8c92e9fea22dbb8bd27cbe85
   subdirs:
     - core
 
