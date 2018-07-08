@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 -- |
@@ -436,21 +435,21 @@ indexArray = (S.!)
 linearIndexArray :: Array sh e -> Int -> e
 linearIndexArray = (S.!!)
 
--- | Rank of an array.
+-- | Rank of an array (as a plain Haskell value)
 --
-arrayRank :: forall sh. Shape sh => Int
-arrayRank = S.rank @sh
+arrayRank :: forall sh e. Shape sh => Array sh e -> Int
+arrayRank _ = S.rank @sh
 
--- |Array shape in plain Haskell code.
+-- | Shape of an array (as a plain Haskell value)
 --
 arrayShape :: Shape sh => Array sh e -> sh
 arrayShape = S.shape
 -- rename as 'shape' is already used by the EDSL to query an array's shape
 
--- | Total number of elements in an array of the given 'Shape'.
+-- | Total number of elements in an array (as a plain Haskell value)
 --
-arraySize :: Shape sh => sh -> Int
-arraySize = S.size
+arraySize :: Shape sh => Array sh e -> Int
+arraySize = S.size . S.shape
 
 -- | Change the shape of an array without altering its contents. The 'arraySize'
 -- of the source and result arrays must be identical.
