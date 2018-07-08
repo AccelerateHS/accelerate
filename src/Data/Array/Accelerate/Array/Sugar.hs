@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr,
 
   -- * Class of supported surface element types and their mapping to representation types
-  Elt(..), EltRepr,
+  Elt(..),
 
   -- * Derived functions
   liftToElt, liftToElt2, sinkFromElt, sinkFromElt2,
@@ -177,70 +177,17 @@ data Divide sh = Divide
 -- Representation change for array element types
 -- ---------------------------------------------
 --
--- TLM: Why is EltRepr not an associated type of Elt?
---
-
 -- | Type representation mapping
 --
 -- We represent tuples by using '()' and '(,)' as type-level nil and snoc to
 -- construct snoc-lists of types, and are flattened all the way down to
 -- primitive types.
 --
-type family EltRepr a :: *
-type instance EltRepr ()              = ()
-type instance EltRepr Z               = ()
-type instance EltRepr (t:.h)          = (EltRepr t, EltRepr h)
-type instance EltRepr All             = ()
-type instance EltRepr (Any Z)         = ()
-type instance EltRepr (Any (sh:.Int)) = (EltRepr (Any sh), ())
-type instance EltRepr Int             = Int
-type instance EltRepr Int8            = Int8
-type instance EltRepr Int16           = Int16
-type instance EltRepr Int32           = Int32
-type instance EltRepr Int64           = Int64
-type instance EltRepr Word            = Word
-type instance EltRepr Word8           = Word8
-type instance EltRepr Word16          = Word16
-type instance EltRepr Word32          = Word32
-type instance EltRepr Word64          = Word64
-type instance EltRepr CShort          = CShort
-type instance EltRepr CUShort         = CUShort
-type instance EltRepr CInt            = CInt
-type instance EltRepr CUInt           = CUInt
-type instance EltRepr CLong           = CLong
-type instance EltRepr CULong          = CULong
-type instance EltRepr CLLong          = CLLong
-type instance EltRepr CULLong         = CULLong
-type instance EltRepr Half            = Half
-type instance EltRepr Float           = Float
-type instance EltRepr Double          = Double
-type instance EltRepr CFloat          = CFloat
-type instance EltRepr CDouble         = CDouble
-type instance EltRepr Bool            = Bool
-type instance EltRepr Char            = Char
-type instance EltRepr CChar           = CChar
-type instance EltRepr CSChar          = CSChar
-type instance EltRepr CUChar          = CUChar
-type instance EltRepr (V2 a)          = V2 a    -- we can only store primitive types in SIMD vectors
-type instance EltRepr (V3 a)          = V3 a
-type instance EltRepr (V4 a)          = V4 a
-type instance EltRepr (V8 a)          = V8 a
-type instance EltRepr (V16 a)         = V16 a
-type instance EltRepr (a, b)          = TupleRepr (EltRepr a, EltRepr b)
-type instance EltRepr (a, b, c)       = TupleRepr (EltRepr a, EltRepr b, EltRepr c)
-type instance EltRepr (a, b, c, d)    = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d)
-type instance EltRepr (a, b, c, d, e) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e)
-type instance EltRepr (a, b, c, d, e, f) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f)
-type instance EltRepr (a, b, c, d, e, f, g) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g)
-type instance EltRepr (a, b, c, d, e, f, g, h) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h)
-type instance EltRepr (a, b, c, d, e, f, g, h, i) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i)
-type instance EltRepr (a, b, c, d, e, f, g, h, i, j) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j)
-type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k)
-type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l)
-type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m)
-type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n)
-type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n, EltRepr o)
-type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRepr (EltRepr a, EltRepr b, EltRepr c, EltRepr d, EltRepr e, EltRepr f, EltRepr g, EltRepr h, EltRepr i, EltRepr j, EltRepr k, EltRepr l, EltRepr m, EltRepr n, EltRepr o, EltRepr p)
+-- type instance EltRepr (V2 a)          = V2 a    -- we can only store primitive types in SIMD vectors
+-- type instance EltRepr (V3 a)          = V3 a
+-- type instance EltRepr (V4 a)          = V4 a
+-- type instance EltRepr (V8 a)          = V8 a
+-- type instance EltRepr (V16 a)         = V16 a
 
 type IsTuple = IsProduct Elt
 
@@ -280,9 +227,12 @@ toTuple = toProd (Proxy :: Proxy Elt)
 --
 class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
       => Elt a where
+  type EltRepr a :: *
   eltType  :: {-dummy-} a -> TupleType (EltRepr a)
   fromElt  :: a -> EltRepr a
   toElt    :: EltRepr a -> a
+
+  type EltRepr a = GEltRepr () (Rep a)
 
   default eltType
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
@@ -294,13 +244,13 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => a
     -> EltRepr a
-  fromElt = gfromElt () . from @a @()
+  fromElt = gfromElt () . from
 
   default toElt
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => EltRepr a
     -> a
-  toElt = to @a @() . snd . gtoElt @(Rep a) @()
+  toElt = to . snd . gtoElt @(Rep a) @()
 
 
 class GElt (f :: * -> *) where
@@ -338,174 +288,231 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
     in
       (t2, a :*: b)
 
+instance Typeable p => Elt (U1 p)
+instance
+  ( Show (M1 i c a p)
+  , Typeable (M1 i c a p)
+  , Typeable (EltRepr (M1 i c a p))
+  , ArrayElt (EltRepr (M1 i c a p))
+  , Elt (a p)
+  ) => Elt (M1 i c a p)
+instance
+  ( Show (K1 i a p)
+  , Typeable (K1 i a p)
+  , Typeable (EltRepr (K1 i a p))
+  , ArrayElt (EltRepr (K1 i a p))
+  , Elt a
+  ) => Elt (K1 i a p)
+instance
+  ( Show ((a :*: b) p)
+  , Typeable ((a :*: b) p)
+  , Typeable (EltRepr ((a :*: b) p))
+  , ArrayElt (EltRepr ((a :*: b) p))
+  , Elt (a p)
+  , Elt (b p)
+  ) => Elt ((a :*: b) p)
 
-type instance EltRepr (U1 p)        = GEltRepr ()  U1
-type instance EltRepr (K1 i a p)    = GEltRepr () (K1 i a)
-type instance EltRepr (M1 i c a p)  = GEltRepr () (M1 i c a)
-type instance EltRepr ((a :*: b) p) = GEltRepr () (a :*: b)
+
+-- type instance EltRepr (U1 p)        = GEltRepr ()  U1
+-- type instance EltRepr (K1 i a p)    = GEltRepr () (K1 i a)
+-- type instance EltRepr (M1 i c a p)  = GEltRepr () (M1 i c a)
+-- type instance EltRepr ((a :*: b) p) = GEltRepr () (a :*: b)
 
 
 instance Elt Z where
-  eltType _  = TypeRunit
-  fromElt Z  = ()
-  toElt ()   = Z
+  type EltRepr Z = ()
+  eltType _      = TypeRunit
+  fromElt Z      = ()
+  toElt ()       = Z
 
 instance (Elt t, Elt h) => Elt (t:.h) where
-  eltType (_::(t:.h))   = TypeRpair (eltType (undefined :: t)) (eltType (undefined :: h))
-  fromElt (t:.h)        = (fromElt t, fromElt h)
-  toElt (t, h)          = toElt t :. toElt h
+  type EltRepr (t:.h) = (EltRepr t, EltRepr h)
+  eltType (_::(t:.h)) = TypeRpair (eltType (undefined :: t)) (eltType (undefined :: h))
+  fromElt (t:.h)      = (fromElt t, fromElt h)
+  toElt (t, h)        = toElt t :. toElt h
 
 instance Elt All where
+  type EltRepr All = ()
   eltType _     = TypeRunit
   fromElt All   = ()
   toElt ()      = All
 
 instance Elt (Any Z) where
+  type EltRepr (Any Z) = ()
   eltType _     = TypeRunit
   fromElt _     = ()
   toElt _       = Any
 
 instance Shape sh => Elt (Any (sh:.Int)) where
+  type EltRepr (Any (sh:.Int)) = (EltRepr (Any sh), ())
   eltType _     = TypeRpair (eltType (undefined::Any sh)) TypeRunit
   fromElt _     = (fromElt (undefined :: Any sh), ())
   toElt _       = Any
 
 instance Elt Int where
+  type EltRepr Int = Int
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Int8 where
+  type EltRepr Int8 = Int8
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Int16 where
+  type EltRepr Int16 = Int16
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Int32 where
+  type EltRepr Int32 = Int32
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Int64 where
+  type EltRepr Int64 = Int64
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Word where
+  type EltRepr Word = Word
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Word8 where
+  type EltRepr Word8 = Word8
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Word16 where
+  type EltRepr Word16 = Word16
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Word32 where
+  type EltRepr Word32 = Word32
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Word64 where
+  type EltRepr Word64 = Word64
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CShort where
+  type EltRepr CShort = CShort
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CUShort where
+  type EltRepr CUShort = CUShort
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CInt where
+  type EltRepr CInt = CInt
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CUInt where
+  type EltRepr CUInt = CUInt
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CLong where
+  type EltRepr CLong = CLong
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CULong where
+  type EltRepr CULong = CULong
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CLLong where
+  type EltRepr CLLong = CLLong
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CULLong where
+  type EltRepr CULLong = CULLong
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Half where
+  type EltRepr Half = Half
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Float where
+  type EltRepr Float = Float
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Double where
+  type EltRepr Double = Double
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CFloat where
+  type EltRepr CFloat = CFloat
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CDouble where
+  type EltRepr CDouble = CDouble
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Bool where
+  type EltRepr Bool = Bool
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt Char where
+  type EltRepr Char = Char
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CChar where
+  type EltRepr CChar = CChar
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CSChar where
+  type EltRepr CSChar = CSChar
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
 
 instance Elt CUChar where
+  type EltRepr CUChar = CUChar
   eltType       = singletonScalarType
   fromElt       = id
   toElt         = id
@@ -528,6 +535,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
 -- GHC does not have `Generic` instances for tuples larger than 7.
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Elt (a, b, c, d, e, f, g, h) where
+  type EltRepr (a, b, c, d, e, f, g, h) = (EltRepr (a, b, c, d, e, f, g), EltRepr h)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g)))
                 (eltType (undefined :: h))
@@ -537,6 +545,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Elt (a, b, c, d, e, f, g, h, i) where
+  type EltRepr (a, b, c, d, e, f, g, h, i) = (EltRepr (a, b, c, d, e, f, g, h), EltRepr i)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h)))
                 (eltType (undefined :: i))
@@ -546,6 +555,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
   => Elt (a, b, c, d, e, f, g, h, i, j) where
+  type EltRepr (a, b, c, d, e, f, g, h, i, j) = (EltRepr (a, b, c, d, e, f, g, h, i), EltRepr j)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i)))
                 (eltType (undefined :: j))
@@ -555,6 +565,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
   => Elt (a, b, c, d, e, f, g, h, i, j, k) where
+  type EltRepr (a, b, c, d, e, f, g, h, i, j, k) = (EltRepr (a, b, c, d, e, f, g, h, i, j), EltRepr k)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j)))
                 (eltType (undefined :: k))
@@ -564,6 +575,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l) where
+  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k), EltRepr l)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k)))
                 (eltType (undefined :: l))
@@ -573,6 +585,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m) where
+  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l), EltRepr m)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l)))
                 (eltType (undefined :: m))
@@ -582,6 +595,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
+  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m), EltRepr n)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m)))
                 (eltType (undefined :: n))
@@ -591,6 +605,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
+  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), EltRepr o)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n)))
                 (eltType (undefined :: o))
@@ -600,6 +615,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), EltRepr p)
   eltType _
     = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)))
                 (eltType (undefined :: p))

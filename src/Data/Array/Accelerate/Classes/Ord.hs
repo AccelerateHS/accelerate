@@ -496,9 +496,8 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g, Ord h, Ord i, Ord j, 
            in a1 > a2 || (a1 == a2 && x' > y')
 
 
-type instance EltRepr Ordering = Int8
-
 instance Elt Ordering where
+  type EltRepr Ordering = Int8
   eltType _ = TypeRscalar scalarType
   fromElt = P.fromIntegral . P.fromEnum
   toElt   = P.toEnum . P.fromIntegral

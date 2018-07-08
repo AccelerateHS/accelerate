@@ -57,9 +57,8 @@ import qualified Prelude                                            as P
 -- Sum: Monoid under addition
 -- --------------------------
 
-type instance EltRepr (Sum a) = ((), EltRepr a)
-
 instance Elt a => Elt (Sum a) where
+  type EltRepr (Sum a) = ((), EltRepr a)
   eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
   toElt ((),x)    = Sum (toElt x)
   fromElt (Sum x) = ((), fromElt x)
@@ -123,9 +122,8 @@ instance Num a => Semigroup (Exp (Sum a)) where
 -- Product: Monoid under multiplication
 -- ------------------------------------
 
-type instance EltRepr (Product a) = ((), EltRepr a)
-
 instance Elt a => Elt (Product a) where
+  type EltRepr (Product a) = ((), EltRepr a)
   eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
   toElt ((),x)    = Product (toElt x)
   fromElt (Product x) = ((), fromElt x)

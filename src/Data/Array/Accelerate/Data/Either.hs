@@ -139,9 +139,8 @@ instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
 tag :: (Elt a, Elt b) => Exp (Either a b) -> Exp Word8
 tag x = Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` x
 
-type instance EltRepr (Either a b) = TupleRepr (Word8, EltRepr a, EltRepr b)
-
 instance (Elt a, Elt b) => Elt (Either a b) where
+  type EltRepr (Either a b) = TupleRepr (Word8, EltRepr a, EltRepr b)
   eltType _ = eltType (undefined::(Word8,a,b))
   toElt ((((),0),a),_)  = Left  (toElt a)
   toElt (_         ,b)  = Right (toElt b)

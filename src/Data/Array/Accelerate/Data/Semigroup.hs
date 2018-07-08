@@ -47,9 +47,8 @@ import Prelude                                                      ( undefined 
 import qualified Prelude                                            as P
 
 
-type instance EltRepr (Min a) = ((), EltRepr a)
-
 instance Elt a => Elt (Min a) where
+  type EltRepr (Min a) = ((), EltRepr a)
   eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
   toElt ((),x)    = Min (toElt x)
   fromElt (Min x) = ((), fromElt x)
@@ -101,9 +100,8 @@ instance (Ord a, Bounded a) => Monoid (Exp (Min a)) where
   mappend = (<>)
 
 
-type instance EltRepr (Max a) = ((), EltRepr a)
-
 instance Elt a => Elt (Max a) where
+  type EltRepr (Max a) = ((), EltRepr a)
   eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
   toElt ((),x)    = Max (toElt x)
   fromElt (Max x) = ((), fromElt x)
