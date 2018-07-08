@@ -79,7 +79,6 @@ class (Eq sh, Slice sh) => Shape sh where
   listToShape :: [Int] -> sh    -- convert a list of dimensions into a shape
 
 instance Shape () where
-  {-# INLINE rank #-}
   rank              = 0
   empty             = ()
   ignore            = ()
@@ -99,7 +98,6 @@ instance Shape () where
   listToShape _  = $internalError "listToShape" "non-empty list when converting to unit"
 
 instance Shape sh => Shape (sh, Int) where
-  {-# INLINE rank #-}
   rank                              = rank @sh + 1
   empty                             = (empty, 0)
   ignore                            = (ignore, -1)
