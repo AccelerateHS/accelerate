@@ -66,12 +66,3 @@ type family ConstructorFor a where
 type family EltFunction acc a where
   EltFunction acc  ()     = acc
   EltFunction acc (a , b) = EltFunction (Exp b -> acc) a
-
-
--- data Foo = Foo Int Int Int Int
---   deriving (Generic, Show, Elt)
-
--- x :: (Exp Int, Exp Int, Exp Int, Exp Int)
--- x = (1, 2, 3, 4)
-
--- instance (cst (ProdRepr Int), IsProduct cst Int) => IsProduct cst Foo
