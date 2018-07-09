@@ -8,7 +8,6 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -258,9 +257,9 @@ class GElt (f :: * -> *) where
 
 instance GElt U1 where
   type GEltRepr t U1 = t
-  geltType t     =  t
-  gfromElt t  U1 =  t
-  gtoElt      t  =  (t, U1)
+  geltType t    =  t
+  gfromElt t U1 =  t
+  gtoElt   t    = (t, U1)
 
 instance GElt a => GElt (M1 i c a) where
   type GEltRepr t (M1 i c a) = GEltRepr t a
@@ -270,9 +269,9 @@ instance GElt a => GElt (M1 i c a) where
 
 instance Elt a => GElt (K1 i a) where
   type GEltRepr t (K1 i a) = (t, EltRepr a)
-  geltType  t        = TypeRpair t (eltType (undefined :: a))
-  gfromElt  t (K1 x) = (t, fromElt x)
-  gtoElt      (t, x) = (t, K1 (toElt x))
+  geltType t        = TypeRpair t (eltType (undefined :: a))
+  gfromElt t (K1 x) = (t, fromElt x)
+  gtoElt     (t, x) = (t, K1 (toElt x))
 
 instance (GElt a, GElt b) => GElt (a :*: b) where
   type GEltRepr t (a :*: b) = GEltRepr (GEltRepr t a) b
@@ -286,6 +285,7 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
       (t2, a :*: b)
 
 instance Typeable p => Elt (U1 p)
+
 instance
   ( Show (M1 i c a p)
   , Typeable (M1 i c a p)
@@ -293,6 +293,7 @@ instance
   , ArrayElt (EltRepr (M1 i c a p))
   , Elt (a p)
   ) => Elt (M1 i c a p)
+
 instance
   ( Show (K1 i a p)
   , Typeable (K1 i a p)
@@ -300,6 +301,7 @@ instance
   , ArrayElt (EltRepr (K1 i a p))
   , Elt a
   ) => Elt (K1 i a p)
+
 instance
   ( Show ((a :*: b) p)
   , Typeable ((a :*: b) p)
