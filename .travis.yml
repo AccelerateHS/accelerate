@@ -26,13 +26,14 @@ addons:
       - alex-3.1.7
       - cabal-install-1.24
       - cabal-install-2.0
+      - cabal-install-2.2
       - happy-1.19.5
       - libgmp-dev
 
 matrix:
   fast_finish: true
   include:
-    - env: GHC=8.6.1 CABAL=2.0
+    - env: GHC=8.6.1 CABAL=2.2
       compiler: "GHC 8.6"
 
     - env: GHC=8.4.3 CABAL=2.0
@@ -49,7 +50,7 @@ matrix:
     #   addons: { apt: { sources: [ hvr-ghc ], packages: [ ghc-head, cabal-install-head, happy-1.19.5, alex-3.1.7 ] }}
 
   allow_failures:
-    - env: GHC=8.6.1 CABAL=2.0
+    - env: GHC=8.6.1 CABAL=2.2
   #   - env: GHC=head CABAL=head
 
 before_install:
