@@ -1,9 +1,12 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -44,31 +47,31 @@ import GHC.Base                                         ( quotInt, remInt )
 --
 class (Eq sh, Slice sh) => Shape sh where
   -- user-facing methods
-  rank      :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
-  size      :: sh -> Int             -- ^total number of elements in an array of this /shape/
-  empty     :: sh                    -- ^empty shape.
+  rank      :: Int                  -- ^number of dimensions (>= 0); rank of the array
+  size      :: sh -> Int            -- ^total number of elements in an array of this /shape/
+  empty     :: sh                   -- ^empty shape.
 
   -- internal methods
-  intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
-  union     :: sh -> sh -> sh  -- yield the union of two shapes
-  ignore    :: sh              -- identifies ignored elements in 'permute'
-  toIndex   :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
-                               -- the array (first argument is the shape)
-  fromIndex :: sh -> Int -> sh -- inverse of `toIndex`
+  intersect :: sh -> sh -> sh       -- yield the intersection of two shapes
+  union     :: sh -> sh -> sh       -- yield the union of two shapes
+  ignore    :: sh                   -- identifies ignored elements in 'permute'
+  toIndex   :: sh -> sh -> Int      -- yield the index position in a linear, row-major representation of
+                                    -- the array (first argument is the shape)
+  fromIndex :: sh -> Int -> sh      -- inverse of `toIndex`
 
   iter      :: sh -> (sh -> a) -> (a -> a -> a) -> a -> a
-                               -- iterate through the entire shape, applying the function in the
-                               -- second argument; third argument combines results and fourth is an
-                               -- initial value that is combined with the results; the index space
-                               -- is traversed in row-major order
+                                    -- iterate through the entire shape, applying the function in the
+                                    -- second argument; third argument combines results and fourth is an
+                                    -- initial value that is combined with the results; the index space
+                                    -- is traversed in row-major order
 
   iter1     :: sh -> (sh -> a) -> (a -> a -> a) -> a
-                               -- variant of 'iter' without an initial value
+                                    -- variant of 'iter' without an initial value
 
   -- operations to facilitate conversion with IArray
-  rangeToShape :: (sh, sh) -> sh   -- convert a minpoint-maxpoint index
-                                   -- into a shape
-  shapeToRange :: sh -> (sh, sh)   -- ...the converse
+  rangeToShape :: (sh, sh) -> sh    -- convert a minpoint-maxpoint index
+                                    -- into a shape
+  shapeToRange :: sh -> (sh, sh)    -- ...the converse
 
 
   -- other conversions
@@ -76,7 +79,7 @@ class (Eq sh, Slice sh) => Shape sh where
   listToShape :: [Int] -> sh    -- convert a list of dimensions into a shape
 
 instance Shape () where
-  rank _            = 0
+  rank              = 0
   empty             = ()
   ignore            = ()
   () `intersect` () = ()
@@ -95,7 +98,7 @@ instance Shape () where
   listToShape _  = $internalError "listToShape" "non-empty list when converting to unit"
 
 instance Shape sh => Shape (sh, Int) where
-  rank _                            = rank (undefined :: sh) + 1
+  rank                              = rank @sh + 1
   empty                             = (empty, 0)
   ignore                            = (ignore, -1)
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
@@ -112,7 +115,7 @@ instance Shape sh => Shape (sh, Int) where
     -- the remainder for the highest dimension since i < sz must hold.
     --
     where
-      r | rank sh == 0  = $indexCheck "fromIndex" i sz i
+      r | rank @sh == 0 = $indexCheck "fromIndex" i sz i
         | otherwise     = i `remInt` sz
 
 {--
@@ -176,25 +179,25 @@ class Slice sl where
   type CoSliceShape  sl      -- the complement of the slice
   type FullShape     sl      -- the combined dimension
     -- argument *value* not used; it's just a phantom value to fix the type
-  sliceIndex :: {-dummy-} sl -> SliceIndex sl (SliceShape sl) (CoSliceShape sl) (FullShape sl)
+  sliceIndex :: SliceIndex sl (SliceShape sl) (CoSliceShape sl) (FullShape sl)
 
 instance Slice () where
   type SliceShape    () = ()
   type CoSliceShape  () = ()
   type FullShape     () = ()
-  sliceIndex _ = SliceNil
+  sliceIndex = SliceNil
 
 instance Slice sl => Slice (sl, ()) where
   type SliceShape   (sl, ()) = (SliceShape  sl, Int)
   type CoSliceShape (sl, ()) = CoSliceShape sl
   type FullShape    (sl, ()) = (FullShape   sl, Int)
-  sliceIndex _ = SliceAll (sliceIndex (undefined::sl))
+  sliceIndex = SliceAll (sliceIndex @sl)
 
 instance Slice sl => Slice (sl, Int) where
   type SliceShape   (sl, Int) = SliceShape sl
   type CoSliceShape (sl, Int) = (CoSliceShape sl, Int)
   type FullShape    (sl, Int) = (FullShape    sl, Int)
-  sliceIndex _ = SliceFixed (sliceIndex (undefined::sl))
+  sliceIndex = SliceFixed (sliceIndex @sl)
 
 -- |Generalised array index, which may index only in a subset of the dimensions
 -- of a shape.

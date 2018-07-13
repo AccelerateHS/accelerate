@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -240,10 +242,10 @@ type instance EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRe
 type IsTuple = IsProduct Elt
 
 fromTuple :: IsTuple tup => tup -> TupleRepr tup
-fromTuple = fromProd (Proxy :: Proxy Elt)
+fromTuple = fromProd @Elt
 
 toTuple :: IsTuple tup => TupleRepr tup -> tup
-toTuple = toProd (Proxy :: Proxy Elt)
+toTuple = toProd @Elt
 
 
 -- Array elements (tuples of scalars)
@@ -275,38 +277,38 @@ toTuple = toProd (Proxy :: Proxy Elt)
 --
 class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
       => Elt a where
-  eltType  :: {-dummy-} a -> TupleType (EltRepr a)
+  eltType  :: TupleType (EltRepr a)
   fromElt  :: a -> EltRepr a
   toElt    :: EltRepr a -> a
 
 instance Elt () where
-  eltType _ = TypeRunit
+  eltType   = TypeRunit
   fromElt   = id
   toElt     = id
 
 instance Elt Z where
-  eltType _  = TypeRunit
+  eltType    = TypeRunit
   fromElt Z  = ()
   toElt ()   = Z
 
 instance (Elt t, Elt h) => Elt (t:.h) where
-  eltType (_::(t:.h))   = TypeRpair (eltType (undefined :: t)) (eltType (undefined :: h))
-  fromElt (t:.h)        = (fromElt t, fromElt h)
-  toElt (t, h)          = toElt t :. toElt h
+  eltType         = TypeRpair (eltType @t) (eltType @h)
+  fromElt (t:.h)  = (fromElt t, fromElt h)
+  toElt (t, h)    = toElt t :. toElt h
 
 instance Elt All where
-  eltType _     = TypeRunit
+  eltType       = TypeRunit
   fromElt All   = ()
   toElt ()      = All
 
 instance Elt (Any Z) where
-  eltType _     = TypeRunit
+  eltType       = TypeRunit
   fromElt _     = ()
   toElt _       = Any
 
 instance Shape sh => Elt (Any (sh:.Int)) where
-  eltType _     = TypeRpair (eltType (undefined::Any sh)) TypeRunit
-  fromElt _     = (fromElt (undefined :: Any sh), ())
+  eltType       = TypeRpair (eltType @(Any sh)) TypeRunit
+  fromElt _     = (fromElt (Any @sh), ())
   toElt _       = Any
 
 instance Elt Int where
@@ -450,118 +452,96 @@ instance Elt CUChar where
   toElt         = id
 
 instance (Elt a, Elt b) => Elt (a, b) where
-  eltType _             = TypeRpair (TypeRpair TypeRunit (eltType (undefined::a))) (eltType (undefined::b))
+  eltType               = TypeRpair (TypeRpair TypeRunit (eltType @a)) (eltType @b)
   fromElt (a,b)         = (((), fromElt a), fromElt b)
   toElt (((),a),b)      = (toElt a, toElt b)
 
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
-  eltType _             = TypeRpair (eltType (undefined :: (a, b))) (eltType (undefined :: c))
+  eltType               = TypeRpair (eltType @(a, b)) (eltType @c)
   fromElt (a, b, c)     = (fromElt (a, b), fromElt c)
   toElt (ab, c)         = let (a, b) = toElt ab in (a, b, toElt c)
 
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
-  eltType _             = TypeRpair (eltType (undefined :: (a, b, c))) (eltType (undefined :: d))
+  eltType               = TypeRpair (eltType @(a, b, c)) (eltType @d)
   fromElt (a, b, c, d)  = (fromElt (a, b, c), fromElt d)
   toElt (abc, d)        = let (a, b, c) = toElt abc in (a, b, c, toElt d)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
-  eltType _               = TypeRpair (eltType (undefined :: (a, b, c, d))) (eltType (undefined :: e))
+  eltType                 = TypeRpair (eltType @(a, b, c, d)) (eltType @e)
   fromElt (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt e)
   toElt (abcd, e)         = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt e)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e)))
-                (eltType (undefined :: f))
+  eltType                    = TypeRpair (eltType @(a, b, c, d, e)) (eltType @f)
   fromElt (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt f)
-  toElt (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt f)
+  toElt (abcde, f)           = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt f)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   => Elt (a, b, c, d, e, f, g) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f)))
-                (eltType (undefined :: g))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f)) (eltType @g)
   fromElt (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt g)
   toElt (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef
                       in  (a, b, c, d, e, f, toElt g)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Elt (a, b, c, d, e, f, g, h) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g)))
-                (eltType (undefined :: h))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g)) (eltType @h)
   fromElt (a, b, c, d, e, f, g, h) = (fromElt (a, b, c, d, e, f, g), fromElt h)
   toElt (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg
                        in  (a, b, c, d, e, f, g, toElt h)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Elt (a, b, c, d, e, f, g, h, i) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h)))
-                (eltType (undefined :: i))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h)) (eltType @i)
   fromElt (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt i)
   toElt (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
                         in  (a, b, c, d, e, f, g, h, toElt i)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
   => Elt (a, b, c, d, e, f, g, h, i, j) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i)))
-                (eltType (undefined :: j))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h, i)) (eltType @j)
   fromElt (a, b, c, d, e, f, g, h, i, j) = (fromElt (a, b, c, d, e, f, g, h, i), fromElt j)
   toElt (abcdefghi, j) = let (a, b, c, d, e, f, g, h, i) = toElt abcdefghi
                          in  (a, b, c, d, e, f, g, h, i, toElt j)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
   => Elt (a, b, c, d, e, f, g, h, i, j, k) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j)))
-                (eltType (undefined :: k))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h, i, j)) (eltType @k)
   fromElt (a, b, c, d, e, f, g, h, i, j, k) = (fromElt (a, b, c, d, e, f, g, h, i, j), fromElt k)
   toElt (abcdefghij, k) = let (a, b, c, d, e, f, g, h, i, j) = toElt abcdefghij
                           in  (a, b, c, d, e, f, g, h, i, j, toElt k)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k)))
-                (eltType (undefined :: l))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h, i, j, k)) (eltType @l)
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l) = (fromElt (a, b, c, d, e, f, g, h, i, j, k), fromElt l)
   toElt (abcdefghijk, l) = let (a, b, c, d, e, f, g, h, i, j, k) = toElt abcdefghijk
                            in  (a, b, c, d, e, f, g, h, i, j, k, toElt l)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l)))
-                (eltType (undefined :: m))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h, i, j, k, l)) (eltType @m)
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l), fromElt m)
   toElt (abcdefghijkl, m) = let (a, b, c, d, e, f, g, h, i, j, k, l) = toElt abcdefghijkl
                             in  (a, b, c, d, e, f, g, h, i, j, k, l, toElt m)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m)))
-                (eltType (undefined :: n))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h, i, j, k, l, m)) (eltType @n)
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m), fromElt n)
   toElt (abcdefghijklm, n) = let (a, b, c, d, e, f, g, h, i, j, k, l, m) = toElt abcdefghijklm
                              in  (a, b, c, d, e, f, g, h, i, j, k, l, m, toElt n)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n)))
-                (eltType (undefined :: o))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h, i, j, k, l, m, n)) (eltType @o)
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromElt o)
   toElt (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toElt abcdefghijklmn
                               in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toElt o)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)))
-                (eltType (undefined :: p))
+  eltType = TypeRpair (eltType @(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)) (eltType @p)
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromElt p)
   toElt (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toElt abcdefghijklmno
                                in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toElt p)
@@ -569,8 +549,8 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 -- |Convenience functions
 --
 
-singletonScalarType :: IsScalar a => a -> TupleType a
-singletonScalarType _ = TypeRscalar scalarType
+singletonScalarType :: IsScalar a => TupleType a
+singletonScalarType = TypeRscalar scalarType
 
 {-# INLINE liftToElt #-}
 liftToElt :: (Elt a, Elt b)
@@ -651,10 +631,10 @@ type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRe
 type IsAtuple = IsProduct Arrays
 
 fromAtuple :: IsAtuple tup => tup -> TupleRepr tup
-fromAtuple = fromProd (Proxy :: Proxy Arrays)
+fromAtuple = fromProd @Arrays
 
 toAtuple :: IsAtuple tup => TupleRepr tup -> tup
-toAtuple = toProd (Proxy :: Proxy Arrays)
+toAtuple = toProd @Arrays
 
 -- Array type reification
 --
@@ -673,143 +653,153 @@ data ArraysFlavour arrs where
 -- results.
 --
 class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
-  arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
-  flavour  :: a {- dummy -} -> ArraysFlavour a
+  arrays  :: ArraysR (ArrRepr a)
+  flavour :: ArraysFlavour a
   --
-  toArr    :: ArrRepr  a -> a
-  fromArr  :: a -> ArrRepr  a
+  toArr   :: ArrRepr  a -> a
+  fromArr :: a -> ArrRepr  a
 
 
 instance Arrays () where
-  arrays  _ = ArraysRunit
-  flavour _ = ArraysFunit
+  arrays  = ArraysRunit
+  flavour = ArraysFunit
   --
-  toArr     = id
-  fromArr   = id
+  fromArr = id
+  toArr   = id
 
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
-  arrays _      = ArraysRarray
-  flavour _     = ArraysFarray
+  arrays  = ArraysRarray
+  flavour = ArraysFarray
   --
-  toArr         = id
-  fromArr       = id
+  fromArr = id
+  toArr   = id
 
 instance (Arrays a, Arrays b) => Arrays (a, b) where
-  arrays  _             = ArraysRpair (ArraysRpair ArraysRunit (arrays (undefined::a))) (arrays (undefined::b))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (ArraysRpair ArraysRunit (arrays @a)) (arrays @b)
+  flavour = ArraysFtuple
   --
-  toArr    (((),a), b)  = (toArr a, toArr b)
-  fromArr  (a, b)       = (((), fromArr a), fromArr b)
+  fromArr (a, b)       = (((), fromArr a), fromArr b)
+  toArr   (((),a), b)  = (toArr a, toArr b)
 
 instance (Arrays a, Arrays b, Arrays c) => Arrays (a, b, c) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b))) (arrays (undefined::c))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b)) (arrays @c)
+  flavour = ArraysFtuple
   --
-  toArr    (ab, c)      = let (a, b) = toArr ab in (a, b, toArr c)
-  fromArr  (a, b, c)    = (fromArr (a, b), fromArr c)
+  fromArr (a, b, c)    = (fromArr (a, b), fromArr c)
+  toArr   (ab, c)      = let (a, b) = toArr ab in (a, b, toArr c)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d) => Arrays (a, b, c, d) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c))) (arrays (undefined::d))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c)) (arrays @d)
+  flavour = ArraysFtuple
   --
-  toArr    (abc, d)     = let (a, b, c) = toArr abc in (a, b, c, toArr d)
-  fromArr  (a, b, c, d) = (fromArr (a, b, c), fromArr d)
+  fromArr (a, b, c, d) = (fromArr (a, b, c), fromArr d)
+  toArr   (abc, d)     = let (a, b, c) = toArr abc in (a, b, c, toArr d)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Arrays (a, b, c, d, e) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d))) (arrays (undefined::e))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d)) (arrays @e)
+  flavour = ArraysFtuple
   --
-  toArr    (abcd, e)    = let (a, b, c, d) = toArr abcd in (a, b, c, d, toArr e)
-  fromArr  (a, b, c, d, e) = (fromArr (a, b, c, d), fromArr e)
+  fromArr (a, b, c, d, e) = (fromArr (a, b, c, d), fromArr e)
+  toArr   (abcd, e)       = let (a, b, c, d) = toArr abcd in (a, b, c, d, toArr e)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
   => Arrays (a, b, c, d, e, f) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e))) (arrays (undefined::f))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e)) (arrays @f)
+  flavour = ArraysFtuple
   --
-  toArr    (abcde, f)   = let (a, b, c, d, e) = toArr abcde in (a, b, c, d, e, toArr f)
-  fromArr  (a, b, c, d, e, f) = (fromArr (a, b, c, d, e), fromArr f)
+  fromArr (a, b, c, d, e, f) = (fromArr (a, b, c, d, e), fromArr f)
+  toArr   (abcde, f)         = let (a, b, c, d, e) = toArr abcde
+                               in (a, b, c, d, e, toArr f)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
   => Arrays (a, b, c, d, e, f, g) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f))) (arrays (undefined::g))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f)) (arrays @g)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdef, g)   = let (a, b, c, d, e, f) = toArr abcdef in (a, b, c, d, e, f, toArr g)
-  fromArr  (a, b, c, d, e, f, g) = (fromArr (a, b, c, d, e, f), fromArr g)
+  fromArr (a, b, c, d, e, f, g) = (fromArr (a, b, c, d, e, f), fromArr g)
+  toArr   (abcdef, g)           = let (a, b, c, d, e, f) = toArr abcdef
+                                  in (a, b, c, d, e, f, toArr g)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
   => Arrays (a, b, c, d, e, f, g, h) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g))) (arrays (undefined::h))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g)) (arrays @h)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefg, h)   = let (a, b, c, d, e, f, g) = toArr abcdefg in (a, b, c, d, e, f, g, toArr h)
-  fromArr  (a, b, c, d, e, f, g, h) = (fromArr (a, b, c, d, e, f, g), fromArr h)
+  fromArr (a, b, c, d, e, f, g, h) = (fromArr (a, b, c, d, e, f, g), fromArr h)
+  toArr   (abcdefg, h)             = let (a, b, c, d, e, f, g) = toArr abcdefg
+                                     in (a, b, c, d, e, f, g, toArr h)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
   => Arrays (a, b, c, d, e, f, g, h, i) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h))) (arrays (undefined::i))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h)) (arrays @i)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toArr abcdefgh in (a, b, c, d, e, f, g, h, toArr i)
-  fromArr  (a, b, c, d, e, f, g, h, i) = (fromArr (a, b, c, d, e, f, g, h), fromArr i)
+  fromArr (a, b, c, d, e, f, g, h, i) = (fromArr (a, b, c, d, e, f, g, h), fromArr i)
+  toArr   (abcdefgh, i)               = let (a, b, c, d, e, f, g, h) = toArr abcdefgh
+                                        in (a, b, c, d, e, f, g, h, toArr i)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
   => Arrays (a, b, c, d, e, f, g, h, i, j) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i))) (arrays (undefined::j))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h, i)) (arrays @j)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefghi, j) = let (a, b, c, d, e, f, g, h, i) = toArr abcdefghi in (a, b, c, d, e, f, g, h, i, toArr j)
-  fromArr  (a, b, c, d, e, f, g, h, i, j) = (fromArr (a, b, c, d, e, f, g, h, i), fromArr j)
+  fromArr (a, b, c, d, e, f, g, h, i, j) = (fromArr (a, b, c, d, e, f, g, h, i), fromArr j)
+  toArr   (abcdefghi, j) = let (a, b, c, d, e, f, g, h, i) = toArr abcdefghi
+                           in (a, b, c, d, e, f, g, h, i, toArr j)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j))) (arrays (undefined::k))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h, i, j)) (arrays @k)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefghij, k) = let (a, b, c, d, e, f, g, h, i, j) = toArr abcdefghij in (a, b, c, d, e, f, g, h, i, j, toArr k)
-  fromArr  (a, b, c, d, e, f, g, h, i, j, k) = (fromArr (a, b, c, d, e, f, g, h, i, j), fromArr k)
+  fromArr (a, b, c, d, e, f, g, h, i, j, k) = (fromArr (a, b, c, d, e, f, g, h, i, j), fromArr k)
+  toArr   (abcdefghij, k) = let (a, b, c, d, e, f, g, h, i, j) = toArr abcdefghij
+                            in (a, b, c, d, e, f, g, h, i, j, toArr k)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k))) (arrays (undefined::l))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h, i, j, k)) (arrays @l)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefghijk, l) = let (a, b, c, d, e, f, g, h, i, j, k) = toArr abcdefghijk in (a, b, c, d, e, f, g, h, i, j, k, toArr l)
-  fromArr  (a, b, c, d, e, f, g, h, i, j, k, l) = (fromArr (a, b, c, d, e, f, g, h, i, j, k), fromArr l)
+  fromArr (a, b, c, d, e, f, g, h, i, j, k, l) = (fromArr (a, b, c, d, e, f, g, h, i, j, k), fromArr l)
+  toArr   (abcdefghijk, l) = let (a, b, c, d, e, f, g, h, i, j, k) = toArr abcdefghijk
+                             in (a, b, c, d, e, f, g, h, i, j, k, toArr l)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l))) (arrays (undefined::m))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h, i, j, k, l)) (arrays @m)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefghijkl, m) = let (a, b, c, d, e, f, g, h, i, j, k, l) = toArr abcdefghijkl in (a, b, c, d, e, f, g, h, i, j, k, l, toArr m)
-  fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l), fromArr m)
+  fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l), fromArr m)
+  toArr   (abcdefghijkl, m) = let (a, b, c, d, e, f, g, h, i, j, k, l) = toArr abcdefghijkl
+                              in (a, b, c, d, e, f, g, h, i, j, k, l, toArr m)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m))) (arrays (undefined::n))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h, i, j, k, l, m)) (arrays @n)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefghijklm, n) = let (a, b, c, d, e, f, g, h, i, j, k, l, m) = toArr abcdefghijklm in (a, b, c, d, e, f, g, h, i, j, k, l, m, toArr n)
-  fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m), fromArr n)
+  fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m), fromArr n)
+  toArr   (abcdefghijklm, n) = let (a, b, c, d, e, f, g, h, i, j, k, l, m) = toArr abcdefghijklm
+                               in (a, b, c, d, e, f, g, h, i, j, k, l, m, toArr n)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n))) (arrays (undefined::o))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h, i, j, k, l, m, n)) (arrays @o)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toArr abcdefghijklmn in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toArr o)
-  fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromArr o)
+  fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromArr o)
+  toArr   (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toArr abcdefghijklmn
+                                in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toArr o)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o))) (arrays (undefined::p))
-  flavour _             = ArraysFtuple
+  arrays  = ArraysRpair (arrays @(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)) (arrays @p)
+  flavour = ArraysFtuple
   --
-  toArr    (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toArr abcdefghijklmno in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toArr p)
-  fromArr  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromArr p)
-
+  fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromArr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromArr p)
+  toArr   (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toArr abcdefghijklmno
+                                 in (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toArr p)
 
 -- {-# RULES
 -- "fromArr/toArr" forall a. fromArr (toArr a) = a
@@ -844,8 +834,8 @@ data Atuple c t where
 --
 type TupleR a = ProdR Elt a
 
-tuple :: IsTuple tup => {- dummy -} tup -> TupleR (TupleRepr tup)
-tuple = prod (Proxy :: Proxy Elt)
+tuple :: forall tup. IsTuple tup => TupleR (TupleRepr tup)
+tuple = prod @Elt @tup
 
 
 -- | Dense, regular, multi-dimensional arrays.
@@ -1050,7 +1040,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
        => Shape sh where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
-  rank   :: sh -> Int
+  rank   :: Int
 
   -- |Total number of elements in an array of the given /shape/.
   size   :: sh -> Int
@@ -1096,12 +1086,12 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   listToShape :: [Int] -> sh
 
   -- | The slice index for slice specifier 'Any sh'
-  sliceAnyIndex :: sh -> Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
+  sliceAnyIndex  :: Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
 
   -- | The slice index for specifying a slice with only the Z component projected
-  sliceNoneIndex :: sh -> Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
+  sliceNoneIndex :: Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
 
-  rank                  = Repr.rank . fromElt
+  rank                  = Repr.rank @(EltRepr sh)
   size                  = Repr.size . fromElt
   empty                 = toElt Repr.empty
   -- (#) must be individually defined, as it holds for all instances *except*
@@ -1127,12 +1117,12 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   listToShape = toElt . Repr.listToShape
 
 instance Shape Z where
-  sliceAnyIndex  _ = Repr.SliceNil
-  sliceNoneIndex _ = Repr.SliceNil
+  sliceAnyIndex  = Repr.SliceNil
+  sliceNoneIndex = Repr.SliceNil
 
 instance Shape sh => Shape (sh:.Int) where
-  sliceAnyIndex  _ = Repr.SliceAll   (sliceAnyIndex  (undefined :: sh))
-  sliceNoneIndex _ = Repr.SliceFixed (sliceNoneIndex (undefined :: sh))
+  sliceAnyIndex  = Repr.SliceAll   (sliceAnyIndex  @sh)
+  sliceNoneIndex = Repr.SliceFixed (sliceNoneIndex @sh)
 
 -- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
 -- indices to slices, co-slices, and slice dimensions
@@ -1142,68 +1132,65 @@ class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape 
   type SliceShape   sl :: *     -- the projected slice
   type CoSliceShape sl :: *     -- the complement of the slice
   type FullShape    sl :: *     -- the combined dimension
-  sliceIndex :: sl {- dummy -} -> Repr.SliceIndex (EltRepr sl)
-                                    (EltRepr (SliceShape   sl))
-                                    (EltRepr (CoSliceShape sl))
-                                    (EltRepr (FullShape    sl))
+  sliceIndex :: Repr.SliceIndex (EltRepr sl)
+                                (EltRepr (SliceShape   sl))
+                                (EltRepr (CoSliceShape sl))
+                                (EltRepr (FullShape    sl))
 
 instance Slice Z where
   type SliceShape   Z = Z
   type CoSliceShape Z = Z
   type FullShape    Z = Z
-  sliceIndex _ = Repr.SliceNil
+  sliceIndex = Repr.SliceNil
 
 instance Slice sl => Slice (sl:.All) where
   type SliceShape   (sl:.All) = SliceShape   sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
   type FullShape    (sl:.All) = FullShape    sl :. Int
-  sliceIndex _ = Repr.SliceAll (sliceIndex (undefined :: sl))
+  sliceIndex = Repr.SliceAll (sliceIndex @sl)
 
 instance Slice sl => Slice (sl:.Int) where
   type SliceShape   (sl:.Int) = SliceShape   sl
   type CoSliceShape (sl:.Int) = CoSliceShape sl :. Int
   type FullShape    (sl:.Int) = FullShape    sl :. Int
-  sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined :: sl))
+  sliceIndex = Repr.SliceFixed (sliceIndex @sl)
 
 instance Shape sh => Slice (Any sh) where
   type SliceShape   (Any sh) = sh
   type CoSliceShape (Any sh) = Z
   type FullShape    (Any sh) = sh
-  sliceIndex _ = sliceAnyIndex (undefined :: sh)
-
+  sliceIndex = sliceAnyIndex @sh
 
 -- | Generalised array division, like above but use for splitting an array into
 -- many subarrays, as opposed to extracting a single subarray.
 --
-class (Slice (DivisionSlice sl))
-       => Division sl where
+class (Slice (DivisionSlice sl)) => Division sl where
   type DivisionSlice sl :: *     -- the slice
   slicesIndex :: slix ~ DivisionSlice sl
-              => sl {- dummy -}
-              -> Repr.SliceIndex (EltRepr slix)
+              => Repr.SliceIndex (EltRepr slix)
                                  (EltRepr (SliceShape   slix))
                                  (EltRepr (CoSliceShape slix))
                                  (EltRepr (FullShape    slix))
 
 instance Division Z where
   type DivisionSlice   Z = Z
-  slicesIndex _ = Repr.SliceNil
+  slicesIndex = Repr.SliceNil
 
 instance Division sl => Division (sl:.All) where
   type DivisionSlice  (sl:.All) = DivisionSlice sl :. All
-  slicesIndex _ = Repr.SliceAll (slicesIndex (undefined :: sl))
+  slicesIndex = Repr.SliceAll (slicesIndex @sl)
 
 instance Division sl => Division (sl:.Split) where
   type DivisionSlice (sl:.Split) = DivisionSlice sl :. Int
-  slicesIndex _ = Repr.SliceFixed (slicesIndex (undefined :: sl))
+  slicesIndex = Repr.SliceFixed (slicesIndex @sl)
 
 instance Shape sh => Division (Any sh) where
   type DivisionSlice (Any sh) = Any sh
-  slicesIndex _ = sliceAnyIndex (undefined :: sh)
+  slicesIndex = sliceAnyIndex @sh
 
 instance (Shape sh, Slice sh) => Division (Divide sh) where
   type DivisionSlice (Divide sh) = sh
-  slicesIndex _ = sliceNoneIndex (undefined :: sh)
+  slicesIndex = sliceNoneIndex @sh
 
 
 -- Array operations
@@ -1364,7 +1351,7 @@ sliceShape slix = toElt . Repr.sliceShape slix . fromElt
 --
 -- Example:
 --
--- > let slix = sliceIndex (undefined :: Z :. Int :. Int :. All)
+-- > let slix = sliceIndex @(Z :. Int :. Int :. All)
 -- >     sh   = Z :. 2 :. 3 :. 1 :: DIM3
 -- > in
 -- > enumSlices slix sh :: [ Z :. Int :. Int :. All ]

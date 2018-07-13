@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE ConstraintKinds            #-}
@@ -8,6 +9,7 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE UnboxedTuples              #-}
 {-# LANGUAGE ViewPatterns               #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -46,7 +48,6 @@ import Control.Monad.IO.Class                                   ( MonadIO, liftI
 import Data.Functor
 import Data.Hashable                                            ( hash, Hashable )
 import Data.Maybe                                               ( isJust )
-import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast, typeOf )
 import Data.Word
 import Foreign.Storable                                         ( sizeOf )
@@ -181,7 +182,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   message $ printf "malloc %d bytes (%d x %d bytes, type=%s, pagesize=%d)" bytes n (sizeOf (undefined::b)) (show (typeOf (undefined::a))) chunk
   --
   mp <-
-    fmap (castRemotePtr (Proxy :: Proxy m))
+    fmap (castRemotePtr @m)
     <$> attempt "malloc/nursery" (liftIO $ N.lookup bytes nursery)
         `orElse`
         attempt "malloc/new" (mallocRemote bytes)
@@ -221,26 +222,24 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
 -- | Deallocate the device array associated with the given host-side array.
 -- Typically this should only be called in very specific circumstances.
 --
-free :: (RemoteMemory m, PrimElt a b)
-     => proxy m
-     -> MemoryTable (RemotePtr m)
+free :: forall m a b. (RemoteMemory m, PrimElt a b)
+     => MemoryTable (RemotePtr m)
      -> ArrayData a
      -> IO ()
-free proxy mt !arr = do
+free mt !arr = do
   sa <- makeStableArray arr
-  freeStable proxy mt sa
+  freeStable @m mt sa
 
 
 -- | Deallocate the device array associated with the given StableArray. This
 -- is useful for other memory managers built on top of the memory table.
 --
 freeStable
-    :: RemoteMemory m
-    => proxy m
-    -> MemoryTable (RemotePtr m)
+    :: forall m. RemoteMemory m
+    => MemoryTable (RemotePtr m)
     -> StableArray
     -> IO ()
-freeStable proxy (MemoryTable !ref _ !nrs _) !sa =
+freeStable (MemoryTable !ref _ !nrs _) !sa =
   withMVar ref      $ \mt ->
   HT.mutateIO mt sa $ \mw -> do
     case mw of
@@ -249,7 +248,7 @@ freeStable proxy (MemoryTable !ref _ !nrs _) !sa =
 
       Just (RemoteArray !p !bytes _) -> do
         message ("free/nursery: " ++ show sa ++ " of " ++ showBytes bytes)
-        N.insert bytes (castRemotePtr proxy p) nrs
+        N.insert bytes (castRemotePtr @m p) nrs
         D.decreaseCurrentBytesRemote (fromIntegral bytes)
 
     return (Nothing, ())
@@ -259,15 +258,16 @@ freeStable proxy (MemoryTable !ref _ !nrs _) !sa =
 -- area. The device memory will be freed when the host array is garbage
 -- collected.
 --
-insert :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
-       => MemoryTable (RemotePtr m)
-       -> ArrayData a
-       -> RemotePtr m b
-       -> Int
-       -> m ()
+insert
+    :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
+    => MemoryTable (RemotePtr m)
+    -> ArrayData a
+    -> RemotePtr m b
+    -> Int
+    -> m ()
 insert mt@(MemoryTable !ref _ _ _) !arr !ptr !bytes = do
   key  <- makeStableArray  arr
-  weak <- liftIO $ makeWeakArrayData arr () (Just $ freeStable (Proxy :: Proxy m) mt key)
+  weak <- liftIO $ makeWeakArrayData arr () (Just $ freeStable @m mt key)
   message $ "insert: " ++ show key
   liftIO  $ D.increaseCurrentBytesRemote (fromIntegral bytes)
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray ptr bytes weak)
@@ -314,7 +314,7 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
     Nothing  -> return ()
     Just ref -> do
       rs <- withMVar ref $ HT.foldM removable []  -- collect arrays that can be removed
-      mapM_ (freeStable (Proxy :: Proxy m) mt) rs -- remove them all
+      mapM_ (freeStable @m mt) rs -- remove them all
   where
     removable rs (sa, RemoteArray _ _ w) = do
       alive <- isJust <$> deRefWeak w

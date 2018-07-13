@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Scan
@@ -26,7 +27,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Scan (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -47,17 +47,17 @@ import Test.Tasty.Hedgehog
 test_scanl :: RunN -> TestTree
 test_scanl runN =
   testGroup "scanl"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestHalf)   $ testElt f16
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestHalf   $ testElt f16
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt
@@ -76,7 +76,7 @@ test_scanl runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanl_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanl_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanl_interval runN sh e
@@ -85,16 +85,16 @@ test_scanl runN =
 test_scanl1 :: RunN -> TestTree
 test_scanl1 runN =
   testGroup "scanl1"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -112,7 +112,7 @@ test_scanl1 runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanl1_sum runN sh e
             , testProperty "non-commutative"  $ test_scanl1_interval runN sh e
             ]
@@ -120,16 +120,16 @@ test_scanl1 runN =
 test_scanl' :: RunN -> TestTree
 test_scanl' runN =
   testGroup "scanl'"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -147,7 +147,7 @@ test_scanl' runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanl'_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanl'_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanl'_interval runN sh e
@@ -156,16 +156,16 @@ test_scanl' runN =
 test_scanr :: RunN -> TestTree
 test_scanr runN =
   testGroup "scanr"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -183,7 +183,7 @@ test_scanr runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanr_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanr_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanr_interval runN sh e
@@ -192,16 +192,16 @@ test_scanr runN =
 test_scanr1 :: RunN -> TestTree
 test_scanr1 runN =
   testGroup "scanr1"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -219,7 +219,7 @@ test_scanr1 runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanr1_sum runN sh e
             , testProperty "non-commutative"  $ test_scanr1_interval runN sh e
             ]
@@ -227,16 +227,16 @@ test_scanr1 runN =
 test_scanr' :: RunN -> TestTree
 test_scanr' runN =
   testGroup "scanr'"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -254,7 +254,7 @@ test_scanr' runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanr'_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanr'_sum runN sh e e
             , testProperty "non-commutative"  $ test_scanr'_interval runN sh e
@@ -263,16 +263,16 @@ test_scanr' runN =
 test_scanlSeg :: RunN -> TestTree
 test_scanlSeg runN =
   testGroup "scanlSeg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -290,7 +290,7 @@ test_scanlSeg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanlSeg_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanlSeg_sum runN sh e e
             ]
@@ -298,16 +298,16 @@ test_scanlSeg runN =
 test_scanl1Seg :: RunN -> TestTree
 test_scanl1Seg runN =
   testGroup "scanl1Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -325,23 +325,23 @@ test_scanl1Seg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"  $ test_scanl1Seg_sum runN sh e
             ]
 
 test_scanl'Seg :: RunN -> TestTree
 test_scanl'Seg runN =
   testGroup "scanl'Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -359,7 +359,7 @@ test_scanl'Seg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanl'Seg_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanl'Seg_sum runN sh e e
             ]
@@ -367,16 +367,16 @@ test_scanl'Seg runN =
 test_scanrSeg :: RunN -> TestTree
 test_scanrSeg runN =
   testGroup "scanrSeg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -394,7 +394,7 @@ test_scanrSeg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanrSeg_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanrSeg_sum runN sh e e
             ]
@@ -402,16 +402,16 @@ test_scanrSeg runN =
 test_scanr1Seg :: RunN -> TestTree
 test_scanr1Seg runN =
   testGroup "scanr1Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -429,23 +429,23 @@ test_scanr1Seg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"  $ test_scanr1Seg_sum runN sh e
             ]
 
 test_scanr'Seg :: RunN -> TestTree
 test_scanr'Seg runN =
   testGroup "scanr'Seg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -463,7 +463,7 @@ test_scanr'Seg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "sum"              $ test_scanr'Seg_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_scanr'Seg_sum runN sh e e
             ]
@@ -636,7 +636,7 @@ test_scanlSeg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank @sh)))))
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanlSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
 
@@ -651,7 +651,7 @@ test_scanl1Seg_sum runN dim e =
     sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
     n2      <- forAll (Gen.int (Range.linear 1 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanl1Seg (+)) in go arr seg ~~~ scanl1SegRef (+) arr seg
 
@@ -668,7 +668,7 @@ test_scanl'Seg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank @sh)))))
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanl'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
 
@@ -685,7 +685,7 @@ test_scanrSeg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank @sh)))))
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanrSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
 
@@ -700,7 +700,7 @@ test_scanr1Seg_sum runN dim e =
     sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
     n2      <- forAll (Gen.int (Range.linear 1 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanr1Seg (+)) in go arr seg ~~~ scanr1SegRef (+) arr seg
 
@@ -717,7 +717,7 @@ test_scanr'Seg_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank @sh)))))
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanr'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanr'SegRef (+) x arr seg
 
@@ -749,7 +749,7 @@ iappend x y
     x2 + 1 A.== y1 ? ( lift (x1,y2) , constant top )
   )))
 
-intervalArray :: (Shape sh, Elt e, P.Num e) => sh -> Int -> proxy e -> Array (sh:.Int) (e,e)
+intervalArray :: (Shape sh, Elt e, P.Num e) => sh -> Int -> Gen e -> Array (sh:.Int) (e,e)
 intervalArray sh n _ = fromFunction (sh:.n) (\(_:.i) -> let x = P.fromIntegral i in (x,x))
 
 

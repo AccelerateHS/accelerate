@@ -1,7 +1,9 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -26,7 +28,7 @@ module Data.Array.Accelerate.Analysis.Match (
   matchPrimFun,  matchPrimFun',
 
   -- auxiliary
-  matchIdx, matchTupleType,
+  matchIdx, matchTupleType, matchShapeType,
   matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
 
 ) where
@@ -115,7 +117,7 @@ matchPreOpenAcc matchAcc encodeAcc = match
       = Just Refl
 
     match (Use a1) (Use a2)
-      | Just Refl <- matchArrays (arrays (undefined::s)) (arrays (undefined::t)) a1 a2
+      | Just Refl <- matchArrays (arrays @s) (arrays @t) a1 a2
       = gcast Refl
 
     match (Unit e1) (Unit e2)
@@ -303,7 +305,7 @@ matchBoundary
 matchBoundary _ _ Clamp        Clamp        = True
 matchBoundary _ _ Mirror       Mirror       = True
 matchBoundary _ _ Wrap         Wrap         = True
-matchBoundary _ _ (Constant s) (Constant t) = matchConst (eltType (undefined::t)) s t
+matchBoundary _ _ (Constant s) (Constant t) = matchConst (eltType @t) s t
 matchBoundary m h (Function f) (Function g)
   | Just Refl <- matchPreOpenFun m h f g
   = True
@@ -456,16 +458,16 @@ matchPreOpenExp matchAcc encodeAcc = match
       = gcast Refl
 
     match (Const c1) (Const c2)
-      | Just Refl <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
-      , matchConst (eltType (undefined::s')) c1 c2
+      | Just Refl <- matchTupleType (eltType @s') (eltType @t')
+      , matchConst (eltType @s') c1 c2
       = gcast Refl  -- surface/representation type
 
     match Undef Undef
-      | Just Refl <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
+      | Just Refl <- matchTupleType (eltType @s') (eltType @t')
       = gcast Refl
 
     match (Coerce e1) (Coerce e2)
-      | Just Refl <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
+      | Just Refl <- matchTupleType (eltType @s') (eltType @t')
       , Just Refl <- match e1 e2
       = gcast Refl
 
@@ -900,6 +902,12 @@ matchTupleType (TypeRpair s1 s2) (TypeRpair t1 t2)
 
 matchTupleType _ _
   = Nothing
+
+
+matchShapeType :: forall s t. (Shape s, Shape t) => Maybe (s :~: t)
+matchShapeType
+  | Just Refl <- matchTupleType (eltType @s) (eltType @t) = gcast Refl
+  | otherwise                                             = Nothing
 
 
 -- Match reified type dictionaries

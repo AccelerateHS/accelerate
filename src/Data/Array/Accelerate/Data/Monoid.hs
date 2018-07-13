@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ >= 806
@@ -53,7 +54,6 @@ import Data.Semigroup
 #else
 import Data.Monoid
 #endif
-import Prelude                                                      ( undefined )
 import qualified Prelude                                            as P
 
 
@@ -63,15 +63,15 @@ import qualified Prelude                                            as P
 type instance EltRepr (Sum a) = ((), EltRepr a)
 
 instance Elt a => Elt (Sum a) where
-  eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
+  eltType         = TypeRpair TypeRunit (eltType @a)
   toElt ((),x)    = Sum (toElt x)
   fromElt (Sum x) = ((), fromElt x)
 
 instance Elt a => IsProduct Elt (Sum a) where
   type ProdRepr (Sum a) = ((), a)
-  toProd _ ((),a)    = Sum a
-  fromProd _ (Sum a) = ((),a)
-  prod _ _           = ProdRsnoc ProdRunit
+  toProd ((),a)    = Sum a
+  fromProd (Sum a) = ((),a)
+  prod             = ProdRsnoc ProdRunit
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Sum a) where
   type Plain (Sum a) = Sum (Plain a)
@@ -129,15 +129,15 @@ instance Num a => Semigroup (Exp (Sum a)) where
 type instance EltRepr (Product a) = ((), EltRepr a)
 
 instance Elt a => Elt (Product a) where
-  eltType _       = TypeRpair TypeRunit (eltType (undefined::a))
+  eltType         = TypeRpair TypeRunit (eltType @a)
   toElt ((),x)    = Product (toElt x)
   fromElt (Product x) = ((), fromElt x)
 
 instance Elt a => IsProduct Elt (Product a) where
   type ProdRepr (Product a) = ((), a)
-  toProd _ ((),a)        = Product a
-  fromProd _ (Product a) = ((),a)
-  prod _ _               = ProdRsnoc ProdRunit
+  toProd ((),a)        = Product a
+  fromProd (Product a) = ((),a)
+  prod                 = ProdRsnoc ProdRunit
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   type Plain (Product a) = Product (Plain a)

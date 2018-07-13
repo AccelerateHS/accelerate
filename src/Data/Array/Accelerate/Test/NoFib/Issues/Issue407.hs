@@ -1,8 +1,10 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedLists     #-}
+{-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue407
 -- Copyright   : [2009..2017] Trevor L. McDonell
@@ -22,7 +24,6 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue407 (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -36,15 +37,14 @@ import Test.Tasty.HUnit
 test_issue407 :: RunN -> TestTree
 test_issue407 runN =
   testGroup "407"
-    [ testElt (Proxy::Proxy Float)
-    , testElt (Proxy::Proxy Double)
+    [ testElt @Float
+    , testElt @Double
     ]
   where
     testElt
         :: forall a. (P.Fractional a, A.RealFloat a)
-        => Proxy a
-        -> TestTree
-    testElt _ =
+        => TestTree
+    testElt =
       testGroup (show (typeOf (undefined :: a)))
         [ testCase "isNaN"      $ eNaN @=? runN (A.map A.isNaN) xs
         , testCase "isInfinite" $ eInf @=? runN (A.map A.isInfinite) xs

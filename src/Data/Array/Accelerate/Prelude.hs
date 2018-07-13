@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -7,6 +8,7 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 -- |
@@ -114,9 +116,8 @@ module Data.Array.Accelerate.Prelude (
 -- avoid clashes with Prelude functions
 --
 import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
-import Data.Typeable                                                ( gcast )
 import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip, undefined )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
 #if __GLASGOW_HASKELL__ == 800
 import Prelude                                                      ( fail )
 #endif
@@ -1380,7 +1381,7 @@ index1' i = lift (Z :. fromIntegral i)
 --
 flatten :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Vector e)
 flatten a
-  | Just Refl <- matchShapeType (undefined::sh) (undefined::DIM1)
+  | Just Refl <- matchShapeType @sh @DIM1
   = a
 flatten a
   = reshape (index1 (size a)) a
@@ -1592,7 +1593,7 @@ filter :: forall sh e. (Shape sh, Slice sh, Elt e)
 filter p arr
   -- Optimise 1-dimensional arrays, where we can avoid additional computations
   -- for the offset indices.
-  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
+  | Just Refl <- matchShapeType @sh @Z
   = let
         keep            = map p arr
         (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
@@ -2362,15 +2363,6 @@ generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = fill (constant empty) undef
-
-
-matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
-matchShapeType _ _
-  | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
-  = gcast Refl
-
-matchShapeType _ _
-  = Nothing
 
 
 -- Lenses

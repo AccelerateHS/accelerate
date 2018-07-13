@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -47,9 +48,8 @@ import Data.Array.Accelerate.Data.Semigroup
 
 import Data.Char
 import Data.Maybe                                                   ( Maybe(..) )
-import Data.Typeable
 import Foreign.C.Types
-import Prelude                                                      ( (.), ($), const, undefined, otherwise )
+import Prelude                                                      ( (.), ($), const, otherwise )
 
 
 -- | Lift a value into a 'Just' constructor
@@ -149,19 +149,19 @@ tag x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
 type instance EltRepr (Maybe a) = TupleRepr (Word8, EltRepr a)
 
 instance Elt a => Elt (Maybe a) where
-  eltType _        = eltType (undefined::(Word8,a))
+  eltType          = eltType @(Word8,a)
   toElt (((),0),_) = Nothing
   toElt (_     ,x) = Just (toElt x)
-  fromElt Nothing  = (((),0), undef' (eltType (undefined::a)))
+  fromElt Nothing  = (((),0), undef' (eltType @a))
   fromElt (Just a) = (((),1), fromElt a)
 
 instance Elt a => IsProduct Elt (Maybe a) where
   type ProdRepr (Maybe a) = ProdRepr (Word8, a)
-  toProd _ (((),0),_) = Nothing
-  toProd _ (_,     x) = Just x
-  fromProd _ Nothing  = (((), 0), toElt (undef' (eltType (undefined::a))))
-  fromProd _ (Just a) = (((), 1), a)
-  prod cst _ = prod cst (undefined :: (Word8,a))
+  toProd (((),0),_) = Nothing
+  toProd (_,     x) = Just x
+  fromProd Nothing  = (((), 0), toElt (undef' (eltType @a)))
+  fromProd (Just a) = (((), 1), a)
+  prod = prod @Elt @(Word8,a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
@@ -214,7 +214,7 @@ filter'
     -> Acc (Array (sh:.Int) e)        -- values
     -> Acc (Vector e, Array sh Int)
 filter' keep arr
-  | Just Refl <- matchShapeType (undefined::sh) (undefined::Z)
+  | Just Refl <- matchShapeType @sh @Z
   = let
         (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
         prj ix          = keep!ix ? ( index1 (target!ix), ignore )
@@ -241,12 +241,4 @@ filter' keep arr
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = fill (constant empty) undef
-
-matchShapeType :: forall s t. (Shape s, Shape t) => s -> t -> Maybe (s :~: t)
-matchShapeType _ _
-  | Just Refl <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
-  = gcast Refl
-
-matchShapeType _ _
-  = Nothing
 

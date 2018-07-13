@@ -5,6 +5,7 @@
 {-# LANGUAGE MonoLocalBinds      #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Filter
@@ -22,7 +23,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Filter (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -41,17 +41,17 @@ import Test.Tasty.Hedgehog
 test_filter :: RunN -> TestTree
 test_filter runN =
   testGroup "filter"
-    [ at (Proxy::Proxy TestInt8)   $ testIntegralElt i8
-    , at (Proxy::Proxy TestInt16)  $ testIntegralElt i16
-    , at (Proxy::Proxy TestInt32)  $ testIntegralElt i32
-    , at (Proxy::Proxy TestInt64)  $ testIntegralElt i64
-    , at (Proxy::Proxy TestWord8)  $ testIntegralElt w8
-    , at (Proxy::Proxy TestWord16) $ testIntegralElt w16
-    , at (Proxy::Proxy TestWord32) $ testIntegralElt w32
-    , at (Proxy::Proxy TestWord64) $ testIntegralElt w64
-    , at (Proxy::Proxy TestHalf)   $ testFloatingElt f16
-    , at (Proxy::Proxy TestFloat)  $ testFloatingElt f32
-    , at (Proxy::Proxy TestDouble) $ testFloatingElt f64
+    [ at @TestInt8   $ testIntegralElt i8
+    , at @TestInt16  $ testIntegralElt i16
+    , at @TestInt32  $ testIntegralElt i32
+    , at @TestInt64  $ testIntegralElt i64
+    , at @TestWord8  $ testIntegralElt w8
+    , at @TestWord16 $ testIntegralElt w16
+    , at @TestWord32 $ testIntegralElt w32
+    , at @TestWord64 $ testIntegralElt w64
+    , at @TestHalf   $ testFloatingElt f16
+    , at @TestFloat  $ testFloatingElt f32
+    , at @TestDouble $ testFloatingElt f64
     ]
   where
     testIntegralElt
@@ -70,7 +70,7 @@ test_filter runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "even"     $ test_even runN sh e
             ]
 
@@ -90,7 +90,7 @@ test_filter runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [ testProperty "positive" $ test_positive runN sh e
             ]
 

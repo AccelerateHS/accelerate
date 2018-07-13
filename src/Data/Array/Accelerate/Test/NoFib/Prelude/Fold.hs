@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Fold
@@ -21,7 +22,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Fold (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -42,17 +42,17 @@ import Test.Tasty.Hedgehog
 test_fold :: RunN -> TestTree
 test_fold runN =
   testGroup "fold"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8  (Gen.int8   (Range.linearFrom 0 (-1) 1))
-    , at (Proxy::Proxy TestInt16)  $ testElt i16 (Gen.int16  (Range.linearFrom 0 (-10) 10))
-    , at (Proxy::Proxy TestInt32)  $ testElt i32 (Gen.int32  (Range.linearFrom 0 (-1000) 1000))
-    , at (Proxy::Proxy TestInt64)  $ testElt i64 (Gen.int64  (Range.linearFrom 0 (-10000) 10000))
-    , at (Proxy::Proxy TestWord8)  $ testElt w8  (Gen.word8  (Range.linear 0 1))
-    , at (Proxy::Proxy TestWord16) $ testElt w16 (Gen.word16 (Range.linear 0 10))
-    , at (Proxy::Proxy TestWord32) $ testElt w32 (Gen.word32 (Range.linear 0 1000))
-    , at (Proxy::Proxy TestWord64) $ testElt w64 (Gen.word64 (Range.linear 0 10000))
-    , at (Proxy::Proxy TestHalf)   $ testElt f16 f16
-    , at (Proxy::Proxy TestFloat)  $ testElt f32 f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64 f64
+    [ at @TestInt8   $ testElt i8  (Gen.int8   (Range.linearFrom 0 (-1) 1))
+    , at @TestInt16  $ testElt i16 (Gen.int16  (Range.linearFrom 0 (-10) 10))
+    , at @TestInt32  $ testElt i32 (Gen.int32  (Range.linearFrom 0 (-1000) 1000))
+    , at @TestInt64  $ testElt i64 (Gen.int64  (Range.linearFrom 0 (-10000) 10000))
+    , at @TestWord8  $ testElt w8  (Gen.word8  (Range.linear 0 1))
+    , at @TestWord16 $ testElt w16 (Gen.word16 (Range.linear 0 10))
+    , at @TestWord32 $ testElt w32 (Gen.word32 (Range.linear 0 1000))
+    , at @TestWord64 $ testElt w64 (Gen.word64 (Range.linear 0 10000))
+    , at @TestHalf   $ testElt f16 f16
+    , at @TestFloat  $ testElt f32 f32
+    , at @TestDouble $ testElt f64 f64
     ]
   where
     testElt
@@ -72,7 +72,7 @@ test_fold runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [
               testProperty "sum"              $ test_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_sum runN sh e e
@@ -85,16 +85,16 @@ test_fold runN =
 test_foldSeg :: RunN -> TestTree
 test_foldSeg runN =
   testGroup "foldSeg"
-    [ at (Proxy::Proxy TestInt8)   $ testElt i8
-    , at (Proxy::Proxy TestInt16)  $ testElt i16
-    , at (Proxy::Proxy TestInt32)  $ testElt i32
-    , at (Proxy::Proxy TestInt64)  $ testElt i64
-    , at (Proxy::Proxy TestWord8)  $ testElt w8
-    , at (Proxy::Proxy TestWord16) $ testElt w16
-    , at (Proxy::Proxy TestWord32) $ testElt w32
-    , at (Proxy::Proxy TestWord64) $ testElt w64
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestInt8   $ testElt i8
+    , at @TestInt16  $ testElt i16
+    , at @TestInt32  $ testElt i32
+    , at @TestInt64  $ testElt i64
+    , at @TestWord8  $ testElt w8
+    , at @TestWord16 $ testElt w16
+    , at @TestWord32 $ testElt w32
+    , at @TestWord64 $ testElt w64
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
@@ -112,7 +112,7 @@ test_foldSeg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank (undefined::(sh:.Int))))
+          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [
               testProperty "sum"              $ test_segmented_sum runN sh (return 0) e
             , testProperty "non-neutral sum"  $ test_segmented_sum runN sh e e
@@ -187,7 +187,7 @@ test_segmented_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
 
@@ -202,7 +202,7 @@ test_segmented_minimum runN dim e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
 
@@ -217,7 +217,7 @@ test_segmented_maximum runN dim e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank (undefined::sh))))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.max) in go xs seg ~~~ fold1SegRef P.max xs seg
 

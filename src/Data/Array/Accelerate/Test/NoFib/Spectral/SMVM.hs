@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
@@ -20,7 +21,6 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.SMVM (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -41,9 +41,9 @@ import Test.Tasty.Hedgehog
 test_smvm :: RunN -> TestTree
 test_smvm runN =
   testGroup "smvm"
-    [ at (Proxy::Proxy TestHalf)   $ testElt f16
-    , at (Proxy::Proxy TestFloat)  $ testElt f32
-    , at (Proxy::Proxy TestDouble) $ testElt f64
+    [ at @TestHalf   $ testElt f16
+    , at @TestFloat  $ testElt f32
+    , at @TestDouble $ testElt f64
     ]
   where
     testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)

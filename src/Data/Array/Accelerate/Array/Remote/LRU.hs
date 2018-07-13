@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DoAndIfThenElse     #-}
@@ -7,6 +8,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.LRU
@@ -42,7 +44,6 @@ import Control.Monad.IO.Class                                   ( MonadIO, liftI
 import Data.Functor
 import Data.Int                                                 ( Int64 )
 import Data.Maybe                                               ( isNothing )
-import Data.Proxy
 import Foreign.Storable                                         ( sizeOf )
 import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
@@ -252,10 +253,11 @@ mallocWithUsage !mt !utbl !ad !usage@(Used _ _ _ _ n _) = malloc'
           HT.insert utbl key usage
           return p
 
-evictLRU :: forall m task. (RemoteMemory m, MonadIO m, Task task)
-         => UT task
-         -> Basic.MemoryTable (RemotePtr m)
-         -> m Bool
+evictLRU
+    :: forall m task. (RemoteMemory m, MonadIO m, Task task)
+    => UT task
+    -> Basic.MemoryTable (RemotePtr m)
+    -> m Bool
 evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
   mused <- liftIO $ HT.foldM eldest Nothing utbl
   case mused of
@@ -270,7 +272,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
           --
           -- Small caveat: Due to finalisers being delayed, it's a good idea
           -- to free the array here.
-          Basic.freeStable (Proxy :: Proxy m) mt sa
+          Basic.freeStable @m mt sa
           delete utbl sa
           message "evictLRU/Accelerate GC interrupted by GHC GC"
 
@@ -278,7 +280,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
           message ("evictLRU/evicting " ++ show sa)
           copyIfNecessary status n arr
           liftIO $ D.didEvictBytes (remoteBytes n weak_arr)
-          liftIO $ Basic.freeStable (Proxy :: Proxy m) mt sa
+          liftIO $ Basic.freeStable @m mt sa
           liftIO $ HT.insert utbl sa (Used ts Evicted count tasks n weak_arr)
       return True
     _ -> trace "evictLRU/All arrays in use, unable to evict" $ return False
@@ -319,17 +321,16 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
 -- Typically this should only be called in very specific circumstances. This
 -- operation is not thread-safe.
 --
-free :: (RemoteMemory m, PrimElt a b)
-     => proxy m
-     -> MemoryTable (RemotePtr m) task
+free :: forall m a b task. (RemoteMemory m, PrimElt a b)
+     => MemoryTable (RemotePtr m) task
      -> ArrayData a
      -> IO ()
-free proxy (MemoryTable !mt !ref _) !arr
+free (MemoryTable !mt !ref _) !arr
   = withMVar' ref
   $ \utbl -> do
       key <- Basic.makeStableArray arr
       delete utbl key
-      Basic.freeStable proxy mt key
+      Basic.freeStable @m mt key
 
 -- | Record an association between a host-side array and a remote memory area
 -- that was not allocated by accelerate. The remote memory will NOT be re-used

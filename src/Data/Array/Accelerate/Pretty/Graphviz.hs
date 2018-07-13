@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
 -- |
@@ -228,7 +229,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail parens aenv atup
       return $ PNode ident (Leaf (p, wrap (prettyTupleIdx ix <+> nest 2 d))) deps
 
-    Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays (undefined::arrs)) arrs) [] ]
+    Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays @arrs) arrs) [] ]
     Unit e                  -> "unit"        .$ [ ppE e ]
     Generate sh f           -> "generate"    .$ [ ppSh sh, ppF f ]
     Transform sh ix f xs    -> "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppA xs ]

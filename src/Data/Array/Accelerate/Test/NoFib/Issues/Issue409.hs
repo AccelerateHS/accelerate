@@ -1,7 +1,9 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue409
 -- Copyright   : [2009..2017] Trevor L. McDonell
@@ -20,7 +22,6 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue409 (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -34,15 +35,14 @@ import Test.Tasty.HUnit
 test_issue409 :: RunN -> TestTree
 test_issue409 runN =
   testGroup "409"
-    [ testElt (Proxy::Proxy Float)
-    , testElt (Proxy::Proxy Double)
+    [ testElt @Float
+    , testElt @Double
     ]
   where
     testElt
         :: forall a. (P.Floating a, P.Eq a, A.Floating a)
-        => Proxy a
-        -> TestTree
-    testElt _ =
+        => TestTree
+    testElt =
       testGroup (show (typeOf (undefined :: a)))
         [ testCase "A" $ e1 @=? indexArray (runN (A.map f) t1) Z
         ]

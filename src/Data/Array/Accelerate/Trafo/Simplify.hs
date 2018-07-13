@@ -7,6 +7,7 @@
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
@@ -46,7 +47,7 @@ import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar                ( Array, Elt(eltType), Shape, Slice, toElt, fromElt, Z(..), (:.)(..)
+import Data.Array.Accelerate.Array.Sugar                ( Array, Shape, Slice, Elt(..), Z(..), (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -397,7 +398,7 @@ simplifyOpenExp env = first getAny . cvtE
 
     shape :: forall sh t. (Shape sh, Elt t) => acc aenv (Array sh t) -> (Any, PreOpenExp acc env aenv sh)
     shape _
-      | Just Refl <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::Z))
+      | Just Refl <- matchTupleType (eltType @sh) (eltType @Z)
       = Stats.ruleFired "shape/Z" $ yes (Const (fromElt Z))
     shape a
       = pure $ Shape a

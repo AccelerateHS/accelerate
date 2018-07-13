@@ -1,5 +1,6 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeFamilies    #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Class
@@ -67,7 +68,7 @@ class (Applicative m, Monad m, MonadCatch m, MonadMask m) => RemoteMemory m wher
   peekRemote :: PrimElt e a => Int -> RemotePtr m a -> MutableArrayData e -> m ()
 
   -- | Cast a remote pointer.
-  castRemotePtr :: proxy m -> RemotePtr m a -> RemotePtr m b
+  castRemotePtr :: RemotePtr m a -> RemotePtr m b
 
   -- | Returns the total remote memory available in bytes.
   totalRemoteMem :: m Int64

@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell    #-}
-{-# LANGUAGE TypeOperators      #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Config
 -- Copyright   : [2009..2017] Trevor L. McDonell
@@ -134,38 +135,38 @@ instance IsOption Interpreter where
 
 
 class IsOption a => TestConfig a where
-  at :: Proxy a -> TestTree -> TestTree
+  at :: TestTree -> TestTree
 
 instance TestConfig TestHalf where
-  at _ t = askOption $ \(TestHalf v)   -> if v then t else testGroup "Half" []
+  at t = askOption $ \(TestHalf v)   -> if v then t else testGroup "Half" []
 
 instance TestConfig TestFloat where
-  at _ t = askOption $ \(TestFloat v)  -> if v then t else testGroup "Float" []
+  at t = askOption $ \(TestFloat v)  -> if v then t else testGroup "Float" []
 
 instance TestConfig TestDouble where
-  at _ t = askOption $ \(TestDouble v) -> if v then t else testGroup "Double" []
+  at t = askOption $ \(TestDouble v) -> if v then t else testGroup "Double" []
 
 instance TestConfig TestInt8 where
-  at _ t = askOption $ \(TestInt8 v)   -> if v then t else testGroup "Int8" []
+  at t = askOption $ \(TestInt8 v)   -> if v then t else testGroup "Int8" []
 
 instance TestConfig TestInt16 where
-  at _ t = askOption $ \(TestInt16 v)  -> if v then t else testGroup "Int16" []
+  at t = askOption $ \(TestInt16 v)  -> if v then t else testGroup "Int16" []
 
 instance TestConfig TestInt32 where
-  at _ t = askOption $ \(TestInt32 v)  -> if v then t else testGroup "Int32" []
+  at t = askOption $ \(TestInt32 v)  -> if v then t else testGroup "Int32" []
 
 instance TestConfig TestInt64 where
-  at _ t = askOption $ \(TestInt64 v)  -> if v then t else testGroup "Int64" []
+  at t = askOption $ \(TestInt64 v)  -> if v then t else testGroup "Int64" []
 
 instance TestConfig TestWord8 where
-  at _ t = askOption $ \(TestWord8 v)  -> if v then t else testGroup "Word8" []
+  at t = askOption $ \(TestWord8 v)  -> if v then t else testGroup "Word8" []
 
 instance TestConfig TestWord16 where
-  at _ t = askOption $ \(TestWord16 v) -> if v then t else testGroup "Word16" []
+  at t = askOption $ \(TestWord16 v) -> if v then t else testGroup "Word16" []
 
 instance TestConfig TestWord32 where
-  at _ t = askOption $ \(TestWord32 v) -> if v then t else testGroup "Word32" []
+  at t = askOption $ \(TestWord32 v) -> if v then t else testGroup "Word32" []
 
 instance TestConfig TestWord64 where
-  at _ t = askOption $ \(TestWord64 v) -> if v then t else testGroup "Word64" []
+  at t = askOption $ \(TestWord64 v) -> if v then t else testGroup "Word64" []
 

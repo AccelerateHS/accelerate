@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
@@ -21,7 +22,6 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes (
 
 ) where
 
-import Data.Proxy
 import Data.Typeable
 import Prelude                                                      as P
 
@@ -42,9 +42,9 @@ import Test.Tasty.Hedgehog
 test_blackscholes :: RunN -> TestTree
 test_blackscholes runN =
   testGroup "blackscholes"
-    [ at (Proxy::Proxy TestHalf)   $ testElt (Gen.realFloat :: Range Half -> Gen Half)
-    , at (Proxy::Proxy TestFloat)  $ testElt Gen.float
-    , at (Proxy::Proxy TestDouble) $ testElt Gen.double
+    [ at @TestHalf   $ testElt (Gen.realFloat :: Range Half -> Gen Half)
+    , at @TestFloat  $ testElt Gen.float
+    , at @TestDouble $ testElt Gen.double
     ]
   where
     testElt

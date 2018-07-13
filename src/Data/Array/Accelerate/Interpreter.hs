@@ -7,6 +7,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
@@ -185,10 +186,10 @@ evalOpenAcc
 evalOpenAcc AST.Delayed{}       _    = $internalError "evalOpenAcc" "expected manifest array"
 evalOpenAcc (AST.Manifest pacc) aenv =
   let
-      manifest :: Arrays a' => DelayedOpenAcc aenv a' -> a'
+      manifest :: forall a'. Arrays a' => DelayedOpenAcc aenv a' -> a'
       manifest acc =
         let a' = evalOpenAcc acc aenv
-        in  rnfArrays (arrays a') (fromArr a') `seq` a'
+        in  rnfArrays (arrays @a') (fromArr a') `seq` a'
 
       delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
       delayed AST.Manifest{}  = $internalError "evalOpenAcc" "expected delayed array"
@@ -787,7 +788,7 @@ stencilAccess = goR stencil
     -- Add a left-most component to an index
     --
     cons :: forall sh. Shape sh => Int -> sh -> (sh :. Int)
-    cons ix extent = toElt $ go (eltType (undefined::sh)) (fromElt extent)
+    cons ix extent = toElt $ go (eltType @sh) (fromElt extent)
       where
         go :: TupleType t -> t -> (t, Int)
         go TypeRunit         ()       = ((), ix)
@@ -801,7 +802,7 @@ stencilAccess = goR stencil
     -- Remove the left-most index of an index, and return the remainder
     --
     uncons :: forall sh. Shape sh => sh :. Int -> (Int, sh)
-    uncons extent = let (i,ix) = go (eltType (undefined::(sh:.Int))) (fromElt extent)
+    uncons extent = let (i,ix) = go (eltType @(sh:.Int)) (fromElt extent)
                     in  (i, toElt ix)
       where
         go :: TupleType (t, Int) -> (t, Int) -> (Int, t)
@@ -835,7 +836,7 @@ bounded bnd (Delayed sh f _) ix =
     -- shape (first argument).
     --
     inside :: forall sh. Shape sh => sh -> sh -> Bool
-    inside sh1 ix1 = go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
+    inside sh1 ix1 = go (eltType @sh) (fromElt sh1) (fromElt ix1)
       where
         go :: TupleType t -> t -> t -> Bool
         go TypeRunit          ()       ()      = True
@@ -856,7 +857,7 @@ bounded bnd (Delayed sh f _) ix =
     -- conditions when outside the bounds of the given shape (first argument)
     --
     bound :: forall sh. Shape sh => sh -> sh -> sh
-    bound sh1 ix1 = toElt $ go (eltType (undefined::sh)) (fromElt sh1) (fromElt ix1)
+    bound sh1 ix1 = toElt $ go (eltType @sh) (fromElt sh1) (fromElt ix1)
       where
         go :: TupleType t -> t -> t -> t
         go TypeRunit          ()       ()       = ()
@@ -1028,7 +1029,7 @@ evalPreOpenExp evalAcc pexp env aenv =
 -- ---------------
 
 evalUndef :: forall a. Elt a => a
-evalUndef = toElt (undef (eltType (undefined::a)))
+evalUndef = toElt (undef (eltType @a))
   where
     undef :: TupleType t -> t
     undef TypeRunit       = ()
@@ -1066,7 +1067,7 @@ evalUndef = toElt (undef (eltType (undefined::a)))
 -- ---------
 
 evalCoerce :: forall a b. (Elt a, Elt b) => a -> b
-evalCoerce = toElt . go (eltType (undefined::a)) (eltType (undefined::b)) . fromElt
+evalCoerce = toElt . go (eltType @a) (eltType @b) . fromElt
   where
     go :: TupleType s -> TupleType t -> s -> t
     go TypeRunit        TypeRunit          ()    = ()

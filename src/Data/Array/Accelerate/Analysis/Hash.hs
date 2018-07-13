@@ -1,8 +1,10 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Hash
@@ -83,7 +85,7 @@ encodePreOpenAcc encodeAcc pacc =
   let
       {-# INLINE travA #-}
       travA :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travA a = encodeArraysType (arrays (undefined::a)) <> encodeAcc a
+      travA a = encodeArraysType (arrays @a) <> encodeAcc a
 
       {-# INLINE travE #-}
       travE :: PreOpenExp acc env' aenv' e -> Builder
@@ -99,7 +101,7 @@ encodePreOpenAcc encodeAcc pacc =
 
       {-# INLINE nacl #-}
       nacl :: Arrays arrs => Builder
-      nacl = encodeArraysType (arrays (undefined::arrs))
+      nacl = encodeArraysType (arrays @arrs)
   in
   case pacc of
     Alet bnd body               -> intHost $(hashQ "Alet")        <> travA bnd <> travA body
@@ -108,7 +110,7 @@ encodePreOpenAcc encodeAcc pacc =
     Aprj ix a                   -> intHost $(hashQ "Aprj")        <> nacl <> encodeTupleIdx ix <> travA a
     Apply f a                   -> intHost $(hashQ "Apply")       <> nacl <> encodePreOpenAfun encodeAcc f <> travA a
     Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> nacl <> encodePreOpenAfun encodeAcc f <> travA a
-    Use a                       -> intHost $(hashQ "Use")         <> encodeArrays (arrays (undefined::arrs)) a
+    Use a                       -> intHost $(hashQ "Use")         <> encodeArrays (arrays @arrs) a
     Awhile p f a                -> intHost $(hashQ "Awhile")      <> encodePreOpenAfun encodeAcc f <> encodePreOpenAfun encodeAcc p <> travA a
     Unit e                      -> intHost $(hashQ "Unit")        <> travE e
     Generate e f                -> intHost $(hashQ "Generate")    <> travE e  <> travF f
@@ -154,7 +156,7 @@ encodePreOpenSeq encodeAcc s =
       travS = encodePreOpenSeq encodeAcc
 
       travV :: forall a. Arrays a => Idx senv' a -> Builder
-      travV v = encodeArraysType (arrays (undefined::a)) <> encodeIdx v
+      travV v = encodeArraysType (arrays @a) <> encodeIdx v
 
       travP :: Producer acc aenv senv a -> Builder
       travP p =
@@ -197,11 +199,11 @@ encodeArrays ArraysRarray        ad       = intHost . unsafePerformIO $! hashSta
 encodeArraysType :: forall a. ArraysR a -> Builder
 encodeArraysType ArraysRunit         = intHost $(hashQ "ArraysRunit")
 encodeArraysType (ArraysRpair r1 r2) = intHost $(hashQ "ArraysRpair")  <> encodeArraysType r1 <> encodeArraysType r2
-encodeArraysType ArraysRarray        = intHost $(hashQ "ArraysRarray") <> encodeArrayType (undefined::a)
+encodeArraysType ArraysRarray        = intHost $(hashQ "ArraysRarray") <> encodeArrayType @a
   where
     {-# INLINE encodeArrayType #-}
-    encodeArrayType :: forall sh e. (Shape sh, Elt e) => Array sh e -> Builder
-    encodeArrayType _ = encodeTupleType (eltType (undefined::sh)) <> encodeTupleType (eltType (undefined::e))
+    encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
+    encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
 
 {-# INLINE encodeAtuple #-}
 encodeAtuple :: EncodeAcc acc -> Atuple (acc aenv) a -> Builder
@@ -214,11 +216,11 @@ encodePreOpenAfun travA afun =
   let
       {-# INLINE travB #-}
       travB :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travB b = encodeArraysType (arrays (undefined::a)) <> travA b
+      travB b = encodeArraysType (arrays @a) <> travA b
 
       {-# INLINE travL #-}
       travL :: forall aenv' a b. Arrays a => PreOpenAfun acc (aenv',a) b -> Builder
-      travL l = encodeArraysType (arrays (undefined::a)) <> encodePreOpenAfun travA l
+      travL l = encodeArraysType (arrays @a) <> encodePreOpenAfun travA l
   in
   case afun of
     Abody b -> intHost $(hashQ "Abody") <> travB b
@@ -230,7 +232,7 @@ encodePreBoundary :: forall acc aenv sh e. EncodeAcc acc -> PreBoundary acc aenv
 encodePreBoundary _ Wrap          = intHost $(hashQ "Wrap")
 encodePreBoundary _ Clamp         = intHost $(hashQ "Clamp")
 encodePreBoundary _ Mirror        = intHost $(hashQ "Mirror")
-encodePreBoundary _ (Constant c)  = intHost $(hashQ "Constant") <> encodeConst (eltType (undefined::e)) c
+encodePreBoundary _ (Constant c)  = intHost $(hashQ "Constant") <> encodeConst (eltType @e) c
 encodePreBoundary h (Function f)  = intHost $(hashQ "Function") <> encodePreOpenFun h f
 
 {-# INLINE encodeSliceIndex #-}
@@ -253,7 +255,7 @@ encodePreOpenExp travA exp =
   let
       {-# INLINE travE #-}
       travE :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
-      travE e =  encodeTupleType (eltType (undefined::e)) <> encodePreOpenExp travA e
+      travE e =  encodeTupleType (eltType @e) <> encodePreOpenExp travA e
 
       {-# INLINE travF #-}
       travF :: PreOpenFun acc env' aenv' f -> Builder
@@ -261,14 +263,14 @@ encodePreOpenExp travA exp =
 
       {-# INLINE nacl #-}
       nacl :: Elt exp => Builder
-      nacl = encodeTupleType (eltType (undefined::exp))
+      nacl = encodeTupleType (eltType @exp)
   in
   case exp of
     Let bnd body                -> intHost $(hashQ "Let")         <> travE bnd <> travE body
     Var ix                      -> intHost $(hashQ "Var")         <> nacl <> encodeIdx ix
     Tuple t                     -> intHost $(hashQ "Tuple")       <> nacl <> encodeTuple travA t
     Prj i e                     -> intHost $(hashQ "Prj")         <> nacl <> encodeTupleIdx i <> travE e -- XXX: here multiplied nacl by hashTupleIdx
-    Const c                     -> intHost $(hashQ "Const")       <> encodeConst (eltType (undefined::exp)) c
+    Const c                     -> intHost $(hashQ "Const")       <> encodeConst (eltType @exp) c
     Undef                       -> intHost $(hashQ "Undef")
     IndexAny                    -> intHost $(hashQ "IndexAny")    <> nacl
     IndexNil                    -> intHost $(hashQ "IndexNil")
@@ -298,10 +300,10 @@ encodePreOpenFun :: forall acc env aenv f. EncodeAcc acc -> PreOpenFun acc env a
 encodePreOpenFun travA fun =
   let
       travB :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
-      travB b = encodeTupleType (eltType (undefined::e)) <> encodePreOpenExp travA b
+      travB b = encodeTupleType (eltType @e) <> encodePreOpenExp travA b
 
       travL :: forall env' aenv' a b. Elt a => PreOpenFun acc (env',a) aenv' b -> Builder
-      travL l = encodeTupleType (eltType (undefined::a)) <> encodePreOpenFun travA l
+      travL l = encodeTupleType (eltType @a) <> encodePreOpenFun travA l
   in
   case fun of
     Body b -> intHost $(hashQ "Body") <> travB b
