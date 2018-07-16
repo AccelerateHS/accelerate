@@ -42,7 +42,7 @@ type family FlattenTuple a where
   FlattenTuple ((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), o) = (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp o)
   FlattenTuple (((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), o), p) = (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp o, Exp p)
 
-type TupleOf a = FlattenTuple (EltRepr a)
+type TupleOf a = FlattenTuple (ProdRepr a)
 type Castable a b = (Elt b, IsTuple a, IsTuple b, ProdRepr a ~ ProdRepr b)
 type Constructable a = (Castable (Plain (TupleOf a)) a, Castable a (Plain (TupleOf a)), Lift Exp (TupleOf a), Unlift Exp (TupleOf a))
 
