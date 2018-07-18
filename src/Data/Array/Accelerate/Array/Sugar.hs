@@ -37,7 +37,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
   Array(..), Scalar, Vector, Matrix, Segments,
-  Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr,
+  Arrays(..), ArraysR(..), ArraysFlavour(..),
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..),
@@ -275,7 +275,7 @@ instance Elt a => GElt (K1 i a) where
 
 instance (GElt a, GElt b) => GElt (a :*: b) where
   type GEltRepr t (a :*: b) = GEltRepr (GEltRepr t a) b
-  geltType t           = geltType @b (geltType @a t)
+  geltType             = geltType @b . geltType @a
   gfromElt t (a :*: b) = gfromElt (gfromElt t a) b
   gtoElt t =
     let
@@ -283,39 +283,6 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
       (t2, a) = gtoElt t1
     in
       (t2, a :*: b)
-
-instance Typeable p => Elt (U1 p)
-
-instance
-  ( Show (M1 i c a p)
-  , Typeable (M1 i c a p)
-  , Typeable (EltRepr (M1 i c a p))
-  , ArrayElt (EltRepr (M1 i c a p))
-  , Elt (a p)
-  ) => Elt (M1 i c a p)
-
-instance
-  ( Show (K1 i a p)
-  , Typeable (K1 i a p)
-  , Typeable (EltRepr (K1 i a p))
-  , ArrayElt (EltRepr (K1 i a p))
-  , Elt a
-  ) => Elt (K1 i a p)
-
-instance
-  ( Show ((a :*: b) p)
-  , Typeable ((a :*: b) p)
-  , Typeable (EltRepr ((a :*: b) p))
-  , ArrayElt (EltRepr ((a :*: b) p))
-  , Elt (a p)
-  , Elt (b p)
-  ) => Elt ((a :*: b) p)
-
-
--- type instance EltRepr (U1 p)        = GEltRepr ()  U1
--- type instance EltRepr (K1 i a p)    = GEltRepr () (K1 i a)
--- type instance EltRepr (M1 i c a p)  = GEltRepr () (M1 i c a)
--- type instance EltRepr ((a :*: b) p) = GEltRepr () (a :*: b)
 
 
 instance Elt Z where
@@ -678,32 +645,6 @@ class Typeable asm => Foreign asm where
   liftForeign _ = $internalError "liftForeign" "not supported by this backend"
 
 
--- Surface arrays
--- --------------
-
--- We represent tuples of arrays in the same way as tuples of scalars; using
--- '()' and '(,)' as type-level nil and snoc. This characterises the domain of
--- results of Accelerate array computations.
---
-type family ArrRepr a :: *
-type instance ArrRepr ()           = ()
-type instance ArrRepr (Array sh e) = Array sh e
-type instance ArrRepr (a, b)       = TupleRepr (ArrRepr a, ArrRepr b)
-type instance ArrRepr (a, b, c)    = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c)
-type instance ArrRepr (a, b, c, d) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d)
-type instance ArrRepr (a, b, c, d, e) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e)
-type instance ArrRepr (a, b, c, d, e, f) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f)
-type instance ArrRepr (a, b, c, d, e, f, g) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g)
-type instance ArrRepr (a, b, c, d, e, f, g, h) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i, j) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o)
-type instance ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o, ArrRepr p)
-
 type IsAtuple = IsProduct Arrays
 
 fromAtuple :: IsAtuple tup => tup -> TupleRepr tup
@@ -728,12 +669,85 @@ data ArraysFlavour arrs where
 -- 15-elements wide. Accelerate computations can thereby return multiple
 -- results.
 --
+-- We represent tuples of arrays in the same way as tuples of scalars; using
+-- '()' and '(,)' as type-level nil and snoc. This characterises the domain of
+-- results of Accelerate array computations.
+--
 class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
+  type ArrRepr a :: *
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
   flavour  :: a {- dummy -} -> ArraysFlavour a
   --
   toArr    :: ArrRepr  a -> a
   fromArr  :: a -> ArrRepr  a
+
+  type ArrRepr a = GArrRepr () (Rep a)
+
+  default arrays
+    :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
+    => a -> ArraysR (ArrRepr a)
+  arrays _ = garrays @(Rep a) ArraysRunit
+
+  default flavour
+    :: (Generic a, GArrays (Rep a), GArrFlav (Rep a) ~ a, ArrRepr a ~ GArrRepr () (Rep a))
+    => a -> ArraysFlavour a
+  flavour _ = gflavour @(Rep a)
+
+  default toArr
+    :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
+    => ArrRepr a -> a
+  toArr = to . snd . gtoArr @(Rep a) @()
+
+  default fromArr
+    :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
+    => a -> ArrRepr a
+  fromArr = (`gfromArr` ()) . from
+
+
+class GArrays (f :: * -> *) where
+  type GArrRepr t f
+  type GArrFlav   f
+  garrays  :: ArraysR t -> ArraysR (GArrRepr t f)
+  gflavour :: ArraysFlavour (GArrFlav f)
+  gfromArr :: f a -> t -> GArrRepr t f
+  gtoArr   :: GArrRepr t f -> (t, f a)
+
+instance GArrays U1 where
+  type GArrRepr t U1 = t
+  type GArrFlav   U1 = ()
+  garrays       =  id
+  gflavour      = ArraysFunit
+  gfromArr U1   =  id
+  gtoArr      t = (t, U1)
+
+instance GArrays a => GArrays (M1 i c a) where
+  type GArrRepr t (M1 i c a) = GArrRepr t a
+  type GArrFlav   (M1 i c a) = GArrFlav   a
+  gflavour        = gflavour @a
+  garrays         = garrays @a
+  gfromArr (M1 x) = gfromArr x
+  gtoArr       x  = let (t, x1) = gtoArr x in (t, M1 x1)
+
+instance Arrays a => GArrays (K1 i a) where
+  type GArrRepr t (K1 i a) = (t, ArrRepr a)
+  type GArrFlav   (K1 i a) = a
+  garrays         t = ArraysRpair t (arrays (undefined :: a))
+  gflavour          = flavour (undefined :: a)
+  gfromArr (K1 x) t = (t, fromArr x)
+  gtoArr   (t, x)   = (t, K1 (toArr x))
+
+instance (GArrRepr () (a :*: b) ~ (l, r), Arrays l, Arrays r, GArrays a, GArrays b) => GArrays (a :*: b) where
+  type GArrRepr t (a :*: b) = GArrRepr (GArrRepr t a) b
+  type GArrFlav   (a :*: b) = GArrRepr () (a :*: b)
+  garrays            = garrays @b . garrays @a
+  gflavour           = ArraysFtuple
+  gfromArr (a :*: b) = gfromArr b . gfromArr a
+  gtoArr t =
+    let
+      (t1, b) = gtoArr t
+      (t2, a) = gtoArr t1
+    in
+      (t2, a :*: b)
 
 
 instance Arrays () where
@@ -744,6 +758,7 @@ instance Arrays () where
   fromArr   = id
 
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
+  type ArrRepr (Array sh e) = Array sh e
   arrays _      = ArraysRarray
   flavour _     = ArraysFarray
   --
@@ -796,6 +811,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
   => Arrays (a, b, c, d, e, f, g, h) where
+  type ArrRepr (a, b, c, d, e, f, g, h) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g))) (arrays (undefined::h))
   flavour _             = ArraysFtuple
   --
@@ -804,6 +820,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
   => Arrays (a, b, c, d, e, f, g, h, i) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h))) (arrays (undefined::i))
   flavour _             = ArraysFtuple
   --
@@ -812,6 +829,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
   => Arrays (a, b, c, d, e, f, g, h, i, j) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i, j) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i))) (arrays (undefined::j))
   flavour _             = ArraysFtuple
   --
@@ -820,6 +838,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i, j, k) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j))) (arrays (undefined::k))
   flavour _             = ArraysFtuple
   --
@@ -828,6 +847,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k))) (arrays (undefined::l))
   flavour _             = ArraysFtuple
   --
@@ -836,6 +856,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l))) (arrays (undefined::m))
   flavour _             = ArraysFtuple
   --
@@ -844,6 +865,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m))) (arrays (undefined::n))
   flavour _             = ArraysFtuple
   --
@@ -852,6 +874,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n))) (arrays (undefined::o))
   flavour _             = ArraysFtuple
   --
@@ -860,6 +883,7 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  type ArrRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i, ArrRepr j, ArrRepr k, ArrRepr l, ArrRepr m, ArrRepr n, ArrRepr o, ArrRepr p)
   arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o))) (arrays (undefined::p))
   flavour _             = ArraysFtuple
   --
