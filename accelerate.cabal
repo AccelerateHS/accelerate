@@ -330,6 +330,7 @@ Library
         Data.Array.Accelerate.Debug
         Data.Array.Accelerate.Error
         Data.Array.Accelerate.Lifetime
+        Data.Array.Accelerate.Orphans
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Product
         Data.Array.Accelerate.Smart
@@ -513,12 +514,12 @@ Library
 
   if impl(ghc == 7.*)
     ghc-options:
-        -fcontext-stack=35
+        -fcontext-stack=50
 
   if impl(ghc >= 8.0)
     ghc-options:
         -Wcompat
-        -freduction-depth=35
+        -freduction-depth=50
 
   if impl(ghc < 7.10)
     build-depends:
