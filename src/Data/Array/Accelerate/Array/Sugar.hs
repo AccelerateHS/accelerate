@@ -15,7 +15,6 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ <= 708
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif
@@ -78,6 +77,7 @@ import qualified Data.Vector.Unboxed                            as U
 -- friends
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Orphans                            ()
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
@@ -484,110 +484,31 @@ instance Elt CUChar where
   toElt         = id
 
 instance Elt ()
-
 instance (Elt a, Elt b) => Elt (a, b)
-
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c)
-
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d)
-
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e)
-
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f)
-
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   => Elt (a, b, c, d, e, f, g)
-
--- GHC does not have `Generic` instances for tuples larger than 7.
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-  => Elt (a, b, c, d, e, f, g, h) where
-  type EltRepr (a, b, c, d, e, f, g, h) = (EltRepr (a, b, c, d, e, f, g), EltRepr h)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g)))
-                (eltType (undefined :: h))
-  fromElt (a, b, c, d, e, f, g, h) = (fromElt (a, b, c, d, e, f, g), fromElt h)
-  toElt (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg
-                       in  (a, b, c, d, e, f, g, toElt h)
-
+  => Elt (a, b, c, d, e, f, g, h)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-  => Elt (a, b, c, d, e, f, g, h, i) where
-  type EltRepr (a, b, c, d, e, f, g, h, i) = (EltRepr (a, b, c, d, e, f, g, h), EltRepr i)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h)))
-                (eltType (undefined :: i))
-  fromElt (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt i)
-  toElt (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
-                        in  (a, b, c, d, e, f, g, h, toElt i)
-
+  => Elt (a, b, c, d, e, f, g, h, i)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-  => Elt (a, b, c, d, e, f, g, h, i, j) where
-  type EltRepr (a, b, c, d, e, f, g, h, i, j) = (EltRepr (a, b, c, d, e, f, g, h, i), EltRepr j)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i)))
-                (eltType (undefined :: j))
-  fromElt (a, b, c, d, e, f, g, h, i, j) = (fromElt (a, b, c, d, e, f, g, h, i), fromElt j)
-  toElt (abcdefghi, j) = let (a, b, c, d, e, f, g, h, i) = toElt abcdefghi
-                         in  (a, b, c, d, e, f, g, h, i, toElt j)
-
+  => Elt (a, b, c, d, e, f, g, h, i, j)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k) where
-  type EltRepr (a, b, c, d, e, f, g, h, i, j, k) = (EltRepr (a, b, c, d, e, f, g, h, i, j), EltRepr k)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j)))
-                (eltType (undefined :: k))
-  fromElt (a, b, c, d, e, f, g, h, i, j, k) = (fromElt (a, b, c, d, e, f, g, h, i, j), fromElt k)
-  toElt (abcdefghij, k) = let (a, b, c, d, e, f, g, h, i, j) = toElt abcdefghij
-                          in  (a, b, c, d, e, f, g, h, i, j, toElt k)
-
+  => Elt (a, b, c, d, e, f, g, h, i, j, k)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l) where
-  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k), EltRepr l)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k)))
-                (eltType (undefined :: l))
-  fromElt (a, b, c, d, e, f, g, h, i, j, k, l) = (fromElt (a, b, c, d, e, f, g, h, i, j, k), fromElt l)
-  toElt (abcdefghijk, l) = let (a, b, c, d, e, f, g, h, i, j, k) = toElt abcdefghijk
-                           in  (a, b, c, d, e, f, g, h, i, j, k, toElt l)
-
+  => Elt (a, b, c, d, e, f, g, h, i, j, k, l)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l), EltRepr m)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l)))
-                (eltType (undefined :: m))
-  fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l), fromElt m)
-  toElt (abcdefghijkl, m) = let (a, b, c, d, e, f, g, h, i, j, k, l) = toElt abcdefghijkl
-                            in  (a, b, c, d, e, f, g, h, i, j, k, l, toElt m)
-
+  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m), EltRepr n)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m)))
-                (eltType (undefined :: n))
-  fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m), fromElt n)
-  toElt (abcdefghijklm, n) = let (a, b, c, d, e, f, g, h, i, j, k, l, m) = toElt abcdefghijklm
-                             in  (a, b, c, d, e, f, g, h, i, j, k, l, m, toElt n)
-
+  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), EltRepr o)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n)))
-                (eltType (undefined :: o))
-  fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromElt o)
-  toElt (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toElt abcdefghijklmn
-                              in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toElt o)
-
+  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  type EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (EltRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), EltRepr p)
-  eltType _
-    = TypeRpair (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)))
-                (eltType (undefined :: p))
-  fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), fromElt p)
-  toElt (abcdefghijklmno, p) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = toElt abcdefghijklmno
-                               in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, toElt p)
+  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
 -- |Convenience functions
 --
@@ -1454,10 +1375,3 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
-
-
--- | Orphans
---
-deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show h, Show i, Show j, Show k, Show l, Show m, Show n, Show o, Show p)
-  => Show (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-
