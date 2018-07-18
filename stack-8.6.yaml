@@ -1,21 +1,32 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: ghc-8.6.0.20180627
-compiler: ghc-8.6.0.20180627
+# resolver: ghc-8.6.0.20180627 #rc1
+resolver: ghc-8.6.0.20180714 #rc2
 compiler-check: match-exact
 allow-newer: true
 
 setup-info:
   ghc:
-    linux64: # x86_64-unknown-linux
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-deb8-linux.tar.xz
-        sha256: e891e9e6ad0d53382e79b5c1005af6123501fbc95088ed849c3a1c22979db319
+    # rc1
+    # linux64: # x86_64-unknown-linux
+    #   8.6.0.20180627:
+    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-deb8-linux.tar.xz
+    #     sha256: e891e9e6ad0d53382e79b5c1005af6123501fbc95088ed849c3a1c22979db319
+    # windows64:
+    #   8.6.0.20180627:
+    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-unknown-mingw32.tar.xz
+    #     sha256: ccff1f896425f932581c804e1fd6dd14dea7b7423f7f4970ff1d99ab03c97504
+
+    # rc2
+    linux64:
+      8.6.0.20180714:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-deb8-linux.tar.xz
+        sha256: 5cfbac190b2d8be4457c7f39ac9697bfa7f458c3b456c254f685f6fcbb7ab48b
     windows64:
-      8.6.0.20180627:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-unknown-mingw32.tar.xz
-        sha256: ccff1f896425f932581c804e1fd6dd14dea7b7423f7f4970ff1d99ab03c97504
+      8.6.0.20180714:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-unknown-mingw32.tar.xz
+        sha256: a9704c4ef91a4301a79de428455e283a4ac40dd30c4ff6635c766896153bcc07
 
 packages:
 - '.'
@@ -23,11 +34,6 @@ packages:
 extra-deps:
 - git:    https://github.com/tmcdonell/hs-memory.git
   commit: feee6256e19ed178dc75b071dc54983bc6320f26
-
-- git:    https://github.com/tmcdonell/foundation.git
-  commit: 9743bb1eb5cd76c22d8c119c21b359ba4984e642
-  subdirs:
-    - basement
 
 - git:    https://github.com/tmcdonell/tasty.git
   commit: 540c85d14e6601bb8c92e9fea22dbb8bd27cbe85
@@ -40,6 +46,7 @@ extra-deps:
 - async-2.2.1
 - base-compat-0.10.4
 - base-orphans-0.8
+- basement-0.0.8
 - bifunctors-5.5.3
 - cabal-doctest-1.0.6
 - call-stack-0.1.0
@@ -54,7 +61,7 @@ extra-deps:
 - distributive-0.6
 - doctest-0.16.0
 - exceptions-0.10.0
-- foundation-0.0.20
+- foundation-0.0.21
 - free-5.1
 - ghc-paths-0.1.0.9
 - half-0.3
@@ -63,7 +70,7 @@ extra-deps:
 - hashtables-1.2.3.1
 - haskell-lexer-1.0.1
 - hedgehog-0.6
-- invariant-0.5
+- invariant-0.5.1
 - kan-extensions-5.2
 - lens-4.17
 - lifted-async-0.10.0.2
@@ -72,7 +79,7 @@ extra-deps:
 - mmorph-1.1.2
 - monad-control-1.0.2.3
 - optparse-applicative-0.14.2.0
-- parallel-3.2.1.1
+- parallel-3.2.2.0
 - pretty-show-1.7
 - primitive-0.6.4.0
 - profunctors-5.3
