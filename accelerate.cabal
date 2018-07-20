@@ -365,6 +365,7 @@ Library
         Data.Array.Accelerate.Debug.Trace
         Data.Array.Accelerate.Language
         Data.Array.Accelerate.Lift
+        Data.Array.Accelerate.Orphans
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz
         Data.Array.Accelerate.Pretty.Graphviz.Monad

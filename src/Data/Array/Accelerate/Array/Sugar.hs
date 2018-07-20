@@ -14,7 +14,6 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ <= 708
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif
@@ -76,6 +75,7 @@ import qualified Data.Vector.Unboxed                            as U
 -- friends
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Orphans                            ()
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
@@ -1361,10 +1361,4 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
-
-
--- | Orphans
---
-deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show h, Show i, Show j, Show k, Show l, Show m, Show n, Show o, Show p)
-  => Show (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
