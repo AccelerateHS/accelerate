@@ -989,11 +989,7 @@ instance NFData (Array sh e) where
       go ArrayEltRcchar        (AD_CChar ua)   = rnf ua
       go ArrayEltRcschar       (AD_CSChar ua)  = rnf ua
       go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
-      go (ArrayEltRvec2 r)     (AD_V2 a)       = go r a `seq` ()
-      go (ArrayEltRvec3 r)     (AD_V3 a)       = go r a `seq` ()
-      go (ArrayEltRvec4 r)     (AD_V4 a)       = go r a `seq` ()
-      go (ArrayEltRvec8 r)     (AD_V8 a)       = go r a `seq` ()
-      go (ArrayEltRvec16 r)    (AD_V16 a)      = go r a `seq` ()
+      go (ArrayEltRvec r)      (AD_Vec a)      = go r a `seq` ()
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 
 

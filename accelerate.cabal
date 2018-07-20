@@ -271,8 +271,8 @@ Library
         , ansi-wl-pprint                >= 0.6
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2
-        , containers                    >= 0.3
         , constraints                   >= 0.9
+        , containers                    >= 0.3
         , cryptonite                    >= 0.21
         , deepseq                       >= 1.3
         , directory                     >= 1.0
@@ -285,6 +285,7 @@ Library
         , hedgehog                      >= 0.5
         , lens                          >= 4.0
         , mtl                           >= 2.0
+        , primitive                     >= 0.6
         , tasty                         >= 0.11
         , tasty-expected-failure        >= 0.11
         , tasty-hedgehog                >= 0.1

@@ -387,15 +387,12 @@ makeStableArray !ad = return $! StableArray (id arrayElt ad)
     id ArrayEltRcchar     (AD_CChar ua)   = uniqueArrayId ua
     id ArrayEltRcschar    (AD_CSChar ua)  = uniqueArrayId ua
     id ArrayEltRcuchar    (AD_CUChar ua)  = uniqueArrayId ua
-    id (ArrayEltRvec2 r)  (AD_V2 a)       = id r a
-    id (ArrayEltRvec3 r)  (AD_V3 a)       = id r a
-    id (ArrayEltRvec4 r)  (AD_V4 a)       = id r a
-    id (ArrayEltRvec8 r)  (AD_V8 a)       = id r a
-    id (ArrayEltRvec16 r) (AD_V16 a)      = id r a
+    id (ArrayEltRvec r)   (AD_Vec a)      = id r a
 #if __GLASGOW_HASKELL__ < 800
     id _ _ =
       error "I do have a cause, though. It is obscenity. I'm for it."
 #endif
+
 
 -- Weak arrays
 -- ----------------------
@@ -440,11 +437,7 @@ makeWeakArrayData !ad !c !mf = mw arrayElt ad
     mw ArrayEltRcchar     (AD_CChar ua)   = mkWeak' ua
     mw ArrayEltRcschar    (AD_CSChar ua)  = mkWeak' ua
     mw ArrayEltRcuchar    (AD_CUChar ua)  = mkWeak' ua
-    mw (ArrayEltRvec2 r)  (AD_V2 a)       = mw r a
-    mw (ArrayEltRvec3 r)  (AD_V3 a)       = mw r a
-    mw (ArrayEltRvec4 r)  (AD_V4 a)       = mw r a
-    mw (ArrayEltRvec8 r)  (AD_V8 a)       = mw r a
-    mw (ArrayEltRvec16 r) (AD_V16 a)      = mw r a
+    mw (ArrayEltRvec r)   (AD_Vec a)      = mw r a
 #if __GLASGOW_HASKELL__ < 800
     mw _ _ =
       error "Base eight is just like base ten really --- if you're missing two fingers."

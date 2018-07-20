@@ -32,6 +32,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), shape, ignore, toIndex )
 import Data.Array.Accelerate.Language                               hiding ( chr )
 import Data.Array.Accelerate.Prelude                                hiding ( filter )
+import Data.Array.Accelerate.Interpreter
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -46,9 +47,7 @@ import Data.Array.Accelerate.Data.Monoid
 import Data.Array.Accelerate.Data.Semigroup
 #endif
 
-import Data.Char
 import Data.Maybe                                                   ( Maybe(..) )
-import Foreign.C.Types
 import Prelude                                                      ( (.), ($), const, otherwise )
 
 
@@ -152,14 +151,14 @@ instance Elt a => Elt (Maybe a) where
   eltType          = eltType @(Word8,a)
   toElt (((),0),_) = Nothing
   toElt (_     ,x) = Just (toElt x)
-  fromElt Nothing  = (((),0), undef' (eltType @a))
+  fromElt Nothing  = (((),0), fromElt (evalUndef @a))
   fromElt (Just a) = (((),1), fromElt a)
 
 instance Elt a => IsProduct Elt (Maybe a) where
   type ProdRepr (Maybe a) = ProdRepr (Word8, a)
   toProd (((),0),_) = Nothing
   toProd (_,     x) = Just x
-  fromProd Nothing  = (((), 0), toElt (undef' (eltType @a)))
+  fromProd Nothing  = (((), 0), evalUndef @a)
   fromProd (Just a) = (((), 1), a)
   prod = prod @Elt @(Word8,a)
 
@@ -171,42 +170,6 @@ instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
 
 -- Utilities
 -- ---------
-
--- We need an undefined value for the Nothing case. We just fill this with
--- zeros, though it would be better if we can actually do nothing, and leave
--- those value in memory undefined.
---
-undef' :: TupleType t -> t
-undef' TypeRunit         = ()
-undef' (TypeRpair ta tb) = (undef' ta, undef' tb)
-undef' (TypeRscalar s)   = scalar s
-
-scalar :: ScalarType t -> t
-scalar (SingleScalarType t) = single t
-scalar (VectorScalarType t) = vector t
-
-single :: SingleType t -> t
-single (NumSingleType    t) = num t
-single (NonNumSingleType t) = nonnum t
-
-vector :: VectorType t -> t
-vector (Vector2Type t)  = let x = single t in V2 x x
-vector (Vector3Type t)  = let x = single t in V3 x x x
-vector (Vector4Type t)  = let x = single t in V4 x x x x
-vector (Vector8Type t)  = let x = single t in V8 x x x x x x x x
-vector (Vector16Type t) = let x = single t in V16 x x x x x x x x x x x x x x x x
-
-num :: NumType t -> t
-num (IntegralNumType t) | IntegralDict <- integralDict t = 0
-num (FloatingNumType t) | FloatingDict <- floatingDict t = 0
-
-nonnum :: NonNumType t -> t
-nonnum TypeBool{}   = False
-nonnum TypeChar{}   = chr 0
-nonnum TypeCChar{}  = CChar 0
-nonnum TypeCSChar{} = CSChar 0
-nonnum TypeCUChar{} = CUChar 0
-
 
 filter'
     :: forall sh e. (Shape sh, Slice sh, Elt e)

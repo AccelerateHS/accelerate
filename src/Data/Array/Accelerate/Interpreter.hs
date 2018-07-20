@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -56,12 +57,15 @@ module Data.Array.Accelerate.Interpreter (
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
+import Control.Monad.ST
 import Data.Bits
 import Data.Char                                                    ( chr, ord )
 import Data.Constraint
+import Data.Primitive.ByteArray
 import Data.Typeable
 import Foreign.C.Types
 import Foreign.ForeignPtr
+import GHC.TypeLits
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Prelude                                                      hiding ( sum )
@@ -1045,11 +1049,17 @@ evalUndef = toElt (undef (eltType @a))
     single (NonNumSingleType t) = nonnum t
 
     vector :: VectorType t -> t
-    vector (Vector2Type t)  = let x = single t in V2 x x
-    vector (Vector3Type t)  = let x = single t in V3 x x x
-    vector (Vector4Type t)  = let x = single t in V4 x x x x
-    vector (Vector8Type t)  = let x = single t in V8 x x x x x x x x
-    vector (Vector16Type t) = let x = single t in V16 x x x x x x x x x x x x x x x x
+    vector (Vector2Type t)  = vec (2 * sizeOfSingleType t)
+    vector (Vector3Type t)  = vec (3 * sizeOfSingleType t)
+    vector (Vector4Type t)  = vec (4 * sizeOfSingleType t)
+    vector (Vector8Type t)  = vec (8 * sizeOfSingleType t)
+    vector (Vector16Type t) = vec (16 * sizeOfSingleType t)
+
+    vec :: KnownNat n => Int -> Vec n t
+    vec n = runST $ do
+      mba           <- newByteArray n
+      ByteArray ba# <- unsafeFreezeByteArray mba
+      return $ Vec ba#
 
     num :: NumType t -> t
     num (IntegralNumType t) | IntegralDict <- integralDict t = 0
@@ -1089,6 +1099,8 @@ evalCoerce = toElt . go (eltType @a) (eltType @b) . fromElt
 -- a different type. This seems the most robust way to do it in the presence of
 -- packed vector types (which Haskell does not represent in the same way as
 -- C due to alignment of the fields, even at specialised UNPACKed types).
+--
+-- TLM: These coercions just make me sad...
 --
 evalCoerceScalar :: ScalarType a -> ScalarType b -> a -> b
 evalCoerceScalar ta tb a
@@ -1133,11 +1145,7 @@ evalCoerceScalar ta tb a
     toUA ArrayEltRcchar     (AD_CChar ua)   = castUniqueArray ua
     toUA ArrayEltRcschar    (AD_CSChar ua)  = castUniqueArray ua
     toUA ArrayEltRcuchar    (AD_CUChar ua)  = castUniqueArray ua
-    toUA (ArrayEltRvec2 r)  (AD_V2 a)       = toUA r a
-    toUA (ArrayEltRvec3 r)  (AD_V3 a)       = toUA r a
-    toUA (ArrayEltRvec4 r)  (AD_V4 a)       = toUA r a
-    toUA (ArrayEltRvec8 r)  (AD_V8 a)       = toUA r a
-    toUA (ArrayEltRvec16 r) (AD_V16 a)      = toUA r a
+    toUA (ArrayEltRvec r)   (AD_Vec a)      = toUA r a
     --
     toUA ArrayEltRunit      _               = error "What sane person could live in this world and not be crazy?"
     toUA ArrayEltRpair{}    _               = error "  --- Ursula K. Le Guin"
@@ -1171,11 +1179,7 @@ evalCoerceScalar ta tb a
     fromUA ArrayEltRcchar     = AD_CChar   . castUniqueArray
     fromUA ArrayEltRcschar    = AD_CSChar  . castUniqueArray
     fromUA ArrayEltRcuchar    = AD_CUChar  . castUniqueArray
-    fromUA (ArrayEltRvec2 r)  = AD_V2      . fromUA r
-    fromUA (ArrayEltRvec3 r)  = AD_V3      . fromUA r
-    fromUA (ArrayEltRvec4 r)  = AD_V4      . fromUA r
-    fromUA (ArrayEltRvec8 r)  = AD_V8      . fromUA r
-    fromUA (ArrayEltRvec16 r) = AD_V16     . fromUA r
+    fromUA (ArrayEltRvec r)   = AD_Vec     . fromUA r
     --
     fromUA ArrayEltRunit      = error "I talk about the gods, I am an atheist. But I am an artist too, and therefore a liar. Distrust everything I say. I am telling the truth."
     fromUA ArrayEltRpair{}    = error "  --- Ursula K. Le Guin, The Left Hand of Darkness"
@@ -1191,13 +1195,6 @@ evalCoerceScalar ta tb a
     single :: SingleType e -> Dict (ArrayElt e)
     single (NumSingleType t)    = num t
     single (NonNumSingleType t) = nonnum t
-
-    vector :: VectorType e -> Dict (ArrayElt e)
-    vector (Vector2Type t)  = withDict (single t) Dict
-    vector (Vector3Type t)  = withDict (single t) Dict
-    vector (Vector4Type t)  = withDict (single t) Dict
-    vector (Vector8Type t)  = withDict (single t) Dict
-    vector (Vector16Type t) = withDict (single t) Dict
 
     num :: NumType e -> Dict (ArrayElt e)
     num (IntegralNumType t) = integral t
@@ -1236,6 +1233,55 @@ evalCoerceScalar ta tb a
     nonnum TypeCChar{}  = Dict
     nonnum TypeCSChar{} = Dict
     nonnum TypeCUChar{} = Dict
+
+    vector :: VectorType t -> Dict (ArrayElt t)
+    vector (Vector2Type t)  = vec_single t
+    vector (Vector3Type t)  = vec_single t
+    vector (Vector4Type t)  = vec_single t
+    vector (Vector8Type t)  = vec_single t
+    vector (Vector16Type t) = vec_single t
+
+    vec_single :: KnownNat n => SingleType e -> Dict (ArrayElt (Vec n e))
+    vec_single (NumSingleType t)    = vec_num t
+    vec_single (NonNumSingleType t) = vec_nonnum t
+
+    vec_num :: KnownNat n => NumType e -> Dict (ArrayElt (Vec n e))
+    vec_num (IntegralNumType t) = vec_integral t
+    vec_num (FloatingNumType t) = vec_floating t
+
+    vec_integral :: KnownNat n => IntegralType e -> Dict (ArrayElt (Vec n e))
+    vec_integral TypeInt{}     = Dict
+    vec_integral TypeInt8{}    = Dict
+    vec_integral TypeInt16{}   = Dict
+    vec_integral TypeInt32{}   = Dict
+    vec_integral TypeInt64{}   = Dict
+    vec_integral TypeWord{}    = Dict
+    vec_integral TypeWord8{}   = Dict
+    vec_integral TypeWord16{}  = Dict
+    vec_integral TypeWord32{}  = Dict
+    vec_integral TypeWord64{}  = Dict
+    vec_integral TypeCShort{}  = Dict
+    vec_integral TypeCUShort{} = Dict
+    vec_integral TypeCInt{}    = Dict
+    vec_integral TypeCUInt{}   = Dict
+    vec_integral TypeCLong{}   = Dict
+    vec_integral TypeCULong{}  = Dict
+    vec_integral TypeCLLong{}  = Dict
+    vec_integral TypeCULLong{} = Dict
+
+    vec_floating :: KnownNat n => FloatingType e -> Dict (ArrayElt (Vec n e))
+    vec_floating TypeHalf{}    = Dict
+    vec_floating TypeFloat{}   = Dict
+    vec_floating TypeDouble{}  = Dict
+    vec_floating TypeCFloat{}  = Dict
+    vec_floating TypeCDouble{} = Dict
+
+    vec_nonnum :: KnownNat n => NonNumType e -> Dict (ArrayElt (Vec n e))
+    vec_nonnum TypeBool{}   = Dict
+    vec_nonnum TypeChar{}   = Dict
+    vec_nonnum TypeCChar{}  = Dict
+    vec_nonnum TypeCSChar{} = Dict
+    vec_nonnum TypeCUChar{} = Dict
 
 
 -- Scalar primitives

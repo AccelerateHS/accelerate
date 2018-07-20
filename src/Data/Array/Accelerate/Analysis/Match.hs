@@ -616,19 +616,11 @@ evalEqSingle (NumSingleType t)                                  = evalEqNum t
 evalEqSingle (NonNumSingleType t) | NonNumDict <- nonNumDict t  = uncurry (==)
 
 evalEqVector :: VectorType a -> (a, a) -> Bool
-evalEqVector (Vector2Type t) (V2 a1 b1, V2 a2 b2)             = evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2)
-evalEqVector (Vector3Type t) (V3 a1 b1 c1, V3 a2 b2 c2)       = evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2)
-evalEqVector (Vector4Type t) (V4 a1 b1 c1 d1, V4 a2 b2 c2 d2) = evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2) && evalEqSingle t (d1,d2)
-evalEqVector (Vector8Type t) ( V8 a1 b1 c1 d1 e1 f1 g1 h1
-                             , V8 a2 b2 c2 d2 e2 f2 g2 h2 ) =
-  evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2) && evalEqSingle t (d1,d2) &&
-  evalEqSingle t (e1,e2) && evalEqSingle t (f1,f2) && evalEqSingle t (g1,g2) && evalEqSingle t (h1,h2)
-evalEqVector (Vector16Type t) ( V16 a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1 m1 n1 o1 p1
-                              , V16 a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 k2 l2 m2 n2 o2 p2 ) =
-  evalEqSingle t (a1,a2) && evalEqSingle t (b1,b2) && evalEqSingle t (c1,c2) && evalEqSingle t (d1,d2) &&
-  evalEqSingle t (e1,e2) && evalEqSingle t (f1,f2) && evalEqSingle t (g1,g2) && evalEqSingle t (h1,h2) &&
-  evalEqSingle t (i1,i2) && evalEqSingle t (j1,j2) && evalEqSingle t (k1,k2) && evalEqSingle t (l1,l2) &&
-  evalEqSingle t (m1,m2) && evalEqSingle t (n1,n2) && evalEqSingle t (o1,o2) && evalEqSingle t (p1,p2)
+evalEqVector Vector2Type{}  = uncurry (==)
+evalEqVector Vector3Type{}  = uncurry (==)
+evalEqVector Vector4Type{}  = uncurry (==)
+evalEqVector Vector8Type{}  = uncurry (==)
+evalEqVector Vector16Type{} = uncurry (==)
 
 evalEqNum :: NumType a -> (a, a) -> Bool
 evalEqNum (IntegralNumType t) | IntegralDict <- integralDict t  = uncurry (==)
