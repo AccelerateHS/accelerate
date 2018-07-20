@@ -344,7 +344,7 @@ Library
   Other-modules:
         Data.Atomic
         Data.Array.Accelerate.Analysis.Hash.TH
-        Data.Array.Accelerate.Array.Lifted
+        -- Data.Array.Accelerate.Array.Lifted
         Data.Array.Accelerate.Array.Remote.Nursery
         Data.Array.Accelerate.Classes
         Data.Array.Accelerate.Classes.Bounded
