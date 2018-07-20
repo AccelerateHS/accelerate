@@ -78,7 +78,7 @@ module Data.Array.Accelerate.Type (
   module Data.Int,
   module Data.Word,
   module Foreign.C.Types,
-  module Data.Array.Accelerate.Type
+  module Data.Array.Accelerate.Type,
 
 ) where
 
@@ -425,95 +425,91 @@ instance Eq (Vec n a) where
   Vec ba1# == Vec ba2# = ByteArray ba1# == ByteArray ba2#
 
 
--- Unboxed version (machine values). These are used for actual values.
+-- Type synonyms for common SIMD vector types
 --
 type V2 a  = Vec 2 a
-type V3 a  = Vec 3 a
+type V3 a  = Vec 3 a  -- dubious?
 type V4 a  = Vec 4 a
 type V8 a  = Vec 8 a
 type V16 a = Vec 16 a
 
--- Lifted version (values are pointers, lazily evaluated). These to be used when
--- manipulating terms (i.e. Exp)
---
-data V2' a  = V2' a a
-data V3' a  = V3' a a a
-data V4' a  = V4' a a a a
-data V8' a  = V8' a a a a a a a a
-data V16' a = V16' a a a a a a a a a a a a a a a a
-
 pattern V2 :: Prim a => a -> a -> V2 a
-pattern V2 a b <- (unpackV2 -> V2' a b)
+pattern V2 a b <- (unpackV2 -> (a,b))
   where V2 = packV2
 {-# COMPLETE V2 #-}
 
 pattern V3 :: Prim a => a -> a -> a -> V3 a
-pattern V3 a b c <- (unpackV3 -> V3' a b c)
+pattern V3 a b c <- (unpackV3 -> (a,b,c))
   where V3 = packV3
 {-# COMPLETE V3 #-}
 
 pattern V4 :: Prim a => a -> a -> a -> a -> V4 a
-pattern V4 a b c d <- (unpackV4 -> V4' a b c d)
+pattern V4 a b c d <- (unpackV4 -> (a,b,c,d))
   where V4 = packV4
 {-# COMPLETE V4 #-}
 
 pattern V8 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> V8 a
-pattern V8 a b c d e f g h <- (unpackV8 -> V8' a b c d e f g h)
+pattern V8 a b c d e f g h <- (unpackV8 -> (a,b,c,d,e,f,g,h))
   where V8 = packV8
 {-# COMPLETE V8 #-}
 
 pattern V16 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> V16 a
-pattern V16 a b c d e f g h i j k l m n o p <- (unpackV16 -> V16' a b c d e f g h i j k l m n o p)
+pattern V16 a b c d e f g h i j k l m n o p <- (unpackV16 -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p))
   where V16 = packV16
 {-# COMPLETE V16 #-}
 
-unpackV2 :: Prim a => V2 a -> V2' a
+unpackV2 :: Prim a => V2 a -> (a,a)
 unpackV2 (Vec ba#) =
-  V2' (indexByteArray# ba# 0#)
-      (indexByteArray# ba# 1#)
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  )
 
-unpackV3 :: Prim a => V3 a -> V3' a
+unpackV3 :: Prim a => V3 a -> (a,a,a)
 unpackV3 (Vec ba#) =
-  V3' (indexByteArray# ba# 0#)
-      (indexByteArray# ba# 1#)
-      (indexByteArray# ba# 2#)
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  )
 
-unpackV4 :: Prim a => V4 a -> V4' a
+unpackV4 :: Prim a => V4 a -> (a,a,a,a)
 unpackV4 (Vec ba#) =
-  V4' (indexByteArray# ba# 0#)
-      (indexByteArray# ba# 1#)
-      (indexByteArray# ba# 2#)
-      (indexByteArray# ba# 3#)
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  , indexByteArray# ba# 3#
+  )
 
-unpackV8 :: Prim a => V8 a -> V8' a
+unpackV8 :: Prim a => V8 a -> (a,a,a,a,a,a,a,a)
 unpackV8 (Vec ba#) =
-  V8' (indexByteArray# ba# 0#)
-      (indexByteArray# ba# 1#)
-      (indexByteArray# ba# 2#)
-      (indexByteArray# ba# 3#)
-      (indexByteArray# ba# 4#)
-      (indexByteArray# ba# 5#)
-      (indexByteArray# ba# 6#)
-      (indexByteArray# ba# 7#)
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  , indexByteArray# ba# 3#
+  , indexByteArray# ba# 4#
+  , indexByteArray# ba# 5#
+  , indexByteArray# ba# 6#
+  , indexByteArray# ba# 7#
+  )
 
-unpackV16 :: Prim a => V16 a -> V16' a
+unpackV16 :: Prim a => V16 a -> (a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a)
 unpackV16 (Vec ba#) =
-  V16' (indexByteArray# ba# 0#)
-       (indexByteArray# ba# 1#)
-       (indexByteArray# ba# 2#)
-       (indexByteArray# ba# 3#)
-       (indexByteArray# ba# 4#)
-       (indexByteArray# ba# 5#)
-       (indexByteArray# ba# 6#)
-       (indexByteArray# ba# 7#)
-       (indexByteArray# ba# 8#)
-       (indexByteArray# ba# 9#)
-       (indexByteArray# ba# 10#)
-       (indexByteArray# ba# 11#)
-       (indexByteArray# ba# 12#)
-       (indexByteArray# ba# 13#)
-       (indexByteArray# ba# 14#)
-       (indexByteArray# ba# 15#)
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  , indexByteArray# ba# 3#
+  , indexByteArray# ba# 4#
+  , indexByteArray# ba# 5#
+  , indexByteArray# ba# 6#
+  , indexByteArray# ba# 7#
+  , indexByteArray# ba# 8#
+  , indexByteArray# ba# 9#
+  , indexByteArray# ba# 10#
+  , indexByteArray# ba# 11#
+  , indexByteArray# ba# 12#
+  , indexByteArray# ba# 13#
+  , indexByteArray# ba# 14#
+  , indexByteArray# ba# 15#
+  )
 
 packV2 :: Prim a => a -> a -> V2 a
 packV2 a b = runST $ do
