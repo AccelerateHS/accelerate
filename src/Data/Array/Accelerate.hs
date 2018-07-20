@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 -- |
 -- Module      : Data.Array.Accelerate
 -- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
@@ -328,6 +329,20 @@ module Data.Array.Accelerate (
   lift1, lift2, lift3,
   ilift1, ilift2, ilift3,
 
+  -- ** Custom data types
+  construct, deconstruct,
+
+  pattern Constructor,
+
+  pattern E1 , pattern E2 , pattern E3 , pattern E4 , pattern E5 ,
+  pattern E6 , pattern E7 , pattern E8 , pattern E9 , pattern E10,
+  pattern E11, pattern E12, pattern E13, pattern E14, pattern E15,
+
+  pattern A1 , pattern A2 , pattern A3 , pattern A4 , pattern A5 ,
+  pattern A6 , pattern A7 , pattern A8 , pattern A9 , pattern A10,
+  pattern A11, pattern A12, pattern A13, pattern A14, pattern A15,
+
+
   -- ** Scalar operations
   -- *** Introduction
   constant,
@@ -399,6 +414,7 @@ module Data.Array.Accelerate (
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, reshape, size, toIndex, fromIndex, intersect, ignore )
+import Data.Array.Accelerate.Constructor
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Prelude
