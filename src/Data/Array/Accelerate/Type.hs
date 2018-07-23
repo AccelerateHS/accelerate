@@ -101,7 +101,7 @@ import Text.PrettyPrint.ANSI.Leijen
 import Text.Printf
 
 import GHC.Prim
-import GHC.TypeNats
+import GHC.TypeLits
 import GHC.Types
 
 
