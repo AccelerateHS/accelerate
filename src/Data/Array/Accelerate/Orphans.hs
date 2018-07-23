@@ -33,6 +33,8 @@ deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show 
 --
 deriving instance Prim Half
 #if !MIN_VERSION_primitive(0,6,4)
-deriving instance Prim CUShort
+deriving instance Prim CUShort  -- Half
+deriving instance Prim CFloat
+deriving instance Prim CDouble
 #endif
 
