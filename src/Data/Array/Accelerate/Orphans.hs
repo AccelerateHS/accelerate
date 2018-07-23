@@ -3,7 +3,8 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE UnboxedTuples              #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans        #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 -- |
 -- Module      : Data.Array.Accelerate.Orphans
 -- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
@@ -19,6 +20,7 @@ module Data.Array.Accelerate.Orphans ()
   where
 
 import Data.Primitive.Types
+import Foreign.C.Types
 import Numeric.Half
 
 
