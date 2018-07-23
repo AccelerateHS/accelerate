@@ -6,7 +6,8 @@ resolver: lts-12.0
 packages:
 - '.'
 
-extra-deps: []
+extra-deps:
+- primitive-0.6.4.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

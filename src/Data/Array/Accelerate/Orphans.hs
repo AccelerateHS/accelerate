@@ -3,8 +3,7 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE UnboxedTuples              #-}
-{-# OPTIONS_GHC -fno-warn-orphans        #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Orphans
 -- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
@@ -32,9 +31,4 @@ deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show 
 -- primitive
 --
 deriving instance Prim Half
-#if !MIN_VERSION_primitive(0,6,4)
-deriving instance Prim CUShort  -- Half
-deriving instance Prim CFloat
-deriving instance Prim CDouble
-#endif
 

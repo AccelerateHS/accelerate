@@ -285,7 +285,7 @@ Library
         , hedgehog                      >= 0.5
         , lens                          >= 4.0
         , mtl                           >= 2.0
-        , primitive                     >= 0.6
+        , primitive                     >= 0.6.4
         , tasty                         >= 0.11
         , tasty-expected-failure        >= 0.11
         , tasty-hedgehog                >= 0.1
