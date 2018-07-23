@@ -408,12 +408,12 @@ type family BitSize a :: Nat
 -- So, as a last resort, we'll just use a ByteArray# to ensure an efficient
 -- packed representation.
 --
-data Vec (n::Nat) a = KnownNat n => Vec ByteArray#
+data Vec (n::Nat) a = Vec ByteArray#
   deriving Typeable
 
 type role Vec nominal representational
 
-instance (Show a, Prim a) => Show (Vec n a) where
+instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
   show (Vec ba#) = vec (go 0#)
     where
       vec :: [a] -> String
