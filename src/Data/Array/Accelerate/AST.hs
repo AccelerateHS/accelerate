@@ -140,7 +140,7 @@ import Instances.TH.Lift                                            () -- Int8, 
 
 import GHC.Base                                                     ( isTrue# )
 import GHC.Int                                                      ( Int(..) )
-import GHC.Prim
+import GHC.Prim                                                     ( (<#), (+#), indexWord8Array#, sizeofByteArray# )
 import GHC.Ptr                                                      ( Ptr(..) )
 import GHC.Word                                                     ( Word8(..) )
 

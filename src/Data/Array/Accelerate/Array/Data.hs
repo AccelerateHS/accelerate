@@ -72,7 +72,7 @@ import Text.Printf
 import Prelude
 
 import GHC.Ptr                                                      ( Ptr(..) )
-import GHC.TypeNats                                                 ( KnownNat, natVal' )
+import GHC.TypeLits                                                 ( KnownNat, natVal' )
 import GHC.Base                                                     ( Int(..), IO(..), Proxy#, proxy#, unsafeCoerce#, newAlignedPinnedByteArray#, byteArrayContents#, copyAddrToByteArray#, copyByteArrayToAddr# )
 import GHC.ForeignPtr                                               ( ForeignPtr(..), ForeignPtrContents(..) )
 

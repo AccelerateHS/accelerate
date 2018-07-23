@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
@@ -14,6 +15,9 @@
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
+#if __GLASGOW_HASKELL__ <= 800
+{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Type
 -- Copyright   : [2008..2018] Manuel M T Chakravarty, Gabriele Keller
