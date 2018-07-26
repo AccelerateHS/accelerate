@@ -556,10 +556,10 @@ test-suite doctest
 
   -- doctest only supports a single x-doctest-options line
   if impl(ghc == 7.*)
-    x-doctest-options:  -fspec-constr-count=25 -fcontext-stack=35
+    x-doctest-options:  -fspec-constr-count=25 -fcontext-stack=50
 
   if impl(ghc >= 8.0)
-    x-doctest-options:  -fspec-constr-count=25 -freduction-depth=35
+    x-doctest-options:  -fspec-constr-count=25 -freduction-depth=50
 
 
 test-suite nofib-interpreter
