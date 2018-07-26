@@ -1,32 +1,25 @@
-{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
-{-# OPTIONS_GHC -fno-warn-missing-pattern-synonym-signatures #-}
 -- |
 -- Module      : Data.Array.Accelerate.Constructor
--- Copyright   : [2018..2018] Joshua Meredith
+-- Copyright   : [2018..2018] Joshua Meredith, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- Constructing terms of custom data types with pattern synonyms.
---
 
 module Data.Array.Accelerate.Constructor (
 
-  pattern Constructor,
-
+  pattern MkT,
 
 ) where
 
@@ -36,92 +29,62 @@ import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
-import Data.Constraint
 
-
-type family FlattenTuple con a where
-  FlattenTuple con () = con ()
-  FlattenTuple con ((), a) = con a
-  FlattenTuple con (((), a), b) = (con a, con b)
-  FlattenTuple con ((((), a), b), c) = (con a, con b, con c)
-  FlattenTuple con (((((), a), b), c), d) = (con a, con b, con c, con d)
-  FlattenTuple con ((((((), a), b), c), d), e) = (con a, con b, con c, con d, con e)
-  FlattenTuple con (((((((), a), b), c), d), e), f) = (con a, con b, con c, con d, con e, con f)
-  FlattenTuple con ((((((((), a), b), c), d), e), f), g) = (con a, con b, con c, con d, con e, con f, con g)
-  FlattenTuple con (((((((((), a), b), c), d), e), f), g), h) = (con a, con b, con c, con d, con e, con f, con g, con h)
-  FlattenTuple con ((((((((((), a), b), c), d), e), f), g), h), i) = (con a, con b, con c, con d, con e, con f, con g, con h, con i)
-  FlattenTuple con (((((((((((), a), b), c), d), e), f), g), h), i), j) = (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j)
-  FlattenTuple con ((((((((((((), a), b), c), d), e), f), g), h), i), j), k) = (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k)
-  FlattenTuple con (((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l) = (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l)
-  FlattenTuple con ((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m) = (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m)
-  FlattenTuple con (((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n) = (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n)
-  FlattenTuple con ((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o) = (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o)
-
-type TupleOf con a = FlattenTuple con (ProdRepr a)
-type Constructable con a = (Castable con (Plain (TupleOf con a)) a, Castable con a (Plain (TupleOf con a)), Unlift con (TupleOf con a))
-
-construct :: forall con a. Constructable con a => TupleOf con a -> con a
-construct = cast @con . lift
-
-deconstruct :: forall con a. Constructable con a => con a -> TupleOf con a
-deconstruct = unlift . cast @con
-
-
-class Castable con a b where
-  type Cst (con :: * -> *) :: * -> Constraint
-  cast :: con a -> con b
-
-instance (Elt b, IsProduct Elt a, IsProduct Elt b, ProdRepr a ~ ProdRepr b) => Castable Exp a b where
-  type Cst Exp = Elt
-  cast (Exp (Tuple x)) = Exp (Tuple x)
-  cast _               = $internalError "cast (exp)" "can only cast products"
-
-instance (Arrays b, IsProduct Arrays a, IsProduct Arrays b, ProdRepr a ~ ProdRepr b) => Castable Acc a b where
-  type Cst Acc = Arrays
-  cast (Acc (Atuple x)) = Acc (Atuple x)
-  cast _                = $internalError "cast (acc)" "can only cast products"
-
-
--- | A pattern synonym for constucting data into an `Exp` or `Acc` context. For
--- example, to define a custom data type representing coordinates, first define
--- the type as a normal Haskell ADT and derive instances for @Show@, @Generic@,
--- @Elt@, and @IsProduct Elt@.
+-- | This pattern synonym can be used as an alternative to 'lift' and 'unlift'
+-- for creating and accessing data types isomorphic to simple product (tuple)
+-- types.
 --
--- > {-# LANGUAGE DeriveGeneric, DeriveAnyClass, PatternSynonyms #-}
--- > import GHC.Generics
--- > data Coord = Coord' Int Int
--- >   deriving (Show, Generic, Elt, IsProduct Elt)
+-- For example, let's say we have regular Haskell data type representing a point
+-- in two-dimensional space:
 --
--- Now, we can write a less polymorphic synonym to @Constructor@:
+-- > data Point = Point_ Float Float
+-- >   deriving (Show, Generic, Elt, IsTuple)
 --
--- > pattern Coord :: Exp Int -> Exp Int -> Exp Coord
--- > pattern Coord x y = Constructor (x, y)
+-- Note that we derive instances for the 'Elt' class, so that this data type can
+-- be used within Accelerate scalar expressions, and 'IsTuple', as this is
+-- a product type (contains multiple values).
 --
--- and use the pattern in the LHS and RHS of expressions:
+-- In order to access the individual fields of the data constructor from within
+-- an Accelerate expression, we define the following pattern synonym:
 --
--- > add1toY :: Exp Coord -> Exp Coord
--- > add1toY (Coord x y) = Coord x (y + 1)
+-- > pattern Point :: Exp Float -> Exp Float -> Exp Point
+-- > pattern Point x y = MkT (x,y)
 --
--- We can similarly define custom data types containing arrays to represent
--- world data for our computation:
+-- In essence, the 'MkT' pattern is really telling GHC how to treat our @Point@
+-- type as a regular pair for use in Accelerate code. The pattern can then be
+-- used on both the left and right hand side of an expression:
 --
--- > data Computation = Computation' (Array DIM1 Float) (Array DIM2 Float)
--- >   deriving (Show, Generic, Arrays, IsProduct Arrays)
--- > pattern Computation { info, grid } = Constructor' (info, grid)
+-- > addPoint :: Exp Point -> Exp Point -> Exp Point
+-- > addPoint (Point x1 y1) (Point x2 y2) = Point (x1+x2) (y1+y2)
 --
--- In this case, we have defined the pattern synonym with record syntax, giving
--- us the option to access the fields with normal record accessors:
+-- Similarly, we can define pattern synonyms for values in 'Acc'. We can also
+-- use record syntax to generate field accessors, if we desire:
 --
--- > filteredInfo :: (Exp Float -> Exp Bool) -> Acc Computation -> Acc (Array DIM1 Float)
--- > filteredInfo pred = filter pred . info
+-- > data SparseVector a = SparseVector_ (Vector Int) (Vector a)
+-- >   deriving (Show, Generic, Arrays, IsAtuple)
+-- >
+-- > pattern SparseVector :: Elt a => Acc (Vector Int) -> Acc (Vector a) -> Acc (SparseVector a)
+-- > pattern SparseVector { indices, values } = MkT (indices, values)
 --
-pattern Constructor :: forall con a. Constructable con a => TupleOf con a -> con a
-pattern Constructor vars <- (deconstruct @con -> vars)
-  where Constructor = construct @con
+pattern MkT :: forall a b c. AsTuple a b c => a -> c b
+pattern MkT vars <- (unlift @c . coerce -> vars)
+  where MkT = coerce . lift @c
 
 
+type AsTuple a b c =
+  ( Unlift c a
+  , ProdRepr (Plain a) ~ ProdRepr b
+  , Coerce (c (Plain a)) (c b), Coerce (c b) (c (Plain a))
+  )
 
+class Coerce a b where
+  coerce :: a -> b
 
+instance (Elt b, IsTuple b, ProdRepr a ~ ProdRepr b) => Coerce (Exp a) (Exp b) where
+  coerce (Exp (Tuple t)) = Exp (Tuple t)
+  coerce _               = $internalError "coerce" "expected a tuple"
 
-
+instance (Arrays b, IsAtuple b, ProdRepr a ~ ProdRepr b) => Coerce (Acc a) (Acc b) where
+  coerce (Acc (Atuple t)) = Acc (Atuple t)
+  coerce _                = $internalError "coerce" "expected a tuple"
 

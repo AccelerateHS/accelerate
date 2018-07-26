@@ -329,6 +329,8 @@ module Data.Array.Accelerate (
   lift1, lift2, lift3,
   ilift1, ilift2, ilift3,
 
+  -- ** Pattern synonyms
+  pattern MkT, IsTuple, IsAtuple,
 
   -- ** Scalar operations
   -- *** Introduction
@@ -380,8 +382,9 @@ module Data.Array.Accelerate (
   fromList, toList,
 
   -- ---------------------------------------------------------------------------
-  -- * Prelude re-exports
+  -- * Useful re-exports
   (.), ($), error, undefined, const,
+  Generic,
 
   -- ---------------------------------------------------------------------------
   -- Types
@@ -394,7 +397,7 @@ module Data.Array.Accelerate (
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
   CChar, CSChar, CUChar,
 
-  -- | Avoid using these in your own functions wherever possible.
+  -- Avoid using these in your own functions wherever possible.
   IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
 
 ) where
@@ -410,6 +413,7 @@ import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
 import Prelude                                                      ( (.), ($), undefined, error, const )
+import GHC.Generics                                                 ( Generic )
 
 -- $setup
 -- >>> :seti -XTypeOperators
