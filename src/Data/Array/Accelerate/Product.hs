@@ -119,22 +119,6 @@ instance (GIsProduct cst a, GIsProduct cst b) => GIsProduct cst (a :*: b) where
       (t2, a :*: b)
   gprod t = gprod @cst @b (gprod @cst @a t)
 
-instance IsProduct cst (U1 p)
-
-instance
-  ( cst (a p)
-  ) => IsProduct cst (M1 i c a p)
-
-instance
-  ( cst a
-  ) => IsProduct cst (K1 i a p)
-
-instance
-  ( cst (a p)
-  , cst (b p)
-  ) => IsProduct cst ((a :*: b) p)
-
-
 instance IsProduct cst () where
   type ProdRepr ()   = ()
   fromProd _         = id
