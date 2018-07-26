@@ -5,9 +5,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -fno-warn-missing-pattern-synonym-signatures #-}
@@ -91,38 +91,38 @@ instance (Arrays b, IsProduct Arrays a, IsProduct Arrays b, ProdRepr a ~ ProdRep
   cast _                = $internalError "cast (acc)" "can only cast products"
 
 
--- / A pattern synonym for constucting data into an `Exp` or `Acc` context.
---   For example, to define a custom data type representing coordinates,
---   first define the type as a normal Haskell ADT and derive instances for
---   @Show@, @Generic@, @Elt@, and @IsProduct Elt@.
+-- | A pattern synonym for constucting data into an `Exp` or `Acc` context. For
+-- example, to define a custom data type representing coordinates, first define
+-- the type as a normal Haskell ADT and derive instances for @Show@, @Generic@,
+-- @Elt@, and @IsProduct Elt@.
 --
---   > {-# LANGUAGE DeriveGeneric, DeriveAnyClass, PatternSynonyms #-}
---   > import GHC.Generics
---   > data Coord = Coord' Int Int
---   >   deriving (Show, Generic, Elt, IsProduct Elt)
+-- > {-# LANGUAGE DeriveGeneric, DeriveAnyClass, PatternSynonyms #-}
+-- > import GHC.Generics
+-- > data Coord = Coord' Int Int
+-- >   deriving (Show, Generic, Elt, IsProduct Elt)
 --
---   Now, we can write a less polymorphic synonym to @Constructor@:
+-- Now, we can write a less polymorphic synonym to @Constructor@:
 --
---   > pattern Coord :: Exp Int -> Exp Int -> Exp Coord
---   > pattern Coord x y = Constructor (x, y)
+-- > pattern Coord :: Exp Int -> Exp Int -> Exp Coord
+-- > pattern Coord x y = Constructor (x, y)
 --
---   and use the pattern in the LHS and RHS of expressions:
+-- and use the pattern in the LHS and RHS of expressions:
 --
---   > add1toY :: Exp Coord -> Exp Coord
---   > add1toY (Coord x y) = Coord x (y + 1)
+-- > add1toY :: Exp Coord -> Exp Coord
+-- > add1toY (Coord x y) = Coord x (y + 1)
 --
---   We can similarly define custom data types containing arrays to represent
---   world data for our computation:
+-- We can similarly define custom data types containing arrays to represent
+-- world data for our computation:
 --
---   > data Computation = Computation' (Array DIM1 Float) (Array DIM2 Float)
---   >   deriving (Show, Generic, Arrays, IsProduct Arrays)
---   > pattern Computation { info, grid } = Constructor' (info, grid)
+-- > data Computation = Computation' (Array DIM1 Float) (Array DIM2 Float)
+-- >   deriving (Show, Generic, Arrays, IsProduct Arrays)
+-- > pattern Computation { info, grid } = Constructor' (info, grid)
 --
---   In this case, we have defined the pattern synonym with record syntax,
---   giving us the option to access the fields with normal record accessors:
+-- In this case, we have defined the pattern synonym with record syntax, giving
+-- us the option to access the fields with normal record accessors:
 --
---   > filteredInfo :: (Exp Float -> Exp Bool) -> Acc Computation -> Acc (Array DIM1 Float)
---   > filteredInfo pred = filter pred . info
+-- > filteredInfo :: (Exp Float -> Exp Bool) -> Acc Computation -> Acc (Array DIM1 Float)
+-- > filteredInfo pred = filter pred . info
 --
 pattern Constructor :: forall con a. Constructable con a => TupleOf con a -> con a
 pattern Constructor vars <- (deconstruct @con -> vars)
@@ -236,6 +236,7 @@ pattern C15 a b c d e f g h i j k l m n o = Constructor (a, b, c, d, e, f, g, h,
 
 
 -- | Specialised pattern synonyms for tuples in @Exp@.
+--
 pattern E1  a                             = C1  a                             :: Exp t
 pattern E2  a b                           = C2  a b                           :: Exp (a, b)
 pattern E3  a b c                         = C3  a b c                         :: Exp (a, b, c)
@@ -253,6 +254,7 @@ pattern E14 a b c d e f g h i j k l m n   = C14 a b c d e f g h i j k l m n   ::
 pattern E15 a b c d e f g h i j k l m n o = C15 a b c d e f g h i j k l m n o :: Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 
 -- | Specialised pattern synonyms for tuples in @Acc@.
+--
 pattern A1  a                             = C1  a                             :: Acc t
 pattern A2  a b                           = C2  a b                           :: Acc (a, b)
 pattern A3  a b c                         = C3  a b c                         :: Acc (a, b, c)
@@ -268,3 +270,4 @@ pattern A12 a b c d e f g h i j k l       = C12 a b c d e f g h i j k l       ::
 pattern A13 a b c d e f g h i j k l m     = C13 a b c d e f g h i j k l m     :: Acc (a, b, c, d, e, f, g, h, i, j, k, l, m)
 pattern A14 a b c d e f g h i j k l m n   = C14 a b c d e f g h i j k l m n   :: Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 pattern A15 a b c d e f g h i j k l m n o = C15 a b c d e f g h i j k l m n o :: Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+

@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -92,9 +91,9 @@ class GIsProduct cst (f :: * -> *) where
 
 instance GIsProduct cst U1 where
   type GProdRepr t U1 = t
-  gfromProd t U1 =  t
+  gfromProd t U1 = t
   gtoProd   t    = (t, U1)
-  gprod     t    =  t
+  gprod     t    = t
 
 instance GIsProduct cst a => GIsProduct cst (M1 i c a) where
   type GProdRepr t (M1 i c a) = GProdRepr t a
@@ -112,11 +111,10 @@ instance (GIsProduct cst a, GIsProduct cst b) => GIsProduct cst (a :*: b) where
   type GProdRepr t (a :*: b) = GProdRepr (GProdRepr t a) b
   gfromProd t (a :*: b) = gfromProd @cst (gfromProd @cst t a) b
   gtoProd t =
-    let
-      (t1, b) = gtoProd @cst t
-      (t2, a) = gtoProd @cst t1
+    let (t1, b) = gtoProd @cst t
+        (t2, a) = gtoProd @cst t1
     in
-      (t2, a :*: b)
+    (t2, a :*: b)
   gprod t = gprod @cst @b (gprod @cst @a t)
 
 instance IsProduct cst () where

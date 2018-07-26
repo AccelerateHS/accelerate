@@ -1,9 +1,8 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE DefaultSignatures     #-}
-{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -12,6 +11,7 @@
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
   Array(..), Scalar, Vector, Matrix, Segments,
-  Arrays(..), ArraysR(..), ArraysFlavour(..),
+  Arrays(..), ArraysR(..),
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..),
@@ -173,32 +173,12 @@ data Divide sh = Divide
   deriving (Typeable, Show, Eq)
 
 
--- type instance EltRepr (V2 a)          = V2 a    -- we can only store primitive types in SIMD vectors
--- type instance EltRepr (V3 a)          = V3 a
--- type instance EltRepr (V4 a)          = V4 a
--- type instance EltRepr (V8 a)          = V8 a
--- type instance EltRepr (V16 a)         = V16 a
-
-type IsTuple = IsProduct Elt
-
-fromTuple :: IsTuple tup => tup -> TupleRepr tup
-fromTuple = fromProd (Proxy :: Proxy Elt)
-
-toTuple :: IsTuple tup => TupleRepr tup -> tup
-toTuple = toProd (Proxy :: Proxy Elt)
-
-
--- Array elements (tuples of scalars)
--- ----------------------------------
-
--- | Type representation mapping
---
--- We represent tuples by using '()' and '(,)' as type-level nil and snoc to
--- construct snoc-lists of types, and are flattened all the way down to
--- primitive types.
+-- Scalar elements
+-- ---------------
 
 -- | The 'Elt' class characterises the allowable array element types, and hence
--- the types which can appear in scalar Accelerate expressions.
+-- the types which can appear in scalar Accelerate expressions of type
+-- 'Data.Array.Accelerate.Exp'.
 --
 -- Accelerate arrays consist of simple atomic types as well as nested tuples
 -- thereof, stored efficiently in memory as consecutive unpacked elements
@@ -221,14 +201,17 @@ toTuple = toProd (Proxy :: Proxy Elt)
 --  * <https://hackage.haskell.org/package/linear-accelerate linear-accelerate>
 --  * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>
 --
-class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
-      => Elt a where
+class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a where
+  -- | Type representation mapping, which explains how to convert a type from
+  -- the surface type into the internal representation type consisting only of
+  -- simple primitive types, unit '()', and pair '(,)'.
+  --
   type EltRepr a :: *
+  type EltRepr a = GEltRepr () (Rep a)
+  --
   eltType  :: {-dummy-} a -> TupleType (EltRepr a)
   fromElt  :: a -> EltRepr a
   toElt    :: EltRepr a -> a
-
-  type EltRepr a = GEltRepr () (Rep a)
 
   default eltType
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
@@ -278,11 +261,10 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
   geltType             = geltType @b . geltType @a
   gfromElt t (a :*: b) = gfromElt (gfromElt t a) b
   gtoElt t =
-    let
-      (t1, b) = gtoElt t
-      (t2, a) = gtoElt t1
+    let (t1, b) = gtoElt t
+        (t2, a) = gtoElt t1
     in
-      (t2, a :*: b)
+    (t2, a :*: b)
 
 
 instance Elt Z where
@@ -510,9 +492,8 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
   => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
--- |Convenience functions
+--  Convenience functions
 --
-
 singletonScalarType :: IsScalar a => a -> TupleType a
 singletonScalarType _ = TypeRscalar scalarType
 
@@ -566,6 +547,43 @@ class Typeable asm => Foreign asm where
   liftForeign _ = $internalError "liftForeign" "not supported by this backend"
 
 
+-- Tuple representation
+-- --------------------
+
+-- |The tuple representation is equivalent to the product representation.
+--
+type TupleRepr a = ProdRepr a
+type TupleR a    = ProdR Elt a
+type IsTuple     = IsProduct Elt
+
+-- |We represent tuples as heterogeneous lists, typed by a type list.
+--
+data Tuple c t where
+  NilTup  ::                              Tuple c ()
+  SnocTup :: Elt t => Tuple c s -> c t -> Tuple c (s, t)
+
+-- TLM: It is irritating that we need a separate data type for tuples of scalars
+--   vs. arrays, purely to carry the class constraint.
+--
+-- | Tuples of Arrays.  Note that this carries the `Arrays` class
+--   constraint rather than `Elt` in the case of tuples of scalars.
+--
+data Atuple c t where
+  NilAtup  ::                                  Atuple c ()
+  SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
+
+-- |Tuple reification
+--
+tuple :: IsTuple tup => {- dummy -} tup -> TupleR (TupleRepr tup)
+tuple = prod (Proxy :: Proxy Elt)
+
+fromTuple :: IsTuple tup => tup -> TupleRepr tup
+fromTuple = fromProd (Proxy :: Proxy Elt)
+
+toTuple :: IsTuple tup => TupleRepr tup -> tup
+toTuple = toProd (Proxy :: Proxy Elt)
+
+
 type IsAtuple = IsProduct Arrays
 
 fromAtuple :: IsAtuple tup => tup -> TupleRepr tup
@@ -574,45 +592,33 @@ fromAtuple = fromProd (Proxy :: Proxy Arrays)
 toAtuple :: IsAtuple tup => TupleRepr tup -> tup
 toAtuple = toProd (Proxy :: Proxy Arrays)
 
--- Array type reification
+
+-- Arrays
+-- ------
+
+-- | The 'Arrays' class characterises the types which can appear in collective
+-- Accelerate computations of type 'Data.Array.Accelerate.Acc'.
 --
-data ArraysR arrs where
-  ArraysRunit  ::                                   ArraysR ()
-  ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
-  ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
-
-data ArraysFlavour arrs where
-  ArraysFunit  ::                                          ArraysFlavour ()
-  ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
-  ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
-
--- | 'Arrays' consists of nested tuples of individual 'Array's, currently up to
--- 15-elements wide. Accelerate computations can thereby return multiple
+-- 'Arrays' consists of nested tuples of individual 'Array's, currently up to
+-- 16-elements wide. Accelerate computations can thereby return multiple
 -- results.
 --
--- We represent tuples of arrays in the same way as tuples of scalars; using
--- '()' and '(,)' as type-level nil and snoc. This characterises the domain of
--- results of Accelerate array computations.
---
 class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
-  type ArrRepr a :: *
-  arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
-  -- flavour  :: a {- dummy -} -> ArraysFlavour a
+  -- | Type representation mapping, which explains how to convert from the
+  -- surface type into the internal representation type, which consists only of
+  -- 'Array', and '()' and '(,)' as type-level nil and snoc.
   --
+  type ArrRepr a :: *
+  type ArrRepr a = GArrRepr () (Rep a)
+
+  arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
   toArr    :: ArrRepr  a -> a
   fromArr  :: a -> ArrRepr  a
-
-  type ArrRepr a = GArrRepr () (Rep a)
 
   default arrays
     :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
     => a -> ArraysR (ArrRepr a)
   arrays _ = garrays @(Rep a) ArraysRunit
-
-  -- default flavour
-  --   :: (Generic a, GArrays (Rep a), GArrFlav (Rep a) ~ a, ArrRepr a ~ GArrRepr () (Rep a))
-  --   => a -> ArraysFlavour a
-  -- flavour _ = gflavour @(Rep a)
 
   default toArr
     :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
@@ -624,62 +630,55 @@ class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
     => a -> ArrRepr a
   fromArr = (`gfromArr` ()) . from
 
+  -- flavour :: a {- dummy -} -> ArraysFlavour a
+  -- default flavour
+  --   :: (Generic a, GArrays (Rep a), GArrFlav (Rep a) ~ a, ArrRepr a ~ GArrRepr () (Rep a))
+  --   => a -> ArraysFlavour a
+  -- flavour _ = gflavour @(Rep a)
+
 
 class GArrays (f :: * -> *) where
   type GArrRepr t f
-  -- type GArrFlav   f
   garrays  :: ArraysR t -> ArraysR (GArrRepr t f)
-  -- gflavour :: ArraysFlavour (GArrFlav f)
   gfromArr :: f a -> t -> GArrRepr t f
   gtoArr   :: GArrRepr t f -> (t, f a)
 
 instance GArrays U1 where
   type GArrRepr t U1 = t
-  -- type GArrFlav   U1 = ()
   garrays       =  id
-  -- gflavour      = ArraysFunit
   gfromArr U1   =  id
   gtoArr      t = (t, U1)
 
 instance GArrays a => GArrays (M1 i c a) where
   type GArrRepr t (M1 i c a) = GArrRepr t a
-  -- type GArrFlav   (M1 i c a) = GArrFlav   a
   garrays         = garrays @a
-  -- gflavour        = gflavour @a
   gfromArr (M1 x) = gfromArr x
   gtoArr       x  = let (t, x1) = gtoArr x in (t, M1 x1)
 
 instance Arrays a => GArrays (K1 i a) where
   type GArrRepr t (K1 i a) = (t, ArrRepr a)
-  -- type GArrFlav   (K1 i a) = a
   garrays         t = ArraysRpair t (arrays (undefined :: a))
-  -- gflavour          = flavour (undefined :: a)
   gfromArr (K1 x) t = (t, fromArr x)
   gtoArr   (t, x)   = (t, K1 (toArr x))
 
 instance (GArrays a, GArrays b) => GArrays (a :*: b) where
   type GArrRepr t (a :*: b) = GArrRepr (GArrRepr t a) b
-  -- type GArrFlav   (a :*: b) = GArrRepr () (a :*: b)
   garrays            = garrays @b . garrays @a
-  -- gflavour           = ArraysFtuple
   gfromArr (a :*: b) = gfromArr b . gfromArr a
   gtoArr t =
-    let
-      (t1, b) = gtoArr t
-      (t2, a) = gtoArr t1
+    let (t1, b) = gtoArr t
+        (t2, a) = gtoArr t1
     in
-      (t2, a :*: b)
+    (t2, a :*: b)
 
-
-instance Arrays ()
 
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
   type ArrRepr (Array sh e) = Array sh e
   arrays _      = ArraysRarray
-  --
   toArr         = id
   fromArr       = id
 
+instance Arrays ()
 instance (Arrays a, Arrays b) => Arrays (a, b)
 instance (Arrays a, Arrays b, Arrays c) => Arrays (a, b, c)
 instance (Arrays a, Arrays b, Arrays c, Arrays d) => Arrays (a, b, c, d)
@@ -708,41 +707,22 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
 
+-- Array type reification
+--
+data ArraysR arrs where
+  ArraysRunit  ::                                   ArraysR ()
+  ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
+  ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
+
+-- data ArraysFlavour arrs where
+--   ArraysFunit  ::                                          ArraysFlavour ()
+--   ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
+--   ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
+
 -- {-# RULES
 -- "fromArr/toArr" forall a. fromArr (toArr a) = a
 -- "toArr/fromArr" forall a. toArr (fromArr a) = a
 -- #-}
-
-
--- Tuple representation
--- --------------------
-
--- |The tuple representation is equivalent to the product representation.
---
-type TupleRepr a = ProdRepr a
-
--- |We represent tuples as heterogeneous lists, typed by a type list.
---
-data Tuple c t where
-  NilTup  ::                              Tuple c ()
-  SnocTup :: Elt t => Tuple c s -> c t -> Tuple c (s, t)
-
--- TLM: It is irritating that we need a separate data type for tuples of scalars
---   vs. arrays, purely to carry the class constraint.
---
--- | Tuples of Arrays.  Note that this carries the `Arrays` class
---   constraint rather than `Elt` in the case of tuples of scalars.
---
-data Atuple c t where
-  NilAtup  ::                                  Atuple c ()
-  SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
-
--- |Tuple reification
---
-type TupleR a = ProdR Elt a
-
-tuple :: IsTuple tup => {- dummy -} tup -> TupleR (TupleRepr tup)
-tuple = prod (Proxy :: Proxy Elt)
 
 
 -- | Dense, regular, multi-dimensional arrays.
@@ -1271,3 +1251,4 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
+
