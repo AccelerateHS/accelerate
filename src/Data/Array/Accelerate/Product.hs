@@ -22,10 +22,10 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- Our representation of products are heterogenous snoc lists, which are typed by
--- type lists, where '()' and '(,)' are type-level nil and snoc, respectively.
--- The components may only be drawn from types that can be used as array
--- elements.
+-- Our representation of products are heterogenous snoc lists, which are typed
+-- by type lists, where '()' and '(,)' are type-level nil and snoc,
+-- respectively. The components may only be drawn from types that can be used as
+-- array elements.
 --
 
 module Data.Array.Accelerate.Product (
@@ -40,7 +40,7 @@ import Data.Array.Accelerate.Type
 import GHC.Generics
 
 
--- |Type-safe projection indices for tuples.
+-- | Type-safe projection indices for tuples.
 --
 -- NB: We index tuples by starting to count from the *right*!
 --
@@ -48,7 +48,7 @@ data TupleIdx t e where
   ZeroTupIdx ::                 TupleIdx (t, s) s
   SuccTupIdx :: TupleIdx t e -> TupleIdx (t, s) e
 
--- |Product reification
+-- | Product reification
 --
 data ProdR cst t where
   ProdRunit   :: ProdR cst ()
@@ -61,25 +61,25 @@ data ProdR cst t where
 --
 class IsProduct cst tup where
   type ProdRepr tup
+  type ProdRepr tup = GProdRepr () (Rep tup)
+
   fromProd :: proxy cst -> tup -> ProdRepr tup
   toProd   :: proxy cst -> ProdRepr tup -> tup
   prod     :: proxy cst -> {- dummy -} tup -> ProdR cst (ProdRepr tup)
 
-  type ProdRepr tup = GProdRepr () (Rep tup)
-
   default fromProd
-    :: (Generic tup)
+    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
     => proxy cst -> tup -> ProdRepr tup
-  fromProd = undefined
+  fromProd _ = gfromProd @cst @(Rep tup) () . from
 
   default toProd
-    :: (Generic tup)
+    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
     => proxy cst -> ProdRepr tup -> tup
-  toProd = undefined
+  toProd _ = to . snd . gtoProd @cst @(Rep tup) @()
 
   default prod
     :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
-    => proxy cst -> {- dummy -} tup -> ProdR cst (ProdRepr tup)
+    => proxy cst -> tup -> ProdR cst (ProdRepr tup)
   prod _ _ = gprod @cst @(Rep tup) ProdRunit
 
 
