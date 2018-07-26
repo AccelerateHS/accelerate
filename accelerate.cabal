@@ -358,6 +358,7 @@ Library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
+        Data.Array.Accelerate.Constructor
         Data.Array.Accelerate.Debug.Flags
         Data.Array.Accelerate.Debug.Monitoring
         Data.Array.Accelerate.Debug.Stats
@@ -514,12 +515,12 @@ Library
 
   if impl(ghc == 7.*)
     ghc-options:
-        -fcontext-stack=35
+        -fcontext-stack=50
 
   if impl(ghc >= 8.0)
     ghc-options:
         -Wcompat
-        -freduction-depth=35
+        -freduction-depth=50
 
   if impl(ghc < 7.10)
     build-depends:

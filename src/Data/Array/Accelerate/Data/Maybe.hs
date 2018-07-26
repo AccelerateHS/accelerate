@@ -145,9 +145,8 @@ tag :: Elt a => Exp (Maybe a) -> Exp Word8
 tag x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
 
 
-type instance EltRepr (Maybe a) = TupleRepr (Word8, EltRepr a)
-
 instance Elt a => Elt (Maybe a) where
+  type EltRepr (Maybe a) = TupleRepr (Word8, EltRepr a)
   eltType          = eltType @(Word8,a)
   toElt (((),0),_) = Nothing
   toElt (_     ,x) = Just (toElt x)

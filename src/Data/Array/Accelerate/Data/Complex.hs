@@ -61,33 +61,33 @@ import qualified Prelude                                            as P
 -- specific types (not for any type 'a') as we can only have vectors of
 -- primitive type.
 --
-type instance EltRepr (Complex Half)    = V2 Half
-type instance EltRepr (Complex Float)   = V2 Float
-type instance EltRepr (Complex Double)  = V2 Double
-type instance EltRepr (Complex CFloat)  = V2 CFloat
-type instance EltRepr (Complex CDouble) = V2 CDouble
 
 instance Elt (Complex Half) where
+  type EltRepr (Complex Half) = V2 Half
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex Float) where
+  type EltRepr (Complex Float) = V2 Float
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex Double) where
+  type EltRepr (Complex Double) = V2 Double
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex CFloat) where
+  type EltRepr (Complex CFloat) = V2 CFloat
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex CDouble) where
+  type EltRepr (Complex CDouble) = V2 CDouble
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i

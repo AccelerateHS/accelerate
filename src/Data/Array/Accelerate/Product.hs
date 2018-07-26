@@ -1,11 +1,15 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DefaultSignatures     #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Product
@@ -31,6 +35,8 @@ module Data.Array.Accelerate.Product (
 
 ) where
 
+import GHC.Generics
+
 
 -- | Type-safe projection indices for tuples.
 --
@@ -54,9 +60,63 @@ data ProdR cst t where
 --
 class IsProduct cst tup where
   type ProdRepr tup
+  type ProdRepr tup = GProdRepr () (Rep tup)
+  --
   fromProd :: tup -> ProdRepr tup
   toProd   :: ProdRepr tup -> tup
   prod     :: ProdR cst (ProdRepr tup)
+
+  default fromProd
+    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
+    => tup
+    -> ProdRepr tup
+  fromProd = gfromProd @cst @(Rep tup) () . from
+
+  default toProd
+    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
+    => ProdRepr tup
+    -> tup
+  toProd = to . snd . gtoProd @cst @(Rep tup) @()
+
+  default prod
+    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
+    => ProdR cst (ProdRepr tup)
+  prod = gprod @cst @(Rep tup) ProdRunit
+
+
+class GIsProduct cst (f :: * -> *) where
+  type GProdRepr t f
+  gfromProd :: t -> f a -> GProdRepr t f
+  gtoProd   :: GProdRepr t f -> (t, f a)
+  gprod     :: ProdR cst t -> ProdR cst (GProdRepr t f)
+
+instance GIsProduct cst U1 where
+  type GProdRepr t U1 = t
+  gfromProd t U1 = t
+  gtoProd   t    = (t, U1)
+  gprod     t    = t
+
+instance GIsProduct cst a => GIsProduct cst (M1 i c a) where
+  type GProdRepr t (M1 i c a) = GProdRepr t a
+  gfromProd t (M1 x) = gfromProd @cst t x
+  gtoProd         x  = let (t, x1) = gtoProd @cst x in (t, M1 x1)
+  gprod              = gprod @cst @a
+
+instance cst a => GIsProduct cst (K1 i a) where
+  type GProdRepr t (K1 i a) = (t, a)
+  gfromProd t (K1 x) = (t, x)
+  gtoProd     (t, x) = (t, K1 x)
+  gprod     t        = ProdRsnoc t
+
+instance (GIsProduct cst a, GIsProduct cst b) => GIsProduct cst (a :*: b) where
+  type GProdRepr t (a :*: b) = GProdRepr (GProdRepr t a) b
+  gfromProd t (a :*: b) = gfromProd @cst (gfromProd @cst t a) b
+  gtoProd t =
+    let (t1, b) = gtoProd @cst t
+        (t2, a) = gtoProd @cst t1
+    in
+    (t2, a :*: b)
+  gprod t = gprod @cst @b (gprod @cst @a t)
 
 instance IsProduct cst () where
   type ProdRepr ()   = ()
