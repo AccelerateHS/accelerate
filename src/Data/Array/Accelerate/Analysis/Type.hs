@@ -25,10 +25,16 @@
 
 module Data.Array.Accelerate.Analysis.Type (
 
-  -- * Query AST types
-  AccType, arrayType, sizeOf,
+  AccType, arrayType,
   accType, expType, delayedAccType, delayedExpType,
-  preAccType, preExpType
+  preAccType, preExpType,
+
+  sizeOf,
+  sizeOfScalarType,
+  sizeOfSingleType,
+  sizeOfVectorType,
+  sizeOfNumType,
+  sizeOfNonNumType,
 
 ) where
 

@@ -14,7 +14,6 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ <= 708
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif
@@ -76,6 +75,7 @@ import qualified Data.Vector.Unboxed                            as U
 -- friends
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Orphans                            ()
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
@@ -989,11 +989,7 @@ instance NFData (Array sh e) where
       go ArrayEltRcchar        (AD_CChar ua)   = rnf ua
       go ArrayEltRcschar       (AD_CSChar ua)  = rnf ua
       go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
-      go (ArrayEltRvec2 r)     (AD_V2 a)       = go r a `seq` ()
-      go (ArrayEltRvec3 r)     (AD_V3 a)       = go r a `seq` ()
-      go (ArrayEltRvec4 r)     (AD_V4 a)       = go r a `seq` ()
-      go (ArrayEltRvec8 r)     (AD_V8 a)       = go r a `seq` ()
-      go (ArrayEltRvec16 r)    (AD_V16 a)      = go r a `seq` ()
+      go (ArrayEltRvec r)      (AD_Vec a)      = go r a `seq` ()
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 
 
@@ -1361,10 +1357,4 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
-
-
--- | Orphans
---
-deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show h, Show i, Show j, Show k, Show l, Show m, Show n, Show o, Show p)
-  => Show (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 

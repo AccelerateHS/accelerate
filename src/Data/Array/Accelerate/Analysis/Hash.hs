@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -44,8 +45,8 @@ import Crypto.Hash
 import Data.Bits
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
+import Data.ByteString.Short.Internal                               ( ShortByteString(..) )
 import Data.Monoid
-import Foreign.C.Types
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName                                        ( hashStableName, makeStableName )
 import Prelude                                                      hiding ( exp )
@@ -333,17 +334,11 @@ encodeSingleConst (NonNumSingleType t) = encodeNonNumConst t
 
 {-# INLINE encodeVectorConst #-}
 encodeVectorConst :: VectorType t -> t -> Builder
-encodeVectorConst (Vector2Type t) (V2 a b)     = intHost $(hashQ "V2") <> encodeSingleConst t a <> encodeSingleConst t b
-encodeVectorConst (Vector3Type t) (V3 a b c)   = intHost $(hashQ "V3") <> encodeSingleConst t a <> encodeSingleConst t b <> encodeSingleConst t c
-encodeVectorConst (Vector4Type t) (V4 a b c d) = intHost $(hashQ "V4") <> encodeSingleConst t a <> encodeSingleConst t b <> encodeSingleConst t c <> encodeSingleConst t d
-encodeVectorConst (Vector8Type t) (V8 a b c d e f g h) =
-  intHost $(hashQ "V8") <> encodeSingleConst t a <> encodeSingleConst t b <> encodeSingleConst t c <> encodeSingleConst t d
-                        <> encodeSingleConst t e <> encodeSingleConst t f <> encodeSingleConst t g <> encodeSingleConst t h
-encodeVectorConst (Vector16Type t) (V16 a b c d e f g h i j k l m n o p) =
-  intHost $(hashQ "V16") <> encodeSingleConst t a <> encodeSingleConst t b <> encodeSingleConst t c <> encodeSingleConst t d
-                         <> encodeSingleConst t e <> encodeSingleConst t f <> encodeSingleConst t g <> encodeSingleConst t h
-                         <> encodeSingleConst t i <> encodeSingleConst t j <> encodeSingleConst t k <> encodeSingleConst t l
-                         <> encodeSingleConst t m <> encodeSingleConst t n <> encodeSingleConst t o <> encodeSingleConst t p
+encodeVectorConst (Vector2Type t)  (Vec ba#) = intHost $(hashQ "V2")  <> encodeSingleType t <> shortByteString (SBS ba#)
+encodeVectorConst (Vector3Type t)  (Vec ba#) = intHost $(hashQ "V3")  <> encodeSingleType t <> shortByteString (SBS ba#)
+encodeVectorConst (Vector4Type t)  (Vec ba#) = intHost $(hashQ "V4")  <> encodeSingleType t <> shortByteString (SBS ba#)
+encodeVectorConst (Vector8Type t)  (Vec ba#) = intHost $(hashQ "V8")  <> encodeSingleType t <> shortByteString (SBS ba#)
+encodeVectorConst (Vector16Type t) (Vec ba#) = intHost $(hashQ "V16") <> encodeSingleType t <> shortByteString (SBS ba#)
 
 {-# INLINE encodeNonNumConst #-}
 encodeNonNumConst :: NonNumType t -> t -> Builder

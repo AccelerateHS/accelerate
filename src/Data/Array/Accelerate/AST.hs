@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MagicHash             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes           #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -120,20 +121,28 @@ module Data.Array.Accelerate.AST (
 
 --standard library
 import Control.DeepSeq
+import Control.Monad.Primitive
+import Control.Monad.ST
 import Data.List
+import Data.Primitive.ByteArray
 import Data.Typeable
 import Foreign.ForeignPtr
 import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
-import GHC.Ptr                                                      ( Ptr(..) )
 import Language.Haskell.TH                                          ( Q, TExp )
 import qualified Language.Haskell.TH                                as TH
 import qualified Language.Haskell.TH.Syntax                         as TH
 #if __GLASGOW_HASKELL__ <= 708
 import Instances.TH.Lift                                            () -- Int8, Int16...
 #endif
+
+import GHC.Base                                                     ( isTrue# )
+import GHC.Int                                                      ( Int(..) )
+import GHC.Prim                                                     ( (<#), (+#), indexWord8Array#, sizeofByteArray# )
+import GHC.Ptr                                                      ( Ptr(..) )
+import GHC.Word                                                     ( Word8(..) )
 
 -- friends
 import Data.Array.Accelerate.Array.Data
@@ -1619,11 +1628,7 @@ liftArray (Array sh adata) =
     go ArrayEltRcchar        (AD_CChar ua)   = [|| AD_CChar $$(arr ua) ||]
     go ArrayEltRcschar       (AD_CSChar ua)  = [|| AD_CSChar $$(arr ua) ||]
     go ArrayEltRcuchar       (AD_CUChar ua)  = [|| AD_CUChar $$(arr ua) ||]
-    go (ArrayEltRvec2 r)     (AD_V2 a)       = [|| AD_V2 $$(go r a) ||]
-    go (ArrayEltRvec3 r)     (AD_V3 a)       = [|| AD_V3 $$(go r a) ||]
-    go (ArrayEltRvec4 r)     (AD_V4 a)       = [|| AD_V4 $$(go r a) ||]
-    go (ArrayEltRvec8 r)     (AD_V8 a)       = [|| AD_V8 $$(go r a) ||]
-    go (ArrayEltRvec16 r)    (AD_V16 a)      = [|| AD_V16 $$(go r a) ||]
+    go (ArrayEltRvec r)      (AD_Vec a)      = [|| AD_Vec $$(go r a) ||]
     go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = [|| AD_Pair $$(go r1 a1) $$(go r2 a2) ||]
 
 
@@ -1730,17 +1735,35 @@ liftSingle (NumSingleType t)    x = liftNum t x
 liftSingle (NonNumSingleType t) x = liftNonNum t x
 
 liftVector :: VectorType v -> v -> Q (TExp v)
-liftVector (Vector2Type t) (V2 a b)     = [|| V2 $$(liftSingle t a) $$(liftSingle t b) ||]
-liftVector (Vector3Type t) (V3 a b c)   = [|| V3 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) ||]
-liftVector (Vector4Type t) (V4 a b c d) = [|| V4 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d) ||]
-liftVector (Vector8Type t) (V8 a b c d e f g h) =
-  [|| V8 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d)
-         $$(liftSingle t e) $$(liftSingle t f) $$(liftSingle t g) $$(liftSingle t h) ||]
-liftVector (Vector16Type t) (V16 a b c d e f g h i j k l m n o p) =
-  [|| V16 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d)
-          $$(liftSingle t e) $$(liftSingle t f) $$(liftSingle t g) $$(liftSingle t h)
-          $$(liftSingle t i) $$(liftSingle t j) $$(liftSingle t k) $$(liftSingle t l)
-          $$(liftSingle t m) $$(liftSingle t n) $$(liftSingle t o) $$(liftSingle t p) ||]
+liftVector Vector2Type{}  x = liftVec x
+liftVector Vector3Type{}  x = liftVec x
+liftVector Vector4Type{}  x = liftVec x
+liftVector Vector8Type{}  x = liftVec x
+liftVector Vector16Type{} x = liftVec x
+
+-- O(n) at runtime to copy from the Addr# to the ByteArray#. We should be able
+-- to do this without copying, but I don't think the definition of ByteArray# is
+-- exported (or it is deeply magical).
+--
+liftVec :: Vec n a -> Q (TExp (Vec n a))
+liftVec (Vec ba#)
+  = TH.unsafeTExpCoerce
+  $ [| runST $ do
+          let I# n'# = n  -- hack
+          mba@(MutableByteArray mba#) <- newByteArray n
+          primitive_ (copyAddrToByteArray# $(TH.litE (TH.StringPrimL bytes)) mba# 0# n'#)
+          ByteArray ba'# <- unsafeFreezeByteArray mba
+          return $ Vec ba'#
+     |]
+  where
+      bytes :: [Word8]
+      bytes = go 0#
+        where
+          go i# | isTrue# (i# <# n#) = W8# (indexWord8Array# ba# i#) : go (i# +# 1#)
+                | otherwise          = []
+
+      n# = sizeofByteArray# ba#
+      n  = I# n#
 
 liftNum :: NumType t -> t -> Q (TExp t)
 liftNum (IntegralNumType t) x = liftIntegral t x

@@ -1,13 +1,23 @@
-{-# LANGUAGE ConstraintKinds      #-}
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE DeriveDataTypeable   #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE TemplateHaskell      #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE RoleAnnotations     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
+#if __GLASGOW_HASKELL__ <= 800
+{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Type
 -- Copyright   : [2008..2018] Manuel M T Chakravarty, Gabriele Keller
@@ -67,29 +77,36 @@
 --
 
 module Data.Array.Accelerate.Type (
+
   Half(..), Float, Double, Char, Bool(..),
   module Data.Int,
   module Data.Word,
   module Foreign.C.Types,
-  module Data.Array.Accelerate.Type
-) where
+  module Data.Array.Accelerate.Type,
 
+) where
 
 import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
 
--- standard libraries
+import Control.Monad.ST
 import Data.Bits
 import Data.Int
+import Data.Primitive.ByteArray
+import Data.Primitive.Types
 import Data.Type.Equality
 import Data.Typeable
 import Data.Word
-import GHC.TypeLits
+import Foreign.C.Types
+import Foreign.C.Types                                              ( CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong, CFloat, CDouble )
+import Foreign.Storable                                             ( Storable )
 import Language.Haskell.TH
 import Numeric.Half
+import Text.PrettyPrint.ANSI.Leijen
 import Text.Printf
-import Foreign.Storable
-import Foreign.C.Types
-    (CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong, CFloat, CDouble)
+
+import GHC.Prim
+import GHC.TypeLits
+import GHC.Types
 
 
 -- Scalar types
@@ -172,8 +189,8 @@ data BoundedType a where
 -- | All scalar element types implement Eq & Ord
 --
 data ScalarType a where
-  SingleScalarType :: SingleType a     -> ScalarType a
-  VectorScalarType :: VectorType (v a) -> ScalarType (v a)
+  SingleScalarType :: SingleType a         -> ScalarType a
+  VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
 
 data SingleType a where
   NumSingleType    :: NumType a    -> SingleType a
@@ -190,38 +207,38 @@ data VectorType v where
 --
 
 instance Show (IntegralType a) where
-  show (TypeInt _)     = "Int"
-  show (TypeInt8 _)    = "Int8"
-  show (TypeInt16 _)   = "Int16"
-  show (TypeInt32 _)   = "Int32"
-  show (TypeInt64 _)   = "Int64"
-  show (TypeWord _)    = "Word"
-  show (TypeWord8 _)   = "Word8"
-  show (TypeWord16 _)  = "Word16"
-  show (TypeWord32 _)  = "Word32"
-  show (TypeWord64 _)  = "Word64"
-  show (TypeCShort _)  = "CShort"
-  show (TypeCUShort _) = "CUShort"
-  show (TypeCInt _)    = "CInt"
-  show (TypeCUInt _)   = "CUInt"
-  show (TypeCLong _)   = "CLong"
-  show (TypeCULong _)  = "CULong"
-  show (TypeCLLong _)  = "CLLong"
-  show (TypeCULLong _) = "CULLong"
+  show TypeInt{}     = "Int"
+  show TypeInt8{}    = "Int8"
+  show TypeInt16{}   = "Int16"
+  show TypeInt32{}   = "Int32"
+  show TypeInt64{}   = "Int64"
+  show TypeWord{}    = "Word"
+  show TypeWord8{}   = "Word8"
+  show TypeWord16{}  = "Word16"
+  show TypeWord32{}  = "Word32"
+  show TypeWord64{}  = "Word64"
+  show TypeCShort{}  = "CShort"
+  show TypeCUShort{} = "CUShort"
+  show TypeCInt{}    = "CInt"
+  show TypeCUInt{}   = "CUInt"
+  show TypeCLong{}   = "CLong"
+  show TypeCULong{}  = "CULong"
+  show TypeCLLong{}  = "CLLong"
+  show TypeCULLong{} = "CULLong"
 
 instance Show (FloatingType a) where
-  show (TypeHalf _)    = "Half"
-  show (TypeFloat _)   = "Float"
-  show (TypeDouble _)  = "Double"
-  show (TypeCFloat _)  = "CFloat"
-  show (TypeCDouble _) = "CDouble"
+  show TypeHalf{}    = "Half"
+  show TypeFloat{}   = "Float"
+  show TypeDouble{}  = "Double"
+  show TypeCFloat{}  = "CFloat"
+  show TypeCDouble{} = "CDouble"
 
 instance Show (NonNumType a) where
-  show (TypeBool _)   = "Bool"
-  show (TypeChar _)   = "Char"
-  show (TypeCChar _)  = "CChar"
-  show (TypeCSChar _) = "CSChar"
-  show (TypeCUChar _) = "CUChar"
+  show TypeBool{}   = "Bool"
+  show TypeChar{}   = "Char"
+  show TypeCChar{}  = "CChar"
+  show TypeCSChar{} = "CSChar"
+  show TypeCUChar{} = "CUChar"
 
 instance Show (NumType a) where
   show (IntegralNumType ty) = show ty
@@ -362,40 +379,204 @@ type family BitSize a :: Nat
 -- SIMD vector types
 -- -----------------
 
-data V2 a  = V2 !a !a
-  deriving (Typeable, Eq, Ord)
+-- Note: [Representing SIMD vector types]
+--
+-- A simple polymorphic representation of SIMD types such as the following:
+--
+-- > data V2 a = V2 !a !a
+--
+-- is not able to unpack the values into the constructor, meaning that 'V2' is
+-- storing pointers to (strict) values on the heap, which is a very inefficient
+-- representation.
+--
+-- We might try defining a data family instead so that we can get efficient
+-- unboxed representations, and even make use of the unlifted SIMD types GHC
+-- knows about:
+--
+-- > data family V2 a :: *
+-- > data instance V2 Float    = V2_Float Float# Float#   -- reasonable
+-- > data instance V2 Double   = V2_Double DoubleX2#      -- built in!
+--
+-- However, this runs into the problem that GHC stores all values as word sized
+-- entities:
+--
+-- > data instance V2 Int      = V2_Int Int# Int#
+-- > data instance V2 Int8     = V2_Int8 Int8# Int8#      -- Int8# does not exist; requires a full Int#
+--
+-- which, again, is very memory inefficient.
+--
+-- So, as a last resort, we'll just use a ByteArray# to ensure an efficient
+-- packed representation.
+--
+data Vec (n::Nat) a = Vec ByteArray#
+  deriving Typeable
 
-data V3 a  = V3 !a !a !a
-  deriving (Typeable, Eq, Ord)
+type role Vec nominal representational
 
-data V4 a  = V4 !a !a !a !a
-  deriving (Typeable, Eq, Ord)
+instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
+  show (Vec ba#) = vec (go 0#)
+    where
+      vec :: [a] -> String
+      vec = show . encloseSep langle rangle comma . map (text . show)
+      --
+      go :: Int# -> [a]
+      go i# | isTrue# (i# <# n#)  = indexByteArray# ba# i# : go (i# +# 1#)
+            | otherwise           = []
+      --
+      !(I# n#)  = fromIntegral (natVal' (proxy# :: Proxy# n))
 
-data V8 a  = V8 !a !a !a !a !a !a !a !a
-  deriving (Typeable, Eq, Ord)
+instance Eq (Vec n a) where
+  Vec ba1# == Vec ba2# = ByteArray ba1# == ByteArray ba2#
 
-data V16 a = V16 !a !a !a !a !a !a !a !a !a !a !a !a !a !a !a !a
-  deriving (Typeable, Eq, Ord)
 
-instance Show a => Show (V2 a) where
-  show (V2 a b) = printf "<%s,%s>" (show a) (show b)
+-- Type synonyms for common SIMD vector types
+--
+type V2 a  = Vec 2 a
+type V3 a  = Vec 3 a  -- dubious?
+type V4 a  = Vec 4 a
+type V8 a  = Vec 8 a
+type V16 a = Vec 16 a
 
-instance Show a => Show (V3 a) where
-  show (V3 a b c) = printf "<%s,%s,%s>" (show a) (show b) (show c)
+pattern V2 :: Prim a => a -> a -> V2 a
+pattern V2 a b <- (unpackV2 -> (a,b))
+  where V2 = packV2
+{-# COMPLETE V2 #-}
 
-instance Show a => Show (V4 a) where
-  show (V4 a b c d) = printf "<%s,%s,%s,%s>" (show a) (show b) (show c) (show d)
+pattern V3 :: Prim a => a -> a -> a -> V3 a
+pattern V3 a b c <- (unpackV3 -> (a,b,c))
+  where V3 = packV3
+{-# COMPLETE V3 #-}
 
-instance Show a => Show (V8 a) where
-  show (V8 a b c d e f g h) =
-    printf "<%s,%s,%s,%s,%s,%s,%s,%s>"
-      (show a) (show b) (show c) (show d) (show e) (show f) (show g) (show h)
+pattern V4 :: Prim a => a -> a -> a -> a -> V4 a
+pattern V4 a b c d <- (unpackV4 -> (a,b,c,d))
+  where V4 = packV4
+{-# COMPLETE V4 #-}
 
-instance Show a => Show (V16 a) where
-  show (V16 a b c d e f g h i j k l m n o p) =
-    printf "<%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s>"
-      (show a) (show b) (show c) (show d) (show e) (show f) (show g) (show h)
-      (show i) (show j) (show k) (show l) (show m) (show n) (show o) (show p)
+pattern V8 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> V8 a
+pattern V8 a b c d e f g h <- (unpackV8 -> (a,b,c,d,e,f,g,h))
+  where V8 = packV8
+{-# COMPLETE V8 #-}
+
+pattern V16 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> V16 a
+pattern V16 a b c d e f g h i j k l m n o p <- (unpackV16 -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p))
+  where V16 = packV16
+{-# COMPLETE V16 #-}
+
+unpackV2 :: Prim a => V2 a -> (a,a)
+unpackV2 (Vec ba#) =
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  )
+
+unpackV3 :: Prim a => V3 a -> (a,a,a)
+unpackV3 (Vec ba#) =
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  )
+
+unpackV4 :: Prim a => V4 a -> (a,a,a,a)
+unpackV4 (Vec ba#) =
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  , indexByteArray# ba# 3#
+  )
+
+unpackV8 :: Prim a => V8 a -> (a,a,a,a,a,a,a,a)
+unpackV8 (Vec ba#) =
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  , indexByteArray# ba# 3#
+  , indexByteArray# ba# 4#
+  , indexByteArray# ba# 5#
+  , indexByteArray# ba# 6#
+  , indexByteArray# ba# 7#
+  )
+
+unpackV16 :: Prim a => V16 a -> (a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a)
+unpackV16 (Vec ba#) =
+  ( indexByteArray# ba# 0#
+  , indexByteArray# ba# 1#
+  , indexByteArray# ba# 2#
+  , indexByteArray# ba# 3#
+  , indexByteArray# ba# 4#
+  , indexByteArray# ba# 5#
+  , indexByteArray# ba# 6#
+  , indexByteArray# ba# 7#
+  , indexByteArray# ba# 8#
+  , indexByteArray# ba# 9#
+  , indexByteArray# ba# 10#
+  , indexByteArray# ba# 11#
+  , indexByteArray# ba# 12#
+  , indexByteArray# ba# 13#
+  , indexByteArray# ba# 14#
+  , indexByteArray# ba# 15#
+  )
+
+packV2 :: Prim a => a -> a -> V2 a
+packV2 a b = runST $ do
+  mba <- newByteArray (2 * sizeOf a)
+  writeByteArray mba 0 a
+  writeByteArray mba 1 b
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
+
+packV3 :: Prim a => a -> a -> a -> V3 a
+packV3 a b c = runST $ do
+  mba <- newByteArray (3 * sizeOf a)
+  writeByteArray mba 0 a
+  writeByteArray mba 1 b
+  writeByteArray mba 2 c
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
+
+packV4 :: Prim a => a -> a -> a -> a -> V4 a
+packV4 a b c d = runST $ do
+  mba <- newByteArray (4 * sizeOf a)
+  writeByteArray mba 0 a
+  writeByteArray mba 1 b
+  writeByteArray mba 2 c
+  writeByteArray mba 3 d
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
+
+packV8 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> V8 a
+packV8 a b c d e f g h = runST $ do
+  mba <- newByteArray (8 * sizeOf a)
+  writeByteArray mba 0 a
+  writeByteArray mba 1 b
+  writeByteArray mba 2 c
+  writeByteArray mba 3 d
+  writeByteArray mba 4 e
+  writeByteArray mba 5 f
+  writeByteArray mba 6 g
+  writeByteArray mba 7 h
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
+
+packV16 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> V16 a
+packV16 a b c d e f g h i j k l m n o p = runST $ do
+  mba <- newByteArray (16 * sizeOf a)
+  writeByteArray mba 0 a
+  writeByteArray mba 1 b
+  writeByteArray mba 2 c
+  writeByteArray mba 3 d
+  writeByteArray mba 4 e
+  writeByteArray mba 5 f
+  writeByteArray mba 6 g
+  writeByteArray mba 7 h
+  writeByteArray mba 8 i
+  writeByteArray mba 9 j
+  writeByteArray mba 10 k
+  writeByteArray mba 11 l
+  writeByteArray mba 12 m
+  writeByteArray mba 13 n
+  writeByteArray mba 14 o
+  writeByteArray mba 15 p
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
 
 
 -- Instances

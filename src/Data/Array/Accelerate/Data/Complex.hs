@@ -93,10 +93,10 @@ instance Elt (Complex CDouble) where
   fromElt (r :+ i) = V2 r i
 
 instance cst a => IsProduct cst (Complex a) where
-  type ProdRepr (Complex a) = ProdRepr (V2 a)
-  fromProd (r :+ i) = fromProd @cst (V2 r i)
-  toProd p          = let (V2 r i) = toProd @cst p in (r :+ i)
-  prod              = prod @cst @(V2 a)
+  type ProdRepr (Complex a) = ProdRepr (a,a)
+  fromProd (r :+ i) = fromProd @cst (r,i)
+  toProd p          = let (r,i) = toProd @cst p in (r :+ i)
+  prod              = prod @cst @(a,a)
 
 instance (Lift Exp a, Elt (Plain a), Elt (Complex (Plain a))) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)

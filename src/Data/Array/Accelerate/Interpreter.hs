@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -56,26 +57,27 @@ module Data.Array.Accelerate.Interpreter (
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
+import Control.Monad.ST
 import Data.Bits
 import Data.Char                                                    ( chr, ord )
-import Data.Constraint
+import Data.Primitive.ByteArray
+import Data.Primitive.Types
 import Data.Typeable
 import Foreign.C.Types
-import Foreign.ForeignPtr
+import GHC.TypeLits
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
+import Unsafe.Coerce
 import Prelude                                                      hiding ( sum )
 
 -- friends
 import Data.Array.Accelerate.AST                                    hiding ( Boundary, PreBoundary(..) )
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Analysis.Type
+import Data.Array.Accelerate.Analysis.Type                          ( sizeOfScalarType, sizeOfSingleType )
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Lifetime
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
@@ -1045,11 +1047,17 @@ evalUndef = toElt (undef (eltType @a))
     single (NonNumSingleType t) = nonnum t
 
     vector :: VectorType t -> t
-    vector (Vector2Type t)  = let x = single t in V2 x x
-    vector (Vector3Type t)  = let x = single t in V3 x x x
-    vector (Vector4Type t)  = let x = single t in V4 x x x x
-    vector (Vector8Type t)  = let x = single t in V8 x x x x x x x x
-    vector (Vector16Type t) = let x = single t in V16 x x x x x x x x x x x x x x x x
+    vector (Vector2Type t)  = vec (2 * sizeOfSingleType t)
+    vector (Vector3Type t)  = vec (3 * sizeOfSingleType t)
+    vector (Vector4Type t)  = vec (4 * sizeOfSingleType t)
+    vector (Vector8Type t)  = vec (8 * sizeOfSingleType t)
+    vector (Vector16Type t) = vec (16 * sizeOfSingleType t)
+
+    vec :: KnownNat n => Int -> Vec n t
+    vec n = runST $ do
+      mba           <- newByteArray n
+      ByteArray ba# <- unsafeFreezeByteArray mba
+      return $ Vec ba#
 
     num :: NumType t -> t
     num (IntegralNumType t) | IntegralDict <- integralDict t = 0
@@ -1071,10 +1079,13 @@ evalCoerce = toElt . go (eltType @a) (eltType @b) . fromElt
   where
     go :: TupleType s -> TupleType t -> s -> t
     go TypeRunit        TypeRunit          ()    = ()
-    go (TypeRscalar s)   (TypeRscalar t)   x     = evalCoerceScalar s t x
     go (TypeRpair s1 s2) (TypeRpair t1 t2) (x,y) = (go s1 t1 x, go s2 t2 y)
+    go (TypeRscalar s)   (TypeRscalar t)   x
+      = $internalCheck "evalCoerce" "sizes not equal" (sizeOfScalarType s == sizeOfScalarType t)
+      $ evalCoerceScalar s t x
     --
     -- newtype wrappers are typically declared similarly to `EltRepr (T a) = ((), EltRepr a)'
+    -- so add some special cases for dealing with redundant parentheses.
     --
     go (TypeRpair TypeRunit s) t@TypeRscalar{}         ((), x) = go s t x
     go s@TypeRscalar{}         (TypeRpair TypeRunit t) x       = ((), go s t x)
@@ -1085,157 +1096,120 @@ evalCoerce = toElt . go (eltType @a) (eltType @b) . fromElt
                   (show (typeOf (undefined::b)))
 
 
--- Coerce a value by writing that data into memory and reading it back at
--- a different type. This seems the most robust way to do it in the presence of
--- packed vector types (which Haskell does not represent in the same way as
--- C due to alignment of the fields, even at specialised UNPACKed types).
+-- Coercion between two scalar types. We require that the size of the source and
+-- destination values are equal (this is not checked at this point).
 --
 evalCoerceScalar :: ScalarType a -> ScalarType b -> a -> b
-evalCoerceScalar ta tb a
-  = $internalCheck "evalCoerce" "sizes not equal" (sizeOf (TypeRscalar ta) == sizeOf (TypeRscalar tb))
-  $ withDict (scalar ta)
-  $ withDict (scalar tb)
-  $ let (adata, _)  = runArrayData $ do
-                        arr <- newArrayData 1
-                        unsafeWriteArrayData arr 0 a
-                        return (arr, undefined)
-        adata'      = fromUA arrayElt (toUA arrayElt adata)
-    in
-    unsafeIndexArrayData adata' 0
+evalCoerceScalar SingleScalarType{}    SingleScalarType{} a = unsafeCoerce a
+evalCoerceScalar VectorScalarType{}    VectorScalarType{} a = unsafeCoerce a  -- or just unpack/repack the (Vec ba#)
+evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
   where
+    vector :: SingleType a -> a -> Vec n b
+    vector (NumSingleType    t) = num t
+    vector (NonNumSingleType t) = nonnum t
 
-    toUA :: ArrayEltR e -> ArrayData e -> UniqueArray ()
-    toUA ArrayEltRint       (AD_Int ua)     = castUniqueArray ua
-    toUA ArrayEltRint8      (AD_Int8 ua)    = castUniqueArray ua
-    toUA ArrayEltRint16     (AD_Int16 ua)   = castUniqueArray ua
-    toUA ArrayEltRint32     (AD_Int32 ua)   = castUniqueArray ua
-    toUA ArrayEltRint64     (AD_Int64 ua)   = castUniqueArray ua
-    toUA ArrayEltRword      (AD_Word ua)    = castUniqueArray ua
-    toUA ArrayEltRword8     (AD_Word8 ua)   = castUniqueArray ua
-    toUA ArrayEltRword16    (AD_Word16 ua)  = castUniqueArray ua
-    toUA ArrayEltRword32    (AD_Word32 ua)  = castUniqueArray ua
-    toUA ArrayEltRword64    (AD_Word64 ua)  = castUniqueArray ua
-    toUA ArrayEltRcshort    (AD_CShort ua)  = castUniqueArray ua
-    toUA ArrayEltRcushort   (AD_CUShort ua) = castUniqueArray ua
-    toUA ArrayEltRcint      (AD_CInt ua)    = castUniqueArray ua
-    toUA ArrayEltRcuint     (AD_CUInt ua)   = castUniqueArray ua
-    toUA ArrayEltRclong     (AD_CLong ua)   = castUniqueArray ua
-    toUA ArrayEltRculong    (AD_CULong ua)  = castUniqueArray ua
-    toUA ArrayEltRcllong    (AD_CLLong ua)  = castUniqueArray ua
-    toUA ArrayEltRcullong   (AD_CULLong ua) = castUniqueArray ua
-    toUA ArrayEltRhalf      (AD_Half ua)    = castUniqueArray ua
-    toUA ArrayEltRfloat     (AD_Float ua)   = castUniqueArray ua
-    toUA ArrayEltRdouble    (AD_Double ua)  = castUniqueArray ua
-    toUA ArrayEltRcfloat    (AD_CFloat ua)  = castUniqueArray ua
-    toUA ArrayEltRcdouble   (AD_CDouble ua) = castUniqueArray ua
-    toUA ArrayEltRbool      (AD_Bool ua)    = castUniqueArray ua
-    toUA ArrayEltRchar      (AD_Char ua)    = castUniqueArray ua
-    toUA ArrayEltRcchar     (AD_CChar ua)   = castUniqueArray ua
-    toUA ArrayEltRcschar    (AD_CSChar ua)  = castUniqueArray ua
-    toUA ArrayEltRcuchar    (AD_CUChar ua)  = castUniqueArray ua
-    toUA (ArrayEltRvec2 r)  (AD_V2 a)       = toUA r a
-    toUA (ArrayEltRvec3 r)  (AD_V3 a)       = toUA r a
-    toUA (ArrayEltRvec4 r)  (AD_V4 a)       = toUA r a
-    toUA (ArrayEltRvec8 r)  (AD_V8 a)       = toUA r a
-    toUA (ArrayEltRvec16 r) (AD_V16 a)      = toUA r a
-    --
-    toUA ArrayEltRunit      _               = error "What sane person could live in this world and not be crazy?"
-    toUA ArrayEltRpair{}    _               = error "  --- Ursula K. Le Guin"
-
-    fromUA :: ArrayEltR e -> UniqueArray () -> ArrayData e
-    fromUA ArrayEltRint       = AD_Int     . castUniqueArray
-    fromUA ArrayEltRint8      = AD_Int8    . castUniqueArray
-    fromUA ArrayEltRint16     = AD_Int16   . castUniqueArray
-    fromUA ArrayEltRint32     = AD_Int32   . castUniqueArray
-    fromUA ArrayEltRint64     = AD_Int64   . castUniqueArray
-    fromUA ArrayEltRword      = AD_Word    . castUniqueArray
-    fromUA ArrayEltRword8     = AD_Word8   . castUniqueArray
-    fromUA ArrayEltRword16    = AD_Word16  . castUniqueArray
-    fromUA ArrayEltRword32    = AD_Word32  . castUniqueArray
-    fromUA ArrayEltRword64    = AD_Word64  . castUniqueArray
-    fromUA ArrayEltRcshort    = AD_CShort  . castUniqueArray
-    fromUA ArrayEltRcushort   = AD_CUShort . castUniqueArray
-    fromUA ArrayEltRcint      = AD_CInt    . castUniqueArray
-    fromUA ArrayEltRcuint     = AD_CUInt   . castUniqueArray
-    fromUA ArrayEltRclong     = AD_CLong   . castUniqueArray
-    fromUA ArrayEltRculong    = AD_CULong  . castUniqueArray
-    fromUA ArrayEltRcllong    = AD_CLLong  . castUniqueArray
-    fromUA ArrayEltRcullong   = AD_CULLong . castUniqueArray
-    fromUA ArrayEltRhalf      = AD_Half    . castUniqueArray
-    fromUA ArrayEltRfloat     = AD_Float   . castUniqueArray
-    fromUA ArrayEltRdouble    = AD_Double  . castUniqueArray
-    fromUA ArrayEltRcfloat    = AD_CFloat  . castUniqueArray
-    fromUA ArrayEltRcdouble   = AD_CDouble . castUniqueArray
-    fromUA ArrayEltRbool      = AD_Bool    . castUniqueArray
-    fromUA ArrayEltRchar      = AD_Char    . castUniqueArray
-    fromUA ArrayEltRcchar     = AD_CChar   . castUniqueArray
-    fromUA ArrayEltRcschar    = AD_CSChar  . castUniqueArray
-    fromUA ArrayEltRcuchar    = AD_CUChar  . castUniqueArray
-    fromUA (ArrayEltRvec2 r)  = AD_V2      . fromUA r
-    fromUA (ArrayEltRvec3 r)  = AD_V3      . fromUA r
-    fromUA (ArrayEltRvec4 r)  = AD_V4      . fromUA r
-    fromUA (ArrayEltRvec8 r)  = AD_V8      . fromUA r
-    fromUA (ArrayEltRvec16 r) = AD_V16     . fromUA r
-    --
-    fromUA ArrayEltRunit      = error "I talk about the gods, I am an atheist. But I am an artist too, and therefore a liar. Distrust everything I say. I am telling the truth."
-    fromUA ArrayEltRpair{}    = error "  --- Ursula K. Le Guin, The Left Hand of Darkness"
-
-    castUniqueArray :: UniqueArray x -> UniqueArray y
-    castUniqueArray (UniqueArray uid (Lifetime r w p)) =
-      UniqueArray uid (Lifetime r w (castForeignPtr p))
-
-    scalar :: ScalarType e -> Dict (ArrayElt e)
-    scalar (SingleScalarType t) = single t
-    scalar (VectorScalarType t) = vector t
-
-    single :: SingleType e -> Dict (ArrayElt e)
-    single (NumSingleType t)    = num t
-    single (NonNumSingleType t) = nonnum t
-
-    vector :: VectorType e -> Dict (ArrayElt e)
-    vector (Vector2Type t)  = withDict (single t) Dict
-    vector (Vector3Type t)  = withDict (single t) Dict
-    vector (Vector4Type t)  = withDict (single t) Dict
-    vector (Vector8Type t)  = withDict (single t) Dict
-    vector (Vector16Type t) = withDict (single t) Dict
-
-    num :: NumType e -> Dict (ArrayElt e)
+    num :: NumType a -> a -> Vec n b
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
 
-    integral :: IntegralType e -> Dict (ArrayElt e)
-    integral TypeInt{}     = Dict
-    integral TypeInt8{}    = Dict
-    integral TypeInt16{}   = Dict
-    integral TypeInt32{}   = Dict
-    integral TypeInt64{}   = Dict
-    integral TypeWord{}    = Dict
-    integral TypeWord8{}   = Dict
-    integral TypeWord16{}  = Dict
-    integral TypeWord32{}  = Dict
-    integral TypeWord64{}  = Dict
-    integral TypeCShort{}  = Dict
-    integral TypeCUShort{} = Dict
-    integral TypeCInt{}    = Dict
-    integral TypeCUInt{}   = Dict
-    integral TypeCLong{}   = Dict
-    integral TypeCULong{}  = Dict
-    integral TypeCLLong{}  = Dict
-    integral TypeCULLong{} = Dict
+    integral :: IntegralType a -> a -> Vec n b
+    integral TypeInt{}     = poke
+    integral TypeInt8{}    = poke
+    integral TypeInt16{}   = poke
+    integral TypeInt32{}   = poke
+    integral TypeInt64{}   = poke
+    integral TypeWord{}    = poke
+    integral TypeWord8{}   = poke
+    integral TypeWord16{}  = poke
+    integral TypeWord32{}  = poke
+    integral TypeWord64{}  = poke
+    integral TypeCShort{}  = poke
+    integral TypeCUShort{} = poke
+    integral TypeCInt{}    = poke
+    integral TypeCUInt{}   = poke
+    integral TypeCLong{}   = poke
+    integral TypeCULong{}  = poke
+    integral TypeCLLong{}  = poke
+    integral TypeCULLong{} = poke
 
-    floating :: FloatingType e -> Dict (ArrayElt e)
-    floating TypeHalf{}    = Dict
-    floating TypeFloat{}   = Dict
-    floating TypeDouble{}  = Dict
-    floating TypeCFloat{}  = Dict
-    floating TypeCDouble{} = Dict
+    floating :: FloatingType a -> a -> Vec n b
+    floating TypeHalf{}    = poke
+    floating TypeFloat{}   = poke
+    floating TypeDouble{}  = poke
+    floating TypeCFloat{}  = poke
+    floating TypeCDouble{} = poke
 
-    nonnum :: NonNumType e -> Dict (ArrayElt e)
-    nonnum TypeBool{}   = Dict
-    nonnum TypeChar{}   = Dict
-    nonnum TypeCChar{}  = Dict
-    nonnum TypeCSChar{} = Dict
-    nonnum TypeCUChar{} = Dict
+    nonnum :: NonNumType a -> a -> Vec n b
+    nonnum TypeBool{}   = bool
+    nonnum TypeChar{}   = poke
+    nonnum TypeCChar{}  = poke
+    nonnum TypeCUChar{} = poke
+    nonnum TypeCSChar{} = poke
+
+    bool :: Bool -> Vec n b
+    bool False = poke (0::Word8)
+    bool True  = poke (1::Word8)
+
+    {-# INLINE poke #-}
+    poke :: forall a b n. Prim a => a -> Vec n b
+    poke x = runST $ do
+      mba <- newByteArray (sizeOf (undefined::a))
+      writeByteArray mba 0 x
+      ByteArray ba# <- unsafeFreezeByteArray mba
+      return $ Vec ba#
+
+evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
+  where
+    scalar :: SingleType b -> Vec n a -> b
+    scalar (NumSingleType    t) = num t
+    scalar (NonNumSingleType t) = nonnum t
+
+    num :: NumType b -> Vec n a -> b
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
+
+    integral :: IntegralType b -> Vec n a -> b
+    integral TypeInt{}     = peek
+    integral TypeInt8{}    = peek
+    integral TypeInt16{}   = peek
+    integral TypeInt32{}   = peek
+    integral TypeInt64{}   = peek
+    integral TypeWord{}    = peek
+    integral TypeWord8{}   = peek
+    integral TypeWord16{}  = peek
+    integral TypeWord32{}  = peek
+    integral TypeWord64{}  = peek
+    integral TypeCShort{}  = peek
+    integral TypeCUShort{} = peek
+    integral TypeCInt{}    = peek
+    integral TypeCUInt{}   = peek
+    integral TypeCLong{}   = peek
+    integral TypeCULong{}  = peek
+    integral TypeCLLong{}  = peek
+    integral TypeCULLong{} = peek
+
+    floating :: FloatingType b -> Vec n a -> b
+    floating TypeHalf{}    = peek
+    floating TypeFloat{}   = peek
+    floating TypeDouble{}  = peek
+    floating TypeCFloat{}  = peek
+    floating TypeCDouble{} = peek
+
+    nonnum :: NonNumType b -> Vec n a -> b
+    nonnum TypeBool{}   = bool
+    nonnum TypeChar{}   = peek
+    nonnum TypeCChar{}  = peek
+    nonnum TypeCUChar{} = peek
+    nonnum TypeCSChar{} = peek
+
+    bool :: Vec n a -> Bool
+    bool v = case peek @Word8 v of
+               0 -> False
+               _ -> True
+
+    {-# INLINE peek #-}
+    peek :: Prim a => Vec n b -> a
+    peek (Vec ba#) = indexByteArray (ByteArray ba#) 0
 
 
 -- Scalar primitives

@@ -7,7 +7,8 @@ packages:
 - '.'
 
 extra-deps:
-- 'half-0.3'
+- half-0.3
+- primitive-0.6.4.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
