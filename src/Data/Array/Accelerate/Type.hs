@@ -189,8 +189,8 @@ data BoundedType a where
 -- | All scalar element types implement Eq & Ord
 --
 data ScalarType a where
-  SingleScalarType :: SingleType a     -> ScalarType a
-  VectorScalarType :: VectorType (v a) -> ScalarType (v a)
+  SingleScalarType :: SingleType a         -> ScalarType a
+  VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
 
 data SingleType a where
   NumSingleType    :: NumType a    -> SingleType a
@@ -207,38 +207,38 @@ data VectorType v where
 --
 
 instance Show (IntegralType a) where
-  show (TypeInt _)     = "Int"
-  show (TypeInt8 _)    = "Int8"
-  show (TypeInt16 _)   = "Int16"
-  show (TypeInt32 _)   = "Int32"
-  show (TypeInt64 _)   = "Int64"
-  show (TypeWord _)    = "Word"
-  show (TypeWord8 _)   = "Word8"
-  show (TypeWord16 _)  = "Word16"
-  show (TypeWord32 _)  = "Word32"
-  show (TypeWord64 _)  = "Word64"
-  show (TypeCShort _)  = "CShort"
-  show (TypeCUShort _) = "CUShort"
-  show (TypeCInt _)    = "CInt"
-  show (TypeCUInt _)   = "CUInt"
-  show (TypeCLong _)   = "CLong"
-  show (TypeCULong _)  = "CULong"
-  show (TypeCLLong _)  = "CLLong"
-  show (TypeCULLong _) = "CULLong"
+  show TypeInt{}     = "Int"
+  show TypeInt8{}    = "Int8"
+  show TypeInt16{}   = "Int16"
+  show TypeInt32{}   = "Int32"
+  show TypeInt64{}   = "Int64"
+  show TypeWord{}    = "Word"
+  show TypeWord8{}   = "Word8"
+  show TypeWord16{}  = "Word16"
+  show TypeWord32{}  = "Word32"
+  show TypeWord64{}  = "Word64"
+  show TypeCShort{}  = "CShort"
+  show TypeCUShort{} = "CUShort"
+  show TypeCInt{}    = "CInt"
+  show TypeCUInt{}   = "CUInt"
+  show TypeCLong{}   = "CLong"
+  show TypeCULong{}  = "CULong"
+  show TypeCLLong{}  = "CLLong"
+  show TypeCULLong{} = "CULLong"
 
 instance Show (FloatingType a) where
-  show (TypeHalf _)    = "Half"
-  show (TypeFloat _)   = "Float"
-  show (TypeDouble _)  = "Double"
-  show (TypeCFloat _)  = "CFloat"
-  show (TypeCDouble _) = "CDouble"
+  show TypeHalf{}    = "Half"
+  show TypeFloat{}   = "Float"
+  show TypeDouble{}  = "Double"
+  show TypeCFloat{}  = "CFloat"
+  show TypeCDouble{} = "CDouble"
 
 instance Show (NonNumType a) where
-  show (TypeBool _)   = "Bool"
-  show (TypeChar _)   = "Char"
-  show (TypeCChar _)  = "CChar"
-  show (TypeCSChar _) = "CSChar"
-  show (TypeCUChar _) = "CUChar"
+  show TypeBool{}   = "Bool"
+  show TypeChar{}   = "Char"
+  show TypeCChar{}  = "CChar"
+  show TypeCSChar{} = "CSChar"
+  show TypeCUChar{} = "CUChar"
 
 instance Show (NumType a) where
   show (IntegralNumType ty) = show ty
