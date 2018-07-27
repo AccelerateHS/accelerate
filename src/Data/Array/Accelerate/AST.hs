@@ -1401,9 +1401,6 @@ rnfNumType (FloatingNumType t) = rnfFloatingType t
 rnfNonNumType :: NonNumType t -> ()
 rnfNonNumType (TypeBool   NonNumDict) = ()
 rnfNonNumType (TypeChar   NonNumDict) = ()
-rnfNonNumType (TypeCChar  NonNumDict) = ()
-rnfNonNumType (TypeCSChar NonNumDict) = ()
-rnfNonNumType (TypeCUChar NonNumDict) = ()
 
 rnfIntegralType :: IntegralType t -> ()
 rnfIntegralType (TypeInt     IntegralDict) = ()
@@ -1416,21 +1413,11 @@ rnfIntegralType (TypeWord8   IntegralDict) = ()
 rnfIntegralType (TypeWord16  IntegralDict) = ()
 rnfIntegralType (TypeWord32  IntegralDict) = ()
 rnfIntegralType (TypeWord64  IntegralDict) = ()
-rnfIntegralType (TypeCShort  IntegralDict) = ()
-rnfIntegralType (TypeCUShort IntegralDict) = ()
-rnfIntegralType (TypeCInt    IntegralDict) = ()
-rnfIntegralType (TypeCUInt   IntegralDict) = ()
-rnfIntegralType (TypeCLong   IntegralDict) = ()
-rnfIntegralType (TypeCULong  IntegralDict) = ()
-rnfIntegralType (TypeCLLong  IntegralDict) = ()
-rnfIntegralType (TypeCULLong IntegralDict) = ()
 
 rnfFloatingType :: FloatingType t -> ()
 rnfFloatingType (TypeHalf    FloatingDict) = ()
 rnfFloatingType (TypeFloat   FloatingDict) = ()
 rnfFloatingType (TypeDouble  FloatingDict) = ()
-rnfFloatingType (TypeCFloat  FloatingDict) = ()
-rnfFloatingType (TypeCDouble FloatingDict) = ()
 
 
 -- Template Haskell
@@ -1610,24 +1597,11 @@ liftArray (Array sh adata) =
     go ArrayEltRword16       (AD_Word16 ua)  = [|| AD_Word16 $$(arr ua) ||]
     go ArrayEltRword32       (AD_Word32 ua)  = [|| AD_Word32 $$(arr ua) ||]
     go ArrayEltRword64       (AD_Word64 ua)  = [|| AD_Word64 $$(arr ua) ||]
-    go ArrayEltRcshort       (AD_CShort ua)  = [|| AD_CShort $$(arr ua) ||]
-    go ArrayEltRcushort      (AD_CUShort ua) = [|| AD_CUShort $$(arr ua) ||]
-    go ArrayEltRcint         (AD_CInt ua)    = [|| AD_CInt $$(arr ua) ||]
-    go ArrayEltRcuint        (AD_CUInt ua)   = [|| AD_CUInt $$(arr ua) ||]
-    go ArrayEltRclong        (AD_CLong ua)   = [|| AD_CLong $$(arr ua) ||]
-    go ArrayEltRculong       (AD_CULong ua)  = [|| AD_CULong $$(arr ua) ||]
-    go ArrayEltRcllong       (AD_CLLong ua)  = [|| AD_CLLong $$(arr ua) ||]
-    go ArrayEltRcullong      (AD_CULLong ua) = [|| AD_CULLong $$(arr ua) ||]
     go ArrayEltRhalf         (AD_Half ua)    = [|| AD_Half $$(arr ua) ||]
     go ArrayEltRfloat        (AD_Float ua)   = [|| AD_Float $$(arr ua) ||]
     go ArrayEltRdouble       (AD_Double ua)  = [|| AD_Double $$(arr ua) ||]
-    go ArrayEltRcfloat       (AD_CFloat ua)  = [|| AD_CFloat $$(arr ua) ||]
-    go ArrayEltRcdouble      (AD_CDouble ua) = [|| AD_CDouble $$(arr ua) ||]
     go ArrayEltRbool         (AD_Bool ua)    = [|| AD_Bool $$(arr ua) ||]
     go ArrayEltRchar         (AD_Char ua)    = [|| AD_Char $$(arr ua) ||]
-    go ArrayEltRcchar        (AD_CChar ua)   = [|| AD_CChar $$(arr ua) ||]
-    go ArrayEltRcschar       (AD_CSChar ua)  = [|| AD_CSChar $$(arr ua) ||]
-    go ArrayEltRcuchar       (AD_CUChar ua)  = [|| AD_CUChar $$(arr ua) ||]
     go (ArrayEltRvec r)      (AD_Vec a)      = [|| AD_Vec $$(go r a) ||]
     go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = [|| AD_Pair $$(go r1 a1) $$(go r2 a2) ||]
 
@@ -1772,9 +1746,6 @@ liftNum (FloatingNumType t) x = liftFloating t x
 liftNonNum :: NonNumType t -> t -> Q (TExp t)
 liftNonNum TypeBool{}   x = [|| x ||]
 liftNonNum TypeChar{}   x = [|| x ||]
-liftNonNum TypeCChar{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftNonNum TypeCSChar{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftNonNum TypeCUChar{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
 
 liftIntegral :: IntegralType t -> t -> Q (TExp t)
 liftIntegral TypeInt{}     x = [|| x ||]
@@ -1791,21 +1762,11 @@ liftIntegral TypeWord8{}   x = [|| x ||]
 liftIntegral TypeWord16{}  x = [|| x ||]
 liftIntegral TypeWord32{}  x = [|| x ||]
 liftIntegral TypeWord64{}  x = [|| x ||]
-liftIntegral TypeCShort{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCUShort{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCInt{}    x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCUInt{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCLong{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCULong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCLLong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCULLong{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
 
 liftFloating :: FloatingType t -> t -> Q (TExp t)
 liftFloating TypeHalf{}    x = [|| x ||]
 liftFloating TypeFloat{}   x = [|| x ||]
 liftFloating TypeDouble{}  x = [|| x ||]
-liftFloating TypeCFloat{}  x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
-liftFloating TypeCDouble{} x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
 
 
 liftIntegralType :: IntegralType t -> Q (TExp (IntegralType t))
@@ -1819,28 +1780,15 @@ liftIntegralType TypeWord8{}   = [|| TypeWord8 IntegralDict ||]
 liftIntegralType TypeWord16{}  = [|| TypeWord16 IntegralDict ||]
 liftIntegralType TypeWord32{}  = [|| TypeWord32 IntegralDict ||]
 liftIntegralType TypeWord64{}  = [|| TypeWord64 IntegralDict ||]
-liftIntegralType TypeCShort{}  = [|| TypeCShort IntegralDict ||]
-liftIntegralType TypeCUShort{} = [|| TypeCUShort IntegralDict ||]
-liftIntegralType TypeCInt{}    = [|| TypeCInt IntegralDict ||]
-liftIntegralType TypeCUInt{}   = [|| TypeCUInt IntegralDict ||]
-liftIntegralType TypeCLong{}   = [|| TypeCLong IntegralDict ||]
-liftIntegralType TypeCULong{}  = [|| TypeCULong IntegralDict ||]
-liftIntegralType TypeCLLong{}  = [|| TypeCLLong IntegralDict ||]
-liftIntegralType TypeCULLong{} = [|| TypeCULLong IntegralDict ||]
 
 liftFloatingType :: FloatingType t -> Q (TExp (FloatingType t))
 liftFloatingType TypeHalf{}    = [|| TypeHalf FloatingDict ||]
 liftFloatingType TypeFloat{}   = [|| TypeFloat FloatingDict ||]
 liftFloatingType TypeDouble{}  = [|| TypeDouble FloatingDict ||]
-liftFloatingType TypeCFloat{}  = [|| TypeCFloat FloatingDict ||]
-liftFloatingType TypeCDouble{} = [|| TypeCDouble FloatingDict ||]
 
 liftNonNumType :: NonNumType t -> Q (TExp (NonNumType t))
 liftNonNumType TypeBool{}   = [|| TypeBool NonNumDict ||]
 liftNonNumType TypeChar{}   = [|| TypeChar NonNumDict ||]
-liftNonNumType TypeCChar{}  = [|| TypeCChar NonNumDict ||]
-liftNonNumType TypeCSChar{} = [|| TypeCSChar NonNumDict ||]
-liftNonNumType TypeCUChar{} = [|| TypeCUChar NonNumDict ||]
 
 liftNumType :: NumType t -> Q (TExp (NumType t))
 liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]

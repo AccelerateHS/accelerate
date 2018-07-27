@@ -41,28 +41,15 @@
 --    * Word16
 --    * Word32
 --    * Word64
---    * CShort
---    * CUShort
---    * CInt
---    * CUInt
---    * CLong
---    * CULong
---    * CLLong
---    * CULLong
 --
 --  Floating types:
 --    * Half
 --    * Float
 --    * Double
---    * CFloat
---    * CDouble
 --
 --  Non-numeric types:
 --    * Bool
 --    * Char
---    * CChar
---    * CSChar
---    * CUChar
 --
 --  SIMD vector types:
 --    * V2
@@ -97,7 +84,6 @@ import Data.Type.Equality
 import Data.Typeable
 import Data.Word
 import Foreign.C.Types
-import Foreign.C.Types                                              ( CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong, CFloat, CDouble )
 import Foreign.Storable                                             ( Storable )
 import Language.Haskell.TH
 import Numeric.Half
@@ -147,14 +133,6 @@ data IntegralType a where
   TypeWord16  :: IntegralDict Word16  -> IntegralType Word16
   TypeWord32  :: IntegralDict Word32  -> IntegralType Word32
   TypeWord64  :: IntegralDict Word64  -> IntegralType Word64
-  TypeCShort  :: IntegralDict CShort  -> IntegralType CShort
-  TypeCUShort :: IntegralDict CUShort -> IntegralType CUShort
-  TypeCInt    :: IntegralDict CInt    -> IntegralType CInt
-  TypeCUInt   :: IntegralDict CUInt   -> IntegralType CUInt
-  TypeCLong   :: IntegralDict CLong   -> IntegralType CLong
-  TypeCULong  :: IntegralDict CULong  -> IntegralType CULong
-  TypeCLLong  :: IntegralDict CLLong  -> IntegralType CLLong
-  TypeCULLong :: IntegralDict CULLong -> IntegralType CULLong
 
 -- | Floating-point types supported in array computations.
 --
@@ -162,17 +140,12 @@ data FloatingType a where
   TypeHalf    :: FloatingDict Half    -> FloatingType Half
   TypeFloat   :: FloatingDict Float   -> FloatingType Float
   TypeDouble  :: FloatingDict Double  -> FloatingType Double
-  TypeCFloat  :: FloatingDict CFloat  -> FloatingType CFloat
-  TypeCDouble :: FloatingDict CDouble -> FloatingType CDouble
 
 -- | Non-numeric types supported in array computations.
 --
 data NonNumType a where
-  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to Word8
-  TypeChar    :: NonNumDict Char      -> NonNumType Char
-  TypeCChar   :: NonNumDict CChar     -> NonNumType CChar
-  TypeCSChar  :: NonNumDict CSChar    -> NonNumType CSChar
-  TypeCUChar  :: NonNumDict CUChar    -> NonNumType CUChar
+  TypeBool  :: NonNumDict Bool  -> NonNumType Bool   --  marshalled to Word8
+  TypeChar  :: NonNumDict Char  -> NonNumType Char
 
 -- | Numeric element types implement Num & Real
 --
@@ -217,28 +190,15 @@ instance Show (IntegralType a) where
   show TypeWord16{}  = "Word16"
   show TypeWord32{}  = "Word32"
   show TypeWord64{}  = "Word64"
-  show TypeCShort{}  = "CShort"
-  show TypeCUShort{} = "CUShort"
-  show TypeCInt{}    = "CInt"
-  show TypeCUInt{}   = "CUInt"
-  show TypeCLong{}   = "CLong"
-  show TypeCULong{}  = "CULong"
-  show TypeCLLong{}  = "CLLong"
-  show TypeCULLong{} = "CULLong"
 
 instance Show (FloatingType a) where
   show TypeHalf{}    = "Half"
   show TypeFloat{}   = "Float"
   show TypeDouble{}  = "Double"
-  show TypeCFloat{}  = "CFloat"
-  show TypeCDouble{} = "CDouble"
 
 instance Show (NonNumType a) where
   show TypeBool{}   = "Bool"
   show TypeChar{}   = "Char"
-  show TypeCChar{}  = "CChar"
-  show TypeCSChar{} = "CSChar"
-  show TypeCUChar{} = "CUChar"
 
 instance Show (NumType a) where
   show (IntegralNumType ty) = show ty
@@ -307,38 +267,25 @@ class Typeable a => IsScalar a where
 --
 
 integralDict :: IntegralType a -> IntegralDict a
-integralDict (TypeInt     dict) = dict
-integralDict (TypeInt8    dict) = dict
-integralDict (TypeInt16   dict) = dict
-integralDict (TypeInt32   dict) = dict
-integralDict (TypeInt64   dict) = dict
-integralDict (TypeWord    dict) = dict
-integralDict (TypeWord8   dict) = dict
-integralDict (TypeWord16  dict) = dict
-integralDict (TypeWord32  dict) = dict
-integralDict (TypeWord64  dict) = dict
-integralDict (TypeCShort  dict) = dict
-integralDict (TypeCUShort dict) = dict
-integralDict (TypeCInt    dict) = dict
-integralDict (TypeCUInt   dict) = dict
-integralDict (TypeCLong   dict) = dict
-integralDict (TypeCULong  dict) = dict
-integralDict (TypeCLLong  dict) = dict
-integralDict (TypeCULLong dict) = dict
+integralDict (TypeInt    dict) = dict
+integralDict (TypeInt8   dict) = dict
+integralDict (TypeInt16  dict) = dict
+integralDict (TypeInt32  dict) = dict
+integralDict (TypeInt64  dict) = dict
+integralDict (TypeWord   dict) = dict
+integralDict (TypeWord8  dict) = dict
+integralDict (TypeWord16 dict) = dict
+integralDict (TypeWord32 dict) = dict
+integralDict (TypeWord64 dict) = dict
 
 floatingDict :: FloatingType a -> FloatingDict a
-floatingDict (TypeHalf    dict) = dict
-floatingDict (TypeFloat   dict) = dict
-floatingDict (TypeDouble  dict) = dict
-floatingDict (TypeCFloat  dict) = dict
-floatingDict (TypeCDouble dict) = dict
+floatingDict (TypeHalf   dict) = dict
+floatingDict (TypeFloat  dict) = dict
+floatingDict (TypeDouble dict) = dict
 
 nonNumDict :: NonNumType a -> NonNumDict a
-nonNumDict (TypeBool   dict) = dict
-nonNumDict (TypeChar   dict) = dict
-nonNumDict (TypeCChar  dict) = dict
-nonNumDict (TypeCSChar dict) = dict
-nonNumDict (TypeCUChar dict) = dict
+nonNumDict (TypeBool dict) = dict
+nonNumDict (TypeChar dict) = dict
 
 
 -- Type representation
@@ -369,7 +316,7 @@ instance Show (TupleType a) where
 -- Type-level bit sizes
 -- --------------------
 
--- |Constraint that values of these two types have the same bit width
+-- | Constraint that values of these two types have the same bit width
 --
 type BitSizeEq a b = (BitSize a == BitSize b) ~ 'True
 
@@ -408,6 +355,9 @@ type family BitSize a :: Nat
 -- So, as a last resort, we'll just use a ByteArray# to ensure an efficient
 -- packed representation.
 --
+-- One inefficiency of this approach is that the byte array does track its size,
+-- which redundant for our use case (derivable from type level information).
+--
 data Vec (n::Nat) a = Vec ByteArray#
   deriving Typeable
 
@@ -432,7 +382,7 @@ instance Eq (Vec n a) where
 -- Type synonyms for common SIMD vector types
 --
 type V2 a  = Vec 2 a
-type V3 a  = Vec 3 a  -- dubious?
+type V3 a  = Vec 3 a  -- XXX: dubious?
 type V4 a  = Vec 4 a
 type V8 a  = Vec 8 a
 type V16 a = Vec 16 a
@@ -595,42 +545,29 @@ $( runQ $ do
 
       integralTypes :: [(Name, Integer)]
       integralTypes =
-        [ (''Int,     bits (undefined::Int))
-        , (''Int8,    8)
-        , (''Int16,   16)
-        , (''Int32,   32)
-        , (''Int64,   64)
-        , (''Word,    bits (undefined::Word))
-        , (''Word8,   8)
-        , (''Word16,  16)
-        , (''Word32,  32)
-        , (''Word64,  64)
-        , (''CShort,  16)
-        , (''CUShort, 16)
-        , (''CInt,    32)
-        , (''CUInt,   32)
-        , (''CLong,   bits (undefined::CLong))
-        , (''CULong,  bits (undefined::CULong))
-        , (''CLLong,  64)
-        , (''CULLong, 64)
+        [ (''Int,    bits (undefined::Int))
+        , (''Int8,   8)
+        , (''Int16,  16)
+        , (''Int32,  32)
+        , (''Int64,  64)
+        , (''Word,   bits (undefined::Word))
+        , (''Word8,  8)
+        , (''Word16, 16)
+        , (''Word32, 32)
+        , (''Word64, 64)
         ]
 
       floatingTypes :: [(Name, Integer)]
       floatingTypes =
-        [ (''Half,    16)
-        , (''Float,   32)
-        , (''Double,  64)
-        , (''CFloat,  32)
-        , (''CDouble, 64)
+        [ (''Half,   16)
+        , (''Float,  32)
+        , (''Double, 64)
         ]
 
       nonNumTypes :: [(Name, Integer)]
       nonNumTypes =
-        [ (''Bool,   8)    -- stored as Word8
-        , (''Char,   32)
-        , (''CChar,  8)
-        , (''CSChar, 8)
-        , (''CUChar, 8)
+        [ (''Bool, 8)     -- stored as Word8
+        , (''Char, 32)
         ]
 
       mkIntegral :: Name -> Integer -> Q [Dec]

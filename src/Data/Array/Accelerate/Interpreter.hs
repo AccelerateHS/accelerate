@@ -63,7 +63,6 @@ import Data.Char                                                    ( chr, ord )
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Typeable
-import Foreign.C.Types
 import GHC.TypeLits
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
@@ -1066,9 +1065,6 @@ evalUndef = toElt (undef (eltType @a))
     nonnum :: NonNumType t -> t
     nonnum TypeBool{}   = False
     nonnum TypeChar{}   = chr 0
-    nonnum TypeCChar{}  = CChar 0
-    nonnum TypeCSChar{} = CSChar 0
-    nonnum TypeCUChar{} = CUChar 0
 
 
 -- Coercions
@@ -1101,7 +1097,7 @@ evalCoerce = toElt . go (eltType @a) (eltType @b) . fromElt
 --
 evalCoerceScalar :: ScalarType a -> ScalarType b -> a -> b
 evalCoerceScalar SingleScalarType{}    SingleScalarType{} a = unsafeCoerce a
-evalCoerceScalar VectorScalarType{}    VectorScalarType{} a = unsafeCoerce a  -- or just unpack/repack the (Vec ba#)
+evalCoerceScalar VectorScalarType{}    VectorScalarType{} a = unsafeCoerce a  -- XXX: or just unpack/repack the (Vec ba#)
 evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
   where
     vector :: SingleType a -> a -> Vec n b
@@ -1123,28 +1119,15 @@ evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
     integral TypeWord16{}  = poke
     integral TypeWord32{}  = poke
     integral TypeWord64{}  = poke
-    integral TypeCShort{}  = poke
-    integral TypeCUShort{} = poke
-    integral TypeCInt{}    = poke
-    integral TypeCUInt{}   = poke
-    integral TypeCLong{}   = poke
-    integral TypeCULong{}  = poke
-    integral TypeCLLong{}  = poke
-    integral TypeCULLong{} = poke
 
     floating :: FloatingType a -> a -> Vec n b
     floating TypeHalf{}    = poke
     floating TypeFloat{}   = poke
     floating TypeDouble{}  = poke
-    floating TypeCFloat{}  = poke
-    floating TypeCDouble{} = poke
 
     nonnum :: NonNumType a -> a -> Vec n b
     nonnum TypeBool{}   = bool
     nonnum TypeChar{}   = poke
-    nonnum TypeCChar{}  = poke
-    nonnum TypeCUChar{} = poke
-    nonnum TypeCSChar{} = poke
 
     bool :: Bool -> Vec n b
     bool False = poke (0::Word8)
@@ -1179,28 +1162,15 @@ evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
     integral TypeWord16{}  = peek
     integral TypeWord32{}  = peek
     integral TypeWord64{}  = peek
-    integral TypeCShort{}  = peek
-    integral TypeCUShort{} = peek
-    integral TypeCInt{}    = peek
-    integral TypeCUInt{}   = peek
-    integral TypeCLong{}   = peek
-    integral TypeCULong{}  = peek
-    integral TypeCLLong{}  = peek
-    integral TypeCULLong{} = peek
 
     floating :: FloatingType b -> Vec n a -> b
     floating TypeHalf{}    = peek
     floating TypeFloat{}   = peek
     floating TypeDouble{}  = peek
-    floating TypeCFloat{}  = peek
-    floating TypeCDouble{} = peek
 
     nonnum :: NonNumType b -> Vec n a -> b
     nonnum TypeBool{}   = bool
     nonnum TypeChar{}   = peek
-    nonnum TypeCChar{}  = peek
-    nonnum TypeCUChar{} = peek
-    nonnum TypeCSChar{} = peek
 
     bool :: Vec n a -> Bool
     bool v = case peek @Word8 v of

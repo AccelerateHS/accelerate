@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies      #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Eq
@@ -111,36 +112,36 @@ instance Eq Word64 where
   (/=) = mkNEq
 
 instance Eq CInt where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CUInt where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CLong where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CULong where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CLLong where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CULLong where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CShort where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CUShort where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq Bool where
   (==) = mkEq
@@ -151,16 +152,16 @@ instance Eq Char where
   (/=) = mkNEq
 
 instance Eq CChar where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CUChar where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CSChar where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq Half where
   (==) = mkEq
@@ -175,12 +176,12 @@ instance Eq Double where
   (/=) = mkNEq
 
 instance Eq CFloat where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance Eq CDouble where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = lift2 mkEq
+  (/=) = lift2 mkNEq
 
 instance (Eq a, Eq b) => Eq (a, b) where
   x == y = let (a1,b1) = untup2 x
@@ -313,4 +314,11 @@ instance Eq a => P.Eq (Exp a) where
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
+
+lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b -> Exp Bool)
+      -> Exp a
+      -> Exp a
+      -> Exp Bool
+lift2 f x y = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
 

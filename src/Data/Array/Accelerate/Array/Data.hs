@@ -60,7 +60,6 @@ import Control.Monad.Primitive
 import Data.Bits
 import Data.Char
 import Data.IORef
-import Data.Maybe
 import Data.Primitive.ByteArray
 import Data.Typeable                                                ( Typeable )
 import Foreign.ForeignPtr
@@ -135,24 +134,11 @@ data instance GArrayData ba Word8     = AD_Word8   (ba Word8)
 data instance GArrayData ba Word16    = AD_Word16  (ba Word16)
 data instance GArrayData ba Word32    = AD_Word32  (ba Word32)
 data instance GArrayData ba Word64    = AD_Word64  (ba Word64)
-data instance GArrayData ba CShort    = AD_CShort  (ba Int16)
-data instance GArrayData ba CUShort   = AD_CUShort (ba Word16)
-data instance GArrayData ba CInt      = AD_CInt    (ba Int32)
-data instance GArrayData ba CUInt     = AD_CUInt   (ba Word32)
-data instance GArrayData ba CLong     = AD_CLong   (ba HTYPE_LONG)
-data instance GArrayData ba CULong    = AD_CULong  (ba HTYPE_UNSIGNED_LONG)
-data instance GArrayData ba CLLong    = AD_CLLong  (ba Int64)
-data instance GArrayData ba CULLong   = AD_CULLong (ba Word64)
 data instance GArrayData ba Half      = AD_Half    (ba Half)
 data instance GArrayData ba Float     = AD_Float   (ba Float)
 data instance GArrayData ba Double    = AD_Double  (ba Double)
-data instance GArrayData ba CFloat    = AD_CFloat  (ba Float)
-data instance GArrayData ba CDouble   = AD_CDouble (ba Double)
 data instance GArrayData ba Bool      = AD_Bool    (ba Word8)
 data instance GArrayData ba Char      = AD_Char    (ba Char)
-data instance GArrayData ba CChar     = AD_CChar   (ba HTYPE_CCHAR)
-data instance GArrayData ba CSChar    = AD_CSChar  (ba Int8)
-data instance GArrayData ba CUChar    = AD_CUChar  (ba Word8)
 data instance GArrayData ba (Vec n a) = AD_Vec     (GArrayData ba a)
 data instance GArrayData ba (a, b)    = AD_Pair    (GArrayData ba a) (GArrayData ba b)
 
@@ -173,25 +159,12 @@ data ArrayEltR a where
   ArrayEltRword16  :: ArrayEltR Word16
   ArrayEltRword32  :: ArrayEltR Word32
   ArrayEltRword64  :: ArrayEltR Word64
-  ArrayEltRcshort  :: ArrayEltR CShort
-  ArrayEltRcushort :: ArrayEltR CUShort
-  ArrayEltRcint    :: ArrayEltR CInt
-  ArrayEltRcuint   :: ArrayEltR CUInt
-  ArrayEltRclong   :: ArrayEltR CLong
-  ArrayEltRculong  :: ArrayEltR CULong
-  ArrayEltRcllong  :: ArrayEltR CLLong
-  ArrayEltRcullong :: ArrayEltR CULLong
   ArrayEltRhalf    :: ArrayEltR Half
   ArrayEltRfloat   :: ArrayEltR Float
   ArrayEltRdouble  :: ArrayEltR Double
-  ArrayEltRcfloat  :: ArrayEltR CFloat
-  ArrayEltRcdouble :: ArrayEltR CDouble
   ArrayEltRbool    :: ArrayEltR Bool
   ArrayEltRchar    :: ArrayEltR Char
-  ArrayEltRcchar   :: ArrayEltR CChar
-  ArrayEltRcschar  :: ArrayEltR CSChar
-  ArrayEltRcuchar  :: ArrayEltR CUChar
-  ArrayEltRvec     :: ArrayEltR a -> ArrayEltR (Vec n a)  -- not restrictive enough
+  ArrayEltRvec     :: ArrayEltR a -> ArrayEltR (Vec n a)  -- XXX: not restrictive enough
   ArrayEltRpair    :: ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
 
 -- Array operations
@@ -426,69 +399,46 @@ mallocPlainForeignPtrBytesAligned (I# size) = IO $ \s ->
 --
 $(runQ $ do
     let
-        integralTypes :: [(Name, Maybe Name)]
+        integralTypes :: [Name]
         integralTypes =
-          [ (''Int,     Nothing)
-          , (''Int8,    Nothing)
-          , (''Int16,   Nothing)
-          , (''Int32,   Nothing)
-          , (''Int64,   Nothing)
-          , (''Word,    Nothing)
-          , (''Word8,   Nothing)
-          , (''Word16,  Nothing)
-          , (''Word32,  Nothing)
-          , (''Word64,  Nothing)
-          , (''CShort,  Just ''Int16)
-          , (''CUShort, Just ''Word16)
-          , (''CInt,    Just ''Int32)
-          , (''CUInt,   Just ''Word32)
-          , (''CLong,   Just ''HTYPE_LONG)
-          , (''CULong,  Just ''HTYPE_UNSIGNED_LONG)
-          , (''CLLong,  Just ''Int64)
-          , (''CULLong, Just ''Word64)
+          [ ''Int
+          , ''Int8
+          , ''Int16
+          , ''Int32
+          , ''Int64
+          , ''Word
+          , ''Word8
+          , ''Word16
+          , ''Word32
+          , ''Word64
           ]
 
-        floatingTypes :: [(Name, Maybe Name)]
+        floatingTypes :: [Name]
         floatingTypes =
-          [ (''Half,    Nothing)
-          , (''Float,   Nothing)
-          , (''Double,  Nothing)
-          , (''CFloat,  Just ''Float)
-          , (''CDouble, Just ''Double)
+          [ ''Half
+          , ''Float
+          , ''Double
           ]
 
-        nonNumTypes :: [(Name, Maybe Name)]
+        nonNumTypes :: [Name]
         nonNumTypes =
-          [ (''Char,   Nothing)             -- wide characters are 4-bytes
-          , (''CChar,  Just ''HTYPE_CCHAR)
-          , (''CSChar, Just ''Int8)
-          , (''CUChar, Just ''Word8)
+          [ ''Char      -- wide characters are 4-bytes
+          --''Bool      -- handled explicitly; stored as Word8
           ]
 
-        allTypes :: [(Name, Maybe Name)]
+        allTypes :: [Name]
         allTypes = integralTypes ++ floatingTypes ++ nonNumTypes
 
-        mkArrayElt :: Name -> Maybe Name -> Q [Dec]
-        mkArrayElt name mrep =
+        mkArrayElt :: Name -> Q [Dec]
+        mkArrayElt name =
           let
-              simple  = isNothing mrep
-              --
               n       = nameBase name
               t       = conT name
-              r       = conT (fromMaybe name mrep)
               con     = conE (mkName ("AD_" ++ n))
               pat     = conP (mkName ("AD_" ++ n)) [varP (mkName "ba")]
-              --
-              wrap
-                | simple    = varE (mkName "id")
-                | otherwise = conE (mkName n)
-              --
-              unwrap
-                | simple    = varP (mkName "e")
-                | otherwise = conP (mkName n) [varP (mkName "e")]
           in
           [d| instance ArrayElt $t where
-                type ArrayPtrs $t = Ptr $r
+                type ArrayPtrs $t = Ptr $t
                 arrayElt = $(conE (mkName ("ArrayEltR" ++ map toLower n)))
                 {-# INLINE newArrayData         #-}
                 {-# INLINE ptrsOfArrayData      #-}
@@ -496,14 +446,14 @@ $(runQ $ do
                 {-# INLINE unsafeIndexArrayData #-}
                 {-# INLINE unsafeReadArrayData  #-}
                 {-# INLINE unsafeWriteArrayData #-}
-                newArrayData size                   = $con <$> newArrayData' size
-                ptrsOfArrayData      $pat           = unsafeUniqueArrayPtr ba
-                touchArrayData       $pat           = touchUniqueArray ba
-                unsafeIndexArrayData $pat i         = $wrap  $! unsafeIndexArray ba i
-                unsafeReadArrayData  $pat i         = $wrap <$> unsafeReadArray  ba i
-                unsafeWriteArrayData $pat i $unwrap = unsafeWriteArray ba i e
+                newArrayData size             = $con <$> newArrayData' size
+                ptrsOfArrayData      $pat     = unsafeUniqueArrayPtr ba
+                touchArrayData       $pat     = touchUniqueArray ba
+                unsafeIndexArrayData $pat i   = unsafeIndexArray ba i
+                unsafeReadArrayData  $pat i   = unsafeReadArray  ba i
+                unsafeWriteArrayData $pat i e = unsafeWriteArray ba i e
             |]
     --
-    concat <$> mapM (uncurry mkArrayElt) allTypes
+    concat <$> mapM mkArrayElt allTypes
  )
 

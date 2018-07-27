@@ -42,7 +42,6 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
 import Crypto.Hash
-import Data.Bits
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
 import Data.ByteString.Short.Internal                               ( ShortByteString(..) )
@@ -342,13 +341,8 @@ encodeVectorConst (Vector16Type t) (Vec ba#) = intHost $(hashQ "V16") <> encodeS
 
 {-# INLINE encodeNonNumConst #-}
 encodeNonNumConst :: NonNumType t -> t -> Builder
-encodeNonNumConst TypeBool{}   x          = intHost $(hashQ "Bool")   <> word8 (fromBool x)
-encodeNonNumConst TypeChar{}   x          = intHost $(hashQ "Char")   <> charUtf8 x
-encodeNonNumConst TypeCSChar{} (CSChar x) = intHost $(hashQ "CSChar") <> int8 x
-encodeNonNumConst TypeCUChar{} (CUChar x) = intHost $(hashQ "CUChar") <> word8 x
-encodeNonNumConst TypeCChar{}  (CChar  x) = intHost $(hashQ "CChar")  <> $( case isSigned (undefined::CChar) of
-                                                                              True  -> [e| int8  |]
-                                                                              False -> [e| word8 |] ) x
+encodeNonNumConst TypeBool{} x = intHost $(hashQ "Bool")   <> word8 (fromBool x)
+encodeNonNumConst TypeChar{} x = intHost $(hashQ "Char")   <> charUtf8 x
 
 {-# INLINE fromBool #-}
 fromBool :: Bool -> Word8
@@ -362,38 +356,22 @@ encodeNumConst (FloatingNumType t) = encodeFloatingConst t
 
 {-# INLINE encodeIntegralConst #-}
 encodeIntegralConst :: IntegralType t -> t -> Builder
-encodeIntegralConst TypeInt{}     x           = intHost $(hashQ "Int")     <> intHost x
-encodeIntegralConst TypeInt8{}    x           = intHost $(hashQ "Int8")    <> int8 x
-encodeIntegralConst TypeInt16{}   x           = intHost $(hashQ "Int16")   <> int16Host x
-encodeIntegralConst TypeInt32{}   x           = intHost $(hashQ "Int32")   <> int32Host x
-encodeIntegralConst TypeInt64{}   x           = intHost $(hashQ "Int64")   <> int64Host x
-encodeIntegralConst TypeWord{}    x           = intHost $(hashQ "Word")    <> wordHost x
-encodeIntegralConst TypeWord8{}   x           = intHost $(hashQ "Word8")   <> word8 x
-encodeIntegralConst TypeWord16{}  x           = intHost $(hashQ "Word16")  <> word16Host x
-encodeIntegralConst TypeWord32{}  x           = intHost $(hashQ "Word32")  <> word32Host x
-encodeIntegralConst TypeWord64{}  x           = intHost $(hashQ "Word64")  <> word64Host x
-encodeIntegralConst TypeCShort{}  (CShort x)  = intHost $(hashQ "CShort")  <> int16Host x
-encodeIntegralConst TypeCUShort{} (CUShort x) = intHost $(hashQ "CUShort") <> word16Host x
-encodeIntegralConst TypeCInt{}    (CInt x)    = intHost $(hashQ "CInt")    <> int32Host x
-encodeIntegralConst TypeCUInt{}   (CUInt x)   = intHost $(hashQ "CUInt")   <> word32Host x
-encodeIntegralConst TypeCLLong{}  (CLLong x)  = intHost $(hashQ "CLLong")  <> int64Host x
-encodeIntegralConst TypeCULLong{} (CULLong x) = intHost $(hashQ "CULLong") <> word64Host x
-encodeIntegralConst TypeCLong{}   (CLong x)   = intHost $(hashQ "CLong")   <> $( case finiteBitSize (undefined::CLong) of
-                                                                                   32 -> [e| int32Host |]
-                                                                                   64 -> [e| int64Host |]
-                                                                                   _  -> error "I don't know what architecture I am" ) x
-encodeIntegralConst TypeCULong{}  (CULong x)  = intHost $(hashQ "CULong")  <> $( case finiteBitSize (undefined::CULong) of
-                                                                                   32 -> [e| word32Host |]
-                                                                                   64 -> [e| word64Host |]
-                                                                                   _  -> error "I don't know what architecture I am" ) x
+encodeIntegralConst TypeInt{}    x = intHost $(hashQ "Int")    <> intHost x
+encodeIntegralConst TypeInt8{}   x = intHost $(hashQ "Int8")   <> int8 x
+encodeIntegralConst TypeInt16{}  x = intHost $(hashQ "Int16")  <> int16Host x
+encodeIntegralConst TypeInt32{}  x = intHost $(hashQ "Int32")  <> int32Host x
+encodeIntegralConst TypeInt64{}  x = intHost $(hashQ "Int64")  <> int64Host x
+encodeIntegralConst TypeWord{}   x = intHost $(hashQ "Word")   <> wordHost x
+encodeIntegralConst TypeWord8{}  x = intHost $(hashQ "Word8")  <> word8 x
+encodeIntegralConst TypeWord16{} x = intHost $(hashQ "Word16") <> word16Host x
+encodeIntegralConst TypeWord32{} x = intHost $(hashQ "Word32") <> word32Host x
+encodeIntegralConst TypeWord64{} x = intHost $(hashQ "Word64") <> word64Host x
 
 {-# INLINE encodeFloatingConst #-}
 encodeFloatingConst :: FloatingType t -> t -> Builder
 encodeFloatingConst TypeHalf{}    (Half (CUShort x)) = intHost $(hashQ "Half")    <> word16Host x
 encodeFloatingConst TypeFloat{}   x                  = intHost $(hashQ "Float")   <> floatHost x
 encodeFloatingConst TypeDouble{}  x                  = intHost $(hashQ "Double")  <> doubleHost x
-encodeFloatingConst TypeCFloat{}  (CFloat x)         = intHost $(hashQ "CFloat")  <> floatHost x
-encodeFloatingConst TypeCDouble{} (CDouble x)        = intHost $(hashQ "CDouble") <> doubleHost x
 
 {-# INLINE encodePrimConst #-}
 encodePrimConst :: PrimConst c -> Builder
@@ -508,11 +486,8 @@ encodeBoundedType (NonNumBoundedType t)   = intHost $(hashQ "NonNumBoundedType")
 
 {-# INLINE encodeNonNumType #-}
 encodeNonNumType :: NonNumType t -> Builder
-encodeNonNumType TypeBool{}   = intHost $(hashQ "Bool")
-encodeNonNumType TypeChar{}   = intHost $(hashQ "Char")
-encodeNonNumType TypeCChar{}  = intHost $(hashQ "CChar")
-encodeNonNumType TypeCSChar{} = intHost $(hashQ "CSChar")
-encodeNonNumType TypeCUChar{} = intHost $(hashQ "CUChar")
+encodeNonNumType TypeBool{} = intHost $(hashQ "Bool")
+encodeNonNumType TypeChar{} = intHost $(hashQ "Char")
 
 {-# INLINE encodeNumType #-}
 encodeNumType :: NumType t -> Builder
@@ -521,30 +496,20 @@ encodeNumType (FloatingNumType t) = intHost $(hashQ "FloatingNumType") <> encode
 
 {-# INLINE encodeIntegralType #-}
 encodeIntegralType :: IntegralType t -> Builder
-encodeIntegralType TypeInt{}     = intHost $(hashQ "Int")
-encodeIntegralType TypeInt8{}    = intHost $(hashQ "Int8")
-encodeIntegralType TypeInt16{}   = intHost $(hashQ "Int16")
-encodeIntegralType TypeInt32{}   = intHost $(hashQ "Int32")
-encodeIntegralType TypeInt64{}   = intHost $(hashQ "Int64")
-encodeIntegralType TypeWord{}    = intHost $(hashQ "Word")
-encodeIntegralType TypeWord8{}   = intHost $(hashQ "Word8")
-encodeIntegralType TypeWord16{}  = intHost $(hashQ "Word16")
-encodeIntegralType TypeWord32{}  = intHost $(hashQ "Word32")
-encodeIntegralType TypeWord64{}  = intHost $(hashQ "Word64")
-encodeIntegralType TypeCShort{}  = intHost $(hashQ "CShort")
-encodeIntegralType TypeCUShort{} = intHost $(hashQ "CUShort")
-encodeIntegralType TypeCInt{}    = intHost $(hashQ "CInt")
-encodeIntegralType TypeCUInt{}   = intHost $(hashQ "CUInt")
-encodeIntegralType TypeCLong{}   = intHost $(hashQ "CLong")
-encodeIntegralType TypeCULong{}  = intHost $(hashQ "CULong")
-encodeIntegralType TypeCLLong{}  = intHost $(hashQ "CLLong")
-encodeIntegralType TypeCULLong{} = intHost $(hashQ "CULLong")
+encodeIntegralType TypeInt{}    = intHost $(hashQ "Int")
+encodeIntegralType TypeInt8{}   = intHost $(hashQ "Int8")
+encodeIntegralType TypeInt16{}  = intHost $(hashQ "Int16")
+encodeIntegralType TypeInt32{}  = intHost $(hashQ "Int32")
+encodeIntegralType TypeInt64{}  = intHost $(hashQ "Int64")
+encodeIntegralType TypeWord{}   = intHost $(hashQ "Word")
+encodeIntegralType TypeWord8{}  = intHost $(hashQ "Word8")
+encodeIntegralType TypeWord16{} = intHost $(hashQ "Word16")
+encodeIntegralType TypeWord32{} = intHost $(hashQ "Word32")
+encodeIntegralType TypeWord64{} = intHost $(hashQ "Word64")
 
 {-# INLINE encodeFloatingType #-}
 encodeFloatingType :: FloatingType t -> Builder
-encodeFloatingType TypeHalf{}    = intHost $(hashQ "Half")
-encodeFloatingType TypeFloat{}   = intHost $(hashQ "Float")
-encodeFloatingType TypeDouble{}  = intHost $(hashQ "Double")
-encodeFloatingType TypeCFloat{}  = intHost $(hashQ "CFloat")
-encodeFloatingType TypeCDouble{} = intHost $(hashQ "CDouble")
+encodeFloatingType TypeHalf{}   = intHost $(hashQ "Half")
+encodeFloatingType TypeFloat{}  = intHost $(hashQ "Float")
+encodeFloatingType TypeDouble{} = intHost $(hashQ "Double")
 

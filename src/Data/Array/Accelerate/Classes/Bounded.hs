@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeApplications  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Bounded
@@ -19,6 +20,7 @@ module Data.Array.Accelerate.Classes.Bounded (
 
 ) where
 
+import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -77,36 +79,36 @@ instance P.Bounded (Exp Word64) where
   maxBound = mkMaxBound
 
 instance P.Bounded (Exp CShort) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Int16)
+  maxBound = mkBitcast (mkMaxBound @Int16)
 
 instance P.Bounded (Exp CUShort) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Word16)
+  maxBound = mkBitcast (mkMaxBound @Word16)
 
 instance P.Bounded (Exp CInt) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Int32)
+  maxBound = mkBitcast (mkMaxBound @Int32)
 
 instance P.Bounded (Exp CUInt) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Word32)
+  maxBound = mkBitcast (mkMaxBound @Word32)
 
 instance P.Bounded (Exp CLong) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @HTYPE_LONG)
+  maxBound = mkBitcast (mkMaxBound @HTYPE_LONG)
 
 instance P.Bounded (Exp CULong) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @HTYPE_UNSIGNED_LONG)
+  maxBound = mkBitcast (mkMaxBound @HTYPE_UNSIGNED_LONG)
 
 instance P.Bounded (Exp CLLong) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Int64)
+  maxBound = mkBitcast (mkMaxBound @Int64)
 
 instance P.Bounded (Exp CULLong) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Word64)
+  maxBound = mkBitcast (mkMaxBound @Word64)
 
 instance P.Bounded (Exp Bool) where
   minBound = mkMinBound
@@ -117,16 +119,16 @@ instance P.Bounded (Exp Char) where
   maxBound = mkMaxBound
 
 instance P.Bounded (Exp CChar) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @HTYPE_CCHAR)
+  maxBound = mkBitcast (mkMaxBound @HTYPE_CCHAR)
 
 instance P.Bounded (Exp CSChar) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Int8)
+  maxBound = mkBitcast (mkMaxBound @Int8)
 
 instance P.Bounded (Exp CUChar) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = mkBitcast (mkMinBound @Word8)
+  maxBound = mkBitcast (mkMaxBound @Word8)
 
 instance (Bounded a, Bounded b)
     => P.Bounded (Exp (a,b)) where

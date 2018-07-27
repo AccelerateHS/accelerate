@@ -88,19 +88,19 @@ import qualified Data.Array.Accelerate.Array.Representation     as Repr
 -- Surface types representing array indices and slices
 -- ---------------------------------------------------
 --
--- Array indices are snoc type lists.  That is, they're backwards --
--- the end-of-list token, `Z`, occurs first.  For example, the type of a
--- rank-2 array index is @Z :. Int :. Int@.
+-- Array indices are snoc type lists. That is, they're backwards -- the
+-- end-of-list token, 'Z', occurs first.  For example, the type of a rank-2
+-- array index is @Z :. Int :. Int@.
 --
 -- In Accelerate the rightmost dimension is the /fastest varying/ or innermost.
 
--- |Rank-0 index
+-- | Rank-0 index
 --
 data Z = Z
   deriving (Typeable, Show, Eq)
 
--- |Increase an index rank by one dimension.  The `:.` operator is
---  used to construct both values and types.
+-- | Increase an index rank by one dimension. The ':.' operator is used to
+-- construct both values and types.
 --
 infixl 3 :.
 data tail :. head = !tail :. !head
@@ -200,6 +200,12 @@ data Divide sh = Divide
 --  * "Data.Array.Accelerate.Data.Monoid"
 --  * <https://hackage.haskell.org/package/linear-accelerate linear-accelerate>
 --  * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>
+--
+-- For simple product types it is possible to derive 'Elt' automatically, for
+-- example:
+--
+-- > data Point = Point Int Float
+-- >   deriving (Show, Generic, Elt)
 --
 class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a where
   -- | Type representation mapping, which explains how to convert a type from
@@ -363,52 +369,52 @@ instance Elt Word64 where
   toElt         = id
 
 instance Elt CShort where
-  type EltRepr CShort = CShort
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CShort = Int16
+  eltType            = singletonScalarType
+  fromElt (CShort x) = x
+  toElt              = CShort
 
 instance Elt CUShort where
-  type EltRepr CUShort = CUShort
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CUShort = Word16
+  eltType             = singletonScalarType
+  fromElt (CUShort x) = x
+  toElt               = CUShort
 
 instance Elt CInt where
-  type EltRepr CInt = CInt
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CInt = Int32
+  eltType          = singletonScalarType
+  fromElt (CInt x) = x
+  toElt            = CInt
 
 instance Elt CUInt where
-  type EltRepr CUInt = CUInt
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CUInt = Word32
+  eltType           = singletonScalarType
+  fromElt (CUInt x) = x
+  toElt             = CUInt
 
 instance Elt CLong where
-  type EltRepr CLong = CLong
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CLong = HTYPE_LONG
+  eltType           = singletonScalarType
+  fromElt (CLong x) = x
+  toElt             = CLong
 
 instance Elt CULong where
-  type EltRepr CULong = CULong
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CULong = HTYPE_UNSIGNED_LONG
+  eltType            = singletonScalarType
+  fromElt (CULong x) = x
+  toElt              = CULong
 
 instance Elt CLLong where
-  type EltRepr CLLong = CLLong
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CLLong = Int64
+  eltType            = singletonScalarType
+  fromElt (CLLong x) = x
+  toElt              = CLLong
 
 instance Elt CULLong where
-  type EltRepr CULLong = CULLong
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CULLong = Word64
+  eltType             = singletonScalarType
+  fromElt (CULLong x) = x
+  toElt               = CULLong
 
 instance Elt Half where
   type EltRepr Half = Half
@@ -429,16 +435,16 @@ instance Elt Double where
   toElt         = id
 
 instance Elt CFloat where
-  type EltRepr CFloat = CFloat
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CFloat = Float
+  eltType            = singletonScalarType
+  fromElt (CFloat x) = x
+  toElt              = CFloat
 
 instance Elt CDouble where
-  type EltRepr CDouble = CDouble
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CDouble = Double
+  eltType             = singletonScalarType
+  fromElt (CDouble x) = x
+  toElt               = CDouble
 
 instance Elt Bool where
   type EltRepr Bool = Bool
@@ -453,22 +459,22 @@ instance Elt Char where
   toElt         = id
 
 instance Elt CChar where
-  type EltRepr CChar = CChar
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CChar = HTYPE_CCHAR
+  eltType           = singletonScalarType
+  fromElt (CChar x) = x
+  toElt             = CChar
 
 instance Elt CSChar where
-  type EltRepr CSChar = CSChar
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CSChar = Int8
+  eltType            = singletonScalarType
+  fromElt (CSChar x) = x
+  toElt              = CSChar
 
 instance Elt CUChar where
-  type EltRepr CUChar = CUChar
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
+  type EltRepr CUChar = Word8
+  eltType            = singletonScalarType
+  fromElt (CUChar x) = x
+  toElt              = CUChar
 
 instance (Elt a, Elt b) => Elt (a, b)
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c)
@@ -865,24 +871,11 @@ instance NFData (Array sh e) where
       go ArrayEltRword16       (AD_Word16 ua)  = rnf ua
       go ArrayEltRword32       (AD_Word32 ua)  = rnf ua
       go ArrayEltRword64       (AD_Word64 ua)  = rnf ua
-      go ArrayEltRcshort       (AD_CShort ua)  = rnf ua
-      go ArrayEltRcushort      (AD_CUShort ua) = rnf ua
-      go ArrayEltRcint         (AD_CInt ua)    = rnf ua
-      go ArrayEltRcuint        (AD_CUInt ua)   = rnf ua
-      go ArrayEltRclong        (AD_CLong ua)   = rnf ua
-      go ArrayEltRculong       (AD_CULong ua)  = rnf ua
-      go ArrayEltRcllong       (AD_CLLong ua)  = rnf ua
-      go ArrayEltRcullong      (AD_CULLong ua) = rnf ua
       go ArrayEltRhalf         (AD_Half ua)    = rnf ua
       go ArrayEltRfloat        (AD_Float ua)   = rnf ua
       go ArrayEltRdouble       (AD_Double ua)  = rnf ua
-      go ArrayEltRcfloat       (AD_CFloat ua)  = rnf ua
-      go ArrayEltRcdouble      (AD_CDouble ua) = rnf ua
       go ArrayEltRbool         (AD_Bool ua)    = rnf ua
       go ArrayEltRchar         (AD_Char ua)    = rnf ua
-      go ArrayEltRcchar        (AD_CChar ua)   = rnf ua
-      go ArrayEltRcschar       (AD_CSChar ua)  = rnf ua
-      go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
       go (ArrayEltRvec r)      (AD_Vec a)      = go r a `seq` ()
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 

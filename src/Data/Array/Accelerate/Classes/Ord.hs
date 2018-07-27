@@ -156,68 +156,68 @@ instance Ord Word64 where
   max  = mkMax
 
 instance Ord CInt where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CUInt where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CLong where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CULong where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CLLong where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CULLong where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CShort where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CUShort where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord Bool where
   (<)  = mkLt
@@ -236,28 +236,28 @@ instance Ord Char where
   max  = mkMax
 
 instance Ord CChar where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CUChar where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CSChar where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord Half where
   (<)  = mkLt
@@ -284,20 +284,20 @@ instance Ord Double where
   max  = mkMax
 
 instance Ord CFloat where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance Ord CDouble where
-  (<)  = mkLt
-  (>)  = mkGt
-  (<=) = mkLtEq
-  (>=) = mkGtEq
-  min  = mkMin
-  max  = mkMax
+  (<)  = liftB mkLt
+  (>)  = liftB mkGt
+  (<=) = liftB mkLtEq
+  (>=) = liftB mkGtEq
+  min  = lift2 mkMin
+  max  = lift2 mkMax
 
 instance (Ord a, Ord b) => Ord (a, b) where
   x <= y = let (a1,b1) = untup2 x
@@ -540,4 +540,18 @@ preludeError x y
             , "constraints for subsequent classes in the standard Haskell numeric"
             , "hierarchy."
             ]
+
+lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b -> Exp b)
+      -> Exp a
+      -> Exp a
+      -> Exp a
+lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
+
+liftB :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b -> Exp Bool)
+      -> Exp a
+      -> Exp a
+      -> Exp Bool
+liftB f x y = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
 

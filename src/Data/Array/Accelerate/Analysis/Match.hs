@@ -950,43 +950,30 @@ matchBoundedType _                       _                       = Nothing
 
 {-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
-matchIntegralType TypeInt{}     TypeInt{}     = Just Refl
-matchIntegralType TypeInt8{}    TypeInt8{}    = Just Refl
-matchIntegralType TypeInt16{}   TypeInt16{}   = Just Refl
-matchIntegralType TypeInt32{}   TypeInt32{}   = Just Refl
-matchIntegralType TypeInt64{}   TypeInt64{}   = Just Refl
-matchIntegralType TypeWord{}    TypeWord{}    = Just Refl
-matchIntegralType TypeWord8{}   TypeWord8{}   = Just Refl
-matchIntegralType TypeWord16{}  TypeWord16{}  = Just Refl
-matchIntegralType TypeWord32{}  TypeWord32{}  = Just Refl
-matchIntegralType TypeWord64{}  TypeWord64{}  = Just Refl
-matchIntegralType TypeCShort{}  TypeCShort{}  = Just Refl
-matchIntegralType TypeCUShort{} TypeCUShort{} = Just Refl
-matchIntegralType TypeCInt{}    TypeCInt{}    = Just Refl
-matchIntegralType TypeCUInt{}   TypeCUInt{}   = Just Refl
-matchIntegralType TypeCLong{}   TypeCLong{}   = Just Refl
-matchIntegralType TypeCULong{}  TypeCULong{}  = Just Refl
-matchIntegralType TypeCLLong{}  TypeCLLong{}  = Just Refl
-matchIntegralType TypeCULLong{} TypeCULLong{} = Just Refl
-matchIntegralType _             _             = Nothing
+matchIntegralType TypeInt{}    TypeInt{}    = Just Refl
+matchIntegralType TypeInt8{}   TypeInt8{}   = Just Refl
+matchIntegralType TypeInt16{}  TypeInt16{}  = Just Refl
+matchIntegralType TypeInt32{}  TypeInt32{}  = Just Refl
+matchIntegralType TypeInt64{}  TypeInt64{}  = Just Refl
+matchIntegralType TypeWord{}   TypeWord{}   = Just Refl
+matchIntegralType TypeWord8{}  TypeWord8{}  = Just Refl
+matchIntegralType TypeWord16{} TypeWord16{} = Just Refl
+matchIntegralType TypeWord32{} TypeWord32{} = Just Refl
+matchIntegralType TypeWord64{} TypeWord64{} = Just Refl
+matchIntegralType _            _            = Nothing
 
 {-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
-matchFloatingType TypeHalf{}    TypeHalf{}    = Just Refl
-matchFloatingType TypeFloat{}   TypeFloat{}   = Just Refl
-matchFloatingType TypeDouble{}  TypeDouble{}  = Just Refl
-matchFloatingType TypeCFloat{}  TypeCFloat{}  = Just Refl
-matchFloatingType TypeCDouble{} TypeCDouble{} = Just Refl
-matchFloatingType _             _             = Nothing
+matchFloatingType TypeHalf{}   TypeHalf{}   = Just Refl
+matchFloatingType TypeFloat{}  TypeFloat{}  = Just Refl
+matchFloatingType TypeDouble{} TypeDouble{} = Just Refl
+matchFloatingType _            _            = Nothing
 
 {-# INLINEABLE matchNonNumType #-}
 matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
-matchNonNumType TypeBool{}   TypeBool{}   = Just Refl
-matchNonNumType TypeChar{}   TypeChar{}   = Just Refl
-matchNonNumType TypeCChar{}  TypeCChar{}  = Just Refl
-matchNonNumType TypeCSChar{} TypeCSChar{} = Just Refl
-matchNonNumType TypeCUChar{} TypeCUChar{} = Just Refl
-matchNonNumType _            _            = Nothing
+matchNonNumType TypeBool{} TypeBool{} = Just Refl
+matchNonNumType TypeChar{} TypeChar{} = Just Refl
+matchNonNumType _          _          = Nothing
 
 
 -- Auxiliary

@@ -81,16 +81,16 @@ instance Elt (Complex Double) where
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex CFloat) where
-  type EltRepr (Complex CFloat) = V2 CFloat
-  eltType          = TypeRscalar scalarType
-  toElt (V2 r i)   = r :+ i
-  fromElt (r :+ i) = V2 r i
+  type EltRepr (Complex CFloat) = V2 Float
+  eltType                        = TypeRscalar scalarType
+  toElt (V2 r i)                 = CFloat r :+ CFloat i
+  fromElt (CFloat r :+ CFloat i) = V2 r i
 
 instance Elt (Complex CDouble) where
-  type EltRepr (Complex CDouble) = V2 CDouble
-  eltType          = TypeRscalar scalarType
-  toElt (V2 r i)   = r :+ i
-  fromElt (r :+ i) = V2 r i
+  type EltRepr (Complex CDouble) = V2 Double
+  eltType                          = TypeRscalar scalarType
+  toElt (V2 r i)                   = CDouble r :+ CDouble i
+  fromElt (CDouble r :+ CDouble i) = V2 r i
 
 instance cst a => IsProduct cst (Complex a) where
   type ProdRepr (Complex a) = ProdRepr (a,a)
