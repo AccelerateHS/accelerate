@@ -332,12 +332,8 @@ encodeSingleConst (NumSingleType t)    = encodeNumConst t
 encodeSingleConst (NonNumSingleType t) = encodeNonNumConst t
 
 {-# INLINE encodeVectorConst #-}
-encodeVectorConst :: VectorType t -> t -> Builder
-encodeVectorConst (Vector2Type t)  (Vec ba#) = intHost $(hashQ "V2")  <> encodeSingleType t <> shortByteString (SBS ba#)
-encodeVectorConst (Vector3Type t)  (Vec ba#) = intHost $(hashQ "V3")  <> encodeSingleType t <> shortByteString (SBS ba#)
-encodeVectorConst (Vector4Type t)  (Vec ba#) = intHost $(hashQ "V4")  <> encodeSingleType t <> shortByteString (SBS ba#)
-encodeVectorConst (Vector8Type t)  (Vec ba#) = intHost $(hashQ "V8")  <> encodeSingleType t <> shortByteString (SBS ba#)
-encodeVectorConst (Vector16Type t) (Vec ba#) = intHost $(hashQ "V16") <> encodeSingleType t <> shortByteString (SBS ba#)
+encodeVectorConst :: VectorType (Vec n t) -> Vec n t -> Builder
+encodeVectorConst (VectorType n t) (Vec ba#) = intHost $(hashQ "Vec") <> intHost n <> encodeSingleType t <> shortByteString (SBS ba#)
 
 {-# INLINE encodeNonNumConst #-}
 encodeNonNumConst :: NonNumType t -> t -> Builder
@@ -472,12 +468,8 @@ encodeSingleType (NumSingleType t)    = intHost $(hashQ "NumSingleType")    <> e
 encodeSingleType (NonNumSingleType t) = intHost $(hashQ "NonNumSingleType") <> encodeNonNumType t
 
 {-# INLINE encodeVectorType #-}
-encodeVectorType :: VectorType t -> Builder
-encodeVectorType (Vector2Type t)  = intHost $(hashQ "Vector2Type") <> encodeSingleType t
-encodeVectorType (Vector3Type t)  = intHost $(hashQ "Vector3Type") <> encodeSingleType t
-encodeVectorType (Vector4Type t)  = intHost $(hashQ "Vector4Type") <> encodeSingleType t
-encodeVectorType (Vector8Type t)  = intHost $(hashQ "Vector8Type") <> encodeSingleType t
-encodeVectorType (Vector16Type t) = intHost $(hashQ "Vector16Type") <> encodeSingleType t
+encodeVectorType :: VectorType (Vec n t) -> Builder
+encodeVectorType (VectorType n t) = intHost $(hashQ "VectorType") <> intHost n <> encodeSingleType t
 
 {-# INLINE encodeBoundedType #-}
 encodeBoundedType :: BoundedType t -> Builder

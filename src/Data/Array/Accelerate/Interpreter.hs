@@ -63,7 +63,6 @@ import Data.Char                                                    ( chr, ord )
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Typeable
-import GHC.TypeLits
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
@@ -1046,13 +1045,9 @@ evalUndef = toElt (undef (eltType @a))
     single (NonNumSingleType t) = nonnum t
 
     vector :: VectorType t -> t
-    vector (Vector2Type t)  = vec (2 * sizeOfSingleType t)
-    vector (Vector3Type t)  = vec (3 * sizeOfSingleType t)
-    vector (Vector4Type t)  = vec (4 * sizeOfSingleType t)
-    vector (Vector8Type t)  = vec (8 * sizeOfSingleType t)
-    vector (Vector16Type t) = vec (16 * sizeOfSingleType t)
+    vector (VectorType n t) = vec (n * sizeOfSingleType t)
 
-    vec :: KnownNat n => Int -> Vec n t
+    vec :: Int -> Vec n t
     vec n = runST $ do
       mba           <- newByteArray n
       ByteArray ba# <- unsafeFreezeByteArray mba

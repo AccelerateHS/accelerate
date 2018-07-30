@@ -15,6 +15,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE UnboxedTuples         #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
@@ -121,10 +122,8 @@ module Data.Array.Accelerate.AST (
 
 --standard library
 import Control.DeepSeq
-import Control.Monad.Primitive
 import Control.Monad.ST
 import Data.List
-import Data.Primitive.ByteArray
 import Data.Typeable
 import Foreign.ForeignPtr
 import Foreign.Marshal
@@ -138,7 +137,7 @@ import qualified Language.Haskell.TH.Syntax                         as TH
 import Instances.TH.Lift                                            () -- Int8, Int16...
 #endif
 
-import GHC.Base                                                     ( isTrue# )
+import GHC.Base                                                     ( Int#, isTrue# )
 import GHC.Int                                                      ( Int(..) )
 import GHC.Prim                                                     ( (<#), (+#), indexWord8Array#, sizeofByteArray# )
 import GHC.Ptr                                                      ( Ptr(..) )
@@ -1384,11 +1383,7 @@ rnfSingleType (NumSingleType t)    = rnfNumType t
 rnfSingleType (NonNumSingleType t) = rnfNonNumType t
 
 rnfVectorType :: VectorType t -> ()
-rnfVectorType (Vector2Type t)  = rnfSingleType t
-rnfVectorType (Vector3Type t)  = rnfSingleType t
-rnfVectorType (Vector4Type t)  = rnfSingleType t
-rnfVectorType (Vector8Type t)  = rnfSingleType t
-rnfVectorType (Vector16Type t) = rnfSingleType t
+rnfVectorType (VectorType !_ t) = rnfSingleType t
 
 rnfBoundedType :: BoundedType t -> ()
 rnfBoundedType (IntegralBoundedType t) = rnfIntegralType t
@@ -1602,8 +1597,8 @@ liftArray (Array sh adata) =
     go ArrayEltRdouble       (AD_Double ua)  = [|| AD_Double $$(arr ua) ||]
     go ArrayEltRbool         (AD_Bool ua)    = [|| AD_Bool $$(arr ua) ||]
     go ArrayEltRchar         (AD_Char ua)    = [|| AD_Char $$(arr ua) ||]
-    go (ArrayEltRvec r)      (AD_Vec a)      = [|| AD_Vec $$(go r a) ||]
     go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = [|| AD_Pair $$(go r1 a1) $$(go r2 a2) ||]
+    go (ArrayEltRvec r)      (AD_Vec w# a)   = TH.unsafeTExpCoerce $ [| AD_Vec $(liftInt# w#) $(TH.unTypeQ (go r a)) |]
 
 
 liftBoundary
@@ -1708,12 +1703,8 @@ liftSingle :: SingleType t -> t -> Q (TExp t)
 liftSingle (NumSingleType t)    x = liftNum t x
 liftSingle (NonNumSingleType t) x = liftNonNum t x
 
-liftVector :: VectorType v -> v -> Q (TExp v)
-liftVector Vector2Type{}  x = liftVec x
-liftVector Vector3Type{}  x = liftVec x
-liftVector Vector4Type{}  x = liftVec x
-liftVector Vector8Type{}  x = liftVec x
-liftVector Vector16Type{} x = liftVec x
+liftVector :: VectorType t -> t -> Q (TExp t)
+liftVector VectorType{} x = liftVec x
 
 -- O(n) at runtime to copy from the Addr# to the ByteArray#. We should be able
 -- to do this without copying, but I don't think the definition of ByteArray# is
@@ -1722,12 +1713,12 @@ liftVector Vector16Type{} x = liftVec x
 liftVec :: Vec n a -> Q (TExp (Vec n a))
 liftVec (Vec ba#)
   = TH.unsafeTExpCoerce
-  $ [| runST $ do
-          let I# n'# = n  -- hack
-          mba@(MutableByteArray mba#) <- newByteArray n
-          primitive_ (copyAddrToByteArray# $(TH.litE (TH.StringPrimL bytes)) mba# 0# n'#)
-          ByteArray ba'# <- unsafeFreezeByteArray mba
-          return $ Vec ba'#
+  $ [| runST $ \s ->
+         case newByteArray# $(liftInt# n#) s                                                   of { (# s1, mba# #) ->
+         case copyAddrToByteArray# $(TH.litE (TH.StringPrimL bytes)) mba# 0# $(liftInt# n#) s1 of { s2             ->
+         case unsafeFreezeByteArray# mba# s2                                                   of { (# s3, ba'# #) ->
+           (# s3, Vec ba'# #)
+        }}}
      |]
   where
       bytes :: [Word8]
@@ -1737,58 +1728,62 @@ liftVec (Vec ba#)
                 | otherwise          = []
 
       n# = sizeofByteArray# ba#
-      n  = I# n#
+
+-- XXX: Typed TH does not support unlifted types
+--
+liftInt# :: Int# -> TH.ExpQ
+liftInt# i# = TH.litE (TH.IntPrimL (toInteger (I# i#)))
 
 liftNum :: NumType t -> t -> Q (TExp t)
 liftNum (IntegralNumType t) x = liftIntegral t x
 liftNum (FloatingNumType t) x = liftFloating t x
 
 liftNonNum :: NonNumType t -> t -> Q (TExp t)
-liftNonNum TypeBool{}   x = [|| x ||]
-liftNonNum TypeChar{}   x = [|| x ||]
+liftNonNum TypeBool{} x = [|| x ||]
+liftNonNum TypeChar{} x = [|| x ||]
 
 liftIntegral :: IntegralType t -> t -> Q (TExp t)
-liftIntegral TypeInt{}     x = [|| x ||]
-liftIntegral TypeInt8{}    x = [|| x ||]
-liftIntegral TypeInt16{}   x = [|| x ||]
-liftIntegral TypeInt32{}   x = [|| x ||]
-liftIntegral TypeInt64{}   x = [|| x ||]
+liftIntegral TypeInt{}    x = [|| x ||]
+liftIntegral TypeInt8{}   x = [|| x ||]
+liftIntegral TypeInt16{}  x = [|| x ||]
+liftIntegral TypeInt32{}  x = [|| x ||]
+liftIntegral TypeInt64{}  x = [|| x ||]
 #if __GLASGOW_HASKELL__ >= 710
-liftIntegral TypeWord{}    x = [|| x ||]
+liftIntegral TypeWord{}   x = [|| x ||]
 #else
-liftIntegral TypeWord{}    x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeWord{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
 #endif
-liftIntegral TypeWord8{}   x = [|| x ||]
-liftIntegral TypeWord16{}  x = [|| x ||]
-liftIntegral TypeWord32{}  x = [|| x ||]
-liftIntegral TypeWord64{}  x = [|| x ||]
+liftIntegral TypeWord8{}  x = [|| x ||]
+liftIntegral TypeWord16{} x = [|| x ||]
+liftIntegral TypeWord32{} x = [|| x ||]
+liftIntegral TypeWord64{} x = [|| x ||]
 
 liftFloating :: FloatingType t -> t -> Q (TExp t)
-liftFloating TypeHalf{}    x = [|| x ||]
-liftFloating TypeFloat{}   x = [|| x ||]
-liftFloating TypeDouble{}  x = [|| x ||]
+liftFloating TypeHalf{}   x = [|| x ||]
+liftFloating TypeFloat{}  x = [|| x ||]
+liftFloating TypeDouble{} x = [|| x ||]
 
 
 liftIntegralType :: IntegralType t -> Q (TExp (IntegralType t))
-liftIntegralType TypeInt{}     = [|| TypeInt IntegralDict ||]
-liftIntegralType TypeInt8{}    = [|| TypeInt8 IntegralDict ||]
-liftIntegralType TypeInt16{}   = [|| TypeInt16 IntegralDict ||]
-liftIntegralType TypeInt32{}   = [|| TypeInt32 IntegralDict ||]
-liftIntegralType TypeInt64{}   = [|| TypeInt64 IntegralDict ||]
-liftIntegralType TypeWord{}    = [|| TypeWord IntegralDict ||]
-liftIntegralType TypeWord8{}   = [|| TypeWord8 IntegralDict ||]
-liftIntegralType TypeWord16{}  = [|| TypeWord16 IntegralDict ||]
-liftIntegralType TypeWord32{}  = [|| TypeWord32 IntegralDict ||]
-liftIntegralType TypeWord64{}  = [|| TypeWord64 IntegralDict ||]
+liftIntegralType TypeInt{}    = [|| TypeInt IntegralDict ||]
+liftIntegralType TypeInt8{}   = [|| TypeInt8 IntegralDict ||]
+liftIntegralType TypeInt16{}  = [|| TypeInt16 IntegralDict ||]
+liftIntegralType TypeInt32{}  = [|| TypeInt32 IntegralDict ||]
+liftIntegralType TypeInt64{}  = [|| TypeInt64 IntegralDict ||]
+liftIntegralType TypeWord{}   = [|| TypeWord IntegralDict ||]
+liftIntegralType TypeWord8{}  = [|| TypeWord8 IntegralDict ||]
+liftIntegralType TypeWord16{} = [|| TypeWord16 IntegralDict ||]
+liftIntegralType TypeWord32{} = [|| TypeWord32 IntegralDict ||]
+liftIntegralType TypeWord64{} = [|| TypeWord64 IntegralDict ||]
 
 liftFloatingType :: FloatingType t -> Q (TExp (FloatingType t))
-liftFloatingType TypeHalf{}    = [|| TypeHalf FloatingDict ||]
-liftFloatingType TypeFloat{}   = [|| TypeFloat FloatingDict ||]
-liftFloatingType TypeDouble{}  = [|| TypeDouble FloatingDict ||]
+liftFloatingType TypeHalf{}   = [|| TypeHalf FloatingDict ||]
+liftFloatingType TypeFloat{}  = [|| TypeFloat FloatingDict ||]
+liftFloatingType TypeDouble{} = [|| TypeDouble FloatingDict ||]
 
 liftNonNumType :: NonNumType t -> Q (TExp (NonNumType t))
-liftNonNumType TypeBool{}   = [|| TypeBool NonNumDict ||]
-liftNonNumType TypeChar{}   = [|| TypeChar NonNumDict ||]
+liftNonNumType TypeBool{} = [|| TypeBool NonNumDict ||]
+liftNonNumType TypeChar{} = [|| TypeChar NonNumDict ||]
 
 liftNumType :: NumType t -> Q (TExp (NumType t))
 liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]
@@ -1807,11 +1802,7 @@ liftSingleType (NumSingleType t)    = [|| NumSingleType $$(liftNumType t) ||]
 liftSingleType (NonNumSingleType t) = [|| NonNumSingleType $$(liftNonNumType t) ||]
 
 -- liftVectorType :: VectorType t -> Q (TExp (VectorType t))
--- liftVectorType (Vector2Type t)  = [|| Vector2Type $$(liftSingleType t) ||]
--- liftVectorType (Vector3Type t)  = [|| Vector3Type $$(liftSingleType t) ||]
--- liftVectorType (Vector4Type t)  = [|| Vector4Type $$(liftSingleType t) ||]
--- liftVectorType (Vector8Type t)  = [|| Vector8Type $$(liftSingleType t) ||]
--- liftVectorType (Vector16Type t) = [|| Vector16Type $$(liftSingleType t) ||]
+-- liftVectorType (VectorType n t) = [|| VectorType n $$(liftSingleType t) ||]
 
 
 -- Debugging

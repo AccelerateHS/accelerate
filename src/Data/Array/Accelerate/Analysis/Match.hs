@@ -36,6 +36,7 @@ module Data.Array.Accelerate.Analysis.Match (
 -- standard library
 import Data.Maybe
 import Data.Typeable
+import Unsafe.Coerce                                    ( unsafeCoerce )
 import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
 import Prelude                                          hiding ( exp )
@@ -616,11 +617,7 @@ evalEqSingle (NumSingleType t)                                  = evalEqNum t
 evalEqSingle (NonNumSingleType t) | NonNumDict <- nonNumDict t  = uncurry (==)
 
 evalEqVector :: VectorType a -> (a, a) -> Bool
-evalEqVector Vector2Type{}  = uncurry (==)
-evalEqVector Vector3Type{}  = uncurry (==)
-evalEqVector Vector4Type{}  = uncurry (==)
-evalEqVector Vector8Type{}  = uncurry (==)
-evalEqVector Vector16Type{} = uncurry (==)
+evalEqVector VectorType{} = uncurry (==)
 
 evalEqNum :: NumType a -> (a, a) -> Bool
 evalEqNum (IntegralNumType t) | IntegralDict <- integralDict t  = uncurry (==)
@@ -917,21 +914,12 @@ matchSingleType (NonNumSingleType s) (NonNumSingleType t) = matchNonNumType s t
 matchSingleType _                    _                    = Nothing
 
 {-# INLINEABLE matchVectorType #-}
-matchVectorType :: VectorType s -> VectorType t -> Maybe (s :~: t)
-matchVectorType (Vector2Type s) (Vector2Type t)
-  | Just Refl <- matchSingleType s t
-  = Just Refl
-matchVectorType (Vector3Type s) (Vector3Type t)
-  | Just Refl <- matchSingleType s t
-  = Just Refl
-matchVectorType (Vector4Type s) (Vector4Type t)
-  | Just Refl <- matchSingleType s t
-  = Just Refl
-matchVectorType (Vector8Type s) (Vector8Type t)
-  | Just Refl <- matchSingleType s t
-  = Just Refl
-matchVectorType (Vector16Type s) (Vector16Type t)
-  | Just Refl <- matchSingleType s t
+matchVectorType :: forall m n s t. VectorType (Vec n s) -> VectorType (Vec m t) -> Maybe (Vec n s :~: Vec m t)
+matchVectorType (VectorType n s) (VectorType m t)
+  | Just Refl <- if n == m
+                   then Just (unsafeCoerce Refl :: n :~: m) -- XXX: we don't have an embedded KnownNat constraint, but
+                   else Nothing                             -- this implementation is the same as 'GHC.TypeLits.sameNat'
+  , Just Refl <- matchSingleType s t
   = Just Refl
 matchVectorType _ _
   = Nothing

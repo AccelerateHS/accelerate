@@ -90,9 +90,10 @@ import Numeric.Half
 import Text.PrettyPrint.ANSI.Leijen
 import Text.Printf
 
+import GHC.Base                                                     ( isTrue# )
+import GHC.Int
 import GHC.Prim
 import GHC.TypeLits
-import GHC.Types
 
 
 -- Scalar types
@@ -169,12 +170,8 @@ data SingleType a where
   NumSingleType    :: NumType a    -> SingleType a
   NonNumSingleType :: NonNumType a -> SingleType a
 
-data VectorType v where
-  Vector2Type   :: SingleType a -> VectorType (V2 a)
-  Vector3Type   :: SingleType a -> VectorType (V3 a)
-  Vector4Type   :: SingleType a -> VectorType (V4 a)
-  Vector8Type   :: SingleType a -> VectorType (V8 a)
-  Vector16Type  :: SingleType a -> VectorType (V16 a)
+data VectorType a where
+  VectorType       :: {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
 
 -- Showing type names
 --
@@ -213,11 +210,7 @@ instance Show (SingleType a) where
   show (NonNumSingleType ty) = show ty
 
 instance Show (VectorType a) where
-  show (Vector2Type t)  = printf "<2 x %s>" (show t)
-  show (Vector3Type t)  = printf "<3 x %s>" (show t)
-  show (Vector4Type t)  = printf "<4 x %s>" (show t)
-  show (Vector8Type t)  = printf "<8 x %s>" (show t)
-  show (Vector16Type t) = printf "<16 x %s>" (show t)
+  show (VectorType n ty)     = printf "<%d x %s>" n (show ty)
 
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
@@ -570,6 +563,9 @@ $( runQ $ do
         , (''Char, 32)
         ]
 
+      vectorTypes :: [(Name, Integer)]
+      vectorTypes = integralTypes ++ floatingTypes ++ tail nonNumTypes  -- not Bool, no ArrayElt instances
+
       mkIntegral :: Name -> Integer -> Q [Dec]
       mkIntegral t n =
         [d| instance IsIntegral $(conT t) where
@@ -626,32 +622,16 @@ $( runQ $ do
 
       mkVector :: Name -> Integer -> Q [Dec]
       mkVector t n =
-        [d| instance IsScalar (V2 $(conT t)) where
-              scalarType = VectorScalarType (Vector2Type singleType)
+        [d| instance KnownNat n => IsScalar (Vec n $(conT t)) where
+              scalarType = VectorScalarType (VectorType (fromIntegral (natVal' (proxy# :: Proxy# n))) singleType)
 
-            instance IsScalar (V3 $(conT t)) where
-              scalarType = VectorScalarType (Vector3Type singleType)
-
-            instance IsScalar (V4 $(conT t)) where
-              scalarType = VectorScalarType (Vector4Type singleType)
-
-            instance IsScalar (V8 $(conT t)) where
-              scalarType = VectorScalarType (Vector8Type singleType)
-
-            instance IsScalar (V16 $(conT t)) where
-              scalarType = VectorScalarType (Vector16Type singleType)
-
-            type instance BitSize (V2 $(conT t))  = $(litT (numTyLit (2*n)))
-            type instance BitSize (V3 $(conT t))  = $(litT (numTyLit (3*n)))
-            type instance BitSize (V4 $(conT t))  = $(litT (numTyLit (4*n)))
-            type instance BitSize (V8 $(conT t))  = $(litT (numTyLit (8*n)))
-            type instance BitSize (V16 $(conT t)) = $(litT (numTyLit (16*n)))
+            type instance BitSize (Vec w $(conT t)) = w GHC.TypeLits.* $(litT (numTyLit n))
           |]
       --
   is <- mapM (uncurry mkIntegral) integralTypes
   fs <- mapM (uncurry mkFloating) floatingTypes
   ns <- mapM (uncurry mkNonNum)   nonNumTypes
-  vs <- mapM (uncurry mkVector)  (integralTypes ++ floatingTypes ++ nonNumTypes)
+  vs <- mapM (uncurry mkVector)   vectorTypes
   --
   return (concat is ++ concat fs ++ concat ns ++ concat vs)
  )

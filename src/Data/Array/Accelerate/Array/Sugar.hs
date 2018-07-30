@@ -876,7 +876,7 @@ instance NFData (Array sh e) where
       go ArrayEltRdouble       (AD_Double ua)  = rnf ua
       go ArrayEltRbool         (AD_Bool ua)    = rnf ua
       go ArrayEltRchar         (AD_Char ua)    = rnf ua
-      go (ArrayEltRvec r)      (AD_Vec a)      = go r a `seq` ()
+      go (ArrayEltRvec r)      (AD_Vec !_ a)   = go r a `seq` ()
       go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 
 

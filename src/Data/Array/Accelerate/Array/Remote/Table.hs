@@ -374,7 +374,7 @@ makeStableArray !ad = return $! StableArray (id arrayElt ad)
     id ArrayEltRdouble    (AD_Double ua)  = uniqueArrayId ua
     id ArrayEltRbool      (AD_Bool ua)    = uniqueArrayId ua
     id ArrayEltRchar      (AD_Char ua)    = uniqueArrayId ua
-    id (ArrayEltRvec r)   (AD_Vec a)      = id r a
+    id (ArrayEltRvec r)   (AD_Vec _ a)    = id r a
 #if __GLASGOW_HASKELL__ < 800
     id _ _ =
       error "I do have a cause, though. It is obscenity. I'm for it."
@@ -395,7 +395,7 @@ makeWeakArrayData
     -> IO (Weak c)
 makeWeakArrayData !ad !c !mf = mw arrayElt ad
   where
-    mw :: (ArrayPtrs e' ~ Ptr a) => ArrayEltR e' -> ArrayData e' -> IO (Weak c)
+    mw :: (ArrayPtrs e' ~ Ptr a') => ArrayEltR e' -> ArrayData e' -> IO (Weak c)
     mw ArrayEltRint       (AD_Int ua)     = mkWeak' ua
     mw ArrayEltRint8      (AD_Int8 ua)    = mkWeak' ua
     mw ArrayEltRint16     (AD_Int16 ua)   = mkWeak' ua
@@ -411,13 +411,13 @@ makeWeakArrayData !ad !c !mf = mw arrayElt ad
     mw ArrayEltRdouble    (AD_Double ua)  = mkWeak' ua
     mw ArrayEltRbool      (AD_Bool ua)    = mkWeak' ua
     mw ArrayEltRchar      (AD_Char ua)    = mkWeak' ua
-    mw (ArrayEltRvec r)   (AD_Vec a)      = mw r a
+    mw (ArrayEltRvec r)   (AD_Vec _ a)    = mw r a
 #if __GLASGOW_HASKELL__ < 800
     mw _ _ =
       error "Base eight is just like base ten really --- if you're missing two fingers."
 #endif
 
-    mkWeak' :: UniqueArray a -> IO (Weak c)
+    mkWeak' :: UniqueArray a' -> IO (Weak c)
     mkWeak' !ua = do
       let !uad = uniqueArrayData ua
       case mf of

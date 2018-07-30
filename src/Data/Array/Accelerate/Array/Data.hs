@@ -47,6 +47,7 @@ module Data.Array.Accelerate.Array.Data (
 -- friends
 import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Orphans                                ()  -- Prim Half
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Debug.Flags
@@ -55,25 +56,23 @@ import Data.Array.Accelerate.Debug.Trace
 
 -- standard libraries
 import Control.Applicative
-import Control.Monad
-import Control.Monad.Primitive
+import Control.Monad                                                ( (<=<) )
 import Data.Bits
 import Data.Char
 import Data.IORef
-import Data.Primitive.ByteArray
+import Data.Primitive                                               ( sizeOf# )
 import Data.Typeable                                                ( Typeable )
 import Foreign.ForeignPtr
-import Foreign.Ptr
 import Foreign.Storable
 import Language.Haskell.TH
 import System.IO.Unsafe
 import Text.Printf
-import Prelude
+import Prelude                                                      hiding ( mapM )
 
-import GHC.Ptr                                                      ( Ptr(..) )
-import GHC.TypeLits                                                 ( KnownNat, natVal' )
-import GHC.Base                                                     ( Int(..), IO(..), Proxy#, proxy#, unsafeCoerce#, newAlignedPinnedByteArray#, byteArrayContents#, copyAddrToByteArray#, copyByteArrayToAddr# )
-import GHC.ForeignPtr                                               ( ForeignPtr(..), ForeignPtrContents(..) )
+import GHC.Base
+import GHC.ForeignPtr
+import GHC.Ptr
+import GHC.TypeLits
 
 
 -- Determine the underlying type of a Haskell CLong or CULong.
@@ -124,23 +123,23 @@ type MutableArrayData e = GArrayData UniqueArray e
 --
 data family GArrayData :: (* -> *) -> * -> *
 data instance GArrayData ba ()        = AD_Unit
-data instance GArrayData ba Int       = AD_Int     (ba Int)
-data instance GArrayData ba Int8      = AD_Int8    (ba Int8)
-data instance GArrayData ba Int16     = AD_Int16   (ba Int16)
-data instance GArrayData ba Int32     = AD_Int32   (ba Int32)
-data instance GArrayData ba Int64     = AD_Int64   (ba Int64)
-data instance GArrayData ba Word      = AD_Word    (ba Word)
-data instance GArrayData ba Word8     = AD_Word8   (ba Word8)
-data instance GArrayData ba Word16    = AD_Word16  (ba Word16)
-data instance GArrayData ba Word32    = AD_Word32  (ba Word32)
-data instance GArrayData ba Word64    = AD_Word64  (ba Word64)
-data instance GArrayData ba Half      = AD_Half    (ba Half)
-data instance GArrayData ba Float     = AD_Float   (ba Float)
-data instance GArrayData ba Double    = AD_Double  (ba Double)
-data instance GArrayData ba Bool      = AD_Bool    (ba Word8)
-data instance GArrayData ba Char      = AD_Char    (ba Char)
-data instance GArrayData ba (Vec n a) = AD_Vec     (GArrayData ba a)
-data instance GArrayData ba (a, b)    = AD_Pair    (GArrayData ba a) (GArrayData ba b)
+data instance GArrayData ba Int       = AD_Int      (ba Int)
+data instance GArrayData ba Int8      = AD_Int8     (ba Int8)
+data instance GArrayData ba Int16     = AD_Int16    (ba Int16)
+data instance GArrayData ba Int32     = AD_Int32    (ba Int32)
+data instance GArrayData ba Int64     = AD_Int64    (ba Int64)
+data instance GArrayData ba Word      = AD_Word     (ba Word)
+data instance GArrayData ba Word8     = AD_Word8    (ba Word8)
+data instance GArrayData ba Word16    = AD_Word16   (ba Word16)
+data instance GArrayData ba Word32    = AD_Word32   (ba Word32)
+data instance GArrayData ba Word64    = AD_Word64   (ba Word64)
+data instance GArrayData ba Half      = AD_Half     (ba Half)
+data instance GArrayData ba Float     = AD_Float    (ba Float)
+data instance GArrayData ba Double    = AD_Double   (ba Double)
+data instance GArrayData ba Bool      = AD_Bool     (ba Word8)
+data instance GArrayData ba Char      = AD_Char     (ba Char)
+data instance GArrayData ba (Vec n a) = AD_Vec Int# (GArrayData ba a) -- vector width
+data instance GArrayData ba (a, b)    = AD_Pair     (GArrayData ba a) (GArrayData ba b)
 
 deriving instance Typeable GArrayData
 
@@ -164,14 +163,12 @@ data ArrayEltR a where
   ArrayEltRdouble  :: ArrayEltR Double
   ArrayEltRbool    :: ArrayEltR Bool
   ArrayEltRchar    :: ArrayEltR Char
-  ArrayEltRvec     :: ArrayEltR a -> ArrayEltR (Vec n a)  -- XXX: not restrictive enough
   ArrayEltRpair    :: ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
+  ArrayEltRvec     :: (KnownNat n, ArrayPtrs a ~ Ptr a) => ArrayEltR a -> ArrayEltR (Vec n a)
+    -- XXX: Do we really require these embedded class constraints?
 
 -- Array operations
 -- ----------------
---
--- TLM: do we need to INLINE these functions to get good performance interfacing
---      to external libraries, especially Repa?
 
 class ArrayElt e where
   type ArrayPtrs e
@@ -212,6 +209,9 @@ instance ArrayElt () where
 -- it is better suited to parallel backends than a packed bit-vector
 -- representation.
 --
+-- XXX: Currently there are _no_ (Vec n Bool) instances. We could use efficient
+--      bit-packed representations for these cases...
+--
 instance ArrayElt Bool where
   type ArrayPtrs Bool = Ptr Word8
   arrayElt            = ArrayEltRbool
@@ -227,37 +227,6 @@ instance ArrayElt Bool where
   unsafeIndexArrayData (AD_Bool ba) i   = toBool  $! unsafeIndexArray ba i
   unsafeReadArrayData  (AD_Bool ba) i   = toBool <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_Bool ba) i e = unsafeWriteArray ba i (fromBool e)
-
-instance (KnownNat n, ArrayElt a, ArrayPtrs a ~ Ptr e, Storable e) => ArrayElt (Vec n a) where
-  type ArrayPtrs (Vec n a) = ArrayPtrs a
-  arrayElt                 = ArrayEltRvec arrayElt
-  {-# INLINE newArrayData         #-}
-  {-# INLINE ptrsOfArrayData      #-}
-  {-# INLINE touchArrayData       #-}
-  {-# INLINE unsafeIndexArrayData #-}
-  {-# INLINE unsafeReadArrayData  #-}
-  {-# INLINE unsafeWriteArrayData #-}
-  newArrayData size           = AD_Vec <$> newArrayData (fromIntegral (natVal' (proxy# :: Proxy# n)) * size)
-  ptrsOfArrayData (AD_Vec ba) = ptrsOfArrayData ba
-  touchArrayData  (AD_Vec ba) = touchArrayData ba
-  unsafeIndexArrayData vec ix = unsafePerformIO $! unsafeReadArrayData vec ix
-  --
-  unsafeReadArrayData (AD_Vec ba) ix = do
-    let n                   = fromIntegral (natVal' (proxy# :: Proxy# n))
-        !bytes@(I# bytes#)  = n * sizeOf (undefined :: e)
-        !(Ptr addr#)        = ptrsOfArrayData ba `plusPtr` (ix * bytes)
-    --
-    mba@(MutableByteArray mba#) <- newByteArray (n * bytes)
-    primitive_ (copyAddrToByteArray# addr# mba# 0# bytes#)
-    ByteArray ba# <- unsafeFreezeByteArray mba
-    return $! Vec ba#
-  --
-  unsafeWriteArrayData (AD_Vec ba) ix (Vec ba#) =
-    let n                   = fromIntegral (natVal' (proxy# :: Proxy# n))
-        !bytes@(I# bytes#)  = n * sizeOf (undefined :: e)
-        !(Ptr addr#)        = ptrsOfArrayData ba `plusPtr` (ix * bytes)
-    in
-    primitive_ (copyByteArrayToAddr# ba# 0# addr# bytes#)
 
 instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
   type ArrayPtrs (a, b) = (ArrayPtrs a, ArrayPtrs b)
@@ -298,6 +267,10 @@ pairArrayData = AD_Pair
 
 -- Auxiliary functions
 -- -------------------
+
+{-# INLINE unPtr# #-}
+unPtr# :: Ptr a -> Addr#
+unPtr# (Ptr addr#) = addr#
 
 {-# INLINE toBool #-}
 toBool :: Word8 -> Bool
@@ -429,8 +402,8 @@ $(runQ $ do
         allTypes :: [Name]
         allTypes = integralTypes ++ floatingTypes ++ nonNumTypes
 
-        mkArrayElt :: Name -> Q [Dec]
-        mkArrayElt name =
+        mkSingleElt :: Name -> Q [Dec]
+        mkSingleElt name =
           let
               n       = nameBase name
               t       = conT name
@@ -453,7 +426,48 @@ $(runQ $ do
                 unsafeReadArrayData  $pat i   = unsafeReadArray  ba i
                 unsafeWriteArrayData $pat i e = unsafeWriteArray ba i e
             |]
+
+        mkVectorElt :: Name -> Q [Dec]
+        mkVectorElt name =
+          let t = conT name
+          in
+          [d| instance KnownNat n => ArrayElt (Vec n $t) where
+                type ArrayPtrs (Vec n $t) = ArrayPtrs $t
+                arrayElt                  = ArrayEltRvec arrayElt
+                {-# INLINE newArrayData         #-}
+                {-# INLINE ptrsOfArrayData      #-}
+                {-# INLINE touchArrayData       #-}
+                {-# INLINE unsafeIndexArrayData #-}
+                {-# INLINE unsafeReadArrayData  #-}
+                {-# INLINE unsafeWriteArrayData #-}
+                newArrayData size =
+                  let !w@(I# w#) = fromIntegral (natVal' (proxy# :: Proxy# n))
+                  in  AD_Vec w# <$> newArrayData (w * size)
+
+                ptrsOfArrayData (AD_Vec _ ba) = ptrsOfArrayData ba
+                touchArrayData  (AD_Vec _ ba) = touchArrayData ba
+                unsafeIndexArrayData vec ix   = unsafePerformIO $! unsafeReadArrayData vec ix
+                unsafeReadArrayData (AD_Vec w# ad) (I# ix#) =
+                  let !bytes# = w# *# sizeOf# (undefined :: $t)
+                      !addr#  = unPtr# (ptrsOfArrayData ad) `plusAddr#` (ix# *# bytes#)
+                  in
+                  IO $ \s ->
+                    case newByteArray# bytes# s                       of { (# s1, mba# #) ->
+                    case copyAddrToByteArray# addr# mba# 0# bytes# s1 of { s2             ->
+                    case unsafeFreezeByteArray# mba# s2               of { (# s3, ba# #)  ->
+                      (# s3, Vec ba# #)
+                    }}}
+                unsafeWriteArrayData (AD_Vec w# ad) (I# ix#) (Vec ba#) =
+                  let !bytes# = w# *# sizeOf# (undefined :: $t)
+                      !addr#  = unPtr# (ptrsOfArrayData ad) `plusAddr#` (ix# *# bytes#)
+                  in
+                  IO $ \s ->
+                    case copyByteArrayToAddr# ba# 0# addr# bytes# s of
+                      s1 -> (# s1, () #)
+            |]
     --
-    concat <$> mapM mkArrayElt allTypes
+    ss <- mapM mkSingleElt allTypes
+    vv <- mapM mkVectorElt allTypes
+    return (concat ss ++ concat vv)
  )
 

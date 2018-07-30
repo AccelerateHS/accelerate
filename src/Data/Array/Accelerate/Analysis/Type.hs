@@ -213,11 +213,7 @@ sizeOfSingleType (NumSingleType t)    = sizeOfNumType t
 sizeOfSingleType (NonNumSingleType t) = sizeOfNonNumType t
 
 sizeOfVectorType :: VectorType t -> Int
-sizeOfVectorType (Vector2Type t)  = 2 * sizeOfSingleType t
-sizeOfVectorType (Vector3Type t)  = 3 * sizeOfSingleType t
-sizeOfVectorType (Vector4Type t)  = 4 * sizeOfSingleType t
-sizeOfVectorType (Vector8Type t)  = 8 * sizeOfSingleType t
-sizeOfVectorType (Vector16Type t) = 16 * sizeOfSingleType t
+sizeOfVectorType (VectorType n t) = n * sizeOfSingleType t
 
 sizeOfNumType :: forall t. NumType t -> Int
 sizeOfNumType (IntegralNumType t) | IntegralDict <- integralDict t = F.sizeOf (undefined::t)
