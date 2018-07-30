@@ -37,7 +37,7 @@ module Data.Array.Accelerate.Array.Data (
   fstArrayData, sndArrayData, pairArrayData,
 
   -- * Type macros
-  HTYPE_INT, HTYPE_WORD, HTYPE_LONG, HTYPE_UNSIGNED_LONG, HTYPE_CCHAR,
+  HTYPE_INT, HTYPE_WORD, HTYPE_CLONG, HTYPE_CULONG, HTYPE_CCHAR,
 
   -- * Allocator internals
   registerForeignPtrAllocator,
@@ -90,13 +90,13 @@ $( runQ [d| type HTYPE_WORD = $(
                 64 -> [t| Word64 |]
                 _  -> error "I don't know what architecture I am" ) |] )
 
-$( runQ [d| type HTYPE_LONG = $(
+$( runQ [d| type HTYPE_CLONG = $(
               case finiteBitSize (undefined::CLong) of
                 32 -> [t| Int32 |]
                 64 -> [t| Int64 |]
                 _  -> error "I don't know what architecture I am" ) |] )
 
-$( runQ [d| type HTYPE_UNSIGNED_LONG = $(
+$( runQ [d| type HTYPE_CULONG = $(
               case finiteBitSize (undefined::CULong) of
                 32 -> [t| Word32 |]
                 64 -> [t| Word64 |]

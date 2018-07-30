@@ -393,13 +393,13 @@ instance Elt CUInt where
   toElt             = CUInt
 
 instance Elt CLong where
-  type EltRepr CLong = HTYPE_LONG
+  type EltRepr CLong = HTYPE_CLONG
   eltType           = singletonScalarType
   fromElt (CLong x) = x
   toElt             = CLong
 
 instance Elt CULong where
-  type EltRepr CULong = HTYPE_UNSIGNED_LONG
+  type EltRepr CULong = HTYPE_CULONG
   eltType            = singletonScalarType
   fromElt (CULong x) = x
   toElt              = CULong

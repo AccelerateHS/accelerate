@@ -95,12 +95,12 @@ instance P.Bounded (Exp CUInt) where
   maxBound = mkBitcast (mkMaxBound @Word32)
 
 instance P.Bounded (Exp CLong) where
-  minBound = mkBitcast (mkMinBound @HTYPE_LONG)
-  maxBound = mkBitcast (mkMaxBound @HTYPE_LONG)
+  minBound = mkBitcast (mkMinBound @HTYPE_CLONG)
+  maxBound = mkBitcast (mkMaxBound @HTYPE_CLONG)
 
 instance P.Bounded (Exp CULong) where
-  minBound = mkBitcast (mkMinBound @HTYPE_UNSIGNED_LONG)
-  maxBound = mkBitcast (mkMaxBound @HTYPE_UNSIGNED_LONG)
+  minBound = mkBitcast (mkMinBound @HTYPE_CULONG)
+  maxBound = mkBitcast (mkMaxBound @HTYPE_CULONG)
 
 instance P.Bounded (Exp CLLong) where
   minBound = mkBitcast (mkMinBound @Int64)

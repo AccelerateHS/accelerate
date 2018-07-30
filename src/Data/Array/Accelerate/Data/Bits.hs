@@ -406,8 +406,8 @@ instance Bits CLong where
   (.|.)        = lift2 mkBOr
   xor          = lift2 mkBXor
   complement   = lift1 mkBNot
-  bit          = mkBitcast . bitDefault @HTYPE_LONG
-  testBit b    = testBitDefault (mkBitcast @HTYPE_LONG b)
+  bit          = mkBitcast . bitDefault @HTYPE_CLONG
+  testBit b    = testBitDefault (mkBitcast @HTYPE_CLONG b)
   shift        = lift2' shiftDefault
   shiftL       = lift2' shiftLDefault
   shiftR       = lift2' shiftRDefault
@@ -417,15 +417,15 @@ instance Bits CLong where
   rotateL      = lift2' rotateLDefault
   rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @HTYPE_LONG
+  popCount     = mkPopCount . mkBitcast @HTYPE_CLONG
 
 instance Bits CULong where
   (.&.)        = lift2 mkBAnd
   (.|.)        = lift2 mkBOr
   xor          = lift2 mkBXor
   complement   = lift1 mkBNot
-  bit          = mkBitcast . bitDefault @HTYPE_UNSIGNED_LONG
-  testBit b    = testBitDefault (mkBitcast @HTYPE_UNSIGNED_LONG b)
+  bit          = mkBitcast . bitDefault @HTYPE_CULONG
+  testBit b    = testBitDefault (mkBitcast @HTYPE_CULONG b)
   shift        = lift2' shiftDefault
   shiftL       = lift2' shiftLDefault
   shiftR       = lift2' shiftRDefault
@@ -435,7 +435,7 @@ instance Bits CULong where
   rotateL      = lift2' rotateLDefault
   rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @HTYPE_UNSIGNED_LONG
+  popCount     = mkPopCount . mkBitcast @HTYPE_CULONG
 
 instance Bits CLLong where
   (.&.)        = lift2 mkBAnd
@@ -635,13 +635,13 @@ instance FiniteBits CUInt where
 
 instance FiniteBits CLong where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CLong))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_LONG
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_LONG
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CLONG
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CLONG
 
 instance FiniteBits CULong where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CULong))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_UNSIGNED_LONG
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_UNSIGNED_LONG
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CULONG
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CULONG
 
 instance FiniteBits CLLong where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CLLong))
