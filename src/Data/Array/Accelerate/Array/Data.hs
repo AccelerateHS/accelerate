@@ -110,36 +110,40 @@ $( runQ [d| type HTYPE_CCHAR = $(
 -- Array representation
 -- --------------------
 
--- |Immutable array representation
+-- | Immutable array representation
 --
 type ArrayData e = MutableArrayData e
 
--- |Mutable array representation
+-- | Mutable array representation
 --
-type MutableArrayData e = GArrayData UniqueArray e
+type MutableArrayData e = GArrayData e
 
--- Array representation in dependence on the element type, but abstracting
--- over the basic array type (in particular, abstracting over mutability)
+-- Underlying array representation.
 --
-data family GArrayData :: (* -> *) -> * -> *
-data instance GArrayData ba ()        = AD_Unit
-data instance GArrayData ba Int       = AD_Int      (ba Int)
-data instance GArrayData ba Int8      = AD_Int8     (ba Int8)
-data instance GArrayData ba Int16     = AD_Int16    (ba Int16)
-data instance GArrayData ba Int32     = AD_Int32    (ba Int32)
-data instance GArrayData ba Int64     = AD_Int64    (ba Int64)
-data instance GArrayData ba Word      = AD_Word     (ba Word)
-data instance GArrayData ba Word8     = AD_Word8    (ba Word8)
-data instance GArrayData ba Word16    = AD_Word16   (ba Word16)
-data instance GArrayData ba Word32    = AD_Word32   (ba Word32)
-data instance GArrayData ba Word64    = AD_Word64   (ba Word64)
-data instance GArrayData ba Half      = AD_Half     (ba Half)
-data instance GArrayData ba Float     = AD_Float    (ba Float)
-data instance GArrayData ba Double    = AD_Double   (ba Double)
-data instance GArrayData ba Bool      = AD_Bool     (ba Word8)
-data instance GArrayData ba Char      = AD_Char     (ba Char)
-data instance GArrayData ba (Vec n a) = AD_Vec Int# (GArrayData ba a) -- vector width
-data instance GArrayData ba (a, b)    = AD_Pair     (GArrayData ba a) (GArrayData ba b)
+-- In previous versions this was abstracted over by the mutable/immutable array
+-- representation, but this is now fixed to our UniqueArray type.
+--
+-- XXX: make sure this does not mess up our lazy device-host transfers.
+--
+data family GArrayData a :: *
+data instance GArrayData ()        = AD_Unit
+data instance GArrayData Int       = AD_Int    {-# UNPACK #-} !(UniqueArray Int)
+data instance GArrayData Int8      = AD_Int8   {-# UNPACK #-} !(UniqueArray Int8)
+data instance GArrayData Int16     = AD_Int16  {-# UNPACK #-} !(UniqueArray Int16)
+data instance GArrayData Int32     = AD_Int32  {-# UNPACK #-} !(UniqueArray Int32)
+data instance GArrayData Int64     = AD_Int64  {-# UNPACK #-} !(UniqueArray Int64)
+data instance GArrayData Word      = AD_Word   {-# UNPACK #-} !(UniqueArray Word)
+data instance GArrayData Word8     = AD_Word8  {-# UNPACK #-} !(UniqueArray Word8)
+data instance GArrayData Word16    = AD_Word16 {-# UNPACK #-} !(UniqueArray Word16)
+data instance GArrayData Word32    = AD_Word32 {-# UNPACK #-} !(UniqueArray Word32)
+data instance GArrayData Word64    = AD_Word64 {-# UNPACK #-} !(UniqueArray Word64)
+data instance GArrayData Half      = AD_Half   {-# UNPACK #-} !(UniqueArray Half)
+data instance GArrayData Float     = AD_Float  {-# UNPACK #-} !(UniqueArray Float)
+data instance GArrayData Double    = AD_Double {-# UNPACK #-} !(UniqueArray Double)
+data instance GArrayData Bool      = AD_Bool   {-# UNPACK #-} !(UniqueArray Word8)
+data instance GArrayData Char      = AD_Char   {-# UNPACK #-} !(UniqueArray Char)
+data instance GArrayData (Vec n a) = AD_Vec !Int# !(GArrayData a) -- sad this does not get unpacked ):
+data instance GArrayData (a, b)    = AD_Pair !(GArrayData a) !(GArrayData b)
 
 deriving instance Typeable GArrayData
 
