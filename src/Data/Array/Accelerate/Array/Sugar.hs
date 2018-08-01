@@ -66,13 +66,15 @@ module Data.Array.Accelerate.Array.Sugar (
 -- standard library
 import Control.DeepSeq
 import Data.Typeable
+import System.IO.Unsafe                                         ( unsafePerformIO )
+import Language.Haskell.TH                                      hiding ( Foreign )
+import Prelude                                                  hiding ( (!!) )
+import qualified Data.Vector.Unboxed                            as U
+
 import GHC.Exts                                                 ( IsList )
 import GHC.Generics
-import System.IO.Unsafe                                         ( unsafePerformIO )
-import Prelude                                                  hiding ( (!!) )
-import Language.Haskell.TH                                      hiding ( Foreign )
+import GHC.TypeLits
 import qualified GHC.Exts                                       as GHC
-import qualified Data.Vector.Unboxed                            as U
 
 -- friends
 import Data.Array.Accelerate.Array.Data
@@ -272,6 +274,34 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
     (t2, a :*: b)
 
 
+-- Note: [Deriving Elt]
+--
+-- We can't use the cunning generalised newtype deriving mechanism, because the
+-- generated 'eltType' function does not type check. For example, it will
+-- generate the following implementation for 'CShort':
+--
+-- > eltType
+-- >   = coerce
+-- >       @(TupleType (EltRepr Int16))
+-- >       @(TupleType (EltRepr CShort))
+-- >       (eltType :: TupleType (EltRepr CShort))
+--
+-- Which yields the error "couldn't match type type 'EltRepr a0' with 'Int16'".
+-- Since this function returns a type family type, the type signature on the
+-- result is not enough to fix the type 'a'. Instead, we require the use of
+-- (visible) type applications:
+--
+-- > eltType
+-- >   = coerce
+-- >       @(TupleType (EltRepr Int16))
+-- >       @(TupleType (EltRepr CShort))
+-- >       (eltType @(EltRepr CShort))
+--
+-- Note that this does not affect deriving instances via 'Generic'
+--
+-- Instances for basic types are generated at the end of this module.
+--
+
 instance Elt () where
   type EltRepr () = ()
   eltType   = TypeRunit
@@ -307,199 +337,6 @@ instance Shape sh => Elt (Any (sh:.Int)) where
   eltType       = TypeRpair (eltType @(Any sh)) TypeRunit
   fromElt _     = (fromElt (Any @sh), ())
   toElt _       = Any
-
-instance Elt Int where
-  type EltRepr Int = Int
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Int8 where
-  type EltRepr Int8 = Int8
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Int16 where
-  type EltRepr Int16 = Int16
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Int32 where
-  type EltRepr Int32 = Int32
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Int64 where
-  type EltRepr Int64 = Int64
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Word where
-  type EltRepr Word = Word
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Word8 where
-  type EltRepr Word8 = Word8
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Word16 where
-  type EltRepr Word16 = Word16
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Word32 where
-  type EltRepr Word32 = Word32
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Word64 where
-  type EltRepr Word64 = Word64
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
--- Note: [Deriving Elt]
---
--- We can't use the cunning generalised newtype deriving mechanism, because the
--- generated 'eltType' function does not type check. For example, it will
--- generate the following implementation for 'CShort':
---
--- > eltType
--- >   = coerce
--- >       @(TupleType (EltRepr Int16))
--- >       @(TupleType (EltRepr CShort))
--- >       (eltType :: TupleType (EltRepr CShort))
---
--- Which yields the error "couldn't match type type 'EltRepr a0' with 'Int16'".
--- Since this function returns a type family type, the type signature on the
--- result is not enough to fix the type 'a'. Instead, we require the use of
--- (visible) type applications:
---
--- > eltType
--- >   = coerce
--- >       @(TupleType (EltRepr Int16))
--- >       @(TupleType (EltRepr CShort))
--- >       (eltType @(EltRepr CShort))
---
--- Note that this does not affect deriving instances via 'Generic'
---
-instance Elt CShort where
-  type EltRepr CShort = Int16
-  eltType            = singletonScalarType
-  fromElt (CShort x) = x
-  toElt              = CShort
-
-instance Elt CUShort where
-  type EltRepr CUShort = Word16
-  eltType             = singletonScalarType
-  fromElt (CUShort x) = x
-  toElt               = CUShort
-
-instance Elt CInt where
-  type EltRepr CInt = Int32
-  eltType          = singletonScalarType
-  fromElt (CInt x) = x
-  toElt            = CInt
-
-instance Elt CUInt where
-  type EltRepr CUInt = Word32
-  eltType           = singletonScalarType
-  fromElt (CUInt x) = x
-  toElt             = CUInt
-
-instance Elt CLong where
-  type EltRepr CLong = HTYPE_CLONG
-  eltType           = singletonScalarType
-  fromElt (CLong x) = x
-  toElt             = CLong
-
-instance Elt CULong where
-  type EltRepr CULong = HTYPE_CULONG
-  eltType            = singletonScalarType
-  fromElt (CULong x) = x
-  toElt              = CULong
-
-instance Elt CLLong where
-  type EltRepr CLLong = Int64
-  eltType            = singletonScalarType
-  fromElt (CLLong x) = x
-  toElt              = CLLong
-
-instance Elt CULLong where
-  type EltRepr CULLong = Word64
-  eltType             = singletonScalarType
-  fromElt (CULLong x) = x
-  toElt               = CULLong
-
-instance Elt Half where
-  type EltRepr Half = Half
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Float where
-  type EltRepr Float = Float
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Double where
-  type EltRepr Double = Double
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt CFloat where
-  type EltRepr CFloat = Float
-  eltType            = singletonScalarType
-  fromElt (CFloat x) = x
-  toElt              = CFloat
-
-instance Elt CDouble where
-  type EltRepr CDouble = Double
-  eltType             = singletonScalarType
-  fromElt (CDouble x) = x
-  toElt               = CDouble
-
-instance Elt Bool where
-  type EltRepr Bool = Bool
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt Char where
-  type EltRepr Char = Char
-  eltType       = singletonScalarType
-  fromElt       = id
-  toElt         = id
-
-instance Elt CChar where
-  type EltRepr CChar = HTYPE_CCHAR
-  eltType           = singletonScalarType
-  fromElt (CChar x) = x
-  toElt             = CChar
-
-instance Elt CSChar where
-  type EltRepr CSChar = Int8
-  eltType            = singletonScalarType
-  fromElt (CSChar x) = x
-  toElt              = CSChar
-
-instance Elt CUChar where
-  type EltRepr CUChar = Word8
-  eltType            = singletonScalarType
-  fromElt (CUChar x) = x
-  toElt              = CUChar
 
 instance (Elt a, Elt b) => Elt (a, b)
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c)
@@ -1269,4 +1106,112 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
+
+
+-- Instances
+-- ---------
+
+$( runQ $ do
+    let
+        -- XXX: we might want to do the digItOut trick used by FromIntegral?
+        --
+        integralTypes :: [Name]
+        integralTypes =
+          [ ''Int
+          , ''Int8
+          , ''Int16
+          , ''Int32
+          , ''Int64
+          , ''Word
+          , ''Word8
+          , ''Word16
+          , ''Word32
+          , ''Word64
+          ]
+
+        floatingTypes :: [Name]
+        floatingTypes =
+          [ ''Half
+          , ''Float
+          , ''Double
+          ]
+
+        nonNumTypes :: [Name]
+        nonNumTypes =
+          [ ''Bool
+          , ''Char
+          ]
+
+        newtypes :: [Name]
+        newtypes =
+          [ ''CShort
+          , ''CUShort
+          , ''CInt
+          , ''CUInt
+          , ''CLong
+          , ''CULong
+          , ''CLLong
+          , ''CULLong
+          , ''CFloat
+          , ''CDouble
+          , ''CChar
+          , ''CSChar
+          , ''CUChar
+          ]
+
+        mkSimple :: Name -> Q [Dec]
+        mkSimple name =
+          let t = conT name
+          in
+          [d| instance Elt $t where
+                type EltRepr $t = $t
+                {-# INLINE eltType #-}
+                {-# INLINE fromElt #-}
+                {-# INLINE toElt   #-}
+                eltType = singletonScalarType
+                fromElt = id
+                toElt   = id
+            |]
+
+        -- XXX: Should we fix this to known "good" vector sizes?
+        --
+        mkVector :: Name -> Q [Dec]
+        mkVector name =
+          let t = conT name
+          in
+          [d| instance KnownNat n => Elt (Vec n $t) where
+                type EltRepr (Vec n $t) = Vec n $t
+                {-# INLINE eltType #-}
+                {-# INLINE fromElt #-}
+                {-# INLINE toElt   #-}
+                eltType = singletonScalarType
+                fromElt = id
+                toElt   = id
+            |]
+
+        -- ghci> $( stringE . show =<< reify ''CFloat )
+        -- TyConI (NewtypeD [] Foreign.C.Types.CFloat [] Nothing (NormalC Foreign.C.Types.CFloat [(Bang NoSourceUnpackedness NoSourceStrictness,ConT GHC.Types.Float)]) [])
+        --
+        mkNewtype :: Name -> Q [Dec]
+        mkNewtype name = do
+          r    <- reify name
+          base <- case r of
+                    TyConI (NewtypeD _ _ _ _ (NormalC _ [(_, ConT b)]) _) -> return b
+                    _                                                     -> error "unexpected case generating newtype Elt instance"
+          --
+          [d| instance Elt $(conT name) where
+                type EltRepr $(conT name) = $(conT base)
+                {-# INLINE eltType #-}
+                {-# INLINE fromElt #-}
+                {-# INLINE toElt   #-}
+                eltType = singletonScalarType
+                fromElt $(conP (mkName (nameBase name)) [varP (mkName "x")]) = x
+                toElt = $(conE (mkName (nameBase name)))
+            |]
+    --
+    ss <- mapM mkSimple ( integralTypes ++ floatingTypes ++      nonNumTypes )
+    vs <- mapM mkVector ( integralTypes ++ floatingTypes ++ tail nonNumTypes )  -- not Bool
+    ns <- mapM mkNewtype newtypes
+    return (concat ss ++ concat vs ++ concat ns)
+ )
 
