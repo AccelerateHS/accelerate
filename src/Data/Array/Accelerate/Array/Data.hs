@@ -123,8 +123,6 @@ type MutableArrayData e = GArrayData e
 -- In previous versions this was abstracted over by the mutable/immutable array
 -- representation, but this is now fixed to our UniqueArray type.
 --
--- XXX: make sure this does not mess up our lazy device-host transfers.
---
 data family GArrayData a :: *
 data instance GArrayData ()        = AD_Unit
 data instance GArrayData Int       = AD_Int    {-# UNPACK #-} !(UniqueArray Int)
@@ -142,8 +140,8 @@ data instance GArrayData Float     = AD_Float  {-# UNPACK #-} !(UniqueArray Floa
 data instance GArrayData Double    = AD_Double {-# UNPACK #-} !(UniqueArray Double)
 data instance GArrayData Bool      = AD_Bool   {-# UNPACK #-} !(UniqueArray Word8)
 data instance GArrayData Char      = AD_Char   {-# UNPACK #-} !(UniqueArray Char)
-data instance GArrayData (Vec n a) = AD_Vec !Int# !(GArrayData a) -- sad this does not get unpacked ):
-data instance GArrayData (a, b)    = AD_Pair !(GArrayData a) !(GArrayData b)
+data instance GArrayData (Vec n a) = AD_Vec !Int# !(GArrayData a)           -- sad this does not get unpacked ):
+data instance GArrayData (a, b)    = AD_Pair (GArrayData a) (GArrayData b)  -- XXX: non-strict to support lazy device-host copying
 
 deriving instance Typeable GArrayData
 
