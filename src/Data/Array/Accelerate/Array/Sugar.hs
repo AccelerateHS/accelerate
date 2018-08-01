@@ -368,6 +368,31 @@ instance Elt Word64 where
   fromElt       = id
   toElt         = id
 
+-- Note: [Deriving Elt]
+--
+-- We can't use the cunning generalised newtype deriving mechanism, because the
+-- generated 'eltType' function does not type check. For example, it will
+-- generate the following implementation for 'CShort':
+--
+-- > eltType
+-- >   = coerce
+-- >       @(TupleType (EltRepr Int16))
+-- >       @(TupleType (EltRepr CShort))
+-- >       (eltType :: TupleType (EltRepr CShort))
+--
+-- Which yields the error "couldn't match type type 'EltRepr a0' with 'Int16'".
+-- Since this function returns a type family type, the type signature on the
+-- result is not enough to fix the type 'a'. Instead, we require the use of
+-- (visible) type applications:
+--
+-- > eltType
+-- >   = coerce
+-- >       @(TupleType (EltRepr Int16))
+-- >       @(TupleType (EltRepr CShort))
+-- >       (eltType @(EltRepr CShort))
+--
+-- Note that this does not affect deriving instances via 'Generic'
+--
 instance Elt CShort where
   type EltRepr CShort = Int16
   eltType            = singletonScalarType
