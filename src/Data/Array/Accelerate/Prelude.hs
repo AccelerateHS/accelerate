@@ -2370,15 +2370,15 @@ emptyArray = fill (constant empty) undef
 --
 -- Imported from `lens-accelerate` (which provides more general Field instances)
 --
-_1 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int)) (Exp Int)
+_1 :: forall sh. Slice sh => Lens' (Exp (sh:.Int)) (Exp Int)
 _1 = lens (\ix   -> let _  :. x = unlift ix :: Exp sh :. Exp Int in x)
           (\ix x -> let sh :. _ = unlift ix :: Exp sh :. Exp Int in lift (sh :. x))
 
-_2 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int:.Int)) (Exp Int)
+_2 :: forall sh. Slice sh => Lens' (Exp (sh:.Int:.Int)) (Exp Int)
 _2 = lens (\ix   -> let _  :. y :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int in y)
           (\ix y -> let sh :. _ :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int in lift (sh :. y :. x))
 
-_3 :: forall sh. (Shape sh, Slice sh) => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
+_3 :: forall sh. Slice sh => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
 _3 = lens (\ix   -> let _  :. z :. _ :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in z)
           (\ix z -> let sh :. _ :. y :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in lift (sh :. z :. y :. x))
 

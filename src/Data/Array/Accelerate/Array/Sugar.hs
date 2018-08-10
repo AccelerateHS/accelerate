@@ -221,17 +221,20 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a 
   fromElt  :: a -> EltRepr a
   toElt    :: EltRepr a -> a
 
+  {-# INLINE eltType #-}
   default eltType
-    :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
+    :: (GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => TupleType (EltRepr a)
   eltType = geltType @(Rep a) TypeRunit
 
+  {-# INLINE fromElt #-}
   default fromElt
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => a
     -> EltRepr a
   fromElt = gfromElt () . from
 
+  {-# INLINE toElt #-}
   default toElt
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => EltRepr a
@@ -485,16 +488,19 @@ class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
   toArr    :: ArrRepr  a -> a
   fromArr  :: a -> ArrRepr  a
 
+  {-# INLINE arrays #-}
   default arrays
-    :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
+    :: (GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
     => ArraysR (ArrRepr a)
   arrays = garrays @(Rep a) ArraysRunit
 
+  {-# INLINE toArr #-}
   default toArr
     :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
     => ArrRepr a -> a
   toArr = to . snd . gtoArr @(Rep a) @()
 
+  {-# INLINE fromArr #-}
   default fromArr
     :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
     => a -> ArrRepr a

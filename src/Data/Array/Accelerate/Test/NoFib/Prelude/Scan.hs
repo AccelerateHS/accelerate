@@ -61,7 +61,7 @@ test_scanl runN =
     ]
   where
     testElt
-        :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -97,7 +97,7 @@ test_scanl1 runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -132,7 +132,7 @@ test_scanl' runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -168,7 +168,7 @@ test_scanr runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -204,7 +204,7 @@ test_scanr1 runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -239,7 +239,7 @@ test_scanr' runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -275,7 +275,7 @@ test_scanlSeg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -310,7 +310,7 @@ test_scanl1Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -344,7 +344,7 @@ test_scanl'Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -379,7 +379,7 @@ test_scanrSeg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -414,7 +414,7 @@ test_scanr1Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -448,7 +448,7 @@ test_scanr'Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a)
         => Gen a
         -> TestTree
     testElt e =
@@ -840,7 +840,7 @@ scanlSegRef f z arr seg =
   let
       sz :. n   = arrayShape arr
       seg'      = toList seg
-      n'        = P.sum $ P.map (\x -> P.fromIntegral x + 1) seg'
+      n'        = P.sum $ P.map (+1) seg'
       arr'      = [ P.scanl f z sec | sub <- splitEvery n (toList arr)
                                     , sec <- splitPlaces seg' sub ]
   in
@@ -856,7 +856,7 @@ scanl1SegRef f arr seg =
   let
       sz :. n   = arrayShape arr
       seg'      = toList seg
-      n'        = P.fromIntegral (P.sum seg')
+      n'        = P.sum seg'
       arr'      = [ P.scanl1 f sec | sub <- splitEvery n (toList arr)
                                    , sec <- splitPlaces seg' sub ]
   in
@@ -890,7 +890,7 @@ scanrSegRef f z arr seg =
   let
       sz :. n   = arrayShape arr
       seg'      = toList seg
-      n'        = P.sum $ P.map (\x -> P.fromIntegral x + 1) seg'
+      n'        = P.sum $ P.map (+1) seg'
       arr'      = [ P.scanr f z sec | sub <- splitEvery n (toList arr)
                                     , sec <- splitPlaces seg' sub ]
   in
@@ -905,7 +905,7 @@ scanr1SegRef
 scanr1SegRef f arr seg =
   let sz :. n   = arrayShape arr
       seg'      = toList seg
-      n'        = P.fromIntegral (P.sum seg')
+      n'        = P.sum seg'
       arr'      = [ P.scanr1 f sec | sub <- splitEvery n (toList arr)
                                    , sec <- splitPlaces seg' sub ]
   in

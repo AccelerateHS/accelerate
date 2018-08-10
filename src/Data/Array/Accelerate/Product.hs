@@ -66,20 +66,23 @@ class IsProduct cst tup where
   toProd   :: ProdRepr tup -> tup
   prod     :: ProdR cst (ProdRepr tup)
 
+  {-# INLINE fromProd #-}
   default fromProd
     :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
     => tup
     -> ProdRepr tup
   fromProd = gfromProd @cst @(Rep tup) () . from
 
+  {-# INLINE toProd #-}
   default toProd
     :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
     => ProdRepr tup
     -> tup
   toProd = to . snd . gtoProd @cst @(Rep tup) @()
 
+  {-# INLINE prod #-}
   default prod
-    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
+    :: (ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
     => ProdR cst (ProdRepr tup)
   prod = gprod @cst @(Rep tup) ProdRunit
 

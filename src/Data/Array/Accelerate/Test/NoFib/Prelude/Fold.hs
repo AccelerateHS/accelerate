@@ -151,7 +151,7 @@ test_mss runN dim e =
     let !go = runN maximumSegmentSum in go xs ~~~ maximumSegmentSumRef xs
 
 test_minimum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -163,7 +163,7 @@ test_minimum runN dim e =
     let !go = runN A.minimum in go xs ~~~ fold1Ref P.min xs
 
 test_maximum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -192,7 +192,7 @@ test_segmented_sum runN dim z e =
     let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
 
 test_segmented_minimum
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -207,7 +207,7 @@ test_segmented_minimum runN dim e =
     let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
 
 test_segmented_maximum
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e

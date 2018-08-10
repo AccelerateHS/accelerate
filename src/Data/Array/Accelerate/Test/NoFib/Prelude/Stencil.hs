@@ -302,10 +302,7 @@ data SimpleBoundary e
   | Constant e
   deriving (P.Eq, Show)
 
-boundary
-    :: Elt e
-    => Gen e
-    -> Gen (SimpleBoundary e)
+boundary :: Gen e -> Gen (SimpleBoundary e)
 boundary e =
   Gen.choice
     [ Constant <$> e
@@ -413,9 +410,9 @@ pattern9x9 = do
   P9 i5 a5 r5 <- pattern9
   P9 i6 a6 r6 <- pattern9
   P9 i7 a7 r7 <- pattern9
-  P9 i8 a8 r8 <- pattern9
+  P9 j8 a8 r8 <- pattern9
   return $
-    P9x9 [i0,i1,i2,i3,i4,i5,i6,i7,i8]
+    P9x9 [i0,i1,i2,i3,i4,i5,i6,i7,j8]
          (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum [a0 x0, a1 x1, a2 x2, a3 x3, a4 x4, a5 x5, a6 x6, a7 x7, a8 x8])
          (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum [r0 x0, r1 x1, r2 x2, r3 x3, r4 x4, r5 x5, r6 x6, r7 x7, r8 x8])
 

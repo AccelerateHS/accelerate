@@ -1185,7 +1185,7 @@ evalPrimConst (PrimMinBound ty) = evalMinBound ty
 evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
 evalPrimConst (PrimPi       ty) = evalPi ty
 
-evalPrim :: (Elt a, Elt r) => PrimFun (a -> r) -> (a -> r)
+evalPrim :: PrimFun (a -> r) -> (a -> r)
 evalPrim (PrimAdd                ty) = evalAdd ty
 evalPrim (PrimSub                ty) = evalSub ty
 evalPrim (PrimMul                ty) = evalMul ty

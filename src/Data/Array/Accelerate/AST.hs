@@ -1571,7 +1571,7 @@ liftArray (Array sh adata) =
       return (appsT (TH.ConT name) resultArgs)
 
     -- TODO: make sure that the resulting array is 16-byte aligned...
-    arr :: forall a. (ArrayElt a, Storable a) => UniqueArray a -> Q (TExp (UniqueArray a))
+    arr :: forall a. Storable a => UniqueArray a -> Q (TExp (UniqueArray a))
     arr ua = do
       bytes <- TH.runIO $ peekArray (sizeOf (undefined::a) * sz) (castPtr (unsafeUniqueArrayPtr ua) :: Ptr Word8)
       [|| unsafePerformIO $ do

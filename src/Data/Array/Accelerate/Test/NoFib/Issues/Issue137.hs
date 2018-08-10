@@ -25,8 +25,6 @@ import Data.Array.Accelerate.Test.NoFib.Base
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Prelude                                                      as P
-
 
 test_issue137 :: RunN -> TestTree
 test_issue137 runN =
@@ -40,8 +38,8 @@ test1 :: Acc (Vector (Int,Int))
 test1 =
   let
       sz          = 3000 :: Int
-      interm_arrA = use $ A.fromList (Z :. sz) [ P.fromIntegral $ 8 - (a `mod` 17) | a <- [1..sz]]
-      msA         = use $ A.fromList (Z :. sz) [ P.fromIntegral $ (a `div` 8) | a <- [1..sz]]
+      interm_arrA = use $ A.fromList (Z :. sz) [ 8 - (a `mod` 17) | a <- [1..sz]]
+      msA         = use $ A.fromList (Z :. sz) [ (a `div` 8) | a <- [1..sz]]
       inf         = 10000 :: Exp Int
       infsA       = A.generate (index1 (384 :: Exp Int)) (\_ -> lift (inf,inf))
       inpA        = A.map (\v -> lift (abs v,inf) :: Exp (Int,Int)) interm_arrA

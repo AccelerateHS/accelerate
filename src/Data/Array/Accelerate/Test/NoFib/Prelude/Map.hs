@@ -193,7 +193,7 @@ test_complement runN dim e =
     let !go = runN (A.map A.complement) in go xs ~~~ mapRef P.complement xs
 
 test_popCount
-    :: (Shape sh, Similar e, A.Bits e, P.Bits e, P.Eq sh)
+    :: (Shape sh, A.Bits e, P.Bits e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -205,7 +205,7 @@ test_popCount runN dim e =
     let !go = runN (A.map A.popCount) in go xs ~~~ mapRef P.popCount xs
 
 test_countLeadingZeros
-    :: (Shape sh, Similar e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
+    :: (Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -217,7 +217,7 @@ test_countLeadingZeros runN dim e =
     let !go = runN (A.map A.countLeadingZeros) in go xs ~~~ mapRef countLeadingZerosRef xs
 
 test_countTrailingZeros
-    :: (Shape sh, Similar e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
+    :: (Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -229,7 +229,7 @@ test_countTrailingZeros runN dim e =
     let !go = runN (A.map A.countTrailingZeros) in go xs ~~~ mapRef countTrailingZerosRef xs
 
 test_fromIntegral
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double)
+    :: forall sh e. (Shape sh, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double)
     => RunN
     -> Gen sh
     -> Gen e
@@ -397,7 +397,7 @@ test_log runN dim e =
     let !go = runN (A.map log) in go xs ~~~ mapRef log xs
 
 test_truncate
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -409,7 +409,7 @@ test_truncate runN dim e =
     let !go = runN (A.map A.truncate) in go xs ~~~ mapRef (P.truncate :: e -> Int) xs
 
 test_round
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -421,7 +421,7 @@ test_round runN dim e =
     let !go = runN (A.map A.round) in go xs ~~~ mapRef (P.round :: e -> Int) xs
 
 test_floor
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -433,7 +433,7 @@ test_floor runN dim e =
     let !go = runN (A.map A.floor) in go xs ~~~ mapRef (P.floor :: e -> Int) xs
 
 test_ceiling
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e

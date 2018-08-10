@@ -53,7 +53,7 @@ test_sasum runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
         => Gen a
         -> TestTree
     testElt e =

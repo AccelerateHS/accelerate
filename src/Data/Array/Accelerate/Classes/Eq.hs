@@ -308,7 +308,7 @@ instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l
 -- the return type is fixed to 'Bool'. This instance is provided to provide
 -- a useful error message.
 --
-instance Eq a => P.Eq (Exp a) where
+instance P.Eq (Exp a) where
   (==) = preludeError "Eq.(==)" "(==)"
   (/=) = preludeError "Eq.(/=)" "(/=)"
 

@@ -53,7 +53,7 @@ test_issue409 runN =
         t1 :: Scalar a
         t1 = fromList Z [1]
 
-        f :: A.Floating a => Exp a -> Exp a
+        f :: Exp a -> Exp a
         f x = let y = recip x
                   b = (-y) * y
               in
