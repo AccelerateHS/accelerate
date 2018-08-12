@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -24,10 +25,10 @@ module Data.Array.Accelerate.Constructor (
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
+
+import Language.Haskell.TH hiding (Exp)
 
 
 -- | This pattern synonym can be used as an alternative to 'lift' and 'unlift'
@@ -66,25 +67,64 @@ import Data.Array.Accelerate.Smart
 -- > pattern SparseVector :: Elt a => Acc (Vector Int) -> Acc (Vector a) -> Acc (SparseVector a)
 -- > pattern SparseVector { indices, values } = MkT (indices, values)
 --
-pattern MkT :: forall a b c. AsTuple a b c => a -> c b
-pattern MkT vars <- (unlift @c . coerce -> vars)
-  where MkT = coerce . lift @c
+pattern MkT :: forall tup a context. MkData context a tup => tup -> context a
+pattern MkT vars <- (destruct @context -> vars)
+  where MkT = construct @context
 
+class MkData con a t where
+  construct :: t -> con a
+  destruct  :: con a -> t
 
-type AsTuple a b c =
-  ( Unlift c a
-  , ProdRepr (Plain a) ~ ProdRepr b
-  , Coerce (c (Plain a)) (c b), Coerce (c b) (c (Plain a))
-  )
+$(runQ $ do
+    let
+      genData :: Int -> TypeQ -> ExpQ -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Q Dec
+      genData n cst tpl conT con prj nil snc = do
 
-class Coerce a b where
-  coerce :: a -> b
+        let
+          t   = return . VarT $ mkName "t"
+          vs  = map mkName . map (:[]) $ take n "abcdefghijklmno"
+          x   = mkName "x"
+          ts  = map VarT vs
 
-instance (Elt b, IsTuple b, ProdRepr a ~ ProdRepr b) => Coerce (Exp a) (Exp b) where
-  coerce (Exp (Tuple t)) = Exp (Tuple t)
-  coerce _               = $internalError "coerce" "expected a tuple"
+          prodReprN = foldl (\acc a -> [t| ($acc, $(return a)) |]) [t| () |] ts
 
-instance (Arrays b, IsAtuple b, ProdRepr a ~ ProdRepr b) => Coerce (Acc a) (Acc b) where
-  coerce (Acc (Atuple t)) = Acc (Atuple t)
-  coerce _                = $internalError "coerce" "expected a tuple"
+        eqRepr    <- [t| ProdRepr $t ~ $prodReprN |]
+        isProduct <- [t| IsProduct $cst $t |]
 
+        cst'      <- cst
+        conT'     <- conT
+        t'        <- t
+
+        let
+          tut | [x] <- ts = [t| $conT $(return x) |]
+              | otherwise = return $ foldl (\acc x -> AppT acc (AppT conT' x)) (TupleT n) ts
+
+          tup      = TupP $ map VarP vs
+          snoc x y = [| $snc $x $(return $ VarE y) |]
+
+          tupidx 1 = [| ZeroTupIdx |]
+          tupidx n = [| SuccTupIdx $(tupidx (n - 1)) |]
+          prjN   n = [| $con $ $prj $(tupidx n) $(return $ VarE x) |]
+
+          cxt = isProduct : eqRepr : map (AppT cst') (t':ts)
+
+        typ    <- [t| MkData $conT $t $tut |]
+        constr <- [| $con $ $tpl $ $(foldl snoc nil vs) |]
+        destr  <- TupE <$> mapM prjN [n,n-1..1]
+
+        return $ InstanceD Nothing cxt typ
+          [ FunD 'construct [Clause [tup   ] (NormalB constr) []]
+          , FunD 'destruct  [Clause [VarP x] (NormalB destr ) []]
+          ]
+
+      genDataExp :: Int -> Q Dec
+      genDataExp n = genData n [t|Elt|] [|Tuple|] [t|Exp|] [|Exp|] [|Prj|] [|NilTup|] [|SnocTup|]
+
+      genDataAcc :: Int -> Q Dec
+      genDataAcc n = genData n [t|Arrays|] [|Atuple|] [t|Acc|] [|Acc|] [|Aprj|] [|NilAtup|] [|SnocAtup|]
+
+    exps <- mapM genDataExp [1..15]
+    accs <- mapM genDataAcc [1..15]
+
+    return $ exps ++ accs
+ )
