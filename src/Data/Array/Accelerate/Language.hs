@@ -898,6 +898,29 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- > blur = stencil (convolve5x1 gaussian) clamp
 -- >      . stencil (convolve1x5 gaussian) clamp
 --
+-- [/Note:/]
+--
+-- Since accelerate-1.3.0.0, we allow the source array to fuse into the stencil
+-- operation. However, since a stencil computation (typically) requires multiple
+-- values from the source array, this means that the work of the fused operation
+-- will be duplicated for each element in the stencil pattern.
+--
+-- For example, suppose we write:
+--
+-- > blur . map f
+--
+-- The operation `f` will be fused into each element of the first Gaussian blur
+-- kernel, resulting in a stencil equivalent to:
+--
+-- > f_and_convolve1x5 :: Num a => (Exp a -> Exp b) -> [Exp b] -> Stencil1x5 a -> Exp b
+-- > f_and_convolve1x5 f kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
+-- >   = Prelude.sum $ Prelude.zipWith (*) kernel [f a, f b, f c, f d, f e]
+--
+-- This duplication is often beneficial, however you may choose to instead force
+-- the array to be evaluated first, preventing fusion, using the
+-- `Data.Array.Accelerate.Prelude.compute` operation. Benchmarking should reveal
+-- which approach is best for your application.
+--
 stencil
     :: (Stencil sh a stencil, Elt b)
     => (stencil -> Exp b)                     -- ^ stencil function
