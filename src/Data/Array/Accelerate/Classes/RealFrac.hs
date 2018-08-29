@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MonoLocalBinds    #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TypeFamilies      #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.RealFrac
@@ -130,17 +131,17 @@ instance RealFrac Double where
 
 instance RealFrac CFloat where
   properFraction  = defaultProperFraction
-  truncate        = mkTruncate
-  round           = mkRound
-  ceiling         = mkCeiling
-  floor           = mkFloor
+  truncate        = lift1 mkTruncate
+  round           = lift1 mkRound
+  ceiling         = lift1 mkCeiling
+  floor           = lift1 mkFloor
 
 instance RealFrac CDouble where
   properFraction  = defaultProperFraction
-  truncate        = mkTruncate
-  round           = mkRound
-  ceiling         = mkCeiling
-  floor           = mkFloor
+  truncate        = lift1 mkTruncate
+  round           = lift1 mkRound
+  ceiling         = lift1 mkCeiling
+  floor           = lift1 mkFloor
 
 
 -- Must test for ±0.0 to avoid returning -0.0 in the second component of the
@@ -176,4 +177,10 @@ preludeError x
             , "These Prelude.RealFrac instances are present only to fulfil superclass"
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
+
+lift1 :: (Elt a, Elt b, Elt c, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp c)
+      -> Exp a
+      -> Exp c
+lift1 f x = f (mkUnsafeCoerce x)
 

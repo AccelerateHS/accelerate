@@ -20,11 +20,12 @@ module Data.Array.Accelerate.Classes.Enum (
 
 ) where
 
+import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 import Text.Printf
 
-import Prelude                                                      hiding ( Enum )
+import Prelude                                                      ( ($), String, error, unlines, succ, pred )
 import qualified Prelude                                            as P
 
 
@@ -34,143 +35,148 @@ type Enum a = P.Enum (Exp a)
 
 
 instance P.Enum (Exp Int) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Int8) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Int16) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Int32) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Int64) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Word) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Word8) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Word16) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Word32) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Word64) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CInt) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CUInt) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CLong) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CULong) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CLLong) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CULLong) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CShort) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CUShort) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Half) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Float) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp Double) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CFloat) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
 instance P.Enum (Exp CDouble) where
-  succ x    = mkAdd x (constant 1)
-  pred x    = mkSub x (constant 1)
+  succ      = defaultSucc
+  pred      = defaultPred
   toEnum    = defaultToEnum
   fromEnum  = defaultFromEnum
 
+defaultSucc :: Num a => Exp a -> Exp a
+defaultSucc x = x + 1
+
+defaultPred :: Num a => Exp a -> Exp a
+defaultPred x = x - 1
 
 defaultToEnum :: Int -> a
 defaultToEnum = preludeError "toEnum"

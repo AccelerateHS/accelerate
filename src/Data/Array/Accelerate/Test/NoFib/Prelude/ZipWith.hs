@@ -471,7 +471,7 @@ test_rotateR runN dim e =
     let !go = runN (A.zipWith A.rotateR) in go xs ys ~~~ zipWithRef P.rotateR xs ys
 
 test_lt
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -485,7 +485,7 @@ test_lt runN dim e =
     let !go = runN (A.zipWith (A.<)) in go xs ys ~~~ zipWithRef (P.<) xs ys
 
 test_gt
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -499,7 +499,7 @@ test_gt runN dim e =
     let !go = runN (A.zipWith (A.>)) in go xs ys ~~~ zipWithRef (P.>) xs ys
 
 test_lte
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -513,7 +513,7 @@ test_lte runN dim e =
     let !go = runN (A.zipWith (A.<=)) in go xs ys ~~~ zipWithRef (P.<=) xs ys
 
 test_gte
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -527,7 +527,7 @@ test_gte runN dim e =
     let !go = runN (A.zipWith (A.>=)) in go xs ys ~~~ zipWithRef (P.>=) xs ys
 
 test_eq
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -541,7 +541,7 @@ test_eq runN dim e =
     let !go = runN (A.zipWith (A.==)) in go xs ys ~~~ zipWithRef (P.==) xs ys
 
 test_neq
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e

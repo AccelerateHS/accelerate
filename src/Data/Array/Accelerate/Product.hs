@@ -1,11 +1,14 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DefaultSignatures     #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -19,23 +22,23 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- Our representation of products are heterogenous snoc lists, which are typed by
--- type lists, where '()' and '(,)' are type-level nil and snoc, respectively.
--- The components may only be drawn from types that can be used as array
--- elements.
+-- Our representation of products are heterogenous snoc lists, which are typed
+-- by type lists, where '()' and '(,)' are type-level nil and snoc,
+-- respectively. The components may only be drawn from types that can be used as
+-- array elements.
 --
 
 module Data.Array.Accelerate.Product (
 
-  -- * Tuple representation
-  TupleIdx(..), IsProduct(..), ProdR(..)
+  -- * Product types
+  TupleIdx(..), IsProduct(..), ProdR(..),
 
 ) where
 
-import Data.Array.Accelerate.Type
+import GHC.Generics
 
 
--- |Type-safe projection indices for tuples.
+-- | Type-safe projection indices for tuples.
 --
 -- NB: We index tuples by starting to count from the *right*!
 --
@@ -43,22 +46,80 @@ data TupleIdx t e where
   ZeroTupIdx ::                 TupleIdx (t, s) s
   SuccTupIdx :: TupleIdx t e -> TupleIdx (t, s) e
 
--- |Product reification
+-- | Product reification
 --
 data ProdR cst t where
   ProdRunit   :: ProdR cst ()
   ProdRsnoc   :: cst e => ProdR cst t -> ProdR cst (t,e)
 
--- |Conversion between surface product types and our product representation.
+-- | Conversion between surface product types and our product representation.
 --
--- We parameterise our products by a constraint on their elements (the 'cst' argument). Every element
--- in the product must obey this constraint, but the products themselves do necessarily not have to.
+-- We parameterise our products by a constraint on their elements (the 'cst'
+-- argument). Every element in the product must obey this constraint, but the
+-- products themselves do not necessarily have to.
 --
 class IsProduct cst tup where
   type ProdRepr tup
+  type ProdRepr tup = GProdRepr () (Rep tup)
+  --
   fromProd :: tup -> ProdRepr tup
   toProd   :: ProdRepr tup -> tup
   prod     :: ProdR cst (ProdRepr tup)
+
+  {-# INLINE fromProd #-}
+  default fromProd
+    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
+    => tup
+    -> ProdRepr tup
+  fromProd = gfromProd @cst @(Rep tup) () . from
+
+  {-# INLINE toProd #-}
+  default toProd
+    :: (Generic tup, ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
+    => ProdRepr tup
+    -> tup
+  toProd = to . snd . gtoProd @cst @(Rep tup) @()
+
+  {-# INLINE prod #-}
+  default prod
+    :: (ProdRepr tup ~ GProdRepr () (Rep tup), GIsProduct cst (Rep tup))
+    => ProdR cst (ProdRepr tup)
+  prod = gprod @cst @(Rep tup) ProdRunit
+
+
+class GIsProduct cst (f :: * -> *) where
+  type GProdRepr t f
+  gfromProd :: t -> f a -> GProdRepr t f
+  gtoProd   :: GProdRepr t f -> (t, f a)
+  gprod     :: ProdR cst t -> ProdR cst (GProdRepr t f)
+
+instance GIsProduct cst U1 where
+  type GProdRepr t U1 = t
+  gfromProd t U1 = t
+  gtoProd   t    = (t, U1)
+  gprod     t    = t
+
+instance GIsProduct cst a => GIsProduct cst (M1 i c a) where
+  type GProdRepr t (M1 i c a) = GProdRepr t a
+  gfromProd t (M1 x) = gfromProd @cst t x
+  gtoProd         x  = let (t, x1) = gtoProd @cst x in (t, M1 x1)
+  gprod              = gprod @cst @a
+
+instance cst a => GIsProduct cst (K1 i a) where
+  type GProdRepr t (K1 i a) = (t, a)
+  gfromProd t (K1 x) = (t, x)
+  gtoProd     (t, x) = (t, K1 x)
+  gprod     t        = ProdRsnoc t
+
+instance (GIsProduct cst a, GIsProduct cst b) => GIsProduct cst (a :*: b) where
+  type GProdRepr t (a :*: b) = GProdRepr (GProdRepr t a) b
+  gfromProd t (a :*: b) = gfromProd @cst (gfromProd @cst t a) b
+  gtoProd t =
+    let (t1, b) = gtoProd @cst t
+        (t2, a) = gtoProd @cst t1
+    in
+    (t2, a :*: b)
+  gprod t = gprod @cst @b (gprod @cst @a t)
 
 instance IsProduct cst () where
   type ProdRepr ()   = ()
@@ -189,42 +250,4 @@ instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, 
     = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
   prod
     = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o))
-
-instance cst a => IsProduct cst (V2 a) where
-  type ProdRepr (V2 a) = ProdRepr (a, a)
-  fromProd (V2 a b) = fromProd @cst (a, b)
-  toProd p          = let (a, b) = toProd @cst p in V2 a b
-  prod              = prod @cst @(a,a)
-
-instance cst a => IsProduct cst (V3 a) where
-  type ProdRepr (V3 a) = ProdRepr (a, a, a)
-  fromProd (V3 a b c) = fromProd @cst (a, b, c)
-  toProd p            = let (a, b, c) = toProd @cst p in V3 a b c
-  prod                = prod @cst @(a,a,a)
-
-instance cst a => IsProduct cst (V4 a) where
-  type ProdRepr (V4 a) = ProdRepr (a, a, a, a)
-  fromProd (V4 a b c d) = fromProd @cst (a, b, c, d)
-  toProd p              = let (a, b, c, d) = toProd @cst p in V4 a b c d
-  prod                  = prod @cst @(a,a,a,a)
-
-instance cst a => IsProduct cst (V8 a) where
-  type ProdRepr (V8 a) = ProdRepr (a, a, a, a, a, a, a, a)
-  fromProd (V8 a b c d e f g h)
-    = fromProd @cst (a, b, c, d, e, f, g, h)
-  toProd p
-    = let (a, b, c, d, e, f, g, h) = toProd @cst p
-      in  V8 a b c d e f g h
-  prod
-    = prod @cst @(a,a,a,a,a,a,a,a)
-
-instance cst a => IsProduct cst (V16 a) where
-  type ProdRepr (V16 a) = ProdRepr (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
-  fromProd (V16 a b c d e f g h i j k l m n o p)
-    = fromProd @cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-  toProd x
-    = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = toProd @cst x
-      in  V16 a b c d e f g h i j k l m n o p
-  prod
-    = prod @cst @(a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a)
 

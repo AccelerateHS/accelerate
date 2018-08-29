@@ -369,33 +369,17 @@ makeStableArray !ad = return $! StableArray (id arrayElt ad)
     id ArrayEltRword16    (AD_Word16 ua)  = uniqueArrayId ua
     id ArrayEltRword32    (AD_Word32 ua)  = uniqueArrayId ua
     id ArrayEltRword64    (AD_Word64 ua)  = uniqueArrayId ua
-    id ArrayEltRcshort    (AD_CShort ua)  = uniqueArrayId ua
-    id ArrayEltRcushort   (AD_CUShort ua) = uniqueArrayId ua
-    id ArrayEltRcint      (AD_CInt ua)    = uniqueArrayId ua
-    id ArrayEltRcuint     (AD_CUInt ua)   = uniqueArrayId ua
-    id ArrayEltRclong     (AD_CLong ua)   = uniqueArrayId ua
-    id ArrayEltRculong    (AD_CULong ua)  = uniqueArrayId ua
-    id ArrayEltRcllong    (AD_CLLong ua)  = uniqueArrayId ua
-    id ArrayEltRcullong   (AD_CULLong ua) = uniqueArrayId ua
     id ArrayEltRhalf      (AD_Half ua)    = uniqueArrayId ua
     id ArrayEltRfloat     (AD_Float ua)   = uniqueArrayId ua
     id ArrayEltRdouble    (AD_Double ua)  = uniqueArrayId ua
-    id ArrayEltRcfloat    (AD_CFloat ua)  = uniqueArrayId ua
-    id ArrayEltRcdouble   (AD_CDouble ua) = uniqueArrayId ua
     id ArrayEltRbool      (AD_Bool ua)    = uniqueArrayId ua
     id ArrayEltRchar      (AD_Char ua)    = uniqueArrayId ua
-    id ArrayEltRcchar     (AD_CChar ua)   = uniqueArrayId ua
-    id ArrayEltRcschar    (AD_CSChar ua)  = uniqueArrayId ua
-    id ArrayEltRcuchar    (AD_CUChar ua)  = uniqueArrayId ua
-    id (ArrayEltRvec2 r)  (AD_V2 a)       = id r a
-    id (ArrayEltRvec3 r)  (AD_V3 a)       = id r a
-    id (ArrayEltRvec4 r)  (AD_V4 a)       = id r a
-    id (ArrayEltRvec8 r)  (AD_V8 a)       = id r a
-    id (ArrayEltRvec16 r) (AD_V16 a)      = id r a
+    id (ArrayEltRvec r)   (AD_Vec _ a)    = id r a
 #if __GLASGOW_HASKELL__ < 800
     id _ _ =
       error "I do have a cause, though. It is obscenity. I'm for it."
 #endif
+
 
 -- Weak arrays
 -- ----------------------
@@ -411,7 +395,7 @@ makeWeakArrayData
     -> IO (Weak c)
 makeWeakArrayData !ad !c !mf = mw arrayElt ad
   where
-    mw :: (ArrayPtrs e' ~ Ptr a) => ArrayEltR e' -> ArrayData e' -> IO (Weak c)
+    mw :: (ArrayPtrs e' ~ Ptr a') => ArrayEltR e' -> ArrayData e' -> IO (Weak c)
     mw ArrayEltRint       (AD_Int ua)     = mkWeak' ua
     mw ArrayEltRint8      (AD_Int8 ua)    = mkWeak' ua
     mw ArrayEltRint16     (AD_Int16 ua)   = mkWeak' ua
@@ -422,35 +406,18 @@ makeWeakArrayData !ad !c !mf = mw arrayElt ad
     mw ArrayEltRword16    (AD_Word16 ua)  = mkWeak' ua
     mw ArrayEltRword32    (AD_Word32 ua)  = mkWeak' ua
     mw ArrayEltRword64    (AD_Word64 ua)  = mkWeak' ua
-    mw ArrayEltRcshort    (AD_CShort ua)  = mkWeak' ua
-    mw ArrayEltRcushort   (AD_CUShort ua) = mkWeak' ua
-    mw ArrayEltRcint      (AD_CInt ua)    = mkWeak' ua
-    mw ArrayEltRcuint     (AD_CUInt ua)   = mkWeak' ua
-    mw ArrayEltRclong     (AD_CLong ua)   = mkWeak' ua
-    mw ArrayEltRculong    (AD_CULong ua)  = mkWeak' ua
-    mw ArrayEltRcllong    (AD_CLLong ua)  = mkWeak' ua
-    mw ArrayEltRcullong   (AD_CULLong ua) = mkWeak' ua
     mw ArrayEltRhalf      (AD_Half ua)    = mkWeak' ua
     mw ArrayEltRfloat     (AD_Float ua)   = mkWeak' ua
     mw ArrayEltRdouble    (AD_Double ua)  = mkWeak' ua
-    mw ArrayEltRcfloat    (AD_CFloat ua)  = mkWeak' ua
-    mw ArrayEltRcdouble   (AD_CDouble ua) = mkWeak' ua
     mw ArrayEltRbool      (AD_Bool ua)    = mkWeak' ua
     mw ArrayEltRchar      (AD_Char ua)    = mkWeak' ua
-    mw ArrayEltRcchar     (AD_CChar ua)   = mkWeak' ua
-    mw ArrayEltRcschar    (AD_CSChar ua)  = mkWeak' ua
-    mw ArrayEltRcuchar    (AD_CUChar ua)  = mkWeak' ua
-    mw (ArrayEltRvec2 r)  (AD_V2 a)       = mw r a
-    mw (ArrayEltRvec3 r)  (AD_V3 a)       = mw r a
-    mw (ArrayEltRvec4 r)  (AD_V4 a)       = mw r a
-    mw (ArrayEltRvec8 r)  (AD_V8 a)       = mw r a
-    mw (ArrayEltRvec16 r) (AD_V16 a)      = mw r a
+    mw (ArrayEltRvec r)   (AD_Vec _ a)    = mw r a
 #if __GLASGOW_HASKELL__ < 800
     mw _ _ =
       error "Base eight is just like base ten really --- if you're missing two fingers."
 #endif
 
-    mkWeak' :: UniqueArray a -> IO (Weak c)
+    mkWeak' :: UniqueArray a' -> IO (Weak c)
     mkWeak' !ua = do
       let !uad = uniqueArrayData ua
       case mf of

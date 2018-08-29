@@ -70,7 +70,7 @@ test_permute runN =
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. Shape sh
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =

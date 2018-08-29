@@ -7,9 +7,10 @@ packages:
 - '.'
 
 extra-deps:
-- 'half-0.3'
-- 'hashtables-1.2.3.0'
-- 'tasty-hedgehog-0.2.0.0'
+- half-0.3
+- hashtables-1.2.3.0
+- primitive-0.6.4.0
+- tasty-hedgehog-0.2.0.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

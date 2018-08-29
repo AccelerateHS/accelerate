@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Bits
@@ -23,6 +24,7 @@ module Data.Array.Accelerate.Data.Bits (
 
 ) where
 
+import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
@@ -33,7 +35,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Integral                       ()
 
-import Prelude                                                      ( ($), undefined, otherwise )
+import Prelude                                                      ( (.), ($), undefined, otherwise )
 import qualified Data.Bits                                          as B
 
 
@@ -364,202 +366,203 @@ instance Bits Word64 where
   popCount     = mkPopCount
 
 instance Bits CInt where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Int32
+  testBit b    = testBitDefault (mkBitcast @Int32 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @Int32
 
 instance Bits CUInt where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Word32
+  testBit b    = testBitDefault (mkBitcast @Word32 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @Word32
 
 instance Bits CLong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @HTYPE_CLONG
+  testBit b    = testBitDefault (mkBitcast @HTYPE_CLONG b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @HTYPE_CLONG
 
 instance Bits CULong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @HTYPE_CULONG
+  testBit b    = testBitDefault (mkBitcast @HTYPE_CULONG b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @HTYPE_CULONG
 
 instance Bits CLLong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Int64
+  testBit b    = testBitDefault (mkBitcast @Int64 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @Int64
 
 instance Bits CULLong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Word64
+  testBit b    = testBitDefault (mkBitcast @Word64 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @Word64
 
 instance Bits CShort where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Int16
+  testBit b    = testBitDefault (mkBitcast @Int16 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @Int16
 
 instance Bits CUShort where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Word16
+  testBit b    = testBitDefault (mkBitcast @Word16 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
   isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  popCount     = mkPopCount . mkBitcast @Word16
 
--- instance Bits CChar where
---   (.&.)        = mkBAnd
---   (.|.)        = mkBOr
---   xor          = mkBXor
---   complement   = mkBNot
---   bit          = bitDefault
---   testBit      = testBitDefault
---   shift        = shiftDefault
---   shiftL       = shiftLDefault
---   shiftR       = shiftRDefault
---   unsafeShiftL = mkBShiftL
---   unsafeShiftR = mkBShiftR
---   rotate       = rotateDefault
---   rotateL      = rotateLDefault
---   rotateR      = rotateRDefault
---   isSigned     = isSignedDefault
---   popCount     = mkPopCount
+instance Bits CChar where
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @HTYPE_CCHAR
+  testBit b    = testBitDefault (mkBitcast @HTYPE_CCHAR b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = mkPopCount . mkBitcast @HTYPE_CCHAR
 
--- instance Bits CUChar where
---   (.&.)        = mkBAnd
---   (.|.)        = mkBOr
---   xor          = mkBXor
---   complement   = mkBNot
---   bit          = bitDefault
---   testBit      = testBitDefault
---   shift        = shiftDefault
---   shiftL       = shiftLDefault
---   shiftR       = shiftRDefault
---   unsafeShiftL = mkBShiftL
---   unsafeShiftR = mkBShiftR
---   rotate       = rotateDefault
---   rotateL      = rotateLDefault
---   rotateR      = rotateRDefault
---   isSigned     = isSignedDefault
---   popCount     = mkPopCount
+instance Bits CSChar where
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Int8
+  testBit b    = testBitDefault (mkBitcast @Int8 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = mkPopCount . mkBitcast @Int8
 
--- instance Bits CSChar where
---   (.&.)        = mkBAnd
---   (.|.)        = mkBOr
---   xor          = mkBXor
---   complement   = mkBNot
---   bit          = bitDefault
---   testBit      = testBitDefault
---   shift        = shiftDefault
---   shiftL       = shiftLDefault
---   shiftR       = shiftRDefault
---   unsafeShiftL = mkBShiftL
---   unsafeShiftR = mkBShiftR
---   rotate       = rotateDefault
---   rotateL      = rotateLDefault
---   rotateR      = rotateRDefault
---   isSigned     = isSignedDefault
---   popCount     = mkPopCount
+instance Bits CUChar where
+  (.&.)        = lift2 mkBAnd
+  (.|.)        = lift2 mkBOr
+  xor          = lift2 mkBXor
+  complement   = lift1 mkBNot
+  bit          = mkBitcast . bitDefault @Word8
+  testBit b    = testBitDefault (mkBitcast @Word8 b)
+  shift        = lift2' shiftDefault
+  shiftL       = lift2' shiftLDefault
+  shiftR       = lift2' shiftRDefault
+  unsafeShiftL = lift2' mkBShiftL
+  unsafeShiftR = lift2' mkBShiftR
+  rotate       = lift2' rotateDefault
+  rotateL      = lift2' rotateLDefault
+  rotateR      = lift2' rotateRDefault
+  isSigned     = isSignedDefault
+  popCount     = mkPopCount . mkBitcast @Word8
+
 
 
 -- Instances for FiniteBits
@@ -622,51 +625,83 @@ instance FiniteBits Word64 where
 
 instance FiniteBits CInt where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CInt))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int32
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int32
 
 instance FiniteBits CUInt where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CUInt))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word32
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word32
 
 instance FiniteBits CLong where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CLong))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CLONG
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CLONG
 
 instance FiniteBits CULong where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CULong))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CULONG
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CULONG
 
 instance FiniteBits CLLong where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CLLong))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int64
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int64
 
 instance FiniteBits CULLong where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CULLong))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word64
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word64
 
 instance FiniteBits CShort where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CShort))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int16
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int16
 
 instance FiniteBits CUShort where
   finiteBitSize _    = constant (B.finiteBitSize (undefined::CUShort))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word16
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word16
 
--- instance FiniteBits CChar
--- instance FiniteBits CUChar
--- instance FiniteBits CSChar
+instance FiniteBits CChar where
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CChar))
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CCHAR
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CCHAR
+
+instance FiniteBits CSChar where
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CSChar))
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int8
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int8
+
+instance FiniteBits CUChar where
+  finiteBitSize _    = constant (B.finiteBitSize (undefined::CUChar))
+  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word8
+  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word8
 
 
 -- Default implementations
 -- -----------------------
+
+lift1 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b)
+      -> Exp a
+      -> Exp a
+lift1 f x = mkUnsafeCoerce (f (mkUnsafeCoerce x))
+
+lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b -> Exp b)
+      -> Exp a
+      -> Exp a
+      -> Exp a
+lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
+
+lift2' :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+       => (Exp b -> Exp Int -> Exp b)
+       -> Exp a
+       -> Exp Int
+       -> Exp a
+lift2' f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) y)
+
 
 bitDefault :: (IsIntegral t, Bits t) => Exp Int -> Exp t
 bitDefault x = constant 1 `shiftL` x
@@ -714,14 +749,6 @@ rotateDefault =
     TypeWord16{}  -> rotateDefault' (undefined::Word16)
     TypeWord32{}  -> rotateDefault' (undefined::Word32)
     TypeWord64{}  -> rotateDefault' (undefined::Word64)
-    TypeCShort{}  -> rotateDefault' (undefined::CUShort)
-    TypeCUShort{} -> rotateDefault' (undefined::CUShort)
-    TypeCInt{}    -> rotateDefault' (undefined::CUInt)
-    TypeCUInt{}   -> rotateDefault' (undefined::CUInt)
-    TypeCLong{}   -> rotateDefault' (undefined::CULong)
-    TypeCULong{}  -> rotateDefault' (undefined::CULong)
-    TypeCLLong{}  -> rotateDefault' (undefined::CULLong)
-    TypeCULLong{} -> rotateDefault' (undefined::CULLong)
 
 rotateDefault'
     :: forall i w. (Elt w, FiniteBits i, IsIntegral i, IsIntegral w, IsIntegral (EltRepr i), IsIntegral (EltRepr w), BitSizeEq (EltRepr i) (EltRepr w), BitSizeEq (EltRepr w) (EltRepr i))

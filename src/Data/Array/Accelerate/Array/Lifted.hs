@@ -81,11 +81,8 @@ instance Arrays t => IsProduct Arrays (Vector' t) where
           swiz | IsC <- isArraysFlat (undefined :: r)
                = ProdRsnoc (tup t)
 
-
-type instance ArrRepr (Vector' a) = ArrRepr (TupleRepr (Vector' a))
-
-
 instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
+  type ArrRepr (Vector' t) = ArrRepr (TupleRepr (Vector' t))
   arrays _ = arrs (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
     where
       arrs :: forall a. ProdR Arrays a -> ArraysR (ArrRepr a)

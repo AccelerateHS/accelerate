@@ -5,6 +5,8 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -23,6 +25,7 @@ module Data.Array.Accelerate.Classes.RealFloat (
 
 ) where
 
+import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -129,44 +132,46 @@ instance RealFloat Half where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f16_is_denormalized . mkUnsafeCoerce)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f16_is_negative_zero . mkUnsafeCoerce)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f16_decode (mkUnsafeCoerce x)
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f16_is_denormalized . mkBitcast)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f16_is_negative_zero . mkBitcast)
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f16_decode (mkBitcast x)
                                                     in  (fromIntegral m, n))
 
 instance RealFloat Float where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkUnsafeCoerce)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkUnsafeCoerce)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f32_decode (mkUnsafeCoerce x)
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f32_decode (mkBitcast x)
                                                     in  (fromIntegral m, n))
 
 instance RealFloat Double where
   atan2           = mkAtan2
   isNaN           = mkIsNaN
   isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkUnsafeCoerce)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkUnsafeCoerce)
-  decodeFloat     = ieee754 "decodeFloat"    (untup2 . ieee754_f64_decode . mkUnsafeCoerce)
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
+  decodeFloat     = ieee754 "decodeFloat"    (untup2 . ieee754_f64_decode . mkBitcast)
 
 instance RealFloat CFloat where
-  atan2           = mkAtan2
-  isNaN           = mkIsNaN
-  isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkUnsafeCoerce)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkUnsafeCoerce)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f32_decode (mkUnsafeCoerce x)
+  atan2           = lift2 mkAtan2
+  isNaN           = mkIsNaN . mkBitcast @Float
+  isInfinite      = mkIsInfinite . mkBitcast @Float
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f32_decode (mkBitcast x)
                                                     in  (fromIntegral m, n))
+  encodeFloat x e = mkBitcast (encodeFloat @Float x e)
 
 instance RealFloat CDouble where
-  atan2           = mkAtan2
-  isNaN           = mkIsNaN
-  isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkUnsafeCoerce)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkUnsafeCoerce)
-  decodeFloat     = ieee754 "decodeFloat"    (untup2 . ieee754_f64_decode . mkUnsafeCoerce)
+  atan2           = lift2 mkAtan2
+  isNaN           = mkIsNaN . mkBitcast @Double
+  isInfinite      = mkIsInfinite . mkBitcast @Double
+  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
+  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
+  decodeFloat     = ieee754 "decodeFloat"    (untup2 . ieee754_f64_decode . mkBitcast)
+  encodeFloat x e = mkBitcast (encodeFloat @Double x e)
 
 
 -- To satisfy superclass constraints
@@ -192,6 +197,13 @@ preludeError x
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
 
+
+lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b -> Exp b)
+      -> Exp a
+      -> Exp a
+      -> Exp a
+lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
 
 ieee754 :: forall a b. P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
 ieee754 name f x

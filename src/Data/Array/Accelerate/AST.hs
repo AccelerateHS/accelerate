@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MagicHash             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes           #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -14,6 +15,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE UnboxedTuples         #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
@@ -120,6 +122,7 @@ module Data.Array.Accelerate.AST (
 
 --standard library
 import Control.DeepSeq
+import Control.Monad.ST
 import Data.List
 import Data.Typeable
 import Foreign.ForeignPtr
@@ -127,13 +130,18 @@ import Foreign.Marshal
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
-import GHC.Ptr                                                      ( Ptr(..) )
 import Language.Haskell.TH                                          ( Q, TExp )
 import qualified Language.Haskell.TH                                as TH
 import qualified Language.Haskell.TH.Syntax                         as TH
 #if __GLASGOW_HASKELL__ <= 708
 import Instances.TH.Lift                                            () -- Int8, Int16...
 #endif
+
+import GHC.Base                                                     ( Int#, isTrue# )
+import GHC.Int                                                      ( Int(..) )
+import GHC.Prim                                                     ( (<#), (+#), indexWord8Array#, sizeofByteArray# )
+import GHC.Ptr                                                      ( Ptr(..) )
+import GHC.Word                                                     ( Word8(..) )
 
 -- friends
 import Data.Array.Accelerate.Array.Data
@@ -1375,11 +1383,7 @@ rnfSingleType (NumSingleType t)    = rnfNumType t
 rnfSingleType (NonNumSingleType t) = rnfNonNumType t
 
 rnfVectorType :: VectorType t -> ()
-rnfVectorType (Vector2Type t)  = rnfSingleType t
-rnfVectorType (Vector3Type t)  = rnfSingleType t
-rnfVectorType (Vector4Type t)  = rnfSingleType t
-rnfVectorType (Vector8Type t)  = rnfSingleType t
-rnfVectorType (Vector16Type t) = rnfSingleType t
+rnfVectorType (VectorType !_ t) = rnfSingleType t
 
 rnfBoundedType :: BoundedType t -> ()
 rnfBoundedType (IntegralBoundedType t) = rnfIntegralType t
@@ -1392,9 +1396,6 @@ rnfNumType (FloatingNumType t) = rnfFloatingType t
 rnfNonNumType :: NonNumType t -> ()
 rnfNonNumType (TypeBool   NonNumDict) = ()
 rnfNonNumType (TypeChar   NonNumDict) = ()
-rnfNonNumType (TypeCChar  NonNumDict) = ()
-rnfNonNumType (TypeCSChar NonNumDict) = ()
-rnfNonNumType (TypeCUChar NonNumDict) = ()
 
 rnfIntegralType :: IntegralType t -> ()
 rnfIntegralType (TypeInt     IntegralDict) = ()
@@ -1407,21 +1408,11 @@ rnfIntegralType (TypeWord8   IntegralDict) = ()
 rnfIntegralType (TypeWord16  IntegralDict) = ()
 rnfIntegralType (TypeWord32  IntegralDict) = ()
 rnfIntegralType (TypeWord64  IntegralDict) = ()
-rnfIntegralType (TypeCShort  IntegralDict) = ()
-rnfIntegralType (TypeCUShort IntegralDict) = ()
-rnfIntegralType (TypeCInt    IntegralDict) = ()
-rnfIntegralType (TypeCUInt   IntegralDict) = ()
-rnfIntegralType (TypeCLong   IntegralDict) = ()
-rnfIntegralType (TypeCULong  IntegralDict) = ()
-rnfIntegralType (TypeCLLong  IntegralDict) = ()
-rnfIntegralType (TypeCULLong IntegralDict) = ()
 
 rnfFloatingType :: FloatingType t -> ()
 rnfFloatingType (TypeHalf    FloatingDict) = ()
 rnfFloatingType (TypeFloat   FloatingDict) = ()
 rnfFloatingType (TypeDouble  FloatingDict) = ()
-rnfFloatingType (TypeCFloat  FloatingDict) = ()
-rnfFloatingType (TypeCDouble FloatingDict) = ()
 
 
 -- Template Haskell
@@ -1580,7 +1571,7 @@ liftArray (Array sh adata) =
       return (appsT (TH.ConT name) resultArgs)
 
     -- TODO: make sure that the resulting array is 16-byte aligned...
-    arr :: forall a. (ArrayElt a, Storable a) => UniqueArray a -> Q (TExp (UniqueArray a))
+    arr :: forall a. Storable a => UniqueArray a -> Q (TExp (UniqueArray a))
     arr ua = do
       bytes <- TH.runIO $ peekArray (sizeOf (undefined::a) * sz) (castPtr (unsafeUniqueArrayPtr ua) :: Ptr Word8)
       [|| unsafePerformIO $ do
@@ -1601,30 +1592,13 @@ liftArray (Array sh adata) =
     go ArrayEltRword16       (AD_Word16 ua)  = [|| AD_Word16 $$(arr ua) ||]
     go ArrayEltRword32       (AD_Word32 ua)  = [|| AD_Word32 $$(arr ua) ||]
     go ArrayEltRword64       (AD_Word64 ua)  = [|| AD_Word64 $$(arr ua) ||]
-    go ArrayEltRcshort       (AD_CShort ua)  = [|| AD_CShort $$(arr ua) ||]
-    go ArrayEltRcushort      (AD_CUShort ua) = [|| AD_CUShort $$(arr ua) ||]
-    go ArrayEltRcint         (AD_CInt ua)    = [|| AD_CInt $$(arr ua) ||]
-    go ArrayEltRcuint        (AD_CUInt ua)   = [|| AD_CUInt $$(arr ua) ||]
-    go ArrayEltRclong        (AD_CLong ua)   = [|| AD_CLong $$(arr ua) ||]
-    go ArrayEltRculong       (AD_CULong ua)  = [|| AD_CULong $$(arr ua) ||]
-    go ArrayEltRcllong       (AD_CLLong ua)  = [|| AD_CLLong $$(arr ua) ||]
-    go ArrayEltRcullong      (AD_CULLong ua) = [|| AD_CULLong $$(arr ua) ||]
     go ArrayEltRhalf         (AD_Half ua)    = [|| AD_Half $$(arr ua) ||]
     go ArrayEltRfloat        (AD_Float ua)   = [|| AD_Float $$(arr ua) ||]
     go ArrayEltRdouble       (AD_Double ua)  = [|| AD_Double $$(arr ua) ||]
-    go ArrayEltRcfloat       (AD_CFloat ua)  = [|| AD_CFloat $$(arr ua) ||]
-    go ArrayEltRcdouble      (AD_CDouble ua) = [|| AD_CDouble $$(arr ua) ||]
     go ArrayEltRbool         (AD_Bool ua)    = [|| AD_Bool $$(arr ua) ||]
     go ArrayEltRchar         (AD_Char ua)    = [|| AD_Char $$(arr ua) ||]
-    go ArrayEltRcchar        (AD_CChar ua)   = [|| AD_CChar $$(arr ua) ||]
-    go ArrayEltRcschar       (AD_CSChar ua)  = [|| AD_CSChar $$(arr ua) ||]
-    go ArrayEltRcuchar       (AD_CUChar ua)  = [|| AD_CUChar $$(arr ua) ||]
-    go (ArrayEltRvec2 r)     (AD_V2 a)       = [|| AD_V2 $$(go r a) ||]
-    go (ArrayEltRvec3 r)     (AD_V3 a)       = [|| AD_V3 $$(go r a) ||]
-    go (ArrayEltRvec4 r)     (AD_V4 a)       = [|| AD_V4 $$(go r a) ||]
-    go (ArrayEltRvec8 r)     (AD_V8 a)       = [|| AD_V8 $$(go r a) ||]
-    go (ArrayEltRvec16 r)    (AD_V16 a)      = [|| AD_V16 $$(go r a) ||]
     go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = [|| AD_Pair $$(go r1 a1) $$(go r2 a2) ||]
+    go (ArrayEltRvec r)      (AD_Vec w# a)   = TH.unsafeTExpCoerce $ [| AD_Vec $(liftInt# w#) $(TH.unTypeQ (go r a)) |]
 
 
 liftBoundary
@@ -1729,95 +1703,87 @@ liftSingle :: SingleType t -> t -> Q (TExp t)
 liftSingle (NumSingleType t)    x = liftNum t x
 liftSingle (NonNumSingleType t) x = liftNonNum t x
 
-liftVector :: VectorType v -> v -> Q (TExp v)
-liftVector (Vector2Type t) (V2 a b)     = [|| V2 $$(liftSingle t a) $$(liftSingle t b) ||]
-liftVector (Vector3Type t) (V3 a b c)   = [|| V3 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) ||]
-liftVector (Vector4Type t) (V4 a b c d) = [|| V4 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d) ||]
-liftVector (Vector8Type t) (V8 a b c d e f g h) =
-  [|| V8 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d)
-         $$(liftSingle t e) $$(liftSingle t f) $$(liftSingle t g) $$(liftSingle t h) ||]
-liftVector (Vector16Type t) (V16 a b c d e f g h i j k l m n o p) =
-  [|| V16 $$(liftSingle t a) $$(liftSingle t b) $$(liftSingle t c) $$(liftSingle t d)
-          $$(liftSingle t e) $$(liftSingle t f) $$(liftSingle t g) $$(liftSingle t h)
-          $$(liftSingle t i) $$(liftSingle t j) $$(liftSingle t k) $$(liftSingle t l)
-          $$(liftSingle t m) $$(liftSingle t n) $$(liftSingle t o) $$(liftSingle t p) ||]
+liftVector :: VectorType t -> t -> Q (TExp t)
+liftVector VectorType{} x = liftVec x
+
+-- O(n) at runtime to copy from the Addr# to the ByteArray#. We should be able
+-- to do this without copying, but I don't think the definition of ByteArray# is
+-- exported (or it is deeply magical).
+--
+liftVec :: Vec n a -> Q (TExp (Vec n a))
+liftVec (Vec ba#)
+  = TH.unsafeTExpCoerce
+  $ [| runST $ \s ->
+         case newByteArray# $(liftInt# n#) s                                                   of { (# s1, mba# #) ->
+         case copyAddrToByteArray# $(TH.litE (TH.StringPrimL bytes)) mba# 0# $(liftInt# n#) s1 of { s2             ->
+         case unsafeFreezeByteArray# mba# s2                                                   of { (# s3, ba'# #) ->
+           (# s3, Vec ba'# #)
+        }}}
+     |]
+  where
+      bytes :: [Word8]
+      bytes = go 0#
+        where
+          go i# | isTrue# (i# <# n#) = W8# (indexWord8Array# ba# i#) : go (i# +# 1#)
+                | otherwise          = []
+
+      n# = sizeofByteArray# ba#
+
+-- XXX: Typed TH does not support unlifted types
+--
+liftInt# :: Int# -> TH.ExpQ
+liftInt# i# = TH.litE (TH.IntPrimL (toInteger (I# i#)))
 
 liftNum :: NumType t -> t -> Q (TExp t)
 liftNum (IntegralNumType t) x = liftIntegral t x
 liftNum (FloatingNumType t) x = liftFloating t x
 
 liftNonNum :: NonNumType t -> t -> Q (TExp t)
-liftNonNum TypeBool{}   x = [|| x ||]
-liftNonNum TypeChar{}   x = [|| x ||]
-liftNonNum TypeCChar{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftNonNum TypeCSChar{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftNonNum TypeCUChar{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftNonNum TypeBool{} x = [|| x ||]
+liftNonNum TypeChar{} x = [|| x ||]
 
 liftIntegral :: IntegralType t -> t -> Q (TExp t)
-liftIntegral TypeInt{}     x = [|| x ||]
-liftIntegral TypeInt8{}    x = [|| x ||]
-liftIntegral TypeInt16{}   x = [|| x ||]
-liftIntegral TypeInt32{}   x = [|| x ||]
-liftIntegral TypeInt64{}   x = [|| x ||]
+liftIntegral TypeInt{}    x = [|| x ||]
+liftIntegral TypeInt8{}   x = [|| x ||]
+liftIntegral TypeInt16{}  x = [|| x ||]
+liftIntegral TypeInt32{}  x = [|| x ||]
+liftIntegral TypeInt64{}  x = [|| x ||]
 #if __GLASGOW_HASKELL__ >= 710
-liftIntegral TypeWord{}    x = [|| x ||]
+liftIntegral TypeWord{}   x = [|| x ||]
 #else
-liftIntegral TypeWord{}    x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeWord{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
 #endif
-liftIntegral TypeWord8{}   x = [|| x ||]
-liftIntegral TypeWord16{}  x = [|| x ||]
-liftIntegral TypeWord32{}  x = [|| x ||]
-liftIntegral TypeWord64{}  x = [|| x ||]
-liftIntegral TypeCShort{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCUShort{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCInt{}    x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCUInt{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCLong{}   x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCULong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCLLong{}  x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
-liftIntegral TypeCULLong{} x = return (TH.TExp (TH.LitE (TH.IntegerL (toInteger x))))
+liftIntegral TypeWord8{}  x = [|| x ||]
+liftIntegral TypeWord16{} x = [|| x ||]
+liftIntegral TypeWord32{} x = [|| x ||]
+liftIntegral TypeWord64{} x = [|| x ||]
 
 liftFloating :: FloatingType t -> t -> Q (TExp t)
-liftFloating TypeHalf{}    x = [|| x ||]
-liftFloating TypeFloat{}   x = [|| x ||]
-liftFloating TypeDouble{}  x = [|| x ||]
-liftFloating TypeCFloat{}  x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
-liftFloating TypeCDouble{} x = return (TH.TExp (TH.LitE (TH.RationalL (toRational x))))
+liftFloating TypeHalf{}   x = [|| x ||]
+liftFloating TypeFloat{}  x = [|| x ||]
+liftFloating TypeDouble{} x = [|| x ||]
 
 
 liftIntegralType :: IntegralType t -> Q (TExp (IntegralType t))
-liftIntegralType TypeInt{}     = [|| TypeInt IntegralDict ||]
-liftIntegralType TypeInt8{}    = [|| TypeInt8 IntegralDict ||]
-liftIntegralType TypeInt16{}   = [|| TypeInt16 IntegralDict ||]
-liftIntegralType TypeInt32{}   = [|| TypeInt32 IntegralDict ||]
-liftIntegralType TypeInt64{}   = [|| TypeInt64 IntegralDict ||]
-liftIntegralType TypeWord{}    = [|| TypeWord IntegralDict ||]
-liftIntegralType TypeWord8{}   = [|| TypeWord8 IntegralDict ||]
-liftIntegralType TypeWord16{}  = [|| TypeWord16 IntegralDict ||]
-liftIntegralType TypeWord32{}  = [|| TypeWord32 IntegralDict ||]
-liftIntegralType TypeWord64{}  = [|| TypeWord64 IntegralDict ||]
-liftIntegralType TypeCShort{}  = [|| TypeCShort IntegralDict ||]
-liftIntegralType TypeCUShort{} = [|| TypeCUShort IntegralDict ||]
-liftIntegralType TypeCInt{}    = [|| TypeCInt IntegralDict ||]
-liftIntegralType TypeCUInt{}   = [|| TypeCUInt IntegralDict ||]
-liftIntegralType TypeCLong{}   = [|| TypeCLong IntegralDict ||]
-liftIntegralType TypeCULong{}  = [|| TypeCULong IntegralDict ||]
-liftIntegralType TypeCLLong{}  = [|| TypeCLLong IntegralDict ||]
-liftIntegralType TypeCULLong{} = [|| TypeCULLong IntegralDict ||]
+liftIntegralType TypeInt{}    = [|| TypeInt IntegralDict ||]
+liftIntegralType TypeInt8{}   = [|| TypeInt8 IntegralDict ||]
+liftIntegralType TypeInt16{}  = [|| TypeInt16 IntegralDict ||]
+liftIntegralType TypeInt32{}  = [|| TypeInt32 IntegralDict ||]
+liftIntegralType TypeInt64{}  = [|| TypeInt64 IntegralDict ||]
+liftIntegralType TypeWord{}   = [|| TypeWord IntegralDict ||]
+liftIntegralType TypeWord8{}  = [|| TypeWord8 IntegralDict ||]
+liftIntegralType TypeWord16{} = [|| TypeWord16 IntegralDict ||]
+liftIntegralType TypeWord32{} = [|| TypeWord32 IntegralDict ||]
+liftIntegralType TypeWord64{} = [|| TypeWord64 IntegralDict ||]
 
 liftFloatingType :: FloatingType t -> Q (TExp (FloatingType t))
-liftFloatingType TypeHalf{}    = [|| TypeHalf FloatingDict ||]
-liftFloatingType TypeFloat{}   = [|| TypeFloat FloatingDict ||]
-liftFloatingType TypeDouble{}  = [|| TypeDouble FloatingDict ||]
-liftFloatingType TypeCFloat{}  = [|| TypeCFloat FloatingDict ||]
-liftFloatingType TypeCDouble{} = [|| TypeCDouble FloatingDict ||]
+liftFloatingType TypeHalf{}   = [|| TypeHalf FloatingDict ||]
+liftFloatingType TypeFloat{}  = [|| TypeFloat FloatingDict ||]
+liftFloatingType TypeDouble{} = [|| TypeDouble FloatingDict ||]
 
 liftNonNumType :: NonNumType t -> Q (TExp (NonNumType t))
-liftNonNumType TypeBool{}   = [|| TypeBool NonNumDict ||]
-liftNonNumType TypeChar{}   = [|| TypeChar NonNumDict ||]
-liftNonNumType TypeCChar{}  = [|| TypeCChar NonNumDict ||]
-liftNonNumType TypeCSChar{} = [|| TypeCSChar NonNumDict ||]
-liftNonNumType TypeCUChar{} = [|| TypeCUChar NonNumDict ||]
+liftNonNumType TypeBool{} = [|| TypeBool NonNumDict ||]
+liftNonNumType TypeChar{} = [|| TypeChar NonNumDict ||]
 
 liftNumType :: NumType t -> Q (TExp (NumType t))
 liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]
@@ -1836,11 +1802,7 @@ liftSingleType (NumSingleType t)    = [|| NumSingleType $$(liftNumType t) ||]
 liftSingleType (NonNumSingleType t) = [|| NonNumSingleType $$(liftNonNumType t) ||]
 
 -- liftVectorType :: VectorType t -> Q (TExp (VectorType t))
--- liftVectorType (Vector2Type t)  = [|| Vector2Type $$(liftSingleType t) ||]
--- liftVectorType (Vector3Type t)  = [|| Vector3Type $$(liftSingleType t) ||]
--- liftVectorType (Vector4Type t)  = [|| Vector4Type $$(liftSingleType t) ||]
--- liftVectorType (Vector8Type t)  = [|| Vector8Type $$(liftSingleType t) ||]
--- liftVectorType (Vector16Type t) = [|| Vector16Type $$(liftSingleType t) ||]
+-- liftVectorType (VectorType n t) = [|| VectorType n $$(liftSingleType t) ||]
 
 
 -- Debugging

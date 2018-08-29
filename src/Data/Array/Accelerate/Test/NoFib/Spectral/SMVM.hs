@@ -46,7 +46,7 @@ test_smvm runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a)
         => Gen a
         -> TestTree
     testElt e =

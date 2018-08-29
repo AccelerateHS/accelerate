@@ -272,7 +272,6 @@ Library
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2
         , containers                    >= 0.3
-        , constraints                   >= 0.9
         , cryptonite                    >= 0.21
         , deepseq                       >= 1.3
         , directory                     >= 1.0
@@ -285,6 +284,7 @@ Library
         , hedgehog                      >= 0.5
         , lens                          >= 4.0
         , mtl                           >= 2.0
+        , primitive                     >= 0.6.4
         , tasty                         >= 0.11
         , tasty-expected-failure        >= 0.11
         , tasty-hedgehog                >= 0.1
@@ -358,6 +358,7 @@ Library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
+        Data.Array.Accelerate.Constructor
         Data.Array.Accelerate.Debug.Flags
         Data.Array.Accelerate.Debug.Monitoring
         Data.Array.Accelerate.Debug.Stats
@@ -365,6 +366,7 @@ Library
         Data.Array.Accelerate.Debug.Trace
         Data.Array.Accelerate.Language
         Data.Array.Accelerate.Lift
+        Data.Array.Accelerate.Orphans
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz
         Data.Array.Accelerate.Pretty.Graphviz.Monad
@@ -500,29 +502,16 @@ Library
   ghc-options:
         -O2
         -Wall
+        -Wcompat
+        -Wmissed-specialisations
+        -- -Wredundant-constraints
+        -freduction-depth=50
+        -fspec-constr-count=25
         -funbox-strict-fields
-        -fno-warn-name-shadowing
 
   ghc-prof-options:
         -caf-all
         -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:
-        -fspec-constr-count=25
-
-  if impl(ghc == 7.*)
-    ghc-options:
-        -fcontext-stack=35
-
-  if impl(ghc >= 8.0)
-    ghc-options:
-        -Wcompat
-        -freduction-depth=35
-
-  if impl(ghc < 7.10)
-    build-depends:
-          th-lift-instances             >= 0.1
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
@@ -547,17 +536,9 @@ test-suite doctest
         -threaded
         -rtsopts
 
-  -- older ghc does not support the dimension-specialised show instances for
-  -- arrays, which the doctests use
-  if impl(ghc < 7.10)
-    buildable:          False
-
-  -- doctest only supports a single x-doctest-options line
-  if impl(ghc == 7.*)
-    x-doctest-options:  -fspec-constr-count=25 -fcontext-stack=35
-
-  if impl(ghc >= 8.0)
-    x-doctest-options:  -fspec-constr-count=25 -freduction-depth=35
+  x-doctest-options:
+        -fspec-constr-count=25
+        -freduction-depth=50
 
 
 test-suite nofib-interpreter

@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies      #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Num
@@ -157,75 +158,75 @@ instance P.Num (Exp Word64) where
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CInt) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CUInt) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CULong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CLLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CULLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CShort) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CUShort) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp Half) where
@@ -256,20 +257,33 @@ instance P.Num (Exp Double) where
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CFloat) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
 
 instance P.Num (Exp CDouble) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
+  (+)         = lift2 mkAdd
+  (-)         = lift2 mkSub
+  (*)         = lift2 mkMul
+  negate      = lift1 mkNeg
+  abs         = lift1 mkAbs
+  signum      = lift1 mkSig
   fromInteger = constant . P.fromInteger
+
+lift1 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b)
+      -> Exp a
+      -> Exp a
+lift1 f = mkUnsafeCoerce . f . mkUnsafeCoerce
+
+lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
+      => (Exp b -> Exp b -> Exp b)
+      -> Exp a
+      -> Exp a
+      -> Exp a
+lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
 
