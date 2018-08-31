@@ -94,212 +94,90 @@ class MkData con a t where
 pattern T2 :: MkData con (a,b) (con a, con b) => con a -> con b -> con (a, b)
 pattern T2 a b = MkT (a, b)
 
-pattern T3
-    :: MkData con (a,b,c) (con a, con b, con c)
-    => con a
-    -> con b
-    -> con c
-    -> con (a, b, c)
+pattern T3 :: MkData con (a,b,c) (con a, con b, con c) => con a -> con b -> con c -> con (a, b, c)
 pattern T3 a b c = MkT (a, b, c)
 
 pattern T4
     :: MkData con (a,b,c,d) (con a, con b, con c, con d)
-    => con a
-    -> con b
-    -> con c
-    -> con d
+    => con a -> con b -> con c -> con d
     -> con (a, b, c, d)
 pattern T4 a b c d = MkT (a, b, c, d)
 
 pattern T5
     :: MkData con (a,b,c,d,e) (con a, con b, con c, con d, con e)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
+    => con a -> con b -> con c -> con d -> con e
     -> con (a, b, c, d, e)
 pattern T5 a b c d e = MkT (a, b, c, d, e)
 
 pattern T6
     :: MkData con (a,b,c,d,e,f) (con a, con b, con c, con d, con e, con f)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
+    => con a -> con b -> con c -> con d -> con e -> con f
     -> con (a, b, c, d, e, f)
 pattern T6 a b c d e f = MkT (a, b, c, d, e, f)
 
 pattern T7
     :: MkData con (a,b,c,d,e,f,g) (con a, con b, con c, con d, con e, con f, con g)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g
     -> con (a, b, c, d, e, f, g)
 pattern T7 a b c d e f g = MkT (a, b, c, d, e, f, g)
 
 pattern T8
     :: MkData con (a,b,c,d,e,f,g,h) (con a, con b, con c, con d, con e, con f, con g, con h)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h
     -> con (a, b, c, d, e, f, g, h)
 pattern T8 a b c d e f g h = MkT (a, b, c, d, e, f, g, h)
 
 pattern T9
     :: MkData con (a,b,c,d,e,f,g,h,i) (con a, con b, con c, con d, con e, con f, con g, con h, con i)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i
     -> con (a, b, c, d, e, f, g, h, i)
 pattern T9 a b c d e f g h i = MkT (a, b, c, d, e, f, g, h, i)
 
 pattern T10
     :: MkData con (a,b,c,d,e,f,g,h,i,j) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
-    -> con j
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j
     -> con (a, b, c, d, e, f, g, h, i, j)
 pattern T10 a b c d e f g h i j = MkT (a, b, c, d, e, f, g, h, i, j)
 
 pattern T11
     :: MkData con (a,b,c,d,e,f,g,h,i,j,k) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
-    -> con j
-    -> con k
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k
     -> con (a, b, c, d, e, f, g, h, i, j, k)
 pattern T11 a b c d e f g h i j k = MkT (a, b, c, d, e, f, g, h, i, j, k)
 
 pattern T12
     :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
-    -> con j
-    -> con k
-    -> con l
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l
     -> con (a, b, c, d, e, f, g, h, i, j, k, l)
 pattern T12 a b c d e f g h i j k l = MkT (a, b, c, d, e, f, g, h, i, j, k, l)
 
 pattern T13
     :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
-    -> con j
-    -> con k
-    -> con l
-    -> con m
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m)
 pattern T13 a b c d e f g h i j k l m = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m)
 
 pattern T14
     :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m,n) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
-    -> con j
-    -> con k
-    -> con l
-    -> con m
-    -> con n
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 pattern T14 a b c d e f g h i j k l m n = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 
 pattern T15
     :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
-    -> con j
-    -> con k
-    -> con l
-    -> con m
-    -> con n
-    -> con o
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 pattern T15 a b c d e f g h i j k l m n o = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 
 pattern T16
     :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o, con p)
-    => con a
-    -> con b
-    -> con c
-    -> con d
-    -> con e
-    -> con f
-    -> con g
-    -> con h
-    -> con i
-    -> con j
-    -> con k
-    -> con l
-    -> con m
-    -> con n
-    -> con o
-    -> con p
+    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o -> con p
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 pattern T16 a b c d e f g h i j k l m n o p = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
--- MkData instances for up to 16-tuples (Acc and Exp). The instances are
--- unremarkable, TH just takes care of the boilerplate for us. It is debatable
--- whether or not this was a good idea...
+-- MkData instances for up to 16-tuples (Acc and Exp). TH takes care of the
+-- (unremarkable) boilerplate for us, but since the implementation is a little
+-- tricky it is debatable whether or not this is a good idea...
 --
 $(runQ $ do
     let
