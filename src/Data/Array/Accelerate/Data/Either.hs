@@ -140,6 +140,9 @@ tag x = Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` x
 
 instance (Elt a, Elt b) => Elt (Either a b) where
   type EltRepr (Either a b) = TupleRepr (Word8, EltRepr a, EltRepr b)
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType = eltType @(Word8,a,b)
   toElt ((((),0),a),_)  = Left  (toElt a)
   toElt (_         ,b)  = Right (toElt b)

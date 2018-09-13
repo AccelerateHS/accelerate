@@ -64,30 +64,45 @@ import qualified Prelude                                            as P
 
 instance Elt (Complex Half) where
   type EltRepr (Complex Half) = V2 Half
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex Float) where
   type EltRepr (Complex Float) = V2 Float
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex Double) where
   type EltRepr (Complex Double) = V2 Double
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType          = TypeRscalar scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
 instance Elt (Complex CFloat) where
   type EltRepr (Complex CFloat) = V2 Float
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType                        = TypeRscalar scalarType
   toElt (V2 r i)                 = CFloat r :+ CFloat i
   fromElt (CFloat r :+ CFloat i) = V2 r i
 
 instance Elt (Complex CDouble) where
   type EltRepr (Complex CDouble) = V2 Double
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType                          = TypeRscalar scalarType
   toElt (V2 r i)                   = CDouble r :+ CDouble i
   fromElt (CDouble r :+ CDouble i) = V2 r i

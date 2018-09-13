@@ -18,6 +18,7 @@
 #if __GLASGOW_HASKELL__ <= 708
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif
+{-# OPTIONS_GHC -fno-warn-inline-rule-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
@@ -227,14 +228,14 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a 
     => TupleType (EltRepr a)
   eltType = geltType @(Rep a) TypeRunit
 
-  {-# INLINE fromElt #-}
+  {-# INLINE [1] fromElt #-}
   default fromElt
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => a
     -> EltRepr a
   fromElt = gfromElt () . from
 
-  {-# INLINE toElt #-}
+  {-# INLINE [1] toElt #-}
   default toElt
     :: (Generic a, GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => EltRepr a
@@ -307,36 +308,54 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 
 instance Elt () where
   type EltRepr () = ()
+  {-# INLINE eltType #-}
+  {-# INLINE toElt   #-}
+  {-# INLINE fromElt #-}
   eltType   = TypeRunit
   fromElt   = id
   toElt     = id
 
 instance Elt Z where
   type EltRepr Z = ()
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType    = TypeRunit
   fromElt Z  = ()
   toElt ()   = Z
 
 instance (Elt t, Elt h) => Elt (t:.h) where
   type EltRepr (t:.h) = (EltRepr t, EltRepr h)
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType         = TypeRpair (eltType @t) (eltType @h)
   fromElt (t:.h)  = (fromElt t, fromElt h)
   toElt (t, h)    = toElt t :. toElt h
 
 instance Elt All where
   type EltRepr All = ()
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType       = TypeRunit
   fromElt All   = ()
   toElt ()      = All
 
 instance Elt (Any Z) where
   type EltRepr (Any Z) = ()
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType       = TypeRunit
   fromElt _     = ()
   toElt _       = Any
 
 instance Shape sh => Elt (Any (sh:.Int)) where
   type EltRepr (Any (sh:.Int)) = (EltRepr (Any sh), ())
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] toElt   #-}
+  {-# INLINE [1] fromElt #-}
   eltType       = TypeRpair (eltType @(Any sh)) TypeRunit
   fromElt _     = (fromElt (Any @sh), ())
   toElt _       = Any
@@ -396,10 +415,10 @@ sinkFromElt2 :: (Elt a, Elt b, Elt c)
              -> (EltRepr a -> EltRepr b -> EltRepr c)
 sinkFromElt2 f x y = fromElt $ f (toElt x) (toElt y)
 
--- {-# RULES
--- "fromElt/toElt" forall e. fromElt (toElt e) = e
--- "toElt/fromElt" forall e. toElt (fromElt e) = e
--- #-}
+{-# RULES
+"fromElt/toElt" forall e. fromElt (toElt e) = e
+"toElt/fromElt" forall e. toElt (fromElt e) = e
+#-}
 
 
 -- Foreign functions
@@ -494,13 +513,13 @@ class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
     => ArraysR (ArrRepr a)
   arrays = garrays @(Rep a) ArraysRunit
 
-  {-# INLINE toArr #-}
+  {-# INLINE [1] toArr #-}
   default toArr
     :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
     => ArrRepr a -> a
   toArr = to . snd . gtoArr @(Rep a) @()
 
-  {-# INLINE fromArr #-}
+  {-# INLINE [1] fromArr #-}
   default fromArr
     :: (Generic a, GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
     => a -> ArrRepr a
@@ -550,12 +569,18 @@ instance (GArrays a, GArrays b) => GArrays (a :*: b) where
 
 instance Arrays () where
   type ArrRepr () = ()
+  {-# INLINE arrays      #-}
+  {-# INLINE [1] fromArr #-}
+  {-# INLINE [1] toArr   #-}
   arrays  = ArraysRunit
   fromArr = id
   toArr   = id
 
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
   type ArrRepr (Array sh e) = Array sh e
+  {-# INLINE arrays      #-}
+  {-# INLINE [1] fromArr #-}
+  {-# INLINE [1] toArr   #-}
   arrays  = ArraysRarray
   fromArr = id
   toArr   = id
@@ -600,10 +625,10 @@ data ArraysR arrs where
 --   ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
 --   ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
 
--- {-# RULES
--- "fromArr/toArr" forall a. fromArr (toArr a) = a
--- "toArr/fromArr" forall a. toArr (fromArr a) = a
--- #-}
+{-# RULES
+"fromArr/toArr" forall a. fromArr (toArr a) = a
+"toArr/fromArr" forall a. toArr (fromArr a) = a
+#-}
 
 
 -- | Dense, regular, multi-dimensional arrays.
@@ -949,12 +974,14 @@ instance (Shape sh, Slice sh) => Division (Divide sh) where
 
 -- | Yield an array's shape
 --
+{-# INLINE shape #-}
 shape :: Shape sh => Array sh e -> sh
 shape (Array sh _) = toElt sh
 
 -- | Change the shape of an array without altering its contents. The 'size' of
 -- the source and result arrays must be identical.
 --
+{-# INLINE reshape #-}
 reshape :: (Shape sh, Shape sh', Elt e) => sh -> Array sh' e -> Array sh e
 reshape sh (Array sh' adata)
   = $boundsCheck "reshape" "shape mismatch" (size sh == Repr.size sh')
@@ -963,14 +990,19 @@ reshape sh (Array sh' adata)
 -- | Array indexing
 --
 infixl 9 !
-{-# INLINE (!) #-}
-(!) :: Array sh e -> sh -> e
+{-# INLINE [1] (!) #-}
+(!) :: (Shape sh, Elt e) => Array sh e -> sh -> e
 (!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` toIndex (toElt sh) ix)
 
 infixl 9 !!
-{-# INLINE (!!) #-}
-(!!) :: Array sh e -> Int -> e
+{-# INLINE [1] (!!) #-}
+(!!) :: Elt e => Array sh e -> Int -> e
 (!!) (Array _ adata) i = toElt (adata `unsafeIndexArrayData` i)
+
+{-# RULES
+"indexArray/DIM0" forall arr.   arr ! Z        = arr !! 0
+"indexArray/DIM1" forall arr i. arr ! (Z :. i) = arr !! i
+#-}
 
 -- | Create an array from its representation function, applied at each index of
 -- the array.
@@ -1171,9 +1203,9 @@ $( runQ $ do
           in
           [d| instance Elt $t where
                 type EltRepr $t = $t
-                {-# INLINE eltType #-}
-                {-# INLINE fromElt #-}
-                {-# INLINE toElt   #-}
+                {-# INLINE eltType     #-}
+                {-# INLINE [1] fromElt #-}
+                {-# INLINE [1] toElt   #-}
                 eltType = singletonScalarType
                 fromElt = id
                 toElt   = id
@@ -1187,9 +1219,9 @@ $( runQ $ do
           in
           [d| instance KnownNat n => Elt (Vec n $t) where
                 type EltRepr (Vec n $t) = Vec n $t
-                {-# INLINE eltType #-}
-                {-# INLINE fromElt #-}
-                {-# INLINE toElt   #-}
+                {-# INLINE eltType     #-}
+                {-# INLINE [1] fromElt #-}
+                {-# INLINE [1] toElt   #-}
                 eltType = singletonScalarType
                 fromElt = id
                 toElt   = id
@@ -1207,9 +1239,9 @@ $( runQ $ do
           --
           [d| instance Elt $(conT name) where
                 type EltRepr $(conT name) = $(conT base)
-                {-# INLINE eltType #-}
-                {-# INLINE fromElt #-}
-                {-# INLINE toElt   #-}
+                {-# INLINE eltType     #-}
+                {-# INLINE [1] fromElt #-}
+                {-# INLINE [1] toElt   #-}
                 eltType = singletonScalarType
                 fromElt $(conP (mkName (nameBase name)) [varP (mkName "x")]) = x
                 toElt = $(conE (mkName (nameBase name)))
