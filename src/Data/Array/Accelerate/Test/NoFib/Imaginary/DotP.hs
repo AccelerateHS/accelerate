@@ -77,7 +77,7 @@ dotp xs ys
   = A.fold (+) 0
   $ A.zipWith (*) xs ys
 
-dotpRef :: P.Num e => Vector e -> Vector e -> e
+dotpRef :: (P.Num e, Elt e) => Vector e -> Vector e -> e
 dotpRef xs ys
   = P.sum ( P.zipWith (*) (toList xs) (toList ys) )
 

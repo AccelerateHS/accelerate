@@ -53,8 +53,8 @@ import qualified Foreign.Storable as F
 
 -- |Reify the element type of an array.
 --
-arrayType :: forall sh e. Array sh e -> TupleType (EltRepr e)
-arrayType (Array _ _) = eltType @e
+arrayType :: forall sh e. Elt e => Array sh e -> TupleType (EltRepr e)
+arrayType _ = eltType @e
 
 
 -- |Determine the type of an expressions
@@ -83,52 +83,49 @@ preAccType :: forall acc aenv sh e.
            -> TupleType (EltRepr e)
 preAccType k pacc =
   case pacc of
-    Alet  _ acc         -> k acc
+    Alet _ acc          -> k acc
 
     -- The following all contain impossible pattern matches, but GHC's type
     -- checker does no grok that
     --
-    Avar _              -> case arrays @(Array sh e) of
+    Avar{}              -> case arrays @(Array sh e) of
                              ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "When I get sad, I stop being sad and be AWESOME instead."
 #endif
 
-    Apply _ _           -> case arrays @(Array sh e) of
+    Apply{}             -> case arrays @(Array sh e) of
                              ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "TRUE STORY."
 #endif
 
-    Atuple _            -> case arrays @(Array sh e) of
+    Atuple{}            -> case arrays @(Array sh e) of
                              ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "I made you a cookie, but I eated it."
 #endif
 
-    Aprj _ _            -> case arrays @(Array sh e) of
+    Aprj{}              -> case arrays @(Array sh e) of
                              ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "Hey look! even the leaves are falling for you."
 #endif
 
-    Aforeign _ _ _      -> case arrays @(Array sh e) of
+    Aforeign{}          -> case arrays @(Array sh e) of
                              ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "Who on earth wrote all these weird error messages?"
 #endif
 
-{--
-    Collect _           -> case arrays @(Array sh e) of
+    Use{}               -> case arrays @(Array sh e) of
                              ArraysRarray -> eltType @e
 #if __GLASGOW_HASKELL__ < 800
                              _            -> error "rob you are terrible at this game"
 #endif
---}
 
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc
-    Use a               -> arrayType a
     Unit _              -> eltType @e
     Generate _ _        -> eltType @e
     Transform _ _ _ _   -> eltType @e

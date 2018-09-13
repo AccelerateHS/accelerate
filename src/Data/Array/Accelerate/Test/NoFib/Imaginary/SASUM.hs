@@ -74,6 +74,6 @@ test_sasum' runN e =
 sasum :: A.Num e => Acc (Vector e) -> Acc (Scalar e)
 sasum = A.fold (+) 0 . A.map abs
 
-sasumRef :: P.Num e => Vector e -> e
+sasumRef :: (P.Num e, Elt e) => Vector e -> e
 sasumRef xs = P.sum [ abs x | x <- toList xs ]
 

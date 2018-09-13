@@ -448,7 +448,7 @@ test_ceiling runN dim e =
 -- Reference Implementation
 -- ------------------------
 
-mapRef :: (Shape sh, Elt b) => (a -> b) -> Array sh a -> Array sh b
+mapRef :: (Shape sh, Elt a, Elt b) => (a -> b) -> Array sh a -> Array sh b
 mapRef f xs = fromFunction (arrayShape xs) (\ix -> f (xs Sugar.! ix))
 
 countLeadingZerosRef :: P.FiniteBits a => a -> Int

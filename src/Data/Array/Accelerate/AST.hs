@@ -1549,7 +1549,7 @@ liftArrays ArraysRunit ()              = [|| () ||]
 liftArrays ArraysRarray arr            = [|| $$(liftArray arr) ||]
 liftArrays (ArraysRpair r1 r2) (a1,a2) = [|| ($$(liftArrays r1 a1), $$(liftArrays r2 a2)) ||]
 
-liftArray :: forall sh e. Array sh e -> Q (TExp (Array sh e))
+liftArray :: forall sh e. (Shape sh, Elt e) => Array sh e -> Q (TExp (Array sh e))
 liftArray (Array sh adata) =
   [|| Array $$(liftConst (eltType @sh) sh) $$(go arrayElt adata) ||] `sigE` typeRepToType (typeOf (undefined::Array sh e))
   where
@@ -1855,7 +1855,7 @@ showArrays = display . collect (arrays @arrs) . fromArr
     display xs  = "(" ++ intercalate ", " xs ++ ")"
 
 
-showShortendArr :: Elt e => Array sh e -> String
+showShortendArr :: (Shape sh, Elt e) => Array sh e -> String
 showShortendArr arr
   = show (take cutoff l) ++ if length l > cutoff then ".." else ""
   where

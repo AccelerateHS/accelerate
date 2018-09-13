@@ -131,11 +131,11 @@ test_neg_neg runN e =
 
 
 
-mapRef :: (Shape sh, Elt b) => (a -> b) -> Array sh a -> Array sh b
+mapRef :: (Shape sh, Elt a, Elt b) => (a -> b) -> Array sh a -> Array sh b
 mapRef f xs = fromFunction (S.shape xs) (\ix -> f (xs S.! ix))
 
 zipWithRef
-    :: (Shape sh, Elt c)
+    :: (Shape sh, Elt a, Elt b, Elt c)
     => (a -> b -> c)
     -> Array sh a
     -> Array sh b

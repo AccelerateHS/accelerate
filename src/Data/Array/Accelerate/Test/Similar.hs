@@ -167,7 +167,7 @@ instance Similar a => Similar [a] where
   (x:xs) ~= (y:ys) = x ~= y && xs ~= ys
   _      ~= _      = False
 
-instance (Similar e, Eq sh, Shape sh) => Similar (Array sh e) where
+instance (Similar e, Eq sh, Shape sh, Elt e) => Similar (Array sh e) where
   a1 ~= a2 = shape a1 == shape a2 && go 0
     where
       n     = size (shape a1)

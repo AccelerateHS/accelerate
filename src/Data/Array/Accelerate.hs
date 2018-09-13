@@ -437,14 +437,14 @@ import GHC.Generics                                                 ( Generic )
 
 -- | Array indexing in plain Haskell code.
 --
-indexArray :: Array sh e -> sh -> e
 {-# INLINE indexArray #-}
+indexArray :: (Shape sh, Elt e) => Array sh e -> sh -> e
 indexArray = (S.!)
 
 -- | Linear array indexing in plain Haskell code.
 --
-linearIndexArray :: Array sh e -> Int -> e
 {-# INLINE linearIndexArray #-}
+linearIndexArray :: Elt e => Array sh e -> Int -> e
 linearIndexArray = (S.!!)
 
 -- | Rank of an array (as a plain Haskell value)

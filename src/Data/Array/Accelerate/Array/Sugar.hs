@@ -669,16 +669,33 @@ data ArraysR arrs where
 -- the 'Array' type.
 --
 data Array sh e where
-  Array :: (Shape sh, Elt e)
-        => EltRepr sh                 -- extent of dimensions = shape
+  Array :: EltRepr sh                 -- extent of dimensions = shape
         -> ArrayData (EltRepr e)      -- array payload
         -> Array sh e
+--
+-- Note: [Embedded class constraints on Array]
+--
+-- Previously, we had embedded 'Shape' and 'Elt' constraints on the 'Array'
+-- constructor. This was occasionally convenient, however, this has a negative
+-- impact on the kind of code which GHC can generate. For example, if we write
+-- the function:
+--
+-- > (!) :: Array sh e -> sh -> e
+--
+-- Without the 'Shape' and 'Elt' constraints on the type signature, and instead
+-- recover those when pattern matching on 'Array', then GHC is unable to
+-- specialise functions past this point. In this example, even if 'sh' and 'e'
+-- are fixed, GHC would not be able to inline the definitions from 'ArrayElt'
+-- which perform the actual data accesses.
+--
+--   - TLM 2018-09-13
+--
 
 deriving instance Typeable Array
 
-instance (Eq sh, Eq e) => Eq (Array sh e) where
-  arr1@Array{} == arr2@Array{} = shape arr1 == shape arr2 && toList arr1 == toList arr2
-  arr1@Array{} /= arr2@Array{} = shape arr1 /= shape arr2 || toList arr1 /= toList arr2
+instance (Shape sh, Elt e, Eq sh, Eq e) => Eq (Array sh e) where
+  arr1 == arr2 = shape arr1 == shape arr2 && toList arr1 == toList arr2
+  arr1 /= arr2 = shape arr1 /= shape arr2 || toList arr1 /= toList arr2
 
 #if __GLASGOW_HASKELL__ >= 710
 -- Convert an array to a string, using specialised instances for dimensions
@@ -691,16 +708,16 @@ instance (Eq sh, Eq e) => Eq (Array sh e) where
 --     not fit on a single line.
 --   * The AST pretty printer does not use these instances
 --
-instance Show (Scalar e) where
-  show arr@Array{} =
+instance Elt e => Show (Scalar e) where
+  show arr =
     "Scalar Z " ++ show (toList arr)
 
-instance Show (Vector e) where
-  show arr@Array{} =
+instance Elt e => Show (Vector e) where
+  show arr =
     "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
 
-instance Show (Array DIM2 e) where
-  show arr@Array{} =
+instance Elt e => Show (Array DIM2 e) where
+  show arr =
     "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat
     where
       Z :. rows :. cols = shape arr
@@ -739,8 +756,8 @@ instance Show (Array DIM2 e) where
 -- Furthermore, those clients are likely to pick this instance, rather than the
 -- more specific ones above, which is (perhaps) a little unfortunate.
 --
-instance {-# INCOHERENT #-} Show (Array sh e) where
-  show arr@Array{} =
+instance {-# INCOHERENT #-} (Shape sh, Elt e) => Show (Array sh e) where
+  show arr =
     "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
 
 instance Elt e => IsList (Vector e) where
@@ -749,7 +766,7 @@ instance Elt e => IsList (Vector e) where
   fromListN n xs = fromList (Z:.n) xs
   fromList xs    = GHC.fromListN (length xs) xs
 
-instance NFData (Array sh e) where
+instance (Shape sh, Elt e) => NFData (Array sh e) where
   rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
     where
       go :: ArrayEltR e' -> ArrayData e' -> ()
@@ -1106,7 +1123,7 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
 -- | Convert an accelerated 'Array' to a list in row-major order.
 --
 {-# INLINEABLE toList #-}
-toList :: forall sh e. Array sh e -> [e]
+toList :: forall sh e. (Shape sh, Elt e) => Array sh e -> [e]
 toList (Array sh adata) = go 0
   where
     -- Assume underling array is in row-major order. This is safe because

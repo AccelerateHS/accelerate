@@ -530,10 +530,10 @@ prettyArrays arrs = tupled False . collect arrs
     collect ArraysRarray        arr      = [prettyArray arr]
     collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
 
-prettyArray :: forall dim e. Array dim e -> Doc
-prettyArray arr@(Array sh _)
+prettyArray :: (Shape sh, Elt e) => Array sh e -> Doc
+prettyArray arr
   = hang 2 $ sep [ text "Array"
-                 , parens . text $ showShape (toElt sh :: dim)
+                 , parens . text $ showShape (shape arr)
                  , dataDoc ]
   where
     showDoc :: forall a. Show a => a -> Doc

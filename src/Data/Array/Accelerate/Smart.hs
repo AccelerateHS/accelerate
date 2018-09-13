@@ -2277,7 +2277,7 @@ showArrays = display . collect (arrays @arrs) . fromArr
     display xs  = "(" ++ intercalate ", " xs ++ ")"
 
 
-showShortendArr :: Elt e => Array sh e -> String
+showShortendArr :: (Shape sh, Elt e) => Array sh e -> String
 showShortendArr arr
   = show (take cutoff l) ++ if length l > cutoff then ".." else ""
   where

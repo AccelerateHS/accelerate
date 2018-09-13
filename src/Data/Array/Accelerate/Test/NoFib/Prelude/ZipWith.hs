@@ -587,7 +587,7 @@ test_max runN dim e =
 -- ------------------------
 
 zipWithRef
-    :: (Shape sh, Elt c)
+    :: (Shape sh, Elt a, Elt b, Elt c)
     => (a -> b -> c)
     -> Array sh a
     -> Array sh b
