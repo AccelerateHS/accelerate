@@ -42,8 +42,7 @@ Description:
       <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
   .
     * @accelerate-examples@: Computational kernels and applications showcasing
-      the use of Accelerate as well as a regression test suite, supporting
-      function and performance testing.
+      the use of Accelerate.
   .
     * @accelerate-io@: Fast conversions between Accelerate arrays and other
       array formats (including vector and repa).
@@ -98,6 +97,8 @@ Description:
   mesh.
   .
   [/Mailing list and contacts/]
+  .
+    * Gitter chat: <https://gitter.im/AccelerateHS/Lobby>
   .
     * Mailing list: <accelerate-haskell@googlegroups.com> (discussion of both
       use and development welcome).
