@@ -82,6 +82,7 @@ extra-deps:
 - lens-4.17
 - lifted-async-0.10.0.2
 - lifted-base-0.2.3.12
+- mintty-0.1.2
 - mmorph-1.1.2
 - monad-control-1.0.2.3
 - optparse-applicative-0.14.2.0
