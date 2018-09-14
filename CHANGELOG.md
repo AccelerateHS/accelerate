@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
+## [next]
+### Changed
+  * Instances of `Elt` are now derivable via `Generic`
+  * The `stencil` functions now support fusion. Note however that the source
+    (delayed) array will be evaluated at _every_ access to the stencil pattern;
+    if the delayed function is expensive, you may wish to explicitly `compute`
+    the source array first, matching the old behaviour.
+
+  * (internal) Visible type applications are used instead of `Proxy` types
+  * (internal) `EltRepr` is now a class-associated type of `Elt`
+  * (internal) `GArrayData` has been simplified
+  * (internal) SIMD representation has been improved and generalised
+
+### Added
+  * Support for GHC-8.6
+  * Pattern synonyms for manipulating custom product types can now be created;
+    see `Pattern`
+
+### Removed
+  * Drop support for GHC-7.10
+
+### Contributors
+
+Special thanks to those who contributed patches as part of this release:
+
+  * Trevor L. McDonell (@tmcdonell)
+  * Joshua Meredith (@JoshMeredith)
+
+
 ## [1.2.0.0] - 2018-04-03
 ### Changed
   * Internal debugging/RTS options handling has been changed. Compiling this package now implies that backends are also compiled in debug mode (no need to set the `-fdebug` cabal flag for those packages as well).
@@ -129,6 +158,7 @@ Special thanks to those who contributed patches as part of this release:
   * Initial release of the CUDA backend
 
 
+[next]:             https://github.com/AccelerateHS/accelerate/compare/v1.2.0.0...HEAD
 [1.2.0.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.2.0.0
 [1.1.1.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.1.1.0
 [1.1.0.0]:          https://github.com/AccelerateHS/accelerate/compare/1.0.0.0...v1.1.0.0
