@@ -884,6 +884,20 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- | The slice index for specifying a slice with only the Z component projected
   sliceNoneIndex :: Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
 
+  {-# INLINE rank         #-}
+  {-# INLINE size         #-}
+  {-# INLINE empty        #-}
+  {-# INLINE ignore       #-}
+  {-# INLINE intersect    #-}
+  {-# INLINE union        #-}
+  {-# INLINE fromIndex    #-}
+  {-# INLINE toIndex      #-}
+  {-# INLINE iter         #-}
+  {-# INLINE iter1        #-}
+  {-# INLINE rangeToShape #-}
+  {-# INLINE shapeToRange #-}
+  {-# INLINE shapeToList  #-}
+  {-# INLINE listToShape  #-}
   rank                  = Repr.rank @(EltRepr sh)
   size                  = Repr.size . fromElt
   empty                 = toElt Repr.empty

@@ -194,6 +194,7 @@ class ArrayElt e where
 instance ArrayElt () where
   type ArrayPtrs () = ()
   arrayElt          = ArrayEltRunit
+  {-# INLINE arrayElt             #-}
   {-# INLINE newArrayData         #-}
   {-# INLINE ptrsOfArrayData      #-}
   {-# INLINE touchArrayData       #-}
@@ -217,6 +218,7 @@ instance ArrayElt () where
 instance ArrayElt Bool where
   type ArrayPtrs Bool = Ptr Word8
   arrayElt            = ArrayEltRbool
+  {-# INLINE arrayElt             #-}
   {-# INLINE newArrayData         #-}
   {-# INLINE ptrsOfArrayData      #-}
   {-# INLINE touchArrayData       #-}
@@ -233,6 +235,7 @@ instance ArrayElt Bool where
 instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
   type ArrayPtrs (a, b) = (ArrayPtrs a, ArrayPtrs b)
   arrayElt              = ArrayEltRpair arrayElt arrayElt
+  {-# INLINE arrayElt               #-}
   {-# INLINE newArrayData           #-}
   {-# INLINE ptrsOfArrayData        #-}
   {-# INLINE ptrsOfMutableArrayData #-}
@@ -415,6 +418,7 @@ $(runQ $ do
           [d| instance ArrayElt $t where
                 type ArrayPtrs $t = Ptr $t
                 arrayElt = $(conE (mkName ("ArrayEltR" ++ map toLower n)))
+                {-# INLINE arrayElt             #-}
                 {-# INLINE newArrayData         #-}
                 {-# INLINE ptrsOfArrayData      #-}
                 {-# INLINE touchArrayData       #-}
@@ -436,6 +440,7 @@ $(runQ $ do
           [d| instance KnownNat n => ArrayElt (Vec n $t) where
                 type ArrayPtrs (Vec n $t) = ArrayPtrs $t
                 arrayElt                  = ArrayEltRvec arrayElt
+                {-# INLINE arrayElt             #-}
                 {-# INLINE newArrayData         #-}
                 {-# INLINE ptrsOfArrayData      #-}
                 {-# INLINE touchArrayData       #-}

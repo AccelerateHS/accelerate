@@ -68,12 +68,15 @@ matchPreOpenAcc
     -> Maybe (s :~: t)
 matchPreOpenAcc matchAcc encodeAcc = match
   where
+    {-# INLINEABLE matchFun #-}
     matchFun :: PreOpenFun acc env' aenv' u -> PreOpenFun acc env' aenv' v -> Maybe (u :~: v)
     matchFun = matchPreOpenFun matchAcc encodeAcc
 
+    {-# INLINEABLE matchExp #-}
     matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :~: v)
     matchExp = matchPreOpenExp matchAcc encodeAcc
 
+    {-# INLINEABLE match #-}
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :~: t)
     match (Alet x1 a1) (Alet x2 a2)
       | Just Refl <- matchAcc x1 x2
@@ -438,6 +441,7 @@ matchPreOpenExp
     -> Maybe (s :~: t)
 matchPreOpenExp matchAcc encodeAcc = match
   where
+    {-# INLINEABLE match #-}
     match :: forall env' aenv' s' t'.
              PreOpenExp acc env' aenv' s'
           -> PreOpenExp acc env' aenv' t'
