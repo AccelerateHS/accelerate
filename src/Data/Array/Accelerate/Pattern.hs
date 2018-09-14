@@ -34,41 +34,8 @@ import Data.Array.Accelerate.Smart
 import Language.Haskell.TH                                          hiding ( Exp )
 
 
--- | This pattern synonym can be used as an alternative to 'lift' and 'unlift'
--- for creating and accessing data types isomorphic to simple product (tuple)
--- types.
---
--- For example, let's say we have regular Haskell data type representing a point
--- in two-dimensional space:
---
--- > data Point = Point_ Float Float
--- >   deriving (Show, Generic, Elt, IsTuple)
---
--- Note that we derive instances for the 'Elt' class, so that this data type can
--- be used within Accelerate scalar expressions, and 'IsTuple', as this is
--- a product type (contains multiple values).
---
--- In order to access the individual fields of the data constructor from within
--- an Accelerate expression, we define the following pattern synonym:
---
--- > pattern Point :: Exp Float -> Exp Float -> Exp Point
--- > pattern Point x y = Pattern (x,y)
---
--- In essence, the 'Pattern' pattern is really telling GHC how to treat our @Point@
--- type as a regular pair for use in Accelerate code. The pattern can then be
--- used on both the left and right hand side of an expression:
---
--- > addPoint :: Exp Point -> Exp Point -> Exp Point
--- > addPoint (Point x1 y1) (Point x2 y2) = Point (x1+x2) (y1+y2)
---
--- Similarly, we can define pattern synonyms for values in 'Acc'. We can also
--- use record syntax to generate field accessors, if we desire:
---
--- > data SparseVector a = SparseVector_ (Vector Int) (Vector a)
--- >   deriving (Show, Generic, Arrays, IsAtuple)
--- >
--- > pattern SparseVector :: Elt a => Acc (Vector Int) -> Acc (Vector a) -> Acc (SparseVector a)
--- > pattern SparseVector { indices, values } = Pattern (indices, values)
+-- | A pattern synonym for working with (product) data types. You can declare
+-- your own pattern synonyms based off of this.
 --
 pattern Pattern :: forall b a context. IsPattern context a b => b -> context a
 pattern Pattern vars <- (destruct @context -> vars)
@@ -79,7 +46,8 @@ class IsPattern con a t where
   destruct  :: con a -> t
 
 -- | Specialised pattern synonyms for tuples, which may be more convenient to
--- use than 'lift' and 'unlift'. For example, to construct a pair:
+-- use than 'Data.Array.Accelerate.Lift.lift' and
+-- 'Data.Array.Accelerate.Lift.unlift'. For example, to construct a pair:
 --
 -- > let a = 4        :: Exp Int
 -- > let b = 2        :: Exp Float
