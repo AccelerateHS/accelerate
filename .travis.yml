@@ -1,8 +1,5 @@
 # vim: nospell
 #
-# Basic template to test with GHC=[7.8, 7.10, 8.0]. Caches the 'stack' build
-# directory to speed subsequent compilations.
-#
 language: minimal
 dist: trusty
 sudo: false

@@ -2,7 +2,8 @@
 # vim: nospell
 
 # resolver: ghc-8.6.0.20180627 #rc1
-resolver: ghc-8.6.0.20180714 #rc2
+# resolver: ghc-8.6.0.20180714 #rc2
+resolver: ghc-8.6.0.20180810 #rc3
 compiler-check: match-exact
 allow-newer: true
 
@@ -18,40 +19,48 @@ setup-info:
     #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-unknown-mingw32.tar.xz
     #     sha256: ccff1f896425f932581c804e1fd6dd14dea7b7423f7f4970ff1d99ab03c97504
 
-    # rc2
+    # # rc2
+    # linux64:
+    #   8.6.0.20180714:
+    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-deb8-linux.tar.xz
+    #     sha256: 5cfbac190b2d8be4457c7f39ac9697bfa7f458c3b456c254f685f6fcbb7ab48b
+    # windows64:
+    #   8.6.0.20180714:
+    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-unknown-mingw32.tar.xz
+    #     sha256: a9704c4ef91a4301a79de428455e283a4ac40dd30c4ff6635c766896153bcc07
+
+    # rc3
+    macosx:
+      8.6.0.20180810:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-beta1/ghc-8.6.0.20180810-x86_64-darwin.tar.xz
+        sha256: 53fcac63a4eb04970a47f63c123076d14946208033e0811e90357831995f541a
     linux64:
-      8.6.0.20180714:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-deb8-linux.tar.xz
-        sha256: 5cfbac190b2d8be4457c7f39ac9697bfa7f458c3b456c254f685f6fcbb7ab48b
+      8.6.0.20180810:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-beta1/ghc-8.6.0.20180810-x86_64-deb8-linux.tar.xz
+        sha256: 69e2e5c579e71c5fed1cf9be9760af4bce5f99865211c8eb6073722b8baffbd9
     windows64:
-      8.6.0.20180714:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-unknown-mingw32.tar.xz
-        sha256: a9704c4ef91a4301a79de428455e283a4ac40dd30c4ff6635c766896153bcc07
+      8.6.0.20180810:
+        url:    https://downloads.haskell.org/~ghc/8.6.1-beta1/ghc-8.6.0.20180810-x86_64-unknown-mingw32.tar.xz
+        sha256: f6492ac6a6561e78b43e905c3cee260d64246868b88bfb177de5b29d3029783c
 
 packages:
 - '.'
 
 extra-deps:
+# https://github.com/vincenthz/hs-memory/pull/68
 - git:    https://github.com/tmcdonell/hs-memory.git
   commit: feee6256e19ed178dc75b071dc54983bc6320f26
 
-- git:    https://github.com/tmcdonell/tasty.git
-  commit: 540c85d14e6601bb8c92e9fea22dbb8bd27cbe85
-  subdirs:
-    - core
-
 - adjunctions-4.4
-- ansi-terminal-0.8.0.4
+- ansi-terminal-0.8.1
 - ansi-wl-pprint-0.6.8.2
 - async-2.2.1
-- base-compat-0.10.4
 - base-orphans-0.8
 - basement-0.0.8
 - bifunctors-5.5.3
 - cabal-doctest-1.0.6
 - call-stack-0.1.0
 - clock-0.7.2
-- code-page-0.1.3
 - colour-2.3.4
 - comonad-5.0.4
 - concurrent-output-1.10.6
@@ -59,11 +68,9 @@ extra-deps:
 - contravariant-1.5
 - cryptonite-0.25
 - distributive-0.6
-- doctest-0.16.0
 - exceptions-0.10.0
 - foundation-0.0.21
 - free-5.1
-- ghc-paths-0.1.0.9
 - half-0.3
 - happy-1.19.9
 - hashable-1.2.7.0
@@ -75,7 +82,6 @@ extra-deps:
 - lens-4.17
 - lifted-async-0.10.0.2
 - lifted-base-0.2.3.12
-- mintty-0.1.2
 - mmorph-1.1.2
 - monad-control-1.0.2.3
 - optparse-applicative-0.14.2.0
@@ -88,25 +94,25 @@ extra-deps:
 - resourcet-1.2.1
 - semigroupoids-5.3.1
 - semigroups-0.18.5
-- StateVar-1.1.1.0
-- syb-0.7
+- StateVar-1.1.1.1
 - tagged-0.8.6
+- tasty-1.1.0.3
 - tasty-expected-failure-0.11.1.1
 - tasty-hedgehog-0.2.0.0
 - tasty-hunit-0.10.0.1
 - terminal-size-0.3.2.1
 - th-abstraction-0.2.8.0
-- th-lift-0.7.10
+- th-lift-0.7.11
 - transformers-base-0.4.5.2
 - transformers-compat-0.6.2
 - unbounded-delays-0.1.1.0
 - unique-0
-- unliftio-core-0.1.1.0
+- unliftio-core-0.1.2.0
 - unordered-containers-0.2.9.0
 - vector-0.12.0.1
 - void-0.7.2
 - wcwidth-0.0.2
-- wl-pprint-annotated-0.1.0.0
+- wl-pprint-annotated-0.1.0.1
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
