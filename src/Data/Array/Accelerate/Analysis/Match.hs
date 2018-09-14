@@ -897,6 +897,9 @@ matchTupleType _ _
   = Nothing
 
 
+-- Match shapes (dimensionality)
+--
+{-# INLINEABLE matchShapeType #-}
 matchShapeType :: forall s t. (Shape s, Shape t) => Maybe (s :~: t)
 matchShapeType
   | Just Refl <- matchTupleType (eltType @s) (eltType @t) = gcast Refl
