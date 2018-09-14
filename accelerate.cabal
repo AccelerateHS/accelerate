@@ -359,7 +359,6 @@ Library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
-        Data.Array.Accelerate.Constructor
         Data.Array.Accelerate.Debug.Flags
         Data.Array.Accelerate.Debug.Monitoring
         Data.Array.Accelerate.Debug.Stats
@@ -368,6 +367,7 @@ Library
         Data.Array.Accelerate.Language
         Data.Array.Accelerate.Lift
         Data.Array.Accelerate.Orphans
+        Data.Array.Accelerate.Pattern
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz
         Data.Array.Accelerate.Pretty.Graphviz.Monad

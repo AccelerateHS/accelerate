@@ -332,7 +332,7 @@ module Data.Array.Accelerate (
   ilift1, ilift2, ilift3,
 
   -- ** Pattern synonyms
-  pattern MkT, IsTuple, IsAtuple,
+  pattern Pattern, IsTuple, IsAtuple,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
@@ -409,9 +409,9 @@ module Data.Array.Accelerate (
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, reshape, size, toIndex, fromIndex, intersect, ignore )
-import Data.Array.Accelerate.Constructor
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Trafo                                  () -- show instances
 import Data.Array.Accelerate.Type

@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ViewPatterns          #-}
 -- |
--- Module      : Data.Array.Accelerate.Constructor
+-- Module      : Data.Array.Accelerate.Pattern
 -- Copyright   : [2018..2018] Joshua Meredith, Trevor L. McDonell
 -- License     : BSD3
 --
@@ -18,9 +18,9 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Constructor (
+module Data.Array.Accelerate.Pattern (
 
-  pattern MkT,
+  pattern Pattern,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
@@ -31,7 +31,7 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
-import Language.Haskell.TH                                          hiding (Exp)
+import Language.Haskell.TH                                          hiding ( Exp )
 
 
 -- | This pattern synonym can be used as an alternative to 'lift' and 'unlift'
@@ -52,9 +52,9 @@ import Language.Haskell.TH                                          hiding (Exp)
 -- an Accelerate expression, we define the following pattern synonym:
 --
 -- > pattern Point :: Exp Float -> Exp Float -> Exp Point
--- > pattern Point x y = MkT (x,y)
+-- > pattern Point x y = Pattern (x,y)
 --
--- In essence, the 'MkT' pattern is really telling GHC how to treat our @Point@
+-- In essence, the 'Pattern' pattern is really telling GHC how to treat our @Point@
 -- type as a regular pair for use in Accelerate code. The pattern can then be
 -- used on both the left and right hand side of an expression:
 --
@@ -68,13 +68,13 @@ import Language.Haskell.TH                                          hiding (Exp)
 -- >   deriving (Show, Generic, Arrays, IsAtuple)
 -- >
 -- > pattern SparseVector :: Elt a => Acc (Vector Int) -> Acc (Vector a) -> Acc (SparseVector a)
--- > pattern SparseVector { indices, values } = MkT (indices, values)
+-- > pattern SparseVector { indices, values } = Pattern (indices, values)
 --
-pattern MkT :: forall b a context. MkData context a b => b -> context a
-pattern MkT vars <- (destruct @context -> vars)
-  where MkT = construct @context
+pattern Pattern :: forall b a context. IsPattern context a b => b -> context a
+pattern Pattern vars <- (destruct @context -> vars)
+  where Pattern = construct @context
 
-class MkData con a t where
+class IsPattern con a t where
   construct :: t -> con a
   destruct  :: con a -> t
 
@@ -91,91 +91,91 @@ class MkData con a t where
 --
 -- These pattern synonyms can be used for both 'Exp' and 'Acc' terms.
 --
-pattern T2 :: MkData con (a,b) (con a, con b) => con a -> con b -> con (a, b)
-pattern T2 a b = MkT (a, b)
+pattern T2 :: IsPattern con (a,b) (con a, con b) => con a -> con b -> con (a, b)
+pattern T2 a b = Pattern (a, b)
 
-pattern T3 :: MkData con (a,b,c) (con a, con b, con c) => con a -> con b -> con c -> con (a, b, c)
-pattern T3 a b c = MkT (a, b, c)
+pattern T3 :: IsPattern con (a,b,c) (con a, con b, con c) => con a -> con b -> con c -> con (a, b, c)
+pattern T3 a b c = Pattern (a, b, c)
 
 pattern T4
-    :: MkData con (a,b,c,d) (con a, con b, con c, con d)
+    :: IsPattern con (a,b,c,d) (con a, con b, con c, con d)
     => con a -> con b -> con c -> con d
     -> con (a, b, c, d)
-pattern T4 a b c d = MkT (a, b, c, d)
+pattern T4 a b c d = Pattern (a, b, c, d)
 
 pattern T5
-    :: MkData con (a,b,c,d,e) (con a, con b, con c, con d, con e)
+    :: IsPattern con (a,b,c,d,e) (con a, con b, con c, con d, con e)
     => con a -> con b -> con c -> con d -> con e
     -> con (a, b, c, d, e)
-pattern T5 a b c d e = MkT (a, b, c, d, e)
+pattern T5 a b c d e = Pattern (a, b, c, d, e)
 
 pattern T6
-    :: MkData con (a,b,c,d,e,f) (con a, con b, con c, con d, con e, con f)
+    :: IsPattern con (a,b,c,d,e,f) (con a, con b, con c, con d, con e, con f)
     => con a -> con b -> con c -> con d -> con e -> con f
     -> con (a, b, c, d, e, f)
-pattern T6 a b c d e f = MkT (a, b, c, d, e, f)
+pattern T6 a b c d e f = Pattern (a, b, c, d, e, f)
 
 pattern T7
-    :: MkData con (a,b,c,d,e,f,g) (con a, con b, con c, con d, con e, con f, con g)
+    :: IsPattern con (a,b,c,d,e,f,g) (con a, con b, con c, con d, con e, con f, con g)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g
     -> con (a, b, c, d, e, f, g)
-pattern T7 a b c d e f g = MkT (a, b, c, d, e, f, g)
+pattern T7 a b c d e f g = Pattern (a, b, c, d, e, f, g)
 
 pattern T8
-    :: MkData con (a,b,c,d,e,f,g,h) (con a, con b, con c, con d, con e, con f, con g, con h)
+    :: IsPattern con (a,b,c,d,e,f,g,h) (con a, con b, con c, con d, con e, con f, con g, con h)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h
     -> con (a, b, c, d, e, f, g, h)
-pattern T8 a b c d e f g h = MkT (a, b, c, d, e, f, g, h)
+pattern T8 a b c d e f g h = Pattern (a, b, c, d, e, f, g, h)
 
 pattern T9
-    :: MkData con (a,b,c,d,e,f,g,h,i) (con a, con b, con c, con d, con e, con f, con g, con h, con i)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i) (con a, con b, con c, con d, con e, con f, con g, con h, con i)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i
     -> con (a, b, c, d, e, f, g, h, i)
-pattern T9 a b c d e f g h i = MkT (a, b, c, d, e, f, g, h, i)
+pattern T9 a b c d e f g h i = Pattern (a, b, c, d, e, f, g, h, i)
 
 pattern T10
-    :: MkData con (a,b,c,d,e,f,g,h,i,j) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i,j) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j
     -> con (a, b, c, d, e, f, g, h, i, j)
-pattern T10 a b c d e f g h i j = MkT (a, b, c, d, e, f, g, h, i, j)
+pattern T10 a b c d e f g h i j = Pattern (a, b, c, d, e, f, g, h, i, j)
 
 pattern T11
-    :: MkData con (a,b,c,d,e,f,g,h,i,j,k) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k
     -> con (a, b, c, d, e, f, g, h, i, j, k)
-pattern T11 a b c d e f g h i j k = MkT (a, b, c, d, e, f, g, h, i, j, k)
+pattern T11 a b c d e f g h i j k = Pattern (a, b, c, d, e, f, g, h, i, j, k)
 
 pattern T12
-    :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l
     -> con (a, b, c, d, e, f, g, h, i, j, k, l)
-pattern T12 a b c d e f g h i j k l = MkT (a, b, c, d, e, f, g, h, i, j, k, l)
+pattern T12 a b c d e f g h i j k l = Pattern (a, b, c, d, e, f, g, h, i, j, k, l)
 
 pattern T13
-    :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m)
-pattern T13 a b c d e f g h i j k l m = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m)
+pattern T13 a b c d e f g h i j k l m = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m)
 
 pattern T14
-    :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m,n) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-pattern T14 a b c d e f g h i j k l m n = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+pattern T14 a b c d e f g h i j k l m n = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 
 pattern T15
-    :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-pattern T15 a b c d e f g h i j k l m n o = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+pattern T15 a b c d e f g h i j k l m n o = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 
 pattern T16
-    :: MkData con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o, con p)
+    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o, con p)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o -> con p
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-pattern T16 a b c d e f g h i j k l m n o p = MkT (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+pattern T16 a b c d e f g h i j k l m n o p = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
--- MkData instances for up to 16-tuples (Acc and Exp). TH takes care of the
+-- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
 -- (unremarkable) boilerplate for us, but since the implementation is a little
 -- tricky it is debatable whether or not this is a good idea...
 --
@@ -198,7 +198,7 @@ $(runQ $ do
                 , ProdRepr a ~ $repr
                 , $cst a
                 , $context
-                ) => MkData $(conT con) a $b where
+                ) => IsPattern $(conT con) a $b where
                   construct $(tupP (map varP xs)) = $(conE con) ($tup $(foldl (\vs v -> appE (appE snoc vs) (varE v)) nil xs))
                   destruct x = $(tupE (map (get [|x|]) [(n-1), (n-2) .. 0]))
             |]
