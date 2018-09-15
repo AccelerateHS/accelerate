@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -42,10 +43,10 @@ import System.Mem.StableName
 import Prelude                                          hiding ( exp )
 
 -- friends
-import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
@@ -884,7 +885,7 @@ matchPrimFun' _ _
 
 -- Match reified types
 --
-{-# INLINEABLE matchTupleType #-}
+{-# INLINE matchTupleType #-}
 matchTupleType :: TupleType s -> TupleType t -> Maybe (s :~: t)
 matchTupleType TypeRunit         TypeRunit         = Just Refl
 matchTupleType (TypeRscalar s)   (TypeRscalar t)   = matchScalarType s t
@@ -899,28 +900,40 @@ matchTupleType _ _
 
 -- Match shapes (dimensionality)
 --
-{-# INLINEABLE matchShapeType #-}
+-- XXX: Matching shapes is sort of a special case because the representation
+-- types really are isomorphic to the surface type. However, 'gcast' does not
+-- inline here, meaning that it will always do the fingerprint check, even if
+-- the dimensions are known statically and thus the check could be elided as
+-- a known branch.
+--
+{-# INLINE matchShapeType #-}
 matchShapeType :: forall s t. (Shape s, Shape t) => Maybe (s :~: t)
 matchShapeType
-  | Just Refl <- matchTupleType (eltType @s) (eltType @t) = gcast Refl
-  | otherwise                                             = Nothing
+  | Just Refl <- matchTupleType (eltType @s) (eltType @t)
+#ifdef ACCELERATE_INTERNAL_CHECKS
+  = gcast Refl
+#else
+  = Just (unsafeCoerce Refl)
+#endif
+  | otherwise
+  = Nothing
 
 
 -- Match reified type dictionaries
 --
-{-# INLINEABLE matchScalarType #-}
+{-# INLINE matchScalarType #-}
 matchScalarType :: ScalarType s -> ScalarType t -> Maybe (s :~: t)
 matchScalarType (SingleScalarType s) (SingleScalarType t) = matchSingleType s t
 matchScalarType (VectorScalarType s) (VectorScalarType t) = matchVectorType s t
 matchScalarType _                    _                    = Nothing
 
-{-# INLINEABLE matchSingleType #-}
+{-# INLINE matchSingleType #-}
 matchSingleType :: SingleType s -> SingleType t -> Maybe (s :~: t)
 matchSingleType (NumSingleType s)    (NumSingleType t)    = matchNumType s t
 matchSingleType (NonNumSingleType s) (NonNumSingleType t) = matchNonNumType s t
 matchSingleType _                    _                    = Nothing
 
-{-# INLINEABLE matchVectorType #-}
+{-# INLINE matchVectorType #-}
 matchVectorType :: forall m n s t. VectorType (Vec n s) -> VectorType (Vec m t) -> Maybe (Vec n s :~: Vec m t)
 matchVectorType (VectorType n s) (VectorType m t)
   | Just Refl <- if n == m
@@ -931,19 +944,19 @@ matchVectorType (VectorType n s) (VectorType m t)
 matchVectorType _ _
   = Nothing
 
-{-# INLINEABLE matchNumType #-}
+{-# INLINE matchNumType #-}
 matchNumType :: NumType s -> NumType t -> Maybe (s :~: t)
 matchNumType (IntegralNumType s) (IntegralNumType t) = matchIntegralType s t
 matchNumType (FloatingNumType s) (FloatingNumType t) = matchFloatingType s t
 matchNumType _                   _                   = Nothing
 
-{-# INLINEABLE matchBoundedType #-}
+{-# INLINE matchBoundedType #-}
 matchBoundedType :: BoundedType s -> BoundedType t -> Maybe (s :~: t)
 matchBoundedType (IntegralBoundedType s) (IntegralBoundedType t) = matchIntegralType s t
 matchBoundedType (NonNumBoundedType s)   (NonNumBoundedType t)   = matchNonNumType s t
 matchBoundedType _                       _                       = Nothing
 
-{-# INLINEABLE matchIntegralType #-}
+{-# INLINE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
 matchIntegralType TypeInt{}    TypeInt{}    = Just Refl
 matchIntegralType TypeInt8{}   TypeInt8{}   = Just Refl
@@ -957,14 +970,14 @@ matchIntegralType TypeWord32{} TypeWord32{} = Just Refl
 matchIntegralType TypeWord64{} TypeWord64{} = Just Refl
 matchIntegralType _            _            = Nothing
 
-{-# INLINEABLE matchFloatingType #-}
+{-# INLINE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
 matchFloatingType TypeHalf{}   TypeHalf{}   = Just Refl
 matchFloatingType TypeFloat{}  TypeFloat{}  = Just Refl
 matchFloatingType TypeDouble{} TypeDouble{} = Just Refl
 matchFloatingType _            _            = Nothing
 
-{-# INLINEABLE matchNonNumType #-}
+{-# INLINE matchNonNumType #-}
 matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
 matchNonNumType TypeBool{} TypeBool{} = Just Refl
 matchNonNumType TypeChar{} TypeChar{} = Just Refl
