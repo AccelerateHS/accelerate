@@ -149,8 +149,8 @@ pattern T16 a b c d e f g h i j k l m n o p = Pattern (a, b, c, d, e, f, g, h, i
 --
 $(runQ $ do
     let
-        mkData :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkData con cst tup prj nil snoc n =
+        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkIsPattern con cst tup prj nil snoc n =
           let
               xs      = [ mkName ('x' : show i) | i <- [0 .. n-1]]
               b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
@@ -168,15 +168,15 @@ $(runQ $ do
                 , $context
                 ) => IsPattern $(conT con) a $b where
                   construct $(tupP (map varP xs)) = $(conE con) ($tup $(foldl (\vs v -> appE (appE snoc vs) (varE v)) nil xs))
-                  destruct x = $(tupE (map (get [|x|]) [(n-1), (n-2) .. 0]))
+                  destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccData = mkData (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
-        mkExpData = mkData (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
+        mkAccPatern = mkIsPattern (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
+        mkExpPatern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
     --
-    as <- mapM mkAccData [1..16]
-    es <- mapM mkExpData [1..16]
+    --
+    as <- mapM mkAccPatern [0..16]
+    es <- mapM mkExpPatern [0..16]
     return (concat as ++ concat es)
-
  )
 
