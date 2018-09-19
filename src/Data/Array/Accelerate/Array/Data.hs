@@ -302,7 +302,7 @@ runArrayData st = unsafePerformIO $ do
 --
 {-# INLINE unsafeIndexArray #-}
 unsafeIndexArray :: Storable e => UniqueArray e -> Int -> e
-unsafeIndexArray ua i =
+unsafeIndexArray !ua !i =
   unsafePerformIO $! unsafeReadArray ua i
 
 -- Read an element from a mutable array at the given index. This does no bounds
@@ -310,7 +310,7 @@ unsafeIndexArray ua i =
 --
 {-# INLINE unsafeReadArray #-}
 unsafeReadArray :: Storable e => UniqueArray e -> Int -> IO e
-unsafeReadArray ua i =
+unsafeReadArray !ua !i =
   withUniqueArrayPtr ua $ \ptr -> peekElemOff ptr i
 
 -- Write an element into a mutable array at the given index. This does no bounds
@@ -318,7 +318,7 @@ unsafeReadArray ua i =
 --
 {-# INLINE unsafeWriteArray #-}
 unsafeWriteArray :: Storable e => UniqueArray e -> Int -> e -> IO ()
-unsafeWriteArray ua i e =
+unsafeWriteArray !ua !i !e =
   withUniqueArrayPtr ua $ \ptr -> pokeElemOff ptr i e
 
 -- Allocate a new array with enough storage to hold the given number of
