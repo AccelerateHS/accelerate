@@ -102,7 +102,7 @@ instance Shape sh => Shape (sh, Int) where
   empty                             = (empty, 0)
   ignore                            = (ignore, -1)
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
-  (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
+  (sh1, sz1) `union`     (sh2, sz2) = (sh1 `union`     sh2, sz1 `max` sz2)
 
   size (sh, sz) | sz <= 0           = 0
                 | otherwise         = size sh * sz
