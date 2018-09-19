@@ -885,7 +885,7 @@ matchPrimFun' _ _
 
 -- Match reified types
 --
-{-# INLINE matchTupleType #-}
+{-# INLINEABLE matchTupleType #-}
 matchTupleType :: TupleType s -> TupleType t -> Maybe (s :~: t)
 matchTupleType TypeRunit         TypeRunit         = Just Refl
 matchTupleType (TypeRscalar s)   (TypeRscalar t)   = matchScalarType s t
@@ -906,7 +906,7 @@ matchTupleType _ _
 -- the dimensions are known statically and thus the check could be elided as
 -- a known branch.
 --
-{-# INLINE matchShapeType #-}
+{-# INLINEABLE matchShapeType #-}
 matchShapeType :: forall s t. (Shape s, Shape t) => Maybe (s :~: t)
 matchShapeType
   | Just Refl <- matchTupleType (eltType @s) (eltType @t)
@@ -921,19 +921,19 @@ matchShapeType
 
 -- Match reified type dictionaries
 --
-{-# INLINE matchScalarType #-}
+{-# INLINEABLE matchScalarType #-}
 matchScalarType :: ScalarType s -> ScalarType t -> Maybe (s :~: t)
 matchScalarType (SingleScalarType s) (SingleScalarType t) = matchSingleType s t
 matchScalarType (VectorScalarType s) (VectorScalarType t) = matchVectorType s t
 matchScalarType _                    _                    = Nothing
 
-{-# INLINE matchSingleType #-}
+{-# INLINEABLE matchSingleType #-}
 matchSingleType :: SingleType s -> SingleType t -> Maybe (s :~: t)
 matchSingleType (NumSingleType s)    (NumSingleType t)    = matchNumType s t
 matchSingleType (NonNumSingleType s) (NonNumSingleType t) = matchNonNumType s t
 matchSingleType _                    _                    = Nothing
 
-{-# INLINE matchVectorType #-}
+{-# INLINEABLE matchVectorType #-}
 matchVectorType :: forall m n s t. VectorType (Vec n s) -> VectorType (Vec m t) -> Maybe (Vec n s :~: Vec m t)
 matchVectorType (VectorType n s) (VectorType m t)
   | Just Refl <- if n == m
@@ -944,19 +944,19 @@ matchVectorType (VectorType n s) (VectorType m t)
 matchVectorType _ _
   = Nothing
 
-{-# INLINE matchNumType #-}
+{-# INLINEABLE matchNumType #-}
 matchNumType :: NumType s -> NumType t -> Maybe (s :~: t)
 matchNumType (IntegralNumType s) (IntegralNumType t) = matchIntegralType s t
 matchNumType (FloatingNumType s) (FloatingNumType t) = matchFloatingType s t
 matchNumType _                   _                   = Nothing
 
-{-# INLINE matchBoundedType #-}
+{-# INLINEABLE matchBoundedType #-}
 matchBoundedType :: BoundedType s -> BoundedType t -> Maybe (s :~: t)
 matchBoundedType (IntegralBoundedType s) (IntegralBoundedType t) = matchIntegralType s t
 matchBoundedType (NonNumBoundedType s)   (NonNumBoundedType t)   = matchNonNumType s t
 matchBoundedType _                       _                       = Nothing
 
-{-# INLINE matchIntegralType #-}
+{-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
 matchIntegralType TypeInt{}    TypeInt{}    = Just Refl
 matchIntegralType TypeInt8{}   TypeInt8{}   = Just Refl
@@ -970,14 +970,14 @@ matchIntegralType TypeWord32{} TypeWord32{} = Just Refl
 matchIntegralType TypeWord64{} TypeWord64{} = Just Refl
 matchIntegralType _            _            = Nothing
 
-{-# INLINE matchFloatingType #-}
+{-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
 matchFloatingType TypeHalf{}   TypeHalf{}   = Just Refl
 matchFloatingType TypeFloat{}  TypeFloat{}  = Just Refl
 matchFloatingType TypeDouble{} TypeDouble{} = Just Refl
 matchFloatingType _            _            = Nothing
 
-{-# INLINE matchNonNumType #-}
+{-# INLINEABLE matchNonNumType #-}
 matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
 matchNonNumType TypeBool{} TypeBool{} = Just Refl
 matchNonNumType TypeChar{} TypeChar{} = Just Refl
