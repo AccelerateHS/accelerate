@@ -58,7 +58,6 @@ before_install:
 
 install:
   - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
-  - cabal --version
   - stack --version
   - travis_retry stack build --fast --jobs=2 --test --only-dependencies --no-terminal --no-copy-bins
 
