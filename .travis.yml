@@ -8,10 +8,11 @@ cache:
   timeout: 600
   directories:
     - $HOME/.stack/snapshots
+    - $HOME/.local/bin
     - .stack-work/install
 
 before_cache:
-  - rm -vrf $(stack path --local-install-root)/bin
+  # - rm -vrf $(stack path --local-install-root)/bin
   - rm -rf  $(stack path --local-install-root)/doc
 
 addons:
@@ -21,9 +22,6 @@ addons:
 
     packages: &apt_packages
       - alex-3.1.7
-      - cabal-install-1.24
-      - cabal-install-2.0
-      - cabal-install-2.2
       - happy-1.19.5
       - libgmp-dev
 
@@ -50,7 +48,7 @@ matrix:
   #   - env: GHC=head CABAL=head
 
 before_install:
-  - export PATH=/opt/cabal/${CABAL}/bin:/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:${HOME}/.cabal/bin:${PATH}
+  - export PATH=/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:${PATH}
   - source .travis/install-stack.sh
   - |
       case ${GHC%.*} in
