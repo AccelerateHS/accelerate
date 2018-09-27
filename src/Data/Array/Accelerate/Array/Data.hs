@@ -235,15 +235,15 @@ instance ArrayElt Bool where
 instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
   type ArrayPtrs (a, b) = (ArrayPtrs a, ArrayPtrs b)
   arrayElt              = ArrayEltRpair arrayElt arrayElt
-  {-# INLINE arrayElt               #-}
-  {-# INLINE newArrayData           #-}
-  {-# INLINE ptrsOfArrayData        #-}
-  {-# INLINE ptrsOfMutableArrayData #-}
-  {-# INLINE touchArrayData         #-}
-  {-# INLINE unsafeFreezeArrayData  #-}
-  {-# INLINE unsafeIndexArrayData   #-}
-  {-# INLINE unsafeReadArrayData    #-}
-  {-# INLINE unsafeWriteArrayData   #-}
+  {-# INLINEABLE arrayElt               #-}
+  {-# INLINEABLE newArrayData           #-}
+  {-# INLINEABLE ptrsOfArrayData        #-}
+  {-# INLINEABLE ptrsOfMutableArrayData #-}
+  {-# INLINEABLE touchArrayData         #-}
+  {-# INLINEABLE unsafeFreezeArrayData  #-}
+  {-# INLINEABLE unsafeIndexArrayData   #-}
+  {-# INLINEABLE unsafeReadArrayData    #-}
+  {-# INLINEABLE unsafeWriteArrayData   #-}
   newArrayData size                             = AD_Pair <$> newArrayData size <*> newArrayData size
   touchArrayData         (AD_Pair a b)          = touchArrayData a >> touchArrayData b
   ptrsOfArrayData        (AD_Pair a b)          = (ptrsOfArrayData a, ptrsOfArrayData b)

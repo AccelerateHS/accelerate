@@ -69,15 +69,12 @@ matchPreOpenAcc
     -> Maybe (s :~: t)
 matchPreOpenAcc matchAcc encodeAcc = match
   where
-    {-# INLINEABLE matchFun #-}
     matchFun :: PreOpenFun acc env' aenv' u -> PreOpenFun acc env' aenv' v -> Maybe (u :~: v)
     matchFun = matchPreOpenFun matchAcc encodeAcc
 
-    {-# INLINEABLE matchExp #-}
     matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :~: v)
     matchExp = matchPreOpenExp matchAcc encodeAcc
 
-    {-# INLINEABLE match #-}
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :~: t)
     match (Alet x1 a1) (Alet x2 a2)
       | Just Refl <- matchAcc x1 x2
@@ -261,7 +258,6 @@ matchPreOpenAcc matchAcc encodeAcc = match
 
 -- Array tuples
 --
-{-# INLINEABLE matchAtuple #-}
 matchAtuple
     :: MatchAcc acc
     -> Atuple (acc aenv) s
@@ -299,7 +295,6 @@ matchPreOpenAfun _ _         _         = Nothing
 
 -- Match stencil boundaries
 --
-{-# INLINEABLE matchBoundary #-}
 matchBoundary
     :: forall acc aenv sh t. Elt t
     => MatchAcc  acc
@@ -321,7 +316,6 @@ matchBoundary _ _ _ _
 {--
 -- Match sequences
 --
-{-# INLINEABLE matchSeq #-}
 matchSeq
     :: forall acc aenv senv s t.
        MatchAcc  acc
@@ -402,7 +396,6 @@ matchSeq m h = match
 -- As a convenience, we are just comparing the stable names, but we could also
 -- walk the structure comparing the underlying ptrsOfArrayData.
 --
-{-# INLINEABLE matchArrays #-}
 matchArrays :: ArraysR s -> ArraysR t -> s -> t -> Maybe (s :~: t)
 matchArrays ArraysRunit ArraysRunit () ()
   = Just Refl
@@ -442,7 +435,6 @@ matchPreOpenExp
     -> Maybe (s :~: t)
 matchPreOpenExp matchAcc encodeAcc = match
   where
-    {-# INLINEABLE match #-}
     match :: forall env' aenv' s' t'.
              PreOpenExp acc env' aenv' s'
           -> PreOpenExp acc env' aenv' t'
@@ -607,7 +599,6 @@ matchPreOpenFun _ _ _        _        = Nothing
 
 -- Matching constants
 --
-{-# INLINEABLE matchConst #-}
 matchConst :: TupleType a -> a -> a -> Bool
 matchConst TypeRunit         ()      ()      = True
 matchConst (TypeRscalar ty)  a       b       = evalEq ty (a,b)
@@ -649,7 +640,6 @@ matchTupleIdx _              _              = Nothing
 
 -- Tuples
 --
-{-# INLINEABLE matchTuple #-}
 matchTuple
     :: MatchAcc  acc
     -> EncodeAcc acc
@@ -667,7 +657,6 @@ matchTuple _ _ _               _                = Nothing
 
 -- Slice specifications
 --
-{-# INLINEABLE matchSliceRestrict #-}
 matchSliceRestrict
     :: SliceIndex slix s co  sh
     -> SliceIndex slix t co' sh
@@ -687,7 +676,6 @@ matchSliceRestrict _ _
   = Nothing
 
 
-{-# INLINEABLE matchSliceExtend #-}
 matchSliceExtend
     :: SliceIndex slix sl co  s
     -> SliceIndex slix sl co' t
@@ -709,7 +697,6 @@ matchSliceExtend _ _
 
 -- Primitive constants and functions
 --
-{-# INLINEABLE matchPrimConst #-}
 matchPrimConst :: PrimConst s -> PrimConst t -> Maybe (s :~: t)
 matchPrimConst (PrimMinBound s) (PrimMinBound t) = matchBoundedType s t
 matchPrimConst (PrimMaxBound s) (PrimMaxBound t) = matchBoundedType s t
