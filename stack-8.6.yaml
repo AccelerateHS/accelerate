@@ -1,47 +1,24 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-# resolver: ghc-8.6.0.20180627 #rc1
-# resolver: ghc-8.6.0.20180714 #rc2
-resolver: ghc-8.6.0.20180810 #rc3
+resolver: ghc-8.6.1
 compiler-check: match-exact
 allow-newer: true
 
 setup-info:
   ghc:
-    # rc1
-    # linux64: # x86_64-unknown-linux
-    #   8.6.0.20180627:
-    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-deb8-linux.tar.xz
-    #     sha256: e891e9e6ad0d53382e79b5c1005af6123501fbc95088ed849c3a1c22979db319
-    # windows64:
-    #   8.6.0.20180627:
-    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha1/ghc-8.6.0.20180627-x86_64-unknown-mingw32.tar.xz
-    #     sha256: ccff1f896425f932581c804e1fd6dd14dea7b7423f7f4970ff1d99ab03c97504
-
-    # # rc2
-    # linux64:
-    #   8.6.0.20180714:
-    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-deb8-linux.tar.xz
-    #     sha256: 5cfbac190b2d8be4457c7f39ac9697bfa7f458c3b456c254f685f6fcbb7ab48b
-    # windows64:
-    #   8.6.0.20180714:
-    #     url:    https://downloads.haskell.org/~ghc/8.6.1-alpha2/ghc-8.6.0.20180714-x86_64-unknown-mingw32.tar.xz
-    #     sha256: a9704c4ef91a4301a79de428455e283a4ac40dd30c4ff6635c766896153bcc07
-
-    # rc3
-    macosx:
-      8.6.0.20180810:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-beta1/ghc-8.6.0.20180810-x86_64-darwin.tar.xz
-        sha256: 53fcac63a4eb04970a47f63c123076d14946208033e0811e90357831995f541a
     linux64:
-      8.6.0.20180810:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-beta1/ghc-8.6.0.20180810-x86_64-deb8-linux.tar.xz
-        sha256: 69e2e5c579e71c5fed1cf9be9760af4bce5f99865211c8eb6073722b8baffbd9
+      8.6.1:
+        url:    https://downloads.haskell.org/~ghc/8.6.1/ghc-8.6.1-x86_64-deb8-linux.tar.xz
+        sha256: 6d8784401b7dd80c90fa17306ec0539920e3987399a2c7ef247989e53197dc42
     windows64:
-      8.6.0.20180810:
-        url:    https://downloads.haskell.org/~ghc/8.6.1-beta1/ghc-8.6.0.20180810-x86_64-unknown-mingw32.tar.xz
-        sha256: f6492ac6a6561e78b43e905c3cee260d64246868b88bfb177de5b29d3029783c
+      8.6.1:
+        url:    https://downloads.haskell.org/~ghc/8.6.1/ghc-8.6.1-x86_64-unknown-mingw32.tar.xz
+        sha256: 7316d9cb5e486460476754f872c7bac30ee2082e42f46da4342f872d10b88099
+    macosx:
+      8.6.1:
+        url:    https://downloads.haskell.org/~ghc/8.6.1/ghc-8.6.1-x86_64-apple-darwin.tar.xz
+        sha256: 9692cdfd202b0e039ea0c3dde5dbf653736c836ca1df46504b179b572100808c
 
 packages:
 - '.'
@@ -65,12 +42,12 @@ extra-deps:
 - code-page-0.1.3
 - colour-2.3.4
 - comonad-5.0.4
-- concurrent-output-1.10.6
+- concurrent-output-1.10.7
 - constraints-0.10.1
 - contravariant-1.5
 - cryptonite-0.25
 - distributive-0.6
-- doctest-0.16.0
+- doctest-0.16.0.1
 - exceptions-0.10.0
 - foundation-0.0.21
 - free-5.1
@@ -79,19 +56,19 @@ extra-deps:
 - happy-1.19.9
 - hashable-1.2.7.0
 - hashtables-1.2.3.1
-- haskell-lexer-1.0.1
-- hedgehog-0.6
+- haskell-lexer-1.0.2
+- hedgehog-0.6.1
 - invariant-0.5.1
 - kan-extensions-5.2
 - lens-4.17
-- lifted-async-0.10.0.2
+- lifted-async-0.10.0.3
 - lifted-base-0.2.3.12
 - mintty-0.1.2
 - mmorph-1.1.2
 - monad-control-1.0.2.3
 - optparse-applicative-0.14.2.0
 - parallel-3.2.2.0
-- pretty-show-1.7
+- pretty-show-1.8.2
 - primitive-0.6.4.0
 - profunctors-5.3
 - random-1.1
