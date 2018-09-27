@@ -154,7 +154,7 @@ class RebuildableExp f where
                   -> f env aenv  e
                   -> f' (f env' aenv e)
 
-  {-# INLINABLE rebuildE #-}
+  {-# INLINEABLE rebuildE #-}
   rebuildE :: SyntacticExp fe
            => (forall e'. Elt e' => Idx env e' -> fe (AccClo (f env)) env' aenv e')
            -> f env  aenv e
