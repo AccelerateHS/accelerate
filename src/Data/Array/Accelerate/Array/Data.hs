@@ -166,7 +166,7 @@ data ArrayEltR a where
   ArrayEltRbool    :: ArrayEltR Bool
   ArrayEltRchar    :: ArrayEltR Char
   ArrayEltRpair    :: ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
-  ArrayEltRvec     :: (KnownNat n, ArrayPtrs a ~ Ptr a) => ArrayEltR a -> ArrayEltR (Vec n a)
+  ArrayEltRvec     :: (KnownNat n, ArrayPtrs (Vec n a) ~ ArrayPtrs a, ArrayPtrs a ~ Ptr a) => ArrayEltR a -> ArrayEltR (Vec n a)
     -- XXX: Do we really require these embedded class constraints?
 
 -- Array operations
