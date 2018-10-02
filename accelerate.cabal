@@ -259,11 +259,10 @@ Flag internal-checks
   Description:          Enable internal consistency checks
   Default:              False
 
+-- Enabling this drastically increases build times
 Flag nofib
-  Default:              True
-  Description:
-    You can disable building the nofib test suite with this flag. Disabling this
-    is an unsupported configuration, but is useful for accelerating builds.
+  Default:              False
+  Description:          Build the nofib test suite (required for backend testing)
 
 Library
   Build-depends:
@@ -287,9 +286,6 @@ Library
         , mtl                           >= 2.0
         , primitive                     >= 0.6.4
         , tasty                         >= 0.11
-        , tasty-expected-failure        >= 0.11
-        , tasty-hedgehog                >= 0.1
-        , tasty-hunit                   >= 0.9
         , template-haskell
         , terminal-size                 >= 0.3
         , transformers                  >= 0.3
@@ -390,7 +386,10 @@ Library
         Data.Array.Accelerate.Test.NoFib.Config
 
   if flag(nofib)
-    -- build-depends:
+    build-depends:
+          tasty-expected-failure        >= 0.11
+        , tasty-hedgehog                >= 0.1
+        , tasty-hunit                   >= 0.9
     --     , pipes                         >= 4.1.6   -- #286
 
     other-modules:

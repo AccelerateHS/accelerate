@@ -59,12 +59,12 @@ before_install:
 install:
   - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - stack --version
-  - travis_retry stack build --fast --jobs=2 --test --only-dependencies --no-terminal --no-copy-bins
+  - travis_retry stack build --fast --jobs=2 --test --only-dependencies --no-terminal --no-copy-bins --flag accelerate:nofib
 
 script:
-  - stack build --fast --jobs=2 --test --no-terminal --no-copy-bins --no-run-tests ${HADDOCK}
-  - stack test accelerate:doctest
-  - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25'
+  - stack build --fast --jobs=2 --test --no-terminal --no-copy-bins --no-run-tests ${HADDOCK} --flag accelerate:nofib
+  - stack test accelerate:doctest --flag accelerate:nofib
+  - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25' --flag accelerate:nofib
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh
