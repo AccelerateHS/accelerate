@@ -1,101 +1,14 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: ghc-8.6.1
-compiler-check: match-exact
-allow-newer: true
-
-setup-info:
-  ghc:
-    linux64:
-      8.6.1:
-        url:    https://downloads.haskell.org/~ghc/8.6.1/ghc-8.6.1-x86_64-deb8-linux.tar.xz
-        sha256: 6d8784401b7dd80c90fa17306ec0539920e3987399a2c7ef247989e53197dc42
-    windows64:
-      8.6.1:
-        url:    https://downloads.haskell.org/~ghc/8.6.1/ghc-8.6.1-x86_64-unknown-mingw32.tar.xz
-        sha256: 7316d9cb5e486460476754f872c7bac30ee2082e42f46da4342f872d10b88099
-    macosx:
-      8.6.1:
-        url:    https://downloads.haskell.org/~ghc/8.6.1/ghc-8.6.1-x86_64-apple-darwin.tar.xz
-        sha256: 9692cdfd202b0e039ea0c3dde5dbf653736c836ca1df46504b179b572100808c
+resolver: nightly-2018-10-02
 
 packages:
 - '.'
 
 extra-deps:
-# https://github.com/vincenthz/hs-memory/pull/68
-- git:    https://github.com/tmcdonell/hs-memory.git
-  commit: feee6256e19ed178dc75b071dc54983bc6320f26
-
-- adjunctions-4.4
-- ansi-terminal-0.8.1
-- ansi-wl-pprint-0.6.8.2
-- async-2.2.1
-- base-compat-0.10.4
-- base-orphans-0.8
-- basement-0.0.8
-- bifunctors-5.5.3
-- cabal-doctest-1.0.6
-- call-stack-0.1.0
-- clock-0.7.2
-- code-page-0.1.3
-- colour-2.3.4
-- comonad-5.0.4
-- concurrent-output-1.10.7
-- constraints-0.10.1
-- contravariant-1.5
+- memory-0.14.18
 - cryptonite-0.25
-- distributive-0.6
-- doctest-0.16.0.1
-- exceptions-0.10.0
-- foundation-0.0.21
-- free-5.1
-- ghc-paths-0.1.0.9
-- half-0.3
-- happy-1.19.9
-- hashable-1.2.7.0
-- hashtables-1.2.3.1
-- haskell-lexer-1.0.2
-- hedgehog-0.6.1
-- invariant-0.5.1
-- kan-extensions-5.2
-- lens-4.17
-- lifted-async-0.10.0.3
-- lifted-base-0.2.3.12
-- mintty-0.1.2
-- mmorph-1.1.2
-- monad-control-1.0.2.3
-- optparse-applicative-0.14.2.0
-- parallel-3.2.2.0
-- pretty-show-1.8.2
-- primitive-0.6.4.0
-- profunctors-5.3
-- random-1.1
-- reflection-2.1.4
-- resourcet-1.2.1
-- semigroupoids-5.3.1
-- semigroups-0.18.5
-- StateVar-1.1.1.1
-- syb-0.7
-- tagged-0.8.6
-- tasty-1.1.0.3
-- tasty-expected-failure-0.11.1.1
-- tasty-hedgehog-0.2.0.0
-- tasty-hunit-0.10.0.1
-- terminal-size-0.3.2.1
-- th-abstraction-0.2.8.0
-- th-lift-0.7.11
-- transformers-base-0.4.5.2
-- transformers-compat-0.6.2
-- unbounded-delays-0.1.1.0
-- unique-0
-- unliftio-core-0.1.2.0
-- unordered-containers-0.2.9.0
-- vector-0.12.0.1
-- void-0.7.2
-- wcwidth-0.0.2
-- wl-pprint-annotated-0.1.0.1
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
