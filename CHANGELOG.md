@@ -20,7 +20,6 @@ Policy (PVP)](https://pvp.haskell.org)
   * (internal) SIMD representation has been improved and generalised
 
 ### Added
-  * Support for GHC-8.6
   * Pattern synonyms for manipulating custom product types can now be created;
     see `Pattern`
 
@@ -34,6 +33,9 @@ Special thanks to those who contributed patches as part of this release:
   * Trevor L. McDonell (@tmcdonell)
   * Joshua Meredith (@JoshMeredith)
 
+## [1.2.0.1] - 2018-10-06
+### Fixed
+  * Build fix for ghc-8.6
 
 ## [1.2.0.0] - 2018-04-03
 ### Changed
@@ -158,7 +160,8 @@ Special thanks to those who contributed patches as part of this release:
   * Initial release of the CUDA backend
 
 
-[next]:             https://github.com/AccelerateHS/accelerate/compare/v1.2.0.0...HEAD
+[next]:             https://github.com/AccelerateHS/accelerate/compare/v1.2.0.1...HEAD
+[1.2.0.1]:          https://github.com/AccelerateHS/accelerate/compare/v1.2.0.0...v1.2.0.1
 [1.2.0.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.2.0.0
 [1.1.1.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.1.1.0
 [1.1.0.0]:          https://github.com/AccelerateHS/accelerate/compare/1.0.0.0...v1.1.0.0
