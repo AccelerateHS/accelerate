@@ -30,9 +30,9 @@ before_build:
   - stack build --no-terminal --no-copy-bins --fast --jobs=1 --only-dependencies --test
 
 build_script:
-  - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test --no-run-tests
+  - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test --no-run-tests --flag accelerate:nofib
 
 test_script:
-  - stack test accelerate:doctest
-  - stack test accelerate:nofib-interpreter --test-arguments="--hedgehog-tests 25"
+  - stack test accelerate:doctest --flag accelerate:nofib
+  - stack test accelerate:nofib-interpreter --test-arguments="--hedgehog-tests 25" --flag accelerate:nofib
 
