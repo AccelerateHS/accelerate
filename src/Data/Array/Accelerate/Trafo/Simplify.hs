@@ -47,7 +47,7 @@ import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar                ( Array, Shape, Slice, Elt(..), Z(..), (:.)(..)
+import Data.Array.Accelerate.Array.Sugar                ( Array, Shape, Elt(..), Z(..), (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -367,7 +367,7 @@ simplifyOpenExp env = first getAny . cvtE
 
     -- Shape manipulations
     --
-    indexCons :: (Slice sl, Elt sz)
+    indexCons :: (Elt sl, Elt sz)
               => (Any, PreOpenExp acc env aenv sl)
               -> (Any, PreOpenExp acc env aenv sz)
               -> (Any, PreOpenExp acc env aenv (sl :. sz))
@@ -384,13 +384,13 @@ simplifyOpenExp env = first getAny . cvtE
     indexCons sl sz
       = IndexCons <$> sl <*> sz
 
-    indexHead :: forall sl sz. (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sz)
+    indexHead :: forall sl sz. (Elt sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sz)
     indexHead (_, Const c)
       | _ :. sz <- toElt c :: sl :. sz  = Stats.ruleFired "indexHead/const"     $ yes (Const (fromElt sz))
     indexHead (_, IndexCons _ sz)       = Stats.ruleFired "indexHead/indexCons" $ yes sz
     indexHead sh                        = IndexHead <$> sh
 
-    indexTail :: forall sl sz. (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sl)
+    indexTail :: forall sl sz. (Elt sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sl)
     indexTail (_, Const c)
       | sl :. _ <- toElt c :: sl :. sz  = Stats.ruleFired "indexTail/const"     $ yes (Const (fromElt sl))
     indexTail (_, IndexCons sl _)       = Stats.ruleFired "indexTail/indexCons" $ yes sl

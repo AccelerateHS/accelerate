@@ -150,22 +150,22 @@ instance Lift Exp Z where
 instance Unlift Exp Z where
   unlift _ = Z
 
-instance (Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
+instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
   lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
 
-instance (Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
+instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
   lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
 
-instance (Elt e, Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
+instance (Elt e, Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
   lift (ix:.i) = Exp $ IndexCons (lift ix) i
 
-instance {-# OVERLAPPABLE #-} (Elt e, Slice (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
+instance {-# OVERLAPPABLE #-} (Elt e, Elt (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
   unlift e = unlift (Exp $ IndexTail e) :. Exp (IndexHead e)
 
-instance {-# OVERLAPPABLE #-} (Elt e, Slice ix) => Unlift Exp (Exp ix :. Exp e) where
+instance {-# OVERLAPPABLE #-} (Elt e, Elt ix) => Unlift Exp (Exp ix :. Exp e) where
   unlift e = (Exp $ IndexTail e) :. Exp (IndexHead e)
 
 instance Shape sh => Lift Exp (Any sh) where

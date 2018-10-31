@@ -1230,12 +1230,12 @@ awhile = Acc $$$ Awhile
 -- an array in C, this index corresponds to the index iterated over by the
 -- innermost nested loop.
 --
-indexHead :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp a
+indexHead :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp a
 indexHead = Exp . IndexHead
 
 -- | Get all but the innermost element of a shape
 --
-indexTail :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp sh
+indexTail :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
 indexTail = Exp . IndexTail
 
 -- | Map a multi-dimensional index into a linear, row-major representation of an

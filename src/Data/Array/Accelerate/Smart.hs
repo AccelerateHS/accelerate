@@ -608,16 +608,16 @@ data PreExp acc exp t where
 
   IndexNil      :: PreExp acc exp Z
 
-  IndexCons     :: (Slice sl, Elt a)
+  IndexCons     :: (Elt sl, Elt a)
                 => exp sl
                 -> exp a
                 -> PreExp acc exp (sl:.a)
 
-  IndexHead     :: (Slice sl, Elt a)
+  IndexHead     :: (Elt sl, Elt a)
                 => exp (sl:.a)
                 -> PreExp acc exp a
 
-  IndexTail     :: (Slice sl, Elt a)
+  IndexTail     :: (Elt sl, Elt a)
                 => exp (sl:.a)
                 -> PreExp acc exp sl
 

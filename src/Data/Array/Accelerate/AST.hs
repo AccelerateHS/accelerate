@@ -844,16 +844,16 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   -- Array indices & shapes
   IndexNil      :: PreOpenExp acc env aenv Z
 
-  IndexCons     :: (Slice sl, Elt a)
+  IndexCons     :: (Elt sl, Elt a)
                 => PreOpenExp acc env aenv sl
                 -> PreOpenExp acc env aenv a
                 -> PreOpenExp acc env aenv (sl:.a)
 
-  IndexHead     :: (Slice sl, Elt a)
+  IndexHead     :: (Elt sl, Elt a)
                 => PreOpenExp acc env aenv (sl:.a)
                 -> PreOpenExp acc env aenv a
 
-  IndexTail     :: (Slice sl, Elt a)
+  IndexTail     :: (Elt sl, Elt a)
                 => PreOpenExp acc env aenv (sl:.a)
                 -> PreOpenExp acc env aenv sl
 
