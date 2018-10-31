@@ -1,14 +1,12 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: nightly-2018-10-02
+resolver: nightly-2018-10-31
 
 packages:
 - '.'
 
-extra-deps:
-- memory-0.14.18
-- cryptonite-0.25
+# extra-deps: []
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
