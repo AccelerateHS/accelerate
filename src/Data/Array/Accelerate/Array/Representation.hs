@@ -75,8 +75,14 @@ class (Eq sh, Slice sh) => Shape sh where
 
 
   -- other conversions
-  shapeToList :: sh -> [Int]    -- convert a shape into its list of dimensions
-  listToShape :: [Int] -> sh    -- convert a list of dimensions into a shape
+  shapeToList   :: sh -> [Int]        -- convert a shape into its list of dimensions
+  listToShape   :: [Int] -> sh        -- convert a list of dimensions into a shape
+  listToShape'  :: [Int] -> Maybe sh  -- attempt to convert a list of dimensions into a shape
+
+  listToShape ds =
+    case listToShape' ds of
+      Just sh -> sh
+      Nothing -> $internalError "listToShape" "unable to convert list to a shape at the specified type"
 
 instance Shape () where
   rank              = 0
@@ -96,6 +102,9 @@ instance Shape () where
   shapeToList () = []
   listToShape [] = ()
   listToShape _  = $internalError "listToShape" "non-empty list when converting to unit"
+
+  listToShape' [] = Just ()
+  listToShape' _  = Nothing
 
 instance Shape sh => Shape (sh, Int) where
   rank                              = rank @sh + 1
@@ -165,9 +174,13 @@ instance Shape sh => Shape (sh, Int) where
 
   shapeToList (sh,sz) = sz : shapeToList sh
 
-  listToShape []      = $internalError "listToShape" "empty list when converting to Ix"
+  listToShape []      = $internalError "listToShape" "empty list when converting to cons"
   listToShape (x:xs)  = (listToShape xs,x)
 
+  listToShape' []     = Nothing
+  listToShape' (x:xs) = do
+    xs' <- listToShape' xs
+    return (xs', x)
 
 -- |Slice representation
 --

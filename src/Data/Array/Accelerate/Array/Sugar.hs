@@ -878,10 +878,13 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- |Convert a list of dimensions into a shape.
   listToShape :: [Int] -> sh
 
-  -- | The slice index for slice specifier 'Any sh'
+  -- |Attempt to convert a list of dimensions into a shape
+  listToShape' :: [Int] -> Maybe sh
+
+  -- |The slice index for slice specifier 'Any sh'
   sliceAnyIndex  :: Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
 
-  -- | The slice index for specifying a slice with only the Z component projected
+  -- |The slice index for specifying a slice with only the Z component projected
   sliceNoneIndex :: Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
 
   {-# INLINE rank         #-}
@@ -898,6 +901,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   {-# INLINE shapeToRange #-}
   {-# INLINE shapeToList  #-}
   {-# INLINE listToShape  #-}
+  {-# INLINE listToShape' #-}
   rank                  = Repr.rank @(EltRepr sh)
   size                  = Repr.size . fromElt
   empty                 = toElt Repr.empty
@@ -920,8 +924,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
       in
       (toElt low, toElt high)
 
-  shapeToList = Repr.shapeToList . fromElt
-  listToShape = toElt . Repr.listToShape
+  shapeToList  = Repr.shapeToList . fromElt
+  listToShape  = toElt . Repr.listToShape
+  listToShape' = fmap toElt . Repr.listToShape'
 
 instance Shape Z where
   sliceAnyIndex  = Repr.SliceNil
