@@ -34,7 +34,7 @@ module Data.Array.Accelerate.Data.Complex (
   mkPolar,
   cis,
   polar,
-  magnitude,
+  magnitude, magnitude',
   phase,
 
   -- * Conjugate
@@ -245,12 +245,19 @@ complex = lift
 -- | The non-negative magnitude of a complex number
 --
 magnitude :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
--- magnitude (unlift -> r :+ i) = sqrt (r*r + i*i)
 magnitude (unlift -> r :+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
   where
     k     = max (exponent r) (exponent i)
     mk    = -k
     sqr z = z * z
+
+-- | As 'magnitude', but ignore floating point rounding and use the traditional
+-- (simpler to evaluate) definition.
+--
+-- @since 1.3.0.0
+--
+magnitude' :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
+magnitude' (unlift -> r :+ i) = sqrt (r*r + i*i)
 
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
