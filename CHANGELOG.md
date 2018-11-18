@@ -33,6 +33,7 @@ Special thanks to those who contributed patches as part of this release:
   * Trevor L. McDonell (@tmcdonell)
   * Joshua Meredith (@JoshMeredith)
 
+
 ## [1.2.0.1] - 2018-10-06
 ### Fixed
   * Build fix for ghc-8.6
