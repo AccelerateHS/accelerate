@@ -28,16 +28,16 @@ addons:
 matrix:
   fast_finish: true
   include:
-    - env: GHC=8.6.1 CABAL=2.2
+    - env: GHC=8.6.2
       compiler: "GHC 8.6"
 
-    - env: GHC=8.4.3 CABAL=2.0
+    - env: GHC=8.4.3
       compiler: "GHC 8.4"
 
-    - env: GHC=8.2.2 CABAL=2.0
+    - env: GHC=8.2.2
       compiler: "GHC 8.2"
 
-    - env: GHC=8.0.2 CABAL=1.24
+    - env: GHC=8.0.2
       compiler: "GHC 8.0"
 
     # - env: GHC=head CABAL=head
