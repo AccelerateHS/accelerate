@@ -124,7 +124,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppAF :: PreOpenAfun acc aenv f -> Doc
     ppAF = parens . prettyPreOpenAfun prettyAcc aenv
 
-    ppB :: forall sh e. (Shape sh, Elt e)
+    ppB :: forall sh e. Elt e
         => PreBoundary acc aenv (Array sh e)
         -> Doc
     ppB Clamp        = text "clamp"

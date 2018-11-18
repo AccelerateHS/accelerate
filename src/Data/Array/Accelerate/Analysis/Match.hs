@@ -707,7 +707,7 @@ matchPrimConst _                _                = Nothing
 -- Covariant function matching
 --
 {-# INLINEABLE matchPrimFun #-}
-matchPrimFun :: (Typeable s, Typeable t) => PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :~: t)
+matchPrimFun :: PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :~: t)
 matchPrimFun (PrimAdd _)                (PrimAdd _)                = Just Refl
 matchPrimFun (PrimSub _)                (PrimSub _)                = Just Refl
 matchPrimFun (PrimMul _)                (PrimMul _)                = Just Refl
@@ -781,7 +781,7 @@ matchPrimFun _ _
 -- Contravariant function matching
 --
 {-# INLINEABLE matchPrimFun' #-}
-matchPrimFun' :: (Typeable s, Typeable t) => PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :~: t)
+matchPrimFun' :: PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :~: t)
 matchPrimFun' (PrimAdd _)                (PrimAdd _)                = Just Refl
 matchPrimFun' (PrimSub _)                (PrimSub _)                = Just Refl
 matchPrimFun' (PrimMul _)                (PrimMul _)                = Just Refl

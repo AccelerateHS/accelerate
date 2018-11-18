@@ -157,8 +157,7 @@ phase n fmt go = D.timed D.dump_phases (\wall cpu -> printf "phase %s: %s" n (fm
 -- not require an optional Manifest|Delayed data type to evaluate the program.
 --
 data Delayed a where
-  Delayed :: (Shape sh, Elt e)
-          => sh
+  Delayed :: sh
           -> (sh -> e)
           -> (Int -> e)
           -> Delayed (Array sh e)
@@ -289,7 +288,7 @@ transformOp sh' p f (Delayed _ xs _)
 
 
 reshapeOp
-    :: (Shape sh, Shape sh', Elt e)
+    :: (Shape sh, Shape sh')
     => sh
     -> Array sh' e
     -> Array sh  e
@@ -402,7 +401,7 @@ fold1Op f (Delayed (sh :. n) arr _)
 
 
 foldSegOp
-    :: forall sh e i. (Elt e, Elt i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
     => (e -> e -> e)
     -> e
     -> Delayed (Array (sh :. Int) e)

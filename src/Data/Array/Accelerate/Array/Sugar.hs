@@ -1018,7 +1018,7 @@ shape (Array sh _) = toElt sh
 -- the source and result arrays must be identical.
 --
 {-# INLINE reshape #-}
-reshape :: (Shape sh, Shape sh', Elt e) => sh -> Array sh' e -> Array sh e
+reshape :: (Shape sh, Shape sh') => sh -> Array sh' e -> Array sh e
 reshape sh (Array sh' adata)
   = $boundsCheck "reshape" "shape mismatch" (size sh == Repr.size sh')
   $ Array (fromElt sh) adata

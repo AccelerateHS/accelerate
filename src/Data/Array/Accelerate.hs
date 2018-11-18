@@ -472,7 +472,7 @@ arraySize = S.size . S.shape
 -- of the source and result arrays must be identical.
 --
 {-# INLINE arrayReshape #-}
-arrayReshape :: (Shape sh, Shape sh', Elt e) => sh -> Array sh' e -> Array sh e
+arrayReshape :: (Shape sh, Shape sh') => sh -> Array sh' e -> Array sh e
 arrayReshape = S.reshape
 
 

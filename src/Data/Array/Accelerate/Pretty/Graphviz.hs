@@ -45,7 +45,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen           as PP
 
 -- friends
 import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), Idx(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Shape, Elt, Tuple(..), Atuple(..), arrays, toElt, strForeign )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Elt, Tuple(..), Atuple(..), arrays, toElt, strForeign )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty.Print
@@ -312,7 +312,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
       return    $ PDoc (parens d) v
 
-    ppB :: forall sh e. (Shape sh, Elt e)
+    ppB :: forall sh e. Elt e
         => PreBoundary DelayedOpenAcc aenv (Array sh e)
         -> Dot PDoc
     ppB Clamp        = return (PDoc "clamp"  [])
