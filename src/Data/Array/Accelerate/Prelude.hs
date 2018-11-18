@@ -1476,7 +1476,7 @@ enumFromStepN sh x y
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 12, 13, 14]
 --
 infixr 5 ++
-(++) :: forall sh e. (Slice sh, Shape sh, Elt e)
+(++) :: forall sh e. (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1586,7 +1586,7 @@ concatOn dim xs ys =
 -- >>> run $ filter odd (use mat)
 -- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19],Vector (Z :. 4) [5,5,0,10])
 --
-filter :: forall sh e. (Shape sh, Slice sh, Elt e)
+filter :: forall sh e. (Shape sh, Elt e)
        => (Exp e -> Exp Bool)
        -> Acc (Array (sh:.Int) e)
        -> Acc (Vector e, Array sh Int)
@@ -1868,7 +1868,7 @@ transposeOn dim1 dim2 xs =
 --     30, 31, 32, 33, 34,
 --     40, 41, 42, 43, 44]
 --
-take :: forall sh e. (Slice sh, Shape sh, Elt e)
+take :: forall sh e. (Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1895,7 +1895,7 @@ take = takeOn _1
 --     37, 38, 39,
 --     47, 48, 49]
 --
-drop :: forall sh e. (Slice sh, Shape sh, Elt e)
+drop :: forall sh e. (Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1921,7 +1921,7 @@ drop = dropOn _1
 --     30, 31, 32, 33, 34, 35, 36, 37, 38,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48]
 --
-init :: forall sh e. (Slice sh, Shape sh, Elt e)
+init :: forall sh e. (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
 init = initOn _1
@@ -1947,7 +1947,7 @@ init = initOn _1
 --     31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
-tail :: forall sh e. (Slice sh, Shape sh, Elt e)
+tail :: forall sh e. (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
 tail = tailOn _1
@@ -1958,7 +1958,7 @@ tail = tailOn _1
 --
 -- > slit i n = take n . drop i
 --
-slit :: forall sh e. (Slice sh, Shape sh, Elt e)
+slit :: forall sh e. (Shape sh, Elt e)
      => Exp Int                     -- ^ starting index
      -> Exp Int                     -- ^ length
      -> Acc (Array (sh :. Int) e)
@@ -2189,7 +2189,7 @@ iterate n f z
 -- | Reduce along an innermost slice of an array /sequentially/, by applying a
 -- binary operator to a starting value and the array from left to right.
 --
-sfoldl :: forall sh a b. (Shape sh, Slice sh, Elt a, Elt b)
+sfoldl :: forall sh a b. (Shape sh, Elt a, Elt b)
        => (Exp a -> Exp b -> Exp a)
        -> Exp a
        -> Exp sh
@@ -2257,7 +2257,7 @@ unindex1 ix = let Z :. i = unlift ix in i
 -- | Creates a rank-2 index from two Exp Int`s
 --
 index2
-    :: (Elt i, Slice (Z :. i))
+    :: Elt i
     => Exp i
     -> Exp i
     -> Exp (Z :. i :. i)
@@ -2266,7 +2266,7 @@ index2 i j = lift (Z :. i :. j)
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
 unindex2
-    :: forall i. (Elt i, Slice (Z :. i))
+    :: forall i. Elt i
     => Exp (Z :. i :. i)
     -> Exp (i, i)
 unindex2 ix
@@ -2276,7 +2276,7 @@ unindex2 ix
 -- | Create a rank-3 index from three Exp Int`s
 --
 index3
-    :: (Elt i, Slice (Z :. i), Slice (Z :. i :. i))
+    :: Elt i
     => Exp i
     -> Exp i
     -> Exp i
@@ -2285,7 +2285,7 @@ index3 k j i = lift (Z :. k :. j :. i)
 
 -- | Destruct a rank-3 index into an Exp tuple of Int`s
 unindex3
-    :: forall i. (Elt i, Slice (Z :. i), Slice (Z :. i :. i))
+    :: forall i. Elt i
     => Exp (Z :. i :. i :. i)
     -> Exp (i, i, i)
 unindex3 ix = let Z :. k :. j :. i = unlift ix  :: Z :. Exp i :. Exp i :. Exp i
@@ -2370,15 +2370,15 @@ emptyArray = fill (constant empty) undef
 --
 -- Imported from `lens-accelerate` (which provides more general Field instances)
 --
-_1 :: forall sh. Slice sh => Lens' (Exp (sh:.Int)) (Exp Int)
+_1 :: forall sh. Elt sh => Lens' (Exp (sh:.Int)) (Exp Int)
 _1 = lens (\ix   -> let _  :. x = unlift ix :: Exp sh :. Exp Int in x)
           (\ix x -> let sh :. _ = unlift ix :: Exp sh :. Exp Int in lift (sh :. x))
 
-_2 :: forall sh. Slice sh => Lens' (Exp (sh:.Int:.Int)) (Exp Int)
+_2 :: forall sh. Elt sh => Lens' (Exp (sh:.Int:.Int)) (Exp Int)
 _2 = lens (\ix   -> let _  :. y :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int in y)
           (\ix y -> let sh :. _ :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int in lift (sh :. y :. x))
 
-_3 :: forall sh. Slice sh => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
+_3 :: forall sh. Elt sh => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
 _3 = lens (\ix   -> let _  :. z :. _ :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in z)
           (\ix z -> let sh :. _ :. y :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in lift (sh :. z :. y :. x))
 

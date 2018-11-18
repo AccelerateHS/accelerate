@@ -13,6 +13,7 @@ Policy (PVP)](https://pvp.haskell.org)
     (delayed) array will be evaluated at _every_ access to the stencil pattern;
     if the delayed function is expensive, you may wish to explicitly `compute`
     the source array first, matching the old behaviour.
+  * Removed `Slice` constraint from some indexing operations
 
   * (internal) Visible type applications are used instead of `Proxy` types
   * (internal) `EltRepr` is now a class-associated type of `Elt`
