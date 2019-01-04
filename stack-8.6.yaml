@@ -4,9 +4,10 @@
 resolver: lts-13.1
 
 packages:
-- '.'
+- .
 
-# extra-deps: []
+extra-deps:
+- tasty-hedgehog-0.2.0.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
