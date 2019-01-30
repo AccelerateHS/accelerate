@@ -1,13 +1,12 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-13.1
+resolver: lts-13.4
 
 packages:
 - .
 
-extra-deps:
-- tasty-hedgehog-0.2.0.0
+# extra-deps: []
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
