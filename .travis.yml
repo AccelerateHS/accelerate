@@ -1,8 +1,7 @@
 # vim: nospell
 #
 language: minimal
-dist: trusty
-sudo: false
+dist: xenial
 
 cache:
   timeout: 600
