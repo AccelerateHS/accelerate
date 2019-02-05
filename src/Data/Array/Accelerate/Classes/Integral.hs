@@ -216,7 +216,7 @@ lift2' :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
        -> Exp a
        -> Exp a
        -> (Exp a, Exp a)
-lift2' f x y = 
+lift2' f x y =
   let (u,v) = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
   in  (mkUnsafeCoerce u, mkUnsafeCoerce v)
 
