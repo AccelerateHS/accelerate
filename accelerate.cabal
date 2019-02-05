@@ -306,6 +306,7 @@ Library
         Data.Array.Accelerate.Data.Functor
         Data.Array.Accelerate.Data.Maybe
         Data.Array.Accelerate.Data.Monoid
+        Data.Array.Accelerate.Data.Ratio
         Data.Array.Accelerate.Unsafe
 
         -- For backend development (hidden)

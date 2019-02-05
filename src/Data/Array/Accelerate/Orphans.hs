@@ -19,9 +19,11 @@ module Data.Array.Accelerate.Orphans ()
   where
 
 import Data.Primitive.Types
+import Data.Ratio
 import Foreign.C.Types
-import Numeric.Half
 import GHC.Generics
+import GHC.Real
+import Numeric.Half
 
 
 -- base
@@ -38,6 +40,8 @@ deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m)
 deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+
+deriving instance Generic (Ratio a)
 
 -- primitive
 --
