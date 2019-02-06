@@ -61,87 +61,117 @@ class IsPattern con a t where
 --
 pattern T2 :: IsPattern con (a,b) (con a, con b) => con a -> con b -> con (a, b)
 pattern T2 a b = Pattern (a, b)
+{-# COMPLETE T2 :: Exp #-}
+{-# COMPLETE T2 :: Acc #-}
 
 pattern T3 :: IsPattern con (a,b,c) (con a, con b, con c) => con a -> con b -> con c -> con (a, b, c)
 pattern T3 a b c = Pattern (a, b, c)
+{-# COMPLETE T3 :: Exp #-}
+{-# COMPLETE T3 :: Acc #-}
 
 pattern T4
     :: IsPattern con (a,b,c,d) (con a, con b, con c, con d)
     => con a -> con b -> con c -> con d
     -> con (a, b, c, d)
 pattern T4 a b c d = Pattern (a, b, c, d)
+{-# COMPLETE T4 :: Exp #-}
+{-# COMPLETE T4 :: Acc #-}
 
 pattern T5
     :: IsPattern con (a,b,c,d,e) (con a, con b, con c, con d, con e)
     => con a -> con b -> con c -> con d -> con e
     -> con (a, b, c, d, e)
 pattern T5 a b c d e = Pattern (a, b, c, d, e)
+{-# COMPLETE T5 :: Exp #-}
+{-# COMPLETE T5 :: Acc #-}
 
 pattern T6
     :: IsPattern con (a,b,c,d,e,f) (con a, con b, con c, con d, con e, con f)
     => con a -> con b -> con c -> con d -> con e -> con f
     -> con (a, b, c, d, e, f)
 pattern T6 a b c d e f = Pattern (a, b, c, d, e, f)
+{-# COMPLETE T6 :: Exp #-}
+{-# COMPLETE T6 :: Acc #-}
 
 pattern T7
     :: IsPattern con (a,b,c,d,e,f,g) (con a, con b, con c, con d, con e, con f, con g)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g
     -> con (a, b, c, d, e, f, g)
 pattern T7 a b c d e f g = Pattern (a, b, c, d, e, f, g)
+{-# COMPLETE T7 :: Exp #-}
+{-# COMPLETE T7 :: Acc #-}
 
 pattern T8
     :: IsPattern con (a,b,c,d,e,f,g,h) (con a, con b, con c, con d, con e, con f, con g, con h)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h
     -> con (a, b, c, d, e, f, g, h)
 pattern T8 a b c d e f g h = Pattern (a, b, c, d, e, f, g, h)
+{-# COMPLETE T8 :: Exp #-}
+{-# COMPLETE T8 :: Acc #-}
 
 pattern T9
     :: IsPattern con (a,b,c,d,e,f,g,h,i) (con a, con b, con c, con d, con e, con f, con g, con h, con i)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i
     -> con (a, b, c, d, e, f, g, h, i)
 pattern T9 a b c d e f g h i = Pattern (a, b, c, d, e, f, g, h, i)
+{-# COMPLETE T9 :: Exp #-}
+{-# COMPLETE T9 :: Acc #-}
 
 pattern T10
     :: IsPattern con (a,b,c,d,e,f,g,h,i,j) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j
     -> con (a, b, c, d, e, f, g, h, i, j)
 pattern T10 a b c d e f g h i j = Pattern (a, b, c, d, e, f, g, h, i, j)
+{-# COMPLETE T10 :: Exp #-}
+{-# COMPLETE T10 :: Acc #-}
 
 pattern T11
     :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k
     -> con (a, b, c, d, e, f, g, h, i, j, k)
 pattern T11 a b c d e f g h i j k = Pattern (a, b, c, d, e, f, g, h, i, j, k)
+{-# COMPLETE T11 :: Exp #-}
+{-# COMPLETE T11 :: Acc #-}
 
 pattern T12
     :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l
     -> con (a, b, c, d, e, f, g, h, i, j, k, l)
 pattern T12 a b c d e f g h i j k l = Pattern (a, b, c, d, e, f, g, h, i, j, k, l)
+{-# COMPLETE T12 :: Exp #-}
+{-# COMPLETE T12 :: Acc #-}
 
 pattern T13
     :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m)
 pattern T13 a b c d e f g h i j k l m = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m)
+{-# COMPLETE T13 :: Exp #-}
+{-# COMPLETE T13 :: Acc #-}
 
 pattern T14
     :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 pattern T14 a b c d e f g h i j k l m n = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+{-# COMPLETE T14 :: Exp #-}
+{-# COMPLETE T14 :: Acc #-}
 
 pattern T15
     :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 pattern T15 a b c d e f g h i j k l m n o = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+{-# COMPLETE T15 :: Exp #-}
+{-# COMPLETE T15 :: Acc #-}
 
 pattern T16
     :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o, con p)
     => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o -> con p
     -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 pattern T16 a b c d e f g h i j k l m n o p = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+{-# COMPLETE T16 :: Exp #-}
+{-# COMPLETE T16 :: Acc #-}
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
 -- (unremarkable) boilerplate for us, but since the implementation is a little
