@@ -334,7 +334,7 @@ module Data.Array.Accelerate (
   -- ** Pattern synonyms
   -- $pattern_synonyms
   --
-  pattern Pattern, IsTuple, IsAtuple,
+  pattern Pattern, IsProduct, IsTuple, IsAtuple,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
@@ -390,8 +390,8 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Useful re-exports
-  (.), ($), error, undefined, const,
-  Generic,
+  (.), ($), error, undefined, const, otherwise,
+  Show, Generic,
 
   -- ---------------------------------------------------------------------------
   -- Types
@@ -415,11 +415,12 @@ import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  () -- show instances
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
-import Prelude                                                      ( (.), ($), undefined, error, const )
+import Prelude                                                      ( (.), ($), Show, undefined, error, const, otherwise )
 import GHC.Generics                                                 ( Generic )
 
 -- $setup
