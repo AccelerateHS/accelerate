@@ -34,7 +34,6 @@ import Data.Array.Accelerate.Classes.Fractional
 import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
-import Data.Array.Accelerate.Classes.Real
 import Data.Array.Accelerate.Classes.ToFloating
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.RealFloat       -- defaultProperFraction
 
@@ -72,7 +71,7 @@ divMod' n d = (f, n - (toFloating f) * d)
 
 -- | Extracting components of fractions.
 --
-class (Real a, Fractional a) => RealFrac a where
+class (Ord a, Fractional a) => RealFrac a where
   -- | The function 'properFraction' takes a real fractional number @x@ and
   -- returns a pair @(n,f)@ such that @x = n+f@, and:
   --
@@ -102,20 +101,20 @@ class (Real a, Fractional a) => RealFrac a where
   -- splitFraction / fraction are from numeric-prelude Algebra.RealRing
 
   -- | @truncate x@ returns the integer nearest @x@ between zero and @x@
-  truncate       :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  truncate :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   truncate = defaultTruncate
 
   -- | @'round' x@ returns the nearest integer to @x@; the even integer if @x@
   -- is equidistant between two integers
-  round          :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  round    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   round    = defaultRound
 
   -- | @'ceiling' x@ returns the least integer not less than @x@
-  ceiling        :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  ceiling  :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   ceiling  = defaultCeiling
 
   -- | @'floor' x@ returns the greatest integer not greater than @x@
-  floor          :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  floor    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   floor    = defaultFloor
 
 instance RealFrac Half where

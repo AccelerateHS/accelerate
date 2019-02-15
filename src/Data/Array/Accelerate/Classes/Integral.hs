@@ -31,7 +31,9 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Enum
-import Data.Array.Accelerate.Classes.Real
+import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Ord
+import Data.Array.Accelerate.Classes.Real                           ()
 
 import Prelude                                                      ( error )
 import qualified Prelude                                            as P
@@ -39,7 +41,7 @@ import qualified Prelude                                            as P
 
 -- | Integral numbers, supporting integral division
 --
-type Integral a = (Enum a, Real a, P.Integral (Exp a))
+type Integral a = (Enum a, Ord a, Num a, P.Integral (Exp a))
 
 
 instance P.Integral (Exp Int) where

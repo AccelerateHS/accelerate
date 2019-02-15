@@ -23,8 +23,8 @@ module Data.Array.Accelerate.Classes (
 
   -- *** Numeric type classes
   module Num,
-  module Real,
   module Integral,
+  module Rational,
   module Fractional,
   module Floating,
   module RealFrac,
@@ -43,9 +43,9 @@ import Data.Array.Accelerate.Classes.Floating                       as Floating
 import Data.Array.Accelerate.Classes.Fractional                     as Fractional
 import Data.Array.Accelerate.Classes.FromIntegral                   as FromIntegral
 import Data.Array.Accelerate.Classes.Integral                       as Integral
+import Data.Array.Accelerate.Classes.Rational                       as Rational
 import Data.Array.Accelerate.Classes.Num                            as Num
 import Data.Array.Accelerate.Classes.Ord                            as Ord
-import Data.Array.Accelerate.Classes.Real                           as Real
 import Data.Array.Accelerate.Classes.RealFloat                      as RealFloat
 import Data.Array.Accelerate.Classes.RealFrac                       as RealFrac
 import Data.Array.Accelerate.Classes.ToFloating                     as ToFloating

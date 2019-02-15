@@ -313,8 +313,8 @@ module Data.Array.Accelerate (
 
   -- *** Numeric type classes
   Num, (+), (-), (*), negate, abs, signum, fromInteger,
-  -- Real, -- vacuous
   Integral, quot, rem, div, mod, quotRem, divMod,
+  Rational(..),
   Fractional, (/), recip, fromRational,
   Floating, pi, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, exp, sqrt, log, (**), logBase,
   RealFrac(..), div', mod', divMod',
