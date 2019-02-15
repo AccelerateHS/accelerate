@@ -352,6 +352,7 @@ Library
         Data.Array.Accelerate.Classes.Integral
         Data.Array.Accelerate.Classes.Num
         Data.Array.Accelerate.Classes.Ord
+        Data.Array.Accelerate.Classes.Rational
         Data.Array.Accelerate.Classes.Real
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
