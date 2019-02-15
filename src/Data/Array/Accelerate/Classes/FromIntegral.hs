@@ -81,7 +81,9 @@ $(runQ $ do
         thFromIntegral a b =
           let
               ty  = AppT (AppT (ConT (mkName "FromIntegral")) (ConT a)) (ConT b)
-              dec = ValD (VarP (mkName "fromIntegral")) (NormalB (VarE (mkName "mkFromIntegral"))) []
+              dec = ValD (VarP (mkName "fromIntegral")) (NormalB (VarE (mkName f))) []
+              f | a == b    = "id"
+                | otherwise = "mkFromIntegral"
           in
           instanceD (return []) (return ty) [return dec]
     --

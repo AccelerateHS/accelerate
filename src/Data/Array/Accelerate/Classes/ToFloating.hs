@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE TemplateHaskell       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.ToFloating
@@ -29,7 +28,7 @@ import Data.Array.Accelerate.Classes.Num
 
 import Language.Haskell.TH                                          hiding ( Exp )
 import Control.Monad
-import Prelude                                                      ( ($), error, concat )
+import Prelude                                                      hiding ( Num, Floating )
 
 
 -- | Accelerate lacks an arbitrary-precision 'Prelude.Rational' type, which the
@@ -77,7 +76,9 @@ $(runQ $ do
         thToFloating a b =
           let
               ty  = AppT (AppT (ConT (mkName "ToFloating")) (ConT a)) (ConT b)
-              dec = ValD (VarP (mkName "toFloating")) (NormalB (VarE (mkName "mkToFloating"))) []
+              dec = ValD (VarP (mkName "toFloating")) (NormalB (VarE (mkName f))) []
+              f | a == b    = "id"
+                | otherwise = "mkToFloating"
           in
           instanceD (return []) (return ty) [return dec]
     --
