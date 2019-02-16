@@ -3,13 +3,10 @@
 {-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
---               [2013..2017] Robert Clifton-Everest
---               [2014..2014] Frederik M. Madsen
+-- Copyright   : [2008..2019] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -142,10 +139,7 @@
 --
 -- * Bug reports: https://github.com/AccelerateHS/accelerate/issues
 --
--- * Maintainers:
---
---     * Trevor L. McDonell: <mailto:tmcdonell@cse.unsw.edu.au>
---     * Manuel M T Chakravarty: <mailto:chak@cse.unsw.edu.au>
+-- * Maintainer: Trevor L. McDonell: <mailto:trevor.mcdonell@gmail.com>
 --
 -- [/Tip:/]
 --

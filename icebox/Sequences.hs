@@ -6,8 +6,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Sequences
+-- Copyright   : [2009..2019] The Accelerate Team
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Prelude.Sequences (
+module Data.Array.Accelerate.Test.NoFib.Prelude.Sequences (
 
   test_sequences
 

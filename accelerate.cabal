@@ -112,14 +112,8 @@ Description:
 
 License:                BSD3
 License-file:           LICENSE
-Author:                 Manuel M T Chakravarty,
-                        Robert Clifton-Everest,
-                        Gabriele Keller,
-                        Ben Lever,
-                        Trevor L. McDonell,
-                        Ryan Newtown,
-                        Sean Seefried
-Maintainer:             Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+Author:                 The Accelerate Team
+Maintainer:             Trevor L. McDonell <trevor.mcdonell@gmail.com>
 Homepage:               https://github.com/AccelerateHS/accelerate/
 Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 

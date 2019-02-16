@@ -17,6 +17,7 @@ For more details, see our papers:
  * [Optimising Purely Functional GPU Programs][MCKL13] ([slides][MCKL13-slides])
  * [Embedding Foreign Code][CMCK14]
  * [Type-safe Runtime Code Generation: Accelerate to LLVM][MCGN15] ([slides][MCGN15-slides]) ([video][MCGN15-video])
+ * [Streaming Irregular Arrays][CMCK17] ([video][CMCK17-video])
 
 There are also slides from some fairly recent presentations:
 
@@ -37,6 +38,7 @@ Chapter 6 of Simon Marlow's book [Parallel and Concurrent Programming in Haskell
   - [Requirements](#requirements)
   - [Documentation](#documentation)
   - [Examples](#examples)
+  - [Who are we?](#who-are-we)
   - [Mailing list and contacts](#mailing-list-and-contacts)
   - [Citing Accelerate](#citing-accelerate)
   - [What's missing?](#whats-missing)
@@ -106,8 +108,8 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
   * A cellular automata simulation
   * A "password recovery" tool, for dictionary lookup of MD5 hashes
 
-[![Mandelbrot](http://i.imgur.com/5Tbsp1j.jpg "accelerate-mandelbrot")](http://i.imgur.com/RgXRqsc.jpg)
-[![Raytracer](http://i.imgur.com/7ohhKm9.jpg "accelerate-ray")](http://i.imgur.com/ZNEGEJK.jpg)
+[![Mandelbrot](https://i.imgur.com/5Tbsp1j.jpg "accelerate-mandelbrot")](https://i.imgur.com/RgXRqsc.jpg)
+[![Raytracer](https://i.imgur.com/7ohhKm9.jpg "accelerate-ray")](https://i.imgur.com/ZNEGEJK.jpg)
 
 <!--
 <video width=400 height=300 controls=false autoplay loop>
@@ -120,7 +122,7 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
 
 [LULESH-accelerate][lulesh-accelerate] is in implementation of the Livermore Unstructured Lagrangian Explicit Shock Hydrodynamics (LULESH) mini-app. [LULESH][LULESH] represents a typical hydrodynamics code such as [ALE3D][ALE3D], but is a highly simplified application, hard-coded to solve the Sedov blast problem on an unstructured hexahedron mesh.
 
-![LULESH mesh](https://codesign.llnl.gov/images/sedov-3d-LLNL.png)
+![LULESH mesh](https://computation.llnl.gov/system/files/142_1.PNG)
 
 
 ### Λ ○ λ (Lol)
@@ -139,6 +141,25 @@ Please feel free to add your own examples!
   * Alexandros Gremm used Accelerate as part of the [2014 CSCS summer school](http://user.cscs.ch/blog/2014/cscs_usi_summer_school_2014_30_june_10_july_2014_in_serpiano_tessin/index.html) ([code](https://github.com/agremm/cscs))
 
 
+Who are we?
+-----------
+
+The Accelerate team (past and present) consists of:
+
+  * Manuel M T Chakravarty (@mchakravarty)  <!-- 2008..2017 -->
+  * Gabriele Keller (@gckeller)             <!-- 2008..     -->
+  * Trevor L. McDonell (@tmcdonell)         <!-- 2009..     -->
+  * Robert Clifton-Everest (@robeverest)    <!-- 2013..     -->
+  * Frederik M. Madsen (@fmma)              <!-- 2014       -->
+  * Ryan R. Newton (@rrnewton)              <!-- 2012..2013 -->
+  * Joshua Meredith (@JoshMeredith)         <!-- 2018..     -->
+  * Ben Lever (@blever)                     <!-- 2010..2011 -->
+  * Sean Seefried (@sseefried)              <!-- 2010..2011 -->
+
+The maintainer and principal developer developer of Accelerate is Trevor L.
+McDonell <trevor.mcdonell@gmail.com>.
+
+
 Mailing list and contacts
 -------------------------
 
@@ -146,14 +167,13 @@ Mailing list and contacts
   * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group].
   * Bug reports and issues tracking: [GitHub project page][Issues].
 
-The maintainers of Accelerate are Manuel M T Chakravarty <chak@cse.unsw.edu.au> and Trevor L McDonell <tmcdonell@cse.unsw.edu.au>.
-
 
 Citing Accelerate
 -----------------
 
 If you use Accelerate for academic research, you are encouraged (though not
-required) to cite the following papers ([BibTeX](http://www.cse.unsw.edu.au/~tmcdonell/papers/accelerate.bib)):
+required) to cite the following papers:
+<!-- ([BibTeX](http://www.cse.unsw.edu.au/~tmcdonell/papers/accelerate.bib)): -->
 
   * Manuel M. T. Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell, and Vinod Grover.
     [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11].
@@ -171,6 +191,11 @@ required) to cite the following papers ([BibTeX](http://www.cse.unsw.edu.au/~tmc
     [Type-safe Runtime Code Generation: Accelerate to LLVM][MCGN15].
     In _Haskell '15: The 8th ACM SIGPLAN Symposium on Haskell_, ACM, 2015.
 
+  * Robert Clifton-Everest, Trevor L. McDonell, Manuel M. T. Chakravarty, and Gabriele Keller.
+    [Streaming Irregular Arrays][CMCK17].
+    In Haskell '17: The 10th ACM SIGPLAN Symposium on Haskell, ACM, 2017.
+
+
 Accelerate is primarily developed by academics, so citations matter a lot to us.
 As an added benefit, you increase Accelerate's exposure and potential user (and
 developer!) base, which is a benefit to all users of Accelerate. Thanks in advance!
@@ -182,17 +207,19 @@ What's missing?
 Here is a list of features that are currently missing:
 
  * Preliminary API (parts of the API may still change in subsequent releases)
+ * Many more features... contact us!
 
 
-
-  [CKLM+11]:                    http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
-  [MCKL13]:                     http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
+  [CKLM+11]:                    https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-cuda-damp2011.pdf
+  [MCKL13]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-optim-icfp2013.pdf
   [MCKL13-slides]:              https://speakerdeck.com/tmcdonell/optimising-purely-functional-gpu-programs
-  [CMCK14]:                     http://www.cse.unsw.edu.au/~chak/papers/CMCK14.html
-  [MCGN15]:                     http://www.cse.unsw.edu.au/~chak/papers/MCGN15.html
+  [CMCK14]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-ffi-padl2014.pdf
+  [MCGN15]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-llvm-haskell2015.pdf
   [MCGN15-slides]:              https://speakerdeck.com/tmcdonell/type-safe-runtime-code-generation-accelerate-to-llvm
   [MCGN15-video]:               https://www.youtube.com/watch?v=snXhXA5noVc
   [HIW'09]:                     https://wiki.haskell.org/HaskellImplementorsWorkshop
+  [CMCK17]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-seq2-haskell2017.pdf
+  [CMCK17-video]:               https://www.youtube.com/watch?v=QIWSqp7AaNo
   [Mar13]:                      http://chimera.labs.oreilly.com/books/1230000000929
   [Embedded]:                   https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
   [Hackage]:                    http://hackage.haskell.org/package/accelerate
@@ -226,7 +253,7 @@ Here is a list of features that are currently missing:
   [wiki-nbody]:                 https://en.wikipedia.org/wiki/N-body
   [wiki-raytracing]:            https://en.wikipedia.org/wiki/Ray_tracing
   [wiki-pagerank]:              https://en.wikipedia.org/wiki/Pagerank
-  [Trevor-thesis]:              http://www.cse.unsw.edu.au/~tmcdonell/papers/TrevorMcDonell_PhD_submission.pdf
+  [Trevor-thesis]:              https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/TrevorMcDonell_PhD_Thesis.pdf
   [colour-accelerate]:          https://github.com/tmcdonell/colour-accelerate
   [gloss]:                      https://hackage.haskell.org/package/gloss
   [gloss-accelerate]:           https://github.com/tmcdonell/gloss-accelerate

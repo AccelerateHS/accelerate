@@ -2,8 +2,17 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Replicate
+-- Copyright   : [2009..2019] The Accelerate Team
+-- License     : BSD3
+--
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Test.Prelude.Replicate (
+module Data.Array.Accelerate.Test.NoFib.Prelude.Replicate (
 
   test_replicate,
 
