@@ -146,17 +146,17 @@ Who are we?
 
 The Accelerate team (past and present) consists of:
 
-  * Manuel M T Chakravarty (@mchakravarty)  <!-- 2008..2017 -->
-  * Gabriele Keller (@gckeller)             <!-- 2008..     -->
-  * Trevor L. McDonell (@tmcdonell)         <!-- 2009..     -->
-  * Robert Clifton-Everest (@robeverest)    <!-- 2013..     -->
-  * Frederik M. Madsen (@fmma)              <!-- 2014       -->
-  * Ryan R. Newton (@rrnewton)              <!-- 2012..2013 -->
-  * Joshua Meredith (@JoshMeredith)         <!-- 2018..     -->
-  * Ben Lever (@blever)                     <!-- 2010..2011 -->
-  * Sean Seefried (@sseefried)              <!-- 2010..2011 -->
+  * Manuel M T Chakravarty ([@mchakravarty])  <!-- 2008..2017 -->
+  * Gabriele Keller ([@gckeller])             <!-- 2008..     -->
+  * Trevor L. McDonell ([@tmcdonell])         <!-- 2009..     -->
+  * Robert Clifton-Everest ([@robeverest])    <!-- 2013..     -->
+  * Frederik M. Madsen ([@fmma])              <!-- 2014       -->
+  * Ryan R. Newton ([@rrnewton])              <!-- 2012..2013 -->
+  * Joshua Meredith ([@JoshMeredith])         <!-- 2018..     -->
+  * Ben Lever ([@blever])                     <!-- 2010..2011 -->
+  * Sean Seefried ([@sseefried])              <!-- 2010..2011 -->
 
-The maintainer and principal developer developer of Accelerate is Trevor L.
+The maintainer and principal developer of Accelerate is Trevor L.
 McDonell <trevor.mcdonell@gmail.com>.
 
 
@@ -209,6 +209,15 @@ Here is a list of features that are currently missing:
  * Preliminary API (parts of the API may still change in subsequent releases)
  * Many more features... contact us!
 
+  [@mchakravarty]:              https://github.com/mchakravarty
+  [@gckeller]:                  https://github.com/gckeller
+  [@tmcdonell]:                 https://github.com/tmcdonell
+  [@robeverest]:                https://github.com/robeverest
+  [@fmma]:                      https://github.com/fmma
+  [@rrnewton]:                  https://github.com/rrnewton
+  [@JoshMeredith]:              https://github.com/JoshMeredith
+  [@blever]:                    https://github.com/blever
+  [@sseefried]:                 https://github.com/sseefried
 
   [CKLM+11]:                    https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-cuda-damp2011.pdf
   [MCKL13]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-optim-icfp2013.pdf
