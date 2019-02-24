@@ -208,7 +208,9 @@ defaultRound x
         half_down = abs r - 0.5
         p         = compare half_down 0.0
     in
-    cond (constant LT == p || even n) n m
+    cond (constant LT == p) n                   $
+    cond (constant EQ == p) (cond (even n) n m) $
+            {- otherwise -} m
 
 
 data IsFloatingDict a where
