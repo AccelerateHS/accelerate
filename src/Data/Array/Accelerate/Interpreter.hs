@@ -41,8 +41,10 @@
 
 module Data.Array.Accelerate.Interpreter (
 
+  Smart.Acc, Arrays,
+  Afunction, AfunctionR,
+
   -- * Interpret an array expression
-  Sugar.Acc, Arrays,
   run, run1, runN,
 
   -- Internal (hidden)
@@ -79,7 +81,7 @@ import Data.Array.Accelerate.Trafo                                  hiding ( Del
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.AST                          as AST
 import qualified Data.Array.Accelerate.Array.Representation         as R
-import qualified Data.Array.Accelerate.Smart                        as Sugar
+import qualified Data.Array.Accelerate.Smart                        as Smart
 import qualified Data.Array.Accelerate.Trafo                        as AST
 
 import qualified Data.Array.Accelerate.Debug                        as D
@@ -90,7 +92,7 @@ import qualified Data.Array.Accelerate.Debug                        as D
 
 -- | Run a complete embedded array program using the reference interpreter.
 --
-run :: Arrays a => Sugar.Acc a -> a
+run :: Arrays a => Smart.Acc a -> a
 run a = unsafePerformIO execute
   where
     !acc    = convertAccWith config a
@@ -101,7 +103,7 @@ run a = unsafePerformIO execute
 
 -- | This is 'runN' specialised to an array program of one argument.
 --
-run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
+run1 :: (Arrays a, Arrays b) => (Smart.Acc a -> Smart.Acc b) -> a -> b
 run1 = runN
 
 -- | Prepare and execute an embedded array program.
