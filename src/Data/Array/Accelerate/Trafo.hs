@@ -41,7 +41,9 @@ module Data.Array.Accelerate.Trafo (
   Match(..), (:~:)(..),
 
   -- ** Auxiliary
-  matchDelayedOpenAcc, encodeDelayedOpenAcc, hashDelayedOpenAcc,
+  matchDelayedOpenAcc,
+  encodeDelayedOpenAcc,
+  hashDelayedOpenAcc, hashDelayedOpenAccWith,
 
 ) where
 

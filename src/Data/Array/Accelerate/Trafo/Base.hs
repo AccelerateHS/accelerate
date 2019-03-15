@@ -36,7 +36,9 @@ module Data.Array.Accelerate.Trafo.Base (
   DelayedAfun, DelayedOpenAfun,
   DelayedExp,  DelayedOpenExp,
   DelayedFun,  DelayedOpenFun,
-  matchDelayedOpenAcc, encodeDelayedOpenAcc, hashDelayedOpenAcc,
+  matchDelayedOpenAcc,
+  encodeDelayedOpenAcc,
+  hashDelayedOpenAcc, hashDelayedOpenAccWith,
 
   -- Environments
   Gamma(..), incExp, prjExp, pushExp,
@@ -92,9 +94,9 @@ instance Kit OpenAcc where
   {-# INLINEABLE encodeAcc #-}
   {-# INLINEABLE matchAcc  #-}
   {-# INLINEABLE prettyAcc #-}
-  encodeAcc (OpenAcc pacc)                  = encodePreOpenAcc encodeAcc pacc
-  matchAcc  (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
-  prettyAcc                                 = prettyOpenAcc
+  encodeAcc options (OpenAcc pacc)         = encodePreOpenAcc options encodeAcc pacc
+  matchAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
+  prettyAcc                                = prettyOpenAcc
 
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
 avarIn = inject  . Avar
@@ -200,21 +202,37 @@ instance NFData (DelayedOpenAcc aenv t) where
 --   rnf = rnfDelayedSeq
 
 
+{-# INLINEABLE hashDelayedOpenAcc #-}
 hashDelayedOpenAcc :: DelayedOpenAcc aenv a -> Hash
-hashDelayedOpenAcc = hashlazy . toLazyByteString . encodeDelayedOpenAcc
+hashDelayedOpenAcc = hashDelayedOpenAccWith defaultHashOptions
+
+{-# INLINEABLE hashDelayedOpenAccWith #-}
+hashDelayedOpenAccWith :: HashOptions -> DelayedOpenAcc aenv a -> Hash
+hashDelayedOpenAccWith options
+  = hashlazy
+  . toLazyByteString
+  . encodeDelayedOpenAcc options
 
 {-# INLINEABLE encodeDelayedOpenAcc #-}
 encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
-encodeDelayedOpenAcc (Manifest pacc) = intHost $(hashQ "Manifest") <> encodePreOpenAcc encodeDelayedOpenAcc pacc
-encodeDelayedOpenAcc Delayed{..}     = intHost $(hashQ "Delayed")  <> travE extentD <> travF indexD <> travF linearIndexD
-  where
-    {-# INLINE travE #-}
-    travE :: DelayedExp aenv sh -> Builder
-    travE = encodePreOpenExp encodeDelayedOpenAcc
+encodeDelayedOpenAcc options acc =
+  let
+      travE :: DelayedExp aenv sh -> Builder
+      travE = encodePreOpenExp options encodeDelayedOpenAcc
 
-    {-# INLINE travF #-}
-    travF :: DelayedFun aenv f -> Builder
-    travF = encodePreOpenFun encodeDelayedOpenAcc
+      travF :: DelayedFun aenv f -> Builder
+      travF = encodePreOpenFun options encodeDelayedOpenAcc
+
+      travA :: PreOpenAcc DelayedOpenAcc aenv a -> Builder
+      travA = encodePreOpenAcc options encodeDelayedOpenAcc
+
+      deep :: Builder -> Builder
+      deep x | perfect options = x
+             | otherwise       = mempty
+  in
+  case acc of
+    Manifest pacc   -> intHost $(hashQ "Manifest") <> deep (travA pacc)
+    Delayed sh f g  -> intHost $(hashQ "Delayed")  <> travE sh <> travF f <> travF g
 
 {-# INLINEABLE matchDelayedOpenAcc #-}
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
