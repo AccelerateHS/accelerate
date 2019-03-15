@@ -125,7 +125,8 @@ data tail :. head = !tail :. !head
 -- etc.
 --
 instance (Show sh, Show sz) => Show (sh :. sz) where
-  show (sh :. sz) = show sh ++ " :. " ++ show sz
+  showsPrec p (sh :. sz) =
+    showsPrec p sh . showString " :. " . showsPrec p sz
 
 -- | Marker for entire dimensions in 'Data.Array.Accelerate.Language.slice' and
 -- 'Data.Array.Accelerate.Language.replicate' descriptors.
