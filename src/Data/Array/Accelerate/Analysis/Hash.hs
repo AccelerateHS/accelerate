@@ -28,8 +28,8 @@ module Data.Array.Accelerate.Analysis.Hash (
 
   -- auxiliary
   EncodeAcc,
-  encodePreOpenAcc, encodeOpenAcc,
-  encodePreOpenExp, encodeOpenExp,
+  encodePreOpenAcc,
+  encodePreOpenExp,
   encodePreOpenFun,
   hashQ,
 
@@ -130,10 +130,6 @@ hashPreOpenExpWith options encodeAcc
 -- ------------------
 
 type EncodeAcc acc = forall aenv a. HashOptions -> acc aenv a -> Builder
-
-{-# INLINEABLE encodeOpenAcc #-}
-encodeOpenAcc :: HashOptions -> OpenAcc aenv arrs -> Builder
-encodeOpenAcc options (OpenAcc pacc) = encodePreOpenAcc options encodeOpenAcc pacc
 
 {-# INLINEABLE encodePreOpenAcc #-}
 encodePreOpenAcc
@@ -307,10 +303,6 @@ encodeSliceIndex (SliceFixed r)   = intHost $(hashQ "sliceFixed") <> encodeSlice
 
 -- Scalar expressions
 -- ------------------
-
-{-# INLINEABLE encodeOpenExp #-}
-encodeOpenExp :: HashOptions -> OpenExp env aenv exp -> Builder
-encodeOpenExp options = encodePreOpenExp options encodeOpenAcc
 
 {-# INLINEABLE encodePreOpenExp #-}
 encodePreOpenExp

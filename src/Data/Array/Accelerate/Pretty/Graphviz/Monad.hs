@@ -1,4 +1,5 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Graphviz.Monad
 -- Copyright   : [2015..2019] The Accelerate Team
@@ -18,6 +19,7 @@ import Data.Sequence                                    ( Seq )
 import System.Mem.StableName
 import Prelude
 import qualified Data.Sequence                          as Seq
+import qualified Data.Text                              as Text
 
 import Data.Array.Accelerate.Pretty.Graphviz.Type
 
@@ -50,7 +52,7 @@ execDot dot = snd <$> runDot dot
 mkLabel :: Dot Label
 mkLabel = state $ \s ->
   let n = fresh s
-  in  ( 'a' : show n, s { fresh = n + 1 } )
+  in  ( Text.pack ('a' : show n), s { fresh = n + 1 } )
 
 mkNodeId :: a -> Dot NodeId
 mkNodeId node = do
@@ -60,7 +62,7 @@ mkNodeId node = do
 mkGraph :: Dot Graph
 mkGraph =
   state $ \DotState{..} ->
-    ( Graph [] (toList $ fmap N dotNodes Seq.>< fmap E dotEdges Seq.>< fmap G dotGraph)
+    ( Graph mempty (toList $ fmap N dotNodes Seq.>< fmap E dotEdges Seq.>< fmap G dotGraph)
     , emptyState { fresh = fresh }
     )
 

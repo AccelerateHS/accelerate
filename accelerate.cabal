@@ -262,7 +262,6 @@ Library
   Build-depends:
           base                          >= 4.9 && < 4.13
         , ansi-terminal                 >= 0.6.2
-        , ansi-wl-pprint                >= 0.6
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2
         , containers                    >= 0.3
@@ -278,10 +277,13 @@ Library
         , hedgehog                      >= 0.5
         , lens                          >= 4.0
         , mtl                           >= 2.0
+        , prettyprinter                 >= 1.2
+        , prettyprinter-ansi-terminal   >= 1.0
         , primitive                     >= 0.6.4
         , tasty                         >= 0.11
         , template-haskell
         , terminal-size                 >= 0.3
+        , text                          >= 1.2
         , transformers                  >= 0.3
         , unique
         , unordered-containers          >= 0.2

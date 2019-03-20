@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE RoleAnnotations     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -79,6 +80,7 @@ import Data.Bits
 import Data.Int
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
+import Data.Text.Prettyprint.Doc
 import Data.Type.Equality
 import Data.Typeable
 import Data.Word
@@ -86,7 +88,6 @@ import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
 import Language.Haskell.TH
 import Numeric.Half
-import Text.PrettyPrint.ANSI.Leijen
 import Text.Printf
 
 import GHC.Base                                                     ( isTrue# )
@@ -359,7 +360,9 @@ instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
   show (Vec ba#) = vec (go 0#)
     where
       vec :: [a] -> String
-      vec = show . encloseSep langle rangle comma . map (text . show)
+      vec = show
+          . group . encloseSep (flatAlt "< " "<") (flatAlt " >" ">") ", "
+          . map viaShow
       --
       go :: Int# -> [a]
       go i# | isTrue# (i# <# n#)  = indexByteArray# ba# i# : go (i# +# 1#)

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ViewPatterns       #-}
 -- |
@@ -15,10 +16,14 @@
 module Data.Array.Accelerate.Pretty.Graphviz.Type
   where
 
-import Data.Maybe
 import Data.Hashable
+import Data.Maybe
+import Data.Text                                          ( Text )
+import Data.Text.Prettyprint.Doc
 import Text.Printf
-import Text.PrettyPrint.ANSI.Leijen
+import qualified Data.Text                                as Text
+
+import Data.Array.Accelerate.Pretty.Print                 ( Adoc, Keyword )
 
 
 -- Rose tree, with all information at the leaves.
@@ -36,17 +41,11 @@ instance Functor Tree where
 data Graph      = Graph Label [Statement]
 data Statement  = N Node | E Edge | G Graph
 
-data Node       = Node (Maybe Label) NodeId (Tree (Maybe Port, Doc))
+data Node       = Node (Maybe Label) NodeId (Tree (Maybe Port, Adoc))
 data NodeId     = NodeId !Int
 
--- XXX: Changed from 'Doc' to 'String' because the version of 'pretty' included
---      with ghc-7.8 does not have an Eq Doc instance, which was added in
---      pretty-1.1.1.2. However, we don't want to simply depend on a newer
---      version of the library, because this will indirectly lead to
---      a dependency on multiple versions (through, e.g., template-haskell).
---
-type Label      = String
-type Port       = String
+type Label      = Text
+type Port       = Text
 
 data Vertex     = Vertex NodeId (Maybe Port)
 data Edge       = Edge {- from -} Vertex
@@ -61,55 +60,54 @@ instance Hashable NodeId where
 instance Show Graph where
   show = show . ppGraph
 
-
 -- Pretty print a (directed) graph to dot format
 --
-ppGraph :: Graph -> Doc
+ppGraph :: Graph -> Adoc
 ppGraph (Graph l ss) =
-  vcat [ text "digraph" <+> text l <+> lbrace
+  vcat [ "digraph" <+> pretty l <+> lbrace
        , nest 4 $ vcat
                 $ punctuate semi
-                $ text "graph [compound=true]"
-                : text "node  [shape=record,fontsize=10]"
+                $ "graph [compound=true]"
+                : "node  [shape=record,fontsize=10]"
                 : map ppStatement ss
        , rbrace
        ]
 
-ppSubgraph :: Graph -> Doc
+ppSubgraph :: Graph -> Adoc
 ppSubgraph (Graph l ss) =
-  vcat [ text "subgraph cluster_" <> text l <+> lbrace
+  vcat [ "subgraph cluster_" <> pretty l <+> lbrace
        , nest 4 $ vcat
                 $ punctuate semi
-                $ text "label" <> equals <> text l
+                $ "label" <> equals <> pretty l
                 : map ppStatement ss
        , rbrace
        ]
 
-ppStatement :: Statement -> Doc
+ppStatement :: Statement -> Adoc
 ppStatement (N n) = ppNode n
 ppStatement (E e) = ppEdge e
 ppStatement (G g) = ppSubgraph g
 
-ppEdge :: Edge -> Doc
-ppEdge (Edge from to) = ppVertex from <+> text "->" <+> ppVertex to
+ppEdge :: Edge -> Adoc
+ppEdge (Edge from to) = ppVertex from <+> "->" <+> ppVertex to
 
-ppVertex :: Vertex -> Doc
-ppVertex (Vertex n p) = ppNodeId n <> maybe empty (colon<>) (fmap text p)
+ppVertex :: Vertex -> Adoc
+ppVertex (Vertex n p) = ppNodeId n <> maybe mempty (colon<>) (fmap pretty p)
 
-ppNode :: Node -> Doc
+ppNode :: Node -> Adoc
 ppNode (Node label nid body) =
   hcat [ ppNodeId nid
        , brackets
        $ hcat
        $ punctuate comma
-       $ catMaybes [ fmap ((\x -> text "xlabel" <> equals <> x) . dquotes . text) label
-                   , Just (       text "label"  <> equals <>      dquotes (ppNodeTree body))
+       $ catMaybes [ fmap ((\x -> "xlabel" <> equals <> x) . dquotes . pretty) label
+                   , Just (       "label"  <> equals <>      dquotes (ppNodeTree body))
                    ]
        ]
 
-ppNodeTree :: Tree (Maybe Port, Doc) -> Doc
-ppNodeTree (Forest trees)      = braces $ hcat (punctuate (char '|') (map ppNodeTree trees))
-ppNodeTree (Leaf (port, body)) = maybe empty (\p -> char '<' <> p <> char '>') (fmap text port) <> pp body
+ppNodeTree :: Tree (Maybe Port, Adoc) -> Adoc
+ppNodeTree (Forest trees)      = braces $ hcat (punctuate (pretty '|') (map ppNodeTree trees))
+ppNodeTree (Leaf (port, body)) = maybe mempty (\p -> pretty '<' <> p <> pretty '>') (fmap pretty port) <> pp body
   where
     -- In order for the text to be properly rendered by graphviz, we need to
     -- escape some special characters. If the text takes up more than one line,
@@ -118,37 +116,39 @@ ppNodeTree (Leaf (port, body)) = maybe empty (\p -> char '<' <> p <> char '>') (
     -- '\l'. Single lines of text remain centred, which provides better
     -- formatting for short statements and port labels.
     --
-    pp :: Doc -> Doc
-    pp = encode . renderSmart 0.7 120
+    pp :: Adoc -> Adoc
+    pp = encode . layoutSmart defaultLayoutOptions
+    -- pp = encode . renderSmart 0.7 120
 
-    encode :: SimpleDoc -> Doc
+    encode :: SimpleDocStream Keyword -> Adoc
     encode doc =
       let
-          go SFail         = error "unexpected failure rendering SimpleDoc"
-          go SEmpty        = (empty, False)
-          go (SChar c x)   = let (x',m) = go x in (text (escape c) <> x', m)
-          go (SText _ t x) = let (x',m) = go x in (text (concatMap escape t) <> x', m)
-          go (SLine i x)   = let (x',_) = go x in (text "\\l" <> spaces i <> x', True)  -- [1] left justify
-          go (SSGR _ x)    = go x
+          go SFail          = error "unexpected failure rendering SimpleDoc"
+          go SEmpty         = (mempty, False)
+          go (SChar c x)    = let (x',m) = go x in (pretty (escape c) <> x', m)
+          go (SText _ t x)  = let (x',m) = go x in (pretty (Text.concatMap escape t) <> x', m)
+          go (SLine i x)    = let (x',_) = go x in ("\\l" <> spaces i <> x', True)  -- [1] left justify
+          go (SAnnPush a x) = let (x',m) = go x in (annotate a x', m)
+          go (SAnnPop x)    = let (x',m) = go x in (unAnnotate x', m)
 
           (doc',multiline) = go doc
       in
       doc' <> if multiline
-                then text "\\l"
-                else empty
+                then "\\l"
+                else mempty
 
-    spaces :: Int -> Doc
-    spaces i | i <= 0    = empty
-             | otherwise = text (concat (replicate i "\\ "))
+    spaces :: Int -> Doc ann
+    spaces i | i <= 0    = mempty
+             | otherwise = pretty (Text.replicate i "\\ ")
 
-    escape :: Char -> String
+    escape :: Char -> Text
     escape ' '  = "\\ "         -- don't collapse multiple spaces
     escape '>'  = "\\>"
     escape '<'  = "\\<"
     escape '|'  = "\\|"
     -- escape '\n' = "\\l"      -- handled at [1] instead
-    escape c    = [c]
+    escape c    = Text.singleton c
 
-ppNodeId :: NodeId -> Doc
-ppNodeId (NodeId nid) = text (printf "Node_%#0x" nid)
+ppNodeId :: NodeId -> Adoc
+ppNodeId (NodeId nid) = pretty (printf "Node_%#0x" nid :: String)
 

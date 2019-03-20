@@ -3,8 +3,8 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
-{-# LANGUAGE IncoherentInstances  #-}
 {-# LANGUAGE InstanceSigs         #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
@@ -61,7 +61,7 @@ import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), Arr
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
-import qualified Data.Array.Accelerate.Debug            as Stats
+import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe -- for debugging
 #endif
@@ -1450,9 +1450,10 @@ applyD :: (Kit acc, Arrays as, Arrays bs)
        -> Embed       acc aenv bs
 applyD afun x
   | Alam (Abody body)   <- afun
-  , Avar ZeroIdx        <- extract body
+  , Just (Avar ZeroIdx) <- extract body
+  , Just x'             <- extract x
   = Stats.ruleFired "applyD/identity"
-  $ done $ extract x
+  $ done x'
 
   | otherwise
   = done $ Apply afun x
@@ -1491,8 +1492,8 @@ aprjD :: forall acc aenv arrs a. (Kit acc, IsAtuple arrs, Arrays arrs, Arrays a)
       ->       acc aenv arrs
       -> Embed acc aenv a
 aprjD embedAcc ix a
-  | Atuple tup <- extract a = Stats.ruleFired "aprj/Atuple" . embedAcc $ aprjAT ix tup
-  | otherwise               = done $ Aprj ix (cvtA a)
+  | Just (Atuple tup) <- extract a = Stats.ruleFired "aprj/Atuple" . embedAcc $ aprjAT ix tup
+  | otherwise                      = done $ Aprj ix (cvtA a)
   where
     cvtA :: acc aenv arrs -> acc aenv arrs
     cvtA = computeAcc . embedAcc

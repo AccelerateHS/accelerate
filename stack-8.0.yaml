@@ -9,6 +9,7 @@ packages:
 extra-deps:
 - half-0.3
 - hashtables-1.2.3.0
+- prettyprinter-1.2.1
 - primitive-0.6.4.0
 - tasty-hedgehog-0.2.0.0
 

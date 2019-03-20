@@ -36,21 +36,21 @@ import Control.Monad.State                              ( modify, gets, state )
 import Data.HashSet                                     ( HashSet )
 import Data.List
 import Data.Maybe
+import Data.String
+import Data.Text.Prettyprint.Doc
 import System.IO.Unsafe                                 ( unsafePerformIO )
-import Text.PrettyPrint.ANSI.Leijen                     hiding ( (<$>), parens )
 import Prelude                                          hiding ( exp )
-import qualified Data.Sequence                          as Seq
 import qualified Data.HashSet                           as Set
-import qualified Text.PrettyPrint.ANSI.Leijen           as PP
+import qualified Data.Sequence                          as Seq
 
 -- friends
-import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), Idx(..) )
+import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), Idx(..), tupleIdxToInt )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Elt, Tuple(..), Atuple(..), arrays, toElt, strForeign )
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Pretty.Print
 import Data.Array.Accelerate.Pretty.Graphviz.Monad
 import Data.Array.Accelerate.Pretty.Graphviz.Type
+import Data.Array.Accelerate.Pretty.Print               hiding ( Keyword(..) )
+import Data.Array.Accelerate.Trafo.Base
 
 
 -- Configuration options
@@ -77,7 +77,7 @@ data Aval env where
 --
 avalToVal :: Aval aenv -> Val aenv
 avalToVal Aempty           = Empty
-avalToVal (Apush aenv _ v) = Push (avalToVal aenv) (text v)
+avalToVal (Apush aenv _ v) = Push (avalToVal aenv) (pretty v)
 
 aprj :: Idx aenv t -> Aval aenv -> (NodeId, Label)        -- TLM: (Vertex, Label) ??
 aprj ZeroIdx      (Apush _    n v) = (n,v)
@@ -107,7 +107,7 @@ mkNode (PNode ident tree deps) label =
 
 -- Add [T|F] ports underneath the given tree.
 --
-mkTF :: Tree (Maybe Port, Doc) -> Tree (Maybe Port, Doc)
+mkTF :: Tree (Maybe Port, Adoc) -> Tree (Maybe Port, Adoc)
 mkTF this =
   Forest [ this
          , Forest [ Leaf (Just "T", "T")
@@ -165,8 +165,8 @@ graphDelayedAfun detail afun = unsafePerformIO . evalDot $! do
 -- Partially constructed graph nodes, consists of some body text and a list of
 -- vertices which we will draw edges from (and later, the port we connect into).
 --
-data PDoc  = PDoc Doc [Vertex]
-data PNode = PNode NodeId (Tree (Maybe Port, Doc)) [(Vertex, Maybe Port)]
+data PDoc  = PDoc Adoc [Vertex]
+data PNode = PNode NodeId (Tree (Maybe Port, Adoc)) [(Vertex, Maybe Port)]
 
 graphDelayedOpenAcc
     :: Detail
@@ -174,7 +174,7 @@ graphDelayedOpenAcc
     -> DelayedOpenAcc aenv a
     -> Dot Graph
 graphDelayedOpenAcc detail aenv acc = do
-  r <- prettyDelayedOpenAcc detail noParens aenv acc
+  r <- prettyDelayedOpenAcc detail context0 aenv acc
   i <- mkNodeId r
   v <- mkNode r Nothing
   _ <- mkNode (PNode i (Leaf (Nothing,"result")) [(Vertex v Nothing, Nothing)]) Nothing
@@ -185,19 +185,19 @@ graphDelayedOpenAcc detail aenv acc = do
 prettyDelayedOpenAcc
     :: forall aenv arrs.
        Detail                               -- simplified output: only print operator name
-    -> (Doc -> Doc)
+    -> Context
     -> Aval aenv
     -> DelayedOpenAcc aenv arrs
     -> Dot PNode
-prettyDelayedOpenAcc _      _    _    Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
-prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
+prettyDelayedOpenAcc _      _   _    Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
+prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
   case pacc of
     Avar ix                 -> pnode (avar ix)
     Alet bnd body           -> do
-      bnd'  <- prettyDelayedOpenAcc detail noParens aenv                 bnd
+      bnd'  <- prettyDelayedOpenAcc detail context0 aenv                 bnd
       a     <- mkLabel
       ident <- mkNode bnd' (Just a)
-      body' <- prettyDelayedOpenAcc detail noParens (Apush aenv ident a) body
+      body' <- prettyDelayedOpenAcc detail context0 (Apush aenv ident a) body
       return body'
 
     Acond p t e             -> do
@@ -210,32 +210,33 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return $ PNode ident doc deps
 
-    Apply afun acc          -> apply <$> prettyDelayedAfun    detail        aenv afun
-                                     <*> prettyDelayedOpenAcc detail parens aenv acc
+    Apply afun acc          -> apply <$> prettyDelayedAfun    detail     aenv afun
+                                     <*> prettyDelayedOpenAcc detail ctx aenv acc
 
     Awhile p f x            -> do
       ident <- mkNodeId atop
-      x'    <- replant =<< prettyDelayedOpenAcc detail parens aenv x
+      x'    <- replant =<< prettyDelayedOpenAcc detail app aenv x
       p'    <- prettyDelayedAfun detail aenv p
       f'    <- prettyDelayedAfun detail aenv f
       --
       let PNode _ (Leaf (Nothing,xb)) fvs = x'
-          loop                            = wrap $ hang 2 (sep ["awhile", text p', text f', xb ])
+          loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
-    Atuple atup             -> prettyDelayedAtuple detail wrap aenv atup
+    Atuple atup             -> prettyDelayedAtuple detail aenv atup
+
     Aprj ix atup            -> do
       ident                     <- mkNodeId atop
-      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail parens aenv atup
-      return $ PNode ident (Leaf (p, wrap (prettyTupleIdx ix <+> nest 2 d))) deps
+      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail context0 aenv atup
+      return $ PNode ident (Leaf (p, d <+> pretty '#' <+> pretty (tupleIdxToInt ix))) deps
 
     Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays @arrs) arrs) [] ]
     Unit e                  -> "unit"        .$ [ ppE e ]
-    Generate sh f           -> "generate"    .$ [ ppSh sh, ppF f ]
-    Transform sh ix f xs    -> "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppA xs ]
-    Reshape sh xs           -> "reshape"     .$ [ ppSh sh, ppA xs ]
-    Replicate _ty ix xs     -> "replicate"   .$ [ ppSh ix, ppA xs ]
-    Slice _ty xs ix         -> "slice"       .$ [ ppA xs, ppSh ix ]
+    Generate sh f           -> "generate"    .$ [ ppE sh, ppF f ]
+    Transform sh ix f xs    -> "transform"   .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
+    Reshape sh xs           -> "reshape"     .$ [ ppE sh, ppA xs ]
+    Replicate _ty ix xs     -> "replicate"   .$ [ ppE ix, ppA xs ]
+    Slice _ty xs ix         -> "slice"       .$ [ ppA xs, ppE ix ]
     Map f xs                -> "map"         .$ [ ppF f, ppA xs ]
     ZipWith f xs ys         -> "zipWith"     .$ [ ppF f, ppA xs, ppA ys ]
     Fold f e xs             -> "fold"        .$ [ ppF f, ppE e, ppA xs ]
@@ -249,24 +250,28 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     Scanr' f e xs           -> "scanr'"      .$ [ ppF f, ppE e, ppA xs ]
     Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppA xs ]
     Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
-    Backpermute sh p xs     -> "backpermute" .$ [ ppSh sh, ppF p, ppA xs ]
+    Backpermute sh p xs     -> "backpermute" .$ [ ppE sh, ppF p, ppA xs ]
     Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB bndy, ppA xs ]
     Stencil2 sten bndy1 acc1 bndy2 acc2
                             -> "stencil2"    .$ [ ppF sten, ppB bndy1, ppA acc1, ppB bndy2, ppA acc2 ]
-    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (text (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
+    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
     -- Collect{}               -> error "Collect"
 
   where
-    (.$) :: String -> [Dot PDoc] -> Dot PNode
+    (.$) :: Operator -> [Dot PDoc] -> Dot PNode
     name .$ docs = pnode =<< fmt name docs
 
-    fmt :: String -> [Dot PDoc] -> Dot PDoc
+    fmt :: Operator -> [Dot PDoc] -> Dot PDoc
     fmt name docs = do
       docs' <- sequence docs
       let args = [ x | PDoc x _ <- docs' ]
           fvs  = [ x | PDoc _ x <- docs' ]
-      return $ PDoc (wrap $ hang 2 (sep [text name, if simple detail then empty else sep args]))
-                    (concat fvs)
+          doc  = if simple detail
+                   then manifest name
+                   else parensIf (needsParens ctx name)
+                      $ nest shiftwidth
+                      $ sep ( manifest name : args )
+      return $ PDoc doc (concat fvs)
 
     pnode :: PDoc -> Dot PNode
     pnode (PDoc doc vs) = do
@@ -290,7 +295,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     --
     avar :: Idx aenv t -> PDoc
     avar ix = let (ident, v) = aprj ix aenv
-              in  PDoc (text v) [Vertex ident Nothing]
+              in  PDoc (pretty v) [Vertex ident Nothing]
 
     aenv' :: Val aenv
     aenv' = avalToVal aenv
@@ -300,16 +305,16 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     ppA acc@Manifest{}       = do
       -- Lift out and draw as a separate node. This can occur with the manifest
       -- array arguments to permute (defaults array) and stencil[2].
-      acc'  <- prettyDelayedOpenAcc detail noParens aenv acc
+      acc'  <- prettyDelayedOpenAcc detail app aenv acc
       v     <- mkLabel
       ident <- mkNode acc' (Just v)
-      return $ PDoc (text v) [Vertex ident Nothing]
+      return $ PDoc (pretty v) [Vertex ident Nothing]
     ppA (Delayed sh f _)
       | Shape a    <- sh                                             -- identical shape
       , Just Refl  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
       = ppA a
     ppA (Delayed sh f _) = do
-      PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
+      PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
 
     ppB :: forall sh e. Elt e
@@ -318,36 +323,30 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     ppB Clamp        = return (PDoc "clamp"  [])
     ppB Mirror       = return (PDoc "mirror" [])
     ppB Wrap         = return (PDoc "wrap"   [])
-    ppB (Constant e) = return (PDoc (parens $ "constant" <+> text (show (toElt e :: e))) [])
+    ppB (Constant e) = return (PDoc (prettyConst (toElt e :: e)) [])
     ppB (Function f) = ppF f
 
     ppF :: DelayedFun aenv t -> Dot PDoc
     ppF = return . uncurry PDoc . (parens . prettyDelayedFun aenv' &&& fvF)
 
     ppE :: DelayedExp aenv t -> Dot PDoc
-    ppE = return . uncurry PDoc . (prettyDelayedExp parens aenv' &&& fvE)
-
-    ppSh :: DelayedExp aenv sh -> Dot PDoc
-    ppSh = return . uncurry PDoc . (parens . prettyDelayedExp noParens aenv' &&& fvE)
+    ppE = return . uncurry PDoc . (prettyDelayedExp aenv' &&& fvE)
 
     lift :: DelayedOpenAcc aenv a -> Dot Vertex
     lift Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
     lift (Manifest (Avar ix)) = return $ Vertex (fst (aprj ix aenv)) Nothing
     lift acc                  = do
-      acc'  <- prettyDelayedOpenAcc detail noParens aenv acc
+      acc'  <- prettyDelayedOpenAcc detail context0 aenv acc
       ident <- mkNode acc' Nothing
       return $ Vertex ident Nothing
 
     apply :: Label -> PNode -> PNode
     apply f (PNode ident x vs) =
       let x' = case x of
-                 Leaf (p,d) -> Leaf (p, wrap (text f <+> d))
-                 Forest ts  -> Forest (Leaf (Nothing,text f) : ts)
+                 Leaf (p,d) -> Leaf (p, pretty f <+> d)
+                 Forest ts  -> Forest (Leaf (Nothing,pretty f) : ts)
       in
       PNode ident x' vs
-
-    parens :: Doc -> Doc
-    parens = PP.parens . align
 
 
 -- Pretty print array functions as separate sub-graphs, and return the name of
@@ -369,7 +368,7 @@ prettyDelayedAfun
 prettyDelayedAfun detail aenv afun = do
   Graph _ ss  <- mkSubgraph (go aenv afun)
   n           <- Seq.length <$> gets dotGraph
-  let label         = "afun" ++ show (n+1)
+  let label         = "afun" <> fromString (show (n+1))
       outer         = collect aenv
       (lifted,ss')  =
         flip partition ss $ \s ->
@@ -387,7 +386,7 @@ prettyDelayedAfun detail aenv afun = do
     go aenv' (Alam  f) = do
       a     <- mkLabel
       ident <- mkNodeId f
-      _     <- mkNode (PNode ident (Leaf (Nothing, text a)) []) Nothing
+      _     <- mkNode (PNode ident (Leaf (Nothing, pretty a)) []) Nothing
       go (Apush aenv' ident a) f
 
     collect :: Aval aenv' -> HashSet NodeId
@@ -400,11 +399,10 @@ prettyDelayedAfun detail aenv afun = do
 prettyDelayedAtuple
     :: forall aenv atup.
        Detail
-    -> (Doc -> Doc)
     -> Aval aenv
     -> Atuple (DelayedOpenAcc aenv) atup
     -> Dot PNode
-prettyDelayedAtuple detail wrap aenv atup = do
+prettyDelayedAtuple detail aenv atup = do
   ident         <- mkNodeId atup
   (ids, ts, vs) <- unzip3 . map (\(PNode i t v) -> (i,t,v)) <$> collect [] atup
   modify $ \s -> s { dotEdges = fmap (redirect ident ids) (dotEdges s) }
@@ -413,7 +411,7 @@ prettyDelayedAtuple detail wrap aenv atup = do
     collect :: [PNode] -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
     collect acc NilAtup          = return acc
     collect acc (SnocAtup tup a) = do
-      a'   <- replant =<< prettyDelayedOpenAcc detail wrap aenv a
+      a'   <- replant =<< prettyDelayedOpenAcc detail context0 aenv a
       tup' <- collect (a':acc) tup
       return tup'
 
@@ -428,7 +426,7 @@ prettyDelayedAtuple detail wrap aenv atup = do
     -- Since we have lifted out any non-leaves into separate nodes, we can
     -- simply tuple-up all of the elements.
     --
-    forest :: [Tree (Maybe Port, Doc)] -> Tree (Maybe Port, Doc)
+    forest :: [Tree (Maybe Port, Adoc)] -> Tree (Maybe Port, Adoc)
     forest leaves = Leaf (Nothing, tupled [ align d | Leaf (Nothing,d) <- leaves ])
 
 
@@ -443,7 +441,7 @@ replant pnode@(PNode ident tree _) =
       vacuous <- mkNodeId pnode
       a       <- mkLabel
       _       <- mkNode pnode (Just a)
-      return   $ PNode vacuous (Leaf (Nothing, text a)) [(Vertex ident Nothing, Nothing)]
+      return   $ PNode vacuous (Leaf (Nothing, pretty a)) [(Vertex ident Nothing, Nothing)]
 
 
 -- Pretty printing scalar functions and expressions
@@ -455,11 +453,11 @@ replant pnode@(PNode ident tree _) =
 -- nodes.
 --
 
-prettyDelayedFun :: Val aenv -> DelayedFun aenv f -> Doc
+prettyDelayedFun :: Val aenv -> DelayedFun aenv f -> Adoc
 prettyDelayedFun = prettyDelayedOpenFun Empty
 
-prettyDelayedExp :: (Doc -> Doc) -> Val aenv -> DelayedExp aenv t -> Doc
-prettyDelayedExp wrap = prettyDelayedOpenExp wrap Empty
+prettyDelayedExp :: Val aenv -> DelayedExp aenv t -> Adoc
+prettyDelayedExp = prettyDelayedOpenExp context0 Empty
 
 
 prettyDelayedOpenFun
@@ -467,29 +465,35 @@ prettyDelayedOpenFun
        Val env
     -> Val aenv
     -> DelayedOpenFun env aenv f
-    -> Doc
-prettyDelayedOpenFun env aenv fun = "\\\\" <> next env fun
+    -> Adoc
+prettyDelayedOpenFun env0 aenv = next "\\\\" env0
   where
     -- graphviz will silently not print a label containing the string "->",
     -- so instead we use the special token "&rarr" for a short right arrow.
     --
-    next :: Val env' -> PreOpenFun DelayedOpenAcc env' aenv f' -> Doc
-    next env' (Body body) = "&rarr;" <+> prettyDelayedOpenExp noParens env' aenv body
-    next env' (Lam fun')  =
-      let x = char 'x' <> int (sizeEnv env')
-      in  x <+> next (env' `Push` x) fun'
+    next :: Adoc -> Val env' -> PreOpenFun DelayedOpenAcc env' aenv f' -> Adoc
+    next vs env (Body body) =
+      nest shiftwidth (sep [ vs <> "&rarr;"
+                           , prettyDelayedOpenExp context0 env aenv body ])
+    next vs env (Lam  lam)  =
+      let x = pretty 'x' <> pretty (sizeEnv env)
+      in  next (vs <> x <> space) (env `Push` x) lam
 
 prettyDelayedOpenExp
-    :: (Doc -> Doc)
+    :: Context
     -> Val env
     -> Val aenv
     -> DelayedOpenExp env aenv t
-    -> Doc
-prettyDelayedOpenExp = prettyPreOpenExp pp
+    -> Adoc
+prettyDelayedOpenExp context = prettyPreOpenExp context pp ex
   where
     pp :: PrettyAcc DelayedOpenAcc
     pp _ aenv (Manifest (Avar ix)) = prj ix aenv
     pp _ _    _                    = $internalError "prettyDelayedOpenExp" "expected array variable"
+
+    ex :: ExtractAcc DelayedOpenAcc
+    ex (Manifest pacc) = pacc
+    ex Delayed{}       = $internalError "prettyDelayedOpenExp" "expected manifest array"
 
 
 -- Data dependencies
@@ -510,7 +514,7 @@ fvPreOpenFun
     -> PreOpenFun acc env aenv fun
     -> [Vertex]
 fvPreOpenFun fvA env aenv (Body b) = fvPreOpenExp fvA env                                          aenv b
-fvPreOpenFun fvA env aenv (Lam f)  = fvPreOpenFun fvA (env `Push` (char 'x' <> int (sizeEnv env))) aenv f
+fvPreOpenFun fvA env aenv (Lam f)  = fvPreOpenFun fvA (env `Push` (pretty 'x' <> pretty (sizeEnv env))) aenv f
 
 fvPreOpenExp
     :: forall acc env aenv exp.
@@ -533,7 +537,7 @@ fvPreOpenExp fvA env aenv = fv
     fv (Index acc i)            = concat [ fvA aenv acc, fv i ]
     fv (LinearIndex acc i)      = concat [ fvA aenv acc, fv i ]
     --
-    fv (Let e1 e2)              = concat [ fv e1, fvPreOpenExp fvA (env `Push` (char 'x' <> int (sizeEnv env))) aenv e2 ]
+    fv (Let e1 e2)              = concat [ fv e1, fvPreOpenExp fvA (env `Push` (pretty 'x' <> pretty (sizeEnv env))) aenv e2 ]
     fv Var{}                    = []
     fv Undef                    = []
     fv Const{}                  = []
