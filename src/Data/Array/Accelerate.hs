@@ -410,7 +410,7 @@ import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Trafo                                  () -- show instances
+import Data.Array.Accelerate.Pretty                                 () -- show instances
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 

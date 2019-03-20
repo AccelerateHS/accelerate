@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -30,8 +31,10 @@ module Data.Array.Accelerate.Trafo.Algebra (
 import Data.Bits
 import Data.Char
 import Data.Monoid
+import Data.Text                                        ( Text )
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Text
 import GHC.Float                                        ( float2Double, double2Float )
-import Text.PrettyPrint.ANSI.Leijen
 import Prelude                                          hiding ( exp )
 import qualified Prelude                                as P
 
@@ -39,12 +42,12 @@ import qualified Prelude                                as P
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                hiding ( Any )
-import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
+import Data.Array.Accelerate.Pretty.Print               ( primOperator, isInfix, opName )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Type
 
-import qualified Data.Array.Accelerate.Debug            as Stats
+import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 
 
 -- Propagate constant expressions, which are either constant valued expressions
@@ -292,8 +295,16 @@ untup2 exp
   | otherwise                                     = Nothing
 
 
-pprFun :: String -> PrimFun f -> String
-pprFun rule f = show $ text rule <+> snd (prettyPrim f)
+pprFun :: Text -> PrimFun f -> Text
+pprFun rule f
+  = renderStrict
+  . layoutCompact
+  $ pretty rule <+> f'
+  where
+    op = primOperator f
+    f' = if isInfix op
+           then parens (opName op)
+           else opName op
 
 
 -- Methods of Num
@@ -438,7 +449,15 @@ evalBAnd :: Elt a => IntegralType a -> (a,a) :-> a
 evalBAnd ty | IntegralDict <- integralDict ty = eval2 (.&.)
 
 evalBOr :: Elt a => IntegralType a -> (a,a) :-> a
-evalBOr ty | IntegralDict <- integralDict ty = eval2 (.|.)
+evalBOr ty | IntegralDict <- integralDict ty = evalBOr'
+
+evalBOr' :: (Elt a, Eq a, Num a, Bits a) => (a,a) :-> a
+evalBOr' (untup2 -> Just (x,y)) env
+  | Just 0 <- propagate env x
+  = Stats.ruleFired "x .|. 0" $ Just y
+
+evalBOr' arg env
+  = eval2 (.|.) arg env
 
 evalBXor :: Elt a => IntegralType a -> (a,a) :-> a
 evalBXor ty | IntegralDict <- integralDict ty = eval2 xor

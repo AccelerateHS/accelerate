@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
@@ -29,7 +30,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:~:)(..),
-  avarIn, kmap, fromOpenAfun,
+  avarIn, kmap,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -38,7 +39,6 @@ module Data.Array.Accelerate.Trafo.Base (
   DelayedFun,  DelayedOpenFun,
   matchDelayedOpenAcc,
   encodeDelayedOpenAcc,
-  hashDelayedOpenAcc, hashDelayedOpenAccWith,
 
   -- Environments
   Gamma(..), incExp, prjExp, pushExp,
@@ -51,12 +51,11 @@ module Data.Array.Accelerate.Trafo.Base (
 -- standard library
 import Control.Applicative
 import Control.DeepSeq
-import Crypto.Hash
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
+import Data.Maybe
 import Data.Monoid
 import Data.Type.Equality
-import Text.PrettyPrint.ANSI.Leijen                     hiding ( (<$>), (<>) )
 import Prelude                                          hiding ( until )
 
 -- friends
@@ -65,7 +64,6 @@ import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Pretty.Print
 import Data.Array.Accelerate.Trafo.Substitution
 
 import Data.Array.Accelerate.Debug.Stats                as Stats
@@ -79,34 +77,34 @@ import Data.Array.Accelerate.Debug.Stats                as Stats
 --
 class (RebuildableAcc acc, Sink acc) => Kit acc where
   inject        :: PreOpenAcc acc aenv a -> acc aenv a
-  extract       :: acc aenv a -> PreOpenAcc acc aenv a
-  fromOpenAcc   :: OpenAcc aenv a -> acc aenv a
+  extract       :: acc aenv a -> Maybe (PreOpenAcc acc aenv a)
   --
   matchAcc      :: MatchAcc acc
   encodeAcc     :: EncodeAcc acc
-  prettyAcc     :: PrettyAcc acc
 
 instance Kit OpenAcc where
-  inject                 = OpenAcc
-  extract (OpenAcc pacc) = pacc
-  fromOpenAcc            = id
-  --
   {-# INLINEABLE encodeAcc #-}
   {-# INLINEABLE matchAcc  #-}
-  {-# INLINEABLE prettyAcc #-}
-  encodeAcc options (OpenAcc pacc)         = encodePreOpenAcc options encodeAcc pacc
-  matchAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
-  prettyAcc                                = prettyOpenAcc
+  inject                 = OpenAcc
+  extract (OpenAcc pacc) = Just pacc
+  encodeAcc              = encodeOpenAcc
+  matchAcc               = matchOpenAcc
+
+encodeOpenAcc :: EncodeAcc OpenAcc
+encodeOpenAcc options (OpenAcc pacc) = encodePreOpenAcc options encodeAcc pacc
+
+matchOpenAcc :: MatchAcc OpenAcc
+matchOpenAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
 
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
 avarIn = inject  . Avar
 
 kmap :: Kit acc => (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
-kmap f = inject . f . extract
+kmap f = inject . f . fromJust . extract
 
-fromOpenAfun :: Kit acc => OpenAfun aenv f -> PreOpenAfun acc aenv f
-fromOpenAfun (Abody a) = Abody $ fromOpenAcc a
-fromOpenAfun (Alam f)  = Alam  $ fromOpenAfun f
+-- fromOpenAfun :: Kit acc => OpenAfun aenv f -> PreOpenAfun acc aenv f
+-- fromOpenAfun (Abody a) = Abody $ fromOpenAcc a
+-- fromOpenAfun (Alam f)  = Alam  $ fromOpenAfun f
 
 -- A class for testing the equality of terms homogeneously, returning a witness
 -- to the existentially quantified terms in the positive case.
@@ -180,17 +178,13 @@ instance Sink DelayedOpenAcc where
   weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
 instance Kit DelayedOpenAcc where
-  inject                  = Manifest
-  extract (Manifest pacc) = pacc
-  extract Delayed{}       = error "DelayedAcc.extract"
-  fromOpenAcc             = error "DelayedAcc.fromOpenAcc"
-  --
   {-# INLINEABLE encodeAcc #-}
   {-# INLINEABLE matchAcc  #-}
-  {-# INLINEABLE prettyAcc #-}
+  inject                  = Manifest
+  extract (Manifest pacc) = Just pacc
+  extract Delayed{}       = Nothing
   encodeAcc               = encodeDelayedOpenAcc
   matchAcc                = matchDelayedOpenAcc
-  prettyAcc               = prettyDelayedOpenAcc
 
 instance NFData (DelayedOpenAfun aenv t) where
   rnf = rnfPreOpenAfun rnfDelayedOpenAcc
@@ -200,18 +194,6 @@ instance NFData (DelayedOpenAcc aenv t) where
 
 -- instance NFData (DelayedSeq t) where
 --   rnf = rnfDelayedSeq
-
-
-{-# INLINEABLE hashDelayedOpenAcc #-}
-hashDelayedOpenAcc :: DelayedOpenAcc aenv a -> Hash
-hashDelayedOpenAcc = hashDelayedOpenAccWith defaultHashOptions
-
-{-# INLINEABLE hashDelayedOpenAccWith #-}
-hashDelayedOpenAccWith :: HashOptions -> DelayedOpenAcc aenv a -> Hash
-hashDelayedOpenAccWith options
-  = hashlazy
-  . toLazyByteString
-  . encodeDelayedOpenAcc options
 
 {-# INLINEABLE encodeDelayedOpenAcc #-}
 encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
@@ -231,8 +213,8 @@ encodeDelayedOpenAcc options acc =
              | otherwise       = mempty
   in
   case acc of
-    Manifest pacc   -> intHost $(hashQ "Manifest") <> deep (travA pacc)
-    Delayed sh f g  -> intHost $(hashQ "Delayed")  <> travE sh <> travF f <> travF g
+    Manifest pacc   -> intHost $(hashQ ("Manifest" :: String)) <> deep (travA pacc)
+    Delayed sh f g  -> intHost $(hashQ ("Delayed"  :: String)) <> travE sh <> travF f <> travF g
 
 {-# INLINEABLE matchDelayedOpenAcc #-}
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
@@ -262,51 +244,6 @@ rnfDelayedSeq (DelayedSeq env s) = rnfExtend rnfDelayedOpenAcc env
 rnfExtend :: NFDataAcc acc -> Extend acc aenv aenv' -> ()
 rnfExtend _    BaseEnv         = ()
 rnfExtend rnfA (PushEnv env a) = rnfExtend rnfA env `seq` rnfA a
---}
-
-
--- Note: If we detect that the delayed array is simply accessing an array
--- variable, then just print the variable name. That is:
---
--- > let a0 = <...> in map f (Delayed (shape a0) (\x0 -> a0!x0))
---
--- becomes
---
--- > let a0 = <...> in map f a0
---
-prettyDelayedOpenAcc :: PrettyAcc DelayedOpenAcc
-prettyDelayedOpenAcc wrap aenv acc = case acc of
-  Manifest pacc         -> prettyPreOpenAcc prettyDelayedOpenAcc wrap aenv pacc
-  Delayed sh f _
-    | Shape a           <- sh
-    , Just Refl         <- match f (Lam (Body (Index a (Var ZeroIdx))))
-    -> prettyDelayedOpenAcc wrap aenv a
-
-    | otherwise
-    -> wrap $ hang 2 (sep [ green (text "delayed")
-                          , parens (align (prettyPreExp prettyDelayedOpenAcc (parens . align) aenv sh))
-                          , parens (align (prettyPreFun prettyDelayedOpenAcc aenv f))
-                          ])
-
-{--
--- Pretty print delayed sequences
---
--- TLM: What is going on with this sequence thing, why is it closed?
---
-prettyDelayedSeq
-    :: (Doc -> Doc)                             -- apply to compound expressions
-    -> DelayedSeq arrs
-    -> Doc
-prettyDelayedSeq wrap (DelayedSeq aenv s)
-  | (d, lvl) <- pp env 0
-  =  wrap $   (hang (text "let") 2 $ sep $ punctuate semi d)
-          <+> (hang (text "in")  2 $ sep $ punctuate semi
-                                         $ prettyPreSeq wrap prettyAcc lvl 0 s)
-  where
-    pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
-    pp BaseEnv          lvl = ([],lvl)
-    pp (PushEnv env' a) lvl | (d', _) <- pp env' (lvl + 1)
-                            = (prettyAcc lvl wrap a : d', lvl)
 --}
 
 

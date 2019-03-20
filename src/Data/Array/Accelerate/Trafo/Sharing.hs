@@ -60,7 +60,8 @@ import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..),
                                                                , PreBoundary(..), Boundary, Stencil(..)
                                                                , showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
-import qualified Data.Array.Accelerate.Debug            as Debug
+import qualified Data.Array.Accelerate.Debug.Trace      as Debug
+import qualified Data.Array.Accelerate.Debug.Flags      as Debug
 
 
 -- Configuration

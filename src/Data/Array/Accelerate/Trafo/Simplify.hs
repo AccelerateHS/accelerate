@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
@@ -49,7 +50,9 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar                ( Array, Shape, Elt(..), Z(..), (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
-import qualified Data.Array.Accelerate.Debug            as Stats
+import qualified Data.Array.Accelerate.Debug.Stats      as Stats
+import qualified Data.Array.Accelerate.Debug.Flags      as Debug
+import qualified Data.Array.Accelerate.Debug.Trace      as Debug
 
 
 class Simplify f where
@@ -483,7 +486,7 @@ iterate summarise f = fix 1 . setup
     lIMIT       = 25
 
     simplify'   = Stats.simplifierDone . f
-    setup x     = Stats.trace Stats.dump_simpl_iterations (msg 0 "init" x)
+    setup x     = Debug.trace Debug.dump_simpl_iterations (msg 0 "init" x)
                 $ snd (trace 1 "simplify" (simplify' x))
 
     fix :: Int -> f a -> f a
@@ -501,7 +504,7 @@ iterate summarise f = fix 1 . setup
     u ==^ (_,v)         = isJust (match u v)
 
     trace i s v@(changed,x)
-      | changed         = Stats.trace Stats.dump_simpl_iterations (msg i s x) v
+      | changed         = Debug.trace Debug.dump_simpl_iterations (msg i s x) v
       | otherwise       = v
 
     msg :: Int -> String -> f a -> String

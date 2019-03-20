@@ -19,8 +19,6 @@ module Data.Array.Accelerate.Debug (
   module Debug,
 
   dumpGraph,
-  dumpSimplStats,
-
   debuggingIsEnabled,
   monitoringIsEnabled,
   boundsChecksAreEnabled,
@@ -94,21 +92,6 @@ internalChecksAreEnabled :: Bool
 internalChecksAreEnabled = True
 #else
 internalChecksAreEnabled = False
-#endif
-
-
--- | Display simplifier statistics. The counts are reset afterwards.
---
-{-# INLINEABLE dumpSimplStats #-}
-dumpSimplStats :: MonadIO m => m ()
-#ifdef ACCELERATE_DEBUG
-dumpSimplStats = do
-  liftIO $ Debug.when dump_simpl_stats $ do
-    stats <- simplCount
-    putTraceMsg (show stats)
-    resetSimplCount
-#else
-dumpSimplStats = return ()
 #endif
 
 
