@@ -277,7 +277,7 @@ Library
         , hedgehog                      >= 0.5
         , lens                          >= 4.0
         , mtl                           >= 2.0
-        , prettyprinter                 >= 1.0
+        , prettyprinter                 >= 1.2
         , prettyprinter-ansi-terminal   >= 1.0
         , primitive                     >= 0.6.4
         , tasty                         >= 0.11
