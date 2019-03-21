@@ -90,7 +90,7 @@ Documentation
 
   * Haddock documentation is included and linked with the individual package releases on [Hackage][Hackage].
   * Haddock documentation for in-development components can be found [here](http://tmcdonell-bot.github.io/accelerate-travis-buildbot/).
-  * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately][HOAS-conv].
+  * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [~~described separately~~][HOAS-conv].
 
 Examples
 --------
@@ -146,7 +146,7 @@ Who are we?
 
 The Accelerate team (past and present) consists of:
 
-  * Manuel M T Chakravarty ([@mchakravarty])  <!-- 2008..2017 -->
+  * Manuel M T Chakravarty ([@mchakravarty])  <!-- 2008..2017? -->
   * Gabriele Keller ([@gckeller])             <!-- 2008..     -->
   * Trevor L. McDonell ([@tmcdonell])         <!-- 2009..     -->
   * Robert Clifton-Everest ([@robeverest])    <!-- 2013..     -->
