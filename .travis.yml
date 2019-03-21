@@ -55,13 +55,16 @@ before_install:
         *  ) export HADDOCK="--haddock --no-haddock-deps" ;;
       esac
 
-install:
+  # build environment
   - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - stack --version
-  - travis_retry stack build --fast --jobs=2 --test --only-dependencies --no-terminal --no-copy-bins --flag accelerate:nofib
+
+install:
+  - export FLAGS="--jobs=2 --no-terminal --no-copy-bins --flag accelerate:nofib"
+  - travis_retry stack build $FLAGS --only-dependencies --test
 
 script:
-  - stack build --fast --jobs=2 --test --no-terminal --no-copy-bins --no-run-tests ${HADDOCK} --flag accelerate:nofib
+  - stack build $FLAGS $HADDOCK --test --no-run-tests
   - stack test accelerate:doctest --flag accelerate:nofib
   - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25' --flag accelerate:nofib
 
