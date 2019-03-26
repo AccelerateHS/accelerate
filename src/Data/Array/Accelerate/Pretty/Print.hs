@@ -211,7 +211,7 @@ prettyAlet
     -> Val aenv
     -> PreOpenAcc acc aenv arrs
     -> Adoc
-prettyAlet prettyAcc extractAcc aenv0 = wrap . collect aenv0
+prettyAlet prettyAcc extractAcc aenv0 = align . wrap . collect aenv0
   where
     collect :: Val aenv' -> PreOpenAcc acc aenv' a -> ([Adoc], Adoc)
     collect aenv =
@@ -240,8 +240,7 @@ prettyAlet prettyAcc extractAcc aenv0 = wrap . collect aenv0
     wrap ([b],  body)
       = sep [ nest shiftwidth (sep [let_, b]), in_, body ]
     wrap (bnds, body)
-      = align
-      $ vsep [ nest shiftwidth (vsep (let_:bnds))
+      = vsep [ nest shiftwidth (vsep (let_:bnds))
              , in_
              , body
              ]
@@ -396,7 +395,7 @@ prettyLet
     -> Adoc
 prettyLet ctx prettyAcc extractAcc env0 aenv
   = parensIf (needsParens ctx "let")
-  . wrap . collect env0
+  . align . wrap . collect env0
   where
     collect :: Val env' -> PreOpenExp acc env' aenv e -> ([Adoc], Adoc)
     collect env =
@@ -425,8 +424,7 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
     wrap ([b],  body)
       = sep [ nest shiftwidth (sep [let_, b]), in_, body ]
     wrap (bnds, body)
-      = align
-      $ vsep [ nest shiftwidth (vsep (let_ : bnds))
+      = vsep [ nest shiftwidth (vsep (let_ : bnds))
              , in_
              , body
              ]
@@ -446,7 +444,7 @@ prettyTuple tt prettyAcc extractAcc env aenv = wrap . collect []
     collect acc =
       \case
         NilTup        -> acc
-        SnocTup tup e -> collect (prettyPreOpenExp context0 prettyAcc extractAcc env aenv e : acc) tup
+        SnocTup tup e -> collect (align (prettyPreOpenExp context0 prettyAcc extractAcc env aenv e) : acc) tup
     --
     wrap
       | TypeRscalar VectorScalarType{} <- tt = group . encloseSep (flatAlt "< " "<") (flatAlt " >" ">") ", "
