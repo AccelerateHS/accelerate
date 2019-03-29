@@ -303,6 +303,8 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 --
 -- Instances for basic types are generated at the end of this module.
 --
+-- TLM 2019-03-22: I think this is fixed now
+--
 
 instance Elt () where
   type EltRepr () = ()
