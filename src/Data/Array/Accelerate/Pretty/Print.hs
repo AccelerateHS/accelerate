@@ -286,7 +286,7 @@ prettyPreOpenFun prettyAcc extractAcc env0 aenv = next (pretty '\\') env0
   where
     next :: Adoc -> Val env' -> PreOpenFun acc env' aenv f' -> Adoc
     next vs env (Body body)
-      -- | PrimApp f x                             <- body
+      --   PrimApp f x                             <- body
       -- , op                                      <- primOperator f
       -- , isInfix op
       -- , Tuple (NilTup `SnocTup` a `SnocTup` b)  <- x
@@ -294,7 +294,6 @@ prettyPreOpenFun prettyAcc extractAcc env0 aenv = next (pretty '\\') env0
       -- , Var ZeroIdx                             <- b
       -- = opName op -- surrounding context will add parens
       --
-      -- | otherwise
       = hang shiftwidth (sep [ vs <> "->"
                              , prettyPreOpenExp context0 prettyAcc extractAcc env aenv body])
     next vs env (Lam  lam)  =
