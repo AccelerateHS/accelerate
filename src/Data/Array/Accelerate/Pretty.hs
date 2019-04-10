@@ -35,7 +35,6 @@ module Data.Array.Accelerate.Pretty (
 ) where
 
 -- libraries
-import Control.DeepSeq
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.String
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -53,9 +52,12 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
 import Data.Array.Accelerate.Trafo
 import Data.Array.Accelerate.Pretty.Graphviz
+
+#if ACCELERATE_DEBUG
+import Control.DeepSeq
 import Data.Array.Accelerate.Debug.Flags
 import Data.Array.Accelerate.Debug.Stats
-
+#endif
 
 
 instance Arrays arrs => Show (Acc arrs) where
