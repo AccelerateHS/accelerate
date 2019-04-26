@@ -291,8 +291,6 @@ $(runQ $ do
                   destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
             |]
 
-        -- mkShapePattern :: Name -> 
-
         mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
         mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
     --
