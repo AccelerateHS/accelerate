@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -25,6 +26,10 @@ module Data.Array.Accelerate.Pattern (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
+  pattern Z_, pattern Ix,
+  pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
+  pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
+
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
@@ -44,6 +49,81 @@ pattern Pattern vars <- (destruct @context -> vars)
 class IsPattern con a t where
   construct :: t -> con a
   destruct  :: con a -> t
+
+
+-- | Pattern synonyms for indices, which may be more convenient to use than
+-- 'Data.Array.Accelerate.Lift.lift' and
+-- 'Data.Array.Accelerate.Lift.unlift'.
+--
+pattern Z_ :: Exp DIM0
+pattern Z_ = Pattern Z
+{-# COMPLETE Z_ #-}
+
+pattern Ix :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
+pattern a `Ix` b = Pattern (a :. b)
+{-# COMPLETE Ix #-}
+
+pattern I0 :: Exp DIM0
+pattern I0 = Z_
+{-# COMPLETE I0 #-}
+
+pattern I1 :: Elt a => Exp a -> Exp (Z :. a)
+pattern I1 a = Z_ `Ix` a
+{-# COMPLETE I1 #-}
+
+pattern I2 :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (Z :. a :. b)
+pattern I2 a b = Z_ `Ix` a `Ix` b
+{-# COMPLETE I2 #-}
+
+pattern I3
+    :: (Elt a, Elt b, Elt c)
+    => Exp a -> Exp b -> Exp c
+    -> Exp (Z :. a :. b :. c)
+pattern I3 a b c = Z_ `Ix` a `Ix` b `Ix` c
+{-# COMPLETE I3 #-}
+
+pattern I4
+    :: (Elt a, Elt b, Elt c, Elt d)
+    => Exp a -> Exp b -> Exp c -> Exp d
+    -> Exp (Z :. a :. b :. c :. d)
+pattern I4 a b c d = Z_ `Ix` a `Ix` b `Ix` c `Ix` d
+{-# COMPLETE I4 #-}
+
+pattern I5
+    :: (Elt a, Elt b, Elt c, Elt d, Elt e)
+    => Exp a -> Exp b -> Exp c -> Exp d -> Exp e
+    -> Exp (Z :. a :. b :. c :. d :. e)
+pattern I5 a b c d e = Z_ `Ix` a `Ix` b `Ix` c `Ix` d `Ix` e
+{-# COMPLETE I5 #-}
+
+pattern I6
+    :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+    => Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f
+    -> Exp (Z :. a :. b :. c :. d :. e :. f)
+pattern I6 a b c d e f = Z_ `Ix` a `Ix` b `Ix` c `Ix` d `Ix` e `Ix` f
+{-# COMPLETE I6 #-}
+
+pattern I7
+    :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+    => Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g
+    -> Exp (Z :. a :. b :. c :. d :. e :. f :. g)
+pattern I7 a b c d e f g = Z_ `Ix` a `Ix` b `Ix` c `Ix` d `Ix` e `Ix` f `Ix` g
+{-# COMPLETE I7 #-}
+
+pattern I8
+    :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+    => Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h
+    -> Exp (Z :. a :. b :. c :. d :. e :. f :. g :. h)
+pattern I8 a b c d e f g h = Z_ `Ix` a `Ix` b `Ix` c `Ix` d `Ix` e `Ix` f `Ix` g `Ix` h
+{-# COMPLETE I8 #-}
+
+pattern I9
+    :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+    => Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i
+    -> Exp (Z :. a :. b :. c :. d :. e :. f :. g :. h :. i)
+pattern I9 a b c d e f g h i = Z_ `Ix` a `Ix` b `Ix` c `Ix` d `Ix` e `Ix` f `Ix` g `Ix` h `Ix` i
+{-# COMPLETE I9 #-}
+
 
 -- | Specialised pattern synonyms for tuples, which may be more convenient to
 -- use than 'Data.Array.Accelerate.Lift.lift' and
@@ -173,6 +253,16 @@ pattern T16 a b c d e f g h i j k l m n o p = Pattern (a, b, c, d, e, f, g, h, i
 {-# COMPLETE T16 :: Exp #-}
 {-# COMPLETE T16 :: Acc #-}
 
+-- IsPattern instances for Shape nil and cons
+--
+instance IsPattern Exp Z Z where
+  construct _ = Exp IndexNil
+  destruct _  = Z
+
+instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
+  construct (a :. b) = Exp (a `IndexCons` b)
+  destruct t         = Exp (IndexTail t) :. Exp (IndexHead t)
+
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
 -- (unremarkable) boilerplate for us, but since the implementation is a little
 -- tricky it is debatable whether or not this is a good idea...
@@ -201,12 +291,14 @@ $(runQ $ do
                   destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccPatern = mkIsPattern (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
-        mkExpPatern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
+        -- mkShapePattern :: Name -> 
+
+        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
+        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
     --
     --
-    as <- mapM mkAccPatern [0..16]
-    es <- mapM mkExpPatern [0..16]
+    as <- mapM mkAccPattern [0..16]
+    es <- mapM mkExpPattern [0..16]
     return (concat as ++ concat es)
  )
 
