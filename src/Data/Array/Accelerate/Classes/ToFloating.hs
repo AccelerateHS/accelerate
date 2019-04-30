@@ -34,7 +34,7 @@ import Prelude                                                      hiding ( Num
 -- | Accelerate lacks an arbitrary-precision 'Prelude.Rational' type, which the
 -- standard 'Prelude.realToFrac' uses as an intermediate value when coercing
 -- to floating-point types. Instead, we use this class to capture a direct
--- coercion between to types.
+-- coercion between two types.
 --
 class ToFloating a b where
   -- | General coercion to floating types
