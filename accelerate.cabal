@@ -254,6 +254,7 @@ Flag internal-checks
   Default:              False
 
 -- Enabling this drastically increases build times
+-- See: https://gitlab.haskell.org/ghc/ghc/issues/15751
 Flag nofib
   Default:              False
   Description:          Build the nofib test suite (required for backend testing)
