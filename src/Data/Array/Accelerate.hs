@@ -333,7 +333,7 @@ module Data.Array.Accelerate (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
-  pattern Z_, pattern Ix,
+  pattern Z_, pattern Ix, pattern (::.),
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
