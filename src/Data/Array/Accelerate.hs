@@ -402,9 +402,6 @@ module Data.Array.Accelerate (
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
   CChar, CSChar, CUChar,
 
-  -- Avoid using these in your own functions wherever possible.
-  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
-
 ) where
 
 -- friends
