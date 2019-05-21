@@ -1,7 +1,8 @@
 {-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TypeOperators            #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports     #-}
 #if __GLASGOW_HASKELL__ >= 800
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 #endif
@@ -25,7 +26,7 @@ module Data.Array.Accelerate.Debug.Flags (
   setValue,
 
   Flag,
-  acc_sharing, exp_sharing, fusion, simplify, flush_cache, force_recomp,
+  acc_sharing, exp_sharing, array_fusion, simplify, flush_cache, force_recomp,
   fast_math, debug, verbose, dump_phases, dump_sharing, dump_fusion,
   dump_simpl_stats, dump_simpl_iterations, dump_vectorisation, dump_dot,
   dump_simpl_dot, dump_gc, dump_gc_stats, dump_cc, dump_ld, dump_asm, dump_exec,
@@ -41,14 +42,16 @@ module Data.Array.Accelerate.Debug.Flags (
 ) where
 
 
+import Data.Bits
 import Data.Int
+import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
 
 import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
 import qualified Control.Monad                                      as M
 
-newtype Flag  = Flag  (Ptr Int32)
+newtype Flag  = Flag  Int           -- can switch to an Enum now if we wished
 newtype Value = Value (Ptr Int32)
 
 
@@ -98,21 +101,27 @@ getValue _         = notEnabled
 
 getFlag    :: Flag -> IO Bool
 #ifdef ACCELERATE_DEBUG
-getFlag (Flag f) = toBool `fmap` peek f
+getFlag (Flag i) = do
+  flags  <- peek cmd_line_flags
+  return $! testBit flags i
 #else
 getFlag _        = notEnabled
 #endif
 
 setFlag    :: Flag -> IO ()
 #ifdef ACCELERATE_DEBUG
-setFlag (Flag f) = poke f (fromBool True)
+setFlag (Flag i) = do
+  flags <- peek cmd_line_flags
+  poke cmd_line_flags (setBit flags i)
 #else
 setFlag _        = notEnabled
 #endif
 
 clearFlag  :: Flag -> IO ()
 #ifdef ACCELERATE_DEBUG
-clearFlag (Flag f) = poke f (fromBool False)
+clearFlag (Flag i) = do
+  flags <- peek cmd_line_flags
+  poke cmd_line_flags (clearBit flags i)
 #else
 clearFlag _        = notEnabled
 #endif
@@ -135,9 +144,10 @@ fromBool :: Bool -> Int32
 fromBool False = 0
 fromBool True  = 1
 
-
 -- Import the underlying flag variables. These are defined in the file
--- cbits/flags.c and initialised at program initialisation.
+-- cbits/flags.c as a bitfield and initialised at program initialisation.
+--
+foreign import ccall "&__cmd_line_flags" cmd_line_flags :: Ptr Word32
 
 -- These @-f<blah>=INT@ values are used by the compiler
 --
@@ -145,31 +155,32 @@ foreign import ccall "&__unfolding_use_threshold" unfolding_use_threshold :: Val
 
 -- These @-f<blah>@ flags can be reversed with @-fno-<blah>@
 --
-foreign import ccall "&__acc_sharing"             acc_sharing             :: Flag   -- recover sharing of array computations
-foreign import ccall "&__exp_sharing"             exp_sharing             :: Flag   -- recover sharing of scalar expressions
-foreign import ccall "&__fusion"                  fusion                  :: Flag   -- fuse array expressions
-foreign import ccall "&__simplify"                simplify                :: Flag   -- simplify scalar expressions
-foreign import ccall "&__fast_math"               fast_math               :: Flag   -- delete persistent compilation cache(s)
-foreign import ccall "&__flush_cache"             flush_cache             :: Flag   -- force recompilation of array programs
-foreign import ccall "&__force_recomp"            force_recomp            :: Flag   -- use faster, less precise math library operations
-foreign import ccall "&__debug"                   debug                   :: Flag   -- compile code with debugging symbols (-g)
+seq_sharing           = Flag  0 -- ^ recover sharing of sequence expressions
+acc_sharing           = Flag  1 -- ^ recover sharing of array computations
+exp_sharing           = Flag  2 -- ^ recover sharing of scalar expressions
+array_fusion          = Flag  3 -- ^ fuse array expressions
+simplify              = Flag  4 -- ^ simplify scalar expressions
+fast_math             = Flag  5 -- ^ delete persistent compilation cache(s)
+flush_cache           = Flag  6 -- ^ force recompilation of array programs
+force_recomp          = Flag  7 -- ^ use faster, less precise math library operations
 
 -- These debugging flags are disable by default and are enabled with @-d<blah>@
 --
-foreign import ccall "&__verbose"                 verbose                 :: Flag   -- be very chatty
-foreign import ccall "&__dump_phases"             dump_phases             :: Flag   -- print information about each phase of the compiler
-foreign import ccall "&__dump_sharing"            dump_sharing            :: Flag   -- sharing recovery phase
-foreign import ccall "&__dump_fusion"             dump_fusion             :: Flag   -- array fusion phase
-foreign import ccall "&__dump_simpl_stats"        dump_simpl_stats        :: Flag   -- statistics form fusion/simplification
-foreign import ccall "&__dump_simpl_iterations"   dump_simpl_iterations   :: Flag   -- output from each simplifier iteration
-foreign import ccall "&__dump_vectorisation"      dump_vectorisation      :: Flag   -- output from the vectoriser
-foreign import ccall "&__dump_dot"                dump_dot                :: Flag   -- generate dot output of the program
-foreign import ccall "&__dump_simpl_dot"          dump_simpl_dot          :: Flag   -- generate simplified dot output
-foreign import ccall "&__dump_gc"                 dump_gc                 :: Flag   -- trace garbage collector
-foreign import ccall "&__dump_gc_stats"           dump_gc_stats           :: Flag   -- print final GC statistics
-foreign import ccall "&__dump_cc"                 dump_cc                 :: Flag   -- trace code generation & compilation
-foreign import ccall "&__dump_ld"                 dump_ld                 :: Flag   -- trace runtime linker
-foreign import ccall "&__dump_asm"                dump_asm                :: Flag   -- trace assembler
-foreign import ccall "&__dump_exec"               dump_exec               :: Flag   -- trace execution
-foreign import ccall "&__dump_sched"              dump_sched              :: Flag   -- trace scheduler
+debug                 = Flag  8 -- ^ compile code with debugging symbols (-g)
+verbose               = Flag  9 -- ^ be very chatty
+dump_phases           = Flag 10 -- ^ print information about each phase of the compiler
+dump_sharing          = Flag 11 -- ^ sharing recovery phase
+dump_fusion           = Flag 12 -- ^ array fusion phase
+dump_simpl_stats      = Flag 13 -- ^ statistics form fusion/simplification
+dump_simpl_iterations = Flag 14 -- ^ output from each simplifier iteration
+dump_vectorisation    = Flag 15 -- ^ output from the vectoriser
+dump_dot              = Flag 16 -- ^ generate dot output of the program
+dump_simpl_dot        = Flag 17 -- ^ generate simplified dot output
+dump_gc               = Flag 18 -- ^ trace garbage collector
+dump_gc_stats         = Flag 19 -- ^ print final GC statistics
+dump_cc               = Flag 20 -- ^ trace code generation & compilation
+dump_ld               = Flag 21 -- ^ trace runtime linker
+dump_asm              = Flag 22 -- ^ trace assembler
+dump_exec             = Flag 23 -- ^ trace execution
+dump_sched            = Flag 24 -- ^ trace scheduler
 

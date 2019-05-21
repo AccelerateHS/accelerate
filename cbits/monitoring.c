@@ -15,6 +15,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "flags.h"
+
 
 /* These monitoring counters are globals which will be accessed from the
  * Haskell side.
@@ -33,8 +35,7 @@ int64_t __total_bytes_evicted_from_remote   = 0;
 int64_t __num_remote_gcs                    = 0;
 int64_t __num_evictions                     = 0;
 
-extern int32_t __dump_gc;
-extern int32_t __dump_gc_stats;
+extern __flags_t __cmd_line_flags;
 
 #if defined(ACCELERATE_DEBUG)
 
@@ -117,7 +118,7 @@ static char* format_int64(char *buffer, int64_t x)
  */
 __attribute__((destructor)) void dump_gc_stats(void)
 {
-  if (__dump_gc_stats) {
+  if (__cmd_line_flags.dump_gc_stats) {
     /*
      * int64 ranges from -9223372036854775807..9223372036854775807, so we need a
      * buffer size of at least 27 characters (including the terminating \0) to

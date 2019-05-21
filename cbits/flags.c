@@ -25,77 +25,70 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "flags.h"
+#include "HsFFI.h"
+
 
 /* These globals will be accessed from the Haskell side to implement the
  * corresponding behaviour.
  */
-int32_t __acc_sharing               = 1;
-int32_t __exp_sharing               = 1;
-int32_t __fusion                    = 1;
-int32_t __simplify                  = 1;
-int32_t __unfolding_use_threshold   = 1;
-int32_t __fast_math                 = 1;
-int32_t __flush_cache               = 0;
-int32_t __force_recomp              = 0;
-int32_t __debug                     = 0;
 
-int32_t __verbose                   = 0;
-int32_t __dump_phases               = 0;
-int32_t __dump_sharing              = 0;
-int32_t __dump_fusion               = 0;
-int32_t __dump_simpl_stats          = 0;
-int32_t __dump_simpl_iterations     = 0;
-int32_t __dump_vectorisation        = 0;
-int32_t __dump_dot                  = 0;
-int32_t __dump_simpl_dot            = 0;
-int32_t __dump_gc                   = 0;
-int32_t __dump_gc_stats             = 0;
-int32_t __dump_cc                   = 0;
-int32_t __dump_ld                   = 0;
-int32_t __dump_asm                  = 0;
-int32_t __dump_exec                 = 0;
-int32_t __dump_sched                = 0;
+__flags_t __cmd_line_flags          = { 0b111111 };
+HsInt     __unfolding_use_threshold = 1;
+
 
 #if defined(ACCELERATE_DEBUG)
 
+enum {
+  OPT_ENABLE = 1,
+  OPT_DISABLE,
+  OPT_UNFOLDING_USE_THRESHOLD
+};
+
+/* NOTE: [adding new command line options]
+ *
+ * When adding new options, make sure the offset value in the OPT_DISABLE branch
+ * is updated, and that the flags are kept in order.
+ */
 static const char*         shortopts  = "";
 static const struct option longopts[] =
-  { { "dverbose",                     no_argument,       &__verbose,               1    }
-  , { "ddump-phases",                 no_argument,       &__dump_phases,           1    }
-  , { "ddump-sharing",                no_argument,       &__dump_sharing,          1    }
-  , { "ddump-fusion",                 no_argument,       &__dump_fusion,           1    }
-  , { "ddump-simpl-stats",            no_argument,       &__dump_simpl_stats,      1    }
-  , { "ddump-simpl-iterations",       no_argument,       &__dump_simpl_iterations, 1    }
-  , { "ddump-vectorisation",          no_argument,       &__dump_vectorisation,    1    }
-  , { "ddump-dot",                    no_argument,       &__dump_dot,              1    }
-  , { "ddump-simpl-dot",              no_argument,       &__dump_simpl_dot,        1    }
-  , { "ddump-gc",                     no_argument,       &__dump_gc,               1    }
-  , { "ddump-gc-stats",               no_argument,       &__dump_gc_stats,         1    }
-  , { "ddump-cc",                     no_argument,       &__dump_cc,               1    }
-  , { "ddump-ld",                     no_argument,       &__dump_ld,               1    }
-  , { "ddump-asm",                    no_argument,       &__dump_asm,              1    }
-  , { "ddump-exec",                   no_argument,       &__dump_exec,             1    }
-  , { "ddump-sched",                  no_argument,       &__dump_sched,            1    }
+  { { "fseq-sharing",                 no_argument,       NULL, OPT_ENABLE                  }
+  , { "facc-sharing",                 no_argument,       NULL, OPT_ENABLE                  }
+  , { "fexp-sharing",                 no_argument,       NULL, OPT_ENABLE                  }
+  , { "ffusion",                      no_argument,       NULL, OPT_ENABLE                  }
+  , { "fsimplify",                    no_argument,       NULL, OPT_ENABLE                  }
+  , { "ffast-math",                   no_argument,       NULL, OPT_ENABLE                  }
+  , { "fflush-cache",                 no_argument,       NULL, OPT_ENABLE                  }
+  , { "fforce-recomp",                no_argument,       NULL, OPT_ENABLE                  }
 
-  , { "facc-sharing",                 no_argument,       &__acc_sharing,           1    }
-  , { "fexp-sharing",                 no_argument,       &__exp_sharing,           1    }
-  , { "ffusion",                      no_argument,       &__fusion,                1    }
-  , { "fsimplify",                    no_argument,       &__simplify,              1    }
-  , { "fflush-cache",                 no_argument,       &__flush_cache,           1    }
-  , { "fforce-recomp",                no_argument,       &__force_recomp,          1    }
-  , { "ffast-math",                   no_argument,       &__fast_math,             1    }
-  , { "fdebug",                       no_argument,       &__debug,                 1    }
+  , { "ddebug",                       no_argument,       NULL, OPT_ENABLE                  }
+  , { "dverbose",                     no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-phases",                 no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-sharing",                no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-fusion",                 no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-simpl-stats",            no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-simpl-iterations",       no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-vectorisation",          no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-dot",                    no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-simpl-dot",              no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-gc",                     no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-gc-stats",               no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-cc",                     no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-ld",                     no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-asm",                    no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-exec",                   no_argument,       NULL, OPT_ENABLE                  }
+  , { "ddump-sched",                  no_argument,       NULL, OPT_ENABLE                  }
 
-  , { "fno-acc-sharing",              no_argument,       &__acc_sharing,           0    }
-  , { "fno-exp-sharing",              no_argument,       &__exp_sharing,           0    }
-  , { "fno-fusion",                   no_argument,       &__fusion,                0    }
-  , { "fno-simplify",                 no_argument,       &__simplify,              0    }
-  , { "fno-flush-cache",              no_argument,       &__flush_cache,           0    }
-  , { "fno-force-recomp",             no_argument,       &__force_recomp,          0    }
-  , { "fno-fast-math",                no_argument,       &__fast_math,             0    }
-  , { "fno-debug",                    no_argument,       &__debug,                 0    }
+  , { "fno-seq-sharing",              no_argument,       NULL, OPT_DISABLE                 }
+  , { "fno-acc-sharing",              no_argument,       NULL, OPT_DISABLE                 }
+  , { "fno-exp-sharing",              no_argument,       NULL, OPT_DISABLE                 }
+  , { "fno-fusion",                   no_argument,       NULL, OPT_DISABLE                 }
+  , { "fno-simplify",                 no_argument,       NULL, OPT_DISABLE                 }
+  , { "fno-fast-math",                no_argument,       NULL, OPT_DISABLE                 }
+  , { "fno-flush-cache",              no_argument,       NULL, OPT_DISABLE                 }
+  , { "fno-force-recomp",             no_argument,       NULL, OPT_DISABLE                 }
 
-  , { "funfolding-use-threshold=INT", required_argument, NULL,                     1000 }
+  , { "funfolding-use-threshold=INT", required_argument, NULL, OPT_UNFOLDING_USE_THRESHOLD }
 
   /* required sentinel */
   , { NULL, 0, NULL, 0 }
@@ -127,9 +120,17 @@ static void parse_options(int argc, char *argv[])
     case 0:
       break;
 
+    case OPT_ENABLE:
+      __cmd_line_flags.bitfield |= 1 << longindex;
+      break;
+
+    case OPT_DISABLE:
+      __cmd_line_flags.bitfield &= ~(1 << (longindex - 25));  // SEE: [adding new command line options]
+      break;
+
     /* attempt to decode the argument to flags which require them */
-    case 1000:
-      if (1 != sscanf(optarg, "%d", &__unfolding_use_threshold)) {
+    case OPT_UNFOLDING_USE_THRESHOLD:
+      if (1 != sscanf(optarg, "%lld", &__unfolding_use_threshold)) {
         fprintf(stderr, "%s: option `-%s' requires an integer argument, but got: %s\n"
                       , basename(argv[0])
                       , longopts[longindex].name
