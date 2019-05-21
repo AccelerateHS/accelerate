@@ -15,8 +15,6 @@
  * corresponding fields are removed from the command line. Note that we can't at
  * this stage update the number of command line arguments, but with some tricks
  * they can be mostly deleted.
- *
- * This is a hack to work around <https://github.com/haskell/cabal/issues/4937>
  */
 
 #include <ctype.h>
