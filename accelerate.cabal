@@ -433,6 +433,8 @@ Library
         Data.Array.Accelerate.Test.NoFib.Issues.Issue364
         Data.Array.Accelerate.Test.NoFib.Issues.Issue407
         Data.Array.Accelerate.Test.NoFib.Issues.Issue409
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue436
+
   else
     cpp-options:
         -DACCELERATE_DISABLE_NOFIB
