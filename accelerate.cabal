@@ -123,6 +123,8 @@ Stability:              Experimental
 Extra-source-files:
     README.md
     CHANGELOG.md
+    cbits/*.c
+    cbits/*.h
 
 Extra-doc-files:
     images/*.png
