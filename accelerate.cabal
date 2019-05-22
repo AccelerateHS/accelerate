@@ -430,6 +430,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Issues.Issue287
         Data.Array.Accelerate.Test.NoFib.Issues.Issue288
         Data.Array.Accelerate.Test.NoFib.Issues.Issue362
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue364
         Data.Array.Accelerate.Test.NoFib.Issues.Issue407
         Data.Array.Accelerate.Test.NoFib.Issues.Issue409
   else
