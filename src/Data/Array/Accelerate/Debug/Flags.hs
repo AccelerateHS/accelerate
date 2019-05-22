@@ -155,32 +155,32 @@ foreign import ccall "&__unfolding_use_threshold" unfolding_use_threshold :: Val
 
 -- These @-f<blah>@ flags can be reversed with @-fno-<blah>@
 --
-seq_sharing           = Flag  0 -- ^ recover sharing of sequence expressions
-acc_sharing           = Flag  1 -- ^ recover sharing of array computations
-exp_sharing           = Flag  2 -- ^ recover sharing of scalar expressions
-array_fusion          = Flag  3 -- ^ fuse array expressions
-simplify              = Flag  4 -- ^ simplify scalar expressions
-fast_math             = Flag  5 -- ^ delete persistent compilation cache(s)
-flush_cache           = Flag  6 -- ^ force recompilation of array programs
-force_recomp          = Flag  7 -- ^ use faster, less precise math library operations
+seq_sharing           = Flag  0 -- recover sharing of sequence expressions
+acc_sharing           = Flag  1 -- recover sharing of array computations
+exp_sharing           = Flag  2 -- recover sharing of scalar expressions
+array_fusion          = Flag  3 -- fuse array expressions
+simplify              = Flag  4 -- simplify scalar expressions
+fast_math             = Flag  5 -- delete persistent compilation cache(s)
+flush_cache           = Flag  6 -- force recompilation of array programs
+force_recomp          = Flag  7 -- use faster, less precise math library operations
 
 -- These debugging flags are disable by default and are enabled with @-d<blah>@
 --
-debug                 = Flag  8 -- ^ compile code with debugging symbols (-g)
-verbose               = Flag  9 -- ^ be very chatty
-dump_phases           = Flag 10 -- ^ print information about each phase of the compiler
-dump_sharing          = Flag 11 -- ^ sharing recovery phase
-dump_fusion           = Flag 12 -- ^ array fusion phase
-dump_simpl_stats      = Flag 13 -- ^ statistics form fusion/simplification
-dump_simpl_iterations = Flag 14 -- ^ output from each simplifier iteration
-dump_vectorisation    = Flag 15 -- ^ output from the vectoriser
-dump_dot              = Flag 16 -- ^ generate dot output of the program
-dump_simpl_dot        = Flag 17 -- ^ generate simplified dot output
-dump_gc               = Flag 18 -- ^ trace garbage collector
-dump_gc_stats         = Flag 19 -- ^ print final GC statistics
-dump_cc               = Flag 20 -- ^ trace code generation & compilation
-dump_ld               = Flag 21 -- ^ trace runtime linker
-dump_asm              = Flag 22 -- ^ trace assembler
-dump_exec             = Flag 23 -- ^ trace execution
-dump_sched            = Flag 24 -- ^ trace scheduler
+debug                 = Flag  8 -- compile code with debugging symbols (-g)
+verbose               = Flag  9 -- be very chatty
+dump_phases           = Flag 10 -- print information about each phase of the compiler
+dump_sharing          = Flag 11 -- sharing recovery phase
+dump_fusion           = Flag 12 -- array fusion phase
+dump_simpl_stats      = Flag 13 -- statistics form fusion/simplification
+dump_simpl_iterations = Flag 14 -- output from each simplifier iteration
+dump_vectorisation    = Flag 15 -- output from the vectoriser
+dump_dot              = Flag 16 -- generate dot output of the program
+dump_simpl_dot        = Flag 17 -- generate simplified dot output
+dump_gc               = Flag 18 -- trace garbage collector
+dump_gc_stats         = Flag 19 -- print final GC statistics
+dump_cc               = Flag 20 -- trace code generation & compilation
+dump_ld               = Flag 21 -- trace runtime linker
+dump_asm              = Flag 22 -- trace assembler
+dump_exec             = Flag 23 -- trace execution
+dump_sched            = Flag 24 -- trace scheduler
 
