@@ -9,6 +9,8 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
+-- https://github.com/AccelerateHS/accelerate/issues/436
+--
 
 module Data.Array.Accelerate.Test.NoFib.Issues.Issue436 (
 
