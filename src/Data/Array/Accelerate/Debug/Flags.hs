@@ -136,13 +136,6 @@ notEnabled :: a
 notEnabled = error $ unlines [ "Data.Array.Accelerate: Debugging options are disabled."
                              , "Reinstall package 'accelerate' with '-fdebug' to enable them." ]
 
-toBool :: Int32 -> Bool
-toBool 0 = False
-toBool _ = True
-
-fromBool :: Bool -> Int32
-fromBool False = 0
-fromBool True  = 1
 
 -- Import the underlying flag variables. These are defined in the file
 -- cbits/flags.c as a bitfield and initialised at program initialisation.
