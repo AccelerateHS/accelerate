@@ -8,6 +8,9 @@
  * Portability : non-portable (GHC extensions)
  */
 
+#ifndef __ACCELERATE_FLAGS_H__
+#define __ACCELERATE_FLAGS_H__
+
 typedef union {
   uint32_t bitfield;
 
@@ -40,4 +43,6 @@ typedef union {
     uint32_t dump_sched             : 1;
   };
 } __flags_t;
+
+#endif // __ACCELERATE_FLAGS_H__
 
