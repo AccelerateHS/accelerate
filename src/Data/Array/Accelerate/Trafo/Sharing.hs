@@ -13,7 +13,6 @@
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
-{-# OPTIONS_GHC -fno-warn-orphans        #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -48,13 +47,10 @@ module Data.Array.Accelerate.Trafo.Sharing (
 -- standard library
 import Control.Applicative                              hiding ( Const )
 import Control.Monad.Fix
-import Data.Bits
 import Data.Hashable
-import Data.List
+import Data.List                                        hiding ( (\\) )
 import Data.Maybe
 import Data.Typeable
-import Data.Word
-import Foreign.Storable
 import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
 import Text.Printf
@@ -65,42 +61,25 @@ import qualified Data.HashSet                           as Set
 import Prelude
 
 -- friends
-import Data.BitSet                                      ( BitSet(..) )
-import qualified Data.BitSet                            as Options
-
+import Data.BitSet                                      ( (\\), member )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Trafo.Config
 import Data.Array.Accelerate.Array.Sugar                as Sugar hiding ( (!!) )
 import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..), OpenAcc(..), Acc
                                                                , PreOpenExp(..), OpenExp, PreExp, Exp
                                                                , PreBoundary(..), Boundary, Stencil(..)
                                                                , showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
-import qualified Data.Array.Accelerate.Debug.Trace      as Debug
-import qualified Data.Array.Accelerate.Debug.Flags      as Debug
+import Data.Array.Accelerate.Debug.Trace                as Debug
+import Data.Array.Accelerate.Debug.Flags                as Debug
 
 
 -- Configuration
 -- -------------
 
-type Config = BitSet Word32 Option
-
-data Option
-  = RecoverSeqSharing       -- ^ Recover sharing of sequence computations ?
-  | RecoverAccSharing       -- ^ Recover sharing of array computations ?
-  | RecoverExpSharing       -- ^ Recover sharing of scalar expressions ?
-  | FloatOutAcc             -- ^ Always float array computations out of expressions ?
-  deriving (Show, Enum)
-
-defaultOptions :: Config
-#if ACCELERATE_DEBUG
-defaultOptions = unsafePerformIO $ do
-  v      <- (0b111 .&.) <$> peek Debug.__cmd_line_flags -- SEE: [layout of command line options bitfield]
-  return $! Options.insert FloatOutAcc (BitSet v)
-#else
-defaultOptions = [RecoverAccSharing, RecoverExpSharing, RecoverSeqSharing, FloatOutAcc]
-#endif
-
+float_out_acc :: Flag
+float_out_acc = Flag 31
 
 -- Layouts
 -- -------
@@ -585,7 +564,7 @@ mkReplicate = AST.Replicate (sliceIndex @slix)
 convertFun :: Function f => f -> AST.Fun () (FunctionR f)
 convertFun
   = convertFunWith
-  $ defaultOptions Options.\\ [RecoverSeqSharing, RecoverAccSharing, FloatOutAcc]
+  $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing, float_out_acc] }
 
 convertFunWith :: Function f => Config -> f -> AST.Fun () (FunctionR f)
 convertFunWith config = convertOpenFun config EmptyLayout
@@ -615,7 +594,7 @@ instance Elt b => Function (Exp b) where
 convertExp :: Elt e => Exp e -> AST.Exp () e
 convertExp
   = convertExpWith
-  $ defaultOptions Options.\\ [RecoverSeqSharing, RecoverAccSharing, FloatOutAcc]
+  $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing, float_out_acc] }
 
 convertExpWith :: Elt e => Config -> Exp e -> AST.Exp () e
 convertExpWith config = convertOpenExp config EmptyLayout
@@ -1335,7 +1314,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                           -> IO (UnscopedAcc arrs, Int)
               reconstruct newAcc
                 = case heightIfRepeatedOccurrence of
-                    Just height | Options.member RecoverAccSharing config
+                    Just height | acc_sharing `member` options config
                       -> return (UnscopedAcc [] (AvarSharing (StableNameHeight sn height)), height)
                     _ -> do (acc, height) <- newAcc
                             return (UnscopedAcc [] (AccSharing (StableNameHeight sn height) acc), height)
@@ -1666,7 +1645,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                           -> IO (UnscopedExp a, Int)
               reconstruct newExp
                 = case heightIfRepeatedOccurrence of
-                    Just height | Options.member RecoverExpSharing config
+                    Just height | exp_sharing `member` options config
                       -> return (UnscopedExp [] (VarSharing (StableNameHeight sn height)), height)
                     _ -> do (exp, height) <- newExp
                             return (UnscopedExp [] (ExpSharing (StableNameHeight sn height) exp), height)
@@ -2367,7 +2346,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (ScopedAcc [] (AvarSharing sn), thisCount)
         reconstruct newAcc subCount
               -- shared subtree => replace by a sharing variable (if 'recoverAccSharing' enabled)
-          | accOccCount > 1 && Options.member RecoverAccSharing config
+          | accOccCount > 1 && acc_sharing `member` options config
           = let allCount = (StableSharingAcc sn sharingAcc `insertAccNode` newCount)
             in
             tracePure ("SHARED" ++ completed) (show allCount)
@@ -2626,9 +2605,9 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
                          -> (ScopedExp t, NodeCounts)
         maybeFloatOutAcc c acc@(ScopedAcc _ (AvarSharing _)) accCount        -- nothing to float out
           = reconstruct (c acc) accCount
-        maybeFloatOutAcc c acc                 accCount
-          | Options.member FloatOutAcc config = reconstruct (c var) ((stableAcc `insertAccNode` noNodeCounts) +++ accCount)
-          | otherwise                         = reconstruct (c acc) accCount
+        maybeFloatOutAcc c acc accCount
+          | float_out_acc `member` options config = reconstruct (c var) ((stableAcc `insertAccNode` noNodeCounts) +++ accCount)
+          | otherwise                             = reconstruct (c acc) accCount
           where
              (var, stableAcc) = abstract acc (\(ScopedAcc _ s) -> s)
 
@@ -2665,7 +2644,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (ScopedExp [] (VarSharing sn), thisCount)
         reconstruct newExp subCount
               -- shared subtree => replace by a sharing variable (if 'recoverExpSharing' enabled)
-          | expOccCount > 1 && Options.member RecoverExpSharing config
+          | expOccCount > 1 && exp_sharing `member` options config
           = let allCount = StableSharingExp sn sharingExp `insertExpNode` newCount
             in
             tracePure ("SHARED" ++ completed) (show allCount)

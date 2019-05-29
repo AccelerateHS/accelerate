@@ -95,7 +95,7 @@ import qualified Data.Array.Accelerate.Debug                        as D
 run :: Arrays a => Smart.Acc a -> a
 run a = unsafePerformIO execute
   where
-    !acc    = convertAccWith config a
+    !acc    = convertAcc a
     execute = do
       D.dumpGraph $!! acc
       D.dumpSimplStats
@@ -111,7 +111,7 @@ run1 = runN
 runN :: Afunction f => f -> AfunctionR f
 runN f = go
   where
-    !acc    = convertAfunWith config f
+    !acc    = convertAfun f
     !afun   = unsafePerformIO $ do
                 D.dumpGraph $!! acc
                 D.dumpSimplStats
@@ -130,17 +130,6 @@ runN f = go
 -- streamOut seq = let seq' = convertSeqWith config seq
 --                 in evalDelayedSeq defaultSeqConfig seq'
 
-
-config :: Phase
-config =  Phase
-  { recoverAccSharing      = True
-  , recoverExpSharing      = True
-  , recoverSeqSharing      = True
-  , floatOutAccFromExp     = True
-  , enableAccFusion        = True
-  , convertOffsetOfSegment = False
-  -- , vectoriseSequences     = True
-  }
 
 -- Debugging
 -- ---------

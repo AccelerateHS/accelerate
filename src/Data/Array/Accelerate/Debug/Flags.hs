@@ -26,8 +26,8 @@ module Data.Array.Accelerate.Debug.Flags (
   getValue,
   setValue,
 
-  Flag,
-  acc_sharing, exp_sharing, array_fusion, simplify, flush_cache, force_recomp,
+  Flag(..),
+  seq_sharing, acc_sharing, exp_sharing, array_fusion, simplify, flush_cache, force_recomp,
   fast_math, debug, verbose, dump_phases, dump_sharing, dump_fusion,
   dump_simpl_stats, dump_simpl_iterations, dump_vectorisation, dump_dot,
   dump_simpl_dot, dump_gc, dump_gc_stats, dump_cc, dump_ld, dump_asm, dump_exec,
@@ -39,6 +39,8 @@ module Data.Array.Accelerate.Debug.Flags (
 
   when,
   unless,
+
+  __cmd_line_flags,
 
 ) where
 
@@ -52,9 +54,42 @@ import Foreign.Storable
 import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
 import qualified Control.Monad                                      as M
 
-newtype Flag  = Flag  Int         -- can switch to an Enum now if we wished
+newtype Flag  = Flag  Int         -- could switch to a Haskell Enum if we wished
 newtype Value = Value (Ptr Int)   -- of type HsInt in flags.c
 
+instance Enum Flag where
+  toEnum            = Flag
+  fromEnum (Flag x) = x
+
+instance Show Flag where
+  show (Flag x) =
+    case x of
+      0  -> "seq-sharing"
+      1  -> "acc-sharing"
+      2  -> "exp-sharing"
+      3  -> "fusion"
+      4  -> "simplify"
+      5  -> "fast-math"
+      6  -> "flush_cache"
+      7  -> "force-recomp"
+      8  -> "debug"
+      9  -> "verbose"
+      10 -> "dump-phases"
+      11 -> "dump-sharing"
+      12 -> "dump-fusion"
+      13 -> "dump-simpl_stats"
+      14 -> "dump-simpl_iterations"
+      15 -> "dump-vectorisation"
+      16 -> "dump-dot"
+      17 -> "dump-simpl_dot"
+      18 -> "dump-gc"
+      19 -> "dump-gc_stats"
+      20 -> "dump-cc"
+      21 -> "dump-ld"
+      22 -> "dump-asm"
+      23 -> "dump-exec"
+      24 -> "dump-sched"
+      _  -> show x
 
 -- | Conditional execution of a monadic debugging expression.
 --

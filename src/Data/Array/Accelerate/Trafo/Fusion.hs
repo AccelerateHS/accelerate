@@ -40,7 +40,8 @@ module Data.Array.Accelerate.Trafo.Fusion (
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- ** Conversion
-  convertAcc, convertAfun,
+  convertAcc,  convertAccWith,
+  convertAfun, convertAfunWith,
 
 ) where
 
@@ -48,9 +49,11 @@ module Data.Array.Accelerate.Trafo.Fusion (
 import Prelude                                          hiding ( exp, until )
 
 -- friends
+import Data.BitSet
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Config
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
@@ -61,6 +64,7 @@ import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), Arr
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
+import Data.Array.Accelerate.Debug.Flags                ( array_fusion )
 import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe -- for debugging
@@ -72,13 +76,19 @@ import System.IO.Unsafe -- for debugging
 
 -- | Apply the fusion transformation to a closed de Bruijn AST
 --
-convertAcc :: Arrays arrs => Bool -> Acc arrs -> DelayedAcc arrs
-convertAcc fuseAcc = withSimplStats . convertOpenAcc fuseAcc
+convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
+convertAcc = convertAccWith defaultOptions
+
+convertAccWith :: Arrays arrs => Config -> Acc arrs -> DelayedAcc arrs
+convertAccWith config = withSimplStats . convertOpenAcc config
 
 -- | Apply the fusion transformation to a function of array arguments
 --
-convertAfun :: Bool -> Afun f -> DelayedAfun f
-convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
+convertAfun :: Afun f -> DelayedAfun f
+convertAfun = convertAfunWith defaultOptions
+
+convertAfunWith :: Config -> Afun f -> DelayedAfun f
+convertAfunWith config = withSimplStats . convertOpenAfun config
 
 -- -- | Apply the fusion transformation to the array computations embedded
 -- --   in a sequence computation.
@@ -112,16 +122,16 @@ withSimplStats x = x
 --      manifest, and the two helper functions are even named as such! We should
 --      encode this property in the type somehow...
 --
-convertOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
-convertOpenAcc fuseAcc = manifest fuseAcc . computeAcc . embedOpenAcc fuseAcc
+convertOpenAcc :: Arrays arrs => Config -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
+convertOpenAcc config = manifest config . computeAcc . embedOpenAcc config
 
 -- Convert array computations into an embeddable delayed representation.
 -- Reapply the embedding function from the first pass and unpack the
 -- representation. It is safe to match on BaseEnv because the first pass
 -- will put producers adjacent to the term consuming it.
 --
-delayed :: (Shape sh, Elt e) => Bool -> OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
-delayed fuseAcc (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
+delayed :: (Shape sh, Elt e) => Config -> OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
+delayed config (embedOpenAcc config -> Embed BaseEnv cc) =
   case cc of
     Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
     Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
@@ -134,7 +144,7 @@ delayed fuseAcc (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
       -> Delayed sh f' (f' `compose` fromIndex sh)
   where
     cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
-    cvtE = convertOpenExp fuseAcc
+    cvtE = convertOpenExp config
 
     cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
     cvtF (Lam f)  = Lam (cvtF f)
@@ -142,8 +152,8 @@ delayed fuseAcc (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
 
 -- Convert array programs as manifest terms.
 --
-manifest :: Bool -> OpenAcc aenv a -> DelayedOpenAcc aenv a
-manifest fuseAcc (OpenAcc pacc) =
+manifest :: Config -> OpenAcc aenv a -> DelayedOpenAcc aenv a
+manifest config (OpenAcc pacc) =
   let fusionError = $internalError "manifest" "unexpected fusible materials"
   in
   Manifest $ case pacc of
@@ -152,13 +162,13 @@ manifest fuseAcc (OpenAcc pacc) =
     Avar ix                 -> Avar ix
     Use arr                 -> Use arr
     Unit e                  -> Unit (cvtE e)
-    Alet bnd body           -> alet (manifest fuseAcc bnd) (manifest fuseAcc body)
-    Acond p t e             -> Acond (cvtE p) (manifest fuseAcc t) (manifest fuseAcc e)
-    Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest fuseAcc a)
+    Alet bnd body           -> alet (manifest config bnd) (manifest config body)
+    Acond p t e             -> Acond (cvtE p) (manifest config t) (manifest config e)
+    Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest config a)
     Atuple tup              -> Atuple (cvtAT tup)
-    Aprj ix tup             -> Aprj ix (manifest fuseAcc tup)
-    Apply f a               -> Apply (cvtAF f) (manifest fuseAcc a)
-    Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest fuseAcc a)
+    Aprj ix tup             -> Aprj ix (manifest config tup)
+    Apply f a               -> Apply (cvtAF f) (manifest config a)
+    Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest config a)
 
     -- Producers
     -- ---------
@@ -168,11 +178,11 @@ manifest fuseAcc (OpenAcc pacc) =
     -- result of a let-binding to be used multiple times. The input array
     -- here should be an array variable, else something went wrong.
     --
-    Map f a                 -> Map (cvtF f) (delayed fuseAcc a)
+    Map f a                 -> Map (cvtF f) (delayed config a)
     Generate sh f           -> Generate (cvtE sh) (cvtF f)
-    Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed fuseAcc a)
-    Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (delayed fuseAcc a)
-    Reshape sl a            -> Reshape (cvtE sl) (manifest fuseAcc a)
+    Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed config a)
+    Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (delayed config a)
+    Reshape sl a            -> Reshape (cvtE sl) (manifest config a)
 
     Replicate{}             -> fusionError
     Slice{}                 -> fusionError
@@ -186,19 +196,19 @@ manifest fuseAcc (OpenAcc pacc) =
     -- argument array multiple times, we are careful not to duplicate work
     -- and instead force the argument to be a manifest array.
     --
-    Fold f z a              -> Fold     (cvtF f) (cvtE z) (delayed fuseAcc a)
-    Fold1 f a               -> Fold1    (cvtF f) (delayed fuseAcc a)
-    FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delayed fuseAcc a) (delayed fuseAcc s)
-    Fold1Seg f a s          -> Fold1Seg (cvtF f) (delayed fuseAcc a) (delayed fuseAcc s)
-    Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delayed fuseAcc a)
-    Scanl1 f a              -> Scanl1   (cvtF f) (delayed fuseAcc a)
-    Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delayed fuseAcc a)
-    Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delayed fuseAcc a)
-    Scanr1 f a              -> Scanr1   (cvtF f) (delayed fuseAcc a)
-    Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed fuseAcc a)
-    Permute f d p a         -> Permute  (cvtF f) (manifest fuseAcc d) (cvtF p) (delayed fuseAcc a)
-    Stencil f x a           -> Stencil  (cvtF f) (cvtB x) (delayed fuseAcc a)
-    Stencil2 f x a y b      -> Stencil2 (cvtF f) (cvtB x) (delayed fuseAcc a) (cvtB y) (delayed fuseAcc b)
+    Fold f z a              -> Fold     (cvtF f) (cvtE z) (delayed config a)
+    Fold1 f a               -> Fold1    (cvtF f) (delayed config a)
+    FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delayed config a) (delayed config s)
+    Fold1Seg f a s          -> Fold1Seg (cvtF f) (delayed config a) (delayed config s)
+    Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delayed config a)
+    Scanl1 f a              -> Scanl1   (cvtF f) (delayed config a)
+    Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delayed config a)
+    Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delayed config a)
+    Scanr1 f a              -> Scanr1   (cvtF f) (delayed config a)
+    Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed config a)
+    Permute f d p a         -> Permute  (cvtF f) (manifest config d) (cvtF p) (delayed config a)
+    Stencil f x a           -> Stencil  (cvtF f) (cvtB x) (delayed config a)
+    Stencil2 f x a y b      -> Stencil2 (cvtF f) (cvtB x) (delayed config a) (cvtB y) (delayed config b)
     -- Collect s               -> Collect  (cvtS s)
 
     where
@@ -215,14 +225,14 @@ manifest fuseAcc (OpenAcc pacc) =
 
       cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
       cvtAT NilAtup        = NilAtup
-      cvtAT (SnocAtup t a) = cvtAT t `SnocAtup` manifest fuseAcc a
+      cvtAT (SnocAtup t a) = cvtAT t `SnocAtup` manifest config a
 
       cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
       cvtAF (Alam f)  = Alam  (cvtAF f)
-      cvtAF (Abody b) = Abody (manifest fuseAcc b)
+      cvtAF (Abody b) = Abody (manifest config b)
 
       -- cvtS :: PreOpenSeq OpenAcc aenv senv s -> PreOpenSeq DelayedOpenAcc aenv senv s
-      -- cvtS = convertOpenSeq fuseAcc
+      -- cvtS = convertOpenSeq config
 
       -- Conversions for closed scalar functions and expressions
       --
@@ -231,7 +241,7 @@ manifest fuseAcc (OpenAcc pacc) =
       cvtF (Body b) = Body (cvtE b)
 
       cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
-      cvtE = convertOpenExp fuseAcc
+      cvtE = convertOpenExp config
 
       cvtB :: Boundary aenv t -> PreBoundary DelayedOpenAcc aenv t
       cvtB Clamp        = Clamp
@@ -240,8 +250,8 @@ manifest fuseAcc (OpenAcc pacc) =
       cvtB (Constant v) = Constant v
       cvtB (Function f) = Function (cvtF f)
 
-convertOpenExp :: Bool -> OpenExp env aenv t -> DelayedOpenExp env aenv t
-convertOpenExp fuseAcc exp =
+convertOpenExp :: Config -> OpenExp env aenv t -> DelayedOpenExp env aenv t
+convertOpenExp config exp =
   case exp of
     Let bnd body            -> Let (cvtE bnd) (cvtE body)
     Var ix                  -> Var ix
@@ -262,9 +272,9 @@ convertOpenExp fuseAcc exp =
     While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
     PrimConst c             -> PrimConst c
     PrimApp f x             -> PrimApp f (cvtE x)
-    Index a sh              -> Index (manifest fuseAcc a) (cvtE sh)
-    LinearIndex a i         -> LinearIndex (manifest fuseAcc a) (cvtE i)
-    Shape a                 -> Shape (manifest fuseAcc a)
+    Index a sh              -> Index (manifest config a) (cvtE sh)
+    LinearIndex a i         -> LinearIndex (manifest config a) (cvtE i)
+    Shape a                 -> Shape (manifest config a)
     ShapeSize sh            -> ShapeSize (cvtE sh)
     Intersect s t           -> Intersect (cvtE s) (cvtE t)
     Union s t               -> Union (cvtE s) (cvtE t)
@@ -282,24 +292,24 @@ convertOpenExp fuseAcc exp =
     cvtF (Body b) = Body (cvtE b)
 
     cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
-    cvtE = convertOpenExp fuseAcc
+    cvtE = convertOpenExp config
 
 
-convertOpenAfun :: Bool -> OpenAfun aenv f -> DelayedOpenAfun aenv f
+convertOpenAfun :: Config -> OpenAfun aenv f -> DelayedOpenAfun aenv f
 convertOpenAfun c (Alam  f) = Alam  (convertOpenAfun c f)
 convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
 
 {--
-convertOpenSeq :: Bool -> PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOpenAcc aenv senv a
-convertOpenSeq fuseAcc s =
+convertOpenSeq :: Config -> PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOpenAcc aenv senv a
+convertOpenSeq config s =
   case s of
     Consumer c          -> Consumer (cvtC c)
     Reify ix            -> Reify ix
-    Producer p s'       -> Producer p' (convertOpenSeq fuseAcc s')
+    Producer p s'       -> Producer p' (convertOpenSeq config s')
       where
         p' = case p of
                StreamIn arrs     -> StreamIn arrs
-               ToSeq slix sh a   -> ToSeq slix sh (delayed fuseAcc a)
+               ToSeq slix sh a   -> ToSeq slix sh (delayed config a)
                MapSeq f x        -> MapSeq (cvtAF f) x
                ChunkedMapSeq f x -> ChunkedMapSeq (cvtAF f) x
                ZipWithSeq f x y  -> ZipWithSeq (cvtAF f) x y
@@ -309,7 +319,7 @@ convertOpenSeq fuseAcc s =
     cvtC c =
       case c of
         FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
-        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest fuseAcc a) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest config a) x
         Stuple t             -> Stuple (cvtCT t)
 
     cvtCT :: Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer DelayedOpenAcc aenv senv) t
@@ -318,10 +328,10 @@ convertOpenSeq fuseAcc s =
 
     cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
     cvtAF (Alam f)  = Alam  (cvtAF f)
-    cvtAF (Abody b) = Abody (manifest fuseAcc b)
+    cvtAF (Abody b) = Abody (manifest config b)
 
     cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
-    cvtE = convertOpenExp fuseAcc
+    cvtE = convertOpenExp config
 
     cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
     cvtF (Lam f)  = Lam (cvtF f)
@@ -337,9 +347,9 @@ convertOpenSeq fuseAcc s =
 type EmbedAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Embed acc aenv arrs
 type ElimAcc  acc = forall aenv s t. acc aenv s -> acc (aenv,s) t -> Bool
 
-embedOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
-embedOpenAcc fuseAcc (OpenAcc pacc) =
-  embedPreAcc fuseAcc (embedOpenAcc fuseAcc) elimOpenAcc pacc
+embedOpenAcc :: Arrays arrs => Config -> OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
+embedOpenAcc config (OpenAcc pacc) =
+  embedPreAcc config (embedOpenAcc config) elimOpenAcc pacc
   where
     -- When does the cost of re-computation outweigh that of memory access? For
     -- the moment only do the substitution on a single use of the bound array
@@ -361,12 +371,12 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
 
 embedPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
-    => Bool
+    => Config
     -> EmbedAcc   acc
     -> ElimAcc    acc
     -> PreOpenAcc acc aenv arrs
     -> Embed      acc aenv arrs
-embedPreAcc fuseAcc embedAcc elimAcc pacc
+embedPreAcc config embedAcc elimAcc pacc
   = unembed
   $ case pacc of
 
@@ -452,8 +462,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     --
     unembed :: Embed acc aenv arrs -> Embed acc aenv arrs
     unembed x
-      | fuseAcc         = x
-      | otherwise       = done (compute x)
+      | array_fusion `member` options config = x
+      | otherwise                            = done (compute x)
 
     cvtA :: Arrays a => acc aenv' a -> acc aenv' a
     cvtA = computeAcc . embedAcc

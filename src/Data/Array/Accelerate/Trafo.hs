@@ -18,7 +18,7 @@
 module Data.Array.Accelerate.Trafo (
 
   -- * HOAS -> de Bruijn conversion
-  Phase(..), phases,
+  Config(..), defaultOptions, convert_segment_offset,
 
   -- ** Array computations
   convertAcc, convertAccWith,
@@ -35,7 +35,10 @@ module Data.Array.Accelerate.Trafo (
   convertExp, convertFun,
 
   -- * Fusion
-  module Data.Array.Accelerate.Trafo.Fusion,
+  DelayedAcc, DelayedOpenAcc(..),
+  DelayedAfun, DelayedOpenAfun,
+  DelayedExp, DelayedOpenExp,
+  DelayedFun, DelayedOpenFun,
 
   -- * Substitution
   module Data.Array.Accelerate.Trafo.Substitution,
@@ -52,10 +55,12 @@ module Data.Array.Accelerate.Trafo (
 import Control.DeepSeq
 import Data.Typeable
 
+import Data.BitSet
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
+import Data.Array.Accelerate.Trafo.Config
+import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedOpenAcc(..), DelayedAfun, DelayedOpenAfun, DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun )
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
@@ -65,62 +70,13 @@ import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 -- import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
+import Data.Array.Accelerate.Debug.Flags                hiding ( when )
+
 #ifdef ACCELERATE_DEBUG
 import Text.Printf
 import System.IO.Unsafe
-import Data.Array.Accelerate.Debug.Flags                hiding ( when )
 import Data.Array.Accelerate.Debug.Timed
 #endif
-
-
--- Configuration
--- -------------
-
-data Phase = Phase
-  {
-    -- | Recover sharing of array computations?
-    recoverAccSharing           :: Bool
-
-    -- | Recover sharing of scalar expressions?
-  , recoverExpSharing           :: Bool
-
-    -- | Recover sharing of sequence computations?
-  , recoverSeqSharing           :: Bool
-
-    -- | Are array computations floated out of expressions irrespective of
-    --   whether they are shared or not? Requires 'recoverAccSharing'.
-  , floatOutAccFromExp          :: Bool
-
-    -- | Fuse array computations? This also implies simplifying scalar
-    --   expressions. NOTE: currently always enabled.
-  , enableAccFusion             :: Bool
-
-    -- | Convert segment length arrays into segment offset arrays?
-  , convertOffsetOfSegment      :: Bool
-
-    --   Vectorise maps and zipwiths in sequence computations to
-    --   enable chunked execution?
-  -- , vectoriseSequences          :: Bool
-  }
-
-
--- | The default method of converting from HOAS to de Bruijn; incorporating
---   sharing recovery and fusion optimisation.
---
-phases :: Phase
-phases =  Phase
-  { recoverAccSharing      = True
-  , recoverExpSharing      = True
-  , recoverSeqSharing      = True
-  , floatOutAccFromExp     = True
-  , enableAccFusion        = True
-  , convertOffsetOfSegment = False
-  -- , vectoriseSequences     = True
-  }
-
-when :: (a -> a) -> Bool -> a -> a
-when f True  = f
-when _ False = id
 
 
 -- HOAS -> de Bruijn conversion
@@ -130,14 +86,14 @@ when _ False = id
 --   incorporating sharing observation and array fusion.
 --
 convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
-convertAcc = convertAccWith phases
+convertAcc = convertAccWith defaultOptions
 
-convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
-convertAccWith Phase{..} acc
-  = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
+convertAccWith :: Arrays arrs => Config -> Acc arrs -> DelayedAcc arrs
+convertAccWith config acc
+  = phase "array-fusion"           (Fusion.convertAccWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
-  $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` convertOffsetOfSegment
-  $ phase "sharing-recovery"       Sharing.convertAcc -- recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
+  $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` (convert_segment_offset `member` options config)
+  $ phase "sharing-recovery"       (Sharing.convertAccWith config)
   $ acc
 
 
@@ -145,14 +101,14 @@ convertAccWith Phase{..} acc
 --   observation and array fusion
 --
 convertAfun :: Afunction f => f -> DelayedAfun (AfunctionR f)
-convertAfun = convertAfunWith phases
+convertAfun = convertAfunWith defaultOptions
 
-convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
-convertAfunWith Phase{..} acc
-  = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
+convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (AfunctionR f)
+convertAfunWith config acc
+  = phase "array-fusion"           (Fusion.convertAfunWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
-  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ phase "sharing-recovery"       Sharing.convertAfun -- recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
+  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` (convert_segment_offset `member` options config)
+  $ phase "sharing-recovery"       (Sharing.convertAfunWith config)
   $ acc
 
 
@@ -161,8 +117,8 @@ convertAfunWith Phase{..} acc
 --
 convertExp :: Elt e => Exp e -> AST.Exp () e
 convertExp
-  = phase "exp-simplify"     Rewrite.simplify
-  . phase "sharing-recovery" Sharing.convertExp -- (recoverExpSharing phases))
+  = phase "exp-simplify"     Rewrite.simplify     -- XXX: only if simplification is enabled
+  . phase "sharing-recovery" Sharing.convertExp
 
 
 -- | Convert closed scalar functions, incorporating sharing observation and
@@ -171,7 +127,7 @@ convertExp
 convertFun :: Function f => f -> AST.Fun () (FunctionR f)
 convertFun
   = phase "exp-simplify"     Rewrite.simplify
-  . phase "sharing-recovery" Sharing.convertFun -- (recoverExpSharing phases))
+  . phase "sharing-recovery" Sharing.convertFun
 
 {--
 -- | Convert a closed sequence computation, incorporating sharing observation and
@@ -188,6 +144,14 @@ convertSeqWith Phase{..} s
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
 --}
+
+
+when :: (a -> a) -> Bool -> a -> a
+when f True  = f
+when _ False = id
+
+convert_segment_offset :: Flag
+convert_segment_offset = Flag 31  -- TLM: let's remove the need for this
 
 -- Debugging
 -- ---------
