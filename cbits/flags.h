@@ -11,6 +11,8 @@
 #ifndef __ACCELERATE_FLAGS_H__
 #define __ACCELERATE_FLAGS_H__
 
+/* NOTE: [layout of command line options bitfield]
+ */
 typedef union {
   uint32_t bitfield;
 

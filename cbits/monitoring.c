@@ -122,7 +122,7 @@ __attribute__((destructor)) void dump_gc_stats(void)
     /*
      * int64 ranges from -9223372036854775807..9223372036854775807, so we need a
      * buffer size of at least 27 characters (including the terminating \0) to
-     * format any numbers with commas.
+     * format any number with commas.
      */
     char buffer[96];
     double timestamp = clock_gettime_elapsed_seconds();

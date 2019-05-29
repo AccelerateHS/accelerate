@@ -22,6 +22,7 @@ module Data.Array.Accelerate.Debug.Flags (
 
   Value,
   unfolding_use_threshold,
+  max_simplifier_iterations,
   getValue,
   setValue,
 
@@ -51,8 +52,8 @@ import Foreign.Storable
 import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
 import qualified Control.Monad                                      as M
 
-newtype Flag  = Flag  Int           -- can switch to an Enum now if we wished
-newtype Value = Value (Ptr Int32)
+newtype Flag  = Flag  Int         -- can switch to an Enum now if we wished
+newtype Value = Value (Ptr Int)   -- of type HsInt in flags.c
 
 
 -- | Conditional execution of a monadic debugging expression.
@@ -86,45 +87,25 @@ unless _ _ = return ()
 
 
 setValue   :: Value -> Int -> IO ()
-#ifdef ACCELERATE_DEBUG
-setValue (Value f) v = poke f (fromIntegral v)
-#else
-setValue _         _ = notEnabled
-#endif
+setValue (Value f) v = poke f v
 
 getValue   :: Value -> IO Int
-#ifdef ACCELERATE_DEBUG
-getValue (Value f) = fromIntegral `fmap` peek f
-#else
-getValue _         = notEnabled
-#endif
+getValue (Value f) = peek f
 
 getFlag    :: Flag -> IO Bool
-#ifdef ACCELERATE_DEBUG
 getFlag (Flag i) = do
-  flags  <- peek cmd_line_flags
+  flags  <- peek __cmd_line_flags
   return $! testBit flags i
-#else
-getFlag _        = notEnabled
-#endif
 
 setFlag    :: Flag -> IO ()
-#ifdef ACCELERATE_DEBUG
 setFlag (Flag i) = do
-  flags <- peek cmd_line_flags
-  poke cmd_line_flags (setBit flags i)
-#else
-setFlag _        = notEnabled
-#endif
+  flags <- peek __cmd_line_flags
+  poke __cmd_line_flags (setBit flags i)
 
 clearFlag  :: Flag -> IO ()
-#ifdef ACCELERATE_DEBUG
 clearFlag (Flag i) = do
-  flags <- peek cmd_line_flags
-  poke cmd_line_flags (clearBit flags i)
-#else
-clearFlag _        = notEnabled
-#endif
+  flags <- peek __cmd_line_flags
+  poke __cmd_line_flags (clearBit flags i)
 
 setFlags   :: [Flag] -> IO ()
 setFlags = mapM_ setFlag
@@ -132,19 +113,22 @@ setFlags = mapM_ setFlag
 clearFlags :: [Flag] -> IO ()
 clearFlags = mapM_ clearFlag
 
-notEnabled :: a
-notEnabled = error $ unlines [ "Data.Array.Accelerate: Debugging options are disabled."
-                             , "Reinstall package 'accelerate' with '-fdebug' to enable them." ]
+-- notEnabled :: a
+-- notEnabled = error $ unlines [ "Data.Array.Accelerate: Debugging options are disabled."
+--                              , "Reinstall package 'accelerate' with '-fdebug' to enable them." ]
 
 
 -- Import the underlying flag variables. These are defined in the file
--- cbits/flags.c as a bitfield and initialised at program initialisation.
+-- cbits/flags.h as a bitfield and initialised at program initialisation.
 --
-foreign import ccall "&__cmd_line_flags" cmd_line_flags :: Ptr Word32
+-- SEE: [layout of command line options bitfield]
+--
+foreign import ccall "&__cmd_line_flags" __cmd_line_flags :: Ptr Word32
 
 -- These @-f<blah>=INT@ values are used by the compiler
 --
-foreign import ccall "&__unfolding_use_threshold" unfolding_use_threshold :: Value  -- the magic cut-off figure for inlining
+foreign import ccall "&__unfolding_use_threshold"   unfolding_use_threshold   :: Value  -- the magic cut-off figure for inlining
+foreign import ccall "&__max_simplifier_iterations" max_simplifier_iterations :: Value  -- maximum number of scalar simplification passes
 
 -- These @-f<blah>@ flags can be reversed with @-fno-<blah>@
 --
