@@ -338,7 +338,6 @@ Library
         Data.Array.Accelerate.Test.Similar
 
   Other-modules:
-        Data.Atomic
         Data.Array.Accelerate.Analysis.Hash.TH
         Data.Array.Accelerate.Array.Remote.Nursery
         Data.Array.Accelerate.Classes
@@ -378,6 +377,8 @@ Library
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
         Data.Array.Accelerate.Trafo.Substitution
+        Data.Atomic
+        Data.BitSet
 
         -- Data.Array.Accelerate.Array.Lifted
         -- Data.Array.Accelerate.Trafo.Vectorise
