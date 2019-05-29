@@ -137,7 +137,7 @@ convertAccWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAcc enableAccFusion)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` convertOffsetOfSegment
-  $ phase "sharing-recovery"       (Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
+  $ phase "sharing-recovery"       Sharing.convertAcc -- recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
 
@@ -152,7 +152,7 @@ convertAfunWith Phase{..} acc
   = phase "array-fusion"           (Fusion.convertAfun enableAccFusion)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
   $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ phase "sharing-recovery"       (Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
+  $ phase "sharing-recovery"       Sharing.convertAfun -- recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ acc
 
 
@@ -161,8 +161,8 @@ convertAfunWith Phase{..} acc
 --
 convertExp :: Elt e => Exp e -> AST.Exp () e
 convertExp
-  = phase "exp-simplify"      Rewrite.simplify
-  . phase "sharing-recovery" (Sharing.convertExp (recoverExpSharing phases))
+  = phase "exp-simplify"     Rewrite.simplify
+  . phase "sharing-recovery" Sharing.convertExp -- (recoverExpSharing phases))
 
 
 -- | Convert closed scalar functions, incorporating sharing observation and
@@ -170,8 +170,8 @@ convertExp
 --
 convertFun :: Function f => f -> AST.Fun () (FunctionR f)
 convertFun
-  = phase "exp-simplify"      Rewrite.simplify
-  . phase "sharing-recovery" (Sharing.convertFun (recoverExpSharing phases))
+  = phase "exp-simplify"     Rewrite.simplify
+  . phase "sharing-recovery" Sharing.convertFun -- (recoverExpSharing phases))
 
 {--
 -- | Convert a closed sequence computation, incorporating sharing observation and

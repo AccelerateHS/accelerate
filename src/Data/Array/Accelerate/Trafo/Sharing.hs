@@ -1,8 +1,11 @@
 {-# LANGUAGE BangPatterns         #-}
+{-# LANGUAGE BinaryLiterals       #-}
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE DeriveDataTypeable   #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE OverloadedLists      #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE StandaloneDeriving   #-}
@@ -28,9 +31,16 @@
 
 module Data.Array.Accelerate.Trafo.Sharing (
 
-  -- * HOAS -> de Bruijn conversion
-  convertAcc, convertAfun, Afunction, AfunctionR,
-  convertExp, convertFun,  Function,  FunctionR,
+  -- * HOAS to de Bruijn conversion
+  convertAcc, convertAccWith,
+
+  Afunction, AfunctionR,
+  convertAfun, convertAfunWith,
+
+  Function, FunctionR,
+  convertExp, convertExpWith,
+  convertFun, convertFunWith,
+
   -- convertSeq
 
 ) where
@@ -38,12 +48,15 @@ module Data.Array.Accelerate.Trafo.Sharing (
 -- standard library
 import Control.Applicative                              hiding ( Const )
 import Control.Monad.Fix
+import Data.Bits
+import Data.Hashable
 import Data.List
 import Data.Maybe
-import Data.Hashable
 import Data.Typeable
-import System.Mem.StableName
+import Data.Word
+import Foreign.Storable
 import System.IO.Unsafe                                 ( unsafePerformIO )
+import System.Mem.StableName
 import Text.Printf
 import qualified Data.HashTable.IO                      as Hash
 import qualified Data.IntMap                            as IntMap
@@ -52,6 +65,9 @@ import qualified Data.HashSet                           as Set
 import Prelude
 
 -- friends
+import Data.BitSet                                      ( BitSet(..) )
+import qualified Data.BitSet                            as Options
+
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar hiding ( (!!) )
@@ -67,16 +83,24 @@ import qualified Data.Array.Accelerate.Debug.Flags      as Debug
 -- Configuration
 -- -------------
 
--- Perhaps the configuration should be passed as a reader monad or some such,
--- but that's a little inconvenient.
---
-data Config = Config
-  {
-    recoverAccSharing   :: Bool         -- ^ Recover sharing of array computations ?
-  , recoverExpSharing   :: Bool         -- ^ Recover sharing of scalar expressions ?
-  , recoverSeqSharing   :: Bool         -- ^ Recover sharing of sequence computations ?
-  , floatOutAcc         :: Bool         -- ^ Always float array computations out of expressions ?
-  }
+type Config = BitSet Word32 Option
+
+data Option
+  = RecoverSeqSharing       -- ^ Recover sharing of sequence computations ?
+  | RecoverAccSharing       -- ^ Recover sharing of array computations ?
+  | RecoverExpSharing       -- ^ Recover sharing of scalar expressions ?
+  | FloatOutAcc             -- ^ Always float array computations out of expressions ?
+  deriving (Show, Enum)
+
+defaultOptions :: Config
+#if ACCELERATE_DEBUG
+defaultOptions = unsafePerformIO $ do
+  v      <- (0b111 .&.) <$> peek Debug.__cmd_line_flags -- SEE: [layout of command line options bitfield]
+  return $! Options.insert FloatOutAcc (BitSet v)
+#else
+defaultOptions = [RecoverAccSharing, RecoverExpSharing, RecoverSeqSharing, FloatOutAcc]
+#endif
+
 
 -- Layouts
 -- -------
@@ -86,9 +110,8 @@ data Config = Config
 -- corresponding entry in the environment.
 --
 data Layout env env' where
-  EmptyLayout :: Layout env ()
-  PushLayout  :: Typeable t
-              => Layout env env' -> Idx env t -> Layout env (env', t)
+  EmptyLayout ::                                               Layout env ()
+  PushLayout  :: Typeable t => Layout env env' -> Idx env t -> Layout env (env', t)
 
 -- Project the nth index out of an environment layout.
 --
@@ -135,27 +158,21 @@ sizeLayout (PushLayout lyt _) = 1 + sizeLayout lyt
 -- | Convert a closed array expression to de Bruijn form while also incorporating sharing
 -- information.
 --
-convertAcc
-    :: Arrays arrs
-    => Bool             -- ^ recover sharing of array computations ?
-    -> Bool             -- ^ recover sharing of scalar expressions ?
-    -> Bool             -- ^ recover sharing of sequence computations ?
-    -> Bool             -- ^ always float array computations out of expressions?
-    -> Acc arrs
-    -> AST.Acc arrs
-convertAcc shareAcc shareExp shareSeq floatAcc acc
-  = let config  = Config shareAcc shareExp shareSeq (shareAcc && floatAcc)
-    in
-    convertOpenAcc config 0 [] EmptyLayout acc
+convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
+convertAcc = convertAccWith defaultOptions
+
+convertAccWith :: Arrays arrs => Config -> Acc arrs -> AST.Acc arrs
+convertAccWith config = convertOpenAcc config EmptyLayout
 
 
 -- | Convert a closed function over array computations, while incorporating
 -- sharing information.
 --
-convertAfun :: Afunction f => Bool -> Bool -> Bool -> Bool -> f -> AST.Afun (AfunctionR f)
-convertAfun shareAcc shareExp shareSeq floatAcc =
-  let config = Config shareAcc shareExp shareSeq (shareAcc && floatAcc)
-  in  aconvert config EmptyLayout
+convertAfun :: Afunction f => f -> AST.Afun (AfunctionR f)
+convertAfun = convertAfunWith defaultOptions
+
+convertAfunWith :: Afunction f => Config -> f -> AST.Afun (AfunctionR f)
+convertAfunWith config = convertOpenAfun config EmptyLayout
 
 
 -- Convert a HOAS fragment into de Bruijn form, binding variables into the typed
@@ -167,25 +184,18 @@ convertAfun shareAcc shareExp shareSeq floatAcc =
 --
 class Afunction f where
   type AfunctionR f
-  aconvert :: Config -> Layout aenv aenv -> f -> AST.OpenAfun aenv (AfunctionR f)
+  convertOpenAfun :: Config -> Layout aenv aenv -> f -> AST.OpenAfun aenv (AfunctionR f)
 
 instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
   type AfunctionR (Acc a -> r) = a -> AfunctionR r
-  --
-  aconvert config alyt f
-    = let a     = Acc $ Atag (sizeLayout alyt)
-          alyt' = incLayout alyt `PushLayout` ZeroIdx
-      in
-      Alam $ aconvert config alyt' (f a)
+  convertOpenAfun config alyt f =
+    let a     = Acc $ Atag (sizeLayout alyt)
+        alyt' = incLayout alyt `PushLayout` ZeroIdx
+     in Alam $ convertOpenAfun config alyt' (f a)
 
 instance Arrays b => Afunction (Acc b) where
   type AfunctionR (Acc b) = b
-  --
-  aconvert config alyt body
-    = let lvl    = sizeLayout alyt
-          vars   = [lvl-1, lvl-2 .. 0]
-      in
-      Abody $ convertOpenAcc config lvl vars alyt body
+  convertOpenAfun config alyt body = Abody $ convertOpenAcc config alyt body
 
 
 -- | Convert an open array expression to de Bruijn form while also incorporating sharing
@@ -194,15 +204,16 @@ instance Arrays b => Afunction (Acc b) where
 convertOpenAcc
     :: Arrays arrs
     => Config
-    -> Level
-    -> [Level]
     -> Layout aenv aenv
     -> Acc arrs
     -> AST.OpenAcc aenv arrs
-convertOpenAcc config lvl fvs alyt acc
-  = let (sharingAcc, initialEnv) = recoverSharingAcc config lvl fvs acc
-    in
-    convertSharingAcc config alyt initialEnv sharingAcc
+convertOpenAcc config alyt acc =
+  let lvl                      = sizeLayout alyt
+      fvs                      = [lvl-1, lvl-2 .. 0]
+      (sharingAcc, initialEnv) = recoverSharingAcc config lvl fvs acc
+  in
+  convertSharingAcc config alyt initialEnv sharingAcc
+
 
 -- | Convert an array expression with given array environment layout and sharing information into
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
@@ -274,12 +285,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
            AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
       Aforeign ff afun acc
-        -> let a = recoverAccSharing config
-               e = recoverExpSharing config
-               s = recoverSeqSharing config
-               f = floatOutAcc config
-           in
-           AST.Aforeign ff (convertAfun a e s f afun) (cvtA acc)
+        -> AST.Aforeign ff (convertAfunWith config afun) (cvtA acc)
 
       Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
       Awhile pred iter init       -> AST.Awhile (cvtAfun1 pred) (cvtAfun1 iter) (cvtA init)
@@ -320,7 +326,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
 
 {--
 -- Sequence expressions
--- ------------------
+-- --------------------
 
 -- | Convert a closed sequence expression to de Bruijn form while incorporating
 -- sharing information.
@@ -576,33 +582,28 @@ mkReplicate = AST.Replicate (sliceIndex @slix)
 -- In higher-order abstract syntax, this represents an n-ary, polyvariadic
 -- function.
 --
-convertFun :: Function f => Bool -> f -> AST.Fun () (FunctionR f)
-convertFun shareExp =
-  let config = Config False shareExp False False
-  in  convert config EmptyLayout
+convertFun :: Function f => f -> AST.Fun () (FunctionR f)
+convertFun
+  = convertFunWith
+  $ defaultOptions Options.\\ [RecoverSeqSharing, RecoverAccSharing, FloatOutAcc]
 
+convertFunWith :: Function f => Config -> f -> AST.Fun () (FunctionR f)
+convertFunWith config = convertOpenFun config EmptyLayout
 
 class Function f where
   type FunctionR f
-  convert :: Config -> Layout env env -> f -> AST.OpenFun env () (FunctionR f)
+  convertOpenFun :: Config -> Layout env env -> f -> AST.OpenFun env () (FunctionR f)
 
 instance (Elt a, Function r) => Function (Exp a -> r) where
   type FunctionR (Exp a -> r) = a -> FunctionR r
-  --
-  convert config lyt f
-    = let x     = Exp $ Tag (sizeLayout lyt)
-          lyt'  = incLayout lyt `PushLayout` ZeroIdx
-      in
-      Lam $ convert config lyt' (f x)
+  convertOpenFun config lyt f =
+    let x     = Exp $ Tag (sizeLayout lyt)
+        lyt'  = incLayout lyt `PushLayout` ZeroIdx
+     in Lam $ convertOpenFun config lyt' (f x)
 
 instance Elt b => Function (Exp b) where
   type FunctionR (Exp b) = b
-  --
-  convert config lyt body
-    = let lvl    = sizeLayout lyt
-          vars   = [lvl-1, lvl-2 .. 0]
-      in
-      Body $ convertOpenExp config lvl vars lyt body
+  convertOpenFun config lyt body = Body $ convertOpenExp config lyt body
 
 
 -- Scalar expressions
@@ -611,28 +612,26 @@ instance Elt b => Function (Exp b) where
 -- | Convert a closed scalar expression to de Bruijn form while incorporating
 -- sharing information.
 --
+convertExp :: Elt e => Exp e -> AST.Exp () e
 convertExp
-    :: Elt e
-    => Bool             -- ^ recover sharing of scalar expressions ?
-    -> Exp e            -- ^ expression to be converted
-    -> AST.Exp () e
-convertExp shareExp exp
-  = let config = Config False shareExp False False
-    in
-    convertOpenExp config 0 [] EmptyLayout exp
+  = convertExpWith
+  $ defaultOptions Options.\\ [RecoverSeqSharing, RecoverAccSharing, FloatOutAcc]
+
+convertExpWith :: Elt e => Config -> Exp e -> AST.Exp () e
+convertExpWith config = convertOpenExp config EmptyLayout
 
 convertOpenExp
     :: Elt e
     => Config
-    -> Level            -- level of currently bound scalar variables
-    -> [Level]          -- tags of bound scalar variables
     -> Layout env env
     -> Exp e
     -> AST.OpenExp env () e
-convertOpenExp config lvl fvar lyt exp
-  = let (sharingExp, initialEnv) = recoverSharingExp config lvl fvar exp
-    in
-    convertSharingExp config lyt EmptyLayout initialEnv [] sharingExp
+convertOpenExp config lyt exp =
+  let lvl                      = sizeLayout lyt
+      fvs                      = [lvl-1, lvl-2 .. 0]
+      (sharingExp, initialEnv) = recoverSharingExp config lvl fvs exp
+  in
+  convertSharingExp config lyt EmptyLayout initialEnv [] sharingExp
 
 
 -- | Convert an open expression with given environment layouts and sharing information into
@@ -733,7 +732,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           ShapeSize e           -> AST.ShapeSize (cvt e)
           Intersect sh1 sh2     -> AST.Intersect (cvt sh1) (cvt sh2)
           Union sh1 sh2         -> AST.Union (cvt sh1) (cvt sh2)
-          Foreign ff f e        -> AST.Foreign ff (convertFun (recoverExpSharing config) f) (cvt e)
+          Foreign ff f e        -> AST.Foreign ff (convertFunWith config f) (cvt e)
           Coerce e              -> AST.Coerce (cvt e)
 
     cvtA :: Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
@@ -1336,7 +1335,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                           -> IO (UnscopedAcc arrs, Int)
               reconstruct newAcc
                 = case heightIfRepeatedOccurrence of
-                    Just height | recoverAccSharing config
+                    Just height | Options.member RecoverAccSharing config
                       -> return (UnscopedAcc [] (AvarSharing (StableNameHeight sn height)), height)
                     _ -> do (acc, height) <- newAcc
                             return (UnscopedAcc [] (AccSharing (StableNameHeight sn height) acc), height)
@@ -1667,7 +1666,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                           -> IO (UnscopedExp a, Int)
               reconstruct newExp
                 = case heightIfRepeatedOccurrence of
-                    Just height | recoverExpSharing config
+                    Just height | Options.member RecoverExpSharing config
                       -> return (UnscopedExp [] (VarSharing (StableNameHeight sn height)), height)
                     _ -> do (exp, height) <- newExp
                             return (UnscopedExp [] (ExpSharing (StableNameHeight sn height) exp), height)
@@ -2368,7 +2367,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (ScopedAcc [] (AvarSharing sn), thisCount)
         reconstruct newAcc subCount
               -- shared subtree => replace by a sharing variable (if 'recoverAccSharing' enabled)
-          | accOccCount > 1 && recoverAccSharing config
+          | accOccCount > 1 && Options.member RecoverAccSharing config
           = let allCount = (StableSharingAcc sn sharingAcc `insertAccNode` newCount)
             in
             tracePure ("SHARED" ++ completed) (show allCount)
@@ -2628,8 +2627,8 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         maybeFloatOutAcc c acc@(ScopedAcc _ (AvarSharing _)) accCount        -- nothing to float out
           = reconstruct (c acc) accCount
         maybeFloatOutAcc c acc                 accCount
-          | floatOutAcc config = reconstruct (c var) ((stableAcc `insertAccNode` noNodeCounts) +++ accCount)
-          | otherwise          = reconstruct (c acc) accCount
+          | Options.member FloatOutAcc config = reconstruct (c var) ((stableAcc `insertAccNode` noNodeCounts) +++ accCount)
+          | otherwise                         = reconstruct (c acc) accCount
           where
              (var, stableAcc) = abstract acc (\(ScopedAcc _ s) -> s)
 
@@ -2641,8 +2640,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
         -- Occurrence count of the currently processed node
         expOccCount = let StableNameHeight sn' _ = sn
-                      in
-                      lookupWithASTName expOccMap (StableASTName sn')
+                       in lookupWithASTName expOccMap (StableASTName sn')
 
         -- Reconstruct the current tree node.
         --
@@ -2667,7 +2665,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (ScopedExp [] (VarSharing sn), thisCount)
         reconstruct newExp subCount
               -- shared subtree => replace by a sharing variable (if 'recoverExpSharing' enabled)
-          | expOccCount > 1 && recoverExpSharing config
+          | expOccCount > 1 && Options.member RecoverExpSharing config
           = let allCount = StableSharingExp sn sharingExp `insertExpNode` newCount
             in
             tracePure ("SHARED" ++ completed) (show allCount)
