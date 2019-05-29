@@ -1,18 +1,16 @@
-{-# LANGUAGE BangPatterns         #-}
-{-# LANGUAGE BinaryLiterals       #-}
-{-# LANGUAGE CPP                  #-}
-{-# LANGUAGE DeriveDataTypeable   #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE LambdaCase           #-}
-{-# LANGUAGE OverloadedLists      #-}
-{-# LANGUAGE PatternGuards        #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE TemplateHaskell      #-}
-{-# LANGUAGE TypeApplications     #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedLists     #-}
+{-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -1071,6 +1069,7 @@ matchStableAcc sn1 (StableSharingAcc sn2 _)
 
 -- Dummy entry for environments to be used for unused variables.
 --
+{-# NOINLINE noStableAccName #-}
 noStableAccName :: StableAccName arrs
 noStableAccName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
 
@@ -1134,6 +1133,7 @@ matchStableExp sn1 (StableSharingExp sn2 _)
 
 -- Dummy entry for environments to be used for unused variables.
 --
+{-# NOINLINE noStableExpName #-}
 noStableExpName :: StableExpName t
 noStableExpName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
 
@@ -1976,9 +1976,9 @@ insertSeqNode ssa@(StableSharingSeq (StableNameHeight sn _) _) (subterms,g)
 --
 -- RCE: This is no longer necessary when NDP is supported.
 cleanCounts :: NodeCounts -> NodeCounts
-cleanCounts (ns, g) = (ns, Map.fromList $ [(h, Set.filter (flip elem hs) (g Map.! h)) | h <- hs ])
+cleanCounts (ns, g) = (ns, Map.fromList [(h, Set.filter (flip elem hs) (g Map.! h)) | h <- hs ])
   where
-    hs = (map nodeName ns)
+    hs = map nodeName ns
 
 nodeName :: NodeCount -> NodeName
 nodeName (AccNodeCount (StableSharingAcc (StableNameHeight sn _) _) _) = NodeName sn
@@ -2409,10 +2409,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     scopesAfun1 :: Arrays a1 => (Acc a1 -> UnscopedAcc a2) -> (Acc a1 -> ScopedAcc a2, NodeCounts)
     scopesAfun1 f = (const (ScopedAcc ssa body'), (counts',graph))
       where
-        body@(UnscopedAcc fvs _) = f undefined
-        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
-        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
-        (freeCounts, counts') = partition isBoundHere counts
+        body@(UnscopedAcc fvs _)             = f undefined
+        (ScopedAcc [] body', (counts,graph)) = scopesAcc body
+        (freeCounts, counts')                = partition isBoundHere counts
+        ssa                                  = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
 
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
         isBoundHere _                                                             = False
@@ -2478,11 +2478,11 @@ determineScopesExp
     -> (ScopedExp t, NodeCounts)          -- Root (closed) expression plus Acc node counts
 determineScopesExp config accOccMap (RootExp expOccMap exp@(UnscopedExp fvs _))
   = let
-        ((ScopedExp [] expWithScopes), (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
-        (expCounts, accCounts)          = partition isExpNodeCount nodeCounts
+        (ScopedExp [] expWithScopes, (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
+        (expCounts, accCounts)                           = partition isExpNodeCount nodeCounts
 
-        isExpNodeCount ExpNodeCount{}   = True
-        isExpNodeCount _                = False
+        isExpNodeCount ExpNodeCount{} = True
+        isExpNodeCount _              = False
     in
     (ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, cleanCounts (accCounts,graph))
 
@@ -2499,12 +2499,12 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
     scopesAcc = determineScopesSharingAcc config accOccMap
 
     scopesFun1 :: (Exp a -> UnscopedExp b) -> (Exp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = tracePure ("LAMBDA " ++ (show ssa)) (show counts) (const (ScopedExp ssa body'), (counts',graph))
+    scopesFun1 f = tracePure ("LAMBDA " ++ show ssa) (show counts) (const (ScopedExp ssa body'), (counts',graph))
       where
-        body@(UnscopedExp fvs _) = f undefined
-        ((ScopedExp [] body'), (counts, graph)) = scopesExp body
-        ssa     = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
-        (freeCounts, counts') = partition isBoundHere counts
+        body@(UnscopedExp fvs _)              = f undefined
+        (ScopedExp [] body', (counts, graph)) = scopesExp body
+        (freeCounts, counts')                 = partition isBoundHere counts
+        ssa                                   = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
 
         isBoundHere (ExpNodeCount (StableSharingExp _ (ExpSharing _ (Tag i))) _) = i `elem` fvs
         isBoundHere _                                                            = False
@@ -2613,8 +2613,8 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
         abstract :: ScopedAcc a -> (ScopedAcc a -> SharingAcc ScopedAcc ScopedExp a)
                  -> (ScopedAcc a, StableSharingAcc)
-        abstract (ScopedAcc _ (AvarSharing _))       _      = $internalError "sharingAccToVar" "AvarSharing"
-        abstract (ScopedAcc ssa (AletSharing sa acc))  lets = abstract acc (lets . (\x -> ScopedAcc ssa (AletSharing sa x)))
+        abstract (ScopedAcc _   (AvarSharing _))       _    = $internalError "sharingAccToVar" "AvarSharing"
+        abstract (ScopedAcc ssa (AletSharing sa acc))  lets = abstract acc (lets . ScopedAcc ssa . AletSharing sa)
         abstract acc@(ScopedAcc ssa (AccSharing sn _)) lets = (ScopedAcc ssa (AvarSharing sn), StableSharingAcc sn (lets acc))
 
         -- Occurrence count of the currently processed node
