@@ -54,9 +54,13 @@ import Foreign.Storable
 import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
 import qualified Control.Monad                                      as M
 
-newtype Flag  = Flag  Int         -- could switch to a Haskell Enum if we wished
+newtype Flag  = Flag  Int
 newtype Value = Value (Ptr Int)   -- of type HsInt in flags.c
 
+-- We aren't using a "real" enum so that we can make use of the unused top
+-- bits for other configuration options, not controlled by the command line
+-- flags.
+--
 instance Enum Flag where
   toEnum            = Flag
   fromEnum (Flag x) = x

@@ -73,12 +73,6 @@ import Data.Array.Accelerate.Debug.Trace                as Debug
 import Data.Array.Accelerate.Debug.Flags                as Debug
 
 
--- Configuration
--- -------------
-
-float_out_acc :: Flag
-float_out_acc = Flag 31
-
 -- Layouts
 -- -------
 

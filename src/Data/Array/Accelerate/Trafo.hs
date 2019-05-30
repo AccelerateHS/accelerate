@@ -150,9 +150,6 @@ when :: (a -> a) -> Bool -> a -> a
 when f True  = f
 when _ False = id
 
-convert_segment_offset :: Flag
-convert_segment_offset = Flag 31  -- TLM: let's remove the need for this
-
 -- Debugging
 -- ---------
 
