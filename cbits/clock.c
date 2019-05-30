@@ -26,16 +26,39 @@
 #include <mach/clock.h>
 #include <mach/mach.h>
 
-static void clock_darwin_gettime(clock_id_t clock, struct timespec *t)
+static clock_serv_t __cclock;
+
+/* constructors with priority execute before constructors without a priority
+ * value.
+ *
+ * constructors with a lower [numeric] priority value are executed before
+ * constructors with a higher [numeric] priority.
+ *
+ * constructor priority values [0,100] are reserved.
+ */
+__attribute__((constructor(101))) void initialise_clock_service(void)
+{
+    host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &__cclock);
+}
+
+/* destructors without a priority execute before destructors with a priority
+ *
+ * destructors with a higher [numeric] priority value are executed before
+ * destructors with a lower priority value.
+ *
+ * destructor priority values [0,100] are reserved.
+ */
+__attribute__((destructor(101))) void deallocate_clock_service(void)
+{
+    mach_port_deallocate(mach_task_self(), __cclock);
+}
+
+static void clock_darwin_gettime(struct timespec *t)
 {
     // OS X does not have clock_gettime, use clock_get_time
     // see http://stackoverflow.com/questions/11680461/monotonic-clock-on-osx
-    clock_serv_t cclock;
     mach_timespec_t mts;
-
-    host_get_clock_service(mach_host_self(), clock, &cclock);
-    clock_get_time(cclock, &mts);
-    mach_port_deallocate(mach_task_self(), cclock);
+    clock_get_time(__cclock, &mts);
 
     t->tv_sec  = mts.tv_sec;
     t->tv_nsec = mts.tv_nsec;
@@ -44,7 +67,7 @@ static void clock_darwin_gettime(clock_id_t clock, struct timespec *t)
 double clock_gettime_monotonic_seconds()
 {
     struct timespec t;
-    clock_darwin_gettime(SYSTEM_CLOCK, &t);
+    clock_darwin_gettime(&t);
 
     return (double) t.tv_sec + (double) t.tv_nsec * 1.0E-9;
 }
