@@ -1,5 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP          #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.BitSet
@@ -16,6 +17,9 @@ module Data.BitSet where
 import Data.Bits
 import Prelude                                            hiding ( foldl, foldr )
 import qualified Data.List                                as List
+#if __GLASGOW_HASKELL__ < 804
+import Data.Semigroup
+#endif
 
 import GHC.Exts                                           ( IsList, build )
 import qualified GHC.Exts                                 as Exts
@@ -37,6 +41,9 @@ instance (Enum a, Bits c) => Semigroup (BitSet c a) where
 
 instance (Enum a, Bits c, Num c) => Monoid (BitSet c a) where
   mempty = empty
+#if __GLASGOW_HASKELL__ < 804
+  mappend = (<>)
+#endif
 
 instance (Enum a, Bits c, Num c) => IsList (BitSet c a) where
   type Item (BitSet c a) = a
@@ -99,7 +106,8 @@ difference :: Bits c => BitSet c a -> BitSet c a -> BitSet c a
 difference (BitSet bits1) (BitSet bits2) = BitSet $! bits1 .&. complement bits2
 
 -- | See 'difference'.
-infix 5 \\
+--
+infix 5 \\ -- comment to fool cpp: https://downloads.haskell.org/~ghc/latest/docs/html/users_guide/phases.html#cpp-and-string-gaps
 {-# INLINE (\\) #-}
 (\\) :: Bits c => BitSet c a -> BitSet c a -> BitSet c a
 (\\) = difference
