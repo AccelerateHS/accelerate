@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.BitSet
 -- Copyright   : [2019] The Accelerate Team

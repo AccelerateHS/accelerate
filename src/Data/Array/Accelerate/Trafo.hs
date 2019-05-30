@@ -18,7 +18,8 @@
 module Data.Array.Accelerate.Trafo (
 
   -- * HOAS -> de Bruijn conversion
-  Config(..), defaultOptions, convert_segment_offset,
+  -- ** Options
+  module Data.Array.Accelerate.Trafo.Config,
 
   -- ** Array computations
   convertAcc, convertAccWith,
