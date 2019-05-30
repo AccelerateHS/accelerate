@@ -35,9 +35,11 @@ module Data.Array.Accelerate.Pretty (
 ) where
 
 -- libraries
+import Data.Maybe
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.String
 import Data.Text.Prettyprint.Doc.Render.Terminal
+import System.Environment
 import System.IO
 import System.IO.Unsafe
 import qualified Data.Text.Lazy                                     as T
@@ -118,8 +120,14 @@ instance (PrettyEnv env, PrettyEnv aenv) => Show (PreOpenFun DelayedOpenAcc env 
 renderForTerminal :: Adoc  -> String
 renderForTerminal = render . layoutSmart terminalLayoutOptions
   where
-    render | terminalSupportsANSI = T.unpack . renderLazy . reAnnotateS ansiKeyword
-           | otherwise            = renderString
+    fancy = terminalSupportsANSI && terminalColourAllowed
+    render
+      | fancy     = T.unpack . renderLazy . reAnnotateS ansiKeyword
+      | otherwise = renderString
+
+{-# NOINLINE terminalColourAllowed #-}
+terminalColourAllowed :: Bool
+terminalColourAllowed = unsafePerformIO $ isNothing <$> lookupEnv "NO_COLOR"
 
 {-# NOINLINE terminalSupportsANSI #-}
 terminalSupportsANSI :: Bool
