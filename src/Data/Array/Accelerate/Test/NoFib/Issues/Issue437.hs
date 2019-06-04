@@ -48,7 +48,9 @@ test_issue437 runN
     c0 <- Atomic.read __total_bytes_copied_from_remote
 
     let (a,_) = go xs
-    a `seq` return ()
+
+    -- check the final result is actually transferred back
+    a @?= fromList Z [42]
 
     a1 <- Atomic.read __total_bytes_allocated_remote
     b1 <- Atomic.read __total_bytes_copied_to_remote
@@ -58,12 +60,19 @@ test_issue437 runN
         to    = b1-b0
         from  = c1-c0
 
+    -- Either:
+    --  a) this is a local memory backend; no transfer takes place
+    --
+    --  b) this is a remote memory backend; we should only transfer the 4 bytes
+    --     to the device for the 'unit', but since the data is already on the
+    --     host we can avoid the transfer back
+    --
     assertBool (printf "bytes_allocated_remote=%d, bytes_copied_to_remote=%d, bytes_copied_from_remote=%d" alloc to from)
-      $ (alloc P.== 0 P.&& from P.== 0 P.&& to P.== 0) P.||
-        (alloc P.>  0 P.&& from P.== 4 P.&& to P.== 4)
+      $ (alloc P.== 0 P.&& to P.== 0 P.&& from P.== 0) P.||   -- local memory space
+        (alloc P.>  0 P.&& to P.== 4 P.&& from P.== 0)        -- remote memory space
   where
     xs :: (Scalar Float, Matrix Float)
-    xs = runN $ T2 (unit 0) (fill (constant $ Z:.10000:.10000) 1)
+    xs = runN $ T2 (unit 42) (fill (constant $ Z:.10000:.10000) 1)
 
     go :: Arrays a => a -> a
     go = runN f
