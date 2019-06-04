@@ -60,6 +60,7 @@ import Data.Array.Accelerate.Test.NoFib.Issues.Issue364
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue407
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue409
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue436
+import Data.Array.Accelerate.Test.NoFib.Issues.Issue437
 
 
 test_issues :: RunN -> TestTree
@@ -86,5 +87,6 @@ test_issues runN =
     , test_issue407 runN
     , test_issue409 runN
     , test_issue436 runN
+    , test_issue437 runN
     ]
 
