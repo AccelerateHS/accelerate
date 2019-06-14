@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate
+-- Description : The Accelerate standard prelude
 -- Copyright   : [2008..2019] The Accelerate Team
 -- License     : BSD3
 --

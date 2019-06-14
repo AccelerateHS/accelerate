@@ -16,6 +16,7 @@
 {-# OPTIONS_HADDOCK prune #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
+-- Description : Reference backend (interpreted)
 -- Copyright   : [2008..2019] The Accelerate Team
 -- License     : BSD3
 --
