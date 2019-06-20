@@ -35,6 +35,7 @@ int64_t __total_bytes_evicted_from_remote   = 0;
 int64_t __num_remote_gcs                    = 0;
 int64_t __num_evictions                     = 0;
 
+/* cbits/flags.c */
 extern __flags_t __cmd_line_flags;
 
 #if defined(ACCELERATE_DEBUG)
