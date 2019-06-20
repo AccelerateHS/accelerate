@@ -73,26 +73,27 @@ instance Show Flag where
       2  -> "exp-sharing"
       3  -> "fusion"
       4  -> "simplify"
-      5  -> "fast-math"
-      6  -> "flush_cache"
-      7  -> "force-recomp"
-      8  -> "debug"
-      9  -> "verbose"
-      10 -> "dump-phases"
-      11 -> "dump-sharing"
-      12 -> "dump-fusion"
-      13 -> "dump-simpl_stats"
-      14 -> "dump-simpl_iterations"
-      15 -> "dump-vectorisation"
-      16 -> "dump-dot"
-      17 -> "dump-simpl_dot"
-      18 -> "dump-gc"
-      19 -> "dump-gc_stats"
-      20 -> "dump-cc"
-      21 -> "dump-ld"
-      22 -> "dump-asm"
-      23 -> "dump-exec"
-      24 -> "dump-sched"
+      5  -> "inplace"
+      6  -> "fast-math"
+      7  -> "flush_cache"
+      8  -> "force-recomp"
+      9  -> "debug"
+      10 -> "verbose"
+      11 -> "dump-phases"
+      12 -> "dump-sharing"
+      13 -> "dump-fusion"
+      14 -> "dump-simpl_stats"
+      15 -> "dump-simpl_iterations"
+      16 -> "dump-vectorisation"
+      17 -> "dump-dot"
+      18 -> "dump-simpl_dot"
+      19 -> "dump-gc"
+      20 -> "dump-gc_stats"
+      21 -> "dump-cc"
+      22 -> "dump-ld"
+      23 -> "dump-asm"
+      24 -> "dump-exec"
+      25 -> "dump-sched"
       _  -> show x
 
 -- | Conditional execution of a monadic debugging expression.
@@ -176,27 +177,28 @@ acc_sharing           = Flag  1 -- recover sharing of array computations
 exp_sharing           = Flag  2 -- recover sharing of scalar expressions
 array_fusion          = Flag  3 -- fuse array expressions
 simplify              = Flag  4 -- simplify scalar expressions
-fast_math             = Flag  5 -- delete persistent compilation cache(s)
-flush_cache           = Flag  6 -- force recompilation of array programs
-force_recomp          = Flag  7 -- use faster, less precise math library operations
+inplace               = Flag  5 -- allow (safe) in-place array updates
+fast_math             = Flag  6 -- delete persistent compilation cache(s)
+flush_cache           = Flag  7 -- force recompilation of array programs
+force_recomp          = Flag  8 -- use faster, less precise math library operations
 
 -- These debugging flags are disable by default and are enabled with @-d<blah>@
 --
-debug                 = Flag  8 -- compile code with debugging symbols (-g)
-verbose               = Flag  9 -- be very chatty
-dump_phases           = Flag 10 -- print information about each phase of the compiler
-dump_sharing          = Flag 11 -- sharing recovery phase
-dump_fusion           = Flag 12 -- array fusion phase
-dump_simpl_stats      = Flag 13 -- statistics form fusion/simplification
-dump_simpl_iterations = Flag 14 -- output from each simplifier iteration
-dump_vectorisation    = Flag 15 -- output from the vectoriser
-dump_dot              = Flag 16 -- generate dot output of the program
-dump_simpl_dot        = Flag 17 -- generate simplified dot output
-dump_gc               = Flag 18 -- trace garbage collector
-dump_gc_stats         = Flag 19 -- print final GC statistics
-dump_cc               = Flag 20 -- trace code generation & compilation
-dump_ld               = Flag 21 -- trace runtime linker
-dump_asm              = Flag 22 -- trace assembler
-dump_exec             = Flag 23 -- trace execution
-dump_sched            = Flag 24 -- trace scheduler
+debug                 = Flag  9 -- compile code with debugging symbols (-g)
+verbose               = Flag 10 -- be very chatty
+dump_phases           = Flag 11 -- print information about each phase of the compiler
+dump_sharing          = Flag 12 -- sharing recovery phase
+dump_fusion           = Flag 13 -- array fusion phase
+dump_simpl_stats      = Flag 14 -- statistics form fusion/simplification
+dump_simpl_iterations = Flag 15 -- output from each simplifier iteration
+dump_vectorisation    = Flag 16 -- output from the vectoriser
+dump_dot              = Flag 17 -- generate dot output of the program
+dump_simpl_dot        = Flag 18 -- generate simplified dot output
+dump_gc               = Flag 19 -- trace garbage collector
+dump_gc_stats         = Flag 20 -- print final GC statistics
+dump_cc               = Flag 21 -- trace code generation & compilation
+dump_ld               = Flag 22 -- trace runtime linker
+dump_asm              = Flag 23 -- trace assembler
+dump_exec             = Flag 24 -- trace execution
+dump_sched            = Flag 25 -- trace scheduler
 
