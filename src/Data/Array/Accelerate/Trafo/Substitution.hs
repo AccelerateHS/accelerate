@@ -171,22 +171,22 @@ type RebuildableAcc acc = (Rebuildable acc, AccClo acc ~ acc)
 instance RebuildableAcc acc => Rebuildable (PreOpenExp acc env) where
   type AccClo (PreOpenExp acc env) = acc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial = rebuildPreOpenExp rebuildPartial (pure . IE)
+  rebuildPartial x = Stats.substitution "rebuild" $ rebuildPreOpenExp rebuildPartial (pure . IE) x
 
 instance RebuildableAcc acc => Rebuildable (PreOpenFun acc env) where
   type AccClo (PreOpenFun acc env) = acc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial = rebuildFun rebuildPartial (pure . IE)
+  rebuildPartial x = Stats.substitution "rebuild" $ rebuildFun rebuildPartial (pure . IE) x
 
 instance RebuildableAcc acc => Rebuildable (PreOpenAcc acc) where
   type AccClo (PreOpenAcc acc) = acc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial = rebuildPreOpenAcc rebuildPartial
+  rebuildPartial x = Stats.substitution "rebuild" $ rebuildPreOpenAcc rebuildPartial x
 
 instance RebuildableAcc acc => Rebuildable (PreOpenAfun acc) where
   type AccClo (PreOpenAfun acc) = acc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial = rebuildAfun rebuildPartial
+  rebuildPartial x = Stats.substitution "rebuild" $ rebuildAfun rebuildPartial x
 
 -- Tuples have to be handled specially.
 newtype RebuildTup acc env aenv t = RebuildTup { unRTup :: Tuple (PreOpenExp acc env aenv) t }
@@ -194,20 +194,20 @@ newtype RebuildTup acc env aenv t = RebuildTup { unRTup :: Tuple (PreOpenExp acc
 instance RebuildableAcc acc => Rebuildable (RebuildTup acc env) where
   type AccClo (RebuildTup acc env) = acc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial v t = RebuildTup <$> rebuildTup rebuildPartial (pure . IE) v (unRTup t)
+  rebuildPartial v t = Stats.substitution "rebuild" . RebuildTup <$> rebuildTup rebuildPartial (pure . IE) v (unRTup t)
 
 instance Rebuildable OpenAcc where
   type AccClo OpenAcc = OpenAcc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial = rebuildOpenAcc
+  rebuildPartial x = Stats.substitution "rebuild" $ rebuildOpenAcc x
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenExp acc) where
   {-# INLINEABLE rebuildPartialE #-}
-  rebuildPartialE v = rebuildPreOpenExp rebuildPartial v (pure . IA)
+  rebuildPartialE v x = Stats.substitution "rebuild" $ rebuildPreOpenExp rebuildPartial v (pure . IA) x
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
   {-# INLINEABLE rebuildPartialE #-}
-  rebuildPartialE v = rebuildFun rebuildPartial v (pure . IA)
+  rebuildPartialE v x = Stats.substitution "rebuild" $ rebuildFun rebuildPartial v (pure . IA) x
 
 -- NOTE: [Weakening]
 --
@@ -321,11 +321,11 @@ type env :?> env' = forall t'. Idx env t' -> Maybe (Idx env' t')
 
 {-# INLINEABLE strengthen #-}
 strengthen :: Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
-strengthen k = rebuildPartial (fmap IA . k)
+strengthen k x = Stats.substitution "strengthen" $ rebuildPartial (fmap IA . k) x
 
 {-# INLINEABLE strengthenE #-}
 strengthenE :: RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
-strengthenE k = rebuildPartialE (fmap IE . k)
+strengthenE k x = Stats.substitution "strengthenE" $ rebuildPartialE (fmap IE . k) x
 
 -- Simultaneous Substitution ===================================================
 --
