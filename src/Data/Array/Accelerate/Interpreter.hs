@@ -67,7 +67,7 @@ import Data.Typeable
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
-import Prelude                                                      hiding ( sum )
+import Prelude                                                      hiding ( (!!), sum )
 
 -- friends
 import Data.Array.Accelerate.AST                                    hiding ( Boundary, PreBoundary(..) )
@@ -180,9 +180,9 @@ evalOpenAcc (AST.Manifest pacc) aenv =
         let a' = evalOpenAcc acc aenv
         in  rnfArrays (arrays @a') (fromArr a') `seq` a'
 
-      delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
-      delayed AST.Manifest{}  = $internalError "evalOpenAcc" "expected delayed array"
+      delayed :: (Shape sh, Elt e) => DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
       delayed AST.Delayed{..} = Delayed (evalE extentD) (evalF indexD) (evalF linearIndexD)
+      delayed (manifest -> a) = Delayed (shape a) (a!) (a!!)
 
       evalE :: DelayedExp aenv t -> t
       evalE exp = evalPreExp evalOpenAcc exp aenv

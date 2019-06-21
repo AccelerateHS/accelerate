@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE InstanceSigs         #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
@@ -131,17 +132,18 @@ convertOpenAcc config = manifest config . computeAcc . embedOpenAcc config
 -- will put producers adjacent to the term consuming it.
 --
 delayed :: (Shape sh, Elt e) => Config -> OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
-delayed config (embedOpenAcc config -> Embed BaseEnv cc) =
-  case cc of
-    Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
-    Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
-    Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
-      | Just Refl <- match sh (arrayShape v)
-      , Just Refl <- isIdentity p
-      -> Delayed sh (f `compose` indexArray v) (f `compose` linearIndex v)
-
-      | f'        <- f `compose` indexArray v `compose` p
-      -> Delayed sh f' (f' `compose` fromIndex sh)
+delayed config (embedOpenAcc config -> Embed env cc)
+  | BaseEnv <- env
+  = case simplify cc of
+      Done v                                                -> avarIn v
+      Yield (cvtE -> sh) (cvtF -> f)                        -> Delayed sh f (f `compose` fromIndex sh)
+      Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
+        | Just Refl <- match sh (arrayShape v)
+        , Just Refl <- isIdentity p                         -> Delayed sh (f `compose` indexArray v) (f `compose` linearIndex v)
+        | f'        <- f `compose` indexArray v `compose` p -> Delayed sh f' (f' `compose` fromIndex sh)
+  --
+  | otherwise
+  = manifest config (computeAcc (Embed env cc))
   where
     cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
     cvtE = convertOpenExp config
@@ -149,6 +151,7 @@ delayed config (embedOpenAcc config -> Embed BaseEnv cc) =
     cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
     cvtF (Lam f)  = Lam (cvtF f)
     cvtF (Body b) = Body (cvtE b)
+
 
 -- Convert array programs as manifest terms.
 --
@@ -173,10 +176,10 @@ manifest config (OpenAcc pacc) =
     -- Producers
     -- ---------
     --
-    -- Some producers might still exist as a manifest array. Typically
-    -- this is because they are the last stage of the computation, or the
-    -- result of a let-binding to be used multiple times. The input array
-    -- here should be an array variable, else something went wrong.
+    -- Some producers might still exist as a manifest array. Typically this
+    -- is because they are the last stage of the computation, or the result
+    -- of a let-binding to be used multiple times. The input array here
+    -- should be a evaluated array term, else something went wrong.
     --
     Map f a                 -> Map (cvtF f) (delayed config a)
     Generate sh f           -> Generate (cvtE sh) (cvtF f)
@@ -191,10 +194,9 @@ manifest config (OpenAcc pacc) =
     -- Consumers
     -- ---------
     --
-    -- Embed producers directly into the representation. For stencils we
-    -- make an exception. Since these consumers access elements of the
-    -- argument array multiple times, we are careful not to duplicate work
-    -- and instead force the argument to be a manifest array.
+    -- Embed producers directly into the representation. For delayed terms
+    -- with local bindings, these will have been floated up above the
+    -- consumer already
     --
     Fold f z a              -> Fold     (cvtF f) (cvtE z) (delayed config a)
     Fold1 f a               -> Fold1    (cvtF f) (delayed config a)
@@ -463,7 +465,10 @@ embedPreAcc config embedAcc elimAcc pacc
     unembed :: Embed acc aenv arrs -> Embed acc aenv arrs
     unembed x
       | array_fusion `member` options config = x
-      | otherwise                            = done (compute x)
+      | Embed env cc <- x
+      = case compute cc of
+          Avar v -> Embed env                         (Done v)
+          pacc   -> Embed (env `PushEnv` inject pacc) (Done ZeroIdx)
 
     cvtA :: Arrays a => acc aenv' a -> acc aenv' a
     cvtA = computeAcc . embedAcc
@@ -480,7 +485,7 @@ embedPreAcc config embedAcc elimAcc pacc
     --
     permute f p d a     = Permute f d p a
 
-    -- Note: [Stencil fusion]
+    -- NOTE: [Stencil fusion]
     --
     -- We allow stencils to delay their argument arrays with no special
     -- considerations. This means that the delayed function will be evaluated
@@ -520,6 +525,11 @@ embedPreAcc config embedAcc elimAcc pacc
           => (f1 env' a -> f2 env' b -> f3 env' c -> d) -> f1 env a -> f2 env b -> f3 env c -> Extend acc env env' -> d
     into3 op a b c env = op (sink env a) (sink env b) (sink env c)
 
+    -- Operations which can be fused into consumers. Move all of the local
+    -- bindings out of the way so that the fusible function operates
+    -- directly on the delayed representation. See also: [Representing
+    -- delayed arrays]
+    --
     fuse :: Arrays as
          => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
          ->       acc aenv as
@@ -537,44 +547,86 @@ embedPreAcc config embedAcc elimAcc pacc
       , env             <- env1 `append` env0
       = Embed env (op env (sink env0 cc1) cc0)
 
+    -- Consumer operations which will be evaluated.
+    --
+    -- NOTE: [Fusion and the lowest common use site]
+    --
+    -- The AST given to us by sharing recovery will place let bindings at
+    -- the lowest common use site for that shared term. For example:
+    --
+    --   fold f z (let a0 = ..
+    --                 a1 = ..
+    --              in zipWith g a0 a1)
+    --
+    -- In order to enable producer/consumer fusion for the above example,
+    -- it is necessary to float the let bindings above the `fold`
+    -- operation; SEE: [Sharing vs. Fusion] for more information.
+    --
+    -- Furthermore, we used to maintain an invariant that all (manifest)
+    -- arguments were supplied as array variables, for example:
+    --
+    --   fold1 f (let a0 = ..               let a0 = ..
+    --             in stencil g a0)   ==>       a1 = stencil g a0
+    --                                          a2 = fold1 f a1
+    --
+    -- However, if the argument term will be evaluated (i.e. can not be
+    -- fused into the producer) then it is better that we do _not_ float
+    -- those terms, and instead leave them under the consumer. This helps
+    -- to syntactically constrain the "liveness" of terms: if the argument
+    -- to an operation is not an array variable, we can see directly that
+    -- this will be the last use-site of that array. In particular, this is
+    -- useful for the 'permute' operation to know when it can in-place
+    -- update the array of default values.
+    --
     embed :: (Arrays as, Arrays bs)
           => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
           ->       acc aenv as
           -> Embed acc aenv bs
-    embed = trav1 id
+    embed op (embedAcc -> Embed env cc)
+      | Done{} <- cc = Embed (BaseEnv `PushEnv` inject (op BaseEnv (computeAcc (Embed env cc)))) (Done ZeroIdx)
+      | otherwise    = Embed (env     `PushEnv` inject (op env     (inject (compute cc))))       (Done ZeroIdx)
 
-    embed2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
+    embed2 :: (Arrays as, Arrays bs, Arrays cs)
            => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
            ->       acc aenv as
            ->       acc aenv bs
            -> Embed acc aenv cs
-    embed2 = trav2 id id
+    embed2 op (embedAcc -> Embed env1 cc1) a0
+      | Done{}          <- cc1
+      , a1              <- computeAcc (Embed env1 cc1)
+      = embed (\env0 -> op env0 (sink env0 a1)) a0
+      --
+      | Embed env0 cc0  <- embedAcc (sink env1 a0)
+      , env             <- env1 `append` env0
+      = case cc0 of
+          Done{} -> Embed (env1 `PushEnv` inject (op env1 (inject (compute cc1)) (computeAcc (Embed env0 cc0))))      (Done ZeroIdx)
+          _      -> Embed (env  `PushEnv` inject (op env  (inject (compute (sink env0 cc1))) (inject (compute cc0)))) (Done ZeroIdx)
 
-    trav1 :: (Arrays as, Arrays bs)
-          => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
-          -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
-          ->       acc aenv as
-          -> Embed acc aenv bs
-    trav1 f op (f . embedAcc -> Embed env cc)
-      = Embed (env `PushEnv` inject (op env (inject (compute' cc)))) (Done ZeroIdx)
+    -- trav1 :: (Arrays as, Arrays bs)
+    --       => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
+    --       -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
+    --       ->       acc aenv as
+    --       -> Embed acc aenv bs
+    -- trav1 f op (f . embedAcc -> Embed env cc)
+    --   = Embed (env `PushEnv` inject (op env (inject (compute cc)))) (Done ZeroIdx)
 
-    trav2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
-          => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
-          -> (forall aenv'. Embed acc aenv' bs -> Embed acc aenv' bs)
-          -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
-          ->       acc aenv as
-          ->       acc aenv bs
-          -> Embed acc aenv cs
-    trav2 f1 f0 op (f1 . embedAcc -> Embed env1 cc1) (f0 . embedAcc . sink env1 -> Embed env0 cc0)
-      | env     <- env1 `append` env0
-      , acc1    <- inject . compute' $ sink env0 cc1
-      , acc0    <- inject . compute' $ cc0
-      = Embed (env `PushEnv` inject (op env acc1 acc0)) (Done ZeroIdx)
+    -- trav2 :: (Arrays as, Arrays bs, Arrays cs)
+    --       => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
+    --       -> (forall aenv'. Embed acc aenv' bs -> Embed acc aenv' bs)
+    --       -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
+    --       ->       acc aenv as
+    --       ->       acc aenv bs
+    --       -> Embed acc aenv cs
+    -- trav2 f1 f0 op (f1 . embedAcc -> Embed env1 cc1) (f0 . embedAcc . sink env1 -> Embed env0 cc0)
+    --   | env     <- env1 `append` env0
+    --   , acc1    <- inject . compute $ sink env0 cc1
+    --   , acc0    <- inject . compute $ cc0
+    --   = Embed (env `PushEnv` inject (op env acc1 acc0)) (Done ZeroIdx)
 
     -- force :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
     -- force (Embed env cc)
     --   | Done{} <- cc = Embed env                                  cc
-    --   | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
+    --   | otherwise    = Embed (env `PushEnv` inject (compute cc)) (Done ZeroIdx)
 
     -- -- Move additional bindings for producers outside of the sequence, so that
     -- -- producers may fuse with their arguments resulting in actual sequencing
@@ -617,7 +669,7 @@ embedSeq embedAcc s
           -> ExtendProducer acc aenv' senv arrs'
     travP (ToSeq slix sh a) env
       | Embed env' cc <- embedAcc (sink env a)
-      = ExtendProducer env' (ToSeq slix sh (inject (compute' cc)))
+      = ExtendProducer env' (ToSeq slix sh (inject (compute cc)))
     travP (StreamIn arrs) _          = ExtendProducer BaseEnv (StreamIn arrs)
     travP (MapSeq f x) env           = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) x)
     travP (ChunkedMapSeq f x) env    = ExtendProducer BaseEnv (ChunkedMapSeq (cvtAF (sink env f)) x)
@@ -669,7 +721,7 @@ data ExtendProducer acc aenv senv arrs where
 -- Internal representation
 -- =======================
 
--- Note: [Representing delayed array]
+-- NOTE: [Representing delayed arrays]
 --
 -- During the fusion transformation we represent terms as a pair consisting of
 -- a collection of supplementary environment bindings and a description of how
@@ -745,9 +797,14 @@ data Cunctation acc aenv a where
 
 
 instance Kit acc => Simplify (Cunctation acc aenv a) where
-  simplify (Done v)        = Done v
-  simplify (Yield sh f)    = Yield (simplify sh) (simplify f)
-  simplify (Step sh p f v) = Step (simplify sh) (simplify p) (simplify f) v
+  simplify = \case
+    Done v                                                    -> Done v
+    Yield (simplify -> sh) (simplify -> f)                    -> Yield sh f
+    Step  (simplify -> sh) (simplify -> p) (simplify -> f) v
+      | Just Refl <- match sh (arrayShape v)
+      , Just Refl <- isIdentity p
+      , Just Refl <- isIdentity f                             -> Done v
+      | otherwise                                             -> Step sh p f v
 
 
 -- Convert a real AST node into the internal representation
@@ -805,7 +862,7 @@ accType _ = arrays @a
 -- ========================
 
 instance Kit acc => Sink (Cunctation acc) where
-  weaken k cc = case cc of
+  weaken k = \case
     Done v              -> Done (weaken k v)
     Step sh p f v       -> Step (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
     Yield sh f          -> Yield (weaken k sh) (weaken k f)
@@ -864,30 +921,68 @@ instance Kit acc => Sink (SinkSeq acc senv) where
 -- Array computations
 -- ------------------
 
--- Recast the internal representation of delayed arrays into a real AST node.
--- Use the most specific version of a combinator whenever possible.
---
-compute :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> PreOpenAcc acc aenv arrs
-compute (Embed env cc) = bind env (compute' cc)
-
-compute' :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
-compute' cc = case simplify cc of
-  Done v                                              -> Avar v
-  Yield sh f                                          -> Generate sh f
-  Step sh p f v
-    | Just Refl <- match sh (simplify (arrayShape v))
-    , Just Refl <- isIdentity p
-    , Just Refl <- isIdentity f                       -> Avar v
-    | Just Refl <- match sh (simplify (arrayShape v))
-    , Just Refl <- isIdentity p                       -> Map f (avarIn v)
-    | Just Refl <- isIdentity f                       -> Backpermute sh p (avarIn v)
-    | otherwise                                       -> Transform sh p f (avarIn v)
-
-
 -- Evaluate a delayed computation and tie the recursive knot
 --
+-- We do a bit of extra work to maintain that terms should be left at their
+-- lowest common use site. SEE: [Fusion and the lowest common use site]
+--
 computeAcc :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> acc aenv arrs
-computeAcc = inject . compute
+computeAcc (Embed      BaseEnv          cc) = inject (compute cc)
+computeAcc (Embed env@(PushEnv bot top) cc) =
+  case simplify cc of
+    Done v        -> bindA env (avarIn v)
+    Yield sh f    -> bindA env (inject (Generate sh f))
+    Step sh p f v
+      | Just Refl <- match sh (arrayShape v)
+      , Just Refl <- isIdentity p
+      -> case v of
+           ZeroIdx
+             | Just g <- strengthen noTop f -> bindA bot (inject (Map g top))
+           _                                -> bindA env (inject (Map f (avarIn v)))
+
+      | Just Refl <- isIdentity f
+      -> case v of
+           ZeroIdx
+             | Just q  <- strengthen noTop p
+             , Just sz <- strengthen noTop sh -> bindA bot (inject (Backpermute sz q top))
+           _                                  -> bindA env (inject (Backpermute sh p (avarIn v)))
+
+      | otherwise
+      -> case v of
+           ZeroIdx
+             | Just g  <- strengthen noTop f
+             , Just q  <- strengthen noTop p
+             , Just sz <- strengthen noTop sh -> bindA bot (inject (Transform sz q g top))
+           _                                  -> bindA env (inject (Transform sh p f (avarIn v)))
+
+  where
+    bindA :: (Kit acc, Arrays a)
+          => Extend acc aenv aenv'
+          ->        acc      aenv' a
+          ->        acc aenv       a
+    bindA BaseEnv         b = b
+    bindA (PushEnv env a) b =
+      case extract b of
+        Just (Avar ZeroIdx) -> bindA env a
+        _                   -> bindA env (inject (Alet a b))
+
+    noTop :: (aenv, a) :?> aenv
+    noTop ZeroIdx      = Nothing
+    noTop (SuccIdx ix) = Just ix
+
+
+-- Convert the internal representation of delayed arrays into a real AST
+-- node. Use the most specific version of a combinator whenever possible.
+--
+compute :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
+compute cc = case simplify cc of
+  Done v                                    -> Avar v
+  Yield sh f                                -> Generate sh f
+  Step sh p f v
+    | Just Refl <- match sh (arrayShape v)
+    , Just Refl <- isIdentity p             -> Map f (avarIn v)
+    | Just Refl <- isIdentity f             -> Backpermute sh p (avarIn v)
+    | otherwise                             -> Transform sh p f (avarIn v)
 
 
 -- Representation of a generator as a delayed array
@@ -921,11 +1016,11 @@ mapD f (Embed env cc)
 -- a backend will be able to execute this in constant time. This operations
 -- looks for the right terms recursively, splitting operations such as:
 --
--- > map (\x -> fst . fst ... x) arr
+--   map (\x -> fst . fst ... x) arr
 --
 -- into multiple stages so that they can all be executed in constant time:
 --
--- > map fst . map fst ... arr
+--   map fst . map fst ... arr
 --
 -- Note that this is a speculative operation, since we could dig under several
 -- levels of projection before discovering that the operation can not be
@@ -1132,8 +1227,8 @@ zipWithD f cc1 cc0
 -- arbitrary sequences of array _data_, irrespective of how the shape component
 -- is used. For example, reverse is defined in the prelude as:
 --
---   reverse xs = let len   = unindex1 (shape xs)
---                    pf i  = len - i - 1
+--   reverse xs = let len  = unindex1 (shape xs)
+--                    pf i = len - i - 1
 --                in
 --                backpermute (shape xs) (ilift1 pf) xs
 --
@@ -1147,7 +1242,7 @@ zipWithD f cc1 cc0
 -- into the body.
 --
 -- Let-elimination can also be used to _introduce_ work duplication, which may
--- be beneficial if we can estimate that the cost of recomputation is less than
+-- be beneficial if we can estimate that the cost of re-computation is less than
 -- the cost of completely evaluating the array and subsequently retrieving the
 -- data from memory.
 --
@@ -1215,10 +1310,10 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
   -- embedAcc. If we don't we can be left with dead terms that don't get
   -- eliminated. This problem occurred in the canny program.
   --
-  | acc1                <- compute (Embed env1 cc1)
-  , False               <- elimAcc (inject acc1) acc0
+  | acc1    <- computeAcc (Embed env1 cc1)
+  , False   <- elimAcc acc1 acc0
   = Stats.ruleFired "aletD/bind"
-  $ Embed (BaseEnv `PushEnv` inject acc1 `append` env0) cc0
+  $ Embed (BaseEnv `PushEnv` acc1 `append` env0) cc0
 
   -- let-elimination
   -- ---------------
@@ -1226,11 +1321,11 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
   -- Handle the remaining cases in a separate function. It turns out that this
   -- is important so we aren't excessively sinking/delaying terms.
   --
-  | acc0'               <- sink1 env1 acc0
+  | acc0'   <- sink1 env1 acc0
   = Stats.ruleFired "aletD/eliminate"
   $ case cc1 of
-      Step{}    -> eliminate env1 cc1 acc0'
-      Yield{}   -> eliminate env1 cc1 acc0'
+      Step{}  -> eliminate env1 cc1 acc0'
+      Yield{} -> eliminate env1 cc1 acc0'
 
   where
     acc0 :: acc (aenv, arrs) brrs
@@ -1251,13 +1346,13 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
       | Yield sh1 f1      <- cc1 = elim sh1 f1
       where
         bnd :: PreOpenAcc acc aenv' (Array sh e)
-        bnd = compute' cc1
+        bnd = compute cc1
 
         elim :: PreExp acc aenv' sh -> PreFun acc aenv' (sh -> e) -> Embed acc aenv brrs
         elim sh1 f1
-          | sh1'                <- weaken SuccIdx sh1
-          , f1'                 <- weaken SuccIdx f1
-          , Embed env0' cc0'    <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          | sh1'              <- weaken SuccIdx sh1
+          , f1'               <- weaken SuccIdx f1
+          , Embed env0' cc0'  <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
           = Embed (env1 `append` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
