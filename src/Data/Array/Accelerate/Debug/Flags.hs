@@ -27,7 +27,7 @@ module Data.Array.Accelerate.Debug.Flags (
   setValue,
 
   Flag(..),
-  seq_sharing, acc_sharing, exp_sharing, array_fusion, simplify, flush_cache, force_recomp,
+  seq_sharing, acc_sharing, exp_sharing, array_fusion, simplify, inplace, flush_cache, force_recomp,
   fast_math, debug, verbose, dump_phases, dump_sharing, dump_fusion,
   dump_simpl_stats, dump_simpl_iterations, dump_vectorisation, dump_dot,
   dump_simpl_dot, dump_gc, dump_gc_stats, dump_cc, dump_ld, dump_asm, dump_exec,
