@@ -923,8 +923,8 @@ instance Kit acc => Sink (SinkSeq acc senv) where
 
 -- Evaluate a delayed computation and tie the recursive knot
 --
--- We do a bit of extra work to maintain that terms should be left at their
--- lowest common use site. SEE: [Fusion and the lowest common use site]
+-- We do a bit of extra work to (try to) maintain that terms should be left
+-- at their lowest common use site. SEE: [Fusion and the lowest common use site]
 --
 computeAcc :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> acc aenv arrs
 computeAcc (Embed      BaseEnv          cc) = inject (compute cc)
@@ -1140,7 +1140,7 @@ reshapeD
     -> PreExp acc aenv sl
     -> Embed  acc aenv (Array sl e)
 reshapeD (Embed env cc) (sink env -> sl)
-  | Done v      <- cc
+  | Done v <- cc
   = Embed (env `PushEnv` inject (Reshape sl (avarIn v))) (Done ZeroIdx)
 
   | otherwise
