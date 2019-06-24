@@ -1646,7 +1646,7 @@ restrict :: (Kit acc, Shape sh, Shape sl, Elt slix)
 restrict sliceIndex slix = Lam (Body (IndexFull sliceIndex (weakenE SuccIdx slix) (Var ZeroIdx)))
 
 arrayShape :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreExp acc aenv sh
-arrayShape = Shape . avarIn
+arrayShape = simplify . Shape . avarIn
 
 indexArray :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreFun acc aenv (sh -> e)
 indexArray v = Lam (Body (Index (avarIn v) (Var ZeroIdx)))
