@@ -35,12 +35,13 @@ import Prelude                                            as P
 
 
 test_issue437 :: RunN -> TestTree
-test_issue437 runN
 #ifndef ACCELERATE_DEBUG
+test_issue437 _
   = expectFail
   $ testCase "437"
   $ assertFailure "This test requires building with -fdebug"
 #else
+test_issue437 runN
   = testCase "437"
   $ do
     a0 <- Atomic.read __total_bytes_allocated_remote
