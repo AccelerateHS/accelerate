@@ -33,7 +33,7 @@
  * corresponding behaviour.
  */
 
-__flags_t __cmd_line_flags            = { 0x3f };
+__flags_t __cmd_line_flags            = { 0x7f };  // SEE: [layout of command line options bitfield]
 HsInt     __unfolding_use_threshold   = 1;
 HsInt     __max_simplifier_iterations = 25;
 
@@ -194,7 +194,7 @@ static void parse_options(int argc, char *argv[])
   }
 
 #if !defined(ACCELERATE_DEBUG)
-  if (__cmd_line_flags.bitfield & 0x1ffff00) {  // SEE: [layout of command line options bitfield]
+  if (__cmd_line_flags.bitfield & 0x3fffe00) {  // SEE: [layout of command line options bitfield]
     fprintf(stderr, "Data.Array.Accelerate: Debugging options are disabled.\n");
     fprintf(stderr, "Reinstall package 'accelerate' with '-fdebug' to enable them.\n");
   }
