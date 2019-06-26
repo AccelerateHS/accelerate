@@ -6,9 +6,9 @@ dist: xenial
 cache:
   timeout: 600
   directories:
-    - $HOME/.stack/snapshots
+    - $HOME/.stack
     - $HOME/.local/bin
-    - .stack-work/install
+    - $TRAVIS_BUILD_DIR/.stack-work
 
 before_cache:
   # - rm -vrf $(stack path --local-install-root)/bin
