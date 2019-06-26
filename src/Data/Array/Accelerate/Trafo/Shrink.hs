@@ -72,7 +72,7 @@ instance Kit acc => Shrink (PreOpenFun acc env aenv f) where
 -- (dead-code elimination) or one (linear inlining) times.
 --
 shrinkExp :: Kit acc => PreOpenExp acc env aenv t -> (Bool, PreOpenExp acc env aenv t)
-shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
+shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
   where
     -- If the bound variable is used at most this many times, it will be inlined
     -- into the body. In cases where it is not used at all, this is equivalent
@@ -152,7 +152,7 @@ shrinkPreAcc
     :: forall acc aenv arrs. ShrinkAcc acc -> ReduceAcc acc
     -> PreOpenAcc acc aenv arrs
     -> PreOpenAcc acc aenv arrs
-shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
+shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
   where
     shrinkA :: PreOpenAcc acc aenv' a -> PreOpenAcc acc aenv' a
     shrinkA pacc = case pacc of

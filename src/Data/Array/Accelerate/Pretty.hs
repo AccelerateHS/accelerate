@@ -158,21 +158,7 @@ extractOpenAcc (OpenAcc pacc) = pacc
 prettyDelayedOpenAcc :: PrettyAcc DelayedOpenAcc
 prettyDelayedOpenAcc context aenv (Manifest pacc)
   = prettyPreOpenAcc context prettyDelayedOpenAcc extractDelayedOpenAcc aenv pacc
-prettyDelayedOpenAcc context aenv (Delayed sh f _)
-  | Shape a   <- sh
-  , Just Refl <- match f (Lam (Body (Index a (Var ZeroIdx))))
-  = prettyDelayedOpenAcc context aenv a
-  --
-  -- If we detect that the delayed array is simply accessing an array
-  -- variable, then just print the variable name. That is:
-  --
-  -- > let a0 = <...> in map f (Delayed (shape a0) (\x0 -> a0!x0))
-  --
-  -- becomes
-  --
-  -- > let a0 = <...> in map f a0
-  --
-  | otherwise
+prettyDelayedOpenAcc _       aenv (Delayed sh f _)
   = parens
   $ nest shiftwidth
   $ sep [ delayed "delayed"

@@ -126,7 +126,7 @@ prettyPreOpenAcc
 prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
   case pacc of
     Avar idx                -> prj idx aenv
-    Alet{}                  -> prettyAlet prettyAcc extractAcc aenv pacc
+    Alet{}                  -> prettyAlet ctx prettyAcc extractAcc aenv pacc
     Atuple tup              -> prettyAtuple prettyAcc aenv tup
     Apply f a               -> apply
       where
@@ -206,12 +206,15 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
 
 prettyAlet
     :: forall acc aenv arrs.
-       PrettyAcc acc
+       Context
+    -> PrettyAcc acc
     -> ExtractAcc acc
     -> Val aenv
     -> PreOpenAcc acc aenv arrs
     -> Adoc
-prettyAlet prettyAcc extractAcc aenv0 = align . wrap . collect aenv0
+prettyAlet ctx prettyAcc extractAcc aenv0
+  = parensIf (needsParens ctx "let")
+  . align . wrap . collect aenv0
   where
     collect :: Val aenv' -> PreOpenAcc acc aenv' a -> ([Adoc], Adoc)
     collect aenv =

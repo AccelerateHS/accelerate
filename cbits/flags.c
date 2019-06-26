@@ -56,6 +56,7 @@ static const struct option longopts[] =
   , { "fexp-sharing",                   no_argument,       NULL, OPT_ENABLE                    }
   , { "ffusion",                        no_argument,       NULL, OPT_ENABLE                    }
   , { "fsimplify",                      no_argument,       NULL, OPT_ENABLE                    }
+  , { "finplace",                       no_argument,       NULL, OPT_ENABLE                    }
   , { "ffast-math",                     no_argument,       NULL, OPT_ENABLE                    }
   , { "fflush-cache",                   no_argument,       NULL, OPT_ENABLE                    }
   , { "fforce-recomp",                  no_argument,       NULL, OPT_ENABLE                    }
@@ -83,6 +84,7 @@ static const struct option longopts[] =
   , { "fno-exp-sharing",                no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-fusion",                     no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-simplify",                   no_argument,       NULL, OPT_DISABLE                   }
+  , { "fno-inplace",                    no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-fast-math",                  no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-flush-cache",                no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-force-recomp",               no_argument,       NULL, OPT_DISABLE                   }
@@ -121,7 +123,7 @@ static void parse_options(int argc, char *argv[])
       break;
 
     case OPT_DISABLE:
-      __cmd_line_flags.bitfield &= ~(1 << (longindex - 25));  // SEE: [layout of command line options bitfield]
+      __cmd_line_flags.bitfield &= ~(1 << (longindex - 26));  // SEE: [layout of command line options bitfield]
       break;
 
     /* attempt to decode the argument to flags which require them */
