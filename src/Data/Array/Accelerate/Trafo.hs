@@ -71,11 +71,10 @@ import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 -- import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
-import Data.Array.Accelerate.Debug.Flags                hiding ( when )
-
 #ifdef ACCELERATE_DEBUG
 import Text.Printf
 import System.IO.Unsafe
+import Data.Array.Accelerate.Debug.Flags                hiding ( when )
 import Data.Array.Accelerate.Debug.Timed
 #endif
 
