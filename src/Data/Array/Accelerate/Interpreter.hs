@@ -397,15 +397,15 @@ foldSegOp
     -> Delayed (Array (sh :. Int) e)
     -> Delayed (Segments i)
     -> Array (sh :. Int) e
-foldSegOp f z (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
+foldSegOp f z (Delayed (sh :. _) arr _) (Delayed (Z :. n) _ seg)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
-  = fromFunction (sh :. n)
-  $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
-                       end   = fromIntegral $ offset ! (Z :. ix+1)
+  = $boundsCheck "foldSeg" "empty segment descriptor" (n > 0)
+  $ fromFunction (sh :. n-1)
+  $ \(sz :. ix) -> let start = fromIntegral $ seg ix
+                       end   = fromIntegral $ seg (ix+1)
                    in
-                   iter (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f z
-  where
-    offset      = scanlOp (+) 0 seg
+                   $boundsCheck "foldSeg" "empty segment" (end >= start)
+                   $ iter (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f z
 
 
 fold1SegOp
@@ -414,16 +414,15 @@ fold1SegOp
     -> Delayed (Array (sh :. Int) e)
     -> Delayed (Segments i)
     -> Array (sh :. Int) e
-fold1SegOp f (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
+fold1SegOp f (Delayed (sh :. _) arr _) (Delayed (Z :. n) _ seg)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
-  = fromFunction (sh :. n)
-  $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
-                       end   = fromIntegral $ offset ! (Z :. ix+1)
+  = $boundsCheck "foldSeg" "empty segment descriptor" (n > 0)
+  $ fromFunction (sh :. n-1)
+  $ \(sz :. ix) -> let start = fromIntegral $ seg ix
+                       end   = fromIntegral $ seg (ix+1)
                    in
                    $boundsCheck "fold1Seg" "empty segment" (end > start)
                    $ iter1 (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f
-  where
-    offset      = scanlOp (+) 0 seg
 
 
 scanl1Op

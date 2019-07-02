@@ -255,7 +255,8 @@ module Data.Array.Accelerate (
   fold, fold1, foldAll, fold1All,
 
   -- *** Segmented reductions
-  foldSeg, fold1Seg,
+  foldSeg,  fold1Seg,
+  foldSeg', fold1Seg',
 
   -- *** Specialised reductions
   all, any, and, or, sum, product, minimum, maximum,

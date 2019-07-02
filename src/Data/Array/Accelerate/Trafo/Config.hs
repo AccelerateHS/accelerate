@@ -17,7 +17,6 @@ module Data.Array.Accelerate.Trafo.Config (
   defaultOptions,
 
   -- Other options not controlled by the command line flags
-  convert_segment_offset,
   float_out_acc,
 
 ) where
@@ -47,6 +46,5 @@ defaultOptions = unsafePerformIO $!
 
 -- Extra options not covered by command line flags
 --
-convert_segment_offset = Flag 30  -- TLM: let's remove the need for this
 float_out_acc          = Flag 31
 

@@ -56,7 +56,6 @@ module Data.Array.Accelerate.Trafo (
 import Control.DeepSeq
 import Data.Typeable
 
-import Data.BitSet
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
@@ -66,7 +65,6 @@ import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, A
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
-import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 -- import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
@@ -92,7 +90,6 @@ convertAccWith :: Arrays arrs => Config -> Acc arrs -> DelayedAcc arrs
 convertAccWith config acc
   = phase "array-fusion"           (Fusion.convertAccWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
-  $ phase "rewrite-segment-offset" Rewrite.convertSegments   `when` (convert_segment_offset `member` options config)
   $ phase "sharing-recovery"       (Sharing.convertAccWith config)
   $ acc
 
@@ -107,7 +104,6 @@ convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith config acc
   = phase "array-fusion"           (Fusion.convertAfunWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
-  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsAfun `when` (convert_segment_offset `member` options config)
   $ phase "sharing-recovery"       (Sharing.convertAfunWith config)
   $ acc
 
@@ -140,15 +136,15 @@ convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
 convertSeqWith Phase{..} s
   = phase "array-fusion"           (Fusion.convertSeq enableAccFusion)
   -- $ phase "vectorise-sequences"    Vectorise.vectoriseSeq     `when` vectoriseSequences
-  $ phase "rewrite-segment-offset" Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
+  -- $ phase "rewrite-segment-offset" Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
   $ phase "sharing-recovery"       (Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp)
   $ s
 --}
 
 
-when :: (a -> a) -> Bool -> a -> a
-when f True  = f
-when _ False = id
+-- when :: (a -> a) -> Bool -> a -> a
+-- when f True  = f
+-- when _ False = id
 
 -- Debugging
 -- ---------

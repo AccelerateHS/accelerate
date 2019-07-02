@@ -40,6 +40,7 @@ module Data.Array.Accelerate.Prelude (
 
   -- * Reductions
   foldAll, fold1All,
+  foldSeg, fold1Seg,
 
   -- ** Specialised folds
   all, any, and, or, sum, product, minimum, maximum,
@@ -702,6 +703,81 @@ fold1All
     -> Acc (Array sh a)
     -> Acc (Scalar a)
 fold1All f arr = fold1 f (flatten arr)
+
+
+-- | Segmented reduction along the innermost dimension of an array. The segment
+-- descriptor specifies the lengths of the logical sub-arrays, each of which is
+-- reduced independently. The innermost dimension must contain at least as many
+-- elements as required by the segment descriptor (sum thereof).
+--
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> run $ foldSeg (+) 0 (use mat) (use seg)
+-- Matrix (Z :. 5 :. 4)
+--   [  0,  10, 0,  18,
+--     10,  50, 0,  48,
+--     20,  90, 0,  78,
+--     30, 130, 0, 108,
+--     40, 170, 0, 138]
+--
+foldSeg
+    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
+  where
+    (plus, zero) =
+      case integralType @i of
+        TypeInt{}    -> ((+), 0)
+        TypeInt8{}   -> ((+), 0)
+        TypeInt16{}  -> ((+), 0)
+        TypeInt32{}  -> ((+), 0)
+        TypeInt64{}  -> ((+), 0)
+        TypeWord{}   -> ((+), 0)
+        TypeWord8{}  -> ((+), 0)
+        TypeWord16{} -> ((+), 0)
+        TypeWord32{} -> ((+), 0)
+        TypeWord64{} -> ((+), 0)
+
+
+-- | Variant of 'foldSeg' that requires /all/ segments of the reduced array
+-- to be non-empty, and does not need a default value. The segment
+-- descriptor species the length of each of the logical sub-arrays.
+--
+fold1Seg
+    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
+    => (Exp e -> Exp e -> Exp e)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+fold1Seg f arr seg = fold1Seg' f arr (scanl plus zero seg)
+  where
+    (plus, zero) =
+      case integralType @i of
+        TypeInt{}    -> ((+), 0)
+        TypeInt8{}   -> ((+), 0)
+        TypeInt16{}  -> ((+), 0)
+        TypeInt32{}  -> ((+), 0)
+        TypeInt64{}  -> ((+), 0)
+        TypeWord{}   -> ((+), 0)
+        TypeWord8{}  -> ((+), 0)
+        TypeWord16{} -> ((+), 0)
+        TypeWord32{} -> ((+), 0)
+        TypeWord64{} -> ((+), 0)
 
 
 -- Specialised reductions
