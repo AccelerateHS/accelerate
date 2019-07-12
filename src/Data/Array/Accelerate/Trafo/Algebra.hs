@@ -732,6 +732,10 @@ evalLAnd (untup2 -> Just (x,y)) env
   = Just $ if a then Stats.ruleFired "True &&" y
                 else Stats.ruleFired "False &&" $ Const (fromElt False)
 
+  | Just b      <- propagate env y
+  = Just $ if b then Stats.ruleFired "True &&" x
+                else Stats.ruleFired "False &&" $ Const (fromElt False)
+
 evalLAnd _ _
   = Nothing
 
@@ -740,6 +744,10 @@ evalLOr (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   = Just $ if a then Stats.ruleFired "True ||" $ Const (fromElt True)
                 else Stats.ruleFired "False ||" y
+
+  | Just b      <- propagate env y
+  = Just $ if b then Stats.ruleFired "True ||" $ Const (fromElt True)
+                else Stats.ruleFired "False ||" x
 
 evalLOr _ _
   = Nothing
