@@ -32,6 +32,9 @@ module Data.Array.Accelerate.Smart (
   -- * Smart constructors for literals
   constant, undef,
 
+  -- * Smart destructors for shapes
+  indexHead, indexTail,
+
   -- * Smart constructors and destructors for tuples
   tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9, tup10, tup11, tup12, tup13, tup14, tup15, tup16,
   untup2, untup3, untup4, untup5, untup6, untup7, untup8, untup9, untup10, untup11, untup12, untup13, untup14, untup15, untup16,
@@ -1498,6 +1501,24 @@ constant = Exp . Const
 --
 undef :: Elt t => Exp t
 undef = Exp Undef
+
+-- | Get the innermost dimension of a shape.
+--
+-- The innermost dimension (right-most component of the shape) is the index of
+-- the array which varies most rapidly, and corresponds to elements of the array
+-- which are adjacent in memory.
+--
+-- Another way to think of this is, for example when writing nested loops over
+-- an array in C, this index corresponds to the index iterated over by the
+-- innermost nested loop.
+--
+indexHead :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp a
+indexHead = Exp . IndexHead
+
+-- | Get all but the innermost element of a shape
+--
+indexTail :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
+indexTail = Exp . IndexTail
 
 -- Smart constructor and destructors for scalar tuples
 --

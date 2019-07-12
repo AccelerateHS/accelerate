@@ -1,7 +1,10 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RebindableSyntax  #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE RebindableSyntax    #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Ord
@@ -20,6 +23,7 @@ module Data.Array.Accelerate.Classes.Ord (
 
 ) where
 
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -27,7 +31,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Classes.Eq
 
 import Text.Printf
-import Prelude                                                      ( ($), (.), Ordering(..), String, error, unlines )
+import Prelude                                                      ( ($), (.), Ordering(..), Maybe(..), String, error, unlines )
 import qualified Prelude                                            as P
 
 
@@ -298,6 +302,26 @@ instance Ord CDouble where
   (>=) = liftB mkGtEq
   min  = lift2 mkMin
   max  = lift2 mkMax
+
+instance Ord Z where
+  (<)  _ _ = constant False
+  (>)  _ _ = constant False
+  (<=) _ _ = constant True
+  (>=) _ _ = constant True
+  min  _ _ = constant Z
+  max  _ _ = constant Z
+
+instance Ord sh => Ord (sh :. Int) where
+  x <= y = indexHead x <= indexHead y && indexTail x <= indexTail y
+  x >= y = indexHead x >= indexHead y && indexTail x >= indexTail y
+  x < y  = indexHead x < indexHead y
+        && case matchTupleType (eltType @sh) (eltType @Z) of
+             Just Refl -> constant True
+             Nothing   -> indexTail x < indexTail y
+  x > y  = indexHead x > indexHead y
+        && case matchTupleType (eltType @sh) (eltType @Z) of
+             Just Refl -> constant True
+             Nothing   -> indexTail x > indexTail y
 
 instance (Ord a, Ord b) => Ord (a, b) where
   x <= y = let (a1,b1) = untup2 x

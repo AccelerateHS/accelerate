@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeOperators     #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Eq
@@ -182,6 +183,14 @@ instance Eq CFloat where
 instance Eq CDouble where
   (==) = lift2 mkEq
   (/=) = lift2 mkNEq
+
+instance Eq Z where
+  (==) _ _ = constant True
+  (/=) _ _ = constant False
+
+instance Eq sh => Eq (sh :. Int) where
+  x == y = indexHead x == indexHead y && indexTail x == indexTail y
+  x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
 
 instance (Eq a, Eq b) => Eq (a, b) where
   x == y = let (a1,b1) = untup2 x
