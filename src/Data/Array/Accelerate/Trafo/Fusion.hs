@@ -170,7 +170,7 @@ manifest config (OpenAcc pacc) =
     Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest config a)
     Atuple tup              -> Atuple (cvtAT tup)
     Aprj ix tup             -> Aprj ix (manifest config tup)
-    Apply f a               -> Apply (cvtAF f) (manifest config a)
+    Apply f a               -> apply (cvtAF f) (manifest config a)
     Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest config a)
 
     -- Producers
@@ -214,16 +214,40 @@ manifest config (OpenAcc pacc) =
     -- Collect s               -> Collect  (cvtS s)
 
     where
-      -- Flatten needless let-binds, which can be introduced by the conversion to
-      -- the internal embeddable representation.
+      -- Flatten needless let-binds, which can be introduced by the
+      -- conversion to the internal embeddable representation.
       --
+      alet :: (Arrays a, Arrays b)
+           => DelayedOpenAcc aenv a
+           -> DelayedOpenAcc (aenv,a) b
+           -> PreOpenAcc DelayedOpenAcc aenv b
       alet bnd body
         | Manifest (Avar ZeroIdx) <- body
         , Manifest x              <- bnd
         = x
-
+        --
         | otherwise
         = Alet bnd body
+
+      -- Eliminate redundant application to an identity function. This
+      -- arises in the use of pipe to avoid fusion and force its argument
+      -- to be evaluated, i.e.:
+      --
+      -- > compute :: Acc a -> Acc a
+      -- > compute = id >-> id
+      --
+      apply :: (Arrays a, Arrays b)
+            => PreOpenAfun DelayedOpenAcc aenv (a -> b)
+            ->             DelayedOpenAcc aenv a
+            -> PreOpenAcc  DelayedOpenAcc aenv b
+      apply afun x
+        | Alam (Abody body)       <- afun
+        , Manifest (Avar ZeroIdx) <- body
+        , Manifest x'             <- x
+        = Stats.ruleFired "applyD/identity" x'
+        --
+        | otherwise
+        = Apply afun x
 
       cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
       cvtAT NilAtup        = NilAtup
@@ -391,10 +415,10 @@ embedPreAcc config embedAcc elimAcc pacc
     -- want to fuse past array let bindings, as this would imply work
     -- duplication. SEE: [Sharing vs. Fusion]
     --
-    Apply f a           -> applyD (cvtAF f) (cvtA a)
     Alet bnd body       -> aletD embedAcc elimAcc bnd body
     Aprj ix tup         -> aprjD embedAcc ix tup
     Acond p at ae       -> acondD embedAcc (cvtE p) at ae
+    Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
@@ -811,8 +835,8 @@ instance Kit acc => Simplify (Cunctation acc aenv a) where
 --
 done :: (Arrays a, Kit acc) => PreOpenAcc acc aenv a -> Embed acc aenv a
 done pacc
-  | Avar v <- pacc      = Embed BaseEnv                         (Done v)
-  | otherwise           = Embed (BaseEnv `PushEnv` inject pacc) (Done ZeroIdx)
+  | Avar v <- pacc = Embed BaseEnv                         (Done v)
+  | otherwise      = Embed (BaseEnv `PushEnv` inject pacc) (Done ZeroIdx)
 
 
 -- Recast a cunctation into a mapping from indices to elements.
@@ -822,11 +846,11 @@ yield :: Kit acc
       -> Cunctation acc aenv (Array sh e)
 yield cc =
   case cc of
-    Yield{}                             -> cc
-    Step sh p f v                       -> Yield sh (f `compose` indexArray v `compose` p)
+    Yield{}                         -> cc
+    Step sh p f v                   -> Yield sh (f `compose` indexArray v `compose` p)
     Done v
-      | ArraysRarray <- accType cc      -> Yield (arrayShape v) (indexArray v)
-      | otherwise                       -> error "yield: impossible case"
+      | ArraysRarray <- accType cc  -> Yield (arrayShape v) (indexArray v)
+      | otherwise                   -> error "yield: impossible case"
 
 
 -- Recast a cunctation into transformation step form. Not possible if the source
@@ -1539,29 +1563,6 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtCT NilAtup        = NilAtup
         cvtCT (SnocAtup t c) = cvtCT t `SnocAtup` cvtC c
 --}
-
-
--- The apply operator, or (>->) in the surface language. This eliminates
--- redundant application to an identity function, instead lifting the argument
--- to a let-binding. This case arises in the use of pipe to avoid fusion and
--- force its argument to be evaluated, e.g.:
---
--- > compute :: Acc a -> Acc a
--- > compute = id >-> id
---
-applyD :: (Kit acc, Arrays as, Arrays bs)
-       => PreOpenAfun acc aenv (as -> bs)
-       ->             acc aenv as
-       -> Embed       acc aenv bs
-applyD afun x
-  | Alam (Abody body)   <- afun
-  , Just (Avar ZeroIdx) <- extract body
-  , Just x'             <- extract x
-  = Stats.ruleFired "applyD/identity"
-  $ done x'
-
-  | otherwise
-  = done $ Apply afun x
 
 
 -- Array conditionals, in particular eliminate branches when the predicate
