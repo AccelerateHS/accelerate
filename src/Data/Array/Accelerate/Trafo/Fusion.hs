@@ -214,9 +214,13 @@ manifest config (OpenAcc pacc) =
     -- Collect s               -> Collect  (cvtS s)
 
     where
-      -- Flatten needless let-binds, which can be introduced by the conversion to
-      -- the internal embeddable representation.
+      -- Flatten needless let-binds, which can be introduced by the
+      -- conversion to the internal embeddable representation.
       --
+      alet :: (Arrays a, Arrays b)
+           => DelayedOpenAcc aenv a
+           -> DelayedOpenAcc (aenv,a) b
+           -> PreOpenAcc DelayedOpenAcc aenv b
       alet bnd body
         | Manifest (Avar ZeroIdx) <- body
         , Manifest x              <- bnd
@@ -232,6 +236,10 @@ manifest config (OpenAcc pacc) =
       -- > compute :: Acc a -> Acc a
       -- > compute = id >-> id
       --
+      apply :: (Arrays a, Arrays b)
+            => PreOpenAfun DelayedOpenAcc aenv (a -> b)
+            ->             DelayedOpenAcc aenv a
+            -> PreOpenAcc  DelayedOpenAcc aenv b
       apply afun x
         | Alam (Abody body)       <- afun
         , Manifest (Avar ZeroIdx) <- body
