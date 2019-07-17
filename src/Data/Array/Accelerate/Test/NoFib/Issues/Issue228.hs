@@ -61,8 +61,8 @@ merge (onL, lenL) (onR, lenR) = (onL * onR, onL * lenR + lenL)
 mergeExp :: Exp (Int,Int) -> Exp (Int,Int) -> Exp (Int,Int)
 mergeExp e1 e2 =
   let
-    v1 = unlift e1 :: (Exp Int,Exp Int)
-    v2 = unlift e2 :: (Exp Int,Exp Int)
+    t1 = unlift e1 :: (Exp Int,Exp Int)
+    t2 = unlift e2 :: (Exp Int,Exp Int)
   in
-  lift $ merge v1 v2
+  lift $ merge t1 t2
 

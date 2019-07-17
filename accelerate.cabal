@@ -166,7 +166,7 @@ Flag debug
         change floating point results (e.g., reassociate) (True).
     .
       * @fast-permute-const@: Allow non-atomic `permute const` for product types
-      (True).
+        (True).
     .
     The following options control debug message output, and are enabled with
     @-d\<flag\>@.
@@ -406,6 +406,7 @@ Library
         Data.Array.Accelerate.Test.NoFib.Prelude
         Data.Array.Accelerate.Test.NoFib.Prelude.Map
         Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
+        Data.Array.Accelerate.Test.NoFib.Prelude.SIMD
         Data.Array.Accelerate.Test.NoFib.Prelude.Fold
         Data.Array.Accelerate.Test.NoFib.Prelude.Scan
         Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute

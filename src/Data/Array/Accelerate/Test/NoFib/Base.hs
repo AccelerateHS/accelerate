@@ -20,6 +20,7 @@ import Data.Array.Accelerate.Trafo.Sharing                          ( Afunction,
 import Data.Array.Accelerate.Type
 
 import Control.Monad
+import Data.Primitive.Types
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -89,6 +90,22 @@ f32 = Gen.float (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
 
 f64 :: Gen Double
 f64 = Gen.double (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
+
+v2 :: Prim a => Gen a -> Gen (V2 a)
+v2 a = V2 <$> a <*> a
+
+v3 :: Prim a => Gen a -> Gen (V3 a)
+v3 a = V3 <$> a <*> a <*> a
+
+v4 :: Prim a => Gen a -> Gen (V4 a)
+v4 a = V4 <$> a <*> a <*> a <*> a
+
+v8 :: Prim a => Gen a -> Gen (V8 a)
+v8 a = V8 <$> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
+
+v16 :: Prim a => Gen a -> Gen (V16 a)
+v16 a = V16 <$> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
+            <*> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
 
 log_flt_max :: RealFloat a => a
 log_flt_max = log flt_max
