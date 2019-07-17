@@ -165,6 +165,9 @@ Flag debug
       * @fast-math@: Allow algebraically equivalent transformations which may
         change floating point results (e.g., reassociate) (True).
     .
+      * @fast-permute-const@: Allow non-atomic `permute const` for product types
+      (True).
+    .
     The following options control debug message output, and are enabled with
     @-d\<flag\>@.
     .

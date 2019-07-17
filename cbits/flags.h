@@ -24,6 +24,7 @@ typedef union {
     uint32_t simplify               : 1;
     uint32_t inplace                : 1;
     uint32_t fast_math              : 1;
+    uint32_t fast_permute_const     : 1;
     uint32_t flush_cache            : 1;
     uint32_t force_recomp           : 1;
 
