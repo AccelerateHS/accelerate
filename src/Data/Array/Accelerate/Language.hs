@@ -54,7 +54,7 @@ module Data.Array.Accelerate.Language (
   -- foldSeq, foldSeqFlatten,
 
   -- * Reductions
-  fold, fold1, foldSeg, fold1Seg,
+  fold, fold1, foldSeg', fold1Seg',
 
   -- * Scan functions
   scanl, scanl', scanl1, scanr, scanr', scanr1,
@@ -526,52 +526,42 @@ fold1 :: (Shape sh, Elt a)
       -> Acc (Array sh a)
 fold1 = Acc $$ Fold1
 
--- | Segmented reduction along the innermost dimension of an array. The segment
--- descriptor specifies the lengths of the logical sub-arrays, each of which is
--- reduced independently. The innermost dimension must contain at least as many
--- elements as required by the segment descriptor (sum thereof).
+-- | Segmented reduction along the innermost dimension of an array. The
+-- segment descriptor specifies the starting index (offset) along the
+-- innermost dimension to the beginning of each logical sub-array.
 --
--- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
--- >>> seg
--- Vector (Z :. 4) [1,4,0,3]
+-- The value in the output array at index i is the reduction of values
+-- between the indices of the segment descriptor at index i and (i+1).
 --
--- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
--- >>> mat
--- Matrix (Z :. 5 :. 10)
---   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
---     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
---     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
---     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
---     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+-- We have that:
 --
--- >>> run $ foldSeg (+) 0 (use mat) (use seg)
--- Matrix (Z :. 5 :. 4)
---   [  0,  10, 0,  18,
---     10,  50, 0,  48,
---     20,  90, 0,  78,
---     30, 130, 0, 108,
---     40, 170, 0, 138]
+-- > foldSeg f z xs seg  ==  foldSeg' f z xs (scanl (+) 0 seg)
 --
-foldSeg
+-- @since 1.3.0.0
+--
+foldSeg'
     :: (Shape sh, Elt a, Elt i, IsIntegral i)
     => (Exp a -> Exp a -> Exp a)
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-foldSeg = Acc $$$$ FoldSeg
+foldSeg' = Acc $$$$ FoldSeg
 
--- | Variant of 'foldSeg' that requires /all/ segments of the reduced array to
--- be non-empty and doesn't need a default value. The segment descriptor
--- specifies the length of each of the logical sub-arrays.
+-- | Variant of 'foldSeg'' that requires /all/ segments of the reduced
+-- array to be non-empty, and doesn't need a default value. The segment
+-- descriptor specifies the offset to the beginning of each of the logical
+-- sub-arrays.
 --
-fold1Seg
+-- @since 1.3.0.0
+--
+fold1Seg'
     :: (Shape sh, Elt a, Elt i, IsIntegral i)
     => (Exp a -> Exp a -> Exp a)
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-fold1Seg = Acc $$$ Fold1Seg
+fold1Seg' = Acc $$$ Fold1Seg
 
 -- Scan functions
 -- --------------
