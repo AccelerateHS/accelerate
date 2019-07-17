@@ -745,7 +745,7 @@ scanr1 = Acc $$ Scanr1
 --   3. The array of source values can fuse into the permutation operation.
 --
 --   4. If the array of default values is only used once, it will be updated
---      in-place.
+--      in-place. This behaviour can be disabled this with @-fno-inplace@.
 --
 -- Regarding the defaults array:
 --
@@ -753,6 +753,24 @@ scanr1 = Acc $$ Scanr1
 -- by the combination function and every element will be overwritten---a default
 -- array created by 'Data.Array.Accelerate.Prelude.fill'ing with the value
 -- 'Data.Array.Accelerate.Unsafe.undef' will give you a new uninitialised array.
+--
+-- Regarding the combination function:
+--
+-- The function 'const' can be used to replace elements of the defaults
+-- array with the new values. If the permutation function maps multiple
+-- values to the same location in the results array (the function is not
+-- injective) then this operation is non-deterministic.
+--
+-- Since Accelerate uses an unzipped struct-of-array representation, where
+-- the individual components of product types (for example, pairs) are
+-- stored in separate arrays, storing values of product type requires
+-- multiple store instructions.
+--
+-- Accelerate prior to version 1.3.0.0 performs this operation atomically,
+-- to ensure that the stored values are always consistent (each component
+-- of the product type is written by the same thread). Later versions relax
+-- this restriction, but this behaviour can be disabled with
+-- @-fno-fast-permute-const@.
 --
 permute
     :: (Shape sh, Shape sh', Elt a)
