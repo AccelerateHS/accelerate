@@ -34,6 +34,9 @@ module Data.Array.Accelerate.Product (
 ) where
 
 import GHC.Generics
+import Data.Primitive.Types
+
+import Data.Array.Accelerate.Type
 
 
 -- | Type-safe projection indices for tuples.
@@ -248,4 +251,39 @@ instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, 
     = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
   prod
     = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o))
+
+instance (Prim a, cst a) => IsProduct cst (V2 a) where
+  type ProdRepr (V2 a) = (((), a), a)
+  fromProd (V2 a b)    = (((), a), b)
+  toProd (((), a), b)  = V2 a b
+  prod                 = prod @cst @(a,a)
+
+instance (Prim a, cst a) => IsProduct cst (V3 a) where
+  type ProdRepr (V3 a)     = ((((), a), a), a)
+  fromProd (V3 a b c)      = ((((), a), b), c)
+  toProd ((((), a), b), c) = V3 a b c
+  prod                     = prod @cst @(a,a,a)
+
+instance (Prim a, cst a) => IsProduct cst (V4 a) where
+  type ProdRepr (V4 a)          = (((((), a), a), a), a)
+  fromProd (V4 a b c d)         = (((((), a), b), c), d)
+  toProd (((((), a), b), c), d) = V4 a b c d
+  prod                          = prod @cst @(a,a,a,a)
+
+instance (Prim a, cst a) => IsProduct cst (V8 a) where
+  type ProdRepr (V8 a)          = (((((((((), a), a), a), a), a), a), a), a)
+  fromProd (V8 a b c d e f g h) = (((((((((), a), b), c), d), e), f), g), h)
+  toProd (((((((((), a), b), c), d), e), f), g), h)
+    = V8 a b c d e f g h
+  prod
+    = prod @cst @(a,a,a,a,a,a,a,a)
+
+instance (Prim a, cst a) => IsProduct cst (V16 a) where
+  type ProdRepr (V16 a) = (((((((((((((((((), a), a), a), a), a), a), a), a), a), a), a), a), a), a), a), a)
+  fromProd (V16 a b c d e f g h i j k l m n o p)
+    = (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
+  toProd (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
+    = V16 a b c d e f g h i j k l m n o p
+  prod
+    = prod @cst @(a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a)
 
