@@ -367,7 +367,7 @@ __mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocPlainForeignPtrBytes
 {-# INLINE mallocPlainForeignPtrBytesAligned #-}
 mallocPlainForeignPtrBytesAligned :: Int -> IO (ForeignPtr a)
 mallocPlainForeignPtrBytesAligned (I# size) = IO $ \s ->
-  case newAlignedPinnedByteArray# size 16# s of
+  case newAlignedPinnedByteArray# size 64# s of
     (# s', mbarr# #) -> (# s', ForeignPtr (byteArrayContents# (unsafeCoerce# mbarr#)) (PlainPtr mbarr#) #)
 
 
