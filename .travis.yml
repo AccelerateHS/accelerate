@@ -27,6 +27,9 @@ addons:
 matrix:
   fast_finish: true
   include:
+    - env: GHC=8.8.1
+      compiler: "GHC 8.8"
+
     - env: GHC=8.6.5
       compiler: "GHC 8.6"
 
