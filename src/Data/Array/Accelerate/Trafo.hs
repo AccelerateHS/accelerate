@@ -58,7 +58,7 @@ import Data.Typeable
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
-import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Base                 ( Match(..), matchDelayedOpenAcc, encodeDelayedOpenAcc )
 import Data.Array.Accelerate.Trafo.Config
 import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedOpenAcc(..), DelayedAfun, DelayedOpenAfun, DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun )
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )

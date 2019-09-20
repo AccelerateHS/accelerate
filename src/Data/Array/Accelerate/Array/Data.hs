@@ -59,11 +59,12 @@ import Control.Monad                                                ( (<=<) )
 import Data.Bits
 import Data.Char
 import Data.IORef
+import Data.Kind
 import Data.Primitive                                               ( sizeOf# )
 import Data.Typeable                                                ( Typeable )
 import Foreign.ForeignPtr
 import Foreign.Storable
-import Language.Haskell.TH
+import Language.Haskell.TH                                          hiding ( Type )
 import System.IO.Unsafe
 import Text.Printf
 import Prelude                                                      hiding ( mapM )
@@ -122,7 +123,7 @@ type MutableArrayData e = GArrayData e
 -- In previous versions this was abstracted over by the mutable/immutable array
 -- representation, but this is now fixed to our UniqueArray type.
 --
-data family GArrayData a :: *
+data family GArrayData a :: Type
 data instance GArrayData ()        = AD_Unit
 data instance GArrayData Int       = AD_Int    {-# UNPACK #-} !(UniqueArray Int)
 data instance GArrayData Int8      = AD_Int8   {-# UNPACK #-} !(UniqueArray Int8)

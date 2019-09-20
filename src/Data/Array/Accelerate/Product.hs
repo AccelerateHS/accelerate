@@ -88,7 +88,7 @@ class IsProduct cst tup where
   prod = gprod @cst @(Rep tup) ProdRunit
 
 
-class GIsProduct cst (f :: * -> *) where
+class GIsProduct cst f where
   type GProdRepr t f
   gfromProd :: t -> f a -> GProdRepr t f
   gtoProd   :: GProdRepr t f -> (t, f a)

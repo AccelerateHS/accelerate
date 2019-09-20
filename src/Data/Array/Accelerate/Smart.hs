@@ -72,6 +72,7 @@ module Data.Array.Accelerate.Smart (
 
 -- standard library
 import Prelude                                  hiding ( exp )
+import Data.Kind
 import Data.List
 import Data.Typeable
 
@@ -1193,7 +1194,7 @@ data PreBoundary acc exp t where
 -- index). The various positions in the stencil are accessed via tuple indices (i.e., projections).
 --
 class (Elt (StencilRepr sh stencil), AST.Stencil sh a (StencilRepr sh stencil)) => Stencil sh a stencil where
-  type StencilRepr sh stencil :: *
+  type StencilRepr sh stencil :: Type
   stencilPrj :: Exp (StencilRepr sh stencil)
              -> stencil
 

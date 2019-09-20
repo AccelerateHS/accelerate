@@ -63,9 +63,10 @@ module Data.Array.Accelerate.Array.Sugar (
 
 -- standard library
 import Control.DeepSeq
+import Data.Kind
 import Data.Typeable
 import System.IO.Unsafe                                         ( unsafePerformIO )
-import Language.Haskell.TH                                      hiding ( Foreign )
+import Language.Haskell.TH                                      hiding ( Foreign, Type )
 import Prelude                                                  hiding ( (!!) )
 import qualified Data.Vector.Unboxed                            as U
 
@@ -213,7 +214,7 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a 
   -- the surface type into the internal representation type consisting only of
   -- simple primitive types, unit '()', and pair '(,)'.
   --
-  type EltRepr a :: *
+  type EltRepr a :: Type
   type EltRepr a = GEltRepr () (Rep a)
   --
   eltType  :: TupleType (EltRepr a)
@@ -241,7 +242,7 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a 
   toElt = to . snd . gtoElt @(Rep a) @()
 
 
-class GElt (f :: * -> *) where
+class GElt f where
   type GEltRepr t f
   geltType :: TupleType t -> TupleType (GEltRepr t f)
   gfromElt :: t -> f a -> GEltRepr t f
@@ -500,7 +501,7 @@ class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
   -- surface type into the internal representation type, which consists only of
   -- 'Array', and '()' and '(,)' as type-level nil and snoc.
   --
-  type ArrRepr a :: *
+  type ArrRepr a :: Type
   type ArrRepr a = GArrRepr () (Rep a)
 
   arrays   :: ArraysR (ArrRepr a)
@@ -532,7 +533,7 @@ class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
   -- flavour _ = gflavour @(Rep a)
 
 
-class GArrays (f :: * -> *) where
+class GArrays f where
   type GArrRepr t f
   garrays  :: ArraysR t -> ArraysR (GArrRepr t f)
   gfromArr :: f a -> t -> GArrRepr t f
@@ -941,9 +942,9 @@ instance Shape sh => Shape (sh:.Int) where
 --
 class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl))
        => Slice sl where
-  type SliceShape   sl :: *     -- the projected slice
-  type CoSliceShape sl :: *     -- the complement of the slice
-  type FullShape    sl :: *     -- the combined dimension
+  type SliceShape   sl :: Type    -- the projected slice
+  type CoSliceShape sl :: Type    -- the complement of the slice
+  type FullShape    sl :: Type    -- the combined dimension
   sliceIndex :: Repr.SliceIndex (EltRepr sl)
                                 (EltRepr (SliceShape   sl))
                                 (EltRepr (CoSliceShape sl))
@@ -977,7 +978,7 @@ instance Shape sh => Slice (Any sh) where
 -- many subarrays, as opposed to extracting a single subarray.
 --
 class (Slice (DivisionSlice sl)) => Division sl where
-  type DivisionSlice sl :: *     -- the slice
+  type DivisionSlice sl :: Type   -- the slice
   slicesIndex :: slix ~ DivisionSlice sl
               => Repr.SliceIndex (EltRepr slix)
                                  (EltRepr (SliceShape   slix))

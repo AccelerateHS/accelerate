@@ -36,8 +36,9 @@ import Data.Array.Accelerate.Array.Data
 import Control.Applicative
 import Control.Monad.Catch
 import Data.Int
-import Data.Word
+import Data.Kind
 import Data.Typeable
+import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
 import Prelude
@@ -54,7 +55,7 @@ type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typ
 class (Applicative m, Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
 
   -- | Pointers into this particular remote memory.
-  type RemotePtr m :: * -> *
+  type RemotePtr m :: Type -> Type
 
   -- | Attempt to allocate the given number of bytes in the remote memory space.
   -- Returns Nothing on failure.
