@@ -63,13 +63,13 @@ before_install:
   - stack --version
 
 install:
-  - export FLAGS="--jobs=2 --no-terminal --no-copy-bins --flag accelerate:nofib"
+  - export FLAGS="--no-terminal --no-copy-bins --flag accelerate:nofib"
   - travis_retry stack build $FLAGS --only-dependencies --test
 
 script:
   - stack build $FLAGS $HADDOCK --test --no-run-tests
-  - stack test accelerate:doctest --flag accelerate:nofib
-  - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25' --flag accelerate:nofib
+  - stack test accelerate:doctest $FLAGS
+  - stack test accelerate:nofib-interpreter $FLAGS --test-arguments='--hedgehog-tests 25'
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh
