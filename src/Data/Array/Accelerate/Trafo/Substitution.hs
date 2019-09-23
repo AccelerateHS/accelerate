@@ -37,6 +37,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
 ) where
 
+import Data.Kind
 import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, seq )
 
@@ -132,7 +133,7 @@ instance Applicative Identity where
 --
 class Rebuildable f where
   {-# MINIMAL rebuildPartial #-}
-  type AccClo f :: (* -> * -> *)
+  type AccClo f :: Type -> Type -> Type
 
   rebuildPartial :: (Applicative f', SyntacticAcc fa)
                  => (forall a'. Arrays a' => Idx aenv a' -> f' (fa (AccClo f) aenv' a'))
@@ -342,7 +343,7 @@ class SyntacticExp f where
   weakenExp     :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc (env, s) aenv t
   -- weakenExpAcc  :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc env (aenv, s) t
 
-newtype IdxE (acc :: * -> * -> *) env aenv t = IE { unIE :: Idx env t }
+newtype IdxE (acc :: Type -> Type -> Type) env aenv t = IE { unIE :: Idx env t }
 
 instance SyntacticExp IdxE where
   varIn          = IE
@@ -444,7 +445,7 @@ class SyntacticAcc f where
   accOut        :: Arrays t => f acc aenv t   -> PreOpenAcc acc aenv t
   weakenAcc     :: Arrays t => RebuildAcc acc -> f acc aenv t -> f acc (aenv, s) t
 
-newtype IdxA (acc :: * -> * -> *) aenv t = IA { unIA :: Idx aenv t }
+newtype IdxA (acc :: Type -> Type -> Type) aenv t = IA { unIA :: Idx aenv t }
 
 instance SyntacticAcc IdxA where
   avarIn         = IA

@@ -1077,7 +1077,7 @@ type StableExpName t = StableNameHeight (Exp t)
 -- Interleave sharing annotations into a scalar expressions AST in the same manner as 'SharingAcc'
 -- do for array computations.
 --
-data SharingExp (acc :: * -> *) exp t where
+data SharingExp acc exp t where
   VarSharing :: Elt t
              => StableExpName t                     -> SharingExp acc exp t
   LetSharing :: StableSharingExp -> exp t           -> SharingExp acc exp t

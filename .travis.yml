@@ -27,6 +27,9 @@ addons:
 matrix:
   fast_finish: true
   include:
+    - env: GHC=8.8.1
+      compiler: "GHC 8.8"
+
     - env: GHC=8.6.5
       compiler: "GHC 8.6"
 
@@ -39,12 +42,8 @@ matrix:
     - env: GHC=8.0.2
       compiler: "GHC 8.0"
 
-    # - env: GHC=head CABAL=head
-    #   compiler: "GHC HEAD"
-    #   addons: { apt: { sources: [ hvr-ghc ], packages: [ ghc-head, cabal-install-head, happy-1.19.5, alex-3.1.7 ] }}
-
-  # allow_failures:
-  #   - env: GHC=head CABAL=head
+  allow_failures:
+    - env: GHC=8.8.1  # not enough memory \:
 
 before_install:
   - export PATH=/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:${PATH}
@@ -60,14 +59,19 @@ before_install:
   - stack --version
 
 install:
-  - export FLAGS="--jobs=2 --no-terminal --no-copy-bins --flag accelerate:nofib"
+  - export FLAGS="--no-terminal --no-copy-bins --flag accelerate:nofib"
   - travis_retry stack build $FLAGS --only-dependencies --test
 
 script:
   - stack build $FLAGS $HADDOCK --test --no-run-tests
-  - stack test accelerate:doctest --flag accelerate:nofib
-  - stack test accelerate:nofib-interpreter --test-arguments='--hedgehog-tests 25' --flag accelerate:nofib
+  - stack test accelerate:doctest $FLAGS
+  - stack test accelerate:nofib-interpreter $FLAGS --test-arguments='--hedgehog-tests 25'
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh
+
+after_failure:
+  - ulimit -a
+  - df -h
+  - dmesg
 

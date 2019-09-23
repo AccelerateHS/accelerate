@@ -673,7 +673,7 @@ type Boundary = PreBoundary OpenAcc
 
 -- | Boundary condition specification for stencil operations
 --
-data PreBoundary (acc :: * -> * -> *) aenv t where
+data PreBoundary acc aenv t where
   -- Clamp coordinates to the extent of the array
   Clamp     :: PreBoundary acc aenv t
 
@@ -807,7 +807,7 @@ instance (Stencil (sh:.Int) a row1,
 
 -- |Parametrised open function abstraction
 --
-data PreOpenFun (acc :: * -> * -> *) env aenv t where
+data PreOpenFun acc env aenv t where
   Body :: Elt t => PreOpenExp acc env      aenv t -> PreOpenFun acc env aenv t
   Lam  :: Elt a => PreOpenFun acc (env, a) aenv t -> PreOpenFun acc env aenv (a -> t)
 
@@ -841,7 +841,7 @@ type Exp = OpenExp ()
 --
 -- The data type is parametrised over the surface types (not the representation type).
 --
-data PreOpenExp (acc :: * -> * -> *) env aenv t where
+data PreOpenExp acc env aenv t where
 
   -- Local binding of a scalar expression
   Let           :: (Elt bnd_t, Elt body_t)
