@@ -80,10 +80,7 @@ extra-deps:
 - wl-pprint-annotated-0.1.0.1@sha256:0b8fd3649bfe72d155a4379e4c88b7ef00408f6f4973f63333787fd2e1b5ba1e,2214
 
 # Override default flag values for local packages and extra-deps
-flags:
-  accelerate:
-    debug: true
-    nofib: true
+# flags: {}
 
 # Extra global and per-package GHC options
 # ghc-options: {}
