@@ -75,7 +75,7 @@ after_success:
   - source .travis/update-accelerate-buildbot.sh
 
 after_failure:
-  - dmesg
-  - df -h
   - ulimit -a
+  - df -h
+  - dmesg
 
