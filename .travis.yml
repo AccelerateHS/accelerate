@@ -64,7 +64,7 @@ before_install:
 
 install:
   - export FLAGS="--no-terminal --no-copy-bins --flag accelerate:nofib"
-  - travis_retry stack build $FLAGS --only-dependencies --test
+  - travis_retry travis_retry stack build $FLAGS --only-dependencies --test
 
 script:
   - stack build $FLAGS $HADDOCK --test --no-run-tests
