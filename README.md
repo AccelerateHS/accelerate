@@ -90,7 +90,7 @@ Documentation
 
   * Haddock documentation is included and linked with the individual package releases on [Hackage][Hackage].
   * Haddock documentation for in-development components can be found [here](http://tmcdonell-bot.github.io/accelerate-travis-buildbot/).
-  * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [~~described separately~~][HOAS-conv].
+  * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately][HOAS-conv].
 
 Examples
 --------
@@ -251,7 +251,7 @@ Here is a list of features that are currently missing:
   [Wiki]:                       https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                     https://github.com/AccelerateHS/accelerate/issues
   [Google-Group]:               http://groups.google.com/group/accelerate-haskell
-  [HOAS-conv]:                  http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
+  [HOAS-conv]:                  https://web.archive.org/web/20180805092417/http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   [repa]:                       http://hackage.haskell.org/package/repa
   [wiki-cc]:                    https://en.wikipedia.org/wiki/CUDA#Supported_GPUs
   [YLJ13-video]:                http://youtu.be/ARqE4yT2Z0o
