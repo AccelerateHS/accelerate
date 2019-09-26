@@ -13,6 +13,7 @@ cache:
 before_cache:
   # - rm -vrf $(stack path --local-install-root)/bin
   - rm -rf  $(stack path --local-install-root)/doc
+  - rm -f $HOME/.stack/programs/*/*.tar.bz2
 
 addons:
   apt:
