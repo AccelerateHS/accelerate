@@ -59,22 +59,22 @@ static char* format_int64(char *buffer, int64_t x)
 
   if (x < 1000)
   {
-    sprintf(s, "%"PRId64, x);
+    sprintf(s, "%"PRIi64, x);
   }
   else if (x < 1000000)
   {
-    sprintf(s, "%"PRId64",%03"PRId64, x/1000, x%1000);
+    sprintf(s, "%"PRIi64",%03"PRIi64, x/1000, x%1000);
   }
   else if (x < 1000000000)
   {
-    sprintf(s, "%"PRId64",%03"PRId64",%03"PRId64
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000
              , (x/1000)%1000
              ,  x%1000);
   }
   else if (x < 1000000000000)
   {
-    sprintf(s, "%"PRId64",%03"PRId64",%03"PRId64",%03"PRId64
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000
              , (x/1000000)%1000
              , (x/1000)%1000
@@ -82,7 +82,7 @@ static char* format_int64(char *buffer, int64_t x)
   }
   else if (x < 1000000000000000)
   {
-    sprintf(s, "%"PRId64",%03"PRId64",%03"PRId64",%03"PRId64",%03"PRId64
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000000
              , (x/1000000000)%1000
              , (x/1000000)%1000
@@ -91,7 +91,7 @@ static char* format_int64(char *buffer, int64_t x)
   }
   else if (x < 1000000000000000000)
   {
-    sprintf(s, "%"PRId64",%03"PRId64",%03"PRId64",%03"PRId64",%03"PRId64",%03"PRId64
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000000000
              , (x/1000000000000)%1000
              , (x/1000000000)%1000
@@ -101,7 +101,7 @@ static char* format_int64(char *buffer, int64_t x)
   }
   else
   {
-    sprintf(s, "%"PRId64",%03"PRId64",%03"PRId64",%03"PRId64",%03"PRId64",%03"PRId64",%03"PRId64
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000000000000
              , (x/1000000000000000)%1000
              , (x/1000000000000)%1000

@@ -55,7 +55,7 @@ import Control.Monad.IO.Class                                       ( MonadIO, l
 import qualified Control.Monad                                      as M
 
 newtype Flag  = Flag  Int
-newtype Value = Value (Ptr Int)   -- of type HsInt in flags.c
+newtype Value = Value (Ptr Word32)    -- see flags.c
 
 -- We aren't using a "real" enum so that we can make use of the unused top
 -- bits for other configuration options, not controlled by the command line
@@ -128,10 +128,10 @@ unless _ _ = return ()
 #endif
 
 
-setValue   :: Value -> Int -> IO ()
+setValue   :: Value -> Word32 -> IO ()
 setValue (Value f) v = poke f v
 
-getValue   :: Value -> IO Int
+getValue   :: Value -> IO Word32
 getValue (Value f) = peek f
 
 getFlag    :: Flag -> IO Bool

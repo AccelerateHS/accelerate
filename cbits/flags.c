@@ -19,6 +19,7 @@
 
 #include <ctype.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,7 +27,6 @@
 #include <string.h>
 
 #include "flags.h"
-#include "HsFFI.h"
 
 
 /* These globals will be accessed from the Haskell side to implement the
@@ -34,8 +34,8 @@
  */
 
 __flags_t __cmd_line_flags            = { 0xff };  // SEE: [layout of command line options bitfield]
-HsInt     __unfolding_use_threshold   = 1;
-HsInt     __max_simplifier_iterations = 25;
+uint32_t  __unfolding_use_threshold   = 1;
+uint32_t  __max_simplifier_iterations = 25;
 
 enum {
   OPT_ENABLE = 1,
@@ -130,7 +130,7 @@ static void parse_options(int argc, char *argv[])
 
     /* attempt to decode the argument to flags which require them */
     case OPT_UNFOLDING_USE_THRESHOLD:
-      if (1 != sscanf(optarg, "%lld", &__unfolding_use_threshold)) {
+      if (1 != sscanf(optarg, "%"PRIu32, &__unfolding_use_threshold)) {
         fprintf(stderr, "%s: option `-%s' requires an integer argument, but got: %s\n"
                       , basename(argv[0])
                       , longopts[longindex].name
@@ -140,7 +140,7 @@ static void parse_options(int argc, char *argv[])
       break;
 
     case OPT_MAX_SIMPLIFIER_ITERATIONS:
-      if (1 != sscanf(optarg, "%lld", &__max_simplifier_iterations)) {
+      if (1 != sscanf(optarg, "%"PRIu32, &__max_simplifier_iterations)) {
         fprintf(stderr, "%s: option `-%s' requires an integer argument, but got: %s\n"
                       , basename(argv[0])
                       , longopts[longindex].name
