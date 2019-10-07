@@ -706,18 +706,17 @@ instance (Shape sh, Elt e, Eq sh, Eq e) => Eq (Array sh e) where
 -- is an annoying limitation for users. In the second option, scalars, vectors and
 -- matrices may not always be shown with their appropriate format.
 --
-instance {-# INCOHERENT #-} (Shape sh, Elt e) => Show (Array sh e) where
+instance (Shape sh, Elt e) => Show (Array sh e) where
   show arr = case shapeToList $ shape arr of
-    [] -> "Scalar Z " ++ show (toList arr)
-    [_] -> "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+    []           -> "Scalar Z " ++ show (toList arr)
+    [_]          -> "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
     [cols, rows] -> showMatrix rows cols arr
-    _ -> "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+    _            -> "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
 
 -- TODO:
---   * Make special formatting optional? It is more difficult to copy/paste the
---     result, for example. Also it does not look good if the matrix row does
---     not fit on a single line.
---   * The AST pretty printer does not use these instances
+-- Make special formatting optional? It is more difficult to copy/paste the
+-- result, for example. Also it does not look good if the matrix row does
+-- not fit on a single line.
 --
 showMatrix :: (Shape sh, Elt e) => Int -> Int -> Array sh e -> String
 showMatrix rows cols arr =
