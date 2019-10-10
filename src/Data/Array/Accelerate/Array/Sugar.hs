@@ -698,30 +698,31 @@ instance (Shape sh, Elt e, Eq sh, Eq e) => Eq (Array sh e) where
   arr1 == arr2 = shape arr1 == shape arr2 && toList arr1 == toList arr2
   arr1 /= arr2 = shape arr1 /= shape arr2 || toList arr1 /= toList arr2
 
-#if __GLASGOW_HASKELL__ >= 710
--- Convert an array to a string, using specialised instances for dimensions
--- zero, one, and two. These are available for ghc-7.10 and later only (earlier
--- versions of ghc would require -XIncoherentInstances in the client module).
+-- We perform the rank check at runtime, as we want a generic Show (Array sh e)
+-- instance. Alternatives would be to create instances for Show (Array Z e),
+-- Show (Array (Z :. Int) e) and so on. This would either require that the
+-- instance for general ranks either works only for DIM3+ arrays, or mean
+-- that the general case is defined with the INCOHERENT annotation. In the first
+-- option, we do not have a general 'Show (Array sh e)' implementation, which
+-- is an annoying limitation for users. In the second option, scalars, vectors and
+-- matrices may not always be shown with their appropriate format.
 --
+instance (Shape sh, Elt e) => Show (Array sh e) where
+  show arr = case shapeToList $ shape arr of
+    []           -> "Scalar Z " ++ show (toList arr)
+    [_]          -> "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+    [cols, rows] -> showMatrix rows cols arr
+    _            -> "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
 -- TODO:
---   * Make special formatting optional? It is more difficult to copy/paste the
---     result, for example. Also it does not look good if the matrix row does
---     not fit on a single line.
---   * The AST pretty printer does not use these instances
+-- Make special formatting optional? It is more difficult to copy/paste the
+-- result, for example. Also it does not look good if the matrix row does
+-- not fit on a single line.
 --
-instance Elt e => Show (Scalar e) where
-  show arr =
-    "Scalar Z " ++ show (toList arr)
-
-instance Elt e => Show (Vector e) where
-  show arr =
-    "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
-
-instance Elt e => Show (Array DIM2 e) where
-  show arr =
+showMatrix :: (Shape sh, Elt e) => Int -> Int -> Array sh e -> String
+showMatrix rows cols arr =
     "Matrix (" ++ showShape (shape arr) ++ ") " ++ showMat
     where
-      Z :. rows :. cols = shape arr
       lengths           = U.generate (rows*cols) (\i -> length (show (arr !! i)))
       widths            = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
       --
@@ -748,18 +749,6 @@ instance Elt e => Show (Array DIM2 e) where
               | otherwise                  = ',' : ppMat r (c+1)
         in
         before ++ cell ++ after
-#endif
-
--- This is a bit unfortunate, but we need to use an INCOHERENT instance because
--- GHC can't determine that with the above specialisations, a DIM3+ instance
--- covers all remaining possibilities, and lacking a general instance is
--- problematic for operations which want a 'Show (Array sh e)' constraint.
--- Furthermore, those clients are likely to pick this instance, rather than the
--- more specific ones above, which is (perhaps) a little unfortunate.
---
-instance {-# INCOHERENT #-} (Shape sh, Elt e) => Show (Array sh e) where
-  show arr =
-    "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
 
 instance Elt e => IsList (Vector e) where
   type Item (Vector e) = e
