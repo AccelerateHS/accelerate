@@ -24,9 +24,8 @@
 
 module Data.Array.Accelerate.Analysis.Type (
 
-  AccType, arrayType,
-  accType, expType, delayedAccType, delayedExpType,
-  preAccType, preExpType,
+  arrayType,
+  accType, expType,
 
   sizeOf,
   sizeOfScalarType,
@@ -40,7 +39,6 @@ module Data.Array.Accelerate.Analysis.Type (
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Type
 
 -- standard library
@@ -59,110 +57,18 @@ arrayType _ = eltType @e
 -- |Determine the type of an expressions
 -- -------------------------------------
 
-type AccType  acc = forall aenv sh e. acc aenv (Array sh e) -> TupleType (EltRepr e)
-
--- |Reify the element type of the result of an array computation.
---
-accType :: AccType OpenAcc
-accType (OpenAcc acc) = preAccType accType acc
-
-delayedAccType :: AccType DelayedOpenAcc
-delayedAccType (Manifest acc) = preAccType delayedAccType acc
-delayedAccType (Delayed _ f _)
-  | Lam (Body e) <- f   = delayedExpType e
-  | otherwise           = error "my favourite place in the world is wherever you happen to be"
-
-
--- |Reify the element type of the result of an array computation using the array computation AST
--- before tying the knot.
---
-preAccType :: forall acc aenv sh e.
-              AccType acc
-           -> PreOpenAcc acc aenv (Array sh e)
-           -> TupleType (EltRepr e)
-preAccType k pacc =
-  case pacc of
-    Alet _ acc          -> k acc
-
-    -- The following all contain impossible pattern matches, but GHC's type
-    -- checker does no grok that
-    --
-    Avar{}              -> case arrays @(Array sh e) of
-                             ArraysRarray -> eltType @e
-#if __GLASGOW_HASKELL__ < 800
-                             _            -> error "When I get sad, I stop being sad and be AWESOME instead."
-#endif
-
-    Apply{}             -> case arrays @(Array sh e) of
-                             ArraysRarray -> eltType @e
-#if __GLASGOW_HASKELL__ < 800
-                             _            -> error "TRUE STORY."
-#endif
-
-    Atuple{}            -> case arrays @(Array sh e) of
-                             ArraysRarray -> eltType @e
-#if __GLASGOW_HASKELL__ < 800
-                             _            -> error "I made you a cookie, but I eated it."
-#endif
-
-    Aprj{}              -> case arrays @(Array sh e) of
-                             ArraysRarray -> eltType @e
-#if __GLASGOW_HASKELL__ < 800
-                             _            -> error "Hey look! even the leaves are falling for you."
-#endif
-
-    Aforeign{}          -> case arrays @(Array sh e) of
-                             ArraysRarray -> eltType @e
-#if __GLASGOW_HASKELL__ < 800
-                             _            -> error "Who on earth wrote all these weird error messages?"
-#endif
-
-    Use{}               -> case arrays @(Array sh e) of
-                             ArraysRarray -> eltType @e
-#if __GLASGOW_HASKELL__ < 800
-                             _            -> error "rob you are terrible at this game"
-#endif
-
-    Acond _ acc _       -> k acc
-    Awhile _ _ acc      -> k acc
-    Unit _              -> eltType @e
-    Generate _ _        -> eltType @e
-    Transform _ _ _ _   -> eltType @e
-    Reshape _ acc       -> k acc
-    Replicate _ _ acc   -> k acc
-    Slice _ acc _       -> k acc
-    Map _ _             -> eltType @e
-    ZipWith _ _ _       -> eltType @e
-    Fold _ _ acc        -> k acc
-    FoldSeg _ _ acc _   -> k acc
-    Fold1 _ acc         -> k acc
-    Fold1Seg _ acc _    -> k acc
-    Scanl _ _ acc       -> k acc
-    Scanl1 _ acc        -> k acc
-    Scanr _ _ acc       -> k acc
-    Scanr1 _ acc        -> k acc
-    Permute _ _ _ acc   -> k acc
-    Backpermute _ _ acc -> k acc
-    Stencil _ _ _       -> eltType @e
-    Stencil2 _ _ _ _ _  -> eltType @e
-
-
--- |Reify the result type of a scalar expression.
---
-expType :: OpenExp env aenv t -> TupleType (EltRepr t)
-expType = preExpType accType
-
-delayedExpType :: DelayedOpenExp env aenv t -> TupleType (EltRepr t)
-delayedExpType = preExpType delayedAccType
+accType :: forall acc aenv sh e. HasArraysRepr acc => acc aenv (Array sh e) -> TupleType (EltRepr e)
+accType acc = case arraysRepr acc of
+  ArraysRarray -> eltType @e
 
 -- |Reify the result types of of a scalar expression using the expression AST before tying the
 -- knot.
 --
-preExpType :: forall acc aenv env t.
-              AccType acc
-           -> PreOpenExp acc aenv env t
+expType :: forall acc aenv env t.
+              HasArraysRepr acc
+           => PreOpenExp acc aenv env t
            -> TupleType (EltRepr t)
-preExpType k e =
+expType e =
   case e of
     Let _ _           -> eltType @t
     Var _             -> eltType @t
@@ -179,12 +85,12 @@ preExpType k e =
     IndexFull _ _ _   -> eltType @t
     ToIndex _ _       -> eltType @t
     FromIndex _ _     -> eltType @t
-    Cond _ t _        -> preExpType k t
+    Cond _ t _        -> expType t
     While _ _ _       -> eltType @t
     PrimConst _       -> eltType @t
     PrimApp _ _       -> eltType @t
-    Index acc _       -> k acc
-    LinearIndex acc _ -> k acc
+    Index acc _       -> accType acc
+    LinearIndex acc _ -> accType acc
     Shape _           -> eltType @t
     ShapeSize _       -> eltType @t
     Intersect _ _     -> eltType @t

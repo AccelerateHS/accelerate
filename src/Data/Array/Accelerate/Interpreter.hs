@@ -100,7 +100,8 @@ run a = unsafePerformIO execute
     execute = do
       D.dumpGraph $!! acc
       D.dumpSimplStats
-      phase "execute" D.elapsed (evaluate (evalOpenAcc acc Empty))
+      res <- phase "execute" D.elapsed $ evaluate $ evalOpenAcc acc Empty
+      return $ toArr res
 
 -- | This is 'runN' specialised to an array program of one argument.
 --
@@ -109,7 +110,7 @@ run1 = runN
 
 -- | Prepare and execute an embedded array program.
 --
-runN :: Afunction f => f -> AfunctionR f
+runN :: forall f. Afunction f => f -> AfunctionR f
 runN f = go
   where
     !acc    = convertAfun f
@@ -117,12 +118,12 @@ runN f = go
                 D.dumpGraph $!! acc
                 D.dumpSimplStats
                 return acc
-    !go     = eval afun Empty
+    !go     = eval (afunctionRepr @f) afun Empty
     --
-    eval :: DelayedOpenAfun aenv f -> Val aenv -> f
-    eval (Alam f)  aenv = \a -> eval f (aenv `Push` a)
-    eval (Abody b) aenv = unsafePerformIO $ phase "execute" D.elapsed (evaluate (evalOpenAcc b aenv))
-
+    eval :: AfunctionRepr g (AfunctionR g) (AreprFunctionR g) -> DelayedOpenAfun aenv (AreprFunctionR g) -> Val aenv -> AfunctionR g
+    eval (AfunctionReprLam reprF) (Alam lhs f) aenv = \a -> eval reprF f $ aenv `push` (lhs, fromArr a)
+    eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" D.elapsed (toArr <$> evaluate (evalOpenAcc b aenv))
+    eval _                        _aenv        _    = error "Two men say they're Jesus; one of them must be wrong"
 
 -- -- | Stream a lazily read list of input arrays through the given program,
 -- -- collecting results as we go
@@ -161,8 +162,8 @@ type EvalAcc acc = forall aenv a. acc aenv a -> Val aenv -> a
 -- Evaluate an open array function
 --
 evalOpenAfun :: DelayedOpenAfun aenv f -> Val aenv -> f
-evalOpenAfun (Alam  f) aenv = \a -> evalOpenAfun f (aenv `Push` a)
-evalOpenAfun (Abody b) aenv = evalOpenAcc b aenv
+evalOpenAfun (Alam lhs f) aenv = \a -> evalOpenAfun f $ aenv `push` (lhs, a)
+evalOpenAfun (Abody b)    aenv = evalOpenAcc b aenv
 
 
 -- The core interpreter for optimised array programs
@@ -175,10 +176,11 @@ evalOpenAcc
 evalOpenAcc AST.Delayed{}       _    = $internalError "evalOpenAcc" "expected manifest array"
 evalOpenAcc (AST.Manifest pacc) aenv =
   let
-      manifest :: forall a'. Arrays a' => DelayedOpenAcc aenv a' -> a'
+      manifest :: forall a'. DelayedOpenAcc aenv a' -> a'
       manifest acc =
-        let a' = evalOpenAcc acc aenv
-        in  rnfArrays (arrays @a') (fromArr a') `seq` a'
+        let a'   = evalOpenAcc acc aenv
+            repr = arraysRepr acc
+        in  rnfArrays repr a' `seq` a'
 
       delayed :: (Shape sh, Elt e) => DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
       delayed AST.Delayed{..} = Delayed (evalE extentD) (evalF indexD) (evalF linearIndexD)
@@ -194,10 +196,10 @@ evalOpenAcc (AST.Manifest pacc) aenv =
       evalB bnd = evalPreBoundary evalOpenAcc bnd aenv
   in
   case pacc of
-    Avar ix                     -> prj ix aenv
-    Alet acc1 acc2              -> evalOpenAcc acc2 (aenv `Push` manifest acc1)
-    Atuple atup                 -> toAtuple $ evalAtuple atup aenv
-    Aprj ix atup                -> evalPrj ix . fromAtuple $ manifest atup
+    Avar (ArrayVar ix)          -> prj ix aenv
+    Alet lhs acc1 acc2          -> evalOpenAcc acc2 $ aenv `push` (lhs, manifest acc1)
+    Apair acc1 acc2             -> (manifest acc1, manifest acc2)
+    Anil                        -> ()
     Apply afun acc              -> evalOpenAfun afun aenv  $ manifest acc
     Aforeign _ afun acc         -> evalOpenAfun afun Empty $ manifest acc
     Acond p acc1 acc2
@@ -212,7 +214,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
           | p x ! Z     = go (f x)
           | otherwise   = x
 
-    Use arr                     -> toArr arr
+    Use _ arr                   -> arr
     Unit e                      -> unitOp (evalE e)
     -- Collect s                   -> evalSeq defaultSeqConfig s aenv
 
@@ -243,13 +245,6 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Permute f def p acc         -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
     Stencil sten b acc          -> stencilOp (evalF sten) (evalB b) (delayed acc)
     Stencil2 sten b1 a1 b2 a2   -> stencil2Op (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
-
--- Array tuple construction and projection
---
-evalAtuple :: Atuple (DelayedOpenAcc aenv) t -> Val aenv -> t
-evalAtuple NilAtup        _    = ()
-evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, evalOpenAcc a aenv)
-
 
 -- Array primitives
 -- ----------------
@@ -479,9 +474,9 @@ scanl'Op
     => (e -> e -> e)
     -> e
     -> Delayed (Array (sh:.Int) e)
-    -> (Array (sh:.Int) e, Array sh e)
+    -> ArrRepr (Array (sh:.Int) e, Array sh e)
 scanl'Op f z (Delayed (sh :. n) ain _)
-  = aout `seq` asum `seq` ( Array (fromElt (sh:.n)) aout
+  = aout `seq` asum `seq` ( ( (), Array (fromElt (sh:.n)) aout )
                           , Array (fromElt sh)      asum )
   where
     f'          = sinkFromElt2 f
@@ -558,9 +553,9 @@ scanr'Op
     => (e -> e -> e)
     -> e
     -> Delayed (Array (sh:.Int) e)
-    -> (Array (sh:.Int) e, Array sh e)
+    -> ArrRepr (Array (sh:.Int) e, Array sh e)
 scanr'Op f z (Delayed (sh :. n) ain _)
-  = aout `seq` asum `seq` ( Array (fromElt (sh:.n)) aout
+  = aout `seq` asum `seq` ( ((), Array (fromElt (sh:.n)) aout )
                           , Array (fromElt sh)      asum )
   where
     f'          = sinkFromElt2 f

@@ -44,8 +44,8 @@ import qualified Data.HashSet                           as Set
 import qualified Data.Sequence                          as Seq
 
 -- friends
-import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), Idx(..), tupleIdxToInt )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Elt, Tuple(..), Atuple(..), arrays, toElt, strForeign )
+import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), LeftHandSide(..), ArrayVar(..), Idx(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Elt, Tuple(..), ArraysR(..), toElt, strForeign )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Graphviz.Monad
 import Data.Array.Accelerate.Pretty.Graphviz.Type
@@ -193,11 +193,11 @@ prettyDelayedOpenAcc _      _   _    Delayed{}            = $internalError "pret
 prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
   case pacc of
     Avar ix                 -> pnode (avar ix)
-    Alet bnd body           -> do
-      bnd'  <- prettyDelayedOpenAcc detail context0 aenv                 bnd
-      a     <- mkLabel
-      ident <- mkNode bnd' (Just a)
-      body' <- prettyDelayedOpenAcc detail context0 (Apush aenv ident a) body
+    Alet lhs bnd body       -> do
+      bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc detail context0 aenv bnd
+      (aenv1, a) <- prettyLetLeftHandSide ident aenv lhs
+      _ <- mkNode bnd' (Just a)
+      body' <- prettyDelayedOpenAcc detail context0 aenv1 body
       return body'
 
     Acond p t e             -> do
@@ -223,14 +223,11 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
           loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
-    Atuple atup             -> prettyDelayedAtuple detail aenv atup
+    a@(Apair a1 a2)         -> mkNodeId a >>= prettyDelayedApair detail aenv a1 a2
 
-    Aprj ix atup            -> do
-      ident                     <- mkNodeId atop
-      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail context0 aenv atup
-      return $ PNode ident (Leaf (p, d <+> pretty '#' <+> pretty (tupleIdxToInt ix))) deps
+    Anil                    -> "()"          .$ []
 
-    Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays @arrs) arrs) [] ]
+    Use repr arrs           -> "use"         .$ [ return $ PDoc (prettyArrays repr arrs) [] ]
     Unit e                  -> "unit"        .$ [ ppE e ]
     Generate sh f           -> "generate"    .$ [ ppE sh, ppF f ]
     Transform sh ix f xs    -> "transform"   .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
@@ -282,8 +279,8 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     -- Free variables
     --
     fvA :: FVAcc DelayedOpenAcc
-    fvA env (Manifest (Avar ix)) = [ Vertex (fst $ aprj ix env) Nothing ]
-    fvA _   _                    = $internalError "graphviz" "expected array variable"
+    fvA env (Manifest (Avar (ArrayVar ix))) = [ Vertex (fst $ aprj ix env) Nothing ]
+    fvA _   _                               = $internalError "graphviz" "expected array variable"
 
     fvF :: DelayedFun aenv t -> [Vertex]
     fvF = fvPreOpenFun fvA Empty aenv
@@ -293,9 +290,9 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
 
     -- Pretty-printing
     --
-    avar :: Idx aenv t -> PDoc
-    avar ix = let (ident, v) = aprj ix aenv
-              in  PDoc (pretty v) [Vertex ident Nothing]
+    avar :: ArrayVar aenv t -> PDoc
+    avar (ArrayVar ix) = let (ident, v) = aprj ix aenv
+                         in  PDoc (pretty v) [Vertex ident Nothing]
 
     aenv' :: Val aenv
     aenv' = avalToVal aenv
@@ -333,9 +330,9 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     ppE = return . uncurry PDoc . (prettyDelayedExp aenv' &&& fvE)
 
     lift :: DelayedOpenAcc aenv a -> Dot Vertex
-    lift Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
-    lift (Manifest (Avar ix)) = return $ Vertex (fst (aprj ix aenv)) Nothing
-    lift acc                  = do
+    lift Delayed{}                       = $internalError "prettyDelayedOpenAcc" "expected manifest array"
+    lift (Manifest (Avar (ArrayVar ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
+    lift acc                             = do
       acc'  <- prettyDelayedOpenAcc detail context0 aenv acc
       ident <- mkNode acc' Nothing
       return $ Vertex ident Nothing
@@ -383,37 +380,66 @@ prettyDelayedAfun detail aenv afun = do
   where
     go :: Aval aenv' -> DelayedOpenAfun aenv' a' -> Dot Graph
     go aenv' (Abody b) = graphDelayedOpenAcc detail aenv' b
-    go aenv' (Alam  f) = do
-      a     <- mkLabel
-      ident <- mkNodeId f
-      _     <- mkNode (PNode ident (Leaf (Nothing, pretty a)) []) Nothing
-      go (Apush aenv' ident a) f
+    go aenv' (Alam lhs f) = do
+      aenv'' <- prettyLambdaLeftHandSide aenv' lhs
+      go aenv'' f
 
     collect :: Aval aenv' -> HashSet NodeId
     collect Aempty        = Set.empty
     collect (Apush a i _) = Set.insert i (collect a)
 
+prettyLetLeftHandSide
+  :: forall repr aenv aenv'.
+     NodeId
+  -> Aval aenv
+  -> LeftHandSide repr aenv aenv'
+  -> Dot (Aval aenv', Label)
+prettyLetLeftHandSide _     aenv (LeftHandSideWildcard repr) = return (aenv, doc)
+  where
+    doc = case repr of
+      ArraysRunit -> "()"
+      _           -> "_"
+prettyLetLeftHandSide ident aenv LeftHandSideArray = do
+  a <- mkLabel
+  return (Apush aenv ident a, a)
+prettyLetLeftHandSide ident aenv (LeftHandSidePair lhs1 lhs2) = do
+  (aenv1, d1) <- prettyLetLeftHandSide ident aenv  lhs1
+  (aenv2, d2) <- prettyLetLeftHandSide ident aenv1 lhs2
+  return (aenv2, "(" <> d1 <> ", " <> d2 <> ")")
+
+prettyLambdaLeftHandSide
+    :: forall repr aenv aenv'.
+       Aval aenv
+    -> LeftHandSide repr aenv aenv'
+    -> Dot (Aval aenv')
+prettyLambdaLeftHandSide aenv (LeftHandSideWildcard _) = return aenv
+prettyLambdaLeftHandSide aenv lhs@LeftHandSideArray = do
+  a     <- mkLabel
+  ident <- mkNodeId lhs
+  _     <- mkNode (PNode ident (Leaf (Nothing, pretty a)) []) Nothing
+  return $ Apush aenv ident a
+prettyLambdaLeftHandSide aenv (LeftHandSidePair lhs1 lhs2) = do
+  aenv1 <- prettyLambdaLeftHandSide aenv lhs1
+  prettyLambdaLeftHandSide aenv1 lhs2
 
 -- Display array tuples. This is a little tricky...
 --
-prettyDelayedAtuple
-    :: forall aenv atup.
+prettyDelayedApair
+    :: forall aenv a1 a2.
        Detail
     -> Aval aenv
-    -> Atuple (DelayedOpenAcc aenv) atup
+    -> DelayedOpenAcc aenv a1
+    -> DelayedOpenAcc aenv a2
+    -> NodeId
     -> Dot PNode
-prettyDelayedAtuple detail aenv atup = do
-  ident         <- mkNodeId atup
-  (ids, ts, vs) <- unzip3 . map (\(PNode i t v) -> (i,t,v)) <$> collect [] atup
-  modify $ \s -> s { dotEdges = fmap (redirect ident ids) (dotEdges s) }
-  return $ PNode ident (forest ts) (concat vs)
+prettyDelayedApair detail aenv a1 a2 ident = do
+  PNode id1 t1 v1 <- prettyElem a1
+  PNode id2 t2 v2 <- prettyElem a2
+  modify $ \s -> s { dotEdges = fmap (redirect ident [id1, id2]) (dotEdges s) }
+  return $ PNode ident (forest [t1, t2]) (v1 ++ v2)
   where
-    collect :: [PNode] -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
-    collect acc NilAtup          = return acc
-    collect acc (SnocAtup tup a) = do
-      a'   <- replant =<< prettyDelayedOpenAcc detail context0 aenv a
-      tup' <- collect (a':acc) tup
-      return tup'
+    prettyElem :: DelayedOpenAcc aenv a -> Dot PNode
+    prettyElem a = replant =<< prettyDelayedOpenAcc detail context0 aenv a
 
     -- Redirect any edges that pointed into one of the nodes now part of this
     -- tuple, to instead point to the container node.
@@ -488,8 +514,8 @@ prettyDelayedOpenExp
 prettyDelayedOpenExp context = prettyPreOpenExp context pp ex
   where
     pp :: PrettyAcc DelayedOpenAcc
-    pp _ aenv (Manifest (Avar ix)) = prj ix aenv
-    pp _ _    _                    = $internalError "prettyDelayedOpenExp" "expected array variable"
+    pp _ aenv (Manifest (Avar (ArrayVar ix))) = prj ix aenv
+    pp _ _    _                               = $internalError "prettyDelayedOpenExp" "expected array variable"
 
     ex :: ExtractAcc DelayedOpenAcc
     ex (Manifest pacc) = pacc

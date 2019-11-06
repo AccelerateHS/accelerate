@@ -140,8 +140,8 @@ encodePreOpenAcc
     -> Builder
 encodePreOpenAcc options encodeAcc pacc =
   let
-      travA :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travA a = encodeArraysType (arrays @a) <> encodeAcc options a
+      travA :: forall aenv' a. acc aenv' a -> Builder
+      travA = encodeAcc options
 
       travAF :: PreOpenAfun acc aenv' f -> Builder
       travAF = encodePreOpenAfun options encodeAcc
@@ -155,21 +155,18 @@ encodePreOpenAcc options encodeAcc pacc =
       travB :: PreBoundary acc aenv' (Array sh e) -> Builder
       travB = encodePreBoundary options encodeAcc
 
-      nacl :: Arrays arrs => Builder
-      nacl = encodeArraysType (arrays @arrs)
-
       deep :: Builder -> Builder
       deep x | perfect options = x
              | otherwise       = mempty
   in
   case pacc of
-    Alet bnd body               -> intHost $(hashQ "Alet")        <> travA bnd <> travA body
-    Avar v                      -> intHost $(hashQ "Avar")        <> nacl <> deep (encodeIdx v)
-    Atuple t                    -> intHost $(hashQ "Atuple")      <> nacl <> encodeAtuple options encodeAcc t
-    Aprj ix a                   -> intHost $(hashQ "Aprj")        <> nacl <> encodeTupleIdx ix <> travA a
-    Apply f a                   -> intHost $(hashQ "Apply")       <> nacl <> travAF f <> travA a
-    Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> nacl <> travAF f <> travA a
-    Use a                       -> intHost $(hashQ "Use")         <> deep (encodeArrays (arrays @arrs) a)
+    Alet lhs bnd body           -> intHost $(hashQ "Alet")        <> encodeLeftHandSide lhs <> travA bnd <> travA body
+    Avar (ArrayVar v)           -> intHost $(hashQ "Avar")        <> deep (encodeIdx v)
+    Apair a1 a2                 -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
+    Anil                        -> intHost $(hashQ "Anil")
+    Apply f a                   -> intHost $(hashQ "Apply")       <> travAF f <> travA a
+    Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
+    Use repr a                  -> intHost $(hashQ "Use")         <> deep (encodeArrays repr a)
     Awhile p f a                -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
     Unit e                      -> intHost $(hashQ "Unit")        <> travE e
     Generate e f                -> intHost $(hashQ "Generate")    <> deep (travE e)  <> travF f
@@ -260,9 +257,13 @@ encodeArraysType ArraysRarray        = intHost $(hashQ "ArraysRarray") <> encode
     encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
     encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
 
-encodeAtuple :: HashOptions -> EncodeAcc acc -> Atuple (acc aenv) a -> Builder
-encodeAtuple _ _     NilAtup        = intHost $(hashQ "NilAtup")
-encodeAtuple o travA (SnocAtup t a) = intHost $(hashQ "SnocAtup") <> encodeAtuple o travA t <> travA o a
+encodeLeftHandSide :: forall a env env'. LeftHandSide a env env' -> Builder
+encodeLeftHandSide (LeftHandSideWildcard r) = intHost $(hashQ "LeftHandSideWildcard") <> encodeArraysType r
+encodeLeftHandSide (LeftHandSidePair r1 r2) = intHost $(hashQ "LeftHandSidePair")  <> encodeLeftHandSide r1 <> encodeLeftHandSide r2
+encodeLeftHandSide LeftHandSideArray        = intHost $(hashQ "LeftHandSideArray") <> encodeArrayType @a
+  where
+    encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
+    encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
 
 encodePreOpenAfun
     :: forall acc aenv f.
@@ -272,15 +273,14 @@ encodePreOpenAfun
     -> Builder
 encodePreOpenAfun options travA afun =
   let
-      travB :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travB b = encodeArraysType (arrays @a) <> travA options b
-
-      travL :: forall aenv' a b. Arrays a => PreOpenAfun acc (aenv',a) b -> Builder
-      travL l = encodeArraysType (arrays @a) <> encodePreOpenAfun options travA l
+      travL :: forall aenv1 aenv2 a b. LeftHandSide a aenv1 aenv2 -> PreOpenAfun acc aenv2 b -> Builder
+      travL lhs l = encodeArraysType repr <> encodePreOpenAfun options travA l
+        where
+          repr = lhsToArraysR lhs
   in
   case afun of
-    Abody b -> intHost $(hashQ "Abody") <> travB b
-    Alam  l -> intHost $(hashQ "Alam")  <> travL l
+    Abody b    -> intHost $(hashQ "Abody") <> travA options b
+    Alam lhs l -> intHost $(hashQ "Alam")  <> travL lhs  l
 
 
 encodePreBoundary

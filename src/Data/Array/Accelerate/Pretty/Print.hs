@@ -111,9 +111,10 @@ prettyPreOpenAfun prettyAcc aenv0 = next (pretty '\\') aenv0
   where
     next :: Adoc -> Val aenv' -> PreOpenAfun acc aenv' f' -> Adoc
     next vs aenv (Abody body) = hang shiftwidth (sep [vs <> "->", prettyAcc context0 aenv body])
-    next vs aenv (Alam  lam)  =
-      let a = pretty 'a' <> pretty (sizeEnv aenv)
-      in  next (vs <> a <> space) (aenv `Push` a) lam
+    next vs aenv (Alam lhs lam) =
+      let 
+        (aenv', lhs') = prettyLHS aenv lhs
+      in  next (vs <> lhs' <> space) aenv' lam
 
 prettyPreOpenAcc
     :: forall acc aenv arrs.
@@ -125,18 +126,14 @@ prettyPreOpenAcc
     -> Adoc
 prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
   case pacc of
-    Avar idx                -> prj idx aenv
+    Avar (ArrayVar idx)     -> prj idx aenv
     Alet{}                  -> prettyAlet ctx prettyAcc extractAcc aenv pacc
-    Atuple tup              -> prettyAtuple prettyAcc aenv tup
+    Apair a1 a2             -> "(" <> prettyAcc context0 aenv a1 <> ", " <> prettyAcc context0 aenv a2 <> ")"
+    Anil                    -> "()"
     Apply f a               -> apply
       where
         op    = Operator ">->" Infix L 1
         apply = sep [ ppAF f, group (sep [opName op, ppA a]) ]
-
-    Aprj tix a              -> parensIf (needsParens ctx op) aprj
-      where
-        op   = Operator "#" Infix L 8
-        aprj = sep [ prettyAcc (arg op L) aenv a, group (sep [opName op, pretty (tupleIdxToInt tix)])]
 
     Acond p t e             -> flatAlt multi single
       where
@@ -153,7 +150,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
 
     Aforeign ff _f a        -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
     Awhile p f a            -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
-    Use arrs                -> "use"          .$ [ prettyArrays (arrays @arrs) arrs ]
+    Use repr arrs           -> "use"          .$ [ prettyArrays repr arrs ]
     Unit e                  -> "unit"         .$ [ ppE e ]
     Reshape sh a            -> "reshape"      .$ [ ppE sh, ppA a ]
     Generate sh f           -> "generate"     .$ [ ppE sh, ppF f ]
@@ -219,9 +216,8 @@ prettyAlet ctx prettyAcc extractAcc aenv0
     collect :: Val aenv' -> PreOpenAcc acc aenv' a -> ([Adoc], Adoc)
     collect aenv =
       \case
-        Alet a1 a2 ->
-          let aenv'           = aenv `Push` v
-              v               = pretty 'a' <> pretty (sizeEnv aenv)
+        Alet lhs a1 a2 ->
+          let (aenv', v)      = prettyLHS aenv lhs
               a1'             = ppA aenv a1
               bnd | isAlet a1 = nest shiftwidth (vsep [v <+> equals, a1'])
                   | otherwise = v <+> align (equals <+> a1')
@@ -248,19 +244,16 @@ prettyAlet ctx prettyAcc extractAcc aenv0
              , body
              ]
 
-prettyAtuple
-    :: forall acc aenv t.
-       PrettyAcc acc
-    -> Val aenv
-    -> Atuple (acc aenv) t
-    -> Adoc
-prettyAtuple prettyAcc aenv = tupled . collect []
+prettyLHS :: Val aenv -> LeftHandSide arrs aenv aenv' -> (Val aenv', Adoc)
+prettyLHS aenv (LeftHandSideWildcard ArraysRunit) = (aenv, "()")
+prettyLHS aenv (LeftHandSideWildcard _) = (aenv, "_")
+prettyLHS aenv LeftHandSideArray = (aenv `Push` v, v)
   where
-    collect :: [Adoc] -> Atuple (acc aenv) s -> [Adoc]
-    collect acc =
-      \case
-        NilAtup         -> acc
-        SnocAtup atup a -> collect (prettyAcc context0 aenv a : acc) atup
+    v = pretty 'a' <> pretty (sizeEnv aenv)
+prettyLHS aenv (LeftHandSidePair a b) = (aenv2, "(" <> doc1 <> ", " <> doc2 <> ")")
+  where
+    (aenv1, doc1) = prettyLHS aenv  a
+    (aenv2, doc2) = prettyLHS aenv1 b
 
 prettyArrays :: ArraysR arrs -> arrs -> Adoc
 prettyArrays arrs = tupled . collect arrs
