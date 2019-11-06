@@ -27,7 +27,8 @@
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), PreBoundary(..), Stencil(..), Level,
+  Acc(..), SmartAcc(..), PreSmartAcc(..), PairIdx(..), Exp(..), PreExp(..),
+  Boundary(..), PreBoundary(..), Stencil(..), Level,
 
   -- * Smart constructors for literals
   constant, undef,
@@ -63,7 +64,7 @@ module Data.Array.Accelerate.Smart (
   mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast, mkUnsafeCoerce,
 
   -- * Auxiliary functions
-  ($$), ($$$), ($$$$), ($$$$$),
+  ($$), ($$$), ($$$$), ($$$$$), unAcc, unAccFunction, ApplyAcc(..),
 
   -- Debugging
   showPreAccOp, showPreExpOp,
@@ -272,7 +273,9 @@ import qualified Data.Array.Accelerate.AST      as AST
 --    fusion) and, if the target architecture has a separate memory space, as is
 --    the case of GPUs, to prevent excessive data transfers.
 --
-newtype Acc a = Acc (PreAcc Acc Exp a)
+newtype Acc a = Acc (SmartAcc (ArrRepr a))
+
+newtype SmartAcc a = SmartAcc (PreSmartAcc SmartAcc Exp a)
 deriving instance Typeable Acc
 
 
@@ -283,160 +286,166 @@ type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
-data PreAcc acc exp as where
+data PreSmartAcc acc exp as where
     -- Needed for conversion to de Bruijn form
-  Atag          :: Arrays as
+  Atag          :: Typeable as
                 => Level                        -- environment size at defining occurrence
-                -> PreAcc acc exp as
+                -> PreSmartAcc acc exp as
 
-  Pipe          :: (Arrays as, Arrays bs, Arrays cs)
-                => (Acc as -> acc bs)
-                -> (Acc bs -> acc cs)
+  Pipe          :: (Typeable as, Typeable bs, Typeable cs)
+                => ArraysR as
+                -> ArraysR bs
+                -> (SmartAcc as -> acc bs)
+                -> (SmartAcc bs -> acc cs)
                 -> acc as
-                -> PreAcc acc exp cs
+                -> PreSmartAcc acc exp cs
 
-  Aforeign      :: (Arrays as, Arrays bs, Foreign asm)
+  Aforeign      :: (Typeable (ArrRepr as), Typeable (ArrRepr bs), Arrays as, Arrays bs, Foreign asm)
                 => asm (as -> bs)
                 -> (Acc as -> Acc bs)
-                -> acc as
-                -> PreAcc acc exp bs
+                -> acc (ArrRepr as)
+                -> PreSmartAcc acc exp (ArrRepr bs)
 
-  Acond         :: Arrays as
+  Acond         :: Typeable as
                 => exp Bool
                 -> acc as
                 -> acc as
-                -> PreAcc acc exp as
+                -> PreSmartAcc acc exp as
 
-  Awhile        :: Arrays arrs
-                => (Acc arrs -> acc (Scalar Bool))
-                -> (Acc arrs -> acc arrs)
+  Awhile        :: Typeable arrs
+                => ArraysR arrs
+                -> (SmartAcc arrs -> acc (Scalar Bool))
+                -> (SmartAcc arrs -> acc arrs)
                 -> acc arrs
-                -> PreAcc acc exp arrs
+                -> PreSmartAcc acc exp arrs
 
-  Atuple        :: (Arrays arrs, IsAtuple arrs)
-                => Atuple acc (TupleRepr arrs)
-                -> PreAcc acc exp arrs
+  Anil          :: PreSmartAcc acc exp ()
 
-  Aprj          :: (Arrays arrs, IsAtuple arrs, Arrays a)
-                => TupleIdx (TupleRepr arrs) a
-                ->        acc     arrs
-                -> PreAcc acc exp a
+  Apair         :: (Typeable arrs1, Typeable arrs2)
+                => acc arrs1
+                -> acc arrs2
+                -> PreSmartAcc acc exp (arrs1, arrs2)
 
-  Use           :: Arrays arrs
+  Aprj          :: (Typeable arrs1, Typeable arrs2)
+                => PairIdx (arrs1, arrs2) arrs
+                -> acc (arrs1, arrs2)
+                -> PreSmartAcc acc exp arrs
+
+  Use           :: (Arrays arrs, Typeable (ArrRepr arrs))
                 => arrs
-                -> PreAcc acc exp arrs
+                -> PreSmartAcc acc exp (ArrRepr arrs)
 
   Unit          :: Elt e
                 => exp e
-                -> PreAcc acc exp (Scalar e)
+                -> PreSmartAcc acc exp (Scalar e)
 
   Generate      :: (Shape sh, Elt e)
                 => exp sh
                 -> (Exp sh -> exp e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreSmartAcc acc exp (Array sh e)
 
   Reshape       :: (Shape sh, Shape sh', Elt e)
                 => exp sh
                 -> acc (Array sh' e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreSmartAcc acc exp (Array sh e)
 
   Replicate     :: (Slice slix, Elt e)
                 => exp slix
                 -> acc            (Array (SliceShape slix) e)
-                -> PreAcc acc exp (Array (FullShape  slix) e)
+                -> PreSmartAcc acc exp (Array (FullShape  slix) e)
 
   Slice         :: (Slice slix, Elt e)
                 => acc            (Array (FullShape  slix) e)
                 -> exp slix
-                -> PreAcc acc exp (Array (SliceShape slix) e)
+                -> PreSmartAcc acc exp (Array (SliceShape slix) e)
 
   Map           :: (Shape sh, Elt e, Elt e')
                 => (Exp e -> exp e')
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh e')
+                -> PreSmartAcc acc exp (Array sh e')
 
   ZipWith       :: (Shape sh, Elt e1, Elt e2, Elt e3)
                 => (Exp e1 -> Exp e2 -> exp e3)
                 -> acc (Array sh e1)
                 -> acc (Array sh e2)
-                -> PreAcc acc exp (Array sh e3)
+                -> PreSmartAcc acc exp (Array sh e3)
 
   Fold          :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh:.Int) e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreSmartAcc acc exp (Array sh e)
 
   Fold1         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array (sh:.Int) e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreSmartAcc acc exp (Array sh e)
 
   FoldSeg       :: (Shape sh, Elt e, Elt i, IsIntegral i)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh:.Int) e)
                 -> acc (Segments i)
-                -> PreAcc acc exp (Array (sh:.Int) e)
+                -> PreSmartAcc acc exp (Array (sh:.Int) e)
 
   Fold1Seg      :: (Shape sh, Elt e, Elt i, IsIntegral i)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array (sh:.Int) e)
                 -> acc (Segments i)
-                -> PreAcc acc exp (Array (sh:.Int) e)
+                -> PreSmartAcc acc exp (Array (sh:.Int) e)
 
   Scanl         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
+                -> PreSmartAcc acc exp (Array (sh :. Int) e)
 
   Scanl'        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e, Array sh e)
+                -> PreSmartAcc acc exp (ArrRepr (Array (sh :. Int) e, Array sh e))
 
   Scanl1        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
+                -> PreSmartAcc acc exp (Array (sh :. Int) e)
 
   Scanr         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
+                -> PreSmartAcc acc exp (Array (sh :. Int) e)
 
   Scanr'        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e, Array sh e)
+                -> PreSmartAcc acc exp (ArrRepr (Array (sh :. Int) e, Array sh e))
 
   Scanr1        :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
+                -> PreSmartAcc acc exp (Array (sh :. Int) e)
 
   Permute       :: (Shape sh, Shape sh', Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array sh' e)
                 -> (Exp sh -> exp sh')
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh' e)
+                -> PreSmartAcc acc exp (Array sh' e)
 
   Backpermute   :: (Shape sh, Shape sh', Elt e)
                 => exp sh'
                 -> (Exp sh' -> exp sh)
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh' e)
+                -> PreSmartAcc acc exp (Array sh' e)
 
   Stencil       :: (Shape sh, Elt a, Elt b, Stencil sh a stencil)
                 => (stencil -> exp b)
                 -> PreBoundary acc exp (Array sh a)
                 -> acc (Array sh a)
-                -> PreAcc acc exp (Array sh b)
+                -> PreSmartAcc acc exp (Array sh b)
 
   Stencil2      :: (Shape sh, Elt a, Elt b, Elt c, Stencil sh a stencil1, Stencil sh b stencil2)
                 => (stencil1 -> stencil2 -> exp c)
@@ -444,12 +453,15 @@ data PreAcc acc exp as where
                 -> acc (Array sh a)
                 -> PreBoundary acc exp (Array sh b)
                 -> acc (Array sh b)
-                -> PreAcc acc exp (Array sh c)
+                -> PreSmartAcc acc exp (Array sh c)
 
   -- Collect       :: Arrays arrs
   --               => seq arrs
-  --               -> PreAcc acc seq exp arrs
+  --               -> PreSmartAcc acc seq exp arrs
 
+data PairIdx p a where
+  PairIdxLeft  :: PairIdx (a, b) a
+  PairIdxRight :: PairIdx (a, b) b
 
 {--
 data PreSeq acc seq exp arrs where
@@ -580,7 +592,7 @@ deriving instance Typeable Seq
 -- efficiently on constrained hardware such as GPUs, and is thus currently
 -- unsupported.
 --
-newtype Exp t = Exp (PreExp Acc Exp t)
+newtype Exp t = Exp (PreExp SmartAcc Exp t)
 
 deriving instance Typeable Exp
 
@@ -702,467 +714,459 @@ data PreExp acc exp t where
 -- Smart constructors and destructors for array tuples
 -- ---------------------------------------------------
 
+nilAtup :: SmartAcc ()
+nilAtup = SmartAcc Anil
+
+snocAtup :: (Typeable a, Arrays b) => SmartAcc a -> Acc b -> SmartAcc (a, ArrRepr b)
+snocAtup a (Acc b) = SmartAcc $ Apair a b
+
 atup2 :: (Arrays a, Arrays b)
       => (Acc a, Acc b)
       -> Acc (a, b)
 atup2 (a, b)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
 
 atup3 :: (Arrays a, Arrays b, Arrays c)
       => (Acc a, Acc b, Acc c)
       -> Acc (a, b, c)
 atup3 (a, b, c)
-  = Acc $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
+  = Acc
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
 
 atup4 :: (Arrays a, Arrays b, Arrays c, Arrays d)
       => (Acc a, Acc b, Acc c, Acc d)
       -> Acc (a, b, c, d)
 atup4 (a, b, c, d)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
 
 atup5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
       => (Acc a, Acc b, Acc c, Acc d, Acc e)
       -> Acc (a, b, c, d, e)
 atup5 (a, b, c, d, e)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
 
 atup6 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
       -> Acc (a, b, c, d, e, f)
 atup6 (a, b, c, d, e, f)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
 
 atup7 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
       -> Acc (a, b, c, d, e, f, g)
 atup7 (a, b, c, d, e, f, g)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
 
 atup8 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
       -> Acc (a, b, c, d, e, f, g, h)
 atup8 (a, b, c, d, e, f, g, h)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
 
 atup9 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
       -> Acc (a, b, c, d, e, f, g, h, i)
 atup9 (a, b, c, d, e, f, g, h, i)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
 
 atup10 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j)
        -> Acc (a, b, c, d, e, f, g, h, i, j)
 atup10 (a, b, c, d, e, f, g, h, i, j)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
+            `snocAtup` j
 
 atup11 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k)
 atup11 (a, b, c, d, e, f, g, h, i, j, k)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
+            `snocAtup` j
+            `snocAtup` k
 
 atup12 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l)
 atup12 (a, b, c, d, e, f, g, h, i, j, k, l)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
+            `snocAtup` j
+            `snocAtup` k
+            `snocAtup` l
 
 atup13 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m)
 atup13 (a, b, c, d, e, f, g, h, i, j, k, l, m)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
+            `snocAtup` j
+            `snocAtup` k
+            `snocAtup` l
+            `snocAtup` m
 
 atup14 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 atup14 (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
-            `SnocAtup` n
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
+            `snocAtup` j
+            `snocAtup` k
+            `snocAtup` l
+            `snocAtup` m
+            `snocAtup` n
 
 atup15 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 atup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
-            `SnocAtup` n
-            `SnocAtup` o
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
+            `snocAtup` j
+            `snocAtup` k
+            `snocAtup` l
+            `snocAtup` m
+            `snocAtup` n
+            `snocAtup` o
 
 atup16 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
        => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p)
        -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 atup16 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
   = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
-            `SnocAtup` n
-            `SnocAtup` o
-            `SnocAtup` p
+  $ nilAtup `snocAtup` a
+            `snocAtup` b
+            `snocAtup` c
+            `snocAtup` d
+            `snocAtup` e
+            `snocAtup` f
+            `snocAtup` g
+            `snocAtup` h
+            `snocAtup` i
+            `snocAtup` j
+            `snocAtup` k
+            `snocAtup` l
+            `snocAtup` m
+            `snocAtup` n
+            `snocAtup` o
+            `snocAtup` p
 
 unatup2 :: (Arrays a, Arrays b)
         => Acc (a, b)
         -> (Acc a, Acc b)
-unatup2 e =
-  ( Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup2 (Acc e) =
+  ( aprj1 e
+  , aprj0 e )
 
 unatup3 :: (Arrays a, Arrays b, Arrays c)
         => Acc (a, b, c)
         -> (Acc a, Acc b, Acc c)
-unatup3 e =
-  ( Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup3 (Acc e) =
+  ( aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup4
     :: (Arrays a, Arrays b, Arrays c, Arrays d)
     => Acc (a, b, c, d)
     -> (Acc a, Acc b, Acc c, Acc d)
-unatup4 e =
-  ( Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup4 (Acc e) =
+  ( aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup5
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
     => Acc (a, b, c, d, e)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e)
-unatup5 e =
-  ( Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup5 (Acc e) =
+  ( aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup6
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
     => Acc (a, b, c, d, e, f)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
-unatup6 e =
-  ( Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup6 (Acc e) =
+  ( aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup7
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
     => Acc (a, b, c, d, e, f, g)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
-unatup7 e =
-  ( Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup7 (Acc e) =
+  ( aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup8
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
     => Acc (a, b, c, d, e, f, g, h)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
-unatup8 e =
-  ( Acc $ tix7 `Aprj` e
-  , Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup8 (Acc e) =
+  ( aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup9
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
     => Acc (a, b, c, d, e, f, g, h, i)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
-unatup9 e =
-  ( Acc $ tix8 `Aprj` e
-  , Acc $ tix7 `Aprj` e
-  , Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup9 (Acc e) =
+  ( aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup10
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
     => Acc (a, b, c, d, e, f, g, h, i, j)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j)
-unatup10 e =
-  ( Acc $ tix9 `Aprj` e
-  , Acc $ tix8 `Aprj` e
-  , Acc $ tix7 `Aprj` e
-  , Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
+unatup10 (Acc e) =
+  ( aprj9 e
+  , aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup11
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
     => Acc (a, b, c, d, e, f, g, h, i, j, k)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k)
-unatup11 e =
-  ( Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
+unatup11 (Acc e) =
+  ( aprj10 e
+  , aprj9 e
+  , aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup12
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
     => Acc (a, b, c, d, e, f, g, h, i, j, k, l)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l)
-unatup12 e =
-  ( Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
+unatup12 (Acc e) =
+  ( aprj11 e
+  , aprj10 e
+  , aprj9 e
+  , aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup13
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
     => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m)
-unatup13 e =
-  ( Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
+unatup13 (Acc e) =
+  ( aprj12 e
+  , aprj11 e
+  , aprj10 e
+  , aprj9 e
+  , aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup14
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
     => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n)
-unatup14 e =
-  ( Acc $ tix13 `Aprj` e
-  , Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
+unatup14 (Acc e) =
+  ( aprj13 e
+  , aprj12 e
+  , aprj11 e
+  , aprj10 e
+  , aprj9 e
+  , aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup15
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
     => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
-unatup15 e =
-  ( Acc $ tix14 `Aprj` e
-  , Acc $ tix13 `Aprj` e
-  , Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
+unatup15 (Acc e) =
+  ( aprj14 e
+  , aprj13 e
+  , aprj12 e
+  , aprj11 e
+  , aprj10 e
+  , aprj9 e
+  , aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 unatup16
     :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
     => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
     -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p)
-unatup16 e =
-  ( Acc $ tix15 `Aprj` e
-  , Acc $ tix14 `Aprj` e
-  , Acc $ tix13 `Aprj` e
-  , Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
+unatup16 (Acc e) =
+  ( aprj15 e
+  , aprj14 e
+  , aprj13 e
+  , aprj12 e
+  , aprj11 e
+  , aprj10 e
+  , aprj9 e
+  , aprj8 e
+  , aprj7 e
+  , aprj6 e
+  , aprj5 e
+  , aprj4 e
+  , aprj3 e
+  , aprj2 e
+  , aprj1 e
+  , aprj0 e )
 
 
 -- Smart constructors for stencils
@@ -1170,7 +1174,7 @@ unatup16 e =
 
 -- | Boundary condition specification for stencil operations
 --
-newtype Boundary t = Boundary (PreBoundary Acc Exp t)
+newtype Boundary t = Boundary (PreBoundary SmartAcc Exp t)
 
 data PreBoundary acc exp t where
   Clamp     :: PreBoundary acc exp t
@@ -1358,105 +1362,178 @@ tix14 = SuccTupIdx tix13
 tix15 :: TupleIdx ((((((((((((((((t, s15), s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s15
 tix15 = SuccTupIdx tix14
 
+aprjTail :: (Typeable a, Typeable t) => SmartAcc (t, a) -> SmartAcc t
+aprjTail = SmartAcc . Aprj PairIdxLeft
+
+aprj0 :: ( Arrays a, Typeable t)
+      => SmartAcc (t, ArrRepr a) -> Acc a
+aprj0 = Acc . SmartAcc . Aprj PairIdxRight
+
+aprj1 :: ( Arrays a, Typeable t, Typeable s0)
+      => SmartAcc ((t, ArrRepr a), s0) -> Acc a
+aprj1 = aprj0 . aprjTail
+
+aprj2 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1)
+      => SmartAcc (((t, ArrRepr a), s1), s0) -> Acc a
+aprj2 = aprj1 . aprjTail
+
+aprj3 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2)
+      => SmartAcc ((((t, ArrRepr a), s2), s1), s0) -> Acc a
+aprj3 = aprj2 . aprjTail
+
+aprj4 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3)
+      => SmartAcc (((((t, ArrRepr a), s3), s2), s1), s0) -> Acc a
+aprj4 = aprj3 . aprjTail
+
+aprj5 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4)
+      => SmartAcc ((((((t, ArrRepr a), s4), s3), s2), s1), s0) -> Acc a
+aprj5 = aprj4 . aprjTail
+
+aprj6 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5)
+      => SmartAcc (((((((t, ArrRepr a), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj6 = aprj5 . aprjTail
+
+aprj7 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6)
+      => SmartAcc ((((((((t, ArrRepr a), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj7 = aprj6 . aprjTail
+
+aprj8 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7)
+      => SmartAcc (((((((((t, ArrRepr a), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj8 = aprj7 . aprjTail
+
+aprj9 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7
+         , Typeable s8)
+      => SmartAcc ((((((((((t, ArrRepr a), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj9 = aprj8 . aprjTail
+
+aprj10 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7
+          , Typeable s8, Typeable s9)
+       => SmartAcc (((((((((((t, ArrRepr a), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj10 = aprj9 . aprjTail
+
+aprj11 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7
+          , Typeable s8, Typeable s9, Typeable s10)
+       => SmartAcc ((((((((((((t, ArrRepr a), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj11 = aprj10 . aprjTail
+
+aprj12 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7
+          , Typeable s8, Typeable s9, Typeable s10, Typeable s11)
+       => SmartAcc (((((((((((((t, ArrRepr a), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj12 = aprj11 . aprjTail
+
+aprj13 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7
+          , Typeable s8, Typeable s9, Typeable s10, Typeable s11, Typeable s12)
+       => SmartAcc ((((((((((((((t, ArrRepr a), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj13 = aprj12 . aprjTail
+
+aprj14 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7
+          , Typeable s8, Typeable s9, Typeable s10, Typeable s11, Typeable s12, Typeable s13)
+       => SmartAcc (((((((((((((((t, ArrRepr a), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj14 = aprj13 . aprjTail
+
+aprj15 :: ( Arrays a, Typeable t, Typeable s0, Typeable s1, Typeable s2, Typeable s3, Typeable s4, Typeable s5, Typeable s6, Typeable s7
+          , Typeable s8, Typeable s9, Typeable s10, Typeable s11, Typeable s12, Typeable s13, Typeable s14)
+       => SmartAcc ((((((((((((((((t, ArrRepr a), s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Acc a
+aprj15 = aprj14 . aprjTail
 {--
 -- Smart constructors for array tuples in sequence computations
 -- ---------------------------------------------------
 
 stup2 :: (Arrays a, Arrays b) => (Seq a, Seq b) -> Seq (a, b)
-stup2 (a, b) = Seq $ Stuple (NilAtup `SnocAtup` a `SnocAtup` b)
+stup2 (a, b) = Seq $ Stuple (nilAtup `snocAtup` a `snocAtup` b)
 
 stup3 :: (Arrays a, Arrays b, Arrays c) => (Seq a, Seq b, Seq c) -> Seq (a, b, c)
-stup3 (a, b, c) = Seq $ Stuple (NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c)
+stup3 (a, b, c) = Seq $ Stuple (nilAtup `snocAtup` a `snocAtup` b `snocAtup` c)
 
 stup4 :: (Arrays a, Arrays b, Arrays c, Arrays d)
       => (Seq a, Seq b, Seq c, Seq d) -> Seq (a, b, c, d)
 stup4 (a, b, c, d)
-  = Seq $ Stuple (NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d)
+  = Seq $ Stuple (nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d)
 
 stup5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
       => (Seq a, Seq b, Seq c, Seq d, Seq e) -> Seq (a, b, c, d, e)
 stup5 (a, b, c, d, e)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d `snocAtup` e
 
 stup6 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f) -> Seq (a, b, c, d, e, f)
 stup6 (a, b, c, d, e, f)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
-              `SnocAtup` d `SnocAtup` e `SnocAtup` f
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c
+              `snocAtup` d `snocAtup` e `snocAtup` f
 
 stup7 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g)
       -> Seq (a, b, c, d, e, f, g)
 stup7 (a, b, c, d, e, f, g)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
-              `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c
+              `snocAtup` d `snocAtup` e `snocAtup` f `snocAtup` g
 
 stup8 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h)
       -> Seq (a, b, c, d, e, f, g, h)
 stup8 (a, b, c, d, e, f, g, h)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d
-              `SnocAtup` e `SnocAtup` f `SnocAtup` g `SnocAtup` h
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d
+              `snocAtup` e `snocAtup` f `snocAtup` g `snocAtup` h
 
 stup9 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i)
       -> Seq (a, b, c, d, e, f, g, h, i)
 stup9 (a, b, c, d, e, f, g, h, i)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d
-              `SnocAtup` e `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d
+              `snocAtup` e `snocAtup` f `snocAtup` g `snocAtup` h `snocAtup` i
 
 stup10 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
        => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j)
        -> Seq (a, b, c, d, e, f, g, h, i, j)
 stup10 (a, b, c, d, e, f, g, h, i, j)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
-              `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d `snocAtup` e
+              `snocAtup` f `snocAtup` g `snocAtup` h `snocAtup` i `snocAtup` j
 
 stup11 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
        => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k)
        -> Seq (a, b, c, d, e, f, g, h, i, j, k)
 stup11 (a, b, c, d, e, f, g, h, i, j, k)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
-              `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d `snocAtup` e
+              `snocAtup` f `snocAtup` g `snocAtup` h `snocAtup` i `snocAtup` j `snocAtup` k
 
 stup12 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
        => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l)
        -> Seq (a, b, c, d, e, f, g, h, i, j, k, l)
 stup12 (a, b, c, d, e, f, g, h, i, j, k, l)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f
-              `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d `snocAtup` e `snocAtup` f
+              `snocAtup` g `snocAtup` h `snocAtup` i `snocAtup` j `snocAtup` k `snocAtup` l
 
 stup13 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
        => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l, Seq m)
        -> Seq (a, b, c, d, e, f, g, h, i, j, k, l, m)
 stup13 (a, b, c, d, e, f, g, h, i, j, k, l, m)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f
-              `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d `snocAtup` e `snocAtup` f
+              `snocAtup` g `snocAtup` h `snocAtup` i `snocAtup` j `snocAtup` k `snocAtup` l `snocAtup` m
 
 stup14 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
        => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l, Seq m, Seq n)
        -> Seq (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 stup14 (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
-              `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m `SnocAtup` n
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d `snocAtup` e `snocAtup` f `snocAtup` g
+              `snocAtup` h `snocAtup` i `snocAtup` j `snocAtup` k `snocAtup` l `snocAtup` m `snocAtup` n
 
 stup15 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
        => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l, Seq m, Seq n, Seq o)
        -> Seq (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 stup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
   = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
-              `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m `SnocAtup` n `SnocAtup` o
+      nilAtup `snocAtup` a `snocAtup` b `snocAtup` c `snocAtup` d `snocAtup` e `snocAtup` f `snocAtup` g
+              `snocAtup` h `snocAtup` i `snocAtup` j `snocAtup` k `snocAtup` l `snocAtup` m `snocAtup` n `snocAtup` o
 --}
 
 -- Smart constructor for literals
@@ -2235,17 +2312,52 @@ infixr 0 $$$$$
 ($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
 (f $$$$$ g) x y z u v = f (g x y z u v)
 
+unAcc :: Arrays a => Acc a -> SmartAcc (ArrRepr a)
+unAcc (Acc a) = a
 
+unAccFunction :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> SmartAcc (ArrRepr a) -> SmartAcc (ArrRepr b)
+unAccFunction f = unAcc . f . Acc
+
+class ApplyAcc a where
+  type FromApplyAcc a
+
+  applyAcc :: FromApplyAcc a -> a
+
+instance ApplyAcc (SmartAcc a) where
+  type FromApplyAcc (SmartAcc a) = PreSmartAcc SmartAcc Exp a
+
+  applyAcc = SmartAcc
+
+instance (Arrays a, ApplyAcc t) => ApplyAcc (Acc a -> t) where
+  type FromApplyAcc (Acc a -> t) = SmartAcc (ArrRepr a) -> FromApplyAcc t
+
+  applyAcc f a = applyAcc $ f (unAcc a)
+
+instance ApplyAcc t => ApplyAcc (Exp a -> t) where
+  type FromApplyAcc (Exp a -> t) = Exp a -> FromApplyAcc t
+
+  applyAcc f a = applyAcc $ f a
+
+instance ApplyAcc t => ApplyAcc ((Exp a -> b) -> t) where
+  type FromApplyAcc ((Exp a -> b) -> t) = (Exp a -> b) -> FromApplyAcc t
+
+  applyAcc f a = applyAcc $ f a
+
+instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) where
+  type FromApplyAcc ((Acc a -> Acc b) -> t) = (SmartAcc (ArrRepr a) -> SmartAcc (ArrRepr b)) -> FromApplyAcc t
+
+  applyAcc f a = applyAcc $ f (unAccFunction a)
 -- Debugging
 -- ---------
 
-showPreAccOp :: forall acc exp arrs. PreAcc acc exp arrs -> String
+showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> String
 showPreAccOp (Atag i)           = "Atag " ++ show i
 showPreAccOp (Use a)            = "Use "  ++ showArrays a
 showPreAccOp Pipe{}             = "Pipe"
 showPreAccOp Acond{}            = "Acond"
 showPreAccOp Awhile{}           = "Awhile"
-showPreAccOp Atuple{}           = "Atuple"
+showPreAccOp Apair{}            = "Apair"
+showPreAccOp Anil{}             = "Anil"
 showPreAccOp Aprj{}             = "Aprj"
 showPreAccOp Unit{}             = "Unit"
 showPreAccOp Generate{}         = "Generate"

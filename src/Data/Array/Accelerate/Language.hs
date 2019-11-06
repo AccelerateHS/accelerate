@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
@@ -161,13 +162,13 @@ import Prelude                                                      ( ($), (.) )
 -- >>> let tup  = use (vec, mat)  :: Acc (Vector Int, Matrix Int)
 --
 use :: Arrays arrays => arrays -> Acc arrays
-use = Acc . Use
+use = Acc . SmartAcc . Use
 
 -- | Construct a singleton (one element) array from a scalar value (or tuple of
 -- scalar values).
 --
 unit :: Elt e => Exp e -> Acc (Scalar e)
-unit = Acc . Unit
+unit = Acc . SmartAcc . Unit
 
 -- | Replicate an array across one or more dimensions as specified by the
 -- /generalised/ array index provided as the first argument.
@@ -255,7 +256,7 @@ replicate
     => Exp slix
     -> Acc (Array (SliceShape slix) e)
     -> Acc (Array (FullShape  slix) e)
-replicate = Acc $$ Replicate
+replicate = Acc $$ applyAcc Replicate
 
 -- | Construct a new array by applying a function to each index.
 --
@@ -291,7 +292,7 @@ generate
     => Exp sh
     -> (Exp sh -> Exp a)
     -> Acc (Array sh a)
-generate = Acc $$ Generate
+generate = Acc $$ applyAcc Generate
 
 -- Shape manipulation
 -- ------------------
@@ -310,7 +311,7 @@ reshape
     => Exp sh
     -> Acc (Array sh' e)
     -> Acc (Array sh e)
-reshape = Acc $$ Reshape
+reshape = Acc $$ applyAcc Reshape
 
 -- Extraction of sub-arrays
 -- ------------------------
@@ -384,7 +385,7 @@ slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
       -> Exp slix
       -> Acc (Array (SliceShape slix) e)
-slice = Acc $$ Slice
+slice = Acc $$ applyAcc Slice
 
 -- Map-like functions
 -- ------------------
@@ -404,7 +405,7 @@ map :: (Shape sh, Elt a, Elt b)
     => (Exp a -> Exp b)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
-map = Acc $$ Map
+map = Acc $$ applyAcc Map
 
 -- | Apply the given binary function element-wise to the two arrays. The extent
 -- of the resulting array is the intersection of the extents of the two source
@@ -437,7 +438,7 @@ zipWith :: (Shape sh, Elt a, Elt b, Elt c)
         -> Acc (Array sh a)
         -> Acc (Array sh b)
         -> Acc (Array sh c)
-zipWith = Acc $$$ ZipWith
+zipWith = Acc $$$ applyAcc ZipWith
 
 -- Reductions
 -- ----------
@@ -508,7 +509,7 @@ fold :: (Shape sh, Elt a)
      -> Exp a
      -> Acc (Array (sh:.Int) a)
      -> Acc (Array sh a)
-fold = Acc $$$ Fold
+fold = Acc $$$ applyAcc Fold
 
 -- | Variant of 'fold' that requires the innermost dimension of the array to be
 -- non-empty and doesn't need an default value.
@@ -524,7 +525,7 @@ fold1 :: (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array sh a)
-fold1 = Acc $$ Fold1
+fold1 = Acc $$ applyAcc Fold1
 
 -- | Segmented reduction along the innermost dimension of an array. The
 -- segment descriptor specifies the starting index (offset) along the
@@ -546,7 +547,7 @@ foldSeg'
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-foldSeg' = Acc $$$$ FoldSeg
+foldSeg' = Acc $$$$ applyAcc FoldSeg
 
 -- | Variant of 'foldSeg'' that requires /all/ segments of the reduced
 -- array to be non-empty, and doesn't need a default value. The segment
@@ -561,7 +562,7 @@ fold1Seg'
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-fold1Seg' = Acc $$$ Fold1Seg
+fold1Seg' = Acc $$$ applyAcc Fold1Seg
 
 -- Scan functions
 -- --------------
@@ -588,7 +589,7 @@ scanl :: (Shape sh, Elt a)
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanl = Acc $$$ Scanl
+scanl = Acc $$$ applyAcc Scanl
 
 -- | Variant of 'scanl', where the last element (final reduction result) along
 -- each dimension is returned separately. Denotationally we have:
@@ -621,7 +622,7 @@ scanl' :: (Shape sh, Elt a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanl' = Acc $$$ Scanl'
+scanl' = Acc $$$ applyAcc Scanl'
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
 -- initial value (aka inclusive scan). The innermost dimension of the array must
@@ -639,7 +640,7 @@ scanl1 :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanl1 = Acc $$ Scanl1
+scanl1 = Acc $$ applyAcc Scanl1
 
 -- | Right-to-left variant of 'scanl'.
 --
@@ -648,7 +649,7 @@ scanr :: (Shape sh, Elt a)
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanr = Acc $$$ Scanr
+scanr = Acc $$$ applyAcc Scanr
 
 -- | Right-to-left variant of 'scanl''.
 --
@@ -657,7 +658,7 @@ scanr' :: (Shape sh, Elt a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanr' = Acc $$$ Scanr'
+scanr' = Acc $$$ applyAcc Scanr'
 
 -- | Right-to-left variant of 'scanl1'.
 --
@@ -665,7 +666,7 @@ scanr1 :: (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanr1 = Acc $$ Scanr1
+scanr1 = Acc $$ applyAcc Scanr1
 
 -- Permutations
 -- ------------
@@ -769,7 +770,7 @@ permute
     -> (Exp sh -> Exp sh')              -- ^ index permutation function
     -> Acc (Array sh  a)                -- ^ array of source values to be permuted
     -> Acc (Array sh' a)
-permute = Acc $$$$ Permute
+permute = Acc $$$$ applyAcc Permute
 
 -- | Generalised backward permutation operation (array gather).
 --
@@ -820,7 +821,7 @@ backpermute
     -> (Exp sh' -> Exp sh)              -- ^ index permutation function
     -> Acc (Array sh  a)                -- ^ source array
     -> Acc (Array sh' a)
-backpermute = Acc $$$ Backpermute
+backpermute = Acc $$$ applyAcc Backpermute
 
 
 -- Stencil operations
@@ -933,7 +934,8 @@ stencil
     -> Boundary (Array sh a)                  -- ^ boundary condition
     -> Acc (Array sh a)                       -- ^ source array
     -> Acc (Array sh b)                       -- ^ destination array
-stencil f (Boundary b) a = Acc $ Stencil f b a
+stencil f (Boundary b) (Acc a)
+  = Acc $ SmartAcc $ Stencil f b a
 
 -- | Map a binary stencil of an array. The extent of the resulting array is the
 -- intersection of the extents of the two source arrays. This is the stencil
@@ -947,7 +949,8 @@ stencil2
     -> Boundary (Array sh b)                  -- ^ boundary condition #2
     -> Acc (Array sh b)                       -- ^ source array #2
     -> Acc (Array sh c)                       -- ^ destination array
-stencil2 f (Boundary b1) a1 (Boundary b2) a2 = Acc $ Stencil2 f b1 a1 b2 a2
+stencil2 f (Boundary b1) (Acc a1) (Boundary b2) (Acc a2)
+  = Acc $ SmartAcc $ Stencil2 f b1 a1 b2 a2
 
 -- | Boundary condition where elements of the stencil which would be
 -- out-of-bounds are instead clamped to the edges of the array.
@@ -1150,12 +1153,12 @@ collect = Acc . Collect
 -- For an example see the <https://hackage.haskell.org/package/accelerate-fft accelerate-fft> package.
 --
 foreignAcc
-    :: (Arrays as, Arrays bs, Foreign asm)
+    :: forall as bs asm. (Arrays as, Arrays bs, Foreign asm)
     => asm (as -> bs)
     -> (Acc as -> Acc bs)
     -> Acc as
     -> Acc bs
-foreignAcc = Acc $$$ Aforeign
+foreignAcc asm f (Acc as) = Acc $ SmartAcc $ Aforeign asm f as
 
 -- | Call a foreign scalar expression.
 --
@@ -1192,8 +1195,8 @@ foreignExp = Exp $$$ Foreign
 -- function.
 --
 infixl 1 >->
-(>->) :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
-(>->) = Acc $$$ Pipe
+(>->) :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
+(>->) = Acc $$$ applyAcc $ Pipe (arrays @a) (arrays @b)
 
 
 -- Flow control constructs
@@ -1209,18 +1212,18 @@ acond :: Arrays a
       -> Acc a                  -- ^ then-array
       -> Acc a                  -- ^ else-array
       -> Acc a
-acond = Acc $$$ Acond
+acond = Acc $$$ applyAcc $ Acond
 
 -- | An array-level 'while' construct. Continue to apply the given function,
 -- starting with the initial value, until the test function evaluates to
 -- 'False'.
 --
-awhile :: Arrays a
+awhile :: forall a. Arrays a
        => (Acc a -> Acc (Scalar Bool))    -- ^ keep evaluating while this returns 'True'
        -> (Acc a -> Acc a)                -- ^ function to apply
        -> Acc a                           -- ^ initial value
        -> Acc a
-awhile = Acc $$$ Awhile
+awhile = Acc $$$ applyAcc $ Awhile $ arrays @a
 
 
 -- Shapes and indices
@@ -1298,7 +1301,7 @@ while = Exp $$$ While
 --
 infixl 9 !
 (!) :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh -> Exp e
-(!) = Exp $$ Index
+Acc a ! ix = Exp $ Index a ix
 
 -- | Extract the value from an array at the specified linear index.
 -- Multidimensional arrays in Accelerate are stored in row-major order with
@@ -1318,12 +1321,12 @@ infixl 9 !
 --
 infixl 9 !!
 (!!) :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp Int -> Exp e
-(!!) = Exp $$ LinearIndex
+Acc a !! ix = Exp $ LinearIndex a ix
 
 -- | Extract the shape (extent) of an array.
 --
 shape :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh
-shape = Exp . Shape
+shape = Exp . Shape . unAcc
 
 -- | The number of elements in the array
 --

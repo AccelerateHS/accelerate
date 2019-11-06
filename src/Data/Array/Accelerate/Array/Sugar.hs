@@ -34,7 +34,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
   Array(..), Scalar, Vector, Matrix, Segments,
-  Arrays(..), ArraysR(..),
+  Arrays(..), ArraysR(..), arraysRtuple2,
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..),
@@ -51,10 +51,9 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array shape query, indexing, and conversions
   shape, reshape, (!), (!!), allocateArray, fromFunction, fromFunctionM, fromList, toList, concatVectors,
 
-  -- * Tuples
+  -- * Tuples of expressions
   TupleR, TupleRepr, tuple,
   Tuple(..), IsTuple, fromTuple, toTuple,
-  Atuple(..), IsAtuple, fromAtuple, toAtuple,
 
   -- * Miscellaneous
   showShape, Foreign(..), sliceShape, enumSlices,
@@ -450,7 +449,7 @@ class Typeable asm => Foreign asm where
 type TupleRepr a = ProdRepr a
 type TupleR a    = ProdR Elt a
 type IsTuple     = IsProduct Elt
-type IsAtuple    = IsProduct Arrays
+-- type IsAtuple    = IsProduct Arrays
 
 -- |We represent tuples as heterogeneous lists, typed by a type list.
 --
@@ -458,15 +457,6 @@ data Tuple c t where
   NilTup  ::                              Tuple c ()
   SnocTup :: Elt t => Tuple c s -> c t -> Tuple c (s, t)
 
--- TLM: It is irritating that we need a separate data type for tuples of scalars
---   vs. arrays, purely to carry the class constraint.
---
--- | Tuples of Arrays.  Note that this carries the `Arrays` class
---   constraint rather than `Elt` in the case of tuples of scalars.
---
-data Atuple c t where
-  NilAtup  ::                                  Atuple c ()
-  SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
 
 -- |Tuple reification
 --
@@ -478,12 +468,6 @@ fromTuple = fromProd @Elt
 
 toTuple :: IsTuple tup => TupleRepr tup -> tup
 toTuple = toProd @Elt
-
-fromAtuple :: IsAtuple tup => tup -> TupleRepr tup
-fromAtuple = fromProd @Arrays
-
-toAtuple :: IsAtuple tup => TupleRepr tup -> tup
-toAtuple = toProd @Arrays
 
 
 -- Arrays
@@ -621,10 +605,8 @@ data ArraysR arrs where
   ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
 
--- data ArraysFlavour arrs where
---   ArraysFunit  ::                                          ArraysFlavour ()
---   ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
---   ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
+arraysRtuple2 :: (Shape sh1, Elt e1, Shape sh2, Elt e2) => ArraysR (((), Array sh2 e2), Array sh1 e1)
+arraysRtuple2 = ArraysRpair ArraysRunit ArraysRarray `ArraysRpair` ArraysRarray
 
 {-# RULES
 "fromArr/toArr" forall a. fromArr (toArr a) = a

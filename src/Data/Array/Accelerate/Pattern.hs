@@ -300,12 +300,10 @@ $(runQ $ do
                   destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
         mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
     --
     --
-    as <- mapM mkAccPattern [0..16]
     es <- mapM mkExpPattern [0..16]
-    return (concat as ++ concat es)
+    return $ concat es
  )
 
