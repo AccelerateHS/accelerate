@@ -51,7 +51,7 @@ module Data.Array.Accelerate.Trafo.Base (
   leftHandSideChangeEnv,
 
   -- Adding new variables to the environment
-  declareArrays, DeclareArrays(..), compileVars,
+  declareArrays, DeclareArrays(..),
 
   aletBodyIsTrivial,
 ) where
@@ -400,8 +400,8 @@ pushArrayEnv env a = PushEnv env LeftHandSideArray a
 -- Append two environment witnesses
 --
 append :: Extend acc env env' -> Extend acc env' env'' -> Extend acc env env''
-append x BaseEnv            = x
-append x (PushEnv lhs as a) = x `append` PushEnv lhs as a
+append x BaseEnv           = x
+append x (PushEnv e lhs a) = PushEnv (append x e) lhs a
 
 -- Bring into scope all of the array terms in the Extend environment list. This
 -- converts a term in the inner environment (aenv') into the outer (aenv).
@@ -463,11 +463,6 @@ leftHandSideChangeEnv LeftHandSideArray           = Exists $ LeftHandSideArray
 leftHandSideChangeEnv (LeftHandSidePair l1 l2)    = case leftHandSideChangeEnv l1 of
   Exists l1' -> case leftHandSideChangeEnv l2 of
     Exists l2' -> Exists $ LeftHandSidePair l1' l2'
-
-compileVars :: ArrayVars env t -> OpenAcc env t
-compileVars ArrayVarsNil                     = OpenAcc Anil
-compileVars (ArrayVarsArray ix@ArrayVar{}) = OpenAcc $ Avar ix
-compileVars (ArrayVarsPair v1 v2)            = OpenAcc $ compileVars v1 `Apair` compileVars v2
 
 aletBodyIsTrivial :: forall acc aenv aenv' a b. Kit acc => LeftHandSide a aenv aenv' -> acc aenv' b -> Maybe (a :~: b)
 aletBodyIsTrivial lhs rhs = case extractArrayVars rhs of

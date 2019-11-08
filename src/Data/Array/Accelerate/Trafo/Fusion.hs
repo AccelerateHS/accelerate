@@ -1307,7 +1307,7 @@ aletD embedAcc elimAcc lhs (embedAcc -> Embed env1 cc1) acc0
   -- that must be later eliminated by shrinking.
   --
   | LeftHandSideArray                     <- lhs
-  , Done (ArrayVarsArray v1@ArrayVar{}) <- cc1
+  , Done (ArrayVarsArray v1@ArrayVar{})   <- cc1
   , Embed env0 cc0                        <- embedAcc $ rebuildA (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `append` env0) cc0

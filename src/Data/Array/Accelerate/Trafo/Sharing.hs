@@ -131,7 +131,7 @@ prjArrayIdx context = go
     go :: forall env env' t. Typeable t => Int -> ArrayLayout env env' -> AST.OpenAcc env t
     go _ ArrayEmptyLayout        = no "environment does not contain index"
     go 0 (ArrayPushLayout _ _ (ix :: ArrayVars env0 s))
-      | Just ix' <- gcast ix     = compileVars ix'
+      | Just ix' <- gcast ix     = avarsIn ix'
       | otherwise                = no $ printf "couldn't match expected type `%s' with actual type `%s'"
                                                           (show (typeOf (undefined::t)))
                                                           (show (typeOf (undefined::s)))
@@ -314,7 +314,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtAprj' PairIdxRight (AST.OpenAcc (AST.Apair _ b)) = b
         cvtAprj' ix a = case declareArrays $ arraysRepr a of
           DeclareArrays lhs _ value ->
-            AST.OpenAcc $ AST.Alet lhs a $ cvtAprj' ix $ compileVars $ value id
+            AST.OpenAcc $ AST.Alet lhs a $ cvtAprj' ix $ avarsIn $ value id
     in
     case preAcc of
 
@@ -333,7 +333,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                 alyt'   = ArrayPushLayout (incArrayLayoutWith k alyt) lhs (value id)
                 bodyAcc = AST.Apply
                             (convertSharingAfun1 config alyt' (noStableSharing : aenv') reprB afun2)
-                            (compileVars $ value id)
+                            (avarsIn $ value id)
               in AST.Alet lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
       Aforeign ff afun acc
