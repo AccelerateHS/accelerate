@@ -349,7 +349,7 @@ usesOfPreAcc withShape countAcc idx = count
       Aforeign _ _ a            -> countA a
       Acond p t e               -> countE p  + countA t + countA e
       Awhile _ _ a              -> countA a
-      Use _ _                   -> 0
+      Use _                     -> 0
       Unit e                    -> countE e
       Reshape e a               -> countE e  + countA a
       Generate e f              -> countE e  + countF f

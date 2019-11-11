@@ -166,7 +166,7 @@ encodePreOpenAcc options encodeAcc pacc =
     Anil                        -> intHost $(hashQ "Anil")
     Apply f a                   -> intHost $(hashQ "Apply")       <> travAF f <> travA a
     Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
-    Use repr a                  -> intHost $(hashQ "Use")         <> deep (encodeArrays repr a)
+    Use a                       -> intHost $(hashQ "Use")         <> deep (encodeArray a)
     Awhile p f a                -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
     Unit e                      -> intHost $(hashQ "Unit")        <> travE e
     Generate e f                -> intHost $(hashQ "Generate")    <> deep (travE e)  <> travF f
@@ -244,10 +244,8 @@ encodeIdx = intHost . idxToInt
 encodeTupleIdx :: TupleIdx tup e -> Builder
 encodeTupleIdx = intHost . tupleIdxToInt
 
-encodeArrays :: ArraysR a -> a -> Builder
-encodeArrays ArraysRunit         ()       = mempty
-encodeArrays (ArraysRpair r1 r2) (a1, a2) = encodeArrays r1 a1 <> encodeArrays r2 a2
-encodeArrays ArraysRarray        ad       = intHost . unsafePerformIO $! hashStableName `fmap` makeStableName ad
+encodeArray :: (Shape sh, Elt e) => Array sh e -> Builder
+encodeArray ad = intHost . unsafePerformIO $! hashStableName <$> makeStableName ad
 
 encodeArraysType :: forall a. ArraysR a -> Builder
 encodeArraysType ArraysRunit         = intHost $(hashQ "ArraysRunit")

@@ -27,7 +27,7 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyPreOpenAfun,
   prettyPreOpenExp,
   prettyPreOpenFun,
-  prettyArrays,
+  prettyArray,
   prettyConst,
 
   -- ** Internals
@@ -150,7 +150,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
 
     Aforeign ff _f a        -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
     Awhile p f a            -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
-    Use repr arrs           -> "use"          .$ [ prettyArrays repr arrs ]
+    Use arr                 -> "use"          .$ [ prettyArray arr ]
     Unit e                  -> "unit"         .$ [ ppE e ]
     Reshape sh a            -> "reshape"      .$ [ ppE sh, ppA a ]
     Generate sh f           -> "generate"     .$ [ ppE sh, ppF f ]
@@ -254,14 +254,6 @@ prettyLHS aenv (LeftHandSidePair a b) = (aenv2, "(" <> doc1 <> ", " <> doc2 <> "
   where
     (aenv1, doc1) = prettyLHS aenv  a
     (aenv2, doc2) = prettyLHS aenv1 b
-
-prettyArrays :: ArraysR arrs -> arrs -> Adoc
-prettyArrays arrs = tupled . collect arrs
-  where
-    collect :: ArraysR arrs -> arrs -> [Adoc]
-    collect ArraysRunit         _        = []
-    collect ArraysRarray        arr      = [prettyArray arr]
-    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
 
 prettyArray :: (Shape sh, Elt e) => Array sh e -> Adoc
 prettyArray = viaShow

@@ -74,7 +74,6 @@ module Data.Array.Accelerate.Smart (
 -- standard library
 import Prelude                                  hiding ( exp )
 import Data.Kind
-import Data.List
 import Data.Typeable
 
 -- friends
@@ -331,9 +330,9 @@ data PreSmartAcc acc exp as where
                 -> acc (arrs1, arrs2)
                 -> PreSmartAcc acc exp arrs
 
-  Use           :: (Arrays arrs, Typeable (ArrRepr arrs))
-                => arrs
-                -> PreSmartAcc acc exp (ArrRepr arrs)
+  Use           :: (Shape sh, Elt e)
+                => Array sh e
+                -> PreSmartAcc acc exp (Array sh e)
 
   Unit          :: Elt e
                 => exp e
@@ -2352,7 +2351,7 @@ instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) wh
 
 showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> String
 showPreAccOp (Atag i)           = "Atag " ++ show i
-showPreAccOp (Use a)            = "Use "  ++ showArrays a
+showPreAccOp (Use a)            = "Use "  ++ showShortendArr a
 showPreAccOp Pipe{}             = "Pipe"
 showPreAccOp Acond{}            = "Acond"
 showPreAccOp Awhile{}           = "Awhile"
@@ -2394,18 +2393,6 @@ showPreSeqOp (FoldSeq{})        = "FoldSeq"
 showPreSeqOp (FoldSeqFlatten{}) = "FoldSeqFlatten"
 showPreSeqOp (Stuple{})         = "Stuple"
 --}
-
-showArrays :: forall arrs. Arrays arrs => arrs -> String
-showArrays = display . collect (arrays @arrs) . fromArr
-  where
-    collect :: ArraysR a -> a -> [String]
-    collect ArraysRunit         _        = []
-    collect ArraysRarray        arr      = [showShortendArr arr]
-    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
-    --
-    display []  = []
-    display [x] = x
-    display xs  = "(" ++ intercalate ", " xs ++ ")"
 
 
 showShortendArr :: (Shape sh, Elt e) => Array sh e -> String

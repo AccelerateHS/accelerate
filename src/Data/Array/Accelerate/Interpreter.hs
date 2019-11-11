@@ -214,7 +214,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
           | p x ! Z     = go (f x)
           | otherwise   = x
 
-    Use _ arr                   -> arr
+    Use arr                     -> arr
     Unit e                      -> unitOp (evalE e)
     -- Collect s                   -> evalSeq defaultSeqConfig s aenv
 

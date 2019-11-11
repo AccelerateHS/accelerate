@@ -119,8 +119,8 @@ matchPreOpenAcc matchAcc encodeAcc = match
       , Just Refl <- matchPreOpenAfun matchAcc f1 f2
       = Just Refl
 
-    match (Use repr1 a1) (Use repr2 a2)
-      | Just Refl <- matchArrays repr1 repr2 a1 a2
+    match (Use a1) (Use a2)
+      | Just Refl <- matchArray a1 a2
       = Just Refl
 
     match (Unit e1) (Unit e2)
@@ -401,23 +401,16 @@ matchSeq m h = match
 -- As a convenience, we are just comparing the stable names, but we could also
 -- walk the structure comparing the underlying ptrsOfArrayData.
 --
-matchArrays :: ArraysR s -> ArraysR t -> s -> t -> Maybe (s :~: t)
-matchArrays ArraysRunit ArraysRunit () ()
-  = Just Refl
-
-matchArrays (ArraysRpair a1 b1) (ArraysRpair a2 b2) (arr1,brr1) (arr2,brr2)
-  | Just Refl <- matchArrays a1 a2 arr1 arr2
-  , Just Refl <- matchArrays b1 b2 brr1 brr2
-  = Just Refl
-
-matchArrays ArraysRarray ArraysRarray (Array _ ad1) (Array _ ad2)
+matchArray :: (Shape sh1, Elt e1, Shape sh2, Elt e2)
+           => Array sh1 e1 -> Array sh2 e2 -> Maybe (Array sh1 e1 :~: Array sh2 e2)
+matchArray (Array _ ad1) (Array _ ad2)
   | unsafePerformIO $ do
       sn1 <- makeStableName ad1
       sn2 <- makeStableName ad2
       return $! hashStableName sn1 == hashStableName sn2
   = gcast Refl
 
-matchArrays _ _ _ _
+matchArray _ _
   = Nothing
 
 matchArraysR :: ArraysR s -> ArraysR t -> Maybe (s :~: t)

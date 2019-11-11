@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
@@ -120,6 +121,7 @@ import Data.Array.Accelerate.Classes.Ord
 
 -- standard libraries
 import Prelude                                                      ( ($), (.) )
+import Data.Typeable
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
@@ -161,8 +163,22 @@ import Prelude                                                      ( ($), (.) )
 -- >>> let mat' = use mat         :: Acc (Matrix Int)
 -- >>> let tup  = use (vec, mat)  :: Acc (Vector Int, Matrix Int)
 --
-use :: Arrays arrays => arrays -> Acc arrays
-use = Acc . SmartAcc . Use
+use :: forall arrays. Arrays arrays => arrays -> Acc arrays
+use arrs = Acc acc
+  where
+    HasTypeable acc = use' (arrays @arrays) $ fromArr arrs
+
+    use' :: ArraysR a -> a -> HasTypeable a
+    use' ArraysRunit         ()       = HasTypeable $ SmartAcc $ Anil
+    use' ArraysRarray        a        = HasTypeable $ SmartAcc $ Use a
+    use' (ArraysRpair r1 r2) (a1, a2)
+      | HasTypeable acc1 <- use' r1 a1
+      , HasTypeable acc2 <- use' r2 a2 = HasTypeable $ SmartAcc $ acc1 `Apair` acc2
+
+-- Internal data type for 'use' to capture the 'Typeable' type class
+data HasTypeable a where
+  HasTypeable :: Typeable a => SmartAcc a -> HasTypeable a
+
 
 -- | Construct a singleton (one element) array from a scalar value (or tuple of
 -- scalar values).

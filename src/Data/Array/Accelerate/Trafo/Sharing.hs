@@ -345,7 +345,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Apair acc1 acc2             -> AST.Apair (cvtA acc1) (cvtA acc2)
       Aprj ix a                   -> let AST.OpenAcc a' = cvtAprj ix a
                                      in a'
-      Use (array :: a)            -> AST.Use (arrays @a) (fromArr array)
+      Use array                   -> AST.Use array
       Unit e                      -> AST.Unit (cvtE e)
       Generate sh f               -> AST.Generate (cvtE sh) (cvtF1 f)
       Reshape e acc               -> AST.Reshape (cvtE e) (cvtA acc)

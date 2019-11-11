@@ -108,7 +108,7 @@ module Data.Array.Accelerate.AST (
 
   -- TemplateHaskell
   LiftAcc,
-  liftIdx, liftTupleIdx, liftArrays,
+  liftIdx, liftTupleIdx,
   liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
 
@@ -123,7 +123,6 @@ module Data.Array.Accelerate.AST (
 --standard library
 import Control.DeepSeq
 import Control.Monad.ST
-import Data.List
 import Data.Typeable
 import Foreign.ForeignPtr
 import Foreign.Marshal
@@ -369,9 +368,9 @@ data PreOpenAcc acc aenv a where
   -- Array inlet. Triggers (possibly) asynchronous host->device transfer if
   -- necessary.
   --
-  Use         :: ArraysR arrs
-              -> arrs
-              -> PreOpenAcc acc aenv arrs
+  Use         :: (Shape sh, Elt e)
+              => Array sh e
+              -> PreOpenAcc acc aenv (Array sh e)
 
   -- Capture a scalar (or a tuple of scalars) in a singleton array
   --
@@ -859,7 +858,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
   arraysRepr (Acond _ whenTrue _)               = arraysRepr whenTrue
   arraysRepr (Awhile _ (Alam lhs _) _)          = lhsToArraysR lhs
   arraysRepr (Awhile _ _ _)                     = error "I want my, I want my MTV!"
-  arraysRepr (Use repr _)                       = repr
+  arraysRepr Use{}                              = ArraysRarray
   arraysRepr Unit{}                             = ArraysRarray
   arraysRepr Reshape{}                          = ArraysRarray
   arraysRepr Generate{}                         = ArraysRarray
@@ -1246,7 +1245,7 @@ rnfPreOpenAcc rnfA pacc =
     Aforeign asm afun a       -> rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
     Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
-    Use repr arrs             -> rnfArrays repr arrs
+    Use arr                   -> rnf arr
     Unit x                    -> rnfE x
     Reshape sh a              -> rnfE sh `seq` rnfA a
     Generate sh f             -> rnfE sh `seq` rnfF f
@@ -1580,7 +1579,7 @@ liftPreOpenAcc liftA pacc =
     Aforeign asm f a          -> [|| Aforeign $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
     Awhile p f a              -> [|| Awhile $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
-    Use repr a                -> [|| Use $$(liftArraysR repr) $$(liftArrays repr a) ||]
+    Use a                     -> [|| Use $$(liftArray a) ||]
     Unit e                    -> [|| Unit $$(liftE e) ||]
     Reshape sh a              -> [|| Reshape $$(liftE sh) $$(liftA a) ||]
     Generate sh f             -> [|| Generate $$(liftE sh) $$(liftF f) ||]
@@ -1667,11 +1666,6 @@ liftPreOpenExp liftA pexp =
     Union sh1 sh2             -> [|| Union $$(liftE sh1) $$(liftE sh2) ||]
     Coerce e                  -> [|| Coerce $$(liftE e) ||]
 
-
-liftArrays :: ArraysR arr -> arr -> Q (TExp arr)
-liftArrays ArraysRunit ()              = [|| () ||]
-liftArrays ArraysRarray arr            = [|| $$(liftArray arr) ||]
-liftArrays (ArraysRpair r1 r2) (a1,a2) = [|| ($$(liftArrays r1 a1), $$(liftArrays r2 a2)) ||]
 
 liftArray :: forall sh e. (Shape sh, Elt e) => Array sh e -> Q (TExp (Array sh e))
 liftArray (Array sh adata) =
@@ -1935,7 +1929,7 @@ liftSingleType (NonNumSingleType t) = [|| NonNumSingleType $$(liftNonNumType t) 
 showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
 showPreAccOp Alet{}               = "Alet"
 showPreAccOp (Avar (ArrayVar ix)) = "Avar a" ++ show (idxToInt ix)
-showPreAccOp (Use repr a)         = "Use " ++ showArrays repr a
+showPreAccOp (Use a)              = "Use " ++ showShortendArr a
 showPreAccOp Apply{}              = "Apply"
 showPreAccOp Aforeign{}           = "Aforeign"
 showPreAccOp Acond{}              = "Acond"
@@ -1965,18 +1959,6 @@ showPreAccOp Backpermute{}        = "Backpermute"
 showPreAccOp Stencil{}            = "Stencil"
 showPreAccOp Stencil2{}           = "Stencil2"
 -- showPreAccOp Collect{}          = "Collect"
-
-showArrays :: forall arrs. ArraysR arrs -> arrs -> String
-showArrays repr = display . collect repr
-  where
-    collect :: ArraysR a -> a -> [String]
-    collect ArraysRunit         _        = []
-    collect ArraysRarray        arr      = [showShortendArr arr]
-    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
-    --
-    display []  = []
-    display [x] = x
-    display xs  = "(" ++ intercalate ", " xs ++ ")"
 
 
 showShortendArr :: (Shape sh, Elt e) => Array sh e -> String

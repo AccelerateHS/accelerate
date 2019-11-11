@@ -161,7 +161,7 @@ manifest config (OpenAcc pacc) =
     -- Non-fusible terms
     -- -----------------
     Avar ix                 -> Avar ix
-    Use repr arr                 -> Use repr arr
+    Use arr                 -> Use arr
     Unit e                  -> Unit (cvtE e)
     Alet lhs bnd body       -> alet lhs (manifest config bnd) (manifest config body)
     Acond p t e             -> Acond (cvtE p) (manifest config t) (manifest config e)
@@ -419,7 +419,7 @@ embedPreAcc config embedAcc elimAcc pacc
 
     -- Array injection
     Avar v              -> done $ Avar v
-    Use repr arrs       -> done $ Use repr arrs
+    Use arrs            -> done $ Use arrs
     Unit e              -> done $ Unit (cvtE e)
 
     -- Producers
@@ -1473,7 +1473,7 @@ aletD' embedAcc elimAcc LeftHandSideArray (Embed env1 cc1) (Embed env0 cc0)
           in
           Alet lhs (cvtA bnd) (kmap (replaceA sh'' f'' (weaken w avar)) body)
 
-        Use repr arrs           -> Use repr arrs
+        Use arrs                -> Use arrs
         Unit e                  -> Unit (cvtE e)
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Anil                    -> Anil

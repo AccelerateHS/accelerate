@@ -509,7 +509,7 @@ rebuildPreOpenAcc
     -> f (PreOpenAcc acc aenv' t)
 rebuildPreOpenAcc k av acc =
   case acc of
-    Use repr a              -> pure (Use repr a)
+    Use a                   -> pure (Use a)
     Alet lhs a b            -> rebuildAlet k av lhs a b
     Avar ix                 -> accOut       <$> av ix
     Apair as bs             -> Apair        <$> k av as <*> k av bs
