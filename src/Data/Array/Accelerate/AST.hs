@@ -111,6 +111,7 @@ module Data.Array.Accelerate.AST (
   liftIdx, liftTupleIdx,
   liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
+  liftLHS, liftArray,
 
   -- Utilities
   Exists(..), weakenWithLHS, (:>),
