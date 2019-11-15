@@ -180,10 +180,10 @@ exp_sharing           = Flag  2 -- recover sharing of scalar expressions
 array_fusion          = Flag  3 -- fuse array expressions
 simplify              = Flag  4 -- simplify scalar expressions
 inplace               = Flag  5 -- allow (safe) in-place array updates
-fast_math             = Flag  6 -- delete persistent compilation cache(s)
+fast_math             = Flag  6 -- use faster, less precise math library operations
 fast_permute_const    = Flag  7 -- allow non-atomic permute const for product types
-flush_cache           = Flag  8 -- force recompilation of array programs
-force_recomp          = Flag  9 -- use faster, less precise math library operations
+flush_cache           = Flag  8 -- delete persistent compilation cache(s)
+force_recomp          = Flag  9 -- force recompilation of array programs
 
 -- These debugging flags are disable by default and are enabled with @-d<blah>@
 --
