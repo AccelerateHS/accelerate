@@ -41,8 +41,8 @@ data Config = Config
 defaultOptions :: Config
 defaultOptions = unsafePerformIO $!
   Config <$> (BitSet . (0x80000000 .|.)) <$> peek F.__cmd_line_flags
-         <*> F.getValue F.unfolding_use_threshold
-         <*> F.getValue F.max_simplifier_iterations
+         <*> (fromIntegral <$> F.getValue F.unfolding_use_threshold)
+         <*> (fromIntegral <$> F.getValue F.max_simplifier_iterations)
 
 -- Extra options not covered by command line flags
 --

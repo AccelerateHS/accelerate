@@ -562,6 +562,9 @@ test-suite nofib-interpreter
   hs-source-dirs:       test/nofib
   main-is:              Main.hs
 
+  if !flag(nofib)
+    buildable: False
+
   build-depends:
           base                          >= 4.9
         , accelerate

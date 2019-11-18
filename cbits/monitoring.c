@@ -12,6 +12,7 @@
  * This is a hack to work around <https://github.com/haskell/cabal/issues/4937>
  */
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -58,22 +59,22 @@ static char* format_int64(char *buffer, int64_t x)
 
   if (x < 1000)
   {
-    sprintf(s, "%lld", x);
+    sprintf(s, "%"PRIi64, x);
   }
   else if (x < 1000000)
   {
-    sprintf(s, "%lld,%03lld", x/1000, x%1000);
+    sprintf(s, "%"PRIi64",%03"PRIi64, x/1000, x%1000);
   }
   else if (x < 1000000000)
   {
-    sprintf(s, "%lld,%03lld,%03lld"
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000
              , (x/1000)%1000
              ,  x%1000);
   }
   else if (x < 1000000000000)
   {
-    sprintf(s, "%lld,%03lld,%03lld,%03lld"
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000
              , (x/1000000)%1000
              , (x/1000)%1000
@@ -81,7 +82,7 @@ static char* format_int64(char *buffer, int64_t x)
   }
   else if (x < 1000000000000000)
   {
-    sprintf(s, "%lld,%03lld,%03lld,%03lld,%03lld"
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000000
              , (x/1000000000)%1000
              , (x/1000000)%1000
@@ -90,7 +91,7 @@ static char* format_int64(char *buffer, int64_t x)
   }
   else if (x < 1000000000000000000)
   {
-    sprintf(s, "%lld,%03lld,%03lld,%03lld,%03lld,%03lld"
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000000000
              , (x/1000000000000)%1000
              , (x/1000000000)%1000
@@ -100,7 +101,7 @@ static char* format_int64(char *buffer, int64_t x)
   }
   else
   {
-    sprintf(s, "%lld,%03lld,%03lld,%03lld,%03lld,%03lld,%03lld"
+    sprintf(s, "%"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64",%03"PRIi64
              ,  x/1000000000000000000
              , (x/1000000000000000)%1000
              , (x/1000000000000)%1000

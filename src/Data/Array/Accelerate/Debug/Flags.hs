@@ -55,7 +55,7 @@ import Control.Monad.IO.Class                                       ( MonadIO, l
 import qualified Control.Monad                                      as M
 
 newtype Flag  = Flag  Int
-newtype Value = Value (Ptr Int)   -- of type HsInt in flags.c
+newtype Value = Value (Ptr Word32)    -- see flags.c
 
 -- We aren't using a "real" enum so that we can make use of the unused top
 -- bits for other configuration options, not controlled by the command line
@@ -128,10 +128,10 @@ unless _ _ = return ()
 #endif
 
 
-setValue   :: Value -> Int -> IO ()
+setValue   :: Value -> Word32 -> IO ()
 setValue (Value f) v = poke f v
 
-getValue   :: Value -> IO Int
+getValue   :: Value -> IO Word32
 getValue (Value f) = peek f
 
 getFlag    :: Flag -> IO Bool
@@ -180,10 +180,10 @@ exp_sharing           = Flag  2 -- recover sharing of scalar expressions
 array_fusion          = Flag  3 -- fuse array expressions
 simplify              = Flag  4 -- simplify scalar expressions
 inplace               = Flag  5 -- allow (safe) in-place array updates
-fast_math             = Flag  6 -- delete persistent compilation cache(s)
+fast_math             = Flag  6 -- use faster, less precise math library operations
 fast_permute_const    = Flag  7 -- allow non-atomic permute const for product types
-flush_cache           = Flag  8 -- force recompilation of array programs
-force_recomp          = Flag  9 -- use faster, less precise math library operations
+flush_cache           = Flag  8 -- delete persistent compilation cache(s)
+force_recomp          = Flag  9 -- force recompilation of array programs
 
 -- These debugging flags are disable by default and are enabled with @-d<blah>@
 --
