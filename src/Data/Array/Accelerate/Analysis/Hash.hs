@@ -156,8 +156,12 @@ encodePreOpenAcc options encodeAcc pacc =
       travB = encodePreBoundary options encodeAcc
 
       deep :: Builder -> Builder
-      deep x | perfect options = x
-             | otherwise       = mempty
+      -- deep x | perfect options = x
+      --        | otherwise       = mempty
+      deep = id
+
+      arrayHash :: (Shape sh, Elt e, arrs ~ Array sh e) => Builder
+      arrayHash = encodeArrayType @arrs
   in
   case pacc of
     Alet lhs bnd body           -> intHost $(hashQ "Alet")        <> encodeLeftHandSide lhs <> travA bnd <> travA body
@@ -166,18 +170,18 @@ encodePreOpenAcc options encodeAcc pacc =
     Anil                        -> intHost $(hashQ "Anil")
     Apply f a                   -> intHost $(hashQ "Apply")       <> travAF f <> travA a
     Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
-    Use a                       -> intHost $(hashQ "Use")         <> deep (encodeArray a)
+    Use a                       -> intHost $(hashQ "Use")         <> arrayHash <> deep (encodeArray a)
     Awhile p f a                -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
     Unit e                      -> intHost $(hashQ "Unit")        <> travE e
-    Generate e f                -> intHost $(hashQ "Generate")    <> deep (travE e)  <> travF f
+    Generate e f                -> intHost $(hashQ "Generate")    <> arrayHash <> deep (travE e)  <> travF f
     Acond e a1 a2               -> intHost $(hashQ "Acond")       <> deep (travE e)  <> travA a1 <> travA a2
-    Reshape sh a                -> intHost $(hashQ "Reshape")     <> deep (travE sh) <> travA a
-    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> deep (travE sh) <> travF f  <> travA a
-    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> deep (travE sh) <> travF f1 <> travF f2 <> travA a
-    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
-    Slice spec a ix             -> intHost $(hashQ "Slice")       <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
-    Map f a                     -> intHost $(hashQ "Map")         <> travF f  <> travA a
-    ZipWith f a1 a2             -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
+    Reshape sh a                -> intHost $(hashQ "Reshape")     <> arrayHash <> deep (travE sh) <> travA a
+    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> arrayHash <> deep (travE sh) <> travF f  <> travA a
+    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> arrayHash <> deep (travE sh) <> travF f1 <> travF f2 <> travA a
+    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> arrayHash <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
+    Slice spec a ix             -> intHost $(hashQ "Slice")       <> arrayHash <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
+    Map f a                     -> intHost $(hashQ "Map")         <> arrayHash <> travF f  <> travA a
+    ZipWith f a1 a2             -> intHost $(hashQ "ZipWith")     <> arrayHash <> travF f  <> travA a1 <> travA a2
     Fold f e a                  -> intHost $(hashQ "Fold")        <> travF f  <> travE e  <> travA a
     Fold1 f a                   -> intHost $(hashQ "Fold1")       <> travF f  <> travA a
     FoldSeg f e a s             -> intHost $(hashQ "FoldSeg")     <> travF f  <> travE e  <> travA a  <> travA s
@@ -251,17 +255,14 @@ encodeArraysType :: forall a. ArraysR a -> Builder
 encodeArraysType ArraysRunit         = intHost $(hashQ "ArraysRunit")
 encodeArraysType (ArraysRpair r1 r2) = intHost $(hashQ "ArraysRpair")  <> encodeArraysType r1 <> encodeArraysType r2
 encodeArraysType ArraysRarray        = intHost $(hashQ "ArraysRarray") <> encodeArrayType @a
-  where
-    encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
-    encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
 
 encodeLeftHandSide :: forall a env env'. LeftHandSide a env env' -> Builder
 encodeLeftHandSide (LeftHandSideWildcard r) = intHost $(hashQ "LeftHandSideWildcard") <> encodeArraysType r
 encodeLeftHandSide (LeftHandSidePair r1 r2) = intHost $(hashQ "LeftHandSidePair")  <> encodeLeftHandSide r1 <> encodeLeftHandSide r2
 encodeLeftHandSide LeftHandSideArray        = intHost $(hashQ "LeftHandSideArray") <> encodeArrayType @a
-  where
-    encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
-    encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
+
+encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
+encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
 
 encodePreOpenAfun
     :: forall acc aenv f.
