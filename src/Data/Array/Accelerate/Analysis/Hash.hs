@@ -160,6 +160,11 @@ encodePreOpenAcc options encodeAcc pacc =
       deep | perfect options = id
            | otherwise       = const mempty
 
+      deepE :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
+      deepE e
+        | perfect options = travE e
+        | otherwise       = encodeTupleType (eltType @e)
+
       arrayHash :: (Shape sh, Elt e, arrs ~ Array sh e) => Builder
       arrayHash = encodeArrayType @arrs
   in
@@ -173,15 +178,17 @@ encodePreOpenAcc options encodeAcc pacc =
     Use a                       -> intHost $(hashQ "Use")         <> arrayHash <> deep (encodeArray a)
     Awhile p f a                -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
     Unit e                      -> intHost $(hashQ "Unit")        <> travE e
-    Generate e f                -> intHost $(hashQ "Generate")    <> arrayHash <> deep (travE e)  <> travF f
-    Acond e a1 a2               -> intHost $(hashQ "Acond")       <> deep (travE e)  <> travA a1 <> travA a2
-    Reshape sh a                -> intHost $(hashQ "Reshape")     <> arrayHash <> deep (travE sh) <> travA a
-    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> arrayHash <> deep (travE sh) <> travF f  <> travA a
-    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> arrayHash <> deep (travE sh) <> travF f1 <> travF f2 <> travA a
-    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> arrayHash <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
-    Slice spec a ix             -> intHost $(hashQ "Slice")       <> arrayHash <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
-    Map f a                     -> intHost $(hashQ "Map")         <> arrayHash <> travF f  <> travA a
-    ZipWith f a1 a2             -> intHost $(hashQ "ZipWith")     <> arrayHash <> travF f  <> travA a1 <> travA a2
+    Generate e f                -> intHost $(hashQ "Generate")    <> deepE e <> travF f
+    -- We don't need to encode the type of 'e' when perfect is False, as 'e' is an expression of type Bool.
+    -- We thus use `deep (travE e)` instead of `deepE e`.
+    Acond e a1 a2               -> intHost $(hashQ "Acond")       <> deep (travE e) <> travA a1 <> travA a2
+    Reshape sh a                -> intHost $(hashQ "Reshape")     <> deepE sh <> travA a
+    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> deepE sh <> travF f  <> travA a
+    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> deepE sh <> travF f1 <> travF f2 <> travA a
+    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> deepE ix <> travA a  <> encodeSliceIndex spec
+    Slice spec a ix             -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
+    Map f a                     -> intHost $(hashQ "Map")         <> travF f  <> travA a
+    ZipWith f a1 a2             -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
     Fold f e a                  -> intHost $(hashQ "Fold")        <> travF f  <> travE e  <> travA a
     Fold1 f a                   -> intHost $(hashQ "Fold1")       <> travF f  <> travA a
     FoldSeg f e a s             -> intHost $(hashQ "FoldSeg")     <> travF f  <> travE e  <> travA a  <> travA s
