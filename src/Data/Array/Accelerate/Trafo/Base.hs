@@ -261,12 +261,12 @@ encodeDelayedOpenAcc options acc =
       travA :: PreOpenAcc DelayedOpenAcc aenv a -> Builder
       travA = encodePreOpenAcc options encodeDelayedOpenAcc
 
-      deep :: Builder -> Builder
-      deep x | perfect options = x
-             | otherwise       = mempty
+      deepA :: forall aenv' a. PreOpenAcc DelayedOpenAcc aenv' a -> Builder
+      deepA | perfect options = travA
+            | otherwise       = encodeArraysType . arraysRepr
   in
   case acc of
-    Manifest pacc   -> intHost $(hashQ ("Manifest" :: String)) <> deep (travA pacc)
+    Manifest pacc   -> intHost $(hashQ ("Manifest" :: String)) <> deepA pacc
     Delayed sh f g  -> intHost $(hashQ ("Delayed"  :: String)) <> travE sh <> travF f <> travF g
 
 {-# INLINEABLE matchDelayedOpenAcc #-}

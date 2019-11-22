@@ -31,6 +31,7 @@ module Data.Array.Accelerate.Analysis.Hash (
   encodePreOpenAcc,
   encodePreOpenExp,
   encodePreOpenFun,
+  encodeArraysType,
   hashQ,
 
 ) where
@@ -156,16 +157,15 @@ encodePreOpenAcc options encodeAcc pacc =
       travB = encodePreBoundary options encodeAcc
 
       deep :: Builder -> Builder
-      -- deep x | perfect options = x
-      --        | otherwise       = mempty
-      deep = id
+      deep | perfect options = id
+           | otherwise       = const mempty
 
       arrayHash :: (Shape sh, Elt e, arrs ~ Array sh e) => Builder
       arrayHash = encodeArrayType @arrs
   in
   case pacc of
     Alet lhs bnd body           -> intHost $(hashQ "Alet")        <> encodeLeftHandSide lhs <> travA bnd <> travA body
-    Avar (ArrayVar v)           -> intHost $(hashQ "Avar")        <> deep (encodeIdx v)
+    Avar (ArrayVar v)           -> intHost $(hashQ "Avar")        <> arrayHash <> deep (encodeIdx v)
     Apair a1 a2                 -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
     Anil                        -> intHost $(hashQ "Anil")
     Apply f a                   -> intHost $(hashQ "Apply")       <> travAF f <> travA a
@@ -273,9 +273,7 @@ encodePreOpenAfun
 encodePreOpenAfun options travA afun =
   let
       travL :: forall aenv1 aenv2 a b. LeftHandSide a aenv1 aenv2 -> PreOpenAfun acc aenv2 b -> Builder
-      travL lhs l = encodeArraysType repr <> encodePreOpenAfun options travA l
-        where
-          repr = lhsToArraysR lhs
+      travL lhs l = encodeLeftHandSide lhs <> encodePreOpenAfun options travA l
   in
   case afun of
     Abody b    -> intHost $(hashQ "Abody") <> travA options b
