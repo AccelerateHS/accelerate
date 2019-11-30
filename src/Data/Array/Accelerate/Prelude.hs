@@ -289,8 +289,7 @@ izipWith
     -> Acc (Array sh b)
     -> Acc (Array sh c)
 izipWith f as bs
-  = generate (shape as `intersect` shape bs)
-             (\ix -> f ix (as ! ix) (bs ! ix))
+  = imap (\ix (unlift -> (a, b)) -> f ix a b) $ zip as bs
 
 -- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
@@ -303,8 +302,7 @@ izipWith3
     -> Acc (Array sh c)
     -> Acc (Array sh d)
 izipWith3 f as bs cs
-  = generate (shape as `intersect` shape bs `intersect` shape cs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix))
+  = izipWith (\ix (unlift -> (a, b)) c -> f ix a b c) (zip as bs) cs
 
 -- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -318,9 +316,7 @@ izipWith4
     -> Acc (Array sh d)
     -> Acc (Array sh e)
 izipWith4 f as bs cs ds
-  = generate (shape as `intersect` shape bs `intersect`
-              shape cs `intersect` shape ds)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
+  = izipWith (\ix (unlift -> (a, b)) c d -> f ix a b c d) (zip as bs) cs ds
 
 -- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -335,9 +331,7 @@ izipWith5
     -> Acc (Array sh e)
     -> Acc (Array sh f)
 izipWith5 f as bs cs ds es
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
+  = izipWith (\ix (unlift -> (a, b)) c d e -> f ix a b c d e) (zip as bs) cs ds es
 
 -- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -352,11 +346,8 @@ izipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-izipWith6 f as bs cs ds es fs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
+izipWith6 fn as bs cs ds es fs
+  = izipWith (\ix (unlift -> (a, b)) c d e f -> fn ix a b c d e f) (zip as bs) cs ds es fs
 
 -- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -372,11 +363,8 @@ izipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-izipWith7 f as bs cs ds es fs gs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
+izipWith7 fn as bs cs ds es fs gs
+  = izipWith (\ix (unlift -> (a, b)) c d e f g -> fn ix a b c d e f g) (zip as bs) cs ds es fs gs
 
 -- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -393,12 +381,8 @@ izipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-izipWith8 f as bs cs ds es fs gs hs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
+izipWith8 fn as bs cs ds es fs gs hs
+  = izipWith (\ix (unlift -> (a, b)) c d e f g h -> fn ix a b c d e f g h) (zip as bs) cs ds es fs gs hs
 
 -- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -416,12 +400,8 @@ izipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-izipWith9 f as bs cs ds es fs gs hs is
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs `intersect` shape is)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
+izipWith9 fn as bs cs ds es fs gs hs is
+  = izipWith (\ix (unlift -> (a, b)) c d e f g h i -> fn ix a b c d e f g h i) (zip as bs) cs ds es fs gs hs is
 
 
 -- | Combine the elements of two arrays pairwise. The shape of the result is the
