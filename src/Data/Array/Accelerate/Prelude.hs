@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE ViewPatterns          #-}
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
 -- Copyright   : [2009..2019] The Accelerate Team
@@ -184,8 +185,7 @@ zipWith3
     -> Acc (Array sh c)
     -> Acc (Array sh d)
 zipWith3 f as bs cs
-  = generate (shape as `intersect` shape bs `intersect` shape cs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix))
+  = zipWith (\(unlift -> (a, b)) c -> f a b c) (zip as bs) cs
 
 -- | Zip four arrays with the given function, analogous to 'zipWith'.
 --
@@ -198,9 +198,7 @@ zipWith4
     -> Acc (Array sh d)
     -> Acc (Array sh e)
 zipWith4 f as bs cs ds
-  = generate (shape as `intersect` shape bs `intersect`
-              shape cs `intersect` shape ds)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
+  = zipWith3 (\(unlift -> (a, b)) c d -> f a b c d) (zip as bs) cs ds
 
 -- | Zip five arrays with the given function, analogous to 'zipWith'.
 --
@@ -214,9 +212,7 @@ zipWith5
     -> Acc (Array sh e)
     -> Acc (Array sh f)
 zipWith5 f as bs cs ds es
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
+  = zipWith4 (\(unlift -> (a, b)) c d e -> f a b c d e) (zip as bs) cs ds es
 
 -- | Zip six arrays with the given function, analogous to 'zipWith'.
 --
@@ -230,11 +226,8 @@ zipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-zipWith6 f as bs cs ds es fs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
+zipWith6 fn as bs cs ds es fs
+  = zipWith5 (\(unlift -> (a, b)) c d e f -> fn a b c d e f) (zip as bs) cs ds es fs
 
 -- | Zip seven arrays with the given function, analogous to 'zipWith'.
 --
@@ -249,11 +242,8 @@ zipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-zipWith7 f as bs cs ds es fs gs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
+zipWith7 fn as bs cs ds es fs gs
+  = zipWith6 (\(unlift -> (a, b)) c d e f g -> fn a b c d e f g) (zip as bs) cs ds es fs gs
 
 -- | Zip eight arrays with the given function, analogous to 'zipWith'.
 --
@@ -269,12 +259,8 @@ zipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-zipWith8 f as bs cs ds es fs gs hs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
+zipWith8 fn as bs cs ds es fs gs hs
+  = zipWith7 (\(unlift -> (a, b)) c d e f g h -> fn a b c d e f g h) (zip as bs) cs ds es fs gs hs
 
 -- | Zip nine arrays with the given function, analogous to 'zipWith'.
 --
@@ -291,13 +277,8 @@ zipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-zipWith9 f as bs cs ds es fs gs hs is
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs `intersect` shape is)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
-
+zipWith9 fn as bs cs ds es fs gs hs is
+  = zipWith8 (\(unlift -> (a, b)) c d e f g h i -> fn a b c d e f g h i) (zip as bs) cs ds es fs gs hs is
 
 -- | Zip two arrays with a function that also takes the element index
 --
