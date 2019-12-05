@@ -144,8 +144,8 @@ terminalLayoutOptions
                     where
                       w = Term.width t
                       f | w <= 80   = 1
-                        | w <= 100  = 0.8
-                        | otherwise = 0.6
+                        | w <= 100  = 0.9
+                        | otherwise = 0.8
 
 prettyOpenAcc :: PrettyAcc OpenAcc
 prettyOpenAcc context aenv (OpenAcc pacc) =

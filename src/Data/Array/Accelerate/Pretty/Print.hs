@@ -110,11 +110,10 @@ prettyPreOpenAfun
 prettyPreOpenAfun prettyAcc aenv0 = next (pretty '\\') aenv0
   where
     next :: Adoc -> Val aenv' -> PreOpenAfun acc aenv' f' -> Adoc
-    next vs aenv (Abody body) = hang shiftwidth (sep [vs <> "->", prettyAcc context0 aenv body])
+    next vs aenv (Abody body)   = hang shiftwidth (sep [vs <> "->", prettyAcc context0 aenv body])
     next vs aenv (Alam lhs lam) =
-      let 
-        (aenv', lhs') = prettyLHS aenv lhs
-      in  next (vs <> lhs' <> space) aenv' lam
+      let (aenv', lhs') = prettyLHS aenv lhs
+       in next (vs <> lhs' <> space) aenv' lam
 
 prettyPreOpenAcc
     :: forall acc aenv arrs.
@@ -128,7 +127,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
   case pacc of
     Avar (ArrayVar idx)     -> prj idx aenv
     Alet{}                  -> prettyAlet ctx prettyAcc extractAcc aenv pacc
-    Apair a1 a2             -> "(" <> prettyAcc context0 aenv a1 <> ", " <> prettyAcc context0 aenv a2 <> ")"
+    Apair{}                 -> prettyAtuple prettyAcc extractAcc aenv pacc
     Anil                    -> "()"
     Apply f a               -> apply
       where
@@ -229,7 +228,7 @@ prettyAlet ctx prettyAcc extractAcc aenv0
 
     isAlet :: acc aenv' a -> Bool
     isAlet (extractAcc -> Alet{}) = True
-    isAlet _                   = False
+    isAlet _                      = False
 
     ppA :: Val aenv' -> acc aenv' a -> Adoc
     ppA = prettyAcc context0
@@ -244,19 +243,45 @@ prettyAlet ctx prettyAcc extractAcc aenv0
              , body
              ]
 
+prettyAtuple
+    :: forall acc aenv arrs.
+       PrettyAcc acc
+    -> ExtractAcc acc
+    -> Val aenv
+    -> PreOpenAcc acc aenv arrs
+    -> Adoc
+prettyAtuple prettyAcc extractAcc aenv0
+  = align . wrap . collect aenv0
+  where
+    wrap [x] = x
+    wrap xs  = tupled xs
+
+    collect :: Val aenv' -> PreOpenAcc acc aenv' a -> [Adoc]
+    collect aenv =
+      \case
+        Anil        -> []
+        Apair a1 a2 -> collect aenv (extractAcc a1) ++ [prettyAcc context0 aenv a2]
+        next        -> [prettyPreOpenAcc context0 prettyAcc extractAcc aenv next]
+
 prettyLHS :: Val aenv -> LeftHandSide arrs aenv aenv' -> (Val aenv', Adoc)
-prettyLHS aenv (LeftHandSideWildcard ArraysRunit) = (aenv, "()")
-prettyLHS aenv (LeftHandSideWildcard _) = (aenv, "_")
-prettyLHS aenv LeftHandSideArray = (aenv `Push` v, v)
+prettyLHS aenv0 = fmap wrap . go aenv0
   where
-    v = pretty 'a' <> pretty (sizeEnv aenv)
-prettyLHS aenv (LeftHandSidePair a b) = (aenv2, "(" <> doc1 <> ", " <> doc2 <> ")")
-  where
-    (aenv1, doc1) = prettyLHS aenv  a
-    (aenv2, doc2) = prettyLHS aenv1 b
+    wrap [x] = x
+    wrap xs  = tupled xs
+
+    go :: Val aenv -> LeftHandSide arrs aenv aenv' -> (Val aenv', [Adoc])
+    go aenv (LeftHandSideWildcard ArraysRunit) = (aenv, [])
+    go aenv (LeftHandSideWildcard _)           = (aenv, ["_"])
+    go aenv LeftHandSideArray                  = (aenv `Push` v, [v])
+      where
+        v = pretty 'a' <> pretty (sizeEnv aenv)
+    go aenv (LeftHandSidePair a b)             = (aenv2, doc1 ++ [doc2])
+      where
+        (aenv1, doc1) = go aenv a
+        (aenv2, doc2) = prettyLHS aenv1 b
 
 prettyArray :: (Shape sh, Elt e) => Array sh e -> Adoc
-prettyArray = viaShow
+prettyArray = parens . viaShow
 
 
 -- Scalar expressions
