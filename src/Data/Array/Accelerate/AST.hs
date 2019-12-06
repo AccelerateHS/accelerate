@@ -273,8 +273,8 @@ lhsToArraysR (LeftHandSidePair as bs) = ArraysRpair (lhsToArraysR as) (lhsToArra
 type env :> env' = forall t'. Idx env t' -> Idx env' t'
 
 weakenWithLHS :: LeftHandSide arrs env env' -> env :> env'
-weakenWithLHS (LeftHandSideWildcard _) = id
-weakenWithLHS LeftHandSideArray =  SuccIdx
+weakenWithLHS (LeftHandSideWildcard _)     = id
+weakenWithLHS LeftHandSideArray            = SuccIdx
 weakenWithLHS (LeftHandSidePair lhs1 lhs2) = weakenWithLHS lhs2 . weakenWithLHS lhs1
 
 -- Often useful when working with LeftHandSide, when you need to
@@ -852,7 +852,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
   arraysRepr (Apair as bs)                      = ArraysRpair (arraysRepr as) (arraysRepr bs)
   arraysRepr Anil                               = ArraysRunit
   arraysRepr (Apply (Alam _ (Abody a)) _)       = arraysRepr a
-  arraysRepr (Apply _ _)                        = error "Tomorrow will arive, on time"
+  arraysRepr (Apply _ _)                        = error "Tomorrow will arrive, on time"
   arraysRepr (Aforeign _ (Alam _ (Abody a)) _)  = arraysRepr a
   arraysRepr (Aforeign _ (Abody _) _)           = error "And what have you got, at the end of the day?"
   arraysRepr (Aforeign _ (Alam _ (Alam _ _)) _) = error "A bottle of whisky. And a new set of lies."
@@ -884,7 +884,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
   arraysRepr Stencil2{}                         = ArraysRarray
 
 instance HasArraysRepr OpenAcc where
-  arraysRepr (OpenAcc a) = arraysRepr a 
+  arraysRepr (OpenAcc a) = arraysRepr a
 -- Embedded expressions
 -- --------------------
 

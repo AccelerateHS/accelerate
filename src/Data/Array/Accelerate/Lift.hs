@@ -473,9 +473,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 
 -- Instances for Arrays class
 
---instance Lift Acc () where
---  type Plain () = ()
---  lift _ = Acc (Atuple NilAtup)
+-- instance Lift Acc () where
+--   type Plain () = ()
+--   lift _ = Acc (SmartAcc Anil)
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e

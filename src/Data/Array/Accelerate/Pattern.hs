@@ -278,8 +278,8 @@ instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
 --
 $(runQ $ do
     let
-        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern con cst tup prj nil snoc n =
+        mkIsPattern' :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkIsPattern' con cst tup prj nil snoc n =
           let
               xs      = [ mkName ('x' : show i) | i <- [0 .. n-1]]
               b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
@@ -300,84 +300,31 @@ $(runQ $ do
                   destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
             |]
 
-        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
-    --
+        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkIsPattern _   _   _     _   _   _    1 = return []
+        mkIsPattern con cst smart prj nil pair n = do
+          let
+              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              a       = foldl (\ts t -> appT ts (varT t)) (tupleT n) xs
+              b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
+              context = foldl (\ts t -> appT ts (appT cst (varT t))) (tupleT n) xs
+              --
+              get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
+              get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
+          --
+          _x <- newName "_x"
+          [d| instance $context => IsPattern $(conT con) $a $b where
+                construct $(tupP (map (conP con . return . varP) xs)) =
+                  $(conE con) $(foldl (\vs v -> appE smart (appE (appE pair vs) (varE v))) (appE smart nil) xs)
+                destruct $(conP con [varP _x]) =
+                  $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
+            |]
+
+        mkExpPattern = mkIsPattern' (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
+        mkAccPattern = mkIsPattern  (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
     es <- mapM mkExpPattern [0..16]
-    return $ concat es
+    as <- mapM mkAccPattern [0..16]
+    return $ concat (es ++ as)
  )
 
--- IsPattern instances for Acc
-instance (Arrays a, Arrays b) => IsPattern Acc (a, b) (Acc a, Acc b) where
-  construct = atup2
-  destruct = unatup2
-
-instance (Arrays a, Arrays b, Arrays c)
-  => IsPattern Acc (a, b, c) (Acc a, Acc b, Acc c) where
-  construct = atup3
-  destruct = unatup3
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d)
-  => IsPattern Acc (a, b, c, d) (Acc a, Acc b, Acc c, Acc d) where
-  construct = atup4
-  destruct = unatup4
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
-  => IsPattern Acc (a, b, c, d, e) (Acc a, Acc b, Acc c, Acc d, Acc e) where
-  construct = atup5
-  destruct = unatup5
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-  => IsPattern Acc (a, b, c, d, e, f) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f) where
-  construct = atup6
-  destruct = unatup6
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
-  => IsPattern Acc (a, b, c, d, e, f, g) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g) where
-  construct = atup7
-  destruct = unatup7
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
-  => IsPattern Acc (a, b, c, d, e, f, g, h) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h) where
-  construct = atup8
-  destruct = unatup8
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i) where
-  construct = atup9
-  destruct = unatup9
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i, j) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j) where
-  construct = atup10
-  destruct = unatup10
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i, j, k) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k) where
-  construct = atup11
-  destruct = unatup11
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i, j, k, l) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l) where
-  construct = atup12
-  destruct = unatup12
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i, j, k, l, m) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m) where
-  construct = atup13
-  destruct = unatup13
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n) where
-  construct = atup14
-  destruct = unatup14
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o) where
-  construct = atup15
-  destruct = unatup15
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
-  => IsPattern Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p) where
-  construct = atup16
-  destruct = unatup16

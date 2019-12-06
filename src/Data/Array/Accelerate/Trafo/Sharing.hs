@@ -160,7 +160,7 @@ sizeArrayLayout (ArrayPushLayout lyt _ _) = 1 + sizeArrayLayout lyt
 
 incVarsWith :: env1 :> env2 -> ArrayVars env1 t -> ArrayVars env2 t
 incVarsWith _ ArrayVarsNil                    = ArrayVarsNil
-incVarsWith k (ArrayVarsArray (ArrayVar idx)) = ArrayVarsArray $ ArrayVar $ k idx 
+incVarsWith k (ArrayVarsArray (ArrayVar idx)) = ArrayVarsArray $ ArrayVar $ k idx
 incVarsWith k (ArrayVarsPair v1 v2)           = incVarsWith k v1 `ArrayVarsPair` incVarsWith k v2
 
 -- Conversion from HOAS to de Bruijn computation AST
