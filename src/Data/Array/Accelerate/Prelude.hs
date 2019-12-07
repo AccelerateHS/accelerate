@@ -174,6 +174,15 @@ imap :: (Shape sh, Elt a, Elt b)
      -> Acc (Array sh b)
 imap f xs = zipWith f (generate (shape xs) id) xs
 
+-- | Used to define the zipWith functions on more than two arrays
+zipWithInduction :: (Shape sh, Elt a, Elt b) 
+    => ((Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
+    -> (Exp a -> Exp b -> rest) 
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> result
+zipWithInduction prev f as bs = prev (\(unlift -> (a,b)) -> f a b) (zip as bs)
+
 
 -- | Zip three arrays with the given function, analogous to 'zipWith'.
 --
@@ -184,8 +193,7 @@ zipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-zipWith3 f as bs cs
-  = zipWith (\(unlift -> (a, b)) c -> f a b c) (zip as bs) cs
+zipWith3 = zipWithInduction zipWith
 
 -- | Zip four arrays with the given function, analogous to 'zipWith'.
 --
@@ -197,8 +205,7 @@ zipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-zipWith4 f as bs cs ds
-  = zipWith3 (\(unlift -> (a, b)) c d -> f a b c d) (zip as bs) cs ds
+zipWith4 = zipWithInduction zipWith3
 
 -- | Zip five arrays with the given function, analogous to 'zipWith'.
 --
@@ -211,8 +218,7 @@ zipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-zipWith5 f as bs cs ds es
-  = zipWith4 (\(unlift -> (a, b)) c d e -> f a b c d e) (zip as bs) cs ds es
+zipWith5 = zipWithInduction zipWith4
 
 -- | Zip six arrays with the given function, analogous to 'zipWith'.
 --
@@ -226,8 +232,7 @@ zipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-zipWith6 fn as bs cs ds es fs
-  = zipWith5 (\(unlift -> (a, b)) c d e f -> fn a b c d e f) (zip as bs) cs ds es fs
+zipWith6 = zipWithInduction zipWith5
 
 -- | Zip seven arrays with the given function, analogous to 'zipWith'.
 --
@@ -242,8 +247,7 @@ zipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-zipWith7 fn as bs cs ds es fs gs
-  = zipWith6 (\(unlift -> (a, b)) c d e f g -> fn a b c d e f g) (zip as bs) cs ds es fs gs
+zipWith7 = zipWithInduction zipWith6
 
 -- | Zip eight arrays with the given function, analogous to 'zipWith'.
 --
@@ -259,8 +263,7 @@ zipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-zipWith8 fn as bs cs ds es fs gs hs
-  = zipWith7 (\(unlift -> (a, b)) c d e f g h -> fn a b c d e f g h) (zip as bs) cs ds es fs gs hs
+zipWith8 = zipWithInduction zipWith7
 
 -- | Zip nine arrays with the given function, analogous to 'zipWith'.
 --
@@ -277,8 +280,18 @@ zipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-zipWith9 fn as bs cs ds es fs gs hs is
-  = zipWith8 (\(unlift -> (a, b)) c d e f g h i -> fn a b c d e f g h i) (zip as bs) cs ds es fs gs hs is
+zipWith9 = zipWithInduction zipWith8
+
+
+-- | Used to define the izipWith functions on two or more arrays
+izipWithInduction :: (Shape sh, Elt a, Elt b) 
+    => ((Exp sh -> Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
+    -> (Exp sh -> Exp a -> Exp b -> rest) 
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> result
+izipWithInduction prev f as bs = prev (\ix (unlift -> (a,b)) -> f ix a b) (zip as bs)
+
 
 -- | Zip two arrays with a function that also takes the element index
 --
@@ -288,8 +301,7 @@ izipWith
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh c)
-izipWith f as bs
-  = imap (\ix (unlift -> (a, b)) -> f ix a b) $ zip as bs
+izipWith = izipWithInduction imap
 
 -- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
@@ -301,8 +313,7 @@ izipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-izipWith3 f as bs cs
-  = izipWith (\ix (unlift -> (a, b)) c -> f ix a b c) (zip as bs) cs
+izipWith3 = izipWithInduction izipWith
 
 -- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -315,8 +326,7 @@ izipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-izipWith4 f as bs cs ds
-  = izipWith3 (\ix (unlift -> (a, b)) c d -> f ix a b c d) (zip as bs) cs ds
+izipWith4 = izipWithInduction izipWith3
 
 -- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -330,8 +340,7 @@ izipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-izipWith5 f as bs cs ds es
-  = izipWith4 (\ix (unlift -> (a, b)) c d e -> f ix a b c d e) (zip as bs) cs ds es
+izipWith5 = izipWithInduction izipWith4
 
 -- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -346,8 +355,7 @@ izipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-izipWith6 fn as bs cs ds es fs
-  = izipWith5 (\ix (unlift -> (a, b)) c d e f -> fn ix a b c d e f) (zip as bs) cs ds es fs
+izipWith6 = izipWithInduction izipWith5
 
 -- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -363,8 +371,7 @@ izipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-izipWith7 fn as bs cs ds es fs gs
-  = izipWith6 (\ix (unlift -> (a, b)) c d e f g -> fn ix a b c d e f g) (zip as bs) cs ds es fs gs
+izipWith7 = izipWithInduction izipWith6
 
 -- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -381,8 +388,7 @@ izipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-izipWith8 fn as bs cs ds es fs gs hs
-  = izipWith7 (\ix (unlift -> (a, b)) c d e f g h -> fn ix a b c d e f g h) (zip as bs) cs ds es fs gs hs
+izipWith8 = izipWithInduction izipWith7
 
 -- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -400,8 +406,7 @@ izipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-izipWith9 fn as bs cs ds es fs gs hs is
-  = izipWith8 (\ix (unlift -> (a, b)) c d e f g h i -> fn ix a b c d e f g h i) (zip as bs) cs ds es fs gs hs is
+izipWith9 = izipWithInduction izipWith8
 
 
 -- | Combine the elements of two arrays pairwise. The shape of the result is the
