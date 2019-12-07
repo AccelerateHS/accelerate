@@ -30,7 +30,7 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
   -- Shrinking
   Shrink(..),
-  ShrinkAcc, shrinkPreAcc, basicReduceAcc,
+  ShrinkAcc,
 
   -- Occurrence counting
   UsesOfAcc, usesOfPreAcc, usesOfExp,
@@ -62,7 +62,6 @@ instance Kit acc => Shrink (PreOpenExp acc env aenv e) where
 
 instance Kit acc => Shrink (PreOpenFun acc env aenv f) where
   shrink' = shrinkFun
-
 
 -- Shrinking
 -- =========
@@ -146,6 +145,8 @@ shrinkFun (Body b) = Body <$> shrinkExp b
 -- array computations into scalar expressions, which is generally not desirable.
 --
 type ShrinkAcc acc = forall aenv a.   acc aenv a -> acc aenv a
+
+{-
 type ReduceAcc acc = forall aenv s t. acc aenv s -> acc (aenv,s) t -> Maybe (PreOpenAcc acc aenv t)
 
 shrinkPreAcc
@@ -156,21 +157,21 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
   where
     shrinkA :: PreOpenAcc acc aenv' a -> PreOpenAcc acc aenv' a
     shrinkA pacc = case pacc of
-      Alet bnd body
+      Alet lhs bnd body
         | Just reduct <- reduceAcc bnd' body'   -> shrinkA reduct
-        | otherwise                             -> Alet bnd' body'
+        | otherwise                             -> Alet lhs bnd' body'
         where
           bnd'  = shrinkAcc bnd
           body' = shrinkAcc body
       --
       Avar ix                   -> Avar ix
-      Atuple tup                -> Atuple (shrinkAT tup)
-      Aprj tup a                -> Aprj tup (shrinkAcc a)
-      Apply f a                 -> Apply (shrinkAF f) (shrinkAcc a)
+      Apair a1 a2               -> Apair (shrinkAcc a1) (shrinkAcc a2)
+      Anil                      -> Anil
+      Apply repr f a            -> Apply repr (shrinkAF f) (shrinkAcc a)
       Aforeign ff af a          -> Aforeign ff af (shrinkAcc a)
       Acond p t e               -> Acond (shrinkE p) (shrinkAcc t) (shrinkAcc e)
       Awhile p f a              -> Awhile (shrinkAF p) (shrinkAF f) (shrinkAcc a)
-      Use a                     -> Use a
+      Use repr a                -> Use repr a
       Unit e                    -> Unit (shrinkE e)
       Reshape e a               -> Reshape (shrinkE e) (shrinkAcc a)
       Generate e f              -> Generate (shrinkE e) (shrinkF f)
@@ -263,41 +264,10 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
     shrinkT NilTup        = NilTup
     shrinkT (SnocTup t e) = shrinkT t `SnocTup` shrinkE e
 
-    shrinkAT :: Atuple (acc aenv') t -> Atuple (acc aenv') t
-    shrinkAT NilAtup        = NilAtup
-    shrinkAT (SnocAtup t a) = shrinkAT t `SnocAtup` shrinkAcc a
-
     shrinkAF :: PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
-    shrinkAF (Alam  f) = Alam (shrinkAF f)
+    shrinkAF (Alam lhs f) = Alam lhs (shrinkAF f)
     shrinkAF (Abody a) = Abody (shrinkAcc a)
-
-
--- A somewhat hacky example implementation of the reduction step. It requires a
--- function to open the recursive closure of an array term.
---
-basicReduceAcc
-    :: Kit acc
-    => (forall aenv a. acc aenv a -> PreOpenAcc acc aenv a)
-    -> UsesOfAcc acc
-    -> ReduceAcc acc
-basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA (subAtop bnd) pbody
-  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA (subAtop bnd) pbody
-  | otherwise           = Nothing
-  where
-    -- If the bound variable is used at most this many times, it will be inlined
-    -- into the body. Since this implies an array computation could be inlined
-    -- into a scalar expression, we limit the shrinking reduction for array
-    -- computations to dead-code elimination only.
-    --
-    lIMIT = 0
-
-    uses  = countAcc True ZeroIdx body
-    msg   = case uses of
-      0 -> "dead acc"
-      _ -> "inline acc"         -- forced inlining when lIMIT > 1
-
-
+-}
 -- Occurrence Counting
 -- ===================
 
@@ -348,7 +318,6 @@ usesOfExp idx = countE
     countT NilTup        = 0
     countT (SnocTup t e) = countT t + countE e
 
-
 -- Count the number of occurrences of the array term bound at the given
 -- environment index. If the first argument is 'True' then it includes in the
 -- total uses of the variable for 'Shape' information, otherwise not.
@@ -371,11 +340,11 @@ usesOfPreAcc withShape countAcc idx = count
 
     count :: PreOpenAcc acc aenv a -> Int
     count pacc = case pacc of
-      Avar this                 -> countIdx this
+      Avar (ArrayVar this)      -> countIdx this
       --
-      Alet bnd body             -> countA bnd + countAcc withShape (SuccIdx idx) body
-      Atuple tup                -> countAT tup
-      Aprj _ a                  -> countA a     -- special case discount?
+      Alet lhs bnd body         -> countA bnd + countAcc withShape (weakenWithLHS lhs idx) body
+      Apair a1 a2               -> countA a1 + countA a2
+      Anil                      -> 0
       Apply _ a                 -> countA a
       Aforeign _ _ a            -> countA a
       Acond p t e               -> countE p  + countA t + countA e
@@ -454,10 +423,6 @@ usesOfPreAcc withShape countAcc idx = count
     countT NilTup        = 0
     countT (SnocTup t e) = countT t + countE e
 
-    countAT :: Atuple (acc aenv) a -> Int
-    countAT NilAtup        = 0
-    countAT (SnocAtup t a) = countAT t + countA a
-
 {--
     countS :: PreOpenSeq acc aenv senv arrs -> Int
     countS seq =
@@ -487,4 +452,3 @@ usesOfPreAcc withShape countAcc idx = count
     countCT NilAtup        = 0
     countCT (SnocAtup t c) = countCT t + countC c
 --}
-

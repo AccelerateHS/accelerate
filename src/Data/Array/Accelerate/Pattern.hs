@@ -278,8 +278,8 @@ instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
 --
 $(runQ $ do
     let
-        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern con cst tup prj nil snoc n =
+        mkIsPattern' :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkIsPattern' con cst tup prj nil snoc n =
           let
               xs      = [ mkName ('x' : show i) | i <- [0 .. n-1]]
               b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
@@ -300,12 +300,31 @@ $(runQ $ do
                   destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
-        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
+        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkIsPattern _   _   _     _   _   _    1 = return []
+        mkIsPattern con cst smart prj nil pair n = do
+          let
+              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              a       = foldl (\ts t -> appT ts (varT t)) (tupleT n) xs
+              b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
+              context = foldl (\ts t -> appT ts (appT cst (varT t))) (tupleT n) xs
+              --
+              get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
+              get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
+          --
+          _x <- newName "_x"
+          [d| instance $context => IsPattern $(conT con) $a $b where
+                construct $(tupP (map (conP con . return . varP) xs)) =
+                  $(conE con) $(foldl (\vs v -> appE smart (appE (appE pair vs) (varE v))) (appE smart nil) xs)
+                destruct $(conP con [varP _x]) =
+                  $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
+            |]
+
+        mkExpPattern = mkIsPattern' (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
+        mkAccPattern = mkIsPattern  (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
-    --
-    as <- mapM mkAccPattern [0..16]
     es <- mapM mkExpPattern [0..16]
-    return (concat as ++ concat es)
+    as <- mapM mkAccPattern [0..16]
+    return $ concat (es ++ as)
  )
 

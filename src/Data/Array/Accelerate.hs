@@ -330,7 +330,7 @@ module Data.Array.Accelerate (
   -- ** Pattern synonyms
   -- $pattern_synonyms
   --
-  pattern Pattern, IsProduct, IsTuple, IsAtuple,
+  pattern Pattern, IsProduct, IsTuple,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,

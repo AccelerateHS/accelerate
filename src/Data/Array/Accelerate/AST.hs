@@ -83,14 +83,15 @@
 module Data.Array.Accelerate.AST (
 
   -- * Typed de Bruijn indices
-  Idx(..), idxToInt, tupleIdxToInt,
+  Idx(..), idxToInt, tupleIdxToInt, ArrayVar(..), ArrayVars(..),
 
   -- * Valuation environment
-  Val(..), ValElt(..), prj, prjElt,
+  Val(..), ValElt(..), push, prj, prjElt,
 
   -- * Accelerated array expressions
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   PreBoundary(..), Boundary, Stencil(..), StencilR(..),
+  LeftHandSide(..), HasArraysRepr(..), lhsToArraysR,
 
   -- * Accelerated sequences
   -- PreOpenSeq(..), Seq,
@@ -107,9 +108,13 @@ module Data.Array.Accelerate.AST (
 
   -- TemplateHaskell
   LiftAcc,
-  liftIdx, liftTupleIdx, liftArrays,
+  liftIdx, liftTupleIdx,
   liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
+  liftLHS, liftArray,
+
+  -- Utilities
+  Exists(..), weakenWithLHS, (:>),
 
   -- debugging
   showPreAccOp, showPreExpOp,
@@ -119,7 +124,6 @@ module Data.Array.Accelerate.AST (
 --standard library
 import Control.DeepSeq
 import Control.Monad.ST
-import Data.List
 import Data.Typeable
 import Foreign.ForeignPtr
 import Foreign.Marshal
@@ -180,8 +184,12 @@ tupleIdxToInt (SuccTupIdx idx) = 1 + tupleIdxToInt idx
 data Val env where
   Empty :: Val ()
   Push  :: Val env -> t -> Val (env, t)
-
 deriving instance Typeable Val
+
+push :: Val env -> (LeftHandSide arrs env env', arrs) -> Val env'
+push env (LeftHandSideWildcard _, _     ) = env
+push env (LeftHandSideArray     , a     ) = env `Push` a
+push env (LeftHandSidePair l1 l2, (a, b)) = push env (l1, a) `push` (l2, b)
 
 -- Valuation for an environment of array elements
 --
@@ -214,8 +222,8 @@ prjElt _             _               = $internalError "prjElt" "inconsistent val
 -- | Function abstraction over parametrised array computations
 --
 data PreOpenAfun acc aenv t where
-  Abody :: Arrays t => acc             aenv      t -> PreOpenAfun acc aenv t
-  Alam  :: Arrays a => PreOpenAfun acc (aenv, a) t -> PreOpenAfun acc aenv (a -> t)
+  Abody ::                              acc             aenv  t -> PreOpenAfun acc aenv t
+  Alam  :: LeftHandSide a aenv aenv' -> PreOpenAfun acc aenv' t -> PreOpenAfun acc aenv (a -> t)
 
 -- Function abstraction over vanilla open array computations
 --
@@ -240,6 +248,47 @@ type Acc = OpenAcc ()
 deriving instance Typeable PreOpenAcc
 deriving instance Typeable OpenAcc
 
+data LeftHandSide arrs env env' where
+  LeftHandSideArray
+    :: (Shape sh, Elt e)
+    => LeftHandSide (Array sh e) env (env, Array sh e)
+
+  -- Note: a unit is represented as LeftHandSide ArraysRunit
+  LeftHandSideWildcard
+    :: ArraysR arrs
+    -> LeftHandSide arrs env env
+
+  LeftHandSidePair
+    :: LeftHandSide arrs1          env  env'
+    -> LeftHandSide arrs2          env' env''
+    -> LeftHandSide (arrs1, arrs2) env  env''
+
+lhsToArraysR :: LeftHandSide arrs aenv aenv' -> ArraysR arrs
+lhsToArraysR LeftHandSideArray        = ArraysRarray
+lhsToArraysR (LeftHandSideWildcard r) = r
+lhsToArraysR (LeftHandSidePair as bs) = ArraysRpair (lhsToArraysR as) (lhsToArraysR bs)
+
+-- The type of shifting terms from one context into another
+--
+type env :> env' = forall t'. Idx env t' -> Idx env' t'
+
+weakenWithLHS :: LeftHandSide arrs env env' -> env :> env'
+weakenWithLHS (LeftHandSideWildcard _)     = id
+weakenWithLHS LeftHandSideArray            = SuccIdx
+weakenWithLHS (LeftHandSidePair lhs1 lhs2) = weakenWithLHS lhs2 . weakenWithLHS lhs1
+
+-- Often useful when working with LeftHandSide, when you need to
+-- existentially quantify on the resulting environment type.
+data Exists f where
+  Exists :: f a -> Exists f
+
+data ArrayVar aenv arr where
+  ArrayVar :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> ArrayVar aenv (Array sh e)
+
+data ArrayVars aenv arrs where
+  ArrayVarsArray :: ArrayVar aenv a -> ArrayVars aenv a
+  ArrayVarsNil   :: ArrayVars aenv ()
+  ArrayVarsPair  :: ArrayVars aenv a -> ArrayVars aenv b -> ArrayVars aenv (a, b)
 
 -- | Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
@@ -265,35 +314,30 @@ data PreOpenAcc acc aenv a where
   -- Local non-recursive binding to represent sharing and demand
   -- explicitly. Note this is an eager binding!
   --
-  Alet        :: (Arrays bndArrs, Arrays bodyArrs)
-              => acc            aenv            bndArrs         -- bound expression
-              -> acc            (aenv, bndArrs) bodyArrs        -- the bound expression scope
-              -> PreOpenAcc acc aenv            bodyArrs
+  Alet        :: LeftHandSide bndArrs aenv aenv'
+              -> acc            aenv  bndArrs         -- bound expression
+              -> acc            aenv' bodyArrs        -- the bound expression scope
+              -> PreOpenAcc acc aenv  bodyArrs
 
   -- Variable bound by a 'Let', represented by a de Bruijn index
   --
-  Avar        :: Arrays arrs
-              => Idx            aenv arrs
-              -> PreOpenAcc acc aenv arrs
+  Avar        :: ArrayVar       aenv (Array sh e)
+              -> PreOpenAcc acc aenv (Array sh e)
 
   -- Tuples of arrays
   --
-  Atuple      :: (Arrays arrs, IsAtuple arrs)
-              => Atuple    (acc aenv) (TupleRepr arrs)
-              -> PreOpenAcc acc aenv  arrs
+  Apair       :: acc            aenv as
+              -> acc            aenv bs
+              -> PreOpenAcc acc aenv (as, bs)
 
-  Aprj        :: (Arrays arrs, IsAtuple arrs, Arrays a)
-              => TupleIdx (TupleRepr arrs) a
-              ->            acc aenv arrs
-              -> PreOpenAcc acc aenv a
+  Anil        :: PreOpenAcc acc aenv ()
 
   -- Array-function application.
   --
   -- The array function is not closed at the core level because we need access
   -- to free variables introduced by 'run1' style evaluators. See Issue#95.
   --
-  Apply       :: (Arrays arrs1, Arrays arrs2)
-              => PreOpenAfun acc aenv (arrs1 -> arrs2)
+  Apply       :: PreOpenAfun acc aenv (arrs1 -> arrs2)
               -> acc             aenv arrs1
               -> PreOpenAcc  acc aenv arrs2
 
@@ -302,23 +346,21 @@ data PreOpenAcc acc aenv a where
   -- closed.
   --
   Aforeign    :: (Arrays as, Arrays bs, Foreign asm)
-              => asm                   (as -> bs)               -- The foreign function for a given backend
-              -> PreAfun      acc      (as -> bs)               -- Fallback implementation(s)
-              -> acc              aenv as                       -- Arguments to the function
-              -> PreOpenAcc   acc aenv bs
+              => asm                   (as -> bs)                 -- The foreign function for a given backend
+              -> PreAfun      acc      (ArrRepr as -> ArrRepr bs) -- Fallback implementation(s)
+              -> acc              aenv (ArrRepr as)               -- Arguments to the function
+              -> PreOpenAcc   acc aenv (ArrRepr bs)
 
   -- If-then-else for array-level computations
   --
-  Acond       :: Arrays arrs
-              => PreExp     acc aenv Bool
+  Acond       :: PreExp     acc aenv Bool
               -> acc            aenv arrs
               -> acc            aenv arrs
               -> PreOpenAcc acc aenv arrs
 
   -- Value-recursion for array-level computations
   --
-  Awhile      :: Arrays arrs
-              => PreOpenAfun acc aenv (arrs -> Scalar Bool)     -- continue iteration while true
+  Awhile      :: PreOpenAfun acc aenv (arrs -> Scalar Bool)     -- continue iteration while true
               -> PreOpenAfun acc aenv (arrs -> arrs)            -- function to iterate
               -> acc             aenv arrs                      -- initial value
               -> PreOpenAcc  acc aenv arrs
@@ -327,9 +369,9 @@ data PreOpenAcc acc aenv a where
   -- Array inlet. Triggers (possibly) asynchronous host->device transfer if
   -- necessary.
   --
-  Use         :: Arrays arrs
-              => ArrRepr arrs
-              -> PreOpenAcc acc aenv arrs
+  Use         :: (Shape sh, Elt e)
+              => Array sh e
+              -> PreOpenAcc acc aenv (Array sh e)
 
   -- Capture a scalar (or a tuple of scalars) in a singleton array
   --
@@ -457,7 +499,7 @@ data PreOpenAcc acc aenv a where
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
               -> acc            aenv (Array (sh:.Int) e)
-              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
+              -> PreOpenAcc acc aenv (ArrRepr (Array (sh:.Int) e, Array sh e))
 
   -- Haskell-style scan without an initial value
   --
@@ -480,7 +522,7 @@ data PreOpenAcc acc aenv a where
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
               -> acc            aenv (Array (sh:.Int) e)
-              -> PreOpenAcc acc aenv (Array (sh:.Int) e, Array sh e)
+              -> PreOpenAcc acc aenv (ArrRepr (Array (sh:.Int) e, Array sh e))
 
   -- Right-to-left version of 'Scanl1'
   --
@@ -801,7 +843,48 @@ instance (Stencil (sh:.Int) a row1,
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
   stencil = StencilRtup9 stencil stencil stencil stencil stencil stencil stencil stencil stencil
 
+class HasArraysRepr f where
+  arraysRepr :: f aenv a -> ArraysR a
 
+instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
+  arraysRepr (Alet _ _ body)                    = arraysRepr body
+  arraysRepr (Avar ArrayVar{})                  = ArraysRarray
+  arraysRepr (Apair as bs)                      = ArraysRpair (arraysRepr as) (arraysRepr bs)
+  arraysRepr Anil                               = ArraysRunit
+  arraysRepr (Apply (Alam _ (Abody a)) _)       = arraysRepr a
+  arraysRepr (Apply _ _)                        = error "Tomorrow will arrive, on time"
+  arraysRepr (Aforeign _ (Alam _ (Abody a)) _)  = arraysRepr a
+  arraysRepr (Aforeign _ (Abody _) _)           = error "And what have you got, at the end of the day?"
+  arraysRepr (Aforeign _ (Alam _ (Alam _ _)) _) = error "A bottle of whisky. And a new set of lies."
+  arraysRepr (Acond _ whenTrue _)               = arraysRepr whenTrue
+  arraysRepr (Awhile _ (Alam lhs _) _)          = lhsToArraysR lhs
+  arraysRepr (Awhile _ _ _)                     = error "I want my, I want my MTV!"
+  arraysRepr Use{}                              = ArraysRarray
+  arraysRepr Unit{}                             = ArraysRarray
+  arraysRepr Reshape{}                          = ArraysRarray
+  arraysRepr Generate{}                         = ArraysRarray
+  arraysRepr Transform{}                        = ArraysRarray
+  arraysRepr Replicate{}                        = ArraysRarray
+  arraysRepr Slice{}                            = ArraysRarray
+  arraysRepr Map{}                              = ArraysRarray
+  arraysRepr ZipWith{}                          = ArraysRarray
+  arraysRepr Fold{}                             = ArraysRarray
+  arraysRepr Fold1{}                            = ArraysRarray
+  arraysRepr FoldSeg{}                          = ArraysRarray
+  arraysRepr Fold1Seg{}                         = ArraysRarray
+  arraysRepr Scanl{}                            = ArraysRarray
+  arraysRepr Scanl'{}                           = arraysRtuple2
+  arraysRepr Scanl1{}                           = ArraysRarray
+  arraysRepr Scanr{}                            = ArraysRarray
+  arraysRepr Scanr'{}                           = arraysRtuple2
+  arraysRepr Scanr1{}                           = ArraysRarray
+  arraysRepr Permute{}                          = ArraysRarray
+  arraysRepr Backpermute{}                      = ArraysRarray
+  arraysRepr Stencil{}                          = ArraysRarray
+  arraysRepr Stencil2{}                         = ArraysRarray
+
+instance HasArraysRepr OpenAcc where
+  arraysRepr (OpenAcc a) = arraysRepr a
 -- Embedded expressions
 -- --------------------
 
@@ -1134,7 +1217,7 @@ rnfOpenAcc (OpenAcc pacc) = rnfPreOpenAcc rnfOpenAcc pacc
 
 rnfPreOpenAfun :: NFDataAcc acc -> PreOpenAfun acc aenv t -> ()
 rnfPreOpenAfun rnfA (Abody b) = rnfA b
-rnfPreOpenAfun rnfA (Alam f)  = rnfPreOpenAfun rnfA f
+rnfPreOpenAfun rnfA (Alam lhs f) = rnfLHS lhs `seq` rnfPreOpenAfun rnfA f
 
 rnfPreOpenAcc :: forall acc aenv t. NFDataAcc acc -> PreOpenAcc acc aenv t -> ()
 rnfPreOpenAcc rnfA pacc =
@@ -1155,15 +1238,15 @@ rnfPreOpenAcc rnfA pacc =
       rnfB = rnfBoundary rnfA
   in
   case pacc of
-    Alet bnd body             -> rnfA bnd `seq` rnfA body
-    Avar ix                   -> rnfIdx ix
-    Atuple atup               -> rnfAtuple rnfA atup
-    Aprj tix a                -> rnfTupleIdx tix `seq` rnfA a
+    Alet lhs bnd body         -> rnfLHS lhs `seq` rnfA bnd `seq` rnfA body
+    Avar (ArrayVar ix)        -> rnfIdx ix
+    Apair as bs               -> rnfA as `seq` rnfA bs
+    Anil                      -> ()
     Apply afun acc            -> rnfAF afun `seq` rnfA acc
     Aforeign asm afun a       -> rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
     Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
-    Use arrs                  -> rnfArrays (arrays @t) arrs
+    Use arr                   -> rnf arr
     Unit x                    -> rnfE x
     Reshape sh a              -> rnfE sh `seq` rnfA a
     Generate sh f             -> rnfE sh `seq` rnfF f
@@ -1188,10 +1271,15 @@ rnfPreOpenAcc rnfA pacc =
     Stencil2 f b1 a1 b2 a2    -> rnfF f `seq` rnfB b1 `seq` rnfB b2 `seq` rnfA a1 `seq` rnfA a2
     -- Collect s                 -> rnfS s
 
+rnfLHS :: LeftHandSide arrs aenv aenv' -> ()
+rnfLHS (LeftHandSideWildcard r)   = rnfArraysR r
+rnfLHS LeftHandSideArray          = ()
+rnfLHS (LeftHandSidePair ar1 ar2) = rnfLHS ar1 `seq` rnfLHS ar2
 
-rnfAtuple :: NFDataAcc acc -> Atuple (acc aenv) t -> ()
-rnfAtuple _    NilAtup          = ()
-rnfAtuple rnfA (SnocAtup tup a) = rnfAtuple rnfA tup `seq` rnfA a
+rnfArraysR :: ArraysR arrs -> ()
+rnfArraysR ArraysRunit           = ()
+rnfArraysR ArraysRarray          = ()
+rnfArraysR (ArraysRpair ar1 ar2) = rnfArraysR ar1 `seq` rnfArraysR ar2
 
 rnfArrays :: ArraysR arrs -> arrs -> ()
 rnfArrays ArraysRunit           ()      = ()
@@ -1460,8 +1548,8 @@ liftTupleIdx (SuccTupIdx tix) = [|| SuccTupIdx $$(liftTupleIdx tix) ||]
 
 
 liftPreOpenAfun :: LiftAcc acc -> PreOpenAfun acc aenv t -> Q (TExp (PreOpenAfun acc aenv t))
-liftPreOpenAfun liftA (Alam f)  = [|| Alam  $$(liftPreOpenAfun liftA f) ||]
-liftPreOpenAfun liftA (Abody b) = [|| Abody $$(liftA b) ||]
+liftPreOpenAfun liftA (Alam lhs f) = [|| Alam $$(liftLHS lhs) $$(liftPreOpenAfun liftA f) ||]
+liftPreOpenAfun liftA (Abody b)    = [|| Abody $$(liftA b) ||]
 
 liftPreOpenAcc
     :: forall acc aenv a.
@@ -1482,20 +1570,17 @@ liftPreOpenAcc liftA pacc =
       liftB :: PreBoundary acc aenv (Array sh e) -> Q (TExp (PreBoundary acc aenv (Array sh e)))
       liftB = liftBoundary liftA
 
-      liftAtuple :: Atuple (acc aenv) t -> Q (TExp (Atuple (acc aenv) t))
-      liftAtuple NilAtup          = [|| NilAtup ||]
-      liftAtuple (SnocAtup tup a) = [|| SnocAtup $$(liftAtuple tup) $$(liftA a) ||]
   in
   case pacc of
-    Alet bnd body             -> [|| Alet $$(liftA bnd) $$(liftA body) ||]
-    Avar ix                   -> [|| Avar $$(liftIdx ix) ||]
-    Atuple tup                -> [|| Atuple $$(liftAtuple tup) ||]
-    Aprj tix a                -> [|| Aprj $$(liftTupleIdx tix) $$(liftA a) ||]
+    Alet lhs bnd body         -> [|| Alet $$(liftLHS lhs) $$(liftA bnd) $$(liftA body) ||]
+    Avar (ArrayVar ix)        -> [|| Avar (ArrayVar $$(liftIdx ix)) ||]
+    Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
+    Anil                      -> [|| Anil ||]
     Apply f a                 -> [|| Apply $$(liftAF f) $$(liftA a) ||]
     Aforeign asm f a          -> [|| Aforeign $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
     Awhile p f a              -> [|| Awhile $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
-    Use a                     -> [|| Use $$(liftArrays (arrays @a) a) ||]
+    Use a                     -> [|| Use $$(liftArray a) ||]
     Unit e                    -> [|| Unit $$(liftE e) ||]
     Reshape sh a              -> [|| Reshape $$(liftE sh) $$(liftA a) ||]
     Generate sh f             -> [|| Generate $$(liftE sh) $$(liftF f) ||]
@@ -1519,6 +1604,15 @@ liftPreOpenAcc liftA pacc =
     Stencil f b a             -> [|| Stencil $$(liftF f) $$(liftB b) $$(liftA a) ||]
     Stencil2 f b1 a1 b2 a2    -> [|| Stencil2 $$(liftF f) $$(liftB b1) $$(liftA a1) $$(liftB b2) $$(liftA a2) ||]
 
+liftLHS :: LeftHandSide arrs aenv aenv' -> Q (TExp (LeftHandSide arrs aenv aenv'))
+liftLHS (LeftHandSideWildcard r) = [|| LeftHandSideWildcard $$(liftArraysR r) ||]
+liftLHS LeftHandSideArray        = [|| LeftHandSideArray ||]
+liftLHS (LeftHandSidePair a b)   = [|| LeftHandSidePair $$(liftLHS a) $$(liftLHS b) ||]
+
+liftArraysR :: ArraysR arrs -> Q (TExp (ArraysR arrs))
+liftArraysR ArraysRunit       = [|| ArraysRunit ||]
+liftArraysR ArraysRarray      = [|| ArraysRarray ||]
+liftArraysR (ArraysRpair a b) = [|| ArraysRpair $$(liftArraysR a) $$(liftArraysR b) ||]
 
 liftPreOpenFun
     :: LiftAcc acc
@@ -1573,11 +1667,6 @@ liftPreOpenExp liftA pexp =
     Union sh1 sh2             -> [|| Union $$(liftE sh1) $$(liftE sh2) ||]
     Coerce e                  -> [|| Coerce $$(liftE e) ||]
 
-
-liftArrays :: ArraysR arr -> arr -> Q (TExp arr)
-liftArrays ArraysRunit ()              = [|| () ||]
-liftArrays ArraysRarray arr            = [|| $$(liftArray arr) ||]
-liftArrays (ArraysRpair r1 r2) (a1,a2) = [|| ($$(liftArrays r1 a1), $$(liftArrays r2 a2)) ||]
 
 liftArray :: forall sh e. (Shape sh, Elt e) => Array sh e -> Q (TExp (Array sh e))
 liftArray (Array sh adata) =
@@ -1839,50 +1928,38 @@ liftSingleType (NonNumSingleType t) = [|| NonNumSingleType $$(liftNonNumType t) 
 -- =========
 
 showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
-showPreAccOp Alet{}             = "Alet"
-showPreAccOp (Avar ix)          = "Avar a" ++ show (idxToInt ix)
-showPreAccOp (Use a)            = "Use "  ++ showArrays (toArr a :: arrs)
-showPreAccOp Apply{}            = "Apply"
-showPreAccOp Aforeign{}         = "Aforeign"
-showPreAccOp Acond{}            = "Acond"
-showPreAccOp Awhile{}           = "Awhile"
-showPreAccOp Atuple{}           = "Atuple"
-showPreAccOp Aprj{}             = "Aprj"
-showPreAccOp Unit{}             = "Unit"
-showPreAccOp Generate{}         = "Generate"
-showPreAccOp Transform{}        = "Transform"
-showPreAccOp Reshape{}          = "Reshape"
-showPreAccOp Replicate{}        = "Replicate"
-showPreAccOp Slice{}            = "Slice"
-showPreAccOp Map{}              = "Map"
-showPreAccOp ZipWith{}          = "ZipWith"
-showPreAccOp Fold{}             = "Fold"
-showPreAccOp Fold1{}            = "Fold1"
-showPreAccOp FoldSeg{}          = "FoldSeg"
-showPreAccOp Fold1Seg{}         = "Fold1Seg"
-showPreAccOp Scanl{}            = "Scanl"
-showPreAccOp Scanl'{}           = "Scanl'"
-showPreAccOp Scanl1{}           = "Scanl1"
-showPreAccOp Scanr{}            = "Scanr"
-showPreAccOp Scanr'{}           = "Scanr'"
-showPreAccOp Scanr1{}           = "Scanr1"
-showPreAccOp Permute{}          = "Permute"
-showPreAccOp Backpermute{}      = "Backpermute"
-showPreAccOp Stencil{}          = "Stencil"
-showPreAccOp Stencil2{}         = "Stencil2"
+showPreAccOp Alet{}               = "Alet"
+showPreAccOp (Avar (ArrayVar ix)) = "Avar a" ++ show (idxToInt ix)
+showPreAccOp (Use a)              = "Use " ++ showShortendArr a
+showPreAccOp Apply{}              = "Apply"
+showPreAccOp Aforeign{}           = "Aforeign"
+showPreAccOp Acond{}              = "Acond"
+showPreAccOp Awhile{}             = "Awhile"
+showPreAccOp Apair{}              = "Apair"
+showPreAccOp Anil                 = "Anil"
+showPreAccOp Unit{}               = "Unit"
+showPreAccOp Generate{}           = "Generate"
+showPreAccOp Transform{}          = "Transform"
+showPreAccOp Reshape{}            = "Reshape"
+showPreAccOp Replicate{}          = "Replicate"
+showPreAccOp Slice{}              = "Slice"
+showPreAccOp Map{}                = "Map"
+showPreAccOp ZipWith{}            = "ZipWith"
+showPreAccOp Fold{}               = "Fold"
+showPreAccOp Fold1{}              = "Fold1"
+showPreAccOp FoldSeg{}            = "FoldSeg"
+showPreAccOp Fold1Seg{}           = "Fold1Seg"
+showPreAccOp Scanl{}              = "Scanl"
+showPreAccOp Scanl'{}             = "Scanl'"
+showPreAccOp Scanl1{}             = "Scanl1"
+showPreAccOp Scanr{}              = "Scanr"
+showPreAccOp Scanr'{}             = "Scanr'"
+showPreAccOp Scanr1{}             = "Scanr1"
+showPreAccOp Permute{}            = "Permute"
+showPreAccOp Backpermute{}        = "Backpermute"
+showPreAccOp Stencil{}            = "Stencil"
+showPreAccOp Stencil2{}           = "Stencil2"
 -- showPreAccOp Collect{}          = "Collect"
-
-showArrays :: forall arrs. Arrays arrs => arrs -> String
-showArrays = display . collect (arrays @arrs) . fromArr
-  where
-    collect :: ArraysR a -> a -> [String]
-    collect ArraysRunit         _        = []
-    collect ArraysRarray        arr      = [showShortendArr arr]
-    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
-    --
-    display []  = []
-    display [x] = x
-    display xs  = "(" ++ intercalate ", " xs ++ ")"
 
 
 showShortendArr :: (Shape sh, Elt e) => Array sh e -> String

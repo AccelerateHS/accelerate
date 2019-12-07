@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Trafo (
   convertAcc, convertAccWith,
 
   -- ** Array functions
-  Afunction, AfunctionR,
+  Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr,
   convertAfun, convertAfunWith,
 
   -- ** Sequence computations
@@ -57,11 +57,11 @@ import Control.DeepSeq
 import Data.Typeable
 
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, ArrRepr )
 import Data.Array.Accelerate.Trafo.Base                 ( Match(..), matchDelayedOpenAcc, encodeDelayedOpenAcc )
 import Data.Array.Accelerate.Trafo.Config
 import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedOpenAcc(..), DelayedAfun, DelayedOpenAfun, DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun )
-import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
+import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
@@ -83,10 +83,10 @@ import Data.Array.Accelerate.Debug.Timed
 -- | Convert a closed array expression to de Bruijn form while also
 --   incorporating sharing observation and array fusion.
 --
-convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
+convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc (ArrRepr arrs)
 convertAcc = convertAccWith defaultOptions
 
-convertAccWith :: Arrays arrs => Config -> Acc arrs -> DelayedAcc arrs
+convertAccWith :: Arrays arrs => Config -> Acc arrs -> DelayedAcc (ArrRepr arrs)
 convertAccWith config acc
   = phase "array-fusion"           (Fusion.convertAccWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
@@ -97,10 +97,10 @@ convertAccWith config acc
 -- | Convert a unary function over array computations, incorporating sharing
 --   observation and array fusion
 --
-convertAfun :: Afunction f => f -> DelayedAfun (AfunctionR f)
+convertAfun :: Afunction f => f -> DelayedAfun (AreprFunctionR f)
 convertAfun = convertAfunWith defaultOptions
 
-convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (AfunctionR f)
+convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (AreprFunctionR f)
 convertAfunWith config acc
   = phase "array-fusion"           (Fusion.convertAfunWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences

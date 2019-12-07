@@ -31,6 +31,7 @@ module Data.Array.Accelerate.Analysis.Hash (
   encodePreOpenAcc,
   encodePreOpenExp,
   encodePreOpenFun,
+  encodeArraysType,
   hashQ,
 
 ) where
@@ -140,8 +141,8 @@ encodePreOpenAcc
     -> Builder
 encodePreOpenAcc options encodeAcc pacc =
   let
-      travA :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travA a = encodeArraysType (arrays @a) <> encodeAcc options a
+      travA :: forall aenv' a. acc aenv' a -> Builder
+      travA = encodeAcc options
 
       travAF :: PreOpenAfun acc aenv' f -> Builder
       travAF = encodePreOpenAfun options encodeAcc
@@ -155,30 +156,37 @@ encodePreOpenAcc options encodeAcc pacc =
       travB :: PreBoundary acc aenv' (Array sh e) -> Builder
       travB = encodePreBoundary options encodeAcc
 
-      nacl :: Arrays arrs => Builder
-      nacl = encodeArraysType (arrays @arrs)
-
       deep :: Builder -> Builder
-      deep x | perfect options = x
-             | otherwise       = mempty
+      deep | perfect options = id
+           | otherwise       = const mempty
+
+      deepE :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
+      deepE e
+        | perfect options = travE e
+        | otherwise       = encodeTupleType (eltType @e)
+
+      arrayHash :: (Shape sh, Elt e, arrs ~ Array sh e) => Builder
+      arrayHash = encodeArrayType @arrs
   in
   case pacc of
-    Alet bnd body               -> intHost $(hashQ "Alet")        <> travA bnd <> travA body
-    Avar v                      -> intHost $(hashQ "Avar")        <> nacl <> deep (encodeIdx v)
-    Atuple t                    -> intHost $(hashQ "Atuple")      <> nacl <> encodeAtuple options encodeAcc t
-    Aprj ix a                   -> intHost $(hashQ "Aprj")        <> nacl <> encodeTupleIdx ix <> travA a
-    Apply f a                   -> intHost $(hashQ "Apply")       <> nacl <> travAF f <> travA a
-    Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> nacl <> travAF f <> travA a
-    Use a                       -> intHost $(hashQ "Use")         <> deep (encodeArrays (arrays @arrs) a)
+    Alet lhs bnd body           -> intHost $(hashQ "Alet")        <> encodeLeftHandSide lhs <> travA bnd <> travA body
+    Avar (ArrayVar v)           -> intHost $(hashQ "Avar")        <> arrayHash <> deep (encodeIdx v)
+    Apair a1 a2                 -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
+    Anil                        -> intHost $(hashQ "Anil")
+    Apply f a                   -> intHost $(hashQ "Apply")       <> travAF f <> travA a
+    Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
+    Use a                       -> intHost $(hashQ "Use")         <> arrayHash <> deep (encodeArray a)
     Awhile p f a                -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
     Unit e                      -> intHost $(hashQ "Unit")        <> travE e
-    Generate e f                -> intHost $(hashQ "Generate")    <> deep (travE e)  <> travF f
-    Acond e a1 a2               -> intHost $(hashQ "Acond")       <> deep (travE e)  <> travA a1 <> travA a2
-    Reshape sh a                -> intHost $(hashQ "Reshape")     <> deep (travE sh) <> travA a
-    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> deep (travE sh) <> travF f  <> travA a
-    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> deep (travE sh) <> travF f1 <> travF f2 <> travA a
-    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
-    Slice spec a ix             -> intHost $(hashQ "Slice")       <> deep (travE ix) <> travA a  <> encodeSliceIndex spec
+    Generate e f                -> intHost $(hashQ "Generate")    <> deepE e <> travF f
+    -- We don't need to encode the type of 'e' when perfect is False, as 'e' is an expression of type Bool.
+    -- We thus use `deep (travE e)` instead of `deepE e`.
+    Acond e a1 a2               -> intHost $(hashQ "Acond")       <> deep (travE e) <> travA a1 <> travA a2
+    Reshape sh a                -> intHost $(hashQ "Reshape")     <> deepE sh <> travA a
+    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> deepE sh <> travF f  <> travA a
+    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> deepE sh <> travF f1 <> travF f2 <> travA a
+    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> deepE ix <> travA a  <> encodeSliceIndex spec
+    Slice spec a ix             -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
     Map f a                     -> intHost $(hashQ "Map")         <> travF f  <> travA a
     ZipWith f a1 a2             -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
     Fold f e a                  -> intHost $(hashQ "Fold")        <> travF f  <> travE e  <> travA a
@@ -247,22 +255,21 @@ encodeIdx = intHost . idxToInt
 encodeTupleIdx :: TupleIdx tup e -> Builder
 encodeTupleIdx = intHost . tupleIdxToInt
 
-encodeArrays :: ArraysR a -> a -> Builder
-encodeArrays ArraysRunit         ()       = mempty
-encodeArrays (ArraysRpair r1 r2) (a1, a2) = encodeArrays r1 a1 <> encodeArrays r2 a2
-encodeArrays ArraysRarray        ad       = intHost . unsafePerformIO $! hashStableName `fmap` makeStableName ad
+encodeArray :: (Shape sh, Elt e) => Array sh e -> Builder
+encodeArray ad = intHost . unsafePerformIO $! hashStableName <$> makeStableName ad
 
 encodeArraysType :: forall a. ArraysR a -> Builder
 encodeArraysType ArraysRunit         = intHost $(hashQ "ArraysRunit")
 encodeArraysType (ArraysRpair r1 r2) = intHost $(hashQ "ArraysRpair")  <> encodeArraysType r1 <> encodeArraysType r2
 encodeArraysType ArraysRarray        = intHost $(hashQ "ArraysRarray") <> encodeArrayType @a
-  where
-    encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
-    encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
 
-encodeAtuple :: HashOptions -> EncodeAcc acc -> Atuple (acc aenv) a -> Builder
-encodeAtuple _ _     NilAtup        = intHost $(hashQ "NilAtup")
-encodeAtuple o travA (SnocAtup t a) = intHost $(hashQ "SnocAtup") <> encodeAtuple o travA t <> travA o a
+encodeLeftHandSide :: forall a env env'. LeftHandSide a env env' -> Builder
+encodeLeftHandSide (LeftHandSideWildcard r) = intHost $(hashQ "LeftHandSideWildcard") <> encodeArraysType r
+encodeLeftHandSide (LeftHandSidePair r1 r2) = intHost $(hashQ "LeftHandSidePair")  <> encodeLeftHandSide r1 <> encodeLeftHandSide r2
+encodeLeftHandSide LeftHandSideArray        = intHost $(hashQ "LeftHandSideArray") <> encodeArrayType @a
+
+encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
+encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
 
 encodePreOpenAfun
     :: forall acc aenv f.
@@ -272,15 +279,12 @@ encodePreOpenAfun
     -> Builder
 encodePreOpenAfun options travA afun =
   let
-      travB :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travB b = encodeArraysType (arrays @a) <> travA options b
-
-      travL :: forall aenv' a b. Arrays a => PreOpenAfun acc (aenv',a) b -> Builder
-      travL l = encodeArraysType (arrays @a) <> encodePreOpenAfun options travA l
+      travL :: forall aenv1 aenv2 a b. LeftHandSide a aenv1 aenv2 -> PreOpenAfun acc aenv2 b -> Builder
+      travL lhs l = encodeLeftHandSide lhs <> encodePreOpenAfun options travA l
   in
   case afun of
-    Abody b -> intHost $(hashQ "Abody") <> travB b
-    Alam  l -> intHost $(hashQ "Alam")  <> travL l
+    Abody b    -> intHost $(hashQ "Abody") <> travA options b
+    Alam lhs l -> intHost $(hashQ "Alam")  <> travL lhs  l
 
 
 encodePreBoundary

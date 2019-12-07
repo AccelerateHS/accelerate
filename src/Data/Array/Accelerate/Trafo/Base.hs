@@ -7,7 +7,9 @@
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE ViewPatterns         #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 #if __GLASGOW_HASKELL__ <= 708
@@ -30,7 +32,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:~:)(..),
-  avarIn, kmap,
+  avarIn, avarsIn, kmap, extractArrayVars,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -42,10 +44,16 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Environments
   Gamma(..), incExp, prjExp, pushExp,
-  Extend(..), append, bind,
+  Extend(..), pushArrayEnv, append, bind,
   Sink(..), sink, sink1,
   Supplement(..), bindExps,
 
+  leftHandSideChangeEnv,
+
+  -- Adding new variables to the environment
+  declareArrays, DeclareArrays(..),
+
+  aletBodyIsTrivial,
 ) where
 
 -- standard library
@@ -62,7 +70,7 @@ import Prelude                                          hiding ( until )
 import Data.Array.Accelerate.AST                        hiding ( Val(..) )
 import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, ArraysR(..), Shape, Elt )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo.Substitution
 
@@ -75,7 +83,7 @@ import Data.Array.Accelerate.Debug.Stats                as Stats
 -- The bat utility belt of operations required to manipulate terms parameterised
 -- by the recursive closure.
 --
-class (RebuildableAcc acc, Sink acc) => Kit acc where
+class (HasArraysRepr acc, RebuildableAcc acc, Sink acc) => Kit acc where
   inject        :: PreOpenAcc acc aenv a -> acc aenv a
   extract       :: acc aenv a -> Maybe (PreOpenAcc acc aenv a)
   --
@@ -96,11 +104,46 @@ encodeOpenAcc options (OpenAcc pacc) = encodePreOpenAcc options encodeAcc pacc
 matchOpenAcc :: MatchAcc OpenAcc
 matchOpenAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
 
-avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
-avarIn = inject  . Avar
+avarIn :: forall acc aenv a. Kit acc => ArrayVar aenv a -> acc aenv a
+avarIn v@ArrayVar{} = inject $ Avar v
+
+avarsIn :: forall acc aenv arrs. Kit acc => ArrayVars aenv arrs -> acc aenv arrs
+avarsIn ArrayVarsNil        = inject Anil
+avarsIn (ArrayVarsArray v)  = avarIn v
+avarsIn (ArrayVarsPair a b) = inject $ avarsIn a `Apair` avarsIn b
 
 kmap :: Kit acc => (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
 kmap f = inject . f . fromJust . extract
+
+extractArrayVars :: Kit acc => acc aenv a -> Maybe (ArrayVars aenv a)
+extractArrayVars (extract -> Just acc) = case acc of
+  Apair (extractArrayVars -> Just a) (extractArrayVars -> Just b)
+    -> Just $ ArrayVarsPair a b
+  Anil
+    -> Just ArrayVarsNil
+  Avar v
+    -> Just $ ArrayVarsArray v
+  _ -> Nothing
+extractArrayVars _ = Nothing
+
+data DeclareArrays arrs aenv where
+  DeclareArrays
+    :: LeftHandSide arrs aenv aenv'
+    -> (aenv :> aenv')
+    -> (forall aenv''. aenv' :> aenv'' -> ArrayVars aenv'' arrs)
+    -> DeclareArrays arrs aenv
+
+declareArrays :: ArraysR arrs -> DeclareArrays arrs aenv
+declareArrays ArraysRarray
+  = DeclareArrays LeftHandSideArray SuccIdx $ \k -> ArrayVarsArray $ ArrayVar $ k ZeroIdx
+declareArrays ArraysRunit
+  = DeclareArrays (LeftHandSideWildcard ArraysRunit) id $ const $ ArrayVarsNil
+declareArrays (ArraysRpair r1 r2) = case declareArrays r1 of
+  DeclareArrays lhs1 subst1 a1 -> case declareArrays r2 of
+    DeclareArrays lhs2 subst2 a2 ->
+      DeclareArrays (LeftHandSidePair lhs1 lhs2) (subst2 . subst1) $ \k -> a1 (k . subst2) `ArrayVarsPair` a2 k
+
+
 
 -- fromOpenAfun :: Kit acc => OpenAfun aenv f -> PreOpenAfun acc aenv f
 -- fromOpenAfun (Abody a) = Abody $ fromOpenAcc a
@@ -115,6 +158,12 @@ class Match f where
 instance Match (Idx env) where
   {-# INLINEABLE match #-}
   match = matchIdx
+
+instance Match (ArrayVar env) where
+  {-# INLINEABLE match #-}
+  match (ArrayVar a) (ArrayVar b)
+    | Just Refl <- match a b = Just Refl
+    | otherwise              = Nothing
 
 instance Kit acc => Match (PreOpenExp acc env aenv) where
   {-# INLINEABLE match #-}
@@ -165,6 +214,10 @@ data DelayedOpenAcc aenv a where
     , linearIndexD      :: PreFun DelayedOpenAcc aenv (Int -> e)
     }                   -> DelayedOpenAcc aenv (Array sh e)
 
+instance HasArraysRepr DelayedOpenAcc where
+  arraysRepr (Manifest a) = arraysRepr a
+  arraysRepr Delayed{}    = ArraysRarray
+
 instance Rebuildable DelayedOpenAcc where
   type AccClo DelayedOpenAcc = DelayedOpenAcc
   {-# INLINEABLE rebuildPartial #-}
@@ -175,7 +228,7 @@ instance Rebuildable DelayedOpenAcc where
                               <*> rebuildPartial v linearIndexD
 
 instance Sink DelayedOpenAcc where
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 instance Kit DelayedOpenAcc where
   {-# INLINEABLE encodeAcc #-}
@@ -208,12 +261,12 @@ encodeDelayedOpenAcc options acc =
       travA :: PreOpenAcc DelayedOpenAcc aenv a -> Builder
       travA = encodePreOpenAcc options encodeDelayedOpenAcc
 
-      deep :: Builder -> Builder
-      deep x | perfect options = x
-             | otherwise       = mempty
+      deepA :: forall aenv' a. PreOpenAcc DelayedOpenAcc aenv' a -> Builder
+      deepA | perfect options = travA
+            | otherwise       = encodeArraysType . arraysRepr
   in
   case acc of
-    Manifest pacc   -> intHost $(hashQ ("Manifest" :: String)) <> deep (travA pacc)
+    Manifest pacc   -> intHost $(hashQ ("Manifest" :: String)) <> deepA pacc
     Delayed sh f g  -> intHost $(hashQ ("Delayed"  :: String)) <> travE sh <> travF f <> travF g
 
 {-# INLINEABLE matchDelayedOpenAcc #-}
@@ -336,14 +389,19 @@ sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
 data Extend acc aenv aenv' where
   BaseEnv :: Extend acc aenv aenv
 
-  PushEnv :: Arrays a
-          => Extend acc aenv aenv' -> acc aenv' a -> Extend acc aenv (aenv', a)
+  PushEnv :: Extend acc aenv aenv'
+          -> LeftHandSide arrs aenv' aenv''
+          -> acc aenv' arrs
+          -> Extend acc aenv aenv''
+
+pushArrayEnv :: (Shape sh, Elt e) => Extend acc aenv aenv' -> acc aenv' (Array sh e) -> Extend acc aenv (aenv', Array sh e)
+pushArrayEnv env a = PushEnv env LeftHandSideArray a
 
 -- Append two environment witnesses
 --
 append :: Extend acc env env' -> Extend acc env' env'' -> Extend acc env env''
-append x BaseEnv        = x
-append x (PushEnv as a) = x `append` as `PushEnv` a
+append x BaseEnv           = x
+append x (PushEnv e lhs a) = PushEnv (append x e) lhs a
 
 -- Bring into scope all of the array terms in the Extend environment list. This
 -- converts a term in the inner environment (aenv') into the outer (aenv).
@@ -352,8 +410,8 @@ bind :: (Kit acc, Arrays a)
      => Extend     acc aenv aenv'
      -> PreOpenAcc acc      aenv' a
      -> PreOpenAcc acc aenv       a
-bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet a . inject
+bind BaseEnv             = id
+bind (PushEnv env lhs a) = bind env . Alet lhs a . inject
 
 -- Sink a term from one array environment into another, where additional
 -- bindings have come into scope according to the witness and no old things have
@@ -363,16 +421,20 @@ sink :: Sink f => Extend acc env env' -> f env t -> f env' t
 sink env = weaken (k env)
   where
     k :: Extend acc env env' -> Idx env t -> Idx env' t
-    k BaseEnv       = Stats.substitution "sink" id
-    k (PushEnv e _) = SuccIdx . k e
+    k BaseEnv           = Stats.substitution "sink" id
+    k (PushEnv e (LeftHandSideWildcard _) _) = k e
+    k (PushEnv e (LeftHandSideArray)      _) = SuccIdx . k e
+    k (PushEnv e (LeftHandSidePair l1 l2) _) = k (PushEnv (PushEnv e l1 undefined) l2 undefined)
 
 sink1 :: Sink f => Extend acc env env' -> f (env,s) t -> f (env',s) t
 sink1 env = weaken (k env)
   where
     k :: Extend acc env env' -> Idx (env,s) t -> Idx (env',s) t
-    k BaseEnv       = Stats.substitution "sink1" id
-    k (PushEnv e _) = split . k e
-    --
+    k BaseEnv           = Stats.substitution "sink1" id
+    k (PushEnv e (LeftHandSideWildcard _) _) = k e
+    k (PushEnv e (LeftHandSideArray)      _) = split . k e
+    k (PushEnv e (LeftHandSidePair l1 l2) _) = k (PushEnv (PushEnv e l1 undefined) l2 undefined)
+
     split :: Idx (env,s) t -> Idx ((env,u),s) t
     split ZeroIdx      = ZeroIdx
     split (SuccIdx ix) = SuccIdx (SuccIdx ix)
@@ -395,3 +457,19 @@ bindExps :: (Kit acc, Elt e)
 bindExps BaseSup       = id
 bindExps (PushSup g b) = bindExps g . Let b
 
+leftHandSideChangeEnv :: LeftHandSide arrs env1 env2 -> Exists (LeftHandSide arrs env3)
+leftHandSideChangeEnv (LeftHandSideWildcard repr) = Exists $ LeftHandSideWildcard repr
+leftHandSideChangeEnv LeftHandSideArray           = Exists $ LeftHandSideArray
+leftHandSideChangeEnv (LeftHandSidePair l1 l2)    = case leftHandSideChangeEnv l1 of
+  Exists l1' -> case leftHandSideChangeEnv l2 of
+    Exists l2' -> Exists $ LeftHandSidePair l1' l2'
+
+aletBodyIsTrivial :: forall acc aenv aenv' a b. Kit acc => LeftHandSide a aenv aenv' -> acc aenv' b -> Maybe (a :~: b)
+aletBodyIsTrivial lhs rhs = case extractArrayVars rhs of
+  Just vars -> case declareArrays @a @aenv (lhsToArraysR lhs) of
+    DeclareArrays lhs' _ value
+      | Just Refl <- matchLeftHandSide lhs lhs'
+      , Just Refl <- matchArrayVars vars $ value id
+        -> Just Refl
+    _ -> Nothing
+  Nothing -> Nothing

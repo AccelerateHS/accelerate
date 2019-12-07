@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Substitution
@@ -33,7 +34,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Rebuilding terms
   RebuildAcc, Rebuildable(..), RebuildableAcc,
-  RebuildableExp(..), RebuildTup(..)
+  RebuildableExp(..), RebuildTup(..), rebuildWeakenVar
 
 ) where
 
@@ -42,7 +43,7 @@ import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Arrays, Tuple(..), Atuple(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Elt, Tuple(..), Array )
 import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 
 
@@ -113,9 +114,9 @@ subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc
 subTop s ZeroIdx      = s
 subTop _ (SuccIdx ix) = Var ix
 
-subAtop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv, s) t -> PreOpenAcc acc aenv t
-subAtop t ZeroIdx       = t
-subAtop _ (SuccIdx idx) = Avar idx
+subAtop :: PreOpenAcc acc aenv t -> ArrayVar (aenv, t) (Array sh2 e2) -> PreOpenAcc acc aenv (Array sh2 e2)
+subAtop t (ArrayVar ZeroIdx      ) = t
+subAtop _ (ArrayVar (SuccIdx idx)) = Avar $ ArrayVar idx
 
 data Identity a = Identity { runIdentity :: a }
 
@@ -136,13 +137,13 @@ class Rebuildable f where
   type AccClo f :: Type -> Type -> Type
 
   rebuildPartial :: (Applicative f', SyntacticAcc fa)
-                 => (forall a'. Arrays a' => Idx aenv a' -> f' (fa (AccClo f) aenv' a'))
+                 => (forall sh e. ArrayVar aenv (Array sh e) -> f' (fa (AccClo f) aenv' (Array sh e)))
                  -> f aenv  a
                  -> f' (f aenv' a)
 
   {-# INLINEABLE rebuildA #-}
   rebuildA :: (SyntacticAcc fa)
-           => (forall a'. Arrays a' => Idx aenv a' -> fa (AccClo f) aenv' a')
+           => (forall sh e. ArrayVar aenv (Array sh e) -> fa (AccClo f) aenv' (Array sh e))
            -> f aenv  a
            -> f aenv' a
   rebuildA av = runIdentity . rebuildPartial (Identity . av)
@@ -224,10 +225,6 @@ instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
 -- variable references to make room for the new bindings.
 --
 
--- The type of shifting terms from one context into another
---
-type env :> env' = forall t'. Idx env t' -> Idx env' t'
-
 class Sink f where
   weaken :: env :> env' -> f env t -> f env' t
 
@@ -236,34 +233,47 @@ class Sink f where
   --
   -- {-# INLINEABLE weaken #-}
   -- default weaken :: Rebuildable f => env :> env' -> f env t -> f env' t
-  -- weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  -- weaken k = Stats.substitution "weaken" . rebuildA rebuildWeakenVar
 
 --instance Rebuildable f => Sink f where -- undecidable, incoherent
---  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+--  weaken k = Stats.substitution "weaken" . rebuildA rebuildWeakenVar
 
 instance Sink Idx where
   {-# INLINEABLE weaken #-}
   weaken k = k
 
+instance Sink ArrayVar where
+  {-# INLINEABLE weaken #-}
+  weaken k (ArrayVar ix) = ArrayVar (k ix)
+
+instance Sink ArrayVars where
+  {-# INLINEABLE weaken #-}
+  weaken _  ArrayVarsNil       = ArrayVarsNil
+  weaken k (ArrayVarsArray v)  = ArrayVarsArray $ weaken k v
+  weaken k (ArrayVarsPair v w) = ArrayVarsPair (weaken k v) (weaken k w)
+
+rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc env' (Array sh e)
+rebuildWeakenVar k (ArrayVar idx) = Avar $ ArrayVar $ k idx
+
 instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 instance RebuildableAcc acc => Sink (RebuildTup acc env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 instance RebuildableAcc acc => Sink (PreBoundary acc) where
   {-# INLINEABLE weaken #-}
@@ -277,7 +287,7 @@ instance RebuildableAcc acc => Sink (PreBoundary acc) where
 
 instance Sink OpenAcc where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
+  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 -- This rewrite rule is disabled because 'weaken' is now part of a type class.
 -- As such, we cannot attach a NOINLINE pragma because it has many definitions.
@@ -321,8 +331,8 @@ instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
 type env :?> env' = forall t'. Idx env t' -> Maybe (Idx env' t')
 
 {-# INLINEABLE strengthen #-}
-strengthen :: Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
-strengthen k x = Stats.substitution "strengthen" $ rebuildPartial (fmap IA . k) x
+strengthen :: forall f env env' t. Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
+strengthen k x = Stats.substitution "strengthen" $ rebuildPartial @f @Maybe @IdxA (\(ArrayVar idx) -> fmap (IA . ArrayVar) $ k idx) x -- (\(ArrayVar idx) -> fmap (IA . ArrayVar) $ k idx)
 
 {-# INLINEABLE strengthenE #-}
 strengthenE :: RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
@@ -372,7 +382,7 @@ rebuildPreOpenExp
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
     -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenExp acc env  aenv t
     -> f (PreOpenExp acc env' aenv' t)
 rebuildPreOpenExp k v av exp =
@@ -410,7 +420,7 @@ rebuildTup
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
     -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> RebuildAvar f fa acc aenv aenv'
     -> Tuple (PreOpenExp acc env  aenv)  t
     -> f (Tuple (PreOpenExp acc env' aenv') t)
 rebuildTup k v av tup =
@@ -423,7 +433,7 @@ rebuildFun
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
     -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenFun acc env  aenv  t
     -> f (PreOpenFun acc env' aenv' t)
 rebuildFun k v av fun =
@@ -436,41 +446,56 @@ rebuildFun k v av fun =
 
 type RebuildAcc acc =
   forall aenv aenv' f fa a. (Applicative f, SyntacticAcc fa)
-    => (forall a'. Arrays a' => Idx aenv a' -> f (fa acc aenv' a'))
-    -> acc aenv  a
+    => RebuildAvar f fa acc aenv aenv'
+    -> acc aenv a
     -> f (acc aenv' a)
 
-class SyntacticAcc f where
-  avarIn        :: Arrays t => Idx aenv t     -> f acc aenv t
-  accOut        :: Arrays t => f acc aenv t   -> PreOpenAcc acc aenv t
-  weakenAcc     :: Arrays t => RebuildAcc acc -> f acc aenv t -> f acc (aenv, s) t
+newtype IdxA (acc :: Type -> Type -> Type) aenv t = IA { unIA :: ArrayVar aenv t }
 
-newtype IdxA (acc :: Type -> Type -> Type) aenv t = IA { unIA :: Idx aenv t }
+class SyntacticAcc f where
+  avarIn        :: ArrayVar aenv (Array sh e) -> f acc aenv (Array sh e)
+  accOut        :: f acc aenv (Array sh e) -> PreOpenAcc acc aenv (Array sh e)
+  weakenAcc     :: RebuildAcc acc -> f acc aenv (Array sh e) -> f acc (aenv, s) (Array sh e)
 
 instance SyntacticAcc IdxA where
-  avarIn         = IA
-  accOut         = Avar . unIA
-  weakenAcc _    = IA . SuccIdx . unIA
+  avarIn                          = IA
+  accOut                          = Avar . unIA
+  weakenAcc _ (IA (ArrayVar idx)) = IA $ ArrayVar $ SuccIdx idx
 
 instance SyntacticAcc PreOpenAcc where
   avarIn        = Avar
   accOut        = id
   weakenAcc k   = runIdentity . rebuildPreOpenAcc k (Identity . weakenAcc k . IA)
 
+type RebuildAvar f (fa :: (* -> * -> *) -> * -> * -> *) acc aenv aenv' =
+  forall sh e. ArrayVar aenv (Array sh e) -> f (fa acc aenv' (Array sh e))
+
 {-# INLINEABLE shiftA #-}
 shiftA
-    :: (Applicative f, SyntacticAcc fa, Arrays t)
+    :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-    -> Idx         (aenv,  s) t
-    -> f (fa   acc (aenv', s) t)
-shiftA _ _ ZeroIdx      = pure $ avarIn ZeroIdx
-shiftA k v (SuccIdx ix) = weakenAcc k <$> v ix
+    -> RebuildAvar f fa acc aenv aenv'
+    -> ArrayVar    (aenv,  s) (Array sh e)
+    -> f (fa   acc (aenv', s) (Array sh e))
+shiftA _ _ (ArrayVar ZeroIdx)      = pure $ avarIn $ ArrayVar ZeroIdx
+shiftA k v (ArrayVar (SuccIdx ix)) = weakenAcc k <$> v (ArrayVar ix)
+
+shiftA'
+    :: (Applicative f, SyntacticAcc fa)
+    => LeftHandSide t aenv1 aenv1'
+    -> LeftHandSide t aenv2 aenv2'
+    -> RebuildAcc acc
+    -> RebuildAvar f fa acc aenv1  aenv2
+    -> RebuildAvar f fa acc aenv1' aenv2'
+shiftA' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
+shiftA'  LeftHandSideArray        LeftHandSideArray       k v = shiftA k v
+shiftA' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftA' b1 b2 k $ shiftA' a1 a2 k v
+shiftA' _ _ _ _ = error "Substitution: left hand sides do not match"
 
 {-# INLINEABLE rebuildOpenAcc #-}
 rebuildOpenAcc
     :: (Applicative f, SyntacticAcc fa)
-    => (forall t'. Arrays t' => Idx aenv t' -> f (fa OpenAcc aenv' t'))
+    => (forall sh e. ArrayVar aenv (Array sh e) -> f (fa OpenAcc aenv' (Array sh e)))
     -> OpenAcc aenv  t
     -> f (OpenAcc aenv' t)
 rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc av acc
@@ -479,16 +504,16 @@ rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc a
 rebuildPreOpenAcc
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAcc acc aenv  t
     -> f (PreOpenAcc acc aenv' t)
 rebuildPreOpenAcc k av acc =
   case acc of
     Use a                   -> pure (Use a)
-    Alet a b                -> Alet         <$> k av a <*> k (shiftA k av) b
+    Alet lhs a b            -> rebuildAlet k av lhs a b
     Avar ix                 -> accOut       <$> av ix
-    Atuple tup              -> Atuple       <$> rebuildAtup k av tup
-    Aprj tup a              -> Aprj tup     <$> k av a
+    Apair as bs             -> Apair        <$> k av as <*> k av bs
+    Anil                    -> pure Anil
     Apply f a               -> Apply        <$> rebuildAfun k av f <*> k av a
     Acond p t e             -> Acond        <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
     Awhile p f a            -> Awhile       <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
@@ -521,31 +546,39 @@ rebuildPreOpenAcc k av acc =
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAfun acc aenv  t
     -> f (PreOpenAfun acc aenv' t)
 rebuildAfun k av afun =
   case afun of
-    Abody b     -> Abody <$> k av b
-    Alam f      -> Alam  <$> rebuildAfun k (shiftA k av) f
+    Abody b -> Abody <$> k av b
+    Alam lhs1 f -> case rebuildLHS lhs1 of
+      Exists lhs2 -> Alam lhs2 <$> rebuildAfun k (shiftA' lhs1 lhs2 k av) f
 
-{-# INLINEABLE rebuildAtup #-}
-rebuildAtup
-    :: (Applicative f, SyntacticAcc fa)
+rebuildAlet
+    :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-    -> Atuple (acc aenv)  t
-    -> f (Atuple (acc aenv') t)
-rebuildAtup k av atup =
-  case atup of
-    NilAtup      -> pure NilAtup
-    SnocAtup t a -> SnocAtup <$> rebuildAtup k av t <*> k av a
+    -> RebuildAvar f fa acc aenv1 aenv2
+    -> LeftHandSide bndArrs aenv1 aenv1'
+    -> acc aenv1  bndArrs
+    -> acc aenv1' arrs
+    -> f (PreOpenAcc acc aenv2 arrs)
+rebuildAlet k av lhs1 bind1 body1 = case rebuildLHS lhs1 of
+  Exists lhs2 -> Alet lhs2 <$> k av bind1 <*> k (shiftA' lhs1 lhs2 k av) body1
+
+{-# INLINEABLE rebuildLHS #-}
+rebuildLHS :: LeftHandSide arr aenv1 aenv1' -> Exists (LeftHandSide arr aenv2)
+rebuildLHS (LeftHandSideWildcard r) = Exists $ LeftHandSideWildcard r
+rebuildLHS LeftHandSideArray = Exists $ LeftHandSideArray
+rebuildLHS (LeftHandSidePair as bs) = case rebuildLHS as of
+  Exists as' -> case rebuildLHS bs of
+    Exists bs' -> Exists $ LeftHandSidePair as' bs'
 
 {-# INLINEABLE rebuildBoundary #-}
 rebuildBoundary
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> RebuildAvar f fa acc aenv aenv'
     -> PreBoundary acc aenv t
     -> f (PreBoundary acc aenv' t)
 rebuildBoundary k av bndy =
@@ -561,7 +594,7 @@ rebuildBoundary k av bndy =
 rebuildSeq
     :: (SyntacticAcc fa, Applicative f)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenSeq acc aenv senv t
     -> f (PreOpenSeq acc aenv' senv t)
 rebuildSeq k v seq =
@@ -573,7 +606,7 @@ rebuildSeq k v seq =
 {-# INLINEABLE rebuildP #-}
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
-         -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+         -> RebuildAvar f fa acc aenv aenv'
          -> Producer acc aenv senv a
          -> f (Producer acc aenv' senv a)
 rebuildP k v p =
@@ -588,7 +621,7 @@ rebuildP k v p =
 {-# INLINEABLE rebuildC #-}
 rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
-         -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+         -> RebuildAvar f fa acc aenv aenv'
          -> Consumer acc aenv senv a
          -> f (Consumer acc aenv' senv a)
 rebuildC k v c =
