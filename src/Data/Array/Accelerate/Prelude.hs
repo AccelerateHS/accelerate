@@ -175,9 +175,9 @@ imap :: (Shape sh, Elt a, Elt b)
 imap f xs = zipWith f (generate (shape xs) id) xs
 
 -- | Used to define the zipWith functions on more than two arrays
-zipWithInduction :: (Shape sh, Elt a, Elt b) 
+zipWithInduction :: (Shape sh, Elt a, Elt b)
     => ((Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
-    -> (Exp a -> Exp b -> rest) 
+    -> (Exp a -> Exp b -> rest)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> result
@@ -284,9 +284,9 @@ zipWith9 = zipWithInduction zipWith8
 
 
 -- | Used to define the izipWith functions on two or more arrays
-izipWithInduction :: (Shape sh, Elt a, Elt b) 
+izipWithInduction :: (Shape sh, Elt a, Elt b)
     => ((Exp sh -> Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
-    -> (Exp sh -> Exp a -> Exp b -> rest) 
+    -> (Exp sh -> Exp a -> Exp b -> rest)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> result
