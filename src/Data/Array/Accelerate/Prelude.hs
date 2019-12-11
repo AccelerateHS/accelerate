@@ -127,6 +127,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), ignore, shape, reshape, size, intersect, toIndex, fromIndex )
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -163,7 +164,7 @@ import Data.Array.Accelerate.Data.Bits
 --     (Z :. 2 :. 0,8.0), (Z :. 2 :. 1,9.0), (Z :. 2 :. 2,10.0), (Z :. 2 :. 3,11.0)]
 --
 indexed :: (Shape sh, Elt a) => Acc (Array sh a) -> Acc (Array sh (sh, a))
-indexed xs = zip (generate (shape xs) id) xs
+indexed = imap T2
 
 -- | Apply a function to every element of an array and its index
 --
@@ -172,6 +173,15 @@ imap :: (Shape sh, Elt a, Elt b)
      -> Acc (Array sh a)
      -> Acc (Array sh b)
 imap f xs = zipWith f (generate (shape xs) id) xs
+
+-- | Used to define the zipWith functions on more than two arrays
+zipWithInduction :: (Shape sh, Elt a, Elt b)
+    => ((Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
+    -> (Exp a -> Exp b -> rest)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> result
+zipWithInduction prev f as bs = prev (\(T2 a b) -> f a b) (zip as bs)
 
 
 -- | Zip three arrays with the given function, analogous to 'zipWith'.
@@ -183,9 +193,7 @@ zipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-zipWith3 f as bs cs
-  = generate (shape as `intersect` shape bs `intersect` shape cs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix))
+zipWith3 = zipWithInduction zipWith
 
 -- | Zip four arrays with the given function, analogous to 'zipWith'.
 --
@@ -197,10 +205,7 @@ zipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-zipWith4 f as bs cs ds
-  = generate (shape as `intersect` shape bs `intersect`
-              shape cs `intersect` shape ds)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
+zipWith4 = zipWithInduction zipWith3
 
 -- | Zip five arrays with the given function, analogous to 'zipWith'.
 --
@@ -213,10 +218,7 @@ zipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-zipWith5 f as bs cs ds es
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
+zipWith5 = zipWithInduction zipWith4
 
 -- | Zip six arrays with the given function, analogous to 'zipWith'.
 --
@@ -230,11 +232,7 @@ zipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-zipWith6 f as bs cs ds es fs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
+zipWith6 = zipWithInduction zipWith5
 
 -- | Zip seven arrays with the given function, analogous to 'zipWith'.
 --
@@ -249,11 +247,7 @@ zipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-zipWith7 f as bs cs ds es fs gs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
+zipWith7 = zipWithInduction zipWith6
 
 -- | Zip eight arrays with the given function, analogous to 'zipWith'.
 --
@@ -269,12 +263,7 @@ zipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-zipWith8 f as bs cs ds es fs gs hs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
+zipWith8 = zipWithInduction zipWith7
 
 -- | Zip nine arrays with the given function, analogous to 'zipWith'.
 --
@@ -291,12 +280,17 @@ zipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-zipWith9 f as bs cs ds es fs gs hs is
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs `intersect` shape is)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
+zipWith9 = zipWithInduction zipWith8
+
+
+-- | Used to define the izipWith functions on two or more arrays
+izipWithInduction :: (Shape sh, Elt a, Elt b)
+    => ((Exp sh -> Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
+    -> (Exp sh -> Exp a -> Exp b -> rest)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> result
+izipWithInduction prev f as bs = prev (\ix (T2 a b) -> f ix a b) (zip as bs)
 
 
 -- | Zip two arrays with a function that also takes the element index
@@ -307,9 +301,7 @@ izipWith
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh c)
-izipWith f as bs
-  = generate (shape as `intersect` shape bs)
-             (\ix -> f ix (as ! ix) (bs ! ix))
+izipWith = izipWithInduction imap
 
 -- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
@@ -321,9 +313,7 @@ izipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-izipWith3 f as bs cs
-  = generate (shape as `intersect` shape bs `intersect` shape cs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix))
+izipWith3 = izipWithInduction izipWith
 
 -- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -336,10 +326,7 @@ izipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-izipWith4 f as bs cs ds
-  = generate (shape as `intersect` shape bs `intersect`
-              shape cs `intersect` shape ds)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
+izipWith4 = izipWithInduction izipWith3
 
 -- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -353,10 +340,7 @@ izipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-izipWith5 f as bs cs ds es
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
+izipWith5 = izipWithInduction izipWith4
 
 -- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -371,11 +355,7 @@ izipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-izipWith6 f as bs cs ds es fs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
+izipWith6 = izipWithInduction izipWith5
 
 -- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -391,11 +371,7 @@ izipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-izipWith7 f as bs cs ds es fs gs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
+izipWith7 = izipWithInduction izipWith6
 
 -- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -412,12 +388,7 @@ izipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-izipWith8 f as bs cs ds es fs gs hs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
+izipWith8 = izipWithInduction izipWith7
 
 -- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -435,12 +406,7 @@ izipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-izipWith9 f as bs cs ds es fs gs hs is
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs `intersect` shape is)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
+izipWith9 = izipWithInduction izipWith8
 
 
 -- | Combine the elements of two arrays pairwise. The shape of the result is the
@@ -460,7 +426,7 @@ zip :: (Shape sh, Elt a, Elt b)
     => Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh (a, b))
-zip = zipWith (curry lift)
+zip = zipWith T2
 
 -- | Take three arrays and return an array of triples, analogous to zip.
 --
@@ -469,7 +435,7 @@ zip3 :: (Shape sh, Elt a, Elt b, Elt c)
      -> Acc (Array sh b)
      -> Acc (Array sh c)
      -> Acc (Array sh (a, b, c))
-zip3 = zipWith3 (\a b c -> lift (a,b,c))
+zip3 = zipWith3 T3
 
 -- | Take four arrays and return an array of quadruples, analogous to zip.
 --
@@ -479,7 +445,7 @@ zip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
      -> Acc (Array sh c)
      -> Acc (Array sh d)
      -> Acc (Array sh (a, b, c, d))
-zip4 = zipWith4 (\a b c d -> lift (a,b,c,d))
+zip4 = zipWith4 T4
 
 -- | Take five arrays and return an array of five-tuples, analogous to zip.
 --
@@ -490,7 +456,7 @@ zip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
      -> Acc (Array sh d)
      -> Acc (Array sh e)
      -> Acc (Array sh (a, b, c, d, e))
-zip5 = zipWith5 (\a b c d e -> lift (a,b,c,d,e))
+zip5 = zipWith5 T5
 
 -- | Take six arrays and return an array of six-tuples, analogous to zip.
 --
@@ -502,7 +468,7 @@ zip6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
      -> Acc (Array sh e)
      -> Acc (Array sh f)
      -> Acc (Array sh (a, b, c, d, e, f))
-zip6 = zipWith6 (\a b c d e f -> lift (a,b,c,d,e,f))
+zip6 = zipWith6 T6
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -515,7 +481,7 @@ zip7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
      -> Acc (Array sh f)
      -> Acc (Array sh g)
      -> Acc (Array sh (a, b, c, d, e, f, g))
-zip7 = zipWith7 (\a b c d e f g -> lift (a,b,c,d,e,f,g))
+zip7 = zipWith7 T7
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -529,7 +495,7 @@ zip8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
      -> Acc (Array sh g)
      -> Acc (Array sh h)
      -> Acc (Array sh (a, b, c, d, e, f, g, h))
-zip8 = zipWith8 (\a b c d e f g h -> lift (a,b,c,d,e,f,g,h))
+zip8 = zipWith8 T8
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -544,7 +510,7 @@ zip9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i
      -> Acc (Array sh h)
      -> Acc (Array sh i)
      -> Acc (Array sh (a, b, c, d, e, f, g, h, i))
-zip9 = zipWith9 (\a b c d e f g h i -> lift (a,b,c,d,e,f,g,h,i))
+zip9 = zipWith9 T9
 
 
 -- | The converse of 'zip', but the shape of the two results is identical to the
