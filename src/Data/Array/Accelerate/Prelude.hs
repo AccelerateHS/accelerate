@@ -11,7 +11,6 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE ViewPatterns          #-}
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
 -- Copyright   : [2009..2019] The Accelerate Team
