@@ -172,8 +172,8 @@ $(runQ $ do
           sequence
             [ patSynSigD name [t| IsPattern $con $ty1 $ty2 => $sig |]
             , patSynD    name (prefixPatSyn xs) implBidir [p| Pattern $(tupP (map varP xs)) |]
-            , pragCompleteD [name] (Just (mkName "Acc"))
-            , pragCompleteD [name] (Just (mkName "Exp"))
+            , pragCompleteD [name] (Just ''Acc)
+            , pragCompleteD [name] (Just ''Exp)
             ]
 
         mkI :: Int -> Q [Dec]
