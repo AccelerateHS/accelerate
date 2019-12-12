@@ -360,31 +360,6 @@ instance Shape sh => Elt (Any (sh:.Int)) where
   fromElt _     = (fromElt (Any @sh), ())
   toElt _       = Any
 
-instance (Elt a, Elt b) => Elt (a, b)
-instance (Elt a, Elt b, Elt c) => Elt (a, b, c)
-instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-  => Elt (a, b, c, d, e, f, g)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-  => Elt (a, b, c, d, e, f, g, h)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-  => Elt (a, b, c, d, e, f, g, h, i)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-  => Elt (a, b, c, d, e, f, g, h, i, j)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
-  => Elt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
 --  Convenience functions
 --
@@ -569,34 +544,6 @@ instance (Shape sh, Elt e) => Arrays (Array sh e) where
   arrays  = ArraysRarray
   fromArr = id
   toArr   = id
-
-instance (Arrays a, Arrays b) => Arrays (a, b)
-instance (Arrays a, Arrays b, Arrays c) => Arrays (a, b, c)
-instance (Arrays a, Arrays b, Arrays c, Arrays d) => Arrays (a, b, c, d)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Arrays (a, b, c, d, e)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-  => Arrays (a, b, c, d, e, f)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
-  => Arrays (a, b, c, d, e, f, g)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
-  => Arrays (a, b, c, d, e, f, g, h)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
-  => Arrays (a, b, c, d, e, f, g, h, i)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
-  => Arrays (a, b, c, d, e, f, g, h, i, j)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
-  => Arrays (a, b, c, d, e, f, g, h, i, j, k)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
-  => Arrays (a, b, c, d, e, f, g, h, i, j, k, l)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
-  => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
-  => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
-  => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
-  => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-
 
 -- Array type reification
 --
@@ -1261,3 +1208,18 @@ $( runQ $ do
     return (concat ss ++ concat vs ++ concat ns)
  )
 
+$(runQ $ do
+    let
+        mkInstance :: TypeQ -> Int -> Q [Dec]
+        mkInstance cst n =
+          let
+              xs  = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              res = foldl (\ts t -> [t| $ts $(varT t) |]) (tupleT n) xs
+              ctx = foldl (\ts t -> [t| $ts ($cst $(varT t)) |]) (tupleT n) xs
+          in
+          [d| instance $ctx => $cst $res |]
+    --
+    es <- mapM (mkInstance [t| Elt    |]) [2..16]
+    as <- mapM (mkInstance [t| Arrays |]) [2..16]
+    return $ concat (es ++ as)
+ )
