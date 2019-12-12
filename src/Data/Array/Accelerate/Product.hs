@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -35,6 +36,7 @@ module Data.Array.Accelerate.Product (
 
 import GHC.Generics
 import Data.Primitive.Types
+import Language.Haskell.TH
 
 import Data.Array.Accelerate.Type
 
@@ -128,130 +130,6 @@ instance IsProduct cst () where
   toProd             = id
   prod               = ProdRunit
 
-instance (cst a, cst b) => IsProduct cst (a, b) where
-  type ProdRepr (a, b) = (((), a), b)
-  fromProd (a, b)      = (((), a), b)
-  toProd (((), a), b)  = (a, b)
-  prod                 = ProdRsnoc $ ProdRsnoc ProdRunit
-
-instance (cst a, cst b, cst c) => IsProduct cst (a, b, c) where
-  type ProdRepr (a, b, c)  = (ProdRepr (a, b), c)
-  fromProd (a, b, c)       = ((((), a), b), c)
-  toProd ((((), a), b), c) = (a, b, c)
-  prod                     = ProdRsnoc (prod @cst @(a,b))
-
-instance (cst a, cst b, cst c, cst d) => IsProduct cst (a, b, c, d) where
-  type ProdRepr (a, b, c, d)    = (ProdRepr (a, b, c), d)
-  fromProd (a, b, c, d)         = (((((), a), b), c), d)
-  toProd (((((), a), b), c), d) = (a, b, c, d)
-  prod                          = ProdRsnoc (prod @cst @(a,b,c))
-
-instance (cst a, cst b, cst c, cst d, cst e) => IsProduct cst (a, b, c, d, e) where
-  type ProdRepr (a, b, c, d, e)      = (ProdRepr (a, b, c, d), e)
-  fromProd (a, b, c, d, e)           = ((((((), a), b), c), d), e)
-  toProd ((((((), a), b), c), d), e) = (a, b, c, d, e)
-  prod                               = ProdRsnoc (prod @cst @(a,b,c,d))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f) => IsProduct cst (a, b, c, d, e, f) where
-  type ProdRepr (a, b, c, d, e, f)        = (ProdRepr (a, b, c, d, e), f)
-  fromProd (a, b, c, d, e, f)             = (((((((), a), b), c), d), e), f)
-  toProd (((((((), a), b), c), d), e), f) = (a, b, c, d, e, f)
-  prod                                    = ProdRsnoc (prod @cst @(a,b,c,d,e))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g)
-  => IsProduct cst (a, b, c, d, e, f, g) where
-  type ProdRepr (a, b, c, d, e, f, g)          = (ProdRepr (a, b, c, d, e, f), g)
-  fromProd (a, b, c, d, e, f, g)               = ((((((((), a), b), c), d), e), f), g)
-  toProd ((((((((), a), b), c), d), e), f), g) = (a, b, c, d, e, f, g)
-  prod                                         = ProdRsnoc (prod @cst @(a,b,c,d,e,f))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h)
-  => IsProduct cst (a, b, c, d, e, f, g, h) where
-  type ProdRepr (a, b, c, d, e, f, g, h)            = (ProdRepr (a, b, c, d, e, f, g), h)
-  fromProd (a, b, c, d, e, f, g, h)                 = (((((((((), a), b), c), d), e), f), g), h)
-  toProd (((((((((), a), b), c), d), e), f), g), h) = (a, b, c, d, e, f, g, h)
-  prod                                              = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i) = (ProdRepr (a, b, c, d, e, f, g, h), i)
-  fromProd (a, b, c, d, e, f, g, h, i)
-    = ((((((((((), a), b), c), d), e), f), g), h), i)
-  toProd ((((((((((), a), b), c), d), e), f), g), h), i)
-    = (a, b, c, d, e, f, g, h, i)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i, j) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i, j) = (ProdRepr (a, b, c, d, e, f, g, h, i), j)
-  fromProd (a, b, c, d, e, f, g, h, i, j)
-    = (((((((((((), a), b), c), d), e), f), g), h), i), j)
-  toProd (((((((((((), a), b), c), d), e), f), g), h), i), j)
-    = (a, b, c, d, e, f, g, h, i, j)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k) = (ProdRepr (a, b, c, d, e, f, g, h, i, j), k)
-  fromProd (a, b, c, d, e, f, g, h, i, j, k)
-    = ((((((((((((), a), b), c), d), e), f), g), h), i), j), k)
-  toProd ((((((((((((), a), b), c), d), e), f), g), h), i), j), k)
-    = (a, b, c, d, e, f, g, h, i, j, k)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k), l)
-  fromProd (a, b, c, d, e, f, g, h, i, j, k, l)
-    = (((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l)
-  toProd (((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l)
-    = (a, b, c, d, e, f, g, h, i, j, k, l)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j,k))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l), m)
-  fromProd (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    = ((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m)
-  toProd ((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m)
-    = (a, b, c, d, e, f, g, h, i, j, k, l, m)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j,k,l))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m, cst n)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m), n)
-  fromProd (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    = (((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n)
-  toProd (((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n)
-    = (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j,k,l,m))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m, cst n, cst o)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), o)
-  fromProd (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    = ((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o)
-  toProd ((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o)
-    = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j,k,l,m,n))
-
-instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m, cst n, cst o, cst p)
-  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o), p)
-  fromProd (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    = (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
-  toProd (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
-    = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-  prod
-    = ProdRsnoc (prod @cst @(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o))
-
 instance (Prim a, cst a) => IsProduct cst (V2 a) where
   type ProdRepr (V2 a) = (((), a), a)
   fromProd (V2 a b)    = (((), a), b)
@@ -286,4 +164,27 @@ instance (Prim a, cst a) => IsProduct cst (V16 a) where
     = V16 a b c d e f g h i j k l m n o p
   prod
     = prod @cst @(a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a)
+
+$(runQ $ do
+    let
+        mkIsProduct :: Int -> Q [Dec]
+        mkIsProduct n = do
+          cst <- newName "cst"
+          let
+              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              lhs     = foldl (\ts t -> [t| $ts ($(varT cst) $(varT t)) |]) (tupleT n) xs
+              flat    = foldl (\ts t -> [t| $ts $(varT t) |]) (tupleT n) xs
+              --
+              prod' 0 = [| ProdRunit |]
+              prod' i = [| ProdRsnoc $(prod' (i-1)) |]
+          --
+          [d| instance $lhs => IsProduct $(varT cst) $flat where
+                type ProdRepr $flat = $(foldl (\ts t -> [t| ($ts, $(varT t)) |]) [t| () |] xs)
+                fromProd $(tupP (map varP xs)) = $(foldl (\vs v -> [| ($vs, $(varE v)) |]) [|()|] xs)
+                toProd $(foldl (\ps p -> tupP [ps, varP p]) (tupP []) xs) = $(tupE (map varE xs))
+                prod = $(prod' n)
+            |]
+
+    concat <$> mapM mkIsProduct [2..16]
+ )
 
