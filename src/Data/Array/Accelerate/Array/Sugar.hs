@@ -1104,7 +1104,7 @@ enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
 -- Instances
 -- ---------
 
-$( runQ $ do
+$(runQ $ do
     let
         -- XXX: we might want to do the digItOut trick used by FromIntegral?
         --
@@ -1210,16 +1210,17 @@ $( runQ $ do
 
 $(runQ $ do
     let
-        mkInstance :: TypeQ -> Int -> Q [Dec]
+        mkInstance :: TypeQ -> Int -> Q Dec
         mkInstance cst n =
           let
               xs  = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
               res = foldl (\ts t -> [t| $ts $(varT t) |]) (tupleT n) xs
-              ctx = foldl (\ts t -> [t| $ts ($cst $(varT t)) |]) (tupleT n) xs
+              ctx = mapM (\x -> [t| $cst $(varT x) |]) xs
           in
-          [d| instance $ctx => $cst $res |]
+          instanceD ctx [t| $cst $res |] []
     --
     es <- mapM (mkInstance [t| Elt    |]) [2..16]
     as <- mapM (mkInstance [t| Arrays |]) [2..16]
-    return $ concat (es ++ as)
+    return (es ++ as)
  )
+

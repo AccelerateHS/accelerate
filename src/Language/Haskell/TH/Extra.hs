@@ -16,7 +16,7 @@ import Language.Haskell.TH
 
 
 tupT :: [TypeQ] -> TypeQ
-tupT ts =
-  let n = length ts
-   in foldl (\ts t -> [t| $ts $t |]) (tupleT n) ts
+tupT tup =
+  let n = length tup
+   in foldl (\ts t -> [t| $ts $t |]) (tupleT n) tup
 
