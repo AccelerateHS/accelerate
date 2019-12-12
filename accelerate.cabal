@@ -394,6 +394,8 @@ Library
         Data.Array.Accelerate.Test.NoFib.Base
         Data.Array.Accelerate.Test.NoFib.Config
 
+        Language.Haskell.TH.Extra
+
   if flag(nofib)
     build-depends:
           tasty-expected-failure        >= 0.11
