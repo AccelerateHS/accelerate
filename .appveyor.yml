@@ -9,6 +9,7 @@ environment:
   global:
     STACK_ROOT: "c:\\sr"
   matrix:
+    - GHC: "8.8"
     - GHC: "8.6"
     - GHC: "8.4"
     - GHC: "8.2"
