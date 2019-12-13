@@ -347,11 +347,11 @@ data PreSmartAcc acc exp as where
 
   Replicate     :: (Slice slix, Elt e)
                 => exp slix
-                -> acc            (Array (SliceShape slix) e)
+                -> acc                 (Array (SliceShape slix) e)
                 -> PreSmartAcc acc exp (Array (FullShape  slix) e)
 
   Slice         :: (Slice slix, Elt e)
-                => acc            (Array (FullShape  slix) e)
+                => acc                 (Array (FullShape  slix) e)
                 -> exp slix
                 -> PreSmartAcc acc exp (Array (SliceShape slix) e)
 
