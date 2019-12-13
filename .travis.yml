@@ -57,7 +57,7 @@ before_install:
   - stack --version
 
 install:
-  - export FLAGS="--no-terminal --no-copy-bins --flag accelerate:nofib"
+  - export FLAGS="--fast --no-terminal --no-copy-bins --flag accelerate:nofib"
   - travis_retry stack build $FLAGS --only-dependencies --test
 
 script:
