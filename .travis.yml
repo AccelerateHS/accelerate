@@ -40,9 +40,6 @@ matrix:
     - env: GHC=8.2.2
       compiler: "GHC 8.2"
 
-    - env: GHC=8.0.2
-      compiler: "GHC 8.0"
-
   allow_failures:
     - env: GHC=8.8.1  # not enough memory \:
 
