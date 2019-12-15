@@ -109,6 +109,7 @@ module Data.Array.Accelerate.Language (
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), ignore, shape, reshape, size, toIndex, fromIndex, intersect, union )
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar
@@ -1389,10 +1390,9 @@ gcd x y = gcd' (abs x) (abs y)
   where
     gcd' :: Integral a => Exp a -> Exp a -> Exp a
     gcd' u v =
-      let (r,_) = untup2
-                $ while (\(untup2 -> (_,b)) -> b /= 0)
-                        (\(untup2 -> (a,b)) -> tup2 (b, a `rem` b))
-                        (tup2 (u,v))
+      let T2 r _ = while (\(T2 _ b) -> b /= 0)
+                         (\(T2 a b) -> T2 b (a `rem` b))
+                         (T2 u v)
       in r
 
 
@@ -1412,21 +1412,19 @@ x0 ^ y0 = cond (y0 <= 0) 1 (f x0 y0)
   where
     f :: Exp a -> Exp b -> Exp a
     f x y =
-      let (x',y') = untup2
-                  $ while (\(untup2 -> (_,v)) -> even v)
-                          (\(untup2 -> (u,v)) -> tup2 (u * u, v `quot` 2))
-                          (tup2 (x, y))
+      let T2 x' y' = while (\(T2 _ v) -> even v)
+                           (\(T2 u v) -> T2 (u * u) (v `quot` 2))
+                           (T2 x y)
       in
       cond (y' == 1) x' (g (x'*x') ((y'-1) `quot` 2) x')
 
     g :: Exp a -> Exp b -> Exp a -> Exp a
     g x y z =
-      let (x',_,z') = untup3
-                    $ while (\(untup3 -> (_,v,_)) -> v /= 1)
-                            (\(untup3 -> (u,v,w)) ->
-                              cond (even v) (tup3 (u*u, v     `quot` 2, w))
-                                            (tup3 (u*u, (v-1) `quot` 2, w*u)))
-                            (tup3 (x,y,z))
+      let T3 x' _ z' = while (\(T3 _ v _) -> v /= 1)
+                             (\(T3 u v w) ->
+                               cond (even v) (T3 (u*u) (v     `quot` 2) w)
+                                             (T3 (u*u) ((v-1) `quot` 2) (w*u)))
+                             (T3 x y z)
       in
       x' * z'
 

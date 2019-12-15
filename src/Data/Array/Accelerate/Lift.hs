@@ -1,7 +1,9 @@
 {-# LANGUAGE CPP                   #-}
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 #if __GLASGOW_HASKELL__ <= 708
@@ -36,6 +38,9 @@ module Data.Array.Accelerate.Lift (
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
+
+import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH.Extra
 
 
 -- |Lift a unary function into 'Exp'.
@@ -81,8 +86,8 @@ ilift3 :: (Exp Int -> Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> 
 ilift3 f = lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
 
 
-
 -- | The class of types @e@ which can be lifted into @c@.
+--
 class Lift c e where
   -- | An associated-type (i.e. a type-level function) that strips all
   --   instances of surface type constructors @c@ from the input type @e@.
@@ -92,6 +97,7 @@ class Lift c e where
   --   following type equality holds:
   --
   --    @Plain (Exp Int, Int) ~ (Int,Int) ~ Plain (Int, Exp Int)@
+  --
   type Plain e
 
   -- | Lift the given value into a surface type 'c' --- either 'Exp' for scalar
@@ -470,323 +476,50 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   unlift = untup16
 
 
-
--- Instances for Arrays class
-
--- instance Lift Acc () where
---   type Plain () = ()
---   lift _ = Acc (SmartAcc Anil)
+instance Lift Acc () where
+  type Plain () = ()
+  lift _ = Acc (SmartAcc Anil)
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e
   lift = Acc . SmartAcc . Use
 
-instance (Lift Acc a, Lift Acc b, Arrays (Plain a), Arrays (Plain b)) => Lift Acc (a, b) where
-  type Plain (a, b) = (Plain a, Plain b)
-  lift (a, b) = atup2 (lift a, lift b)
+-- Lift and Unlift instances for tuples
+--
+$(runQ $ do
+    let
+        mkInstances :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkInstances con cst smart prj nil pair n = do
+          let
+              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts      = map varT xs
+              res1    = tupT ts
+              res2    = tupT (map (conT con `appT`) ts)
+              plain   = tupT (map (\t -> [t| Plain $t |]) ts)
+              ctx1    = tupT (map (\t -> [t| Lift $(conT con) $t |]) ts)
+              ctx2    = tupT (map (\t -> [t| $cst (Plain $t) |]) ts)
+              ctx3    = tupT (map (appT cst) ts)
+              --
+              get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
+              get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
+          --
+          _x <- newName "_x"
+          [d| instance ($ctx1, $ctx2) => Lift $(conT con) $res1 where
+                type Plain $res1 = $plain
+                lift $(tupP (map varP xs)) =
+                  $(conE con)
+                  $(foldl (\vs v -> do _v <- newName "_v"
+                                       [| let $(conP con [varP _v]) = lift $(varE v)
+                                           in $smart ($pair $vs $(varE _v)) |]) [| $smart $nil |] xs)
 
-instance (Arrays a, Arrays b) => Unlift Acc (Acc a, Acc b) where
-  unlift = unatup2
+              instance $ctx3 => Unlift $(conT con) $res2 where
+                unlift $(conP con [varP _x]) =
+                  $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
+            |]
 
-instance (Lift Acc a, Lift Acc b, Lift Acc c,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c))
-  => Lift Acc (a, b, c) where
-  type Plain (a, b, c) = (Plain a, Plain b, Plain c)
-  lift (a, b, c) = atup3 (lift a, lift b, lift c)
-
-instance (Arrays a, Arrays b, Arrays c) => Unlift Acc (Acc a, Acc b, Acc c) where
-  unlift = unatup3
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d))
-  => Lift Acc (a, b, c, d) where
-  type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
-  lift (a, b, c, d) = atup4 (lift a, lift b, lift c, lift d)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d) => Unlift Acc (Acc a, Acc b, Acc c, Acc d) where
-  unlift = unatup4
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e))
-  => Lift Acc (a, b, c, d, e) where
-  type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
-  lift (a, b, c, d, e) = atup5 (lift a, lift b, lift c, lift d, lift e)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e) where
-  unlift = unatup5
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f))
-  => Lift Acc (a, b, c, d, e, f) where
-  type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
-  lift (a, b, c, d, e, f) = atup6 (lift a, lift b, lift c, lift d, lift e, lift f)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f) where
-  unlift = unatup6
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f, Lift Acc g,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g))
-  => Lift Acc (a, b, c, d, e, f, g) where
-  type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
-  lift (a, b, c, d, e, f, g) = atup7 (lift a, lift b, lift c, lift d, lift e, lift f, lift g)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g) where
-  unlift = unatup7
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f, Lift Acc g, Lift Acc h,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g), Arrays (Plain h))
-  => Lift Acc (a, b, c, d, e, f, g, h) where
-  type Plain (a, b, c, d, e, f, g, h)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
-  lift (a, b, c, d, e, f, g, h)
-    = atup8 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h) where
-  unlift = unatup8
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e,
-          Lift Acc f, Lift Acc g, Lift Acc h, Lift Acc i,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
-          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i))
-  => Lift Acc (a, b, c, d, e, f, g, h, i) where
-  type Plain (a, b, c, d, e, f, g, h, i)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
-  lift (a, b, c, d, e, f, g, h, i)
-    = atup9 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i) where
-  unlift = unatup9
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e,
-          Lift Acc f, Lift Acc g, Lift Acc h, Lift Acc i, Lift Acc j,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
-          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j))
-  => Lift Acc (a, b, c, d, e, f, g, h, i, j) where
-  type Plain (a, b, c, d, e, f, g, h, i, j)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j)
-  lift (a, b, c, d, e, f, g, h, i, j)
-    = atup10 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j) where
-  unlift = unatup10
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e,
-          Lift Acc f, Lift Acc g, Lift Acc h, Lift Acc i, Lift Acc j, Lift Acc k,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
-          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k))
-  => Lift Acc (a, b, c, d, e, f, g, h, i, j, k) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k)
-  lift (a, b, c, d, e, f, g, h, i, j, k)
-    = atup11 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k) where
-  unlift = unatup11
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f,
-          Lift Acc g, Lift Acc h, Lift Acc i, Lift Acc j, Lift Acc k, Lift Acc l,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l))
-  => Lift Acc (a, b, c, d, e, f, g, h, i, j, k, l) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l)
-    = atup12 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l) where
-  unlift = unatup12
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f,
-          Lift Acc g, Lift Acc h, Lift Acc i, Lift Acc j, Lift Acc k, Lift Acc l, Lift Acc m,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m))
-  => Lift Acc (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    = atup13 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m) where
-  unlift = unatup13
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f, Lift Acc g,
-          Lift Acc h, Lift Acc i, Lift Acc j, Lift Acc k, Lift Acc l, Lift Acc m, Lift Acc n,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f), Arrays (Plain g),
-          Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m), Arrays (Plain n))
-  => Lift Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    = atup14 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n) where
-  unlift = unatup14
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f, Lift Acc g,
-          Lift Acc h, Lift Acc i, Lift Acc j, Lift Acc k, Lift Acc l, Lift Acc m, Lift Acc n, Lift Acc o,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f), Arrays (Plain g),
-          Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m), Arrays (Plain n), Arrays (Plain o))
-  => Lift Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n, Plain o)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    = atup15 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n, lift o)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o) where
-  unlift = unatup15
-
-instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f, Lift Acc g, Lift Acc h,
-          Lift Acc i, Lift Acc j, Lift Acc k, Lift Acc l, Lift Acc m, Lift Acc n, Lift Acc o, Lift Acc p,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f), Arrays (Plain g), Arrays (Plain h),
-          Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m), Arrays (Plain n), Arrays (Plain o), Arrays (Plain p))
-  => Lift Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n, Plain o, Plain p)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    = atup16 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n, lift o, lift p)
-
-instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
-  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p) where
-  unlift = unatup16
-
-{--
--- Instances for Seq
-
-instance (Lift Seq a, Lift Seq b, Arrays (Plain a), Arrays (Plain b)) => Lift Seq (a, b) where
-  type Plain (a, b) = (Plain a, Plain b)
-  lift (a, b) = stup2 (lift a, lift b)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c))
-  => Lift Seq (a, b, c) where
-  type Plain (a, b, c) = (Plain a, Plain b, Plain c)
-  lift (a, b, c) = stup3 (lift a, lift b, lift c)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d))
-  => Lift Seq (a, b, c, d) where
-  type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
-  lift (a, b, c, d) = stup4 (lift a, lift b, lift c, lift d)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e))
-  => Lift Seq (a, b, c, d, e) where
-  type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
-  lift (a, b, c, d, e) = stup5 (lift a, lift b, lift c, lift d, lift e)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f))
-  => Lift Seq (a, b, c, d, e, f) where
-  type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
-  lift (a, b, c, d, e, f) = stup6 (lift a, lift b, lift c, lift d, lift e, lift f)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g))
-  => Lift Seq (a, b, c, d, e, f, g) where
-  type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
-  lift (a, b, c, d, e, f, g) = stup7 (lift a, lift b, lift c, lift d, lift e, lift f, lift g)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g, Lift Seq h,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g), Arrays (Plain h))
-  => Lift Seq (a, b, c, d, e, f, g, h) where
-  type Plain (a, b, c, d, e, f, g, h)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
-  lift (a, b, c, d, e, f, g, h)
-    = stup8 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
-          Lift Seq f, Lift Seq g, Lift Seq h, Lift Seq i,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
-          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i))
-  => Lift Seq (a, b, c, d, e, f, g, h, i) where
-  type Plain (a, b, c, d, e, f, g, h, i)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
-  lift (a, b, c, d, e, f, g, h, i)
-    = stup9 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
-          Lift Seq f, Lift Seq g, Lift Seq h, Lift Seq i, Lift Seq j,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
-          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j))
-  => Lift Seq (a, b, c, d, e, f, g, h, i, j) where
-  type Plain (a, b, c, d, e, f, g, h, i, j)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j)
-  lift (a, b, c, d, e, f, g, h, i, j)
-    = stup10 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
-          Lift Seq f, Lift Seq g, Lift Seq h, Lift Seq i, Lift Seq j, Lift Seq k,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
-          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k))
-  => Lift Seq (a, b, c, d, e, f, g, h, i, j, k) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k)
-  lift (a, b, c, d, e, f, g, h, i, j, k)
-    = stup11 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f,
-          Lift Seq g, Lift Seq h, Lift Seq i, Lift Seq j, Lift Seq k, Lift Seq l,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l))
-  => Lift Seq (a, b, c, d, e, f, g, h, i, j, k, l) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l)
-    = stup12 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f,
-          Lift Seq g, Lift Seq h, Lift Seq i, Lift Seq j, Lift Seq k, Lift Seq l, Lift Seq m,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
-          Arrays (Plain g), Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m))
-  => Lift Seq (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    = stup13 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g,
-          Lift Seq h, Lift Seq i, Lift Seq j, Lift Seq k, Lift Seq l, Lift Seq m, Lift Seq n,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f), Arrays (Plain g),
-          Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m), Arrays (Plain n))
-  => Lift Seq (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    = stup14 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g,
-          Lift Seq h, Lift Seq i, Lift Seq j, Lift Seq k, Lift Seq l, Lift Seq m, Lift Seq n, Lift Seq o,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f), Arrays (Plain g),
-          Arrays (Plain h), Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m), Arrays (Plain n), Arrays (Plain o))
-  => Lift Seq (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n, Plain o)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    = stup15 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n, lift o)
-
-instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g, Lift Seq h,
-          Lift Seq i, Lift Seq j, Lift Seq k, Lift Seq l, Lift Seq m, Lift Seq n, Lift Seq o, Lift Seq p,
-          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f), Arrays (Plain g), Arrays (Plain h),
-          Arrays (Plain i), Arrays (Plain j), Arrays (Plain k), Arrays (Plain l), Arrays (Plain m), Arrays (Plain n), Arrays (Plain o), Arrays (Plain p))
-  => Lift Seq (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n, Plain o, Plain p)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    = stup16 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n, lift o, lift p)
---}
+        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
+    --
+    as <- mapM mkAccInstances [2..16]
+    return $ concat as
+ )
 

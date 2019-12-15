@@ -533,7 +533,7 @@ packV16 a b c d e f g h i j k l m n o p = runST $ do
 -- to split this into a separate module.
 --
 
-$( runQ $ do
+$(runQ $ do
   let
       bits :: FiniteBits b => b -> Integer
       bits = toInteger . finiteBitSize
