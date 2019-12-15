@@ -24,6 +24,8 @@ module Data.Array.Accelerate.Classes.RealFrac (
 
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language                               ( (^), cond, even )
+import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -149,7 +151,7 @@ instance RealFrac CDouble where
 --     => Exp a
 --     -> (Exp b, Exp a)
 -- defaultProperFraction x =
---   untup2 $ Exp
+--   unlift $ Exp
 --          $ Cond (x == 0) (tup2 (0, 0))
 --                          (tup2 (n, f))
 --   where
@@ -161,10 +163,10 @@ defaultProperFraction
     => Exp a
     -> (Exp b, Exp a)
 defaultProperFraction x
-  = untup2
+  = unlift
   $ cond (n >= 0)
-      (tup2 (fromIntegral m * (2 ^ n), 0.0))
-      (tup2 (fromIntegral q, encodeFloat r n))
+      (T2 (fromIntegral m * (2 ^ n)) 0.0)
+      (T2 (fromIntegral q) (encodeFloat r n))
   where
     (m, n) = decodeFloat x
     (q, r) = quotRem m (2 ^ (negate n))
