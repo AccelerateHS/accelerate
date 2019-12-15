@@ -41,6 +41,7 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
 import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH.Extra
 
 
 -- | A pattern synonym for working with (product) data types. You can declare
@@ -115,9 +116,10 @@ $(runQ $ do
         mkIsPattern con cst smart prj nil pair n = do
           let
               xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              a       = foldl (\ts t -> appT ts (varT t)) (tupleT n) xs
-              b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
-              context = foldl (\ts t -> appT ts (appT cst (varT t))) (tupleT n) xs
+              ts      = map varT xs
+              a       = tupT ts
+              b       = tupT (map (conT con `appT`) ts)
+              context = tupT (map (cst `appT`) ts)
               --
               get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
               get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
@@ -162,12 +164,13 @@ $(runQ $ do
     let
         mkT :: Int -> Q [Dec]
         mkT n =
-          let xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              name    = mkName ('T':show n)
-              con     = varT (mkName "con")
-              ty1     = foldl (\ts t -> [t| $ts       $(varT t)  |]) (tupleT n) xs
-              ty2     = foldl (\ts t -> [t| $ts ($con $(varT t)) |]) (tupleT n) xs
-              sig     = foldr (\t ts -> [t| $con $(varT t) -> $ts |]) [t| $con $ty1 |] xs
+          let xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts    = map varT xs
+              name  = mkName ('T':show n)
+              con   = varT (mkName "con")
+              ty1   = tupT ts
+              ty2   = tupT (map (con `appT`) ts)
+              sig   = foldr (\t r -> [t| $con $t -> $r |]) (appT con ty1) ts
           in
           sequence
             [ patSynSigD name [t| IsPattern $con $ty1 $ty2 => $sig |]
@@ -179,11 +182,12 @@ $(runQ $ do
         mkI :: Int -> Q [Dec]
         mkI n =
           let xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts      = map varT xs
               name    = mkName ('I':show n)
               ix      = mkName "Ix"
-              cst     = foldl (\ts t -> [t| $ts (Elt $(varT t)) |]) (tupleT n) xs
-              dim     = foldl (\ts t -> [t| $ts :. $(varT t) |]) [t| Z |] xs
-              sig     = foldr (\t ts -> [t| Exp $(varT t) -> $ts |]) [t| Exp $dim |] xs
+              cst     = tupT (map (\t -> [t| Elt $t |]) ts)
+              dim     = foldl (\h t -> [t| $h :. $t |]) [t| Z |] ts
+              sig     = foldr (\t r -> [t| Exp $t -> $r |]) [t| Exp $dim |] ts
           in
           sequence
             [ patSynSigD name [t| $cst => $sig |]

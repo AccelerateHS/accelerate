@@ -66,6 +66,7 @@ import Data.Kind
 import Data.Typeable
 import System.IO.Unsafe                                         ( unsafePerformIO )
 import Language.Haskell.TH                                      hiding ( Foreign, Type )
+import Language.Haskell.TH.Extra
 import Prelude                                                  hiding ( (!!) )
 import qualified Data.Vector.Unboxed                            as U
 
@@ -1214,10 +1215,11 @@ $(runQ $ do
         mkInstance cst n =
           let
               xs  = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              res = foldl (\ts t -> [t| $ts $(varT t) |]) (tupleT n) xs
-              ctx = mapM (\x -> [t| $cst $(varT x) |]) xs
+              ts  = map varT xs
+              res = tupT ts
+              ctx = mapM (appT cst) ts
           in
-          instanceD ctx [t| $cst $res |] []
+          instanceD ctx (appT cst res) []
     --
     es <- mapM (mkInstance [t| Elt    |]) [2..16]
     as <- mapM (mkInstance [t| Arrays |]) [2..16]

@@ -37,6 +37,7 @@ module Data.Array.Accelerate.Product (
 import GHC.Generics
 import Data.Primitive.Types
 import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 import Data.Array.Accelerate.Type
 
@@ -171,15 +172,16 @@ $(runQ $ do
         mkIsProduct n = do
           cst <- newName "cst"
           let
-              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              lhs     = foldl (\ts t -> [t| $ts ($(varT cst) $(varT t)) |]) (tupleT n) xs
-              flat    = foldl (\ts t -> [t| $ts $(varT t) |]) (tupleT n) xs
+              xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts    = map varT xs
+              lhs   = tupT (map (varT cst `appT`) ts)
+              flat  = tupT ts
               --
               prod' 0 = [| ProdRunit |]
               prod' i = [| ProdRsnoc $(prod' (i-1)) |]
           --
           [d| instance $lhs => IsProduct $(varT cst) $flat where
-                type ProdRepr $flat = $(foldl (\ts t -> [t| ($ts, $(varT t)) |]) [t| () |] xs)
+                type ProdRepr $flat = $(foldl (\s t -> [t| ($s, $t) |]) [t| () |] ts)
                 fromProd $(tupP (map varP xs)) = $(foldl (\vs v -> [| ($vs, $(varE v)) |]) [|()|] xs)
                 toProd $(foldl (\ps p -> tupP [ps, varP p]) (tupP []) xs) = $(tupE (map varE xs))
                 prod = $(prod' n)

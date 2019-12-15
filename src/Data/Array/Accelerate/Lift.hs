@@ -40,6 +40,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH.Extra
 
 
 -- |Lift a unary function into 'Exp'.
@@ -492,12 +493,13 @@ $(runQ $ do
         mkInstances con cst smart prj nil pair n = do
           let
               xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              res1    = foldl (\ts t -> appT ts (varT t)) (tupleT n) xs
-              res2    = foldl (\ts t -> [t| $ts ($(conT con) $(varT t)) |]) (tupleT n) xs
-              ctx1    = foldl (\ts t -> [t| $ts (Lift $(conT con) $(varT t)) |]) (tupleT n) xs
-              ctx2    = foldl (\ts t -> [t| $ts ($cst (Plain $(varT t))) |]) (tupleT n) xs
-              ctx3    = foldl (\ts t -> [t| $ts ($cst $(varT t)) |]) (tupleT n) xs
-              plain   = foldl (\ts t -> [t| $ts (Plain $(varT t)) |]) (tupleT n) xs
+              ts      = map varT xs
+              res1    = tupT ts
+              res2    = tupT (map (conT con `appT`) ts)
+              plain   = tupT (map (\t -> [t| Plain $t |]) ts)
+              ctx1    = tupT (map (\t -> [t| Lift $(conT con) $t |]) ts)
+              ctx2    = tupT (map (\t -> [t| $cst (Plain $t) |]) ts)
+              ctx3    = tupT (map (appT cst) ts)
               --
               get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
               get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
