@@ -476,7 +476,6 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   unlift = untup16
 
 
-
 instance Lift Acc () where
   type Plain () = ()
   lift _ = Acc (SmartAcc Anil)

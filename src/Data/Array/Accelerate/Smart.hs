@@ -728,16 +728,18 @@ data PreBoundary acc exp t where
 
 
 -- Stencil reification
+-- -------------------
 --
--- In the AST representation, we turn the stencil type from nested tuples of Accelerate expressions
--- into an Accelerate expression whose type is a tuple nested in the same manner.  This enables us
--- to represent the stencil function as a unary function (which also only needs one de Bruijn
--- index). The various positions in the stencil are accessed via tuple indices (i.e., projections).
+-- In the AST representation, we turn the stencil type from nested tuples
+-- of Accelerate expressions into an Accelerate expression whose type is
+-- a tuple nested in the same manner. This enables us to represent the
+-- stencil function as a unary function (which also only needs one de
+-- Bruijn index). The various positions in the stencil are accessed via
+-- tuple indices (i.e., projections).
 --
 class (Elt (StencilRepr sh stencil), AST.Stencil sh a (StencilRepr sh stencil)) => Stencil sh a stencil where
   type StencilRepr sh stencil :: Type
-  stencilPrj :: Exp (StencilRepr sh stencil)
-             -> stencil
+  stencilPrj :: Exp (StencilRepr sh stencil) -> stencil
 
 -- DIM1
 instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e) where
