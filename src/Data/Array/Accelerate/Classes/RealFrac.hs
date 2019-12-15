@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Classes.RealFrac (
 
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language                               ( (^), cond, even )
-import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Lift                                   ( unlift )
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
