@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
@@ -21,163 +22,193 @@
 --
 
 module Data.Array.Accelerate.Array.Representation (
+  -- * Array data type in terms of representation types
+  Array(..), ArrayR(..), arraysRarray, arraysRtuple2,
+  ArraysR, TupleType, Scalar, Vector, Matrix, fromList, toList,
 
   -- * Array shapes, indices, and slices
-  Shape(..), Slice(..), SliceIndex(..),
+  ShapeR(..), Slice(..), SliceIndex(..),
+  DIM0, DIM1, DIM2,
+
+  -- * Shape functions
+  rank, size, empty, ignore, intersect, union, toIndex, fromIndex, iter, iter1,
+  rangeToShape, shapeToRange, shapeToList, listToShape, listToShape', shapeType,
 
   -- * Slice shape functions
-  sliceShape, enumSlices,
+  sliceShape, sliceShapeR, enumSlices,
 
 ) where
 
 -- friends
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Data
 
 -- standard library
 import GHC.Base                                         ( quotInt, remInt )
 
+-- |Array data type, where the type arguments regard the representation types of the shape and elements.
+data Array sh e where
+  Array :: sh                         -- extent of dimensions = shape
+        -> ArrayData e                -- array payload
+        -> Array sh e
+
+{-# INLINEABLE fromList #-}
+fromList :: ArrayR (Array sh e) -> sh -> [e] -> Array sh e
+fromList (ArrayR shr tp) sh xs = adata `seq` Array sh adata
+  where
+    -- Assume the array is in dense row-major order. This is safe because
+    -- otherwise backends would not be able to directly memcpy.
+    --
+    !n    = size shr sh
+    (adata, _) = runArrayData $ do
+                  arr <- newArrayData tp n
+                  let go !i _ | i >= n = return ()
+                      go !i (v:vs)     = unsafeWriteArrayData tp arr i v >> go (i+1) vs
+                      go _  []         = error "Data.Array.Accelerate.fromList: not enough input data"
+                  --
+                  go 0 xs
+                  return (arr, undefined)
+
+
+-- | Convert an accelerated 'Array' to a list in row-major order.
+--
+{-# INLINEABLE toList #-}
+toList :: ArrayR (Array sh e) -> Array sh e -> [e]
+toList (ArrayR shr tp) (Array sh adata) = go 0
+  where
+    -- Assume underling array is in row-major order. This is safe because
+    -- otherwise backends would not be able to directly memcpy.
+    --
+    !n                  = size shr sh
+    go !i | i >= n      = []
+          | otherwise   = (unsafeIndexArrayData tp adata i) : go (i+1)
+
+type ArraysR = TupR ArrayR
+data ArrayR a where
+  ArrayR :: ShapeR sh -> TupleType e -> ArrayR (Array sh e)
+
+arraysRarray :: ShapeR sh -> TupleType e -> ArraysR (Array sh e)
+arraysRarray shr tp = TupRsingle $ ArrayR shr tp
+
+arraysRtuple2 :: ArrayR a -> ArrayR b -> ArraysR (((), a), b)
+arraysRtuple2 a b = TupRpair TupRunit (TupRsingle a) `TupRpair` TupRsingle b
+
+type Scalar = Array DIM0
+type Vector = Array DIM1
+type Matrix = Array DIM2
 
 -- |Index representation
 --
+type DIM0 = ()
+type DIM1 = ((), Int)
+type DIM2 = (((), Int), Int)
 
--- |Class of index representations (which are nested pairs)
+-- |Index representations (which are nested pairs)
 --
-class (Eq sh, Slice sh) => Shape sh where
-  -- user-facing methods
-  rank      :: Int                  -- ^number of dimensions (>= 0); rank of the array
-  size      :: sh -> Int            -- ^total number of elements in an array of this /shape/
-  empty     :: sh                   -- ^empty shape.
+    
+data ShapeR sh where
+  ShapeRz :: ShapeR ()
+  ShapeRcons :: ShapeR sh -> ShapeR (sh, Int)
 
-  -- internal methods
-  intersect :: sh -> sh -> sh       -- yield the intersection of two shapes
-  union     :: sh -> sh -> sh       -- yield the union of two shapes
-  ignore    :: sh                   -- identifies ignored elements in 'permute'
-  toIndex   :: sh -> sh -> Int      -- yield the index position in a linear, row-major representation of
-                                    -- the array (first argument is the shape)
-  fromIndex :: sh -> Int -> sh      -- inverse of `toIndex`
+rank :: ShapeR sh -> Int
+rank ShapeRz = 0
+rank (ShapeRcons shr) = rank shr + 1
 
-  iter      :: sh -> (sh -> a) -> (a -> a -> a) -> a -> a
-                                    -- iterate through the entire shape, applying the function in the
-                                    -- second argument; third argument combines results and fourth is an
-                                    -- initial value that is combined with the results; the index space
-                                    -- is traversed in row-major order
+size :: ShapeR sh -> sh -> Int
+size ShapeRz () = 1
+size (ShapeRcons shr) (sh, sz)
+  | sz <= 0   = 0
+  | otherwise = size shr sh * sz
 
-  iter1     :: sh -> (sh -> a) -> (a -> a -> a) -> a
-                                    -- variant of 'iter' without an initial value
+empty :: ShapeR sh -> sh
+empty ShapeRz = ()
+empty (ShapeRcons shr) = (empty shr, 0)
 
-  -- operations to facilitate conversion with IArray
-  rangeToShape :: (sh, sh) -> sh    -- convert a minpoint-maxpoint index
-                                    -- into a shape
-  shapeToRange :: sh -> (sh, sh)    -- ...the converse
+ignore :: ShapeR sh -> sh
+ignore ShapeRz = ()
+ignore (ShapeRcons shr) = (ignore shr, -1)
 
+shapeZip :: (Int -> Int -> Int) -> ShapeR sh -> sh -> sh -> sh
+shapeZip _ ShapeRz () () = ()
+shapeZip f (ShapeRcons shr) (as, a) (bs, b) = (shapeZip f shr as bs, f a b)
 
-  -- other conversions
-  shapeToList   :: sh -> [Int]        -- convert a shape into its list of dimensions
-  listToShape   :: [Int] -> sh        -- convert a list of dimensions into a shape
-  listToShape'  :: [Int] -> Maybe sh  -- attempt to convert a list of dimensions into a shape
+intersect, union :: ShapeR sh -> sh -> sh -> sh
+intersect = shapeZip min
+union = shapeZip max
 
-  listToShape ds =
-    case listToShape' ds of
-      Just sh -> sh
-      Nothing -> $internalError "listToShape" "unable to convert list to a shape at the specified type"
+toIndex :: ShapeR sh -> sh -> sh -> Int
+toIndex ShapeRz () () = 0
+toIndex (ShapeRcons shr) (sh, sz) (ix, i)
+  = $indexCheck "toIndex" i sz
+  $ toIndex shr sh ix * sz + i
 
-instance Shape () where
-  rank              = 0
-  empty             = ()
-  ignore            = ()
-  () `intersect` () = ()
-  () `union` ()     = ()
-  size ()           = 1
-  toIndex () ()     = 0
-  fromIndex () _    = ()
-  iter  () f _ _    = f ()
-  iter1 () f _      = f ()
+fromIndex :: ShapeR sh -> sh -> Int -> sh
+fromIndex ShapeRz () _ = ()
+fromIndex (ShapeRcons shr) (sh, sz) i
+  = (fromIndex shr sh (i `quotInt` sz), r)
+  -- If we assume that the index is in range, there is no point in computing
+  -- the remainder for the highest dimension since i < sz must hold.
+  --
+  where
+    r = case shr of -- Check if rank of shr is 0
+      ShapeRz -> $indexCheck "fromIndex" i sz i
+      _       -> i `remInt` sz
 
-  rangeToShape ((), ()) = ()
-  shapeToRange ()       = ((), ())
+-- iterate through the entire shape, applying the function in the
+-- second argument; third argument combines results and fourth is an
+-- initial value that is combined with the results; the index space
+-- is traversed in row-major order
+iter :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a -> a
+iter ShapeRz () f _ _    = f ()
+iter (ShapeRcons shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
+  where
+    iter' (ix,i) | i >= sz   = r
+                 | otherwise = f (ix,i) `c` iter' (ix,i+1)
 
-  shapeToList () = []
-  listToShape [] = ()
-  listToShape _  = $internalError "listToShape" "non-empty list when converting to unit"
+-- variant of 'iter' without an initial value
+iter1 :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a
+iter1 ShapeRz () f _      = f ()
+iter1 (ShapeRcons _  ) (_,  0)  _ _ = $boundsError "iter1" "empty iteration space"
+iter1 (ShapeRcons shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
+  where
+    iter1' (ix,i) | i == sz-1 = f (ix,i)
+                  | otherwise = f (ix,i) `c` iter1' (ix,i+1)
 
-  listToShape' [] = Just ()
-  listToShape' _  = Nothing
+-- Operations to facilitate conversion with IArray
 
-instance Shape sh => Shape (sh, Int) where
-  rank                              = rank @sh + 1
-  empty                             = (empty, 0)
-  ignore                            = (ignore, -1)
-  (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
-  (sh1, sz1) `union`     (sh2, sz2) = (sh1 `union`     sh2, sz1 `max` sz2)
+-- convert a minpoint-maxpoint index into a shape
+rangeToShape :: ShapeR sh -> (sh, sh) -> sh
+rangeToShape ShapeRz ((), ()) = ()
+rangeToShape (ShapeRcons shr) ((sh1, sz1), (sh2, sz2)) = (rangeToShape shr (sh1, sh2), sz2 - sz1 + 1)
 
-  size (sh, sz) | sz <= 0           = 0
-                | otherwise         = size sh * sz
+-- the converse
+shapeToRange :: ShapeR sh -> sh -> (sh, sh)
+shapeToRange ShapeRz () = ((), ())
+shapeToRange (ShapeRcons shr) (sh, sz) = let (low, high) = shapeToRange shr sh in ((low, 0), (high, sz - 1))
 
-  toIndex (sh, sz) (ix, i)          = $indexCheck "toIndex" i sz
-                                    $ toIndex sh ix * sz + i
+-- Other conversions
 
-  fromIndex (sh, sz) i              = (fromIndex sh (i `quotInt` sz), r)
-    -- If we assume that the index is in range, there is no point in computing
-    -- the remainder for the highest dimension since i < sz must hold.
-    --
-    where
-      r | rank @sh == 0 = $indexCheck "fromIndex" i sz i
-        | otherwise     = i `remInt` sz
+-- Convert a shape into its list of dimensions
+shapeToList :: ShapeR sh -> sh -> [Int]
+shapeToList ShapeRz () = []
+shapeToList (ShapeRcons shr) (sh,sz) = sz : shapeToList shr sh
 
-{--
-  bound (sh, sz) (ix, i) bndy
-    | i < 0                         = case bndy of
-                                        Clamp      -> next `addDim` 0
-                                        Mirror     -> next `addDim` (-i)
-                                        Wrap       -> next `addDim` (sz+i)
-                                        Constant e -> Left e
-    | i >= sz                       = case bndy of
-                                        Clamp      -> next `addDim` (sz-1)
-                                        Mirror     -> next `addDim` (sz-(i-sz+2))
-                                        Wrap       -> next `addDim` (i-sz)
-                                        Constant e -> Left e
-    | otherwise                     = next `addDim` i
-    where
-      -- This function is quite difficult to optimize due to the deep recursion
-      -- that it can generate with high-dimensional arrays. If we let 'next' be
-      -- inlined into each alternative of the cases above the size of this
-      -- function on an n-dimensional array will grow as 7^n. This quickly causes
-      -- GHC's head to explode. See GHC Trac #10491 for more details.
-      next = bound sh ix bndy
-      {-# NOINLINE next #-}
+-- Convert a list of dimensions into a shape
+listToShape :: ShapeR sh -> [Int] -> sh
+listToShape shr ds = case listToShape' shr ds of
+  Just sh -> sh
+  Nothing -> $internalError "listToShape" "unable to convert list to a shape at the specified type"
 
-      Right ds `addDim` d = Right (ds, d)
-      Left e   `addDim` _ = Left e
---}
+-- Attempt to convert a list of dimensions into a shape
+listToShape' :: ShapeR sh -> [Int] -> Maybe sh
+listToShape' ShapeRz [] = Just ()
+listToShape' (ShapeRcons shr) (x:xs) = (, x) <$> listToShape' shr xs
+listToShape' _ _ = Nothing
 
-  iter (sh, sz) f c r = iter sh (\ix -> iter' (ix,0)) c r
-    where
-      iter' (ix,i) | i >= sz   = r
-                   | otherwise = f (ix,i) `c` iter' (ix,i+1)
-
-  iter1 (_,  0)  _ _ = $boundsError "iter1" "empty iteration space"
-  iter1 (sh, sz) f c = iter1 sh (\ix -> iter1' (ix,0)) c
-    where
-      iter1' (ix,i) | i == sz-1 = f (ix,i)
-                    | otherwise = f (ix,i) `c` iter1' (ix,i+1)
-
-  rangeToShape ((sh1, sz1), (sh2, sz2))
-    = (rangeToShape (sh1, sh2), sz2 - sz1 + 1)
-
-  shapeToRange (sh, sz)
-    = let (low, high) = shapeToRange sh
-      in
-      ((low, 0), (high, sz - 1))
-
-  shapeToList (sh,sz) = sz : shapeToList sh
-
-  listToShape []      = $internalError "listToShape" "empty list when converting to cons"
-  listToShape (x:xs)  = (listToShape xs,x)
-
-  listToShape' []     = Nothing
-  listToShape' (x:xs) = do
-    xs' <- listToShape' xs
-    return (xs', x)
+shapeType :: ShapeR sh -> TupleType sh
+shapeType ShapeRz = TupRunit
+shapeType (ShapeRcons shr) = shapeType shr `TupRpair` (TupRsingle $ SingleScalarType $ NumSingleType $ IntegralNumType TypeInt)
 
 -- |Slice representation
 --
@@ -234,6 +265,10 @@ sliceShape SliceNil        ()      = ()
 sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
 sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 
+sliceShapeR :: SliceIndex slix sl co dim -> ShapeR sl
+sliceShapeR SliceNil        = ShapeRz
+sliceShapeR (SliceAll sl)   = ShapeRcons $ sliceShapeR sl
+sliceShapeR (SliceFixed sl) = sliceShapeR sl
 
 -- | Enumerate all slices within a given bound. The innermost dimension changes
 -- most rapidly.

@@ -1,15 +1,18 @@
-{-# LANGUAGE BangPatterns         #-}
-{-# LANGUAGE CPP                  #-}
-{-# LANGUAGE DeriveDataTypeable   #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE MagicHash            #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE TemplateHaskell      #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE UnboxedTuples        #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes    #-}
+{-# LANGUAGE BangPatterns           #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE DeriveDataTypeable     #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE MagicHash              #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE StandaloneDeriving     #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE UnboxedTuples          #-}
+{-# LANGUAGE UndecidableInstances   #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
@@ -29,11 +32,8 @@
 module Data.Array.Accelerate.Array.Data (
 
   -- * Array operations and representations
-  ArrayElt(..), ArrayData, MutableArrayData, runArrayData,
-  ArrayEltR(..), GArrayData(..),
-
-  -- * Array tuple operations
-  fstArrayData, sndArrayData, pairArrayData,
+  ArrayData, MutableArrayData, runArrayData, GArrayData, rnfArrayData, ScalarData,
+  unsafeIndexArrayData, ptrOfArrayData, touchArrayData, newArrayData, unsafeReadArrayData, unsafeWriteArrayData,
 
   -- * Type macros
   HTYPE_INT, HTYPE_WORD, HTYPE_CLONG, HTYPE_CULONG, HTYPE_CCHAR,
@@ -56,12 +56,10 @@ import Data.Array.Accelerate.Debug.Trace
 -- standard libraries
 import Control.Applicative
 import Control.Monad                                                ( (<=<) )
+import Control.DeepSeq
 import Data.Bits
-import Data.Char
 import Data.IORef
-import Data.Kind
 import Data.Primitive                                               ( sizeOf# )
-import Data.Typeable                                                ( Typeable )
 import Foreign.ForeignPtr
 import Foreign.Storable
 import Language.Haskell.TH                                          hiding ( Type )
@@ -72,7 +70,7 @@ import Prelude                                                      hiding ( map
 import GHC.Base
 import GHC.ForeignPtr
 import GHC.Ptr
-import GHC.TypeLits
+import Data.Primitive.Types                                         ( Prim )
 
 
 -- Determine the underlying type of a Haskell CLong or CULong.
@@ -123,152 +121,130 @@ type MutableArrayData e = GArrayData e
 -- In previous versions this was abstracted over by the mutable/immutable array
 -- representation, but this is now fixed to our UniqueArray type.
 --
-data family GArrayData a :: Type
-data instance GArrayData ()        = AD_Unit
-data instance GArrayData Int       = AD_Int    {-# UNPACK #-} !(UniqueArray Int)
-data instance GArrayData Int8      = AD_Int8   {-# UNPACK #-} !(UniqueArray Int8)
-data instance GArrayData Int16     = AD_Int16  {-# UNPACK #-} !(UniqueArray Int16)
-data instance GArrayData Int32     = AD_Int32  {-# UNPACK #-} !(UniqueArray Int32)
-data instance GArrayData Int64     = AD_Int64  {-# UNPACK #-} !(UniqueArray Int64)
-data instance GArrayData Word      = AD_Word   {-# UNPACK #-} !(UniqueArray Word)
-data instance GArrayData Word8     = AD_Word8  {-# UNPACK #-} !(UniqueArray Word8)
-data instance GArrayData Word16    = AD_Word16 {-# UNPACK #-} !(UniqueArray Word16)
-data instance GArrayData Word32    = AD_Word32 {-# UNPACK #-} !(UniqueArray Word32)
-data instance GArrayData Word64    = AD_Word64 {-# UNPACK #-} !(UniqueArray Word64)
-data instance GArrayData Half      = AD_Half   {-# UNPACK #-} !(UniqueArray Half)
-data instance GArrayData Float     = AD_Float  {-# UNPACK #-} !(UniqueArray Float)
-data instance GArrayData Double    = AD_Double {-# UNPACK #-} !(UniqueArray Double)
-data instance GArrayData Bool      = AD_Bool   {-# UNPACK #-} !(UniqueArray Word8)
-data instance GArrayData Char      = AD_Char   {-# UNPACK #-} !(UniqueArray Char)
-data instance GArrayData (Vec n a) = AD_Vec !Int# !(GArrayData a)           -- sad this does not get unpacked ):
-data instance GArrayData (a, b)    = AD_Pair (GArrayData a) (GArrayData b)  -- XXX: non-strict to support lazy device-host copying
+type family GArrayData a = r | r -> a where
+  GArrayData ()        = ()
+  GArrayData (a, b)    = (GArrayData a, GArrayData b) -- XXX: fields of tuple are non-strict, which enables lazy device-host copying
+  GArrayData a         = ScalarData a
 
-deriving instance Typeable GArrayData
+type ScalarData a = UniqueArray (ScalarDataRepr a)
 
+-- Mapping from scalar type to the type as represented in memory in an array.
+-- Booleans are stored as Word8, other types are represented as itself.
+type family ScalarDataRepr tp where
+  ScalarDataRepr Int    = Int
+  ScalarDataRepr Int8   = Int8
+  ScalarDataRepr Int16  = Int16
+  ScalarDataRepr Int32  = Int32
+  ScalarDataRepr Int64  = Int64
+  ScalarDataRepr Word   = Word
+  ScalarDataRepr Word8  = Word8
+  ScalarDataRepr Word16 = Word16
+  ScalarDataRepr Word32 = Word32
+  ScalarDataRepr Word64 = Word64
+  ScalarDataRepr Half   = Half
+  ScalarDataRepr Float  = Float
+  ScalarDataRepr Double = Double
+  ScalarDataRepr Bool   = Word8
+  ScalarDataRepr Char   = Char
+  ScalarDataRepr (Vec n tp) = ScalarDataRepr tp
 
--- | GADT to reify the 'ArrayElt' class.
---
-data ArrayEltR a where
-  ArrayEltRunit    :: ArrayEltR ()
-  ArrayEltRint     :: ArrayEltR Int
-  ArrayEltRint8    :: ArrayEltR Int8
-  ArrayEltRint16   :: ArrayEltR Int16
-  ArrayEltRint32   :: ArrayEltR Int32
-  ArrayEltRint64   :: ArrayEltR Int64
-  ArrayEltRword    :: ArrayEltR Word
-  ArrayEltRword8   :: ArrayEltR Word8
-  ArrayEltRword16  :: ArrayEltR Word16
-  ArrayEltRword32  :: ArrayEltR Word32
-  ArrayEltRword64  :: ArrayEltR Word64
-  ArrayEltRhalf    :: ArrayEltR Half
-  ArrayEltRfloat   :: ArrayEltR Float
-  ArrayEltRdouble  :: ArrayEltR Double
-  ArrayEltRbool    :: ArrayEltR Bool
-  ArrayEltRchar    :: ArrayEltR Char
-  ArrayEltRpair    :: ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
-  ArrayEltRvec     :: (KnownNat n, ArrayPtrs (Vec n a) ~ ArrayPtrs a, ArrayPtrs a ~ Ptr a) => ArrayEltR a -> ArrayEltR (Vec n a)
-    -- XXX: Do we really require these embedded class constraints?
+-- Utilities for working with the type families & type class instances
+data ScalarDict e where
+  ScalarDict :: (Storable (ScalarDataRepr e), Prim (ScalarDataRepr e), ArrayData e ~ ScalarData e) => ScalarDict e
+
+{-# INLINE scalarDict #-}
+scalarDict :: ScalarType e -> (Int, ScalarDict e)
+scalarDict (SingleScalarType tp)
+  | (dict, _, _) <- singleDict tp = (1, dict)
+scalarDict (VectorScalarType (VectorType n tp))
+  | (ScalarDict, _, _) <- singleDict tp = (n, ScalarDict)
+
+{-# INLINE singleDict #-}
+singleDict :: SingleType e -> (ScalarDict e, e -> ScalarDataRepr e, ScalarDataRepr e -> e)
+singleDict (NonNumSingleType TypeBool) = (ScalarDict, fromBool, toBool)
+singleDict (NonNumSingleType TypeChar) = (ScalarDict, id, id)
+singleDict (NumSingleType (IntegralNumType tp)) = case tp of
+  TypeInt    -> (ScalarDict, id, id)
+  TypeInt8   -> (ScalarDict, id, id)
+  TypeInt16  -> (ScalarDict, id, id)
+  TypeInt32  -> (ScalarDict, id, id)
+  TypeInt64  -> (ScalarDict, id, id)
+  TypeWord   -> (ScalarDict, id, id)
+  TypeWord8  -> (ScalarDict, id, id)
+  TypeWord16 -> (ScalarDict, id, id)
+  TypeWord32 -> (ScalarDict, id, id)
+  TypeWord64 -> (ScalarDict, id, id)
+singleDict (NumSingleType (FloatingNumType tp)) = case tp of
+  TypeHalf   -> (ScalarDict, id, id)
+  TypeFloat  -> (ScalarDict, id, id)
+  TypeDouble -> (ScalarDict, id, id)
 
 -- Array operations
 -- ----------------
 
-class ArrayElt e where
-  type ArrayPtrs e
-  arrayElt               :: ArrayEltR e
-  --
-  unsafeIndexArrayData   :: ArrayData e -> Int -> e
-  ptrsOfArrayData        :: ArrayData e -> ArrayPtrs e
-  touchArrayData         :: ArrayData e -> IO ()
-  --
-  newArrayData           :: Int -> IO (MutableArrayData e)
-  unsafeReadArrayData    :: MutableArrayData e -> Int      -> IO e
-  unsafeWriteArrayData   :: MutableArrayData e -> Int -> e -> IO ()
-  unsafeFreezeArrayData  :: MutableArrayData e -> IO (ArrayData e)
-  ptrsOfMutableArrayData :: MutableArrayData e -> IO (ArrayPtrs e)
-  --
-  {-# INLINE unsafeFreezeArrayData  #-}
-  {-# INLINE ptrsOfMutableArrayData #-}
-  unsafeFreezeArrayData  = return
-  ptrsOfMutableArrayData = return . ptrsOfArrayData
+-- Reads an element from an array
+unsafeIndexArrayData :: TupleType e -> ArrayData e -> Int -> e
+unsafeIndexArrayData TupRunit () !_ = ()
+unsafeIndexArrayData (TupRpair t1 t2) (a1, a2) !ix = (unsafeIndexArrayData t1 a1 ix, unsafeIndexArrayData t2 a2 ix)
+unsafeIndexArrayData (TupRsingle (SingleScalarType tp)) arr ix
+  | (ScalarDict, _, to) <- singleDict tp = to $! unsafeIndexArray arr ix
+-- VectorScalarType is handled in unsafeReadArrayData
+unsafeIndexArrayData !tp !arr !ix = unsafePerformIO $! unsafeReadArrayData tp arr ix
 
-instance ArrayElt () where
-  type ArrayPtrs () = ()
-  arrayElt          = ArrayEltRunit
-  {-# INLINE arrayElt             #-}
-  {-# INLINE newArrayData         #-}
-  {-# INLINE ptrsOfArrayData      #-}
-  {-# INLINE touchArrayData       #-}
-  {-# INLINE unsafeIndexArrayData #-}
-  {-# INLINE unsafeReadArrayData  #-}
-  {-# INLINE unsafeWriteArrayData #-}
-  newArrayData !_                    = return AD_Unit
-  ptrsOfArrayData      AD_Unit       = ()
-  touchArrayData       AD_Unit       = return ()
-  unsafeIndexArrayData AD_Unit !_    = ()
-  unsafeReadArrayData  AD_Unit !_    = return ()
-  unsafeWriteArrayData AD_Unit !_ () = return ()
+ptrOfArrayData :: ScalarType e -> ArrayData e -> Ptr (ScalarDataRepr e)
+ptrOfArrayData tp arr 
+  | (_, ScalarDict) <- scalarDict tp = unsafeUniqueArrayPtr arr
 
--- Bool arrays are stored as arrays of bytes. While this is memory inefficient,
--- it is better suited to parallel backends than a packed bit-vector
--- representation.
---
--- XXX: Currently there are _no_ (Vec n Bool) instances. We could use efficient
---      bit-packed representations for these cases...
---
-instance ArrayElt Bool where
-  type ArrayPtrs Bool = Ptr Word8
-  arrayElt            = ArrayEltRbool
-  {-# INLINE arrayElt             #-}
-  {-# INLINE newArrayData         #-}
-  {-# INLINE ptrsOfArrayData      #-}
-  {-# INLINE touchArrayData       #-}
-  {-# INLINE unsafeIndexArrayData #-}
-  {-# INLINE unsafeReadArrayData  #-}
-  {-# INLINE unsafeWriteArrayData #-}
-  newArrayData size                     = AD_Bool <$> newArrayData' size
-  ptrsOfArrayData      (AD_Bool ba)     = unsafeUniqueArrayPtr ba
-  touchArrayData       (AD_Bool ba)     = touchUniqueArray ba
-  unsafeIndexArrayData (AD_Bool ba) i   = toBool  $! unsafeIndexArray ba i
-  unsafeReadArrayData  (AD_Bool ba) i   = toBool <$> unsafeReadArray ba i
-  unsafeWriteArrayData (AD_Bool ba) i e = unsafeWriteArray ba i (fromBool e)
+touchArrayData :: TupleType e -> ArrayData e -> IO ()
+touchArrayData TupRunit () = return ()
+touchArrayData (TupRpair t1 t2) (a1, a2) = touchArrayData t1 a1 >> touchArrayData t2 a2
+touchArrayData (TupRsingle tp) arr
+  | (_, ScalarDict) <- scalarDict tp = touchUniqueArray arr
 
-instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
-  type ArrayPtrs (a, b) = (ArrayPtrs a, ArrayPtrs b)
-  arrayElt              = ArrayEltRpair arrayElt arrayElt
-  {-# INLINEABLE arrayElt               #-}
-  {-# INLINEABLE newArrayData           #-}
-  {-# INLINEABLE ptrsOfArrayData        #-}
-  {-# INLINEABLE ptrsOfMutableArrayData #-}
-  {-# INLINEABLE touchArrayData         #-}
-  {-# INLINEABLE unsafeFreezeArrayData  #-}
-  {-# INLINEABLE unsafeIndexArrayData   #-}
-  {-# INLINEABLE unsafeReadArrayData    #-}
-  {-# INLINEABLE unsafeWriteArrayData   #-}
-  newArrayData size                             = AD_Pair <$> newArrayData size <*> newArrayData size
-  touchArrayData         (AD_Pair a b)          = touchArrayData a >> touchArrayData b
-  ptrsOfArrayData        (AD_Pair a b)          = (ptrsOfArrayData a, ptrsOfArrayData b)
-  ptrsOfMutableArrayData (AD_Pair a b)          = (,) <$> ptrsOfMutableArrayData a <*> ptrsOfMutableArrayData b
-  unsafeReadArrayData    (AD_Pair a b) i        = (,) <$> unsafeReadArrayData a i <*> unsafeReadArrayData b i
-  unsafeIndexArrayData   (AD_Pair a b) i        = (unsafeIndexArrayData a i, unsafeIndexArrayData b i)
-  unsafeWriteArrayData   (AD_Pair a b) i (x, y) = unsafeWriteArrayData a i x >> unsafeWriteArrayData b i y
-  unsafeFreezeArrayData  (AD_Pair a b)          = AD_Pair <$> unsafeFreezeArrayData a <*> unsafeFreezeArrayData b
+newArrayData :: TupleType e -> Int -> IO (MutableArrayData e)
+newArrayData TupRunit         !_     = return ()
+newArrayData (TupRpair t1 t2) !size  = (,) <$> newArrayData t1 size <*> newArrayData t2 size
+newArrayData (TupRsingle tp)  !size
+  | (n, ScalarDict) <- scalarDict tp = newArrayData' (n * size)
 
+unsafeReadArrayData :: forall e. TupleType e -> MutableArrayData e -> Int -> IO e
+unsafeReadArrayData TupRunit () !_ = return ()
+unsafeReadArrayData (TupRpair t1 t2) (a1, a2) !ix = (,) <$> unsafeReadArrayData t1 a1 ix <*> unsafeReadArrayData t2 a2 ix
+unsafeReadArrayData (TupRsingle (SingleScalarType tp)) arr !ix
+  | (ScalarDict, _, to) <- singleDict tp = to <$> unsafeReadArray arr ix
+unsafeReadArrayData (TupRsingle (VectorScalarType (VectorType (I# w#) tp))) arr (I# ix#)
+  | (ScalarDict, _, _) <- singleDict tp =
+    let
+      !bytes# = w# *# sizeOf# (undefined :: ScalarDataRepr e)
+      !addr#  = unPtr# (unsafeUniqueArrayPtr arr) `plusAddr#` (ix# *# bytes#)
+    in
+      IO $ \s ->
+        case newByteArray# bytes# s                       of { (# s1, mba# #) ->
+        case copyAddrToByteArray# addr# mba# 0# bytes# s1 of { s2             ->
+        case unsafeFreezeByteArray# mba# s2               of { (# s3, ba# #)  ->
+          (# s3, Vec ba# #)
+        }}}
 
--- Array tuple operations
--- ----------------------
+unsafeWriteArrayData :: forall e. TupleType e -> MutableArrayData e -> Int -> e -> IO ()
+unsafeWriteArrayData TupRunit () !_ () = return ()
+unsafeWriteArrayData (TupRpair t1 t2) (a1, a2) !ix (v1, v2)
+  =  unsafeWriteArrayData t1 a1 ix v1
+  >> unsafeWriteArrayData t2 a2 ix v2
+unsafeWriteArrayData (TupRsingle (SingleScalarType tp)) arr !ix !val
+  | (ScalarDict, from, _) <- singleDict tp = unsafeWriteArray arr ix (from val)
+unsafeWriteArrayData (TupRsingle (VectorScalarType (VectorType (I# w#) tp))) arr !(I# ix#) (Vec ba# :: Vec n t)
+  | (ScalarDict, _, _) <- singleDict tp =
+    let
+      !bytes# = w# *# sizeOf# (undefined :: ScalarDataRepr e)
+      !addr#  = unPtr# (unsafeUniqueArrayPtr arr) `plusAddr#` (ix# *# bytes#)
+    in
+      IO $ \s -> case copyByteArrayToAddr# ba# 0# addr# bytes# s of
+        s1 -> (# s1, () #)
 
-{-# INLINE fstArrayData #-}
-fstArrayData :: ArrayData (a, b) -> ArrayData a
-fstArrayData (AD_Pair x _) = x
-
-{-# INLINE sndArrayData #-}
-sndArrayData :: ArrayData (a, b) -> ArrayData b
-sndArrayData (AD_Pair _ y) = y
-
-{-# INLINE pairArrayData #-}
-pairArrayData :: ArrayData a -> ArrayData b -> ArrayData (a, b)
-pairArrayData = AD_Pair
-
+rnfArrayData :: TupleType e -> ArrayData e -> ()
+rnfArrayData TupRunit         ()       = ()
+rnfArrayData (TupRpair t1 t2) (a1, a2) = rnfArrayData t1 a1 `seq` rnfArrayData t2 a2
+rnfArrayData (TupRsingle tp)  arr      = rnf $ ptrOfArrayData tp arr
 
 -- Auxiliary functions
 -- -------------------
@@ -370,111 +346,4 @@ mallocPlainForeignPtrBytesAligned :: Int -> IO (ForeignPtr a)
 mallocPlainForeignPtrBytesAligned (I# size) = IO $ \s ->
   case newAlignedPinnedByteArray# size 64# s of
     (# s', mbarr# #) -> (# s', ForeignPtr (byteArrayContents# (unsafeCoerce# mbarr#)) (PlainPtr mbarr#) #)
-
-
--- Instances
--- ---------
---
-$(runQ $ do
-    let
-        integralTypes :: [Name]
-        integralTypes =
-          [ ''Int
-          , ''Int8
-          , ''Int16
-          , ''Int32
-          , ''Int64
-          , ''Word
-          , ''Word8
-          , ''Word16
-          , ''Word32
-          , ''Word64
-          ]
-
-        floatingTypes :: [Name]
-        floatingTypes =
-          [ ''Half
-          , ''Float
-          , ''Double
-          ]
-
-        nonNumTypes :: [Name]
-        nonNumTypes =
-          [ ''Char      -- wide characters are 4-bytes
-          --''Bool      -- handled explicitly; stored as Word8
-          ]
-
-        allTypes :: [Name]
-        allTypes = integralTypes ++ floatingTypes ++ nonNumTypes
-
-        mkSingleElt :: Name -> Q [Dec]
-        mkSingleElt name =
-          let
-              n       = nameBase name
-              t       = conT name
-              con     = conE (mkName ("AD_" ++ n))
-              pat     = conP (mkName ("AD_" ++ n)) [varP (mkName "ba")]
-          in
-          [d| instance ArrayElt $t where
-                type ArrayPtrs $t = Ptr $t
-                arrayElt = $(conE (mkName ("ArrayEltR" ++ map toLower n)))
-                {-# INLINE arrayElt             #-}
-                {-# INLINE newArrayData         #-}
-                {-# INLINE ptrsOfArrayData      #-}
-                {-# INLINE touchArrayData       #-}
-                {-# INLINE unsafeIndexArrayData #-}
-                {-# INLINE unsafeReadArrayData  #-}
-                {-# INLINE unsafeWriteArrayData #-}
-                newArrayData size             = $con <$> newArrayData' size
-                ptrsOfArrayData      $pat     = unsafeUniqueArrayPtr ba
-                touchArrayData       $pat     = touchUniqueArray ba
-                unsafeIndexArrayData $pat i   = unsafeIndexArray ba i
-                unsafeReadArrayData  $pat i   = unsafeReadArray  ba i
-                unsafeWriteArrayData $pat i e = unsafeWriteArray ba i e
-            |]
-
-        mkVectorElt :: Name -> Q [Dec]
-        mkVectorElt name =
-          let t = conT name
-          in
-          [d| instance KnownNat n => ArrayElt (Vec n $t) where
-                type ArrayPtrs (Vec n $t) = ArrayPtrs $t
-                arrayElt                  = ArrayEltRvec arrayElt
-                {-# INLINE arrayElt             #-}
-                {-# INLINE newArrayData         #-}
-                {-# INLINE ptrsOfArrayData      #-}
-                {-# INLINE touchArrayData       #-}
-                {-# INLINE unsafeIndexArrayData #-}
-                {-# INLINE unsafeReadArrayData  #-}
-                {-# INLINE unsafeWriteArrayData #-}
-                newArrayData size =
-                  let !w@(I# w#) = fromIntegral (natVal' (proxy# :: Proxy# n))
-                  in  AD_Vec w# <$> newArrayData (w * size)
-
-                ptrsOfArrayData (AD_Vec _ ba) = ptrsOfArrayData ba
-                touchArrayData  (AD_Vec _ ba) = touchArrayData ba
-                unsafeIndexArrayData vec ix   = unsafePerformIO $! unsafeReadArrayData vec ix
-                unsafeReadArrayData (AD_Vec w# ad) (I# ix#) =
-                  let !bytes# = w# *# sizeOf# (undefined :: $t)
-                      !addr#  = unPtr# (ptrsOfArrayData ad) `plusAddr#` (ix# *# bytes#)
-                  in
-                  IO $ \s ->
-                    case newByteArray# bytes# s                       of { (# s1, mba# #) ->
-                    case copyAddrToByteArray# addr# mba# 0# bytes# s1 of { s2             ->
-                    case unsafeFreezeByteArray# mba# s2               of { (# s3, ba# #)  ->
-                      (# s3, Vec ba# #)
-                    }}}
-                unsafeWriteArrayData (AD_Vec w# ad) (I# ix#) (Vec ba#) =
-                  let !bytes# = w# *# sizeOf# (undefined :: $t)
-                      !addr#  = unPtr# (ptrsOfArrayData ad) `plusAddr#` (ix# *# bytes#)
-                  in
-                  IO $ \s ->
-                    case copyByteArrayToAddr# ba# 0# addr# bytes# s of
-                      s1 -> (# s1, () #)
-            |]
-    --
-    ss <- mapM mkSingleElt allTypes
-    vv <- mapM mkVectorElt allTypes
-    return (concat ss ++ concat vv)
- )
 

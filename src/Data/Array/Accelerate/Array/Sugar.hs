@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -31,13 +32,18 @@
 --
 
 module Data.Array.Accelerate.Array.Sugar (
+  -- * Tuple representation
+  TupR(..),
 
   -- * Array representation
   Array(..), Scalar, Vector, Matrix, Segments,
-  Arrays(..), ArraysR(..), arraysRtuple2,
+  Arrays(..), Repr.ArraysR, Repr.ArrayR(..), Repr.arraysRarray, Repr.arraysRtuple2,
 
   -- * Class of supported surface element types and their mapping to representation types
-  Elt(..),
+  Elt(..), TupleType,
+
+  -- * Stencils
+  Stencil(..), StencilR(..),
 
   -- * Derived functions
   liftToElt, liftToElt2, sinkFromElt, sinkFromElt2,
@@ -173,7 +179,6 @@ data Split = Split
 data Divide sh = Divide
   deriving (Typeable, Show, Eq)
 
-
 -- Scalar elements
 -- ---------------
 
@@ -208,7 +213,7 @@ data Divide sh = Divide
 -- > data Point = Point Int Float
 -- >   deriving (Show, Generic, Elt)
 --
-class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a where
+class (Show a, Typeable a, Typeable (EltRepr a)) => Elt a where
   -- | Type representation mapping, which explains how to convert a type from
   -- the surface type into the internal representation type consisting only of
   -- simple primitive types, unit '()', and pair '(,)'.
@@ -224,7 +229,7 @@ class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a)) => Elt a 
   default eltType
     :: (GElt (Rep a), EltRepr a ~ GEltRepr () (Rep a))
     => TupleType (EltRepr a)
-  eltType = geltType @(Rep a) TypeRunit
+  eltType = geltType @(Rep a) TupRunit
 
   {-# INLINE [1] fromElt #-}
   default fromElt
@@ -261,7 +266,7 @@ instance GElt a => GElt (M1 i c a) where
 
 instance Elt a => GElt (K1 i a) where
   type GEltRepr t (K1 i a) = (t, EltRepr a)
-  geltType t        = TypeRpair t (eltType @a)
+  geltType t        = TupRpair t (eltType @a)
   gfromElt t (K1 x) = (t, fromElt x)
   gtoElt     (t, x) = (t, K1 (toElt x))
 
@@ -288,7 +293,7 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 -- >       @(TupleType (EltRepr CShort))
 -- >       (eltType :: TupleType (EltRepr CShort))
 --
--- Which yields the error "couldn't match type type 'EltRepr a0' with 'Int16'".
+-- Which yields the error "couldn't match type 'EltRepr a0' with 'Int16'".
 -- Since this function returns a type family type, the type signature on the
 -- result is not enough to fix the type 'a'. Instead, we require the use of
 -- (visible) type applications:
@@ -311,7 +316,7 @@ instance Elt () where
   {-# INLINE eltType #-}
   {-# INLINE toElt   #-}
   {-# INLINE fromElt #-}
-  eltType   = TypeRunit
+  eltType   = TupRunit
   fromElt   = id
   toElt     = id
 
@@ -320,7 +325,7 @@ instance Elt Z where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType    = TypeRunit
+  eltType    = TupRunit
   fromElt Z  = ()
   toElt ()   = Z
 
@@ -329,7 +334,7 @@ instance (Elt t, Elt h) => Elt (t:.h) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType         = TypeRpair (eltType @t) (eltType @h)
+  eltType         = TupRpair (eltType @t) (eltType @h)
   fromElt (t:.h)  = (fromElt t, fromElt h)
   toElt (t, h)    = toElt t :. toElt h
 
@@ -338,7 +343,7 @@ instance Elt All where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType       = TypeRunit
+  eltType       = TupRunit
   fromElt All   = ()
   toElt ()      = All
 
@@ -347,7 +352,7 @@ instance Elt (Any Z) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType       = TypeRunit
+  eltType       = TupRunit
   fromElt _     = ()
   toElt _       = Any
 
@@ -356,7 +361,7 @@ instance Shape sh => Elt (Any (sh:.Int)) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType       = TypeRpair (eltType @(Any sh)) TypeRunit
+  eltType       = TupRpair (eltType @(Any sh)) TupRunit
   fromElt _     = (fromElt (Any @sh), ())
   toElt _       = Any
 
@@ -389,7 +394,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 --  Convenience functions
 --
 singletonScalarType :: IsScalar a => TupleType a
-singletonScalarType = TypeRscalar scalarType
+singletonScalarType = TupRsingle scalarType
 
 {-# INLINE liftToElt #-}
 liftToElt :: (Elt a, Elt b)
@@ -419,6 +424,114 @@ sinkFromElt2 f x y = fromElt $ f (toElt x) (toElt y)
 "fromElt/toElt" forall e. fromElt (toElt e) = e
 "toElt/fromElt" forall e. toElt (fromElt e) = e
 #-}
+
+
+-- | Operations on stencils
+--
+class (Shape sh, Elt e, IsTuple stencil, Elt stencil) => Stencil sh e stencil where
+  stencil :: StencilR sh e stencil
+
+-- | GADT reifying the 'Stencil' class
+--
+data StencilR sh e pat where
+  StencilRunit3 :: Elt e => StencilR DIM1 e (e,e,e)
+  StencilRunit5 :: Elt e => StencilR DIM1 e (e,e,e,e,e)
+  StencilRunit7 :: Elt e => StencilR DIM1 e (e,e,e,e,e,e,e)
+  StencilRunit9 :: Elt e => StencilR DIM1 e (e,e,e,e,e,e,e,e,e)
+
+  StencilRtup3  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3)
+
+  StencilRtup5  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5)
+
+  StencilRtup7  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR sh e pat6
+                -> StencilR sh e pat7
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7)
+
+  StencilRtup9  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR sh e pat6
+                -> StencilR sh e pat7
+                -> StencilR sh e pat8
+                -> StencilR sh e pat9
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7,pat8,pat9)
+
+
+-- Note: [Stencil reification class]
+--
+-- We cannot start with 'DIM0'.  The 'IsTuple stencil' superclass would at
+-- 'DIM0' imply that the types of individual array elements are in 'IsTuple'.
+-- (That would only possible if we could have (degenerate) 1-tuple, but we can't
+-- as we can't distinguish between a 1-tuple of a pair and a simple pair.)
+-- Hence, we need to start from 'DIM1' and use 'sh:.Int:.Int' in the recursive
+-- case (to avoid overlapping instances).
+
+-- DIM1
+instance Elt e => Stencil DIM1 e (e, e, e) where
+  stencil = StencilRunit3
+
+instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
+  stencil = StencilRunit5
+
+instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
+  stencil = StencilRunit7
+
+instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
+  stencil = StencilRunit9
+
+-- DIM(n+1), where n>1
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3) => Stencil (sh:.Int:.Int) a (row1, row2, row3) where
+  stencil = StencilRtup3 stencil stencil stencil
+
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
+  stencil = StencilRtup5 stencil stencil stencil stencil stencil
+
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5,
+          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row7)
+  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
+  stencil = StencilRtup7 stencil stencil stencil stencil stencil stencil stencil
+
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5,
+          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row7,
+          Stencil (sh:.Int) a row8,
+          Stencil (sh:.Int) a row9)
+  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  stencil = StencilRtup9 stencil stencil stencil stencil stencil stencil stencil stencil stencil
 
 
 -- Foreign functions
@@ -488,15 +601,15 @@ class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
   type ArrRepr a :: Type
   type ArrRepr a = GArrRepr () (Rep a)
 
-  arrays   :: ArraysR (ArrRepr a)
+  arrays   :: Repr.ArraysR (ArrRepr a)
   toArr    :: ArrRepr  a -> a
   fromArr  :: a -> ArrRepr  a
 
   {-# INLINE arrays #-}
   default arrays
     :: (GArrays (Rep a), ArrRepr a ~ GArrRepr () (Rep a))
-    => ArraysR (ArrRepr a)
-  arrays = garrays @(Rep a) ArraysRunit
+    => Repr.ArraysR (ArrRepr a)
+  arrays = garrays @(Rep a) TupRunit
 
   {-# INLINE [1] toArr #-}
   default toArr
@@ -516,10 +629,12 @@ class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
   --   => a -> ArraysFlavour a
   -- flavour _ = gflavour @(Rep a)
 
+arrayR :: forall sh e. (Shape sh, Elt e) => Repr.ArrayR (Repr.Array (EltRepr sh) (EltRepr e))
+arrayR = Repr.ArrayR (shapeR @sh) (eltType @e)
 
 class GArrays f where
   type GArrRepr t f
-  garrays  :: ArraysR t -> ArraysR (GArrRepr t f)
+  garrays  :: Repr.ArraysR t -> Repr.ArraysR (GArrRepr t f)
   gfromArr :: f a -> t -> GArrRepr t f
   gtoArr   :: GArrRepr t f -> (t, f a)
 
@@ -537,7 +652,7 @@ instance GArrays a => GArrays (M1 i c a) where
 
 instance Arrays a => GArrays (K1 i a) where
   type GArrRepr t (K1 i a) = (t, ArrRepr a)
-  garrays         t = ArraysRpair t (arrays @a)
+  garrays         t = TupRpair t (arrays @a)
   gfromArr (K1 x) t = (t, fromArr x)
   gtoArr   (t, x)   = (t, K1 (toArr x))
 
@@ -557,18 +672,18 @@ instance Arrays () where
   {-# INLINE arrays      #-}
   {-# INLINE [1] fromArr #-}
   {-# INLINE [1] toArr   #-}
-  arrays  = ArraysRunit
+  arrays  = TupRunit
   fromArr = id
   toArr   = id
 
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
-  type ArrRepr (Array sh e) = Array sh e
+  type ArrRepr (Array sh e) = Repr.Array (EltRepr sh) (EltRepr e)
   {-# INLINE arrays      #-}
   {-# INLINE [1] fromArr #-}
   {-# INLINE [1] toArr   #-}
-  arrays  = ArraysRarray
-  fromArr = id
-  toArr   = id
+  arrays  = Repr.arraysRarray (shapeR @sh) (eltType @e)
+  fromArr (Array sh arrayData) = Repr.Array sh arrayData
+  toArr   (Repr.Array sh arrayData) = Array sh arrayData
 
 instance (Arrays a, Arrays b) => Arrays (a, b)
 instance (Arrays a, Arrays b, Arrays c) => Arrays (a, b, c)
@@ -596,17 +711,6 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
   => Arrays (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-
-
--- Array type reification
---
-data ArraysR arrs where
-  ArraysRunit  ::                                   ArraysR ()
-  ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
-  ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
-
-arraysRtuple2 :: (Shape sh1, Elt e1, Shape sh2, Elt e2) => ArraysR (((), Array sh2 e2), Array sh1 e1)
-arraysRtuple2 = ArraysRpair ArraysRunit ArraysRarray `ArraysRpair` ArraysRarray
 
 {-# RULES
 "fromArr/toArr" forall a. fromArr (toArr a) = a
@@ -739,28 +843,7 @@ instance Elt e => IsList (Vector e) where
   fromList xs    = GHC.fromListN (length xs) xs
 
 instance (Shape sh, Elt e) => NFData (Array sh e) where
-  rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
-    where
-      go :: ArrayEltR e' -> ArrayData e' -> ()
-      go ArrayEltRunit         AD_Unit         = ()
-      go ArrayEltRint          (AD_Int ua)     = rnf ua
-      go ArrayEltRint8         (AD_Int8 ua)    = rnf ua
-      go ArrayEltRint16        (AD_Int16 ua)   = rnf ua
-      go ArrayEltRint32        (AD_Int32 ua)   = rnf ua
-      go ArrayEltRint64        (AD_Int64 ua)   = rnf ua
-      go ArrayEltRword         (AD_Word ua)    = rnf ua
-      go ArrayEltRword8        (AD_Word8 ua)   = rnf ua
-      go ArrayEltRword16       (AD_Word16 ua)  = rnf ua
-      go ArrayEltRword32       (AD_Word32 ua)  = rnf ua
-      go ArrayEltRword64       (AD_Word64 ua)  = rnf ua
-      go ArrayEltRhalf         (AD_Half ua)    = rnf ua
-      go ArrayEltRfloat        (AD_Float ua)   = rnf ua
-      go ArrayEltRdouble       (AD_Double ua)  = rnf ua
-      go ArrayEltRbool         (AD_Bool ua)    = rnf ua
-      go ArrayEltRchar         (AD_Char ua)    = rnf ua
-      go (ArrayEltRvec r)      (AD_Vec !_ a)   = go r a `seq` ()
-      go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
-
+  rnf (Array sh ad) = Repr.size (shapeR @sh) sh `seq` rnfArrayData (eltType @e) ad
 
 -- | Scalar arrays hold a single element
 --
@@ -801,8 +884,10 @@ type DIM9 = DIM8:.Int
 
 -- |Shapes and indices of multi-dimensional arrays
 --
-class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSliceShape sh ~ sh, SliceShape sh ~ Z)
+class (Elt sh, Elt (Any sh), FullShape sh ~ sh, CoSliceShape sh ~ sh, SliceShape sh ~ Z)
        => Shape sh where
+
+  shapeR :: Repr.ShapeR (EltRepr sh)
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
   rank   :: Int
@@ -874,37 +959,39 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   {-# INLINE shapeToList  #-}
   {-# INLINE listToShape  #-}
   {-# INLINE listToShape' #-}
-  rank                  = Repr.rank @(EltRepr sh)
-  size                  = Repr.size . fromElt
-  empty                 = toElt Repr.empty
+  rank                  = Repr.rank (shapeR @sh)
+  size                  = Repr.size (shapeR @sh) . fromElt
+  empty                 = toElt $ Repr.empty $ shapeR @sh
   -- (#) must be individually defined, as it holds for all instances *except*
   -- the one with the largest arity
 
-  ignore                = toElt Repr.ignore
-  intersect sh1 sh2     = toElt (Repr.intersect (fromElt sh1) (fromElt sh2))
-  union sh1 sh2         = toElt (Repr.union (fromElt sh1) (fromElt sh2))
-  fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
-  toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)
+  ignore                = toElt $ Repr.ignore $ shapeR @sh
+  intersect sh1 sh2     = toElt (Repr.intersect (shapeR @sh) (fromElt sh1) (fromElt sh2))
+  union sh1 sh2         = toElt (Repr.union (shapeR @sh) (fromElt sh1) (fromElt sh2))
+  fromIndex sh ix       = toElt (Repr.fromIndex (shapeR @sh) (fromElt sh) ix)
+  toIndex sh ix         = Repr.toIndex (shapeR @sh) (fromElt sh) (fromElt ix)
 
-  iter sh f c r         = Repr.iter  (fromElt sh) (f . toElt) c r
-  iter1 sh f r          = Repr.iter1 (fromElt sh) (f . toElt) r
+  iter sh f c r         = Repr.iter  (shapeR @sh) (fromElt sh) (f . toElt) c r
+  iter1 sh f r          = Repr.iter1 (shapeR @sh) (fromElt sh) (f . toElt) r
 
   rangeToShape (low, high)
-    = toElt (Repr.rangeToShape (fromElt low, fromElt high))
+    = toElt (Repr.rangeToShape (shapeR @sh) (fromElt low, fromElt high))
   shapeToRange ix
-    = let (low, high) = Repr.shapeToRange (fromElt ix)
+    = let (low, high) = Repr.shapeToRange (shapeR @sh) (fromElt ix)
       in
       (toElt low, toElt high)
 
-  shapeToList  = Repr.shapeToList . fromElt
-  listToShape  = toElt . Repr.listToShape
-  listToShape' = fmap toElt . Repr.listToShape'
+  shapeToList  = Repr.shapeToList (shapeR @sh) . fromElt
+  listToShape  = toElt . Repr.listToShape (shapeR @sh)
+  listToShape' = fmap toElt . Repr.listToShape' (shapeR @sh)
 
 instance Shape Z where
+  shapeR = Repr.ShapeRz
   sliceAnyIndex  = Repr.SliceNil
   sliceNoneIndex = Repr.SliceNil
 
 instance Shape sh => Shape (sh:.Int) where
+  shapeR = Repr.ShapeRcons (shapeR @sh)
   sliceAnyIndex  = Repr.SliceAll   (sliceAnyIndex  @sh)
   sliceNoneIndex = Repr.SliceFixed (sliceNoneIndex @sh)
 
@@ -990,22 +1077,22 @@ shape (Array sh _) = toElt sh
 -- the source and result arrays must be identical.
 --
 {-# INLINE reshape #-}
-reshape :: (Shape sh, Shape sh') => sh -> Array sh' e -> Array sh e
+reshape :: forall sh sh' e. (Shape sh, Shape sh') => sh -> Array sh' e -> Array sh e
 reshape sh (Array sh' adata)
-  = $boundsCheck "reshape" "shape mismatch" (size sh == Repr.size sh')
+  = $boundsCheck "reshape" "shape mismatch" (size sh == Repr.size (shapeR @sh') sh')
   $ Array (fromElt sh) adata
 
 -- | Array indexing
 --
 infixl 9 !
 {-# INLINE [1] (!) #-}
-(!) :: (Shape sh, Elt e) => Array sh e -> sh -> e
-(!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` toIndex (toElt sh) ix)
+(!) :: forall sh e. (Shape sh, Elt e) => Array sh e -> sh -> e
+(!) (Array sh adata) ix = toElt (unsafeIndexArrayData (eltType @e) adata $ toIndex (toElt sh) ix)
 
 infixl 9 !!
 {-# INLINE [1] (!!) #-}
-(!!) :: Elt e => Array sh e -> Int -> e
-(!!) (Array _ adata) i = toElt (adata `unsafeIndexArrayData` i)
+(!!) :: forall sh e. Elt e => Array sh e -> Int -> e
+(!!) (Array _ adata) i = toElt (unsafeIndexArrayData (eltType @e) adata i)
 
 {-# RULES
 "indexArray/DIM0" forall arr.   arr ! Z        = arr !! 0
@@ -1024,16 +1111,16 @@ fromFunction sh f = unsafePerformIO $! fromFunctionM sh (return . f)
 -- @since 1.2.0.0
 --
 {-# INLINEABLE fromFunctionM #-}
-fromFunctionM :: (Shape sh, Elt e) => sh -> (sh -> IO e) -> IO (Array sh e)
+fromFunctionM :: forall sh e. (Shape sh, Elt e) => sh -> (sh -> IO e) -> IO (Array sh e)
 fromFunctionM sh f = do
   let !n = size sh
-  arr <- newArrayData n
+  arr <- newArrayData (eltType @e) n
   --
   let write !i
         | i >= n    = return ()
         | otherwise = do
             v <- f (fromIndex sh i)
-            unsafeWriteArrayData arr i (fromElt v)
+            unsafeWriteArrayData (eltType @e) arr i (fromElt v)
             write (i+1)
   --
   write 0
@@ -1043,14 +1130,14 @@ fromFunctionM sh f = do
 -- | Create a vector from the concatenation of the given list of vectors.
 --
 {-# INLINEABLE concatVectors #-}
-concatVectors :: Elt e => [Vector e] -> Vector e
+concatVectors :: forall e. Elt e => [Vector e] -> Vector e
 concatVectors vs = adata `seq` Array ((), len) adata
   where
     offsets     = scanl (+) 0 (map (size . shape) vs)
     len         = last offsets
     (adata, _)  = runArrayData $ do
-              arr <- newArrayData len
-              sequence_ [ unsafeWriteArrayData arr (i + k) (unsafeIndexArrayData ad i)
+              arr <- newArrayData (eltType @e) len
+              sequence_ [ unsafeWriteArrayData (eltType @e) arr (i + k) (unsafeIndexArrayData (eltType @e) ad i)
                         | (Array ((), n) ad, k) <- vs `zip` offsets
                         , i <- [0 .. n - 1] ]
               return (arr, undefined)
@@ -1058,9 +1145,9 @@ concatVectors vs = adata `seq` Array ((), len) adata
 -- | Creates a new, uninitialized Accelerate array.
 --
 {-# INLINEABLE allocateArray #-}
-allocateArray :: (Shape sh, Elt e) => sh -> IO (Array sh e)
+allocateArray :: forall sh e. (Shape sh, Elt e) => sh -> IO (Array sh e)
 allocateArray sh = do
-  adata  <- newArrayData (size sh)
+  adata  <- newArrayData (eltType @e) (size sh)
   return $! Array (fromElt sh) adata
 
 
@@ -1095,34 +1182,14 @@ allocateArray sh = do
 -- thus forcing the spine of the list to be manifest on the heap.
 --
 {-# INLINEABLE fromList #-}
-fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
-fromList sh xs = adata `seq` Array (fromElt sh) adata
-  where
-    -- Assume the array is in dense row-major order. This is safe because
-    -- otherwise backends would not be able to directly memcpy.
-    --
-    !n          = size sh
-    (adata, _)  = runArrayData $ do
-                    arr <- newArrayData n
-                    let go !i _ | i >= n = return ()
-                        go !i (v:vs)     = unsafeWriteArrayData arr i (fromElt v) >> go (i+1) vs
-                        go _  []         = error "Data.Array.Accelerate.fromList: not enough input data"
-                    --
-                    go 0 xs
-                    return (arr, undefined)
+fromList :: forall sh e. (Shape sh, Elt e) => sh -> [e] -> Array sh e
+fromList sh xs = toArr $ Repr.fromList (arrayR @sh @e) (fromElt sh) $ map fromElt xs
 
 -- | Convert an accelerated 'Array' to a list in row-major order.
 --
 {-# INLINEABLE toList #-}
 toList :: forall sh e. (Shape sh, Elt e) => Array sh e -> [e]
-toList (Array sh adata) = go 0
-  where
-    -- Assume underling array is in row-major order. This is safe because
-    -- otherwise backends would not be able to directly memcpy.
-    --
-    !n                  = Repr.size sh
-    go !i | i >= n      = []
-          | otherwise   = toElt (adata `unsafeIndexArrayData` i) : go (i+1)
+toList = map toElt . Repr.toList (arrayR @sh @e) . fromArr
 
 -- | Nicely format a shape as a string
 --
