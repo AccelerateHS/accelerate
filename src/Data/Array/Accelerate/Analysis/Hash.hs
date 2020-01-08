@@ -317,8 +317,16 @@ encodePreOpenExp
     -> Builder
 encodePreOpenExp options encodeAcc exp =
   let
+      -- XXX: Temporary fix for hashing expressions which only depend on
+      -- free array variables. For the code generating backends it will
+      -- never pick up expressions which differ only at free array
+      -- variables. We know that this will always be an Avar (we depend on
+      -- array expressions being floated out already) so we should change
+      -- this in the AST. This problem occurred in the Quickhull program.
+      --   -- TLM 2020-01-08
+      --
       travA :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travA a = encodeArraysType (arrays @a) <> encodeAcc options a
+      travA a = encodeArraysType (arrays @a) <> encodeAcc (options {perfect=True}) a
 
       travE :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
       travE e =  encodeTupleType (eltType @e) <> encodePreOpenExp options encodeAcc e
