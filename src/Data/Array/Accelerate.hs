@@ -339,6 +339,8 @@ module Data.Array.Accelerate (
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
+  pattern True_, pattern False_,
+
   -- ** Scalar operations
   -- *** Introduction
   constant,

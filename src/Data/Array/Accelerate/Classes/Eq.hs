@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE TypeOperators     #-}
@@ -17,6 +18,7 @@
 
 module Data.Array.Accelerate.Classes.Eq (
 
+  Bool(..), pattern True_, pattern False_,
   Eq(..),
   (&&),
   (||),
@@ -34,6 +36,13 @@ import Prelude                                                      ( ($), Strin
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
+
+
+pattern True_ :: Exp Bool
+pattern True_ = Exp (Const True)
+
+pattern False_ :: Exp Bool
+pattern False_ = Exp (Const False)
 
 
 infix 4 ==
@@ -74,12 +83,12 @@ class Elt a => Eq a where
 
 
 instance Eq () where
-  _ == _ = constant True   -- force arguments?
-  _ /= _ = constant False  -- force arguments?
+  _ == _ = True_
+  _ /= _ = False_
 
 instance Eq Z where
-  (==) _ _ = constant True
-  (/=) _ _ = constant False
+  _ == _ = True_
+  _ /= _ = False_
 
 instance Eq sh => Eq (sh :. Int) where
   x == y = indexHead x == indexHead y && indexTail x == indexTail y
