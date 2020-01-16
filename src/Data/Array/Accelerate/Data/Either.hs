@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -22,7 +23,7 @@
 
 module Data.Array.Accelerate.Data.Either (
 
-  Either(..),
+  Either(..), pattern Left_, pattern Right_,
   left, right,
   either, isLeft, isRight, fromLeft, fromRight, lefts, rights,
 
@@ -51,6 +52,14 @@ import Data.Either                                                  ( Either(..)
 import Data.Maybe
 import Prelude                                                      ( (.), ($), const, otherwise )
 
+
+pattern Left_ :: (Elt a, Elt b) => Exp a -> Exp (Either a b)
+pattern Left_ <- _
+  where Left_ = left
+
+pattern Right_ :: (Elt a, Elt b) => Exp b -> Exp (Either a b)
+pattern Right_ <- _
+  where Right_ = right
 
 -- | Lift a value into the 'Left' constructor
 --
@@ -123,7 +132,7 @@ instance Elt a => Functor (Either a) where
 instance (Eq a, Eq b) => Eq (Either a b) where
   ex == ey = isLeft  ex && isLeft  ey ? ( fromLeft ex  == fromLeft ey
            , isRight ex && isRight ey ? ( fromRight ex == fromRight ey
-           , {- else -}                   constant False ))
+           , {- else -}                   False_ ))
 
 instance (Ord a, Ord b) => Ord (Either a b) where
   compare ex ey = isLeft  ex && isLeft  ey ? ( compare (fromLeft ex) (fromLeft ey)
