@@ -795,14 +795,14 @@ any f = or . map f
 and :: Shape sh
     => Acc (Array (sh:.Int) Bool)
     -> Acc (Array sh Bool)
-and = fold (&&) (constant True)
+and = fold (&&) True_
 
 -- | Check if any element along the innermost dimension is 'True'.
 --
 or :: Shape sh
    => Acc (Array (sh:.Int) Bool)
    -> Acc (Array sh Bool)
-or = fold (||) (constant False)
+or = fold (||) False_
 
 -- | Compute the sum of elements along the innermost dimension of the array. To
 -- find the sum of the entire array, 'flatten' it first.
@@ -973,10 +973,10 @@ scanlSeg
     -> Acc (Array (sh:.Int) e)
 scanlSeg f z arr seg =
   if null arr || null flags
-    then fill (lift (sh:.sz + length seg)) z
+    then fill (sh ::. sz + length seg) z
     else scanl1Seg f arr' seg'
   where
-    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
+    sh ::. sz    = shape arr
 
     -- Segmented exclusive scan is implemented by first injecting the seed
     -- element at the head of each segment, and then performing a segmented
@@ -988,9 +988,9 @@ scanlSeg f z arr seg =
     --
     seg'        = map (+1) seg
     arr'        = permute const
-                          (fill (lift (sh :. sz + length seg)) z)
-                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
-                                  in  lift (sx :. i + fromIntegral (inc ! index1 i)))
+                          (fill (sh ::. sz + length seg) z)
+                          (\ix -> let sx ::. i = ix
+                                  in  sx ::. i + fromIntegral (inc ! I1 i))
                           (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
@@ -1048,8 +1048,8 @@ scanl'Seg
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
 scanl'Seg f z arr seg =
   if null arr
-    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
-    else lift (body, sums)
+    then T2 arr  (fill (indexTail (shape arr) ::. length seg) z)
+    else T2 body sums
   where
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -1068,9 +1068,9 @@ scanl'Seg f z arr seg =
     seg'        = map (+1) seg
     tails       = zipWith (+) seg $ prescanl (+) 0 seg'
     sums        = backpermute
-                    (lift (indexTail (shape arr') :. length seg))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. fromIntegral (tails ! index1 i)))
+                    (indexTail (shape arr') ::. length seg)
+                    (\ix -> let sz ::. i = ix
+                            in  sz ::. fromIntegral (tails ! I1 i))
                     arr'
 
     -- Slice out the body of each segment.
@@ -1089,9 +1089,9 @@ scanl'Seg f z arr seg =
 
     len         = offset ! index1 (length offset - 1)
     body        = backpermute
-                    (lift (indexTail (shape arr) :. fromIntegral len))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                    (indexTail (shape arr) ::. fromIntegral len)
+                    (\ix -> let sz ::. i = ix
+                            in  sz ::. i + fromIntegral (inc ! I1 i))
                     arr'
 
 
@@ -1198,10 +1198,10 @@ scanrSeg
     -> Acc (Array (sh:.Int) e)
 scanrSeg f z arr seg =
   if null arr || null flags
-    then fill (lift (sh :. sz + length seg)) z
+    then fill (sh ::. sz + length seg) z
     else scanr1Seg f arr' seg'
   where
-    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
+    sh ::. sz    = shape arr
 
     -- Using technique described for 'scanlSeg', where we intersperse the array
     -- with the seed element at the start of each segment, and then perform an
@@ -1212,9 +1212,9 @@ scanrSeg f z arr seg =
 
     seg'        = map (+1) seg
     arr'        = permute const
-                          (fill (lift (sh :. sz + length seg)) z)
-                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
-                                  in  lift (sx :. i + fromIntegral (inc ! index1 i) - 1))
+                          (fill (sh ::. sz + length seg) z)
+                          (\ix -> let sx ::. i = ix
+                                  in  sx ::. i + fromIntegral (inc ! index1 i) - 1)
                           (drop (sz - length flags) arr)
 
 
@@ -1258,8 +1258,8 @@ scanr'Seg
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
 scanr'Seg f z arr seg =
   if null arr
-    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
-    else lift (body, sums)
+    then T2 arr  (fill (indexTail (shape arr) ::. length seg) z)
+    else T2 body sums
   where
     -- Using technique described for scanl'Seg
     --
@@ -1269,18 +1269,18 @@ scanr'Seg f z arr seg =
     seg'        = map (+1) seg
     heads       = prescanl (+) 0 seg'
     sums        = backpermute
-                    (lift (indexTail (shape arr') :. length seg))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. fromIntegral (heads ! index1 i)))
+                    (indexTail (shape arr') ::. length seg)
+                    (\ix -> let sz ::.i = ix
+                            in  sz ::. fromIntegral (heads ! I1 i))
                     arr'
 
     -- body segments
     flags       = mkHeadFlags seg
     inc         = scanl1 (+) flags
     body        = backpermute
-                    (lift (indexTail (shape arr) :. indexHead (shape flags)))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                    (indexTail (shape arr) ::. indexHead (shape flags))
+                    (\ix -> let sz ::. i = ix
+                            in  sz ::. i + fromIntegral (inc ! I1 i))
                     arr'
 
 
@@ -1364,9 +1364,9 @@ mkHeadFlags seg
   = init
   $ permute (+) zeros (\ix -> index1' (offset ! ix)) ones
   where
-    (offset, len)       = unlift (scanl' (+) 0 seg)
-    zeros               = fill (index1' $ the len + 1) 0
-    ones                = fill (index1  $ size offset) 1
+    T2 offset len = scanl' (+) 0 seg
+    zeros         = fill (index1' $ the len + 1) 0
+    ones          = fill (index1  $ size offset) 1
 
 -- |Compute tail flags vector from segment vector for right-scans. That is, the
 -- flag is placed at the last place in each segment.
@@ -1379,9 +1379,9 @@ mkTailFlags seg
   = init
   $ permute (+) zeros (\ix -> index1' (the len - 1 - offset ! ix)) ones
   where
-    (offset, len)       = unlift (scanr' (+) 0 seg)
-    zeros               = fill (index1' $ the len + 1) 0
-    ones                = fill (index1  $ size offset) 1
+    T2 offset len = scanr' (+) 0 seg
+    zeros         = fill (index1' $ the len + 1) 0
+    ones          = fill (index1  $ size offset) 1
 
 -- | Construct a segmented version of a function from a non-segmented
 -- version. The segmented apply operates on a head-flag value tuple, and
@@ -1639,21 +1639,21 @@ filter p arr
   | Just Refl <- matchShapeType @sh @Z
   = let
         keep            = map p arr
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
+        T2 target len   = scanl' (+) 0 (map boolToInt keep)
         prj ix          = keep!ix ? ( index1 (target!ix), ignore )
         dummy           = fill (index1 (the len)) undef
         result          = permute const dummy prj arr
     in
     if null arr
-      then lift (emptyArray, fill (constant Z) 0)
-      else lift (result, len)
+      then T2 emptyArray (fill Z_ 0)
+      else T2 result len
 
 filter p arr
   = let
         sz              = indexTail (shape arr)
         keep            = map p arr
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
+        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+        T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
                             then index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
                             else ignore
@@ -1661,8 +1661,8 @@ filter p arr
         result          = permute const dummy prj arr
     in
     if null arr
-      then lift (emptyArray, fill sz 0)
-      else lift (result, len)
+      then T2 emptyArray (fill sz 0)
+      else T2 result len
 
 {-# NOINLINE filter #-}
 {-# RULES
@@ -2220,10 +2220,8 @@ iterate
     -> Exp a
     -> Exp a
 iterate n f z
-  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
-        step (i, acc)   = ( i+1, f acc )
-    in
-    snd $ while (\v -> fst v < n) (lift1 step) (lift (0, z))
+  = let step (T2 i acc) = T2 (i+1) (f acc)
+     in snd $ while (\v -> fst v < n) step (T2 0 z)
 
 
 -- Scalar bulk operations
@@ -2239,11 +2237,9 @@ sfoldl :: forall sh a b. (Shape sh, Elt a, Elt b)
        -> Acc (Array (sh :. Int) b)
        -> Exp a
 sfoldl f z ix xs
-  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
-        step (i, acc)   = ( i+1, acc `f` (xs ! lift (ix :. i)) )
-        (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
-    in
-    snd $ while (\v -> fst v < n) (lift1 step) (lift (0, z))
+  = let n               = indexHead (shape xs)
+        step (T2 i acc) = T2 (i+1) (acc `f` (xs ! (ix ::. i)))
+     in snd $ while (\v -> fst v < n) step (T2 0 z)
 
 
 -- Tuples
@@ -2252,21 +2248,21 @@ sfoldl f z ix xs
 -- |Extract the first component of a scalar pair.
 --
 fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
-fst e = let (x, _::Exp b) = unlift e in x
+fst (T2 a _) = a
 
 -- |Extract the first component of an array pair.
 {-# NOINLINE[1] afst #-}
 afst :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc a
-afst a = let (x, _::Acc b) = unlift a in x
+afst (T2 a _) = a
 
 -- |Extract the second component of a scalar pair.
 --
 snd :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp b
-snd e = let (_:: Exp a, y) = unlift e in y
+snd (T2 _ b) = b
 
 -- | Extract the second component of an array pair
 asnd :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc b
-asnd a = let (_::Acc a, y) = unlift a in y
+asnd (T2 _ b) = b
 
 -- |Converts an uncurried function to a curried function.
 --
