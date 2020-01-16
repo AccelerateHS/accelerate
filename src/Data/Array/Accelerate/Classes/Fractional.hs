@@ -16,7 +16,7 @@
 module Data.Array.Accelerate.Classes.Fractional (
 
   Fractional,
-  (P./), P.recip, fromRational,
+  (P./), P.recip, P.fromRational,
 
 ) where
 
@@ -26,7 +26,7 @@ import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Num
 
-import Prelude                                                      ( Rational, (.) )
+import Prelude                                                      ( (.) )
 import qualified Prelude                                            as P
 
 
@@ -37,8 +37,8 @@ import qualified Prelude                                            as P
 -- version where the return type is fixed to an 'Exp' term in order to improve
 -- type checking in Accelerate modules when @RebindableSyntax@ is enabled.
 --
-fromRational :: Fractional a => Rational -> Exp a
-fromRational = P.fromRational
+-- fromRational :: Fractional a => Rational -> Exp a
+-- fromRational = P.fromRational
 
 
 -- | Fractional numbers, supporting real division
