@@ -982,9 +982,9 @@ scanlSeg f z arr seg =
     -- element at the head of each segment, and then performing a segmented
     -- inclusive scan.
     --
-    -- This is done by creating a creating a vector entirely of the seed
-    -- element, and overlaying the input data in all places other than at the
-    -- start of a segment.
+    -- This is done by creating a vector entirely of the seed element, and
+    -- overlaying the input data in all places other than at the start of
+    -- a segment.
     --
     seg'        = map (+1) seg
     arr'        = permute const
@@ -1135,7 +1135,7 @@ scanl1Seg
     -> Acc (Array (sh:.Int) e)
 scanl1Seg f arr seg
   = map snd
-  . scanl1 (segmented f)
+  . scanl1 (segmentedL f)
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkHeadFlags seg)) arr
 
 -- |Segmented version of 'prescanl'.
@@ -1315,7 +1315,7 @@ scanr1Seg
     -> Acc (Array (sh:.Int) e)
 scanr1Seg f arr seg
   = map snd
-  . scanr1 (flip (segmented f))
+  . scanr1 (segmentedR f)
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkTailFlags seg)) arr
 
 
@@ -1383,23 +1383,25 @@ mkTailFlags seg
     zeros               = fill (index1' $ the len + 1) 0
     ones                = fill (index1  $ size offset) 1
 
--- |Construct a segmented version of a function from a non-segmented version.
--- The segmented apply operates on a head-flag value tuple, and follows the
--- procedure of Sengupta et. al.
+-- | Construct a segmented version of a function from a non-segmented
+-- version. The segmented apply operates on a head-flag value tuple, and
+-- follows the procedure of Sengupta et. al.
 --
-segmented
+segmentedL
     :: (Elt e, Num i, Bits i)
     => (Exp e -> Exp e -> Exp e)
-    -> Exp (i, e)
-    -> Exp (i, e)
-    -> Exp (i, e)
-segmented f a b =
-  let (aF, aV) = unlift a
-      (bF, bV) = unlift b
-  in
-  lift (aF .|. bF, bF /= 0 ? (bV, f aV bV))
+    -> (Exp (i, e) -> Exp (i, e) -> Exp (i, e))
+segmentedL f (T2 aF aV) (T2 bF bV) =
+  T2 (aF .|. bF)
+     (bF /= 0 ? (bV, f aV bV))
 
--- |Index construction and destruction generalised to integral types.
+segmentedR
+    :: (Elt e, Num i, Bits i)
+    => (Exp e -> Exp e -> Exp e)
+    -> (Exp (i, e) -> Exp (i, e) -> Exp (i, e))
+segmentedR f y x = segmentedL (flip f) x y
+
+-- | Index construction and destruction generalised to integral types.
 --
 -- We generalise the segment descriptor to integral types because some
 -- architectures, such as GPUs, have poor performance for 64-bit types. So,
