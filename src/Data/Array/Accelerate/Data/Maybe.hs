@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -22,7 +23,7 @@
 
 module Data.Array.Accelerate.Data.Maybe (
 
-  Maybe(..),
+  Maybe(..), pattern Nothing_, pattern Just_,
   just, nothing,
   maybe, isJust, isNothing, fromMaybe, fromJust, justs,
 
@@ -50,6 +51,14 @@ import Data.Array.Accelerate.Data.Semigroup
 import Data.Maybe                                                   ( Maybe(..) )
 import Prelude                                                      ( (.), ($), const, otherwise )
 
+
+pattern Nothing_ :: Elt a => Exp (Maybe a)
+pattern Nothing_ <- _
+  where Nothing_ = nothing
+
+pattern Just_ :: Elt a => Exp a -> Exp (Maybe a)
+pattern Just_ <- _
+  where Just_ = just
 
 -- | Lift a value into a 'Just' constructor
 --
@@ -113,12 +122,12 @@ justs xs = filter' (map isJust xs) (map fromJust xs)
 
 
 instance Functor Maybe where
-  fmap f x = cond (isNothing x) (constant Nothing) (lift (Just (f (fromJust x))))
+  fmap f x = cond (isNothing x) Nothing_ (Just_ (f (fromJust x)))
 
 instance Eq a => Eq (Maybe a) where
-  ma == mb = cond (isNothing ma && isNothing mb) (constant True)
+  ma == mb = cond (isNothing ma && isNothing mb) True_
            $ cond (isJust ma    && isJust mb)    (fromJust ma == fromJust mb)
-           $ constant False
+           $ False_
 
 instance Ord a => Ord (Maybe a) where
   compare ma mb = cond (isJust ma && isJust mb)
@@ -126,7 +135,7 @@ instance Ord a => Ord (Maybe a) where
                        (compare (tag ma) (tag mb))
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
-  mempty        = constant Nothing
+  mempty        = Nothing_
 #if __GLASGOW_HASKELL__ < 804
   mappend ma mb = cond (isNothing ma) mb
                 $ cond (isNothing mb) ma
