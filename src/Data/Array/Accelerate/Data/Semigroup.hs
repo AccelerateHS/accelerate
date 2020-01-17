@@ -42,9 +42,9 @@ import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Type
 
 import Data.Function
 import Data.Monoid                                                  ( Monoid(..) )
@@ -53,30 +53,18 @@ import qualified Prelude                                            as P
 
 
 pattern Min_ :: Elt a => Exp a -> Exp (Min a)
-pattern Min_ x <- (unlift -> Min x)
-  where Min_ = lift . Min
+pattern Min_ x = Pattern x
+{-# COMPLETE Min_ #-}
 
-instance Elt a => Elt (Min a) where
-  type EltRepr (Min a) = ((), EltRepr a)
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType         = TypeRpair TypeRunit (eltType @a)
-  toElt ((),x)    = Min (toElt x)
-  fromElt (Min x) = ((), fromElt x)
-
-instance Elt a => IsProduct Elt (Min a) where
-  type ProdRepr (Min a) = ((), a)
-  toProd ((),a)    = Min a
-  fromProd (Min a) = ((),a)
-  prod             = ProdRsnoc ProdRunit
+instance Elt a => Elt (Min a)
+instance Elt a => IsProduct Elt (Min a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Min a) where
   type Plain (Min a) = Min (Plain a)
-  lift (Min a)       = Exp $ Tuple $ NilTup `SnocTup` lift a
+  lift (Min a)       = Min_ (lift a)
 
 instance Elt a => Unlift Exp (Min (Exp a)) where
-  unlift t = Min . Exp $ ZeroTupIdx `Prj` t
+  unlift (Min_ a) = Min a
 
 instance Bounded a => P.Bounded (Exp (Min a)) where
   minBound = lift $ Min (minBound :: Exp a)
@@ -113,34 +101,22 @@ instance (Ord a, Bounded a) => Monoid (Exp (Min a)) where
 
 
 pattern Max_ :: Elt a => Exp a -> Exp (Max a)
-pattern Max_ x <- (unlift -> Max x)
-  where Max_ = lift . Max
+pattern Max_ x = Pattern x
+{-# COMPLETE Max_ #-}
 
-instance Elt a => Elt (Max a) where
-  type EltRepr (Max a) = ((), EltRepr a)
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType         = TypeRpair TypeRunit (eltType @a)
-  toElt ((),x)    = Max (toElt x)
-  fromElt (Max x) = ((), fromElt x)
-
-instance Elt a => IsProduct Elt (Max a) where
-  type ProdRepr (Max a) = ((), a)
-  toProd ((),a)    = Max a
-  fromProd (Max a) = ((),a)
-  prod             = ProdRsnoc ProdRunit
+instance Elt a => Elt (Max a)
+instance Elt a => IsProduct Elt (Max a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Max a) where
   type Plain (Max a) = Max (Plain a)
-  lift (Max a)       = Exp $ Tuple $ NilTup `SnocTup` lift a
+  lift (Max a)       = Max_ (lift a)
 
 instance Elt a => Unlift Exp (Max (Exp a)) where
-  unlift t = Max . Exp $ ZeroTupIdx `Prj` t
+  unlift (Max_ a) = Max a
 
 instance Bounded a => P.Bounded (Exp (Max a)) where
-  minBound = lift $ Max (minBound :: Exp a)
-  maxBound = lift $ Max (maxBound :: Exp a)
+  minBound = Max_ minBound
+  maxBound = Max_ maxBound
 
 instance Num a => P.Num (Exp (Max a)) where
   (+)           = lift2 ((+) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
@@ -160,11 +136,11 @@ instance Ord a => Ord (Max a) where
   (>)     = lift2 ((>) `on` getMax)
   (<=)    = lift2 ((<=) `on` getMax)
   (>=)    = lift2 ((>=) `on` getMax)
-  min x y = lift . Max $ lift2 (min `on` getMax) x y
-  max x y = lift . Max $ lift2 (max `on` getMax) x y
+  min x y = Max_ $ lift2 (min `on` getMax) x y
+  max x y = Max_ $ lift2 (max `on` getMax) x y
 
 instance Ord a => Semigroup (Exp (Max a)) where
-  x <> y  = lift . Max $ lift2 (max `on` getMax) x y
+  x <> y  = Max_ $ lift2 (max `on` getMax) x y
   stimes  = stimesIdempotent
 
 instance (Ord a, Bounded a) => Monoid (Exp (Max a)) where
