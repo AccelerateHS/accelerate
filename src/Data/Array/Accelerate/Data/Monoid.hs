@@ -3,9 +3,11 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ >= 806
 {-# LANGUAGE UndecidableInstances  #-}
@@ -28,8 +30,8 @@ module Data.Array.Accelerate.Data.Monoid (
 
   Monoid(..), (<>),
 
-  Sum(..),
-  Product(..),
+  Sum(..), pattern Sum_,
+  Product(..), pattern Product_,
 
 ) where
 
@@ -60,6 +62,10 @@ import qualified Prelude                                            as P
 -- Sum: Monoid under addition
 -- --------------------------
 
+pattern Sum_ :: Elt a => Exp a -> Exp (Sum a)
+pattern Sum_ x <- (unlift -> Sum x)
+  where Sum_ = lift . Sum
+
 instance Elt a => Elt (Sum a) where
   type EltRepr (Sum a) = ((), EltRepr a)
   {-# INLINE eltType     #-}
@@ -83,8 +89,8 @@ instance Elt a => Unlift Exp (Sum (Exp a)) where
   unlift t = Sum . Exp $ ZeroTupIdx `Prj` t
 
 instance Bounded a => P.Bounded (Exp (Sum a)) where
-  minBound = lift $ Sum (minBound :: Exp a)
-  maxBound = lift $ Sum (maxBound :: Exp a)
+  minBound = Sum_ minBound
+  maxBound = Sum_ maxBound
 
 instance Num a => P.Num (Exp (Sum a)) where
   (+)             = lift2 ((+) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
@@ -104,8 +110,8 @@ instance Ord a => Ord (Sum a) where
   (>)     = lift2 ((>) `on` getSum)
   (<=)    = lift2 ((<=) `on` getSum)
   (>=)    = lift2 ((>=) `on` getSum)
-  min x y = lift . Sum $ lift2 (min `on` getSum) x y
-  max x y = lift . Sum $ lift2 (max `on` getSum) x y
+  min x y = Sum_ $ lift2 (min `on` getSum) x y
+  max x y = Sum_ $ lift2 (max `on` getSum) x y
 
 instance Num a => Monoid (Exp (Sum a)) where
   mempty  = 0
@@ -121,12 +127,16 @@ instance Num a => Monoid (Exp (Sum a)) where
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
   (<>)       = (+)
-  stimes n x = lift . Sum $ P.fromIntegral n * getSum (unlift x :: Sum (Exp a))
+  stimes n x = Sum_ $ P.fromIntegral n * getSum (unlift x :: Sum (Exp a))
 #endif
 
 
 -- Product: Monoid under multiplication
 -- ------------------------------------
+
+pattern Product_ :: Elt a => Exp a -> Exp (Product a)
+pattern Product_ x <- (unlift -> Product x)
+  where Product_ = lift . Product
 
 instance Elt a => Elt (Product a) where
   type EltRepr (Product a) = ((), EltRepr a)
@@ -151,8 +161,8 @@ instance Elt a => Unlift Exp (Product (Exp a)) where
   unlift t = Product . Exp $ ZeroTupIdx `Prj` t
 
 instance Bounded a => P.Bounded (Exp (Product a)) where
-  minBound = lift $ Product (minBound :: Exp a)
-  maxBound = lift $ Product (maxBound :: Exp a)
+  minBound = Product_ minBound
+  maxBound = Product_ maxBound
 
 instance Num a => P.Num (Exp (Product a)) where
   (+)             = lift2 ((+) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
@@ -172,8 +182,8 @@ instance Ord a => Ord (Product a) where
   (>)     = lift2 ((>) `on` getProduct)
   (<=)    = lift2 ((<=) `on` getProduct)
   (>=)    = lift2 ((>=) `on` getProduct)
-  min x y = lift . Product $ lift2 (min `on` getProduct) x y
-  max x y = lift . Product $ lift2 (max `on` getProduct) x y
+  min x y = Product_ $ lift2 (min `on` getProduct) x y
+  max x y = Product_ $ lift2 (max `on` getProduct) x y
 
 instance Num a => Monoid (Exp (Product a)) where
   mempty  = 1
@@ -189,7 +199,7 @@ instance Num a => Monoid (Exp (Product a)) where
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
   (<>)       = (*)
-  stimes n x = lift . Product $ getProduct (unlift x :: Product (Exp a)) ^ (P.fromIntegral n :: Exp Int)
+  stimes n x = Product_ $ getProduct (unlift x :: Product (Exp a)) ^ (P.fromIntegral n :: Exp Int)
 #endif
 
 
