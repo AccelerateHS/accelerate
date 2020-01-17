@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
@@ -30,8 +31,8 @@ module Data.Array.Accelerate.Data.Semigroup (
 
   Semigroup(..),
 
-  Min(..),
-  Max(..),
+  Min(..), pattern Min_,
+  Max(..), pattern Max_,
 
 ) where
 
@@ -50,6 +51,10 @@ import Data.Monoid                                                  ( Monoid(..)
 import Data.Semigroup
 import qualified Prelude                                            as P
 
+
+pattern Min_ :: Elt a => Exp a -> Exp (Min a)
+pattern Min_ x <- (unlift -> Min x)
+  where Min_ = lift . Min
 
 instance Elt a => Elt (Min a) where
   type EltRepr (Min a) = ((), EltRepr a)
@@ -106,6 +111,10 @@ instance (Ord a, Bounded a) => Monoid (Exp (Min a)) where
   mempty  = maxBound
   mappend = (<>)
 
+
+pattern Max_ :: Elt a => Exp a -> Exp (Max a)
+pattern Max_ x <- (unlift -> Max x)
+  where Max_ = lift . Max
 
 instance Elt a => Elt (Max a) where
   type EltRepr (Max a) = ((), EltRepr a)
