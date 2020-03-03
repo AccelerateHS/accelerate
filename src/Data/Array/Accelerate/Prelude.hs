@@ -1517,7 +1517,7 @@ enumFromStepN sh x y
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 12, 13, 14]
 --
 infixr 5 ++
-(++) :: forall sh e. (Shape sh, Elt e)
+(++) :: (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1909,7 +1909,7 @@ transposeOn dim1 dim2 xs =
 --     30, 31, 32, 33, 34,
 --     40, 41, 42, 43, 44]
 --
-take :: forall sh e. (Shape sh, Elt e)
+take :: (Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1936,7 +1936,7 @@ take = takeOn _1
 --     37, 38, 39,
 --     47, 48, 49]
 --
-drop :: forall sh e. (Shape sh, Elt e)
+drop :: (Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1962,7 +1962,7 @@ drop = dropOn _1
 --     30, 31, 32, 33, 34, 35, 36, 37, 38,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48]
 --
-init :: forall sh e. (Shape sh, Elt e)
+init :: (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
 init = initOn _1
@@ -1988,7 +1988,7 @@ init = initOn _1
 --     31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
-tail :: forall sh e. (Shape sh, Elt e)
+tail :: (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
 tail = tailOn _1
@@ -1999,7 +1999,7 @@ tail = tailOn _1
 --
 -- > slit i n = take n . drop i
 --
-slit :: forall sh e. (Shape sh, Elt e)
+slit :: (Shape sh, Elt e)
      => Exp Int                     -- ^ starting index
      -> Exp Int                     -- ^ length
      -> Acc (Array (sh :. Int) e)
@@ -2212,7 +2212,7 @@ instance IfThenElse Acc where
 -- | Repeatedly apply a function a fixed number of times
 --
 iterate
-    :: forall a. Elt a
+    :: Elt a
     => Exp Int
     -> (Exp a -> Exp a)
     -> Exp a
@@ -2228,7 +2228,7 @@ iterate n f z
 -- | Reduce along an innermost slice of an array /sequentially/, by applying a
 -- binary operator to a starting value and the array from left to right.
 --
-sfoldl :: forall sh a b. (Shape sh, Elt a, Elt b)
+sfoldl :: (Shape sh, Elt a, Elt b)
        => (Exp a -> Exp b -> Exp a)
        -> Exp a
        -> Exp sh
@@ -2245,21 +2245,21 @@ sfoldl f z ix xs
 
 -- |Extract the first component of a scalar pair.
 --
-fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
+fst :: (Elt a, Elt b) => Exp (a, b) -> Exp a
 fst (T2 a _) = a
 
 -- |Extract the first component of an array pair.
 {-# NOINLINE[1] afst #-}
-afst :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc a
+afst :: (Arrays a, Arrays b) => Acc (a, b) -> Acc a
 afst (T2 a _) = a
 
 -- |Extract the second component of a scalar pair.
 --
-snd :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp b
+snd :: (Elt a, Elt b) => Exp (a, b) -> Exp b
 snd (T2 _ b) = b
 
 -- | Extract the second component of an array pair
-asnd :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc b
+asnd :: (Arrays a, Arrays b) => Acc (a, b) -> Acc b
 asnd (T2 _ b) = b
 
 -- |Converts an uncurried function to a curried function.
@@ -2303,12 +2303,10 @@ index2 i j = lift (Z :. i :. j)
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
 unindex2
-    :: forall i. Elt i
+    :: Elt i
     => Exp (Z :. i :. i)
     -> Exp (i, i)
-unindex2 ix
-  = let Z :. i :. j = unlift ix :: Z :. Exp i :. Exp i
-    in  lift (i, j)
+unindex2 (Z_ ::. i ::. j) = T2 i j
 
 -- | Create a rank-3 index from three Exp Int`s
 --
@@ -2318,15 +2316,14 @@ index3
     -> Exp i
     -> Exp i
     -> Exp (Z :. i :. i :. i)
-index3 k j i = lift (Z :. k :. j :. i)
+index3 k j i = Z_ ::. k ::. j ::. i
 
 -- | Destruct a rank-3 index into an Exp tuple of Int`s
 unindex3
-    :: forall i. Elt i
+    :: Elt i
     => Exp (Z :. i :. i :. i)
     -> Exp (i, i, i)
-unindex3 ix = let Z :. k :. j :. i = unlift ix  :: Z :. Exp i :. Exp i :. Exp i
-              in  lift (k, j, i)
+unindex3 (Z_ ::. k ::. j ::. i) = T3 k j i
 
 
 -- Array operations with a scalar result
