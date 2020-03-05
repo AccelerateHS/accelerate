@@ -144,6 +144,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Data.Bits
 
 -- $setup
+-- >>> :seti -XFlexibleContexts
 -- >>> import Data.Array.Accelerate
 -- >>> import Data.Array.Accelerate.Interpreter
 -- >>> :{
