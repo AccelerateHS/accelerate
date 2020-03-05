@@ -109,6 +109,9 @@ module Data.Array.Accelerate.Prelude (
   -- * Array operations with a scalar result
   the, null, length,
 
+  -- * Irregular data-parallelism
+  expand,
+
   -- * Sequence operations
   -- fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
 
@@ -2347,9 +2350,107 @@ length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
 
 
+-- Operations to facilitate irregular data parallelism
+-- ---------------------------------------------------
+
+-- | A recipe for generating flattened implementations of some kinds of
+-- irregular nested parallelism. Given two functions that:
+--
+--   (1) for each source element, determine how many target
+--       elements it expands into; and
+--
+--   (2) computes a particular target element based on a source element and
+--       the target element index associated with the source
+--
+-- The following example implements the Sieve of Eratosthenes,
+-- a contraction style algorithm which first computes all primes less than
+-- /sqrt n/, then uses this intermediate result to sieve away all numbers
+-- in the range /[sqrt n .. n]/. The 'expand' function is used to calculate
+-- and flatten the sieves. For each prime /p/ and upper limit /c2/,
+-- function /sz/ computes the number of contributions in the sieve. Then,
+-- for each prime /p/ and sieve index /i/, the function /get/ computes the
+-- sieve contribution. The final step produces all the new primes in the
+-- interval /[c1 .. c2]/.
+--
+-- >>> :{
+--   primes :: Exp Int -> Acc (Vector Int)
+--   primes n = afst loop
+--     where
+--       c0    = unit 2
+--       a0    = use $ fromList (Z:.0) []
+--       limit = truncate (sqrt (fromIntegral (n+1) :: Exp Float))
+--       loop  = awhile
+--                 (\(T2 _   c) -> map (< n+1) c)
+--                 (\(T2 old c) ->
+--                   let c1 = the c
+--                       c2 = c1 < limit ? ( c1*c1, n+1 )
+--                       --
+--                       sieves =
+--                         let sz p    = (c2 - p) `quot` p
+--                             get p i = (2+i)*p
+--                         in
+--                         map (subtract c1) (expand sz get old)
+--                       --
+--                       new =
+--                         let m     = c2-c1
+--                             put i = let s = sieves ! i
+--                                      in s >= 0 && s < m ? (I1 s, ignore)
+--                         in
+--                         afst
+--                           $ filter (> 0)
+--                           $ permute const (enumFromN (I1 m) c1) put
+--                           $ fill (shape sieves) 0
+--                    in
+--                    T2 (old ++ new) (unit c2))
+--                 (T2 a0 c0)
+-- :}
+--
+-- >>> run $ primes 100
+-- Vector (Z :. 25) [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
+--
+-- Inspired by the paper /Data-Parallel Flattening by Expansion/ by Martin
+-- Elsman, Troels Henddriksen, and Niels Gustav Westphal Serup, ARRAY'19.
+--
+-- @since 1.4.0.0
+--
+expand :: (Elt a, Elt b)
+       => (Exp a -> Exp Int)
+       -> (Exp a -> Exp Int -> Exp b)
+       -> Acc (Vector a)
+       -> Acc (Vector b)
+expand f g xs =
+  if length xs == 0
+     then use $ fromList (Z:.0) []
+     else
+      let
+          szs           = map f xs
+          T2 offset len = scanl' (+) 0 szs
+
+          m             = the len
+          n             = m + 1
+          put ix        = I1 (offset ! ix)
+
+          head_flags    :: Acc (Vector Int)
+          head_flags    = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
+
+          idxs          = map (subtract 1)
+                        $ map snd
+                        $ scanl1 (segmentedL (+))
+                        $ zip head_flags
+                        $ fill (I1 m) 1
+
+          iotas         = map snd
+                        $ scanl1 (segmentedL const)
+                        $ zip head_flags
+                        $ permute const (fill (I1 n) undef) put
+                        $ enumFromN (shape xs) 0
+      in
+      zipWith g (gather iotas xs) idxs
+
+
 {--
 -- Sequence operations
--- --------------------------------------
+-- -------------------
 
 -- | Reduce a sequence by appending all the shapes and all the elements in two
 -- separate vectors.

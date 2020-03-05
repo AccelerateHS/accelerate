@@ -198,6 +198,9 @@ module Data.Array.Accelerate (
   -- *** Concatenation
   (++), concatOn,
 
+  -- *** Expansion
+  expand,
+
   -- ** Composition
   -- *** Flow control
   (?|), acond, awhile,
