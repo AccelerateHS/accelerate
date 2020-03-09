@@ -41,9 +41,7 @@ import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Lift
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Type
 
 import Data.Function
 import Data.Monoid                                                  ( Monoid(..) )
@@ -52,26 +50,20 @@ import qualified Prelude                                            as P
 
 
 instance Elt a => Elt (Min a) where
-  type EltRepr (Min a) = ((), EltRepr a)
+  type EltRepr (Min a) = EltRepr a
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType         = TypeRpair TypeRunit (eltType @a)
-  toElt ((),x)    = Min (toElt x)
-  fromElt (Min x) = ((), fromElt x)
-
-instance Elt a => IsProduct Elt (Min a) where
-  type ProdRepr (Min a) = ((), a)
-  toProd ((),a)    = Min a
-  fromProd (Min a) = ((),a)
-  prod             = ProdRsnoc ProdRunit
+  eltType         = eltType @a
+  toElt x         = Min (toElt x)
+  fromElt (Min x) = fromElt x
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Min a) where
   type Plain (Min a) = Min (Plain a)
-  lift (Min a)       = Exp $ Tuple $ NilTup `SnocTup` lift a
+  lift (Min a) = let Exp e = lift a in Exp e
 
 instance Elt a => Unlift Exp (Min (Exp a)) where
-  unlift t = Min . Exp $ ZeroTupIdx `Prj` t
+  unlift (Exp t) = Min $ Exp t
 
 instance Bounded a => P.Bounded (Exp (Min a)) where
   minBound = lift $ Min (minBound :: Exp a)
@@ -108,26 +100,20 @@ instance (Ord a, Bounded a) => Monoid (Exp (Min a)) where
 
 
 instance Elt a => Elt (Max a) where
-  type EltRepr (Max a) = ((), EltRepr a)
+  type EltRepr (Max a) = EltRepr a
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType         = TypeRpair TypeRunit (eltType @a)
-  toElt ((),x)    = Max (toElt x)
-  fromElt (Max x) = ((), fromElt x)
-
-instance Elt a => IsProduct Elt (Max a) where
-  type ProdRepr (Max a) = ((), a)
-  toProd ((),a)    = Max a
-  fromProd (Max a) = ((),a)
-  prod             = ProdRsnoc ProdRunit
+  eltType         = eltType @a
+  toElt x         = Max (toElt x)
+  fromElt (Max x) = fromElt x
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Max a) where
   type Plain (Max a) = Max (Plain a)
-  lift (Max a)       = Exp $ Tuple $ NilTup `SnocTup` lift a
+  lift (Max a) = let Exp e = lift a in Exp e
 
 instance Elt a => Unlift Exp (Max (Exp a)) where
-  unlift t = Max . Exp $ ZeroTupIdx `Prj` t
+  unlift (Exp t) = Max $ Exp t
 
 instance Bounded a => P.Bounded (Exp (Max a)) where
   minBound = lift $ Max (minBound :: Exp a)

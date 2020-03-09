@@ -40,7 +40,6 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 #if __GLASGOW_HASKELL__ >= 800
@@ -61,26 +60,20 @@ import qualified Prelude                                            as P
 -- --------------------------
 
 instance Elt a => Elt (Sum a) where
-  type EltRepr (Sum a) = ((), EltRepr a)
+  type EltRepr (Sum a) = EltRepr a
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType         = TypeRpair TypeRunit (eltType @a)
-  toElt ((),x)    = Sum (toElt x)
-  fromElt (Sum x) = ((), fromElt x)
-
-instance Elt a => IsProduct Elt (Sum a) where
-  type ProdRepr (Sum a) = ((), a)
-  toProd ((),a)    = Sum a
-  fromProd (Sum a) = ((),a)
-  prod             = ProdRsnoc ProdRunit
+  eltType         = eltType @a
+  toElt x         = Sum (toElt x)
+  fromElt (Sum x) = fromElt x
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Sum a) where
   type Plain (Sum a) = Sum (Plain a)
-  lift (Sum a)       = Exp $ Tuple $ NilTup `SnocTup` lift a
+  lift (Sum a) = let Exp e = lift a in Exp e
 
 instance Elt a => Unlift Exp (Sum (Exp a)) where
-  unlift t = Sum . Exp $ ZeroTupIdx `Prj` t
+  unlift (Exp t) = Sum $ Exp t
 
 instance Bounded a => P.Bounded (Exp (Sum a)) where
   minBound = lift $ Sum (minBound :: Exp a)
@@ -129,26 +122,20 @@ instance Num a => Semigroup (Exp (Sum a)) where
 -- ------------------------------------
 
 instance Elt a => Elt (Product a) where
-  type EltRepr (Product a) = ((), EltRepr a)
+  type EltRepr (Product a) = EltRepr a
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType         = TypeRpair TypeRunit (eltType @a)
-  toElt ((),x)    = Product (toElt x)
-  fromElt (Product x) = ((), fromElt x)
-
-instance Elt a => IsProduct Elt (Product a) where
-  type ProdRepr (Product a) = ((), a)
-  toProd ((),a)        = Product a
-  fromProd (Product a) = ((),a)
-  prod                 = ProdRsnoc ProdRunit
+  eltType         = eltType @a
+  toElt x         = Product (toElt x)
+  fromElt (Product x) = fromElt x
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   type Plain (Product a) = Product (Plain a)
-  lift (Product a)       = Exp $ Tuple $ NilTup `SnocTup` lift a
+  lift (Product a)       = let Exp e = lift a in Exp e
 
 instance Elt a => Unlift Exp (Product (Exp a)) where
-  unlift t = Product . Exp $ ZeroTupIdx `Prj` t
+  unlift (Exp t) = Product $ Exp t
 
 instance Bounded a => P.Bounded (Exp (Product a)) where
   minBound = lift $ Product (minBound :: Exp a)

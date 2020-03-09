@@ -74,6 +74,7 @@ module Data.Array.Accelerate.Type (
 ) where
 
 import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
+import Data.Array.Accelerate.Orphans () -- Prim Half
 
 import Control.Monad.ST
 import Data.Bits
@@ -116,6 +117,9 @@ data FloatingDict a where
 data NonNumDict a where
   NonNumDict :: ( Bounded a, Eq a, Ord a, Show a, Storable a )
              => NonNumDict a
+
+data TypeableDict a where
+  TypeableDict :: Typeable a => TypeableDict a
 
 
 -- Scalar type representation
@@ -171,7 +175,7 @@ data SingleType a where
   NonNumSingleType :: NonNumType a -> SingleType a
 
 data VectorType a where
-  VectorType       :: {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
+  VectorType       :: KnownNat n => {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
 
 -- Showing type names
 --
@@ -279,7 +283,74 @@ nonNumDict :: NonNumType a -> NonNumDict a
 nonNumDict TypeBool = NonNumDict
 nonNumDict TypeChar = NonNumDict
 
+typeableDict :: TupleType tp -> TypeableDict tp
+typeableDict TupRunit               = TypeableDict
+typeableDict (TupRpair t1 t2)
+  | TypeableDict <- typeableDict t1
+  , TypeableDict <- typeableDict t2 = TypeableDict
+typeableDict (TupRsingle tp)        = scalarTypeableDict tp
 
+scalarTypeableDict :: ScalarType tp -> TypeableDict tp
+scalarTypeableDict (SingleScalarType tp) = singleTypeableDict tp
+scalarTypeableDict (VectorScalarType (VectorType _ tp))
+  | TypeableDict <- singleTypeableDict tp = TypeableDict
+
+singleTypeableDict :: SingleType tp -> TypeableDict tp
+singleTypeableDict (NumSingleType (IntegralNumType tp)) = case tp of
+  TypeInt    -> TypeableDict
+  TypeInt8   -> TypeableDict
+  TypeInt16  -> TypeableDict
+  TypeInt32  -> TypeableDict
+  TypeInt64  -> TypeableDict
+  TypeWord   -> TypeableDict
+  TypeWord8  -> TypeableDict
+  TypeWord16 -> TypeableDict
+  TypeWord32 -> TypeableDict
+  TypeWord64 -> TypeableDict
+singleTypeableDict (NumSingleType (FloatingNumType tp)) = case tp of
+  TypeHalf   -> TypeableDict
+  TypeFloat  -> TypeableDict
+  TypeDouble -> TypeableDict
+singleTypeableDict (NonNumSingleType TypeChar) = TypeableDict
+singleTypeableDict (NonNumSingleType TypeBool) = TypeableDict
+
+showType :: TupleType tp -> ShowS
+showType TupRunit = showString "()"
+showType (TupRsingle tp) = showString $ showScalarType tp
+showType (TupRpair t1 t2) = showString "(" . showType t1 . showString ", " . showType t2 . showString ")"
+
+showScalarType :: ScalarType tp -> String
+showScalarType (SingleScalarType tp) = showSingleType tp
+showScalarType (VectorScalarType (VectorType n tp)) = "Vec " ++ show n ++ " " ++ showSingleType tp
+
+showSingleType :: SingleType tp -> String
+showSingleType (NumSingleType (IntegralNumType tp)) = case tp of
+  TypeInt    -> "Int"
+  TypeInt8   -> "Int8"
+  TypeInt16  -> "Int16"
+  TypeInt32  -> "Int32"
+  TypeInt64  -> "Int64"
+  TypeWord   -> "Word"
+  TypeWord8  -> "Word8"
+  TypeWord16 -> "Word16"
+  TypeWord32 -> "Word32"
+  TypeWord64 -> "Word64"
+showSingleType (NumSingleType (FloatingNumType tp)) = case tp of
+  TypeHalf   -> "Half"
+  TypeFloat  -> "Float"
+  TypeDouble -> "Double"
+showSingleType (NonNumSingleType TypeChar) = "Char"
+showSingleType (NonNumSingleType TypeBool) = "Bool"
+
+-- Common used types in the compiler.
+scalarTypeBool :: ScalarType Bool
+scalarTypeBool = SingleScalarType $ NonNumSingleType TypeBool
+
+scalarTypeInt :: ScalarType Int
+scalarTypeInt = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt
+
+scalarTypeWord8 :: ScalarType Word8
+scalarTypeWord8 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord8
 
 -- Tuple representation
 -- -------------------
@@ -308,6 +379,27 @@ instance Show (TupR ScalarType a) where
   show TupRunit       = "()"
   show (TupRsingle t) = show t
   show (TupRpair a b) = "(" ++ show a ++ "," ++ show b ++")"
+
+type Tup2 a b               =        (((), a), b)
+type Tup3 a b c             =       ((((), a), b), c)
+type Tup5 a b c d e         =     ((((((), a), b), c), d), e)
+type Tup7 a b c d e f g     =   ((((((((), a), b), c), d), e), f), g)
+type Tup9 a b c d e f g h i = ((((((((((), a), b), c), d), e), f), g), h), i)
+
+tupR2 :: TupR s t1 -> TupR s t2 -> TupR s (Tup2 t1 t2)
+tupR2 t1 t2 = TupRunit `TupRpair` t1 `TupRpair` t2
+
+tupR3 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s (Tup3 t1 t2 t3)
+tupR3 t1 t2 t3 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3
+
+tupR5 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s t4 -> TupR s t5 -> TupR s (Tup5 t1 t2 t3 t4 t5)
+tupR5 t1 t2 t3 t4 t5 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3 `TupRpair` t4 `TupRpair` t5
+
+tupR7 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s t4 -> TupR s t5 -> TupR s t6 -> TupR s t7 -> TupR s (Tup7 t1 t2 t3 t4 t5 t6 t7)
+tupR7 t1 t2 t3 t4 t5 t6 t7 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3 `TupRpair` t4 `TupRpair` t5 `TupRpair` t6 `TupRpair` t7
+
+tupR9 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s t4 -> TupR s t5 -> TupR s t6 -> TupR s t7 -> TupR s t8 -> TupR s t9 -> TupR s (Tup9 t1 t2 t3 t4 t5 t6 t7 t8 t9)
+tupR9 t1 t2 t3 t4 t5 t6 t7 t8 t9 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3 `TupRpair` t4 `TupRpair` t5 `TupRpair` t6 `TupRpair` t7 `TupRpair` t8 `TupRpair` t9
 
 -- Type-level bit sizes
 -- --------------------
@@ -378,6 +470,29 @@ vecToArray (Vec ba#) = go 0#
 
 instance Eq (Vec n a) where
   Vec ba1# == Vec ba2# = ByteArray ba1# == ByteArray ba2#
+
+data IsPrim a where
+  IsPrim :: Prim a => IsPrim a
+
+getPrim :: SingleType a -> IsPrim a
+getPrim (NumSingleType (IntegralNumType tp)) = case tp of
+  TypeInt     -> IsPrim
+  TypeInt8    -> IsPrim
+  TypeInt16   -> IsPrim
+  TypeInt32   -> IsPrim
+  TypeInt64   -> IsPrim
+  TypeWord    -> IsPrim
+  TypeWord8   -> IsPrim
+  TypeWord16  -> IsPrim
+  TypeWord32  -> IsPrim
+  TypeWord64  -> IsPrim
+getPrim (NumSingleType (FloatingNumType tp)) = case tp of
+  TypeHalf    -> IsPrim
+  TypeFloat   -> IsPrim
+  TypeDouble  -> IsPrim
+getPrim (NonNumSingleType TypeChar) = IsPrim
+getPrim (NonNumSingleType TypeBool) = error "prim: We don't support vector of bools yet"
+
 
 
 -- Type synonyms for common SIMD vector types

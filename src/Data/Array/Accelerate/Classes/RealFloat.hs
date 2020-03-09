@@ -78,9 +78,9 @@ class (RealFrac a, Floating a) => RealFloat a where
   -- | Corresponds to the second component of 'decodeFloat'
   exponent       :: Exp a -> Exp Int
   exponent x      = let (m,n) = decodeFloat x
-                    in  Exp $ Cond (m == 0)
-                                   0
-                                   (n + floatDigits x)
+                    in  cond (m == 0)
+                             0
+                             (n + floatDigits x)
 
   -- | Corresponds to the first component of 'decodeFloat'
   significand    :: Exp a -> Exp a
@@ -90,8 +90,8 @@ class (RealFrac a, Floating a) => RealFloat a where
   -- | Multiply a floating point number by an integer power of the radix
   scaleFloat     :: Exp Int -> Exp a -> Exp a
   scaleFloat k x  =
-    Exp $ Cond (k == 0 || isFix) x
-        $ encodeFloat m (n + clamp b)
+    cond (k == 0 || isFix) x
+         $ encodeFloat m (n + clamp b)
     where
       isFix = x == 0 || isNaN x || isInfinite x
       (m,n) = decodeFloat x
@@ -155,7 +155,7 @@ instance RealFloat Double where
   decodeFloat     = ieee754 "decodeFloat"    (untup2 . ieee754_f64_decode . mkBitcast)
 
 instance RealFloat CFloat where
-  atan2           = lift2 mkAtan2
+  atan2           = mkAtan2
   isNaN           = mkIsNaN . mkBitcast @Float
   isInfinite      = mkIsInfinite . mkBitcast @Float
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
@@ -165,7 +165,7 @@ instance RealFloat CFloat where
   encodeFloat x e = mkBitcast (encodeFloat @Float x e)
 
 instance RealFloat CDouble where
-  atan2           = lift2 mkAtan2
+  atan2           = mkAtan2
   isNaN           = mkIsNaN . mkBitcast @Double
   isInfinite      = mkIsInfinite . mkBitcast @Double
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
@@ -197,13 +197,6 @@ preludeError x
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
 
-
-lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp b)
-      -> Exp a
-      -> Exp a
-      -> Exp a
-lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
 
 ieee754 :: forall a b. P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
 ieee754 name f x
@@ -323,19 +316,19 @@ ieee754_f16_decode i =
 
       (high3, exp3)
             = untup2
-            $ Exp $ Cond (exp1 /= _HMINEXP)
-                         -- don't add hidden bit to denorms
-                         (tup2 (high2 .|. _HHIGHBIT, exp1))
-                         -- a denorm, normalise the mantissa
-                         (Exp $ While (\(untup2 -> (h,_)) -> (h .&. _HHIGHBIT) /= 0 )
-                                      (\(untup2 -> (h,e)) -> tup2 (h `unsafeShiftL` 1, e-1))
-                                      (tup2 (high2, exp2)))
+            $ cond (exp1 /= _HMINEXP)
+                   -- don't add hidden bit to denorms
+                   (tup2 (high2 .|. _HHIGHBIT, exp1))
+                   -- a denorm, normalise the mantissa
+                   (while (\(untup2 -> (h,_)) -> (h .&. _HHIGHBIT) /= 0 )
+                          (\(untup2 -> (h,e)) -> tup2 (h `unsafeShiftL` 1, e-1))
+                          (tup2 (high2, exp2)))
 
-      high4 = Exp $ Cond (fromIntegral i < (0 :: Exp Int16)) (-high3) high3
+      high4 = cond (fromIntegral i < (0 :: Exp Int16)) (-high3) high3
   in
-  Exp $ Cond (high1 .&. complement _HMSBIT == 0)
-             (tup2 (0,0))
-             (tup2 (high4, exp3))
+  cond (high1 .&. complement _HMSBIT == 0)
+       (tup2 (0,0))
+       (tup2 (high4, exp3))
 
 
 -- From: ghc/rts/StgPrimFloat.c
@@ -358,19 +351,19 @@ ieee754_f32_decode i =
 
       (high3, exp3)
             = untup2
-            $ Exp $ Cond (exp1 /= _FMINEXP)
-                         -- don't add hidden bit to denorms
-                         (tup2 (high2 .|. _FHIGHBIT, exp1))
-                         -- a denorm, normalise the mantissa
-                         (Exp $ While (\(untup2 -> (h,_)) -> (h .&. _FHIGHBIT) /= 0 )
-                                      (\(untup2 -> (h,e)) -> tup2 (h `unsafeShiftL` 1, e-1))
-                                      (tup2 (high2, exp2)))
+            $ cond (exp1 /= _FMINEXP)
+                   -- don't add hidden bit to denorms
+                   (tup2 (high2 .|. _FHIGHBIT, exp1))
+                   -- a denorm, normalise the mantissa
+                   (while (\(untup2 -> (h,_)) -> (h .&. _FHIGHBIT) /= 0 )
+                          (\(untup2 -> (h,e)) -> tup2 (h `unsafeShiftL` 1, e-1))
+                          (tup2 (high2, exp2)))
 
-      high4 = Exp $ Cond (fromIntegral i < (0 :: Exp Int32)) (-high3) high3
+      high4 = cond (fromIntegral i < (0 :: Exp Int32)) (-high3) high3
   in
-  Exp $ Cond (high1 .&. complement _FMSBIT == 0)
-             (tup2 (0,0))
-             (tup2 (high4, exp3))
+  cond (high1 .&. complement _FMSBIT == 0)
+       (tup2 (0,0))
+       (tup2 (high4, exp3))
 
 
 ieee754_f64_decode :: Exp Word64 -> Exp (Int64, Int)
@@ -391,26 +384,31 @@ ieee754_f64_decode2 i =
       high  = fromIntegral (i `unsafeShiftR` 32)
 
       iexp  = (fromIntegral ((high `unsafeShiftR` 20) .&. 0x7FF) + _DMINEXP)
-      sign = Exp $ Cond (fromIntegral i < (0 :: Exp Int64)) (-1) 1
+      sign = cond (fromIntegral i < (0 :: Exp Int64)) (-1) 1
 
       high2 = high .&. (_DHIGHBIT - 1)
       iexp2 = iexp + 1
 
       (hi,lo,ie)
             = untup3
-            $ Exp $ Cond (iexp2 /= _DMINEXP)
-                         -- don't add hidden bit to denorms
-                         (tup3 (high2 .|. _DHIGHBIT, low, iexp))
-                         -- a denorm, nermalise the mantissa
-                         (Exp $ While (\(untup3 -> (h,_,_)) -> (h .&. _DHIGHBIT) /= 0)
-                                      (\(untup3 -> (h,l,e)) ->
-                                        let h1 = h `unsafeShiftL` 1
-                                            h2 = Exp $ Cond ((l .&. _DMSBIT) /= 0) (h1+1) h1
-                                        in  tup3 (h2, l `unsafeShiftL` 1, e-1))
-                                      (tup3 (high2, low, iexp2)))
+            $ cond (iexp2 /= _DMINEXP)
+                   -- don't add hidden bit to denorms
+                   (tup3 (high2 .|. _DHIGHBIT, low, iexp))
+                   -- a denorm, nermalise the mantissa
+                   (while (\(untup3 -> (h,_,_)) -> (h .&. _DHIGHBIT) /= 0)
+                          (\(untup3 -> (h,l,e)) ->
+                            let h1 = h `unsafeShiftL` 1
+                                h2 = cond ((l .&. _DMSBIT) /= 0) (h1+1) h1
+                            in  tup3 (h2, l `unsafeShiftL` 1, e-1))
+                          (tup3 (high2, low, iexp2)))
 
   in
-  Exp $ Cond (low == 0 && (high .&. (complement _DMSBIT)) == 0)
-             (tup4 (1,0,0,0))
-             (tup4 (sign,hi,lo,ie))
+  cond (low == 0 && (high .&. (complement _DMSBIT)) == 0)
+       (tup4 (1,0,0,0))
+       (tup4 (sign,hi,lo,ie))
 
+cond :: Exp Bool -> Exp a -> Exp a -> Exp a
+cond (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond c x y
+
+while :: forall e. Elt e => (Exp e -> Exp Bool) -> (Exp e -> Exp e) -> Exp e -> Exp e
+while c f (Exp e) = Exp $ SmartExp $ While (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e

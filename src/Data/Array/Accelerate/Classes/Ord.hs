@@ -68,7 +68,7 @@ class Eq a => Ord a where
 -- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
 --
 ifThenElse :: Elt a => Exp Bool -> Exp a -> Exp a -> Exp a
-ifThenElse = Exp $$$ Cond
+ifThenElse (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond c x y
 
 instance Ord () where
   (<)     _ _ = constant False
@@ -160,68 +160,68 @@ instance Ord Word64 where
   max  = mkMax
 
 instance Ord CInt where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CUInt where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CLong where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CULong where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CLLong where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CULLong where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CShort where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CUShort where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord Bool where
   (<)  = mkLt
@@ -240,28 +240,28 @@ instance Ord Char where
   max  = mkMax
 
 instance Ord CChar where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CUChar where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CSChar where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord Half where
   (<)  = mkLt
@@ -288,20 +288,20 @@ instance Ord Double where
   max  = mkMax
 
 instance Ord CFloat where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord CDouble where
-  (<)  = liftB mkLt
-  (>)  = liftB mkGt
-  (<=) = liftB mkLtEq
-  (>=) = liftB mkGtEq
-  min  = lift2 mkMin
-  max  = lift2 mkMax
+  (<)  = mkLt
+  (>)  = mkGt
+  (<=) = mkLtEq
+  (>=) = mkGtEq
+  min  = mkMin
+  max  = mkMax
 
 instance Ord Z where
   (<)  _ _ = constant False
@@ -522,7 +522,7 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g, Ord h, Ord i, Ord j, 
 
 instance Elt Ordering where
   type EltRepr Ordering = Int8
-  eltType = TypeRscalar scalarType
+  eltType = TupRsingle scalarType
   fromElt = P.fromIntegral . P.fromEnum
   toElt   = P.toEnum . P.fromIntegral
 
@@ -564,18 +564,3 @@ preludeError x y
             , "constraints for subsequent classes in the standard Haskell numeric"
             , "hierarchy."
             ]
-
-lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp b)
-      -> Exp a
-      -> Exp a
-      -> Exp a
-lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
-
-liftB :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp Bool)
-      -> Exp a
-      -> Exp a
-      -> Exp Bool
-liftB f x y = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
-

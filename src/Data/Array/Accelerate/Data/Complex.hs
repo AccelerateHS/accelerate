@@ -47,7 +47,7 @@ import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Smart                                  hiding (exp)
 import Data.Array.Accelerate.Type
 
 import Prelude                                                      ( ($) )
@@ -67,7 +67,7 @@ instance Elt (Complex Half) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType          = TypeRscalar scalarType
+  eltType          = TupRsingle scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
@@ -76,7 +76,7 @@ instance Elt (Complex Float) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType          = TypeRscalar scalarType
+  eltType          = TupRsingle scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
@@ -85,7 +85,7 @@ instance Elt (Complex Double) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType          = TypeRscalar scalarType
+  eltType          = TupRsingle scalarType
   toElt (V2 r i)   = r :+ i
   fromElt (r :+ i) = V2 r i
 
@@ -94,7 +94,7 @@ instance Elt (Complex CFloat) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType                        = TypeRscalar scalarType
+  eltType                        = TupRsingle scalarType
   toElt (V2 r i)                 = CFloat r :+ CFloat i
   fromElt (CFloat r :+ CFloat i) = V2 r i
 
@@ -103,24 +103,18 @@ instance Elt (Complex CDouble) where
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType                          = TypeRscalar scalarType
+  eltType                          = TupRsingle scalarType
   toElt (V2 r i)                   = CDouble r :+ CDouble i
   fromElt (CDouble r :+ CDouble i) = V2 r i
 
-instance cst a => IsProduct cst (Complex a) where
-  type ProdRepr (Complex a) = ProdRepr (a,a)
-  fromProd (r :+ i) = fromProd @cst (r,i)
-  toProd p          = let (r,i) = toProd @cst p in (r :+ i)
-  prod              = prod @cst @(a,a)
-
 instance (Lift Exp a, Elt (Plain a), Elt (Complex (Plain a))) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
-  lift (r :+ i)          = Exp $ Tuple (NilTup `SnocTup` lift r `SnocTup` lift i)
+  lift (r :+ i)          = P.undefined -- Exp $ Tuple (NilTup `SnocTup` lift r `SnocTup` lift i)
 
 instance (Elt a, Elt (Complex a)) => Unlift Exp (Complex (Exp a)) where
   unlift e
-    = let r     = Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-          i     = Exp $ ZeroTupIdx `Prj` e
+    = let r     = P.undefined -- Exp $ SuccTupIdx ZeroTupIdx `Prj` e
+          i     = P.undefined -- Exp $ ZeroTupIdx `Prj` e
       in
       r :+ i
 

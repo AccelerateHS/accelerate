@@ -2,6 +2,9 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 #if __GLASGOW_HASKELL__ <= 708
@@ -138,153 +141,157 @@ instance Unlift Acc (Acc a) where
 
 instance Lift Exp () where
   type Plain () = ()
-  lift _ = Exp $ Tuple NilTup
+  lift _ = Exp $ SmartExp Nil
 
 instance Unlift Exp () where
   unlift _ = ()
 
 instance Lift Exp Z where
   type Plain Z = Z
-  lift _ = Exp $ IndexNil
+  lift _ = Exp $ SmartExp Nil
 
 instance Unlift Exp Z where
   unlift _ = Z
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
-  lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
+  lift (ix:.i) = Exp $ SmartExp $ Pair (unExp $ lift ix) (unExp $ expConst i)
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
-  lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
+  lift (ix:.i) = Exp $ SmartExp $ Pair (unExp $ lift ix) (unExp $ constant i)
 
 instance (Elt e, Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
-  lift (ix:.i) = Exp $ IndexCons (lift ix) i
+  lift (ix :. Exp i) = Exp $ SmartExp $ Pair (unExp $ lift ix) i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
-  unlift e = unlift (Exp $ IndexTail e) :. Exp (IndexHead e)
+  unlift (Exp e) = unlift (Exp $ SmartExp $ Prj PairIdxLeft e) :. Exp (SmartExp $ Prj PairIdxRight e)
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt ix) => Unlift Exp (Exp ix :. Exp e) where
-  unlift e = (Exp $ IndexTail e) :. Exp (IndexHead e)
+  unlift (Exp e) = (Exp $ SmartExp $ Prj PairIdxLeft e) :. Exp (SmartExp $ Prj PairIdxRight e)
 
-instance Shape sh => Lift Exp (Any sh) where
- type Plain (Any sh) = Any sh
- lift Any = Exp $ IndexAny
+instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
+  type Plain (Any sh) = Any sh
+  lift Any = constant Any
 
 -- instances for numeric types
 
+{-# INLINE expConst #-}
+expConst :: forall e. Elt e => IsScalar (EltRepr e) => e -> Exp e
+expConst = Exp . SmartExp . Const (scalarType @(EltRepr e)) . fromElt
+
 instance Lift Exp Int where
   type Plain Int = Int
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Int8 where
   type Plain Int8 = Int8
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Int16 where
   type Plain Int16 = Int16
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Int32 where
   type Plain Int32 = Int32
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Int64 where
   type Plain Int64 = Int64
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Word where
   type Plain Word = Word
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Word8 where
   type Plain Word8 = Word8
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Word16 where
   type Plain Word16 = Word16
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Word32 where
   type Plain Word32 = Word32
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Word64 where
   type Plain Word64 = Word64
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CShort where
   type Plain CShort = CShort
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CUShort where
   type Plain CUShort = CUShort
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CInt where
   type Plain CInt = CInt
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CUInt where
   type Plain CUInt = CUInt
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CLong where
   type Plain CLong = CLong
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CULong where
   type Plain CULong = CULong
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CLLong where
   type Plain CLLong = CLLong
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CULLong where
   type Plain CULLong = CULLong
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Half where
   type Plain Half = Half
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Float where
   type Plain Float = Float
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Double where
   type Plain Double = Double
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CFloat where
   type Plain CFloat = CFloat
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CDouble where
   type Plain CDouble = CDouble
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp Char where
   type Plain Char = Char
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CChar where
   type Plain CChar = CChar
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CSChar where
   type Plain CSChar = CSChar
-  lift = Exp . Const
+  lift = expConst
 
 instance Lift Exp CUChar where
   type Plain CUChar = CUChar
-  lift = Exp . Const
+  lift = expConst
 
 -- Instances for tuples
 
@@ -479,7 +486,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e
-  lift = Acc . SmartAcc . Use
+  lift (Array arr) = Acc $ SmartAcc $ Use (arrayR @sh @e) arr
 
 instance (Lift Acc a, Lift Acc b, Arrays (Plain a), Arrays (Plain b)) => Lift Acc (a, b) where
   type Plain (a, b) = (Plain a, Plain b)

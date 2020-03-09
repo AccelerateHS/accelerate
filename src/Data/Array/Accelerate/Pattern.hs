@@ -37,7 +37,6 @@ module Data.Array.Accelerate.Pattern (
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
 import Language.Haskell.TH                                          hiding ( Exp )
@@ -265,12 +264,12 @@ pattern T16 a b c d e f g h i j k l m n o p = Pattern (a, b, c, d, e, f, g, h, i
 -- IsPattern instances for Shape nil and cons
 --
 instance IsPattern Exp Z Z where
-  construct _ = Exp IndexNil
+  construct _ = Exp $ SmartExp Nil
   destruct _  = Z
 
 instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
-  construct (a :. b) = Exp (a `IndexCons` b)
-  destruct t         = Exp (IndexTail t) :. Exp (IndexHead t)
+  construct (Exp a :. Exp b) = Exp $ SmartExp $ a `Pair` b
+  destruct (Exp t)           = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
 -- (unremarkable) boilerplate for us, but since the implementation is a little
@@ -278,53 +277,42 @@ instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
 --
 $(runQ $ do
     let
-        mkIsPattern' :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern' con cst tup prj nil snoc n =
+        -- Generate instance declarations for IsPattern of the form:
+        -- instance (Elt x, EltRepr x ~ (((), EltRepr a), EltRepr b), Elt a, Elt b,) => IsPattern Exp x (Exp a, Exp b)
+        mkIsPattern :: Name -> TypeQ -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkIsPattern _   _   _    _     _   _   _    1 = return []
+        mkIsPattern con cst repr smart prj nil pair n = do
+          a <- newName "a"
           let
-              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1]]
-              b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
-              repr    = foldl (\ts t -> [t| ($ts, $(varT t)) |]) [t| () |] xs
-              context = foldl (\ts t -> appT ts (appT cst (varT t))) (tupleT n) xs
-              --
-              tix 0   = [| ZeroTupIdx |]
-              tix i   = [| SuccTupIdx $(tix (i-1)) |]
-              get x i = [| $(conE con) ($prj $(tix i) $x) |]
-          in
-          [d| instance
-                ( IsProduct $cst a
-                , ProdRepr a ~ $repr
-                , $cst a
-                , $context
-                ) => IsPattern $(conT con) a $b where
-                  construct $(tupP (map varP xs)) = $(conE con) ($tup $(foldl (\vs v -> appE (appE snoc vs) (varE v)) nil xs))
-                  destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
-            |]
-
-        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern _   _   _     _   _   _    1 = return []
-        mkIsPattern con cst smart prj nil pair n = do
-          let
-              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              a       = foldl (\ts t -> appT ts (varT t)) (tupleT n) xs
-              b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
-              context = foldl (\ts t -> appT ts (appT cst (varT t))) (tupleT n) xs
+              -- Type variables for the elements
+              xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              -- Last argument to `IsPattern`, eg (Exp, a, Exp b) in the example
+              b        = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
+              -- Representation as snoc-list of pairs, eg (((), EltRepr a), EltRepr b)
+              snoc     = foldl (\sn t -> [t| ($sn, $(appT repr $ varT t)) |]) [t| () |] xs
+              -- Constraints for the type class, consisting of Elt constraints on all type variables,
+              -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
+              contexts = appT cst [t| $(varT a) |]
+                       : [t| $repr $(varT a) ~ $snoc |]
+                       : map (\t -> appT cst (varT t)) xs
+              -- Store all constraints in a tuple
+              context  = foldl (\ts t -> appT ts t) (tupleT $ length contexts) contexts
               --
               get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
               get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
           --
           _x <- newName "_x"
-          [d| instance $context => IsPattern $(conT con) $a $b where
+          [d| instance $context => IsPattern $(conT con) $(varT a) $b where
                 construct $(tupP (map (conP con . return . varP) xs)) =
                   $(conE con) $(foldl (\vs v -> appE smart (appE (appE pair vs) (varE v))) (appE smart nil) xs)
                 destruct $(conP con [varP _x]) =
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
-        mkExpPattern = mkIsPattern' (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
-        mkAccPattern = mkIsPattern  (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
+        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [t| EltRepr |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
+        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [t| ArrRepr |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
     es <- mapM mkExpPattern [0..16]
     as <- mapM mkAccPattern [0..16]
     return $ concat (es ++ as)
  )
-

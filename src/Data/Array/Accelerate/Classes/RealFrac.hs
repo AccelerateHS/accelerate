@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
@@ -128,17 +129,17 @@ instance RealFrac Double where
 
 instance RealFrac CFloat where
   properFraction  = defaultProperFraction
-  truncate        = lift1 defaultTruncate
-  round           = lift1 defaultRound
-  ceiling         = lift1 defaultCeiling
-  floor           = lift1 defaultFloor
+  truncate        = defaultTruncate
+  round           = defaultRound
+  ceiling         = defaultCeiling
+  floor           = defaultFloor
 
 instance RealFrac CDouble where
   properFraction  = defaultProperFraction
-  truncate        = lift1 defaultTruncate
-  round           = lift1 defaultRound
-  ceiling         = lift1 defaultCeiling
-  floor           = lift1 defaultFloor
+  truncate        = defaultTruncate
+  round           = defaultRound
+  ceiling         = defaultCeiling
+  floor           = defaultFloor
 
 
 -- Must test for ±0.0 to avoid returning -0.0 in the second component of the
@@ -196,6 +197,7 @@ defaultFloor x
   | otherwise
   = let (n, r) = properFraction x in cond (r < 0) (n-1) n
 
+-- mkRound :: (Elt a, Elt b, IsFloating (EltRepr a), IsIntegral (EltRepr b)) => Exp a -> Exp b
 defaultRound :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
 defaultRound x
   | Just IsFloatingDict <- isFloating @a
@@ -219,10 +221,10 @@ data IsFloatingDict a where
 data IsIntegralDict a where
   IsIntegralDict :: IsIntegral a => IsIntegralDict a
 
-isFloating :: forall a. Elt a => Maybe (IsFloatingDict a)
+isFloating :: forall a. Elt a => Maybe (IsFloatingDict (EltRepr a))
 isFloating
   | Just Refl          <- eqT @a @(EltRepr a)
-  , TypeRscalar t      <- eltType @a
+  , TupRsingle t       <- eltType @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , FloatingNumType f  <- n
@@ -234,10 +236,10 @@ isFloating
   | otherwise
   = Nothing
 
-isIntegral :: forall a. Elt a => Maybe (IsIntegralDict a)
+isIntegral :: forall a. Elt a => Maybe (IsIntegralDict (EltRepr a))
 isIntegral
   | Just Refl          <- eqT @a @(EltRepr a)
-  , TypeRscalar t      <- eltType @a
+  , TupRsingle t       <- eltType @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , IntegralNumType i  <- n
@@ -274,10 +276,3 @@ preludeError x
             , "These Prelude.RealFrac instances are present only to fulfil superclass"
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
-
-lift1 :: (Elt a, Elt b, Elt c, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp c)
-      -> Exp a
-      -> Exp c
-lift1 f x = f (mkUnsafeCoerce x)
-

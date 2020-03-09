@@ -32,7 +32,7 @@
 module Data.Array.Accelerate.Array.Data (
 
   -- * Array operations and representations
-  ArrayData, MutableArrayData, runArrayData, GArrayData, rnfArrayData, ScalarData,
+  ArrayData, MutableArrayData, runArrayData, GArrayData, rnfArrayData, ScalarData, ScalarDataRepr,
   unsafeIndexArrayData, ptrOfArrayData, touchArrayData, newArrayData, unsafeReadArrayData, unsafeWriteArrayData,
 
   -- * Type macros
@@ -40,6 +40,9 @@ module Data.Array.Accelerate.Array.Data (
 
   -- * Allocator internals
   registerForeignPtrAllocator,
+
+  -- * Utilities for type classes
+  ScalarDict(..), scalarDict, singleDict
 
 ) where
 
@@ -60,6 +63,7 @@ import Control.DeepSeq
 import Data.Bits
 import Data.IORef
 import Data.Primitive                                               ( sizeOf# )
+import Data.Typeable                                                ( Typeable )
 import Foreign.ForeignPtr
 import Foreign.Storable
 import Language.Haskell.TH                                          hiding ( Type )
@@ -150,7 +154,7 @@ type family ScalarDataRepr tp where
 
 -- Utilities for working with the type families & type class instances
 data ScalarDict e where
-  ScalarDict :: (Storable (ScalarDataRepr e), Prim (ScalarDataRepr e), ArrayData e ~ ScalarData e) => ScalarDict e
+  ScalarDict :: (Typeable e, Typeable (ScalarDataRepr e), Storable (ScalarDataRepr e), Prim (ScalarDataRepr e), ArrayData e ~ ScalarData e) => ScalarDict e
 
 {-# INLINE scalarDict #-}
 scalarDict :: ScalarType e -> (Int, ScalarDict e)

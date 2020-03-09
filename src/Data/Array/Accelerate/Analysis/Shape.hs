@@ -24,24 +24,22 @@ module Data.Array.Accelerate.Analysis.Shape (
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Representation
 
 -- |Reify the dimensionality of the result type of an array computation
 --
 accDim :: forall acc aenv sh e. HasArraysRepr acc => acc aenv (Array sh e) -> Int
-accDim acc = case arraysRepr acc of
-  ArraysRarray -> rank @sh
+accDim = rank . arrayRshape . arrayRepr
 
 -- |Reify dimensionality of a scalar expression yielding a shape
 --
-expDim :: forall acc env aenv sh. Elt sh => PreOpenExp acc env aenv sh -> Int
-expDim _ = ndim (eltType @sh)
-
+expDim :: forall acc env aenv sh. HasArraysRepr acc => PreOpenExp acc env aenv sh -> Int
+expDim = ndim . expType
 
 -- Count the number of components to a tuple type
 --
-ndim :: TupleType a -> Int
-ndim TypeRunit       = 0
-ndim TypeRscalar{}   = 1
-ndim (TypeRpair a b) = ndim a + ndim b
+ndim :: TupR s a -> Int
+ndim TupRunit       = 0
+ndim TupRsingle{}   = 1
+ndim (TupRpair a b) = ndim a + ndim b
 

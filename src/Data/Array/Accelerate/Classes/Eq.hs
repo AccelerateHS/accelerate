@@ -113,36 +113,36 @@ instance Eq Word64 where
   (/=) = mkNEq
 
 instance Eq CInt where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CUInt where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CLong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CULong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CLLong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CULLong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CShort where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CUShort where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq Bool where
   (==) = mkEq
@@ -153,16 +153,16 @@ instance Eq Char where
   (/=) = mkNEq
 
 instance Eq CChar where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CUChar where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CSChar where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq Half where
   (==) = mkEq
@@ -177,12 +177,12 @@ instance Eq Double where
   (/=) = mkNEq
 
 instance Eq CFloat where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq CDouble where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+  (==) = mkEq
+  (/=) = mkNEq
 
 instance Eq Z where
   (==) _ _ = constant True
@@ -323,11 +323,3 @@ instance P.Eq (Exp a) where
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
-
-lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp Bool)
-      -> Exp a
-      -> Exp a
-      -> Exp Bool
-lift2 f x y = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
-

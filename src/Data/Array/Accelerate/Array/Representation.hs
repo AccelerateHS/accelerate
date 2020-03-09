@@ -23,20 +23,26 @@
 
 module Data.Array.Accelerate.Array.Representation (
   -- * Array data type in terms of representation types
-  Array(..), ArrayR(..), arraysRarray, arraysRtuple2,
-  ArraysR, TupleType, Scalar, Vector, Matrix, fromList, toList,
+  Array(..), ArrayR(..), arraysRarray, arraysRtuple2, arrayRshape, arrayRtype, rnfArray, rnfShape,
+  ArraysR, TupleType, Scalar, Vector, Matrix, fromList, toList, Segments, shape, reshape, concatVectors,
+  showArrayR, showArraysR,
 
   -- * Array shapes, indices, and slices
   ShapeR(..), Slice(..), SliceIndex(..),
-  DIM0, DIM1, DIM2,
+  DIM0, DIM1, DIM2, (!), (!!),
 
   -- * Shape functions
   rank, size, empty, ignore, intersect, union, toIndex, fromIndex, iter, iter1,
   rangeToShape, shapeToRange, shapeToList, listToShape, listToShape', shapeType,
 
   -- * Slice shape functions
-  sliceShape, sliceShapeR, enumSlices,
+  sliceShape, sliceShapeR, sliceDomainR, enumSlices,
 
+  -- * Stencils
+  StencilR(..), stencilElt, stencilShape, stencilType, stencilArrayR,
+
+  -- * Show
+  showShape, showElement, showArray, showArray',
 ) where
 
 -- friends
@@ -46,12 +52,48 @@ import Data.Array.Accelerate.Array.Data
 
 -- standard library
 import GHC.Base                                         ( quotInt, remInt )
+import Prelude                                          hiding ((!!))
+import Data.List                                        ( intercalate )
+import Text.Show                                        ( showListWith )
+import qualified Data.Vector.Unboxed                    as U
 
 -- |Array data type, where the type arguments regard the representation types of the shape and elements.
 data Array sh e where
   Array :: sh                         -- extent of dimensions = shape
         -> ArrayData e                -- array payload
         -> Array sh e
+
+{-# INLINE shape #-}
+shape :: Array sh e -> sh
+shape (Array sh _) = sh
+
+{-# INLINE reshape #-}
+reshape :: ShapeR sh -> sh -> ShapeR sh' -> Array sh' e -> Array sh e
+reshape shr sh shr' (Array sh' adata)
+  = $boundsCheck "reshape" "shape mismatch" (size shr sh == size shr' sh')
+  $ Array sh adata
+
+{-# INLINE [1] (!) #-}
+(!) :: (ArrayR (Array sh e), Array sh e) -> sh -> e
+(!) (ArrayR shr tp, Array sh adata) ix = unsafeIndexArrayData tp adata $ toIndex shr sh ix
+
+{-# INLINE [1] (!!) #-}
+(!!) :: (TupleType e, Array sh e) -> Int -> e
+(tp, Array _ adata) !! i = unsafeIndexArrayData tp adata i
+
+{-# INLINEABLE concatVectors #-}
+concatVectors :: TupleType e -> [Vector e] -> Vector e
+concatVectors tp vs = adata `seq` Array ((), len) adata
+  where
+    dim1        = ShapeRcons ShapeRz
+    offsets     = scanl (+) 0 (map (size dim1 . shape) vs)
+    len         = last offsets
+    (adata, _)  = runArrayData $ do
+              arr <- newArrayData tp len
+              sequence_ [ unsafeWriteArrayData tp arr (i + k) (unsafeIndexArrayData tp ad i)
+                        | (Array ((), n) ad, k) <- vs `zip` offsets
+                        , i <- [0 .. n - 1] ]
+              return (arr, undefined)
 
 {-# INLINEABLE fromList #-}
 fromList :: ArrayR (Array sh e) -> sh -> [e] -> Array sh e
@@ -88,15 +130,37 @@ type ArraysR = TupR ArrayR
 data ArrayR a where
   ArrayR :: ShapeR sh -> TupleType e -> ArrayR (Array sh e)
 
+arrayRshape :: ArrayR (Array sh e) -> ShapeR sh
+arrayRshape (ArrayR sh _) = sh
+
+arrayRtype :: ArrayR (Array sh e) -> TupleType e
+arrayRtype (ArrayR _ tp) = tp
+
 arraysRarray :: ShapeR sh -> TupleType e -> ArraysR (Array sh e)
 arraysRarray shr tp = TupRsingle $ ArrayR shr tp
 
 arraysRtuple2 :: ArrayR a -> ArrayR b -> ArraysR (((), a), b)
 arraysRtuple2 a b = TupRpair TupRunit (TupRsingle a) `TupRpair` TupRsingle b
 
+showArrayR :: ArrayR a -> ShowS
+showArrayR (ArrayR shr tp) = showString "Array DIM" . shows (rank shr) . showString " " . showType tp
+
+showArraysR :: ArraysR tp -> ShowS
+showArraysR TupRunit = showString "()"
+showArraysR (TupRsingle repr) = showArrayR repr
+showArraysR (TupRpair t1 t2) = showString "(" . showArraysR t1 . showString ", " . showArraysR t2 . showString ")"
+
 type Scalar = Array DIM0
 type Vector = Array DIM1
 type Matrix = Array DIM2
+
+-- | Segment descriptor (vector of segment lengths).
+--
+-- To represent nested one-dimensional arrays, we use a flat array of data
+-- values in conjunction with a /segment descriptor/, which stores the lengths
+-- of the subarrays.
+--
+type Segments = Vector
 
 -- |Index representation
 --
@@ -270,6 +334,11 @@ sliceShapeR SliceNil        = ShapeRz
 sliceShapeR (SliceAll sl)   = ShapeRcons $ sliceShapeR sl
 sliceShapeR (SliceFixed sl) = sliceShapeR sl
 
+sliceDomainR :: SliceIndex slix sl co dim -> ShapeR dim
+sliceDomainR SliceNil        = ShapeRz
+sliceDomainR (SliceAll sl)   = ShapeRcons $ sliceDomainR sl
+sliceDomainR (SliceFixed sl) = ShapeRcons $ sliceDomainR sl
+
 -- | Enumerate all slices within a given bound. The innermost dimension changes
 -- most rapidly.
 --
@@ -283,3 +352,186 @@ enumSlices SliceNil        ()       = [()]
 enumSlices (SliceAll   sl) (sh, _)  = [ (sh', ()) | sh' <- enumSlices sl sh]
 enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh, i <- [0..n-1]]
 
+
+-- | GADT reifying the 'Stencil' class
+--
+data StencilR sh e pat where
+  StencilRunit3 :: TupleType e -> StencilR DIM1 e (Tup3 e e e)
+  StencilRunit5 :: TupleType e -> StencilR DIM1 e (Tup5 e e e e e)
+  StencilRunit7 :: TupleType e -> StencilR DIM1 e (Tup7 e e e e e e e)
+  StencilRunit9 :: TupleType e -> StencilR DIM1 e (Tup9 e e e e e e e e e)
+
+  StencilRtup3  :: StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR (sh, Int) e (Tup3 pat1 pat2 pat3)
+
+  StencilRtup5  :: StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR (sh, Int) e (Tup5 pat1 pat2 pat3 pat4 pat5)
+
+  StencilRtup7  :: StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR sh e pat6
+                -> StencilR sh e pat7
+                -> StencilR (sh, Int) e (Tup7 pat1 pat2 pat3 pat4 pat5 pat6 pat7)
+
+  StencilRtup9  :: StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR sh e pat6
+                -> StencilR sh e pat7
+                -> StencilR sh e pat8
+                -> StencilR sh e pat9
+                -> StencilR (sh, Int) e (Tup9 pat1 pat2 pat3 pat4 pat5 pat6 pat7 pat8 pat9)
+
+stencilElt :: StencilR sh e pat -> TupleType e
+stencilElt (StencilRunit3 tp) = tp
+stencilElt (StencilRunit5 tp) = tp
+stencilElt (StencilRunit7 tp) = tp
+stencilElt (StencilRunit9 tp) = tp
+stencilElt (StencilRtup3 sr _ _) = stencilElt sr
+stencilElt (StencilRtup5 sr _ _ _ _) = stencilElt sr
+stencilElt (StencilRtup7 sr _ _ _ _ _ _) = stencilElt sr
+stencilElt (StencilRtup9 sr _ _ _ _ _ _ _ _) = stencilElt sr
+
+stencilShape :: StencilR sh e pat -> ShapeR sh
+stencilShape (StencilRunit3 _) = ShapeRcons ShapeRz
+stencilShape (StencilRunit5 _) = ShapeRcons ShapeRz
+stencilShape (StencilRunit7 _) = ShapeRcons ShapeRz
+stencilShape (StencilRunit9 _) = ShapeRcons ShapeRz
+stencilShape (StencilRtup3 sr _ _) = ShapeRcons $ stencilShape sr
+stencilShape (StencilRtup5 sr _ _ _ _) = ShapeRcons $ stencilShape sr
+stencilShape (StencilRtup7 sr _ _ _ _ _ _) = ShapeRcons $ stencilShape sr
+stencilShape (StencilRtup9 sr _ _ _ _ _ _ _ _) = ShapeRcons $ stencilShape sr
+
+stencilType :: StencilR sh e pat -> TupleType pat
+stencilType (StencilRunit3 tp)                        = tupR3 tp tp tp
+stencilType (StencilRunit5 tp)                        = tupR5 tp tp tp tp tp
+stencilType (StencilRunit7 tp)                        = tupR7 tp tp tp tp tp tp tp
+stencilType (StencilRunit9 tp)                        = tupR9 tp tp tp tp tp tp tp tp tp
+stencilType (StencilRtup3 s1 s2 s3)                   = tupR3 (stencilType s1) (stencilType s2) (stencilType s3)
+stencilType (StencilRtup5 s1 s2 s3 s4 s5)             = tupR5 (stencilType s1) (stencilType s2) (stencilType s3)
+                                                              (stencilType s4) (stencilType s5)
+stencilType (StencilRtup7 s1 s2 s3 s4 s5 s6 s7)       = tupR7 (stencilType s1) (stencilType s2) (stencilType s3)
+                                                              (stencilType s4) (stencilType s5) (stencilType s6)
+                                                              (stencilType s7)
+stencilType (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) = tupR9 (stencilType s1) (stencilType s2) (stencilType s3)
+                                                              (stencilType s4) (stencilType s5) (stencilType s6)
+                                                              (stencilType s7) (stencilType s8) (stencilType s9)
+
+stencilArrayR :: StencilR sh e pat -> ArrayR (Array sh e)
+stencilArrayR stencil = ArrayR (stencilShape stencil) (stencilElt stencil)
+
+rnfArray :: ArrayR a -> a -> ()
+rnfArray (ArrayR shr tp) (Array sh ad) = rnfShape shr sh `seq` rnfArrayData tp ad
+
+rnfShape :: ShapeR sh -> sh -> ()
+rnfShape ShapeRz () = ()
+rnfShape (ShapeRcons shr) (sh, s) = s `seq` rnfShape shr sh
+
+-- | Nicely format a shape as a string
+--
+showShape :: ShapeR sh -> sh -> String
+showShape shr = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList shr
+
+showElement :: TupleType e -> e -> String
+showElement tuple value = showElement' tuple value ""
+  where
+    showElement' :: TupleType e -> e -> ShowS
+    showElement' TupRunit () = showString "()"
+    showElement' (TupRpair t1 t2) (e1, e2) = showString "(" . showElement' t1 e1 . showString ", " . showElement' t2 e2 . showString ")"
+    showElement' (TupRsingle tp) val = showScalar tp val
+
+    showScalar :: ScalarType e -> e -> ShowS
+    showScalar (SingleScalarType t) e = showString $ showSingle t e
+    showScalar (VectorScalarType t) e = showString $ showVector t e
+
+    showSingle :: SingleType e -> e -> String
+    showSingle (NumSingleType t) e = showNum t e
+    showSingle (NonNumSingleType t) e = showNonNum t e
+
+    showNum :: NumType e -> e -> String
+    showNum (IntegralNumType t) e = showIntegral t e
+    showNum (FloatingNumType t) e = showFloating t e
+
+    showIntegral :: IntegralType e -> e -> String
+    showIntegral TypeInt{}    e = show e
+    showIntegral TypeInt8{}   e = show e
+    showIntegral TypeInt16{}  e = show e
+    showIntegral TypeInt32{}  e = show e
+    showIntegral TypeInt64{}  e = show e
+    showIntegral TypeWord{}   e = show e
+    showIntegral TypeWord8{}  e = show e
+    showIntegral TypeWord16{} e = show e
+    showIntegral TypeWord32{} e = show e
+    showIntegral TypeWord64{} e = show e
+
+    showFloating :: FloatingType e -> e -> String
+    showFloating TypeHalf{}   e = show e
+    showFloating TypeFloat{}  e = show e
+    showFloating TypeDouble{} e = show e
+
+    showNonNum :: NonNumType e -> e -> String
+    showNonNum TypeChar e = show e
+    showNonNum TypeBool e = show e
+
+    showVector :: VectorType (Vec n a) -> Vec n a -> String
+    showVector (VectorType _ single) vec
+      | IsPrim <- getPrim single = "<" ++ (intercalate ", " $ showSingle single <$> vecToArray vec) ++ ">"
+
+showArray :: ArrayR (Array sh e) -> Array sh e -> String
+showArray repr@(ArrayR _ tp) = showArray' (showString . showElement tp) repr
+
+{-# INLINE showArray' #-}
+showArray' :: (e -> ShowS) -> ArrayR (Array sh e) -> Array sh e -> String
+showArray' f repr@(ArrayR shr tp) arr@(Array sh _) = case shr of
+  ShapeRz                         -> "Scalar Z "                       ++ list
+  ShapeRcons ShapeRz              -> "Vector (" ++ shapeString ++ ") " ++ list
+  ShapeRcons (ShapeRcons ShapeRz) -> "Matrix (" ++ shapeString ++ ") " ++ showMatrix f tp arr
+  _                               -> "Array ("  ++ shapeString ++ ") " ++ list
+  where
+    shapeString = showShape shr sh
+    list = showListWith f (toList repr arr) ""
+
+-- TODO:
+-- Make special formatting optional? It is more difficult to copy/paste the
+-- result, for example. Also it does not look good if the matrix row does
+-- not fit on a single line.
+--
+showMatrix :: (e -> ShowS) -> TupleType e -> Array DIM2 e -> String
+showMatrix f tp arr@(Array sh _)
+  | rows * cols == 0 = "[]"
+  | otherwise        = "\n  [" ++ ppMat 0 0
+    where
+      (((), rows), cols) = sh
+      lengths            = U.generate (rows*cols) (\i -> length (f ((tp, arr) !! i) ""))
+      widths             = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
+      --
+      ppMat :: Int -> Int -> String
+      ppMat !r !c | c >= cols = ppMat (r+1) 0
+      ppMat !r !c             =
+        let
+            !i    = r*cols+c
+            !l    = lengths U.! i
+            !w    = widths  U.! c
+            !pad  = 1
+            cell  = replicate (w-l+pad) ' ' ++ f ((tp, arr) !! i) ""
+            --
+            before
+              | r > 0 && c == 0 = "\n   "
+              | otherwise       = ""
+            --
+            after
+              | r >= rows-1 && c >= cols-1 = "]"
+              | otherwise                  = ',' : ppMat r (c+1)
+        in
+        before ++ cell ++ after

@@ -29,9 +29,9 @@ module Data.Array.Accelerate.Analysis.Match (
   matchPrimFun,  matchPrimFun',
 
   -- auxiliary
-  matchIdx, matchArrayVar, matchArrayVars, matchTupleType, matchShapeType,
-  matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
-  matchLeftHandSide, matchLeftHandSide',
+  matchIdx, matchVar, matchVars, matchArrayR, matchArraysR, matchTupleType, matchShapeR,
+  matchShapeType, matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
+  matchLeftHandSide, matchALeftHandSide, matchELeftHandSide, matchSingleType, matchTupR
 
 ) where
 
@@ -45,10 +45,9 @@ import Prelude                                          hiding ( exp )
 
 -- friends
 import Data.Array.Accelerate.Analysis.Hash
-import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Representation
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
 
@@ -62,8 +61,8 @@ type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :~: t)
 --
 {-# INLINEABLE matchPreOpenAcc #-}
 matchPreOpenAcc
-    :: forall acc aenv s t.
-       MatchAcc  acc
+    :: forall acc aenv s t. HasArraysRepr acc
+    => MatchAcc  acc
     -> EncodeAcc acc
     -> PreOpenAcc acc aenv s
     -> PreOpenAcc acc aenv t
@@ -78,13 +77,13 @@ matchPreOpenAcc matchAcc encodeAcc = match
 
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :~: t)
     match (Alet lhs1 x1 a1) (Alet lhs2 x2 a2)
-      | Just Refl <- matchLeftHandSide lhs1 lhs2
+      | Just Refl <- matchALeftHandSide lhs1 lhs2
       , Just Refl <- matchAcc x1 x2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Avar (ArrayVar v1)) (Avar (ArrayVar v2))
-      = matchIdx v1 v2
+    match (Avar v1) (Avar v2)
+      = matchVar v1 v2
 
     match (Apair a1 a2) (Apair b1 b2)
       | Just Refl <- matchAcc a1 b1
@@ -119,47 +118,49 @@ matchPreOpenAcc matchAcc encodeAcc = match
       , Just Refl <- matchPreOpenAfun matchAcc f1 f2
       = Just Refl
 
-    match (Use a1) (Use a2)
-      | Just Refl <- matchArray a1 a2
+    match (Use repr1 a1) (Use repr2 a2)
+      | Just Refl <- matchArray repr1 repr2 a1 a2
       = Just Refl
 
     match (Unit e1) (Unit e2)
       | Just Refl <- matchExp e1 e2
       = Just Refl
 
-    match (Reshape sh1 a1) (Reshape sh2 a2)
+    match (Reshape _ sh1 a1) (Reshape _ sh2 a2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Generate sh1 f1) (Generate sh2 f2)
+    match (Generate _ sh1 f1) (Generate _ sh2 f2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun f1  f2
       = Just Refl
 
-    match (Transform sh1 ix1 f1 a1) (Transform sh2 ix2 f2 a2)
+    match (Transform _ sh1 ix1 f1 a1) (Transform _ sh2 ix2 f2 a2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun ix1 ix2
       , Just Refl <- matchFun f1  f2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Replicate _ ix1 a1) (Replicate _ ix2 a2)
-      | Just Refl <- matchExp ix1 ix2
-      , Just Refl <- matchAcc a1  a2
-      = gcast Refl  -- slice specification ??
-
-    match (Slice _ a1 ix1) (Slice _ a2 ix2)
-      | Just Refl <- matchAcc a1  a2
+    match (Replicate si1 ix1 a1) (Replicate si2 ix2 a2)
+      | Just Refl <- matchSliceIndex si1 si2
       , Just Refl <- matchExp ix1 ix2
-      = gcast Refl  -- slice specification ??
+      , Just Refl <- matchAcc a1  a2
+      = Just Refl
 
-    match (Map f1 a1) (Map f2 a2)
+    match (Slice si1 a1 ix1) (Slice si2 a2 ix2)
+      | Just Refl <- matchSliceIndex si1 si2
+      , Just Refl <- matchAcc a1  a2
+      , Just Refl <- matchExp ix1 ix2
+      = Just Refl
+
+    match (Map _ f1 a1) (Map _ f2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (ZipWith f1 a1 b1) (ZipWith f2 a2 b2)
+    match (ZipWith _ f1 a1 b1) (ZipWith _ f2 a2 b2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc b1 b2
@@ -176,14 +177,14 @@ matchPreOpenAcc matchAcc encodeAcc = match
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (FoldSeg f1 z1 a1 s1) (FoldSeg f2 z2 a2 s2)
+    match (FoldSeg _ f1 z1 a1 s1) (FoldSeg _ f2 z2 a2 s2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc s1 s2
       = Just Refl
 
-    match (Fold1Seg f1 a1 s1) (Fold1Seg f2 a2 s2)
+    match (Fold1Seg _ f1 a1 s1) (Fold1Seg _ f2 a2 s2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc s1 s2
@@ -230,24 +231,24 @@ matchPreOpenAcc matchAcc encodeAcc = match
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Backpermute sh1 ix1 a1) (Backpermute sh2 ix2 a2)
+    match (Backpermute _ sh1 ix1 a1) (Backpermute _ sh2 ix2 a2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun ix1 ix2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Stencil f1 b1 a1) (Stencil f2 b2 a2)
+    match (Stencil s1 _ f1 b1 a1) (Stencil _ _ f2 b2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
-      , matchBoundary matchAcc encodeAcc b1 b2
+      , matchBoundary matchAcc encodeAcc (stencilElt s1) b1 b2
       = Just Refl
 
-    match (Stencil2 f1 b1  a1  b2  a2) (Stencil2 f2 b1' a1' b2' a2')
+    match (Stencil2 s1 s2 _ f1 b1  a1  b2  a2) (Stencil2 _ _ _ f2 b1' a1' b2' a2')
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a1'
       , Just Refl <- matchAcc a2 a2'
-      , matchBoundary matchAcc encodeAcc b1 b1'
-      , matchBoundary matchAcc encodeAcc b2 b2'
+      , matchBoundary matchAcc encodeAcc (stencilElt s1) b1 b1'
+      , matchBoundary matchAcc encodeAcc (stencilElt s2) b2 b2'
       = Just Refl
 
     -- match (Collect s1) (Collect s2)
@@ -265,56 +266,50 @@ matchPreOpenAfun
     -> PreOpenAfun acc aenv t
     -> Maybe (s :~: t)
 matchPreOpenAfun m (Alam lhs1 s) (Alam lhs2 t)
-  | Just Refl <- matchLeftHandSide lhs1 lhs2
+  | Just Refl <- matchALeftHandSide lhs1 lhs2
   , Just Refl <- matchPreOpenAfun m s t
   = Just Refl
 
 matchPreOpenAfun m (Abody s) (Abody t) = m s t
 matchPreOpenAfun _ _           _           = Nothing
 
-matchLeftHandSide :: forall aenv aenv1 aenv2 arr1 arr2. LeftHandSide arr1 aenv aenv1 -> LeftHandSide arr2 aenv aenv2 -> Maybe (LeftHandSide arr1 aenv aenv1 :~: LeftHandSide arr2 aenv aenv2)
-matchLeftHandSide (LeftHandSideWildcard repr1) (LeftHandSideWildcard repr2)
-  | Just Refl <- matchArraysR repr1 repr2
-  = Just Refl
-matchLeftHandSide LeftHandSideArray LeftHandSideArray
-  | Just Refl <- gcast @arr1 @arr2 Refl
-  = Just Refl
-matchLeftHandSide (LeftHandSidePair a1 a2) (LeftHandSidePair b1 b2)
-  | Just Refl <- matchLeftHandSide a1 b1
-  , Just Refl <- matchLeftHandSide a2 b2
-  = Just Refl
-matchLeftHandSide _ _ = Nothing
+matchALeftHandSide :: forall aenv aenv1 aenv2 t1 t2. ALeftHandSide t1 aenv aenv1 -> ALeftHandSide t2 aenv aenv2 -> Maybe (ALeftHandSide t1 aenv aenv1 :~: ALeftHandSide t2 aenv aenv2)
+matchALeftHandSide = matchLeftHandSide matchArrayR
 
-matchLeftHandSide' :: forall aenv aenv1 aenv2 arr1 arr2. LeftHandSide arr1 aenv1 aenv -> LeftHandSide arr2 aenv2 aenv -> Maybe (LeftHandSide arr1 aenv1 aenv :~: LeftHandSide arr2 aenv2 aenv)
-matchLeftHandSide' (LeftHandSideWildcard repr1) (LeftHandSideWildcard repr2)
-  | Just Refl <- matchArraysR repr1 repr2
+matchELeftHandSide :: forall env env1 env2 t1 t2. ELeftHandSide t1 env env1 -> ELeftHandSide t2 env env2 -> Maybe (ELeftHandSide t1 env env1 :~: ELeftHandSide t2 env env2)
+matchELeftHandSide = matchLeftHandSide matchScalarType
+
+matchLeftHandSide :: forall s env env1 env2 t1 t2. (forall x y. s x -> s y -> Maybe (x :~: y)) -> LeftHandSide s t1 env env1 -> LeftHandSide s t2 env env2 -> Maybe (LeftHandSide s t1 env env1 :~: LeftHandSide s t2 env env2)
+matchLeftHandSide f (LeftHandSideWildcard repr1) (LeftHandSideWildcard repr2)
+  | Just Refl <- matchTupR f repr1 repr2
   = Just Refl
-matchLeftHandSide' LeftHandSideArray LeftHandSideArray
-  | Just Refl <- gcast @arr1 @arr2 Refl
+matchLeftHandSide f (LeftHandSideSingle x) (LeftHandSideSingle y)
+  | Just Refl <- f x y
   = Just Refl
-matchLeftHandSide' (LeftHandSidePair a1 a2) (LeftHandSidePair b1 b2)
-  | Just Refl <- matchLeftHandSide' a2 b2
-  , Just Refl <- matchLeftHandSide' a1 b1
+matchLeftHandSide f (LeftHandSidePair a1 a2) (LeftHandSidePair b1 b2)
+  | Just Refl <- matchLeftHandSide f a1 b1
+  , Just Refl <- matchLeftHandSide f a2 b2
   = Just Refl
-matchLeftHandSide' _ _ = Nothing
+matchLeftHandSide _ _ _ = Nothing
 
 -- Match stencil boundaries
 --
 matchBoundary
-    :: forall acc aenv sh t. Elt t
+    :: HasArraysRepr acc
     => MatchAcc  acc
     -> EncodeAcc acc
+    -> TupleType t
     -> PreBoundary acc aenv (Array sh t)
     -> PreBoundary acc aenv (Array sh t)
     -> Bool
-matchBoundary _ _ Clamp        Clamp        = True
-matchBoundary _ _ Mirror       Mirror       = True
-matchBoundary _ _ Wrap         Wrap         = True
-matchBoundary _ _ (Constant s) (Constant t) = matchConst (eltType @t) s t
-matchBoundary m h (Function f) (Function g)
+matchBoundary _ _ _  Clamp        Clamp        = True
+matchBoundary _ _ _  Mirror       Mirror       = True
+matchBoundary _ _ _  Wrap         Wrap         = True
+matchBoundary _ _ tp (Constant s) (Constant t) = matchConst tp s t
+matchBoundary m h _  (Function f) (Function g)
   | Just Refl <- matchPreOpenFun m h f g
   = True
-matchBoundary _ _ _ _
+matchBoundary _ _ _ _ _
   = False
 
 
@@ -401,33 +396,39 @@ matchSeq m h = match
 -- As a convenience, we are just comparing the stable names, but we could also
 -- walk the structure comparing the underlying ptrsOfArrayData.
 --
-matchArray :: (Shape sh1, Elt e1, Shape sh2, Elt e2)
-           => Array sh1 e1 -> Array sh2 e2 -> Maybe (Array sh1 e1 :~: Array sh2 e2)
-matchArray (Array _ ad1) (Array _ ad2)
-  | unsafePerformIO $ do
+matchArray :: ArrayR (Array sh1 e1)
+           -> ArrayR (Array sh2 e2)
+           -> Array sh1 e1
+           -> Array sh2 e2
+           -> Maybe (Array sh1 e1 :~: Array sh2 e2)
+matchArray repr1 repr2 (Array _ ad1) (Array _ ad2)
+  | Just Refl <- matchArrayR repr1 repr2
+  , unsafePerformIO $ do
+      
       sn1 <- makeStableName ad1
       sn2 <- makeStableName ad2
       return $! hashStableName sn1 == hashStableName sn2
-  = gcast Refl
+  = Just Refl
 
-matchArray _ _
+matchArray _ _ _ _
   = Nothing
+
+matchTupR :: (forall u1 u2. s u1 -> s u2 -> Maybe (u1 :~: u2)) -> TupR s t1 -> TupR s t2 -> Maybe (t1 :~: t2)
+matchTupR _ TupRunit         TupRunit         = Just Refl
+matchTupR f (TupRsingle x)   (TupRsingle y)   = f x y
+matchTupR f (TupRpair x1 x2) (TupRpair y1 y2)
+  | Just Refl <- matchTupR f x1 y1
+  , Just Refl <- matchTupR f x2 y2            = Just Refl
+matchTupR _ _                _                = Nothing
 
 matchArraysR :: ArraysR s -> ArraysR t -> Maybe (s :~: t)
-matchArraysR ArraysRunit ArraysRunit
-  = Just Refl
+matchArraysR = matchTupR matchArrayR
 
-matchArraysR (ArraysRpair a1 b1) (ArraysRpair a2 b2)
-  | Just Refl <- matchArraysR a1 a2
-  , Just Refl <- matchArraysR b1 b2
-  = Just Refl
-
-matchArraysR ArraysRarray ArraysRarray
-  = gcast Refl
-
-matchArraysR _ _
-  = Nothing
-
+matchArrayR :: ArrayR s -> ArrayR t -> Maybe (s :~: t)
+matchArrayR (ArrayR shr1 tp1) (ArrayR shr2 tp2)
+  | Just Refl <- matchShapeR shr1 shr2
+  , Just Refl <- matchTupleType tp1 tp2 = Just Refl
+matchArrayR _ _ = Nothing
 
 
 -- Compute the congruence of two scalar expressions. Two nodes are congruent if
@@ -441,8 +442,8 @@ matchArraysR _ _
 --
 {-# INLINEABLE matchPreOpenExp #-}
 matchPreOpenExp
-    :: forall acc env aenv s t.
-       MatchAcc  acc
+    :: forall acc env aenv s t. HasArraysRepr acc
+    => MatchAcc  acc
     -> EncodeAcc acc
     -> PreOpenExp acc env aenv s
     -> PreOpenExp acc env aenv t
@@ -453,13 +454,14 @@ matchPreOpenExp matchAcc encodeAcc = match
              PreOpenExp acc env' aenv' s'
           -> PreOpenExp acc env' aenv' t'
           -> Maybe (s' :~: t')
-    match (Let x1 e1) (Let x2 e2)
-      | Just Refl <- match x1 x2
+    match (Let lhs1 x1 e1) (Let lhs2 x2 e2)
+      | Just Refl <- matchELeftHandSide lhs1 lhs2
+      , Just Refl <- match x1 x2
       , Just Refl <- match e1 e2
       = Just Refl
 
-    match (Var v1) (Var v2)
-      = matchIdx v1 v2
+    match (Evar v1) (Evar v2)
+      = matchVar v1 v2
 
     match (Foreign ff1 _ e1) (Foreign ff2 _ e2)
       | Just Refl <- match e1 e2
@@ -469,66 +471,44 @@ matchPreOpenExp matchAcc encodeAcc = match
           return $! hashStableName sn1 == hashStableName sn2
       = gcast Refl
 
-    match (Const c1) (Const c2)
-      | Just Refl <- matchTupleType (eltType @s') (eltType @t')
-      , matchConst (eltType @s') c1 c2
-      = gcast Refl  -- surface/representation type
+    match (Const t1 c1) (Const t2 c2)
+      | Just Refl <- matchScalarType t1 t2
+      , matchConst (TupRsingle t1) c1 c2
+      = Just Refl
 
-    match Undef Undef
-      | Just Refl <- matchTupleType (eltType @s') (eltType @t')
-      = gcast Refl
+    match (Undef t1) (Undef t2) = matchScalarType t1 t2
 
-    match (Coerce e1) (Coerce e2)
-      | Just Refl <- matchTupleType (eltType @s') (eltType @t')
+    match (Coerce _ t1 e1) (Coerce _ t2 e2)
+      | Just Refl <- matchScalarType t1 t2
       , Just Refl <- match e1 e2
-      = gcast Refl
-
-    match (Tuple t1) (Tuple t2)
-      | Just Refl <- matchTuple matchAcc encodeAcc t1 t2
-      = gcast Refl  -- surface/representation type
-
-    match (Prj ix1 t1) (Prj ix2 t2)
-      | Just Refl <- match         t1  t2
-      , Just Refl <- matchTupleIdx ix1 ix2
       = Just Refl
 
-    match IndexAny IndexAny
-      = gcast Refl  -- ???
-
-    match IndexNil IndexNil
+    match (Pair a1 b1) (Pair a2 b2)
+      | Just Refl <- match a1 a2
+      , Just Refl <- match b1 b2
       = Just Refl
 
-    match (IndexCons sl1 a1) (IndexCons sl2 a2)
-      | Just Refl <- match sl1 sl2
-      , Just Refl <- match a1 a2
-      = Just Refl
-
-    match (IndexHead sl1) (IndexHead sl2)
-      | Just Refl <- match sl1 sl2
-      = Just Refl
-
-    match (IndexTail sl1) (IndexTail sl2)
-      | Just Refl <- match sl1 sl2
+    match Nil Nil
       = Just Refl
 
     match (IndexSlice sliceIndex1 ix1 sh1) (IndexSlice sliceIndex2 ix2 sh2)
       | Just Refl <- match ix1 ix2
       , Just Refl <- match sh1 sh2
-      , Just Refl <- matchSliceRestrict sliceIndex1 sliceIndex2
-      = gcast Refl  -- SliceIndex representation/surface type
+      , Just Refl <- matchSliceIndex sliceIndex1 sliceIndex2
+      = Just Refl
 
     match (IndexFull sliceIndex1 ix1 sl1) (IndexFull sliceIndex2 ix2 sl2)
       | Just Refl <- match ix1 ix2
       , Just Refl <- match sl1 sl2
-      , Just Refl <- matchSliceExtend sliceIndex1 sliceIndex2
-      = gcast Refl  -- SliceIndex representation/surface type
+      , Just Refl <- matchSliceIndex sliceIndex1 sliceIndex2
+      = Just Refl
 
-    match (ToIndex sh1 i1) (ToIndex sh2 i2)
+    match (ToIndex _ sh1 i1) (ToIndex _ sh2 i2)
       | Just Refl <- match sh1 sh2
       , Just Refl <- match i1  i2
       = Just Refl
 
-    match (FromIndex sh1 i1) (FromIndex sh2 i2)
+    match (FromIndex _ sh1 i1) (FromIndex _ sh2 i2)
       | Just Refl <- match i1  i2
       , Just Refl <- match sh1 sh2
       = Just Refl
@@ -573,18 +553,8 @@ matchPreOpenExp matchAcc encodeAcc = match
       | Just Refl <- matchAcc a1 a2     -- should only be array indices
       = Just Refl
 
-    match (ShapeSize sh1) (ShapeSize sh2)
+    match (ShapeSize _ sh1) (ShapeSize _ sh2)
       | Just Refl <- match sh1 sh2
-      = Just Refl
-
-    match (Intersect sa1 sb1) (Intersect sa2 sb2)
-      | Just Refl <- match sa1 sa2
-      , Just Refl <- match sb1 sb2
-      = Just Refl
-
-    match (Union sa1 sb1) (Union sa2 sb2)
-      | Just Refl <- match sa1 sa2
-      , Just Refl <- match sb1 sb2
       = Just Refl
 
     match _ _
@@ -595,18 +565,16 @@ matchPreOpenExp matchAcc encodeAcc = match
 --
 {-# INLINEABLE matchPreOpenFun #-}
 matchPreOpenFun
-    :: MatchAcc  acc
+    :: HasArraysRepr acc
+    => MatchAcc  acc
     -> EncodeAcc acc
     -> PreOpenFun acc env aenv s
     -> PreOpenFun acc env aenv t
     -> Maybe (s :~: t)
-matchPreOpenFun m h (Lam s) (Lam t)
-  | Just Refl <- matchEnvTop         s t
+matchPreOpenFun m h (Lam lhs1 s) (Lam lhs2 t)
+  | Just Refl <- matchELeftHandSide lhs1 lhs2
   , Just Refl <- matchPreOpenFun m h s t
   = Just Refl
-  where
-    matchEnvTop :: (Elt s, Elt t) => PreOpenFun acc (env, s) aenv f -> PreOpenFun acc (env, t) aenv g -> Maybe (s :~: t)
-    matchEnvTop _ _ = gcast Refl  -- ???
 
 matchPreOpenFun m h (Body s) (Body t) = matchPreOpenExp m h s t
 matchPreOpenFun _ _ _        _        = Nothing
@@ -614,9 +582,9 @@ matchPreOpenFun _ _ _        _        = Nothing
 -- Matching constants
 --
 matchConst :: TupleType a -> a -> a -> Bool
-matchConst TypeRunit         ()      ()      = True
-matchConst (TypeRscalar ty)  a       b       = evalEq ty (a,b)
-matchConst (TypeRpair ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
+matchConst TupRunit         ()      ()      = True
+matchConst (TupRsingle ty)  a       b       = evalEq ty (a,b)
+matchConst (TupRpair ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
 
 evalEq :: ScalarType a -> (a, a) -> Bool
 evalEq (SingleScalarType t) = evalEqSingle t
@@ -642,86 +610,37 @@ matchIdx ZeroIdx     ZeroIdx     = Just Refl
 matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
 matchIdx _           _           = Nothing
 
-{-# INLINEABLE matchArrayVar #-}
-matchArrayVar :: ArrayVar env s -> ArrayVar env t -> Maybe (s :~: t)
-matchArrayVar (ArrayVar v1) (ArrayVar v2) = matchIdx v1 v2
+{-# INLINEABLE matchVar #-}
+matchVar :: Var s env t1 -> Var s env t2 -> Maybe (t1 :~: t2)
+matchVar (Var _ v1) (Var _ v2) = matchIdx v1 v2
 
-{-# INLINEABLE matchArrayVars #-}
-matchArrayVars :: ArrayVars env s -> ArrayVars env t -> Maybe (s :~: t)
-matchArrayVars ArrayVarsNil        ArrayVarsNil = Just Refl
-matchArrayVars (ArrayVarsArray v1) (ArrayVarsArray v2)
-  | Just Refl <- matchArrayVar v1 v2 = Just Refl
-matchArrayVars (ArrayVarsPair v w) (ArrayVarsPair x y)
-  | Just Refl <- matchArrayVars v x
-  , Just Refl <- matchArrayVars w y  = Just Refl
-matchArrayVars _ _ = Nothing
-
-
--- Tuple projection indices. Given the same tuple expression structure (tup),
--- check that the indices project identical elements.
---
-{-# INLINEABLE matchTupleIdx #-}
-matchTupleIdx :: TupleIdx tup s -> TupleIdx tup t -> Maybe (s :~: t)
-matchTupleIdx ZeroTupIdx     ZeroTupIdx     = Just Refl
-matchTupleIdx (SuccTupIdx s) (SuccTupIdx t) = matchTupleIdx s t
-matchTupleIdx _              _              = Nothing
-
--- Tuples
---
-matchTuple
-    :: MatchAcc  acc
-    -> EncodeAcc acc
-    -> Tuple (PreOpenExp acc env aenv) s
-    -> Tuple (PreOpenExp acc env aenv) t
-    -> Maybe (s :~: t)
-matchTuple _ _ NilTup          NilTup           = Just Refl
-matchTuple m h (SnocTup t1 e1) (SnocTup t2 e2)
-  | Just Refl <- matchTuple      m h t1 t2
-  , Just Refl <- matchPreOpenExp m h e1 e2
-  = Just Refl
-
-matchTuple _ _ _               _                = Nothing
+{-# INLINEABLE matchVars #-}
+matchVars :: Vars s env t1 -> Vars s env t2 -> Maybe (t1 :~: t2)
+matchVars VarsNil         VarsNil = Just Refl
+matchVars (VarsSingle v1) (VarsSingle v2)
+  | Just Refl <- matchVar v1 v2 = Just Refl
+matchVars (VarsPair v w) (VarsPair x y)
+  | Just Refl <- matchVars v x
+  , Just Refl <- matchVars w y  = Just Refl
+matchVars _ _ = Nothing
 
 
 -- Slice specifications
 --
-matchSliceRestrict
-    :: SliceIndex slix s co  sh
-    -> SliceIndex slix t co' sh
-    -> Maybe (s :~: t)
-matchSliceRestrict SliceNil SliceNil
+matchSliceIndex :: SliceIndex slix1 sl1 co1 sh1 -> SliceIndex slix2 sl2 co2 sh2 -> Maybe (SliceIndex slix1 sl1 co1 sh1 :~: SliceIndex slix2 sl2 co2 sh2)
+matchSliceIndex SliceNil SliceNil
   = Just Refl
 
-matchSliceRestrict (SliceAll   sl1) (SliceAll   sl2)
-  | Just Refl <- matchSliceRestrict sl1 sl2
+matchSliceIndex (SliceAll   sl1) (SliceAll   sl2)
+  | Just Refl <- matchSliceIndex sl1 sl2
   = Just Refl
 
-matchSliceRestrict (SliceFixed sl1) (SliceFixed sl2)
-  | Just Refl <- matchSliceRestrict sl1 sl2
+matchSliceIndex (SliceFixed sl1) (SliceFixed sl2)
+  | Just Refl <- matchSliceIndex sl1 sl2
   = Just Refl
 
-matchSliceRestrict _ _
+matchSliceIndex _ _
   = Nothing
-
-
-matchSliceExtend
-    :: SliceIndex slix sl co  s
-    -> SliceIndex slix sl co' t
-    -> Maybe (s :~: t)
-matchSliceExtend SliceNil SliceNil
-  = Just Refl
-
-matchSliceExtend (SliceAll   sl1) (SliceAll   sl2)
-  | Just Refl <- matchSliceExtend sl1 sl2
-  = Just Refl
-
-matchSliceExtend (SliceFixed sl1) (SliceFixed sl2)
-  | Just Refl <- matchSliceExtend sl1 sl2
-  = Just Refl
-
-matchSliceExtend _ _
-  = Nothing
-
 
 -- Primitive constants and functions
 --
@@ -902,15 +821,7 @@ matchPrimFun' _ _
 --
 {-# INLINEABLE matchTupleType #-}
 matchTupleType :: TupleType s -> TupleType t -> Maybe (s :~: t)
-matchTupleType TypeRunit         TypeRunit         = Just Refl
-matchTupleType (TypeRscalar s)   (TypeRscalar t)   = matchScalarType s t
-matchTupleType (TypeRpair s1 s2) (TypeRpair t1 t2)
-  | Just Refl <- matchTupleType s1 t1
-  , Just Refl <- matchTupleType s2 t2
-  = Just Refl
-
-matchTupleType _ _
-  = Nothing
+matchTupleType = matchTupR matchScalarType
 
 
 -- Match shapes (dimensionality)
@@ -922,9 +833,9 @@ matchTupleType _ _
 -- a known branch.
 --
 {-# INLINEABLE matchShapeType #-}
-matchShapeType :: forall s t. (Shape s, Shape t) => Maybe (s :~: t)
+matchShapeType :: forall s t. (Sugar.Shape s, Sugar.Shape t) => Maybe (s :~: t)
 matchShapeType
-  | Just Refl <- matchTupleType (eltType @s) (eltType @t)
+  | Just Refl <- matchShapeR (Sugar.shapeR @s) (Sugar.shapeR @t)
 #ifdef ACCELERATE_INTERNAL_CHECKS
   = gcast Refl
 #else
@@ -932,6 +843,13 @@ matchShapeType
 #endif
   | otherwise
   = Nothing
+
+{-# INLINEABLE matchShapeR #-}
+matchShapeR :: forall s t. ShapeR s -> ShapeR t -> Maybe (s :~: t)
+matchShapeR ShapeRz ShapeRz = Just Refl
+matchShapeR (ShapeRcons shr1) (ShapeRcons shr2)
+  | Just Refl <- matchShapeR shr1 shr2 = Just Refl
+matchShapeR _ _ = Nothing
 
 
 -- Match reified type dictionaries
@@ -1007,8 +925,8 @@ matchNonNumType _          _          = Nothing
 -- commutativity.
 --
 commutes
-    :: forall acc env aenv a r.
-       EncodeAcc acc
+    :: forall acc env aenv a r. HasArraysRepr acc
+    => EncodeAcc acc
     -> PrimFun (a -> r)
     -> PreOpenExp acc env aenv a
     -> Maybe (PreOpenExp acc env aenv a)
@@ -1028,8 +946,8 @@ commutes h f x = case f of
   where
     swizzle :: PreOpenExp acc env aenv (a',a') -> PreOpenExp acc env aenv (a',a')
     swizzle exp
-      | Tuple (NilTup `SnocTup` a `SnocTup` b)  <- exp
-      , hashPreOpenExp h a > hashPreOpenExp h b = Tuple (NilTup `SnocTup` b `SnocTup` a)
+      | (a `Pair` b)  <- exp
+      , hashPreOpenExp h a > hashPreOpenExp h b = b `Pair` a
       --
       | otherwise                               = exp
 
