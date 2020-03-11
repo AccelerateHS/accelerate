@@ -111,7 +111,7 @@ module Data.Array.Accelerate.AST (
   liftIdx, liftTupleIdx,
   liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
-  liftLHS, liftArray,
+  liftArray, liftArraysR, liftLHS,
 
   -- Utilities
   Exists(..), weakenWithLHS, (:>),
@@ -1605,8 +1605,8 @@ liftPreOpenAcc liftA pacc =
     Stencil2 f b1 a1 b2 a2    -> [|| Stencil2 $$(liftF f) $$(liftB b1) $$(liftA a1) $$(liftB b2) $$(liftA a2) ||]
 
 liftLHS :: LeftHandSide arrs aenv aenv' -> Q (TExp (LeftHandSide arrs aenv aenv'))
-liftLHS (LeftHandSideWildcard r) = [|| LeftHandSideWildcard $$(liftArraysR r) ||]
 liftLHS LeftHandSideArray        = [|| LeftHandSideArray ||]
+liftLHS (LeftHandSideWildcard r) = [|| LeftHandSideWildcard $$(liftArraysR r) ||]
 liftLHS (LeftHandSidePair a b)   = [|| LeftHandSidePair $$(liftLHS a) $$(liftLHS b) ||]
 
 liftArraysR :: ArraysR arrs -> Q (TExp (ArraysR arrs))
