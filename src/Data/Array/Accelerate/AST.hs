@@ -84,7 +84,7 @@ module Data.Array.Accelerate.AST (
 
   -- * Typed de Bruijn indices
   Idx(..), idxToInt, tupleIdxToInt, Var(..), Vars(..), ArrayVar, ArrayVars, ExpVar, ExpVars,
-  evars, LeftHandSide(..), ALeftHandSide, ELeftHandSide,
+  evars, varsType, LeftHandSide(..), ALeftHandSide, ELeftHandSide,
 
   -- * Valuation environment
   Val(..), push, prj,
@@ -117,7 +117,7 @@ module Data.Array.Accelerate.AST (
 
   -- Utilities
   Exists(..), weakenWithLHS, (:>), weakenId, weakenSucc, weakenSucc', (.>), (>:>),
-  shift, shiftWithLHS,
+  sink, sinkWithLHS,
 
   -- debugging
   showPreAccOp, showPreExpOp, showShortendArr, showElement
@@ -278,9 +278,8 @@ weakenSucc' (Weaken f) = Weaken (SuccIdx . f)
 weakenSucc :: (env, t) :> env' -> env :> env'
 weakenSucc (Weaken f) = Weaken (f . SuccIdx)
 
--- TODO: Rename to sink
-shift :: forall env env' t. env :> env' -> (env, t) :> (env', t)
-shift (Weaken f) = Weaken g
+sink :: forall env env' t. env :> env' -> (env, t) :> (env', t)
+sink (Weaken f) = Weaken g
   where
     g :: Idx (env, t) t' -> Idx (env', t) t'
     g ZeroIdx      = ZeroIdx
@@ -290,12 +289,11 @@ infixr 9 .>
 (.>) :: env2 :> env3 -> env1 :> env2 -> env1 :> env3
 (.>) (Weaken f) (Weaken g) = Weaken (f . g)
 
--- TODO: REname to sinkWithLHS
-shiftWithLHS :: LeftHandSide s t env1 env1' -> LeftHandSide s t env2 env2' -> env1 :> env2 -> env1' :> env2'
-shiftWithLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
-shiftWithLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = shift k
-shiftWithLHS (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k = shiftWithLHS b1 b2 $ shiftWithLHS a1 a2 k
-shiftWithLHS _ _ _ = error "shiftWithLHS: left hand sides do not match"
+sinkWithLHS :: LeftHandSide s t env1 env1' -> LeftHandSide s t env2 env2' -> env1 :> env2 -> env1' :> env2'
+sinkWithLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
+sinkWithLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = sink k
+sinkWithLHS (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k = sinkWithLHS b1 b2 $ sinkWithLHS a1 a2 k
+sinkWithLHS _ _ _ = error "sinkWithLHS: left hand sides do not match"
 
 weakenWithLHS :: forall s t env env'. LeftHandSide s t env env' -> env :> env'
 weakenWithLHS = go weakenId
@@ -326,6 +324,11 @@ evars :: ExpVars env tp -> PreOpenExp acc env aenv tp
 evars VarsNil          = Nil
 evars (VarsSingle var) = Evar var
 evars (VarsPair v1 v2) = evars v1 `Pair` evars v2
+
+varsType :: Vars s env t -> TupR s t
+varsType (VarsSingle (Var tp _)) = TupRsingle tp
+varsType VarsNil                 = TupRunit
+varsType (VarsPair v1 v2)        = varsType v1 `TupRpair` varsType v2
 
 -- | Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
@@ -374,7 +377,8 @@ data PreOpenAcc acc aenv a where
   -- The array function is not closed at the core level because we need access
   -- to free variables introduced by 'run1' style evaluators. See Issue#95.
   --
-  Apply       :: PreOpenAfun acc aenv (arrs1 -> arrs2)
+  Apply       :: ArraysR arrs2
+              -> PreOpenAfun acc aenv (arrs1 -> arrs2)
               -> acc             aenv arrs1
               -> PreOpenAcc  acc aenv arrs2
 
@@ -412,7 +416,8 @@ data PreOpenAcc acc aenv a where
 
   -- Capture a scalar (or a tuple of scalars) in a singleton array
   --
-  Unit        :: PreExp     acc aenv e
+  Unit        :: TupleType e
+              -> PreExp     acc aenv e
               -> PreOpenAcc acc aenv (Scalar e)
 
   -- Change the shape of an array without altering its contents.
@@ -774,8 +779,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
   arraysRepr (Avar (Var repr _))                = TupRsingle repr
   arraysRepr (Apair as bs)                      = TupRpair (arraysRepr as) (arraysRepr bs)
   arraysRepr Anil                               = TupRunit
-  arraysRepr (Apply (Alam _ (Abody a)) _)       = arraysRepr a
-  arraysRepr (Apply _ _)                        = error "Tomorrow will arrive, on time"
+  arraysRepr (Apply repr _ _)                   = repr
   arraysRepr (Aforeign _ (Alam _ (Abody a)) _)  = arraysRepr a
   arraysRepr (Aforeign _ (Abody _) _)           = error "And what have you got, at the end of the day?"
   arraysRepr (Aforeign _ (Alam _ (Alam _ _)) _) = error "A bottle of whisky. And a new set of lies."
@@ -783,7 +787,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
   arraysRepr (Awhile _ (Alam lhs _) _)          = lhsToTupR lhs
   arraysRepr (Awhile _ _ _)                     = error "I want my, I want my MTV!"
   arraysRepr (Use repr _)                       = TupRsingle repr
-  arraysRepr (Unit e)                           = arraysRarray ShapeRz $ expType e
+  arraysRepr (Unit tp _)                        = arraysRarray ShapeRz tp
   arraysRepr (Reshape sh _ a)                   = let TupRsingle (ArrayR _ tp) = arraysRepr a
                                                   in  arraysRarray sh tp
   arraysRepr (Generate repr _ _)                = TupRsingle repr
@@ -1325,12 +1329,12 @@ rnfPreOpenAcc rnfA pacc =
     Avar (Var repr ix)        -> rnfArrayR repr `seq` rnfIdx ix
     Apair as bs               -> rnfA as `seq` rnfA bs
     Anil                      -> ()
-    Apply afun acc            -> rnfAF afun `seq` rnfA acc
+    Apply repr afun acc       -> rnfTupR rnfArrayR repr `seq` rnfAF afun `seq` rnfA acc
     Aforeign asm afun a       -> rnf (Sugar.strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
     Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
     Use repr arr              -> rnfArray repr arr
-    Unit x                    -> rnfE x
+    Unit tp x                 -> rnfTupleType tp `seq` rnfE x
     Reshape shr sh a          -> rnfShapeR shr `seq` rnfE sh `seq` rnfA a
     Generate repr sh f        -> rnfArrayR repr `seq` rnfE sh `seq` rnfF f
     Transform repr sh p f a   -> rnfArrayR repr `seq` rnfE sh `seq` rnfF p `seq` rnfF f `seq` rnfA a
@@ -1691,12 +1695,12 @@ liftPreOpenAcc liftA pacc =
     Avar (Var tp ix)          -> [|| Avar (Var $$(liftArrayR tp) $$(liftIdx ix)) ||]
     Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
     Anil                      -> [|| Anil ||]
-    Apply f a                 -> [|| Apply $$(liftAF f) $$(liftA a) ||]
+    Apply repr f a            -> [|| Apply $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
     Aforeign asm f a          -> [|| Aforeign $$(Sugar.liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
     Awhile p f a              -> [|| Awhile $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
     Use repr a                -> [|| Use $$(liftArrayR repr) $$(liftArray repr a) ||]
-    Unit e                    -> [|| Unit $$(liftE e) ||]
+    Unit tp e                 -> [|| Unit $$(liftTupleType tp) $$(liftE e) ||]
     Reshape shr sh a          -> [|| Reshape $$(liftShapeR shr) $$(liftE sh) $$(liftA a) ||]
     Generate repr sh f        -> [|| Generate $$(liftArrayR repr) $$(liftE sh) $$(liftF f) ||]
     Transform repr sh p f a   -> [|| Transform $$(liftArrayR repr) $$(liftE sh) $$(liftF p) $$(liftF f) $$(liftA a) ||]

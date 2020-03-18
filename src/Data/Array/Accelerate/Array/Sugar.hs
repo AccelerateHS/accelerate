@@ -959,19 +959,11 @@ fromFunction sh f = unsafePerformIO $! fromFunctionM sh (return . f)
 --
 {-# INLINEABLE fromFunctionM #-}
 fromFunctionM :: forall sh e. (Shape sh, Elt e) => sh -> (sh -> IO e) -> IO (Array sh e)
-fromFunctionM sh f = do
-  let !n = size sh
-  arr <- newArrayData (eltType @e) n
-  --
-  let write !i
-        | i >= n    = return ()
-        | otherwise = do
-            v <- f (fromIndex sh i)
-            unsafeWriteArrayData (eltType @e) arr i (fromElt v)
-            write (i+1)
-  --
-  write 0
-  return $! arr `seq` Array $ Repr.Array (fromElt sh) arr
+fromFunctionM sh f = Array <$> Repr.fromFunctionM (arrayR @sh @e) (fromElt sh) f'
+  where
+    f' x = do
+      y <- f $ toElt x
+      return $ fromElt y
 
 
 -- | Create a vector from the concatenation of the given list of vectors.

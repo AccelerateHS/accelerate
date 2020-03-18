@@ -211,7 +211,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return $ PNode ident doc deps
 
-    Apply afun acc          -> apply <$> prettyDelayedAfun    detail     aenv afun
+    Apply _ afun acc        -> apply <$> prettyDelayedAfun    detail     aenv afun
                                      <*> prettyDelayedOpenAcc detail ctx aenv acc
 
     Awhile p f x            -> do
@@ -229,7 +229,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     Anil                    -> "()"          .$ []
 
     Use repr arr            -> "use"         .$ [ return $ PDoc (prettyArray repr arr) [] ]
-    Unit e                  -> "unit"        .$ [ ppE e ]
+    Unit _ e                -> "unit"        .$ [ ppE e ]
     Generate _ sh f         -> "generate"    .$ [ ppE sh, ppF f ]
     Transform _ sh ix f xs  -> "transform"   .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
     Reshape _ sh xs         -> "reshape"     .$ [ ppE sh, ppA xs ]

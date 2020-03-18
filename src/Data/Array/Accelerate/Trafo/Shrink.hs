@@ -401,12 +401,12 @@ usesOfPreAcc withShape countAcc idx = count
       Alet lhs bnd body          -> countA bnd + countAcc withShape (weakenWithLHS lhs >:> idx) body
       Apair a1 a2                -> countA a1 + countA a2
       Anil                       -> 0
-      Apply _ a                  -> countA a
+      Apply _ _ a                -> countA a
       Aforeign _ _ a             -> countA a
       Acond p t e                -> countE p  + countA t + countA e
       Awhile _ _ a               -> countA a
       Use _ _                    -> 0
-      Unit e                     -> countE e
+      Unit _ e                   -> countE e
       Reshape _ e a              -> countE e  + countA a
       Generate _ e f             -> countE e  + countF f
       Transform _ sh ix f a      -> countE sh + countF ix + countF f  + countA a

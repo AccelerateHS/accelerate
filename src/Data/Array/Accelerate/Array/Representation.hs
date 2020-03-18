@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Array.Representation (
   -- * Array data type in terms of representation types
   Array(..), ArrayR(..), arraysRarray, arraysRtuple2, arrayRshape, arrayRtype, rnfArray, rnfShape,
   ArraysR, TupleType, Scalar, Vector, Matrix, fromList, toList, Segments, shape, reshape, concatVectors,
-  showArrayR, showArraysR,
+  showArrayR, showArraysR, fromFunction, fromFunctionM,
 
   -- * Array shapes, indices, and slices
   ShapeR(..), Slice(..), SliceIndex(..),
@@ -33,7 +33,7 @@ module Data.Array.Accelerate.Array.Representation (
 
   -- * Shape functions
   rank, size, empty, ignore, intersect, union, toIndex, fromIndex, iter, iter1,
-  rangeToShape, shapeToRange, shapeToList, listToShape, listToShape', shapeType,
+  rangeToShape, shapeToRange, shapeToList, listToShape, listToShape', shapeType, shapeEq,
 
   -- * Slice shape functions
   sliceShape, sliceShapeR, sliceDomainR, enumSlices,
@@ -55,6 +55,7 @@ import GHC.Base                                         ( quotInt, remInt )
 import Prelude                                          hiding ((!!))
 import Data.List                                        ( intercalate )
 import Text.Show                                        ( showListWith )
+import System.IO.Unsafe                                 ( unsafePerformIO )
 import qualified Data.Vector.Unboxed                    as U
 
 -- |Array data type, where the type arguments regard the representation types of the shape and elements.
@@ -80,6 +81,34 @@ reshape shr sh shr' (Array sh' adata)
 {-# INLINE [1] (!!) #-}
 (!!) :: (TupleType e, Array sh e) -> Int -> e
 (tp, Array _ adata) !! i = unsafeIndexArrayData tp adata i
+
+-- | Create an array from its representation function, applied at each index of
+-- the array.
+--
+{-# INLINEABLE fromFunction #-}
+fromFunction :: ArrayR (Array sh e) -> sh -> (sh -> e) -> Array sh e
+fromFunction repr sh f = unsafePerformIO $! fromFunctionM repr sh (return . f)
+
+-- | Create an array using a monadic function applied at each index.
+--
+-- @since 1.2.0.0
+--
+{-# INLINEABLE fromFunctionM #-}
+fromFunctionM :: ArrayR (Array sh e) -> sh -> (sh -> IO e) -> IO (Array sh e)
+fromFunctionM (ArrayR shr tp) sh f = do
+  let !n = size shr sh
+  arr <- newArrayData tp n
+  --
+  let write !i
+        | i >= n    = return ()
+        | otherwise = do
+            v <- f (fromIndex shr sh i)
+            unsafeWriteArrayData tp arr i v
+            write (i+1)
+  --
+  write 0
+  return $! arr `seq` Array sh arr
+
 
 {-# INLINEABLE concatVectors #-}
 concatVectors :: TupleType e -> [Vector e] -> Vector e
@@ -218,6 +247,10 @@ fromIndex (ShapeRcons shr) (sh, sz) i
     r = case shr of -- Check if rank of shr is 0
       ShapeRz -> $indexCheck "fromIndex" i sz i
       _       -> i `remInt` sz
+
+shapeEq :: ShapeR sh -> sh -> sh -> Bool
+shapeEq ShapeRz          ()      ()        = True
+shapeEq (ShapeRcons shr) (sh, i) (sh', i') = i == i' && shapeEq shr sh sh'
 
 -- iterate through the entire shape, applying the function in the
 -- second argument; third argument combines results and fourth is an

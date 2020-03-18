@@ -45,7 +45,7 @@ module Data.Array.Accelerate.Trafo.Base (
   -- Environments
   Gamma(..), incExp, prjExp, pushExp,
   Extend(..), pushArrayEnv, append, bind,
-  Sink(..), sink, sink1,
+  Sink(..), sinkA, sink1,
   PreOpenExp', bindExps,
 
   -- Adding new variables to the environment
@@ -53,6 +53,9 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Checks
   isIdentity, isIdentityIndexing,
+
+  -- Utilities
+  mkIntersect, mkUnion,
 ) where
 
 -- standard library
@@ -384,7 +387,7 @@ sinkGamma
     -> Gamma acc env env' aenv
     -> Gamma acc env env' aenv'
 sinkGamma _   EmptyExp        = EmptyExp
-sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
+sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sinkA ext e)
 --}
 
 -- As part of various transformations we often need to lift out array valued
@@ -425,9 +428,8 @@ bind (PushEnv g lhs a) = bind g . Alet lhs a . inject
 -- bindings have come into scope according to the witness and no old things have
 -- vanished.
 --
--- Rename to sinkA
-sink :: Sink f => Extend s acc env env' -> f env t -> f env' t
-sink env = weaken (sinkWeaken env) -- TODO: Fix Stats sink  vs sink1
+sinkA :: Sink f => Extend s acc env env' -> f env t -> f env' t
+sinkA env = weaken (sinkWeaken env) -- TODO: Fix Stats sinkA  vs sink1
 
 sinkWeaken :: Extend s acc env env' -> env :> env'
 sinkWeaken BaseEnv = Stats.substitution "sink" weakenId
@@ -436,7 +438,7 @@ sinkWeaken (PushEnv e (LeftHandSideSingle _)   _) = weakenSucc' $ sinkWeaken e
 sinkWeaken (PushEnv e (LeftHandSidePair l1 l2) _) = sinkWeaken (PushEnv (PushEnv e l1 undefined) l2 undefined)
 
 sink1 :: Sink f => Extend s acc env env' -> f (env,t') t -> f (env',t') t
-sink1 env = weaken $ shift $ sinkWeaken env
+sink1 env = weaken $ sink $ sinkWeaken env
 
 -- Wrapper around PreOpenExp, with the order of type arguments env and aenv flipped
 newtype PreOpenExp' acc aenv env e = PreOpenExp' (PreOpenExp acc env aenv e)
@@ -447,3 +449,41 @@ bindExps :: Kit acc
          -> PreOpenExp acc env  aenv e
 bindExps BaseEnv = id
 bindExps (PushEnv g lhs (PreOpenExp' b)) = bindExps g . Let lhs b
+
+
+-- Utilities for working with shapes
+mkShapeBinary :: (HasArraysRepr acc, RebuildableAcc acc)
+              => (forall env'. PreOpenExp acc env' aenv Int -> PreOpenExp acc env' aenv Int -> PreOpenExp acc env' aenv Int)
+              -> ShapeR sh
+              -> PreOpenExp acc env aenv sh
+              -> PreOpenExp acc env aenv sh
+              -> PreOpenExp acc env aenv sh
+mkShapeBinary _ ShapeRz _ _ = Nil
+mkShapeBinary f (ShapeRcons shr) (Pair as a) (Pair bs b) = mkShapeBinary f shr as bs `Pair` f a b
+mkShapeBinary f shr (Let lhs bnd a) b = Let lhs bnd $ mkShapeBinary f shr a (weakenE (weakenWithLHS lhs) b)
+mkShapeBinary f shr a (Let lhs bnd b) = Let lhs bnd $ mkShapeBinary f shr (weakenE (weakenWithLHS lhs) a) b
+mkShapeBinary f shr a b@Pair{} -- `a` is not Pair
+  | DeclareVars lhs k value <- declareVars $ shapeType shr
+    = Let lhs a $ mkShapeBinary f shr (evars $ value weakenId) (weakenE k b)
+mkShapeBinary f shr a b -- `b` is not a Pair
+  | DeclareVars lhs k value <- declareVars $ shapeType shr
+    = Let lhs b $ mkShapeBinary f shr (weakenE k a) (evars $ value weakenId)
+
+mkIntersect :: (HasArraysRepr acc, RebuildableAcc acc)
+            => ShapeR sh
+            -> PreOpenExp acc env aenv sh
+            -> PreOpenExp acc env aenv sh
+            -> PreOpenExp acc env aenv sh
+mkIntersect = mkShapeBinary f
+  where
+    f a b = PrimApp (PrimMin singleType) $ Pair a b
+
+mkUnion :: (HasArraysRepr acc, RebuildableAcc acc)
+        => ShapeR sh
+        -> PreOpenExp acc env aenv sh
+        -> PreOpenExp acc env aenv sh
+        -> PreOpenExp acc env aenv sh
+mkUnion = mkShapeBinary f
+  where
+    f a b = PrimApp (PrimMax singleType) $ Pair a b
+

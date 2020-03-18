@@ -168,11 +168,11 @@ encodePreOpenAcc options encodeAcc pacc =
     Avar (Var repr v)            -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
     Apair a1 a2                  -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
     Anil                         -> intHost $(hashQ "Anil")
-    Apply f a                    -> intHost $(hashQ "Apply")       <> travAF f <> travA a
+    Apply _ f a                  -> intHost $(hashQ "Apply")       <> travAF f <> travA a
     Aforeign _ f a               -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
     Use repr a                   -> intHost $(hashQ "Use")         <> encodeArrayType repr <> deep (encodeArray a)
     Awhile p f a                 -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
-    Unit e                       -> intHost $(hashQ "Unit")        <> travE e
+    Unit _ e                     -> intHost $(hashQ "Unit")        <> travE e
     Generate _ e f               -> intHost $(hashQ "Generate")    <> deepE e <> travF f
     -- We don't need to encode the type of 'e' when perfect is False, as 'e' is an expression of type Bool.
     -- We thus use `deep (travE e)` instead of `deepE e`.

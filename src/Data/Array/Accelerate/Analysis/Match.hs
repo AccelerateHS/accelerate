@@ -93,7 +93,7 @@ matchPreOpenAcc matchAcc encodeAcc = match
     match Anil Anil
       = Just Refl
 
-    match (Apply f1 a1) (Apply f2 a2)
+    match (Apply _ f1 a1) (Apply _ f2 a2)
       | Just Refl <- matchPreOpenAfun matchAcc f1 f2
       , Just Refl <- matchAcc                  a1 a2
       = Just Refl
@@ -122,8 +122,9 @@ matchPreOpenAcc matchAcc encodeAcc = match
       | Just Refl <- matchArray repr1 repr2 a1 a2
       = Just Refl
 
-    match (Unit e1) (Unit e2)
-      | Just Refl <- matchExp e1 e2
+    match (Unit t1 e1) (Unit t2 e2)
+      | Just Refl <- matchTupleType t1 t2
+      , Just Refl <- matchExp e1 e2
       = Just Refl
 
     match (Reshape _ sh1 a1) (Reshape _ sh2 a2)

@@ -130,7 +130,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     Alet{}                  -> prettyAlet ctx prettyAcc extractAcc aenv pacc
     Apair{}                 -> prettyAtuple prettyAcc extractAcc aenv pacc
     Anil                    -> "()"
-    Apply f a               -> apply
+    Apply _ f a             -> apply
       where
         op    = Operator ">->" Infix L 1
         apply = sep [ ppAF f, group (sep [opName op, ppA a]) ]
@@ -151,7 +151,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     Aforeign ff _f a        -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
     Awhile p f a            -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
     Use repr arr            -> "use"          .$ [ prettyArray repr arr ]
-    Unit e                  -> "unit"         .$ [ ppE e ]
+    Unit _ e                -> "unit"         .$ [ ppE e ]
     Reshape _ sh a          -> "reshape"      .$ [ ppE sh, ppA a ]
     Generate _ sh f         -> "generate"     .$ [ ppE sh, ppF f ]
     Transform _ sh p f a    -> "transform"    .$ [ ppE sh, ppF p, ppF f, ppA a ]

@@ -33,7 +33,7 @@ import Data.Array.Accelerate.Array.Sugar                            hiding ( (!)
 import Data.Array.Accelerate.Language                               hiding ( chr )
 import Data.Array.Accelerate.Prelude                                hiding ( filter )
 import Data.Array.Accelerate.Interpreter
-import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -80,14 +80,16 @@ isRight x = tag x == 1
 -- instead.
 --
 fromLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp a
-fromLeft x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
+fromLeft x = a
+  where T3 _ a _ = asTuple x
 
 -- | The 'fromRight' function extracts the element out of the 'Right'
 -- constructor. If the argument was actually 'Left', you will get an undefined
 -- value instead.
 --
 fromRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp b
-fromRight x = Exp $ ZeroTupIdx `Prj` x
+fromRight x = b
+  where T3 _ _ b = asTuple x
 
 -- | The 'either' function performs case analysis on the 'Either' type. If the
 -- value is @'Left' a@, apply the first function to @a@; if it is @'Right' b@,
@@ -136,7 +138,8 @@ instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
 #endif
 
 tag :: (Elt a, Elt b) => Exp (Either a b) -> Exp Word8
-tag x = Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` x
+tag x = t
+  where T3 t _ _ = asTuple x
 
 instance (Elt a, Elt b) => Elt (Either a b) where
   type EltRepr (Either a b) = TupleRepr (Word8, EltRepr a, EltRepr b)
@@ -146,21 +149,13 @@ instance (Elt a, Elt b) => Elt (Either a b) where
   eltType = eltType @(Word8,a,b)
   toElt ((((),0),a),_)  = Left  (toElt a)
   toElt (_         ,b)  = Right (toElt b)
-  fromElt (Left a)      = ((((),0), fromElt a), fromElt (evalUndef @b))
-  fromElt (Right b)     = ((((),1), fromElt (evalUndef @a)), fromElt b)
-
-instance (Elt a, Elt b) => IsProduct Elt (Either a b) where
-  type ProdRepr (Either a b) = ProdRepr (Word8, a, b)
-  toProd ((((),0),a),_) = Left a
-  toProd (_         ,b) = Right b
-  fromProd (Left a)   = ((((), 0), a), evalUndef @b)
-  fromProd (Right b)  = ((((), 1), evalUndef @a), b)
-  prod = prod @Elt @(Word8,a,b)
+  fromElt (Left a)      = ((((),0), fromElt a             ), evalUndef $ eltType @b)
+  fromElt (Right b)     = ((((),1), evalUndef $ eltType @a), fromElt b)
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)
-  lift (Left a)  = Exp . Tuple $ NilTup `SnocTup` constant 0 `SnocTup` lift a `SnocTup` undef
-  lift (Right b) = Exp . Tuple $ NilTup `SnocTup` constant 1 `SnocTup` undef  `SnocTup` lift b
+  lift (Left a)  = toEither $ T3 (constant 0) (lift a) undef
+  lift (Right b) = toEither $ T3 (constant 1) undef    (lift b)
 
 
 -- Utilities
@@ -199,4 +194,10 @@ filter' keep arr
 
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = fill (constant empty) undef
+
+asTuple :: Exp (Either a b) -> Exp (Word8, a, b)
+asTuple (Exp e) = Exp e
+
+toEither :: Exp (Word8, a, b) -> Exp (Either a b)
+toEither (Exp e) = Exp e
 

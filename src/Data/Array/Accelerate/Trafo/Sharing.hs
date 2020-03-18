@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Trafo.Sharing (
   Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr,
   convertAfun, convertAfunWith,
 
-  Function, FunctionR,
+  Function, FunctionR, EltReprFunctionR, FunctionRepr(..), functionRepr,
   convertExp, convertExpWith,
   convertFun, convertFunWith,
 
@@ -143,10 +143,10 @@ sizeLayout (PushLayout lyt _ _) = 1 + sizeLayout lyt
 -- | Convert a closed array expression to de Bruijn form while also incorporating sharing
 -- information.
 --
-convertAcc :: Arrays arrs => Acc arrs -> AST.Acc (ArrRepr arrs)
+convertAcc :: Acc arrs -> AST.Acc (ArrRepr arrs)
 convertAcc = convertAccWith defaultOptions
 
-convertAccWith :: Arrays arrs => Config -> Acc arrs -> AST.Acc (ArrRepr arrs)
+convertAccWith :: Config -> Acc arrs -> AST.Acc (ArrRepr arrs)
 convertAccWith config (Acc acc) = convertOpenAcc config EmptyLayout acc
 
 
@@ -294,13 +294,13 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> let AST.OpenAcc a = avarsIn $ prjIdx ("de Bruijn conversion tag " ++ show i) showArraysR repr i alyt
            in  a
 
-      Pipe reprA reprB _ (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
+      Pipe reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
         | DeclareVars lhs k value <- declareVars reprB ->
           let
             noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
-            boundAcc = AST.Apply (cvtAfun1 reprA afun1) (cvtA acc)
+            boundAcc = AST.Apply reprB (cvtAfun1 reprA afun1) (cvtA acc)
             alyt'   = PushLayout (incLayout k alyt) lhs (value weakenId)
-            bodyAcc = AST.Apply
+            bodyAcc = AST.Apply reprC
                         (convertSharingAfun1 config alyt' (noStableSharing : aenv') reprB afun2)
                         (avarsIn $ value weakenId)
           in AST.Alet lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
@@ -315,7 +315,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Aprj ix a                   -> let AST.OpenAcc a' = cvtAprj ix a
                                      in a'
       Use repr array              -> AST.Use repr array
-      Unit _ e                    -> AST.Unit (cvtE e)
+      Unit tp e                   -> AST.Unit tp (cvtE e)
       Generate repr@(ArrayR shr _) sh f
                                   -> AST.Generate repr (cvtE sh) (cvtF1 (shapeType shr) f)
       Reshape shr e acc           -> AST.Reshape shr (cvtE e) (cvtA acc)
@@ -613,13 +613,13 @@ instance Elt b => Function (Exp b) where
 -- | Convert a closed scalar expression to de Bruijn form while incorporating
 -- sharing information.
 --
-convertExp :: SmartExp e -> AST.Exp () e
+convertExp :: Exp e -> AST.Exp () (EltRepr e)
 convertExp
   = convertExpWith
   $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing, float_out_acc] }
 
-convertExpWith :: Config -> SmartExp e -> AST.Exp () e
-convertExpWith config = convertOpenExp config EmptyLayout
+convertExpWith :: Config -> Exp e -> AST.Exp () (EltRepr e)
+convertExpWith config (Exp e) = convertOpenExp config EmptyLayout e
 
 convertOpenExp
     :: Config

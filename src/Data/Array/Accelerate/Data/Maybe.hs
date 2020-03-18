@@ -33,7 +33,6 @@ import Data.Array.Accelerate.Array.Sugar                            hiding ( (!)
 import Data.Array.Accelerate.Language                               hiding ( chr )
 import Data.Array.Accelerate.Prelude                                hiding ( filter )
 import Data.Array.Accelerate.Interpreter
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -48,7 +47,7 @@ import Data.Array.Accelerate.Data.Semigroup
 #endif
 
 import Data.Maybe                                                   ( Maybe(..) )
-import Prelude                                                      ( (.), ($), const, otherwise )
+import Prelude                                                      ( ($), const, otherwise )
 
 
 -- | Lift a value into a 'Just' constructor
@@ -92,7 +91,7 @@ fromMaybe d x = cond (isNothing x) d (fromJust x)
 -- instead.
 --
 fromJust :: Elt a => Exp (Maybe a) -> Exp a
-fromJust x = Exp $ ZeroTupIdx `Prj` x
+fromJust (Exp x) = Exp $ SmartExp $ PairIdxRight `Prj` x
 
 -- | The 'maybe' function takes a default value, a function, and a 'Maybe'
 -- value. If the 'Maybe' value is nothing, the default value is returned;
@@ -142,7 +141,7 @@ instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
 
 
 tag :: Elt a => Exp (Maybe a) -> Exp Word8
-tag x = Exp $ SuccTupIdx ZeroTupIdx `Prj` x
+tag (Exp x) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft x
 
 
 instance Elt a => Elt (Maybe a) where
@@ -153,21 +152,17 @@ instance Elt a => Elt (Maybe a) where
   eltType          = eltType @(Word8,a)
   toElt (((),0),_) = Nothing
   toElt (_     ,x) = Just (toElt x)
-  fromElt Nothing  = (((),0), fromElt (evalUndef @a))
+  fromElt Nothing  = (((),0), evalUndef $ eltType @a)
   fromElt (Just a) = (((),1), fromElt a)
-
-instance Elt a => IsProduct Elt (Maybe a) where
-  type ProdRepr (Maybe a) = ProdRepr (Word8, a)
-  toProd (((),0),_) = Nothing
-  toProd (_,     x) = Just x
-  fromProd Nothing  = (((), 0), evalUndef @a)
-  fromProd (Just a) = (((), 1), a)
-  prod = prod @Elt @(Word8,a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  lift Nothing  = Exp . Tuple $ NilTup `SnocTup` constant 0 `SnocTup` undef
-  lift (Just x) = Exp . Tuple $ NilTup `SnocTup` constant 1 `SnocTup` lift x
+  lift Nothing  = Exp $ SmartExp $ Pair t $ unExp $ undef @(Plain a)
+    where
+      t = SmartExp $ Pair (SmartExp Nil) $ SmartExp $ Const scalarTypeWord8 0
+  lift (Just x) = Exp $ SmartExp $ Pair t $ unExp $ lift x
+    where
+      t = SmartExp $ Pair (SmartExp Nil) $ SmartExp $ Const scalarTypeWord8 1
 
 
 -- Utilities

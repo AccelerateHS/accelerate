@@ -35,10 +35,11 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Rebuilding terms
   RebuildAcc, Rebuildable(..), RebuildableAcc,
-  RebuildableExp(..), rebuildWeakenVar,
+  RebuildableExp(..), rebuildWeakenVar, rebuildLHS,
 
   -- ** Checks
-  isIdentity, isIdentityIndexing
+  isIdentity, isIdentityIndexing, extractExpVars,
+  bindingIsTrivial,
 
 ) where
 
@@ -215,7 +216,7 @@ compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
   | Just Refl <- isIdentity g = f
 
   | Exists lhsB' <- rebuildLHS lhsB
-   = Lam lhsA $ Body $ Let lhsB' b (weakenE (shiftWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c)
+   = Lam lhsA $ Body $ Let lhsB' b (weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c)
   -- = Stats.substitution "compose" . Lam lhs2 . Body $ substitute' f g
 compose _                   _                   = error "compose: impossible evaluation"
 
@@ -630,10 +631,10 @@ rebuildPreOpenAcc k av acc =
     Avar ix                 -> accOut       <$> av ix
     Apair as bs             -> Apair        <$> k av as <*> k av bs
     Anil                    -> pure Anil
-    Apply f a               -> Apply        <$> rebuildAfun k av f <*> k av a
+    Apply repr f a          -> Apply repr   <$> rebuildAfun k av f <*> k av a
     Acond p t e             -> Acond        <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
     Awhile p f a            -> Awhile       <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
-    Unit e                  -> Unit         <$> rebuildPreOpenExp k (pure . IE) av e
+    Unit tp e               -> Unit tp      <$> rebuildPreOpenExp k (pure . IE) av e
     Reshape shr e a         -> Reshape shr  <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
     Generate repr e f       -> Generate repr <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
     Transform repr sh ix f a -> Transform repr <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a

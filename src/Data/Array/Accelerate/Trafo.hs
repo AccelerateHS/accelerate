@@ -57,11 +57,11 @@ import Control.DeepSeq
 import Data.Typeable
 
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, ArrRepr )
+import Data.Array.Accelerate.Array.Sugar                ( ArrRepr, EltRepr )
 import Data.Array.Accelerate.Trafo.Base                 ( Match(..), matchDelayedOpenAcc, encodeDelayedOpenAcc )
 import Data.Array.Accelerate.Trafo.Config
 import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedOpenAcc(..), DelayedAfun, DelayedOpenAfun, DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun )
-import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr )
+import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr, EltReprFunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
@@ -83,15 +83,14 @@ import Data.Array.Accelerate.Debug.Timed
 -- | Convert a closed array expression to de Bruijn form while also
 --   incorporating sharing observation and array fusion.
 --
-convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc (ArrRepr arrs)
+convertAcc :: Acc arrs -> DelayedAcc (ArrRepr arrs)
 convertAcc = convertAccWith defaultOptions
 
-convertAccWith :: Arrays arrs => Config -> Acc arrs -> DelayedAcc (ArrRepr arrs)
-convertAccWith config acc
+convertAccWith :: Config -> Acc arrs -> DelayedAcc (ArrRepr arrs)
+convertAccWith config
   = phase "array-fusion"           (Fusion.convertAccWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
-  $ phase "sharing-recovery"       (Sharing.convertAccWith config)
-  $ acc
+  . phase "sharing-recovery"       (Sharing.convertAccWith config)
 
 
 -- | Convert a unary function over array computations, incorporating sharing
@@ -101,17 +100,16 @@ convertAfun :: Afunction f => f -> DelayedAfun (AreprFunctionR f)
 convertAfun = convertAfunWith defaultOptions
 
 convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (AreprFunctionR f)
-convertAfunWith config acc
+convertAfunWith config
   = phase "array-fusion"           (Fusion.convertAfunWith config)
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
-  $ phase "sharing-recovery"       (Sharing.convertAfunWith config)
-  $ acc
+  . phase "sharing-recovery"       (Sharing.convertAfunWith config)
 
 
 -- | Convert a closed scalar expression, incorporating sharing observation and
 --   optimisation.
 --
-convertExp :: Elt e => Exp e -> AST.Exp () e
+convertExp :: Exp e -> AST.Exp () (EltRepr e)
 convertExp
   = phase "exp-simplify"     Rewrite.simplify     -- XXX: only if simplification is enabled
   . phase "sharing-recovery" Sharing.convertExp
@@ -120,7 +118,7 @@ convertExp
 -- | Convert closed scalar functions, incorporating sharing observation and
 --   optimisation.
 --
-convertFun :: Function f => f -> AST.Fun () (FunctionR f)
+convertFun :: Function f => f -> AST.Fun () (EltReprFunctionR f)
 convertFun
   = phase "exp-simplify"     Rewrite.simplify
   . phase "sharing-recovery" Sharing.convertFun
