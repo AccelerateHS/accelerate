@@ -37,7 +37,6 @@ module Data.Array.Accelerate.Array.Remote.Table (
   -- Internals
   StableArray, makeStableArray,
   makeWeakArrayData,
-  -- AsSingleType(..), toSingleType
 
 ) where
 
@@ -362,29 +361,6 @@ makeStableArray
     -> m StableArray
 makeStableArray !tp !ad
   | (_, ScalarDict) <- scalarDict tp = return $! StableArray (uniqueArrayId ad)
-{-  where
-    id :: (ArrayPtrs e ~ Ptr a) => ArrayEltR e -> ArrayData e -> Unique
-    id ArrayEltRint       (AD_Int ua)     = uniqueArrayId ua
-    id ArrayEltRint8      (AD_Int8 ua)    = uniqueArrayId ua
-    id ArrayEltRint16     (AD_Int16 ua)   = uniqueArrayId ua
-    id ArrayEltRint32     (AD_Int32 ua)   = uniqueArrayId ua
-    id ArrayEltRint64     (AD_Int64 ua)   = uniqueArrayId ua
-    id ArrayEltRword      (AD_Word ua)    = uniqueArrayId ua
-    id ArrayEltRword8     (AD_Word8 ua)   = uniqueArrayId ua
-    id ArrayEltRword16    (AD_Word16 ua)  = uniqueArrayId ua
-    id ArrayEltRword32    (AD_Word32 ua)  = uniqueArrayId ua
-    id ArrayEltRword64    (AD_Word64 ua)  = uniqueArrayId ua
-    id ArrayEltRhalf      (AD_Half ua)    = uniqueArrayId ua
-    id ArrayEltRfloat     (AD_Float ua)   = uniqueArrayId ua
-    id ArrayEltRdouble    (AD_Double ua)  = uniqueArrayId ua
-    id ArrayEltRbool      (AD_Bool ua)    = uniqueArrayId ua
-    id ArrayEltRchar      (AD_Char ua)    = uniqueArrayId ua
-    id (ArrayEltRvec r)   (AD_Vec _ a)    = id r a
-#if __GLASGOW_HASKELL__ < 800
-    id _ _ =
-      error "I do have a cause, though. It is obscenity. I'm for it."
-#endif
--}
 
 
 -- Weak arrays
@@ -407,35 +383,7 @@ makeWeakArrayData !tp !ad !c !mf
         Nothing -> return ()
         Just f  -> addFinalizer uad f
       mkWeak uad c
-  {-
-  
-  mw arrayElt ad
-  where
-    mw :: (ArrayPtrs e' ~ Ptr a') => ArrayEltR e' -> ArrayData e' -> IO (Weak c)
-    mw ArrayEltRint       (AD_Int ua)     = mkWeak' ua
-    mw ArrayEltRint8      (AD_Int8 ua)    = mkWeak' ua
-    mw ArrayEltRint16     (AD_Int16 ua)   = mkWeak' ua
-    mw ArrayEltRint32     (AD_Int32 ua)   = mkWeak' ua
-    mw ArrayEltRint64     (AD_Int64 ua)   = mkWeak' ua
-    mw ArrayEltRword      (AD_Word ua)    = mkWeak' ua
-    mw ArrayEltRword8     (AD_Word8 ua)   = mkWeak' ua
-    mw ArrayEltRword16    (AD_Word16 ua)  = mkWeak' ua
-    mw ArrayEltRword32    (AD_Word32 ua)  = mkWeak' ua
-    mw ArrayEltRword64    (AD_Word64 ua)  = mkWeak' ua
-    mw ArrayEltRhalf      (AD_Half ua)    = mkWeak' ua
-    mw ArrayEltRfloat     (AD_Float ua)   = mkWeak' ua
-    mw ArrayEltRdouble    (AD_Double ua)  = mkWeak' ua
-    mw ArrayEltRbool      (AD_Bool ua)    = mkWeak' ua
-    mw ArrayEltRchar      (AD_Char ua)    = mkWeak' ua
-    mw (ArrayEltRvec r)   (AD_Vec _ a)    = mw r a
-#if __GLASGOW_HASKELL__ < 800
-    mw _ _ =
-      error "Base eight is just like base ten really --- if you're missing two fingers."
-#endif
 
-    mkWeak' :: UniqueArray a' -> IO (Weak c)
-    mkWeak' !ua = 
--}
 
 -- Debug
 -- -----
@@ -475,11 +423,4 @@ management msg nrs next = do
 
     else
       next
-{-
-data AsSingleType tp where
-  AsSingleType :: ScalarDataRepr tp ~ ScalarDataRepr tp' => SingleType tp' -> AsSingleType tp
 
-toSingleType :: ScalarType tp -> AsSingleType tp
-toSingleType (SingleScalarType tp)                = AsSingleType tp
-toSingleType (VectorScalarType (VectorType _ tp)) = AsSingleType tp
--}
