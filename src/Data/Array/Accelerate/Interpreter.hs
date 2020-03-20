@@ -381,17 +381,17 @@ foldOp
     -> e
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array sh e)
-foldOp f z (Delayed (ArrayR (ShapeRcons shr) tp) (sh, n) arr _)
-  = fromFunction' (ArrayR shr tp) sh (\ix -> iter (ShapeRcons ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f z)
+foldOp f z (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
+  = fromFunction' (ArrayR shr tp) sh (\ix -> iter (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f z)
 
 
 fold1Op
     :: (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array sh e)
-fold1Op f (Delayed (ArrayR (ShapeRcons shr) tp) (sh, n) arr _)
+fold1Op f (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
   = $boundsCheck "fold1" "empty array" (n > 0)
-  $ fromFunction' (ArrayR shr tp) sh (\ix -> iter1 (ShapeRcons ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f)
+  $ fromFunction' (ArrayR shr tp) sh (\ix -> iter1 (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f)
 
 
 foldSegOp
@@ -409,7 +409,7 @@ foldSegOp itp f z (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
                        end   = fromIntegral $ seg (ix+1)
                    in
                    $boundsCheck "foldSeg" "empty segment" (end >= start)
-                   $ iter (ShapeRcons ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
+                   $ iter (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
 
 
 fold1SegOp
@@ -426,7 +426,7 @@ fold1SegOp itp f (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
                        end   = fromIntegral $ seg (ix+1)
                    in
                    $boundsCheck "fold1Seg" "empty segment" (end > start)
-                   $ iter1 (ShapeRcons ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f
+                   $ iter1 (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f
 
 
 scanl1Op
@@ -483,7 +483,7 @@ scanl'Op
     -> e
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (((), Array (sh, Int) e), Array sh e)
-scanl'Op f z (Delayed (ArrayR shr@(ShapeRcons shr') tp) (sh, n) ain _)
+scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
   = ( TupRunit `TupRpair` TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
     , aout `seq` asum `seq` ( ( (), Array (sh, n) aout )
                             , Array sh asum )
@@ -560,7 +560,7 @@ scanr'Op
     -> e
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (((), Array (sh, Int) e), Array sh e)
-scanr'Op f z (Delayed (ArrayR shr@(ShapeRcons shr') tp) (sh, n) ain _)
+scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
   = ( TupRunit `TupRpair` TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
     , aout `seq` asum `seq` ( ((), Array (sh, n) aout )
                             , Array sh asum )
@@ -599,7 +599,7 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
 
     ignore' :: ShapeR sh -> sh
     ignore' ShapeRz          = ()
-    ignore' (ShapeRcons shr) = (ignore' shr, 0)
+    ignore' (ShapeRsnoc shr) = (ignore' shr, 0)
 
     ignore = ignore' shr'
     --
@@ -736,7 +736,7 @@ stencilAccess stencil = goR (stencilShape stencil) stencil
     -- when we recurse on the stencil structure we must manipulate the
     -- _left-most_ index component.
     --
-    goR (ShapeRcons shr) (StencilRtup3 s1 s2 s3) rf ix =
+    goR (ShapeRsnoc shr) (StencilRtup3 s1 s2 s3) rf ix =
       let (i, ix') = uncons shr ix
           rf' d ds = rf (cons shr (i+d) ds)
       in
@@ -745,7 +745,7 @@ stencilAccess stencil = goR (stencilShape stencil) stencil
       , goR shr s2 (rf'   0)  ix')
       , goR shr s3 (rf'   1)  ix')
 
-    goR (ShapeRcons shr) (StencilRtup5 s1 s2 s3 s4 s5) rf ix =
+    goR (ShapeRsnoc shr) (StencilRtup5 s1 s2 s3 s4 s5) rf ix =
       let (i, ix') = uncons shr ix
           rf' d ds = rf (cons shr (i+d) ds)
       in
@@ -756,7 +756,7 @@ stencilAccess stencil = goR (stencilShape stencil) stencil
       , goR shr s4 (rf'   1)  ix')
       , goR shr s5 (rf'   2)  ix')
 
-    goR (ShapeRcons shr) (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) rf ix =
+    goR (ShapeRsnoc shr) (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) rf ix =
       let (i, ix') = uncons shr ix
           rf' d ds = rf (cons shr (i+d) ds)
       in
@@ -769,7 +769,7 @@ stencilAccess stencil = goR (stencilShape stencil) stencil
       , goR shr s6 (rf'   2)  ix')
       , goR shr s7 (rf'   3)  ix')
 
-    goR (ShapeRcons shr) (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) rf ix =
+    goR (ShapeRsnoc shr) (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) rf ix =
       let (i, ix') = uncons shr ix
           rf' d ds = rf (cons shr (i+d) ds)
       in
@@ -788,13 +788,13 @@ stencilAccess stencil = goR (stencilShape stencil) stencil
     --
     cons :: ShapeR sh -> Int -> sh -> (sh, Int)
     cons ShapeRz          ix ()       = ((), ix)
-    cons (ShapeRcons shr) ix (sh, sz) = (cons shr ix sh, sz)
+    cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
 
     -- Remove the left-most index of an index, and return the remainder
     --
     uncons :: ShapeR sh -> (sh, Int) -> (Int, sh)
     uncons ShapeRz          ((), v)  = (v, ())
-    uncons (ShapeRcons shr) (v1, v2) = let (i, v1') = uncons shr v1
+    uncons (ShapeRsnoc shr) (v1, v2) = let (i, v1') = uncons shr v1
                                        in  (i, (v1', v2))
 
 
@@ -819,14 +819,14 @@ bounded shr bnd (Delayed _ sh f _) ix =
     --
     inside :: ShapeR sh -> sh -> sh -> Bool
     inside ShapeRz          ()       ()       = True
-    inside (ShapeRcons shr) (sh, sz) (ih, iz) = iz >= 0 && iz < sz && inside shr sh ih
+    inside (ShapeRsnoc shr) (sh, sz) (ih, iz) = iz >= 0 && iz < sz && inside shr sh ih
 
     -- Return the index (second argument), updated to obey the given boundary
     -- conditions when outside the bounds of the given shape (first argument)
     --
     bound :: ShapeR sh -> sh -> sh -> sh
     bound ShapeRz () () = ()
-    bound (ShapeRcons shr) (sh, sz) (ih, iz) = (bound shr sh ih, ih')
+    bound (ShapeRsnoc shr) (sh, sz) (ih, iz) = (bound shr sh ih, ih')
       where
         ih'
           | iz < 0 = case bnd of

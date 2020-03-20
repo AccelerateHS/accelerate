@@ -1305,7 +1305,7 @@ intersect (Exp x) (Exp y) = Exp $ intersect' (shapeR @sh) x y
 
 intersect' :: Repr.ShapeR sh -> SmartExp sh -> SmartExp sh -> SmartExp sh
 intersect' Repr.ShapeRz _ _ = SmartExp Nil
-intersect' (Repr.ShapeRcons shr) (unPair -> (xs, x)) (unPair -> (ys, y))
+intersect' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
   = SmartExp
   $ intersect' shr xs ys `Pair` 
     SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
@@ -1318,7 +1318,7 @@ union (Exp x) (Exp y) = Exp $ union' (shapeR @sh) x y
 
 union' :: Repr.ShapeR sh -> SmartExp sh -> SmartExp sh -> SmartExp sh
 union' Repr.ShapeRz _ _ = SmartExp Nil
-union' (Repr.ShapeRcons shr) (unPair -> (xs, x)) (unPair -> (ys, y))
+union' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
   = SmartExp
   $ union' shr xs ys `Pair` 
     SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)

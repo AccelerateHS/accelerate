@@ -357,12 +357,12 @@ instance Shape sh => Elt (Any sh) where
     where
       go :: Repr.ShapeR sh' -> TupleType (AnyRepr sh')
       go Repr.ShapeRz = TupRunit
-      go (Repr.ShapeRcons shr) = TupRpair (go shr) TupRunit
+      go (Repr.ShapeRsnoc shr) = TupRpair (go shr) TupRunit
   fromElt _     = go $ shapeR @sh
     where
       go :: Repr.ShapeR sh' -> AnyRepr sh'
       go Repr.ShapeRz = ()
-      go (Repr.ShapeRcons shr) = (go shr, ())
+      go (Repr.ShapeRsnoc shr) = (go shr, ())
   toElt _       = Any
 
 instance (Elt a, Elt b) => Elt (a, b)
@@ -840,7 +840,7 @@ instance Shape Z where
   sliceNoneIndex = Repr.SliceNil
 
 instance Shape sh => Shape (sh:.Int) where
-  shapeR = Repr.ShapeRcons (shapeR @sh)
+  shapeR = Repr.ShapeRsnoc (shapeR @sh)
   sliceAnyIndex  = Repr.SliceAll   (sliceAnyIndex  @sh)
   sliceNoneIndex = Repr.SliceFixed (sliceNoneIndex @sh)
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -67,6 +68,7 @@ module Data.Array.Accelerate.Smart (
 
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$), unAcc, unAccFunction, ApplyAcc(..), exp, unPair, HasExpType(..), HasArraysRepr(..),
+  vecR2, vecR3, vecR4, vecR5, vecR6, vecR7, vecR8, vecR9, vecR16,
 
   -- Debugging
   showPreAccOp, showPreExpOp,
@@ -87,6 +89,8 @@ import Data.Array.Accelerate.AST                   hiding ( PreOpenAcc(..), Open
                                                           , PreOpenExp(..), OpenExp, PreExp, Exp
                                                           , PreBoundary(..), Boundary, HasArraysRepr(..), expType
                                                           , showPreAccOp, showPreExpOp )
+import GHC.TypeNats
+
 -- Array computations
 -- ------------------
 
@@ -497,18 +501,18 @@ instance HasArraysRepr acc => HasArraysRepr (PreSmartAcc acc exp) where
                                  in  TupRsingle $ ArrayR shr tp
     ZipWith _ _ tp _ a _      -> let TupRsingle (ArrayR shr _) = arraysRepr a
                                  in  TupRsingle $ ArrayR shr tp
-    Fold _ _ _ a              -> let TupRsingle (ArrayR (ShapeRcons shr) tp) = arraysRepr a
+    Fold _ _ _ a              -> let TupRsingle (ArrayR (ShapeRsnoc shr) tp) = arraysRepr a
                                  in  TupRsingle (ArrayR shr tp)
-    Fold1 _ _ a               -> let TupRsingle (ArrayR (ShapeRcons shr) tp) = arraysRepr a
+    Fold1 _ _ a               -> let TupRsingle (ArrayR (ShapeRsnoc shr) tp) = arraysRepr a
                                  in  TupRsingle (ArrayR shr tp)
     FoldSeg _ _ _ _ a _       -> arraysRepr a
     Fold1Seg _ _ _ a _        -> arraysRepr a
     Scanl _ _ _ a             -> arraysRepr a
-    Scanl' _ _ _ a            -> let r@(TupRsingle (ArrayR (ShapeRcons shr) tp)) = arraysRepr a
+    Scanl' _ _ _ a            -> let r@(TupRsingle (ArrayR (ShapeRsnoc shr) tp)) = arraysRepr a
                                  in  r `pair` TupRsingle (ArrayR shr tp)
     Scanl1 _ _ a              -> arraysRepr a
     Scanr _ _ _ a             -> arraysRepr a
-    Scanr' _ _ _ a            -> let r@(TupRsingle (ArrayR (ShapeRcons shr) tp)) = arraysRepr a
+    Scanr' _ _ _ a            -> let r@(TupRsingle (ArrayR (ShapeRsnoc shr) tp)) = arraysRepr a
                                  in  r `pair` TupRsingle (ArrayR shr tp)
     Scanr1 _ _ a              -> arraysRepr a
     Permute _ _ a _ _         -> arraysRepr a
@@ -678,11 +682,16 @@ data PreSmartExp acc exp t where
                 -> exp (t1, t2)
                 -> PreSmartExp acc exp t
 
-  {- Vec           :: 
+  -- SIMD vectors
+  VecPack       :: KnownNat n
+                => VecR n s tup
+                -> exp tup
+                -> PreSmartExp acc exp (Vec n s)
 
-  VecPrj        :: (KnownNat n, KnownNat k, k <= y)
-                => exp (Vec n e)
-                -> PreSmartExp acc exp e -}
+  VecUnpack     :: KnownNat n
+                => VecR n s tup
+                -> exp (Vec n s)
+                -> PreSmartExp acc exp tup
 
   ToIndex       :: ShapeR sh
                 -> exp sh
@@ -757,6 +766,8 @@ instance HasExpType exp => HasExpType (PreSmartExp acc exp) where
     Prj idx e                       -> let TupRpair t1 t2 = expType e in case idx of
                                          PairIdxLeft  -> t1
                                          PairIdxRight -> t2
+    VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
+    VecUnpack vecR _                -> vecRtuple vecR
     ToIndex _ _ _                   -> TupRsingle $ scalarTypeInt
     FromIndex shr _ _               -> shapeType shr
     Cond _ e _                      -> expType e
@@ -2610,7 +2621,8 @@ showPreExpOp (Undef _)          = "Undef"
 showPreExpOp Nil{}              = "Nil"
 showPreExpOp Pair{}             = "Pair"
 showPreExpOp Prj{}              = "Prj"
--- showPreExpOp VecPrj{}           = "VecPrj"
+showPreExpOp VecPack{}          = "VecPack"
+showPreExpOp VecUnpack{}        = "VecUnpack"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"
 showPreExpOp Cond{}             = "Cond"
@@ -2623,4 +2635,31 @@ showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Foreign{}          = "Foreign"
 showPreExpOp Coerce{}           = "Coerce"
+
+vecR2 :: SingleType s -> VecR 2 s (Tup2 s s)
+vecR2 s = VecRsucc $ VecRsucc $ VecRnil s
+
+vecR3 :: SingleType s -> VecR 3 s (Tup3 s s s)
+vecR3 = VecRsucc . vecR2
+
+vecR4 :: SingleType s -> VecR 4 s (Tup4 s s s s)
+vecR4 = VecRsucc . vecR3
+
+vecR5 :: SingleType s -> VecR 5 s (Tup5 s s s s s)
+vecR5 = VecRsucc . vecR4
+
+vecR6 :: SingleType s -> VecR 6 s (Tup6 s s s s s s)
+vecR6 = VecRsucc . vecR5
+
+vecR7 :: SingleType s -> VecR 7 s (Tup7 s s s s s s s)
+vecR7 = VecRsucc . vecR6
+
+vecR8 :: SingleType s -> VecR 8 s (Tup8 s s s s s s s s)
+vecR8 = VecRsucc . vecR7
+
+vecR9 :: SingleType s -> VecR 9 s (Tup9 s s s s s s s s s)
+vecR9 = VecRsucc . vecR8
+
+vecR16 :: SingleType s -> VecR 16 s (Tup16 s s s s s s s s s s s s s s s s)
+vecR16 = VecRsucc . VecRsucc . VecRsucc . VecRsucc . VecRsucc . VecRsucc . VecRsucc . vecR9
 

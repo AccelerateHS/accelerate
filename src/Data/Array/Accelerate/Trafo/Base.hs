@@ -459,7 +459,7 @@ mkShapeBinary :: (HasArraysRepr acc, RebuildableAcc acc)
               -> PreOpenExp acc env aenv sh
               -> PreOpenExp acc env aenv sh
 mkShapeBinary _ ShapeRz _ _ = Nil
-mkShapeBinary f (ShapeRcons shr) (Pair as a) (Pair bs b) = mkShapeBinary f shr as bs `Pair` f a b
+mkShapeBinary f (ShapeRsnoc shr) (Pair as a) (Pair bs b) = mkShapeBinary f shr as bs `Pair` f a b
 mkShapeBinary f shr (Let lhs bnd a) b = Let lhs bnd $ mkShapeBinary f shr a (weakenE (weakenWithLHS lhs) b)
 mkShapeBinary f shr a (Let lhs bnd b) = Let lhs bnd $ mkShapeBinary f shr (weakenE (weakenWithLHS lhs) a) b
 mkShapeBinary f shr a b@Pair{} -- `a` is not Pair

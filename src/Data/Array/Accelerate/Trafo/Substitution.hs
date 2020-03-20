@@ -139,26 +139,29 @@ inlineVars lhsBound expr bound
       | Just Refl <- matchVars vars vars' = Just $ weakenE k2 bound
     substitute k1 k2 vars e = case e of
       Let lhs e1 e2
-        | Exists lhs' <- rebuildLHS lhs -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) e2
-      Evar (Var t ix) -> Evar . Var t <$> k1 ix
-      Foreign asm f e1 -> Foreign asm f <$> travE e1
-      Pair e1 e2 -> Pair <$> travE e1 <*> travE e2
-      Nil -> Just Nil
+        | Exists lhs' <- rebuildLHS lhs
+                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) e2
+      Evar (Var t ix)     -> Evar . Var t <$> k1 ix
+      Foreign asm f e1    -> Foreign asm f <$> travE e1
+      Pair e1 e2          -> Pair <$> travE e1 <*> travE e2
+      Nil                 -> Just Nil
+      VecPack   vec e1    -> VecPack   vec <$> travE e1
+      VecUnpack vec e1    -> VecUnpack vec <$> travE e1
       IndexSlice si e1 e2 -> IndexSlice si <$> travE e1 <*> travE e2
       IndexFull  si e1 e2 -> IndexFull  si <$> travE e1 <*> travE e2
       ToIndex   shr e1 e2 -> ToIndex   shr <$> travE e1 <*> travE e2
       FromIndex shr e1 e2 -> FromIndex shr <$> travE e1 <*> travE e2
-      Cond e1 e2 e3 -> Cond <$> travE e1 <*> travE e2 <*> travE e3
-      While f1 f2 e1 -> While <$> travF f1 <*> travF f2 <*> travE e1
-      Const t c -> Just $ Const t c
-      PrimConst c -> Just $ PrimConst c
-      PrimApp p e1 -> PrimApp p <$> travE e1
-      Index a e1 -> Index a <$> travE e1
-      LinearIndex a e1 -> LinearIndex a <$> travE e1
-      Shape a -> Just $ Shape a
-      ShapeSize shr e1 -> ShapeSize shr <$> travE e1
-      Undef t -> Just $ Undef t
-      Coerce t1 t2 e1 -> Coerce t1 t2 <$> travE e1
+      Cond e1 e2 e3       -> Cond <$> travE e1 <*> travE e2 <*> travE e3
+      While f1 f2 e1      -> While <$> travF f1 <*> travF f2 <*> travE e1
+      Const t c           -> Just $ Const t c
+      PrimConst c         -> Just $ PrimConst c
+      PrimApp p e1        -> PrimApp p <$> travE e1
+      Index a e1          -> Index a <$> travE e1
+      LinearIndex a e1    -> LinearIndex a <$> travE e1
+      Shape a             -> Just $ Shape a
+      ShapeSize shr e1    -> ShapeSize shr <$> travE e1
+      Undef t             -> Just $ Undef t
+      Coerce t1 t2 e1     -> Coerce t1 t2 <$> travE e1
 
       where
         travE :: PreOpenExp acc env1 aenv s -> Maybe (PreOpenExp acc env2 aenv s)
@@ -526,6 +529,8 @@ rebuildPreOpenExp k v av exp =
                         -> Let lhs'      <$> rebuildPreOpenExp k v av a  <*> rebuildPreOpenExp k (shiftE' lhs lhs' k v) av b
     Pair e1 e2          -> Pair          <$> rebuildPreOpenExp k v av e1 <*> rebuildPreOpenExp k v av e2
     Nil                 -> pure $ Nil
+    VecPack   vec e     -> VecPack   vec <$> rebuildPreOpenExp k v av e
+    VecUnpack vec e     -> VecUnpack vec <$> rebuildPreOpenExp k v av e
     IndexSlice x ix sh  -> IndexSlice x  <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
     IndexFull x ix sl   -> IndexFull x   <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
     ToIndex shr sh ix   -> ToIndex shr   <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix

@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -93,7 +94,7 @@ module Data.Array.Accelerate.AST (
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   PreBoundary(..), Boundary, StencilR(..),
   HasArraysRepr(..), arrayRepr, lhsToTupR,
-  ArrayR(..), ArraysR, ShapeR(..), SliceIndex(..),
+  ArrayR(..), ArraysR, ShapeR(..), SliceIndex(..), VecR(..), vecRvector, vecRtuple,
 
   -- * Accelerated sequences
   -- PreOpenSeq(..), Seq,
@@ -146,6 +147,7 @@ import GHC.Int                                                      ( Int(..) )
 import GHC.Prim                                                     ( (<#), (+#), indexWord8Array#, sizeofByteArray# )
 import GHC.Ptr                                                      ( Ptr(..) )
 import GHC.Word                                                     ( Word8(..) )
+import GHC.TypeNats
 
 -- friends
 import Data.Array.Accelerate.Array.Data
@@ -800,18 +802,18 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
                                                   in  arraysRarray sh tp
   arraysRepr (ZipWith tp _ a _)                 = let TupRsingle (ArrayR sh _) = arraysRepr a
                                                   in  arraysRarray sh tp
-  arraysRepr (Fold _ _ a)                       = let TupRsingle (ArrayR (ShapeRcons sh) tp) = arraysRepr a
+  arraysRepr (Fold _ _ a)                       = let TupRsingle (ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
                                                   in  arraysRarray sh tp
-  arraysRepr (Fold1 _ a)                        = let TupRsingle (ArrayR (ShapeRcons sh) tp) = arraysRepr a
+  arraysRepr (Fold1 _ a)                        = let TupRsingle (ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
                                                   in  arraysRarray sh tp
   arraysRepr (FoldSeg _ _ _ a _)                = arraysRepr a
   arraysRepr (Fold1Seg _ _ a _)                 = arraysRepr a
   arraysRepr (Scanl _ _ a)                      = arraysRepr a
-  arraysRepr (Scanl' _ _ a)                       = let TupRsingle repr@(ArrayR (ShapeRcons sh) tp) = arraysRepr a
+  arraysRepr (Scanl' _ _ a)                       = let TupRsingle repr@(ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
                                                   in  arraysRtuple2 repr $ ArrayR sh tp
   arraysRepr (Scanl1 _ a)                       = arraysRepr a
   arraysRepr (Scanr _ _ a)                      = arraysRepr a
-  arraysRepr (Scanr' _ _ a)                     = let TupRsingle repr@(ArrayR (ShapeRcons sh) tp) = arraysRepr a
+  arraysRepr (Scanr' _ _ a)                     = let TupRsingle repr@(ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
                                                   in  arraysRtuple2 repr $ ArrayR sh tp
   arraysRepr (Scanr1 _ a)                       = arraysRepr a
   arraysRepr (Permute _ a _ _)                  = arraysRepr a
@@ -890,20 +892,17 @@ data PreOpenExp acc env aenv t where
   Nil           :: PreOpenExp acc env aenv ()
 
   -- SIMD vectors
-  {- VecPrj        :: VecIdx n
-                -> PreOpenExp (Vec n e)
-                -> PreOpenExp acc exp e
+  VecPack       :: KnownNat n
+                => VecR n s tup
+                -> PreOpenExp acc env aenv tup
+                -> PreOpenExp acc env aenv (Vec n s)
 
-  Evec          :: VecE n (exp e)
-                -> PreOpenExp acc exp (Vec n e) -}
+  VecUnpack     :: KnownNat n
+                => VecR n s tup
+                -> PreOpenExp acc env aenv (Vec n s)
+                -> PreOpenExp acc env aenv tup
 
   -- Array indices & shapes
-  -- TODO: IndexIgnore?
-  -- IndexAny      :: PreOpenExp acc aenv env ()
-
-  -- Evec          :: PreOpenExp ??
-  --               -> PreOpenExp (Vec n e)
-
   IndexSlice    :: SliceIndex slix sl co sh
                 -> PreOpenExp acc env aenv slix
                 -> PreOpenExp acc env aenv sh
@@ -982,6 +981,27 @@ data PreOpenExp acc env aenv t where
                 -> PreOpenExp acc env aenv a
                 -> PreOpenExp acc env aenv b
 
+data VecR (n :: Nat) single tuple where
+  VecRnil  :: SingleType s -> VecR 0       s ()
+  VecRsucc :: VecR n s t   -> VecR (n + 1) s (t, s)
+
+vecRvector :: KnownNat n => VecR n s tuple -> VectorType (Vec n s)
+vecRvector = uncurry VectorType . go
+  where
+    go :: VecR n s tuple -> (Int, SingleType s)
+    go (VecRnil tp)   = (0,     tp)
+    go (VecRsucc vec) = (n + 1, tp)
+      where (n, tp) = go vec
+
+vecRtuple :: VecR n s tuple -> TupleType tuple
+vecRtuple = snd . go
+  where
+    go :: VecR n s tuple -> (SingleType s, TupleType tuple)
+    go (VecRnil tp)           = (tp, TupRunit)
+    go (VecRsucc vec)
+      | (tp, tuple) <- go vec = (tp, TupRpair tuple $ TupRsingle $ SingleScalarType tp)
+
+
 expType :: HasArraysRepr acc => PreOpenExp acc aenv env t -> TupleType t
 expType expr = case expr of
   Let _ _ body                 -> expType body
@@ -990,6 +1010,8 @@ expType expr = case expr of
   Foreign _ _ _                -> error "Though you ride on the wheels of tomorrow, you still wander the fields of your sorrow."
   Pair e1 e2                   -> TupRpair (expType e1) (expType e2)
   Nil                          -> TupRunit
+  VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
+  VecUnpack vecR _             -> vecRtuple vecR
   IndexSlice si _ _            -> shapeType $ sliceShapeR si
   IndexFull  si _ _            -> shapeType $ sliceDomainR si
   ToIndex _ _ _                -> TupRsingle $ SingleScalarType $ NumSingleType $ IntegralNumType $ TypeInt
@@ -1006,20 +1028,6 @@ expType expr = case expr of
   ShapeSize _ _                -> TupRsingle $ SingleScalarType $ NumSingleType $ IntegralNumType $ TypeInt
   Undef tp                     -> TupRsingle tp
   Coerce _ tp _                -> TupRsingle tp
-
-{- data VecE (n :: Nat) a where
-  VecNil  ::                  VecE 0       a
-  VecCons :: a -> VecE n a -> VecE (1 + n) a
-
--- Or have a VecE constructor which converts a tuple expression to a vector, and the other way around?
-
-instance Functor (VecE n) where
-  fmap _ VecNil = VecNil
-  fmap f (VecCons a as) = VecCons (f a) (fmap f as)
-
-data VecIdx n where
-  VecIdxZero ::             VecIdx n
-  VecIdxSucc :: VecIdx n -> VecIdx (1 + n) -}
 
 -- |Primitive constant values
 --
@@ -1393,7 +1401,7 @@ rnfArrays (TupRpair ar1 ar2) (a1,a2) = rnfArrays ar1 a1 `seq` rnfArrays ar2 a2
 
 rnfShapeR :: ShapeR sh -> ()
 rnfShapeR ShapeRz          = ()
-rnfShapeR (ShapeRcons shr) = rnfShapeR shr
+rnfShapeR (ShapeRsnoc shr) = rnfShapeR shr
 
 rnfStencilR :: StencilR sh e pat -> ()
 rnfStencilR (StencilRunit3 tp) = rnfTupleType tp
@@ -1511,6 +1519,8 @@ rnfPreOpenExp rnfA topExp =
     Undef tp                  -> rnfScalarType tp
     Pair a b                  -> rnfE a `seq` rnfE b
     Nil                       -> ()
+    VecPack   vecr e          -> rnfVecR vecr `seq` rnfE e
+    VecUnpack vecr e          -> rnfVecR vecr `seq` rnfE e
     IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
@@ -1650,6 +1660,9 @@ rnfFloatingType TypeHalf   = ()
 rnfFloatingType TypeFloat  = ()
 rnfFloatingType TypeDouble = ()
 
+rnfVecR :: VecR n single tuple -> ()
+rnfVecR (VecRnil tp)   = rnfSingleType tp
+rnfVecR (VecRsucc vec) = rnfVecR vec
 
 -- Template Haskell
 -- ================
@@ -1744,7 +1757,7 @@ liftELhs (LeftHandSidePair a b)      = [|| LeftHandSidePair $$(liftELhs a) $$(li
 
 liftShapeR :: ShapeR sh -> Q (TExp (ShapeR sh))
 liftShapeR ShapeRz         = [|| ShapeRz ||]
-liftShapeR (ShapeRcons sh) = [|| ShapeRcons $$(liftShapeR sh) ||]
+liftShapeR (ShapeRsnoc sh) = [|| ShapeRsnoc $$(liftShapeR sh) ||]
 
 liftArrayR :: ArrayR a -> Q (TExp (ArrayR a))
 liftArrayR (ArrayR shr tp) = [|| ArrayR $$(liftShapeR shr) $$(liftTupleType tp) ||]
@@ -1798,6 +1811,8 @@ liftPreOpenExp liftA pexp =
     Undef tp                  -> [|| Undef $$(liftScalarType tp) ||]
     Pair a b                  -> [|| Pair $$(liftE a) $$(liftE b) ||]
     Nil                       -> [|| Nil ||]
+    VecPack   vecr e          -> [|| VecPack   $$(liftVecR vecr) $$(liftE e) ||]
+    VecUnpack vecr e          -> [|| VecUnpack $$(liftVecR vecr) $$(liftE e) ||]
     IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
@@ -2027,6 +2042,10 @@ liftSingle (NonNumSingleType t) x = liftNonNum t x
 liftVector :: VectorType t -> t -> Q (TExp t)
 liftVector VectorType{} x = liftVec x
 
+liftVecR :: VecR n single tuple -> Q (TExp (VecR n single tuple))
+liftVecR (VecRnil tp)   = [|| VecRnil $$(liftSingleType tp) ||]
+liftVecR (VecRsucc vec) = [|| VecRsucc $$(liftVecR vec) ||]
+
 -- O(n) at runtime to copy from the Addr# to the ByteArray#. We should be able
 -- to do this without copying, but I don't think the definition of ByteArray# is
 -- exported (or it is deeply magical).
@@ -2182,7 +2201,8 @@ showPreExpOp Undef{}           = "Undef"
 showPreExpOp Foreign{}         = "Foreign"
 showPreExpOp Pair{}            = "Pair"
 showPreExpOp Nil{}             = "Nil"
--- showPreExpOp VecPrj{}          = "VecPrj"
+showPreExpOp VecPack{}         = "VecPack"
+showPreExpOp VecUnpack{}       = "VecUnpack"
 showPreExpOp IndexSlice{}      = "IndexSlice"
 showPreExpOp IndexFull{}       = "IndexFull"
 showPreExpOp ToIndex{}         = "ToIndex"

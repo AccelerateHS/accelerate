@@ -178,6 +178,8 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Undef t                   -> pure (Undef t)
       Nil                       -> pure Nil
       Pair x y                  -> Pair <$> shrinkE x <*> shrinkE y
+      VecPack   vec e           -> VecPack   vec <$> shrinkE e
+      VecUnpack vec e           -> VecUnpack vec <$> shrinkE e
       IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       ToIndex shr sh ix         -> ToIndex shr <$> shrinkE sh <*> shrinkE ix
@@ -355,6 +357,8 @@ usesOfExp range = countE
       Undef _                   -> Finite 0
       Nil                       -> Finite 0
       Pair e1 e2                -> countE e1 <> countE e2
+      VecPack   _ e             -> countE e
+      VecUnpack _ e             -> countE e
       IndexSlice _ ix sh        -> countE ix <> countE sh
       IndexFull _ ix sl         -> countE ix <> countE sl
       FromIndex _ sh i          -> countE sh <> countE i
@@ -438,6 +442,8 @@ usesOfPreAcc withShape countAcc idx = count
       Undef _                    -> 0
       Nil                        -> 0
       Pair x y                   -> countE x + countE y
+      VecPack   _ e              -> countE e
+      VecUnpack _ e              -> countE e
       IndexSlice _ ix sh         -> countE ix + countE sh
       IndexFull _ ix sl          -> countE ix + countE sl
       ToIndex _ sh ix            -> countE sh + countE ix

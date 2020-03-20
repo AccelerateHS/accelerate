@@ -74,7 +74,7 @@ positionsR (StencilRtup9 i h g f e d c b a) = concat
 -- Inject a dimension component inner-most
 --
 innermost :: ShapeR sh -> (sh -> (sh, Int)) -> sh -> (sh, Int)
-innermost shr f = invertShape (ShapeRcons shr) . f . invertShape shr
+innermost shr f = invertShape (ShapeRsnoc shr) . f . invertShape shr
 
 invertShape :: ShapeR sh -> sh -> sh
 invertShape shr = listToShape shr . reverse . shapeToList shr

@@ -848,7 +848,7 @@ matchShapeType
 {-# INLINEABLE matchShapeR #-}
 matchShapeR :: forall s t. ShapeR s -> ShapeR t -> Maybe (s :~: t)
 matchShapeR ShapeRz ShapeRz = Just Refl
-matchShapeR (ShapeRcons shr1) (ShapeRcons shr2)
+matchShapeR (ShapeRsnoc shr1) (ShapeRsnoc shr2)
   | Just Refl <- matchShapeR shr1 shr2 = Just Refl
 matchShapeR _ _ = Nothing
 

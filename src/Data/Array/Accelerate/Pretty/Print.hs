@@ -341,6 +341,8 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
     Const tp c            -> prettyConst (TupRsingle tp) c
     Pair{}                -> prettyTuple prettyAcc extractAcc env aenv exp
     Nil                   -> "()"
+    VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
+    VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0

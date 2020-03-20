@@ -114,7 +114,7 @@ fromFunctionM (ArrayR shr tp) sh f = do
 concatVectors :: TupleType e -> [Vector e] -> Vector e
 concatVectors tp vs = adata `seq` Array ((), len) adata
   where
-    dim1        = ShapeRcons ShapeRz
+    dim1        = ShapeRsnoc ShapeRz
     offsets     = scanl (+) 0 (map (size dim1 . shape) vs)
     len         = last offsets
     (adata, _)  = runArrayData $ do
@@ -202,29 +202,29 @@ type DIM2 = (((), Int), Int)
     
 data ShapeR sh where
   ShapeRz :: ShapeR ()
-  ShapeRcons :: ShapeR sh -> ShapeR (sh, Int)
+  ShapeRsnoc :: ShapeR sh -> ShapeR (sh, Int)
 
 rank :: ShapeR sh -> Int
 rank ShapeRz = 0
-rank (ShapeRcons shr) = rank shr + 1
+rank (ShapeRsnoc shr) = rank shr + 1
 
 size :: ShapeR sh -> sh -> Int
 size ShapeRz () = 1
-size (ShapeRcons shr) (sh, sz)
+size (ShapeRsnoc shr) (sh, sz)
   | sz <= 0   = 0
   | otherwise = size shr sh * sz
 
 empty :: ShapeR sh -> sh
 empty ShapeRz = ()
-empty (ShapeRcons shr) = (empty shr, 0)
+empty (ShapeRsnoc shr) = (empty shr, 0)
 
 ignore :: ShapeR sh -> sh
 ignore ShapeRz = ()
-ignore (ShapeRcons shr) = (ignore shr, -1)
+ignore (ShapeRsnoc shr) = (ignore shr, -1)
 
 shapeZip :: (Int -> Int -> Int) -> ShapeR sh -> sh -> sh -> sh
 shapeZip _ ShapeRz () () = ()
-shapeZip f (ShapeRcons shr) (as, a) (bs, b) = (shapeZip f shr as bs, f a b)
+shapeZip f (ShapeRsnoc shr) (as, a) (bs, b) = (shapeZip f shr as bs, f a b)
 
 intersect, union :: ShapeR sh -> sh -> sh -> sh
 intersect = shapeZip min
@@ -232,13 +232,13 @@ union = shapeZip max
 
 toIndex :: ShapeR sh -> sh -> sh -> Int
 toIndex ShapeRz () () = 0
-toIndex (ShapeRcons shr) (sh, sz) (ix, i)
+toIndex (ShapeRsnoc shr) (sh, sz) (ix, i)
   = $indexCheck "toIndex" i sz
   $ toIndex shr sh ix * sz + i
 
 fromIndex :: ShapeR sh -> sh -> Int -> sh
 fromIndex ShapeRz () _ = ()
-fromIndex (ShapeRcons shr) (sh, sz) i
+fromIndex (ShapeRsnoc shr) (sh, sz) i
   = (fromIndex shr sh (i `quotInt` sz), r)
   -- If we assume that the index is in range, there is no point in computing
   -- the remainder for the highest dimension since i < sz must hold.
@@ -250,7 +250,7 @@ fromIndex (ShapeRcons shr) (sh, sz) i
 
 shapeEq :: ShapeR sh -> sh -> sh -> Bool
 shapeEq ShapeRz          ()      ()        = True
-shapeEq (ShapeRcons shr) (sh, i) (sh', i') = i == i' && shapeEq shr sh sh'
+shapeEq (ShapeRsnoc shr) (sh, i) (sh', i') = i == i' && shapeEq shr sh sh'
 
 -- iterate through the entire shape, applying the function in the
 -- second argument; third argument combines results and fourth is an
@@ -258,7 +258,7 @@ shapeEq (ShapeRcons shr) (sh, i) (sh', i') = i == i' && shapeEq shr sh sh'
 -- is traversed in row-major order
 iter :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a -> a
 iter ShapeRz () f _ _    = f ()
-iter (ShapeRcons shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
+iter (ShapeRsnoc shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
   where
     iter' (ix,i) | i >= sz   = r
                  | otherwise = f (ix,i) `c` iter' (ix,i+1)
@@ -266,8 +266,8 @@ iter (ShapeRcons shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
 -- variant of 'iter' without an initial value
 iter1 :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a
 iter1 ShapeRz () f _      = f ()
-iter1 (ShapeRcons _  ) (_,  0)  _ _ = $boundsError "iter1" "empty iteration space"
-iter1 (ShapeRcons shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
+iter1 (ShapeRsnoc _  ) (_,  0)  _ _ = $boundsError "iter1" "empty iteration space"
+iter1 (ShapeRsnoc shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
   where
     iter1' (ix,i) | i == sz-1 = f (ix,i)
                   | otherwise = f (ix,i) `c` iter1' (ix,i+1)
@@ -277,19 +277,19 @@ iter1 (ShapeRcons shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
 -- convert a minpoint-maxpoint index into a shape
 rangeToShape :: ShapeR sh -> (sh, sh) -> sh
 rangeToShape ShapeRz ((), ()) = ()
-rangeToShape (ShapeRcons shr) ((sh1, sz1), (sh2, sz2)) = (rangeToShape shr (sh1, sh2), sz2 - sz1 + 1)
+rangeToShape (ShapeRsnoc shr) ((sh1, sz1), (sh2, sz2)) = (rangeToShape shr (sh1, sh2), sz2 - sz1 + 1)
 
 -- the converse
 shapeToRange :: ShapeR sh -> sh -> (sh, sh)
 shapeToRange ShapeRz () = ((), ())
-shapeToRange (ShapeRcons shr) (sh, sz) = let (low, high) = shapeToRange shr sh in ((low, 0), (high, sz - 1))
+shapeToRange (ShapeRsnoc shr) (sh, sz) = let (low, high) = shapeToRange shr sh in ((low, 0), (high, sz - 1))
 
 -- Other conversions
 
 -- Convert a shape into its list of dimensions
 shapeToList :: ShapeR sh -> sh -> [Int]
 shapeToList ShapeRz () = []
-shapeToList (ShapeRcons shr) (sh,sz) = sz : shapeToList shr sh
+shapeToList (ShapeRsnoc shr) (sh,sz) = sz : shapeToList shr sh
 
 -- Convert a list of dimensions into a shape
 listToShape :: ShapeR sh -> [Int] -> sh
@@ -300,12 +300,12 @@ listToShape shr ds = case listToShape' shr ds of
 -- Attempt to convert a list of dimensions into a shape
 listToShape' :: ShapeR sh -> [Int] -> Maybe sh
 listToShape' ShapeRz [] = Just ()
-listToShape' (ShapeRcons shr) (x:xs) = (, x) <$> listToShape' shr xs
+listToShape' (ShapeRsnoc shr) (x:xs) = (, x) <$> listToShape' shr xs
 listToShape' _ _ = Nothing
 
 shapeType :: ShapeR sh -> TupleType sh
 shapeType ShapeRz = TupRunit
-shapeType (ShapeRcons shr) = shapeType shr `TupRpair` (TupRsingle $ SingleScalarType $ NumSingleType $ IntegralNumType TypeInt)
+shapeType (ShapeRsnoc shr) = shapeType shr `TupRpair` (TupRsingle $ SingleScalarType $ NumSingleType $ IntegralNumType TypeInt)
 
 -- |Slice representation
 --
@@ -364,13 +364,13 @@ sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 
 sliceShapeR :: SliceIndex slix sl co dim -> ShapeR sl
 sliceShapeR SliceNil        = ShapeRz
-sliceShapeR (SliceAll sl)   = ShapeRcons $ sliceShapeR sl
+sliceShapeR (SliceAll sl)   = ShapeRsnoc $ sliceShapeR sl
 sliceShapeR (SliceFixed sl) = sliceShapeR sl
 
 sliceDomainR :: SliceIndex slix sl co dim -> ShapeR dim
 sliceDomainR SliceNil        = ShapeRz
-sliceDomainR (SliceAll sl)   = ShapeRcons $ sliceDomainR sl
-sliceDomainR (SliceFixed sl) = ShapeRcons $ sliceDomainR sl
+sliceDomainR (SliceAll sl)   = ShapeRsnoc $ sliceDomainR sl
+sliceDomainR (SliceFixed sl) = ShapeRsnoc $ sliceDomainR sl
 
 -- | Enumerate all slices within a given bound. The innermost dimension changes
 -- most rapidly.
@@ -437,14 +437,14 @@ stencilElt (StencilRtup7 sr _ _ _ _ _ _) = stencilElt sr
 stencilElt (StencilRtup9 sr _ _ _ _ _ _ _ _) = stencilElt sr
 
 stencilShape :: StencilR sh e pat -> ShapeR sh
-stencilShape (StencilRunit3 _) = ShapeRcons ShapeRz
-stencilShape (StencilRunit5 _) = ShapeRcons ShapeRz
-stencilShape (StencilRunit7 _) = ShapeRcons ShapeRz
-stencilShape (StencilRunit9 _) = ShapeRcons ShapeRz
-stencilShape (StencilRtup3 sr _ _) = ShapeRcons $ stencilShape sr
-stencilShape (StencilRtup5 sr _ _ _ _) = ShapeRcons $ stencilShape sr
-stencilShape (StencilRtup7 sr _ _ _ _ _ _) = ShapeRcons $ stencilShape sr
-stencilShape (StencilRtup9 sr _ _ _ _ _ _ _ _) = ShapeRcons $ stencilShape sr
+stencilShape (StencilRunit3 _) = ShapeRsnoc ShapeRz
+stencilShape (StencilRunit5 _) = ShapeRsnoc ShapeRz
+stencilShape (StencilRunit7 _) = ShapeRsnoc ShapeRz
+stencilShape (StencilRunit9 _) = ShapeRsnoc ShapeRz
+stencilShape (StencilRtup3 sr _ _) = ShapeRsnoc $ stencilShape sr
+stencilShape (StencilRtup5 sr _ _ _ _) = ShapeRsnoc $ stencilShape sr
+stencilShape (StencilRtup7 sr _ _ _ _ _ _) = ShapeRsnoc $ stencilShape sr
+stencilShape (StencilRtup9 sr _ _ _ _ _ _ _ _) = ShapeRsnoc $ stencilShape sr
 
 stencilType :: StencilR sh e pat -> TupleType pat
 stencilType (StencilRunit3 tp)                        = tupR3 tp tp tp
@@ -469,7 +469,7 @@ rnfArray (ArrayR shr tp) (Array sh ad) = rnfShape shr sh `seq` rnfArrayData tp a
 
 rnfShape :: ShapeR sh -> sh -> ()
 rnfShape ShapeRz () = ()
-rnfShape (ShapeRcons shr) (sh, s) = s `seq` rnfShape shr sh
+rnfShape (ShapeRsnoc shr) (sh, s) = s `seq` rnfShape shr sh
 
 -- | Nicely format a shape as a string
 --
@@ -528,8 +528,8 @@ showArray repr@(ArrayR _ tp) = showArray' (showString . showElement tp) repr
 showArray' :: (e -> ShowS) -> ArrayR (Array sh e) -> Array sh e -> String
 showArray' f repr@(ArrayR shr tp) arr@(Array sh _) = case shr of
   ShapeRz                         -> "Scalar Z "                       ++ list
-  ShapeRcons ShapeRz              -> "Vector (" ++ shapeString ++ ") " ++ list
-  ShapeRcons (ShapeRcons ShapeRz) -> "Matrix (" ++ shapeString ++ ") " ++ showMatrix f tp arr
+  ShapeRsnoc ShapeRz              -> "Vector (" ++ shapeString ++ ") " ++ list
+  ShapeRsnoc (ShapeRsnoc ShapeRz) -> "Matrix (" ++ shapeString ++ ") " ++ showMatrix f tp arr
   _                               -> "Array ("  ++ shapeString ++ ") " ++ list
   where
     shapeString = showShape shr sh
