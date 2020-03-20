@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
 #if __GLASGOW_HASKELL__ <= 800
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
@@ -38,6 +40,7 @@ module Data.Array.Accelerate.Pattern (
 
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH                                          hiding ( Exp )
 
@@ -316,3 +319,58 @@ $(runQ $ do
     as <- mapM mkAccPattern [0..16]
     return $ concat (es ++ as)
  )
+
+instance (Elt a, Elt (Vec 2 a), IsSingle (EltRepr a), EltRepr (Vec 2 a) ~ Vec 2 (EltRepr a)) => IsPattern Exp (Vec 2 a) (Exp a, Exp a) where
+  construct as = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR2 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a)
+  destruct e = destruct e'
+    where
+      e' :: Exp (a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR2 $ singleType @(EltRepr a)
+
+instance (Elt a, Elt (Vec 3 a), IsSingle (EltRepr a), EltRepr (Vec 3 a) ~ Vec 3 (EltRepr a)) => IsPattern Exp (Vec 3 a) (Exp a, Exp a, Exp a) where
+  construct as = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR3 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a)
+  destruct e = destruct e'
+    where
+      e' :: Exp (a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR3 $ singleType @(EltRepr a)
+
+instance (Elt a, Elt (Vec 4 a), IsSingle (EltRepr a), EltRepr (Vec 4 a) ~ Vec 4 (EltRepr a)) => IsPattern Exp (Vec 4 a) (Exp a, Exp a, Exp a, Exp a) where
+  construct as = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR4 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a, a)
+  destruct e = destruct e'
+    where
+      e' :: Exp (a, a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR4 $ singleType @(EltRepr a)
+
+instance (Elt a, Elt (Vec 8 a), IsSingle (EltRepr a), EltRepr (Vec 8 a) ~ Vec 8 (EltRepr a)) => IsPattern Exp (Vec 8 a) (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) where
+  construct as = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR8 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a, a, a, a, a, a)
+  destruct e = destruct e'
+    where
+      e' :: Exp (a, a, a, a, a, a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR8 $ singleType @(EltRepr a)
+
+instance (Elt a, Elt (Vec 16 a), IsSingle (EltRepr a), EltRepr (Vec 16 a) ~ Vec 16 (EltRepr a)) => IsPattern Exp (Vec 16 a) (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) where
+  construct as = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR16 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
+  destruct e = destruct e'
+    where
+      e' :: Exp (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR16 $ singleType @(EltRepr a)
