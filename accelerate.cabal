@@ -1,7 +1,7 @@
 Name:                   accelerate
 Version:                1.4.0.0
 Cabal-version:          >= 1.18
-Tested-with:            GHC >= 7.10
+Tested-with:            GHC >= 8.2
 Build-type:             Custom
 
 Synopsis:               An embedded language for accelerated array processing
@@ -131,7 +131,7 @@ Extra-doc-files:
 
 custom-setup
   setup-depends:
-      base              >= 4.7
+      base              >= 4.10
     , Cabal
     , cabal-doctest     >= 1.0
 
@@ -268,7 +268,7 @@ Flag nofib
 
 Library
   Build-depends:
-          base                          >= 4.9 && < 4.14
+          base                          >= 4.10 && < 4.14
         , ansi-terminal                 >= 0.6.2
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2
@@ -393,6 +393,8 @@ Library
         -- nofib test suite
         Data.Array.Accelerate.Test.NoFib.Base
         Data.Array.Accelerate.Test.NoFib.Config
+
+        Language.Haskell.TH.Extra
 
   if flag(nofib)
     build-depends:
@@ -542,7 +544,7 @@ test-suite doctest
   main-is:              Main.hs
 
   build-depends:
-          base                          >= 4.9
+          base                          >= 4.10
         , accelerate
         , doctest                       >= 0.11
 
@@ -566,7 +568,7 @@ test-suite nofib-interpreter
     buildable: False
 
   build-depends:
-          base                          >= 4.9
+          base                          >= 4.10
         , accelerate
 
   ghc-options:

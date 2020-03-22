@@ -16,7 +16,7 @@
 module Data.Array.Accelerate.Classes.Num (
 
   Num,
-  (P.+), (P.-), (P.*), P.negate, P.abs, P.signum, fromInteger,
+  (P.+), (P.-), (P.*), P.negate, P.abs, P.signum, P.fromInteger,
 
 ) where
 
@@ -24,7 +24,7 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( Integer, (.) )
+import Prelude                                                      ( (.) )
 import qualified Prelude                                            as P
 
 
@@ -58,8 +58,8 @@ import qualified Prelude                                            as P
 -- version where the return type is fixed to an 'Exp' term in order to improve
 -- type checking in Accelerate modules when @RebindableSyntax@ is enabled.
 --
-fromInteger :: Num a => Integer -> Exp a
-fromInteger = P.fromInteger
+-- fromInteger :: Num a => Integer -> Exp a
+-- fromInteger = P.fromInteger
 
 
 -- | Basic numeric class

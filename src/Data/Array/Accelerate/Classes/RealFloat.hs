@@ -27,6 +27,7 @@ module Data.Array.Accelerate.Classes.RealFloat (
 
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -62,7 +63,7 @@ class (RealFrac a, Floating a) => RealFloat a where
   floatRange     :: Exp a -> (Exp Int, Exp Int)
   default floatRange :: P.RealFloat a => Exp a -> (Exp Int, Exp Int)
   floatRange _    = let (m,n) = P.floatRange (undefined::a)
-                    in (constant m, constant n)
+                     in (constant m, constant n)
 
   -- | Return the significand and an appropriately scaled exponent. If
   -- @(m,n) = 'decodeFloat' x@ then @x = m*b^^n@, where @b@ is the
@@ -78,14 +79,14 @@ class (RealFrac a, Floating a) => RealFloat a where
   -- | Corresponds to the second component of 'decodeFloat'
   exponent       :: Exp a -> Exp Int
   exponent x      = let (m,n) = decodeFloat x
-                    in  cond (m == 0)
+                     in cond (m == 0)
                              0
                              (n + floatDigits x)
 
   -- | Corresponds to the first component of 'decodeFloat'
   significand    :: Exp a -> Exp a
   significand x   = let (m,_) = decodeFloat x
-                    in  encodeFloat m (negate (floatDigits x))
+                     in encodeFloat m (negate (floatDigits x))
 
   -- | Multiply a floating point number by an integer power of the radix
   scaleFloat     :: Exp Int -> Exp a -> Exp a
@@ -134,8 +135,8 @@ instance RealFloat Half where
   isInfinite      = mkIsInfinite
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f16_is_denormalized . mkBitcast)
   isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f16_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f16_decode (mkBitcast x)
-                                                    in  (fromIntegral m, n))
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f16_decode (mkBitcast x)
+                                                     in (fromIntegral m, n))
 
 instance RealFloat Float where
   atan2           = mkAtan2
@@ -143,8 +144,8 @@ instance RealFloat Float where
   isInfinite      = mkIsInfinite
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
   isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f32_decode (mkBitcast x)
-                                                    in  (fromIntegral m, n))
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f32_decode (mkBitcast x)
+                                                     in (fromIntegral m, n))
 
 instance RealFloat Double where
   atan2           = mkAtan2
@@ -152,7 +153,8 @@ instance RealFloat Double where
   isInfinite      = mkIsInfinite
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
   isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (untup2 . ieee754_f64_decode . mkBitcast)
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f64_decode (mkBitcast x)
+                                                     in (m, n))
 
 instance RealFloat CFloat where
   atan2           = mkAtan2
@@ -160,7 +162,7 @@ instance RealFloat CFloat where
   isInfinite      = mkIsInfinite . mkBitcast @Float
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
   isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let (m,n) = untup2 $ ieee754_f32_decode (mkBitcast x)
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f32_decode (mkBitcast x)
                                                     in  (fromIntegral m, n))
   encodeFloat x e = mkBitcast (encodeFloat @Float x e)
 
@@ -170,7 +172,8 @@ instance RealFloat CDouble where
   isInfinite      = mkIsInfinite . mkBitcast @Double
   isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
   isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (untup2 . ieee754_f64_decode . mkBitcast)
+  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f64_decode (mkBitcast x)
+                                                     in (m, n))
   encodeFloat x e = mkBitcast (encodeFloat @Double x e)
 
 
@@ -314,21 +317,20 @@ ieee754_f16_decode i =
       exp1  = ((fromIntegral high1 `unsafeShiftR` 10) .&. 0x1F) + _HMINEXP
       exp2  = exp1 + 1
 
-      (high3, exp3)
-            = untup2
-            $ cond (exp1 /= _HMINEXP)
+      T2 high3 exp3
+            = cond (exp1 /= _HMINEXP)
                    -- don't add hidden bit to denorms
-                   (tup2 (high2 .|. _HHIGHBIT, exp1))
+                   (T2 (high2 .|. _HHIGHBIT) exp1)
                    -- a denorm, normalise the mantissa
-                   (while (\(untup2 -> (h,_)) -> (h .&. _HHIGHBIT) /= 0 )
-                          (\(untup2 -> (h,e)) -> tup2 (h `unsafeShiftL` 1, e-1))
-                          (tup2 (high2, exp2)))
+                   (while (\(T2 h _) -> (h .&. _HHIGHBIT) /= 0 )
+                          (\(T2 h e) -> T2 (h `unsafeShiftL` 1) (e-1))
+                          (T2 high2 exp2))
 
       high4 = cond (fromIntegral i < (0 :: Exp Int16)) (-high3) high3
   in
   cond (high1 .&. complement _HMSBIT == 0)
-       (tup2 (0,0))
-       (tup2 (high4, exp3))
+       (T2 0 0)
+       (T2 high4 exp3)
 
 
 -- From: ghc/rts/StgPrimFloat.c
@@ -349,27 +351,26 @@ ieee754_f32_decode i =
       exp1  = ((fromIntegral high1 `unsafeShiftR` 23) .&. 0xFF) + _FMINEXP
       exp2  = exp1 + 1
 
-      (high3, exp3)
-            = untup2
-            $ cond (exp1 /= _FMINEXP)
+      T2 high3 exp3
+            = cond (exp1 /= _FMINEXP)
                    -- don't add hidden bit to denorms
-                   (tup2 (high2 .|. _FHIGHBIT, exp1))
+                   (T2 (high2 .|. _FHIGHBIT) exp1)
                    -- a denorm, normalise the mantissa
-                   (while (\(untup2 -> (h,_)) -> (h .&. _FHIGHBIT) /= 0 )
-                          (\(untup2 -> (h,e)) -> tup2 (h `unsafeShiftL` 1, e-1))
-                          (tup2 (high2, exp2)))
+                   (while (\(T2 h _) -> (h .&. _FHIGHBIT) /= 0 )
+                          (\(T2 h e) -> T2 (h `unsafeShiftL` 1) (e-1))
+                          (T2 high2 exp2))
 
       high4 = cond (fromIntegral i < (0 :: Exp Int32)) (-high3) high3
   in
   cond (high1 .&. complement _FMSBIT == 0)
-       (tup2 (0,0))
-       (tup2 (high4, exp3))
+       (T2 0 0)
+       (T2 high4 exp3)
 
 
 ieee754_f64_decode :: Exp Word64 -> Exp (Int64, Int)
 ieee754_f64_decode i =
-  let (s,h,l,e) = untup4 $ ieee754_f64_decode2 i
-  in  tup2 (fromIntegral s * (fromIntegral h `unsafeShiftL` 32 .|. fromIntegral l), e)
+  let T4 s h l e = ieee754_f64_decode2 i
+   in T2 (fromIntegral s * (fromIntegral h `unsafeShiftL` 32 .|. fromIntegral l)) e
 
 ieee754_f64_decode2 :: Exp Word64 -> Exp (Int, Word32, Word32, Int)
 ieee754_f64_decode2 i =
@@ -389,23 +390,22 @@ ieee754_f64_decode2 i =
       high2 = high .&. (_DHIGHBIT - 1)
       iexp2 = iexp + 1
 
-      (hi,lo,ie)
-            = untup3
-            $ cond (iexp2 /= _DMINEXP)
+      T3 hi lo ie
+            = cond (iexp2 /= _DMINEXP)
                    -- don't add hidden bit to denorms
-                   (tup3 (high2 .|. _DHIGHBIT, low, iexp))
+                   (T3 (high2 .|. _DHIGHBIT) low iexp)
                    -- a denorm, nermalise the mantissa
-                   (while (\(untup3 -> (h,_,_)) -> (h .&. _DHIGHBIT) /= 0)
-                          (\(untup3 -> (h,l,e)) ->
+                   (while (\(T3 h _ _) -> (h .&. _DHIGHBIT) /= 0)
+                          (\(T3 h l e) ->
                             let h1 = h `unsafeShiftL` 1
                                 h2 = cond ((l .&. _DMSBIT) /= 0) (h1+1) h1
-                            in  tup3 (h2, l `unsafeShiftL` 1, e-1))
-                          (tup3 (high2, low, iexp2)))
+                            in  T3 h2 (l `unsafeShiftL` 1) (e-1))
+                          (T3 high2 low iexp2))
 
   in
   cond (low == 0 && (high .&. (complement _DMSBIT)) == 0)
-       (tup4 (1,0,0,0))
-       (tup4 (sign,hi,lo,ie))
+       (T4 1 0 0 0)
+       (T4 sign hi lo ie)
 
 cond :: Exp Bool -> Exp a -> Exp a -> Exp a
 cond (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond c x y

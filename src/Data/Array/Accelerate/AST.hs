@@ -114,7 +114,7 @@ module Data.Array.Accelerate.AST (
   liftIdx, liftTupleIdx,
   liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
-  liftALhs, liftELhs, liftArray,
+  liftALhs, liftELhs, liftArray, liftArraysR, liftTupleType,
 
   -- Utilities
   Exists(..), weakenWithLHS, (:>), weakenId, weakenSucc, weakenSucc', (.>), (>:>),
@@ -1746,13 +1746,13 @@ liftPreOpenAcc liftA pacc =
       in [|| Stencil2 $$(liftStencilR sr1) $$(liftStencilR sr2) $$(liftTupleType tp) $$(liftF f) $$(liftB repr1 b1) $$(liftA a1) $$(liftB repr2 b2) $$(liftA a2) ||]
 
 liftALhs :: ALeftHandSide arrs aenv aenv' -> Q (TExp (ALeftHandSide arrs aenv aenv'))
-liftALhs (LeftHandSideWildcard r)  = [|| LeftHandSideWildcard $$(liftArraysR r) ||]
 liftALhs (LeftHandSideSingle repr) = [|| LeftHandSideSingle $$(liftArrayR repr) ||]
+liftALhs (LeftHandSideWildcard r)  = [|| LeftHandSideWildcard $$(liftArraysR r) ||]
 liftALhs (LeftHandSidePair a b)    = [|| LeftHandSidePair $$(liftALhs a) $$(liftALhs b) ||]
 
 liftELhs :: ELeftHandSide t env env' -> Q (TExp (ELeftHandSide t env env'))
-liftELhs (LeftHandSideWildcard r)    = [|| LeftHandSideWildcard $$(liftTupleType r) ||]
 liftELhs (LeftHandSideSingle t)      = [|| LeftHandSideSingle $$(liftScalarType t) ||]
+liftELhs (LeftHandSideWildcard r)    = [|| LeftHandSideWildcard $$(liftTupleType r) ||]
 liftELhs (LeftHandSidePair a b)      = [|| LeftHandSidePair $$(liftELhs a) $$(liftELhs b) ||]
 
 liftShapeR :: ShapeR sh -> Q (TExp (ShapeR sh))

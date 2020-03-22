@@ -586,8 +586,8 @@ instance SyntacticAcc PreOpenAcc where
   accOut        = id
   weakenAcc k   = runIdentity . rebuildPreOpenAcc k (Identity . weakenAcc k . IA)
 
-type RebuildAvar f (fa :: (* -> * -> *) -> * -> * -> *) acc aenv aenv' =
-  forall sh e. ArrayVar aenv (Array sh e) -> f (fa acc aenv' (Array sh e))
+type RebuildAvar f (fa :: (Type -> Type -> Type) -> Type -> Type -> Type) acc aenv aenv'
+    = forall sh e. ArrayVar aenv (Array sh e) -> f (fa acc aenv' (Array sh e))
 
 type RebuildEvar f fe (acc :: * -> * -> *) env env' aenv' =
   forall t'. ExpVar env t' -> f (fe acc env' aenv' t')

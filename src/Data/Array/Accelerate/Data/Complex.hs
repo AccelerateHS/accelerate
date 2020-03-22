@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
@@ -26,7 +27,7 @@
 module Data.Array.Accelerate.Data.Complex (
 
   -- * Rectangular from
-  Complex(..),
+  Complex(..), pattern (::+),
   real,
   imag,
 
@@ -45,15 +46,21 @@ module Data.Array.Accelerate.Data.Complex (
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Data.Functor
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart                                  hiding (exp)
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( ($) )
 import Data.Complex                                                 ( Complex(..) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
+
+
+infix 6 ::+
+pattern (::+) :: (Elt a, Elt (Complex a)) => Exp a -> Exp a -> Exp (Complex a)
+pattern r ::+ c = Pattern (r, c)
+{-# COMPLETE (::+) #-}
 
 
 -- Use an array-of-structs representation for complex numbers. This matches the
@@ -109,41 +116,32 @@ instance Elt (Complex CDouble) where
 
 instance (Lift Exp a, Elt (Plain a), Elt (Complex (Plain a))) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
-  lift (r :+ i)          = P.undefined -- Exp $ Tuple (NilTup `SnocTup` lift r `SnocTup` lift i)
+  lift (r :+ i) = lift r ::+ lift i
 
 instance (Elt a, Elt (Complex a)) => Unlift Exp (Complex (Exp a)) where
-  unlift e
-    = let r     = P.undefined -- Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-          i     = P.undefined -- Exp $ ZeroTupIdx `Prj` e
-      in
-      r :+ i
+  unlift (r ::+ i) = r :+ i
 
 
 instance (Eq a, Elt (Complex a)) => Eq (Complex a) where
-  x == y = let r1 :+ c1 = unlift x
-               r2 :+ c2 = unlift y
-           in  r1 == r2 && c1 == c2
-  x /= y = let r1 :+ c1 = unlift x
-               r2 :+ c2 = unlift y
-           in  r1 /= r2 || c1 /= c2
+  r1 ::+ c1 == r2 ::+ c2 = r1 == r2 && c1 == c2
+  r1 ::+ c1 /= r2 ::+ c2 = r1 /= r2 || c1 /= c2
 
 instance (RealFloat a, Elt (Complex a)) => P.Num (Exp (Complex a)) where
-  (+)           = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  (-)           = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  (*)           = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  negate        = lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
-  signum z      = if z == 0
-                    then z
-                    else let x :+ y = unlift z
-                             r      = magnitude z
-                         in
-                         lift (x/r :+ y/r)
-  abs z         = lift (magnitude z :+ 0)
-  fromInteger n = lift (fromInteger n :+ 0)
+  (+)    = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  (-)    = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  (*)    = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  negate = lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
+  signum z@(x ::+ y) =
+    if z == 0
+       then z
+       else let r = magnitude z
+             in x/r ::+ y/r
+  abs z         = magnitude z ::+ 0
+  fromInteger n = fromInteger n ::+ 0
 
 instance (RealFloat a, Elt (Complex a)) => P.Fractional (Exp (Complex a)) where
-  fromRational x  = lift (fromRational x :+ 0)
-  z / z'          = lift ((x*x''+y*y'') / d :+ (y*x''-x*y'') / d)
+  fromRational x  = fromRational x ::+ 0
+  z / z'          = (x*x''+y*y'') / d ::+ (y*x''-x*y'') / d
     where
       x  :+ y   = unlift z
       x' :+ y'  = unlift z'
@@ -154,69 +152,66 @@ instance (RealFloat a, Elt (Complex a)) => P.Fractional (Exp (Complex a)) where
       d   = x'*x'' + y'*y''
 
 instance (RealFloat a, Elt (Complex a)) => P.Floating (Exp (Complex a)) where
-  pi                      = lift $ pi :+ 0
-
-  exp (unlift -> x :+ y)  = let expx = exp x
-                            in  complex $ expx * cos y :+ expx * sin y
-
-  log z                   = lift $ log (magnitude z) :+ phase z
-
-  sqrt z@(unlift -> x :+ y) =
+  pi                = pi ::+ 0
+  exp (x ::+ y)     = let expx = exp x
+                       in expx * cos y ::+ expx * sin y
+  log z             = log (magnitude z) ::+ phase z
+  sqrt z@(x ::+ y)  =
     if z == 0
       then 0
-      else lift $ u :+ (y < 0 ? (-v, v))
+      else u ::+ (y < 0 ? (-v, v))
     where
-      (u,v) = unlift (x < 0 ? (lift (v',u'), lift (u',v')))
-      v'    = abs y / (u'*2)
-      u'    = sqrt ((magnitude z + abs x) / 2)
+      T2 u v = x < 0 ? (T2 v' u', T2 u' v')
+      v'     = abs y / (u'*2)
+      u'     = sqrt ((magnitude z + abs x) / 2)
 
   x ** y =
     if y == 0 then 1 else
     if x == 0 then if exp_r > 0 then 0 else
-                   if exp_r < 0 then lift (inf :+ 0)
-                                else lift (nan :+ nan)
+                   if exp_r < 0 then inf ::+ 0
+                                else nan ::+ nan
               else if isInfinite r || isInfinite i
-                     then if exp_r > 0 then lift (inf :+ 0) else
+                     then if exp_r > 0 then inf ::+ 0 else
                           if exp_r < 0 then 0
-                                       else lift (nan :+ nan)
+                                       else nan ::+ nan
                      else exp (log x * y)
     where
-      r     :+ i  = unlift x
-      exp_r :+ _  = unlift y
+      r     ::+ i  = x
+      exp_r ::+ _  = y
       --
       inf = 1 / 0
       nan = 0 / 0
 
-  sin (unlift -> x :+ y)  = complex $ sin x * cosh y :+ cos x * sinh y
-  cos (unlift -> x :+ y)  = complex $ cos x * cosh y :+ (- sin x * sinh y)
-  tan (unlift -> x :+ y)  = (complex $ sinx*coshy :+ cosx*sinhy) / (complex $ cosx*coshy :+ (-sinx*sinhy))
+  sin (x ::+ y)  = sin x * cosh y ::+ cos x * sinh y
+  cos (x ::+ y)  = cos x * cosh y ::+ (- sin x * sinh y)
+  tan (x ::+ y)  = (sinx*coshy ::+ cosx*sinhy) / (cosx*coshy ::+ (-sinx*sinhy))
     where
       sinx  = sin x
       cosx  = cos x
       sinhy = sinh y
       coshy = cosh y
 
-  sinh (unlift -> x :+ y) = complex $ cos y * sinh x :+ sin  y * cosh x
-  cosh (unlift -> x :+ y) = complex $ cos y * cosh x :+ sin y * sinh x
-  tanh (unlift -> x :+ y) = (complex $ cosy*sinhx :+ siny*coshx) / (complex $ cosy*coshx :+ siny*sinhx)
+  sinh (x ::+ y) = cos y * sinh x ::+ sin  y * cosh x
+  cosh (x ::+ y) = cos y * cosh x ::+ sin y * sinh x
+  tanh (x ::+ y) = (cosy*sinhx ::+ siny*coshx) / (cosy*coshx ::+ siny*sinhx)
     where
       siny  = sin y
       cosy  = cos y
       sinhx = sinh x
       coshx = cosh x
 
-  asin z@(unlift -> x :+ y) = complex $ y' :+ (-x')
+  asin z@(x ::+ y) = y' ::+ (-x')
     where
-      x' :+ y' = unlift $ log ((complex ((-y):+x)) + sqrt (1 - z*z))
+      x' ::+ y' = log (((-y) ::+ x) + sqrt (1 - z*z))
 
-  acos z                    = complex $ y'' :+ (-x'')
+  acos z                    = y'' ::+ (-x'')
     where
-      x'' :+ y''  = unlift $ log (z + (complex ((-y') :+ x')))
-      x'  :+ y'   = unlift $ sqrt (1 - z*z)
+      x'' ::+ y''  = log (z + ((-y') ::+ x'))
+      x'  ::+ y'   = sqrt (1 - z*z)
 
-  atan z@(unlift -> x :+ y) = complex $ y' :+ (-x')
+  atan z@(x ::+ y) = y' ::+ (-x')
     where
-      x' :+ y' = unlift $ log ((complex ((1-y):+x)) / sqrt (1+z*z))
+      x' ::+ y' = log (((1-y) ::+ x) / sqrt (1+z*z))
 
   asinh z =  log (z + sqrt (1+z*z))
   acosh z =  log (z + (z+1) * sqrt ((z-1)/(z+1)))
@@ -224,22 +219,17 @@ instance (RealFloat a, Elt (Complex a)) => P.Floating (Exp (Complex a)) where
 
 
 instance (FromIntegral a b, Num b, Elt (Complex b)) => FromIntegral a (Complex b) where
-  fromIntegral x = lift (fromIntegral x :+ 0)
+  fromIntegral x = fromIntegral x ::+ 0
 
 -- | @since 1.2.0.0
 instance Functor Complex where
-  fmap f (unlift -> r :+ i) = lift (f r :+ f i)
+  fmap f (r ::+ i) = f r ::+ f i
 
-
--- Helper function to fix the types for lift (ugh)
---
-complex :: (Elt a, Elt (Complex a)) => Complex (Exp a) -> Exp (Complex a)
-complex = lift
 
 -- | The non-negative magnitude of a complex number
 --
 magnitude :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
-magnitude (unlift -> r :+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
+magnitude (r ::+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
   where
     k     = max (exponent r) (exponent i)
     mk    = -k
@@ -251,13 +241,13 @@ magnitude (unlift -> r :+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (
 -- @since 1.3.0.0
 --
 magnitude' :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
-magnitude' (unlift -> r :+ i) = sqrt (r*r + i*i)
+magnitude' (r ::+ i) = sqrt (r*r + i*i)
 
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
 phase :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
-phase z@(unlift -> r :+ i) =
+phase z@(r ::+ i) =
   if z == 0
     then 0
     else atan2 i r
@@ -267,7 +257,7 @@ phase z@(unlift -> r :+ i) =
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
 polar :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp (a,a)
-polar z =  lift (magnitude z, phase z)
+polar z =  T2 (magnitude z) (phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
@@ -291,17 +281,17 @@ cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 -- | Return the real part of a complex number
 --
 real :: (Elt a, Elt (Complex a)) => Exp (Complex a) -> Exp a
-real (unlift -> r :+ _) = r
+real (r ::+ _) = r
 
 -- | Return the imaginary part of a complex number
 --
 imag :: (Elt a, Elt (Complex a)) => Exp (Complex a) -> Exp a
-imag (unlift -> _ :+ i) = i
+imag (_ ::+ i) = i
 
 -- | Return the complex conjugate of a complex number, defined as
 --
 -- > conjugate(Z) = X - iY
 --
 conjugate :: (Num a, Elt (Complex a)) => Exp (Complex a) -> Exp (Complex a)
-conjugate z = lift $ real z :+ (- imag z)
+conjugate z = real z ::+ (- imag z)
 
