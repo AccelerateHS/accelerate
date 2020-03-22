@@ -743,6 +743,43 @@ data PreSmartExp acc exp t where
   Undef         :: ScalarType t
                 -> PreSmartExp acc exp t
 
+  Coerce        :: (Typeable a, Typeable b, BitSizeEq a b)
+                 => ScalarType a
+                 -> ScalarType b
+                 -> exp a
+                 -> PreSmartExp acc exp b
+
+class HasExpType f where
+  expType :: f t -> TupleType t
+
+instance HasExpType exp => HasExpType (PreSmartExp acc exp) where
+  expType expr = case expr of
+    Tag tp _                        -> tp
+    Const tp _                      -> TupRsingle tp
+    Nil                             -> TupRunit
+    Pair e1 e2                      -> expType e1 `TupRpair` expType e2
+    Prj idx e                       -> let TupRpair t1 t2 = expType e in case idx of
+                                         PairIdxLeft  -> t1
+                                         PairIdxRight -> t2
+    VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
+    VecUnpack vecR _                -> vecRtuple vecR
+    ToIndex _ _ _                   -> TupRsingle $ scalarTypeInt
+    FromIndex shr _ _               -> shapeType shr
+    Cond _ e _                      -> expType e
+    While t _ _ _                   -> t
+    PrimConst c                     -> primConstType c
+    PrimApp f _                     -> snd $ primFunType f
+    Index tp _ _                    -> tp
+    LinearIndex tp _ _              -> tp
+    Shape shr _                     -> shapeType shr
+    ShapeSize _ _                   -> TupRsingle $ scalarTypeInt
+    Foreign (_ :: asm (x -> y)) _ _ -> eltType @y
+    Undef tp                        -> TupRsingle tp
+    Coerce _ tp _                   -> TupRsingle tp
+
+instance HasExpType SmartExp where
+  expType (SmartExp e) = expType e
+
 -- Smart constructors for stencils
 -- -------------------------------
 
