@@ -1,8 +1,10 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
@@ -38,6 +40,9 @@ module Data.Array.Accelerate.Array.Representation (
   -- * Slice shape functions
   sliceShape, sliceShapeR, sliceDomainR, enumSlices,
 
+  -- * Vec representation & utilities
+  VecR(..), vecRvector, vecRtuple, vecPack, vecUnpack,
+
   -- * Stencils
   StencilR(..), stencilElt, stencilShape, stencilType, stencilArrayR,
 
@@ -51,12 +56,16 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 
 -- standard library
-import GHC.Base                                         ( quotInt, remInt )
+import GHC.Base                                         ( quotInt, remInt, Int(..), Int#, (-#) )
+import GHC.TypeNats
+import Data.Primitive.ByteArray
+import Data.Primitive.Types
 import Prelude                                          hiding ((!!))
 import Data.List                                        ( intercalate )
 import Text.Show                                        ( showListWith )
 import System.IO.Unsafe                                 ( unsafePerformIO )
 import qualified Data.Vector.Unboxed                    as U
+import Control.Monad.ST
 
 -- |Array data type, where the type arguments regard the representation types of the shape and elements.
 data Array sh e where
@@ -470,6 +479,67 @@ rnfArray (ArrayR shr tp) (Array sh ad) = rnfShape shr sh `seq` rnfArrayData tp a
 rnfShape :: ShapeR sh -> sh -> ()
 rnfShape ShapeRz () = ()
 rnfShape (ShapeRsnoc shr) (sh, s) = s `seq` rnfShape shr sh
+
+-- | SIMD Vectors (Vec n t)
+--
+
+-- Declares the size of a SIMD vector and the type of its elements.
+-- This data type is used to denote the relation between a vector
+-- type (Vec n single) with its tuple representation (tuple).
+-- Conversions between those types are exposed through vecPack and
+-- vecUnpack.
+-- 
+data VecR (n :: Nat) single tuple where
+  VecRnil  :: SingleType s -> VecR 0       s ()
+  VecRsucc :: VecR n s t   -> VecR (n + 1) s (t, s)
+
+vecRvector :: KnownNat n => VecR n s tuple -> VectorType (Vec n s)
+vecRvector = uncurry VectorType . go
+  where
+    go :: VecR n s tuple -> (Int, SingleType s)
+    go (VecRnil tp)   = (0,     tp)
+    go (VecRsucc vec) = (n + 1, tp)
+      where (n, tp) = go vec
+
+vecRtuple :: VecR n s tuple -> TupleType tuple
+vecRtuple = snd . go
+  where
+    go :: VecR n s tuple -> (SingleType s, TupleType tuple)
+    go (VecRnil tp)           = (tp, TupRunit)
+    go (VecRsucc vec)
+      | (tp, tuple) <- go vec = (tp, TupRpair tuple $ TupRsingle $ SingleScalarType tp)
+
+vecPack :: forall n single tuple. KnownNat n => VecR n single tuple -> tuple -> Vec n single
+vecPack vecR tuple
+  | IsPrim <- getPrim single = runST $ do
+    mba <- newByteArray (n * sizeOf (undefined :: single))
+    go (n - 1) vecR tuple mba
+    ByteArray ba# <- unsafeFreezeByteArray mba
+    return $! Vec ba#
+
+  where
+    VectorType n single = vecRvector vecR
+
+    go :: Prim single => Int -> VecR n' single tuple' -> tuple' -> MutableByteArray s -> ST s ()
+    go _ (VecRnil _)  ()      _   = return ()
+    go i (VecRsucc r) (xs, x) mba = do
+      writeByteArray mba i x
+      go (i - 1) r xs mba
+
+vecUnpack :: forall n single tuple. KnownNat n => VecR n single tuple -> Vec n single -> tuple
+vecUnpack vecR (Vec ba#)
+  | IsPrim <- getPrim single
+  = go (n# -# 1#) vecR
+  where
+    VectorType n single = vecRvector vecR
+    !(I# n#) = n
+
+    go :: Prim single => Int# -> VecR n' single tuple' -> tuple'
+    go _  (VecRnil _)  = ()
+    go i# (VecRsucc r) = x `seq` xs `seq` (xs, x)
+      where
+        xs = go (i# -# 1#) r
+        x  = indexByteArray# ba# i#
 
 -- | Nicely format a shape as a string
 --

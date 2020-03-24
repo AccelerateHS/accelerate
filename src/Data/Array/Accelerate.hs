@@ -303,6 +303,9 @@ module Data.Array.Accelerate (
   -- ** Scalar data types
   Exp,
 
+  -- ** SIMD vectors
+  Vec, VecElt,
+
   -- ** Type classes
   -- *** Basic type classes
   Eq(..),
@@ -341,6 +344,10 @@ module Data.Array.Accelerate (
   pattern Z_, pattern Ix, pattern (::.),
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
+
+  pattern V2, pattern V2_, pattern V3, pattern V3_,
+  pattern V4, pattern V4_, pattern V8, pattern V8_,
+  pattern V16, pattern V16_,
 
   pattern True_, pattern False_,
 

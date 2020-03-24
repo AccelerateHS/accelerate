@@ -42,7 +42,7 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
-import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Type
 #if __GLASGOW_HASKELL__ >= 800
 import Data.Array.Accelerate.Data.Semigroup                         ()

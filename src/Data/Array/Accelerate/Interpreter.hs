@@ -939,6 +939,8 @@ evalPreOpenExp evalAcc pexp env aenv =
     Pair e1 e2                  -> let !v1 = evalE e1
                                        !v2 = evalE e2
                                    in (v1, v2)
+    VecPack   vecR e            -> vecPack   vecR $! evalE e
+    VecUnpack vecR e            -> vecUnpack vecR $! evalE e
     IndexSlice slice slix sh    -> restrict slice (evalE slix)
                                                   (evalE sh)
       where

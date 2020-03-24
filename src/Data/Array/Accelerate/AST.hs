@@ -981,26 +981,6 @@ data PreOpenExp acc env aenv t where
                 -> PreOpenExp acc env aenv a
                 -> PreOpenExp acc env aenv b
 
-data VecR (n :: Nat) single tuple where
-  VecRnil  :: SingleType s -> VecR 0       s ()
-  VecRsucc :: VecR n s t   -> VecR (n + 1) s (t, s)
-
-vecRvector :: KnownNat n => VecR n s tuple -> VectorType (Vec n s)
-vecRvector = uncurry VectorType . go
-  where
-    go :: VecR n s tuple -> (Int, SingleType s)
-    go (VecRnil tp)   = (0,     tp)
-    go (VecRsucc vec) = (n + 1, tp)
-      where (n, tp) = go vec
-
-vecRtuple :: VecR n s tuple -> TupleType tuple
-vecRtuple = snd . go
-  where
-    go :: VecR n s tuple -> (SingleType s, TupleType tuple)
-    go (VecRnil tp)           = (tp, TupRunit)
-    go (VecRsucc vec)
-      | (tp, tuple) <- go vec = (tp, TupRpair tuple $ TupRsingle $ SingleScalarType tp)
-
 
 expType :: HasArraysRepr acc => PreOpenExp acc aenv env t -> TupleType t
 expType expr = case expr of

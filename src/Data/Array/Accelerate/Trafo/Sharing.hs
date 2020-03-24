@@ -718,6 +718,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Prj idx e             -> cvtPrj idx (cvt e)
           Nil                   -> AST.Nil
           Pair e1 e2            -> AST.Pair (cvt e1) (cvt e2)
+          VecPack   vec e       -> AST.VecPack   vec (cvt e)
+          VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
           FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
           Cond e1 e2 e3         -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
@@ -1639,6 +1641,8 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Nil                 -> return (Nil, 1)
             Pair e1 e2          -> travE2 Pair e1 e2
             Prj i e             -> travE1 (Prj i) e
+            VecPack   vec e     -> travE1 (VecPack   vec) e
+            VecUnpack vec e     -> travE1 (VecUnpack vec) e
             ToIndex shr sh ix   -> travE2 (ToIndex shr) sh ix
             FromIndex shr sh e  -> travE2 (FromIndex shr) sh e
             Cond e1 e2 e3       -> travE3 Cond e1 e2 e3
@@ -2482,6 +2486,8 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Pair e1 e2            -> travE2 Pair e1 e2
           Nil                   -> reconstruct Nil noNodeCounts
           Prj i e               -> travE1 (Prj i) e
+          VecPack   vec e       -> travE1 (VecPack   vec) e
+          VecUnpack vec e       -> travE1 (VecUnpack vec) e
           ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
           FromIndex shr sh e    -> travE2 (FromIndex shr) sh e
           Cond e1 e2 e3         -> travE3 Cond e1 e2 e3

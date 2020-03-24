@@ -98,13 +98,14 @@ matchPreOpenAcc matchAcc encodeAcc = match
       , Just Refl <- matchAcc                  a1 a2
       = Just Refl
 
-    match (Aforeign ff1 _ a1) (Aforeign ff2 _ a2)
+    match (Aforeign ff1 f1 a1) (Aforeign ff2 f2 a2)
       | Just Refl <- matchAcc a1 a2
       , unsafePerformIO $ do
           sn1 <- makeStableName ff1
           sn2 <- makeStableName ff2
           return $! hashStableName sn1 == hashStableName sn2
-      = gcast Refl
+      , Just Refl <- matchPreOpenAfun matchAcc f1 f2
+      = Just Refl
 
     match (Acond p1 t1 e1) (Acond p2 t2 e2)
       | Just Refl <- matchExp p1 p2
@@ -464,13 +465,14 @@ matchPreOpenExp matchAcc encodeAcc = match
     match (Evar v1) (Evar v2)
       = matchVar v1 v2
 
-    match (Foreign ff1 _ e1) (Foreign ff2 _ e2)
+    match (Foreign ff1 f1 e1) (Foreign ff2 f2 e2)
       | Just Refl <- match e1 e2
       , unsafePerformIO $ do
           sn1 <- makeStableName ff1
           sn2 <- makeStableName ff2
           return $! hashStableName sn1 == hashStableName sn2
-      = gcast Refl
+      , Just Refl <- matchPreOpenFun matchAcc encodeAcc f1 f2
+      = Just Refl
 
     match (Const t1 c1) (Const t2 c2)
       | Just Refl <- matchScalarType t1 t2

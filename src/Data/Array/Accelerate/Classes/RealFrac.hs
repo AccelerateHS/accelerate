@@ -40,7 +40,6 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.ToFloating
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.RealFloat       -- defaultProperFraction
 
-import Data.Typeable
 import Data.Maybe
 import Text.Printf
 import Prelude                                                      ( ($), String, error, unlines, otherwise )
@@ -225,8 +224,7 @@ data IsIntegralDict a where
 
 isFloating :: forall a. Elt a => Maybe (IsFloatingDict (EltRepr a))
 isFloating
-  | Just Refl          <- eqT @a @(EltRepr a)
-  , TupRsingle t       <- eltType @a
+  | TupRsingle t       <- eltType @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , FloatingNumType f  <- n
@@ -240,8 +238,7 @@ isFloating
 
 isIntegral :: forall a. Elt a => Maybe (IsIntegralDict (EltRepr a))
 isIntegral
-  | Just Refl          <- eqT @a @(EltRepr a)
-  , TupRsingle t       <- eltType @a
+  | TupRsingle t       <- eltType @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , IntegralNumType i  <- n

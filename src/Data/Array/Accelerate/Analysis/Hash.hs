@@ -325,7 +325,7 @@ encodePreOpenExp options encodeAcc exp =
       --   -- TLM 2020-01-08
       --
       travA :: forall aenv' a. acc aenv' a -> Builder
-      travA a = encodeArraysType (arrayRepr a) <> encodeAcc (options {perfect=True}) a
+      travA a = encodeAcc (options {perfect=True}) a
 
       travE :: forall env' aenv' e. PreOpenExp acc env' aenv' e -> Builder
       travE e = encodePreOpenExp options encodeAcc e

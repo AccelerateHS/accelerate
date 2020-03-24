@@ -59,7 +59,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Tuple(..), IsTuple, fromTuple, toTuple,
 
   -- * Miscellaneous
-  showShape, Foreign(..), sliceShape, enumSlices,
+  showShape, Foreign(..), sliceShape, enumSlices, VecElt,
 
 ) where
 
@@ -67,6 +67,7 @@ module Data.Array.Accelerate.Array.Sugar (
 import Control.DeepSeq
 import Data.Kind
 import Data.Typeable
+import Data.Primitive.Types
 import System.IO.Unsafe                                         ( unsafePerformIO )
 import Language.Haskell.TH                                      hiding ( Foreign, Type )
 import Language.Haskell.TH.Extra
@@ -210,7 +211,7 @@ data Divide sh = Divide
 -- > data Point = Point Int Float
 -- >   deriving (Show, Generic, Elt)
 --
-class (Show a, Typeable a, Typeable (EltRepr a)) => Elt a where
+class Show a => Elt a where
   -- | Type representation mapping, which explains how to convert a type from
   -- the surface type into the internal representation type consisting only of
   -- simple primitive types, unit '()', and pair '(,)'.
@@ -460,7 +461,7 @@ toTuple = toProd @Elt
 -- 16-elements wide. Accelerate computations can thereby return multiple
 -- results.
 --
-class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
+class Arrays a where
   -- | Type representation mapping, which explains how to convert from the
   -- surface type into the internal representation type, which consists only of
   -- 'Array', and '()' and '(,)' as type-level nil and snoc.
@@ -1000,6 +1001,22 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
 
 
+-- Vec
+-- ---
+
+class (Elt a, IsSingle a, Prim a, a ~ EltRepr a) => VecElt a
+
+-- XXX: Should we fix this to known "good" vector sizes?
+--
+instance (KnownNat n, VecElt a) => Elt (Vec n a) where
+  type EltRepr (Vec n a) = Vec n a
+  {-# INLINE eltType     #-}
+  {-# INLINE [1] fromElt #-}
+  {-# INLINE [1] toElt   #-}
+  eltType = TupRsingle $ VectorScalarType $ VectorType (fromIntegral $ natVal (undefined :: Proxy n)) $ singleType @a
+  fromElt = id
+  toElt   = id
+
 -- Instances
 -- ---------
 
@@ -1065,21 +1082,11 @@ $(runQ $ do
                 toElt   = id
             |]
 
-        -- XXX: Should we fix this to known "good" vector sizes?
-        --
-        mkVector :: Name -> Q [Dec]
-        mkVector name =
+        mkVecElt :: Name -> Q [Dec]
+        mkVecElt name =
           let t = conT name
           in
-          [d| instance KnownNat n => Elt (Vec n $t) where
-                type EltRepr (Vec n $t) = Vec n $t
-                {-# INLINE eltType     #-}
-                {-# INLINE [1] fromElt #-}
-                {-# INLINE [1] toElt   #-}
-                eltType = singletonScalarType
-                fromElt = id
-                toElt   = id
-            |]
+          [d| instance VecElt $t |]
 
         -- ghci> $( stringE . show =<< reify ''CFloat )
         -- TyConI (NewtypeD [] Foreign.C.Types.CFloat [] Nothing (NormalC Foreign.C.Types.CFloat [(Bang NoSourceUnpackedness NoSourceStrictness,ConT GHC.Types.Float)]) [])
@@ -1102,7 +1109,7 @@ $(runQ $ do
             |]
     --
     ss <- mapM mkSimple ( integralTypes ++ floatingTypes ++      nonNumTypes )
-    vs <- mapM mkVector ( integralTypes ++ floatingTypes ++ tail nonNumTypes )  -- not Bool
+    vs <- mapM mkVecElt ( integralTypes ++ floatingTypes ++ tail nonNumTypes )  -- not Bool
     ns <- mapM mkNewtype newtypes
     return (concat ss ++ concat vs ++ concat ns)
  )

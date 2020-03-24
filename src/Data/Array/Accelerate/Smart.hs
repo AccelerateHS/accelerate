@@ -1147,7 +1147,7 @@ indexTail (Exp x) = exp $ Prj PairIdxLeft x
 nilTup :: SmartExp ()
 nilTup = SmartExp Nil
 
-snocTup :: (Typeable a, Elt b) => SmartExp a -> Exp b -> SmartExp (a, EltRepr b)
+snocTup :: Elt b => SmartExp a -> Exp b -> SmartExp (a, EltRepr b)
 snocTup a (Exp b) = SmartExp $ Pair a b
 
 tup2 :: (Elt a, Elt b) => (Exp a, Exp b) -> Exp (a, b)
