@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE TypeOperators     #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -freduction-depth=100 #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Eq
 -- Copyright   : [2016..2019] The Accelerate Team
@@ -39,10 +39,10 @@ import qualified Prelude                                            as P
 
 
 pattern True_ :: Exp Bool
-pattern True_ = Exp (Const True)
+pattern True_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBool)) True))
 
 pattern False_ :: Exp Bool
-pattern False_ = Exp (Const False)
+pattern False_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBool)) False))
 
 
 infix 4 ==
@@ -104,6 +104,12 @@ instance P.Eq (Exp a) where
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
+
+-- To support 16-tuples, we must set the maximum recursion depth of the type
+-- checker higher. The default is 51, which appears to be a problem for
+-- 16-tuples (15-tuples do work). Hence we set a compiler flag at the top
+-- of this file: -freduction-depth=100
+--
 
 $(runQ $ do
     let

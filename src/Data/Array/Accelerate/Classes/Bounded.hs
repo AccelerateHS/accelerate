@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeApplications  #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -freduction-depth=100 #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Bounded
 -- Copyright   : [2016..2019] The Accelerate Team
@@ -134,6 +134,12 @@ instance P.Bounded (Exp CSChar) where
 instance P.Bounded (Exp CUChar) where
   minBound = mkBitcast (mkMinBound @Word8)
   maxBound = mkBitcast (mkMaxBound @Word8)
+
+-- To support 16-tuples, we must set the maximum recursion depth of the type
+-- checker higher. The default is 51, which appears to be a problem for
+-- 16-tuples (15-tuples do work). Hence we set a compiler flag at the top
+-- of this file: -freduction-depth=100
+--
 
 $(runQ $ do
     let

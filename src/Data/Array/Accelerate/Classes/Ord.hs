@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -freduction-depth=100 #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Ord
 -- Copyright   : [2016..2019] The Accelerate Team
@@ -148,6 +148,12 @@ preludeError x y
             , "constraints for subsequent classes in the standard Haskell numeric"
             , "hierarchy."
             ]
+
+-- To support 16-tuples, we must set the maximum recursion depth of the type
+-- checker higher. The default is 51, which appears to be a problem for
+-- 16-tuples (15-tuples do work). Hence we set a compiler flag at the top
+-- of this file: -freduction-depth=100
+--
 
 $(runQ $ do
     let
