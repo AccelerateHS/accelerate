@@ -336,7 +336,7 @@ module Data.Array.Accelerate (
   -- ** Pattern synonyms
   -- $pattern_synonyms
   --
-  pattern Pattern, IsProduct, IsTuple,
+  pattern Pattern,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
@@ -424,7 +424,6 @@ import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Pretty                                 () -- show instances
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S

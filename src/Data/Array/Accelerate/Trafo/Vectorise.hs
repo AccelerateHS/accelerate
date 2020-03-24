@@ -58,7 +58,6 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Classes.Eq       as S
 import qualified Data.Array.Accelerate.Language         as S
@@ -123,12 +122,6 @@ instance Shape sh => Slice (None sh) where
   type CoSliceShape (None sh) = sh
   type FullShape    (None sh) = sh
   sliceIndex _ = sliceNoneIndex (undefined :: sh)
-
-instance Shape sh => IsProduct Elt (None sh) where
-  type ProdRepr (None sh) = ((),sh)
-  fromProd _ (None sh) = ((),sh)
-  toProd _ ((),sh)     = None sh
-  prod _ _ = ProdRsnoc ProdRunit
 
 -- Lifting terms
 -- -------------

@@ -38,7 +38,6 @@ import Prelude                                                  hiding ( concat 
 import Data.Typeable
 
 -- friends
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
@@ -63,23 +62,6 @@ type instance LiftedTupleRepr () = ()
 type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
 
 type LiftedArray sh e = Vector' (Array sh e)
-
-instance Arrays t => IsProduct Arrays (Vector' t) where
-  type ProdRepr (Vector' t) = LiftedRepr (ArrRepr t) t
-  fromProd _ (Vector' t) = t
-  toProd _ = Vector'
-  prod _ _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ProdRsnoc ProdRunit
-                ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
-                ArraysFtuple -> tup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
-    where
-      tup :: forall a. ProdR Arrays a -> ProdR Arrays (LiftedTupleRepr a)
-      tup ProdRunit     = ProdRunit
-      tup (ProdRsnoc t) = swiz
-        where
-          swiz :: forall l r. (a ~ (l,r), Arrays r) => ProdR Arrays (LiftedTupleRepr a)
-          swiz | IsC <- isArraysFlat (undefined :: r)
-               = ProdRsnoc (tup t)
 
 instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
   type ArrRepr (Vector' t) = ArrRepr (TupleRepr (Vector' t))

@@ -151,7 +151,7 @@ tag x = t
   where T3 t _ _ = asTuple x
 
 instance (Elt a, Elt b) => Elt (Either a b) where
-  type EltRepr (Either a b) = TupleRepr (Word8, EltRepr a, EltRepr b)
+  type EltRepr (Either a b) = Tup3 Word8 (EltRepr a) (EltRepr b)
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}

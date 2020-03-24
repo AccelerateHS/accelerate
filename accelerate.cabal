@@ -333,7 +333,6 @@ Library
         Data.Array.Accelerate.Error
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
-        Data.Array.Accelerate.Product
         Data.Array.Accelerate.Smart
         Data.Array.Accelerate.Trafo
         Data.Array.Accelerate.Type

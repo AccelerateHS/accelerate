@@ -54,10 +54,6 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array shape query, indexing, and conversions
   shape, reshape, (!), (!!), allocateArray, fromFunction, fromFunctionM, fromList, toList, concatVectors,
 
-  -- * Tuples of expressions
-  TupleR, TupleRepr, tuple,
-  Tuple(..), IsTuple, fromTuple, toTuple,
-
   -- * Miscellaneous
   showShape, Foreign(..), sliceShape, enumSlices, VecElt,
 
@@ -82,7 +78,6 @@ import qualified GHC.Exts                                       as GHC
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Orphans                            ()
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
@@ -420,35 +415,6 @@ class Typeable asm => Foreign asm where
   -- the foreign function into Template Haskell
   liftForeign :: asm args -> Q (TExp (asm args))
   liftForeign _ = $internalError "liftForeign" "not supported by this backend"
-
-
--- Tuple representation
--- --------------------
-
--- |The tuple representation is equivalent to the product representation.
---
-type TupleRepr a = ProdRepr a
-type TupleR a    = ProdR Elt a
-type IsTuple     = IsProduct Elt
--- type IsAtuple    = IsProduct Arrays
-
--- |We represent tuples as heterogeneous lists, typed by a type list.
---
-data Tuple c t where
-  NilTup  ::                              Tuple c ()
-  SnocTup :: Elt t => Tuple c s -> c t -> Tuple c (s, t)
-
-
--- |Tuple reification
---
-tuple :: forall tup. IsTuple tup => TupleR (TupleRepr tup)
-tuple = prod @Elt @tup
-
-fromTuple :: IsTuple tup => tup -> TupleRepr tup
-fromTuple = fromProd @Elt
-
-toTuple :: IsTuple tup => TupleRepr tup -> tup
-toTuple = toProd @Elt
 
 
 -- Arrays

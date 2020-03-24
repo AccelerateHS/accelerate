@@ -84,7 +84,7 @@
 module Data.Array.Accelerate.AST (
 
   -- * Typed de Bruijn indices
-  Idx(..), idxToInt, tupleIdxToInt, Var(..), Vars(..), ArrayVar, ArrayVars, ExpVar, ExpVars,
+  Idx(..), idxToInt, Var(..), Vars(..), ArrayVar, ArrayVars, ExpVar, ExpVars,
   evars, varsType, LeftHandSide(..), ALeftHandSide, ELeftHandSide,
 
   -- * Valuation environment
@@ -111,7 +111,7 @@ module Data.Array.Accelerate.AST (
 
   -- TemplateHaskell
   LiftAcc,
-  liftIdx, liftTupleIdx,
+  liftIdx,
   liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
   liftALhs, liftELhs, liftArray, liftArraysR, liftTupleType,
@@ -154,7 +154,6 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
 import qualified Data.Array.Accelerate.Array.Sugar                   as Sugar
 import Data.Array.Accelerate.Array.Unique
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 #if __GLASGOW_HASKELL__ < 800
 import Data.Array.Accelerate.Error
@@ -176,10 +175,6 @@ data Idx env t where
 idxToInt :: Idx env t -> Int
 idxToInt ZeroIdx       = 0
 idxToInt (SuccIdx idx) = 1 + idxToInt idx
-
-tupleIdxToInt :: TupleIdx tup e -> Int
-tupleIdxToInt ZeroTupIdx       = 0
-tupleIdxToInt (SuccTupIdx idx) = 1 + tupleIdxToInt idx
 
 
 -- Environments
@@ -1652,10 +1647,6 @@ type LiftAcc acc = forall aenv a. acc aenv a -> Q (TExp (acc aenv a))
 liftIdx :: Idx env t -> Q (TExp (Idx env t))
 liftIdx ZeroIdx      = [|| ZeroIdx ||]
 liftIdx (SuccIdx ix) = [|| SuccIdx $$(liftIdx ix) ||]
-
-liftTupleIdx :: TupleIdx t e -> Q (TExp (TupleIdx t e))
-liftTupleIdx ZeroTupIdx       = [|| ZeroTupIdx ||]
-liftTupleIdx (SuccTupIdx tix) = [|| SuccTupIdx $$(liftTupleIdx tix) ||]
 
 
 liftPreOpenAfun :: LiftAcc acc -> PreOpenAfun acc aenv t -> Q (TExp (PreOpenAfun acc aenv t))

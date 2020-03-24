@@ -30,7 +30,6 @@ import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Product
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen

@@ -154,7 +154,7 @@ tag (Exp x) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft x
 
 
 instance Elt a => Elt (Maybe a) where
-  type EltRepr (Maybe a) = TupleRepr (Word8, EltRepr a)
+  type EltRepr (Maybe a) = Tup2 Word8 (EltRepr a)
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
