@@ -3,7 +3,6 @@
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DefaultSignatures     #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -96,14 +95,14 @@ import qualified Data.Array.Accelerate.Array.Representation     as Repr
 -- | Rank-0 index
 --
 data Z = Z
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 -- | Increase an index rank by one dimension. The ':.' operator is used to
 -- construct both values and types.
 --
 infixl 3 :.
 data tail :. head = !tail :. !head
-  deriving (Typeable, Eq)
+  deriving Eq
 
 -- We don't we use a derived Show instance for (:.) because this will insert
 -- parenthesis to demonstrate which order the operator is applied, i.e.:
@@ -137,7 +136,7 @@ instance (Show sh, Show sz) => Show (sh :. sz) where
 -- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data All = All
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 -- | Marker for arbitrary dimensions in 'Data.Array.Accelerate.Language.slice'
 -- and 'Data.Array.Accelerate.Language.replicate' descriptors.
@@ -149,7 +148,7 @@ data All = All
 -- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data Any sh = Any
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 -- | Marker for splitting along an entire dimension in division descriptors.
 --
@@ -158,7 +157,7 @@ data Any sh = Any
 -- divided along this dimension forming the elements of the output sequence.
 --
 data Split = Split
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 -- | Marker for arbitrary shapes in slices descriptors, where it is desired to
 -- split along an unknown number of dimensions.
@@ -170,7 +169,7 @@ data Split = Split
 -- > vectors = toSeq (Divide :. All)
 --
 data Divide sh = Divide
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 -- Scalar elements
 -- ---------------

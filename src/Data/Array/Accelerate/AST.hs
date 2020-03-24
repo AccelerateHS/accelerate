@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -128,7 +127,6 @@ module Data.Array.Accelerate.AST (
 --standard library
 import Control.DeepSeq
 import Control.Monad.ST
-import Data.Typeable
 import Data.List                                                    ( intercalate )
 import Foreign.ForeignPtr
 import Foreign.Marshal
@@ -185,7 +183,6 @@ idxToInt (SuccIdx idx) = 1 + idxToInt idx
 data Val env where
   Empty :: Val ()
   Push  :: Val env -> t -> Val (env, t)
-deriving instance Typeable Val
 
 push :: Val env -> (LeftHandSide s arrs env env', arrs) -> Val env'
 push env (LeftHandSideWildcard _, _     ) = env
@@ -229,9 +226,6 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 -- | Closed array expression aka an array program
 --
 type Acc = OpenAcc ()
-
-deriving instance Typeable PreOpenAcc
-deriving instance Typeable OpenAcc
 
 type ALeftHandSide = LeftHandSide ArrayR
 

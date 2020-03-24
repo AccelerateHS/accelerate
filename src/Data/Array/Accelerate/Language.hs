@@ -125,7 +125,6 @@ import Data.Array.Accelerate.Classes.Ord
 
 -- standard libraries
 import Prelude                                                      ( ($), (.) )
-import Data.Typeable
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
@@ -168,23 +167,12 @@ import Data.Typeable
 -- >>> let tup  = use (vec, mat)  :: Acc (Vector Int, Matrix Int)
 --
 use :: forall arrays. Arrays arrays => arrays -> Acc arrays
-use arrs = Acc acc
+use = Acc . use' (arrays @arrays) . fromArr
   where
-    HasTypeable acc = use' (arrays @arrays) $ fromArr arrs
-
-    use' :: ArraysR a -> a -> HasTypeable a
-    use' TupRunit                         ()       = HasTypeable $ SmartAcc $ Anil
-    use' (TupRsingle repr@(ArrayR shr t)) a        
-      | TypeableDict <- typeableDict $ Repr.shapeType shr
-      , TypeableDict <- typeableDict t             = HasTypeable $ SmartAcc $ Use repr a
-    use' (TupRpair r1 r2)                 (a1, a2)
-      | HasTypeable acc1 <- use' r1 a1
-      , HasTypeable acc2 <- use' r2 a2             = HasTypeable $ SmartAcc $ acc1 `Apair` acc2
-
--- Internal data type for 'use' to capture the 'Typeable' type class
-data HasTypeable a where
-  HasTypeable :: Typeable a => SmartAcc a -> HasTypeable a
-
+    use' :: ArraysR a -> a -> SmartAcc a
+    use' TupRunit                   ()       = SmartAcc $ Anil
+    use' (TupRsingle repr@ArrayR{}) a        = SmartAcc $ Use repr a
+    use' (TupRpair r1 r2)           (a1, a2) = SmartAcc $ use' r1 a1 `Apair` use' r2 a2
 
 -- | Construct a singleton (one element) array from a scalar value (or tuple of
 -- scalar values).

@@ -33,7 +33,6 @@ import Control.Applicative                              hiding ( Const )
 import Control.Lens                                     hiding ( Const, ix )
 import Data.Maybe
 import Data.Monoid
-import Data.Typeable
 import Text.Printf
 import Prelude                                          hiding ( exp, iterate )
 

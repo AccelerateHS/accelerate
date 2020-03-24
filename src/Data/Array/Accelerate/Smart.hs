@@ -1,6 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -73,7 +72,6 @@ module Data.Array.Accelerate.Smart (
 -- standard library
 import Prelude                                     hiding ( exp )
 import Data.Kind
-import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -275,7 +273,6 @@ import GHC.TypeNats
 newtype Acc a = Acc (SmartAcc (ArrRepr a))
 
 newtype SmartAcc a = SmartAcc (PreSmartAcc SmartAcc SmartExp a)
-deriving instance Typeable Acc
 
 
 -- The level of lambda-bound variables. The root has level 0; then it increases with each bound
@@ -651,7 +648,6 @@ deriving instance Typeable Seq
 --
 newtype Exp t = Exp (SmartExp (EltRepr t))
 newtype SmartExp t = SmartExp (PreSmartExp SmartAcc SmartExp t)
-deriving instance Typeable Exp
 
 -- | Scalar expressions to parametrise collective array operations, themselves parameterised over
 -- the type of collective array operations.
@@ -743,11 +739,11 @@ data PreSmartExp acc exp t where
   Undef         :: ScalarType t
                 -> PreSmartExp acc exp t
 
-  Coerce        :: (Typeable a, Typeable b, BitSizeEq a b)
-                 => ScalarType a
-                 -> ScalarType b
-                 -> exp a
-                 -> PreSmartExp acc exp b
+  Coerce        :: BitSizeEq a b
+                => ScalarType a
+                -> ScalarType b
+                -> exp a
+                -> PreSmartExp acc exp b
 
 class HasExpType f where
   expType :: f t -> TupleType t
@@ -1082,14 +1078,12 @@ prj15 = prj14 . prjTail
 -- change without the need to generate fresh code.
 --
 constant :: forall e. Elt e => e -> Exp e
-constant = Exp . snd . go (eltType @e) . fromElt
+constant = Exp . go (eltType @e) . fromElt
   where
-    go :: TupleType t -> t -> (TypeableDict t, SmartExp t)
-    go TupRunit         ()             = (TypeableDict, SmartExp $ Nil)
-    go (TupRsingle tp)  c              = (scalarTypeableDict tp, SmartExp $ Const tp c)
-    go (TupRpair t1 t2) (c1, c2)
-      | (TypeableDict, e1) <- go t1 c1
-      , (TypeableDict, e2) <- go t2 c2 = (TypeableDict, SmartExp $ e1 `Pair` e2)
+    go :: TupleType t -> t -> SmartExp t
+    go TupRunit         ()       = SmartExp $ Nil
+    go (TupRsingle tp)  c        = SmartExp $ Const tp c
+    go (TupRpair t1 t2) (c1, c2) = SmartExp $ go t1 c1 `Pair` go t2 c2
 
 -- | 'undef' can be used anywhere a constant is expected, and indicates that the
 -- consumer of the value can receive an unspecified bit pattern.
@@ -1115,14 +1109,12 @@ constant = Exp . snd . go (eltType @e) . fromElt
 -- @since 1.2.0.0
 --
 undef :: forall e. Elt e => Exp e
-undef = Exp $ snd $ go $ eltType @e
+undef = Exp $ go $ eltType @e
   where
-    go :: TupleType t -> (TypeableDict t, SmartExp t)
-    go TupRunit                     = (TypeableDict, SmartExp $ Nil)
-    go (TupRsingle t)               = (scalarTypeableDict t, SmartExp $ Undef t)
-    go (TupRpair t1 t2)
-      | (TypeableDict, e1) <- go t1
-      , (TypeableDict, e2) <- go t2 = (TypeableDict, SmartExp $ Pair e1 e2)
+    go :: TupleType t -> SmartExp t
+    go TupRunit         = SmartExp $ Nil
+    go (TupRsingle t)   = SmartExp $ Undef t
+    go (TupRpair t1 t2) = SmartExp $ go t1 `Pair` go t2
 
 -- | Get the innermost dimension of a shape.
 --

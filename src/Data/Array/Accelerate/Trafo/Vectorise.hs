@@ -1,7 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -45,7 +44,6 @@ module Data.Array.Accelerate.Trafo.Vectorise (
 
 import Prelude                                          hiding ( exp, replicate, concat )
 import qualified Prelude                                as P
-import Data.Typeable
 import Control.Applicative                              hiding ( Const )
 import Data.Maybe
 
@@ -108,7 +106,7 @@ type VectoriseAcc acc = forall aenv aenv' t.
                      -> LiftedAcc acc aenv' t
 
 data None sh = None sh
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 type instance EltRepr (None sh) = EltRepr sh
 

@@ -1,7 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes    #-}
 {-# LANGUAGE BangPatterns           #-}
 {-# LANGUAGE CPP                    #-}
-{-# LANGUAGE DeriveDataTypeable     #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE GADTs                  #-}
@@ -63,7 +62,6 @@ import Control.DeepSeq
 import Data.Bits
 import Data.IORef
 import Data.Primitive                                               ( sizeOf# )
-import Data.Typeable                                                ( Typeable )
 import Foreign.ForeignPtr
 import Foreign.Storable
 import Language.Haskell.TH                                          hiding ( Type )
@@ -154,7 +152,7 @@ type family ScalarDataRepr tp where
 
 -- Utilities for working with the type families & type class instances
 data ScalarDict e where
-  ScalarDict :: (Typeable e, Typeable (ScalarDataRepr e), Storable (ScalarDataRepr e), Prim (ScalarDataRepr e), ArrayData e ~ ScalarData e) => ScalarDict e
+  ScalarDict :: (Storable (ScalarDataRepr e), Prim (ScalarDataRepr e), ArrayData e ~ ScalarData e) => ScalarDict e
 
 {-# INLINE scalarDict #-}
 scalarDict :: ScalarType e -> (Int, ScalarDict e)

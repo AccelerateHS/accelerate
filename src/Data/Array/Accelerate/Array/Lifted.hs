@@ -1,5 +1,4 @@
 {-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
@@ -35,7 +34,6 @@ module Data.Array.Accelerate.Array.Lifted (
 ) where
 
 import Prelude                                                  hiding ( concat )
-import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar
@@ -50,7 +48,6 @@ import qualified Data.Array.Accelerate.Array.Representation     as Repr
 -- of arrays, are still members of the 'Arrays' class.
 
 newtype Vector' a = Vector' (LiftedRepr (ArrRepr a) a)
-  deriving Typeable
 
 type family LiftedRepr r a where
   LiftedRepr ()     ()                 = ((),Scalar Int)
@@ -63,7 +60,7 @@ type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
 
 type LiftedArray sh e = Vector' (Array sh e)
 
-instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
+instance Arrays t => Arrays (Vector' t) where
   type ArrRepr (Vector' t) = ArrRepr (TupleRepr (Vector' t))
   arrays _ = arrs (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
     where

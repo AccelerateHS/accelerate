@@ -2,7 +2,6 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
@@ -83,7 +82,6 @@ import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Text.Prettyprint.Doc
 import Data.Type.Equality
-import Data.Typeable
 import Data.Word
 import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
@@ -117,9 +115,6 @@ data FloatingDict a where
 data NonNumDict a where
   NonNumDict :: ( Bounded a, Eq a, Ord a, Show a, Storable a )
              => NonNumDict a
-
-data TypeableDict a where
-  TypeableDict :: Typeable a => TypeableDict a
 
 
 -- Scalar type representation
@@ -255,7 +250,7 @@ class IsScalar a => IsSingle a where
 
 -- | All scalar types
 --
-class Typeable a => IsScalar a where
+class IsScalar a where
   scalarType :: ScalarType a
 
 
@@ -282,37 +277,6 @@ floatingDict TypeDouble = FloatingDict
 nonNumDict :: NonNumType a -> NonNumDict a
 nonNumDict TypeBool = NonNumDict
 nonNumDict TypeChar = NonNumDict
-
-typeableDict :: TupleType tp -> TypeableDict tp
-typeableDict TupRunit               = TypeableDict
-typeableDict (TupRpair t1 t2)
-  | TypeableDict <- typeableDict t1
-  , TypeableDict <- typeableDict t2 = TypeableDict
-typeableDict (TupRsingle tp)        = scalarTypeableDict tp
-
-scalarTypeableDict :: ScalarType tp -> TypeableDict tp
-scalarTypeableDict (SingleScalarType tp) = singleTypeableDict tp
-scalarTypeableDict (VectorScalarType (VectorType _ tp))
-  | TypeableDict <- singleTypeableDict tp = TypeableDict
-
-singleTypeableDict :: SingleType tp -> TypeableDict tp
-singleTypeableDict (NumSingleType (IntegralNumType tp)) = case tp of
-  TypeInt    -> TypeableDict
-  TypeInt8   -> TypeableDict
-  TypeInt16  -> TypeableDict
-  TypeInt32  -> TypeableDict
-  TypeInt64  -> TypeableDict
-  TypeWord   -> TypeableDict
-  TypeWord8  -> TypeableDict
-  TypeWord16 -> TypeableDict
-  TypeWord32 -> TypeableDict
-  TypeWord64 -> TypeableDict
-singleTypeableDict (NumSingleType (FloatingNumType tp)) = case tp of
-  TypeHalf   -> TypeableDict
-  TypeFloat  -> TypeableDict
-  TypeDouble -> TypeableDict
-singleTypeableDict (NonNumSingleType TypeChar) = TypeableDict
-singleTypeableDict (NonNumSingleType TypeBool) = TypeableDict
 
 showType :: TupleType tp -> ShowS
 showType TupRunit = showString "()"
@@ -452,7 +416,6 @@ type family BitSize a :: Nat
 -- which redundant for our use case (derivable from type level information).
 --
 data Vec (n::Nat) a = Vec ByteArray#
-  deriving Typeable
 
 type role Vec nominal representational
 
