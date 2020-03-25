@@ -506,7 +506,7 @@ prettyDelayedOpenFun env0 aenv = next "\\\\" env0
       nest shiftwidth (sep [ vs <> "&rarr;"
                            , prettyDelayedOpenExp context0 env aenv body ])
     next vs env (Lam lhs lam)  =
-      let (env', arg) = prettyLHS env lhs
+      let (env', arg) = prettyELhs env lhs
       in  next (vs <> arg <> space) env' lam
 
 prettyDelayedOpenExp
@@ -546,7 +546,7 @@ fvPreOpenFun
 fvPreOpenFun fvA env aenv (Body b)    = fvPreOpenExp fvA env  aenv b
 fvPreOpenFun fvA env aenv (Lam lhs f) = fvPreOpenFun fvA env' aenv f
       where
-        (env', _) = prettyLHS env lhs
+        (env', _) = prettyELhs env lhs
 
 fvPreOpenExp
     :: forall acc env aenv exp.
@@ -567,7 +567,7 @@ fvPreOpenExp fvA env aenv = fv
     --
     fv (Let lhs e1 e2)          = concat [ fv e1, fvPreOpenExp fvA env' aenv e2 ]
       where
-        (env', _) = prettyLHS env lhs
+        (env', _) = prettyELhs env lhs
     fv Evar{}                   = []
     fv Undef{}                  = []
     fv Const{}                  = []

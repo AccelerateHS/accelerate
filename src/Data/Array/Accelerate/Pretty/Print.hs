@@ -29,7 +29,8 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyPreOpenFun,
   prettyArray,
   prettyConst,
-  prettyLHS,
+  prettyELhs,
+  prettyALhs,
 
   -- ** Internals
   Adoc,
@@ -113,7 +114,7 @@ prettyPreOpenAfun prettyAcc aenv0 = next (pretty '\\') aenv0
     next :: Adoc -> Val aenv' -> PreOpenAfun acc aenv' f' -> Adoc
     next vs aenv (Abody body)   = hang shiftwidth (sep [vs <> "->", prettyAcc context0 aenv body])
     next vs aenv (Alam lhs lam) =
-      let (aenv', lhs') = prettyLHS aenv lhs
+      let (aenv', lhs') = prettyALhs aenv lhs
       in  next (vs <> lhs' <> space) aenv' lam
 
 prettyPreOpenAcc
@@ -219,7 +220,7 @@ prettyAlet ctx prettyAcc extractAcc aenv0
     collect aenv =
       \case
         Alet lhs a1 a2 ->
-          let (aenv', v)      = prettyLHS aenv lhs
+          let (aenv', v)      = prettyALhs aenv lhs
               a1'             = ppA aenv a1
               bnd | isAlet a1 = nest shiftwidth (vsep [v <+> equals, a1'])
                   | otherwise = v <+> align (equals <+> a1')
@@ -253,36 +254,50 @@ prettyAtuple
     -> Val aenv
     -> PreOpenAcc acc aenv arrs
     -> Adoc
-prettyAtuple prettyAcc extractAcc aenv0
-  = align . wrap . collect aenv0
+prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
+    Just tup -> align $ "T" <> pretty (length tup) <+> sep tup
+    Nothing  -> align $ ppPair acc
   where
-    wrap [x] = x
-    wrap xs  = tupled xs
+    ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
+    ppPair (Apair a1 a2) = "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc context0 aenv0 a2 <> ")"
+    ppPair a             = prettyPreOpenAcc context0 prettyAcc extractAcc aenv0 a
 
-    collect :: Val aenv' -> PreOpenAcc acc aenv' a -> [Adoc]
-    collect aenv =
-      \case
-        Anil        -> []
-        Apair a1 a2 -> collect aenv (extractAcc a1) ++ [prettyAcc context0 aenv a2]
-        next        -> [prettyPreOpenAcc context0 prettyAcc extractAcc aenv next]
+    collect :: PreOpenAcc acc aenv arrs' -> Maybe [Adoc]
+    collect Anil          = Just []
+    collect (Apair a1 a2)
+      | Just tup <- collect $ extractAcc a1
+                          = Just $ tup ++ [prettyAcc app aenv0 a2]
+    collect _             = Nothing
 
 -- TODO: Should we also print the types of the declared variables? And the types of wildcards?
-prettyLHS :: Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
-prettyLHS env0 = fmap wrap . go env0
-  where
-    wrap [x] = x
-    wrap xs  = tupled xs
+prettyALhs :: Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyALhs = prettyLhs False 'a'
 
-    go :: Val env -> LeftHandSide s arrs env env' -> (Val env', [Adoc])
-    go env (LeftHandSideWildcard TupRunit) = (env, ["()"])
-    go env (LeftHandSideWildcard _)        = (env, ["_"])
-    go env (LeftHandSideSingle _)          = (env `Push` v, [v])
+prettyELhs :: Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyELhs = prettyLhs False 'x'
+
+prettyLhs :: forall s env env' arrs. Bool -> Char -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyLhs requiresParens x env0 lhs = case collect lhs of
+  Just (env1, tup) -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> sep tup))
+  Nothing          -> ppPair lhs
+  where
+    ppPair :: LeftHandSide s arrs' env env'' -> (Val env'', Adoc)
+    ppPair (LeftHandSideWildcard TupRunit) = (env0, "()")
+    ppPair (LeftHandSideWildcard _)        = (env0, "_")
+    ppPair (LeftHandSideSingle _)          = (env0 `Push` v, v)
       where
-        v = pretty 'a' <> pretty (sizeEnv env)
-    go env (LeftHandSidePair a b)          = (env2, doc1 ++ [doc2])
+        v = pretty x <> pretty (sizeEnv env0)
+    ppPair (LeftHandSidePair a b)          = (env2, tupled [doc1, doc2])
       where
-        (env1, doc1) = go env a
-        (env2, doc2) = prettyLHS env1 b
+        (env1, doc1) = ppPair a
+        (env2, doc2) = prettyLhs False x env1 b
+
+    collect :: LeftHandSide s arrs' env env'' -> Maybe (Val env'', [Adoc])
+    collect (LeftHandSidePair l1 l2)
+      | Just (env1, tup ) <- collect l1
+      ,      (env2, doc2) <- prettyLhs True x env1 l2 = Just (env2, tup ++ [doc2])
+    collect (LeftHandSideWildcard TupRunit) = Just (env0, [])
+    collect _ = Nothing
 
 prettyArray :: ArrayR (Array sh e) -> Array sh e -> Adoc
 prettyArray repr = parens . fromString . showArray repr
@@ -314,7 +329,7 @@ prettyPreOpenFun prettyAcc extractAcc env0 aenv = next (pretty '\\') env0
       = hang shiftwidth (sep [ vs <> "->"
                              , prettyPreOpenExp context0 prettyAcc extractAcc env aenv body])
     next vs env (Lam lhs lam) =
-      let (env', lhs') = prettyLHS env lhs
+      let (env', lhs') = prettyELhs env lhs
       in  next (vs <> lhs' <> space) env' lam
 
 prettyPreOpenExp
@@ -328,11 +343,11 @@ prettyPreOpenExp
     -> Adoc
 prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
   case exp of
-    Evar (Var _ idx)    -> prj idx env
-    Let{}               -> prettyLet ctx prettyAcc extractAcc env aenv exp
+    Evar (Var _ idx)      -> prj idx env
+    Let{}                 -> prettyLet ctx prettyAcc extractAcc env aenv exp
     PrimApp f x
-      | Nil `Pair` a `Pair` b <- x -> ppF2 op  (ppE a) (ppE b)
-      | otherwise                  -> ppF1 op' (ppE x)
+      | a `Pair` b <- x   -> ppF2 op  (ppE a) (ppE b)
+      | otherwise         -> ppF1 op' (ppE x)
       where
         op  = primOperator f
         op' = isInfix op ? (Operator (parens (opName op)) App L 10, op)
@@ -421,7 +436,7 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
     collect env =
       \case
         Let lhs e1 e2 ->
-          let (env', v)       = prettyLHS env lhs
+          let (env', v)       = prettyELhs env lhs
               e1'             = ppE env e1
               bnd | isLet e1  = nest shiftwidth (vsep [v <+> equals, e1'])
                   | otherwise = v <+> align (equals <+> e1')
@@ -456,18 +471,45 @@ prettyTuple
     -> Val aenv
     -> PreOpenExp acc env aenv t
     -> Adoc
-prettyTuple prettyAcc extractAcc env aenv = wrap . collect []
+prettyTuple prettyAcc extractAcc env aenv exp = case collect exp of
+    Just tup -> align $ "T" <> pretty (length tup) <+> sep tup
+    Nothing  -> align $ ppPair exp
   where
-    wrap [x] = x
-    wrap xs  = tupled xs
+    ppPair :: PreOpenExp acc env aenv t' -> Adoc
+    ppPair (Pair e1 e2) = "(" <> ppPair e1 <> "," <+> prettyPreOpenExp context0 prettyAcc extractAcc env aenv e2 <> ")"
+    ppPair e            = prettyPreOpenExp context0 prettyAcc extractAcc env aenv e
 
-    collect :: [Adoc] -> PreOpenExp acc env aenv s -> [Adoc]
-    collect acc =
-      \case
-        Nil        -> acc
-        Pair tup e -> collect (align (prettyPreOpenExp context0 prettyAcc extractAcc env aenv e) : acc) tup
-        next       -> [prettyPreOpenExp context0 prettyAcc extractAcc env aenv next]
+    collect :: PreOpenExp acc env aenv t' -> Maybe [Adoc]
+    collect Nil          = Just []
+    collect (Pair e1 e2)
+      | Just tup <- collect e1
+                         = Just $ tup ++ [prettyPreOpenExp app prettyAcc extractAcc env aenv e2]
+    collect _            = Nothing
 
+{-
+
+prettyAtuple
+    :: forall acc aenv arrs.
+       PrettyAcc acc
+    -> ExtractAcc acc
+    -> Val aenv
+    -> PreOpenAcc acc aenv arrs
+    -> Adoc
+prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
+  Just tup -> align $ "T" <> pretty (length tup) <+> sep tup
+  Nothing  -> align $ ppPair acc
+  where
+    ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
+    ppPair (Apair a1 a2) = "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc context0 aenv0 a2 <> ")"
+    ppPair a             = prettyPreOpenAcc context0 prettyAcc extractAcc aenv0 a
+
+    collect :: PreOpenAcc acc aenv arrs' -> Maybe [Adoc]
+    collect Anil          = Just []
+    collect (Apair a1 a2)
+      | Just tup <- collect $ extractAcc a1
+                          = Just $ tup ++ [prettyAcc app aenv0 a2]
+    collect _             = Nothing
+-}
 
 prettyConst :: TupleType e -> e -> Adoc
 prettyConst tp x =
