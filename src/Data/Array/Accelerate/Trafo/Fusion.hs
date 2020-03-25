@@ -281,6 +281,8 @@ convertOpenExp config exp =
     Undef tp                -> Undef tp
     Nil                     -> Nil
     Pair e1 e2              -> Pair (cvtE e1) (cvtE e2)
+    VecPack   vec e         -> VecPack   vec (cvtE e)
+    VecUnpack vec e         -> VecUnpack vec (cvtE e)
     IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
     IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
     ToIndex shr sh ix       -> ToIndex shr (cvtE sh) (cvtE ix)
@@ -1052,8 +1054,9 @@ unzipD tp f (Embed env cc@(Done v))
   , Just vars <- extractExpVars a
   , ArrayR shr _ <- arrayRepr cc
   , f' <- Lam lhs $ Body $ evars vars = Just $ Embed (env `pushArrayEnv` inject (Map tp f' $ avarsIn v)) $ doneZeroIdx $ ArrayR shr tp
-  | otherwise = Nothing
 
+unzipD _ _ _
+  = Nothing
 
 -- Fuse an index space transformation function that specifies where elements in
 -- the destination array read there data from in the source array.
