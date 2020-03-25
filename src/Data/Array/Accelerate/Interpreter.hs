@@ -932,9 +932,7 @@ evalPreOpenExp evalAcc pexp env aenv =
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
     Nil                         -> ()
-    Pair e1 e2                  -> let !v1 = evalE e1
-                                       !v2 = evalE e2
-                                   in (v1, v2)
+    Pair e1 e2                  -> (evalE e1, evalE e2)
     VecPack   vecR e            -> vecPack   vecR $! evalE e
     VecUnpack vecR e            -> vecUnpack vecR $! evalE e
     IndexSlice slice slix sh    -> restrict slice (evalE slix)
