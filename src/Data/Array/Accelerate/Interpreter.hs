@@ -597,11 +597,7 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
     sh'         = shape def
     n'          = size shr' sh'
 
-    ignore' :: ShapeR sh -> sh
-    ignore' ShapeRz          = ()
-    ignore' (ShapeRsnoc shr) = (ignore' shr, 0)
-
-    ignore = ignore' shr'
+    ignore' = ignore shr'
     --
     (adata, _)  = runArrayData $ do
       aout <- newArrayData tp n'
@@ -620,7 +616,7 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
                   i     = toIndex shr  sh  src
                   j     = toIndex shr' sh' dst
               in
-              unless (shapeEq shr' dst ignore) $ do
+              unless (shapeEq shr' dst ignore') $ do
                 let x = ain  i
                 y <- unsafeReadArrayData tp aout j
                 unsafeWriteArrayData tp aout j (f x y)
