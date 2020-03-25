@@ -27,7 +27,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Scan (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
@@ -65,7 +64,7 @@ test_scanl runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -101,7 +100,7 @@ test_scanl1 runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -136,7 +135,7 @@ test_scanl' runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -172,7 +171,7 @@ test_scanr runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -208,7 +207,7 @@ test_scanr1 runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -243,7 +242,7 @@ test_scanr' runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -279,7 +278,7 @@ test_scanlSeg runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -314,7 +313,7 @@ test_scanl1Seg runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -348,7 +347,7 @@ test_scanl'Seg runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -383,7 +382,7 @@ test_scanrSeg runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -418,7 +417,7 @@ test_scanr1Seg runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -452,7 +451,7 @@ test_scanr'Seg runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3

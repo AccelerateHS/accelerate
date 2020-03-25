@@ -19,8 +19,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.SIMD (
 
 ) where
 
-import Data.Typeable
-import Data.Primitive.Types
 import Control.Lens                                                 ( view, _1, _2, _3, _4 )
 import Prelude                                                      as P
 
@@ -29,7 +27,6 @@ import Data.Array.Accelerate.Array.Sugar                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Smart
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -54,16 +51,16 @@ test_simd runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall e. (Prim e, P.Eq e, Elt e, Elt (V2 e), Elt (V3 e), Elt (V4 e))
+    testElt :: forall e. (VecElt e, P.Eq e)
             => Gen e
             -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined::e)))
+      testGroup (show (eltType @e))
         [ testExtract e
         , testInject  e
         ]
 
-    testExtract :: forall e. (Prim e, P.Eq e, Elt e, Elt (V2 e), Elt (V3 e), Elt (V4 e))
+    testExtract :: forall e. (VecElt e, P.Eq e)
                 => Gen e
                 -> TestTree
     testExtract e =
@@ -73,7 +70,7 @@ test_simd runN =
         , testProperty "V4" $ test_extract_v4 runN dim1 e
         ]
 
-    testInject :: forall e. (Prim e, P.Eq e, Elt e, Elt (V2 e), Elt (V3 e), Elt (V4 e))
+    testInject :: forall e. (VecElt e, P.Eq e)
                => Gen e
                -> TestTree
     testInject e =
@@ -85,7 +82,7 @@ test_simd runN =
 
 
 test_extract_v2
-    :: (Shape sh, Prim e, P.Eq e, P.Eq sh, Elt e, Elt (V2 e))
+    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -98,7 +95,7 @@ test_extract_v2 runN dim e =
     let !go = runN (A.map (view _m . unpackV2')) in go xs === mapRef (view _l . unpackV2) xs
 
 test_extract_v3
-    :: (Shape sh, Prim e, P.Eq e, P.Eq sh, Elt e, Elt (V3 e))
+    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -111,7 +108,7 @@ test_extract_v3 runN dim e =
     let !go = runN (A.map (view _m . unpackV3')) in go xs === mapRef (view _l . unpackV3) xs
 
 test_extract_v4
-    :: (Shape sh, Prim e, P.Eq e, P.Eq sh, Elt e, Elt (V4 e))
+    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -124,7 +121,7 @@ test_extract_v4 runN dim e =
     let !go = runN (A.map (view _m . unpackV4')) in go xs === mapRef (view _l . unpackV4) xs
 
 test_inject_v2
-    :: (Shape sh, Prim e, P.Eq e, P.Eq sh, Elt e, Elt (V2 e))
+    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -135,10 +132,10 @@ test_inject_v2 runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (array sh1 e)
     ys  <- forAll (array sh2 e)
-    let !go = runN (A.zipWith packV2') in go xs ys === zipWithRef V2 xs ys
+    let !go = runN (A.zipWith A.V2_) in go xs ys === zipWithRef V2 xs ys
 
 test_inject_v3
-    :: (Shape sh, Prim e, P.Eq e, P.Eq sh, Elt e, Elt (V3 e))
+    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -151,10 +148,10 @@ test_inject_v3 runN dim e =
     xs  <- forAll (array sh1 e)
     ys  <- forAll (array sh2 e)
     zs  <- forAll (array sh3 e)
-    let !go = runN (A.zipWith3 packV3') in go xs ys zs === zipWith3Ref V3 xs ys zs
+    let !go = runN (A.zipWith3 A.V3_) in go xs ys zs === zipWith3Ref V3 xs ys zs
 
 test_inject_v4
-    :: (Shape sh, Prim e, P.Eq e, P.Eq sh, Elt e, Elt (V4 e))
+    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -169,38 +166,17 @@ test_inject_v4 runN dim e =
     ys  <- forAll (array sh2 e)
     zs  <- forAll (array sh3 e)
     ws  <- forAll (array sh4 e)
-    let !go = runN (A.zipWith4 packV4') in go xs ys zs ws === zipWith4Ref V4 xs ys zs ws
+    let !go = runN (A.zipWith4 A.V4_) in go xs ys zs ws === zipWith4Ref V4 xs ys zs ws
 
 
-unpackV2' :: (Prim e, Elt e, Elt (V2 e)) => Exp (V2 e) -> (Exp e, Exp e)
-unpackV2' e =
-  ( Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e
-  )
+unpackV2' :: VecElt e => Exp (V2 e) -> (Exp e, Exp e)
+unpackV2' (A.V2_ a b) = (a, b)
 
-unpackV3' :: (Prim e, Elt e, Elt (V3 e)) => Exp (V3 e) -> (Exp e, Exp e, Exp e)
-unpackV3' e =
-  ( Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e
-  )
+unpackV3' :: VecElt e => Exp (V3 e) -> (Exp e, Exp e, Exp e)
+unpackV3' (A.V3_ a b c) = (a, b, c)
 
-unpackV4' :: (Prim e, Elt e, Elt (V4 e)) => Exp (V4 e) -> (Exp e, Exp e, Exp e, Exp e)
-unpackV4' e =
-  ( Exp $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e
-  , Exp $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e
-  , Exp $ SuccTupIdx ZeroTupIdx `Prj` e
-  , Exp $ ZeroTupIdx `Prj` e
-  )
-
-packV2' :: (Prim e, Elt e, Elt (V2 e)) => Exp e -> Exp e -> Exp (V2 e)
-packV2' x y = Exp . Tuple $ NilTup `SnocTup` x `SnocTup` y
-
-packV3' :: (Prim e, Elt e, Elt (V3 e)) => Exp e -> Exp e -> Exp e -> Exp (V3 e)
-packV3' x y z = Exp . Tuple $ NilTup `SnocTup` x `SnocTup` y `SnocTup` z
-
-packV4' :: (Prim e, Elt e, Elt (V4 e)) => Exp e -> Exp e -> Exp e -> Exp e -> Exp (V4 e)
-packV4' x y z w = Exp . Tuple $ NilTup `SnocTup` x `SnocTup` y `SnocTup` z `SnocTup` w
+unpackV4' :: VecElt e => Exp (V4 e) -> (Exp e, Exp e, Exp e, Exp e)
+unpackV4' (A.V4_ a b c d) = (a, b, c, d)
 
 
 -- Reference Implementation

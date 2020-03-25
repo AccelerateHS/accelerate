@@ -64,7 +64,7 @@ test_stencil runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim1
         , testDim2
         , testDim3
@@ -630,9 +630,9 @@ bound bnd sh0 ix0 =
     Right ix' -> Right (toElt ix')
   where
     go :: TupleType t -> t -> t -> Either e t
-    go TypeRunit           ()      ()      = Right ()
-    go (TypeRpair tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
-    go (TypeRscalar t)     sh      i
+    go TupRunit           ()      ()      = Right ()
+    go (TupRpair tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
+    go (TupRsingle t)     sh      i
       | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
       = if i P.< 0
           then case bnd of

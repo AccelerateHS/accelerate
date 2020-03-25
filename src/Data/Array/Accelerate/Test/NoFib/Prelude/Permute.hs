@@ -22,13 +22,13 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Permute (
 ) where
 
 import Control.Monad
-import Data.Typeable
 import System.IO.Unsafe
 import Prelude                                                      as P
 import qualified Data.Set                                           as Set
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Array.Sugar                            as S
+import qualified Data.Array.Accelerate.Array.Representation         as R
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
@@ -63,7 +63,7 @@ test_permute runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -144,15 +144,16 @@ test_accumulate runN dim dim' e =
 
 
 permuteRef
-    :: (Shape sh, Shape sh', P.Eq sh', Elt e)
+    :: forall sh sh' e. (Shape sh, Shape sh', P.Eq sh', Elt e)
     => (e -> e -> e)
     -> Array sh' e
     -> (sh -> sh')
     -> Array sh e
     -> Array sh' e
-permuteRef f def@(Array _ aold) p arr@(Array _ anew) =
+permuteRef f def@(Array (R.Array _ aold)) p arr@(Array (R.Array _ anew)) =
   unsafePerformIO $ do
     let
+        tp  = S.eltType @e
         sh  = S.shape arr
         sh' = S.shape def
         n   = S.size sh
@@ -165,9 +166,9 @@ permuteRef f def@(Array _ aold) p arr@(Array _ anew) =
               --
               unless (ix' P.== S.ignore) $ do
                 let i'  = S.toIndex sh' ix'
-                x  <- toElt <$> unsafeReadArrayData anew i
-                x' <- toElt <$> unsafeReadArrayData aold i'
-                unsafeWriteArrayData aold i' (fromElt (f x x'))
+                x  <- toElt <$> unsafeReadArrayData tp anew i
+                x' <- toElt <$> unsafeReadArrayData tp aold i'
+                unsafeWriteArrayData tp aold i' (fromElt (f x x'))
               --
               go (i+1)
     --
