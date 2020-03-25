@@ -1297,7 +1297,7 @@ intersect' Repr.ShapeRz _ _ = SmartExp Nil
 intersect' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
   = SmartExp
   $ intersect' shr xs ys `Pair` 
-    SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
+    SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)
 
 
 -- | Union of two shapes
@@ -1310,7 +1310,7 @@ union' Repr.ShapeRz _ _ = SmartExp Nil
 union' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
   = SmartExp
   $ union' shr xs ys `Pair` 
-    SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)
+    SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
 
 
 -- Flow-control
