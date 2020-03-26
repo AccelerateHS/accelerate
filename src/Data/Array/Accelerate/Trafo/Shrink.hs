@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
@@ -40,9 +41,14 @@ module Data.Array.Accelerate.Trafo.Shrink (
 ) where
 
 -- standard library
-import Data.Monoid
 import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, seq )
+
+#if __GLASGOW_HASKELL__ < 804
+import Data.Semigroup
+#else
+import Data.Monoid
+#endif
 
 -- friends
 import Data.Array.Accelerate.AST

@@ -1,4 +1,5 @@
-{-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
@@ -1336,8 +1337,20 @@ while :: forall e. Elt e
       -> (Exp e -> Exp e)       -- ^ function to apply
       -> Exp e                  -- ^ initial value
       -> Exp e
+#if __GLASGOW_HASKELL__ < 804
+while c f (Exp e) = exp $ While @SmartAcc @SmartExp @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
+#else
 while c f (Exp e) = exp $ While @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
+#endif
 
+{-
+
+  While         :: TupleType t
+                -> (SmartExp t -> exp Bool)
+                -> (SmartExp t -> exp t)
+                -> exp t
+                -> PreSmartExp acc exp t
+                -}
 
 -- Array operations with a scalar result
 -- -------------------------------------
