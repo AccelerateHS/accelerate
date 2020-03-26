@@ -123,7 +123,7 @@ type MutableArrayData e = GArrayData e
 -- In previous versions this was abstracted over by the mutable/immutable array
 -- representation, but this is now fixed to our UniqueArray type.
 --
-type family GArrayData a = r | r -> a where
+type family GArrayData a where
   GArrayData ()        = ()
   GArrayData (a, b)    = (GArrayData a, GArrayData b) -- XXX: fields of tuple are non-strict, which enables lazy device-host copying
   GArrayData a         = ScalarData a

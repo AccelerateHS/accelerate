@@ -120,13 +120,13 @@ fromFunctionM (ArrayR shr tp) sh f = do
 
 
 {-# INLINEABLE concatVectors #-}
-concatVectors :: TupleType e -> [Vector e] -> Vector e
+concatVectors :: forall e. TupleType e -> [Vector e] -> Vector e
 concatVectors tp vs = adata `seq` Array ((), len) adata
   where
     dim1        = ShapeRsnoc ShapeRz
     offsets     = scanl (+) 0 (map (size dim1 . shape) vs)
     len         = last offsets
-    (adata, _)  = runArrayData $ do
+    (adata, _)  = runArrayData @e $ do
               arr <- newArrayData tp len
               sequence_ [ unsafeWriteArrayData tp arr (i + k) (unsafeIndexArrayData tp ad i)
                         | (Array ((), n) ad, k) <- vs `zip` offsets
@@ -134,14 +134,14 @@ concatVectors tp vs = adata `seq` Array ((), len) adata
               return (arr, undefined)
 
 {-# INLINEABLE fromList #-}
-fromList :: ArrayR (Array sh e) -> sh -> [e] -> Array sh e
+fromList :: forall sh e. ArrayR (Array sh e) -> sh -> [e] -> Array sh e
 fromList (ArrayR shr tp) sh xs = adata `seq` Array sh adata
   where
     -- Assume the array is in dense row-major order. This is safe because
     -- otherwise backends would not be able to directly memcpy.
     --
     !n    = size shr sh
-    (adata, _) = runArrayData $ do
+    (adata, _) = runArrayData @e $ do
                   arr <- newArrayData tp n
                   let go !i _ | i >= n = return ()
                       go !i (v:vs)     = unsafeWriteArrayData tp arr i v >> go (i+1) vs

@@ -430,7 +430,8 @@ fold1SegOp itp f (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
 
 
 scanl1Op
-    :: (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanl1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
@@ -440,7 +441,7 @@ scanl1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
     )
   where
     --
-    (adata, _)  = runArrayData $ do
+    (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh)
 
       let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh (sz, 0)) (ain (sz, 0))
@@ -454,7 +455,8 @@ scanl1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
 
 
 scanlOp
-    :: (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
@@ -465,7 +467,7 @@ scanlOp f z (Delayed (ArrayR shr tp) (sh, n) ain _)
   where
     sh'         = (sh, n+1)
     --
-    (adata, _)  = runArrayData $ do
+    (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh')
 
       let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh' (sz, 0)) z
@@ -479,7 +481,8 @@ scanlOp f z (Delayed (ArrayR shr tp) (sh, n) ain _)
 
 
 scanl'Op
-    :: (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (((), Array (sh, Int) e), Array sh e)
@@ -489,7 +492,7 @@ scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
                             , Array sh asum )
     )
   where
-    ((aout, asum), _) = runArrayData $ do
+    ((aout, asum), _) = runArrayData @(e, e) $ do
       aout <- newArrayData tp (size shr  (sh, n))
       asum <- newArrayData tp (size shr' sh)
 
@@ -508,7 +511,8 @@ scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
 
 
 scanrOp
-    :: (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
@@ -519,7 +523,7 @@ scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
   where
     sh'         = (sz, n+1)
     --
-    (adata, _)  = runArrayData $ do
+    (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh')
 
       let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh' (sz, n)) z
@@ -533,7 +537,8 @@ scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
 
 
 scanr1Op
-    :: (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
@@ -542,7 +547,7 @@ scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
     , adata `seq` Array sh adata
     )
   where
-    (adata, _)  = runArrayData $ do
+    (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh)
 
       let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh (sz, n-1)) (ain (sz, n-1))
@@ -556,7 +561,8 @@ scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
 
 
 scanr'Op
-    :: (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (((), Array (sh, Int) e), Array sh e)
@@ -566,7 +572,7 @@ scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
                             , Array sh asum )
     )
   where
-    ((aout, asum), _) = runArrayData $ do
+    ((aout, asum), _) = runArrayData @(e, e) $ do
       aout <- newArrayData tp (size shr  (sh, n))
       asum <- newArrayData tp (size shr' sh)
 
@@ -586,10 +592,11 @@ scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
 
 
 permuteOp
-    :: (e -> e -> e)
+    :: forall sh sh' e.
+       (e -> e -> e)
     -> WithReprs (Array sh' e)
     -> (sh -> sh')
-    -> Delayed (Array sh  e)
+    -> Delayed   (Array sh  e)
     -> WithReprs (Array sh' e)
 permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR shr tp) sh _ ain)
   = (TupRsingle $ ArrayR shr' tp, adata `seq` Array sh' adata)
@@ -599,7 +606,7 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
 
     ignore' = ignore shr'
     --
-    (adata, _)  = runArrayData $ do
+    (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp n'
 
       let -- initialise array with default values
