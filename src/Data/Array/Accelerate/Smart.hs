@@ -482,9 +482,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreSmartAcc acc exp) where
                               -> case idx of
                                    PairIdxLeft  -> t1
                                    PairIdxRight -> t2
-#if __GLASGOW_HASKELL__ < 806
     Aprj _ _                  -> error "Ejector seat? You're joking!"
-#endif
     Use repr _                -> TupRsingle repr
     Unit tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
     Generate repr _ _         -> TupRsingle repr
@@ -763,9 +761,7 @@ instance HasExpType exp => HasExpType (PreSmartExp acc exp) where
                                     -> case idx of
                                          PairIdxLeft  -> t1
                                          PairIdxRight -> t2
-#if __GLASGOW_HASKELL__ < 806
     Prj _ _                         -> error "I never joke about my work"
-#endif
     VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
     VecUnpack vecR _                -> vecRtuple vecR
     ToIndex _ _ _                   -> TupRsingle $ scalarTypeInt

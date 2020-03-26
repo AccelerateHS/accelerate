@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DoAndIfThenElse     #-}
@@ -41,7 +42,9 @@ import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Data.Functor
+#if __GLASGOW_HASKELL__ < 808
 import Data.Int                                                 ( Int64 )
+#endif
 import Data.Maybe                                               ( isNothing )
 import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )

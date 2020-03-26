@@ -128,6 +128,7 @@ module Data.Array.Accelerate.AST (
 import Control.DeepSeq
 import Control.Monad.ST
 import Data.List                                                    ( intercalate )
+import Data.Kind
 import Foreign.ForeignPtr
 import Foreign.Marshal
 import Foreign.Ptr
@@ -231,7 +232,7 @@ type ALeftHandSide = LeftHandSide ArrayR
 
 type ELeftHandSide = LeftHandSide ScalarType
 
-data LeftHandSide (s :: * -> *) v env env' where
+data LeftHandSide (s :: Type -> Type) v env env' where
   LeftHandSideSingle
     :: s v
     -> LeftHandSide s v env (env, v)

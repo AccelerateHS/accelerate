@@ -589,7 +589,7 @@ instance SyntacticAcc PreOpenAcc where
 type RebuildAvar f (fa :: (Type -> Type -> Type) -> Type -> Type -> Type) acc aenv aenv'
     = forall sh e. ArrayVar aenv (Array sh e) -> f (fa acc aenv' (Array sh e))
 
-type RebuildEvar f fe (acc :: * -> * -> *) env env' aenv' =
+type RebuildEvar f fe (acc :: Type -> Type -> Type) env env' aenv' =
   forall t'. ExpVar env t' -> f (fe acc env' aenv' t')
 
 {-# INLINEABLE shiftA #-}
