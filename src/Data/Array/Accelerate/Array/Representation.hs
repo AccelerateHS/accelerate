@@ -511,15 +511,13 @@ vecRtuple = snd . go
 
 vecPack :: forall n single tuple. KnownNat n => VecR n single tuple -> tuple -> Vec n single
 vecPack vecR tuple
-  | IsPrim <- getPrim single = runST $ do
+  | VectorType n single <- vecRvector vecR
+  , IsPrim <- getPrim single = runST $ do
     mba <- newByteArray (n * sizeOf (undefined :: single))
     go (n - 1) vecR tuple mba
     ByteArray ba# <- unsafeFreezeByteArray mba
     return $! Vec ba#
-
   where
-    VectorType n single = vecRvector vecR
-
     go :: Prim single => Int -> VecR n' single tuple' -> tuple' -> MutableByteArray s -> ST s ()
     go _ (VecRnil _)  ()      _   = return ()
     go i (VecRsucc r) (xs, x) mba = do
@@ -528,12 +526,11 @@ vecPack vecR tuple
 
 vecUnpack :: forall n single tuple. KnownNat n => VecR n single tuple -> Vec n single -> tuple
 vecUnpack vecR (Vec ba#)
-  | IsPrim <- getPrim single
+  | VectorType n single <- vecRvector vecR
+  , !(I# n#) <- n
+  , IsPrim <- getPrim single
   = go (n# -# 1#) vecR
   where
-    VectorType n single = vecRvector vecR
-    !(I# n#) = n
-
     go :: Prim single => Int# -> VecR n' single tuple' -> tuple'
     go _  (VecRnil _)  = ()
     go i# (VecRsucc r) = x `seq` xs `seq` (xs, x)

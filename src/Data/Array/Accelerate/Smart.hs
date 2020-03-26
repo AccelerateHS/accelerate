@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -477,9 +478,13 @@ instance HasArraysRepr acc => HasArraysRepr (PreSmartAcc acc exp) where
     Awhile _ _ _ a            -> arraysRepr a
     Anil                      -> TupRunit
     Apair a1 a2               -> arraysRepr a1 `TupRpair` arraysRepr a2
-    Aprj idx a                -> let TupRpair t1 t2 = arraysRepr a in case idx of
+    Aprj idx a | TupRpair t1 t2 <- arraysRepr a
+                              -> case idx of
                                    PairIdxLeft  -> t1
                                    PairIdxRight -> t2
+#if __GLASGOW_HASKELL__ < 806
+    Aprj _ _                  -> error "Ejector seat? You're joking!"
+#endif
     Use repr _                -> TupRsingle repr
     Unit tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
     Generate repr _ _         -> TupRsingle repr
@@ -754,9 +759,13 @@ instance HasExpType exp => HasExpType (PreSmartExp acc exp) where
     Const tp _                      -> TupRsingle tp
     Nil                             -> TupRunit
     Pair e1 e2                      -> expType e1 `TupRpair` expType e2
-    Prj idx e                       -> let TupRpair t1 t2 = expType e in case idx of
+    Prj idx e | TupRpair t1 t2 <- expType e
+                                    -> case idx of
                                          PairIdxLeft  -> t1
                                          PairIdxRight -> t2
+#if __GLASGOW_HASKELL__ < 806
+    Prj _ _                         -> error "I never joke about my work"
+#endif
     VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
     VecUnpack vecR _                -> vecRtuple vecR
     ToIndex _ _ _                   -> TupRsingle $ scalarTypeInt
