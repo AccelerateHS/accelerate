@@ -526,7 +526,7 @@ data PreOpenAcc acc aenv a where
   Scanl'      :: PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
               -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (((), Array (sh, Int) e), Array sh e)
+              -> PreOpenAcc acc aenv (Array (sh, Int) e, Array sh e)
 
   -- Haskell-style scan without an initial value
   --
@@ -546,7 +546,7 @@ data PreOpenAcc acc aenv a where
   Scanr'      :: PreFun     acc aenv (e -> e -> e)              -- combination function
               -> PreExp     acc aenv e                          -- initial value
               -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (((), Array (sh, Int) e), Array sh e)
+              -> PreOpenAcc acc aenv (Array (sh, Int) e, Array sh e)
 
   -- Right-to-left version of 'Scanl1'
   --
@@ -780,38 +780,38 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
   arraysRepr (Awhile _ _ _)                     = error "I want my, I want my MTV!"
   arraysRepr (Use repr _)                       = TupRsingle repr
   arraysRepr (Unit tp _)                        = arraysRarray ShapeRz tp
-  arraysRepr (Reshape sh _ a)                   = let TupRsingle (ArrayR _ tp) = arraysRepr a
+  arraysRepr (Reshape sh _ a)                   = let ArrayR _ tp = arrayRepr a
                                                   in  arraysRarray sh tp
   arraysRepr (Generate repr _ _)                = TupRsingle repr
   arraysRepr (Transform repr _ _ _ _)           = TupRsingle repr
-  arraysRepr (Replicate slice _ a)              = let TupRsingle (ArrayR _ tp) = arraysRepr a
+  arraysRepr (Replicate slice _ a)              = let ArrayR _ tp = arrayRepr a
                                                   in  arraysRarray (sliceDomainR slice) tp
-  arraysRepr (Slice slice a _)                  = let TupRsingle (ArrayR _ tp) = arraysRepr a
+  arraysRepr (Slice slice a _)                  = let ArrayR _ tp = arrayRepr a
                                                   in  arraysRarray (sliceShapeR slice) tp
-  arraysRepr (Map tp _ a)                       = let TupRsingle (ArrayR sh _) = arraysRepr a
+  arraysRepr (Map tp _ a)                       = let ArrayR sh _ = arrayRepr a
                                                   in  arraysRarray sh tp
-  arraysRepr (ZipWith tp _ a _)                 = let TupRsingle (ArrayR sh _) = arraysRepr a
+  arraysRepr (ZipWith tp _ a _)                 = let ArrayR sh _ = arrayRepr a
                                                   in  arraysRarray sh tp
-  arraysRepr (Fold _ _ a)                       = let TupRsingle (ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
+  arraysRepr (Fold _ _ a)                       = let ArrayR (ShapeRsnoc sh) tp = arrayRepr a
                                                   in  arraysRarray sh tp
-  arraysRepr (Fold1 _ a)                        = let TupRsingle (ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
+  arraysRepr (Fold1 _ a)                        = let ArrayR (ShapeRsnoc sh) tp = arrayRepr a
                                                   in  arraysRarray sh tp
   arraysRepr (FoldSeg _ _ _ a _)                = arraysRepr a
   arraysRepr (Fold1Seg _ _ a _)                 = arraysRepr a
   arraysRepr (Scanl _ _ a)                      = arraysRepr a
-  arraysRepr (Scanl' _ _ a)                       = let TupRsingle repr@(ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
-                                                  in  arraysRtuple2 repr $ ArrayR sh tp
+  arraysRepr (Scanl' _ _ a)                     = let repr@(ArrayR (ShapeRsnoc sh) tp) = arrayRepr a
+                                                  in  TupRsingle repr `TupRpair` TupRsingle (ArrayR sh tp)
   arraysRepr (Scanl1 _ a)                       = arraysRepr a
   arraysRepr (Scanr _ _ a)                      = arraysRepr a
-  arraysRepr (Scanr' _ _ a)                     = let TupRsingle repr@(ArrayR (ShapeRsnoc sh) tp) = arraysRepr a
-                                                  in  arraysRtuple2 repr $ ArrayR sh tp
+  arraysRepr (Scanr' _ _ a)                     = let repr@(ArrayR (ShapeRsnoc sh) tp) = arrayRepr a
+                                                  in  TupRsingle repr `TupRpair` TupRsingle (ArrayR sh tp)
   arraysRepr (Scanr1 _ a)                       = arraysRepr a
   arraysRepr (Permute _ a _ _)                  = arraysRepr a
-  arraysRepr (Backpermute sh _ _ a)             = let TupRsingle (ArrayR _ tp) = arraysRepr a
+  arraysRepr (Backpermute sh _ _ a)             = let ArrayR _ tp = arrayRepr a
                                                   in  arraysRarray sh tp
-  arraysRepr (Stencil _ tp _ _ a)               = let TupRsingle (ArrayR sh _) = arraysRepr a
+  arraysRepr (Stencil _ tp _ _ a)               = let ArrayR sh _ = arrayRepr a
                                                   in  arraysRarray sh tp
-  arraysRepr (Stencil2 _ _ tp _ _ a _ _)        = let TupRsingle (ArrayR sh _) = arraysRepr a
+  arraysRepr (Stencil2 _ _ tp _ _ a _ _)        = let ArrayR sh _ = arrayRepr a
                                                   in  arraysRarray sh tp
 
 instance HasArraysRepr OpenAcc where

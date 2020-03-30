@@ -62,7 +62,7 @@ module Data.Array.Accelerate.Smart (
   mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce,
 
   -- * Auxiliary functions
-  ($$), ($$$), ($$$$), ($$$$$), unAcc, unAccFunction, ApplyAcc(..), exp, unPair, HasExpType(..), HasArraysRepr(..),
+  ($$), ($$$), ($$$$), ($$$$$), unAcc, unAccFunction, ApplyAcc(..), exp, unPair, mkPairToTuple, HasExpType(..), HasArraysRepr(..),
   vecR2, vecR3, vecR4, vecR5, vecR6, vecR7, vecR8, vecR9, vecR16,
 
   -- Debugging
@@ -81,7 +81,7 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Array.Representation  hiding (DIM1)
 import Data.Array.Accelerate.AST                   hiding ( PreOpenAcc(..), OpenAcc(..), Acc
                                                           , PreOpenExp(..), OpenExp, PreExp, Exp
-                                                          , PreBoundary(..), Boundary, HasArraysRepr(..), expType
+                                                          , PreBoundary(..), Boundary, HasArraysRepr(..), arrayRepr, expType
                                                           , showPreAccOp, showPreExpOp )
 import GHC.TypeNats
 
@@ -402,7 +402,7 @@ data PreSmartAcc acc exp as where
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> exp e
                 -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (((), Array (sh, Int) e), Array sh e)
+                -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
 
   Scanl1        :: TupleType e
                 -> (SmartExp e -> SmartExp e -> exp e)
@@ -419,7 +419,7 @@ data PreSmartAcc acc exp as where
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> exp e
                 -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (((), Array (sh, Int) e), Array sh e)
+                -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
 
   Scanr1        :: TupleType e
                 -> (SmartExp e -> SmartExp e -> exp e)
@@ -468,6 +468,10 @@ data PairIdx p a where
 class HasArraysRepr f where
   arraysRepr :: f a -> ArraysR a
 
+arrayRepr :: HasArraysRepr f => f (Array sh e) -> ArrayR (Array sh e)
+arrayRepr acc = case arraysRepr acc of
+  TupRsingle repr -> repr
+
 instance HasArraysRepr acc => HasArraysRepr (PreSmartAcc acc exp) where
   arraysRepr acc = case acc of
     Atag repr _               -> repr
@@ -486,37 +490,35 @@ instance HasArraysRepr acc => HasArraysRepr (PreSmartAcc acc exp) where
     Use repr _                -> TupRsingle repr
     Unit tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
     Generate repr _ _         -> TupRsingle repr
-    Reshape shr _ a           -> let TupRsingle (ArrayR _ tp) = arraysRepr a
+    Reshape shr _ a           -> let ArrayR _ tp = arrayRepr a
                                  in  TupRsingle $ ArrayR shr tp
-    Replicate si _ a          -> let TupRsingle (ArrayR _ tp) = arraysRepr a
+    Replicate si _ a          -> let ArrayR _ tp = arrayRepr a
                                  in  TupRsingle $ ArrayR (sliceDomainR si) tp
-    Slice si a _              -> let TupRsingle (ArrayR _ tp) = arraysRepr a
+    Slice si a _              -> let ArrayR _ tp = arrayRepr a
                                  in  TupRsingle $ ArrayR (sliceShapeR si) tp
-    Map _ tp _ a              -> let TupRsingle (ArrayR shr _) = arraysRepr a
+    Map _ tp _ a              -> let ArrayR shr _ = arrayRepr a
                                  in  TupRsingle $ ArrayR shr tp
-    ZipWith _ _ tp _ a _      -> let TupRsingle (ArrayR shr _) = arraysRepr a
+    ZipWith _ _ tp _ a _      -> let ArrayR shr _ = arrayRepr a
                                  in  TupRsingle $ ArrayR shr tp
-    Fold _ _ _ a              -> let TupRsingle (ArrayR (ShapeRsnoc shr) tp) = arraysRepr a
+    Fold _ _ _ a              -> let ArrayR (ShapeRsnoc shr) tp = arrayRepr a
                                  in  TupRsingle (ArrayR shr tp)
-    Fold1 _ _ a               -> let TupRsingle (ArrayR (ShapeRsnoc shr) tp) = arraysRepr a
+    Fold1 _ _ a               -> let ArrayR (ShapeRsnoc shr) tp = arrayRepr a
                                  in  TupRsingle (ArrayR shr tp)
     FoldSeg _ _ _ _ a _       -> arraysRepr a
     Fold1Seg _ _ _ a _        -> arraysRepr a
     Scanl _ _ _ a             -> arraysRepr a
-    Scanl' _ _ _ a            -> let r@(TupRsingle (ArrayR (ShapeRsnoc shr) tp)) = arraysRepr a
-                                 in  r `pair` TupRsingle (ArrayR shr tp)
+    Scanl' _ _ _ a            -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayRepr a
+                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
     Scanl1 _ _ a              -> arraysRepr a
     Scanr _ _ _ a             -> arraysRepr a
-    Scanr' _ _ _ a            -> let r@(TupRsingle (ArrayR (ShapeRsnoc shr) tp)) = arraysRepr a
-                                 in  r `pair` TupRsingle (ArrayR shr tp)
+    Scanr' _ _ _ a            -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayRepr a
+                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
     Scanr1 _ _ a              -> arraysRepr a
     Permute _ _ a _ _         -> arraysRepr a
-    Backpermute shr _ _ a     -> let TupRsingle (ArrayR _ tp) = arraysRepr a
+    Backpermute shr _ _ a     -> let ArrayR _ tp = arrayRepr a
                                  in  TupRsingle (ArrayR shr tp)
     Stencil s tp _ _ _        -> TupRsingle $ ArrayR (stencilShape s) tp
     Stencil2 s _ tp _ _ _ _ _ -> TupRsingle $ ArrayR (stencilShape s) tp
-    where
-      pair a b = TupRpair TupRunit a `TupRpair` b
 
 instance HasArraysRepr SmartAcc where
   arraysRepr (SmartAcc e) = arraysRepr e
@@ -1892,6 +1894,13 @@ mkPrimBinary prim (Exp a) (Exp b) = exp $ PrimApp prim (SmartExp $ Pair a b)
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)
+
+mkPairToTuple :: SmartAcc (a, b) -> SmartAcc (((), a), b)
+mkPairToTuple e = SmartAcc Anil `pair` a `pair` b
+  where
+    a = SmartAcc $ Aprj PairIdxLeft e
+    b = SmartAcc $ Aprj PairIdxRight e
+    pair x y = SmartAcc $ Apair x y
 
 class ApplyAcc a where
   type FromApplyAcc a

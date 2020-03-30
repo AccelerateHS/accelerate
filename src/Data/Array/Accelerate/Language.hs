@@ -645,7 +645,7 @@ scanl' :: forall sh a.
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanl' = Acc $$$ applyAcc (Scanl' $ eltType @a)
+scanl' = Acc . mkPairToTuple $$$ applyAcc (Scanl' $ eltType @a)
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
 -- initial value (aka inclusive scan). The innermost dimension of the array must
@@ -684,7 +684,7 @@ scanr' :: forall sh a.
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanr' = Acc $$$ applyAcc (Scanr' $ eltType @a)
+scanr' = Acc . mkPairToTuple $$$ applyAcc (Scanr' $ eltType @a)
 
 -- | Right-to-left variant of 'scanl1'.
 --

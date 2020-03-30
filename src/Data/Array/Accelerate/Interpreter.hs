@@ -485,11 +485,10 @@ scanl'Op
        (e -> e -> e)
     -> e
     -> Delayed (Array (sh, Int) e)
-    -> WithReprs (((), Array (sh, Int) e), Array sh e)
+    -> WithReprs (Array (sh, Int) e, Array sh e)
 scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
-  = ( TupRunit `TupRpair` TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
-    , aout `seq` asum `seq` ( ( (), Array (sh, n) aout )
-                            , Array sh asum )
+  = ( TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
+    , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
     )
   where
     ((aout, asum), _) = runArrayData @(e, e) $ do
@@ -565,11 +564,10 @@ scanr'Op
        (e -> e -> e)
     -> e
     -> Delayed (Array (sh, Int) e)
-    -> WithReprs (((), Array (sh, Int) e), Array sh e)
+    -> WithReprs (Array (sh, Int) e, Array sh e)
 scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
-  = ( TupRunit `TupRpair` TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
-    , aout `seq` asum `seq` ( ((), Array (sh, n) aout )
-                            , Array sh asum )
+  = ( TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
+    , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
     )
   where
     ((aout, asum), _) = runArrayData @(e, e) $ do

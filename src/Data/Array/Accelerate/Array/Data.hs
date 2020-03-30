@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes    #-}
 {-# LANGUAGE BangPatterns           #-}
+{-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE CPP                    #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
@@ -41,7 +42,7 @@ module Data.Array.Accelerate.Array.Data (
   registerForeignPtrAllocator,
 
   -- * Utilities for type classes
-  ScalarDict(..), scalarDict, singleDict
+  ScalarDict(..), scalarDict, singleDict, IsScalarData
 
 ) where
 
@@ -152,7 +153,9 @@ type family ScalarDataRepr tp where
 
 -- Utilities for working with the type families & type class instances
 data ScalarDict e where
-  ScalarDict :: (Storable (ScalarDataRepr e), Prim (ScalarDataRepr e), ArrayData e ~ ScalarData e) => ScalarDict e
+  ScalarDict :: IsScalarData e => ScalarDict e
+
+type IsScalarData e = (Storable (ScalarDataRepr e), Prim (ScalarDataRepr e), ArrayData e ~ ScalarData e)
 
 {-# INLINE scalarDict #-}
 scalarDict :: ScalarType e -> (Int, ScalarDict e)
