@@ -23,7 +23,6 @@ module Data.Array.Accelerate.Analysis.Shape (
 ) where
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation
 
 -- |Reify the dimensionality of the result type of an array computation

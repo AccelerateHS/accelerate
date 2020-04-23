@@ -49,7 +49,7 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalUndef, evalCoerceScalar,
+  evalPrim, evalPrimConst, evalUndef, evalUndefScalar, evalCoerceScalar,
 
 ) where
 
@@ -937,7 +937,9 @@ evalPreOpenExp evalAcc pexp env aenv =
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
     Nil                         -> ()
-    Pair e1 e2                  -> (evalE e1, evalE e2)
+    Pair e1 e2                  -> let !x1 = evalE e1
+                                       !x2 = evalE e2
+                                   in  (x1, x2)
     VecPack   vecR e            -> vecPack   vecR $! evalE e
     VecUnpack vecR e            -> vecUnpack vecR $! evalE e
     IndexSlice slice slix sh    -> restrict slice (evalE slix)

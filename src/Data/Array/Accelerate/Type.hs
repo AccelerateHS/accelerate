@@ -439,26 +439,26 @@ vecToArray (Vec ba#) = go 0#
 instance Eq (Vec n a) where
   Vec ba1# == Vec ba2# = ByteArray ba1# == ByteArray ba2#
 
-data IsPrim a where
-  IsPrim :: Prim a => IsPrim a
+data PrimDict a where
+  PrimDict :: Prim a => PrimDict a
 
-getPrim :: SingleType a -> IsPrim a
+getPrim :: SingleType a -> PrimDict a
 getPrim (NumSingleType (IntegralNumType tp)) = case tp of
-  TypeInt     -> IsPrim
-  TypeInt8    -> IsPrim
-  TypeInt16   -> IsPrim
-  TypeInt32   -> IsPrim
-  TypeInt64   -> IsPrim
-  TypeWord    -> IsPrim
-  TypeWord8   -> IsPrim
-  TypeWord16  -> IsPrim
-  TypeWord32  -> IsPrim
-  TypeWord64  -> IsPrim
+  TypeInt     -> PrimDict
+  TypeInt8    -> PrimDict
+  TypeInt16   -> PrimDict
+  TypeInt32   -> PrimDict
+  TypeInt64   -> PrimDict
+  TypeWord    -> PrimDict
+  TypeWord8   -> PrimDict
+  TypeWord16  -> PrimDict
+  TypeWord32  -> PrimDict
+  TypeWord64  -> PrimDict
 getPrim (NumSingleType (FloatingNumType tp)) = case tp of
-  TypeHalf    -> IsPrim
-  TypeFloat   -> IsPrim
-  TypeDouble  -> IsPrim
-getPrim (NonNumSingleType TypeChar) = IsPrim
+  TypeHalf    -> PrimDict
+  TypeFloat   -> PrimDict
+  TypeDouble  -> PrimDict
+getPrim (NonNumSingleType TypeChar) = PrimDict
 getPrim (NonNumSingleType TypeBool) = error "prim: We don't support vector of bools yet"
 
 

@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE EmptyCase             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -83,7 +84,7 @@
 module Data.Array.Accelerate.AST (
 
   -- * Typed de Bruijn indices
-  Idx(..), idxToInt, Var(..), Vars(..), ArrayVar, ArrayVars, ExpVar, ExpVars,
+  Idx(..), idxToInt, Var(..), Vars(..), TupR(..), ArrayVar, ArrayVars, ExpVar, ExpVars,
   evars, varsType, LeftHandSide(..), ALeftHandSide, ELeftHandSide,
 
   -- * Valuation environment
@@ -92,7 +93,7 @@ module Data.Array.Accelerate.AST (
   -- * Accelerated array expressions
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   PreBoundary(..), Boundary, StencilR(..),
-  HasArraysRepr(..), arrayRepr, lhsToTupR,
+  HasArraysRepr(..), arrayRepr, lhsToTupR, PairIdx(..),
   ArrayR(..), ArraysR, ShapeR(..), SliceIndex(..), VecR(..), vecRvector, vecRtuple,
 
   -- * Accelerated sequences
@@ -113,10 +114,11 @@ module Data.Array.Accelerate.AST (
   liftIdx,
   liftConst, liftSliceIndex, liftPrimConst, liftPrimFun,
   liftPreOpenAfun, liftPreOpenAcc, liftPreOpenFun, liftPreOpenExp,
-  liftALhs, liftELhs, liftArray, liftArraysR, liftTupleType,
+  liftALhs, liftELhs, liftArray, liftArraysR, liftTupleType, liftArrayR,
+  liftScalarType, liftShapeR, liftVecR, liftIntegralType,
 
   -- Utilities
-  Exists(..), weakenWithLHS, (:>), weakenId, weakenSucc, weakenSucc', (.>), (>:>),
+  Exists(..), weakenWithLHS, (:>), weakenId, weakenSucc, weakenSucc', weakenEmpty, (.>), (>:>),
   sink, sinkWithLHS,
 
   -- debugging
@@ -269,6 +271,9 @@ weakenSucc' (Weaken f) = Weaken (SuccIdx . f)
 
 weakenSucc :: (env, t) :> env' -> env :> env'
 weakenSucc (Weaken f) = Weaken (f . SuccIdx)
+
+weakenEmpty :: () :> env'
+weakenEmpty = Weaken (\x -> case x of {})
 
 sink :: forall env env' t. env :> env' -> (env, t) :> (env', t)
 sink (Weaken f) = Weaken g
@@ -758,6 +763,9 @@ data PreBoundary acc aenv t where
   Function  :: PreFun acc aenv (sh -> e)
             -> PreBoundary acc aenv (Array sh e)
 
+data PairIdx p a where
+  PairIdxLeft  :: PairIdx (a, b) a
+  PairIdxRight :: PairIdx (a, b) b
 
 class HasArraysRepr f where
   arraysRepr :: f aenv a -> ArraysR a
@@ -990,7 +998,7 @@ expType expr = case expr of
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While _ _ _                  -> error "What's the matter, you're running in the shadows"
   Const tp _                   -> TupRsingle tp
-  PrimConst c                  -> primConstType c
+  PrimConst c                  -> TupRsingle $ SingleScalarType $ primConstType c
   PrimApp f _                  -> snd $ primFunType f
   Index a _                    -> arrayRtype $ arrayRepr a
   LinearIndex a _              -> arrayRtype $ arrayRepr a
@@ -1089,6 +1097,12 @@ data PrimFun sig where
   PrimMin  :: SingleType a -> PrimFun ((a, a) -> a   )
 
   -- logical operators
+  -- Note that these operators are strict in both arguments,
+  -- eg the second argument of PrimLAnd is always evaluated
+  -- even when the first argument is false. We thus define
+  -- (&&) and (||) using if-then-else to enable short-circuiting.
+  -- (&&!) and (||!) are strict versions of these operators,
+  -- which are defined using PrimLAnd and PrimLOr.
   PrimLAnd :: PrimFun ((Bool, Bool) -> Bool)
   PrimLOr  :: PrimFun ((Bool, Bool) -> Bool)
   PrimLNot :: PrimFun (Bool         -> Bool)
@@ -1104,18 +1118,18 @@ data PrimFun sig where
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
   PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
 
-primConstType :: PrimConst a -> TupleType a
+primConstType :: PrimConst a -> SingleType a
 primConstType prim = case prim of
   PrimMinBound t -> boundedTp t
   PrimMaxBound t -> boundedTp t
   PrimPi       t -> floatingTp t
   where
-    boundedTp :: BoundedType a -> TupleType a
-    boundedTp (IntegralBoundedType t) = TupRsingle $ SingleScalarType $ NumSingleType $ IntegralNumType t
-    boundedTp (NonNumBoundedType t)   = TupRsingle $ SingleScalarType $ NonNumSingleType t
+    boundedTp :: BoundedType a -> SingleType a
+    boundedTp (IntegralBoundedType t) = NumSingleType $ IntegralNumType t
+    boundedTp (NonNumBoundedType t)   = NonNumSingleType t
 
-    floatingTp :: FloatingType t -> TupleType t
-    floatingTp = TupRsingle . SingleScalarType . NumSingleType . FloatingNumType
+    floatingTp :: FloatingType t -> SingleType t
+    floatingTp = NumSingleType . FloatingNumType
 
 primFunType :: PrimFun (a -> b) -> (TupleType a, TupleType b)
 primFunType prim = case prim of

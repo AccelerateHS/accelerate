@@ -49,7 +49,6 @@ import Control.Monad
 import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Analysis.Match
 import qualified Data.Array.Accelerate.Debug.Stats      as Stats

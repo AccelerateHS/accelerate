@@ -512,7 +512,7 @@ vecRtuple = snd . go
 vecPack :: forall n single tuple. KnownNat n => VecR n single tuple -> tuple -> Vec n single
 vecPack vecR tuple
   | VectorType n single <- vecRvector vecR
-  , IsPrim <- getPrim single = runST $ do
+  , PrimDict <- getPrim single = runST $ do
     mba <- newByteArray (n * sizeOf (undefined :: single))
     go (n - 1) vecR tuple mba
     ByteArray ba# <- unsafeFreezeByteArray mba
@@ -528,7 +528,7 @@ vecUnpack :: forall n single tuple. KnownNat n => VecR n single tuple -> Vec n s
 vecUnpack vecR (Vec ba#)
   | VectorType n single <- vecRvector vecR
   , !(I# n#) <- n
-  , IsPrim <- getPrim single
+  , PrimDict <- getPrim single
   = go (n# -# 1#) vecR
   where
     go :: Prim single => Int# -> VecR n' single tuple' -> tuple'
@@ -586,7 +586,7 @@ showElement tuple value = showElement' tuple value ""
 
     showVector :: VectorType (Vec n a) -> Vec n a -> String
     showVector (VectorType _ single) vec
-      | IsPrim <- getPrim single = "<" ++ (intercalate ", " $ showSingle single <$> vecToArray vec) ++ ">"
+      | PrimDict <- getPrim single = "<" ++ (intercalate ", " $ showSingle single <$> vecToArray vec) ++ ">"
 
 showArray :: ArrayR (Array sh e) -> Array sh e -> String
 showArray repr@(ArrayR _ tp) = showArray' (showString . showElement tp) repr

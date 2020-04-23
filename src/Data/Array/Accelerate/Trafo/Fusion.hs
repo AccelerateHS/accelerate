@@ -1221,7 +1221,7 @@ combineLhs = go weakenId weakenId
     go k1 k2 (LeftHandSideWildcard _)  lhs                      
       | Exists lhs' <- rebuildLHS lhs                           = CombinedLHS lhs'        (weakenWithLHS lhs' .> k1) (sinkWithLHS lhs lhs' k2)
     go k1 k2 lhs                       (LeftHandSideWildcard _)
-      | Exists lhs' <- rebuildLHS lhs                           = CombinedLHS lhs'         (sinkWithLHS lhs lhs' k1) (weakenWithLHS lhs' .> k2)
+      | Exists lhs' <- rebuildLHS lhs                           = CombinedLHS lhs'        (sinkWithLHS lhs lhs' k1)  (weakenWithLHS lhs' .> k2)
 
 data CombinedLHS s t env1' env2' env where
   CombinedLHS :: LeftHandSide s t env env' -> env1' :> env' -> env2' :> env' -> CombinedLHS s t env1' env2' env

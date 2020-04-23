@@ -20,8 +20,8 @@ module Data.Array.Accelerate.Classes.Eq (
 
   Bool(..), pattern True_, pattern False_,
   Eq(..),
-  (&&),
-  (||),
+  (&&), (&&!),
+  (||), (||!),
   not,
 
 ) where
@@ -53,7 +53,14 @@ infix 4 /=
 --
 infixr 3 &&
 (&&) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&) = mkLAnd
+(&&) x y = cond x y $ constant False
+
+-- | Conjunction: True if both arguments are true. This is a strict version of
+-- '(&&)': it will always evaluate both arguments, even when the first is false.
+--
+infixr 3 &&!
+(&&!) :: Exp Bool -> Exp Bool -> Exp Bool
+(&&!) = mkLAnd
 
 -- | Disjunction: True if either argument is true. This is a short-circuit
 -- operator, so the second argument will be evaluated only if the first is
@@ -61,7 +68,14 @@ infixr 3 &&
 --
 infixr 2 ||
 (||) :: Exp Bool -> Exp Bool -> Exp Bool
-(||) = mkLOr
+(||) x y = cond x (constant True) y
+
+-- | Disjunction: True if either argument is true. This is a strict version of
+-- '(||)': it will always evaluate both arguments, even when the first is true.
+--
+infixr 2 ||!
+(||!) :: Exp Bool -> Exp Bool -> Exp Bool
+(||!) = mkLOr
 
 -- | Logical negation
 --
@@ -104,6 +118,13 @@ instance P.Eq (Exp a) where
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
+
+cond :: Elt t
+     => Exp Bool                -- ^ condition
+     -> Exp t                   -- ^ then-expression
+     -> Exp t                   -- ^ else-expression
+     -> Exp t
+cond (Exp c) (Exp x) (Exp y) = exp $ Cond c x y
 
 -- To support 16-tuples, we must set the maximum recursion depth of the type
 -- checker higher. The default is 51, which appears to be a problem for

@@ -460,11 +460,6 @@ data PreSmartAcc acc exp as where
   --               => seq arrs
   --               -> PreSmartAcc acc seq exp arrs
 
-data PairIdx p a where
-  PairIdxLeft  :: PairIdx (a, b) a
-  PairIdxRight :: PairIdx (a, b) b
-
-
 class HasArraysRepr f where
   arraysRepr :: f a -> ArraysR a
 
@@ -770,7 +765,7 @@ instance HasExpType exp => HasExpType (PreSmartExp acc exp) where
     FromIndex shr _ _               -> shapeType shr
     Cond _ e _                      -> expType e
     While t _ _ _                   -> t
-    PrimConst c                     -> primConstType c
+    PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
     PrimApp f _                     -> snd $ primFunType f
     Index tp _ _                    -> tp
     LinearIndex tp _ _              -> tp
@@ -947,75 +942,6 @@ instance (Stencil (sh:.Int) a row8,
 -- Auxiliary tuple index constants
 --
 
-{-
-prjTail :: SmartExp (t, a) -> SmartExp t
-prjTail = SmartExp . Prj PairIdxLeft
-
-prj0 :: ( Elt a)
-      => SmartExp (t, EltRepr a) -> Exp a
-prj0 = exp . Prj PairIdxRight
-
-prj1 :: ( Elt a)
-      => SmartExp ((t, EltRepr a), s0) -> Exp a
-prj1 = prj0 . prjTail
-
-prj2 :: ( Elt a)
-      => SmartExp (((t, EltRepr a), s1), s0) -> Exp a
-prj2 = prj1 . prjTail
-
-prj3 :: ( Elt a)
-      => SmartExp ((((t, EltRepr a), s2), s1), s0) -> Exp a
-prj3 = prj2 . prjTail
-
-prj4 :: ( Elt a)
-      => SmartExp (((((t, EltRepr a), s3), s2), s1), s0) -> Exp a
-prj4 = prj3 . prjTail
-
-prj5 :: ( Elt a)
-      => SmartExp ((((((t, EltRepr a), s4), s3), s2), s1), s0) -> Exp a
-prj5 = prj4 . prjTail
-
-prj6 :: ( Elt a)
-      => SmartExp (((((((t, EltRepr a), s5), s4), s3), s2), s1), s0) -> Exp a
-prj6 = prj5 . prjTail
-
-prj7 :: ( Elt a)
-      => SmartExp ((((((((t, EltRepr a), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj7 = prj6 . prjTail
-
-prj8 :: ( Elt a)
-      => SmartExp (((((((((t, EltRepr a), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj8 = prj7 . prjTail
-
-prj9 :: ( Elt a)
-      => SmartExp ((((((((((t, EltRepr a), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj9 = prj8 . prjTail
-
-prj10 :: ( Elt a)
-       => SmartExp (((((((((((t, EltRepr a), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj10 = prj9 . prjTail
-
-prj11 :: ( Elt a)
-       => SmartExp ((((((((((((t, EltRepr a), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj11 = prj10 . prjTail
-
-prj12 :: ( Elt a)
-       => SmartExp (((((((((((((t, EltRepr a), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj12 = prj11 . prjTail
-
-prj13 :: ( Elt a)
-       => SmartExp ((((((((((((((t, EltRepr a), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj13 = prj12 . prjTail
-
-prj14 :: ( Elt a)
-       => SmartExp (((((((((((((((t, EltRepr a), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj14 = prj13 . prjTail
-
-prj15 :: ( Elt a)
-       => SmartExp ((((((((((((((((t, EltRepr a), s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> Exp a
-prj15 = prj14 . prjTail
--}
-
 prjTail :: SmartExp (t, a) -> SmartExp t
 prjTail = SmartExp . Prj PairIdxLeft
 
@@ -1066,8 +992,6 @@ prj14 = prj13 . prjTail
 
 prj15 :: SmartExp ((((((((((((((((t, a), s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) -> SmartExp a
 prj15 = prj14 . prjTail
-
-
 
 -- Smart constructor for literals
 --
