@@ -74,7 +74,6 @@ import GHC.TypeLits
 import qualified GHC.Exts                                       as GHC
 
 -- friends
-import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Orphans                            ()
 import Data.Array.Accelerate.Type
@@ -887,13 +886,12 @@ fromFunctionM sh f = Array <$> Repr.fromFunctionM (arrayR @sh @e) (fromElt sh) f
 concatVectors :: forall e. Elt e => [Vector e] -> Vector e
 concatVectors = toArr . Repr.concatVectors (eltType @e) . map fromArr
 
+
 -- | Creates a new, uninitialized Accelerate array.
 --
 {-# INLINEABLE allocateArray #-}
 allocateArray :: forall sh e. (Shape sh, Elt e) => sh -> IO (Array sh e)
-allocateArray sh = do
-  adata  <- newArrayData (eltType @e) (size sh)
-  return $! Array $ Repr.Array (fromElt sh) adata
+allocateArray sh = Array <$> Repr.allocateArray (arrayR @sh @e) (fromElt sh)
 
 
 -- | Convert elements of a list into an Accelerate 'Array'.

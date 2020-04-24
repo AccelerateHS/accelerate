@@ -27,11 +27,11 @@ module Data.Array.Accelerate.Array.Representation (
   -- * Array data type in terms of representation types
   Array(..), ArrayR(..), arraysRarray, arraysRtuple2, arrayRshape, arrayRtype, rnfArray, rnfShape,
   ArraysR, TupleType, Scalar, Vector, Matrix, fromList, toList, Segments, shape, reshape, concatVectors,
-  showArrayR, showArraysR, fromFunction, fromFunctionM,
+  showArrayR, showArraysR, fromFunction, fromFunctionM, reduceRank, allocateArray,
 
   -- * Array shapes, indices, and slices
   ShapeR(..), Slice(..), SliceIndex(..),
-  DIM0, DIM1, DIM2, (!), (!!),
+  DIM0, DIM1, DIM2, dim0, dim1, dim2, (!), (!!),
 
   -- * Shape functions
   rank, size, empty, ignore, intersect, union, toIndex, fromIndex, iter, iter1,
@@ -123,7 +123,6 @@ fromFunctionM (ArrayR shr tp) sh f = do
 concatVectors :: forall e. TupleType e -> [Vector e] -> Vector e
 concatVectors tp vs = adata `seq` Array ((), len) adata
   where
-    dim1        = ShapeRsnoc ShapeRz
     offsets     = scanl (+) 0 (map (size dim1 . shape) vs)
     len         = last offsets
     (adata, _)  = runArrayData @e $ do
@@ -132,6 +131,14 @@ concatVectors tp vs = adata `seq` Array ((), len) adata
                         | (Array ((), n) ad, k) <- vs `zip` offsets
                         , i <- [0 .. n - 1] ]
               return (arr, undefined)
+
+-- | Creates a new, uninitialized Accelerate array.
+--
+{-# INLINEABLE allocateArray #-}
+allocateArray :: ArrayR (Array sh e) -> sh -> IO (Array sh e)
+allocateArray (ArrayR shr tp) sh = do
+  adata  <- newArrayData tp (size shr sh)
+  return $! Array sh adata
 
 {-# INLINEABLE fromList #-}
 fromList :: forall sh e. ArrayR (Array sh e) -> sh -> [e] -> Array sh e
@@ -205,6 +212,15 @@ type Segments = Vector
 type DIM0 = ()
 type DIM1 = ((), Int)
 type DIM2 = (((), Int), Int)
+
+dim0 :: ShapeR DIM0
+dim0 = ShapeRz
+
+dim1 :: ShapeR DIM1
+dim1 = ShapeRsnoc dim0
+
+dim2 :: ShapeR DIM2
+dim2 = ShapeRsnoc dim1
 
 -- |Index representations (which are nested pairs)
 --
@@ -635,3 +651,7 @@ showMatrix f tp arr@(Array sh _)
               | otherwise                  = ',' : ppMat r (c+1)
         in
         before ++ cell ++ after
+
+
+reduceRank :: ArrayR (Array (sh, Int) e) -> ArrayR (Array sh e)
+reduceRank (ArrayR (ShapeRsnoc shr) tp) = ArrayR shr tp
