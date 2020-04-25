@@ -111,21 +111,23 @@ $(runQ $ do
                   destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
             |]
 
-        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern _   _   _     _   _   _    1 = return []
-        mkIsPattern con cst smart prj nil pair n = do
+        mkIsPattern :: Name -> TypeQ -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
+        mkIsPattern con cst repr smart prj nil pair n = do
           let
               xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
               ts      = map varT xs
               a       = tupT ts
               b       = tupT (map (conT con `appT`) ts)
               context = tupT (map (cst `appT`) ts)
+              equiv   = case n of
+                          1 -> [t| ((), $repr $a) |]
+                          _ -> [t| $repr $a       |]
               --
               get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
               get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
           --
           _x <- newName "_x"
-          [d| instance $context => IsPattern $(conT con) $a $b where
+          [d| instance ($repr a ~ $equiv, $context) => IsPattern $(conT con) a $b where
                 construct $(tupP (map (conP con . return . varP) xs)) =
                   $(conE con) $(foldl (\vs v -> appE smart (appE (appE pair vs) (varE v))) (appE smart nil) xs)
                 destruct $(conP con [varP _x]) =
@@ -133,7 +135,7 @@ $(runQ $ do
             |]
 
         mkExpPattern = mkIsPattern' (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
-        mkAccPattern = mkIsPattern  (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
+        mkAccPattern = mkIsPattern  (mkName "Acc") [t| Arrays |] [t| ArrRepr |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
     es <- mapM mkExpPattern [0..16]
     as <- mapM mkAccPattern [0..16]
