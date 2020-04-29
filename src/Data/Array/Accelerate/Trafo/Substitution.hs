@@ -141,7 +141,7 @@ inlineVars lhsBound expr bound
         | Exists lhs' <- rebuildLHS lhs
                           -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) e2
       Evar (Var t ix)     -> Evar . Var t <$> k1 ix
-      Foreign asm f e1    -> Foreign asm f <$> travE e1
+      Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
       Pair e1 e2          -> Pair <$> travE e1 <*> travE e2
       Nil                 -> Just Nil
       VecPack   vec e1    -> VecPack   vec <$> travE e1
@@ -541,7 +541,7 @@ rebuildPreOpenExp k v av exp =
     LinearIndex a i     -> LinearIndex   <$> k av a                      <*> rebuildPreOpenExp k v av i
     Shape a             -> Shape         <$> k av a
     ShapeSize shr sh    -> ShapeSize shr <$> rebuildPreOpenExp k v av sh
-    Foreign ff f e      -> Foreign ff f  <$> rebuildPreOpenExp k v av e
+    Foreign tp ff f e   -> Foreign tp ff f <$> rebuildPreOpenExp k v av e
     Coerce t1 t2 e      -> Coerce t1 t2  <$> rebuildPreOpenExp k v av e
 
 {-# INLINEABLE rebuildFun #-}
@@ -661,7 +661,7 @@ rebuildPreOpenAcc k av acc =
     Stencil sr tp f b a     -> Stencil sr tp <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b  <*> k av a
     Stencil2 s1 s2 tp f b1 a1 b2 a2 -> Stencil2 s1 s2 tp <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b1 <*> k av a1 <*> rebuildBoundary k av b2 <*> k av a2
     -- Collect seq             -> Collect      <$> rebuildSeq k av seq
-    Aforeign ff afun as     -> Aforeign ff afun <$> k av as
+    Aforeign repr ff afun as -> Aforeign repr ff afun <$> k av as
 
 {-# INLINEABLE rebuildAfun #-}
 rebuildAfun

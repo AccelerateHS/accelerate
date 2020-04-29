@@ -169,7 +169,7 @@ encodePreOpenAcc options encodeAcc pacc =
     Apair a1 a2                  -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
     Anil                         -> intHost $(hashQ "Anil")
     Apply _ f a                  -> intHost $(hashQ "Apply")       <> travAF f <> travA a
-    Aforeign _ f a               -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
+    Aforeign _ _ f a             -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
     Use repr a                   -> intHost $(hashQ "Use")         <> encodeArrayType repr <> deep (encodeArray a)
     Awhile p f a                 -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
     Unit _ e                     -> intHost $(hashQ "Unit")        <> travE e
@@ -354,7 +354,7 @@ encodePreOpenExp options encodeAcc exp =
     LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> travA a  <> travE ix
     Shape a                     -> intHost $(hashQ "Shape")       <> travA a
     ShapeSize _ sh              -> intHost $(hashQ "ShapeSize")   <> travE sh
-    Foreign _ f e               -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
+    Foreign _ _ f e             -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
     Coerce _ tp e               -> intHost $(hashQ "Coerce")      <> encodeScalarType tp <> travE e
 
 

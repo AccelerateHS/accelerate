@@ -63,7 +63,7 @@ module Data.Array.Accelerate.Smart (
 
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$), unAcc, unAccFunction, ApplyAcc(..), exp, unPair, mkPairToTuple, HasExpType(..), HasArraysRepr(..),
-  vecR2, vecR3, vecR4, vecR5, vecR6, vecR7, vecR8, vecR9, vecR16,
+  vecR2, vecR3, vecR4, vecR5, vecR6, vecR7, vecR8, vecR9, vecR16, unExpFunction,
 
   -- Debugging
   showPreAccOp, showPreExpOp,
@@ -297,11 +297,12 @@ data PreSmartAcc acc exp as where
                 -> acc as
                 -> PreSmartAcc acc exp cs
 
-  Aforeign      :: (Arrays as, Arrays bs, Foreign asm)
-                => asm (as -> bs)
-                -> (Acc as -> Acc bs)
-                -> acc (ArrRepr as)
-                -> PreSmartAcc acc exp (ArrRepr bs)
+  Aforeign      :: Foreign asm
+                => ArraysR bs
+                -> asm (as -> bs)
+                -> (SmartAcc as -> SmartAcc bs)
+                -> acc as
+                -> PreSmartAcc acc exp bs
 
   Acond         :: exp Bool
                 -> acc as
@@ -471,8 +472,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreSmartAcc acc exp) where
   arraysRepr acc = case acc of
     Atag repr _               -> repr
     Pipe _ _ repr  _ _ _      -> repr
-    Aforeign (_ :: asm (as -> bs)) _ _
-                              -> Sugar.arrays @bs
+    Aforeign repr _ _ _       -> repr
     Acond _ a _               -> arraysRepr a
     Awhile _ _ _ a            -> arraysRepr a
     Anil                      -> TupRunit
@@ -730,11 +730,12 @@ data PreSmartExp acc exp t where
                 -> exp sh
                 -> PreSmartExp acc exp Int
 
-  Foreign       :: (Elt x, Elt y, Foreign asm)
-                => asm (x -> y)
-                -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
-                -> exp (EltRepr x)
-                -> PreSmartExp acc exp (EltRepr y)
+  Foreign       :: Foreign asm
+                => TupleType y
+                -> asm (x -> y)
+                -> (SmartExp x -> SmartExp y) -- RCE: Using SmartExp instead of exp to aid in sharing recovery.
+                -> exp x
+                -> PreSmartExp acc exp y
 
   Undef         :: ScalarType t
                 -> PreSmartExp acc exp t
@@ -771,7 +772,7 @@ instance HasExpType exp => HasExpType (PreSmartExp acc exp) where
     LinearIndex tp _ _              -> tp
     Shape shr _                     -> shapeType shr
     ShapeSize _ _                   -> TupRsingle $ scalarTypeInt
-    Foreign (_ :: asm (x -> y)) _ _ -> eltType @y
+    Foreign tp _ _ _                -> tp
     Undef tp                        -> TupRsingle tp
     Coerce _ tp _                   -> TupRsingle tp
 

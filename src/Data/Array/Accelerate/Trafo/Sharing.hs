@@ -201,6 +201,14 @@ instance Arrays b => Afunction (Acc b) where
   afunctionRepr = AfunctionReprBody
   convertOpenAfun config alyt (Acc body) = Abody $ convertOpenAcc config alyt body
 
+convertSmartAfun1 :: Config -> ArraysR a -> (SmartAcc a -> SmartAcc b) -> AST.Afun (a -> b)
+convertSmartAfun1 config repr f
+  | DeclareVars lhs _ value <- declareVars repr =
+    let
+      a     = SmartAcc $ Atag repr 0
+      alyt' = PushLayout EmptyLayout lhs (value weakenId)
+    in
+      Alam lhs $ Abody $ convertOpenAcc config alyt' $ f a
 
 -- | Convert an open array expression to de Bruijn form while also incorporating sharing
 -- information.
@@ -305,8 +313,8 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (avarsIn $ value weakenId)
           in AST.Alet lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
-      Aforeign ff afun acc
-        -> AST.Aforeign ff (convertAfunWith config afun) (cvtA acc)
+      Aforeign repr ff afun acc
+        -> AST.Aforeign repr ff (convertSmartAfun1 config (arraysRepr acc) afun) (cvtA acc)
 
       Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
       Awhile reprA pred iter init -> AST.Awhile (cvtAfun1 reprA pred) (cvtAfun1 reprA iter) (cvtA init)
@@ -607,6 +615,15 @@ instance Elt b => Function (Exp b) where
   functionRepr = FunctionReprBody
   convertOpenFun config lyt (Exp body) = Body $ convertOpenExp config lyt body
 
+convertSmartFun :: Config -> TupleType a -> (SmartExp a -> SmartExp b) -> AST.Fun () (a -> b)
+convertSmartFun config tp f
+  | DeclareVars lhs _ value <- declareVars tp =
+    let
+      e    = SmartExp $ Tag tp 0
+      lyt' = PushLayout EmptyLayout lhs (value weakenId)
+    in
+      Lam lhs $ Body $ convertOpenExp config lyt' $ f e
+
 -- Scalar expressions
 -- ------------------
 
@@ -730,7 +747,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           LinearIndex _ a i     -> AST.LinearIndex (cvtA a) (cvt i)
           Shape _ a             -> AST.Shape (cvtA a)
           ShapeSize shr e       -> AST.ShapeSize shr (cvt e)
-          Foreign ff f e        -> AST.Foreign ff (convertFunWith config f) (cvt e)
+          Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (expType e) f) (cvt e)
           Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
 
     cvtPrj :: forall a b c env1 aenv1. PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
@@ -1324,7 +1341,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (acc', h3)   <- traverseAcc lvl acc
                                              return (Pipe repr1 repr2 repr3 afun1' afun2' acc'
                                                     , h1 `max` h2 `max` h3 + 1)
-            Aforeign ff afun acc        -> travA (Aforeign ff afun) acc
+            Aforeign repr ff afun acc   -> travA (Aforeign repr ff afun) acc
             Acond e acc1 acc2           -> do
                                              (e'   , h1) <- traverseExp lvl e
                                              (acc1', h2) <- traverseAcc lvl acc1
@@ -1657,9 +1674,9 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             LinearIndex tp a i  -> travAE (LinearIndex tp) a i
             Shape shr a         -> travA (Shape shr) a
             ShapeSize shr e     -> travE1 (ShapeSize shr) e
-            Foreign ff f e      -> do
+            Foreign tp ff f e   -> do
                                       (e', h) <- travE lvl e
-                                      return  (Foreign ff f e', h+1)
+                                      return  (Foreign tp ff f e', h+1)
             Coerce t1 t2 e      -> travE1 (Coerce t1 t2) e
 
       where
@@ -2124,10 +2141,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      reconstruct (Pipe repr1 repr2 repr3 afun1' afun2' acc')
                                                  (accCount1 +++ accCount2 +++ accCount3)
 
-          Aforeign ff afun acc    -> let
+          Aforeign r ff afun acc  -> let
                                        (acc', accCount) = scopesAcc acc
                                      in
-                                     reconstruct (Aforeign ff afun acc') accCount
+                                     reconstruct (Aforeign r ff afun acc') accCount
           Acond e acc1 acc2       -> let
                                        (e'   , accCount1) = scopesExp e
                                        (acc1', accCount2) = scopesAcc acc1
@@ -2502,7 +2519,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           LinearIndex tp a e    -> travAE (LinearIndex tp) a e
           Shape shr a           -> travA (Shape shr) a
           ShapeSize shr e       -> travE1 (ShapeSize shr) e
-          Foreign ff f e        -> travE1 (Foreign ff f) e
+          Foreign tp ff f e     -> travE1 (Foreign tp ff f) e
           Coerce t1 t2 e        -> travE1 (Coerce t1 t2) e
       where
         travE1 :: (ScopedExp a -> PreSmartExp ScopedAcc ScopedExp t) -> UnscopedExp a

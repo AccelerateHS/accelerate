@@ -46,7 +46,7 @@ import qualified Data.Sequence                          as Seq
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar                ( strForeign, TupR(..) )
+import Data.Array.Accelerate.Array.Sugar                ( strForeign )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Graphviz.Monad
 import Data.Array.Accelerate.Pretty.Graphviz.Type
@@ -253,7 +253,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
                             -> "stencil"     .$ [ ppF sten, ppB (stencilElt s) bndy, ppA xs ]
     Stencil2 s1 s2 _ sten bndy1 acc1 bndy2 acc2
                             -> "stencil2"    .$ [ ppF sten, ppB (stencilElt s1) bndy1, ppA acc1, ppB (stencilElt s2) bndy2, ppA acc2 ]
-    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
+    Aforeign _ ff _afun xs  -> "aforeign"    .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
     -- Collect{}               -> error "Collect"
 
   where

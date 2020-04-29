@@ -207,8 +207,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
                                      (TupRpair r1 r2, (a1, a2))
     Anil                        -> (TupRunit, ())
     Apply repr afun acc         -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
-    Aforeign (_ :: asm (a1 -> a2)) afun acc
-                                -> (Sugar.arrays @a2, evalOpenAfun afun Empty $ snd $ manifest acc)
+    Aforeign repr _ afun acc    -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
       | evalE p                 -> manifest acc1
       | otherwise               -> manifest acc2
@@ -986,7 +985,7 @@ evalPreOpenExp evalAcc pexp env aenv =
                                    in (repr, a) ! ix
     Shape acc                   -> shape $ snd $ evalA acc
     ShapeSize shr sh            -> size shr (evalE sh)
-    Foreign _ f e               -> evalPreOpenFun evalAcc f Empty Empty $ evalE e
+    Foreign _ _ f e             -> evalPreOpenFun evalAcc f Empty Empty $ evalE e
     Coerce t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
 
 

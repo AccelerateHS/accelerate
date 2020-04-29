@@ -98,7 +98,7 @@ matchPreOpenAcc matchAcc encodeAcc = match
       , Just Refl <- matchAcc                  a1 a2
       = Just Refl
 
-    match (Aforeign ff1 f1 a1) (Aforeign ff2 f2 a2)
+    match (Aforeign _ ff1 f1 a1) (Aforeign _ ff2 f2 a2)
       | Just Refl <- matchAcc a1 a2
       , unsafePerformIO $ do
           sn1 <- makeStableName ff1
@@ -465,7 +465,7 @@ matchPreOpenExp matchAcc encodeAcc = match
     match (Evar v1) (Evar v2)
       = matchVar v1 v2
 
-    match (Foreign ff1 f1 e1) (Foreign ff2 f2 e2)
+    match (Foreign _ ff1 f1 e1) (Foreign _ ff2 f2 e2)
       | Just Refl <- match e1 e2
       , unsafePerformIO $ do
           sn1 <- makeStableName ff1

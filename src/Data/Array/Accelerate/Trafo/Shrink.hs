@@ -265,7 +265,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       LinearIndex a i           -> LinearIndex a <$> shrinkE i
       Shape a                   -> pure (Shape a)
       ShapeSize shr sh          -> ShapeSize shr <$> shrinkE sh
-      Foreign ff f e            -> Foreign ff <$> shrinkF f <*> shrinkE e
+      Foreign repr ff f e       -> Foreign repr ff <$> shrinkF f <*> shrinkE e
       Coerce t1 t2 e            -> Coerce t1 t2 <$> shrinkE e
 
     shrinkF :: Kit acc => PreOpenFun acc env aenv t -> (Any, PreOpenFun acc env aenv t)
@@ -453,7 +453,7 @@ usesOfExp range = countE
       LinearIndex _ i           -> countE i
       Shape _                   -> Finite 0
       ShapeSize _ sh            -> countE sh
-      Foreign _ _ e             -> countE e
+      Foreign _ _ _ e           -> countE e
       Coerce _ _ e              -> countE e
 
 usesOfFun :: VarsRange -> PreOpenFun acc env aenv f -> Count
@@ -488,7 +488,7 @@ usesOfPreAcc withShape countAcc idx = count
       Apair a1 a2                -> countA a1 + countA a2
       Anil                       -> 0
       Apply _ _ a                -> countA a --- XXX: It is suspicious that we don't descend into the function here. Same for awhile.
-      Aforeign _ _ a             -> countA a
+      Aforeign _ _ _ a           -> countA a
       Acond p t e                -> countE p  + countA t + countA e
       Awhile _ _ a               -> countA a
       Use _ _                    -> 0
@@ -540,7 +540,7 @@ usesOfPreAcc withShape countAcc idx = count
       Shape a
         | withShape              -> countA a
         | otherwise              -> 0
-      Foreign _ _ e              -> countE e
+      Foreign _ _ _ e            -> countE e
       Coerce _ _ e               -> countE e
 
     countA :: acc aenv a -> Int

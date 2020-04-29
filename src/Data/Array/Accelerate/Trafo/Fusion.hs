@@ -168,7 +168,7 @@ manifest config (OpenAcc pacc) =
     Apair a1 a2             -> Apair (manifest config a1) (manifest config a2)
     Anil                    -> Anil
     Apply repr f a          -> apply repr (cvtAF f) (manifest config a)
-    Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest config a)
+    Aforeign repr ff f a    -> Aforeign repr ff (cvtAF f) (manifest config a)
 
     -- Producers
     -- ---------
@@ -295,7 +295,7 @@ convertOpenExp config exp =
     LinearIndex a i         -> LinearIndex (manifest config a) (cvtE i)
     Shape a                 -> Shape (manifest config a)
     ShapeSize shr sh        -> ShapeSize shr (cvtE sh)
-    Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
+    Foreign tp ff f e       -> Foreign tp ff (cvtF f) (cvtE e)
     Coerce t1 t2 e          -> Coerce t1 t2 (cvtE e)
   where
     -- Conversions for closed scalar functions and expressions
@@ -408,7 +408,7 @@ embedPreAcc config embedAcc elimAcc pacc
     Apply repr f a      -> done $ Apply repr (cvtAF f) (cvtA a)
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Apair a1 a2         -> done $ Apair (cvtA a1) (cvtA a2)
-    Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
+    Aforeign repr ff f a -> done $ Aforeign repr ff (cvtAF f) (cvtA a)
     -- Collect s           -> collectD s
 
     -- Array injection
@@ -1415,7 +1415,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Let lhs x y                     -> let k = weakenWithLHS lhs
                                            in  Let lhs (cvtE x) (replaceE (weakenE k sh') (weakenE k f') avar y)
         Evar var                        -> Evar var
-        Foreign ff f e                  -> Foreign ff f (cvtE e)
+        Foreign tp ff f e               -> Foreign tp ff f (cvtE e)
         Const tp c                      -> Const tp c
         Undef tp                        -> Undef tp
         Nil                             -> Nil
@@ -1491,7 +1491,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Apair a1 a2             -> Apair (cvtA a1) (cvtA a2)
         Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (cvtA a)
         Apply repr f a          -> Apply repr (cvtAF f) (cvtA a)
-        Aforeign ff f a         -> Aforeign ff f (cvtA a)       -- no sharing between f and a
+        Aforeign repr ff f a    -> Aforeign repr ff f (cvtA a)       -- no sharing between f and a
         Generate repr sh f      -> Generate repr (cvtE sh) (cvtF f)
         Map tp f a              -> Map tp (cvtF f) (cvtA a)
         ZipWith tp f a b        -> ZipWith tp (cvtF f) (cvtA a) (cvtA b)

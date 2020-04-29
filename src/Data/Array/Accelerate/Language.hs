@@ -1198,11 +1198,11 @@ collect = Acc . Collect
 --
 foreignAcc
     :: forall as bs asm. (Arrays as, Arrays bs, Foreign asm)
-    => asm (as -> bs)
+    => asm (ArrRepr as -> ArrRepr bs)
     -> (Acc as -> Acc bs)
     -> Acc as
     -> Acc bs
-foreignAcc asm f (Acc as) = Acc $ SmartAcc $ Aforeign asm f as
+foreignAcc asm f (Acc as) = Acc $ SmartAcc $ Aforeign (arrays @bs) asm (unAccFunction f) as
 
 -- | Call a foreign scalar expression.
 --
@@ -1215,12 +1215,12 @@ foreignAcc asm f (Acc as) = Acc $ SmartAcc $ Aforeign asm f as
 -- purely in Accelerate.
 --
 foreignExp
-    :: (Elt x, Elt y, Foreign asm)
-    => asm (x -> y)
+    :: forall x y asm. (Elt x, Elt y, Foreign asm)
+    => asm (EltRepr x -> EltRepr y)
     -> (Exp x -> Exp y)
     -> Exp x
     -> Exp y
-foreignExp a f (Exp x) = exp $ Foreign a f x
+foreignExp a f (Exp x) = exp $ Foreign (eltType @y) a (unExpFunction f) x
 
 
 -- Composition of array computations

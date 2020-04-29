@@ -246,7 +246,7 @@ simplifyOpenExp env = first getAny . cvtE
       LinearIndex a i           -> LinearIndex a <$> cvtE i
       Shape a                   -> shape a
       ShapeSize shr sh          -> shapeSize shr (cvtE sh)
-      Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
+      Foreign tp ff f e         -> Foreign tp ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
       Coerce t1 t2 e            -> Coerce t1 t2 <$> cvtE e
 
@@ -490,7 +490,7 @@ summariseOpenExp = (terms +~ 1) . goE
       case exp of
         Let _ bnd body        -> travE bnd +++ travE body & binders +~ 1
         Evar{}                -> zero & vars +~ 1
-        Foreign _ _ x         -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
+        Foreign _ _ _ x       -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
         Const{}               -> zero
         Undef _               -> zero
         Nil                   -> zero & terms +~ 1

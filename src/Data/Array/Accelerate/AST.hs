@@ -383,11 +383,12 @@ data PreOpenAcc acc aenv a where
   -- Accelerate version for use with other backends. The functions must be
   -- closed.
   --
-  Aforeign    :: (Sugar.Arrays as, Sugar.Arrays bs, Sugar.Foreign asm)
-              => asm                   (as -> bs)                 -- The foreign function for a given backend
-              -> PreAfun      acc      (Sugar.ArrRepr as -> Sugar.ArrRepr bs) -- Fallback implementation(s)
-              -> acc              aenv (Sugar.ArrRepr as)               -- Arguments to the function
-              -> PreOpenAcc   acc aenv (Sugar.ArrRepr bs)
+  Aforeign    :: Sugar.Foreign asm
+              => ArraysR bs
+              -> asm                   (as -> bs) -- The foreign function for a given backend
+              -> PreAfun      acc      (as -> bs) -- Fallback implementation(s)
+              -> acc              aenv as         -- Arguments to the function
+              -> PreOpenAcc   acc aenv bs
 
   -- If-then-else for array-level computations
   --
@@ -780,9 +781,7 @@ instance HasArraysRepr acc => HasArraysRepr (PreOpenAcc acc) where
   arraysRepr (Apair as bs)                      = TupRpair (arraysRepr as) (arraysRepr bs)
   arraysRepr Anil                               = TupRunit
   arraysRepr (Apply repr _ _)                   = repr
-  arraysRepr (Aforeign _ (Alam _ (Abody a)) _)  = arraysRepr a
-  arraysRepr (Aforeign _ (Abody _) _)           = error "And what have you got, at the end of the day?"
-  arraysRepr (Aforeign _ (Alam _ (Alam _ _)) _) = error "A bottle of whisky. And a new set of lies."
+  arraysRepr (Aforeign r _ _ _)                 = r
   arraysRepr (Acond _ whenTrue _)               = arraysRepr whenTrue
   arraysRepr (Awhile _ (Alam lhs _) _)          = lhsToTupR lhs
   arraysRepr (Awhile _ _ _)                     = error "I want my, I want my MTV!"
@@ -876,11 +875,12 @@ data PreOpenExp acc env aenv t where
                 -> PreOpenExp acc env aenv t
 
   -- Apply a backend-specific foreign function
-  Foreign       :: (Sugar.Foreign asm, Sugar.Elt x, Sugar.Elt y)
-                => asm           (x -> y)                             -- foreign function
-                -> PreFun acc () (Sugar.EltRepr x -> Sugar.EltRepr y) -- alternate implementation (for other backends)
-                -> PreOpenExp acc env aenv (Sugar.EltRepr x)
-                -> PreOpenExp acc env aenv (Sugar.EltRepr y)
+  Foreign       :: Sugar.Foreign asm
+                => TupleType y
+                -> asm           (x -> y)    -- foreign function
+                -> PreFun acc () (x -> y)    -- alternate implementation (for other backends)
+                -> PreOpenExp acc env aenv x
+                -> PreOpenExp acc env aenv y
 
   -- Tuples
   Pair          :: PreOpenExp acc env aenv t1
@@ -984,8 +984,7 @@ expType :: HasArraysRepr acc => PreOpenExp acc aenv env t -> TupleType t
 expType expr = case expr of
   Let _ _ body                 -> expType body
   Evar (Var tp _)              -> TupRsingle tp
-  Foreign _ (Lam _ (Body e)) _ -> expType e
-  Foreign _ _ _                -> error "Though you ride on the wheels of tomorrow, you still wander the fields of your sorrow."
+  Foreign tp _ _ _             -> tp
   Pair e1 e2                   -> TupRpair (expType e1) (expType e2)
   Nil                          -> TupRunit
   VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
@@ -1322,7 +1321,7 @@ rnfPreOpenAcc rnfA pacc =
     Apair as bs               -> rnfA as `seq` rnfA bs
     Anil                      -> ()
     Apply repr afun acc       -> rnfTupR rnfArrayR repr `seq` rnfAF afun `seq` rnfA acc
-    Aforeign asm afun a       -> rnf (Sugar.strForeign asm) `seq` rnfAF afun `seq` rnfA a
+    Aforeign repr asm afun a  -> rnfTupR rnfArrayR repr `seq` rnf (Sugar.strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
     Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
     Use repr arr              -> rnfArray repr arr
@@ -1498,7 +1497,7 @@ rnfPreOpenExp rnfA topExp =
   case topExp of
     Let lhs bnd body          -> rnfELhs lhs `seq` rnfE bnd `seq` rnfE body
     Evar (Var tp ix)          -> rnfScalarType tp `seq` rnfIdx ix
-    Foreign asm f x           -> rnf (Sugar.strForeign asm) `seq` rnfF f `seq` rnfE x
+    Foreign tp asm f x        -> rnfTupleType tp `seq` rnf (Sugar.strForeign asm) `seq` rnfF f `seq` rnfE x
     Const tp c                -> c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
     Undef tp                  -> rnfScalarType tp
     Pair a b                  -> rnfE a `seq` rnfE b
@@ -1689,7 +1688,7 @@ liftPreOpenAcc liftA pacc =
     Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
     Anil                      -> [|| Anil ||]
     Apply repr f a            -> [|| Apply $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
-    Aforeign asm f a          -> [|| Aforeign $$(Sugar.liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
+    Aforeign repr asm f a     -> [|| Aforeign $$(liftArraysR repr) $$(Sugar.liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
     Awhile p f a              -> [|| Awhile $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
     Use repr a                -> [|| Use $$(liftArrayR repr) $$(liftArray repr a) ||]
@@ -1786,7 +1785,7 @@ liftPreOpenExp liftA pexp =
   case pexp of
     Let lhs bnd body          -> [|| Let $$(liftELhs lhs) $$(liftPreOpenExp liftA bnd) $$(liftPreOpenExp liftA body) ||]
     Evar var                  -> [|| Evar $$(liftExpVar var) ||]
-    Foreign asm f x           -> [|| Foreign $$(Sugar.liftForeign asm) $$(liftPreOpenFun liftA f) $$(liftE x) ||]
+    Foreign repr asm f x      -> [|| Foreign $$(liftTupleType repr) $$(Sugar.liftForeign asm) $$(liftPreOpenFun liftA f) $$(liftE x) ||]
     Const tp c                -> [|| Const $$(liftScalarType tp) $$(liftConst (TupRsingle tp) c) ||]
     Undef tp                  -> [|| Undef $$(liftScalarType tp) ||]
     Pair a b                  -> [|| Pair $$(liftE a) $$(liftE b) ||]

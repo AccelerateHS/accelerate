@@ -149,7 +149,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
                       , hang shiftwidth (sep [ then_, t' ])
                       , hang shiftwidth (sep [ else_, e' ]) ]
 
-    Aforeign ff _f a        -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
+    Aforeign _ ff _ a       -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
     Awhile p f a            -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
     Use repr arr            -> "use"          .$ [ prettyArray repr arr ]
     Unit _ e                -> "unit"         .$ [ ppE e ]
@@ -376,7 +376,7 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
     ToIndex _ sh ix       -> ppF2 "toIndex"     (ppE sh) (ppE ix)
     FromIndex _ sh ix     -> ppF2 "fromIndex"   (ppE sh) (ppE ix)
     While p f x           -> ppF3 "while"       (ppF p) (ppF f) (ppE x)
-    Foreign ff _f e       -> ppF2 "foreign"     (\_ -> pretty (strForeign ff)) (ppE e)
+    Foreign _ ff _ e      -> ppF2 "foreign"     (\_ -> pretty (strForeign ff)) (ppE e)
     Shape arr             -> ppF1 "shape"       (ppA arr)
     ShapeSize _ sh        -> ppF1 "shapeSize"   (ppE sh)
     Index arr ix          -> ppF2 (Operator (pretty '!') Infix L 9) (ppA arr) (ppE ix)
