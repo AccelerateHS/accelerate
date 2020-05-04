@@ -306,7 +306,7 @@ module Data.Array.Accelerate (
   -- ** Type classes
   -- *** Basic type classes
   Eq(..),
-  Ord(..), Ordering(..),
+  Ord(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
 

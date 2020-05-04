@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE RebindableSyntax    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
@@ -21,7 +22,7 @@
 module Data.Array.Accelerate.Classes.Ord (
 
   Ord(..),
-  Ordering(..),
+  Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
 
 ) where
 
@@ -44,6 +45,16 @@ infix 4 <
 infix 4 >
 infix 4 <=
 infix 4 >=
+
+pattern LT_ :: Exp Ordering
+pattern LT_ = Exp (Const LT)
+
+pattern EQ_ :: Exp Ordering
+pattern EQ_ = Exp (Const EQ)
+
+pattern GT_ :: Exp Ordering
+pattern GT_ = Exp (Const GT)
+{-# COMPLETE LT_, EQ_, GT_ #-}
 
 -- | The 'Ord' class for totally ordered datatypes
 --

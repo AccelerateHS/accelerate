@@ -43,6 +43,7 @@ pattern True_ = Exp (Const True)
 
 pattern False_ :: Exp Bool
 pattern False_ = Exp (Const False)
+{-# COMPLETE True_, False_ #-}
 
 
 infix 4 ==
