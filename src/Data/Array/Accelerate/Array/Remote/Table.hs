@@ -122,11 +122,11 @@ new release = do
 lookup :: forall m a.
           RemoteMemory m
        => MemoryTable (RemotePtr m)
-       -> ScalarType a
+       -> SingleType a
        -> ArrayData a
        -> IO (Maybe (RemotePtr m (ScalarDataRepr a)))
 lookup (MemoryTable !ref _ _ _) !tp !arr
-  | (_, ScalarDict) <- scalarDict tp = do
+  | (ScalarDict, _, _) <- singleDict tp = do
     sa <- makeStableArray tp arr
     mw <- withMVar ref (`HT.lookup` sa)
     case mw of
@@ -159,12 +159,12 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
 --
 malloc :: forall a m. (RemoteMemory m, MonadIO m)
        => MemoryTable (RemotePtr m)
-       -> ScalarType a
+       -> SingleType a
        -> ArrayData a
        -> Int
        -> m (Maybe (RemotePtr m (ScalarDataRepr a)))
 malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
-  | (_, ScalarDict) <- scalarDict tp = do
+  | (ScalarDict, _, _) <- singleDict tp = do
     -- Note: [Allocation sizes]
     --
     -- Instead of allocating the exact number of elements requested, we round up to
@@ -221,7 +221,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
 --
 free :: forall m a. (RemoteMemory m)
      => MemoryTable (RemotePtr m)
-     -> ScalarType a
+     -> SingleType a
      -> ArrayData a
      -> IO ()
 free mt tp !arr = do
@@ -259,13 +259,13 @@ freeStable (MemoryTable !ref _ !nrs _) !sa =
 insert
     :: forall m a. (RemoteMemory m, MonadIO m)
     => MemoryTable (RemotePtr m)
-    -> ScalarType a
+    -> SingleType a
     -> ArrayData a
     -> RemotePtr m (ScalarDataRepr a)
     -> Int
     -> m ()
 insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes
-  | (_, ScalarDict)  <- scalarDict tp = do
+  | (ScalarDict, _, _)  <- singleDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
   message $ "insert: " ++ show key
@@ -282,12 +282,12 @@ insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes
 insertUnmanaged
     :: forall m a. (MonadIO m, RemoteMemory m)
     => MemoryTable (RemotePtr m)
-    -> ScalarType a
+    -> SingleType a
     -> ArrayData a
     -> RemotePtr m (ScalarDataRepr a)
     -> m ()
 insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr
-  | (_, ScalarDict)  <- scalarDict tp = do
+  | (ScalarDict, _, _)  <- singleDict tp = do
     key  <- makeStableArray tp arr
     weak <- liftIO $ makeWeakArrayData tp arr () (Just $ remoteFinalizer weak_ref key)
     message $ "insertUnmanaged: " ++ show key
@@ -356,11 +356,11 @@ remoteFinalizer !weak_ref !key = do
 {-# INLINE makeStableArray #-}
 makeStableArray
     :: MonadIO m
-    => ScalarType a
+    => SingleType a
     -> ArrayData a
     -> m StableArray
 makeStableArray !tp !ad
-  | (_, ScalarDict) <- scalarDict tp = return $! StableArray (uniqueArrayId ad)
+  | (ScalarDict, _, _) <- singleDict tp = return $! StableArray (uniqueArrayId ad)
 
 
 -- Weak arrays
@@ -371,13 +371,13 @@ makeStableArray !tp !ad
 --
 makeWeakArrayData
     :: forall e c.
-       ScalarType e
+       SingleType e
     -> ArrayData e
     -> c
     -> Maybe (IO ())
     -> IO (Weak c)
 makeWeakArrayData !tp !ad !c !mf
-  | (_, ScalarDict) <- scalarDict tp = do
+  | (ScalarDict, _, _) <- singleDict tp = do
       let !uad = uniqueArrayData ad
       case mf of
         Nothing -> return ()

@@ -52,9 +52,9 @@ import Prelude                                                  hiding ( lookup 
 import qualified Data.HashTable.IO                              as HT
 
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Analysis.Type                      ( sizeOfScalarType )
-import Data.Array.Accelerate.Analysis.Match                     ( matchScalarType, (:~:)(..) )
-import Data.Array.Accelerate.Array.Data                         ( ArrayData, ScalarData, ScalarDataRepr, ScalarDict(..), scalarDict )
+import Data.Array.Accelerate.Analysis.Type                      ( sizeOfSingleType )
+import Data.Array.Accelerate.Analysis.Match                     ( matchSingleType, (:~:)(..) )
+import Data.Array.Accelerate.Array.Data                         ( ArrayData, ScalarData, ScalarDataRepr, ScalarDict(..), singleDict )
 import Data.Array.Accelerate.Array.Remote.Class
 import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
 import Data.Array.Accelerate.Error                              ( internalError )
@@ -92,7 +92,7 @@ data Used task where
        -> {-# UNPACK #-} !Int                   -- Use count
        -> ![task]                               -- Asynchronous tasks using the array
        -> {-# UNPACK #-} !Int                   -- Number of elements
-       -> !(ScalarType e)
+       -> !(SingleType e)
        -> {-# UNPACK #-} !(Weak (ScalarData e))
        -> Used task
 
@@ -138,12 +138,12 @@ new release = do
 withRemote
     :: forall task m a c. (Task task, RemoteMemory m, MonadIO m, Functor m)
     => MemoryTable (RemotePtr m) task
-    -> ScalarType a
+    -> SingleType a
     -> ArrayData a
     -> (RemotePtr m (ScalarDataRepr a) -> m (task, c))
     -> m (Maybe c)
 withRemote (MemoryTable !mt !ref _) !tp !arr run
-  | (_, ScalarDict) <- scalarDict tp = do
+  | (ScalarDict, _, _) <- singleDict tp = do
     key <- Basic.makeStableArray tp arr
     mp <- withMVar' ref $ \utbl -> do
       mu  <- liftIO . HT.mutate utbl key $ \case
@@ -177,7 +177,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run
 
     copyBack :: UT task -> Used task -> m (RemotePtr m (ScalarDataRepr a))
     copyBack utbl (Used ts _ count tasks n tp' weak_arr)
-      | Just Refl <- matchScalarType tp tp' = do
+      | Just Refl <- matchSingleType tp tp' = do
         message "withRemote/reuploading-evicted-array"
         p <- mallocWithUsage mt utbl tp arr (Used ts Clean count tasks n tp weak_arr)
         pokeRemote tp n p arr
@@ -220,13 +220,13 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run
 --
 malloc :: forall e m task. (RemoteMemory m, MonadIO m, Task task)
        => MemoryTable (RemotePtr m) task
-       -> ScalarType e
+       -> SingleType e
        -> ArrayData e
        -> Bool                                -- ^ True if host array is frozen.
        -> Int                                 -- ^ Number of elements
        -> m Bool                              -- ^ Was the array allocated successfully?
 malloc (MemoryTable mt ref weak_utbl) !tp !ad !frozen !n
-  | (_, ScalarDict) <- scalarDict tp -- Required for ArrayData e ~ ScalarData e
+  | (ScalarDict, _, _) <- singleDict tp -- Required for ArrayData e ~ ScalarData e
   = do
   ts  <- liftIO $ getCPUTime
   key <- Basic.makeStableArray tp ad
@@ -249,7 +249,7 @@ mallocWithUsage
     :: forall e m task. (RemoteMemory m, MonadIO m, Task task, ArrayData e ~ ScalarData e)
     => Basic.MemoryTable (RemotePtr m)
     -> UT task
-    -> ScalarType e
+    -> SingleType e
     -> ArrayData e
     -> Used task
     -> m (RemotePtr m (ScalarDataRepr e))
@@ -313,8 +313,8 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
         _  -> return prev
     eldest prev _ = return prev
 
-    remoteBytes :: ScalarType e -> Int -> Int64
-    remoteBytes tp n = fromIntegral (sizeOfScalarType tp) * fromIntegral n
+    remoteBytes :: SingleType e -> Int -> Int64
+    remoteBytes tp n = fromIntegral (sizeOfSingleType tp) * fromIntegral n
 
     evictable :: Status -> Bool
     evictable Clean     = True
@@ -322,7 +322,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
     evictable Unmanaged = False
     evictable Evicted   = False
 
-    copyIfNecessary :: Status -> Int -> ScalarType e -> ArrayData e -> m ()
+    copyIfNecessary :: Status -> Int -> SingleType e -> ArrayData e -> m ()
     copyIfNecessary Clean     _ _  _  = return ()
     copyIfNecessary Unmanaged _ _  _  = return ()
     copyIfNecessary Evicted   _ _  _  = $internalError "evictLRU" "Attempting to evict already evicted array"
@@ -338,7 +338,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
 --
 free :: forall m a task. (RemoteMemory m)
      => MemoryTable (RemotePtr m) task
-     -> ScalarType a
+     -> SingleType a
      -> ArrayData a
      -> IO ()
 free (MemoryTable !mt !ref _) !tp !arr
@@ -357,12 +357,12 @@ free (MemoryTable !mt !ref _) !tp !arr
 insertUnmanaged
     :: (MonadIO m, RemoteMemory m)
     => MemoryTable (RemotePtr m) task
-    -> ScalarType e
+    -> SingleType e
     -> ArrayData e
     -> RemotePtr m (ScalarDataRepr e)
     -> m ()
 insertUnmanaged (MemoryTable mt ref weak_utbl) !tp !arr !ptr
-  | (_, ScalarDict) <- scalarDict tp = do -- Gives evidence that ArrayData e ~ ScalarData e
+  | (ScalarDict, _, _) <- singleDict tp = do -- Gives evidence that ArrayData e ~ ScalarData e
   key <- Basic.makeStableArray tp arr
   ()  <- Basic.insertUnmanaged mt tp arr ptr
   liftIO

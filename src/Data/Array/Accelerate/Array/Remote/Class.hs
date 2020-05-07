@@ -32,7 +32,7 @@ module Data.Array.Accelerate.Array.Remote.Class (
 ) where
 
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Type (ScalarType)
+import Data.Array.Accelerate.Type (SingleType)
 
 import Control.Applicative
 import Control.Monad.Catch
@@ -56,10 +56,10 @@ class (Applicative m, Monad m, MonadCatch m, MonadMask m) => RemoteMemory m wher
   mallocRemote :: Int -> m (Maybe (RemotePtr m Word8))
 
   -- | Copy the given number of elements from the host array into remote memory.
-  pokeRemote :: ScalarType e -> Int -> RemotePtr m (ScalarDataRepr e) -> ArrayData e -> m ()
+  pokeRemote :: SingleType e -> Int -> RemotePtr m (ScalarDataRepr e) -> ArrayData e -> m ()
 
   -- | Copy the given number of elements from remote memory to the host array.
-  peekRemote :: ScalarType e -> Int -> RemotePtr m (ScalarDataRepr e) -> MutableArrayData e -> m ()
+  peekRemote :: SingleType e -> Int -> RemotePtr m (ScalarDataRepr e) -> MutableArrayData e -> m ()
 
   -- | Cast a remote pointer.
   castRemotePtr :: RemotePtr m a -> RemotePtr m b

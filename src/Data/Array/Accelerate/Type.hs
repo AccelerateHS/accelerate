@@ -313,8 +313,14 @@ scalarTypeBool = SingleScalarType $ NonNumSingleType TypeBool
 scalarTypeInt :: ScalarType Int
 scalarTypeInt = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt
 
+scalarTypeInt32 :: ScalarType Int32
+scalarTypeInt32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt32
+
 scalarTypeWord8 :: ScalarType Word8
 scalarTypeWord8 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord8
+
+scalarTypeWord32 :: ScalarType Word32
+scalarTypeWord32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord32
 
 -- Tuple representation
 -- -------------------
