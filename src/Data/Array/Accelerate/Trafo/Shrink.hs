@@ -52,6 +52,8 @@ import Data.Semigroup
 import Data.Monoid
 #endif
 
+import Data.Either (fromRight)
+
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Trafo.Base
@@ -73,39 +75,52 @@ instance Kit acc => Shrink (PreOpenExp acc env aenv e) where
 instance Kit acc => Shrink (PreOpenFun acc env aenv f) where
   shrink' = shrinkFun
 
-data VarsRange = VarsRange !Int !Int !(Maybe RangeTuple) -- first, count, tuple
+data VarsRange env = VarsRange !(Exists (Idx env)) !Int !(Maybe RangeTuple) -- rightmost variable, count, tuple
 
 data RangeTuple
   = RTNil
   | RTSingle
   | RTPair !RangeTuple !RangeTuple
 
-lhsVarsRange :: LeftHandSide s v env env' -> VarsRange
-lhsVarsRange (LeftHandSideWildcard TupRunit)   = VarsRange 0 0         $ Just RTNil
-lhsVarsRange (LeftHandSideWildcard _)          = VarsRange 0 0           Nothing
-lhsVarsRange (LeftHandSideSingle _)            = VarsRange 0 1         $ Just RTSingle
-lhsVarsRange (LeftHandSidePair l1 l2)          = VarsRange 0 (n1 + n2) $ RTPair <$> t1 <*> t2
+lhsVarsRange :: LeftHandSide s v env env' -> Either (env :~: env') (VarsRange env')
+lhsVarsRange lhs = case rightIx lhs of
+  Left eq -> Left eq
+  Right ix -> let (n, rt) = go lhs
+              in  Right $ VarsRange ix n rt
   where
-    VarsRange _ n1 t1 = lhsVarsRange l1
-    VarsRange _ n2 t2 = lhsVarsRange l2
+    rightIx :: LeftHandSide s v env env' -> Either (env :~: env') (Exists (Idx env'))
+    rightIx (LeftHandSideWildcard _) = Left Refl
+    rightIx (LeftHandSideSingle _)   = Right $ Exists ZeroIdx
+    rightIx (LeftHandSidePair l1 l2) = case rightIx l2 of
+      Right ix  -> Right ix
+      Left Refl -> rightIx l1
 
-lhsSize :: LeftHandSide s v env env' -> Int
-lhsSize (LeftHandSideWildcard _) = 0
-lhsSize (LeftHandSideSingle _)   = 1
-lhsSize (LeftHandSidePair l1 l2) = lhsSize l1 + lhsSize l2
+    go :: LeftHandSide s v env env' -> (Int, Maybe (RangeTuple))
+    go (LeftHandSideWildcard TupRunit)   = (0,       Just RTNil)
+    go (LeftHandSideWildcard _)          = (0,       Nothing)
+    go (LeftHandSideSingle _)            = (1,       Just RTSingle)
+    go (LeftHandSidePair l1 l2)          = (n1 + n2, RTPair <$> t1 <*> t2)
+      where
+        (n1, t1) = go l1
+        (n2, t2) = go l2
 
-weakenVarsRange :: LeftHandSide s v env env' -> VarsRange -> VarsRange
-weakenVarsRange lhs (VarsRange i n t) = VarsRange (i + lhsSize lhs) n t
+weakenVarsRange :: LeftHandSide s v env env' -> VarsRange env -> VarsRange env'
+weakenVarsRange lhs (VarsRange ix n t) = VarsRange (go lhs ix) n t
+  where
+    go :: LeftHandSide s v env env' -> Exists (Idx env) -> Exists (Idx env')
+    go (LeftHandSideWildcard _) ix'          = ix'
+    go (LeftHandSideSingle _)   (Exists ix') = Exists (SuccIdx ix')
+    go (LeftHandSidePair l1 l2) ix'          = go l2 $ go l1 ix'
 
-matchEVarsRange :: VarsRange -> PreOpenExp acc env aenv t -> Bool
-matchEVarsRange (VarsRange first _ (Just rt)) expr = isJust $ go first rt expr
+matchEVarsRange :: VarsRange env -> PreOpenExp acc env aenv t -> Bool
+matchEVarsRange (VarsRange (Exists first) _ (Just rt)) expr = isJust $ go (idxToInt first) rt expr
   where
     go :: Int -> RangeTuple -> PreOpenExp acc env aenv t -> Maybe Int
     go i RTNil Nil = Just i
     go i RTSingle (Evar (Var _ ix))
       | checkIdx i ix = Just (i + 1)
     go i (RTPair t1 t2) (Pair e1 e2)
-      | Just i' <- go i t1 e1 = go i' t2 e2
+      | Just i' <- go i t2 e2 = go i' t1 e1
     go _ _ _ = Nothing
 
     checkIdx :: Int -> Idx env t ->  Bool
@@ -114,12 +129,23 @@ matchEVarsRange (VarsRange first _ (Just rt)) expr = isJust $ go first rt expr
     checkIdx _ _ = False
 matchEVarsRange _ _ = False
 
-varInRange :: VarsRange -> Var s env t -> Maybe Usages
-varInRange (VarsRange i n _) (Var _ ix)
-  | 0 <= j && j < n = Just $ replicate j False ++ [True] ++ replicate (n - j - 1) False
-  | otherwise = Nothing
+varInRange :: VarsRange env -> Var s env t -> Maybe Usages
+varInRange (VarsRange (Exists rangeIx) n _) (Var _ varIx) = case go rangeIx varIx of
+    Nothing -> Nothing
+    Just j  -> Just $ replicate j False ++ [True] ++ replicate (n - j - 1) False
   where
-    j = n - 1 - (idxToInt ix - i)
+    -- `go ix ix'` checks whether ix <= ix' with recursion, and then checks
+    -- whether ix' < ix + n in go'. Returns a Just if both checks
+    -- are successful, containing an integer j such that ix + j = ix'.
+    go :: Idx env u -> Idx env t -> Maybe Int
+    go (SuccIdx ix) (SuccIdx ix') = go ix ix'
+    go ZeroIdx      ix'           = go' ix' 0
+    go _            ZeroIdx       = Nothing
+
+    go' :: Idx env t -> Int -> Maybe Int
+    go' _ j | j >= n    = Nothing
+    go' ZeroIdx       j = Just j
+    go' (SuccIdx ix') j = go' ix' (j + 1)
 
 -- Describes how often the variables defined in a LHS are used together.
 data Count
@@ -156,8 +182,8 @@ shrinkLhs (Impossible usages) lhs = case go usages lhs of
     go (True  : us) (LeftHandSideSingle tp)   = (False, us, Exists $ LeftHandSideSingle tp)
     go (False : us) (LeftHandSideSingle tp)   = (True , us, Exists $ LeftHandSideWildcard $ TupRsingle tp)
     go us           (LeftHandSidePair l1 l2)
-      | (c1, us' , Exists l1') <- go us  l1
-      , (c2, us'', Exists l2') <- go us' l2
+      | (c2, us' , Exists l2') <- go us  l2
+      , (c1, us'', Exists l1') <- go us' l1
       , Exists l2'' <- rebuildLHS l2'
         = let
             lhs'
@@ -226,21 +252,23 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
         | otherwise    -> Let lhs <$> bnd' <*> body'
         where
           shouldInline = case count of
+            Finite 0     -> False -- Handled by shrinkLhs
             Finite n     -> n <= lIMIT || cheap (snd bnd')
             Infinity     ->               cheap (snd bnd')
             Impossible _ -> False
 
           bnd'  = shrinkE bnd
           body' = shrinkE body
-          range = lhsVarsRange lhs
+
           -- If the lhs includes non-trivial wildcards (the last field of range is Nothing),
           -- then we cannot inline the binding. We can only check which variables are not used,
           -- to detect unused variables.
           -- If the lhs does not include non-trivial wildcards (the last field of range is a Just),
           -- we can both analyse whether we can inline the binding, and check which variables are
           -- not used, to detect unused variables.
-
-          count = usesOfExp range (snd body')
+          count = case lhsVarsRange lhs of
+            Left _ -> Finite 0
+            Right range -> usesOfExp range (snd body')
 
           msg = case count of
             Finite 0 -> "dead exp"
@@ -278,15 +306,22 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     yes (_, x) = (Any True, x)
 
 shrinkFun :: Kit acc => PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
-shrinkFun (Lam lhs f) 
-  | Just (Exists lhs') <- shrinkLhs count lhs = case strengthenE (strengthenShrunkLHS lhs lhs' Just) f' of
-      Just f'' -> (True, Lam lhs' f'')
-      Nothing  -> error "shrinkFun: Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
-  | otherwise = (b, Lam lhs f')
+shrinkFun (Lam lhs f) = case lhsVarsRange lhs of
+  Left Refl ->
+    let b' = case lhs of
+                LeftHandSideWildcard TupRunit -> b
+                _                             -> True
+    in (b', Lam (LeftHandSideWildcard $ lhsToTupR lhs) f')
+  Right range ->
+    let
+      count = usesOfFun range f
+    in case shrinkLhs count lhs of
+        Just (Exists lhs') -> case strengthenE (strengthenShrunkLHS lhs lhs' Just) f' of
+          Just f'' -> (True, Lam lhs' f'')
+          Nothing  -> error "shrinkFun: Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
+        Nothing -> (b, Lam lhs f')
   where
     (b, f') = shrinkFun f
-    range = lhsVarsRange lhs
-    count = usesOfFun range f
 
 shrinkFun (Body b) = Body <$> shrinkExp b
 
@@ -424,7 +459,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
 -- Count the number of occurrences an in-scope scalar expression bound at the
 -- given variable index recursively in a term.
 --
-usesOfExp :: forall acc env aenv t. VarsRange -> PreOpenExp acc env aenv t -> Count
+usesOfExp :: forall acc env aenv t. VarsRange env -> PreOpenExp acc env aenv t -> Count
 usesOfExp range = countE
   where
     countE :: PreOpenExp acc env aenv e -> Count
@@ -456,9 +491,9 @@ usesOfExp range = countE
       Foreign _ _ _ e           -> countE e
       Coerce _ _ e              -> countE e
 
-usesOfFun :: VarsRange -> PreOpenFun acc env aenv f -> Count
-usesOfFun range' (Lam lhs f) = usesOfFun (weakenVarsRange lhs range') f
-usesOfFun range' (Body b)    = usesOfExp range' b
+usesOfFun :: VarsRange env -> PreOpenFun acc env aenv f -> Count
+usesOfFun range (Lam lhs f) = usesOfFun (weakenVarsRange lhs range) f
+usesOfFun range (Body b)    = usesOfExp range b
 
 -- Count the number of occurrences of the array term bound at the given
 -- environment index. If the first argument is 'True' then it includes in the

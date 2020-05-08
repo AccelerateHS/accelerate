@@ -1204,10 +1204,10 @@ zipWithD tp f cc1 cc0
             | Lam lhsA (Lam lhsB (Body c')) <- weakenE (weakenWithLHS lhs1) c
               -> Lam lhs1 $ Body $ Let lhsA ixa'  $ Let lhsB (weakenE (weakenWithLHS lhsA)       ixb') c'
           Nothing
-            | CombinedLHS lhs k1 _ <- combineLhs lhs1 lhs2
+            | CombinedLHS lhs k1 k2 <- combineLhs lhs1 lhs2
             , Lam lhsA (Lam lhsB (Body c')) <- weakenE (weakenWithLHS lhs) c
             , ixa'' <- weakenE k1 ixa'
-              -> Lam lhs  $ Body $ Let lhsA ixa'' $ Let lhsB {-(weakenE (weakenWithLHS lhsA .> k2) ixb')-} undefined c'
+              -> Lam lhs  $ Body $ Let lhsA ixa'' $ Let lhsB (weakenE (weakenWithLHS lhsA .> k2) ixb') c'
 
 combineLhs :: LeftHandSide s t env env1' -> LeftHandSide s t env env2' -> CombinedLHS s t env1' env2' env
 combineLhs = go weakenId weakenId
