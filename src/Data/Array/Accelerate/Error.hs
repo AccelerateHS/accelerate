@@ -21,7 +21,7 @@ module Data.Array.Accelerate.Error (
 
 ) where
 
-import Data.List
+import Data.List                                        ( intercalate )
 import Debug.Trace
 import Language.Haskell.TH                              hiding ( Unsafe )
 

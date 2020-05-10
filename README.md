@@ -1,13 +1,17 @@
-An Embedded Language for Accelerated Array Computations
-=======================================================
+<div align="center">
+<img width="450" src="https://github.com/AccelerateHS/accelerate/raw/master/images/accelerate-logo-text-v.png?raw=true" alt="henlo, my name is Theia"/>
+
+# High-performance parallel arrays for Haskell
 
 [![Travis](https://img.shields.io/travis/AccelerateHS/accelerate/master.svg?label=linux)](https://travis-ci.org/AccelerateHS/accelerate)
 [![AppVeyor](https://img.shields.io/appveyor/ci/tmcdonell/accelerate/master.svg?label=windows)](https://ci.appveyor.com/project/tmcdonell/accelerate)
+[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
+<br>
 [![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)
 [![Stackage Nightly](https://stackage.org/package/accelerate/badge/nightly)](https://stackage.org/nightly/package/accelerate)
 [![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
-[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
 
+</div>
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
@@ -122,12 +126,7 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
 
 [LULESH-accelerate][lulesh-accelerate] is in implementation of the Livermore Unstructured Lagrangian Explicit Shock Hydrodynamics (LULESH) mini-app. [LULESH][LULESH] represents a typical hydrodynamics code such as [ALE3D][ALE3D], but is a highly simplified application, hard-coded to solve the Sedov blast problem on an unstructured hexahedron mesh.
 
-![LULESH mesh](https://computation.llnl.gov/system/files/142_1.PNG)
-
-
-### Λ ○ λ (Lol)
-
-Λ ○ λ ([Lol][lol]) is a general-purpose library for ring-based lattice cryptography. Lol has applications in, for example, symmetric-key somewhat-homomorphic encryption schemes. The [lol-accelerate][lol-accelerate] package provides an Accelerate backend for Lol.
+![LULESH mesh](https://i.imgur.com/bIkODKd.jpg)
 
 
 ### Additional examples
@@ -135,6 +134,9 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
 Accelerate users have also built some substantial applications of their own.
 Please feel free to add your own examples!
 
+  * Jonathan Fraser, [GPUVAC](https://github.com/GeneralFusion/gpuvac): An explicit advection magnetohydrodynamics simulation
+  * David van Balen, [Sudokus](https://github.com/dpvanbalen/Sudokus): A sudoku solver
+  * Trevor L. McDonell, [lol-accelerate][lol-accelerate]: A backend to the Λ ○ λ ([Lol][lol]) library for ring-based lattice cryptography
   * Henning Thielemann, [patch-image](http://hackage.haskell.org/package/patch-image): Combine a collage of overlapping images
   * apunktbau, [bildpunkt](https://github.com/abau/bildpunkt): A ray-marching distance field renderer
   * klarh, [hasdy](https://github.com/klarh/hasdy): Molecular dynamics in Haskell using Accelerate
@@ -155,6 +157,7 @@ The Accelerate team (past and present) consists of:
   * Joshua Meredith ([@JoshMeredith])         <!-- 2018..     -->
   * Ben Lever ([@blever])                     <!-- 2010..2011 -->
   * Sean Seefried ([@sseefried])              <!-- 2010..2011 -->
+  * Ivo Gabe de Wolff ([@ivogabe])            <!-- 2019..     -->
 
 The maintainer and principal developer of Accelerate is Trevor L.
 McDonell <trevor.mcdonell@gmail.com>.
@@ -164,8 +167,9 @@ Mailing list and contacts
 -------------------------
 
   * Mailing list: [`accelerate-haskell@googlegroups.com`](mailto:accelerate-haskell@googlegroups.com) (discussions on both use and development are welcome)
-  * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group].
-  * Bug reports and issues tracking: [GitHub project page][Issues].
+  * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group]
+  * Bug reports and issues tracking: [GitHub project page][Issues]
+  * Chat with us on [gitter](https://gitter.im/AccelerateHS/Lobby)
 
 
 Citing Accelerate
@@ -218,6 +222,7 @@ Here is a list of features that are currently missing:
   [@JoshMeredith]:              https://github.com/JoshMeredith
   [@blever]:                    https://github.com/blever
   [@sseefried]:                 https://github.com/sseefried
+  [@ivogabe]:                   https://github.com/ivogabe
 
   [CKLM+11]:                    https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-cuda-damp2011.pdf
   [MCKL13]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-optim-icfp2013.pdf

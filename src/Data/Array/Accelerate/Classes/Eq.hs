@@ -44,6 +44,7 @@ pattern True_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBoo
 pattern False_ :: Exp Bool
 pattern False_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBool)) False))
 
+{-# COMPLETE True_, False_ #-}
 
 infix 4 ==
 infix 4 /=
