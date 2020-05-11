@@ -32,14 +32,16 @@ import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Data.Array.Accelerate.Classes.Eq
+-- We must hide (==), as that operator is used for the literals 0, 1 and 2 in the pattern synonyms for Ordering.
+-- As RebindableSyntax is enabled, a literal pattern is compiled to a call to (==), meaning that the Prelude.(==) should be in scope as (==).
+import Data.Array.Accelerate.Classes.Eq                             hiding ( (==) )
+import qualified Data.Array.Accelerate.Classes.Eq                   as A
 
 import Text.Printf
-import Prelude                                                      ( ($), (.), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
+import Prelude                                                      ( ($), (.), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM, (==) )
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
-
 
 infix 4 <
 infix 4 >
@@ -47,13 +49,13 @@ infix 4 <=
 infix 4 >=
 
 pattern LT_ :: Exp Ordering
-pattern LT_ = Exp (Const LT)
+pattern LT_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 0))
 
 pattern EQ_ :: Exp Ordering
-pattern EQ_ = Exp (Const EQ)
+pattern EQ_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 1))
 
 pattern GT_ :: Exp Ordering
-pattern GT_ = Exp (Const GT)
+pattern GT_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 2))
 {-# COMPLETE LT_, EQ_, GT_ #-}
 
 -- | The 'Ord' class for totally ordered datatypes
@@ -68,18 +70,18 @@ class Eq a => Ord a where
   max     :: Exp a -> Exp a -> Exp a
   compare :: Exp a -> Exp a -> Exp Ordering
 
-  x <  y = if compare x y == constant LT then constant True  else constant False
-  x <= y = if compare x y == constant GT then constant False else constant True
-  x >  y = if compare x y == constant GT then constant True  else constant False
-  x >= y = if compare x y == constant LT then constant False else constant True
+  x <  y = if compare x y A.== constant LT then constant True  else constant False
+  x <= y = if compare x y A.== constant GT then constant False else constant True
+  x >  y = if compare x y A.== constant GT then constant True  else constant False
+  x >= y = if compare x y A.== constant LT then constant False else constant True
 
   min x y = if x <= y then x else y
   max x y = if x <= y then y else x
 
   compare x y =
-    if x == y then constant EQ else
-    if x <= y then constant LT
-              else constant GT
+    if x A.== y then constant EQ else
+    if x   <= y then constant LT
+                else constant GT
 
 -- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
 --
@@ -122,8 +124,8 @@ instance Elt Ordering where
   toElt   = P.toEnum . P.fromIntegral
 
 instance Eq Ordering where
-  x == y = mkBitcast x == (mkBitcast y :: Exp Int8)
-  x /= y = mkBitcast x /= (mkBitcast y :: Exp Int8)
+  x == y = mkBitcast x A.== (mkBitcast y :: Exp Int8)
+  x /= y = mkBitcast x   /= (mkBitcast y :: Exp Int8)
 
 instance Ord Ordering where
   x < y   = mkBitcast x < (mkBitcast y :: Exp Int8)
@@ -225,22 +227,22 @@ $(runQ $ do
 
         mkLt' :: [ExpQ] -> [ExpQ] -> ExpQ
         mkLt' [x] [y]       = [| $x < $y |]
-        mkLt' (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLt' xs ys) ) |]
+        mkLt' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLt' xs ys) ) |]
         mkLt' _      _      = error "mkLt'"
 
         mkGt' :: [ExpQ] -> [ExpQ] -> ExpQ
         mkGt' [x]    [y]    = [| $x > $y |]
-        mkGt' (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGt' xs ys) ) |]
+        mkGt' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGt' xs ys) ) |]
         mkGt' _      _      = error "mkGt'"
 
         mkLtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
         mkLtEq' [x] [y]       = [| $x < $y |]
-        mkLtEq' (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLtEq' xs ys) ) |]
+        mkLtEq' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLtEq' xs ys) ) |]
         mkLtEq' _      _      = error "mkLtEq'"
 
         mkGtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
         mkGtEq' [x]    [y]    = [| $x > $y |]
-        mkGtEq' (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGtEq' xs ys) ) |]
+        mkGtEq' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGtEq' xs ys) ) |]
         mkGtEq' _      _      = error "mkGtEq'"
 
         mkTup :: Int -> Q [Dec]
