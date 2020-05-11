@@ -52,8 +52,6 @@ import Data.Semigroup
 import Data.Monoid
 #endif
 
-import Data.Either (fromRight)
-
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Trafo.Base
