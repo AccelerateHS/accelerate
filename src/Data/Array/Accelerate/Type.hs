@@ -359,7 +359,7 @@ type Tup7 a b c d e f g     =   ((((((((), a), b), c), d), e), f), g)
 type Tup8 a b c d e f g h   =  (((((((((), a), b), c), d), e), f), g), h)
 type Tup9 a b c d e f g h i = ((((((((((), a), b), c), d), e), f), g), h), i)
 type Tup16 a b c d e f g h
-           i j k l m n o p   = ((((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p))
+           i j k l m n o p   = (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
 
 tupR2 :: TupR s t1 -> TupR s t2 -> TupR s (Tup2 t1 t2)
 tupR2 t1 t2 = TupRunit `TupRpair` t1 `TupRpair` t2
