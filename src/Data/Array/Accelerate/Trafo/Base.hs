@@ -45,7 +45,7 @@ module Data.Array.Accelerate.Trafo.Base (
   -- Environments
   Gamma(..), incExp, prjExp, pushExp,
   Extend(..), pushArrayEnv, append, bind,
-  Sink(..), sinkA, sink1,
+  Sink(..), SinkExp(..), sinkA, sink1,
   PreOpenExp', bindExps,
 
   -- Adding new variables to the environment

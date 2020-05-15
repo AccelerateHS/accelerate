@@ -211,20 +211,10 @@ simplifyOpenExp env = first getAny . cvtE
   where
     cvtE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     cvtE exp = case exp of
-      Let lhs@(LeftHandSideSingle _) bnd body
-        -- Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        -- Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | otherwise -> Let lhs <$> bnd' <*> body'
+      Let lhs bnd body -> (u <> v, exp')
         where
-          bnd'  = cvtE bnd
-          env'  = env `pushExp` snd bnd'
-          body' = cvtE' (incExp env') body
-      Let lhs bnd body -> Let lhs <$> bnd' <*> body'
-        where
-          bnd'  = cvtE bnd
-          env'  = lhsExpr lhs env
-          body' = cvtE' env' body
-
+          (u, bnd') = cvtE bnd
+          (v, exp') = cvtLet env lhs bnd' (\env' -> cvtE' env' body)
       Evar var                  -> pure $ Evar var
       Const tp c                -> pure $ Const tp c
       Undef tp                  -> pure $ Undef tp
@@ -255,6 +245,15 @@ simplifyOpenExp env = first getAny . cvtE
 
     cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
     cvtF env' = first Any . simplifyOpenFun env'
+
+    cvtLet :: Gamma acc env' env' aenv -> ELeftHandSide bnd env' env'' -> PreOpenExp acc env' aenv bnd -> (Gamma acc env'' env'' aenv -> (Any, PreOpenExp acc env'' aenv t)) -> (Any, PreOpenExp acc env' aenv t)
+    cvtLet env' lhs@(LeftHandSideSingle _) bnd          body = Let lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
+    cvtLet env' (LeftHandSideWildcard _)   _            body = body env'                                 -- Binding not used, remove let binding
+    cvtLet env' (LeftHandSidePair l1 l2)   (Pair e1 e2) body =                                           -- Split binding to multiple bindings
+      first (const $ Any True) $
+        cvtLet env' l1 e1 $
+          \env'' -> cvtLet env'' l2 (weakenE (weakenWithLHS l1) e2) body
+    cvtLet env' lhs                        bnd          body = Let lhs bnd <$> body (lhsExpr lhs env')   -- Cannot split this binding.
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
