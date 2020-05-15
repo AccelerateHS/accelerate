@@ -380,6 +380,7 @@ Library
         Data.Array.Accelerate.Trafo.Base
         Data.Array.Accelerate.Trafo.Config
         Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.LetSplit
         Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify

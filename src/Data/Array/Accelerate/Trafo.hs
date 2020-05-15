@@ -65,6 +65,7 @@ import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, A
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
+import qualified Data.Array.Accelerate.Trafo.LetSplit   as LetSplit
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 -- import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
@@ -89,6 +90,7 @@ convertAcc = convertAccWith defaultOptions
 convertAccWith :: Config -> Acc arrs -> DelayedAcc (ArrRepr arrs)
 convertAccWith config
   = phase "array-fusion"           (Fusion.convertAccWith config)
+  . phase "array-split-lets"       LetSplit.convertAcc
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAcc `when` vectoriseSequences
   . phase "sharing-recovery"       (Sharing.convertAccWith config)
 
@@ -102,6 +104,7 @@ convertAfun = convertAfunWith defaultOptions
 convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (AreprFunctionR f)
 convertAfunWith config
   = phase "array-fusion"           (Fusion.convertAfunWith config)
+  . phase "array-split-lets"       LetSplit.convertAfun
   -- phase "vectorise-sequences"    Vectorise.vectoriseSeqAfun  `when` vectoriseSequences
   . phase "sharing-recovery"       (Sharing.convertAfunWith config)
 
