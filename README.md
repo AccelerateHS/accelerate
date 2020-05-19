@@ -256,7 +256,8 @@ Here is a list of features that are currently missing:
   [Wiki]:                       https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                     https://github.com/AccelerateHS/accelerate/issues
   [Google-Group]:               http://groups.google.com/group/accelerate-haskell
-  [HOAS-conv]:                  https://web.archive.org/web/20180805092417/http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
+  [HOAS-conv]:                  https://github.com/mchakravarty/hoas-conv
+  <!-- [HOAS-conv]:                  https://web.archive.org/web/20180805092417/http://www.cse.unsw.edu.au/~chak/haskell/term-conv/ -->
   [repa]:                       http://hackage.haskell.org/package/repa
   [wiki-cc]:                    https://en.wikipedia.org/wiki/CUDA#Supported_GPUs
   [YLJ13-video]:                http://youtu.be/ARqE4yT2Z0o
