@@ -1,0 +1,62 @@
+name: CI
+
+# Trigger the workflow on push or pull request, but only for the master branch
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  stack:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        stack: ["latest"]
+        ghc:
+          - "8.8"
+          - "8.6"
+          - "8.4"
+          - "8.2"
+        exclude:
+          - os: macOS-latest
+            ghc: 8.6
+          - os: macOS-latest
+            ghc: 8.4
+          - os: macOS-latest
+            ghc: 8.2
+          - os: windows-latest
+            ghc: 8.6
+          - os: windows-latest
+            ghc: 8.4
+          - os: windows-latest
+            ghc: 8.2
+
+    steps:
+    - uses: actions/checkout@v2
+      if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
+
+    - uses: actions/setup-haskell@v1.1
+      name: Setup Haskell Stack
+      with:
+        enable-stack: true
+        ghc-version: ${{ matrix.ghc }}
+        stack-version: ${{ matrix.stack }}
+
+    - uses: actions/cache@v1
+      name: Cache ~/.stack
+      with:
+        path: ~/.stack
+        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
+
+    - name: Build
+      run: |
+        ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
+        stack build --test --no-run-tests --system-ghc --flag accelerate:nofib
+
+    - name: Test
+      run: |
+        stack test accelerate:doctest --system-ghc --flag accelerate:nofib
+        stack test accelerate:nofib-interpreter --system-ghc --flag accelerate:nofib --test-arguments='--hedgehog-tests 25'
+

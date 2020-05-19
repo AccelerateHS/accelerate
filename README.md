@@ -5,6 +5,7 @@
 
 [![Travis](https://img.shields.io/travis/AccelerateHS/accelerate/master.svg?label=linux)](https://travis-ci.org/AccelerateHS/accelerate)
 [![AppVeyor](https://img.shields.io/appveyor/ci/tmcdonell/accelerate/master.svg?label=windows)](https://ci.appveyor.com/project/tmcdonell/accelerate)
+[![GitHub CI](https://github.com/tmcdonell/accelerate/workflows/CI/badge.svg)](https://github.com/tmcdonell/accelerate/actions)
 [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
 <br>
 [![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)
