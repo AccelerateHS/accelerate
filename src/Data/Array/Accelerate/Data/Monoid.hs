@@ -114,8 +114,8 @@ instance Num a => Monoid (Exp (Sum a)) where
 #if __GLASGOW_HASKELL__ >= 800
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
-  (<>)       = (+)
-  stimes n x = Sum_ $ P.fromIntegral n * getSum (unlift x :: Sum (Exp a))
+  (<>)              = (+)
+  stimes n (Sum_ x) = Sum_ $ P.fromIntegral n * x
 #endif
 
 
@@ -174,8 +174,8 @@ instance Num a => Monoid (Exp (Product a)) where
 #if __GLASGOW_HASKELL__ >= 800
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
-  (<>)       = (*)
-  stimes n x = Product_ $ getProduct (unlift x :: Product (Exp a)) ^ (P.fromIntegral n :: Exp Int)
+  (<>)                  = (*)
+  stimes n (Product_ x) = Product_ $ x ^ (P.fromIntegral n :: Exp Int)
 #endif
 
 
