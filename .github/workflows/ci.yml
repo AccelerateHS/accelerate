@@ -11,30 +11,24 @@ jobs:
   stack:
     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest]
         stack: ["latest"]
         ghc:
           - "8.8"
           - "8.6"
           - "8.4"
           - "8.2"
-        exclude:
+        include:
           - os: macOS-latest
-            ghc: 8.6
-          - os: macOS-latest
-            ghc: 8.4
-          - os: macOS-latest
-            ghc: 8.2
+            ghc: 8.8
           - os: windows-latest
-            ghc: 8.6
-          - os: windows-latest
-            ghc: 8.4
-          - os: windows-latest
-            ghc: 8.2
+            ghc: 8.8
+            allow_failure: true
     env:
-      STACK_FLAGS: "--system-ghc --jobs 1 --flag accelerate:nofib"
+      STACK_FLAGS: "--system-ghc --flag accelerate:nofib"
 
     steps:
     - uses: actions/checkout@v2
