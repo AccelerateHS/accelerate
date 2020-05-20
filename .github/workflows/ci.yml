@@ -34,7 +34,7 @@ jobs:
           - os: windows-latest
             ghc: 8.2
         env:
-          - flags: "--system-ghc --jobs 1 --flag accelerate:nofib"
+          - FLAGS: "--system-ghc --jobs 1 --flag accelerate:nofib"
 
     steps:
     - uses: actions/checkout@v2
@@ -55,10 +55,10 @@ jobs:
     - name: Build
       run: |
         ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
-        stack build ${{ flags }} --test --no-run-tests
+        stack build $FLAGS --test --no-run-tests
 
     - name: Test
       run: |
-        stack test accelerate:doctest ${{ flags }}
-        stack test accelerate:nofib-interpreter ${{ flags }} --test-arguments='--hedgehog-tests 25'
+        stack test accelerate:doctest $FLAGS
+        stack test accelerate:nofib-interpreter $FLAGS --test-arguments='--hedgehog-tests 25'
 
