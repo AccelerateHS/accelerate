@@ -114,7 +114,7 @@ prettyPreOpenAfun prettyAcc aenv0 = next (pretty '\\') aenv0
     next :: Adoc -> Val aenv' -> PreOpenAfun acc aenv' f' -> Adoc
     next vs aenv (Abody body)   = hang shiftwidth (sep [vs <> "->", prettyAcc context0 aenv body])
     next vs aenv (Alam lhs lam) =
-      let (aenv', lhs') = prettyALhs aenv lhs
+      let (aenv', lhs') = prettyALhs True aenv lhs
       in  next (vs <> lhs' <> space) aenv' lam
 
 prettyPreOpenAcc
@@ -220,7 +220,7 @@ prettyAlet ctx prettyAcc extractAcc aenv0
     collect aenv =
       \case
         Alet lhs a1 a2 ->
-          let (aenv', v)      = prettyALhs aenv lhs
+          let (aenv', v)      = prettyALhs False aenv lhs
               a1'             = ppA aenv a1
               bnd | isAlet a1 = nest shiftwidth (vsep [v <+> equals, a1'])
                   | otherwise = v <+> align (equals <+> a1')
@@ -270,11 +270,11 @@ prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
     collect _             = Nothing
 
 -- TODO: Should we also print the types of the declared variables? And the types of wildcards?
-prettyALhs :: Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
-prettyALhs = prettyLhs False 'a'
+prettyALhs :: Bool -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyALhs requiresParens = prettyLhs requiresParens 'a'
 
-prettyELhs :: Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
-prettyELhs = prettyLhs False 'x'
+prettyELhs :: Bool -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyELhs requiresParens = prettyLhs requiresParens 'x'
 
 prettyLhs :: forall s env env' arrs. Bool -> Char -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
 prettyLhs requiresParens x env0 lhs = case collect lhs of
@@ -329,7 +329,7 @@ prettyPreOpenFun prettyAcc extractAcc env0 aenv = next (pretty '\\') env0
       = hang shiftwidth (sep [ vs <> "->"
                              , prettyPreOpenExp context0 prettyAcc extractAcc env aenv body])
     next vs env (Lam lhs lam) =
-      let (env', lhs') = prettyELhs env lhs
+      let (env', lhs') = prettyELhs True env lhs
       in  next (vs <> lhs' <> space) env' lam
 
 prettyPreOpenExp
@@ -354,7 +354,7 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
     --
     PrimConst c           -> prettyPrimConst c
     Const tp c            -> prettyConst (TupRsingle tp) c
-    Pair{}                -> prettyTuple prettyAcc extractAcc env aenv exp
+    Pair{}                -> prettyTuple ctx prettyAcc extractAcc env aenv exp
     Nil                   -> "()"
     VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
     VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
@@ -436,7 +436,7 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
     collect env =
       \case
         Let lhs e1 e2 ->
-          let (env', v)       = prettyELhs env lhs
+          let (env', v)       = prettyELhs False env lhs
               e1'             = ppE env e1
               bnd | isLet e1  = nest shiftwidth (vsep [v <+> equals, e1'])
                   | otherwise = v <+> align (equals <+> e1')
@@ -465,14 +465,15 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
 
 prettyTuple
     :: forall acc env aenv t.
-       PrettyAcc acc
+       Context
+    -> PrettyAcc acc
     -> ExtractAcc acc
     -> Val env
     -> Val aenv
     -> PreOpenExp acc env aenv t
     -> Adoc
-prettyTuple prettyAcc extractAcc env aenv exp = case collect exp of
-    Just tup -> align $ "T" <> pretty (length tup) <+> sep tup
+prettyTuple ctx prettyAcc extractAcc env aenv exp = case collect exp of
+    Just tup -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
     Nothing  -> align $ ppPair exp
   where
     ppPair :: PreOpenExp acc env aenv t' -> Adoc
