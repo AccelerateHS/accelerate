@@ -15,7 +15,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        stack: ["latest"]
         allow_failure: [false]
         ghc:
           - "8.8"
@@ -30,7 +29,7 @@ jobs:
             ghc: 8.8
             allow_failure: true
     env:
-      STACK_FLAGS: "--system-ghc --flag accelerate:nofib"
+      STACK_FLAGS: "--flag accelerate:nofib"
 
     steps:
     - uses: actions/checkout@v2
@@ -39,8 +38,8 @@ jobs:
       name: Setup Haskell Stack
       with:
         enable-stack: true
+        stack-no-global: true
         ghc-version: ${{ matrix.ghc }}
-        stack-version: ${{ matrix.stack }}
 
     - uses: actions/cache@v1
       name: Cache ~/.stack
