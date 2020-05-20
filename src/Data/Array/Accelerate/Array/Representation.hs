@@ -44,7 +44,7 @@ module Data.Array.Accelerate.Array.Representation (
   VecR(..), vecRvector, vecRtuple, vecPack, vecUnpack,
 
   -- * Stencils
-  StencilR(..), stencilElt, stencilShape, stencilType, stencilArrayR,
+  StencilR(..), stencilElt, stencilShape, stencilType, stencilArrayR, stencilHalo,
 
   -- * Show
   showShape, showElement, showArray, showArray',
@@ -488,6 +488,31 @@ stencilType (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) = tupR9 (stencilType s1) (
 
 stencilArrayR :: StencilR sh e pat -> ArrayR (Array sh e)
 stencilArrayR stencil = ArrayR (stencilShape stencil) (stencilElt stencil)
+
+stencilHalo :: StencilR sh e stencil -> (ShapeR sh, sh)
+stencilHalo = go'
+  where
+    go' :: StencilR sh e stencil -> (ShapeR sh, sh)
+    go' StencilRunit3{} = (dim1, ((), 1))
+    go' StencilRunit5{} = (dim1, ((), 2))
+    go' StencilRunit7{} = (dim1, ((), 3))
+    go' StencilRunit9{} = (dim1, ((), 4))
+    --
+    go' (StencilRtup3 a b c            ) = (ShapeRsnoc shr, cons shr 1 $ foldl1 (union shr) [a', go b, go c])
+      where (shr, a') = go' a
+    go' (StencilRtup5 a b c d e        ) = (ShapeRsnoc shr, cons shr 2 $ foldl1 (union shr) [a', go b, go c, go d, go e])
+      where (shr, a') = go' a
+    go' (StencilRtup7 a b c d e f g    ) = (ShapeRsnoc shr, cons shr 3 $ foldl1 (union shr) [a', go b, go c, go d, go e, go f, go g])
+      where (shr, a') = go' a
+    go' (StencilRtup9 a b c d e f g h i) = (ShapeRsnoc shr, cons shr 4 $ foldl1 (union shr) [a', go b, go c, go d, go e, go f, go g, go h, go i])
+      where (shr, a') = go' a
+
+    go :: StencilR sh e stencil -> sh
+    go = snd . go'
+    
+    cons :: ShapeR sh -> Int -> sh -> (sh, Int)
+    cons ShapeRz          ix ()       = ((), ix)
+    cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
 
 rnfArray :: ArrayR a -> a -> ()
 rnfArray (ArrayR shr tp) (Array sh ad) = rnfShape shr sh `seq` rnfArrayData tp ad
