@@ -25,6 +25,7 @@ jobs:
         include:
           - os: macOS-latest
             ghc: 8.8
+            allow_failure: false
           - os: windows-latest
             ghc: 8.8
             allow_failure: true
