@@ -523,7 +523,11 @@ usesOfPreAcc withShape countAcc idx = count
       Apply _ f a                -> countAF f idx + countA a
       Aforeign _ _ _ a           -> countA a
       Acond p t e                -> countE p + countA t + countA e
-      Awhile c f a               -> countAF c idx + countAF f idx + countA a
+      -- Body and condition of the while loop may be evaluated multiple times.
+      -- We multiply the usage count, as a practical solution to this. As
+      -- we will check whether the count is at most 1, we will thus never
+      -- inline variables used in while loops.
+      Awhile c f a               -> 2 * countAF c idx + 2 * countAF f idx + countA a
       Use _ _                    -> 0
       Unit _ e                   -> countE e
       Reshape _ e a              -> countE e  + countA a
