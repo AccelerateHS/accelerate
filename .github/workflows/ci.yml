@@ -11,11 +11,12 @@ jobs:
   stack:
     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
+    continue-on-error: ${{ matrix.allow_failure }}
     strategy:
       matrix:
         os: [ubuntu-latest]
         stack: ["latest"]
+        allow_failure: [false]
         ghc:
           - "8.8"
           - "8.6"
@@ -26,7 +27,7 @@ jobs:
             ghc: 8.8
           - os: windows-latest
             ghc: 8.8
-            experimental: true
+            allow_failure: true
     env:
       STACK_FLAGS: "--system-ghc --flag accelerate:nofib"
 
