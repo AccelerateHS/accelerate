@@ -46,6 +46,13 @@ jobs:
         path: ~/.stack
         key: ${{ runner.os }}-${{ matrix.ghc }}-stack
 
+    - name: Update PATH
+      run: echo "::add-path::$HOME/AppData/Roaming/local/bin"
+      if: ${{ matrix.os }} == 'windows-latest'
+
+    - name: Echo PATH
+      run: echo $PATH
+
     - name: Build
       run: |
         ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
