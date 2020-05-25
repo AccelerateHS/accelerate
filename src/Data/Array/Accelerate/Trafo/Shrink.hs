@@ -479,7 +479,7 @@ usesOfExp range = countE
       FromIndex _ sh i          -> countE sh <> countE i
       ToIndex _ sh e            -> countE sh <> countE e
       Cond p t e                -> countE p  <> countE t <> countE e
-      While p f x               -> countE x  <> loopCount (usesOfFun range p) <> usesOfFun range f
+      While p f x               -> countE x  <> loopCount (usesOfFun range p) <> loopCount (usesOfFun range f)
       PrimConst _               -> Finite 0
       PrimApp _ x               -> countE x
       Index _ sh                -> countE sh
