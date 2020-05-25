@@ -280,21 +280,17 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
 
     -- Free variables
     --
-    fvA :: FVAcc DelayedOpenAcc
-    fvA env (Manifest (Avar (Var _ ix))) = [ Vertex (fst $ aprj ix env) Nothing ]
-    fvA _   _                            = $internalError "graphviz" "expected array variable"
+    fvF :: Fun aenv t -> [Vertex]
+    fvF = fvOpenFun Empty aenv
 
-    fvF :: DelayedFun aenv t -> [Vertex]
-    fvF = fvPreOpenFun fvA Empty aenv
-
-    fvE :: DelayedExp aenv t -> [Vertex]
-    fvE = fvPreOpenExp fvA Empty aenv
+    fvE :: Exp aenv t -> [Vertex]
+    fvE = fvOpenExp Empty aenv
 
     -- Pretty-printing
     --
     avar :: ArrayVar aenv t -> PDoc
     avar (Var _ ix) = let (ident, v) = aprj ix aenv
-                         in  PDoc (pretty v) [Vertex ident Nothing]
+                      in  PDoc (pretty v) [Vertex ident Nothing]
 
     aenv' :: Val aenv
     aenv' = avalToVal aenv
@@ -312,14 +308,14 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
       | Shape a    <- sh                   -- identical shape
       , Just b     <- isIdentityIndexing f -- function is `\ix -> b ! ix`
       , Just Refl  <- match a b            -- function thus is `\ix -> a ! ix`
-      = ppA a
+      = ppA $ Manifest $ Avar a
     ppA (Delayed _ sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
 
     ppB :: forall sh e.
            TupleType e
-        -> PreBoundary DelayedOpenAcc aenv (Array sh e)
+        -> Boundary aenv (Array sh e)
         -> Dot PDoc
     ppB _  Clamp        = return (PDoc "clamp"  [])
     ppB _  Mirror       = return (PDoc "mirror" [])
@@ -327,11 +323,11 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     ppB tp (Constant e) = return (PDoc (prettyConst tp e) [])
     ppB _  (Function f) = ppF f
 
-    ppF :: DelayedFun aenv t -> Dot PDoc
-    ppF = return . uncurry PDoc . (parens . prettyDelayedFun aenv' &&& fvF)
+    ppF :: Fun aenv t -> Dot PDoc
+    ppF = return . uncurry PDoc . (parens . prettyFun aenv' &&& fvF)
 
-    ppE :: DelayedExp aenv t -> Dot PDoc
-    ppE = return . uncurry PDoc . (prettyDelayedExp aenv' &&& fvE)
+    ppE :: Exp aenv t -> Dot PDoc
+    ppE = return . uncurry PDoc . (prettyExp aenv' &&& fvE)
 
     lift :: DelayedOpenAcc aenv a -> Dot Vertex
     lift Delayed{}                    = $internalError "prettyDelayedOpenAcc" "expected manifest array"
@@ -483,49 +479,6 @@ replant pnode@(PNode ident tree _) =
 -- nodes.
 --
 
-prettyDelayedFun :: Val aenv -> DelayedFun aenv f -> Adoc
-prettyDelayedFun = prettyDelayedOpenFun Empty
-
-prettyDelayedExp :: Val aenv -> DelayedExp aenv t -> Adoc
-prettyDelayedExp = prettyDelayedOpenExp context0 Empty
-
-
-prettyDelayedOpenFun
-    :: forall env aenv f.
-       Val env
-    -> Val aenv
-    -> DelayedOpenFun env aenv f
-    -> Adoc
-prettyDelayedOpenFun env0 aenv = next "\\\\" env0
-  where
-    -- graphviz will silently not print a label containing the string "->",
-    -- so instead we use the special token "&rarr" for a short right arrow.
-    --
-    next :: Adoc -> Val env' -> PreOpenFun DelayedOpenAcc env' aenv f' -> Adoc
-    next vs env (Body body) =
-      nest shiftwidth (sep [ vs <> "&rarr;"
-                           , prettyDelayedOpenExp context0 env aenv body ])
-    next vs env (Lam lhs lam)  =
-      let (env', arg) = prettyELhs True env lhs
-      in  next (vs <> arg <> space) env' lam
-
-prettyDelayedOpenExp
-    :: Context
-    -> Val env
-    -> Val aenv
-    -> DelayedOpenExp env aenv t
-    -> Adoc
-prettyDelayedOpenExp context = prettyPreOpenExp context pp ex
-  where
-    pp :: PrettyAcc DelayedOpenAcc
-    pp _ aenv (Manifest (Avar (Var _ ix))) = prj ix aenv
-    pp _ _    _                            = $internalError "prettyDelayedOpenExp" "expected array variable"
-
-    ex :: ExtractAcc DelayedOpenAcc
-    ex (Manifest pacc) = pacc
-    ex Delayed{}       = $internalError "prettyDelayedOpenExp" "expected manifest array"
-
-
 -- Data dependencies
 -- -----------------
 --
@@ -534,38 +487,37 @@ prettyDelayedOpenExp context = prettyPreOpenExp context pp ex
 -- nodes (vertices) into the current term.
 --
 
-type FVAcc acc = forall aenv a. Aval aenv -> acc aenv a -> [Vertex]
+fvAvar :: Aval aenv -> ArrayVar aenv a -> [Vertex]
+fvAvar env (Var _ ix) = [ Vertex (fst $ aprj ix env) Nothing ]
 
-fvPreOpenFun
-    :: forall acc env aenv fun.
-       FVAcc acc
-    -> Val env
+fvOpenFun
+    :: forall env aenv fun.
+       Val env
     -> Aval aenv
-    -> PreOpenFun acc env aenv fun
+    -> OpenFun env aenv fun
     -> [Vertex]
-fvPreOpenFun fvA env aenv (Body b)    = fvPreOpenExp fvA env  aenv b
-fvPreOpenFun fvA env aenv (Lam lhs f) = fvPreOpenFun fvA env' aenv f
+fvOpenFun env aenv (Body b)    = fvOpenExp env  aenv b
+fvOpenFun env aenv (Lam lhs f) = fvOpenFun env' aenv f
       where
         (env', _) = prettyELhs True env lhs
 
-fvPreOpenExp
-    :: forall acc env aenv exp.
-       FVAcc acc
-    -> Val env
+fvOpenExp
+    :: forall env aenv exp.
+       Val env
     -> Aval aenv
-    -> PreOpenExp acc env aenv exp
+    -> OpenExp env aenv exp
     -> [Vertex]
-fvPreOpenExp fvA env aenv = fv
+fvOpenExp env aenv = fv
   where
-    fvF :: PreOpenFun acc env aenv f -> [Vertex]
-    fvF = fvPreOpenFun fvA env aenv
+    fvF :: OpenFun env aenv f -> [Vertex]
+    fvF = fvOpenFun env aenv
 
-    fv :: PreOpenExp acc env aenv e -> [Vertex]
-    fv (Shape acc)              = if cfgIncludeShape then fvA aenv acc else []
-    fv (Index acc i)            = concat [ fvA aenv acc, fv i ]
-    fv (LinearIndex acc i)      = concat [ fvA aenv acc, fv i ]
+    fv :: OpenExp env aenv e -> [Vertex]
+    fv (Shape acc)              = if cfgIncludeShape then fvAvar aenv acc else []
+    fv (Index acc i)            = concat [ fvAvar aenv acc, fv i ]
+    fv (LinearIndex acc i)      = concat [ fvAvar aenv acc, fv i ]
     --
-    fv (Let lhs e1 e2)          = concat [ fv e1, fvPreOpenExp fvA env' aenv e2 ]
+    fv (Let lhs e1 e2)          = concat [ fv e1, fvOpenExp env' aenv e2 ]
       where
         (env', _) = prettyELhs False env lhs
     fv Evar{}                   = []

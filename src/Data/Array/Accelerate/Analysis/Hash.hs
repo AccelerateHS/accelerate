@@ -23,14 +23,13 @@ module Data.Array.Accelerate.Analysis.Hash (
   Hash,
   HashOptions(..), defaultHashOptions,
   hashPreOpenAcc, hashPreOpenAccWith,
-  hashPreOpenFun, hashPreOpenFunWith,
-  hashPreOpenExp, hashPreOpenExpWith,
+  hashOpenFun, hashOpenExp,
 
   -- auxiliary
   EncodeAcc,
   encodePreOpenAcc,
-  encodePreOpenExp,
-  encodePreOpenFun,
+  encodeOpenExp,
+  encodeOpenFun,
   encodeArraysType,
   hashQ,
 
@@ -95,14 +94,6 @@ defaultHashOptions = HashOptions True
 hashPreOpenAcc :: HasArraysRepr acc => EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
 hashPreOpenAcc = hashPreOpenAccWith defaultHashOptions
 
-{-# INLINEABLE hashPreOpenFun #-}
-hashPreOpenFun :: HasArraysRepr acc => EncodeAcc acc -> PreOpenFun acc env aenv f -> Hash
-hashPreOpenFun = hashPreOpenFunWith defaultHashOptions
-
-{-# INLINEABLE hashPreOpenExp #-}
-hashPreOpenExp :: HasArraysRepr acc => EncodeAcc acc -> PreOpenExp acc env aenv t -> Hash
-hashPreOpenExp = hashPreOpenExpWith defaultHashOptions
-
 {-# INLINEABLE hashPreOpenAccWith #-}
 hashPreOpenAccWith :: HasArraysRepr acc => HashOptions -> EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
 hashPreOpenAccWith options encodeAcc
@@ -110,19 +101,19 @@ hashPreOpenAccWith options encodeAcc
   . toLazyByteString
   . encodePreOpenAcc options encodeAcc
 
-{-# INLINEABLE hashPreOpenFunWith #-}
-hashPreOpenFunWith :: HasArraysRepr acc => HashOptions -> EncodeAcc acc -> PreOpenFun acc env aenv f -> Hash
-hashPreOpenFunWith options encodeAcc
+{-# INLINEABLE hashOpenFun #-}
+hashOpenFun :: OpenFun env aenv f -> Hash
+hashOpenFun
   = hashlazy
   . toLazyByteString
-  . encodePreOpenFun options encodeAcc
+  . encodeOpenFun
 
-{-# INLINEABLE hashPreOpenExpWith #-}
-hashPreOpenExpWith :: HasArraysRepr acc => HashOptions -> EncodeAcc acc -> PreOpenExp acc env aenv t -> Hash
-hashPreOpenExpWith options encodeAcc
+{-# INLINEABLE hashOpenExp #-}
+hashOpenExp :: OpenExp env aenv t -> Hash
+hashOpenExp
   = hashlazy
   . toLazyByteString
-  . encodePreOpenExp options encodeAcc
+  . encodeOpenExp
 
 
 -- Array computations
@@ -145,20 +136,17 @@ encodePreOpenAcc options encodeAcc pacc =
       travAF :: PreOpenAfun acc aenv' f -> Builder
       travAF = encodePreOpenAfun options encodeAcc
 
-      travE :: PreOpenExp acc env' aenv' e -> Builder
-      travE = encodePreOpenExp options encodeAcc
+      travE :: OpenExp env' aenv' e -> Builder
+      travE = encodeOpenExp
 
-      travF :: PreOpenFun acc env' aenv' f -> Builder
-      travF = encodePreOpenFun options encodeAcc
-
-      travB :: TupleType e -> PreBoundary acc aenv' (Array sh e) -> Builder
-      travB = encodePreBoundary options encodeAcc
+      travF :: OpenFun env' aenv' f -> Builder
+      travF = encodeOpenFun
 
       deep :: Builder -> Builder
       deep | perfect options = id
            | otherwise       = const mempty
 
-      deepE :: forall env' aenv' e. PreOpenExp acc env' aenv' e -> Builder
+      deepE :: forall env' aenv' e. OpenExp env' aenv' e -> Builder
       deepE e
         | perfect options = travE e
         | otherwise       = encodeTupleType $ expType e
@@ -195,8 +183,8 @@ encodePreOpenAcc options encodeAcc pacc =
     Scanr' f e a                 -> intHost $(hashQ "Scanr'")      <> travF f  <> travE e  <> travA a
     Scanr1 f a                   -> intHost $(hashQ "Scanr1")      <> travF f  <> travA a
     Permute f1 a1 f2 a2          -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
-    Stencil s _ f b a            -> intHost $(hashQ "Stencil")     <> travF f  <> travB (stencilElt s) b  <> travA a
-    Stencil2 s1 s2 _ f b1 a1 b2 a2 -> intHost $(hashQ "Stencil2")  <> travF f  <> travB (stencilElt s1) b1 <> travA a1 <> travB (stencilElt s2) b2 <> travA a2
+    Stencil s _ f b a            -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilElt s) b  <> travA a
+    Stencil2 s1 s2 _ f b1 a1 b2 a2 -> intHost $(hashQ "Stencil2")  <> travF f  <> encodeBoundary (stencilElt s1) b1 <> travA a1 <> encodeBoundary (stencilElt s2) b2 <> travA a2
 
 {--
 {-# INLINEABLE encodePreOpenSeq #-}
@@ -206,14 +194,14 @@ encodePreOpenSeq encodeAcc s =
       travA :: acc aenv' a -> Builder
       travA = encodeAcc -- XXX: plus type information?
 
-      travE :: PreOpenExp acc env' aenv' e -> Builder
-      travE = encodePreOpenExp encodeAcc
+      travE :: OpenExp env' aenv' e -> Builder
+      travE = encodeOpenExp encodeAcc
 
       travAF :: PreOpenAfun acc aenv' f -> Builder
       travAF = encodePreOpenAfun encodeAcc
 
-      travF :: PreOpenFun acc env' aenv' f -> Builder
-      travF = encodePreOpenFun encodeAcc
+      travF :: OpenFun env' aenv' f -> Builder
+      travF = encodeOpenFun encodeAcc
 
       travS :: PreOpenSeq acc aenv senv' arrs' -> Builder
       travS = encodePreOpenSeq encodeAcc
@@ -285,18 +273,15 @@ encodePreOpenAfun options travA afun =
     Alam lhs l -> intHost $(hashQ "Alam")  <> travL lhs  l
 
 
-encodePreBoundary
-    :: forall acc aenv sh e.
-       HashOptions
-    -> EncodeAcc acc
-    -> TupleType e
-    -> PreBoundary acc aenv (Array sh e)
+encodeBoundary
+    :: TupleType e
+    -> Boundary aenv (Array sh e)
     -> Builder
-encodePreBoundary _ _ _  Wrap          = intHost $(hashQ "Wrap")
-encodePreBoundary _ _ _  Clamp         = intHost $(hashQ "Clamp")
-encodePreBoundary _ _ _  Mirror        = intHost $(hashQ "Mirror")
-encodePreBoundary _ _ tp (Constant c)  = intHost $(hashQ "Constant") <> encodeConst tp c
-encodePreBoundary o h _  (Function f)  = intHost $(hashQ "Function") <> encodePreOpenFun o h f
+encodeBoundary _  Wrap          = intHost $(hashQ "Wrap")
+encodeBoundary _  Clamp         = intHost $(hashQ "Clamp")
+encodeBoundary _  Mirror        = intHost $(hashQ "Mirror")
+encodeBoundary tp (Constant c)  = intHost $(hashQ "Constant") <> encodeConst tp c
+encodeBoundary _  (Function f)  = intHost $(hashQ "Function") <> encodeOpenFun f
 
 encodeSliceIndex :: SliceIndex slix sl co sh -> Builder
 encodeSliceIndex SliceNil         = intHost $(hashQ "SliceNil")
@@ -307,31 +292,18 @@ encodeSliceIndex (SliceFixed r)   = intHost $(hashQ "sliceFixed") <> encodeSlice
 -- Scalar expressions
 -- ------------------
 
-{-# INLINEABLE encodePreOpenExp #-}
-encodePreOpenExp
-    :: forall acc env aenv exp.
-       HashOptions
-    -> EncodeAcc acc
-    -> PreOpenExp acc env aenv exp
+{-# INLINEABLE encodeOpenExp #-}
+encodeOpenExp
+    :: forall env aenv exp.
+       OpenExp env aenv exp
     -> Builder
-encodePreOpenExp options encodeAcc exp =
+encodeOpenExp exp =
   let
-      -- XXX: Temporary fix for hashing expressions which only depend on
-      -- free array variables. For the code generating backends it will
-      -- never pick up expressions which differ only at free array
-      -- variables. We know that this will always be an Avar (we depend on
-      -- array expressions being floated out already) so we should change
-      -- this in the AST. This problem occurred in the Quickhull program.
-      --   -- TLM 2020-01-08
-      --
-      travA :: forall aenv' a. acc aenv' a -> Builder
-      travA a = encodeAcc (options {perfect=True}) a
+      travE :: forall env' aenv' e. OpenExp env' aenv' e -> Builder
+      travE e = encodeOpenExp e
 
-      travE :: forall env' aenv' e. PreOpenExp acc env' aenv' e -> Builder
-      travE e = encodePreOpenExp options encodeAcc e
-
-      travF :: PreOpenFun acc env' aenv' f -> Builder
-      travF = encodePreOpenFun options encodeAcc
+      travF :: OpenFun env' aenv' f -> Builder
+      travF = encodeOpenFun
   in
   case exp of
     Let lhs bnd body            -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
@@ -350,32 +322,22 @@ encodePreOpenExp options encodeAcc exp =
     While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
     PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
     PrimConst c                 -> intHost $(hashQ "PrimConst")   <> encodePrimConst c
-    Index a ix                  -> intHost $(hashQ "Index")       <> travA a  <> travE ix
-    LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> travA a  <> travE ix
-    Shape a                     -> intHost $(hashQ "Shape")       <> travA a
+    Index a ix                  -> intHost $(hashQ "Index")       <> encodeArrayVar a <> travE ix
+    LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> encodeArrayVar a <> travE ix
+    Shape a                     -> intHost $(hashQ "Shape")       <> encodeArrayVar a
     ShapeSize _ sh              -> intHost $(hashQ "ShapeSize")   <> travE sh
     Foreign _ _ f e             -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
     Coerce _ tp e               -> intHost $(hashQ "Coerce")      <> encodeScalarType tp <> travE e
 
+encodeArrayVar :: ArrayVar aenv a -> Builder
+encodeArrayVar (Var repr v) = encodeArrayType repr <> encodeIdx v
 
-{-# INLINEABLE encodePreOpenFun #-}
-encodePreOpenFun
-    :: forall acc env aenv f.
-       HashOptions
-    -> EncodeAcc acc
-    -> PreOpenFun acc env aenv f
+{-# INLINEABLE encodeOpenFun #-}
+encodeOpenFun
+    :: OpenFun env aenv f
     -> Builder
-encodePreOpenFun options travA fun =
-  let
-      travB :: forall env' aenv' e. PreOpenExp acc env' aenv' e -> Builder
-      travB b = encodePreOpenExp options travA b
-
-      travL :: forall env' aenv' b. PreOpenFun acc env' aenv' b -> Builder
-      travL l = encodePreOpenFun options travA l
-  in
-  case fun of
-    Body b -> intHost $(hashQ "Body") <> travB b
-    Lam lhs l -> intHost $(hashQ "Lam") <> encodeLeftHandSide encodeScalarType lhs <> travL l
+encodeOpenFun (Body b)    = intHost $(hashQ "Body") <> encodeOpenExp b
+encodeOpenFun (Lam lhs l) = intHost $(hashQ "Lam") <> encodeLeftHandSide encodeScalarType lhs <> encodeOpenFun l
 
 
 encodeConst :: TupleType t -> t -> Builder

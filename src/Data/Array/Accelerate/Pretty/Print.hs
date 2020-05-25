@@ -25,8 +25,8 @@ module Data.Array.Accelerate.Pretty.Print (
   PrettyAcc, ExtractAcc,
   prettyPreOpenAcc,
   prettyPreOpenAfun,
-  prettyPreOpenExp,
-  prettyPreOpenFun,
+  prettyOpenExp, prettyExp,
+  prettyOpenFun, prettyFun,
   prettyArray,
   prettyConst,
   prettyELhs,
@@ -187,15 +187,15 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     ppAF :: PreOpenAfun acc aenv f -> Adoc
     ppAF = parens . prettyPreOpenAfun prettyAcc aenv
 
-    ppE :: PreExp acc aenv t -> Adoc
-    ppE = prettyPreOpenExp app prettyAcc extractAcc Empty aenv
+    ppE :: Exp aenv t -> Adoc
+    ppE = prettyOpenExp app Empty aenv
 
-    ppF :: PreFun acc aenv t -> Adoc
-    ppF = parens . prettyPreOpenFun prettyAcc extractAcc Empty aenv
+    ppF :: Fun aenv t -> Adoc
+    ppF = parens . prettyOpenFun Empty aenv
 
     ppB :: forall sh e.
            TupleType e
-        -> PreBoundary acc aenv (Array sh e)
+        -> Boundary aenv (Array sh e)
         -> Adoc
     ppB _  Clamp        = "clamp"
     ppB _  Mirror       = "mirror"
@@ -305,18 +305,21 @@ prettyArray repr = parens . fromString . showArray repr
 
 -- Scalar expressions
 -- ------------------
+prettyFun :: Val aenv -> Fun aenv f -> Adoc
+prettyFun = prettyOpenFun Empty
 
-prettyPreOpenFun
-    :: forall acc env aenv f.
-       PrettyAcc acc
-    -> ExtractAcc acc
-    -> Val env
+prettyExp :: Val aenv -> Exp aenv t -> Adoc
+prettyExp = prettyOpenExp context0 Empty
+
+prettyOpenFun
+    :: forall env aenv f.
+       Val env
     -> Val aenv
-    -> PreOpenFun acc env aenv f
+    -> OpenFun env aenv f
     -> Adoc
-prettyPreOpenFun prettyAcc extractAcc env0 aenv = next (pretty '\\') env0
+prettyOpenFun env0 aenv = next (pretty '\\') env0
   where
-    next :: Adoc -> Val env' -> PreOpenFun acc env' aenv f' -> Adoc
+    next :: Adoc -> Val env' -> OpenFun env' aenv f' -> Adoc
     next vs env (Body body)
       --   PrimApp f x                             <- body
       -- , op                                      <- primOperator f
@@ -327,24 +330,22 @@ prettyPreOpenFun prettyAcc extractAcc env0 aenv = next (pretty '\\') env0
       -- = opName op -- surrounding context will add parens
       --
       = hang shiftwidth (sep [ vs <> "->"
-                             , prettyPreOpenExp context0 prettyAcc extractAcc env aenv body])
+                             , prettyOpenExp context0 env aenv body])
     next vs env (Lam lhs lam) =
       let (env', lhs') = prettyELhs True env lhs
       in  next (vs <> lhs' <> space) env' lam
 
-prettyPreOpenExp
-    :: forall acc env aenv t.
+prettyOpenExp
+    :: forall env aenv t.
        Context
-    -> PrettyAcc acc
-    -> ExtractAcc acc
     -> Val env
     -> Val aenv
-    -> PreOpenExp acc env aenv t
+    -> OpenExp env aenv t
     -> Adoc
-prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
+prettyOpenExp ctx env aenv exp =
   case exp of
     Evar (Var _ idx)      -> prj idx env
-    Let{}                 -> prettyLet ctx prettyAcc extractAcc env aenv exp
+    Let{}                 -> prettyLet ctx env aenv exp
     PrimApp f x
       | a `Pair` b <- x   -> ppF2 op  (ppE a) (ppE b)
       | otherwise         -> ppF1 op' (ppE x)
@@ -354,7 +355,7 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
     --
     PrimConst c           -> prettyPrimConst c
     Const tp c            -> prettyConst (TupRsingle tp) c
-    Pair{}                -> prettyTuple ctx prettyAcc extractAcc env aenv exp
+    Pair{}                -> prettyTuple ctx env aenv exp
     Nil                   -> "()"
     VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
     VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
@@ -385,14 +386,14 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
     Undef tp              -> withTypeRep tp "undef"
 
   where
-    ppE :: PreOpenExp acc env aenv e -> Context -> Adoc
-    ppE e c = prettyPreOpenExp c prettyAcc extractAcc env aenv e
+    ppE :: OpenExp env aenv e -> Context -> Adoc
+    ppE e c = prettyOpenExp c env aenv e
 
-    ppA :: acc aenv a -> Context -> Adoc
-    ppA acc _ = prettyAcc app aenv acc
+    ppA :: ArrayVar aenv a -> Context -> Adoc
+    ppA acc _ = prettyArrayVar aenv acc
 
-    ppF :: PreOpenFun acc env aenv f -> Context -> Adoc
-    ppF f _ = parens $ prettyPreOpenFun prettyAcc extractAcc env aenv f
+    ppF :: OpenFun env aenv f -> Context -> Adoc
+    ppF f _ = parens $ prettyOpenFun env aenv f
 
     ppF1 :: Operator -> (Context -> Adoc) -> Adoc
     ppF1 op x
@@ -418,21 +419,25 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
     withTypeRep :: ScalarType t -> Adoc -> Adoc
     withTypeRep tp op = op <> enclose langle rangle (pretty (showScalarType tp))
 
+prettyArrayVar
+    :: forall aenv a.
+       Val aenv
+    -> ArrayVar aenv a
+    -> Adoc
+prettyArrayVar aenv (Var _ idx) = prj idx aenv
 
 prettyLet
-    :: forall acc env aenv t.
+    :: forall env aenv t.
        Context
-    -> PrettyAcc acc
-    -> ExtractAcc acc
     -> Val env
     -> Val aenv
-    -> PreOpenExp acc env aenv t
+    -> OpenExp env aenv t
     -> Adoc
-prettyLet ctx prettyAcc extractAcc env0 aenv
+prettyLet ctx env0 aenv
   = parensIf (needsParens ctx "let")
   . align . wrap . collect env0
   where
-    collect :: Val env' -> PreOpenExp acc env' aenv e -> ([Adoc], Adoc)
+    collect :: Val env' -> OpenExp env' aenv e -> ([Adoc], Adoc)
     collect env =
       \case
         Let lhs e1 e2 ->
@@ -446,12 +451,12 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
         --
         next     -> ([], ppE env next)
 
-    isLet :: PreOpenExp acc env' aenv t' -> Bool
+    isLet :: OpenExp env' aenv t' -> Bool
     isLet Let{} = True
     isLet _     = False
 
-    ppE :: Val env' -> PreOpenExp acc env' aenv t' -> Adoc
-    ppE env = prettyPreOpenExp context0 prettyAcc extractAcc env aenv
+    ppE :: Val env' -> OpenExp env' aenv t' -> Adoc
+    ppE env = prettyOpenExp context0 env aenv
 
     wrap :: ([Adoc], Adoc) -> Adoc
     wrap ([],   body) = body  -- shouldn't happen!
@@ -464,27 +469,25 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
              ]
 
 prettyTuple
-    :: forall acc env aenv t.
+    :: forall env aenv t.
        Context
-    -> PrettyAcc acc
-    -> ExtractAcc acc
     -> Val env
     -> Val aenv
-    -> PreOpenExp acc env aenv t
+    -> OpenExp env aenv t
     -> Adoc
-prettyTuple ctx prettyAcc extractAcc env aenv exp = case collect exp of
+prettyTuple ctx env aenv exp = case collect exp of
     Just tup -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
     Nothing  -> align $ ppPair exp
   where
-    ppPair :: PreOpenExp acc env aenv t' -> Adoc
-    ppPair (Pair e1 e2) = "(" <> ppPair e1 <> "," <+> prettyPreOpenExp context0 prettyAcc extractAcc env aenv e2 <> ")"
-    ppPair e            = prettyPreOpenExp context0 prettyAcc extractAcc env aenv e
+    ppPair :: OpenExp env aenv t' -> Adoc
+    ppPair (Pair e1 e2) = "(" <> ppPair e1 <> "," <+> prettyOpenExp context0 env aenv e2 <> ")"
+    ppPair e            = prettyOpenExp context0 env aenv e
 
-    collect :: PreOpenExp acc env aenv t' -> Maybe [Adoc]
+    collect :: OpenExp env aenv t' -> Maybe [Adoc]
     collect Nil          = Just []
     collect (Pair e1 e2)
       | Just tup <- collect e1
-                         = Just $ tup ++ [prettyPreOpenExp app prettyAcc extractAcc env aenv e2]
+                         = Just $ tup ++ [prettyOpenExp app env aenv e2]
     collect _            = Nothing
 
 {-

@@ -52,10 +52,10 @@ import qualified Data.Array.Accelerate.Debug.Trace      as Debug
 class Simplify f where
   simplify :: f -> f
 
-instance Kit acc => Simplify (PreFun acc aenv f) where
+instance Simplify (Fun aenv f) where
   simplify = simplifyFun
 
-instance Kit acc => Simplify (PreExp acc aenv e) where
+instance Simplify (Exp aenv e) where
   simplify = simplifyExp
 
 
@@ -86,9 +86,9 @@ instance Kit acc => Simplify (PreExp acc aenv e) where
 --
 localCSE :: (Kit acc, Elt a)
          => Gamma      acc env env aenv
-         -> PreOpenExp acc env     aenv a
-         -> PreOpenExp acc (env,a) aenv b
-         -> Maybe (PreOpenExp acc env aenv b)
+         -> OpenExp env     aenv a
+         -> OpenExp (env,a) aenv b
+         -> Maybe (OpenExp env aenv b)
 localCSE env bnd body
   | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline body (Var ix)
   | otherwise                    = Nothing
@@ -102,8 +102,8 @@ localCSE env bnd body
 --
 globalCSE :: (Kit acc, Elt t)
           => Gamma      acc env env aenv
-          -> PreOpenExp acc env     aenv t
-          -> Maybe (PreOpenExp acc env aenv t)
+          -> OpenExp env     aenv t
+          -> Maybe (OpenExp env aenv t)
 globalCSE env exp
   | Just ix <- lookupExp env exp = Stats.ruleFired "CSE" . Just $ Var ix
   | otherwise                    = Nothing
@@ -140,9 +140,9 @@ globalCSE env exp
 recoverLoops
     :: (Kit acc, Elt b)
     => Gamma      acc env env aenv
-    -> PreOpenExp acc env     aenv a
-    -> PreOpenExp acc (env,a) aenv b
-    -> Maybe (PreOpenExp acc env aenv b)
+    -> OpenExp env     aenv a
+    -> OpenExp (env,a) aenv b
+    -> Maybe (OpenExp env aenv b)
 recoverLoops _ bnd e3
   -- To introduce scaler loops, we look for expressions of the form:
   --
@@ -177,15 +177,15 @@ recoverLoops _ bnd e3
   = Nothing
 
   where
-    plus :: PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv Int
+    plus :: OpenExp env aenv Int -> OpenExp env aenv Int -> OpenExp env aenv Int
     plus x y = PrimApp (PrimAdd numType) $ Tuple $ NilTup `SnocTup` x `SnocTup` y
 
-    constant :: Int -> PreOpenExp acc env aenv Int
+    constant :: Int -> OpenExp env aenv Int
     constant i = Const ((),i)
 
     matchEnvTop :: (Elt s, Elt t)
-                => PreOpenExp acc (env,s) aenv f
-                -> PreOpenExp acc (env,t) aenv g
+                => OpenExp (env,s) aenv f
+                -> OpenExp (env,t) aenv g
                 -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast Refl
 --}
@@ -203,13 +203,13 @@ recoverLoops _ bnd e3
 --       Eg, for `let x = -y in -x`, the inlining would allow us to shorten it to `y`.
 --       If we do not want to do inlining, we should remove the environment here.
 simplifyOpenExp
-    :: forall acc env aenv e. (Kit acc)
-    => Gamma acc env env aenv
-    -> PreOpenExp acc env aenv e
-    -> (Bool, PreOpenExp acc env aenv e)
+    :: forall env aenv e.
+       Gamma env env aenv
+    -> OpenExp env aenv e
+    -> (Bool, OpenExp env aenv e)
 simplifyOpenExp env = first getAny . cvtE
   where
-    cvtE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    cvtE :: OpenExp env aenv t -> (Any, OpenExp env aenv t)
     cvtE exp = case exp of
       Let lhs bnd body -> (u <> v, exp')
         where
@@ -240,13 +240,13 @@ simplifyOpenExp env = first getAny . cvtE
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
       Coerce t1 t2 e            -> Coerce t1 t2 <$> cvtE e
 
-    cvtE' :: Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
+    cvtE' :: Gamma env' env' aenv -> OpenExp env' aenv e' -> (Any, OpenExp env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
 
-    cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
+    cvtF :: Gamma env' env' aenv -> OpenFun env' aenv f -> (Any, OpenFun env' aenv f)
     cvtF env' = first Any . simplifyOpenFun env'
 
-    cvtLet :: Gamma acc env' env' aenv -> ELeftHandSide bnd env' env'' -> PreOpenExp acc env' aenv bnd -> (Gamma acc env'' env'' aenv -> (Any, PreOpenExp acc env'' aenv t)) -> (Any, PreOpenExp acc env' aenv t)
+    cvtLet :: Gamma env' env' aenv -> ELeftHandSide bnd env' env'' -> OpenExp env' aenv bnd -> (Gamma env'' env'' aenv -> (Any, OpenExp env'' aenv t)) -> (Any, OpenExp env' aenv t)
     cvtLet env' lhs@(LeftHandSideSingle _) bnd          body = Let lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
     cvtLet env' (LeftHandSideWildcard _)   _            body = body env'                                 -- Binding not used, remove let binding
     cvtLet env' (LeftHandSidePair l1 l2)   (Pair e1 e2) body =                                           -- Split binding to multiple bindings
@@ -259,10 +259,10 @@ simplifyOpenExp env = first getAny . cvtE
     -- when the predicate is a known constant.
     --
     cond :: forall t.
-            (Any, PreOpenExp acc env aenv Bool)
-         -> (Any, PreOpenExp acc env aenv t)
-         -> (Any, PreOpenExp acc env aenv t)
-         -> (Any, PreOpenExp acc env aenv t)
+            (Any, OpenExp env aenv Bool)
+         -> (Any, OpenExp env aenv t)
+         -> (Any, OpenExp env aenv t)
+         -> (Any, OpenExp env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
       | Const _ True  <- p'        = Stats.knownBranch "True"      (yes t')
       | Const _ False <- p'        = Stats.knownBranch "False"     (yes e')
@@ -272,23 +272,22 @@ simplifyOpenExp env = first getAny . cvtE
 
     -- Shape manipulations
     --
-    shape :: forall sh t. acc aenv (Array sh t) -> (Any, PreOpenExp acc env aenv sh)
-    shape a
-      | ArrayR ShapeRz _ <- arrayRepr a
+    shape :: forall sh t. ArrayVar aenv (Array sh t) -> (Any, OpenExp env aenv sh)
+    shape (Var (ArrayR ShapeRz _) _)
         = Stats.ruleFired "shape/Z" $ yes Nil
     shape a
         = pure $ Shape a
 
-    shapeSize :: forall sh. ShapeR sh -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
+    shapeSize :: forall sh. ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int)
     shapeSize shr (_, extractConstTuple -> Just c) = Stats.ruleFired "shapeSize/const" $ yes (Const scalarTypeInt (product (shapeToList shr c)))
     shapeSize shr sh           = ShapeSize shr <$> sh
 
-    toIndex :: forall sh. ShapeR sh -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
+    toIndex :: forall sh. ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int)
     toIndex _ (_,sh) (_,FromIndex _ sh' ix)
       | Just Refl <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
     toIndex shr sh ix             = ToIndex shr <$> sh <*> ix
 
-    fromIndex :: forall sh. ShapeR sh -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
+    fromIndex :: forall sh. ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int) -> (Any, OpenExp env aenv sh)
     fromIndex _ (_,sh) (_,ToIndex _ sh' ix)
       | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
     fromIndex shr sh ix           = FromIndex shr <$> sh <*> ix
@@ -299,7 +298,7 @@ simplifyOpenExp env = first getAny . cvtE
     yes :: x -> (Any, x)
     yes x = (Any True, x)
 
-extractConstTuple :: PreOpenExp acc env aenv t -> Maybe t
+extractConstTuple :: OpenExp env aenv t -> Maybe t
 extractConstTuple Nil          = Just ()
 extractConstTuple (Pair e1 e2) = (,) <$> extractConstTuple e1 <*> extractConstTuple e2
 extractConstTuple (Const _ c)  = Just c
@@ -308,16 +307,15 @@ extractConstTuple _            = Nothing
 -- Simplification for open functions
 --
 simplifyOpenFun
-    :: Kit acc
-    => Gamma acc env env aenv
-    -> PreOpenFun acc env aenv f
-    -> (Bool, PreOpenFun acc env aenv f)
+    :: Gamma env env aenv
+    -> OpenFun env aenv f
+    -> (Bool, OpenFun env aenv f)
 simplifyOpenFun env (Body e)    = Body    <$> simplifyOpenExp env  e
 simplifyOpenFun env (Lam lhs f) = Lam lhs <$> simplifyOpenFun env' f
   where
     env' = lhsExpr lhs env
 
-lhsExpr :: Kit acc => ELeftHandSide t env env' -> Gamma acc env env aenv -> Gamma acc env' env' aenv
+lhsExpr :: ELeftHandSide t env env' -> Gamma env env aenv -> Gamma env' env' aenv
 lhsExpr (LeftHandSideWildcard _) env = env
 lhsExpr (LeftHandSideSingle  tp) env = incExp env `pushExp` Evar (Var tp ZeroIdx)
 lhsExpr (LeftHandSidePair l1 l2) env = lhsExpr l2 $ lhsExpr l1 env
@@ -325,10 +323,10 @@ lhsExpr (LeftHandSidePair l1 l2) env = lhsExpr l2 $ lhsExpr l1 env
 -- Simplify closed expressions and functions. The process is applied
 -- repeatedly until no more changes are made.
 --
-simplifyExp :: Kit acc => PreExp acc aenv t -> PreExp acc aenv t
+simplifyExp :: Exp aenv t -> Exp aenv t
 simplifyExp = iterate summariseOpenExp (simplifyOpenExp EmptyExp)
 
-simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
+simplifyFun :: Fun aenv f -> Fun aenv f
 simplifyFun = iterate summariseOpenFun (simplifyOpenFun EmptyExp)
 
 
@@ -428,19 +426,19 @@ ops     = lens _ops     (\Stats{..} v -> Stats { _ops     = v, ..})
 {-# INLINE vars    #-}
 {-# INLINE ops     #-}
 
-summariseOpenFun :: PreOpenFun acc env aenv f -> Stats
+summariseOpenFun :: OpenFun env aenv f -> Stats
 summariseOpenFun (Body e)  = summariseOpenExp e & terms +~ 1
 summariseOpenFun (Lam _ f) = summariseOpenFun f & terms +~ 1 & binders +~ 1
 
-summariseOpenExp :: PreOpenExp acc env aenv t -> Stats
+summariseOpenExp :: OpenExp env aenv t -> Stats
 summariseOpenExp = (terms +~ 1) . goE
   where
     zero = Stats 0 0 0 0 0
 
-    travE :: PreOpenExp acc env aenv t -> Stats
+    travE :: OpenExp env aenv t -> Stats
     travE = summariseOpenExp
 
-    travF :: PreOpenFun acc env aenv t -> Stats
+    travF :: OpenFun env aenv t -> Stats
     travF = summariseOpenFun
 
     travA :: acc aenv a -> Stats
@@ -484,7 +482,7 @@ summariseOpenExp = (terms +~ 1) . goE
     -- travVectorType (Vector16Type t) = travSingleType t & types +~ 1
 
     -- The scrutinee has already been counted
-    goE :: PreOpenExp acc env aenv t -> Stats
+    goE :: OpenExp env aenv t -> Stats
     goE exp =
       case exp of
         Let _ bnd body        -> travE bnd +++ travE body & binders +~ 1

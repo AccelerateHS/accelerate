@@ -38,8 +38,6 @@ module Data.Array.Accelerate.Trafo (
   -- * Fusion
   DelayedAcc, DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
-  DelayedExp, DelayedOpenExp,
-  DelayedFun, DelayedOpenFun,
 
   -- * Substitution
   module Data.Array.Accelerate.Trafo.Substitution,
@@ -60,7 +58,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                ( ArrRepr, EltRepr )
 import Data.Array.Accelerate.Trafo.Base                 ( Match(..), matchDelayedOpenAcc, encodeDelayedOpenAcc )
 import Data.Array.Accelerate.Trafo.Config
-import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedOpenAcc(..), DelayedAfun, DelayedOpenAfun, DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun )
+import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedOpenAcc(..), DelayedAfun, DelayedOpenAfun )
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr, EltReprFunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST

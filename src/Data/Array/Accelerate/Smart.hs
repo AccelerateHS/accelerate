@@ -80,8 +80,8 @@ import Data.Array.Accelerate.Array.Sugar           (Elt, Arrays, EltRepr, ArrRep
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Array.Representation  hiding (DIM1)
 import Data.Array.Accelerate.AST                   hiding ( PreOpenAcc(..), OpenAcc(..), Acc
-                                                          , PreOpenExp(..), OpenExp, PreExp, Exp
-                                                          , PreBoundary(..), Boundary, HasArraysRepr(..), arrayRepr, expType
+                                                          , OpenExp(..), Exp
+                                                          , Boundary(..), HasArraysRepr(..), arrayRepr, expType
                                                           , showPreAccOp, showPreExpOp )
 import GHC.TypeNats
 

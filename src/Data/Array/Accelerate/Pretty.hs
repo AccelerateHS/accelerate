@@ -24,8 +24,8 @@ module Data.Array.Accelerate.Pretty (
   PrettyAcc, ExtractAcc,
   prettyPreOpenAcc,
   prettyPreOpenAfun,
-  prettyPreOpenExp,
-  prettyPreOpenFun,
+  prettyOpenExp,
+  prettyOpenFun,
 
   -- ** Graphviz
   Graph,
@@ -101,17 +101,11 @@ instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
 instance PrettyEnv aenv => Show (DelayedOpenAfun aenv f) where
   show = renderForTerminal . prettyPreOpenAfun prettyDelayedOpenAcc (prettyEnv (pretty 'a'))
 
-instance (PrettyEnv env, PrettyEnv aenv) => Show (PreOpenExp OpenAcc env aenv e) where
-  show = renderForTerminal . prettyPreOpenExp context0 prettyOpenAcc extractOpenAcc (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
+instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenExp env aenv e) where
+  show = renderForTerminal . prettyOpenExp context0 (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
 
-instance (PrettyEnv env, PrettyEnv aenv) => Show (PreOpenExp DelayedOpenAcc env aenv e) where
-  show = renderForTerminal . prettyPreOpenExp context0 prettyDelayedOpenAcc extractDelayedOpenAcc (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
-
-instance (PrettyEnv env, PrettyEnv aenv) => Show (PreOpenFun OpenAcc env aenv e) where
-  show = renderForTerminal . prettyPreOpenFun prettyOpenAcc extractOpenAcc (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
-
-instance (PrettyEnv env, PrettyEnv aenv) => Show (PreOpenFun DelayedOpenAcc env aenv e) where
-  show = renderForTerminal . prettyPreOpenFun prettyDelayedOpenAcc extractDelayedOpenAcc (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
+instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenFun env aenv e) where
+  show = renderForTerminal . prettyOpenFun (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
 
 
 -- Internals
@@ -162,8 +156,8 @@ prettyDelayedOpenAcc _       aenv (Delayed _ sh f _)
   = parens
   $ nest shiftwidth
   $ sep [ delayed "delayed"
-        ,          prettyPreOpenExp app prettyDelayedOpenAcc extractDelayedOpenAcc Empty aenv sh
-        , parens $ prettyPreOpenFun     prettyDelayedOpenAcc extractDelayedOpenAcc Empty aenv f
+        ,          prettyOpenExp app Empty aenv sh
+        , parens $ prettyOpenFun     Empty aenv f
         ]
 
 extractDelayedOpenAcc :: DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
