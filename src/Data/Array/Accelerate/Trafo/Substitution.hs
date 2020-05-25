@@ -602,6 +602,7 @@ reindexAvar v = ReindexAvar f where
   f :: forall sh e. ArrayVar aenv (Array sh e) -> f (ArrayVar aenv' (Array sh e))
   f var = g <$> v var
 
+  g :: fa acc aenv' (Array sh e) -> ArrayVar aenv' (Array sh e)
   g fa = case accOut fa of
     Avar var' -> var'
     _ -> $internalError "reindexAvar" "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."

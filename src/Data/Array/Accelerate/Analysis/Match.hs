@@ -63,11 +63,10 @@ type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :~: t)
 matchPreOpenAcc
     :: forall acc aenv s t. HasArraysRepr acc
     => MatchAcc  acc
-    -> EncodeAcc acc
     -> PreOpenAcc acc aenv s
     -> PreOpenAcc acc aenv t
     -> Maybe (s :~: t)
-matchPreOpenAcc matchAcc encodeAcc = match
+matchPreOpenAcc matchAcc = match
   where
     matchFun :: OpenFun env' aenv' u -> OpenFun env' aenv' v -> Maybe (u :~: v)
     matchFun = matchOpenFun
@@ -915,7 +914,7 @@ matchNonNumType _          _          = Nothing
 -- commutativity.
 --
 commutes
-    :: forall acc env aenv a r.
+    :: forall env aenv a r.
        PrimFun (a -> r)
     -> OpenExp env aenv a
     -> Maybe (OpenExp env aenv a)

@@ -103,7 +103,7 @@ encodeOpenAcc :: EncodeAcc OpenAcc
 encodeOpenAcc options (OpenAcc pacc) = encodePreOpenAcc options encodeAcc pacc
 
 matchOpenAcc :: MatchAcc OpenAcc
-matchOpenAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
+matchOpenAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc pacc1 pacc2
 
 avarIn :: forall acc aenv a. Kit acc => ArrayVar aenv a -> acc aenv a
 avarIn v@(Var ArrayR{} _) = inject $ Avar v
@@ -184,7 +184,7 @@ instance Match (OpenFun env aenv) where
 
 instance Kit acc => Match (PreOpenAcc acc aenv) where
   {-# INLINEABLE match #-}
-  match = matchPreOpenAcc matchAcc encodeAcc
+  match = matchPreOpenAcc matchAcc
 
 instance {-# INCOHERENT #-} Kit acc => Match (acc aenv) where
   {-# INLINEABLE match #-}
@@ -278,7 +278,7 @@ encodeDelayedOpenAcc options acc =
 {-# INLINEABLE matchDelayedOpenAcc #-}
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
 matchDelayedOpenAcc (Manifest pacc1) (Manifest pacc2)
-  = matchPreOpenAcc matchDelayedOpenAcc encodeDelayedOpenAcc pacc1 pacc2
+  = matchPreOpenAcc matchDelayedOpenAcc pacc1 pacc2
 
 matchDelayedOpenAcc (Delayed _ sh1 ix1 lx1) (Delayed _ sh2 ix2 lx2)
   | Just Refl <- matchOpenExp sh1 sh2
