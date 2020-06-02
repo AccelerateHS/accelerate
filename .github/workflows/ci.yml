@@ -29,9 +29,12 @@ jobs:
           - os: macOS-latest
             ghc: 8.8
             allow_failure: false
+          # ghc-8.8 currently doesn't work on the windows test machines due to a
+          # 32-bit linker problem, failing with the error:
+          # Access violation in generated code when writing 0x0
           - os: windows-latest
-            ghc: 8.8
-            allow_failure: true
+            ghc: 8.6
+            allow_failure: false
     env:
       STACK_FLAGS: "--system-ghc --no-install-ghc --fast --flag accelerate:nofib"
 
