@@ -7,6 +7,10 @@ on:
     # but only for the master branch
     # branches: [master]
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   stack:
     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
