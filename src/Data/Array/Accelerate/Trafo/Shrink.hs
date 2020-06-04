@@ -147,11 +147,16 @@ varInRange (VarsRange (Exists rangeIx) n _) (Var _ varIx) = case go rangeIx varI
 
 -- Describes how often the variables defined in a LHS are used together.
 data Count
-  = Impossible !Usages         -- Cannot inline this definition. This happens when the definition declares multiple variables (the right hand side returns a tuple) and the variables are used seperately.
-  | Infinity                   -- The variable is used in a loop. Inlining should only proceed if the computation is cheap.
+  = Impossible !Usages
+      -- Cannot inline this definition. This happens when the definition
+      -- declares multiple variables (the right hand side returns a tuple)
+      -- and the variables are used seperately.
+  | Infinity
+      -- The variable is used in a loop. Inlining should only proceed if
+      -- the computation is cheap.
   | Finite {-# UNPACK #-} !Int
 
-type Usages = [Bool] -- Per variable a Bool denoting whether that variable is used.
+type Usages = [Bool] -- Per variable a Boolean denoting whether that variable is used.
 
 instance Semigroup Count where
   Impossible u1 <> Impossible u2 = Impossible $ zipWith (||) u1 u2
@@ -183,18 +188,20 @@ shrinkLhs (Impossible usages) lhs = case go usages lhs of
       | (c2, us' , Exists l2') <- go us  l2
       , (c1, us'', Exists l1') <- go us' l1
       , Exists l2'' <- rebuildLHS l2'
-        = let
-            lhs'
-              | LeftHandSideWildcard t1 <- l1'
-              , LeftHandSideWildcard t2 <- l2'' = LeftHandSideWildcard $ TupRpair t1 t2
-              | otherwise = LeftHandSidePair l1' l2''
-          in
-            (c1 || c2, us'', Exists lhs')
+      = let
+          lhs'
+            | LeftHandSideWildcard t1 <- l1'
+            , LeftHandSideWildcard t2 <- l2'' = LeftHandSideWildcard $ TupRpair t1 t2
+            | otherwise = LeftHandSidePair l1' l2''
+        in
+          (c1 || c2, us'', Exists lhs')
     go _ _ = $internalError "shrinkLhs" "Empty array, mismatch in length of usages array and LHS"
 shrinkLhs _ _ = Nothing
 
--- The first LHS should be 'larger' than the second, eg the second may have a wildcard if the first LHS does bind variables there,
--- but not the other way around.
+-- The first LHS should be 'larger' than the second, eg the second may have
+-- a wildcard if the first LHS does bind variables there, but not the other
+-- way around.
+--
 strengthenShrunkLHS :: LeftHandSide s t env1 env2 -> LeftHandSide s t env1' env2' -> env1 :?> env1' -> env2 :?> env2'
 strengthenShrunkLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
 strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
@@ -243,10 +250,10 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Let lhs bnd body
         | shouldInline -> case inlineVars lhs (snd body') (snd bnd') of
             Just inlined -> Stats.betaReduce msg . yes $ shrinkE inlined
-            _            -> error "shrinkExp: Unexpected failure while trying to inline some expression."
+            _            -> $internalError "shrinkExp" "Unexpected failure while trying to inline some expression."
         | Just (Exists lhs') <- shrinkLhs count lhs -> case strengthenE (strengthenShrunkLHS lhs lhs' Just) (snd body') of
            Just body'' -> (Any True, Let lhs' (snd bnd') body'')
-           Nothing     -> error "shrinkExp: Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
+           Nothing     -> $internalError "shrinkExp" "Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
         | otherwise    -> Let lhs <$> bnd' <*> body'
         where
           shouldInline = case count of
@@ -261,11 +268,13 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
           -- If the lhs includes non-trivial wildcards (the last field of range is Nothing),
           -- then we cannot inline the binding. We can only check which variables are not used,
           -- to detect unused variables.
+          --
           -- If the lhs does not include non-trivial wildcards (the last field of range is a Just),
           -- we can both analyse whether we can inline the binding, and check which variables are
           -- not used, to detect unused variables.
+          --
           count = case lhsVarsRange lhs of
-            Left _ -> Finite 0
+            Left _      -> Finite 0
             Right range -> usesOfExp range (snd body')
 
           msg = case count of
@@ -316,7 +325,7 @@ shrinkFun (Lam lhs f) = case lhsVarsRange lhs of
     in case shrinkLhs count lhs of
         Just (Exists lhs') -> case strengthenE (strengthenShrunkLHS lhs lhs' Just) f' of
           Just f'' -> (True, Lam lhs' f'')
-          Nothing  -> error "shrinkFun: Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
+          Nothing  -> $internalError "shrinkFun" "Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
         Nothing -> (b, Lam lhs f')
   where
     (b, f') = shrinkFun f
@@ -327,9 +336,9 @@ shrinkFun (Body b) = Body <$> shrinkExp b
 -- dead-code elimination only, primarily because linear inlining may inline
 -- array computations into scalar expressions, which is generally not desirable.
 --
-type ShrinkAcc acc = forall aenv a.   acc aenv a -> acc aenv a
+type ShrinkAcc acc = forall aenv a. acc aenv a -> acc aenv a
 
-{-
+{--
 type ReduceAcc acc = forall aenv s t. acc aenv s -> acc (aenv,s) t -> Maybe (PreOpenAcc acc aenv t)
 
 shrinkPreAcc
@@ -450,7 +459,8 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
     shrinkAF :: PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
     shrinkAF (Alam lhs f) = Alam lhs (shrinkAF f)
     shrinkAF (Abody a) = Abody (shrinkAcc a)
--}
+--}
+
 -- Occurrence Counting
 -- ===================
 
@@ -622,3 +632,4 @@ usesOfPreAcc withShape countAcc idx = count
     countCT NilAtup        = 0
     countCT (SnocAtup t c) = countCT t + countC c
 --}
+

@@ -17,7 +17,8 @@
 module Data.Array.Accelerate.Unsafe (
 
   -- ** Unsafe operations
-  undef, coerce, Coerce
+  Coerce, coerce,
+  undef,
 
 ) where
 
@@ -48,3 +49,4 @@ import Data.Array.Accelerate.Smart
 --
 coerce :: Coerce (EltRepr a) (EltRepr b) => Exp a -> Exp b
 coerce = mkCoerce
+

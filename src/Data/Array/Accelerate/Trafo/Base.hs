@@ -144,7 +144,7 @@ declareVars TupRunit
 declareVars (TupRpair r1 r2)
   | DeclareVars lhs1 subst1 a1 <- declareVars r1
   , DeclareVars lhs2 subst2 a2 <- declareVars r2
-    = DeclareVars (LeftHandSidePair lhs1 lhs2) (subst2 .> subst1) $ \k -> a1 (k .> subst2) `VarsPair` a2 k
+  = DeclareVars (LeftHandSidePair lhs1 lhs2) (subst2 .> subst1) $ \k -> a1 (k .> subst2) `VarsPair` a2 k
 
 
 -- fromOpenAfun :: Kit acc => OpenAfun aenv f -> PreOpenAfun acc aenv f
@@ -464,10 +464,10 @@ mkShapeBinary f shr (Let lhs bnd a) b = Let lhs bnd $ mkShapeBinary f shr a (wea
 mkShapeBinary f shr a (Let lhs bnd b) = Let lhs bnd $ mkShapeBinary f shr (weakenE (weakenWithLHS lhs) a) b
 mkShapeBinary f shr a b@Pair{} -- `a` is not Pair
   | DeclareVars lhs k value <- declareVars $ shapeType shr
-    = Let lhs a $ mkShapeBinary f shr (evars $ value weakenId) (weakenE k b)
+  = Let lhs a $ mkShapeBinary f shr (evars $ value weakenId) (weakenE k b)
 mkShapeBinary f shr a b -- `b` is not a Pair
   | DeclareVars lhs k value <- declareVars $ shapeType shr
-    = Let lhs b $ mkShapeBinary f shr (weakenE k a) (evars $ value weakenId)
+  = Let lhs b $ mkShapeBinary f shr (weakenE k a) (evars $ value weakenId)
 
 mkIntersect :: (HasArraysRepr acc, RebuildableAcc acc)
             => ShapeR sh

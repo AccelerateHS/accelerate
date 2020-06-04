@@ -72,7 +72,7 @@ import Data.Array.Accelerate.Error
 --
 data Context env aenv env' aenv' where
   -- All environments are empty
-  EmptyC     :: Context () () () ()
+  EmptyC    :: Context () () () ()
 
   -- An expression that has already been lifted
   PushLExpC :: Elt e

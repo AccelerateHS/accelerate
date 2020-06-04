@@ -264,8 +264,7 @@ insert
     -> RemotePtr m (ScalarDataRepr a)
     -> Int
     -> m ()
-insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes
-  | (ScalarDict, _, _)  <- singleDict tp = do
+insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes | (ScalarDict, _, _) <- singleDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
   message $ "insert: " ++ show key
@@ -286,12 +285,11 @@ insertUnmanaged
     -> ArrayData a
     -> RemotePtr m (ScalarDataRepr a)
     -> m ()
-insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr
-  | (ScalarDict, _, _)  <- singleDict tp = do
-    key  <- makeStableArray tp arr
-    weak <- liftIO $ makeWeakArrayData tp arr () (Just $ remoteFinalizer weak_ref key)
-    message $ "insertUnmanaged: " ++ show key
-    liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) 0 weak)
+insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr | (ScalarDict, _, _)  <- singleDict tp = do
+  key  <- makeStableArray tp arr
+  weak <- liftIO $ makeWeakArrayData tp arr () (Just $ remoteFinalizer weak_ref key)
+  message $ "insertUnmanaged: " ++ show key
+  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) 0 weak)
 
 
 -- Removing entries
@@ -364,7 +362,7 @@ makeStableArray !tp !ad
 
 
 -- Weak arrays
--- ----------------------
+-- -----------
 
 -- | Make a weak pointer using an array as a key. Unlike the standard `mkWeak`,
 -- this guarantees finalisers won't fire early.
@@ -376,13 +374,12 @@ makeWeakArrayData
     -> c
     -> Maybe (IO ())
     -> IO (Weak c)
-makeWeakArrayData !tp !ad !c !mf
-  | (ScalarDict, _, _) <- singleDict tp = do
-      let !uad = uniqueArrayData ad
-      case mf of
-        Nothing -> return ()
-        Just f  -> addFinalizer uad f
-      mkWeak uad c
+makeWeakArrayData !tp !ad !c !mf | (ScalarDict, _, _) <- singleDict tp = do
+  let !uad = uniqueArrayData ad
+  case mf of
+    Nothing -> return ()
+    Just f  -> addFinalizer uad f
+  mkWeak uad c
 
 
 -- Debug
@@ -420,7 +417,6 @@ management msg nrs next = do
                   (showBytes total)
       --
       return r
-
     else
       next
 

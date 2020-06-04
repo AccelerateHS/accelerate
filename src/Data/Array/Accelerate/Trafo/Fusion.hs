@@ -13,7 +13,7 @@
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE ViewPatterns         #-}
-{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-} -- TODO: remove this & fix warnings
 {-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Fusion
@@ -835,9 +835,10 @@ instance HasArraysRepr (Cunctation acc) where
 --
 done :: Kit acc => PreOpenAcc acc aenv a -> Embed acc aenv a
 done pacc
-  | Just vars <- extractArrayVars $ inject pacc = Embed BaseEnv (Done vars)
-  | otherwise = case declareVars (arraysRepr pacc) of
-      DeclareVars lhs _ value -> Embed (PushEnv BaseEnv lhs $ inject pacc) $ Done $ value weakenId
+  | Just vars <- extractArrayVars $ inject pacc
+  = Embed BaseEnv (Done vars)
+  | DeclareVars lhs _ value <- declareVars (arraysRepr pacc)
+  = Embed (PushEnv BaseEnv lhs $ inject pacc) $ Done $ value weakenId
 
 doneZeroIdx :: ArrayR (Array sh e) -> Cunctation acc (aenv, Array sh e) (Array sh e)
 doneZeroIdx repr = Done $ VarsSingle $ Var repr ZeroIdx
@@ -1218,7 +1219,7 @@ combineLhs = go weakenId weakenId
     go k1 k2 (LeftHandSidePair l1 h1)  (LeftHandSidePair l2 h2)
       | CombinedLHS l k1'  k2'  <- go k1  k2  l1 l2
       , CombinedLHS h k1'' k2'' <- go k1' k2' h1 h2             = CombinedLHS (LeftHandSidePair l h)       k1''      k2''
-    go k1 k2 (LeftHandSideWildcard _)  lhs                      
+    go k1 k2 (LeftHandSideWildcard _)  lhs
       | Exists lhs' <- rebuildLHS lhs                           = CombinedLHS lhs'        (weakenWithLHS lhs' .> k1) (sinkWithLHS lhs lhs' k2)
     go k1 k2 lhs                       (LeftHandSideWildcard _)
       | Exists lhs' <- rebuildLHS lhs                           = CombinedLHS lhs'        (sinkWithLHS lhs lhs' k1)  (weakenWithLHS lhs' .> k2)
@@ -1659,7 +1660,7 @@ arrayShape :: Kit acc => ArrayVar aenv (Array sh e) -> PreExp acc aenv sh
 arrayShape = simplify . Shape . avarIn
 
 indexArray :: Kit acc => ArrayVar aenv (Array sh e) -> PreFun acc aenv (sh -> e)
-indexArray v@(Var (ArrayR shr _) _) 
+indexArray v@(Var (ArrayR shr _) _)
   | DeclareVars lhs _ value <- declareVars $ shapeType shr
   = Lam lhs $ Body $ Index (avarIn v) $ evars $ value weakenId
 

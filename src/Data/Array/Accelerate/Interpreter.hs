@@ -72,14 +72,13 @@ import Data.Array.Accelerate.AST                                    hiding ( Bou
 import Data.Array.Accelerate.Analysis.Type                          ( sizeOfSingleType )
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
-import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.AST                          as AST
+import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar
 import qualified Data.Array.Accelerate.Smart                        as Smart
 import qualified Data.Array.Accelerate.Trafo                        as AST
-
 import qualified Data.Array.Accelerate.Debug                        as D
 
 
@@ -358,21 +357,6 @@ zipWithOp
     -> WithReprs (Array sh c)
 zipWithOp tp f (Delayed (ArrayR shr _) shx xs _) (Delayed _ shy ys _)
   = fromFunction' (ArrayR shr tp) (intersect shr shx shy) (\ix -> f (xs ix) (ys ix))
-
--- zipWith'Op
---     :: (Shape sh, Elt a)
---     => (a -> a -> a)
---     -> Delayed (Array sh a)
---     -> Delayed (Array sh a)
---     -> Array sh a
--- zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
---   = fromFunction' (shx `union` shy) (\ix -> if ix `outside` shx
---                                            then ys ix
---                                            else if ix `outside` shy
---                                            then xs ix
---                                            else f (xs ix) (ys ix))
---   where
---     a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
 
 
 foldOp

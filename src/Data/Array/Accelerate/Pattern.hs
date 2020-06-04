@@ -267,8 +267,9 @@ pattern V8_ a b c d e f g h = Pattern (VecPattern (a, b, c, d, e, f, g, h))
 {-# COMPLETE V8_ #-}
 
 pattern V16_ :: VecElt a
-             => Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> 
+             => Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a ->
                 Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp (Vec 16 a)
 pattern V16_ a b c d e f g h
              i j k l m n o p = Pattern (VecPattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p))
 {-# COMPLETE V16_ #-}
+

@@ -138,8 +138,8 @@ instance P.Integral (Exp CInt) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CUInt) where
@@ -147,8 +147,8 @@ instance P.Integral (Exp CUInt) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CLong) where
@@ -156,8 +156,8 @@ instance P.Integral (Exp CLong) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CULong) where
@@ -165,8 +165,8 @@ instance P.Integral (Exp CULong) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CLLong) where
@@ -174,8 +174,8 @@ instance P.Integral (Exp CLLong) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CULLong) where
@@ -183,8 +183,8 @@ instance P.Integral (Exp CULLong) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CShort) where
@@ -192,8 +192,8 @@ instance P.Integral (Exp CShort) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CUShort) where
@@ -201,6 +201,7 @@ instance P.Integral (Exp CUShort) where
   rem       = mkRem
   div       = mkIDiv
   mod       = mkMod
-  quotRem   =  mkQuotRem
-  divMod    =  mkDivMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
+

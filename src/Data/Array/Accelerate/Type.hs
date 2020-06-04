@@ -72,7 +72,6 @@ module Data.Array.Accelerate.Type (
 
 ) where
 
-import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
 import Data.Array.Accelerate.Orphans () -- Prim Half
 
 import Control.Monad.ST
@@ -343,7 +342,7 @@ data TupR s a where
   TupRsingle :: s a                  -> TupR s a
   TupRpair   :: TupR s a -> TupR s b -> TupR s (a, b)
 
-type TupleType = TupR ScalarType -- Rename to EltR?
+type TupleType = TupR ScalarType -- TODO: Rename to EltR
 
 instance Show (TupR ScalarType a) where
   show TupRunit       = "()"

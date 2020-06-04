@@ -44,11 +44,11 @@ import System.Mem.StableName
 import Prelude                                          hiding ( exp )
 
 -- friends
+import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Array.Representation
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
-import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
 -- The type of matching array computations
@@ -275,13 +275,26 @@ matchPreOpenAfun m (Alam lhs1 s) (Alam lhs2 t)
 matchPreOpenAfun m (Abody s) (Abody t) = m s t
 matchPreOpenAfun _ _           _           = Nothing
 
-matchALeftHandSide :: forall aenv aenv1 aenv2 t1 t2. ALeftHandSide t1 aenv aenv1 -> ALeftHandSide t2 aenv aenv2 -> Maybe (ALeftHandSide t1 aenv aenv1 :~: ALeftHandSide t2 aenv aenv2)
+matchALeftHandSide
+    :: forall aenv aenv1 aenv2 t1 t2.
+       ALeftHandSide t1 aenv aenv1
+    -> ALeftHandSide t2 aenv aenv2
+    -> Maybe (ALeftHandSide t1 aenv aenv1 :~: ALeftHandSide t2 aenv aenv2)
 matchALeftHandSide = matchLeftHandSide matchArrayR
 
-matchELeftHandSide :: forall env env1 env2 t1 t2. ELeftHandSide t1 env env1 -> ELeftHandSide t2 env env2 -> Maybe (ELeftHandSide t1 env env1 :~: ELeftHandSide t2 env env2)
+matchELeftHandSide
+    :: forall env env1 env2 t1 t2.
+       ELeftHandSide t1 env env1
+    -> ELeftHandSide t2 env env2
+    -> Maybe (ELeftHandSide t1 env env1 :~: ELeftHandSide t2 env env2)
 matchELeftHandSide = matchLeftHandSide matchScalarType
 
-matchLeftHandSide :: forall s env env1 env2 t1 t2. (forall x y. s x -> s y -> Maybe (x :~: y)) -> LeftHandSide s t1 env env1 -> LeftHandSide s t2 env env2 -> Maybe (LeftHandSide s t1 env env1 :~: LeftHandSide s t2 env env2)
+matchLeftHandSide
+    :: forall s env env1 env2 t1 t2.
+      (forall x y. s x -> s y -> Maybe (x :~: y))
+    -> LeftHandSide s t1 env env1
+    -> LeftHandSide s t2 env env2
+    -> Maybe (LeftHandSide s t1 env env1 :~: LeftHandSide s t2 env env2)
 matchLeftHandSide f (LeftHandSideWildcard repr1) (LeftHandSideWildcard repr2)
   | Just Refl <- matchTupR f repr1 repr2
   = Just Refl
@@ -406,7 +419,6 @@ matchArray :: ArrayR (Array sh1 e1)
 matchArray repr1 repr2 (Array _ ad1) (Array _ ad2)
   | Just Refl <- matchArrayR repr1 repr2
   , unsafePerformIO $ do
-      
       sn1 <- makeStableName ad1
       sn2 <- makeStableName ad2
       return $! hashStableName sn1 == hashStableName sn2

@@ -69,3 +69,4 @@ instance P.Fractional (Exp CDouble) where
   (/)          = mkFDiv
   recip        = mkRecip
   fromRational = constant . P.fromRational
+

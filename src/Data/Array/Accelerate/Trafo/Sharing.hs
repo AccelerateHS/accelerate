@@ -188,8 +188,8 @@ instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
   afunctionRepr = AfunctionReprLam $ afunctionRepr @r
   convertOpenAfun config alyt f
     | repr <- Sugar.arrays @a
-    , DeclareVars lhs k value <- declareVars repr =
-      let
+    , DeclareVars lhs k value <- declareVars repr
+    = let
         a     = Acc $ SmartAcc $ Atag repr $ sizeLayout alyt
         alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
       in
@@ -203,8 +203,8 @@ instance Arrays b => Afunction (Acc b) where
 
 convertSmartAfun1 :: Config -> ArraysR a -> (SmartAcc a -> SmartAcc b) -> AST.Afun (a -> b)
 convertSmartAfun1 config repr f
-  | DeclareVars lhs _ value <- declareVars repr =
-    let
+  | DeclareVars lhs _ value <- declareVars repr
+  = let
       a     = SmartAcc $ Atag repr 0
       alyt' = PushLayout EmptyLayout lhs (value weakenId)
     in
@@ -521,8 +521,8 @@ convertSharingAfun1
     -> (SmartAcc a -> ScopedAcc b)
     -> OpenAfun aenv (a -> b)
 convertSharingAfun1 config alyt aenv reprA f
-  | DeclareVars lhs k value <- declareVars reprA =
-    let
+  | DeclareVars lhs k value <- declareVars reprA
+  = let
       alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
       body = f undefined
     in
@@ -601,8 +601,8 @@ instance (Elt a, Function r) => Function (Exp a -> r) where
   functionRepr = FunctionReprLam $ functionRepr @r
   convertOpenFun config lyt f
     | tp <- eltType @a
-    , DeclareVars lhs k value <- declareVars tp =
-      let
+    , DeclareVars lhs k value <- declareVars tp
+    = let
         e    = Exp $ SmartExp $ Tag tp $ sizeLayout lyt
         lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
       in
@@ -617,8 +617,8 @@ instance Elt b => Function (Exp b) where
 
 convertSmartFun :: Config -> TupleType a -> (SmartExp a -> SmartExp b) -> AST.Fun () (a -> b)
 convertSmartFun config tp f
-  | DeclareVars lhs _ value <- declareVars tp =
-    let
+  | DeclareVars lhs _ value <- declareVars tp
+  = let
       e    = SmartExp $ Tag tp 0
       lyt' = PushLayout EmptyLayout lhs (value weakenId)
     in
@@ -723,10 +723,10 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
     cvt (ScopedExp _ (LetSharing se@(StableSharingExp _ boundExp) bodyExp))
       | DeclareVars lhs k value <- declareVars $ expType boundExp
-        = let
-            lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
-          in
-            AST.Let lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
+      = let
+          lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
+        in
+          AST.Let lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
           Tag tp i              -> evars $ prjIdx ("de Bruijn conversion tag " ++ show i) showType tp i lyt
@@ -762,8 +762,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
     cvtFun1 :: TupleType a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
     cvtFun1 tp f
-      | DeclareVars lhs k value <- declareVars tp =
-        let
+      | DeclareVars lhs k value <- declareVars tp
+      = let
           lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
           body = f undefined
         in
@@ -787,8 +787,8 @@ convertSharingFun1
     -> (SmartExp a -> ScopedExp b)
     -> AST.Fun aenv (a -> b)
 convertSharingFun1 config alyt aenv tp f
-  | DeclareVars lhs _ value <- declareVars tp =
-    let
+  | DeclareVars lhs _ value <- declareVars tp
+  = let
       a               = SmartExp undefined             -- the 'tag' was already embedded in Phase 1
       lyt             = PushLayout EmptyLayout lhs (value weakenId)
       openF           = convertSharingExp config lyt alyt [] aenv (f a)
@@ -807,8 +807,8 @@ convertSharingFun2
     -> AST.Fun aenv (a -> b -> c)
 convertSharingFun2 config alyt aenv ta tb f
   | DeclareVars lhs1 _  value1 <- declareVars ta
-  , DeclareVars lhs2 k2 value2 <- declareVars tb =
-    let
+  , DeclareVars lhs2 k2 value2 <- declareVars tb
+  = let
       a               = SmartExp undefined
       b               = SmartExp undefined
       lyt1            = PushLayout EmptyLayout lhs1 (value1 k2)
@@ -1921,6 +1921,7 @@ noNodeCounts = ([], Map.empty)
 -- nodes.
 --
 -- TODO: Perform cycle detection here.
+--
 insertAccNode :: StableSharingAcc -> NodeCounts -> NodeCounts
 insertAccNode ssa@(StableSharingAcc (StableNameHeight sn _) _) (subterms,g)
   = ([AccNodeCount ssa 1], g') +++ (subterms,g)
@@ -1933,6 +1934,7 @@ insertAccNode ssa@(StableSharingAcc (StableNameHeight sn _) _) (subterms,g)
 -- nodes.
 --
 -- TODO: Perform cycle detection here.
+--
 insertExpNode :: StableSharingExp -> NodeCounts -> NodeCounts
 insertExpNode ssa@(StableSharingExp (StableNameHeight sn _) _) (subterms,g)
   = ([ExpNodeCount ssa 1], g') +++ (subterms,g)
@@ -1946,6 +1948,7 @@ insertExpNode ssa@(StableSharingExp (StableNameHeight sn _) _) (subterms,g)
 -- nodes.
 --
 -- TODO: Perform cycle detection here.
+--
 insertSeqNode :: StableSharingSeq -> NodeCounts -> NodeCounts
 insertSeqNode ssa@(StableSharingSeq (StableNameHeight sn _) _) (subterms,g)
   = ([SeqNodeCount ssa 1], g') +++ (subterms,g)
@@ -1958,6 +1961,7 @@ insertSeqNode ssa@(StableSharingSeq (StableNameHeight sn _) _) (subterms,g)
 -- Remove nodes that aren't in the list from the graph.
 --
 -- RCE: This is no longer necessary when NDP is supported.
+--
 cleanCounts :: NodeCounts -> NodeCounts
 cleanCounts (ns, g) = (ns, Map.fromList [(h, Set.filter (flip elem hs) (g Map.! h)) | h <- hs ])
   where
@@ -2188,7 +2192,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                        (acc', accCount2) = scopesAcc  acc
                                      in
                                      reconstruct (Map t1 t2 f' acc') (accCount1 +++ accCount2)
-          ZipWith t1 t2 t3 f acc1 acc2 
+          ZipWith t1 t2 t3 f acc1 acc2
                                   -> travF2A2 (ZipWith t1 t2 t3) f acc1 acc2
           Fold tp f z acc         -> travF2EA (Fold tp) f z acc
           Fold1 tp f acc          -> travF2A (Fold1 tp) f acc

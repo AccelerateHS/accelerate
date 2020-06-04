@@ -80,3 +80,4 @@ travB = id
 convertAfun :: Kit acc => PreOpenAfun acc aenv f -> PreOpenAfun acc aenv f
 convertAfun (Alam lhs f) = Alam lhs $ convertAfun f
 convertAfun (Abody a) = Abody $ convertAcc a
+

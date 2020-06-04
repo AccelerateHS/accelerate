@@ -142,32 +142,31 @@ withRemote
     -> ArrayData a
     -> (RemotePtr m (ScalarDataRepr a) -> m (task, c))
     -> m (Maybe c)
-withRemote (MemoryTable !mt !ref _) !tp !arr run
-  | (ScalarDict, _, _) <- singleDict tp = do
-    key <- Basic.makeStableArray tp arr
-    mp <- withMVar' ref $ \utbl -> do
-      mu  <- liftIO . HT.mutate utbl key $ \case
-        Nothing -> (Nothing,           Nothing)
-        Just u  -> (Just (incCount u), Just u)
-      --
-      case mu of
-        Nothing -> do
-          message ("withRemote/array has never been malloc'd: " ++ show key)
-          return Nothing -- The array was never in the table
-
-        Just u  -> do
-          mp  <- liftIO $ Basic.lookup @m mt tp arr
-          ptr <- case mp of
-                  Just p          -> return p
-                  Nothing
-                    | isEvicted u -> copyBack utbl (incCount u)
-                    | otherwise   -> do message ("lost array " ++ show key)
-                                        $internalError "withRemote" "non-evicted array has been lost"
-          return (Just ptr)
+withRemote (MemoryTable !mt !ref _) !tp !arr run | (ScalarDict, _, _) <- singleDict tp = do
+  key <- Basic.makeStableArray tp arr
+  mp  <- withMVar' ref $ \utbl -> do
+    mu  <- liftIO . HT.mutate utbl key $ \case
+      Nothing -> (Nothing,           Nothing)
+      Just u  -> (Just (incCount u), Just u)
     --
-    case mp of
-      Nothing  -> return Nothing
-      Just ptr -> Just <$> go key ptr
+    case mu of
+      Nothing -> do
+        message ("withRemote/array has never been malloc'd: " ++ show key)
+        return Nothing -- The array was never in the table
+
+      Just u  -> do
+        mp  <- liftIO $ Basic.lookup @m mt tp arr
+        ptr <- case mp of
+                Just p          -> return p
+                Nothing
+                  | isEvicted u -> copyBack utbl (incCount u)
+                  | otherwise   -> do message ("lost array " ++ show key)
+                                      $internalError "withRemote" "non-evicted array has been lost"
+        return (Just ptr)
+  --
+  case mp of
+    Nothing  -> return Nothing
+    Just ptr -> Just <$> go key ptr
   where
     updateTask :: Used task -> task -> IO (Used task)
     updateTask (Used _ status count tasks n tp' weak_arr) task = do
@@ -222,12 +221,10 @@ malloc :: forall e m task. (RemoteMemory m, MonadIO m, Task task)
        => MemoryTable (RemotePtr m) task
        -> SingleType e
        -> ArrayData e
-       -> Bool                                -- ^ True if host array is frozen.
-       -> Int                                 -- ^ Number of elements
-       -> m Bool                              -- ^ Was the array allocated successfully?
-malloc (MemoryTable mt ref weak_utbl) !tp !ad !frozen !n
-  | (ScalarDict, _, _) <- singleDict tp -- Required for ArrayData e ~ ScalarData e
-  = do
+       -> Bool            -- ^ True if host array is frozen.
+       -> Int             -- ^ Number of elements
+       -> m Bool          -- ^ Was the array allocated successfully?
+malloc (MemoryTable mt ref weak_utbl) !tp !ad !frozen !n | (ScalarDict, _, _) <- singleDict tp = do -- Required for ArrayData e ~ ScalarData e
   ts  <- liftIO $ getCPUTime
   key <- Basic.makeStableArray tp ad
   --
@@ -361,8 +358,7 @@ insertUnmanaged
     -> ArrayData e
     -> RemotePtr m (ScalarDataRepr e)
     -> m ()
-insertUnmanaged (MemoryTable mt ref weak_utbl) !tp !arr !ptr
-  | (ScalarDict, _, _) <- singleDict tp = do -- Gives evidence that ArrayData e ~ ScalarData e
+insertUnmanaged (MemoryTable mt ref weak_utbl) !tp !arr !ptr | (ScalarDict, _, _) <- singleDict tp = do -- Gives evidence that ArrayData e ~ ScalarData e
   key <- Basic.makeStableArray tp arr
   ()  <- Basic.insertUnmanaged mt tp arr ptr
   liftIO

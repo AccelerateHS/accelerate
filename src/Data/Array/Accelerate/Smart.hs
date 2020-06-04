@@ -1829,37 +1829,30 @@ mkPairToTuple e = SmartAcc Anil `pair` a `pair` b
 
 class ApplyAcc a where
   type FromApplyAcc a
-
   applyAcc :: FromApplyAcc a -> a
 
 instance ApplyAcc (SmartAcc a) where
   type FromApplyAcc (SmartAcc a) = PreSmartAcc SmartAcc SmartExp a
-
   applyAcc = SmartAcc
 
 instance (Arrays a, ApplyAcc t) => ApplyAcc (Acc a -> t) where
   type FromApplyAcc (Acc a -> t) = SmartAcc (ArrRepr a) -> FromApplyAcc t
-
   applyAcc f a = applyAcc $ f (unAcc a)
 
 instance (Elt a, ApplyAcc t) => ApplyAcc (Exp a -> t) where
   type FromApplyAcc (Exp a -> t) = SmartExp (EltRepr a) -> FromApplyAcc t
-
   applyAcc f a = applyAcc $ f (unExp a)
 
 instance (Elt a, Elt b, ApplyAcc t) => ApplyAcc ((Exp a -> Exp b) -> t) where
   type FromApplyAcc ((Exp a -> Exp b) -> t) = (SmartExp (EltRepr a) -> SmartExp (EltRepr b)) -> FromApplyAcc t
-
   applyAcc f a = applyAcc $ f (unExpFunction a)
 
 instance (Elt a, Elt b, Elt c, ApplyAcc t) => ApplyAcc ((Exp a -> Exp b -> Exp c) -> t) where
   type FromApplyAcc ((Exp a -> Exp b -> Exp c) -> t) = (SmartExp (EltRepr a) -> SmartExp (EltRepr b) -> SmartExp (EltRepr c)) -> FromApplyAcc t
-
   applyAcc f a = applyAcc $ f (unExpBinaryFunction a)
 
 instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) where
   type FromApplyAcc ((Acc a -> Acc b) -> t) = (SmartAcc (ArrRepr a) -> SmartAcc (ArrRepr b)) -> FromApplyAcc t
-
   applyAcc f a = applyAcc $ f (unAccFunction a)
 
 -- Debugging

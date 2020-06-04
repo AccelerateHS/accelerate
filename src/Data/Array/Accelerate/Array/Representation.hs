@@ -9,7 +9,6 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -24,6 +23,7 @@
 --
 
 module Data.Array.Accelerate.Array.Representation (
+
   -- * Array data type in terms of representation types
   Array(..), ArrayR(..), arraysRarray, arraysRtuple2, arrayRshape, arrayRtype, rnfArray, rnfShape,
   ArraysR, TupleType, Scalar, Vector, Matrix, fromList, toList, Segments, shape, reshape, concatVectors,
@@ -48,6 +48,7 @@ module Data.Array.Accelerate.Array.Representation (
 
   -- * Show
   showShape, showElement, showArray, showArray',
+
 ) where
 
 -- friends
@@ -224,13 +225,13 @@ dim2 = ShapeRsnoc dim1
 
 -- |Index representations (which are nested pairs)
 --
-    
+
 data ShapeR sh where
-  ShapeRz :: ShapeR ()
+  ShapeRz    :: ShapeR ()
   ShapeRsnoc :: ShapeR sh -> ShapeR (sh, Int)
 
 rank :: ShapeR sh -> Int
-rank ShapeRz = 0
+rank ShapeRz          = 0
 rank (ShapeRsnoc shr) = rank shr + 1
 
 size :: ShapeR sh -> sh -> Int
@@ -240,20 +241,20 @@ size (ShapeRsnoc shr) (sh, sz)
   | otherwise = size shr sh * sz
 
 empty :: ShapeR sh -> sh
-empty ShapeRz = ()
+empty ShapeRz          = ()
 empty (ShapeRsnoc shr) = (empty shr, 0)
 
 ignore :: ShapeR sh -> sh
-ignore ShapeRz = ()
+ignore ShapeRz          = ()
 ignore (ShapeRsnoc shr) = (ignore shr, -1)
 
 shapeZip :: (Int -> Int -> Int) -> ShapeR sh -> sh -> sh -> sh
-shapeZip _ ShapeRz () () = ()
+shapeZip _ ShapeRz          ()      ()      = ()
 shapeZip f (ShapeRsnoc shr) (as, a) (bs, b) = (shapeZip f shr as bs, f a b)
 
 intersect, union :: ShapeR sh -> sh -> sh -> sh
 intersect = shapeZip min
-union = shapeZip max
+union     = shapeZip max
 
 toIndex :: ShapeR sh -> sh -> sh -> Int
 toIndex ShapeRz () () = 0
@@ -282,7 +283,7 @@ shapeEq (ShapeRsnoc shr) (sh, i) (sh', i') = i == i' && shapeEq shr sh sh'
 -- initial value that is combined with the results; the index space
 -- is traversed in row-major order
 iter :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a -> a
-iter ShapeRz () f _ _    = f ()
+iter ShapeRz          ()       f _ _ = f ()
 iter (ShapeRsnoc shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
   where
     iter' (ix,i) | i >= sz   = r
@@ -290,7 +291,7 @@ iter (ShapeRsnoc shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
 
 -- variant of 'iter' without an initial value
 iter1 :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a
-iter1 ShapeRz () f _      = f ()
+iter1 ShapeRz          ()       f _ = f ()
 iter1 (ShapeRsnoc _  ) (_,  0)  _ _ = $boundsError "iter1" "empty iteration space"
 iter1 (ShapeRsnoc shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
   where
@@ -301,19 +302,19 @@ iter1 (ShapeRsnoc shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
 
 -- convert a minpoint-maxpoint index into a shape
 rangeToShape :: ShapeR sh -> (sh, sh) -> sh
-rangeToShape ShapeRz ((), ()) = ()
+rangeToShape ShapeRz          ((), ())                 = ()
 rangeToShape (ShapeRsnoc shr) ((sh1, sz1), (sh2, sz2)) = (rangeToShape shr (sh1, sh2), sz2 - sz1 + 1)
 
 -- the converse
 shapeToRange :: ShapeR sh -> sh -> (sh, sh)
-shapeToRange ShapeRz () = ((), ())
+shapeToRange ShapeRz          ()       = ((), ())
 shapeToRange (ShapeRsnoc shr) (sh, sz) = let (low, high) = shapeToRange shr sh in ((low, 0), (high, sz - 1))
 
 -- Other conversions
 
 -- Convert a shape into its list of dimensions
 shapeToList :: ShapeR sh -> sh -> [Int]
-shapeToList ShapeRz () = []
+shapeToList ShapeRz          ()      = []
 shapeToList (ShapeRsnoc shr) (sh,sz) = sz : shapeToList shr sh
 
 -- Convert a list of dimensions into a shape
@@ -324,12 +325,12 @@ listToShape shr ds = case listToShape' shr ds of
 
 -- Attempt to convert a list of dimensions into a shape
 listToShape' :: ShapeR sh -> [Int] -> Maybe sh
-listToShape' ShapeRz [] = Just ()
+listToShape' ShapeRz          []     = Just ()
 listToShape' (ShapeRsnoc shr) (x:xs) = (, x) <$> listToShape' shr xs
 listToShape' _ _ = Nothing
 
 shapeType :: ShapeR sh -> TupleType sh
-shapeType ShapeRz = TupRunit
+shapeType ShapeRz          = TupRunit
 shapeType (ShapeRsnoc shr) = shapeType shr `TupRpair` (TupRsingle $ SingleScalarType $ NumSingleType $ IntegralNumType TypeInt)
 
 -- |Slice representation
@@ -367,10 +368,8 @@ instance Slice sl => Slice (sl, Int) where
 --
 data SliceIndex ix slice coSlice sliceDim where
   SliceNil   :: SliceIndex () () () ()
-  SliceAll   ::
-   SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
-  SliceFixed ::
-   SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)
+  SliceAll   :: SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co       (dim, Int)
+  SliceFixed :: SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice      (co, Int) (dim, Int)
 
 instance Show (SliceIndex ix slice coSlice sliceDim) where
   show SliceNil          = "SliceNil"
@@ -509,7 +508,7 @@ stencilHalo = go'
 
     go :: StencilR sh e stencil -> sh
     go = snd . go'
-    
+
     cons :: ShapeR sh -> Int -> sh -> (sh, Int)
     cons ShapeRz          ix ()       = ((), ix)
     cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
@@ -518,7 +517,7 @@ rnfArray :: ArrayR a -> a -> ()
 rnfArray (ArrayR shr tp) (Array sh ad) = rnfShape shr sh `seq` rnfArrayData tp ad
 
 rnfShape :: ShapeR sh -> sh -> ()
-rnfShape ShapeRz () = ()
+rnfShape ShapeRz          ()      = ()
 rnfShape (ShapeRsnoc shr) (sh, s) = s `seq` rnfShape shr sh
 
 -- | SIMD Vectors (Vec n t)
@@ -529,7 +528,7 @@ rnfShape (ShapeRsnoc shr) (sh, s) = s `seq` rnfShape shr sh
 -- type (Vec n single) with its tuple representation (tuple).
 -- Conversions between those types are exposed through vecPack and
 -- vecUnpack.
--- 
+--
 data VecR (n :: Nat) single tuple where
   VecRnil  :: SingleType s -> VecR 0       s ()
   VecRsucc :: VecR n s t   -> VecR (n + 1) s (t, s)
@@ -677,6 +676,6 @@ showMatrix f tp arr@(Array sh _)
         in
         before ++ cell ++ after
 
-
 reduceRank :: ArrayR (Array (sh, Int) e) -> ArrayR (Array sh e)
 reduceRank (ArrayR (ShapeRsnoc shr) tp) = ArrayR shr tp
+

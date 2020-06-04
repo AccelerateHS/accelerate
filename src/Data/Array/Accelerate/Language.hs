@@ -1297,7 +1297,7 @@ intersect' :: Repr.ShapeR sh -> SmartExp sh -> SmartExp sh -> SmartExp sh
 intersect' Repr.ShapeRz _ _ = SmartExp Nil
 intersect' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
   = SmartExp
-  $ intersect' shr xs ys `Pair` 
+  $ intersect' shr xs ys `Pair`
     SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)
 
 
@@ -1310,7 +1310,7 @@ union' :: Repr.ShapeR sh -> SmartExp sh -> SmartExp sh -> SmartExp sh
 union' Repr.ShapeRz _ _ = SmartExp Nil
 union' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
   = SmartExp
-  $ union' shr xs ys `Pair` 
+  $ union' shr xs ys `Pair`
     SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
 
 
@@ -1340,17 +1340,9 @@ while :: forall e. Elt e
 #if __GLASGOW_HASKELL__ < 804
 while c f (Exp e) = exp $ While @SmartAcc @SmartExp @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
 #else
-while c f (Exp e) = exp $ While @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
+while c f (Exp e) = exp $ While                     @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
 #endif
 
-{-
-
-  While         :: TupleType t
-                -> (SmartExp t -> exp Bool)
-                -> (SmartExp t -> exp t)
-                -> exp t
-                -> PreSmartExp acc exp t
-                -}
 
 -- Array operations with a scalar result
 -- -------------------------------------

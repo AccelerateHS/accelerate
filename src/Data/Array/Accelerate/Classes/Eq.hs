@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE TypeOperators     #-}
-{-# OPTIONS_GHC -fno-warn-orphans -freduction-depth=100 #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Eq
 -- Copyright   : [2016..2019] The Accelerate Team
@@ -126,12 +126,6 @@ cond :: Elt t
      -> Exp t                   -- ^ else-expression
      -> Exp t
 cond (Exp c) (Exp x) (Exp y) = exp $ Cond c x y
-
--- To support 16-tuples, we must set the maximum recursion depth of the type
--- checker higher. The default is 51, which appears to be a problem for
--- 16-tuples (15-tuples do work). Hence we set a compiler flag at the top
--- of this file: -freduction-depth=100
---
 
 $(runQ $ do
     let

@@ -13,7 +13,8 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Analysis.Stencil (positionsR) where
+module Data.Array.Accelerate.Analysis.Stencil ( positionsR )
+  where
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Representation

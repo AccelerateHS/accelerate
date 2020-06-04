@@ -142,3 +142,4 @@ instance P.Floating (Exp CDouble) where
   log     = mkLog
   (**)    = mkFPow
   logBase = mkLogBase
+

@@ -6,9 +6,10 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -49,8 +50,9 @@ import Control.Monad
 import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Error
 import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 
 
@@ -95,7 +97,8 @@ lhsFullVars = fmap snd . go weakenId
 bindingIsTrivial :: LeftHandSide s a env1 env2 -> Vars s env2 b -> Maybe (a :~: b)
 bindingIsTrivial lhs vars
   | Just lhsVars <- lhsFullVars lhs
-  , Just Refl <- matchVars vars lhsVars = Just Refl
+  , Just Refl    <- matchVars vars lhsVars
+  = Just Refl
 bindingIsTrivial _ _ = Nothing
 
 isIdentity :: PreOpenFun acc env aenv (a -> b) -> Maybe (a :~: b)
@@ -107,7 +110,8 @@ isIdentityIndexing :: PreOpenFun acc env aenv (a -> b) -> Maybe (acc aenv (Array
 isIdentityIndexing (Lam lhs (Body body))
   | Index a ix <- body
   , Just vars  <- extractExpVars ix
-  , Just Refl  <- bindingIsTrivial lhs vars = Just a
+  , Just Refl  <- bindingIsTrivial lhs vars
+  = Just a
 isIdentityIndexing _ = Nothing
 
 -- | Replace the first variable with the given expression. The environment
@@ -176,7 +180,7 @@ inlineVars lhsBound expr bound
             -> PreOpenFun acc env1 aenv t
             -> Maybe (PreOpenFun acc env2 aenv t)
     substituteF k1 k2 vars (Body e) = Body <$> substitute k1 k2 vars e
-    substituteF k1 k2 vars (Lam lhs f) 
+    substituteF k1 k2 vars (Lam lhs f)
       | Exists lhs' <- rebuildLHS lhs = Lam lhs' <$> substituteF (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) f
 
 inlineVars _ _ _ = Nothing
@@ -218,7 +222,7 @@ compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
   | Just Refl <- isIdentity g = f
 
   | Exists lhsB' <- rebuildLHS lhsB
-   = Lam lhsA $ Body $ Let lhsB' b (weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c)
+  = Lam lhsA $ Body $ Let lhsB' b (weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c)
   -- = Stats.substitution "compose" . Lam lhs2 . Body $ substitute' f g
 compose _                   _                   = error "compose: impossible evaluation"
 
@@ -450,7 +454,7 @@ strengthenWithLHS (LeftHandSidePair l1 l2) = strengthenWithLHS l2 >=> strengthen
 
 strengthenAfter :: LeftHandSide s t env1 env2 -> LeftHandSide s t env1' env2' -> env1 :?> env1' -> env2 :?> env2'
 strengthenAfter (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
-strengthenAfter (LeftHandSideSingle _) (LeftHandSideSingle _) k = \ix -> case ix of
+strengthenAfter (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
   ZeroIdx   -> Just ZeroIdx
   SuccIdx i -> SuccIdx <$> k i
 strengthenAfter (LeftHandSidePair l1 l2) (LeftHandSidePair l1' l2') k
@@ -522,27 +526,27 @@ rebuildPreOpenExp k v av exp =
     Const t c           -> pure $ Const t c
     PrimConst c         -> pure $ PrimConst c
     Undef t             -> pure $ Undef t
-    Evar var            -> expOut        <$> v var
+    Evar var            -> expOut          <$> v var
     Let lhs a b
       | Exists lhs' <- rebuildLHS lhs
-                        -> Let lhs'      <$> rebuildPreOpenExp k v av a  <*> rebuildPreOpenExp k (shiftE' lhs lhs' k v) av b
-    Pair e1 e2          -> Pair          <$> rebuildPreOpenExp k v av e1 <*> rebuildPreOpenExp k v av e2
-    Nil                 -> pure $ Nil
-    VecPack   vec e     -> VecPack   vec <$> rebuildPreOpenExp k v av e
-    VecUnpack vec e     -> VecUnpack vec <$> rebuildPreOpenExp k v av e
-    IndexSlice x ix sh  -> IndexSlice x  <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
-    IndexFull x ix sl   -> IndexFull x   <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
-    ToIndex shr sh ix   -> ToIndex shr   <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    FromIndex shr sh ix -> FromIndex shr <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    Cond p t e          -> Cond          <$> rebuildPreOpenExp k v av p  <*> rebuildPreOpenExp k v av t  <*> rebuildPreOpenExp k v av e
-    While p f x         -> While         <$> rebuildFun k v av p         <*> rebuildFun k v av f         <*> rebuildPreOpenExp k v av x
-    PrimApp f x         -> PrimApp f     <$> rebuildPreOpenExp k v av x
-    Index a sh          -> Index         <$> k av a                      <*> rebuildPreOpenExp k v av sh
-    LinearIndex a i     -> LinearIndex   <$> k av a                      <*> rebuildPreOpenExp k v av i
-    Shape a             -> Shape         <$> k av a
-    ShapeSize shr sh    -> ShapeSize shr <$> rebuildPreOpenExp k v av sh
+                        -> Let lhs'        <$> rebuildPreOpenExp k v av a  <*> rebuildPreOpenExp k (shiftE' lhs lhs' k v) av b
+    Pair e1 e2          -> Pair            <$> rebuildPreOpenExp k v av e1 <*> rebuildPreOpenExp k v av e2
+    Nil                 -> pure Nil
+    VecPack   vec e     -> VecPack   vec   <$> rebuildPreOpenExp k v av e
+    VecUnpack vec e     -> VecUnpack vec   <$> rebuildPreOpenExp k v av e
+    IndexSlice x ix sh  -> IndexSlice x    <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
+    IndexFull x ix sl   -> IndexFull x     <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
+    ToIndex shr sh ix   -> ToIndex shr     <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    FromIndex shr sh ix -> FromIndex shr   <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    Cond p t e          -> Cond            <$> rebuildPreOpenExp k v av p  <*> rebuildPreOpenExp k v av t  <*> rebuildPreOpenExp k v av e
+    While p f x         -> While           <$> rebuildFun k v av p         <*> rebuildFun k v av f         <*> rebuildPreOpenExp k v av x
+    PrimApp f x         -> PrimApp f       <$> rebuildPreOpenExp k v av x
+    Index a sh          -> Index           <$> k av a                      <*> rebuildPreOpenExp k v av sh
+    LinearIndex a i     -> LinearIndex     <$> k av a                      <*> rebuildPreOpenExp k v av i
+    Shape a             -> Shape           <$> k av a
+    ShapeSize shr sh    -> ShapeSize shr   <$> rebuildPreOpenExp k v av sh
     Foreign tp ff f e   -> Foreign tp ff f <$> rebuildPreOpenExp k v av e
-    Coerce t1 t2 e      -> Coerce t1 t2  <$> rebuildPreOpenExp k v av e
+    Coerce t1 t2 e      -> Coerce t1 t2    <$> rebuildPreOpenExp k v av e
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun
@@ -555,7 +559,7 @@ rebuildFun
 rebuildFun k v av fun =
   case fun of
     Body e      -> Body <$> rebuildPreOpenExp k v av e
-    Lam lhs f   
+    Lam lhs f
       | Exists lhs' <- rebuildLHS lhs
         -> Lam lhs' <$> rebuildFun k (shiftE' lhs lhs' k v) av f
 
@@ -611,7 +615,7 @@ shiftA'
 shiftA' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
 shiftA' (LeftHandSideSingle _)   (LeftHandSideSingle _)   k v = shiftA k v
 shiftA' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftA' b1 b2 k $ shiftA' a1 a2 k v
-shiftA' _ _ _ _ = error "Substitution: left hand sides do not match"
+shiftA' _ _ _ _ = $internalError "Substitution/shiftA'" "left hand sides do not match"
 
 {-# INLINEABLE rebuildOpenAcc #-}
 rebuildOpenAcc
@@ -630,38 +634,39 @@ rebuildPreOpenAcc
     -> f (PreOpenAcc acc aenv' t)
 rebuildPreOpenAcc k av acc =
   case acc of
-    Use repr a              -> pure $ Use repr a
-    Alet lhs a b            -> rebuildAlet k av lhs a b
-    Avar ix                 -> accOut       <$> av ix
-    Apair as bs             -> Apair        <$> k av as <*> k av bs
-    Anil                    -> pure Anil
-    Apply repr f a          -> Apply repr   <$> rebuildAfun k av f <*> k av a
-    Acond p t e             -> Acond        <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
-    Awhile p f a            -> Awhile       <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
-    Unit tp e               -> Unit tp      <$> rebuildPreOpenExp k (pure . IE) av e
-    Reshape shr e a         -> Reshape shr  <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
-    Generate repr e f       -> Generate repr <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
-    Transform repr sh ix f a -> Transform repr <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
-    Replicate sl slix a     -> Replicate sl <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
-    Slice sl a slix         -> Slice sl     <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
-    Map tp f a              -> Map tp       <$> rebuildFun k (pure . IE) av f <*> k av a
-    ZipWith tp f a1 a2      -> ZipWith tp   <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
-    Fold f z a              -> Fold         <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Fold1 f a               -> Fold1        <$> rebuildFun k (pure . IE) av f <*> k av a
-    FoldSeg itp f z a s     -> FoldSeg itp  <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
-    Fold1Seg itp f a s      -> Fold1Seg itp <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
-    Scanl f z a             -> Scanl        <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl' f z a            -> Scanl'       <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl1 f a              -> Scanl1       <$> rebuildFun k (pure . IE) av f <*> k av a
-    Scanr f z a             -> Scanr        <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr' f z a            -> Scanr'       <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr1 f a              -> Scanr1       <$> rebuildFun k (pure . IE) av f <*> k av a
-    Permute f1 a1 f2 a2     -> Permute      <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
-    Backpermute shr sh f a  -> Backpermute shr <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
-    Stencil sr tp f b a     -> Stencil sr tp <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b  <*> k av a
-    Stencil2 s1 s2 tp f b1 a1 b2 a2 -> Stencil2 s1 s2 tp <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b1 <*> k av a1 <*> rebuildBoundary k av b2 <*> k av a2
+    Use repr a                -> pure $ Use repr a
+    Alet lhs a b              -> rebuildAlet k av lhs a b
+    Avar ix                   -> accOut          <$> av ix
+    Apair as bs               -> Apair           <$> k av as <*> k av bs
+    Anil                      -> pure Anil
+    Apply repr f a            -> Apply repr      <$> rebuildAfun k av f <*> k av a
+    Acond p t e               -> Acond           <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
+    Awhile p f a              -> Awhile          <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
+    Unit tp e                 -> Unit tp         <$> rebuildPreOpenExp k (pure . IE) av e
+    Reshape shr e a           -> Reshape shr     <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
+    Generate repr e f         -> Generate repr   <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
+    Transform repr sh ix f a  -> Transform repr  <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
+    Replicate sl slix a       -> Replicate sl    <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
+    Slice sl a slix           -> Slice sl        <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
+    Map tp f a                -> Map tp          <$> rebuildFun k (pure . IE) av f <*> k av a
+    ZipWith tp f a1 a2        -> ZipWith tp      <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
+    Fold f z a                -> Fold            <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Fold1 f a                 -> Fold1           <$> rebuildFun k (pure . IE) av f <*> k av a
+    FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
+    Fold1Seg itp f a s        -> Fold1Seg itp    <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
+    Scanl f z a               -> Scanl           <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl' f z a              -> Scanl'          <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl1 f a                -> Scanl1          <$> rebuildFun k (pure . IE) av f <*> k av a
+    Scanr f z a               -> Scanr           <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr' f z a              -> Scanr'          <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr1 f a                -> Scanr1          <$> rebuildFun k (pure . IE) av f <*> k av a
+    Permute f1 a1 f2 a2       -> Permute         <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
+    Backpermute shr sh f a    -> Backpermute shr <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
+    Stencil sr tp f b a       -> Stencil sr tp   <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b  <*> k av a
+    Stencil2 s1 s2 tp f b1 a1 b2 a2
+                              -> Stencil2 s1 s2 tp <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b1 <*> k av a1 <*> rebuildBoundary k av b2 <*> k av a2
+    Aforeign repr ff afun as  -> Aforeign repr ff afun <$> k av as
     -- Collect seq             -> Collect      <$> rebuildSeq k av seq
-    Aforeign repr ff afun as -> Aforeign repr ff afun <$> k av as
 
 {-# INLINEABLE rebuildAfun #-}
 rebuildAfun
@@ -670,11 +675,10 @@ rebuildAfun
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAfun acc aenv  t
     -> f (PreOpenAfun acc aenv' t)
-rebuildAfun k av afun =
-  case afun of
-    Abody b -> Abody <$> k av b
-    Alam lhs1 f -> case rebuildLHS lhs1 of
-      Exists lhs2 -> Alam lhs2 <$> rebuildAfun k (shiftA' lhs1 lhs2 k av) f
+rebuildAfun k av (Abody b) = Abody <$> k av b
+rebuildAfun k av (Alam lhs1 f)
+  | Exists lhs2 <- rebuildLHS lhs1
+  = Alam lhs2 <$> rebuildAfun k (shiftA' lhs1 lhs2 k av) f
 
 rebuildAlet
     :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (Applicative f, SyntacticAcc fa)
@@ -684,16 +688,18 @@ rebuildAlet
     -> acc aenv1  bndArrs
     -> acc aenv1' arrs
     -> f (PreOpenAcc acc aenv2 arrs)
-rebuildAlet k av lhs1 bind1 body1 = case rebuildLHS lhs1 of
-  Exists lhs2 -> Alet lhs2 <$> k av bind1 <*> k (shiftA' lhs1 lhs2 k av) body1
+rebuildAlet k av lhs1 bind1 body1
+  | Exists lhs2 <- rebuildLHS lhs1
+  = Alet lhs2 <$> k av bind1 <*> k (shiftA' lhs1 lhs2 k av) body1
 
 {-# INLINEABLE rebuildLHS #-}
 rebuildLHS :: LeftHandSide s t aenv1 aenv1' -> Exists (LeftHandSide s t aenv2)
 rebuildLHS (LeftHandSideWildcard r) = Exists $ LeftHandSideWildcard r
 rebuildLHS (LeftHandSideSingle s)   = Exists $ LeftHandSideSingle s
-rebuildLHS (LeftHandSidePair as bs) = case rebuildLHS as of
-  Exists as' -> case rebuildLHS bs of
-    Exists bs' -> Exists $ LeftHandSidePair as' bs'
+rebuildLHS (LeftHandSidePair as bs)
+  | Exists as' <- rebuildLHS as
+  , Exists bs' <- rebuildLHS bs
+  = Exists $ LeftHandSidePair as' bs'
 
 {-# INLINEABLE rebuildBoundary #-}
 rebuildBoundary
@@ -761,3 +767,4 @@ extractExpVars Nil          = Just VarsNil
 extractExpVars (Pair e1 e2) = VarsPair <$> extractExpVars e1 <*> extractExpVars e2
 extractExpVars (Evar v)     = Just $ VarsSingle v
 extractExpVars _            = Nothing
+

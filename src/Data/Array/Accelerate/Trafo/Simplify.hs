@@ -202,6 +202,7 @@ recoverLoops _ bnd e3
 --       It might be helpful to do some inlining if this enables other optimizations.
 --       Eg, for `let x = -y in -x`, the inlining would allow us to shorten it to `y`.
 --       If we do not want to do inlining, we should remove the environment here.
+--
 simplifyOpenExp
     :: forall acc env aenv e. (Kit acc)
     => Gamma acc env env aenv
@@ -246,49 +247,62 @@ simplifyOpenExp env = first getAny . cvtE
     cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
     cvtF env' = first Any . simplifyOpenFun env'
 
-    cvtLet :: Gamma acc env' env' aenv -> ELeftHandSide bnd env' env'' -> PreOpenExp acc env' aenv bnd -> (Gamma acc env'' env'' aenv -> (Any, PreOpenExp acc env'' aenv t)) -> (Any, PreOpenExp acc env' aenv t)
+    cvtLet :: Gamma acc env' env' aenv
+           -> ELeftHandSide bnd env' env''
+           -> PreOpenExp acc env' aenv bnd
+           -> (Gamma acc env'' env'' aenv -> (Any, PreOpenExp acc env'' aenv t))
+           -> (Any, PreOpenExp acc env' aenv t)
     cvtLet env' lhs@(LeftHandSideSingle _) bnd          body = Let lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
     cvtLet env' (LeftHandSideWildcard _)   _            body = body env'                                 -- Binding not used, remove let binding
-    cvtLet env' (LeftHandSidePair l1 l2)   (Pair e1 e2) body =                                           -- Split binding to multiple bindings
-      first (const $ Any True) $
-        cvtLet env' l1 e1 $
-          \env'' -> cvtLet env'' l2 (weakenE (weakenWithLHS l1) e2) body
+    cvtLet env' (LeftHandSidePair l1 l2)   (Pair e1 e2) body                                             -- Split binding to multiple bindings
+      = first (const $ Any True)
+      $ cvtLet env' l1 e1
+      $ \env'' -> cvtLet env'' l2 (weakenE (weakenWithLHS l1) e2) body
     cvtLet env' lhs                        bnd          body = Let lhs bnd <$> body (lhsExpr lhs env')   -- Cannot split this binding.
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
     --
-    cond :: forall t.
-            (Any, PreOpenExp acc env aenv Bool)
+    cond :: (Any, PreOpenExp acc env aenv Bool)
          -> (Any, PreOpenExp acc env aenv t)
          -> (Any, PreOpenExp acc env aenv t)
          -> (Any, PreOpenExp acc env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
-      | Const _ True  <- p'        = Stats.knownBranch "True"      (yes t')
-      | Const _ False <- p'        = Stats.knownBranch "False"     (yes e')
+      | Const _ True  <- p'      = Stats.knownBranch "True"      (yes t')
+      | Const _ False <- p'      = Stats.knownBranch "False"     (yes e')
       | Just Refl <- match t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                = Cond <$> p <*> t <*> e
 
-
     -- Shape manipulations
     --
-    shape :: forall sh t. acc aenv (Array sh t) -> (Any, PreOpenExp acc env aenv sh)
+    shape :: acc aenv (Array sh t) -> (Any, PreOpenExp acc env aenv sh)
     shape a
       | ArrayR ShapeRz _ <- arrayRepr a
-        = Stats.ruleFired "shape/Z" $ yes Nil
+      = Stats.ruleFired "shape/Z" $ yes Nil
     shape a
-        = pure $ Shape a
+      = pure $ Shape a
 
-    shapeSize :: forall sh. ShapeR sh -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
-    shapeSize shr (_, extractConstTuple -> Just c) = Stats.ruleFired "shapeSize/const" $ yes (Const scalarTypeInt (product (shapeToList shr c)))
-    shapeSize shr sh           = ShapeSize shr <$> sh
+    shapeSize :: ShapeR sh
+              -> (Any, PreOpenExp acc env aenv sh)
+              -> (Any, PreOpenExp acc env aenv Int)
+    shapeSize shr (_, sh)
+      | Just c <- extractConstTuple sh
+      = Stats.ruleFired "shapeSize/const" $ yes (Const scalarTypeInt (product (shapeToList shr c)))
+    shapeSize shr sh
+      = ShapeSize shr <$> sh
 
-    toIndex :: forall sh. ShapeR sh -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
+    toIndex :: ShapeR sh
+            -> (Any, PreOpenExp acc env aenv sh)
+            -> (Any, PreOpenExp acc env aenv sh)
+            -> (Any, PreOpenExp acc env aenv Int)
     toIndex _ (_,sh) (_,FromIndex _ sh' ix)
       | Just Refl <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
     toIndex shr sh ix             = ToIndex shr <$> sh <*> ix
 
-    fromIndex :: forall sh. ShapeR sh -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
+    fromIndex :: ShapeR sh
+              -> (Any, PreOpenExp acc env aenv sh)
+              -> (Any, PreOpenExp acc env aenv Int)
+              -> (Any, PreOpenExp acc env aenv sh)
     fromIndex _ (_,sh) (_,ToIndex _ sh' ix)
       | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
     fromIndex shr sh ix           = FromIndex shr <$> sh <*> ix

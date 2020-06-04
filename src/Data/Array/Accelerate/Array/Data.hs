@@ -125,30 +125,30 @@ type MutableArrayData e = GArrayData e
 -- representation, but this is now fixed to our UniqueArray type.
 --
 type family GArrayData a where
-  GArrayData ()        = ()
-  GArrayData (a, b)    = (GArrayData a, GArrayData b) -- XXX: fields of tuple are non-strict, which enables lazy device-host copying
-  GArrayData a         = ScalarData a
+  GArrayData ()     = ()
+  GArrayData (a, b) = (GArrayData a, GArrayData b) -- XXX: fields of tuple are non-strict, which enables lazy device-host copying
+  GArrayData a      = ScalarData a
 
 type ScalarData a = UniqueArray (ScalarDataRepr a)
 
 -- Mapping from scalar type to the type as represented in memory in an array.
 -- Booleans are stored as Word8, other types are represented as itself.
 type family ScalarDataRepr tp where
-  ScalarDataRepr Int    = Int
-  ScalarDataRepr Int8   = Int8
-  ScalarDataRepr Int16  = Int16
-  ScalarDataRepr Int32  = Int32
-  ScalarDataRepr Int64  = Int64
-  ScalarDataRepr Word   = Word
-  ScalarDataRepr Word8  = Word8
-  ScalarDataRepr Word16 = Word16
-  ScalarDataRepr Word32 = Word32
-  ScalarDataRepr Word64 = Word64
-  ScalarDataRepr Half   = Half
-  ScalarDataRepr Float  = Float
-  ScalarDataRepr Double = Double
-  ScalarDataRepr Bool   = Word8
-  ScalarDataRepr Char   = Char
+  ScalarDataRepr Int        = Int
+  ScalarDataRepr Int8       = Int8
+  ScalarDataRepr Int16      = Int16
+  ScalarDataRepr Int32      = Int32
+  ScalarDataRepr Int64      = Int64
+  ScalarDataRepr Word       = Word
+  ScalarDataRepr Word8      = Word8
+  ScalarDataRepr Word16     = Word16
+  ScalarDataRepr Word32     = Word32
+  ScalarDataRepr Word64     = Word64
+  ScalarDataRepr Half       = Half
+  ScalarDataRepr Float      = Float
+  ScalarDataRepr Double     = Double
+  ScalarDataRepr Bool       = Word8
+  ScalarDataRepr Char       = Char
   ScalarDataRepr (Vec n tp) = ScalarDataRepr tp
 
 -- Utilities for working with the type families & type class instances
@@ -197,7 +197,7 @@ unsafeIndexArrayData (TupRsingle (SingleScalarType tp)) arr ix
 unsafeIndexArrayData !tp !arr !ix = unsafePerformIO $! unsafeReadArrayData tp arr ix
 
 ptrOfArrayData :: ScalarType e -> ArrayData e -> Ptr (ScalarDataRepr e)
-ptrOfArrayData tp arr 
+ptrOfArrayData tp arr
   | (_, ScalarDict) <- scalarDict tp = unsafeUniqueArrayPtr arr
 
 touchArrayData :: TupleType e -> ArrayData e -> IO ()

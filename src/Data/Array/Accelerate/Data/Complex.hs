@@ -54,8 +54,8 @@ import Data.Array.Accelerate.Smart                                  hiding (exp)
 import Data.Array.Accelerate.Type
 
 import Data.Complex                                                 ( Complex(..) )
-import qualified Data.Complex                                       as C
 import Prelude                                                      (($))
+import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
 
 infix 6 ::+
@@ -131,24 +131,24 @@ complexR TupRpair{}                                                             
 
 constructComplex :: forall a. Elt a => Exp a -> Exp a -> Exp (Complex a)
 constructComplex r i = case complexR $ eltType @a of
-  ComplexRvec _ -> 
+  ComplexRvec _ ->
     let
       r', i' :: Exp (EltRepr a)
-      r' = reExp @a @(EltRepr a) r
-      i' = reExp i
+      r' = coerce @a @(EltRepr a) r
+      i' = coerce i
       v :: Exp (V2 (EltRepr a))
       v = V2_ r' i'
     in
-      reExp @(V2 (EltRepr a)) @(Complex a) $ v
-  ComplexRtup   -> reExp $ T2  r i
+      coerce @(V2 (EltRepr a)) @(Complex a) $ v
+  ComplexRtup   -> coerce $ T2  r i
 
 deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
 deconstructComplex c = case complexR $ eltType @a of
-  ComplexRvec _ -> let V2_ r i = reExp @(Complex a) @(V2 (EltRepr a)) c in (reExp r, reExp i)
-  ComplexRtup   -> let T2  r i = reExp c in (r, i)
+  ComplexRvec _ -> let V2_ r i = coerce @(Complex a) @(V2 (EltRepr a)) c in (coerce r, coerce i)
+  ComplexRtup   -> let T2  r i = coerce c in (r, i)
 
-reExp :: EltRepr a ~ EltRepr b => Exp a -> Exp b
-reExp (Exp e) = Exp e
+coerce :: EltRepr a ~ EltRepr b => Exp a -> Exp b
+coerce (Exp e) = Exp e
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
@@ -258,6 +258,7 @@ instance (FromIntegral a b, Num b, Elt (Complex b)) => FromIntegral a (Complex b
   fromIntegral x = fromIntegral x ::+ 0
 
 -- | @since 1.2.0.0
+--
 instance Functor Complex where
   fmap f (r ::+ i) = f r ::+ f i
 

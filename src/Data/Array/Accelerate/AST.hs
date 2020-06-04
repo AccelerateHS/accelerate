@@ -254,6 +254,8 @@ lhsToTupR (LeftHandSideSingle s)   = TupRsingle s
 lhsToTupR (LeftHandSideWildcard r) = r
 lhsToTupR (LeftHandSidePair as bs) = TupRpair (lhsToTupR as) (lhsToTupR bs)
 
+-- TODO: We should move the weakening utilities elsewhere
+
 -- The type of shifting terms from one context into another
 -- This is defined as a newtype, as a type synonym containing a forall quantifier
 -- may give issues with impredicative polymorphism which GHC does not support.
@@ -1345,7 +1347,7 @@ rnfPreOpenAcc rnfA pacc =
     Scanr' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
     Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
     Backpermute shr sh f a    -> rnfShapeR shr `seq` rnfE sh `seq` rnfF f `seq` rnfA a
-    Stencil sr tp f b a       -> 
+    Stencil sr tp f b a       ->
       let
         TupRsingle (ArrayR shr _) = arraysRepr a
         repr = ArrayR shr $ stencilElt sr
@@ -2195,3 +2197,4 @@ showPreExpOp LinearIndex{}     = "LinearIndex"
 showPreExpOp Shape{}           = "Shape"
 showPreExpOp ShapeSize{}       = "ShapeSize"
 showPreExpOp Coerce{}          = "Coerce"
+

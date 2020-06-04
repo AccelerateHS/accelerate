@@ -625,94 +625,40 @@ evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = 
 evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (<)
 evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (<)
 
--- evalLt (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (<)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (<)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (<)
--- evalLt (VectorScalarType (Vector2Type s)) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- t -> eval2 (<)
---     NumSingleType (FloatingNumType t) | FloatingDict <- t -> eval2 (<)
---     NonNumSingleType t                | NonNumDict   <- t -> eval2 (<)
-
 evalGt :: SingleType a -> (a,a) :-> Bool
 evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (>)
 evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (>)
 evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (>)
-
--- evalGt (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (>)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (>)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (>)
 
 evalLtEq :: SingleType a -> (a,a) :-> Bool
 evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (<=)
 evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (<=)
 evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (<=)
 
--- evalLtEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (<=)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (<=)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (<=)
-
 evalGtEq :: SingleType a -> (a,a) :-> Bool
 evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (>=)
 evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (>=)
 evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (>=)
-
--- evalGtEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (>=)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (>=)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (>=)
 
 evalEq :: SingleType a -> (a,a) :-> Bool
 evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (==)
 evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (==)
 evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (==)
 
--- evalEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (==)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (==)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (==)
-
 evalNEq :: SingleType a -> (a,a) :-> Bool
 evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (/=)
 evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (/=)
 evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (/=)
-
--- evalNEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (/=)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (/=)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (/=)
 
 evalMax :: SingleType a -> (a,a) :-> a
 evalMax ty@(NumSingleType (IntegralNumType ty')) | IntegralDict <- integralDict ty' = eval2 ty max
 evalMax ty@(NumSingleType (FloatingNumType ty')) | FloatingDict <- floatingDict ty' = eval2 ty max
 evalMax ty@(NonNumSingleType ty')                | NonNumDict   <- nonNumDict ty'   = eval2 ty max
 
--- evalMax (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 max
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 max
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 max
-
 evalMin :: SingleType a -> (a,a) :-> a
 evalMin ty@(NumSingleType (IntegralNumType ty')) | IntegralDict <- integralDict ty' = eval2 ty min
 evalMin ty@(NumSingleType (FloatingNumType ty')) | FloatingDict <- floatingDict ty' = eval2 ty min
 evalMin ty@(NonNumSingleType ty')                | NonNumDict   <- nonNumDict ty'   = eval2 ty min
-
--- evalMin (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 min
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 min
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 min
-
 
 -- Logical operators
 -- -----------------
