@@ -303,6 +303,9 @@ module Data.Array.Accelerate (
   -- ** Scalar data types
   Exp,
 
+  -- ** SIMD vectors
+  Vec, VecElt,
+
   -- ** Type classes
   -- *** Basic type classes
   Eq(..),
@@ -333,7 +336,7 @@ module Data.Array.Accelerate (
   -- ** Pattern synonyms
   -- $pattern_synonyms
   --
-  pattern Pattern, IsProduct, IsTuple,
+  pattern Pattern,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
@@ -341,6 +344,10 @@ module Data.Array.Accelerate (
   pattern Z_, pattern Ix, pattern (::.),
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
+
+  pattern V2, pattern V2_, pattern V3, pattern V3_,
+  pattern V4, pattern V4_, pattern V8, pattern V8_,
+  pattern V16, pattern V16_,
 
   pattern True_, pattern False_,
 
@@ -417,7 +424,6 @@ import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Pretty                                 () -- show instances
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S

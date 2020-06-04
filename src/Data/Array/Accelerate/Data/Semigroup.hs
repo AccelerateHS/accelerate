@@ -43,7 +43,6 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 
 import Data.Function
@@ -57,7 +56,6 @@ pattern Min_ x = Pattern x
 {-# COMPLETE Min_ #-}
 
 instance Elt a => Elt (Min a)
-instance Elt a => IsProduct Elt (Min a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Min a) where
   type Plain (Min a) = Min (Plain a)
@@ -105,7 +103,6 @@ pattern Max_ x = Pattern x
 {-# COMPLETE Max_ #-}
 
 instance Elt a => Elt (Max a)
-instance Elt a => IsProduct Elt (Max a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Max a) where
   type Plain (Max a) = Max (Plain a)

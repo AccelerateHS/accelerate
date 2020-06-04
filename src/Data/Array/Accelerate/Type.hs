@@ -2,7 +2,6 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
@@ -74,6 +73,7 @@ module Data.Array.Accelerate.Type (
 ) where
 
 import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
+import Data.Array.Accelerate.Orphans () -- Prim Half
 
 import Control.Monad.ST
 import Data.Bits
@@ -82,7 +82,6 @@ import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Text.Prettyprint.Doc
 import Data.Type.Equality
-import Data.Typeable
 import Data.Word
 import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
@@ -124,29 +123,29 @@ data NonNumDict a where
 -- | Integral types supported in array computations.
 --
 data IntegralType a where
-  TypeInt     :: IntegralDict Int     -> IntegralType Int
-  TypeInt8    :: IntegralDict Int8    -> IntegralType Int8
-  TypeInt16   :: IntegralDict Int16   -> IntegralType Int16
-  TypeInt32   :: IntegralDict Int32   -> IntegralType Int32
-  TypeInt64   :: IntegralDict Int64   -> IntegralType Int64
-  TypeWord    :: IntegralDict Word    -> IntegralType Word
-  TypeWord8   :: IntegralDict Word8   -> IntegralType Word8
-  TypeWord16  :: IntegralDict Word16  -> IntegralType Word16
-  TypeWord32  :: IntegralDict Word32  -> IntegralType Word32
-  TypeWord64  :: IntegralDict Word64  -> IntegralType Word64
+  TypeInt     :: IntegralType Int
+  TypeInt8    :: IntegralType Int8
+  TypeInt16   :: IntegralType Int16
+  TypeInt32   :: IntegralType Int32
+  TypeInt64   :: IntegralType Int64
+  TypeWord    :: IntegralType Word
+  TypeWord8   :: IntegralType Word8
+  TypeWord16  :: IntegralType Word16
+  TypeWord32  :: IntegralType Word32
+  TypeWord64  :: IntegralType Word64
 
 -- | Floating-point types supported in array computations.
 --
 data FloatingType a where
-  TypeHalf    :: FloatingDict Half    -> FloatingType Half
-  TypeFloat   :: FloatingDict Float   -> FloatingType Float
-  TypeDouble  :: FloatingDict Double  -> FloatingType Double
+  TypeHalf    :: FloatingType Half
+  TypeFloat   :: FloatingType Float
+  TypeDouble  :: FloatingType Double
 
 -- | Non-numeric types supported in array computations.
 --
 data NonNumType a where
-  TypeBool  :: NonNumDict Bool  -> NonNumType Bool   --  marshalled to Word8
-  TypeChar  :: NonNumDict Char  -> NonNumType Char
+  TypeBool  :: NonNumType Bool   --  marshalled to Word8
+  TypeChar  :: NonNumType Char
 
 -- | Numeric element types implement Num & Real
 --
@@ -171,31 +170,31 @@ data SingleType a where
   NonNumSingleType :: NonNumType a -> SingleType a
 
 data VectorType a where
-  VectorType       :: {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
+  VectorType       :: KnownNat n => {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
 
 -- Showing type names
 --
 
 instance Show (IntegralType a) where
-  show TypeInt{}     = "Int"
-  show TypeInt8{}    = "Int8"
-  show TypeInt16{}   = "Int16"
-  show TypeInt32{}   = "Int32"
-  show TypeInt64{}   = "Int64"
-  show TypeWord{}    = "Word"
-  show TypeWord8{}   = "Word8"
-  show TypeWord16{}  = "Word16"
-  show TypeWord32{}  = "Word32"
-  show TypeWord64{}  = "Word64"
+  show TypeInt     = "Int"
+  show TypeInt8    = "Int8"
+  show TypeInt16   = "Int16"
+  show TypeInt32   = "Int32"
+  show TypeInt64   = "Int64"
+  show TypeWord    = "Word"
+  show TypeWord8   = "Word8"
+  show TypeWord16  = "Word16"
+  show TypeWord32  = "Word32"
+  show TypeWord64  = "Word64"
 
 instance Show (FloatingType a) where
-  show TypeHalf{}    = "Half"
-  show TypeFloat{}   = "Float"
-  show TypeDouble{}  = "Double"
+  show TypeHalf    = "Half"
+  show TypeFloat   = "Float"
+  show TypeDouble  = "Double"
 
 instance Show (NonNumType a) where
-  show TypeBool{}   = "Bool"
-  show TypeChar{}   = "Char"
+  show TypeBool   = "Bool"
+  show TypeChar   = "Char"
 
 instance Show (NumType a) where
   show (IntegralNumType ty) = show ty
@@ -215,7 +214,6 @@ instance Show (VectorType a) where
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
   show (VectorScalarType ty) = show ty
-
 
 -- Querying scalar type representations
 --
@@ -252,7 +250,7 @@ class IsScalar a => IsSingle a where
 
 -- | All scalar types
 --
-class Typeable a => IsScalar a where
+class IsScalar a where
   scalarType :: ScalarType a
 
 
@@ -260,51 +258,123 @@ class Typeable a => IsScalar a where
 --
 
 integralDict :: IntegralType a -> IntegralDict a
-integralDict (TypeInt    dict) = dict
-integralDict (TypeInt8   dict) = dict
-integralDict (TypeInt16  dict) = dict
-integralDict (TypeInt32  dict) = dict
-integralDict (TypeInt64  dict) = dict
-integralDict (TypeWord   dict) = dict
-integralDict (TypeWord8  dict) = dict
-integralDict (TypeWord16 dict) = dict
-integralDict (TypeWord32 dict) = dict
-integralDict (TypeWord64 dict) = dict
+integralDict TypeInt    = IntegralDict
+integralDict TypeInt8   = IntegralDict
+integralDict TypeInt16  = IntegralDict
+integralDict TypeInt32  = IntegralDict
+integralDict TypeInt64  = IntegralDict
+integralDict TypeWord   = IntegralDict
+integralDict TypeWord8  = IntegralDict
+integralDict TypeWord16 = IntegralDict
+integralDict TypeWord32 = IntegralDict
+integralDict TypeWord64 = IntegralDict
 
 floatingDict :: FloatingType a -> FloatingDict a
-floatingDict (TypeHalf   dict) = dict
-floatingDict (TypeFloat  dict) = dict
-floatingDict (TypeDouble dict) = dict
+floatingDict TypeHalf   = FloatingDict
+floatingDict TypeFloat  = FloatingDict
+floatingDict TypeDouble = FloatingDict
 
 nonNumDict :: NonNumType a -> NonNumDict a
-nonNumDict (TypeBool dict) = dict
-nonNumDict (TypeChar dict) = dict
+nonNumDict TypeBool = NonNumDict
+nonNumDict TypeChar = NonNumDict
 
+showType :: TupleType tp -> ShowS
+showType TupRunit = showString "()"
+showType (TupRsingle tp) = showString $ showScalarType tp
+showType (TupRpair t1 t2) = showString "(" . showType t1 . showString ", " . showType t2 . showString ")"
 
--- Type representation
+showScalarType :: ScalarType tp -> String
+showScalarType (SingleScalarType tp) = showSingleType tp
+showScalarType (VectorScalarType (VectorType n tp)) = "Vec " ++ show n ++ " " ++ showSingleType tp
+
+showSingleType :: SingleType tp -> String
+showSingleType (NumSingleType (IntegralNumType tp)) = case tp of
+  TypeInt    -> "Int"
+  TypeInt8   -> "Int8"
+  TypeInt16  -> "Int16"
+  TypeInt32  -> "Int32"
+  TypeInt64  -> "Int64"
+  TypeWord   -> "Word"
+  TypeWord8  -> "Word8"
+  TypeWord16 -> "Word16"
+  TypeWord32 -> "Word32"
+  TypeWord64 -> "Word64"
+showSingleType (NumSingleType (FloatingNumType tp)) = case tp of
+  TypeHalf   -> "Half"
+  TypeFloat  -> "Float"
+  TypeDouble -> "Double"
+showSingleType (NonNumSingleType TypeChar) = "Char"
+showSingleType (NonNumSingleType TypeBool) = "Bool"
+
+-- Common used types in the compiler.
+scalarTypeBool :: ScalarType Bool
+scalarTypeBool = SingleScalarType $ NonNumSingleType TypeBool
+
+scalarTypeInt :: ScalarType Int
+scalarTypeInt = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt
+
+scalarTypeInt32 :: ScalarType Int32
+scalarTypeInt32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt32
+
+scalarTypeWord8 :: ScalarType Word8
+scalarTypeWord8 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord8
+
+scalarTypeWord32 :: ScalarType Word32
+scalarTypeWord32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord32
+
+-- Tuple representation
 -- -------------------
 --
--- Representation of product types, consisting of:
+-- Both arrays (Acc) and expressions (Exp) may form tuples. These are represented
+-- using as product types, consisting of:
 --
 --   * unit (void)
 --
---   * scalar types: values which go in registers. These may be single value
+--   * single array / scalar types
+--     in case of expressions: values which go in registers. These may be single value
 --     types such as int and float, or SIMD vectors of single value types such
 --     as <4 * float>. We do not allow vectors-of-vectors.
 --
 --   * pairs: representing compound values (i.e. tuples) where each component
 --     will be stored in a separate array.
 --
-data TupleType a where
-  TypeRunit   ::                               TupleType ()
-  TypeRscalar :: ScalarType a               -> TupleType a
-  TypeRpair   :: TupleType a -> TupleType b -> TupleType (a, b)
+data TupR s a where
+  TupRunit   ::                         TupR s ()
+  TupRsingle :: s a                  -> TupR s a
+  TupRpair   :: TupR s a -> TupR s b -> TupR s (a, b)
 
-instance Show (TupleType a) where
-  show TypeRunit        = "()"
-  show (TypeRscalar t)  = show t
-  show (TypeRpair a b)  = printf "(%s,%s)" (show a) (show b)
+type TupleType = TupR ScalarType -- Rename to EltR?
 
+instance Show (TupR ScalarType a) where
+  show TupRunit       = "()"
+  show (TupRsingle t) = show t
+  show (TupRpair a b) = "(" ++ show a ++ "," ++ show b ++")"
+
+type Tup2 a b               =        (((), a), b)
+type Tup3 a b c             =       ((((), a), b), c)
+type Tup4 a b c d           =      (((((), a), b), c), d)
+type Tup5 a b c d e         =     ((((((), a), b), c), d), e)
+type Tup6 a b c d e f       =    (((((((), a), b), c), d), e), f)
+type Tup7 a b c d e f g     =   ((((((((), a), b), c), d), e), f), g)
+type Tup8 a b c d e f g h   =  (((((((((), a), b), c), d), e), f), g), h)
+type Tup9 a b c d e f g h i = ((((((((((), a), b), c), d), e), f), g), h), i)
+type Tup16 a b c d e f g h
+           i j k l m n o p  = (((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o), p)
+
+tupR2 :: TupR s t1 -> TupR s t2 -> TupR s (Tup2 t1 t2)
+tupR2 t1 t2 = TupRunit `TupRpair` t1 `TupRpair` t2
+
+tupR3 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s (Tup3 t1 t2 t3)
+tupR3 t1 t2 t3 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3
+
+tupR5 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s t4 -> TupR s t5 -> TupR s (Tup5 t1 t2 t3 t4 t5)
+tupR5 t1 t2 t3 t4 t5 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3 `TupRpair` t4 `TupRpair` t5
+
+tupR7 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s t4 -> TupR s t5 -> TupR s t6 -> TupR s t7 -> TupR s (Tup7 t1 t2 t3 t4 t5 t6 t7)
+tupR7 t1 t2 t3 t4 t5 t6 t7 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3 `TupRpair` t4 `TupRpair` t5 `TupRpair` t6 `TupRpair` t7
+
+tupR9 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s t4 -> TupR s t5 -> TupR s t6 -> TupR s t7 -> TupR s t8 -> TupR s t9 -> TupR s (Tup9 t1 t2 t3 t4 t5 t6 t7 t8 t9)
+tupR9 t1 t2 t3 t4 t5 t6 t7 t8 t9 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3 `TupRpair` t4 `TupRpair` t5 `TupRpair` t6 `TupRpair` t7 `TupRpair` t8 `TupRpair` t9
 
 -- Type-level bit sizes
 -- --------------------
@@ -352,26 +422,51 @@ type family BitSize a :: Nat
 -- which redundant for our use case (derivable from type level information).
 --
 data Vec (n::Nat) a = Vec ByteArray#
-  deriving Typeable
 
 type role Vec nominal representational
 
 instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
-  show (Vec ba#) = vec (go 0#)
+  show = vec . vecToArray
     where
       vec :: [a] -> String
       vec = show
           . group . encloseSep (flatAlt "< " "<") (flatAlt " >" ">") ", "
           . map viaShow
-      --
-      go :: Int# -> [a]
-      go i# | isTrue# (i# <# n#)  = indexByteArray# ba# i# : go (i# +# 1#)
-            | otherwise           = []
-      --
-      !(I# n#)  = fromIntegral (natVal' (proxy# :: Proxy# n))
+
+vecToArray :: forall a n. (Prim a, KnownNat n) => Vec n a -> [a]
+vecToArray (Vec ba#) = go 0#
+  where
+    go :: Int# -> [a]
+    go i# | isTrue# (i# <# n#)  = indexByteArray# ba# i# : go (i# +# 1#)
+          | otherwise           = []
+
+    !(I# n#)  = fromIntegral (natVal' (proxy# :: Proxy# n))
 
 instance Eq (Vec n a) where
   Vec ba1# == Vec ba2# = ByteArray ba1# == ByteArray ba2#
+
+data PrimDict a where
+  PrimDict :: Prim a => PrimDict a
+
+getPrim :: SingleType a -> PrimDict a
+getPrim (NumSingleType (IntegralNumType tp)) = case tp of
+  TypeInt     -> PrimDict
+  TypeInt8    -> PrimDict
+  TypeInt16   -> PrimDict
+  TypeInt32   -> PrimDict
+  TypeInt64   -> PrimDict
+  TypeWord    -> PrimDict
+  TypeWord8   -> PrimDict
+  TypeWord16  -> PrimDict
+  TypeWord32  -> PrimDict
+  TypeWord64  -> PrimDict
+getPrim (NumSingleType (FloatingNumType tp)) = case tp of
+  TypeHalf    -> PrimDict
+  TypeFloat   -> PrimDict
+  TypeDouble  -> PrimDict
+getPrim (NonNumSingleType TypeChar) = PrimDict
+getPrim (NonNumSingleType TypeBool) = error "prim: We don't support vector of bools yet"
+
 
 
 -- Type synonyms for common SIMD vector types
@@ -571,7 +666,7 @@ $(runQ $ do
       mkIntegral :: Name -> Integer -> Q [Dec]
       mkIntegral t n =
         [d| instance IsIntegral $(conT t) where
-              integralType = $(conE (mkName ("Type" ++ nameBase t))) IntegralDict
+              integralType = $(conE (mkName ("Type" ++ nameBase t)))
 
             instance IsNum $(conT t) where
               numType = IntegralNumType integralType
@@ -591,7 +686,7 @@ $(runQ $ do
       mkFloating :: Name -> Integer -> Q [Dec]
       mkFloating t n =
         [d| instance IsFloating $(conT t) where
-              floatingType = $(conE (mkName ("Type" ++ nameBase t))) FloatingDict
+              floatingType = $(conE (mkName ("Type" ++ nameBase t)))
 
             instance IsNum $(conT t) where
               numType = FloatingNumType floatingType
@@ -608,7 +703,7 @@ $(runQ $ do
       mkNonNum :: Name -> Integer -> Q [Dec]
       mkNonNum t n =
         [d| instance IsNonNum $(conT t) where
-              nonNumType = $(conE (mkName ("Type" ++ nameBase t))) NonNumDict
+              nonNumType = $(conE (mkName ("Type" ++ nameBase t)))
 
             instance IsBounded $(conT t) where
               boundedType = NonNumBoundedType nonNumType

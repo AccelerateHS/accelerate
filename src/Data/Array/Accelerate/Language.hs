@@ -1,3 +1,5 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
@@ -113,6 +115,8 @@ import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar
+import qualified Data.Array.Accelerate.Array.Representation         as Repr
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Fractional
@@ -122,7 +126,6 @@ import Data.Array.Accelerate.Classes.Ord
 
 -- standard libraries
 import Prelude                                                      ( ($), (.) )
-import Data.Typeable
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
@@ -165,27 +168,18 @@ import Data.Typeable
 -- >>> let tup  = use (vec, mat)  :: Acc (Vector Int, Matrix Int)
 --
 use :: forall arrays. Arrays arrays => arrays -> Acc arrays
-use arrs = Acc acc
+use = Acc . use' (arrays @arrays) . fromArr
   where
-    HasTypeable acc = use' (arrays @arrays) $ fromArr arrs
-
-    use' :: ArraysR a -> a -> HasTypeable a
-    use' ArraysRunit         ()       = HasTypeable $ SmartAcc $ Anil
-    use' ArraysRarray        a        = HasTypeable $ SmartAcc $ Use a
-    use' (ArraysRpair r1 r2) (a1, a2)
-      | HasTypeable acc1 <- use' r1 a1
-      , HasTypeable acc2 <- use' r2 a2 = HasTypeable $ SmartAcc $ acc1 `Apair` acc2
-
--- Internal data type for 'use' to capture the 'Typeable' type class
-data HasTypeable a where
-  HasTypeable :: Typeable a => SmartAcc a -> HasTypeable a
-
+    use' :: ArraysR a -> a -> SmartAcc a
+    use' TupRunit                   ()       = SmartAcc $ Anil
+    use' (TupRsingle repr@ArrayR{}) a        = SmartAcc $ Use repr a
+    use' (TupRpair r1 r2)           (a1, a2) = SmartAcc $ use' r1 a1 `Apair` use' r2 a2
 
 -- | Construct a singleton (one element) array from a scalar value (or tuple of
 -- scalar values).
 --
-unit :: Elt e => Exp e -> Acc (Scalar e)
-unit = Acc . SmartAcc . Unit
+unit :: forall e. Elt e => Exp e -> Acc (Scalar e)
+unit (Exp e) = Acc $ SmartAcc $ Unit (eltType @e) e
 
 -- | Replicate an array across one or more dimensions as specified by the
 -- /generalised/ array index provided as the first argument.
@@ -269,11 +263,12 @@ unit = Acc . SmartAcc . Unit
 --     0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 --
 replicate
-    :: (Slice slix, Elt e)
+    :: forall slix e.
+       (Slice slix, Elt e)
     => Exp slix
     -> Acc (Array (SliceShape slix) e)
     -> Acc (Array (FullShape  slix) e)
-replicate = Acc $$ applyAcc Replicate
+replicate = Acc $$ applyAcc (Replicate $ sliceIndex @slix)
 
 -- | Construct a new array by applying a function to each index.
 --
@@ -305,11 +300,12 @@ replicate = Acc $$ applyAcc Replicate
 -- @.\/Data\/Array\/Accelerate\/Trafo\/Sharing.hs:447 (convertSharingExp): inconsistent valuation \@ shared \'Exp\' tree ...@.
 --
 generate
-    :: (Shape sh, Elt a)
+    :: forall sh a.
+       (Shape sh, Elt a)
     => Exp sh
     -> (Exp sh -> Exp a)
     -> Acc (Array sh a)
-generate = Acc $$ applyAcc Generate
+generate = Acc $$ applyAcc (Generate $ arrayR @sh @a)
 
 -- Shape manipulation
 -- ------------------
@@ -324,11 +320,12 @@ generate = Acc $$ applyAcc Generate
 -- an index transformation in the fused code.
 --
 reshape
-    :: (Shape sh, Shape sh', Elt e)
+    :: forall sh sh' e.
+       (Shape sh, Shape sh', Elt e)
     => Exp sh
     -> Acc (Array sh' e)
     -> Acc (Array sh e)
-reshape = Acc $$ applyAcc Reshape
+reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 
 -- Extraction of sub-arrays
 -- ------------------------
@@ -398,11 +395,12 @@ reshape = Acc $$ applyAcc Reshape
 --     30, 31, 32, 33, 34,
 --     50, 51, 52, 53, 54]
 --
-slice :: (Slice slix, Elt e)
+slice :: forall slix e.
+         (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
       -> Exp slix
       -> Acc (Array (SliceShape slix) e)
-slice = Acc $$ applyAcc Slice
+slice = Acc $$ applyAcc (Slice $ sliceIndex @slix)
 
 -- Map-like functions
 -- ------------------
@@ -418,11 +416,12 @@ slice = Acc $$ applyAcc Slice
 -- >>> run $ map (+1) (use xs)
 -- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
-map :: (Shape sh, Elt a, Elt b)
+map :: forall sh a b.
+       (Shape sh, Elt a, Elt b)
     => (Exp a -> Exp b)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
-map = Acc $$ applyAcc Map
+map = Acc $$ applyAcc (Map (eltType @a) (eltType @b))
 
 -- | Apply the given binary function element-wise to the two arrays. The extent
 -- of the resulting array is the intersection of the extents of the two source
@@ -450,12 +449,13 @@ map = Acc $$ applyAcc Map
 --     16, 18, 20, 22, 24,
 --     31, 33, 35, 37, 39]
 --
-zipWith :: (Shape sh, Elt a, Elt b, Elt c)
+zipWith :: forall sh a b c.
+           (Shape sh, Elt a, Elt b, Elt c)
         => (Exp a -> Exp b -> Exp c)
         -> Acc (Array sh a)
         -> Acc (Array sh b)
         -> Acc (Array sh c)
-zipWith = Acc $$$ applyAcc ZipWith
+zipWith = Acc $$$ applyAcc (ZipWith (eltType @a) (eltType @b) (eltType @c))
 
 -- Reductions
 -- ----------
@@ -521,12 +521,13 @@ zipWith = Acc $$$ applyAcc ZipWith
 -- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
 -- compute multiple results from a single reduction.
 --
-fold :: (Shape sh, Elt a)
+fold :: forall sh a.
+        (Shape sh, Elt a)
      => (Exp a -> Exp a -> Exp a)
      -> Exp a
      -> Acc (Array (sh:.Int) a)
      -> Acc (Array sh a)
-fold = Acc $$$ applyAcc Fold
+fold = Acc $$$ applyAcc (Fold $ eltType @a)
 
 -- | Variant of 'fold' that requires the innermost dimension of the array to be
 -- non-empty and doesn't need an default value.
@@ -538,11 +539,12 @@ fold = Acc $$$ applyAcc Fold
 -- The first argument needs to be an /associative/ function to enable an
 -- efficient parallel implementation, but does not need to be commutative.
 --
-fold1 :: (Shape sh, Elt a)
+fold1 :: forall sh a.
+         (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array sh a)
-fold1 = Acc $$ applyAcc Fold1
+fold1 = Acc $$ applyAcc (Fold1 $ eltType @a)
 
 -- | Segmented reduction along the innermost dimension of an array. The
 -- segment descriptor specifies the starting index (offset) along the
@@ -558,13 +560,14 @@ fold1 = Acc $$ applyAcc Fold1
 -- @since 1.3.0.0
 --
 foldSeg'
-    :: (Shape sh, Elt a, Elt i, IsIntegral i)
+    :: forall sh a i.
+       (Shape sh, Elt a, Elt i, IsIntegral i, i ~ EltRepr i)
     => (Exp a -> Exp a -> Exp a)
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-foldSeg' = Acc $$$$ applyAcc FoldSeg
+foldSeg' = Acc $$$$ applyAcc (FoldSeg (integralType @i) (eltType @a))
 
 -- | Variant of 'foldSeg'' that requires /all/ segments of the reduced
 -- array to be non-empty, and doesn't need a default value. The segment
@@ -574,12 +577,13 @@ foldSeg' = Acc $$$$ applyAcc FoldSeg
 -- @since 1.3.0.0
 --
 fold1Seg'
-    :: (Shape sh, Elt a, Elt i, IsIntegral i)
+    :: forall sh a i.
+       (Shape sh, Elt a, Elt i, IsIntegral i, i ~ EltRepr i)
     => (Exp a -> Exp a -> Exp a)
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-fold1Seg' = Acc $$$ applyAcc Fold1Seg
+fold1Seg' = Acc $$$ applyAcc (Fold1Seg (integralType @i) (eltType @a))
 
 -- Scan functions
 -- --------------
@@ -601,12 +605,13 @@ fold1Seg' = Acc $$$ applyAcc Fold1Seg
 --     0, 20, 41, 63,  86, 110, 135, 161, 188, 216, 245,
 --     0, 30, 61, 93, 126, 160, 195, 231, 268, 306, 345]
 --
-scanl :: (Shape sh, Elt a)
+scanl :: forall sh a.
+         (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanl = Acc $$$ applyAcc Scanl
+scanl = Acc $$$ applyAcc (Scanl $ eltType @a)
 
 -- | Variant of 'scanl', where the last element (final reduction result) along
 -- each dimension is returned separately. Denotationally we have:
@@ -634,12 +639,13 @@ scanl = Acc $$$ applyAcc Scanl
 -- >>> sums
 -- Vector (Z :. 4) [45,145,245,345]
 --
-scanl' :: (Shape sh, Elt a)
+scanl' :: forall sh a.
+          (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanl' = Acc $$$ applyAcc Scanl'
+scanl' = Acc . mkPairToTuple $$$ applyAcc (Scanl' $ eltType @a)
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
 -- initial value (aka inclusive scan). The innermost dimension of the array must
@@ -653,37 +659,41 @@ scanl' = Acc $$$ applyAcc Scanl'
 --     20, 41, 63,  86, 110, 135, 161, 188, 216, 245,
 --     30, 61, 93, 126, 160, 195, 231, 268, 306, 345]
 --
-scanl1 :: (Shape sh, Elt a)
+scanl1 :: forall sh a.
+          (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanl1 = Acc $$ applyAcc Scanl1
+scanl1 = Acc $$ applyAcc (Scanl1 $ eltType @a)
 
 -- | Right-to-left variant of 'scanl'.
 --
-scanr :: (Shape sh, Elt a)
+scanr :: forall sh a.
+         (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanr = Acc $$$ applyAcc Scanr
+scanr = Acc $$$ applyAcc (Scanr $ eltType @a)
 
 -- | Right-to-left variant of 'scanl''.
 --
-scanr' :: (Shape sh, Elt a)
+scanr' :: forall sh a.
+          (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanr' = Acc $$$ applyAcc Scanr'
+scanr' = Acc . mkPairToTuple $$$ applyAcc (Scanr' $ eltType @a)
 
 -- | Right-to-left variant of 'scanl1'.
 --
-scanr1 :: (Shape sh, Elt a)
+scanr1 :: forall sh a.
+          (Shape sh, Elt a)
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanr1 = Acc $$ applyAcc Scanr1
+scanr1 = Acc $$ applyAcc (Scanr1 $ eltType @a)
 
 -- Permutations
 -- ------------
@@ -781,13 +791,13 @@ scanr1 = Acc $$ applyAcc Scanr1
 -- @-fno-fast-permute-const@.
 --
 permute
-    :: (Shape sh, Shape sh', Elt a)
+    :: forall sh sh' a. (Shape sh, Shape sh', Elt a)
     => (Exp a -> Exp a -> Exp a)        -- ^ combination function
     -> Acc (Array sh' a)                -- ^ array of default values
     -> (Exp sh -> Exp sh')              -- ^ index permutation function
     -> Acc (Array sh  a)                -- ^ array of source values to be permuted
     -> Acc (Array sh' a)
-permute = Acc $$$$ applyAcc Permute
+permute = Acc $$$$ applyAcc (Permute $ arrayR @sh @a)
 
 -- | Generalised backward permutation operation (array gather).
 --
@@ -833,13 +843,12 @@ permute = Acc $$$$ applyAcc Permute
 --     9, 19, 29, 39, 49]
 --
 backpermute
-    :: (Shape sh, Shape sh', Elt a)
+    :: forall sh sh' a. (Shape sh, Shape sh', Elt a)
     => Exp sh'                          -- ^ shape of the result array
     -> (Exp sh' -> Exp sh)              -- ^ index permutation function
     -> Acc (Array sh  a)                -- ^ source array
     -> Acc (Array sh' a)
-backpermute = Acc $$$ applyAcc Backpermute
-
+backpermute = Acc $$$ applyAcc (Backpermute $ shapeR @sh')
 
 -- Stencil operations
 -- ------------------
@@ -946,20 +955,27 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- which approach is best for your application.
 --
 stencil
-    :: (Stencil sh a stencil, Elt b)
+    :: forall sh stencil a b.
+       (Stencil sh a stencil, Elt b)
     => (stencil -> Exp b)                     -- ^ stencil function
     -> Boundary (Array sh a)                  -- ^ boundary condition
     -> Acc (Array sh a)                       -- ^ source array
     -> Acc (Array sh b)                       -- ^ destination array
 stencil f (Boundary b) (Acc a)
-  = Acc $ SmartAcc $ Stencil f b a
+  = Acc $ SmartAcc $ Stencil
+      (stencilR @sh @a @stencil)
+      (eltType @b)
+      (unExp . f . stencilPrj @sh @a @stencil)
+      b
+      a
 
 -- | Map a binary stencil of an array. The extent of the resulting array is the
 -- intersection of the extents of the two source arrays. This is the stencil
 -- equivalent of 'zipWith'.
 --
 stencil2
-    :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
+    :: forall sh stencil1 stencil2 a b c.
+       (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
     => (stencil1 -> stencil2 -> Exp c)        -- ^ binary stencil function
     -> Boundary (Array sh a)                  -- ^ boundary condition #1
     -> Acc (Array sh a)                       -- ^ source array #1
@@ -967,7 +983,15 @@ stencil2
     -> Acc (Array sh b)                       -- ^ source array #2
     -> Acc (Array sh c)                       -- ^ destination array
 stencil2 f (Boundary b1) (Acc a1) (Boundary b2) (Acc a2)
-  = Acc $ SmartAcc $ Stencil2 f b1 a1 b2 a2
+  = Acc $ SmartAcc $ Stencil2
+      (stencilR @sh @a @stencil1)
+      (stencilR @sh @b @stencil2)
+      (eltType @c)
+      (\x y -> unExp $ f (stencilPrj @sh @a @stencil1 x) (stencilPrj @sh @b @stencil2 y))
+      b1
+      a1
+      b2
+      a2
 
 -- | Boundary condition where elements of the stencil which would be
 -- out-of-bounds are instead clamped to the edges of the array.
@@ -1041,10 +1065,13 @@ wrap = Boundary Wrap
 -- >     Z :. height :. width = unlift (shape xs)
 --
 function
-    :: (Shape sh, Elt e)
+    :: forall sh e. (Shape sh, Elt e)
     => (Exp sh -> Exp e)
     -> Boundary (Array sh e)
-function = Boundary . Function
+function f = Boundary $ Function (f')
+  where
+    f' :: SmartExp (EltRepr sh) -> SmartExp (EltRepr e)
+    f' = unExp . f . Exp
 
 
 {--
@@ -1171,11 +1198,11 @@ collect = Acc . Collect
 --
 foreignAcc
     :: forall as bs asm. (Arrays as, Arrays bs, Foreign asm)
-    => asm (as -> bs)
+    => asm (ArrRepr as -> ArrRepr bs)
     -> (Acc as -> Acc bs)
     -> Acc as
     -> Acc bs
-foreignAcc asm f (Acc as) = Acc $ SmartAcc $ Aforeign asm f as
+foreignAcc asm f (Acc as) = Acc $ SmartAcc $ Aforeign (arrays @bs) asm (unAccFunction f) as
 
 -- | Call a foreign scalar expression.
 --
@@ -1188,12 +1215,12 @@ foreignAcc asm f (Acc as) = Acc $ SmartAcc $ Aforeign asm f as
 -- purely in Accelerate.
 --
 foreignExp
-    :: (Elt x, Elt y, Foreign asm)
-    => asm (x -> y)
+    :: forall x y asm. (Elt x, Elt y, Foreign asm)
+    => asm (EltRepr x -> EltRepr y)
     -> (Exp x -> Exp y)
     -> Exp x
     -> Exp y
-foreignExp = Exp $$$ Foreign
+foreignExp a f (Exp x) = exp $ Foreign (eltType @y) a (unExpFunction f) x
 
 
 -- Composition of array computations
@@ -1213,7 +1240,7 @@ foreignExp = Exp $$$ Foreign
 --
 infixl 1 >->
 (>->) :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
-(>->) = Acc $$$ applyAcc $ Pipe (arrays @a) (arrays @b)
+(>->) = Acc $$$ applyAcc $ Pipe (arrays @a) (arrays @b) (arrays @c)
 
 
 -- Flow control constructs
@@ -1250,26 +1277,41 @@ awhile = Acc $$$ applyAcc $ Awhile $ arrays @a
 -- array.
 --
 toIndex
-    :: Shape sh
+    :: forall sh. Shape sh
     => Exp sh                     -- ^ extent of the array
     -> Exp sh                     -- ^ index to remap
     -> Exp Int
-toIndex = Exp $$ ToIndex
+toIndex (Exp sh) (Exp ix) = exp $ ToIndex (shapeR @sh) sh ix
 
 -- | Inverse of 'toIndex'
 --
-fromIndex :: Shape sh => Exp sh -> Exp Int -> Exp sh
-fromIndex = Exp $$ FromIndex
+fromIndex :: forall sh. Shape sh => Exp sh -> Exp Int -> Exp sh
+fromIndex (Exp sh) (Exp e) = exp $ FromIndex (shapeR @sh) sh e
 
 -- | Intersection of two shapes
 --
-intersect :: Shape sh => Exp sh -> Exp sh -> Exp sh
-intersect = Exp $$ Intersect
+intersect :: forall sh. Shape sh => Exp sh -> Exp sh -> Exp sh
+intersect (Exp x) (Exp y) = Exp $ intersect' (shapeR @sh) x y
+
+intersect' :: Repr.ShapeR sh -> SmartExp sh -> SmartExp sh -> SmartExp sh
+intersect' Repr.ShapeRz _ _ = SmartExp Nil
+intersect' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
+  = SmartExp
+  $ intersect' shr xs ys `Pair` 
+    SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)
+
 
 -- | Union of two shapes
 --
-union :: Shape sh => Exp sh -> Exp sh -> Exp sh
-union = Exp $$ Union
+union :: forall sh. Shape sh => Exp sh -> Exp sh -> Exp sh
+union (Exp x) (Exp y) = Exp $ union' (shapeR @sh) x y
+
+union' :: Repr.ShapeR sh -> SmartExp sh -> SmartExp sh -> SmartExp sh
+union' Repr.ShapeRz _ _ = SmartExp Nil
+union' (Repr.ShapeRsnoc shr) (unPair -> (xs, x)) (unPair -> (ys, y))
+  = SmartExp
+  $ union' shr xs ys `Pair` 
+    SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
 
 
 -- Flow-control
@@ -1285,18 +1327,30 @@ cond :: Elt t
      -> Exp t                   -- ^ then-expression
      -> Exp t                   -- ^ else-expression
      -> Exp t
-cond = Exp $$$ Cond
+cond (Exp c) (Exp x) (Exp y) = exp $ Cond c x y
 
 -- | While construct. Continue to apply the given function, starting with the
 -- initial value, until the test function evaluates to 'False'.
 --
-while :: Elt e
+while :: forall e. Elt e
       => (Exp e -> Exp Bool)    -- ^ keep evaluating while this returns 'True'
       -> (Exp e -> Exp e)       -- ^ function to apply
       -> Exp e                  -- ^ initial value
       -> Exp e
-while = Exp $$$ While
+#if __GLASGOW_HASKELL__ < 804
+while c f (Exp e) = exp $ While @SmartAcc @SmartExp @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
+#else
+while c f (Exp e) = exp $ While @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
+#endif
 
+{-
+
+  While         :: TupleType t
+                -> (SmartExp t -> exp Bool)
+                -> (SmartExp t -> exp t)
+                -> exp t
+                -> PreSmartExp acc exp t
+                -}
 
 -- Array operations with a scalar result
 -- -------------------------------------
@@ -1317,8 +1371,8 @@ while = Exp $$$ While
 -- 12
 --
 infixl 9 !
-(!) :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh -> Exp e
-Acc a ! ix = Exp $ Index a ix
+(!) :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh -> Exp e
+Acc a ! Exp ix = exp $ Index (eltType @e) a ix
 
 -- | Extract the value from an array at the specified linear index.
 -- Multidimensional arrays in Accelerate are stored in row-major order with
@@ -1337,13 +1391,13 @@ Acc a ! ix = Exp $ Index a ix
 -- 12
 --
 infixl 9 !!
-(!!) :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp Int -> Exp e
-Acc a !! ix = Exp $ LinearIndex a ix
+(!!) :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Exp Int -> Exp e
+Acc a !! Exp ix = exp $ LinearIndex (eltType @e) a ix
 
 -- | Extract the shape (extent) of an array.
 --
-shape :: (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh
-shape = Exp . Shape . unAcc
+shape :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh
+shape = exp . Shape (shapeR @sh) . unAcc
 
 -- | The number of elements in the array
 --
@@ -1352,8 +1406,8 @@ size = shapeSize . shape
 
 -- | The number of elements that would be held by an array of the given shape.
 --
-shapeSize :: Shape sh => Exp sh -> Exp Int
-shapeSize = Exp . ShapeSize
+shapeSize :: forall sh. Shape sh => Exp sh -> Exp Int
+shapeSize (Exp sh) = exp $ ShapeSize (shapeR @sh) sh
 
 
 -- Numeric functions

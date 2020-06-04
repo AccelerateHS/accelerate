@@ -23,7 +23,6 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue264 (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
@@ -60,7 +59,7 @@ test_issue264 runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testProperty "neg.neg"        $ test_neg_neg runN e
         ]
 

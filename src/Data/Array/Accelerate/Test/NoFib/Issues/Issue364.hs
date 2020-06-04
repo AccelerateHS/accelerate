@@ -24,7 +24,6 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue364 (
 
 ) where
 
-import Data.Typeable
 import Prelude                                            ( fromInteger, show )
 import qualified Prelude                                  as P
 #if __GLASGOW_HASKELL__ == 800
@@ -58,7 +57,7 @@ test_issue364 runN =
               => Gen e
               -> TestTree
       testElt _ =
-        testGroup (show (typeOf (undefined :: e)))
+        testGroup (show (eltType @e))
           [ testCase "A" $ expectedArray @_ @e Z 64 @=? runN (scanl iappend one) (intervalArray Z 64)
           , testCase "B" $ expectedArray @_ @e Z 65 @=? runN (scanl iappend one) (intervalArray Z 65) -- failed for integral types
           ]

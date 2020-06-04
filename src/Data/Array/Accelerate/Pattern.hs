@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
 #if __GLASGOW_HASKELL__ <= 800
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
@@ -34,11 +36,13 @@ module Data.Array.Accelerate.Pattern (
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
+  pattern V2_, pattern V3_, pattern V4_, pattern V8_, pattern V16_,
+
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
@@ -76,12 +80,12 @@ pattern a `Ix` b = a ::. b
 -- IsPattern instances for Shape nil and cons
 --
 instance IsPattern Exp Z Z where
-  construct _ = Exp IndexNil
+  construct _ = constant Z
   destruct _  = Z
 
 instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
-  construct (a :. b) = Exp (a `IndexCons` b)
-  destruct t         = Exp (IndexTail t) :. Exp (IndexHead t)
+  construct (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
+  destruct (Exp t)           = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
 -- (unremarkable) boilerplate for us, but since the implementation is a little
@@ -89,53 +93,39 @@ instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
 --
 $(runQ $ do
     let
-        mkIsPattern' :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern' con cst tup prj nil snoc n =
-          let
-              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1]]
-              b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
-              repr    = foldl (\ts t -> [t| ($ts, $(varT t)) |]) [t| () |] xs
-              context = foldl (\ts t -> appT ts (appT cst (varT t))) (tupleT n) xs
-              --
-              tix 0   = [| ZeroTupIdx |]
-              tix i   = [| SuccTupIdx $(tix (i-1)) |]
-              get x i = [| $(conE con) ($prj $(tix i) $x) |]
-          in
-          [d| instance
-                ( IsProduct $cst a
-                , ProdRepr a ~ $repr
-                , $cst a
-                , $context
-                ) => IsPattern $(conT con) a $b where
-                  construct $(tupP (map varP xs)) = $(conE con) ($tup $(foldl (\vs v -> appE (appE snoc vs) (varE v)) nil xs))
-                  destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
-            |]
-
+        -- Generate instance declarations for IsPattern of the form:
+        -- instance (Elt x, EltRepr x ~ (((), EltRepr a), EltRepr b), Elt a, Elt b,) => IsPattern Exp x (Exp a, Exp b)
         mkIsPattern :: Name -> TypeQ -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
         mkIsPattern con cst repr smart prj nil pair n = do
+          a <- newName "a"
           let
-              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              ts      = map varT xs
-              a       = tupT ts
-              b       = tupT (map (conT con `appT`) ts)
-              context = tupT (map (cst `appT`) ts)
-              equiv   = case n of
-                          1 -> [t| ((), $repr $a) |]
-                          _ -> [t| $repr $a       |]
+              -- Type variables for the elements
+              xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              -- Last argument to `IsPattern`, eg (Exp, a, Exp b) in the example
+              b        = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
+              -- Representation as snoc-list of pairs, eg (((), EltRepr a), EltRepr b)
+              snoc     = foldl (\sn t -> [t| ($sn, $(appT repr $ varT t)) |]) [t| () |] xs
+              -- Constraints for the type class, consisting of Elt constraints on all type variables,
+              -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
+              contexts = appT cst [t| $(varT a) |]
+                       : [t| $repr $(varT a) ~ $snoc |]
+                       : map (\t -> appT cst (varT t)) xs
+              -- Store all constraints in a tuple
+              context  = foldl (\ts t -> appT ts t) (tupleT $ length contexts) contexts
               --
               get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
               get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
           --
           _x <- newName "_x"
-          [d| instance ($repr a ~ $equiv, $context) => IsPattern $(conT con) a $b where
+          [d| instance $context => IsPattern $(conT con) $(varT a) $b where
                 construct $(tupP (map (conP con . return . varP) xs)) =
                   $(conE con) $(foldl (\vs v -> appE smart (appE (appE pair vs) (varE v))) (appE smart nil) xs)
                 destruct $(conP con [varP _x]) =
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
-        mkExpPattern = mkIsPattern' (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
-        mkAccPattern = mkIsPattern  (mkName "Acc") [t| Arrays |] [t| ArrRepr |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
+        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [t| EltRepr |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
+        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [t| ArrRepr |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
     es <- mapM mkExpPattern [0..16]
     as <- mapM mkAccPattern [0..16]
@@ -202,3 +192,83 @@ $(runQ $ do
     return $ concat (ts ++ is)
  )
 
+-- Newtype to make difference between T and P instances clear
+newtype VecPattern a = VecPattern a
+
+instance VecElt a => IsPattern Exp (Vec 2 a) (VecPattern (Exp a, Exp a)) where
+  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR2 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a)
+  destruct e = VecPattern $ destruct e'
+    where
+      e' :: Exp (a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR2 $ singleType @(EltRepr a)
+
+instance VecElt a => IsPattern Exp (Vec 3 a) (VecPattern (Exp a, Exp a, Exp a)) where
+  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR3 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a)
+  destruct e = VecPattern $ destruct e'
+    where
+      e' :: Exp (a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR3 $ singleType @(EltRepr a)
+
+instance VecElt a => IsPattern Exp (Vec 4 a) (VecPattern (Exp a, Exp a, Exp a, Exp a)) where
+  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR4 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a, a)
+  destruct e = VecPattern $ destruct e'
+    where
+      e' :: Exp (a, a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR4 $ singleType @(EltRepr a)
+
+instance VecElt a => IsPattern Exp (Vec 8 a) (VecPattern (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)) where
+  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR8 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a, a, a, a, a, a)
+  destruct e = VecPattern $ destruct e'
+    where
+      e' :: Exp (a, a, a, a, a, a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR8 $ singleType @(EltRepr a)
+
+instance VecElt a => IsPattern Exp (Vec 16 a) (VecPattern (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)) where
+  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
+    where
+      r = vecR16 $ singleType @(EltRepr a)
+      Exp tup = construct as :: Exp (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
+  destruct e = VecPattern $ destruct e'
+    where
+      e' :: Exp (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
+      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
+      r  = vecR16 $ singleType @(EltRepr a)
+
+pattern V2_ :: VecElt a => Exp a -> Exp a -> Exp (Vec 2 a)
+pattern V2_ a b = Pattern (VecPattern (a, b))
+{-# COMPLETE V2_ #-}
+
+pattern V3_ :: VecElt a => Exp a -> Exp a -> Exp a -> Exp (Vec 3 a)
+pattern V3_ a b c = Pattern (VecPattern (a, b, c))
+{-# COMPLETE V3_ #-}
+
+pattern V4_ :: VecElt a => Exp a -> Exp a -> Exp a -> Exp a -> Exp (Vec 4 a)
+pattern V4_ a b c d = Pattern (VecPattern (a, b, c, d))
+{-# COMPLETE V4_ #-}
+
+pattern V8_ :: VecElt a => Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp (Vec 8 a)
+pattern V8_ a b c d e f g h = Pattern (VecPattern (a, b, c, d, e, f, g, h))
+{-# COMPLETE V8_ #-}
+
+pattern V16_ :: VecElt a
+             => Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> 
+                Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp (Vec 16 a)
+pattern V16_ a b c d e f g h
+             i j k l m n o p = Pattern (VecPattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p))
+{-# COMPLETE V16_ #-}

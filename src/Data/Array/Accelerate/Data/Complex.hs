@@ -2,6 +2,8 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MagicHash             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RebindableSyntax      #-}
@@ -48,91 +50,119 @@ import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Smart                                  hiding (exp)
 import Data.Array.Accelerate.Type
 
 import Data.Complex                                                 ( Complex(..) )
 import qualified Data.Complex                                       as C
+import Prelude                                                      (($))
 import qualified Prelude                                            as P
 
-
 infix 6 ::+
-pattern (::+) :: (Elt a, Elt (Complex a)) => Exp a -> Exp a -> Exp (Complex a)
-pattern r ::+ c = Pattern (r, c)
+pattern (::+) :: Elt a => Exp a -> Exp a -> Exp (Complex a)
+pattern r ::+ i <- (deconstructComplex -> (r, i))
+  where (::+) = constructComplex
 {-# COMPLETE (::+) #-}
 
 
--- Use an array-of-structs representation for complex numbers. This matches the
--- standard C-style layout, but means that we can define instances only at
--- specific types (not for any type 'a') as we can only have vectors of
--- primitive type.
+-- Use an array-of-structs representation for complex numbers if possible.
+-- This matches the standard C-style layout, but we can use this representation only at
+-- specific types (not for any type 'a') as we can only have vectors of primitive type.
+-- For other types, we use a structure-of-arrays representation. This is handled by the
+-- ComplexRepr. We use the GADT ComplexR and function complexR to reconstruct
+-- information on how the elements are represented.
 --
-
-instance Elt (Complex Half) where
-  type EltRepr (Complex Half) = V2 Half
+instance Elt a => Elt (Complex a) where
+  type EltRepr (Complex a) = ComplexRepr (EltRepr a)
   {-# INLINE eltType     #-}
   {-# INLINE [1] toElt   #-}
   {-# INLINE [1] fromElt #-}
-  eltType          = TypeRscalar scalarType
-  toElt (V2 r i)   = r :+ i
-  fromElt (r :+ i) = V2 r i
+  eltType = case complexR tp of
+      ComplexRvec s -> TupRsingle $ VectorScalarType $ VectorType 2 s
+      ComplexRtup   -> TupRunit `TupRpair` tp `TupRpair` tp
+    where
+      tp = eltType @a
+  toElt = case complexR $ eltType @a of
+    ComplexRvec _ -> \(V2 r i)     -> toElt r :+ toElt i
+    ComplexRtup   -> \(((), r), i) -> toElt r :+ toElt i
+  fromElt (r :+ i) = case complexR $ eltType @a of
+    ComplexRvec _ -> V2 (fromElt r) (fromElt i)
+    ComplexRtup   -> (((), fromElt r), fromElt i)
 
-instance Elt (Complex Float) where
-  type EltRepr (Complex Float) = V2 Float
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType          = TypeRscalar scalarType
-  toElt (V2 r i)   = r :+ i
-  fromElt (r :+ i) = V2 r i
+type family ComplexRepr a where
+  ComplexRepr Half   = V2 Half
+  ComplexRepr Float  = V2 Float
+  ComplexRepr Double = V2 Double
+  ComplexRepr Int    = V2 Int
+  ComplexRepr Int8   = V2 Int8
+  ComplexRepr Int16  = V2 Int16
+  ComplexRepr Int32  = V2 Int32
+  ComplexRepr Int64  = V2 Int64
+  ComplexRepr Word   = V2 Word
+  ComplexRepr Word8  = V2 Word8
+  ComplexRepr Word16 = V2 Word16
+  ComplexRepr Word32 = V2 Word32
+  ComplexRepr Word64 = V2 Word64
+  ComplexRepr a      = Tup2 a a
 
-instance Elt (Complex Double) where
-  type EltRepr (Complex Double) = V2 Double
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType          = TypeRscalar scalarType
-  toElt (V2 r i)   = r :+ i
-  fromElt (r :+ i) = V2 r i
+data ComplexR a c where
+  ComplexRvec :: VecElt a => SingleType a -> ComplexR a (V2 a)
+  ComplexRtup :: ComplexR a (Tup2 a a)
 
-instance Elt (Complex CFloat) where
-  type EltRepr (Complex CFloat) = V2 Float
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType                        = TypeRscalar scalarType
-  toElt (V2 r i)                 = CFloat r :+ CFloat i
-  fromElt (CFloat r :+ CFloat i) = V2 r i
+complexR :: TupleType a -> ComplexR a (ComplexRepr a)
+complexR (TupRsingle (SingleScalarType (NumSingleType (FloatingNumType TypeHalf  )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (FloatingNumType TypeFloat )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (FloatingNumType TypeDouble)))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt   )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt8  )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt16 )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt32 )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt64 )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord  )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord8 )))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord16)))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord32)))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord64)))) = ComplexRvec singleType
+complexR (TupRsingle (SingleScalarType (NonNumSingleType TypeChar)))                  = ComplexRtup
+complexR (TupRsingle (SingleScalarType (NonNumSingleType TypeBool)))                  = ComplexRtup
+complexR (TupRsingle (VectorScalarType (_)))                                          = ComplexRtup
+complexR TupRunit                                                                     = ComplexRtup
+complexR TupRpair{}                                                                   = ComplexRtup
 
-instance Elt (Complex CDouble) where
-  type EltRepr (Complex CDouble) = V2 Double
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType                          = TypeRscalar scalarType
-  toElt (V2 r i)                   = CDouble r :+ CDouble i
-  fromElt (CDouble r :+ CDouble i) = V2 r i
+constructComplex :: forall a. Elt a => Exp a -> Exp a -> Exp (Complex a)
+constructComplex r i = case complexR $ eltType @a of
+  ComplexRvec _ -> 
+    let
+      r', i' :: Exp (EltRepr a)
+      r' = reExp @a @(EltRepr a) r
+      i' = reExp i
+      v :: Exp (V2 (EltRepr a))
+      v = V2_ r' i'
+    in
+      reExp @(V2 (EltRepr a)) @(Complex a) $ v
+  ComplexRtup   -> reExp $ T2  r i
 
-instance cst a => IsProduct cst (Complex a) where
-  type ProdRepr (Complex a) = ProdRepr (a,a)
-  fromProd (r :+ i) = fromProd @cst (r,i)
-  toProd p          = let (r,i) = toProd @cst p in (r :+ i)
-  prod              = prod @cst @(a,a)
+deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
+deconstructComplex c = case complexR $ eltType @a of
+  ComplexRvec _ -> let V2_ r i = reExp @(Complex a) @(V2 (EltRepr a)) c in (reExp r, reExp i)
+  ComplexRtup   -> let T2  r i = reExp c in (r, i)
 
-instance (Lift Exp a, Elt (Plain a), Elt (Complex (Plain a))) => Lift Exp (Complex a) where
+reExp :: EltRepr a ~ EltRepr b => Exp a -> Exp b
+reExp (Exp e) = Exp e
+
+instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
   lift (r :+ i) = lift r ::+ lift i
 
-instance (Elt a, Elt (Complex a)) => Unlift Exp (Complex (Exp a)) where
+instance Elt a => Unlift Exp (Complex (Exp a)) where
   unlift (r ::+ i) = r :+ i
 
 
-instance (Eq a, Elt (Complex a)) => Eq (Complex a) where
+instance Eq a => Eq (Complex a) where
   r1 ::+ c1 == r2 ::+ c2 = r1 == r2 && c1 == c2
   r1 ::+ c1 /= r2 ::+ c2 = r1 /= r2 || c1 /= c2
 
-instance (RealFloat a, Elt (Complex a)) => P.Num (Exp (Complex a)) where
+instance RealFloat a => P.Num (Exp (Complex a)) where
   (+)    = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (-)    = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (*)    = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
@@ -145,7 +175,7 @@ instance (RealFloat a, Elt (Complex a)) => P.Num (Exp (Complex a)) where
   abs z         = magnitude z ::+ 0
   fromInteger n = fromInteger n ::+ 0
 
-instance (RealFloat a, Elt (Complex a)) => P.Fractional (Exp (Complex a)) where
+instance RealFloat a => P.Fractional (Exp (Complex a)) where
   fromRational x  = fromRational x ::+ 0
   z / z'          = (x*x''+y*y'') / d ::+ (y*x''-x*y'') / d
     where
@@ -157,7 +187,7 @@ instance (RealFloat a, Elt (Complex a)) => P.Fractional (Exp (Complex a)) where
       k   = - max (exponent x') (exponent y')
       d   = x'*x'' + y'*y''
 
-instance (RealFloat a, Elt (Complex a)) => P.Floating (Exp (Complex a)) where
+instance RealFloat a => P.Floating (Exp (Complex a)) where
   pi                = pi ::+ 0
   exp (x ::+ y)     = let expx = exp x
                        in expx * cos y ::+ expx * sin y
@@ -234,7 +264,7 @@ instance Functor Complex where
 
 -- | The non-negative magnitude of a complex number
 --
-magnitude :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
+magnitude :: RealFloat a => Exp (Complex a) -> Exp a
 magnitude (r ::+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
   where
     k     = max (exponent r) (exponent i)
@@ -246,13 +276,13 @@ magnitude (r ::+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloa
 --
 -- @since 1.3.0.0
 --
-magnitude' :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
+magnitude' :: RealFloat a => Exp (Complex a) -> Exp a
 magnitude' (r ::+ i) = sqrt (r*r + i*i)
 
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
-phase :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp a
+phase :: RealFloat a => Exp (Complex a) -> Exp a
 phase z@(r ::+ i) =
   if z == 0
     then 0
@@ -262,15 +292,15 @@ phase z@(r ::+ i) =
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
-polar :: (RealFloat a, Elt (Complex a)) => Exp (Complex a) -> Exp (a,a)
+polar :: RealFloat a => Exp (Complex a) -> Exp (a,a)
 polar z =  T2 (magnitude z) (phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
 #if __GLASGOW_HASKELL__ <= 708
-mkPolar :: forall a. (RealFloat a, Elt (Complex a)) => Exp a -> Exp a -> Exp (Complex a)
+mkPolar :: forall a. RealFloat a => Exp a -> Exp a -> Exp (Complex a)
 #else
-mkPolar :: forall a. (Floating a,  Elt (Complex a)) => Exp a -> Exp a -> Exp (Complex a)
+mkPolar :: forall a. Floating a => Exp a -> Exp a -> Exp (Complex a)
 #endif
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
@@ -278,26 +308,26 @@ mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 -- @2*'pi'@).
 --
 #if __GLASGOW_HASKELL__ <= 708
-cis :: forall a. (RealFloat a, Elt (Complex a)) => Exp a -> Exp (Complex a)
+cis :: forall a. RealFloat a => Exp a -> Exp (Complex a)
 #else
-cis :: forall a. (Floating a,  Elt (Complex a)) => Exp a -> Exp (Complex a)
+cis :: forall a. Floating a => Exp a -> Exp (Complex a)
 #endif
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
 --
-real :: (Elt a, Elt (Complex a)) => Exp (Complex a) -> Exp a
+real :: Elt a => Exp (Complex a) -> Exp a
 real (r ::+ _) = r
 
 -- | Return the imaginary part of a complex number
 --
-imag :: (Elt a, Elt (Complex a)) => Exp (Complex a) -> Exp a
+imag :: Elt a => Exp (Complex a) -> Exp a
 imag (_ ::+ i) = i
 
 -- | Return the complex conjugate of a complex number, defined as
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: (Num a, Elt (Complex a)) => Exp (Complex a) -> Exp (Complex a)
+conjugate :: Num a => Exp (Complex a) -> Exp (Complex a)
 conjugate z = real z ::+ (- imag z)
 

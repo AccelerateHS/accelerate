@@ -29,6 +29,8 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyPreOpenFun,
   prettyArray,
   prettyConst,
+  prettyELhs,
+  prettyALhs,
 
   -- ** Internals
   Adoc,
@@ -53,11 +55,11 @@ import Data.Char
 import Data.String
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
-import Data.Typeable                                                ( Typeable, typeOf, showsTypeRep )
 import Prelude                                                      hiding ( exp )
 
 import Data.Array.Accelerate.AST                                    hiding ( Val(..), prj )
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Sugar                            ( strForeign )
+import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Type
 
 
@@ -112,8 +114,8 @@ prettyPreOpenAfun prettyAcc aenv0 = next (pretty '\\') aenv0
     next :: Adoc -> Val aenv' -> PreOpenAfun acc aenv' f' -> Adoc
     next vs aenv (Abody body)   = hang shiftwidth (sep [vs <> "->", prettyAcc context0 aenv body])
     next vs aenv (Alam lhs lam) =
-      let (aenv', lhs') = prettyLHS aenv lhs
-       in next (vs <> lhs' <> space) aenv' lam
+      let (aenv', lhs') = prettyALhs True aenv lhs
+      in  next (vs <> lhs' <> space) aenv' lam
 
 prettyPreOpenAcc
     :: forall acc aenv arrs.
@@ -125,11 +127,11 @@ prettyPreOpenAcc
     -> Adoc
 prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
   case pacc of
-    Avar (ArrayVar idx)     -> prj idx aenv
+    Avar (Var _ idx)        -> prj idx aenv
     Alet{}                  -> prettyAlet ctx prettyAcc extractAcc aenv pacc
     Apair{}                 -> prettyAtuple prettyAcc extractAcc aenv pacc
     Anil                    -> "()"
-    Apply f a               -> apply
+    Apply _ f a             -> apply
       where
         op    = Operator ">->" Infix L 1
         apply = sep [ ppAF f, group (sep [opName op, ppA a]) ]
@@ -147,21 +149,21 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
                       , hang shiftwidth (sep [ then_, t' ])
                       , hang shiftwidth (sep [ else_, e' ]) ]
 
-    Aforeign ff _f a        -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
+    Aforeign _ ff _ a       -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
     Awhile p f a            -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
-    Use arr                 -> "use"          .$ [ prettyArray arr ]
-    Unit e                  -> "unit"         .$ [ ppE e ]
-    Reshape sh a            -> "reshape"      .$ [ ppE sh, ppA a ]
-    Generate sh f           -> "generate"     .$ [ ppE sh, ppF f ]
-    Transform sh p f a      -> "transform"    .$ [ ppE sh, ppF p, ppF f, ppA a ]
+    Use repr arr            -> "use"          .$ [ prettyArray repr arr ]
+    Unit _ e                -> "unit"         .$ [ ppE e ]
+    Reshape _ sh a          -> "reshape"      .$ [ ppE sh, ppA a ]
+    Generate _ sh f         -> "generate"     .$ [ ppE sh, ppF f ]
+    Transform _ sh p f a    -> "transform"    .$ [ ppE sh, ppF p, ppF f, ppA a ]
     Replicate _ ix a        -> "replicate"    .$ [ ppE ix, ppA a ]
     Slice _ a ix            -> "slice"        .$ [ ppE ix, ppA a ]
-    Map f a                 -> "map"          .$ [ ppF f,  ppA a ]
-    ZipWith f a b           -> "zipWith"      .$ [ ppF f,  ppA a, ppA b ]
+    Map _ f a               -> "map"          .$ [ ppF f,  ppA a ]
+    ZipWith _ f a b         -> "zipWith"      .$ [ ppF f,  ppA a, ppA b ]
     Fold f z a              -> "fold"         .$ [ ppF f,  ppE z, ppA a ]
     Fold1 f a               -> "fold1"        .$ [ ppF f,  ppA a ]
-    FoldSeg f z a s         -> "foldSeg"      .$ [ ppF f,  ppE z, ppA a, ppA s ]
-    Fold1Seg f a s          -> "fold1Seg"     .$ [ ppF f,  ppA a, ppA s ]
+    FoldSeg _ f z a s       -> "foldSeg"      .$ [ ppF f,  ppE z, ppA a, ppA s ]
+    Fold1Seg _ f a s        -> "fold1Seg"     .$ [ ppF f,  ppA a, ppA s ]
     Scanl f z a             -> "scanl"        .$ [ ppF f,  ppE z, ppA a ]
     Scanl' f z a            -> "scanl'"       .$ [ ppF f,  ppE z, ppA a ]
     Scanl1 f a              -> "scanl1"       .$ [ ppF f,  ppA a ]
@@ -169,9 +171,10 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     Scanr' f z a            -> "scanr'"       .$ [ ppF f,  ppE z, ppA a ]
     Scanr1 f a              -> "scanr1"       .$ [ ppF f,  ppA a ]
     Permute f d p s         -> "permute"      .$ [ ppF f,  ppA d, ppF p, ppA s ]
-    Backpermute sh f a      -> "backpermute"  .$ [ ppE sh, ppF f, ppA a ]
-    Stencil f b a           -> "stencil"      .$ [ ppF f,  ppB b, ppA a ]
-    Stencil2 f b1 a1 b2 a2  -> "stencil2"     .$ [ ppF f,  ppB b1, ppA a1, ppB b2, ppA a2 ]
+    Backpermute _ sh f a    -> "backpermute"  .$ [ ppE sh, ppF f, ppA a ]
+    Stencil s _ f b a       -> "stencil"      .$ [ ppF f,  ppB (stencilElt s) b, ppA a ]
+    Stencil2 s1 s2 _ f b1 a1 b2 a2
+                            -> "stencil2"     .$ [ ppF f,  ppB (stencilElt s1) b1, ppA a1, ppB (stencilElt s2) b2, ppA a2 ]
   where
     infixr 0 .$
     f .$ xs
@@ -190,14 +193,15 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     ppF :: PreFun acc aenv t -> Adoc
     ppF = parens . prettyPreOpenFun prettyAcc extractAcc Empty aenv
 
-    ppB :: forall sh e. Elt e
-        => PreBoundary acc aenv (Array sh e)
+    ppB :: forall sh e.
+           TupleType e
+        -> PreBoundary acc aenv (Array sh e)
         -> Adoc
-    ppB Clamp        = "clamp"
-    ppB Mirror       = "mirror"
-    ppB Wrap         = "wrap"
-    ppB (Constant e) = prettyConst (toElt e :: e)
-    ppB (Function f) = ppF f
+    ppB _  Clamp        = "clamp"
+    ppB _  Mirror       = "mirror"
+    ppB _  Wrap         = "wrap"
+    ppB tp (Constant e) = prettyConst tp e
+    ppB _  (Function f) = ppF f
 
 
 prettyAlet
@@ -216,7 +220,7 @@ prettyAlet ctx prettyAcc extractAcc aenv0
     collect aenv =
       \case
         Alet lhs a1 a2 ->
-          let (aenv', v)      = prettyLHS aenv lhs
+          let (aenv', v)      = prettyALhs False aenv lhs
               a1'             = ppA aenv a1
               bnd | isAlet a1 = nest shiftwidth (vsep [v <+> equals, a1'])
                   | otherwise = v <+> align (equals <+> a1')
@@ -250,38 +254,53 @@ prettyAtuple
     -> Val aenv
     -> PreOpenAcc acc aenv arrs
     -> Adoc
-prettyAtuple prettyAcc extractAcc aenv0
-  = align . wrap . collect aenv0
+prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
+    Just tup -> align $ "T" <> pretty (length tup) <+> sep tup
+    Nothing  -> align $ ppPair acc
   where
-    wrap [x] = x
-    wrap xs  = tupled xs
+    ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
+    ppPair (Apair a1 a2) = "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc context0 aenv0 a2 <> ")"
+    ppPair a             = prettyPreOpenAcc context0 prettyAcc extractAcc aenv0 a
 
-    collect :: Val aenv' -> PreOpenAcc acc aenv' a -> [Adoc]
-    collect aenv =
-      \case
-        Anil        -> []
-        Apair a1 a2 -> collect aenv (extractAcc a1) ++ [prettyAcc context0 aenv a2]
-        next        -> [prettyPreOpenAcc context0 prettyAcc extractAcc aenv next]
+    collect :: PreOpenAcc acc aenv arrs' -> Maybe [Adoc]
+    collect Anil          = Just []
+    collect (Apair a1 a2)
+      | Just tup <- collect $ extractAcc a1
+                          = Just $ tup ++ [prettyAcc app aenv0 a2]
+    collect _             = Nothing
 
-prettyLHS :: Val aenv -> LeftHandSide arrs aenv aenv' -> (Val aenv', Adoc)
-prettyLHS aenv0 = fmap wrap . go aenv0
+-- TODO: Should we also print the types of the declared variables? And the types of wildcards?
+prettyALhs :: Bool -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyALhs requiresParens = prettyLhs requiresParens 'a'
+
+prettyELhs :: Bool -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyELhs requiresParens = prettyLhs requiresParens 'x'
+
+prettyLhs :: forall s env env' arrs. Bool -> Char -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
+prettyLhs requiresParens x env0 lhs = case collect lhs of
+  Just (env1, tup) -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> sep tup))
+  Nothing          -> ppPair lhs
   where
-    wrap [x] = x
-    wrap xs  = tupled xs
-
-    go :: Val aenv -> LeftHandSide arrs aenv aenv' -> (Val aenv', [Adoc])
-    go aenv (LeftHandSideWildcard ArraysRunit) = (aenv, [])
-    go aenv (LeftHandSideWildcard _)           = (aenv, ["_"])
-    go aenv LeftHandSideArray                  = (aenv `Push` v, [v])
+    ppPair :: LeftHandSide s arrs' env env'' -> (Val env'', Adoc)
+    ppPair (LeftHandSideWildcard TupRunit) = (env0, "()")
+    ppPair (LeftHandSideWildcard _)        = (env0, "_")
+    ppPair (LeftHandSideSingle _)          = (env0 `Push` v, v)
       where
-        v = pretty 'a' <> pretty (sizeEnv aenv)
-    go aenv (LeftHandSidePair a b)             = (aenv2, doc1 ++ [doc2])
+        v = pretty x <> pretty (sizeEnv env0)
+    ppPair (LeftHandSidePair a b)          = (env2, tupled [doc1, doc2])
       where
-        (aenv1, doc1) = go aenv a
-        (aenv2, doc2) = prettyLHS aenv1 b
+        (env1, doc1) = ppPair a
+        (env2, doc2) = prettyLhs False x env1 b
 
-prettyArray :: (Shape sh, Elt e) => Array sh e -> Adoc
-prettyArray = parens . viaShow
+    collect :: LeftHandSide s arrs' env env'' -> Maybe (Val env'', [Adoc])
+    collect (LeftHandSidePair l1 l2)
+      | Just (env1, tup ) <- collect l1
+      ,      (env2, doc2) <- prettyLhs True x env1 l2 = Just (env2, tup ++ [doc2])
+    collect (LeftHandSideWildcard TupRunit) = Just (env0, [])
+    collect _ = Nothing
+
+prettyArray :: ArrayR (Array sh e) -> Array sh e -> Adoc
+prettyArray repr = parens . fromString . showArray repr
 
 
 -- Scalar expressions
@@ -309,9 +328,9 @@ prettyPreOpenFun prettyAcc extractAcc env0 aenv = next (pretty '\\') env0
       --
       = hang shiftwidth (sep [ vs <> "->"
                              , prettyPreOpenExp context0 prettyAcc extractAcc env aenv body])
-    next vs env (Lam  lam)  =
-      let x = pretty 'x' <> pretty (sizeEnv env)
-      in  next (vs <> x <> space) (env `Push` x) lam
+    next vs env (Lam lhs lam) =
+      let (env', lhs') = prettyELhs True env lhs
+      in  next (vs <> lhs' <> space) env' lam
 
 prettyPreOpenExp
     :: forall acc env aenv t.
@@ -324,19 +343,21 @@ prettyPreOpenExp
     -> Adoc
 prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
   case exp of
-    Var idx             -> prj idx env
-    Let{}               -> prettyLet ctx prettyAcc extractAcc env aenv exp
+    Evar (Var _ idx)      -> prj idx env
+    Let{}                 -> prettyLet ctx prettyAcc extractAcc env aenv exp
     PrimApp f x
-      | Tuple (NilTup `SnocTup` a `SnocTup` b) <- x -> ppF2 op  (ppE a) (ppE b)
-      | otherwise                                   -> ppF1 op' (ppE x)
+      | a `Pair` b <- x   -> ppF2 op  (ppE a) (ppE b)
+      | otherwise         -> ppF1 op' (ppE x)
       where
         op  = primOperator f
         op' = isInfix op ? (Operator (parens (opName op)) App L 10, op)
     --
     PrimConst c           -> prettyPrimConst c
-    Const c               -> prettyConst (toElt c :: t)
-    Tuple t               -> prettyTuple (eltType @t) prettyAcc extractAcc env aenv t
-    Prj tix e             -> ppF2 (Operator "#" Infix L 8) (ppE e) (\_ -> pretty (tupleIdxToInt tix))
+    Const tp c            -> prettyConst (TupRsingle tp) c
+    Pair{}                -> prettyTuple ctx prettyAcc extractAcc env aenv exp
+    Nil                   -> "()"
+    VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
+    VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0
@@ -350,25 +371,18 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
                       , hang shiftwidth (sep [ then_, t' ])
                       , hang shiftwidth (sep [ else_, e' ]) ]
     --
-    IndexAny              -> "Any"
-    IndexNil              -> pretty 'Z'
-    IndexCons sh sz       -> ppF2 (Operator ":." Infix L 3) (ppE sh) (ppE sz)
-    IndexHead sh          -> ppF1 "indexHead"   (ppE sh)
-    IndexTail sh          -> ppF1 "indexTail"   (ppE sh)
     IndexSlice _ slix sh  -> ppF2 "indexSlice"  (ppE slix) (ppE sh)
     IndexFull _ slix sl   -> ppF2 "indexFull"   (ppE slix) (ppE sl)
-    ToIndex sh ix         -> ppF2 "toIndex"     (ppE sh) (ppE ix)
-    FromIndex sh ix       -> ppF2 "fromIndex"   (ppE sh) (ppE ix)
+    ToIndex _ sh ix       -> ppF2 "toIndex"     (ppE sh) (ppE ix)
+    FromIndex _ sh ix     -> ppF2 "fromIndex"   (ppE sh) (ppE ix)
     While p f x           -> ppF3 "while"       (ppF p) (ppF f) (ppE x)
-    Foreign ff _f e       -> ppF2 "foreign"     (\_ -> pretty (strForeign ff)) (ppE e)
+    Foreign _ ff _ e      -> ppF2 "foreign"     (\_ -> pretty (strForeign ff)) (ppE e)
     Shape arr             -> ppF1 "shape"       (ppA arr)
-    ShapeSize sh          -> ppF1 "shapeSize"   (ppE sh)
-    Intersect sh1 sh2     -> ppF2 "intersect"   (ppE sh1) (ppE sh2)
-    Union sh1 sh2         -> ppF2 "union"       (ppE sh1) (ppE sh2)
+    ShapeSize _ sh        -> ppF1 "shapeSize"   (ppE sh)
     Index arr ix          -> ppF2 (Operator (pretty '!') Infix L 9) (ppA arr) (ppE ix)
     LinearIndex arr ix    -> ppF2 (Operator "!!"         Infix L 9) (ppA arr) (ppE ix)
-    Coerce x              -> ppF1 (Operator (withTypeRep "coerce") App L 10) (ppE x)
-    Undef                 -> withTypeRep "undef"
+    Coerce _ tp x         -> ppF1 (Operator (withTypeRep tp "coerce") App L 10) (ppE x)
+    Undef tp              -> withTypeRep tp "undef"
 
   where
     ppE :: PreOpenExp acc env aenv e -> Context -> Adoc
@@ -401,8 +415,8 @@ prettyPreOpenExp ctx prettyAcc extractAcc env aenv exp =
       $ hang 2
       $ sep [ opName op, x app, y app, z app ]
 
-    withTypeRep :: Typeable t => Adoc -> Adoc
-    withTypeRep op = op <> enclose langle rangle (pretty (showsTypeRep (typeOf (undefined::t)) ""))
+    withTypeRep :: ScalarType t -> Adoc -> Adoc
+    withTypeRep tp op = op <> enclose langle rangle (pretty (showScalarType tp))
 
 
 prettyLet
@@ -421,9 +435,8 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
     collect :: Val env' -> PreOpenExp acc env' aenv e -> ([Adoc], Adoc)
     collect env =
       \case
-        Let e1 e2 ->
-          let env'            = env `Push` v
-              v               = pretty 'x' <> pretty (sizeEnv env)
+        Let lhs e1 e2 ->
+          let (env', v)       = prettyELhs False env lhs
               e1'             = ppE env e1
               bnd | isLet e1  = nest shiftwidth (vsep [v <+> equals, e1'])
                   | otherwise = v <+> align (equals <+> e1')
@@ -451,30 +464,57 @@ prettyLet ctx prettyAcc extractAcc env0 aenv
              ]
 
 prettyTuple
-    :: forall acc env aenv t p.
-       TupleType t
+    :: forall acc env aenv t.
+       Context
     -> PrettyAcc acc
     -> ExtractAcc acc
     -> Val env
     -> Val aenv
-    -> Tuple (PreOpenExp acc env aenv) p
+    -> PreOpenExp acc env aenv t
     -> Adoc
-prettyTuple tt prettyAcc extractAcc env aenv = wrap . collect []
+prettyTuple ctx prettyAcc extractAcc env aenv exp = case collect exp of
+    Just tup -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
+    Nothing  -> align $ ppPair exp
   where
-    collect :: [Adoc] -> Tuple (PreOpenExp acc env aenv) s -> [Adoc]
-    collect acc =
-      \case
-        NilTup        -> acc
-        SnocTup tup e -> collect (align (prettyPreOpenExp context0 prettyAcc extractAcc env aenv e) : acc) tup
-    --
-    wrap
-      | TypeRscalar VectorScalarType{} <- tt = group . encloseSep (flatAlt "< " "<") (flatAlt " >" ">") ", "
-      | otherwise                            = tupled -- as above, with parenthesis
+    ppPair :: PreOpenExp acc env aenv t' -> Adoc
+    ppPair (Pair e1 e2) = "(" <> ppPair e1 <> "," <+> prettyPreOpenExp context0 prettyAcc extractAcc env aenv e2 <> ")"
+    ppPair e            = prettyPreOpenExp context0 prettyAcc extractAcc env aenv e
 
+    collect :: PreOpenExp acc env aenv t' -> Maybe [Adoc]
+    collect Nil          = Just []
+    collect (Pair e1 e2)
+      | Just tup <- collect e1
+                         = Just $ tup ++ [prettyPreOpenExp app prettyAcc extractAcc env aenv e2]
+    collect _            = Nothing
 
-prettyConst :: Elt e => e -> Adoc
-prettyConst x =
-  let y = show x
+{-
+
+prettyAtuple
+    :: forall acc aenv arrs.
+       PrettyAcc acc
+    -> ExtractAcc acc
+    -> Val aenv
+    -> PreOpenAcc acc aenv arrs
+    -> Adoc
+prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
+  Just tup -> align $ "T" <> pretty (length tup) <+> sep tup
+  Nothing  -> align $ ppPair acc
+  where
+    ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
+    ppPair (Apair a1 a2) = "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc context0 aenv0 a2 <> ")"
+    ppPair a             = prettyPreOpenAcc context0 prettyAcc extractAcc aenv0 a
+
+    collect :: PreOpenAcc acc aenv arrs' -> Maybe [Adoc]
+    collect Anil          = Just []
+    collect (Apair a1 a2)
+      | Just tup <- collect $ extractAcc a1
+                          = Just $ tup ++ [prettyAcc app aenv0 a2]
+    collect _             = Nothing
+-}
+
+prettyConst :: TupleType e -> e -> Adoc
+prettyConst tp x =
+  let y = showElement tp x
   in  parensIf (any isSpace y) (pretty y)
 
 prettyPrimConst :: PrimConst a -> Adoc

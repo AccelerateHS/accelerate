@@ -158,7 +158,7 @@ extractOpenAcc (OpenAcc pacc) = pacc
 prettyDelayedOpenAcc :: PrettyAcc DelayedOpenAcc
 prettyDelayedOpenAcc context aenv (Manifest pacc)
   = prettyPreOpenAcc context prettyDelayedOpenAcc extractDelayedOpenAcc aenv pacc
-prettyDelayedOpenAcc _       aenv (Delayed sh f _)
+prettyDelayedOpenAcc _       aenv (Delayed _ sh f _)
   = parens
   $ nest shiftwidth
   $ sep [ delayed "delayed"

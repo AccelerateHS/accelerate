@@ -24,10 +24,10 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue407 (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Array.Sugar                            as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -45,7 +45,7 @@ test_issue407 runN =
         :: forall a. (P.Fractional a, A.RealFloat a)
         => TestTree
     testElt =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (A.eltType @a))
         [ testCase "isNaN"      $ eNaN @=? runN (A.map A.isNaN) xs
         , testCase "isInfinite" $ eInf @=? runN (A.map A.isInfinite) xs
         ]

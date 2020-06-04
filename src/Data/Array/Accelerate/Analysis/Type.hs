@@ -24,8 +24,7 @@
 
 module Data.Array.Accelerate.Analysis.Type (
 
-  arrayType,
-  accType, expType,
+  accType,
 
   sizeOf,
   sizeOfScalarType,
@@ -38,73 +37,26 @@ module Data.Array.Accelerate.Analysis.Type (
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Type
 
 -- standard library
 import qualified Foreign.Storable as F
 
 
--- |Determine an array type
--- ------------------------
-
--- |Reify the element type of an array.
---
-arrayType :: forall sh e. Elt e => Array sh e -> TupleType (EltRepr e)
-arrayType _ = eltType @e
-
-
 -- |Determine the type of an expressions
 -- -------------------------------------
 
-accType :: forall acc aenv sh e. HasArraysRepr acc => acc aenv (Array sh e) -> TupleType (EltRepr e)
-accType acc = case arraysRepr acc of
-  ArraysRarray -> eltType @e
-
--- |Reify the result types of of a scalar expression using the expression AST before tying the
--- knot.
---
-expType :: forall acc aenv env t.
-              HasArraysRepr acc
-           => PreOpenExp acc aenv env t
-           -> TupleType (EltRepr t)
-expType e =
-  case e of
-    Let _ _           -> eltType @t
-    Var _             -> eltType @t
-    Const _           -> eltType @t
-    Undef             -> eltType @t
-    Tuple _           -> eltType @t
-    Prj _ _           -> eltType @t
-    IndexNil          -> eltType @t
-    IndexCons _ _     -> eltType @t
-    IndexHead _       -> eltType @t
-    IndexTail _       -> eltType @t
-    IndexAny          -> eltType @t
-    IndexSlice _ _ _  -> eltType @t
-    IndexFull _ _ _   -> eltType @t
-    ToIndex _ _       -> eltType @t
-    FromIndex _ _     -> eltType @t
-    Cond _ t _        -> expType t
-    While _ _ _       -> eltType @t
-    PrimConst _       -> eltType @t
-    PrimApp _ _       -> eltType @t
-    Index acc _       -> accType acc
-    LinearIndex acc _ -> accType acc
-    Shape _           -> eltType @t
-    ShapeSize _       -> eltType @t
-    Intersect _ _     -> eltType @t
-    Union _ _         -> eltType @t
-    Foreign _ _ _     -> eltType @t
-    Coerce _          -> eltType @t
+accType :: forall acc aenv sh e. HasArraysRepr acc => acc aenv (Array sh e) -> TupleType e
+accType = arrayRtype . arrayRepr
 
 
 -- |Size of a tuple type, in bytes
 --
 sizeOf :: TupleType a -> Int
-sizeOf TypeRunit       = 0
-sizeOf (TypeRpair a b) = sizeOf a + sizeOf b
-sizeOf (TypeRscalar t) = sizeOfScalarType t
+sizeOf TupRunit       = 0
+sizeOf (TupRpair a b) = sizeOf a + sizeOf b
+sizeOf (TupRsingle t) = sizeOfScalarType t
 
 sizeOfScalarType :: ScalarType t -> Int
 sizeOfScalarType (SingleScalarType t) = sizeOfSingleType t

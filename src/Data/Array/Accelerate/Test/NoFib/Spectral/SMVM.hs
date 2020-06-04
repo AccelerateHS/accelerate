@@ -21,7 +21,6 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.SMVM (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
@@ -50,7 +49,7 @@ test_smvm runN =
         => Gen a
         -> TestTree
     testElt e =
-      testProperty (show (typeOf (undefined :: a))) $ test_smvm' runN e
+      testProperty (show (eltType @a)) $ test_smvm' runN e
 
 
 test_smvm' :: (A.Num e, P.Num e, Similar e) => RunN -> Gen e -> Property

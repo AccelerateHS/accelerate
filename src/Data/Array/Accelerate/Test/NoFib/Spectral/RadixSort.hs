@@ -22,7 +22,6 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort (
 
 ) where
 
-import Data.Typeable
 import Data.Function
 import Data.List
 import Prelude                                                      as P
@@ -30,7 +29,7 @@ import qualified Data.Bits                                          as P
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Data.Bits                              as A
-import Data.Array.Accelerate.Array.Sugar                            as S ( shape )
+import Data.Array.Accelerate.Array.Sugar                            as S ( shape, eltType )
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -62,7 +61,7 @@ test_radixsort runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testProperty "ascending"    $ test_sort_ascending runN e
         , testProperty "descending"   $ test_sort_descending runN e
         , testProperty "key-value"    $ test_sort_keyval runN e f32
