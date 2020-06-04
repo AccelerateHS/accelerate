@@ -54,7 +54,7 @@ type family LiftedRepr r a where
   LiftedRepr (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
   LiftedRepr (l,r) a                   = LiftedTupleRepr (TupleRepr a)
 
-type family LiftedTupleRepr t :: *
+type family LiftedTupleRepr t :: Type
 type instance LiftedTupleRepr () = ()
 type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
 
