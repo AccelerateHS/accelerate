@@ -1,3 +1,5 @@
+{-# LANGUAGE MonoLocalBinds        #-}
+{-# LANGUAGE FlexibleContexts      #-}
 -- |
 -- Module      : Data.Array.Accelerate.Unsafe
 -- Copyright   : [2009..2019] The Accelerate Team
@@ -15,7 +17,8 @@
 module Data.Array.Accelerate.Unsafe (
 
   -- ** Unsafe operations
-  undef, coerce,
+  Coerce, coerce,
+  undef,
 
 ) where
 
@@ -39,11 +42,11 @@ import Data.Array.Accelerate.Smart
 -- abstract type to the concrete type by dropping the extra @()@ from the
 -- representation, and vice-versa.
 --
--- You will get a runtime error if it fails to find a coercion between the two
--- representations.
+-- The type class 'Coerce' assures that there is a coercion between the two
+-- types.
 --
 -- @since 1.2.0.0
 --
-coerce :: (Elt a, Elt b) => Exp a -> Exp b
-coerce = mkUnsafeCoerce
+coerce :: Coerce (EltRepr a) (EltRepr b) => Exp a -> Exp b
+coerce = mkCoerce
 

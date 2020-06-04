@@ -44,8 +44,9 @@ import qualified Data.HashSet                           as Set
 import qualified Data.Sequence                          as Seq
 
 -- friends
-import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), PreBoundary(..), LeftHandSide(..), ArrayVar(..), Idx(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Elt, Tuple(..), ArraysR(..), toElt, strForeign )
+import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar                ( strForeign )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Graphviz.Monad
 import Data.Array.Accelerate.Pretty.Graphviz.Type
@@ -195,7 +196,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     Avar ix                 -> pnode (avar ix)
     Alet lhs bnd body       -> do
       bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc detail context0 aenv bnd
-      (aenv1, a) <- prettyLetLeftHandSide ident aenv lhs
+      (aenv1, a) <- prettyLetALeftHandSide ident aenv lhs
       _ <- mkNode bnd' (Just a)
       body' <- prettyDelayedOpenAcc detail context0 aenv1 body
       return body'
@@ -210,7 +211,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return $ PNode ident doc deps
 
-    Apply afun acc          -> apply <$> prettyDelayedAfun    detail     aenv afun
+    Apply _ afun acc        -> apply <$> prettyDelayedAfun    detail     aenv afun
                                      <*> prettyDelayedOpenAcc detail ctx aenv acc
 
     Awhile p f x            -> do
@@ -227,19 +228,19 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
 
     Anil                    -> "()"          .$ []
 
-    Use arr                 -> "use"         .$ [ return $ PDoc (prettyArray arr) [] ]
-    Unit e                  -> "unit"        .$ [ ppE e ]
-    Generate sh f           -> "generate"    .$ [ ppE sh, ppF f ]
-    Transform sh ix f xs    -> "transform"   .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
-    Reshape sh xs           -> "reshape"     .$ [ ppE sh, ppA xs ]
+    Use repr arr            -> "use"         .$ [ return $ PDoc (prettyArray repr arr) [] ]
+    Unit _ e                -> "unit"        .$ [ ppE e ]
+    Generate _ sh f         -> "generate"    .$ [ ppE sh, ppF f ]
+    Transform _ sh ix f xs  -> "transform"   .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
+    Reshape _ sh xs         -> "reshape"     .$ [ ppE sh, ppA xs ]
     Replicate _ty ix xs     -> "replicate"   .$ [ ppE ix, ppA xs ]
     Slice _ty xs ix         -> "slice"       .$ [ ppA xs, ppE ix ]
-    Map f xs                -> "map"         .$ [ ppF f, ppA xs ]
-    ZipWith f xs ys         -> "zipWith"     .$ [ ppF f, ppA xs, ppA ys ]
+    Map _ f xs              -> "map"         .$ [ ppF f, ppA xs ]
+    ZipWith _ f xs ys       -> "zipWith"     .$ [ ppF f, ppA xs, ppA ys ]
     Fold f e xs             -> "fold"        .$ [ ppF f, ppE e, ppA xs ]
     Fold1 f xs              -> "fold1"       .$ [ ppF f, ppA xs ]
-    FoldSeg f e xs ys       -> "foldSeg"     .$ [ ppF f, ppE e, ppA xs, ppA ys ]
-    Fold1Seg f xs ys        -> "fold1Seg"    .$ [ ppF f, ppA xs, ppA ys ]
+    FoldSeg _ f e xs ys     -> "foldSeg"     .$ [ ppF f, ppE e, ppA xs, ppA ys ]
+    Fold1Seg _ f xs ys      -> "fold1Seg"    .$ [ ppF f, ppA xs, ppA ys ]
     Scanl f e xs            -> "scanl"       .$ [ ppF f, ppE e, ppA xs ]
     Scanl' f e xs           -> "scanl'"      .$ [ ppF f, ppE e, ppA xs ]
     Scanl1 f xs             -> "scanl1"      .$ [ ppF f, ppA xs ]
@@ -247,11 +248,12 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     Scanr' f e xs           -> "scanr'"      .$ [ ppF f, ppE e, ppA xs ]
     Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppA xs ]
     Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
-    Backpermute sh p xs     -> "backpermute" .$ [ ppE sh, ppF p, ppA xs ]
-    Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB bndy, ppA xs ]
-    Stencil2 sten bndy1 acc1 bndy2 acc2
-                            -> "stencil2"    .$ [ ppF sten, ppB bndy1, ppA acc1, ppB bndy2, ppA acc2 ]
-    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
+    Backpermute _ sh p xs   -> "backpermute" .$ [ ppE sh, ppF p, ppA xs ]
+    Stencil s _ sten bndy xs
+                            -> "stencil"     .$ [ ppF sten, ppB (stencilElt s) bndy, ppA xs ]
+    Stencil2 s1 s2 _ sten bndy1 acc1 bndy2 acc2
+                            -> "stencil2"    .$ [ ppF sten, ppB (stencilElt s1) bndy1, ppA acc1, ppB (stencilElt s2) bndy2, ppA acc2 ]
+    Aforeign _ ff _afun xs  -> "aforeign"    .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
     -- Collect{}               -> error "Collect"
 
   where
@@ -279,8 +281,8 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     -- Free variables
     --
     fvA :: FVAcc DelayedOpenAcc
-    fvA env (Manifest (Avar (ArrayVar ix))) = [ Vertex (fst $ aprj ix env) Nothing ]
-    fvA _   _                               = $internalError "graphviz" "expected array variable"
+    fvA env (Manifest (Avar (Var _ ix))) = [ Vertex (fst $ aprj ix env) Nothing ]
+    fvA _   _                            = $internalError "graphviz" "expected array variable"
 
     fvF :: DelayedFun aenv t -> [Vertex]
     fvF = fvPreOpenFun fvA Empty aenv
@@ -291,7 +293,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     -- Pretty-printing
     --
     avar :: ArrayVar aenv t -> PDoc
-    avar (ArrayVar ix) = let (ident, v) = aprj ix aenv
+    avar (Var _ ix) = let (ident, v) = aprj ix aenv
                          in  PDoc (pretty v) [Vertex ident Nothing]
 
     aenv' :: Val aenv
@@ -306,22 +308,24 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
       v     <- mkLabel
       ident <- mkNode acc' (Just v)
       return $ PDoc (pretty v) [Vertex ident Nothing]
-    ppA (Delayed sh f _)
-      | Shape a    <- sh                                             -- identical shape
-      , Just Refl  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
+    ppA (Delayed _ sh f _)
+      | Shape a    <- sh                   -- identical shape
+      , Just b     <- isIdentityIndexing f -- function is `\ix -> b ! ix`
+      , Just Refl  <- match a b            -- function thus is `\ix -> a ! ix`
       = ppA a
-    ppA (Delayed sh f _) = do
+    ppA (Delayed _ sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
 
-    ppB :: forall sh e. Elt e
-        => PreBoundary DelayedOpenAcc aenv (Array sh e)
+    ppB :: forall sh e.
+           TupleType e
+        -> PreBoundary DelayedOpenAcc aenv (Array sh e)
         -> Dot PDoc
-    ppB Clamp        = return (PDoc "clamp"  [])
-    ppB Mirror       = return (PDoc "mirror" [])
-    ppB Wrap         = return (PDoc "wrap"   [])
-    ppB (Constant e) = return (PDoc (prettyConst (toElt e :: e)) [])
-    ppB (Function f) = ppF f
+    ppB _  Clamp        = return (PDoc "clamp"  [])
+    ppB _  Mirror       = return (PDoc "mirror" [])
+    ppB _  Wrap         = return (PDoc "wrap"   [])
+    ppB tp (Constant e) = return (PDoc (prettyConst tp e) [])
+    ppB _  (Function f) = ppF f
 
     ppF :: DelayedFun aenv t -> Dot PDoc
     ppF = return . uncurry PDoc . (parens . prettyDelayedFun aenv' &&& fvF)
@@ -330,9 +334,9 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     ppE = return . uncurry PDoc . (prettyDelayedExp aenv' &&& fvE)
 
     lift :: DelayedOpenAcc aenv a -> Dot Vertex
-    lift Delayed{}                       = $internalError "prettyDelayedOpenAcc" "expected manifest array"
-    lift (Manifest (Avar (ArrayVar ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
-    lift acc                             = do
+    lift Delayed{}                    = $internalError "prettyDelayedOpenAcc" "expected manifest array"
+    lift (Manifest (Avar (Var _ ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
+    lift acc                          = do
       acc'  <- prettyDelayedOpenAcc detail context0 aenv acc
       ident <- mkNode acc' Nothing
       return $ Vertex ident Nothing
@@ -381,46 +385,46 @@ prettyDelayedAfun detail aenv afun = do
     go :: Aval aenv' -> DelayedOpenAfun aenv' a' -> Dot Graph
     go aenv' (Abody b) = graphDelayedOpenAcc detail aenv' b
     go aenv' (Alam lhs f) = do
-      aenv'' <- prettyLambdaLeftHandSide aenv' lhs
+      aenv'' <- prettyLambdaALeftHandSide aenv' lhs
       go aenv'' f
 
     collect :: Aval aenv' -> HashSet NodeId
     collect Aempty        = Set.empty
     collect (Apush a i _) = Set.insert i (collect a)
 
-prettyLetLeftHandSide
+prettyLetALeftHandSide
   :: forall repr aenv aenv'.
      NodeId
   -> Aval aenv
-  -> LeftHandSide repr aenv aenv'
+  -> ALeftHandSide repr aenv aenv'
   -> Dot (Aval aenv', Label)
-prettyLetLeftHandSide _     aenv (LeftHandSideWildcard repr) = return (aenv, doc)
+prettyLetALeftHandSide _     aenv (LeftHandSideWildcard repr) = return (aenv, doc)
   where
     doc = case repr of
-      ArraysRunit -> "()"
-      _           -> "_"
-prettyLetLeftHandSide ident aenv LeftHandSideArray = do
+      TupRunit -> "()"
+      _        -> "_"
+prettyLetALeftHandSide ident aenv (LeftHandSideSingle _) = do
   a <- mkLabel
   return (Apush aenv ident a, a)
-prettyLetLeftHandSide ident aenv (LeftHandSidePair lhs1 lhs2) = do
-  (aenv1, d1) <- prettyLetLeftHandSide ident aenv  lhs1
-  (aenv2, d2) <- prettyLetLeftHandSide ident aenv1 lhs2
+prettyLetALeftHandSide ident aenv (LeftHandSidePair lhs1 lhs2) = do
+  (aenv1, d1) <- prettyLetALeftHandSide ident aenv  lhs1
+  (aenv2, d2) <- prettyLetALeftHandSide ident aenv1 lhs2
   return (aenv2, "(" <> d1 <> ", " <> d2 <> ")")
 
-prettyLambdaLeftHandSide
+prettyLambdaALeftHandSide
     :: forall repr aenv aenv'.
        Aval aenv
-    -> LeftHandSide repr aenv aenv'
+    -> ALeftHandSide repr aenv aenv'
     -> Dot (Aval aenv')
-prettyLambdaLeftHandSide aenv (LeftHandSideWildcard _) = return aenv
-prettyLambdaLeftHandSide aenv lhs@LeftHandSideArray = do
+prettyLambdaALeftHandSide aenv (LeftHandSideWildcard _) = return aenv
+prettyLambdaALeftHandSide aenv lhs@(LeftHandSideSingle _) = do
   a     <- mkLabel
   ident <- mkNodeId lhs
   _     <- mkNode (PNode ident (Leaf (Nothing, pretty a)) []) Nothing
   return $ Apush aenv ident a
-prettyLambdaLeftHandSide aenv (LeftHandSidePair lhs1 lhs2) = do
-  aenv1 <- prettyLambdaLeftHandSide aenv lhs1
-  prettyLambdaLeftHandSide aenv1 lhs2
+prettyLambdaALeftHandSide aenv (LeftHandSidePair lhs1 lhs2) = do
+  aenv1 <- prettyLambdaALeftHandSide aenv lhs1
+  prettyLambdaALeftHandSide aenv1 lhs2
 
 -- Display array tuples. This is a little tricky...
 --
@@ -501,9 +505,9 @@ prettyDelayedOpenFun env0 aenv = next "\\\\" env0
     next vs env (Body body) =
       nest shiftwidth (sep [ vs <> "&rarr;"
                            , prettyDelayedOpenExp context0 env aenv body ])
-    next vs env (Lam  lam)  =
-      let x = pretty 'x' <> pretty (sizeEnv env)
-      in  next (vs <> x <> space) (env `Push` x) lam
+    next vs env (Lam lhs lam)  =
+      let (env', arg) = prettyELhs True env lhs
+      in  next (vs <> arg <> space) env' lam
 
 prettyDelayedOpenExp
     :: Context
@@ -514,8 +518,8 @@ prettyDelayedOpenExp
 prettyDelayedOpenExp context = prettyPreOpenExp context pp ex
   where
     pp :: PrettyAcc DelayedOpenAcc
-    pp _ aenv (Manifest (Avar (ArrayVar ix))) = prj ix aenv
-    pp _ _    _                               = $internalError "prettyDelayedOpenExp" "expected array variable"
+    pp _ aenv (Manifest (Avar (Var _ ix))) = prj ix aenv
+    pp _ _    _                            = $internalError "prettyDelayedOpenExp" "expected array variable"
 
     ex :: ExtractAcc DelayedOpenAcc
     ex (Manifest pacc) = pacc
@@ -539,8 +543,10 @@ fvPreOpenFun
     -> Aval aenv
     -> PreOpenFun acc env aenv fun
     -> [Vertex]
-fvPreOpenFun fvA env aenv (Body b) = fvPreOpenExp fvA env                                          aenv b
-fvPreOpenFun fvA env aenv (Lam f)  = fvPreOpenFun fvA (env `Push` (pretty 'x' <> pretty (sizeEnv env))) aenv f
+fvPreOpenFun fvA env aenv (Body b)    = fvPreOpenExp fvA env  aenv b
+fvPreOpenFun fvA env aenv (Lam lhs f) = fvPreOpenFun fvA env' aenv f
+      where
+        (env', _) = prettyELhs True env lhs
 
 fvPreOpenExp
     :: forall acc env aenv exp.
@@ -551,10 +557,6 @@ fvPreOpenExp
     -> [Vertex]
 fvPreOpenExp fvA env aenv = fv
   where
-    fvT :: Tuple (PreOpenExp acc env aenv) t -> [Vertex]
-    fvT NilTup          = []
-    fvT (SnocTup tup e) = concat [ fv e, fvT tup ]
-
     fvF :: PreOpenFun acc env aenv f -> [Vertex]
     fvF = fvPreOpenFun fvA env aenv
 
@@ -563,28 +565,25 @@ fvPreOpenExp fvA env aenv = fv
     fv (Index acc i)            = concat [ fvA aenv acc, fv i ]
     fv (LinearIndex acc i)      = concat [ fvA aenv acc, fv i ]
     --
-    fv (Let e1 e2)              = concat [ fv e1, fvPreOpenExp fvA (env `Push` (pretty 'x' <> pretty (sizeEnv env))) aenv e2 ]
-    fv Var{}                    = []
-    fv Undef                    = []
+    fv (Let lhs e1 e2)          = concat [ fv e1, fvPreOpenExp fvA env' aenv e2 ]
+      where
+        (env', _) = prettyELhs False env lhs
+    fv Evar{}                   = []
+    fv Undef{}                  = []
     fv Const{}                  = []
     fv PrimConst{}              = []
     fv (PrimApp _ x)            = fv x
-    fv (Tuple tup)              = fvT tup
-    fv (Prj _ e)                = fv e
-    fv IndexNil                 = []
-    fv IndexAny                 = []
-    fv (IndexHead sh)           = fv sh
-    fv (IndexTail sh)           = fv sh
-    fv (IndexCons t h)          = concat [ fv t, fv h ]
+    fv (Pair e1 e2)             = concat [ fv e1, fv e2]
+    fv Nil                      = []
+    fv (VecPack   _ e)          = fv e
+    fv (VecUnpack _ e)          = fv e
     fv (IndexSlice _ slix sh)   = concat [ fv slix, fv sh ]
     fv (IndexFull _ slix sh)    = concat [ fv slix, fv sh ]
-    fv (ToIndex sh ix)          = concat [ fv sh, fv ix ]
-    fv (FromIndex sh ix)        = concat [ fv sh, fv ix ]
-    fv (Union sh1 sh2)          = concat [ fv sh1, fv sh2 ]
-    fv (Intersect sh1 sh2)      = concat [ fv sh1, fv sh2 ]
-    fv (ShapeSize sh)           = fv sh
+    fv (ToIndex _ sh ix)        = concat [ fv sh, fv ix ]
+    fv (FromIndex _ sh ix)      = concat [ fv sh, fv ix ]
+    fv (ShapeSize _ sh)         = fv sh
     fv Foreign{}                = []
     fv (Cond p t e)             = concat [ fv p, fv t, fv e ]
     fv (While p f x)            = concat [ fvF p, fvF f, fv x ]
-    fv (Coerce e)               = fv e
+    fv (Coerce _ _ e)           = fv e
 

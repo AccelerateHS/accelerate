@@ -24,7 +24,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Map (
 ) where
 
 import Data.Bits                                                    as P
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
@@ -65,7 +64,7 @@ test_map runN =
         => Gen a
         -> TestTree
     testIntegralElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim0
         , testDim dim1
         , testDim dim2
@@ -97,7 +96,7 @@ test_map runN =
         => (Range a -> Gen a)
         -> TestTree
     testFloatingElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim0
         , testDim dim1
         , testDim dim2

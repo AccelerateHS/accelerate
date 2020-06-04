@@ -17,6 +17,7 @@
 module Data.Array.Accelerate.Orphans ()
   where
 
+import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
 import Data.Primitive.Types
 import Data.Ratio
 import Foreign.C.Types

@@ -333,7 +333,6 @@ Library
         Data.Array.Accelerate.Error
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
-        Data.Array.Accelerate.Product
         Data.Array.Accelerate.Smart
         Data.Array.Accelerate.Trafo
         Data.Array.Accelerate.Type
@@ -381,6 +380,7 @@ Library
         Data.Array.Accelerate.Trafo.Base
         Data.Array.Accelerate.Trafo.Config
         Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.LetSplit
         Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
@@ -522,8 +522,8 @@ Library
         -Wcompat
         -Wmissed-specialisations
         -- -Wredundant-constraints
-        -freduction-depth=50
-        -fspec-constr-count=25
+        -freduction-depth=100
+        -fspec-constr-count=50
         -funbox-strict-fields
 
   ghc-prof-options:
@@ -554,8 +554,8 @@ test-suite doctest
         -rtsopts
 
   x-doctest-options:
-        -fspec-constr-count=25
-        -freduction-depth=50
+        -freduction-depth=100
+        -fspec-constr-count=50
 
 
 test-suite nofib-interpreter

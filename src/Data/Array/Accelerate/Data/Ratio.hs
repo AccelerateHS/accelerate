@@ -34,7 +34,6 @@ import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Orphans                                ()
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Enum
@@ -55,7 +54,6 @@ import qualified Prelude                                            as P
 
 
 instance Elt a => Elt (Ratio a)
-instance Elt a => IsProduct Elt (Ratio a)
 
 pattern (:%) :: Elt a => Exp a -> Exp a -> Exp (Ratio a)
 pattern (:%) { numerator, denominator } = Pattern (numerator, denominator)

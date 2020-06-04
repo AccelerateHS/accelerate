@@ -20,7 +20,6 @@ module Data.Array.Accelerate.Test.NoFib.Imaginary.DotP (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                  as P
 
 import Data.Array.Accelerate                                    as A
@@ -57,7 +56,7 @@ test_dotp runN =
         => Gen a
         -> TestTree
     testElt e =
-      testProperty (show (typeOf (undefined :: a))) $ test_dotp' runN e
+      testProperty (show (eltType @a)) $ test_dotp' runN e
 
 
 test_dotp'

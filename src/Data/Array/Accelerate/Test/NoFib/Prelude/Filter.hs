@@ -23,7 +23,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Filter (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
@@ -59,7 +58,7 @@ test_filter runN =
         => Gen a
         -> TestTree
     testIntegralElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
@@ -79,7 +78,7 @@ test_filter runN =
         => Gen a
         -> TestTree
     testFloatingElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3

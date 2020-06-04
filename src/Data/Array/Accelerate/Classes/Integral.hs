@@ -26,7 +26,6 @@ module Data.Array.Accelerate.Classes.Integral (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -135,90 +134,74 @@ instance P.Integral (Exp Word64) where
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CInt) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CUInt) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CLong) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CULong) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CLLong) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CULLong) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CShort) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CUShort) where
-  quot      = lift2 mkQuot
-  rem       = lift2 mkRem
-  div       = lift2 mkIDiv
-  mod       = lift2 mkMod
-  quotRem   = lift2' mkQuotRem
-  divMod    = lift2' mkDivMod
+  quot      = mkQuot
+  rem       = mkRem
+  div       = mkIDiv
+  mod       = mkMod
+  quotRem   = mkQuotRem
+  divMod    = mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
-
-lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp b)
-      -> Exp a
-      -> Exp a
-      -> Exp a
-lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
-
-lift2' :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-       => (Exp b -> Exp b -> (Exp b, Exp b))
-       -> Exp a
-       -> Exp a
-       -> (Exp a, Exp a)
-lift2' f x y =
-  let (u,v) = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
-  in  (mkUnsafeCoerce u, mkUnsafeCoerce v)
 

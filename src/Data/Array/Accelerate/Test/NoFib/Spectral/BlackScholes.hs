@@ -22,7 +22,6 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
@@ -52,7 +51,7 @@ test_blackscholes runN =
         => (Range a -> Gen a)
         -> TestTree
     testElt e =
-      testProperty (show (typeOf (undefined :: a))) $ test_blackscholes' runN e
+      testProperty (show (eltType @a)) $ test_blackscholes' runN e
 
 
 test_blackscholes'

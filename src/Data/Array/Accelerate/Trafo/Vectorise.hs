@@ -1,7 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -45,7 +44,6 @@ module Data.Array.Accelerate.Trafo.Vectorise (
 
 import Prelude                                          hiding ( exp, replicate, concat )
 import qualified Prelude                                as P
-import Data.Typeable
 import Control.Applicative                              hiding ( Const )
 import Data.Maybe
 
@@ -58,7 +56,6 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Classes.Eq       as S
 import qualified Data.Array.Accelerate.Language         as S
@@ -75,7 +72,7 @@ import Data.Array.Accelerate.Error
 --
 data Context env aenv env' aenv' where
   -- All environments are empty
-  EmptyC     :: Context () () () ()
+  EmptyC    :: Context () () () ()
 
   -- An expression that has already been lifted
   PushLExpC :: Elt e
@@ -109,7 +106,7 @@ type VectoriseAcc acc = forall aenv aenv' t.
                      -> LiftedAcc acc aenv' t
 
 data None sh = None sh
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 type instance EltRepr (None sh) = EltRepr sh
 
@@ -123,12 +120,6 @@ instance Shape sh => Slice (None sh) where
   type CoSliceShape (None sh) = sh
   type FullShape    (None sh) = sh
   sliceIndex _ = sliceNoneIndex (undefined :: sh)
-
-instance Shape sh => IsProduct Elt (None sh) where
-  type ProdRepr (None sh) = ((),sh)
-  fromProd _ (None sh) = ((),sh)
-  toProd _ ((),sh)     = None sh
-  prod _ _ = ProdRsnoc ProdRunit
 
 -- Lifting terms
 -- -------------

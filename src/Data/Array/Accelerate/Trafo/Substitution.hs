@@ -6,9 +6,11 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Substitution
@@ -23,7 +25,7 @@
 module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Renaming & Substitution
-  inline, substitute, compose,
+  inline, inlineVars, compose,
   subTop, subAtop,
 
   -- ** Weakening
@@ -34,16 +36,23 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Rebuilding terms
   RebuildAcc, Rebuildable(..), RebuildableAcc,
-  RebuildableExp(..), RebuildTup(..), rebuildWeakenVar
+  RebuildableExp(..), rebuildWeakenVar, rebuildLHS,
+
+  -- ** Checks
+  isIdentity, isIdentityIndexing, extractExpVars,
+  bindingIsTrivial,
 
 ) where
 
 import Data.Kind
 import Control.Applicative                              hiding ( Const )
+import Control.Monad
 import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Tuple(..), Array )
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Error
 import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 
 
@@ -72,7 +81,38 @@ import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 -- a class of operations on variables that is closed under shifting.
 --
 infixr `compose`
-infixr `substitute`
+-- infixr `substitute`
+
+lhsFullVars :: forall s a env1 env2. LeftHandSide s a env1 env2 -> Maybe (Vars s env2 a)
+lhsFullVars = fmap snd . go weakenId
+  where
+    go :: forall env env' b. (env' :> env2) -> LeftHandSide s b env env' -> Maybe (env :> env2, Vars s env2 b)
+    go k (LeftHandSideWildcard TupRunit) = Just (k, VarsNil)
+    go k (LeftHandSideSingle s) = Just $ (weakenSucc $ k, VarsSingle $ Var s $ k >:> ZeroIdx)
+    go k (LeftHandSidePair l1 l2)
+      | Just (k',  v2) <- go k  l2
+      , Just (k'', v1) <- go k' l1 = Just (k'', VarsPair v1 v2)
+    go _ _ = Nothing
+
+bindingIsTrivial :: LeftHandSide s a env1 env2 -> Vars s env2 b -> Maybe (a :~: b)
+bindingIsTrivial lhs vars
+  | Just lhsVars <- lhsFullVars lhs
+  , Just Refl    <- matchVars vars lhsVars
+  = Just Refl
+bindingIsTrivial _ _ = Nothing
+
+isIdentity :: PreOpenFun acc env aenv (a -> b) -> Maybe (a :~: b)
+isIdentity (Lam lhs (Body (extractExpVars -> Just vars))) = bindingIsTrivial lhs vars
+isIdentity _ = Nothing
+
+-- Detects whether the function is of the form \ix -> a ! ix
+isIdentityIndexing :: PreOpenFun acc env aenv (a -> b) -> Maybe (acc aenv (Array a b))
+isIdentityIndexing (Lam lhs (Body body))
+  | Index a ix <- body
+  , Just vars  <- extractExpVars ix
+  , Just Refl  <- bindingIsTrivial lhs vars
+  = Just a
+isIdentityIndexing _ = Nothing
 
 -- | Replace the first variable with the given expression. The environment
 -- shrinks.
@@ -83,40 +123,116 @@ inline :: RebuildableAcc acc
        -> PreOpenExp acc env      aenv t
 inline f g = Stats.substitution "inline" $ rebuildE (subTop g) f
 
+inlineVars :: forall acc env env' aenv t1 t2.
+              RebuildableAcc acc
+           => ELeftHandSide t1 env env'
+           -> PreOpenExp acc env' aenv t2
+           -> PreOpenExp acc env  aenv t1
+           -> Maybe (PreOpenExp acc env  aenv t2)
+inlineVars lhsBound expr bound
+  | Just vars <- lhsFullVars lhsBound = substitute (strengthenWithLHS lhsBound) weakenId vars expr
+  where
+    substitute :: forall env1 env2 t.
+               env1 :?> env2
+            -> env :> env2
+            -> ExpVars env1 t1
+            -> PreOpenExp acc env1 aenv t
+            -> Maybe (PreOpenExp acc env2 aenv t)
+    substitute _ k2 vars (extractExpVars -> Just vars')
+      | Just Refl <- matchVars vars vars' = Just $ weakenE k2 bound
+    substitute k1 k2 vars e = case e of
+      Let lhs e1 e2
+        | Exists lhs' <- rebuildLHS lhs
+                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) e2
+      Evar (Var t ix)     -> Evar . Var t <$> k1 ix
+      Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
+      Pair e1 e2          -> Pair <$> travE e1 <*> travE e2
+      Nil                 -> Just Nil
+      VecPack   vec e1    -> VecPack   vec <$> travE e1
+      VecUnpack vec e1    -> VecUnpack vec <$> travE e1
+      IndexSlice si e1 e2 -> IndexSlice si <$> travE e1 <*> travE e2
+      IndexFull  si e1 e2 -> IndexFull  si <$> travE e1 <*> travE e2
+      ToIndex   shr e1 e2 -> ToIndex   shr <$> travE e1 <*> travE e2
+      FromIndex shr e1 e2 -> FromIndex shr <$> travE e1 <*> travE e2
+      Cond e1 e2 e3       -> Cond <$> travE e1 <*> travE e2 <*> travE e3
+      While f1 f2 e1      -> While <$> travF f1 <*> travF f2 <*> travE e1
+      Const t c           -> Just $ Const t c
+      PrimConst c         -> Just $ PrimConst c
+      PrimApp p e1        -> PrimApp p <$> travE e1
+      Index a e1          -> Index a <$> travE e1
+      LinearIndex a e1    -> LinearIndex a <$> travE e1
+      Shape a             -> Just $ Shape a
+      ShapeSize shr e1    -> ShapeSize shr <$> travE e1
+      Undef t             -> Just $ Undef t
+      Coerce t1 t2 e1     -> Coerce t1 t2 <$> travE e1
+
+      where
+        travE :: PreOpenExp acc env1 aenv s -> Maybe (PreOpenExp acc env2 aenv s)
+        travE = substitute k1 k2 vars
+
+        travF :: PreOpenFun acc env1 aenv s -> Maybe (PreOpenFun acc env2 aenv s)
+        travF = substituteF k1 k2 vars
+
+    substituteF :: forall env1 env2 t.
+               env1 :?> env2
+            -> env :> env2
+            -> ExpVars env1 t1
+            -> PreOpenFun acc env1 aenv t
+            -> Maybe (PreOpenFun acc env2 aenv t)
+    substituteF k1 k2 vars (Body e) = Body <$> substitute k1 k2 vars e
+    substituteF k1 k2 vars (Lam lhs f)
+      | Exists lhs' <- rebuildLHS lhs = Lam lhs' <$> substituteF (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) f
+
+inlineVars _ _ _ = Nothing
+
+
 -- | Replace an expression that uses the top environment variable with another.
 -- The result of the first is let bound into the second.
 --
-substitute :: (RebuildableAcc acc, Elt b, Elt c)
-           => PreOpenExp acc (env, b) aenv c
-           -> PreOpenExp acc (env, a) aenv b
-           -> PreOpenExp acc (env, a) aenv c
-substitute f g
+{- substitute' :: RebuildableAcc acc
+            => PreOpenExp acc (env, b) aenv c
+            -> PreOpenExp acc (env, a) aenv b
+            -> PreOpenExp acc (env, a) aenv c
+substitute' f g
   | Stats.substitution "substitute" False = undefined
-
-  | Var ZeroIdx <- g    = f     -- don't rebind an identity function
-  | otherwise           = Let g $ rebuildE split f
+  | isIdentity f = g -- don't rebind an identity function
+  | isIdentity g = f
+  | otherwise = Let g $ rebuildE split f
   where
-    split :: Elt c => Idx (env,b) c -> PreOpenExp acc ((env,a),b) aenv c
+    split :: Idx (env,b) c -> PreOpenExp acc ((env,a),b) aenv c
     split ZeroIdx       = Var ZeroIdx
     split (SuccIdx ix)  = Var (SuccIdx (SuccIdx ix))
 
+substitute :: RebuildableAcc acc
+           => LeftHandSide b env envb
+           -> PreOpenExp acc envb c
+           -> LeftHandSide a env enva
+           -> PreOpenExp acc enva b
+-}
 
 -- | Composition of unary functions.
 --
-compose :: (RebuildableAcc acc, Elt c)
+compose :: RebuildableAcc acc
         => PreOpenFun acc env aenv (b -> c)
         -> PreOpenFun acc env aenv (a -> b)
         -> PreOpenFun acc env aenv (a -> c)
-compose (Lam (Body f)) (Lam (Body g)) = Stats.substitution "compose" . Lam . Body $ substitute f g
-compose _              _              = error "compose: impossible evaluation"
+compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
+  | Stats.substitution "compose" False = undefined
+  | Just Refl <- isIdentity f = g -- don't rebind an identity function
+  | Just Refl <- isIdentity g = f
 
-subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
-subTop s ZeroIdx      = s
-subTop _ (SuccIdx ix) = Var ix
+  | Exists lhsB' <- rebuildLHS lhsB
+  = Lam lhsA $ Body $ Let lhsB' b (weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c)
+  -- = Stats.substitution "compose" . Lam lhs2 . Body $ substitute' f g
+compose _                   _                   = error "compose: impossible evaluation"
+
+subTop :: PreOpenExp acc env aenv s -> ExpVar (env, s) t -> PreOpenExp acc env aenv t
+subTop s (Var _  ZeroIdx     ) = s
+subTop _ (Var tp (SuccIdx ix)) = Evar $ Var tp ix
 
 subAtop :: PreOpenAcc acc aenv t -> ArrayVar (aenv, t) (Array sh2 e2) -> PreOpenAcc acc aenv (Array sh2 e2)
-subAtop t (ArrayVar ZeroIdx      ) = t
-subAtop _ (ArrayVar (SuccIdx idx)) = Avar $ ArrayVar idx
+subAtop t (Var _    ZeroIdx      ) = t
+subAtop _ (Var repr (SuccIdx idx)) = Avar $ Var repr idx
 
 data Identity a = Identity { runIdentity :: a }
 
@@ -153,13 +269,13 @@ class Rebuildable f where
 class RebuildableExp f where
   {-# MINIMAL rebuildPartialE #-}
   rebuildPartialE :: (Applicative f', SyntacticExp fe)
-                  => (forall e'. Elt e' => Idx env e' -> f' (fe (AccClo (f env)) env' aenv e'))
+                  => (forall e'. ExpVar env e' -> f' (fe (AccClo (f env)) env' aenv e'))
                   -> f env aenv  e
                   -> f' (f env' aenv e)
 
   {-# INLINEABLE rebuildE #-}
   rebuildE :: SyntacticExp fe
-           => (forall e'. Elt e' => Idx env e' -> fe (AccClo (f env)) env' aenv e')
+           => (forall e'. ExpVar env e' -> fe (AccClo (f env)) env' aenv e')
            -> f env  aenv e
            -> f env' aenv e
   rebuildE v = runIdentity . rebuildPartialE (Identity . v)
@@ -189,14 +305,6 @@ instance RebuildableAcc acc => Rebuildable (PreOpenAfun acc) where
   type AccClo (PreOpenAfun acc) = acc
   {-# INLINEABLE rebuildPartial #-}
   rebuildPartial x = Stats.substitution "rebuild" $ rebuildAfun rebuildPartial x
-
--- Tuples have to be handled specially.
-newtype RebuildTup acc env aenv t = RebuildTup { unRTup :: Tuple (PreOpenExp acc env aenv) t }
-
-instance RebuildableAcc acc => Rebuildable (RebuildTup acc env) where
-  type AccClo (RebuildTup acc env) = acc
-  {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial v t = Stats.substitution "rebuild" . RebuildTup <$> rebuildTup rebuildPartial (pure . IE) v (unRTup t)
 
 instance Rebuildable OpenAcc where
   type AccClo OpenAcc = OpenAcc
@@ -240,20 +348,23 @@ class Sink f where
 
 instance Sink Idx where
   {-# INLINEABLE weaken #-}
-  weaken k = k
+  weaken = (>:>)
 
-instance Sink ArrayVar where
+instance Sink (Var s) where
   {-# INLINEABLE weaken #-}
-  weaken k (ArrayVar ix) = ArrayVar (k ix)
+  weaken k (Var s ix) = Var s (k >:> ix)
 
-instance Sink ArrayVars where
+instance Sink (Vars s) where
   {-# INLINEABLE weaken #-}
-  weaken _  ArrayVarsNil       = ArrayVarsNil
-  weaken k (ArrayVarsArray v)  = ArrayVarsArray $ weaken k v
-  weaken k (ArrayVarsPair v w) = ArrayVarsPair (weaken k v) (weaken k w)
+  weaken _  VarsNil       = VarsNil
+  weaken k (VarsSingle v) = VarsSingle $ weaken k v
+  weaken k (VarsPair v w) = VarsPair (weaken k v) (weaken k w)
 
 rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc env' (Array sh e)
-rebuildWeakenVar k (ArrayVar idx) = Avar $ ArrayVar $ k idx
+rebuildWeakenVar k (Var s idx) = Avar $ Var s $ k >:> idx
+
+rebuildWeakenEvar :: env :> env' -> ExpVar env t -> PreOpenExp acc env' aenv t
+rebuildWeakenEvar k (Var s idx) = Evar $ Var s $ k >:> idx
 
 instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
   {-# INLINEABLE weaken #-}
@@ -268,10 +379,6 @@ instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
   weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
 instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
-  {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
-
-instance RebuildableAcc acc => Sink (RebuildTup acc env) where
   {-# INLINEABLE weaken #-}
   weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
@@ -307,11 +414,11 @@ class SinkExp f where
 
 instance RebuildableAcc acc => SinkExp (PreOpenExp acc) where
   {-# INLINEABLE weakenE #-}
-  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+  weakenE v = Stats.substitution "weakenE" . rebuildE (rebuildWeakenEvar v)
 
 instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
   {-# INLINEABLE weakenE #-}
-  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+  weakenE v = Stats.substitution "weakenE" . rebuildE (rebuildWeakenEvar v)
 
 -- See above for why this is disabled.
 -- {-# RULES
@@ -332,11 +439,27 @@ type env :?> env' = forall t'. Idx env t' -> Maybe (Idx env' t')
 
 {-# INLINEABLE strengthen #-}
 strengthen :: forall f env env' t. Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
-strengthen k x = Stats.substitution "strengthen" $ rebuildPartial @f @Maybe @IdxA (\(ArrayVar idx) -> fmap (IA . ArrayVar) $ k idx) x -- (\(ArrayVar idx) -> fmap (IA . ArrayVar) $ k idx)
+strengthen k x = Stats.substitution "strengthen" $ rebuildPartial @f @Maybe @IdxA (\(Var s ix) -> fmap (IA . Var s) $ k ix) x
 
 {-# INLINEABLE strengthenE #-}
-strengthenE :: RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
-strengthenE k x = Stats.substitution "strengthenE" $ rebuildPartialE (fmap IE . k) x
+strengthenE :: forall f env env' aenv t. RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
+strengthenE k x = Stats.substitution "strengthenE" $ rebuildPartialE @f @Maybe @IdxE (\(Var tp ix) -> fmap (IE . Var tp) $ k ix) x
+
+strengthenWithLHS :: LeftHandSide s t env1 env2 -> env2 :?> env1
+strengthenWithLHS (LeftHandSideWildcard _) = Just
+strengthenWithLHS (LeftHandSideSingle _) = \ix -> case ix of
+  ZeroIdx   -> Nothing
+  SuccIdx i -> Just i
+strengthenWithLHS (LeftHandSidePair l1 l2) = strengthenWithLHS l2 >=> strengthenWithLHS l1
+
+strengthenAfter :: LeftHandSide s t env1 env2 -> LeftHandSide s t env1' env2' -> env1 :?> env1' -> env2 :?> env2'
+strengthenAfter (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
+strengthenAfter (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
+  ZeroIdx   -> Just ZeroIdx
+  SuccIdx i -> SuccIdx <$> k i
+strengthenAfter (LeftHandSidePair l1 l2) (LeftHandSidePair l1' l2') k
+  = strengthenAfter l2 l2' $ strengthenAfter l1 l1' k
+strengthenAfter _ _ _ = error "Substitution.strengthenAfter: left hand sides do not match"
 
 -- Simultaneous Substitution ===================================================
 --
@@ -348,98 +471,97 @@ strengthenE k x = Stats.substitution "strengthenE" $ rebuildPartialE (fmap IE . 
 -- SEE: [Weakening]
 --
 class SyntacticExp f where
-  varIn         :: Elt t => Idx env t        -> f acc env aenv t
-  expOut        :: Elt t => f acc env aenv t -> PreOpenExp acc env aenv t
-  weakenExp     :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc (env, s) aenv t
-  -- weakenExpAcc  :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc env (aenv, s) t
+  varIn         :: ExpVar env t       -> f acc env aenv t
+  expOut        :: f acc env aenv t -> PreOpenExp acc env aenv t
+  weakenExp     :: RebuildAcc acc -> f acc env aenv t -> f acc (env, s) aenv t
+  -- weakenExpAcc  :: RebuildAcc acc -> f acc env aenv t -> f acc env (aenv, s) t
 
-newtype IdxE (acc :: Type -> Type -> Type) env aenv t = IE { unIE :: Idx env t }
+newtype IdxE (acc :: Type -> Type -> Type) env aenv t = IE { unIE :: ExpVar env t }
 
 instance SyntacticExp IdxE where
   varIn          = IE
-  expOut         = Var . unIE
-  weakenExp _    = IE . SuccIdx . unIE
+  expOut         = Evar . unIE
+  weakenExp _ (IE (Var tp ix)) = IE $ Var tp $ SuccIdx ix
   -- weakenExpAcc _ = IE . unIE
 
 instance SyntacticExp PreOpenExp where
-  varIn          = Var
+  varIn          = Evar
   expOut         = id
   weakenExp k    = runIdentity . rebuildPreOpenExp k (Identity . weakenExp k . IE) (Identity . IA)
   -- weakenExpAcc k = runIdentity . rebuildPreOpenExp k (Identity . IE) (Identity . weakenAcc k . IA)
 
 {-# INLINEABLE shiftE #-}
 shiftE
-    :: (Applicative f, SyntacticExp fe, Elt t)
+    :: (Applicative f, SyntacticExp fe)
     => RebuildAcc acc
-    -> (forall t'. Elt t' => Idx env t' -> f (fe acc env' aenv t'))
-    -> Idx       (env,  s)      t
-    -> f (fe acc (env', s) aenv t)
-shiftE _ _ ZeroIdx      = pure $ varIn ZeroIdx
-shiftE k v (SuccIdx ix) = weakenExp k <$> (v ix)
+    -> RebuildEvar f fe acc env      env'      aenv
+    -> RebuildEvar f fe acc (env, s) (env', s) aenv
+shiftE _ _ (Var tp ZeroIdx)      = pure $ varIn (Var tp ZeroIdx)
+shiftE k v (Var tp (SuccIdx ix)) = weakenExp k <$> v (Var tp ix)
+
+{-# INLINEABLE shiftE' #-}
+shiftE'
+    :: (Applicative f, SyntacticExp fa)
+    => ELeftHandSide t env1 env1'
+    -> ELeftHandSide t env2 env2'
+    -> RebuildAcc acc
+    -> RebuildEvar f fa acc env1  env2  aenv
+    -> RebuildEvar f fa acc env1' env2' aenv
+shiftE' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
+shiftE' (LeftHandSideSingle _)   (LeftHandSideSingle _)   k v = shiftE k v
+shiftE' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftE' b1 b2 k $ shiftE' a1 a2 k v
+shiftE' _ _ _ _ = error "Substitution: left hand sides do not match"
+
 
 {-# INLINEABLE rebuildPreOpenExp #-}
 rebuildPreOpenExp
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
-    -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
+    -> RebuildEvar f fe acc env env' aenv'
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenExp acc env  aenv t
     -> f (PreOpenExp acc env' aenv' t)
 rebuildPreOpenExp k v av exp =
   case exp of
-    Const c             -> pure (Const c)
-    PrimConst c         -> pure (PrimConst c)
-    Undef               -> pure Undef
-    IndexNil            -> pure IndexNil
-    IndexAny            -> pure IndexAny
-    Var ix              -> expOut       <$> v ix
-    Let a b             -> Let          <$> rebuildPreOpenExp k v av a  <*> rebuildPreOpenExp k (shiftE k v) av b
-    Tuple tup           -> Tuple        <$> rebuildTup k v av tup
-    Prj tup e           -> Prj tup      <$> rebuildPreOpenExp k v av e
-    IndexCons sh sz     -> IndexCons    <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av sz
-    IndexHead sh        -> IndexHead    <$> rebuildPreOpenExp k v av sh
-    IndexTail sh        -> IndexTail    <$> rebuildPreOpenExp k v av sh
-    IndexSlice x ix sh  -> IndexSlice x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
-    IndexFull x ix sl   -> IndexFull x  <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
-    ToIndex sh ix       -> ToIndex      <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    FromIndex sh ix     -> FromIndex    <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    Cond p t e          -> Cond         <$> rebuildPreOpenExp k v av p  <*> rebuildPreOpenExp k v av t  <*> rebuildPreOpenExp k v av e
-    While p f x         -> While        <$> rebuildFun k v av p         <*> rebuildFun k v av f         <*> rebuildPreOpenExp k v av x
-    PrimApp f x         -> PrimApp f    <$> rebuildPreOpenExp k v av x
-    Index a sh          -> Index        <$> k av a                      <*> rebuildPreOpenExp k v av sh
-    LinearIndex a i     -> LinearIndex  <$> k av a                      <*> rebuildPreOpenExp k v av i
-    Shape a             -> Shape        <$> k av a
-    ShapeSize sh        -> ShapeSize    <$> rebuildPreOpenExp k v av sh
-    Intersect s t       -> Intersect    <$> rebuildPreOpenExp k v av s  <*> rebuildPreOpenExp k v av t
-    Union s t           -> Union        <$> rebuildPreOpenExp k v av s  <*> rebuildPreOpenExp k v av t
-    Foreign ff f e      -> Foreign ff f <$> rebuildPreOpenExp k v av e
-    Coerce e            -> Coerce       <$> rebuildPreOpenExp k v av e
-
-{-# INLINEABLE rebuildTup #-}
-rebuildTup
-    :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
-    => RebuildAcc acc
-    -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
-    -> RebuildAvar f fa acc aenv aenv'
-    -> Tuple (PreOpenExp acc env  aenv)  t
-    -> f (Tuple (PreOpenExp acc env' aenv') t)
-rebuildTup k v av tup =
-  case tup of
-    NilTup      -> pure NilTup
-    SnocTup t e -> SnocTup <$> rebuildTup k v av t <*> rebuildPreOpenExp k v av e
+    Const t c           -> pure $ Const t c
+    PrimConst c         -> pure $ PrimConst c
+    Undef t             -> pure $ Undef t
+    Evar var            -> expOut          <$> v var
+    Let lhs a b
+      | Exists lhs' <- rebuildLHS lhs
+                        -> Let lhs'        <$> rebuildPreOpenExp k v av a  <*> rebuildPreOpenExp k (shiftE' lhs lhs' k v) av b
+    Pair e1 e2          -> Pair            <$> rebuildPreOpenExp k v av e1 <*> rebuildPreOpenExp k v av e2
+    Nil                 -> pure Nil
+    VecPack   vec e     -> VecPack   vec   <$> rebuildPreOpenExp k v av e
+    VecUnpack vec e     -> VecUnpack vec   <$> rebuildPreOpenExp k v av e
+    IndexSlice x ix sh  -> IndexSlice x    <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
+    IndexFull x ix sl   -> IndexFull x     <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
+    ToIndex shr sh ix   -> ToIndex shr     <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    FromIndex shr sh ix -> FromIndex shr   <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    Cond p t e          -> Cond            <$> rebuildPreOpenExp k v av p  <*> rebuildPreOpenExp k v av t  <*> rebuildPreOpenExp k v av e
+    While p f x         -> While           <$> rebuildFun k v av p         <*> rebuildFun k v av f         <*> rebuildPreOpenExp k v av x
+    PrimApp f x         -> PrimApp f       <$> rebuildPreOpenExp k v av x
+    Index a sh          -> Index           <$> k av a                      <*> rebuildPreOpenExp k v av sh
+    LinearIndex a i     -> LinearIndex     <$> k av a                      <*> rebuildPreOpenExp k v av i
+    Shape a             -> Shape           <$> k av a
+    ShapeSize shr sh    -> ShapeSize shr   <$> rebuildPreOpenExp k v av sh
+    Foreign tp ff f e   -> Foreign tp ff f <$> rebuildPreOpenExp k v av e
+    Coerce t1 t2 e      -> Coerce t1 t2    <$> rebuildPreOpenExp k v av e
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun
     :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
     => RebuildAcc acc
-    -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
+    -> RebuildEvar f fe acc env env' aenv'
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenFun acc env  aenv  t
     -> f (PreOpenFun acc env' aenv' t)
 rebuildFun k v av fun =
   case fun of
     Body e      -> Body <$> rebuildPreOpenExp k v av e
-    Lam f       -> Lam  <$> rebuildFun k (shiftE k v) av f
+    Lam lhs f
+      | Exists lhs' <- rebuildLHS lhs
+        -> Lam lhs' <$> rebuildFun k (shiftE' lhs lhs' k v) av f
 
 -- The array environment
 -- -----------------
@@ -458,9 +580,9 @@ class SyntacticAcc f where
   weakenAcc     :: RebuildAcc acc -> f acc aenv (Array sh e) -> f acc (aenv, s) (Array sh e)
 
 instance SyntacticAcc IdxA where
-  avarIn                          = IA
-  accOut                          = Avar . unIA
-  weakenAcc _ (IA (ArrayVar idx)) = IA $ ArrayVar $ SuccIdx idx
+  avarIn                       = IA
+  accOut                       = Avar . unIA
+  weakenAcc _ (IA (Var s idx)) = IA $ Var s $ SuccIdx idx
 
 instance SyntacticAcc PreOpenAcc where
   avarIn        = Avar
@@ -470,6 +592,9 @@ instance SyntacticAcc PreOpenAcc where
 type RebuildAvar f (fa :: (Type -> Type -> Type) -> Type -> Type -> Type) acc aenv aenv'
     = forall sh e. ArrayVar aenv (Array sh e) -> f (fa acc aenv' (Array sh e))
 
+type RebuildEvar f fe (acc :: Type -> Type -> Type) env env' aenv' =
+  forall t'. ExpVar env t' -> f (fe acc env' aenv' t')
+
 {-# INLINEABLE shiftA #-}
 shiftA
     :: (Applicative f, SyntacticAcc fa)
@@ -477,20 +602,20 @@ shiftA
     -> RebuildAvar f fa acc aenv aenv'
     -> ArrayVar    (aenv,  s) (Array sh e)
     -> f (fa   acc (aenv', s) (Array sh e))
-shiftA _ _ (ArrayVar ZeroIdx)      = pure $ avarIn $ ArrayVar ZeroIdx
-shiftA k v (ArrayVar (SuccIdx ix)) = weakenAcc k <$> v (ArrayVar ix)
+shiftA _ _ (Var s ZeroIdx)      = pure $ avarIn $ Var s ZeroIdx
+shiftA k v (Var s (SuccIdx ix)) = weakenAcc k <$> v (Var s ix)
 
 shiftA'
     :: (Applicative f, SyntacticAcc fa)
-    => LeftHandSide t aenv1 aenv1'
-    -> LeftHandSide t aenv2 aenv2'
+    => ALeftHandSide t aenv1 aenv1'
+    -> ALeftHandSide t aenv2 aenv2'
     -> RebuildAcc acc
     -> RebuildAvar f fa acc aenv1  aenv2
     -> RebuildAvar f fa acc aenv1' aenv2'
 shiftA' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
-shiftA'  LeftHandSideArray        LeftHandSideArray       k v = shiftA k v
+shiftA' (LeftHandSideSingle _)   (LeftHandSideSingle _)   k v = shiftA k v
 shiftA' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftA' b1 b2 k $ shiftA' a1 a2 k v
-shiftA' _ _ _ _ = error "Substitution: left hand sides do not match"
+shiftA' _ _ _ _ = $internalError "Substitution/shiftA'" "left hand sides do not match"
 
 {-# INLINEABLE rebuildOpenAcc #-}
 rebuildOpenAcc
@@ -509,38 +634,39 @@ rebuildPreOpenAcc
     -> f (PreOpenAcc acc aenv' t)
 rebuildPreOpenAcc k av acc =
   case acc of
-    Use a                   -> pure (Use a)
-    Alet lhs a b            -> rebuildAlet k av lhs a b
-    Avar ix                 -> accOut       <$> av ix
-    Apair as bs             -> Apair        <$> k av as <*> k av bs
-    Anil                    -> pure Anil
-    Apply f a               -> Apply        <$> rebuildAfun k av f <*> k av a
-    Acond p t e             -> Acond        <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
-    Awhile p f a            -> Awhile       <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
-    Unit e                  -> Unit         <$> rebuildPreOpenExp k (pure . IE) av e
-    Reshape e a             -> Reshape      <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
-    Generate e f            -> Generate     <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
-    Transform sh ix f a     -> Transform    <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
-    Replicate sl slix a     -> Replicate sl <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
-    Slice sl a slix         -> Slice sl     <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
-    Map f a                 -> Map          <$> rebuildFun k (pure . IE) av f <*> k av a
-    ZipWith f a1 a2         -> ZipWith      <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
-    Fold f z a              -> Fold         <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Fold1 f a               -> Fold1        <$> rebuildFun k (pure . IE) av f <*> k av a
-    FoldSeg f z a s         -> FoldSeg      <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
-    Fold1Seg f a s          -> Fold1Seg     <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
-    Scanl f z a             -> Scanl        <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl' f z a            -> Scanl'       <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl1 f a              -> Scanl1       <$> rebuildFun k (pure . IE) av f <*> k av a
-    Scanr f z a             -> Scanr        <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr' f z a            -> Scanr'       <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr1 f a              -> Scanr1       <$> rebuildFun k (pure . IE) av f <*> k av a
-    Permute f1 a1 f2 a2     -> Permute      <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
-    Backpermute sh f a      -> Backpermute  <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
-    Stencil f b a           -> Stencil      <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b  <*> k av a
-    Stencil2 f b1 a1 b2 a2  -> Stencil2     <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b1 <*> k av a1 <*> rebuildBoundary k av b2 <*> k av a2
+    Use repr a                -> pure $ Use repr a
+    Alet lhs a b              -> rebuildAlet k av lhs a b
+    Avar ix                   -> accOut          <$> av ix
+    Apair as bs               -> Apair           <$> k av as <*> k av bs
+    Anil                      -> pure Anil
+    Apply repr f a            -> Apply repr      <$> rebuildAfun k av f <*> k av a
+    Acond p t e               -> Acond           <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
+    Awhile p f a              -> Awhile          <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
+    Unit tp e                 -> Unit tp         <$> rebuildPreOpenExp k (pure . IE) av e
+    Reshape shr e a           -> Reshape shr     <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
+    Generate repr e f         -> Generate repr   <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
+    Transform repr sh ix f a  -> Transform repr  <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
+    Replicate sl slix a       -> Replicate sl    <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
+    Slice sl a slix           -> Slice sl        <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
+    Map tp f a                -> Map tp          <$> rebuildFun k (pure . IE) av f <*> k av a
+    ZipWith tp f a1 a2        -> ZipWith tp      <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
+    Fold f z a                -> Fold            <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Fold1 f a                 -> Fold1           <$> rebuildFun k (pure . IE) av f <*> k av a
+    FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
+    Fold1Seg itp f a s        -> Fold1Seg itp    <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
+    Scanl f z a               -> Scanl           <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl' f z a              -> Scanl'          <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl1 f a                -> Scanl1          <$> rebuildFun k (pure . IE) av f <*> k av a
+    Scanr f z a               -> Scanr           <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr' f z a              -> Scanr'          <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr1 f a                -> Scanr1          <$> rebuildFun k (pure . IE) av f <*> k av a
+    Permute f1 a1 f2 a2       -> Permute         <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
+    Backpermute shr sh f a    -> Backpermute shr <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
+    Stencil sr tp f b a       -> Stencil sr tp   <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b  <*> k av a
+    Stencil2 s1 s2 tp f b1 a1 b2 a2
+                              -> Stencil2 s1 s2 tp <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b1 <*> k av a1 <*> rebuildBoundary k av b2 <*> k av a2
+    Aforeign repr ff afun as  -> Aforeign repr ff afun <$> k av as
     -- Collect seq             -> Collect      <$> rebuildSeq k av seq
-    Aforeign ff afun as     -> Aforeign ff afun <$> k av as
 
 {-# INLINEABLE rebuildAfun #-}
 rebuildAfun
@@ -549,30 +675,31 @@ rebuildAfun
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAfun acc aenv  t
     -> f (PreOpenAfun acc aenv' t)
-rebuildAfun k av afun =
-  case afun of
-    Abody b -> Abody <$> k av b
-    Alam lhs1 f -> case rebuildLHS lhs1 of
-      Exists lhs2 -> Alam lhs2 <$> rebuildAfun k (shiftA' lhs1 lhs2 k av) f
+rebuildAfun k av (Abody b) = Abody <$> k av b
+rebuildAfun k av (Alam lhs1 f)
+  | Exists lhs2 <- rebuildLHS lhs1
+  = Alam lhs2 <$> rebuildAfun k (shiftA' lhs1 lhs2 k av) f
 
 rebuildAlet
     :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv1 aenv2
-    -> LeftHandSide bndArrs aenv1 aenv1'
+    -> ALeftHandSide bndArrs aenv1 aenv1'
     -> acc aenv1  bndArrs
     -> acc aenv1' arrs
     -> f (PreOpenAcc acc aenv2 arrs)
-rebuildAlet k av lhs1 bind1 body1 = case rebuildLHS lhs1 of
-  Exists lhs2 -> Alet lhs2 <$> k av bind1 <*> k (shiftA' lhs1 lhs2 k av) body1
+rebuildAlet k av lhs1 bind1 body1
+  | Exists lhs2 <- rebuildLHS lhs1
+  = Alet lhs2 <$> k av bind1 <*> k (shiftA' lhs1 lhs2 k av) body1
 
 {-# INLINEABLE rebuildLHS #-}
-rebuildLHS :: LeftHandSide arr aenv1 aenv1' -> Exists (LeftHandSide arr aenv2)
+rebuildLHS :: LeftHandSide s t aenv1 aenv1' -> Exists (LeftHandSide s t aenv2)
 rebuildLHS (LeftHandSideWildcard r) = Exists $ LeftHandSideWildcard r
-rebuildLHS LeftHandSideArray = Exists $ LeftHandSideArray
-rebuildLHS (LeftHandSidePair as bs) = case rebuildLHS as of
-  Exists as' -> case rebuildLHS bs of
-    Exists bs' -> Exists $ LeftHandSidePair as' bs'
+rebuildLHS (LeftHandSideSingle s)   = Exists $ LeftHandSideSingle s
+rebuildLHS (LeftHandSidePair as bs)
+  | Exists as' <- rebuildLHS as
+  , Exists bs' <- rebuildLHS bs
+  = Exists $ LeftHandSidePair as' bs'
 
 {-# INLINEABLE rebuildBoundary #-}
 rebuildBoundary
@@ -634,4 +761,10 @@ rebuildC k v c =
     rebuildT NilAtup        = pure NilAtup
     rebuildT (SnocAtup t s) = SnocAtup <$> (rebuildT t) <*> (rebuildC k v s)
 --}
+
+extractExpVars :: PreOpenExp acc env aenv a -> Maybe (ExpVars env a)
+extractExpVars Nil          = Just VarsNil
+extractExpVars (Pair e1 e2) = VarsPair <$> extractExpVars e1 <*> extractExpVars e2
+extractExpVars (Evar v)     = Just $ VarsSingle v
+extractExpVars _            = Nothing
 

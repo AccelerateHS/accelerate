@@ -1,5 +1,4 @@
 {-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
@@ -35,10 +34,8 @@ module Data.Array.Accelerate.Array.Lifted (
 ) where
 
 import Prelude                                                  hiding ( concat )
-import Data.Typeable
 
 -- friends
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
@@ -51,37 +48,19 @@ import qualified Data.Array.Accelerate.Array.Representation     as Repr
 -- of arrays, are still members of the 'Arrays' class.
 
 newtype Vector' a = Vector' (LiftedRepr (ArrRepr a) a)
-  deriving Typeable
 
 type family LiftedRepr r a where
   LiftedRepr ()     ()                 = ((),Scalar Int)
   LiftedRepr (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
   LiftedRepr (l,r) a                   = LiftedTupleRepr (TupleRepr a)
 
-type family LiftedTupleRepr t :: *
+type family LiftedTupleRepr t :: Type
 type instance LiftedTupleRepr () = ()
 type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
 
 type LiftedArray sh e = Vector' (Array sh e)
 
-instance Arrays t => IsProduct Arrays (Vector' t) where
-  type ProdRepr (Vector' t) = LiftedRepr (ArrRepr t) t
-  fromProd _ (Vector' t) = t
-  toProd _ = Vector'
-  prod _ _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ProdRsnoc ProdRunit
-                ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
-                ArraysFtuple -> tup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
-    where
-      tup :: forall a. ProdR Arrays a -> ProdR Arrays (LiftedTupleRepr a)
-      tup ProdRunit     = ProdRunit
-      tup (ProdRsnoc t) = swiz
-        where
-          swiz :: forall l r. (a ~ (l,r), Arrays r) => ProdR Arrays (LiftedTupleRepr a)
-          swiz | IsC <- isArraysFlat (undefined :: r)
-               = ProdRsnoc (tup t)
-
-instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
+instance Arrays t => Arrays (Vector' t) where
   type ArrRepr (Vector' t) = ArrRepr (TupleRepr (Vector' t))
   arrays _ = arrs (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
     where

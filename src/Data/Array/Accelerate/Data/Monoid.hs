@@ -43,7 +43,6 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 #if __GLASGOW_HASKELL__ >= 800
 import Data.Array.Accelerate.Data.Semigroup                         ()
@@ -67,7 +66,6 @@ pattern Sum_ x = Pattern x
 {-# COMPLETE Sum_ #-}
 
 instance Elt a => Elt (Sum a)
-instance Elt a => IsProduct Elt (Sum a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Sum a) where
   type Plain (Sum a) = Sum (Plain a)
@@ -127,7 +125,6 @@ pattern Product_ x = Pattern x
 {-# COMPLETE Product_ #-}
 
 instance Elt a => Elt (Product a)
-instance Elt a => IsProduct Elt (Product a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   type Plain (Product a) = Product (Plain a)

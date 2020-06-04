@@ -42,15 +42,14 @@
 
 module Data.Array.Accelerate.Interpreter (
 
-  Smart.Acc, Arrays,
+  Smart.Acc, Sugar.Arrays,
   Afunction, AfunctionR,
 
   -- * Interpret an array expression
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrj,
-  evalPrim, evalPrimConst, evalUndef, evalCoerce,
+  evalPrim, evalPrimConst, evalUndef, evalUndefScalar, evalCoerceScalar,
 
 ) where
 
@@ -63,7 +62,6 @@ import Data.Bits
 import Data.Char                                                    ( chr, ord )
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
-import Data.Typeable
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
@@ -71,20 +69,16 @@ import Prelude                                                      hiding ( (!!
 
 -- friends
 import Data.Array.Accelerate.AST                                    hiding ( Boundary, PreBoundary(..) )
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Analysis.Type                          ( sizeOfScalarType, sizeOfSingleType )
+import Data.Array.Accelerate.Analysis.Type                          ( sizeOfSingleType )
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.AST                          as AST
-import qualified Data.Array.Accelerate.Array.Representation         as R
+import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar
 import qualified Data.Array.Accelerate.Smart                        as Smart
 import qualified Data.Array.Accelerate.Trafo                        as AST
-
 import qualified Data.Array.Accelerate.Debug                        as D
 
 
@@ -93,7 +87,7 @@ import qualified Data.Array.Accelerate.Debug                        as D
 
 -- | Run a complete embedded array program using the reference interpreter.
 --
-run :: Arrays a => Smart.Acc a -> a
+run :: Sugar.Arrays a => Smart.Acc a -> a
 run a = unsafePerformIO execute
   where
     !acc    = convertAcc a
@@ -101,11 +95,11 @@ run a = unsafePerformIO execute
       D.dumpGraph $!! acc
       D.dumpSimplStats
       res <- phase "execute" D.elapsed $ evaluate $ evalOpenAcc acc Empty
-      return $ toArr res
+      return $ Sugar.toArr $ snd res
 
 -- | This is 'runN' specialised to an array program of one argument.
 --
-run1 :: (Arrays a, Arrays b) => (Smart.Acc a -> Smart.Acc b) -> a -> b
+run1 :: (Sugar.Arrays a, Sugar.Arrays b) => (Smart.Acc a -> Smart.Acc b) -> a -> b
 run1 = runN
 
 -- | Prepare and execute an embedded array program.
@@ -121,8 +115,8 @@ runN f = go
     !go     = eval (afunctionRepr @f) afun Empty
     --
     eval :: AfunctionRepr g (AfunctionR g) (AreprFunctionR g) -> DelayedOpenAfun aenv (AreprFunctionR g) -> Val aenv -> AfunctionR g
-    eval (AfunctionReprLam reprF) (Alam lhs f) aenv = \a -> eval reprF f $ aenv `push` (lhs, fromArr a)
-    eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" D.elapsed (toArr <$> evaluate (evalOpenAcc b aenv))
+    eval (AfunctionReprLam reprF) (Alam lhs f) aenv = \a -> eval reprF f $ aenv `push` (lhs, Sugar.fromArr a)
+    eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" D.elapsed (Sugar.toArr . snd <$> evaluate (evalOpenAcc b aenv))
     eval _                        _aenv        _    = error "Two men say they're Jesus; one of them must be wrong"
 
 -- -- | Stream a lazily read list of input arrays through the given program,
@@ -148,7 +142,8 @@ phase n fmt go = D.timed D.dump_phases (\wall cpu -> printf "phase %s: %s" n (fm
 -- not require an optional Manifest|Delayed data type to evaluate the program.
 --
 data Delayed a where
-  Delayed :: sh
+  Delayed :: ArrayR (Array sh e)
+          -> sh
           -> (sh -> e)
           -> (Int -> e)
           -> Delayed (Array sh e)
@@ -157,13 +152,18 @@ data Delayed a where
 -- Array expression evaluation
 -- ---------------------------
 
-type EvalAcc acc = forall aenv a. acc aenv a -> Val aenv -> a
+type EvalAcc acc = forall aenv a. acc aenv a -> Val aenv -> WithReprs a
+
+type WithReprs acc = (ArraysR acc, acc)
+
+fromFunction' :: ArrayR (Array sh e) -> sh -> (sh -> e) -> WithReprs (Array sh e)
+fromFunction' repr sh f = (TupRsingle repr, fromFunction repr sh f)
 
 -- Evaluate an open array function
 --
 evalOpenAfun :: DelayedOpenAfun aenv f -> Val aenv -> f
 evalOpenAfun (Alam lhs f) aenv = \a -> evalOpenAfun f $ aenv `push` (lhs, a)
-evalOpenAfun (Abody b)    aenv = evalOpenAcc b aenv
+evalOpenAfun (Abody b)    aenv = snd $ evalOpenAcc b aenv
 
 
 -- The core interpreter for optimised array programs
@@ -172,19 +172,20 @@ evalOpenAcc
     :: forall aenv a.
        DelayedOpenAcc aenv a
     -> Val aenv
-    -> a
+    -> WithReprs a
 evalOpenAcc AST.Delayed{}       _    = $internalError "evalOpenAcc" "expected manifest array"
 evalOpenAcc (AST.Manifest pacc) aenv =
   let
-      manifest :: forall a'. DelayedOpenAcc aenv a' -> a'
+      manifest :: forall a'. DelayedOpenAcc aenv a' -> WithReprs a'
       manifest acc =
-        let a'   = evalOpenAcc acc aenv
-            repr = arraysRepr acc
-        in  rnfArrays repr a' `seq` a'
+        let (repr, a') = evalOpenAcc acc aenv
+        in  rnfArrays repr a' `seq` (repr, a')
 
-      delayed :: (Shape sh, Elt e) => DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
-      delayed AST.Delayed{..} = Delayed (evalE extentD) (evalF indexD) (evalF linearIndexD)
-      delayed (manifest -> a) = Delayed (shape a) (a!) (a!!)
+      delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
+      delayed AST.Delayed{..} = Delayed reprD (evalE extentD) (evalF indexD) (evalF linearIndexD)
+      delayed a' = Delayed repr (shape a) ((repr, a) !) ((arrayRtype repr, a) !!)
+        where
+          (TupRsingle repr, a) = manifest a'
 
       evalE :: DelayedExp aenv t -> t
       evalE exp = evalPreExp evalOpenAcc exp aenv
@@ -196,37 +197,42 @@ evalOpenAcc (AST.Manifest pacc) aenv =
       evalB bnd = evalPreBoundary evalOpenAcc bnd aenv
   in
   case pacc of
-    Avar (ArrayVar ix)          -> prj ix aenv
-    Alet lhs acc1 acc2          -> evalOpenAcc acc2 $ aenv `push` (lhs, manifest acc1)
-    Apair acc1 acc2             -> (manifest acc1, manifest acc2)
-    Anil                        -> ()
-    Apply afun acc              -> evalOpenAfun afun aenv  $ manifest acc
-    Aforeign _ afun acc         -> evalOpenAfun afun Empty $ manifest acc
+    Avar (Var repr ix)          -> (TupRsingle repr, prj ix aenv)
+    Alet lhs acc1 acc2          -> evalOpenAcc acc2 $ aenv `push` (lhs, snd $ manifest acc1)
+    Apair acc1 acc2             -> let
+                                     (r1, a1) = manifest acc1
+                                     (r2, a2) = manifest acc2
+                                   in
+                                     (TupRpair r1 r2, (a1, a2))
+    Anil                        -> (TupRunit, ())
+    Apply repr afun acc         -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
+    Aforeign repr _ afun acc    -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
       | evalE p                 -> manifest acc1
       | otherwise               -> manifest acc2
 
-    Awhile cond body acc        -> go (manifest acc)
+    Awhile cond body acc        -> (repr, go initial)
       where
+        (repr, initial) = manifest acc
         p       = evalOpenAfun cond aenv
         f       = evalOpenAfun body aenv
         go !x
-          | p x ! Z     = go (f x)
-          | otherwise   = x
+          | (ArrayR ShapeRz (TupRsingle scalarTypeBool), p x) ! () = go (f x)
+          | otherwise = x
 
-    Use arr                     -> arr
-    Unit e                      -> unitOp (evalE e)
+    Use repr arr                -> (TupRsingle repr, arr)
+    Unit tp e                   -> unitOp tp (evalE e)
     -- Collect s                   -> evalSeq defaultSeqConfig s aenv
 
     -- Producers
     -- ---------
-    Map f acc                   -> mapOp (evalF f) (delayed acc)
-    Generate sh f               -> generateOp (evalE sh) (evalF f)
-    Transform sh p f acc        -> transformOp (evalE sh) (evalF p) (evalF f) (delayed acc)
-    Backpermute sh p acc        -> backpermuteOp (evalE sh) (evalF p) (delayed acc)
-    Reshape sh acc              -> reshapeOp (evalE sh) (manifest acc)
+    Map tp f acc                -> mapOp tp (evalF f) (delayed acc)
+    Generate repr sh f          -> generateOp repr (evalE sh) (evalF f)
+    Transform repr sh p f acc   -> transformOp repr (evalE sh) (evalF p) (evalF f) (delayed acc)
+    Backpermute shr sh p acc    -> backpermuteOp shr (evalE sh) (evalF p) (delayed acc)
+    Reshape shr sh acc          -> reshapeOp shr (evalE sh) (manifest acc)
 
-    ZipWith f acc1 acc2         -> zipWithOp (evalF f) (delayed acc1) (delayed acc2)
+    ZipWith tp f acc1 acc2      -> zipWithOp tp (evalF f) (delayed acc1) (delayed acc2)
     Replicate slice slix acc    -> replicateOp slice (evalE slix) (manifest acc)
     Slice slice acc slix        -> sliceOp slice (manifest acc) (evalE slix)
 
@@ -234,8 +240,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     -- ---------
     Fold f z acc                -> foldOp (evalF f) (evalE z) (delayed acc)
     Fold1 f acc                 -> fold1Op (evalF f) (delayed acc)
-    FoldSeg f z acc seg         -> foldSegOp (evalF f) (evalE z) (delayed acc) (delayed seg)
-    Fold1Seg f acc seg          -> fold1SegOp (evalF f) (delayed acc) (delayed seg)
+    FoldSeg i f z acc seg       -> foldSegOp i (evalF f) (evalE z) (delayed acc) (delayed seg)
+    Fold1Seg i f acc seg        -> fold1SegOp i (evalF f) (delayed acc) (delayed seg)
     Scanl f z acc               -> scanlOp (evalF f) (evalE z) (delayed acc)
     Scanl' f z acc              -> scanl'Op (evalF f) (evalE z) (delayed acc)
     Scanl1 f acc                -> scanl1Op (evalF f) (delayed acc)
@@ -243,55 +249,58 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Scanr' f z acc              -> scanr'Op (evalF f) (evalE z) (delayed acc)
     Scanr1 f acc                -> scanr1Op (evalF f) (delayed acc)
     Permute f def p acc         -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
-    Stencil sten b acc          -> stencilOp (evalF sten) (evalB b) (delayed acc)
-    Stencil2 sten b1 a1 b2 a2   -> stencil2Op (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
+    Stencil s tp sten b acc     -> stencilOp s tp (evalF sten) (evalB b) (delayed acc)
+    Stencil2 s1 s2 tp sten b1 a1 b2 a2
+                                -> stencil2Op s1 s2 tp (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
 
 -- Array primitives
 -- ----------------
 
-unitOp :: Elt e => e -> Scalar e
-unitOp e = fromFunction Z (const e)
+unitOp :: TupleType e -> e -> WithReprs (Scalar e)
+unitOp tp e = fromFunction' (ArrayR ShapeRz tp) () (const e)
 
 
 generateOp
-    :: (Shape sh, Elt e)
-    => sh
+    :: ArrayR (Array sh e)
+    -> sh
     -> (sh -> e)
-    -> Array sh e
-generateOp = fromFunction
+    -> WithReprs (Array sh e)
+generateOp = fromFunction'
 
 
 transformOp
-    :: (Shape sh', Elt b)
-    => sh'
+    :: ArrayR (Array sh' b)
+    -> sh'
     -> (sh' -> sh)
     -> (a -> b)
     -> Delayed (Array sh a)
-    -> Array sh' b
-transformOp sh' p f (Delayed _ xs _)
-  = fromFunction sh' (\ix -> f (xs $ p ix))
+    -> WithReprs (Array sh' b)
+transformOp repr sh' p f (Delayed _ _ xs _)
+  = fromFunction' repr sh' (\ix -> f (xs $ p ix))
 
 
 reshapeOp
-    :: (Shape sh, Shape sh')
-    => sh
-    -> Array sh' e
-    -> Array sh  e
-reshapeOp newShape arr@(Array _ adata)
-  = $boundsCheck "reshape" "shape mismatch" (size newShape == size (shape arr))
-  $ Array (fromElt newShape) adata
+    :: ShapeR sh
+    -> sh
+    -> WithReprs (Array sh' e)
+    -> WithReprs (Array sh  e)
+reshapeOp newShapeR newShape (TupRsingle (ArrayR shr tp), (Array sh adata))
+  = $boundsCheck "reshape" "shape mismatch" (size newShapeR newShape == size shr sh)
+    ( TupRsingle (ArrayR newShapeR tp)
+    , Array newShape adata
+    )
 
 
 replicateOp
-    :: (Shape sh, Shape sl, Elt slix, Elt e)
-    => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+    :: SliceIndex slix sl co sh
     -> slix
-    -> Array sl e
-    -> Array sh e
-replicateOp slice slix arr
-  = fromFunction (toElt sh) (\ix -> arr ! liftToElt pf ix)
+    -> WithReprs (Array sl e)
+    -> WithReprs (Array sh e)
+replicateOp slice slix (TupRsingle repr@(ArrayR _ tp), arr)
+  = fromFunction' repr' sh (\ix -> (repr, arr) ! pf ix)
   where
-    (sh, pf) = extend slice (fromElt slix) (fromElt (shape arr))
+    repr' = ArrayR (sliceDomainR slice) tp
+    (sh, pf) = extend slice slix (shape arr)
 
     extend :: SliceIndex slix sl co dim
            -> slix
@@ -308,15 +317,15 @@ replicateOp slice slix arr
 
 
 sliceOp
-    :: (Shape sh, Shape sl, Elt slix, Elt e)
-    => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-    -> Array sh e
+    :: SliceIndex slix sl co sh
+    -> WithReprs (Array sh e)
     -> slix
-    -> Array sl e
-sliceOp slice arr slix
-  = fromFunction (toElt sh') (\ix -> arr ! liftToElt pf ix)
+    -> WithReprs (Array sl e)
+sliceOp slice (TupRsingle repr@(ArrayR _ tp), arr) slix
+  = fromFunction' repr' sh' (\ix -> (repr, arr) ! pf ix)
   where
-    (sh', pf) = restrict slice (fromElt slix) (fromElt (shape arr))
+    repr' = ArrayR (sliceShapeR slice) tp
+    (sh', pf) = restrict slice slix (shape arr)
 
     restrict :: SliceIndex slix sl co sh
              -> slix
@@ -332,536 +341,489 @@ sliceOp slice arr slix
         in  $indexCheck "slice" i sz $ (sl', \ix -> (f' ix, i))
 
 
-mapOp :: (Shape sh, Elt b)
-      => (a -> b)
-      -> Delayed (Array sh a)
-      -> Array sh b
-mapOp f (Delayed sh xs _)
-  = fromFunction sh (\ix -> f (xs ix))
+mapOp :: TupleType b
+      -> (a -> b)
+      -> Delayed   (Array sh a)
+      -> WithReprs (Array sh b)
+mapOp tp f (Delayed (ArrayR shr _) sh xs _)
+  = fromFunction' (ArrayR shr tp) sh (\ix -> f (xs ix))
 
 
 zipWithOp
-    :: (Shape sh, Elt c)
-    => (a -> b -> c)
-    -> Delayed (Array sh a)
-    -> Delayed (Array sh b)
-    -> Array sh c
-zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
-  = fromFunction (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
-
--- zipWith'Op
---     :: (Shape sh, Elt a)
---     => (a -> a -> a)
---     -> Delayed (Array sh a)
---     -> Delayed (Array sh a)
---     -> Array sh a
--- zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
---   = fromFunction (shx `union` shy) (\ix -> if ix `outside` shx
---                                            then ys ix
---                                            else if ix `outside` shy
---                                            then xs ix
---                                            else f (xs ix) (ys ix))
---   where
---     a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
+    :: TupleType c
+    -> (a -> b -> c)
+    -> Delayed   (Array sh a)
+    -> Delayed   (Array sh b)
+    -> WithReprs (Array sh c)
+zipWithOp tp f (Delayed (ArrayR shr _) shx xs _) (Delayed _ shy ys _)
+  = fromFunction' (ArrayR shr tp) (intersect shr shx shy) (\ix -> f (xs ix) (ys ix))
 
 
 foldOp
-    :: (Shape sh, Elt e)
-    => (e -> e -> e)
+    :: (e -> e -> e)
     -> e
-    -> Delayed (Array (sh :. Int) e)
-    -> Array sh e
-foldOp f z (Delayed (sh :. n) arr _)
-  = fromFunction sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr (ix :. i)) f z)
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array sh e)
+foldOp f z (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
+  = fromFunction' (ArrayR shr tp) sh (\ix -> iter (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f z)
 
 
 fold1Op
-    :: (Shape sh, Elt e)
-    => (e -> e -> e)
-    -> Delayed (Array (sh :. Int) e)
-    -> Array sh e
-fold1Op f (Delayed (sh :. n) arr _)
+    :: (e -> e -> e)
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array sh e)
+fold1Op f (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
   = $boundsCheck "fold1" "empty array" (n > 0)
-  $ fromFunction sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
+  $ fromFunction' (ArrayR shr tp) sh (\ix -> iter1 (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f)
 
 
 foldSegOp
-    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
-    => (e -> e -> e)
+    :: IntegralType i
+    -> (e -> e -> e)
     -> e
-    -> Delayed (Array (sh :. Int) e)
+    -> Delayed (Array (sh, Int) e)
     -> Delayed (Segments i)
-    -> Array (sh :. Int) e
-foldSegOp f z (Delayed (sh :. _) arr _) (Delayed (Z :. n) _ seg)
-  | IntegralDict <- integralDict (integralType :: IntegralType i)
+    -> WithReprs (Array (sh, Int) e)
+foldSegOp itp f z (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
+  | IntegralDict <- integralDict itp
   = $boundsCheck "foldSeg" "empty segment descriptor" (n > 0)
-  $ fromFunction (sh :. n-1)
-  $ \(sz :. ix) -> let start = fromIntegral $ seg ix
+  $ fromFunction' repr (sh, n-1)
+  $ \(sz, ix) ->   let start = fromIntegral $ seg ix
                        end   = fromIntegral $ seg (ix+1)
                    in
                    $boundsCheck "foldSeg" "empty segment" (end >= start)
-                   $ iter (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f z
+                   $ iter (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
 
 
 fold1SegOp
-    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
-    => (e -> e -> e)
-    -> Delayed (Array (sh :. Int) e)
+    :: IntegralType i
+    -> (e -> e -> e)
+    -> Delayed (Array (sh, Int) e)
     -> Delayed (Segments i)
-    -> Array (sh :. Int) e
-fold1SegOp f (Delayed (sh :. _) arr _) (Delayed (Z :. n) _ seg)
-  | IntegralDict <- integralDict (integralType :: IntegralType i)
+    -> WithReprs (Array (sh, Int) e)
+fold1SegOp itp f (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
+  | IntegralDict <- integralDict itp
   = $boundsCheck "foldSeg" "empty segment descriptor" (n > 0)
-  $ fromFunction (sh :. n-1)
-  $ \(sz :. ix) -> let start = fromIntegral $ seg ix
+  $ fromFunction' repr (sh, n-1)
+  $ \(sz, ix)   -> let start = fromIntegral $ seg ix
                        end   = fromIntegral $ seg (ix+1)
                    in
                    $boundsCheck "fold1Seg" "empty segment" (end > start)
-                   $ iter1 (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f
+                   $ iter1 (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f
 
 
 scanl1Op
-    :: (Shape sh, Elt e)
-    => (e -> e -> e)
-    -> Delayed (Array (sh:.Int) e)
-    -> Array (sh:.Int) e
-scanl1Op f (Delayed sh@(_ :. n) ain _)
+    :: forall sh e.
+       (e -> e -> e)
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array (sh, Int) e)
+scanl1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
   = $boundsCheck "scanl1" "empty array" (n > 0)
-  $ adata `seq` Array (fromElt sh) adata
+    ( TupRsingle $ ArrayR shr tp
+    , adata `seq` Array sh adata
+    )
   where
-    f'          = sinkFromElt2 f
     --
-    (adata, _)  = runArrayData $ do
-      aout <- newArrayData (size sh)
+    (adata, _)  = runArrayData @e $ do
+      aout <- newArrayData tp (size shr sh)
 
-      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh (sz:.0)) (fromElt (ain (sz:.0)))
-          write (sz:.i) = do
-            x <- unsafeReadArrayData aout (toIndex sh (sz:.i-1))
-            y <- return $ fromElt (ain (sz:.i))
-            unsafeWriteArrayData aout (toIndex sh (sz:.i)) (f' x y)
+      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh (sz, 0)) (ain (sz, 0))
+          write (sz, i) = do
+            x <- unsafeReadArrayData tp aout (toIndex shr sh (sz, i-1))
+            let y = ain (sz, i)
+            unsafeWriteArrayData tp aout (toIndex shr sh (sz, i)) (f x y)
 
-      iter sh write (>>) (return ())
+      iter shr sh write (>>) (return ())
       return (aout, undefined)
 
 
 scanlOp
-    :: (Shape sh, Elt e)
-    => (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
-    -> Delayed (Array (sh:.Int) e)
-    -> Array (sh:.Int) e
-scanlOp f z (Delayed (sh :. n) ain _)
-  = adata `seq` Array (fromElt sh') adata
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array (sh, Int) e)
+scanlOp f z (Delayed (ArrayR shr tp) (sh, n) ain _)
+  = ( TupRsingle $ ArrayR shr tp
+    , adata `seq` Array sh' adata
+    )
   where
-    sh'         = sh :. n+1
-    f'          = sinkFromElt2 f
+    sh'         = (sh, n+1)
     --
-    (adata, _)  = runArrayData $ do
-      aout <- newArrayData (size sh')
+    (adata, _)  = runArrayData @e $ do
+      aout <- newArrayData tp (size shr sh')
 
-      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh' (sz:.0)) (fromElt z)
-          write (sz:.i) = do
-            x <- unsafeReadArrayData aout (toIndex sh' (sz:.i-1))
-            y <- return $ fromElt (ain (sz:.i-1))
-            unsafeWriteArrayData aout (toIndex sh' (sz:.i)) (f' x y)
+      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh' (sz, 0)) z
+          write (sz, i) = do
+            x <- unsafeReadArrayData tp aout (toIndex shr sh' (sz, i-1))
+            let y = ain (sz, i-1)
+            unsafeWriteArrayData tp aout (toIndex shr sh' (sz, i)) (f x y)
 
-      iter sh' write (>>) (return ())
+      iter shr sh' write (>>) (return ())
       return (aout, undefined)
 
 
 scanl'Op
-    :: (Shape sh, Elt e)
-    => (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
-    -> Delayed (Array (sh:.Int) e)
-    -> ArrRepr (Array (sh:.Int) e, Array sh e)
-scanl'Op f z (Delayed (sh :. n) ain _)
-  = aout `seq` asum `seq` ( ( (), Array (fromElt (sh:.n)) aout )
-                          , Array (fromElt sh)      asum )
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array (sh, Int) e, Array sh e)
+scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
+  = ( TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
+    , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
+    )
   where
-    f'          = sinkFromElt2 f
-    --
-    (AD_Pair aout asum, _) = runArrayData $ do
-      aout <- newArrayData (size (sh:.n))
-      asum <- newArrayData (size sh)
+    ((aout, asum), _) = runArrayData @(e, e) $ do
+      aout <- newArrayData tp (size shr  (sh, n))
+      asum <- newArrayData tp (size shr' sh)
 
-      let write (sz:.0)
-            | n == 0    = unsafeWriteArrayData asum (toIndex sh sz) (fromElt z)
-            | otherwise = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.0)) (fromElt z)
-          write (sz:.i) = do
-            x <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.i-1))
-            y <- return $ fromElt (ain (sz:.i-1))
+      let write (sz, 0)
+            | n == 0    = unsafeWriteArrayData tp asum (toIndex shr' sh sz) z
+            | otherwise = unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, 0)) z
+          write (sz, i) = do
+            x <- unsafeReadArrayData tp aout (toIndex shr (sh, n) (sz, i-1))
+            let y = ain (sz, i-1)
             if i == n
-              then unsafeWriteArrayData asum (toIndex sh      sz)      (f' x y)
-              else unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.i)) (f' x y)
+              then unsafeWriteArrayData tp asum (toIndex shr' sh      sz)      (f x y)
+              else unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, i)) (f x y)
 
-      iter (sh:.n+1) write (>>) (return ())
-      return (AD_Pair aout asum, undefined)
+      iter shr (sh, n+1) write (>>) (return ())
+      return ((aout, asum), undefined)
 
 
 scanrOp
-    :: (Shape sh, Elt e)
-    => (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
-    -> Delayed (Array (sh:.Int) e)
-    -> Array (sh:.Int) e
-scanrOp f z (Delayed (sz :. n) ain _)
-  = adata `seq` Array (fromElt sh') adata
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array (sh, Int) e)
+scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
+  = ( TupRsingle (ArrayR shr tp)
+    , adata `seq` Array sh' adata
+    )
   where
-    sh'         = sz :. n+1
-    f'          = sinkFromElt2 f
+    sh'         = (sz, n+1)
     --
-    (adata, _)  = runArrayData $ do
-      aout <- newArrayData (size sh')
+    (adata, _)  = runArrayData @e $ do
+      aout <- newArrayData tp (size shr sh')
 
-      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh' (sz:.n)) (fromElt z)
-          write (sz:.i) = do
-            x <- return $ fromElt (ain (sz:.n-i))
-            y <- unsafeReadArrayData aout (toIndex sh' (sz:.n-i+1))
-            unsafeWriteArrayData aout (toIndex sh' (sz:.n-i)) (f' x y)
+      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh' (sz, n)) z
+          write (sz, i) = do
+            let x = ain (sz, n-i)
+            y <- unsafeReadArrayData tp aout (toIndex shr sh' (sz, n-i+1))
+            unsafeWriteArrayData tp aout (toIndex shr sh' (sz, n-i)) (f x y)
 
-      iter sh' write (>>) (return ())
+      iter shr sh' write (>>) (return ())
       return (aout, undefined)
 
 
 scanr1Op
-    :: (Shape sh, Elt e)
-    => (e -> e -> e)
-    -> Delayed (Array (sh:.Int) e)
-    -> Array (sh:.Int) e
-scanr1Op f (Delayed sh@(_ :. n) ain _)
+    :: forall sh e.
+       (e -> e -> e)
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array (sh, Int) e)
+scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
   = $boundsCheck "scanr1" "empty array" (n > 0)
-  $ adata `seq` Array (fromElt sh) adata
+    ( TupRsingle $ ArrayR shr tp
+    , adata `seq` Array sh adata
+    )
   where
-    f'          = sinkFromElt2 f
-    --
-    (adata, _)  = runArrayData $ do
-      aout <- newArrayData (size sh)
+    (adata, _)  = runArrayData @e $ do
+      aout <- newArrayData tp (size shr sh)
 
-      let write (sz:.0) = unsafeWriteArrayData aout (toIndex sh (sz:.n-1)) (fromElt (ain (sz:.n-1)))
-          write (sz:.i) = do
-            x <- return $ fromElt (ain (sz:.n-i-1))
-            y <- unsafeReadArrayData aout (toIndex sh (sz:.n-i))
-            unsafeWriteArrayData aout (toIndex sh (sz:.n-i-1)) (f' x y)
+      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh (sz, n-1)) (ain (sz, n-1))
+          write (sz, i) = do
+            let x = ain (sz, n-i-1)
+            y <- unsafeReadArrayData tp aout (toIndex shr sh (sz, n-i))
+            unsafeWriteArrayData tp aout (toIndex shr sh (sz, n-i-1)) (f x y)
 
-      iter sh write (>>) (return ())
+      iter shr sh write (>>) (return ())
       return (aout, undefined)
 
 
 scanr'Op
-    :: forall sh e. (Shape sh, Elt e)
-    => (e -> e -> e)
+    :: forall sh e.
+       (e -> e -> e)
     -> e
-    -> Delayed (Array (sh:.Int) e)
-    -> ArrRepr (Array (sh:.Int) e, Array sh e)
-scanr'Op f z (Delayed (sh :. n) ain _)
-  = aout `seq` asum `seq` ( ((), Array (fromElt (sh:.n)) aout )
-                          , Array (fromElt sh)      asum )
+    -> Delayed (Array (sh, Int) e)
+    -> WithReprs (Array (sh, Int) e, Array sh e)
+scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
+  = ( TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
+    , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
+    )
   where
-    f'          = sinkFromElt2 f
-    --
-    (AD_Pair aout asum, _) = runArrayData $ do
-      aout <- newArrayData (size (sh:.n))
-      asum <- newArrayData (size sh)
+    ((aout, asum), _) = runArrayData @(e, e) $ do
+      aout <- newArrayData tp (size shr  (sh, n))
+      asum <- newArrayData tp (size shr' sh)
 
-      let write (sz:.0)
-            | n == 0    = unsafeWriteArrayData asum (toIndex sh sz) (fromElt z)
-            | otherwise = unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-1)) (fromElt z)
+      let write (sz, 0)
+            | n == 0    = unsafeWriteArrayData tp asum (toIndex shr' sh sz) z
+            | otherwise = unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, n-1)) z
 
-          write (sz:.i) = do
-            x <- return $ fromElt (ain (sz:.n-i))
-            y <- unsafeReadArrayData aout (toIndex (sh:.n) (sz:.n-i))
+          write (sz, i) = do
+            let x = ain (sz, n-i)
+            y <- unsafeReadArrayData tp aout (toIndex shr (sh, n) (sz, n-i))
             if i == n
-              then unsafeWriteArrayData asum (toIndex sh      sz)          (f' x y)
-              else unsafeWriteArrayData aout (toIndex (sh:.n) (sz:.n-i-1)) (f' x y)
+              then unsafeWriteArrayData tp asum (toIndex shr' sh      sz)          (f x y)
+              else unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, n-i-1)) (f x y)
 
-      iter (sh:.n+1) write (>>) (return ())
-      return (AD_Pair aout asum, undefined)
+      iter shr (sh, n+1) write (>>) (return ())
+      return ((aout, asum), undefined)
 
 
 permuteOp
-    :: (Shape sh, Shape sh', Elt e)
-    => (e -> e -> e)
-    -> Array sh' e
+    :: forall sh sh' e.
+       (e -> e -> e)
+    -> WithReprs (Array sh' e)
     -> (sh -> sh')
-    -> Delayed (Array sh  e)
-    -> Array sh' e
-permuteOp f def@(Array _ adef) p (Delayed sh _ ain)
-  = adata `seq` Array (fromElt sh') adata
+    -> Delayed   (Array sh  e)
+    -> WithReprs (Array sh' e)
+permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR shr tp) sh _ ain)
+  = (TupRsingle $ ArrayR shr' tp, adata `seq` Array sh' adata)
   where
     sh'         = shape def
-    n'          = size sh'
-    f'          = sinkFromElt2 f
+    n'          = size shr' sh'
+
+    ignore' = ignore shr'
     --
-    (adata, _)  = runArrayData $ do
-      aout <- newArrayData n'
+    (adata, _)  = runArrayData @e $ do
+      aout <- newArrayData tp n'
 
       let -- initialise array with default values
           init i
             | i >= n'   = return ()
             | otherwise = do
-                x <- unsafeReadArrayData adef i
-                unsafeWriteArrayData aout i x
+                x <- unsafeReadArrayData tp adef i
+                unsafeWriteArrayData tp aout i x
                 init (i+1)
 
           -- project each element onto the destination array and update
           update src
             = let dst   = p src
-                  i     = toIndex sh  src
-                  j     = toIndex sh' dst
+                  i     = toIndex shr  sh  src
+                  j     = toIndex shr' sh' dst
               in
-              unless (fromElt dst == R.ignore) $ do
-                x <- return . fromElt $  ain  i
-                y <- unsafeReadArrayData aout j
-                unsafeWriteArrayData aout j (f' x y)
+              unless (shapeEq shr' dst ignore') $ do
+                let x = ain  i
+                y <- unsafeReadArrayData tp aout j
+                unsafeWriteArrayData tp aout j (f x y)
 
       init 0
-      iter sh update (>>) (return ())
+      iter shr sh update (>>) (return ())
       return (aout, undefined)
 
 
 backpermuteOp
-    :: (Shape sh', Elt e)
-    => sh'
+    :: ShapeR sh'
+    -> sh'
     -> (sh' -> sh)
     -> Delayed (Array sh e)
-    -> Array sh' e
-backpermuteOp sh' p (Delayed _ arr _)
-  = fromFunction sh' (\ix -> arr $ p ix)
+    -> WithReprs (Array sh' e)
+backpermuteOp shr sh' p (Delayed (ArrayR _ tp) _ arr _)
+  = fromFunction' (ArrayR shr tp) sh' (\ix -> arr $ p ix)
 
 
 stencilOp
-    :: (Stencil sh a stencil, Elt b)
-    => (stencil -> b)
+    :: StencilR sh a stencil
+    -> TupleType b
+    -> (stencil -> b)
     -> Boundary (Array sh a)
     -> Delayed  (Array sh a)
-    -> Array sh b
-stencilOp stencil bnd arr@(Delayed sh _ _)
-  = fromFunction sh
-  $ stencil . stencilAccess (bounded bnd arr)
+    -> WithReprs (Array sh b)
+stencilOp stencil tp f bnd arr@(Delayed _ sh _ _)
+  = fromFunction' (ArrayR shr tp) sh
+  $ f . stencilAccess stencil (bounded shr bnd arr)
+  where
+    shr = stencilShape stencil
 
 
 stencil2Op
-    :: (Stencil sh a stencil1, Stencil sh b stencil2, Elt c)
-    => (stencil1 -> stencil2 -> c)
+    :: StencilR sh a stencil1
+    -> StencilR sh b stencil2
+    -> TupleType c
+    -> (stencil1 -> stencil2 -> c)
     -> Boundary (Array sh a)
     -> Delayed  (Array sh a)
     -> Boundary (Array sh b)
     -> Delayed  (Array sh b)
-    -> Array sh c
-stencil2Op stencil bnd1 arr1@(Delayed sh1 _ _) bnd2 arr2@(Delayed sh2 _ _)
-  = fromFunction (sh1 `intersect` sh2) f
+    -> WithReprs (Array sh c)
+stencil2Op s1 s2 tp stencil bnd1 arr1@(Delayed _ sh1 _ _) bnd2 arr2@(Delayed _ sh2 _ _)
+  = fromFunction' (ArrayR shr tp) (intersect shr sh1 sh2) f
   where
-    f ix  = stencil (stencilAccess (bounded bnd1 arr1) ix)
-                    (stencilAccess (bounded bnd2 arr2) ix)
+    f ix  = stencil (stencilAccess s1 (bounded shr bnd1 arr1) ix)
+                    (stencilAccess s2 (bounded shr bnd2 arr2) ix)
+    shr = stencilShape s1
 
 stencilAccess
-    :: Stencil sh e stencil
-    => (sh -> e)
+    :: StencilR sh e stencil
+    -> (sh -> e)
     -> sh
     -> stencil
-stencilAccess = goR stencil
+stencilAccess stencil = goR (stencilShape stencil) stencil
   where
     -- Base cases, nothing interesting to do here since we know the lower
     -- dimension is Z.
     --
-    goR :: StencilR sh e stencil -> (sh -> e) -> sh -> stencil
-    goR StencilRunit3 rf ix =
+    goR :: ShapeR sh -> StencilR sh e stencil -> (sh -> e) -> sh -> stencil
+    goR _ (StencilRunit3 _) rf ix =
       let
-          z :. i = ix
-          rf' d  = rf (z :. i+d)
+          (z, i) = ix
+          rf' d  = rf (z, i+d)
       in
-      ( rf' (-1)
-      , rf'   0
-      , rf'   1
-      )
+      ((( ()
+      , rf' (-1))
+      , rf'   0 )
+      , rf'   1 )
 
-    goR StencilRunit5 rf ix =
-      let z :. i = ix
-          rf' d  = rf (z :. i+d)
+    goR _ (StencilRunit5 _) rf ix =
+      let (z, i) = ix
+          rf' d  = rf (z, i+d)
       in
-      ( rf' (-2)
-      , rf' (-1)
-      , rf'   0
-      , rf'   1
-      , rf'   2
-      )
+      ((((( ()
+      , rf' (-2))
+      , rf' (-1))
+      , rf'   0 )
+      , rf'   1 )
+      , rf'   2 )
 
-    goR StencilRunit7 rf ix =
-      let z :. i = ix
-          rf' d  = rf (z :. i+d)
+    goR _ (StencilRunit7 _) rf ix =
+      let (z, i) = ix
+          rf' d  = rf (z, i+d)
       in
-      ( rf' (-3)
-      , rf' (-2)
-      , rf' (-1)
-      , rf'   0
-      , rf'   1
-      , rf'   2
-      , rf'   3
-      )
+      ((((((( ()
+      , rf' (-3))
+      , rf' (-2))
+      , rf' (-1))
+      , rf'   0 )
+      , rf'   1 )
+      , rf'   2 )
+      , rf'   3 )
 
-    goR StencilRunit9 rf ix =
-      let z :. i = ix
-          rf' d  = rf (z :. i+d)
+    goR _ (StencilRunit9 _) rf ix =
+      let (z, i) = ix
+          rf' d  = rf (z, i+d)
       in
-      ( rf' (-4)
-      , rf' (-3)
-      , rf' (-2)
-      , rf' (-1)
-      , rf'   0
-      , rf'   1
-      , rf'   2
-      , rf'   3
-      , rf'   4
-      )
+      ((((((((( ()
+      , rf' (-4))
+      , rf' (-3))
+      , rf' (-2))
+      , rf' (-1))
+      , rf'   0 )
+      , rf'   1 )
+      , rf'   2 )
+      , rf'   3 )
+      , rf'   4 )
 
     -- Recursive cases. Note that because the stencil pattern is defined with
     -- cons ordering, whereas shapes (and indices) are defined as a snoc-list,
     -- when we recurse on the stencil structure we must manipulate the
     -- _left-most_ index component.
     --
-    goR (StencilRtup3 s1 s2 s3) rf ix =
-      let (i, ix') = uncons ix
-          rf' d ds = rf (cons (i+d) ds)
+    goR (ShapeRsnoc shr) (StencilRtup3 s1 s2 s3) rf ix =
+      let (i, ix') = uncons shr ix
+          rf' d ds = rf (cons shr (i+d) ds)
       in
-      ( goR s1 (rf' (-1)) ix'
-      , goR s2 (rf'   0)  ix'
-      , goR s3 (rf'   1)  ix'
-      )
+      ((( ()
+      , goR shr s1 (rf' (-1)) ix')
+      , goR shr s2 (rf'   0)  ix')
+      , goR shr s3 (rf'   1)  ix')
 
-    goR (StencilRtup5 s1 s2 s3 s4 s5) rf ix =
-      let (i, ix') = uncons ix
-          rf' d ds = rf (cons (i+d) ds)
+    goR (ShapeRsnoc shr) (StencilRtup5 s1 s2 s3 s4 s5) rf ix =
+      let (i, ix') = uncons shr ix
+          rf' d ds = rf (cons shr (i+d) ds)
       in
-      ( goR s1 (rf' (-2)) ix'
-      , goR s2 (rf' (-1)) ix'
-      , goR s3 (rf'   0)  ix'
-      , goR s4 (rf'   1)  ix'
-      , goR s5 (rf'   2)  ix'
-      )
+      ((((( ()
+      , goR shr s1 (rf' (-2)) ix')
+      , goR shr s2 (rf' (-1)) ix')
+      , goR shr s3 (rf'   0)  ix')
+      , goR shr s4 (rf'   1)  ix')
+      , goR shr s5 (rf'   2)  ix')
 
-    goR (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) rf ix =
-      let (i, ix') = uncons ix
-          rf' d ds = rf (cons (i+d) ds)
+    goR (ShapeRsnoc shr) (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) rf ix =
+      let (i, ix') = uncons shr ix
+          rf' d ds = rf (cons shr (i+d) ds)
       in
-      ( goR s1 (rf' (-3)) ix'
-      , goR s2 (rf' (-2)) ix'
-      , goR s3 (rf' (-1)) ix'
-      , goR s4 (rf'   0)  ix'
-      , goR s5 (rf'   1)  ix'
-      , goR s6 (rf'   2)  ix'
-      , goR s7 (rf'   3)  ix'
-      )
+      ((((((( ()
+      , goR shr s1 (rf' (-3)) ix')
+      , goR shr s2 (rf' (-2)) ix')
+      , goR shr s3 (rf' (-1)) ix')
+      , goR shr s4 (rf'   0)  ix')
+      , goR shr s5 (rf'   1)  ix')
+      , goR shr s6 (rf'   2)  ix')
+      , goR shr s7 (rf'   3)  ix')
 
-    goR (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) rf ix =
-      let (i, ix') = uncons ix
-          rf' d ds = rf (cons (i+d) ds)
+    goR (ShapeRsnoc shr) (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) rf ix =
+      let (i, ix') = uncons shr ix
+          rf' d ds = rf (cons shr (i+d) ds)
       in
-      ( goR s1 (rf' (-4)) ix'
-      , goR s2 (rf' (-3)) ix'
-      , goR s3 (rf' (-2)) ix'
-      , goR s4 (rf' (-1)) ix'
-      , goR s5 (rf'   0)  ix'
-      , goR s6 (rf'   1)  ix'
-      , goR s7 (rf'   2)  ix'
-      , goR s8 (rf'   3)  ix'
-      , goR s9 (rf'   4)  ix'
-      )
+      ((((((((( ()
+      , goR shr s1 (rf' (-4)) ix')
+      , goR shr s2 (rf' (-3)) ix')
+      , goR shr s3 (rf' (-2)) ix')
+      , goR shr s4 (rf' (-1)) ix')
+      , goR shr s5 (rf'   0)  ix')
+      , goR shr s6 (rf'   1)  ix')
+      , goR shr s7 (rf'   2)  ix')
+      , goR shr s8 (rf'   3)  ix')
+      , goR shr s9 (rf'   4)  ix')
 
     -- Add a left-most component to an index
     --
-    cons :: forall sh. Shape sh => Int -> sh -> (sh :. Int)
-    cons ix extent = toElt $ go (eltType @sh) (fromElt extent)
-      where
-        go :: TupleType t -> t -> (t, Int)
-        go TypeRunit         ()       = ((), ix)
-        go (TypeRpair th tz) (sh, sz)
-          | TypeRscalar t <- tz
-          , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
-          = (go th sh, sz)
-        go _ _
-          = $internalError "cons" "expected index with Int components"
+    cons :: ShapeR sh -> Int -> sh -> (sh, Int)
+    cons ShapeRz          ix ()       = ((), ix)
+    cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
 
     -- Remove the left-most index of an index, and return the remainder
     --
-    uncons :: forall sh. Shape sh => sh :. Int -> (Int, sh)
-    uncons extent = let (i,ix) = go (eltType @(sh:.Int)) (fromElt extent)
-                    in  (i, toElt ix)
-      where
-        go :: TupleType (t, Int) -> (t, Int) -> (Int, t)
-        go (TypeRpair TypeRunit _)           ((), v) = (v, ())
-        go (TypeRpair t1@(TypeRpair _ t2) _) (v1,v3)
-          | TypeRscalar t <- t2
-          , Just Refl     <- matchScalarType t (scalarType :: ScalarType Int)
-          = let (i, v1') = go t1 v1
-            in  (i, (v1', v3))
-        go _ _
-          = $internalError "uncons" "expected index with Int components"
+    uncons :: ShapeR sh -> (sh, Int) -> (Int, sh)
+    uncons ShapeRz          ((), v)  = (v, ())
+    uncons (ShapeRsnoc shr) (v1, v2) = let (i, v1') = uncons shr v1
+                                       in  (i, (v1', v2))
 
 
 bounded
-    :: (Shape sh, Elt e)
-    => Boundary (Array sh e)
+    :: ShapeR sh
+    -> Boundary (Array sh e)
     -> Delayed (Array sh e)
     -> sh
     -> e
-bounded bnd (Delayed sh f _) ix =
-  if inside sh ix
+bounded shr bnd (Delayed _ sh f _) ix =
+  if inside shr sh ix
     then f ix
     else
       case bnd of
         Function g -> g ix
-        Constant v -> toElt v
-        _          -> f (bound sh ix)
+        Constant v -> v
+        _          -> f (bound shr sh ix)
 
   where
     -- Whether the index (second argument) is inside the bounds of the given
     -- shape (first argument).
     --
-    inside :: forall sh. Shape sh => sh -> sh -> Bool
-    inside sh1 ix1 = go (eltType @sh) (fromElt sh1) (fromElt ix1)
-      where
-        go :: TupleType t -> t -> t -> Bool
-        go TypeRunit          ()       ()      = True
-        go (TypeRpair tsh ti) (sh, sz) (ih,iz)
-          = if go ti sz iz
-              then go tsh sh ih
-              else False
-        go (TypeRscalar t) sz iz
-          | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
-          = if iz < 0 || iz >= sz
-              then False
-              else True
-          --
-          | otherwise
-          = $internalError "inside" "expected index with Int components"
+    inside :: ShapeR sh -> sh -> sh -> Bool
+    inside ShapeRz          ()       ()       = True
+    inside (ShapeRsnoc shr) (sh, sz) (ih, iz) = iz >= 0 && iz < sz && inside shr sh ih
 
     -- Return the index (second argument), updated to obey the given boundary
     -- conditions when outside the bounds of the given shape (first argument)
     --
-    bound :: forall sh. Shape sh => sh -> sh -> sh
-    bound sh1 ix1 = toElt $ go (eltType @sh) (fromElt sh1) (fromElt ix1)
+    bound :: ShapeR sh -> sh -> sh -> sh
+    bound ShapeRz () () = ()
+    bound (ShapeRsnoc shr) (sh, sz) (ih, iz) = (bound shr sh ih, ih')
       where
-        go :: TupleType t -> t -> t -> t
-        go TypeRunit          ()       ()       = ()
-        go (TypeRpair tsh ti) (sh, sz) (ih, iz) = (go tsh sh ih, go ti sz iz)
-        go (TypeRscalar t)    sz       iz
-          | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
-          = let i | iz < 0    = case bnd of
-                                  Clamp  -> 0
-                                  Mirror -> -iz
-                                  Wrap   -> sz + iz
-                                  _      -> $internalError "bound" "unexpected boundary condition"
-                  | iz >= sz  = case bnd of
-                                  Clamp  -> sz - 1
-                                  Mirror -> sz - (iz - sz + 2)
-                                  Wrap   -> iz - sz
-                                  _      -> $internalError "bound" "unexpected boundary condition"
-                  | otherwise = iz
-            in i
-          | otherwise
-          = $internalError "bound" "expected index with Int components"
-
+        ih'
+          | iz < 0 = case bnd of
+                          Clamp  -> 0
+                          Mirror -> -iz
+                          Wrap   -> sz + iz
+                          _      -> $internalError "bound" "unexpected boundary condition"
+          | iz >= sz  = case bnd of
+                          Clamp  -> sz - 1
+                          Mirror -> sz - (iz - sz + 2)
+                          Wrap   -> iz - sz
+                          _      -> $internalError "bound" "unexpected boundary condition"
+          | otherwise = iz
 
 -- toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
 --         => SliceIndex (EltRepr slix)
@@ -882,11 +844,11 @@ data Boundary t where
   Clamp    :: Boundary t
   Mirror   :: Boundary t
   Wrap     :: Boundary t
-  Constant :: Elt t => EltRepr t -> Boundary (Array sh t)
-  Function :: (Shape sh, Elt e) => (sh -> e) -> Boundary (Array sh e)
+  Constant :: t -> Boundary (Array sh t)
+  Function :: (sh -> e) -> Boundary (Array sh e)
 
 
-evalPreBoundary :: EvalAcc acc -> AST.PreBoundary acc aenv t -> Val aenv -> Boundary t
+evalPreBoundary :: HasArraysRepr acc => EvalAcc acc -> AST.PreBoundary acc aenv t -> Val aenv -> Boundary t
 evalPreBoundary evalAcc bnd aenv =
   case bnd of
     AST.Clamp      -> Clamp
@@ -901,20 +863,20 @@ evalPreBoundary evalAcc bnd aenv =
 
 -- Evaluate a closed scalar expression
 --
-evalPreExp :: EvalAcc acc -> PreExp acc aenv t -> Val aenv -> t
-evalPreExp evalAcc e aenv = evalPreOpenExp evalAcc e EmptyElt aenv
+evalPreExp :: HasArraysRepr acc => EvalAcc acc -> PreExp acc aenv t -> Val aenv -> t
+evalPreExp evalAcc e aenv = evalPreOpenExp evalAcc e Empty aenv
 
 -- Evaluate a closed scalar function
 --
-evalPreFun :: EvalAcc acc -> PreFun acc aenv t -> Val aenv -> t
-evalPreFun evalAcc f aenv = evalPreOpenFun evalAcc f EmptyElt aenv
+evalPreFun :: HasArraysRepr acc => EvalAcc acc -> PreFun acc aenv t -> Val aenv -> t
+evalPreFun evalAcc f aenv = evalPreOpenFun evalAcc f Empty aenv
 
 -- Evaluate an open scalar function
 --
-evalPreOpenFun :: EvalAcc acc -> PreOpenFun acc env aenv t -> ValElt env -> Val aenv -> t
-evalPreOpenFun evalAcc (Body e) env aenv = evalPreOpenExp evalAcc e env aenv
-evalPreOpenFun evalAcc (Lam f)  env aenv =
-  \x -> evalPreOpenFun evalAcc f (env `PushElt` fromElt x) aenv
+evalPreOpenFun :: HasArraysRepr acc => EvalAcc acc -> PreOpenFun acc env aenv t -> Val env -> Val aenv -> t
+evalPreOpenFun evalAcc (Body e)    env aenv = evalPreOpenExp evalAcc e env aenv
+evalPreOpenFun evalAcc (Lam lhs f) env aenv =
+  \x -> evalPreOpenFun evalAcc f (env `push` (lhs, x)) aenv
 
 
 -- Evaluate an open scalar expression
@@ -925,11 +887,16 @@ evalPreOpenFun evalAcc (Lam f)  env aenv =
 --     mapped over an array, the array argument would be evaluated many times
 --     leading to a large amount of wasteful recomputation.
 --
+-- TODO: If we change the argument of Shape, Index and LinearIndex to be an array
+--       variable (instead of an arbitrary array computation), we could remove the
+--       HasArraysRepr constraint and just pattern match on the Var.
+--
 evalPreOpenExp
     :: forall acc env aenv t.
-       EvalAcc acc
+       HasArraysRepr acc
+    => EvalAcc acc
     -> PreOpenExp acc env aenv t
-    -> ValElt env
+    -> Val env
     -> Val aenv
     -> t
 evalPreOpenExp evalAcc pexp env aenv =
@@ -940,27 +907,26 @@ evalPreOpenExp evalAcc pexp env aenv =
       evalF :: PreOpenFun acc env aenv f' -> f'
       evalF f = evalPreOpenFun evalAcc f env aenv
 
-      evalA :: acc aenv a -> a
+      evalA :: acc aenv a -> WithReprs a
       evalA a = evalAcc a aenv
   in
   case pexp of
-    Let exp1 exp2               -> let !v1  = evalE exp1
-                                       env' = env `PushElt` fromElt v1
+    Let lhs exp1 exp2           -> let !v1  = evalE exp1
+                                       env' = env `push` (lhs, v1)
                                    in  evalPreOpenExp evalAcc exp2 env' aenv
-    Var ix                      -> prjElt ix env
-    Const c                     -> toElt c
-    Undef                       -> evalUndef
+    Evar (Var _ ix)             -> prj ix env
+    Const _ c                   -> c
+    Undef tp                    -> evalUndefScalar tp
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
-    Tuple tup                   -> toTuple $ evalTuple evalAcc tup env aenv
-    Prj ix tup                  -> evalPrj ix . fromTuple $ evalE tup
-    IndexNil                    -> Z
-    IndexAny                    -> Any
-    IndexCons sh sz             -> evalE sh :. evalE sz
-    IndexHead sh                -> let _  :. ix = evalE sh in ix
-    IndexTail sh                -> let ix :. _  = evalE sh in ix
-    IndexSlice slice slix sh    -> toElt $ restrict slice (fromElt (evalE slix))
-                                                          (fromElt (evalE sh))
+    Nil                         -> ()
+    Pair e1 e2                  -> let !x1 = evalE e1
+                                       !x2 = evalE e2
+                                   in  (x1, x2)
+    VecPack   vecR e            -> vecPack   vecR $! evalE e
+    VecUnpack vecR e            -> vecUnpack vecR $! evalE e
+    IndexSlice slice slix sh    -> restrict slice (evalE slix)
+                                                  (evalE sh)
       where
         restrict :: SliceIndex slix sl co sh -> slix -> sh -> sl
         restrict SliceNil              ()        ()         = ()
@@ -970,8 +936,8 @@ evalPreOpenExp evalAcc pexp env aenv =
         restrict (SliceFixed sliceIdx) (slx, _i)  (sl, _sz) =
           restrict sliceIdx slx sl
 
-    IndexFull slice slix sh     -> toElt $ extend slice (fromElt (evalE slix))
-                                                        (fromElt (evalE sh))
+    IndexFull slice slix sh     -> extend slice (evalE slix)
+                                                (evalE sh)
       where
         extend :: SliceIndex slix sl co sh -> slix -> sl -> sh
         extend SliceNil              ()        ()       = ()
@@ -982,8 +948,8 @@ evalPreOpenExp evalAcc pexp env aenv =
           let sh' = extend sliceIdx slx sl
           in  (sh', sz)
 
-    ToIndex sh ix               -> toIndex (evalE sh) (evalE ix)
-    FromIndex sh ix             -> fromIndex (evalE sh) (evalE ix)
+    ToIndex shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
+    FromIndex shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
     Cond c t e
       | evalE c                 -> evalE t
       | otherwise               -> evalE e
@@ -996,29 +962,28 @@ evalPreOpenExp evalAcc pexp env aenv =
           | p x         = go (f x)
           | otherwise   = x
 
-    Index acc ix                -> evalA acc ! evalE ix
-    LinearIndex acc i           -> let a  = evalA acc
-                                       ix = fromIndex (shape a) (evalE i)
-                                   in a ! ix
-    Shape acc                   -> shape (evalA acc)
-    ShapeSize sh                -> size (evalE sh)
-    Intersect sh1 sh2           -> intersect (evalE sh1) (evalE sh2)
-    Union sh1 sh2               -> union (evalE sh1) (evalE sh2)
-    Foreign _ f e               -> evalPreOpenFun evalAcc f EmptyElt Empty $ evalE e
-    Coerce e                    -> evalCoerce (evalE e)
+    Index acc ix                -> let (TupRsingle repr, a) = evalA acc
+                                   in (repr, a) ! evalE ix
+    LinearIndex acc i           -> let (TupRsingle repr, a) = evalA acc
+                                       ix   = fromIndex (arrayRshape repr) (shape a) (evalE i)
+                                   in (repr, a) ! ix
+    Shape acc                   -> shape $ snd $ evalA acc
+    ShapeSize shr sh            -> size shr (evalE sh)
+    Foreign _ _ f e             -> evalPreOpenFun evalAcc f Empty Empty $ evalE e
+    Coerce t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
 
 
 -- Constant values
 -- ---------------
 
-evalUndef :: forall a. Elt a => a
-evalUndef = toElt (undef (eltType @a))
-  where
-    undef :: TupleType t -> t
-    undef TypeRunit       = ()
-    undef (TypeRpair a b) = (undef a, undef b)
-    undef (TypeRscalar t) = scalar t
+evalUndef :: TupleType a -> a
+evalUndef TupRunit         = ()
+evalUndef (TupRsingle tp)  = evalUndefScalar tp
+evalUndef (TupRpair t1 t2) = (evalUndef t1, evalUndef t2)
 
+evalUndefScalar :: ScalarType a -> a
+evalUndefScalar = scalar
+  where
     scalar :: ScalarType t -> t
     scalar (SingleScalarType t) = single t
     scalar (VectorScalarType t) = vector t
@@ -1047,28 +1012,6 @@ evalUndef = toElt (undef (eltType @a))
 
 -- Coercions
 -- ---------
-
-evalCoerce :: forall a b. (Elt a, Elt b) => a -> b
-evalCoerce = toElt . go (eltType @a) (eltType @b) . fromElt
-  where
-    go :: TupleType s -> TupleType t -> s -> t
-    go TypeRunit        TypeRunit          ()    = ()
-    go (TypeRpair s1 s2) (TypeRpair t1 t2) (x,y) = (go s1 t1 x, go s2 t2 y)
-    go (TypeRscalar s)   (TypeRscalar t)   x
-      = $internalCheck "evalCoerce" "sizes not equal" (sizeOfScalarType s == sizeOfScalarType t)
-      $ evalCoerceScalar s t x
-    --
-    -- newtype wrappers are typically declared similarly to `EltRepr (T a) = ((), EltRepr a)'
-    -- so add some special cases for dealing with redundant parentheses.
-    --
-    go (TypeRpair TypeRunit s) t@TypeRscalar{}         ((), x) = go s t x
-    go s@TypeRscalar{}         (TypeRpair TypeRunit t) x       = ((), go s t x)
-    --
-    go _ _ _
-      = error $ printf "could not coerce type `%s' to `%s'"
-                  (show (typeOf (undefined::a)))
-                  (show (typeOf (undefined::b)))
-
 
 -- Coercion between two scalar types. We require that the size of the source and
 -- destination values are equal (this is not checked at this point).
@@ -1234,22 +1177,6 @@ evalPrim PrimChr                     = evalChr
 evalPrim PrimBoolToInt               = evalBoolToInt
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
-
-
--- Tuple construction and projection
--- ---------------------------------
-
-evalTuple :: EvalAcc acc -> Tuple (PreOpenExp acc env aenv) t -> ValElt env -> Val aenv -> t
-evalTuple _       NilTup            _env _aenv = ()
-evalTuple evalAcc (tup `SnocTup` e) env  aenv  =
-  (evalTuple evalAcc tup env aenv, evalPreOpenExp evalAcc e env aenv)
-
-evalPrj :: TupleIdx t e -> t -> e
-evalPrj ZeroTupIdx       (!_, v)   = v
-evalPrj (SuccTupIdx idx) (tup, !_) = evalPrj idx tup
-  -- FIXME: Strictly speaking, we ought to force all components of a tuples;
-  --        not only those that we happen to encounter during the recursive
-  --        walk.
 
 
 -- Implementation of scalar primitives

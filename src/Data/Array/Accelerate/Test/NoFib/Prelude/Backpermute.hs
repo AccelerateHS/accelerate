@@ -21,7 +21,6 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
@@ -59,7 +58,7 @@ test_backpermute runN =
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltType @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3

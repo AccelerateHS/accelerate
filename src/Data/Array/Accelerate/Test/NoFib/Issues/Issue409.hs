@@ -22,10 +22,10 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue409 (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Array.Sugar                            as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -43,7 +43,7 @@ test_issue409 runN =
         :: forall a. (P.Floating a, P.Eq a, A.Floating a)
         => TestTree
     testElt =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (A.eltType @a))
         [ testCase "A" $ e1 @=? indexArray (runN (A.map f) t1) Z
         ]
       where

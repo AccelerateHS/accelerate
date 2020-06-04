@@ -27,26 +27,20 @@
 
 module Data.Array.Accelerate.Array.Remote.Class (
 
-  RemoteMemory(..), PrimElt
+  RemoteMemory(..)
 
 ) where
 
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Type (SingleType)
 
 import Control.Applicative
 import Control.Monad.Catch
 import Data.Int
 import Data.Kind
-import Data.Typeable
 import Data.Word
-import Foreign.Ptr
-import Foreign.Storable
 import Prelude
 
-
--- | Matches array element types to primitive types.
---
-type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typeable a)
 
 -- | Accelerate backends can provide an instance of this class in order to take
 -- advantage of the automated memory managers we provide as part of the base
@@ -62,10 +56,10 @@ class (Applicative m, Monad m, MonadCatch m, MonadMask m) => RemoteMemory m wher
   mallocRemote :: Int -> m (Maybe (RemotePtr m Word8))
 
   -- | Copy the given number of elements from the host array into remote memory.
-  pokeRemote :: PrimElt e a => Int -> RemotePtr m a -> ArrayData e -> m ()
+  pokeRemote :: SingleType e -> Int -> RemotePtr m (ScalarDataRepr e) -> ArrayData e -> m ()
 
   -- | Copy the given number of elements from remote memory to the host array.
-  peekRemote :: PrimElt e a => Int -> RemotePtr m a -> MutableArrayData e -> m ()
+  peekRemote :: SingleType e -> Int -> RemotePtr m (ScalarDataRepr e) -> MutableArrayData e -> m ()
 
   -- | Cast a remote pointer.
   castRemotePtr :: RemotePtr m a -> RemotePtr m b

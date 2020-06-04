@@ -20,8 +20,8 @@ module Data.Array.Accelerate.Classes.Eq (
 
   Bool(..), pattern True_, pattern False_,
   Eq(..),
-  (&&),
-  (||),
+  (&&), (&&!),
+  (||), (||!),
   not,
 
 ) where
@@ -39,12 +39,12 @@ import qualified Prelude                                            as P
 
 
 pattern True_ :: Exp Bool
-pattern True_ = Exp (Const True)
+pattern True_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBool)) True))
 
 pattern False_ :: Exp Bool
-pattern False_ = Exp (Const False)
-{-# COMPLETE True_, False_ #-}
+pattern False_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBool)) False))
 
+{-# COMPLETE True_, False_ #-}
 
 infix 4 ==
 infix 4 /=
@@ -54,7 +54,14 @@ infix 4 /=
 --
 infixr 3 &&
 (&&) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&) = mkLAnd
+(&&) x y = cond x y $ constant False
+
+-- | Conjunction: True if both arguments are true. This is a strict version of
+-- '(&&)': it will always evaluate both arguments, even when the first is false.
+--
+infixr 3 &&!
+(&&!) :: Exp Bool -> Exp Bool -> Exp Bool
+(&&!) = mkLAnd
 
 -- | Disjunction: True if either argument is true. This is a short-circuit
 -- operator, so the second argument will be evaluated only if the first is
@@ -62,7 +69,14 @@ infixr 3 &&
 --
 infixr 2 ||
 (||) :: Exp Bool -> Exp Bool -> Exp Bool
-(||) = mkLOr
+(||) x y = cond x (constant True) y
+
+-- | Disjunction: True if either argument is true. This is a strict version of
+-- '(||)': it will always evaluate both arguments, even when the first is true.
+--
+infixr 2 ||!
+(||!) :: Exp Bool -> Exp Bool -> Exp Bool
+(||!) = mkLOr
 
 -- | Logical negation
 --
@@ -106,12 +120,12 @@ instance P.Eq (Exp a) where
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
 
-lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp Bool)
-      -> Exp a
-      -> Exp a
-      -> Exp Bool
-lift2 f x y = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
+cond :: Elt t
+     => Exp Bool                -- ^ condition
+     -> Exp t                   -- ^ then-expression
+     -> Exp t                   -- ^ else-expression
+     -> Exp t
+cond (Exp c) (Exp x) (Exp y) = exp $ Cond c x y
 
 $(runQ $ do
     let
@@ -166,13 +180,6 @@ $(runQ $ do
                 (/=) = mkNEq
             |]
 
-        mkCPrim :: Name -> Q [Dec]
-        mkCPrim t =
-          [d| instance Eq $(conT t) where
-                (==) = lift2 mkEq
-                (/=) = lift2 mkNEq
-            |]
-
         mkTup :: Int -> Q [Dec]
         mkTup n =
           let
@@ -190,7 +197,7 @@ $(runQ $ do
     is <- mapM mkPrim integralTypes
     fs <- mapM mkPrim floatingTypes
     ns <- mapM mkPrim nonNumTypes
-    cs <- mapM mkCPrim cTypes
+    cs <- mapM mkPrim cTypes
     ts <- mapM mkTup [2..16]
     return $ concat (concat [is,fs,ns,cs,ts])
  )

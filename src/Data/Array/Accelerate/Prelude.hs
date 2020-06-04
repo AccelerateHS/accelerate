@@ -707,7 +707,7 @@ fold1All f arr = fold1 f (flatten arr)
 --     40, 170, 0, 138]
 --
 foldSeg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltRepr i, IsIntegral i)
     => (Exp e -> Exp e -> Exp e)
     -> Exp e
     -> Acc (Array (sh:.Int) e)
@@ -734,15 +734,17 @@ foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
 -- descriptor species the length of each of the logical sub-arrays.
 --
 fold1Seg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltRepr i, IsIntegral i)
     => (Exp e -> Exp e -> Exp e)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 fold1Seg f arr seg = fold1Seg' f arr (scanl plus zero seg)
   where
+    plus :: Exp i -> Exp i -> Exp i
+    zero :: Exp i
     (plus, zero) =
-      case integralType @i of
+      case integralType @(EltRepr i) of
         TypeInt{}    -> ((+), 0)
         TypeInt8{}   -> ((+), 0)
         TypeInt16{}  -> ((+), 0)

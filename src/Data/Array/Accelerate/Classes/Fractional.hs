@@ -20,7 +20,6 @@ module Data.Array.Accelerate.Classes.Fractional (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -62,25 +61,12 @@ instance P.Fractional (Exp Double) where
   fromRational = constant . P.fromRational
 
 instance P.Fractional (Exp CFloat) where
-  (/)          = lift2 mkFDiv
-  recip        = lift1 mkRecip
+  (/)          = mkFDiv
+  recip        = mkRecip
   fromRational = constant . P.fromRational
 
 instance P.Fractional (Exp CDouble) where
-  (/)          = lift2 mkFDiv
-  recip        = lift1 mkRecip
+  (/)          = mkFDiv
+  recip        = mkRecip
   fromRational = constant . P.fromRational
-
-lift1 :: (Elt a, Elt b, b ~ EltRepr a)
-      => (Exp b -> Exp b)
-      -> Exp a
-      -> Exp a
-lift1 f = mkUnsafeCoerce . f . mkUnsafeCoerce
-
-lift2 :: (Elt a, Elt b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp b)
-      -> Exp a
-      -> Exp a
-      -> Exp a
-lift2 f x y = mkUnsafeCoerce (f (mkUnsafeCoerce x) (mkUnsafeCoerce y))
 
