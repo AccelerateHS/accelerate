@@ -1977,6 +1977,7 @@ nodeName (AccNodeCount (StableSharingAcc (StableNameHeight sn _) _) _) = NodeNam
 nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeName sn
 -- nodeName (SeqNodeCount (StableSharingSeq (StableNameHeight sn _) _) _) = NodeName sn
 
+
 -- Combine node counts that belong to the same node.
 --
 -- * We assume that the list invariant —subterms follow their parents— holds for both arguments and
@@ -1984,36 +1985,23 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
 -- * In the same manner, we assume that all 'Exp' node counts precede 'SmartAcc' node counts and
 --   guarantee that this also hold for the result.
 --
--- RCE: The list combination should be able to be performed as a more efficient merge.
---
+-- With the latest revision, the commented Seq code hasn't been updated for this function.
+
 (+++) :: NodeCounts -> NodeCounts -> NodeCounts
-(ns1,g1) +++ (ns2,g2) = (foldr insert ns1 ns2, Map.unionWith Set.union g1 g2)
+(ns1, g1) +++ (ns2, g2) = (cleanup $ merge ns1 ns2, Map.unionWith Set.union g1 g2)
   where
-    insert x               []                         = [x]
-    insert x@(AccNodeCount sa1 count1) ys@(y@(AccNodeCount sa2 count2) : ys')
-      | sa1 == sa2          = AccNodeCount (sa1 `pickNoneAvar` sa2) (count1 + count2) : ys'
-      | sa1 `higherSSA` sa2 = x : ys
-      | otherwise           = y : insert x ys'
-    insert x@(ExpNodeCount se1 count1) ys@(y@(ExpNodeCount se2 count2) : ys')
-      | se1 == se2          = ExpNodeCount (se1 `pickNoneVar` se2) (count1 + count2) : ys'
-      | se1 `higherSSE` se2 = x : ys
-      | otherwise           = y : insert x ys'
-    -- insert x@(SeqNodeCount se1 count1) ys@(y@(SeqNodeCount se2 count2) : ys')
-    --   | se1 == se2          = SeqNodeCount (se1 `pickNoneSvar` se2) (count1 + count2) : ys'
-    --   | se1 `higherSSS` se2 = x : ys
-    --   | otherwise           = y : insert x ys'
-    insert x@(AccNodeCount _ _) (y@(ExpNodeCount _ _) : ys')
-      = y : insert x ys'
-    insert x@(ExpNodeCount _ _) (y@(AccNodeCount _ _) : ys')
-      = x : insert y ys'
-    -- insert x@(SeqNodeCount _ _) (y@(ExpNodeCount _ _) : ys')
-    --   = y : insert x ys'
-    -- insert x@(ExpNodeCount _ _) (y@(SeqNodeCount _ _) : ys')
-    --   = x : insert y ys'
-    -- insert x@(AccNodeCount _ _) (y@(SeqNodeCount _ _) : ys')
-    --   = y : insert x ys'
-    -- insert x@(SeqNodeCount _ _) (y@(AccNodeCount _ _) : ys')
-    --   = x : insert y ys'
+    merge [] x = x
+    merge x [] = x
+    merge (x@(AccNodeCount sa1 count1):xs) (y@(AccNodeCount sa2 count2):ys)
+     | sa1 == sa2          = AccNodeCount (sa1 `pickNoneAvar` sa2) (count1 + count2) : merge xs ys
+     | sa1 `higherSSA` sa2 = x : merge xs (y:ys)
+     | otherwise           = y : merge (x:xs) ys
+    merge (x@(ExpNodeCount se1 count1):xs) (y@(ExpNodeCount se2 count2):ys)
+     | se1 == se2          = ExpNodeCount (se1 `pickNoneVar` se2) (count1 + count2) : merge xs ys
+     | se1 `higherSSE` se2 = x : merge xs (y:ys)
+     | otherwise           = y : merge (x:xs) ys
+    merge (x@(AccNodeCount _ _):xs) (y@(ExpNodeCount _ _):ys) = y : merge (x:xs) ys
+    merge (x@(ExpNodeCount _ _):xs) (y@(AccNodeCount _ _):ys) = x : merge xs (y:ys)
 
     (StableSharingAcc _ (AvarSharing _ _)) `pickNoneAvar` sa2  = sa2
     sa1                                    `pickNoneAvar` _sa2 = sa1
@@ -2021,9 +2009,15 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
     (StableSharingExp _ (VarSharing _ _))  `pickNoneVar`  sa2  = sa2
     sa1                                    `pickNoneVar`  _sa2 = sa1
 
-    -- pickNoneSvar :: StableSharingSeq -> StableSharingSeq -> StableSharingSeq
-    -- (StableSharingSeq _ (SvarSharing _)) `pickNoneSvar` sa2  = sa2
-    -- sa1                                  `pickNoneSvar` _sa2 = sa1
+    -- As the StableSharingAccs do not pose a strict ordering, this cleanup step is needed.
+    -- In this step, all pairs of AccNodes and ExpNodes that are of the same height are compared against eachother.
+    -- Without this step, duplicates may arise.
+    -- Note that while (+++) is morally symmetric, replacing `merge [x] y' with `merge y [x]' inside of `cleanup' won't check all required possibilities.
+    cleanup = concatMap (foldr (\x y -> merge [x] y) []) . groupBy sameHeight
+    sameHeight (AccNodeCount sa1 _) (AccNodeCount sa2 _) = not (sa1 `higherSSA` sa2) && not (sa2 `higherSSA` sa1)
+    sameHeight (ExpNodeCount se1 _) (ExpNodeCount se2 _) = not (se1 `higherSSE` se2) && not (se2 `higherSSE` se1)
+    sameHeight _ _ = False
+
 
 -- Build an initial environment for the tag values given in the first argument for traversing an
 -- array expression.  The 'StableSharingAcc's for all tags /actually used/ in the expressions are
