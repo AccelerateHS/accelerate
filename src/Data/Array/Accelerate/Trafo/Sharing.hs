@@ -1982,11 +1982,10 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
 --
 -- * We assume that the list invariant —subterms follow their parents— holds for both arguments and
 --   guarantee that it still holds for the result.
+--
 -- * In the same manner, we assume that all 'Exp' node counts precede 'SmartAcc' node counts and
 --   guarantee that this also hold for the result.
 --
--- With the latest revision, the commented Seq code hasn't been updated for this function.
-
 (+++) :: NodeCounts -> NodeCounts -> NodeCounts
 (ns1, g1) +++ (ns2, g2) = (cleanup $ merge ns1 ns2, Map.unionWith Set.union g1 g2)
   where
@@ -2009,10 +2008,15 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
     (StableSharingExp _ (VarSharing _ _))  `pickNoneVar`  sa2  = sa2
     sa1                                    `pickNoneVar`  _sa2 = sa1
 
-    -- As the StableSharingAccs do not pose a strict ordering, this cleanup step is needed.
-    -- In this step, all pairs of AccNodes and ExpNodes that are of the same height are compared against eachother.
-    -- Without this step, duplicates may arise.
-    -- Note that while (+++) is morally symmetric, replacing `merge [x] y' with `merge y [x]' inside of `cleanup' won't check all required possibilities.
+    -- As the StableSharingAccs do not pose a strict ordering, this cleanup
+    -- step is needed. In this step, all pairs of AccNodes and ExpNodes
+    -- that are of the same height are compared against each other. Without
+    -- this step, duplicates may arise.
+    --
+    -- Note that while (+++) is morally symmetric, replacing `merge [x] y'
+    -- with `merge y [x]' inside of `cleanup' won't check all required
+    -- possibilities.
+    --
     cleanup = concatMap (foldr (\x y -> merge [x] y) []) . groupBy sameHeight
     sameHeight (AccNodeCount sa1 _) (AccNodeCount sa2 _) = not (sa1 `higherSSA` sa2) && not (sa2 `higherSSA` sa1)
     sameHeight (ExpNodeCount se1 _) (ExpNodeCount se2 _) = not (se1 `higherSSE` se2) && not (se2 `higherSSE` se1)
