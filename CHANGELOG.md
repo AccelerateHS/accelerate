@@ -14,18 +14,20 @@ Policy (PVP)](https://pvp.haskell.org)
     if the delayed function is expensive, you may wish to explicitly `compute`
     the source array first, matching the old behaviour.
   * Removed `Slice` constraint from some indexing operations
+  * Improve fusion for `zipWith*` ([#453])
 
   * (internal) Visible type applications are used instead of `Proxy` types
   * (internal) `EltRepr` is now a class-associated type of `Elt`
   * (internal) `GArrayData` has been simplified
   * (internal) SIMD representation has been improved and generalised
+  * (internal) Massive internal refactoring of the internal AST ([#449], [#455], [#457])
 
 ### Added
   * Pattern synonyms for manipulating custom product types can now be created;
     see `Pattern`
 
 ### Removed
-  * Drop support for GHC-7.10
+  * Drop support for GHC-7.10, 8.0
 
 ### Contributors
 
@@ -33,6 +35,10 @@ Special thanks to those who contributed patches as part of this release:
 
   * Trevor L. McDonell (@tmcdonell)
   * Joshua Meredith (@JoshMeredith)
+  * Ivo Gabe de Wolff (@ivogabe)
+  * David van Balen (@dpvanbalen)
+  * Jaro Reinders (@noughtmare)
+  * Alex Lang (@alang9)
 
 
 ## [1.2.0.1] - 2018-10-06
@@ -180,4 +186,8 @@ Special thanks to those who contributed patches as part of this release:
 
 [#340]:             https://github.com/AccelerateHS/accelerate/issues/340
 [#390]:             https://github.com/AccelerateHS/accelerate/issues/390
+[#453]:             https://github.com/AccelerateHS/accelerate/pull/453
+[#449]:             https://github.com/AccelerateHS/accelerate/pull/449
+[#455]:             https://github.com/AccelerateHS/accelerate/pull/455
+[#457]:             https://github.com/AccelerateHS/accelerate/pull/457
 
