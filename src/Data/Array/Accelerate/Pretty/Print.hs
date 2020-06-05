@@ -255,8 +255,12 @@ prettyAtuple
     -> PreOpenAcc acc aenv arrs
     -> Adoc
 prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
-    Just tup -> align $ "T" <> pretty (length tup) <+> sep tup
     Nothing  -> align $ ppPair acc
+    Just tup ->
+      case tup of
+        []  -> "()"
+        [t] -> t
+        _   -> align $ "T" <> pretty (length tup) <+> sep tup
   where
     ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
     ppPair (Apair a1 a2) = "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc context0 aenv0 a2 <> ")"
@@ -278,8 +282,11 @@ prettyELhs requiresParens = prettyLhs requiresParens 'x'
 
 prettyLhs :: forall s env env' arrs. Bool -> Char -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
 prettyLhs requiresParens x env0 lhs = case collect lhs of
-  Just (env1, tup) -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> sep tup))
   Nothing          -> ppPair lhs
+  Just (env1, tup) ->
+    case tup of
+      []  -> (env1, "()")
+      _   -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> sep tup))
   where
     ppPair :: LeftHandSide s arrs' env env'' -> (Val env'', Adoc)
     ppPair (LeftHandSideWildcard TupRunit) = (env0, "()")
@@ -476,19 +483,22 @@ prettyTuple
     -> OpenExp env aenv t
     -> Adoc
 prettyTuple ctx env aenv exp = case collect exp of
-    Just tup -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
     Nothing  -> align $ ppPair exp
+    Just tup ->
+      case tup of
+        []  -> "()"
+        [t] -> t
+        _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
   where
     ppPair :: OpenExp env aenv t' -> Adoc
     ppPair (Pair e1 e2) = "(" <> ppPair e1 <> "," <+> prettyOpenExp context0 env aenv e2 <> ")"
     ppPair e            = prettyOpenExp context0 env aenv e
 
     collect :: OpenExp env aenv t' -> Maybe [Adoc]
-    collect Nil          = Just []
+    collect Nil                = Just []
     collect (Pair e1 e2)
-      | Just tup <- collect e1
-                         = Just $ tup ++ [prettyOpenExp app env aenv e2]
-    collect _            = Nothing
+      | Just tup <- collect e1 = Just $ tup ++ [prettyOpenExp app env aenv e2]
+    collect _                  = Nothing
 
 {-
 
