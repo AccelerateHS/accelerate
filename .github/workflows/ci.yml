@@ -1,0 +1,65 @@
+name: CI
+
+# Trigger the workflow on push or pull request
+on:
+  pull_request:
+  push:
+    # but only for the master branch
+    # branches: [master]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  stack:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        allow_failure: [false]
+        ghc:
+          - "8.8"
+          - "8.6"
+          - "8.4"
+          - "8.2"
+        include:
+          - os: macOS-latest
+            ghc: 8.8
+            allow_failure: false
+          # ghc-8.8 currently doesn't work on the windows test machines due to a
+          # 32-bit linker problem, failing with the error:
+          # Access violation in generated code when writing 0x0
+          - os: windows-latest
+            ghc: 8.6
+            allow_failure: false
+    env:
+      STACK_FLAGS: "--system-ghc --no-install-ghc --fast --flag accelerate:nofib"
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/setup-haskell@v1.1
+      name: Setup Haskell Stack
+      with:
+        enable-stack: true
+        ghc-version: ${{ matrix.ghc }}
+
+    - uses: actions/cache@v1
+      name: Cache ~/.stack
+      with:
+        path: ~/.stack
+        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
+
+    - name: Build
+      run: |
+        ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
+        stack build $STACK_FLAGS --test --no-run-tests
+
+    - name: Test
+      run: |
+        stack test accelerate:doctest $STACK_FLAGS
+        stack test accelerate:nofib-interpreter $STACK_FLAGS --test-arguments='--hedgehog-tests 25'
+
