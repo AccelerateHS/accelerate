@@ -37,6 +37,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
   -- ** Rebuilding terms
   RebuildAcc, Rebuildable(..), RebuildableAcc,
   RebuildableExp(..), rebuildWeakenVar, rebuildLHS,
+  OpenAccFun(..), OpenAccExp(..),
 
   -- ** Checks
   isIdentity, isIdentityIndexing, extractExpVars,
@@ -101,34 +102,32 @@ bindingIsTrivial lhs vars
   = Just Refl
 bindingIsTrivial _ _ = Nothing
 
-isIdentity :: PreOpenFun acc env aenv (a -> b) -> Maybe (a :~: b)
+isIdentity :: OpenFun env aenv (a -> b) -> Maybe (a :~: b)
 isIdentity (Lam lhs (Body (extractExpVars -> Just vars))) = bindingIsTrivial lhs vars
 isIdentity _ = Nothing
 
 -- Detects whether the function is of the form \ix -> a ! ix
-isIdentityIndexing :: PreOpenFun acc env aenv (a -> b) -> Maybe (acc aenv (Array a b))
+isIdentityIndexing :: OpenFun env aenv (a -> b) -> Maybe (ArrayVar aenv (Array a b))
 isIdentityIndexing (Lam lhs (Body body))
-  | Index a ix <- body
-  , Just vars  <- extractExpVars ix
-  , Just Refl  <- bindingIsTrivial lhs vars
-  = Just a
+  | Index avar ix <- body
+  , Just vars     <- extractExpVars ix
+  , Just Refl     <- bindingIsTrivial lhs vars
+  = Just avar
 isIdentityIndexing _ = Nothing
 
 -- | Replace the first variable with the given expression. The environment
 -- shrinks.
 --
-inline :: RebuildableAcc acc
-       => PreOpenExp acc (env, s) aenv t
-       -> PreOpenExp acc env      aenv s
-       -> PreOpenExp acc env      aenv t
+inline :: OpenExp (env, s) aenv t
+       -> OpenExp env      aenv s
+       -> OpenExp env      aenv t
 inline f g = Stats.substitution "inline" $ rebuildE (subTop g) f
 
-inlineVars :: forall acc env env' aenv t1 t2.
-              RebuildableAcc acc
-           => ELeftHandSide t1 env env'
-           -> PreOpenExp acc env' aenv t2
-           -> PreOpenExp acc env  aenv t1
-           -> Maybe (PreOpenExp acc env  aenv t2)
+inlineVars :: forall env env' aenv t1 t2.
+              ELeftHandSide t1 env env'
+           ->        OpenExp env' aenv t2
+           ->        OpenExp env  aenv t1
+           -> Maybe (OpenExp env  aenv t2)
 inlineVars lhsBound expr bound
   | Just vars <- lhsFullVars lhsBound = substitute (strengthenWithLHS lhsBound) weakenId vars expr
   where
@@ -136,8 +135,8 @@ inlineVars lhsBound expr bound
                env1 :?> env2
             -> env :> env2
             -> ExpVars env1 t1
-            -> PreOpenExp acc env1 aenv t
-            -> Maybe (PreOpenExp acc env2 aenv t)
+            -> OpenExp env1 aenv t
+            -> Maybe (OpenExp env2 aenv t)
     substitute _ k2 vars (extractExpVars -> Just vars')
       | Just Refl <- matchVars vars vars' = Just $ weakenE k2 bound
     substitute k1 k2 vars e = case e of
@@ -167,18 +166,18 @@ inlineVars lhsBound expr bound
       Coerce t1 t2 e1     -> Coerce t1 t2 <$> travE e1
 
       where
-        travE :: PreOpenExp acc env1 aenv s -> Maybe (PreOpenExp acc env2 aenv s)
+        travE :: OpenExp env1 aenv s -> Maybe (OpenExp env2 aenv s)
         travE = substitute k1 k2 vars
 
-        travF :: PreOpenFun acc env1 aenv s -> Maybe (PreOpenFun acc env2 aenv s)
+        travF :: OpenFun env1 aenv s -> Maybe (OpenFun env2 aenv s)
         travF = substituteF k1 k2 vars
 
     substituteF :: forall env1 env2 t.
                env1 :?> env2
             -> env :> env2
             -> ExpVars env1 t1
-            -> PreOpenFun acc env1 aenv t
-            -> Maybe (PreOpenFun acc env2 aenv t)
+            -> OpenFun env1 aenv t
+            -> Maybe (OpenFun env2 aenv t)
     substituteF k1 k2 vars (Body e) = Body <$> substitute k1 k2 vars e
     substituteF k1 k2 vars (Lam lhs f)
       | Exists lhs' <- rebuildLHS lhs = Lam lhs' <$> substituteF (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) f
@@ -189,44 +188,45 @@ inlineVars _ _ _ = Nothing
 -- | Replace an expression that uses the top environment variable with another.
 -- The result of the first is let bound into the second.
 --
-{- substitute' :: RebuildableAcc acc
-            => PreOpenExp acc (env, b) aenv c
-            -> PreOpenExp acc (env, a) aenv b
-            -> PreOpenExp acc (env, a) aenv c
+{- substitute' :: OpenExp (env, b) aenv c
+            -> OpenExp (env, a) aenv b
+            -> OpenExp (env, a) aenv c
 substitute' f g
   | Stats.substitution "substitute" False = undefined
   | isIdentity f = g -- don't rebind an identity function
   | isIdentity g = f
   | otherwise = Let g $ rebuildE split f
   where
-    split :: Idx (env,b) c -> PreOpenExp acc ((env,a),b) aenv c
+    split :: Idx (env,b) c -> OpenExp ((env,a),b) aenv c
     split ZeroIdx       = Var ZeroIdx
     split (SuccIdx ix)  = Var (SuccIdx (SuccIdx ix))
 
-substitute :: RebuildableAcc acc
-           => LeftHandSide b env envb
-           -> PreOpenExp acc envb c
+substitute :: LeftHandSide b env envb
+           -> OpenExp envb c
            -> LeftHandSide a env enva
-           -> PreOpenExp acc enva b
+           -> OpenExp enva b
 -}
 
 -- | Composition of unary functions.
 --
-compose :: RebuildableAcc acc
-        => PreOpenFun acc env aenv (b -> c)
-        -> PreOpenFun acc env aenv (a -> b)
-        -> PreOpenFun acc env aenv (a -> c)
+compose :: OpenFun env aenv (b -> c)
+        -> OpenFun env aenv (a -> b)
+        -> OpenFun env aenv (a -> c)
 compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
   | Stats.substitution "compose" False = undefined
   | Just Refl <- isIdentity f = g -- don't rebind an identity function
   | Just Refl <- isIdentity g = f
 
   | Exists lhsB' <- rebuildLHS lhsB
-  = Lam lhsA $ Body $ Let lhsB' b (weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c)
+  = Lam lhsA
+  $ Body
+  $ Let lhsB' b
+  $ weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c
   -- = Stats.substitution "compose" . Lam lhs2 . Body $ substitute' f g
-compose _                   _                   = error "compose: impossible evaluation"
+compose _
+  _ = error "compose: impossible evaluation"
 
-subTop :: PreOpenExp acc env aenv s -> ExpVar (env, s) t -> PreOpenExp acc env aenv t
+subTop :: OpenExp env aenv s -> ExpVar (env, s) t -> OpenExp env aenv t
 subTop s (Var _  ZeroIdx     ) = s
 subTop _ (Var tp (SuccIdx ix)) = Evar $ Var tp ix
 
@@ -269,13 +269,13 @@ class Rebuildable f where
 class RebuildableExp f where
   {-# MINIMAL rebuildPartialE #-}
   rebuildPartialE :: (Applicative f', SyntacticExp fe)
-                  => (forall e'. ExpVar env e' -> f' (fe (AccClo (f env)) env' aenv e'))
-                  -> f env aenv  e
+                  => (forall e'. ExpVar env e' -> f' (fe env' aenv e'))
+                  -> f env aenv e
                   -> f' (f env' aenv e)
 
   {-# INLINEABLE rebuildE #-}
   rebuildE :: SyntacticExp fe
-           => (forall e'. ExpVar env e' -> fe (AccClo (f env)) env' aenv e')
+           => (forall e'. ExpVar env e' -> fe env' aenv e')
            -> f env  aenv e
            -> f env' aenv e
   rebuildE v = runIdentity . rebuildPartialE (Identity . v)
@@ -284,17 +284,25 @@ class RebuildableExp f where
 --
 type RebuildableAcc acc = (Rebuildable acc, AccClo acc ~ acc)
 
+-- Wrappers which add the 'acc' type argument
+--
+data OpenAccExp (acc :: Type -> Type -> Type) env aenv a where
+  OpenAccExp :: { unOpenAccExp :: OpenExp env aenv a } -> OpenAccExp acc env aenv a
+
+data OpenAccFun (acc :: Type -> Type -> Type) env aenv a where
+  OpenAccFun :: { unOpenAccFun :: OpenFun env aenv a } -> OpenAccFun acc env aenv a
+
 -- We can use the same plumbing to rebuildPartial all the things we want to rebuild.
 --
-instance RebuildableAcc acc => Rebuildable (PreOpenExp acc env) where
-  type AccClo (PreOpenExp acc env) = acc
+instance Rebuildable (OpenAccExp acc env) where
+  type AccClo (OpenAccExp acc env) = acc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial x = Stats.substitution "rebuild" $ rebuildPreOpenExp rebuildPartial (pure . IE) x
+  rebuildPartial v (OpenAccExp e) = OpenAccExp <$> Stats.substitution "rebuild" (rebuildOpenExp (pure . IE) (reindexAvar v) e)
 
-instance RebuildableAcc acc => Rebuildable (PreOpenFun acc env) where
-  type AccClo (PreOpenFun acc env) = acc
+instance Rebuildable (OpenAccFun acc env) where
+  type AccClo (OpenAccFun acc env) = acc
   {-# INLINEABLE rebuildPartial #-}
-  rebuildPartial x = Stats.substitution "rebuild" $ rebuildFun rebuildPartial (pure . IE) x
+  rebuildPartial v (OpenAccFun f) = OpenAccFun <$> Stats.substitution "rebuild" (rebuildFun (pure . IE) (reindexAvar v) f)
 
 instance RebuildableAcc acc => Rebuildable (PreOpenAcc acc) where
   type AccClo (PreOpenAcc acc) = acc
@@ -311,13 +319,13 @@ instance Rebuildable OpenAcc where
   {-# INLINEABLE rebuildPartial #-}
   rebuildPartial x = Stats.substitution "rebuild" $ rebuildOpenAcc x
 
-instance RebuildableAcc acc => RebuildableExp (PreOpenExp acc) where
+instance RebuildableExp OpenExp where
   {-# INLINEABLE rebuildPartialE #-}
-  rebuildPartialE v x = Stats.substitution "rebuild" $ rebuildPreOpenExp rebuildPartial v (pure . IA) x
+  rebuildPartialE v x = Stats.substitution "rebuild" $ rebuildOpenExp v (ReindexAvar pure) x
 
-instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
+instance RebuildableExp OpenFun where
   {-# INLINEABLE rebuildPartialE #-}
-  rebuildPartialE v x = Stats.substitution "rebuild" $ rebuildFun rebuildPartial v (pure . IA) x
+  rebuildPartialE v x = Stats.substitution "rebuild" $ rebuildFun v (ReindexAvar pure) x
 
 -- NOTE: [Weakening]
 --
@@ -363,7 +371,7 @@ instance Sink (Vars s) where
 rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc env' (Array sh e)
 rebuildWeakenVar k (Var s idx) = Avar $ Var s $ k >:> idx
 
-rebuildWeakenEvar :: env :> env' -> ExpVar env t -> PreOpenExp acc env' aenv t
+rebuildWeakenEvar :: env :> env' -> ExpVar env t -> OpenExp env' aenv t
 rebuildWeakenEvar k (Var s idx) = Evar $ Var s $ k >:> idx
 
 instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
@@ -374,15 +382,15 @@ instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
   {-# INLINEABLE weaken #-}
   weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
 
-instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
+instance Sink (OpenExp env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
+  weaken k = Stats.substitution "weaken" . runIdentity . rebuildOpenExp (Identity . Evar) (ReindexAvar (Identity . weaken k))
 
-instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
+instance Sink (OpenFun env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
+  weaken k = Stats.substitution "weaken" . runIdentity . rebuildFun (Identity . Evar) (ReindexAvar (Identity . weaken k))
 
-instance RebuildableAcc acc => Sink (PreBoundary acc) where
+instance Sink Boundary where
   {-# INLINEABLE weaken #-}
   weaken k bndy =
     case bndy of
@@ -412,11 +420,11 @@ class SinkExp f where
   -- default weakenE :: RebuildableExp f => env :> env' -> f env aenv t -> f env' aenv t
   -- weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
 
-instance RebuildableAcc acc => SinkExp (PreOpenExp acc) where
+instance SinkExp OpenExp where
   {-# INLINEABLE weakenE #-}
   weakenE v = Stats.substitution "weakenE" . rebuildE (rebuildWeakenEvar v)
 
-instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
+instance SinkExp OpenFun where
   {-# INLINEABLE weakenE #-}
   weakenE v = Stats.substitution "weakenE" . rebuildE (rebuildWeakenEvar v)
 
@@ -447,7 +455,7 @@ strengthenE k x = Stats.substitution "strengthenE" $ rebuildPartialE @f @Maybe @
 
 strengthenWithLHS :: LeftHandSide s t env1 env2 -> env2 :?> env1
 strengthenWithLHS (LeftHandSideWildcard _) = Just
-strengthenWithLHS (LeftHandSideSingle _) = \ix -> case ix of
+strengthenWithLHS (LeftHandSideSingle _)   = \ix -> case ix of
   ZeroIdx   -> Nothing
   SuccIdx i -> Just i
 strengthenWithLHS (LeftHandSidePair l1 l2) = strengthenWithLHS l2 >=> strengthenWithLHS l1
@@ -471,57 +479,51 @@ strengthenAfter _ _ _ = error "Substitution.strengthenAfter: left hand sides do 
 -- SEE: [Weakening]
 --
 class SyntacticExp f where
-  varIn         :: ExpVar env t       -> f acc env aenv t
-  expOut        :: f acc env aenv t -> PreOpenExp acc env aenv t
-  weakenExp     :: RebuildAcc acc -> f acc env aenv t -> f acc (env, s) aenv t
-  -- weakenExpAcc  :: RebuildAcc acc -> f acc env aenv t -> f acc env (aenv, s) t
+  varIn         :: ExpVar env t -> f env aenv t
+  expOut        :: f env aenv t -> OpenExp env aenv t
+  weakenExp     :: f env aenv t -> f (env, s) aenv t
 
-newtype IdxE (acc :: Type -> Type -> Type) env aenv t = IE { unIE :: ExpVar env t }
+newtype IdxE env aenv t = IE { unIE :: ExpVar env t }
 
 instance SyntacticExp IdxE where
   varIn          = IE
   expOut         = Evar . unIE
-  weakenExp _ (IE (Var tp ix)) = IE $ Var tp $ SuccIdx ix
-  -- weakenExpAcc _ = IE . unIE
+  weakenExp (IE (Var tp ix)) = IE $ Var tp $ SuccIdx ix
 
-instance SyntacticExp PreOpenExp where
+instance SyntacticExp OpenExp where
   varIn          = Evar
   expOut         = id
-  weakenExp k    = runIdentity . rebuildPreOpenExp k (Identity . weakenExp k . IE) (Identity . IA)
-  -- weakenExpAcc k = runIdentity . rebuildPreOpenExp k (Identity . IE) (Identity . weakenAcc k . IA)
+  weakenExp      = runIdentity . rebuildOpenExp (Identity . weakenExp . IE) (ReindexAvar Identity)
 
 {-# INLINEABLE shiftE #-}
 shiftE
     :: (Applicative f, SyntacticExp fe)
-    => RebuildAcc acc
-    -> RebuildEvar f fe acc env      env'      aenv
-    -> RebuildEvar f fe acc (env, s) (env', s) aenv
-shiftE _ _ (Var tp ZeroIdx)      = pure $ varIn (Var tp ZeroIdx)
-shiftE k v (Var tp (SuccIdx ix)) = weakenExp k <$> v (Var tp ix)
+    => RebuildEvar f fe env      env'      aenv
+    -> RebuildEvar f fe (env, s) (env', s) aenv
+shiftE _ (Var tp ZeroIdx)      = pure $ varIn (Var tp ZeroIdx)
+shiftE v (Var tp (SuccIdx ix)) = weakenExp <$> v (Var tp ix)
 
 {-# INLINEABLE shiftE' #-}
 shiftE'
     :: (Applicative f, SyntacticExp fa)
     => ELeftHandSide t env1 env1'
     -> ELeftHandSide t env2 env2'
-    -> RebuildAcc acc
-    -> RebuildEvar f fa acc env1  env2  aenv
-    -> RebuildEvar f fa acc env1' env2' aenv
-shiftE' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
-shiftE' (LeftHandSideSingle _)   (LeftHandSideSingle _)   k v = shiftE k v
-shiftE' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftE' b1 b2 k $ shiftE' a1 a2 k v
-shiftE' _ _ _ _ = error "Substitution: left hand sides do not match"
+    -> RebuildEvar f fa env1  env2  aenv
+    -> RebuildEvar f fa env1' env2' aenv
+shiftE' (LeftHandSideWildcard _) (LeftHandSideWildcard _) v = v
+shiftE' (LeftHandSideSingle _)   (LeftHandSideSingle _)   v = shiftE v
+shiftE' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) v = shiftE' b1 b2 $ shiftE' a1 a2 v
+shiftE' _ _ _ = error "Substitution: left hand sides do not match"
 
 
-{-# INLINEABLE rebuildPreOpenExp #-}
-rebuildPreOpenExp
-    :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
-    => RebuildAcc acc
-    -> RebuildEvar f fe acc env env' aenv'
-    -> RebuildAvar f fa acc aenv aenv'
-    -> PreOpenExp acc env  aenv t
-    -> f (PreOpenExp acc env' aenv' t)
-rebuildPreOpenExp k v av exp =
+{-# INLINEABLE rebuildOpenExp #-}
+rebuildOpenExp
+    :: (Applicative f, SyntacticExp fe)
+    => RebuildEvar f fe env env' aenv'
+    -> ReindexAvar f aenv aenv'
+    -> OpenExp env  aenv t
+    -> f (OpenExp env' aenv' t)
+rebuildOpenExp v av@(ReindexAvar reindex) exp =
   case exp of
     Const t c           -> pure $ Const t c
     PrimConst c         -> pure $ PrimConst c
@@ -529,39 +531,38 @@ rebuildPreOpenExp k v av exp =
     Evar var            -> expOut          <$> v var
     Let lhs a b
       | Exists lhs' <- rebuildLHS lhs
-                        -> Let lhs'        <$> rebuildPreOpenExp k v av a  <*> rebuildPreOpenExp k (shiftE' lhs lhs' k v) av b
-    Pair e1 e2          -> Pair            <$> rebuildPreOpenExp k v av e1 <*> rebuildPreOpenExp k v av e2
+                        -> Let lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
+    Pair e1 e2          -> Pair            <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
     Nil                 -> pure Nil
-    VecPack   vec e     -> VecPack   vec   <$> rebuildPreOpenExp k v av e
-    VecUnpack vec e     -> VecUnpack vec   <$> rebuildPreOpenExp k v av e
-    IndexSlice x ix sh  -> IndexSlice x    <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
-    IndexFull x ix sl   -> IndexFull x     <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
-    ToIndex shr sh ix   -> ToIndex shr     <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    FromIndex shr sh ix -> FromIndex shr   <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    Cond p t e          -> Cond            <$> rebuildPreOpenExp k v av p  <*> rebuildPreOpenExp k v av t  <*> rebuildPreOpenExp k v av e
-    While p f x         -> While           <$> rebuildFun k v av p         <*> rebuildFun k v av f         <*> rebuildPreOpenExp k v av x
-    PrimApp f x         -> PrimApp f       <$> rebuildPreOpenExp k v av x
-    Index a sh          -> Index           <$> k av a                      <*> rebuildPreOpenExp k v av sh
-    LinearIndex a i     -> LinearIndex     <$> k av a                      <*> rebuildPreOpenExp k v av i
-    Shape a             -> Shape           <$> k av a
-    ShapeSize shr sh    -> ShapeSize shr   <$> rebuildPreOpenExp k v av sh
-    Foreign tp ff f e   -> Foreign tp ff f <$> rebuildPreOpenExp k v av e
-    Coerce t1 t2 e      -> Coerce t1 t2    <$> rebuildPreOpenExp k v av e
+    VecPack   vec e     -> VecPack   vec   <$> rebuildOpenExp v av e
+    VecUnpack vec e     -> VecUnpack vec   <$> rebuildOpenExp v av e
+    IndexSlice x ix sh  -> IndexSlice x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
+    IndexFull x ix sl   -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
+    ToIndex shr sh ix   -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    FromIndex shr sh ix -> FromIndex shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    Cond p t e          -> Cond            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t  <*> rebuildOpenExp v av e
+    While p f x         -> While           <$> rebuildFun v av p      <*> rebuildFun v av f         <*> rebuildOpenExp v av x
+    PrimApp f x         -> PrimApp f       <$> rebuildOpenExp v av x
+    Index a sh          -> Index           <$> reindex a              <*> rebuildOpenExp v av sh
+    LinearIndex a i     -> LinearIndex     <$> reindex a              <*> rebuildOpenExp v av i
+    Shape a             -> Shape           <$> reindex a
+    ShapeSize shr sh    -> ShapeSize shr   <$> rebuildOpenExp v av sh
+    Foreign tp ff f e   -> Foreign tp ff f <$> rebuildOpenExp v av e
+    Coerce t1 t2 e      -> Coerce t1 t2    <$> rebuildOpenExp v av e
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun
-    :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
-    => RebuildAcc acc
-    -> RebuildEvar f fe acc env env' aenv'
-    -> RebuildAvar f fa acc aenv aenv'
-    -> PreOpenFun acc env  aenv  t
-    -> f (PreOpenFun acc env' aenv' t)
-rebuildFun k v av fun =
+    :: (Applicative f, SyntacticExp fe)
+    => RebuildEvar f fe env env' aenv'
+    -> ReindexAvar f aenv aenv'
+    -> OpenFun env  aenv  t
+    -> f (OpenFun env' aenv' t)
+rebuildFun v av fun =
   case fun of
-    Body e      -> Body <$> rebuildPreOpenExp k v av e
+    Body e -> Body <$> rebuildOpenExp v av e
     Lam lhs f
       | Exists lhs' <- rebuildLHS lhs
-        -> Lam lhs' <$> rebuildFun k (shiftE' lhs lhs' k v) av f
+        -> Lam lhs' <$> rebuildFun (shiftE' lhs lhs' v) av f
 
 -- The array environment
 -- -----------------
@@ -592,16 +593,34 @@ instance SyntacticAcc PreOpenAcc where
 type RebuildAvar f (fa :: (Type -> Type -> Type) -> Type -> Type -> Type) acc aenv aenv'
     = forall sh e. ArrayVar aenv (Array sh e) -> f (fa acc aenv' (Array sh e))
 
-type RebuildEvar f fe (acc :: Type -> Type -> Type) env env' aenv' =
-  forall t'. ExpVar env t' -> f (fe acc env' aenv' t')
+type RebuildEvar f fe env env' aenv' =
+  forall t'. ExpVar env t' -> f (fe env' aenv' t')
+
+newtype ReindexAvar f aenv aenv' =
+  ReindexAvar (forall sh e. ArrayVar aenv (Array sh e) -> f (ArrayVar aenv' (Array sh e)))
+
+reindexAvar
+    :: forall f fa acc aenv aenv'.
+       (Applicative f, SyntacticAcc fa)
+    => RebuildAvar f fa acc aenv aenv'
+    -> ReindexAvar f        aenv aenv'
+reindexAvar v = ReindexAvar f where
+  f :: forall sh e. ArrayVar aenv (Array sh e) -> f (ArrayVar aenv' (Array sh e))
+  f var = g <$> v var
+
+  g :: fa acc aenv' (Array sh e) -> ArrayVar aenv' (Array sh e)
+  g fa = case accOut fa of
+    Avar var' -> var'
+    _ -> $internalError "reindexAvar" "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."
+
 
 {-# INLINEABLE shiftA #-}
 shiftA
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv aenv'
-    -> ArrayVar    (aenv,  s) (Array sh e)
-    -> f (fa   acc (aenv', s) (Array sh e))
+    -> ArrayVar  (aenv,  s) (Array sh e)
+    -> f (fa acc (aenv', s) (Array sh e))
 shiftA _ _ (Var s ZeroIdx)      = pure $ avarIn $ Var s ZeroIdx
 shiftA k v (Var s (SuccIdx ix)) = weakenAcc k <$> v (Var s ix)
 
@@ -640,33 +659,35 @@ rebuildPreOpenAcc k av acc =
     Apair as bs               -> Apair           <$> k av as <*> k av bs
     Anil                      -> pure Anil
     Apply repr f a            -> Apply repr      <$> rebuildAfun k av f <*> k av a
-    Acond p t e               -> Acond           <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
+    Acond p t e               -> Acond           <$> rebuildOpenExp (pure . IE) av' p <*> k av t <*> k av e
     Awhile p f a              -> Awhile          <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
-    Unit tp e                 -> Unit tp         <$> rebuildPreOpenExp k (pure . IE) av e
-    Reshape shr e a           -> Reshape shr     <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
-    Generate repr e f         -> Generate repr   <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
-    Transform repr sh ix f a  -> Transform repr  <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
-    Replicate sl slix a       -> Replicate sl    <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
-    Slice sl a slix           -> Slice sl        <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
-    Map tp f a                -> Map tp          <$> rebuildFun k (pure . IE) av f <*> k av a
-    ZipWith tp f a1 a2        -> ZipWith tp      <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
-    Fold f z a                -> Fold            <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Fold1 f a                 -> Fold1           <$> rebuildFun k (pure . IE) av f <*> k av a
-    FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
-    Fold1Seg itp f a s        -> Fold1Seg itp    <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
-    Scanl f z a               -> Scanl           <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl' f z a              -> Scanl'          <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanl1 f a                -> Scanl1          <$> rebuildFun k (pure . IE) av f <*> k av a
-    Scanr f z a               -> Scanr           <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr' f z a              -> Scanr'          <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
-    Scanr1 f a                -> Scanr1          <$> rebuildFun k (pure . IE) av f <*> k av a
-    Permute f1 a1 f2 a2       -> Permute         <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
-    Backpermute shr sh f a    -> Backpermute shr <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
-    Stencil sr tp f b a       -> Stencil sr tp   <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b  <*> k av a
+    Unit tp e                 -> Unit tp         <$> rebuildOpenExp (pure . IE) av' e
+    Reshape shr e a           -> Reshape shr     <$> rebuildOpenExp (pure . IE) av' e <*> k av a
+    Generate repr e f         -> Generate repr   <$> rebuildOpenExp (pure . IE) av' e <*> rebuildFun (pure . IE) av' f
+    Transform repr sh ix f a  -> Transform repr  <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' ix <*> rebuildFun (pure . IE) av' f <*> k av a
+    Replicate sl slix a       -> Replicate sl    <$> rebuildOpenExp (pure . IE) av' slix <*> k av a
+    Slice sl a slix           -> Slice sl        <$> k av a <*> rebuildOpenExp (pure . IE) av' slix
+    Map tp f a                -> Map tp          <$> rebuildFun (pure . IE) av' f <*> k av a
+    ZipWith tp f a1 a2        -> ZipWith tp      <$> rebuildFun (pure . IE) av' f <*> k av a1 <*> k av a2
+    Fold f z a                -> Fold            <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
+    Fold1 f a                 -> Fold1           <$> rebuildFun (pure . IE) av' f <*> k av a
+    FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a <*> k av s
+    Fold1Seg itp f a s        -> Fold1Seg itp    <$> rebuildFun (pure . IE) av' f <*> k av a <*> k av s
+    Scanl f z a               -> Scanl           <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
+    Scanl' f z a              -> Scanl'          <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
+    Scanl1 f a                -> Scanl1          <$> rebuildFun (pure . IE) av' f <*> k av a
+    Scanr f z a               -> Scanr           <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
+    Scanr' f z a              -> Scanr'          <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
+    Scanr1 f a                -> Scanr1          <$> rebuildFun (pure . IE) av' f <*> k av a
+    Permute f1 a1 f2 a2       -> Permute         <$> rebuildFun (pure . IE) av' f1 <*> k av a1 <*> rebuildFun (pure . IE) av' f2 <*> k av a2
+    Backpermute shr sh f a    -> Backpermute shr <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' f <*> k av a
+    Stencil sr tp f b a       -> Stencil sr tp   <$> rebuildFun (pure . IE) av' f <*> rebuildBoundary av' b  <*> k av a
     Stencil2 s1 s2 tp f b1 a1 b2 a2
-                              -> Stencil2 s1 s2 tp <$> rebuildFun k (pure . IE) av f <*> rebuildBoundary k av b1 <*> k av a1 <*> rebuildBoundary k av b2 <*> k av a2
+                              -> Stencil2 s1 s2 tp <$> rebuildFun (pure . IE) av' f <*> rebuildBoundary av' b1 <*> k av a1 <*> rebuildBoundary av' b2 <*> k av a2
     Aforeign repr ff afun as  -> Aforeign repr ff afun <$> k av as
     -- Collect seq             -> Collect      <$> rebuildSeq k av seq
+  where
+    av' = reindexAvar av
 
 {-# INLINEABLE rebuildAfun #-}
 rebuildAfun
@@ -703,18 +724,17 @@ rebuildLHS (LeftHandSidePair as bs)
 
 {-# INLINEABLE rebuildBoundary #-}
 rebuildBoundary
-    :: (Applicative f, SyntacticAcc fa)
-    => RebuildAcc acc
-    -> RebuildAvar f fa acc aenv aenv'
-    -> PreBoundary acc aenv t
-    -> f (PreBoundary acc aenv' t)
-rebuildBoundary k av bndy =
+    :: Applicative f
+    => ReindexAvar f aenv aenv'
+    -> Boundary aenv t
+    -> f (Boundary aenv' t)
+rebuildBoundary av bndy =
   case bndy of
     Clamp       -> pure Clamp
     Mirror      -> pure Mirror
     Wrap        -> pure Wrap
     Constant v  -> pure (Constant v)
-    Function f  -> Function <$> rebuildFun k (pure . IE) av f
+    Function f  -> Function <$> rebuildFun (pure . IE) av f
 
 {--
 {-# INLINEABLE rebuildSeq #-}
@@ -743,7 +763,7 @@ rebuildP k v p =
     MapSeq f x           -> MapSeq <$> rebuildAfun k v f <*> pure x
     ChunkedMapSeq f x    -> ChunkedMapSeq <$> rebuildAfun k v f <*> pure x
     ZipWithSeq f x y     -> ZipWithSeq <$> rebuildAfun k v f <*> pure x <*> pure y
-    ScanSeq f e x        -> ScanSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
+    ScanSeq f e x        -> ScanSeq <$> rebuildFun (pure . IE) v f <*> rebuildOpenExp (pure . IE) v e <*> pure x
 
 {-# INLINEABLE rebuildC #-}
 rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
@@ -753,7 +773,7 @@ rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          -> f (Consumer acc aenv' senv a)
 rebuildC k v c =
   case c of
-    FoldSeq f e x          -> FoldSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
+    FoldSeq f e x          -> FoldSeq <$> rebuildFun (pure . IE) v f <*> rebuildOpenExp (pure . IE) v e <*> pure x
     FoldSeqFlatten f acc x -> FoldSeqFlatten <$> rebuildAfun k v f <*> k v acc <*> pure x
     Stuple t               -> Stuple <$> rebuildT t
   where
@@ -762,7 +782,7 @@ rebuildC k v c =
     rebuildT (SnocAtup t s) = SnocAtup <$> (rebuildT t) <*> (rebuildC k v s)
 --}
 
-extractExpVars :: PreOpenExp acc env aenv a -> Maybe (ExpVars env a)
+extractExpVars :: OpenExp env aenv a -> Maybe (ExpVars env a)
 extractExpVars Nil          = Just VarsNil
 extractExpVars (Pair e1 e2) = VarsPair <$> extractExpVars e1 <*> extractExpVars e2
 extractExpVars (Evar v)     = Just $ VarsSingle v

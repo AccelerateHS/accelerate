@@ -70,8 +70,8 @@ import Data.Array.Accelerate.Array.Representation       hiding ((!!))
 import Data.Array.Accelerate.Array.Sugar                ( Elt, EltRepr, Arrays, ArrRepr, eltType )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..), OpenAcc(..), Acc
-                                                               , PreOpenExp(..), OpenExp, PreExp, Exp
-                                                               , PreBoundary(..), Boundary
+                                                               , OpenExp(..), Exp
+                                                               , Boundary(..)
                                                                , showPreAccOp, showPreExpOp, expType, HasArraysRepr(..), arraysRepr )
 import qualified Data.Array.Accelerate.AST              as AST
 import Data.Array.Accelerate.Debug.Trace                as Debug
@@ -537,7 +537,7 @@ convertSharingBoundary
     -> [StableSharingAcc]
     -> ShapeR sh
     -> PreBoundary ScopedAcc ScopedExp (Array sh e)
-    -> AST.PreBoundary AST.OpenAcc aenv (Array sh e)
+    -> AST.Boundary aenv (Array sh e)
 convertSharingBoundary config alyt aenv shr = cvt
   where
     cvt :: PreBoundary ScopedAcc ScopedExp (Array sh e) -> AST.Boundary aenv (Array sh e)
@@ -573,7 +573,7 @@ convertSharingBoundary config alyt aenv shr = cvt
 convertFun :: Function f => f -> AST.Fun () (EltReprFunctionR f)
 convertFun
   = convertFunWith
-  $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing, float_out_acc] }
+  $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing] }
 
 convertFunWith :: Function f => Config -> f -> AST.Fun () (EltReprFunctionR f)
 convertFunWith config = convertOpenFun config EmptyLayout
@@ -633,7 +633,7 @@ convertSmartFun config tp f
 convertExp :: Exp e -> AST.Exp () (EltRepr e)
 convertExp
   = convertExpWith
-  $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing, float_out_acc] }
+  $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing] }
 
 convertExpWith :: Config -> Exp e -> AST.Exp () (EltRepr e)
 convertExpWith config (Exp e) = convertOpenExp config EmptyLayout e
@@ -743,9 +743,9 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           While tp p it i       -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
           PrimConst c           -> AST.PrimConst c
           PrimApp f e           -> cvtPrimFun f (cvt e)
-          Index _ a e           -> AST.Index (cvtA a) (cvt e)
-          LinearIndex _ a i     -> AST.LinearIndex (cvtA a) (cvt i)
-          Shape _ a             -> AST.Shape (cvtA a)
+          Index _ a e           -> AST.Index (cvtAvar a) (cvt e)
+          LinearIndex _ a i     -> AST.LinearIndex (cvtAvar a) (cvt i)
+          Shape _ a             -> AST.Shape (cvtAvar a)
           ShapeSize shr e       -> AST.ShapeSize shr (cvt e)
           Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (expType e) f) (cvt e)
           Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
@@ -759,6 +759,11 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
     cvtA :: ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
+
+    cvtAvar :: ScopedAcc a -> AST.ArrayVar aenv a
+    cvtAvar a = case cvtA a of
+      AST.OpenAcc (AST.Avar var) -> var
+      _ -> $internalError "convertSharingExp" "Expected array computation in expression to be floated out"
 
     cvtFun1 :: TupleType a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
     cvtFun1 tp f
@@ -2554,7 +2559,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
         travA :: (ScopedAcc a -> PreSmartExp ScopedAcc ScopedExp t) -> UnscopedAcc a
               -> (ScopedExp t, NodeCounts)
-        travA c acc = maybeFloatOutAcc c acc' accCount
+        travA c acc = floatOutAcc c acc' accCount
           where
             (acc', accCount)  = scopesAcc acc
 
@@ -2562,20 +2567,19 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
                -> UnscopedAcc a
                -> UnscopedExp b
                -> (ScopedExp t, NodeCounts)
-        travAE c acc e = maybeFloatOutAcc (`c` e') acc' (accCountA +++ accCountE)
+        travAE c acc e = floatOutAcc (`c` e') acc' (accCountA +++ accCountE)
           where
             (acc', accCountA) = scopesAcc acc
             (e'  , accCountE) = scopesExp e
 
-        maybeFloatOutAcc :: (ScopedAcc a -> PreSmartExp ScopedAcc ScopedExp t)
+        floatOutAcc :: (ScopedAcc a -> PreSmartExp ScopedAcc ScopedExp t)
                          -> ScopedAcc a
                          -> NodeCounts
                          -> (ScopedExp t, NodeCounts)
-        maybeFloatOutAcc c acc@(ScopedAcc _ (AvarSharing _ _)) accCount        -- nothing to float out
+        floatOutAcc c acc@(ScopedAcc _ (AvarSharing _ _)) accCount        -- nothing to float out
           = reconstruct (c acc) accCount
-        maybeFloatOutAcc c acc accCount
-          | float_out_acc `member` options config = reconstruct (c var) ((stableAcc `insertAccNode` noNodeCounts) +++ accCount)
-          | otherwise                             = reconstruct (c acc) accCount
+        floatOutAcc c acc accCount
+          = reconstruct (c var) ((stableAcc `insertAccNode` noNodeCounts) +++ accCount)
           where
              (var, stableAcc) = abstract acc (\(ScopedAcc _ s) -> s)
 

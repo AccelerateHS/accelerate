@@ -17,7 +17,7 @@ module Data.Array.Accelerate.Trafo.Config (
   defaultOptions,
 
   -- Other options not controlled by the command line flags
-  float_out_acc,
+  -- float_out_acc,
 
 ) where
 
@@ -46,5 +46,5 @@ defaultOptions = unsafePerformIO $!
 
 -- Extra options not covered by command line flags
 --
-float_out_acc          = Flag 31
+-- float_out_acc          = Flag 31
 

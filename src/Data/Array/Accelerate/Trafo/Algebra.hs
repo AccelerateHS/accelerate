@@ -52,13 +52,13 @@ import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 -- or constant let bindings. Be careful not to follow self-cycles.
 --
 propagate
-    :: forall acc env aenv exp. Kit acc
-    => Gamma acc env env aenv
-    -> PreOpenExp acc env aenv exp
+    :: forall env aenv exp.
+       Gamma env env aenv
+    -> OpenExp env aenv exp
     -> Maybe exp
 propagate env = cvtE
   where
-    cvtE :: PreOpenExp acc env aenv e -> Maybe e
+    cvtE :: OpenExp env aenv e -> Maybe e
     cvtE exp = case exp of
       Const _ c                                 -> Just c
       PrimConst c                               -> Just (evalPrimConst c)
@@ -73,11 +73,11 @@ propagate env = cvtE
 -- Attempt to evaluate primitive function applications
 --
 evalPrimApp
-    :: forall acc env aenv a r. (Kit acc)
-    => Gamma acc env env aenv
+    :: forall env aenv a r.
+       Gamma env env aenv
     -> PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> (Any, PreOpenExp acc env aenv r)
+    -> OpenExp env aenv a
+    -> (Any, OpenExp env aenv r)
 evalPrimApp env f x
   -- First attempt to move constant values towards the left
   | Just r      <- commutes f x env     = evalPrimApp env f r
@@ -159,11 +159,11 @@ evalPrimApp env f x
 -- to the left of the operator. Returning Nothing indicates no change is made.
 --
 commutes
-    :: forall acc env aenv a r. Kit acc
-    => PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> Gamma acc env env aenv
-    -> Maybe (PreOpenExp acc env aenv a)
+    :: forall env aenv a r.
+       PrimFun (a -> r)
+    -> OpenExp env aenv a
+    -> Gamma env env aenv
+    -> Maybe (OpenExp env aenv a)
 commutes f x env = case f of
   PrimAdd _     -> swizzle x
   PrimMul _     -> swizzle x
@@ -176,7 +176,7 @@ commutes f x env = case f of
   PrimMin _     -> swizzle x
   _             -> Nothing
   where
-    swizzle :: PreOpenExp acc env aenv (b,b) -> Maybe (PreOpenExp acc env aenv (b,b))
+    swizzle :: OpenExp env aenv (b,b) -> Maybe (OpenExp env aenv (b,b))
     swizzle (Pair a b)
       | Nothing         <- propagate env a
       , Just _          <- propagate env b
@@ -213,8 +213,8 @@ commutes f x env = case f of
 associates
     :: (Elt a, Elt r)
     => PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> Maybe (PreOpenExp acc env aenv r)
+    -> OpenExp env aenv a
+    -> Maybe (OpenExp env aenv r)
 associates fun exp = case fun of
   PrimAdd _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
   PrimSub _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
@@ -226,7 +226,7 @@ associates fun exp = case fun of
     ty  = undefined
     ops = [ PrimMul ty, PrimFDiv ty, PrimAdd ty, PrimSub ty, PrimBAnd ty, PrimBOr ty, PrimBXor ty ]
 
-    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> PreOpenExp acc env aenv a -> [PrimFun (a -> r)] -> Maybe (PreOpenExp acc env aenv r)
+    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> OpenExp env aenv a -> [PrimFun (a -> r)] -> Maybe (OpenExp env aenv r)
     swizzle f x lvl
       | Just Refl       <- matches f ops
       , Just (a,bc)     <- untup2 x
@@ -253,7 +253,7 @@ associates fun exp = case fun of
 -- Helper functions
 -- ----------------
 
-type a :-> b = forall acc env aenv. Kit acc => PreOpenExp acc env aenv a -> Gamma acc env env aenv -> Maybe (PreOpenExp acc env aenv b)
+type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Maybe (OpenExp env aenv b)
 
 eval1 :: SingleType b -> (a -> b) -> a :-> b
 eval1 tp f x env
@@ -270,10 +270,10 @@ eval2 tp f (untup2 -> Just (x,y)) env
 eval2 _ _ _ _
   = Nothing
 
-tup2 :: (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b) -> PreOpenExp acc env aenv (a, b)
+tup2 :: (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
 tup2 (a,b) = Pair a b
 
-untup2 :: PreOpenExp acc env aenv (a, b) -> Maybe (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b)
+untup2 :: OpenExp env aenv (a, b) -> Maybe (OpenExp env aenv a, OpenExp env aenv b)
 untup2 exp
   | Pair a b <- exp = Just (a, b)
   | otherwise       = Nothing

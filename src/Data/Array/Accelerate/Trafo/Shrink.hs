@@ -67,10 +67,10 @@ class Shrink f where
 
   shrink = snd . shrink'
 
-instance Kit acc => Shrink (PreOpenExp acc env aenv e) where
+instance Shrink (OpenExp env aenv e) where
   shrink' = shrinkExp
 
-instance Kit acc => Shrink (PreOpenFun acc env aenv f) where
+instance Shrink (OpenFun env aenv f) where
   shrink' = shrinkFun
 
 data VarsRange env = VarsRange !(Exists (Idx env)) !Int !(Maybe RangeTuple) -- rightmost variable, count, tuple
@@ -110,10 +110,10 @@ weakenVarsRange lhs (VarsRange ix n t) = VarsRange (go lhs ix) n t
     go (LeftHandSideSingle _)   (Exists ix') = Exists (SuccIdx ix')
     go (LeftHandSidePair l1 l2) ix'          = go l2 $ go l1 ix'
 
-matchEVarsRange :: VarsRange env -> PreOpenExp acc env aenv t -> Bool
+matchEVarsRange :: VarsRange env -> OpenExp env aenv t -> Bool
 matchEVarsRange (VarsRange (Exists first) _ (Just rt)) expr = isJust $ go (idxToInt first) rt expr
   where
-    go :: Int -> RangeTuple -> PreOpenExp acc env aenv t -> Maybe Int
+    go :: Int -> RangeTuple -> OpenExp env aenv t -> Maybe Int
     go i RTNil Nil = Just i
     go i RTSingle (Evar (Var _ ix))
       | checkIdx i ix = Just (i + 1)
@@ -224,7 +224,7 @@ strengthenShrunkLHS _                        _                        _ = $inter
 -- instance of beta-reduction to cases where the bound variable is used zero
 -- (dead-code elimination) or one (linear inlining) times.
 --
-shrinkExp :: Kit acc => PreOpenExp acc env aenv t -> (Bool, PreOpenExp acc env aenv t)
+shrinkExp :: OpenExp env aenv t -> (Bool, OpenExp env aenv t)
 shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
   where
     -- If the bound variable is used at most this many times, it will be inlined
@@ -234,7 +234,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     lIMIT :: Int
     lIMIT = 1
 
-    cheap :: PreOpenExp acc env aenv t -> Bool
+    cheap :: OpenExp env aenv t -> Bool
     cheap (Evar _) = True
     cheap (Pair e1 e2) = cheap e1 && cheap e2
     cheap Nil = True
@@ -244,7 +244,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     cheap (Coerce _ _ e) = cheap e
     cheap _ = False
 
-    shrinkE :: Kit acc => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    shrinkE :: OpenExp env aenv t -> (Any, OpenExp env aenv t)
     shrinkE exp = case exp of
       Let (LeftHandSideSingle _) bnd@Evar{} body -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
       Let lhs bnd body
@@ -303,7 +303,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Foreign repr ff f e       -> Foreign repr ff <$> shrinkF f <*> shrinkE e
       Coerce t1 t2 e            -> Coerce t1 t2 <$> shrinkE e
 
-    shrinkF :: Kit acc => PreOpenFun acc env aenv t -> (Any, PreOpenFun acc env aenv t)
+    shrinkF :: OpenFun env aenv t -> (Any, OpenFun env aenv t)
     shrinkF = first Any . shrinkFun
 
     first :: (a -> a') -> (a,b) -> (a',b)
@@ -312,7 +312,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     yes :: (Any, x) -> (Any, x)
     yes (_, x) = (Any True, x)
 
-shrinkFun :: Kit acc => PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
+shrinkFun :: OpenFun env aenv f -> (Bool, OpenFun env aenv f)
 shrinkFun (Lam lhs f) = case lhsVarsRange lhs of
   Left Refl ->
     let b' = case lhs of
@@ -418,7 +418,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
     shrinkCT (SnocAtup t c) = SnocAtup (shrinkCT t) (shrinkC c)
 --}
 
-    shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
+    shrinkE :: OpenExp env aenv' t -> OpenExp env aenv' t
     shrinkE exp = case exp of
       Let bnd body              -> Let (shrinkE bnd) (shrinkE body)
       Var idx                   -> Var idx
@@ -448,11 +448,11 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
       Foreign ff f e            -> Foreign ff (shrinkF f) (shrinkE e)
       Coerce e                  -> Coerce (shrinkE e)
 
-    shrinkF :: PreOpenFun acc env aenv' f -> PreOpenFun acc env aenv' f
+    shrinkF :: OpenFun env aenv' f -> OpenFun env aenv' f
     shrinkF (Lam f)  = Lam (shrinkF f)
     shrinkF (Body b) = Body (shrinkE b)
 
-    shrinkT :: Tuple (PreOpenExp acc env aenv') t -> Tuple (PreOpenExp acc env aenv') t
+    shrinkT :: Tuple (OpenExp env aenv') t -> Tuple (OpenExp env aenv') t
     shrinkT NilTup        = NilTup
     shrinkT (SnocTup t e) = shrinkT t `SnocTup` shrinkE e
 
@@ -467,10 +467,10 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
 -- Count the number of occurrences an in-scope scalar expression bound at the
 -- given variable index recursively in a term.
 --
-usesOfExp :: forall acc env aenv t. VarsRange env -> PreOpenExp acc env aenv t -> Count
+usesOfExp :: forall env aenv t. VarsRange env -> OpenExp env aenv t -> Count
 usesOfExp range = countE
   where
-    countE :: PreOpenExp acc env aenv e -> Count
+    countE :: OpenExp env aenv e -> Count
     countE exp | matchEVarsRange range exp = Finite 1
     countE exp = case exp of
       Evar v -> case varInRange range v of
@@ -499,7 +499,7 @@ usesOfExp range = countE
       Foreign _ _ _ e           -> countE e
       Coerce _ _ e              -> countE e
 
-usesOfFun :: VarsRange env -> PreOpenFun acc env aenv f -> Count
+usesOfFun :: VarsRange env -> OpenFun env aenv f -> Count
 usesOfFun range (Lam lhs f) = usesOfFun (weakenVarsRange lhs range) f
 usesOfFun range (Body b)    = usesOfExp range b
 
@@ -525,7 +525,7 @@ usesOfPreAcc withShape countAcc idx = count
 
     count :: PreOpenAcc acc aenv a -> Int
     count pacc = case pacc of
-      Avar (Var _ this)          -> countIdx this
+      Avar var                   -> countAvar var
       --
       Alet lhs bnd body          -> countA bnd + countAcc withShape (weakenWithLHS lhs >:> idx) body
       Apair a1 a2                -> countA a1 + countA a2
@@ -563,7 +563,7 @@ usesOfPreAcc withShape countAcc idx = count
       Stencil2 _ _ _ f _ a1 _ a2 -> countF f  + countA a1 + countA a2
       -- Collect s                 -> countS s
 
-    countE :: PreOpenExp acc env aenv e -> Int
+    countE :: OpenExp env aenv e -> Int
     countE exp = case exp of
       Let _ bnd body             -> countE bnd + countE body
       Evar _                     -> 0
@@ -581,11 +581,11 @@ usesOfPreAcc withShape countAcc idx = count
       While p f x                -> countF p  + countF f + countE x
       PrimConst _                -> 0
       PrimApp _ x                -> countE x
-      Index a sh                 -> countA a + countE sh
-      LinearIndex a i            -> countA a + countE i
+      Index a sh                 -> countAvar a + countE sh
+      LinearIndex a i            -> countAvar a + countE i
       ShapeSize _ sh             -> countE sh
       Shape a
-        | withShape              -> countA a
+        | withShape              -> countAvar a
         | otherwise              -> 0
       Foreign _ _ _ e            -> countE e
       Coerce _ _ e               -> countE e
@@ -593,13 +593,16 @@ usesOfPreAcc withShape countAcc idx = count
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
 
+    countAvar :: ArrayVar aenv a -> Int
+    countAvar (Var _ this) = countIdx this
+
     countAF :: PreOpenAfun acc aenv' f
             -> Idx aenv' s
             -> Int
     countAF (Alam lhs f) v = countAF f (weakenWithLHS lhs >:> v)
     countAF (Abody a)    v = countAcc withShape v a
 
-    countF :: PreOpenFun acc env aenv f -> Int
+    countF :: OpenFun env aenv f -> Int
     countF (Lam _ f) = countF f
     countF (Body  b) = countE b
 

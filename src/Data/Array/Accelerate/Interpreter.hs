@@ -68,7 +68,7 @@ import Unsafe.Coerce
 import Prelude                                                      hiding ( (!!), sum )
 
 -- friends
-import Data.Array.Accelerate.AST                                    hiding ( Boundary, PreBoundary(..) )
+import Data.Array.Accelerate.AST                                    hiding ( Boundary(..) )
 import Data.Array.Accelerate.Analysis.Type                          ( sizeOfSingleType )
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
@@ -152,8 +152,6 @@ data Delayed a where
 -- Array expression evaluation
 -- ---------------------------
 
-type EvalAcc acc = forall aenv a. acc aenv a -> Val aenv -> WithReprs a
-
 type WithReprs acc = (ArraysR acc, acc)
 
 fromFunction' :: ArrayR (Array sh e) -> sh -> (sh -> e) -> WithReprs (Array sh e)
@@ -187,14 +185,14 @@ evalOpenAcc (AST.Manifest pacc) aenv =
         where
           (TupRsingle repr, a) = manifest a'
 
-      evalE :: DelayedExp aenv t -> t
-      evalE exp = evalPreExp evalOpenAcc exp aenv
+      evalE :: Exp aenv t -> t
+      evalE exp = evalExp exp aenv
 
-      evalF :: DelayedFun aenv f -> f
-      evalF fun = evalPreFun evalOpenAcc fun aenv
+      evalF :: Fun aenv f -> f
+      evalF fun = evalFun fun aenv
 
-      evalB :: AST.PreBoundary DelayedOpenAcc aenv t -> Boundary t
-      evalB bnd = evalPreBoundary evalOpenAcc bnd aenv
+      evalB :: AST.Boundary aenv t -> Boundary t
+      evalB bnd = evalBoundary bnd aenv
   in
   case pacc of
     Avar (Var repr ix)          -> (TupRsingle repr, prj ix aenv)
@@ -848,14 +846,14 @@ data Boundary t where
   Function :: (sh -> e) -> Boundary (Array sh e)
 
 
-evalPreBoundary :: HasArraysRepr acc => EvalAcc acc -> AST.PreBoundary acc aenv t -> Val aenv -> Boundary t
-evalPreBoundary evalAcc bnd aenv =
+evalBoundary :: AST.Boundary aenv t -> Val aenv -> Boundary t
+evalBoundary bnd aenv =
   case bnd of
     AST.Clamp      -> Clamp
     AST.Mirror     -> Mirror
     AST.Wrap       -> Wrap
     AST.Constant v -> Constant v
-    AST.Function f -> Function (evalPreFun evalAcc f aenv)
+    AST.Function f -> Function (evalFun f aenv)
 
 
 -- Scalar expression evaluation
@@ -863,20 +861,20 @@ evalPreBoundary evalAcc bnd aenv =
 
 -- Evaluate a closed scalar expression
 --
-evalPreExp :: HasArraysRepr acc => EvalAcc acc -> PreExp acc aenv t -> Val aenv -> t
-evalPreExp evalAcc e aenv = evalPreOpenExp evalAcc e Empty aenv
+evalExp :: Exp aenv t -> Val aenv -> t
+evalExp e aenv = evalOpenExp e Empty aenv
 
 -- Evaluate a closed scalar function
 --
-evalPreFun :: HasArraysRepr acc => EvalAcc acc -> PreFun acc aenv t -> Val aenv -> t
-evalPreFun evalAcc f aenv = evalPreOpenFun evalAcc f Empty aenv
+evalFun :: Fun aenv t -> Val aenv -> t
+evalFun f aenv = evalOpenFun f Empty aenv
 
 -- Evaluate an open scalar function
 --
-evalPreOpenFun :: HasArraysRepr acc => EvalAcc acc -> PreOpenFun acc env aenv t -> Val env -> Val aenv -> t
-evalPreOpenFun evalAcc (Body e)    env aenv = evalPreOpenExp evalAcc e env aenv
-evalPreOpenFun evalAcc (Lam lhs f) env aenv =
-  \x -> evalPreOpenFun evalAcc f (env `push` (lhs, x)) aenv
+evalOpenFun :: OpenFun env aenv t -> Val env -> Val aenv -> t
+evalOpenFun (Body e)    env aenv = evalOpenExp e env aenv
+evalOpenFun (Lam lhs f) env aenv =
+  \x -> evalOpenFun f (env `push` (lhs, x)) aenv
 
 
 -- Evaluate an open scalar expression
@@ -887,33 +885,27 @@ evalPreOpenFun evalAcc (Lam lhs f) env aenv =
 --     mapped over an array, the array argument would be evaluated many times
 --     leading to a large amount of wasteful recomputation.
 --
--- TODO: If we change the argument of Shape, Index and LinearIndex to be an array
---       variable (instead of an arbitrary array computation), we could remove the
---       HasArraysRepr constraint and just pattern match on the Var.
---
-evalPreOpenExp
-    :: forall acc env aenv t.
-       HasArraysRepr acc
-    => EvalAcc acc
-    -> PreOpenExp acc env aenv t
+evalOpenExp
+    :: forall env aenv t.
+       OpenExp env aenv t
     -> Val env
     -> Val aenv
     -> t
-evalPreOpenExp evalAcc pexp env aenv =
+evalOpenExp pexp env aenv =
   let
-      evalE :: PreOpenExp acc env aenv t' -> t'
-      evalE e = evalPreOpenExp evalAcc e env aenv
+      evalE :: OpenExp env aenv t' -> t'
+      evalE e = evalOpenExp e env aenv
 
-      evalF :: PreOpenFun acc env aenv f' -> f'
-      evalF f = evalPreOpenFun evalAcc f env aenv
+      evalF :: OpenFun env aenv f' -> f'
+      evalF f = evalOpenFun f env aenv
 
-      evalA :: acc aenv a -> WithReprs a
-      evalA a = evalAcc a aenv
+      evalA :: ArrayVar aenv a -> WithReprs a
+      evalA (Var repr ix) = (TupRsingle repr, prj ix aenv)
   in
   case pexp of
     Let lhs exp1 exp2           -> let !v1  = evalE exp1
                                        env' = env `push` (lhs, v1)
-                                   in  evalPreOpenExp evalAcc exp2 env' aenv
+                                   in  evalOpenExp exp2 env' aenv
     Evar (Var _ ix)             -> prj ix env
     Const _ c                   -> c
     Undef tp                    -> evalUndefScalar tp
@@ -969,7 +961,7 @@ evalPreOpenExp evalAcc pexp env aenv =
                                    in (repr, a) ! ix
     Shape acc                   -> shape $ snd $ evalA acc
     ShapeSize shr sh            -> size shr (evalE sh)
-    Foreign _ _ f e             -> evalPreOpenFun evalAcc f Empty Empty $ evalE e
+    Foreign _ _ f e             -> evalOpenFun f Empty Empty $ evalE e
     Coerce t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
 
 
@@ -1809,10 +1801,10 @@ evalSeq conf s aenv = evalSeq' s
     evalAF f = evalOpenAfun f aenv
 
     evalE :: DelayedExp aenv t -> t
-    evalE exp = evalPreExp evalOpenAcc exp aenv
+    evalE exp = evalExp exp aenv
 
     evalF :: DelayedFun aenv f -> f
-    evalF fun = evalPreFun evalOpenAcc fun aenv
+    evalF fun = evalFun fun aenv
 
     initProducer :: forall a senv.
                     Producer DelayedOpenAcc aenv senv a
@@ -1858,9 +1850,9 @@ evalSeq conf s aenv = evalSeq' s
 
     delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
     delayed AST.Manifest{}  = $internalError "evalOpenAcc" "expected delayed array"
-    delayed AST.Delayed{..} = Delayed (evalPreExp evalOpenAcc extentD aenv)
-                                      (evalPreFun evalOpenAcc indexD aenv)
-                                      (evalPreFun evalOpenAcc linearIndexD aenv)
+    delayed AST.Delayed{..} = Delayed (evalExp extentD aenv)
+                                      (evalFun indexD aenv)
+                                      (evalFun linearIndexD aenv)
 
 produce :: Arrays a => ExecP senv a -> Val' senv -> (Chunk a, Maybe (ExecP senv a))
 produce p senv =

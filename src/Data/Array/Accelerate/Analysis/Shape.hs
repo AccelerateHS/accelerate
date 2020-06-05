@@ -32,7 +32,7 @@ accDim = rank . arrayRshape . arrayRepr
 
 -- |Reify dimensionality of a scalar expression yielding a shape
 --
-expDim :: forall acc env aenv sh. HasArraysRepr acc => PreOpenExp acc env aenv sh -> Int
+expDim :: forall env aenv sh. OpenExp env aenv sh -> Int
 expDim = ndim . expType
 
 -- Count the number of components to a tuple type

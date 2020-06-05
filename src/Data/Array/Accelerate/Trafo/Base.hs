@@ -37,8 +37,6 @@ module Data.Array.Accelerate.Trafo.Base (
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
-  DelayedExp,  DelayedOpenExp,
-  DelayedFun,  DelayedOpenFun,
   matchDelayedOpenAcc,
   encodeDelayedOpenAcc,
 
@@ -46,7 +44,7 @@ module Data.Array.Accelerate.Trafo.Base (
   Gamma(..), incExp, prjExp, pushExp,
   Extend(..), pushArrayEnv, append, bind,
   Sink(..), SinkExp(..), sinkA, sink1,
-  PreOpenExp', bindExps,
+  OpenExp', bindExps,
 
   -- Adding new variables to the environment
   declareVars, DeclareVars(..),
@@ -105,7 +103,7 @@ encodeOpenAcc :: EncodeAcc OpenAcc
 encodeOpenAcc options (OpenAcc pacc) = encodePreOpenAcc options encodeAcc pacc
 
 matchOpenAcc :: MatchAcc OpenAcc
-matchOpenAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc encodeAcc pacc1 pacc2
+matchOpenAcc (OpenAcc pacc1) (OpenAcc pacc2) = matchPreOpenAcc matchAcc pacc1 pacc2
 
 avarIn :: forall acc aenv a. Kit acc => ArrayVar aenv a -> acc aenv a
 avarIn v@(Var ArrayR{} _) = inject $ Avar v
@@ -176,17 +174,17 @@ instance Match ArrayR where
 instance Match a => Match (TupR a) where
   match = matchTupR match
 
-instance Kit acc => Match (PreOpenExp acc env aenv) where
+instance Match (OpenExp env aenv) where
   {-# INLINEABLE match #-}
-  match = matchPreOpenExp matchAcc encodeAcc
+  match = matchOpenExp
 
-instance Kit acc => Match (PreOpenFun acc env aenv) where
+instance Match (OpenFun env aenv) where
   {-# INLINEABLE match #-}
-  match = matchPreOpenFun matchAcc encodeAcc
+  match = matchOpenFun
 
 instance Kit acc => Match (PreOpenAcc acc aenv) where
   {-# INLINEABLE match #-}
-  match = matchPreOpenAcc matchAcc encodeAcc
+  match = matchPreOpenAcc matchAcc
 
 instance {-# INCOHERENT #-} Kit acc => Match (acc aenv) where
   {-# INLINEABLE match #-}
@@ -203,17 +201,12 @@ instance {-# INCOHERENT #-} Kit acc => Match (acc aenv) where
 type DelayedAcc         = DelayedOpenAcc ()
 type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
 
-type DelayedExp         = DelayedOpenExp ()
-type DelayedFun         = DelayedOpenFun ()
-
 -- data DelayedSeq t where
 --   DelayedSeq :: Extend DelayedOpenAcc () aenv
 --              -> DelayedOpenSeq aenv () t
 --              -> DelayedSeq t
 
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
-type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
-type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
 -- type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
 
 data DelayedOpenAcc aenv a where
@@ -221,9 +214,9 @@ data DelayedOpenAcc aenv a where
 
   Delayed               ::
     { reprD             :: ArrayR (Array sh e)
-    , extentD           :: PreExp DelayedOpenAcc aenv sh
-    , indexD            :: PreFun DelayedOpenAcc aenv (sh  -> e)
-    , linearIndexD      :: PreFun DelayedOpenAcc aenv (Int -> e)
+    , extentD           :: Exp aenv sh
+    , indexD            :: Fun aenv (sh  -> e)
+    , linearIndexD      :: Fun aenv (Int -> e)
     }                   -> DelayedOpenAcc aenv (Array sh e)
 
 instance HasArraysRepr DelayedOpenAcc where
@@ -235,10 +228,10 @@ instance Rebuildable DelayedOpenAcc where
   {-# INLINEABLE rebuildPartial #-}
   rebuildPartial v acc = case acc of
     Manifest pacc -> Manifest <$> rebuildPartial v pacc
-    Delayed{..}   -> Delayed      reprD
-                              <$> rebuildPartial v extentD
-                              <*> rebuildPartial v indexD
-                              <*> rebuildPartial v linearIndexD
+    Delayed{..}   -> (\e i l -> Delayed reprD (unOpenAccExp e) (unOpenAccFun i) (unOpenAccFun l))
+                              <$> rebuildPartial v (OpenAccExp extentD)
+                              <*> rebuildPartial v (OpenAccFun indexD)
+                              <*> rebuildPartial v (OpenAccFun linearIndexD)
 
 instance Sink DelayedOpenAcc where
   weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
@@ -265,11 +258,11 @@ instance NFData (DelayedOpenAcc aenv t) where
 encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
 encodeDelayedOpenAcc options acc =
   let
-      travE :: DelayedExp aenv sh -> Builder
-      travE = encodePreOpenExp options encodeDelayedOpenAcc
+      travE :: Exp aenv sh -> Builder
+      travE = encodeOpenExp
 
-      travF :: DelayedFun aenv f -> Builder
-      travF = encodePreOpenFun options encodeDelayedOpenAcc
+      travF :: Fun aenv f -> Builder
+      travF = encodeOpenFun
 
       travA :: PreOpenAcc DelayedOpenAcc aenv a -> Builder
       travA = encodePreOpenAcc options encodeDelayedOpenAcc
@@ -285,12 +278,12 @@ encodeDelayedOpenAcc options acc =
 {-# INLINEABLE matchDelayedOpenAcc #-}
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
 matchDelayedOpenAcc (Manifest pacc1) (Manifest pacc2)
-  = matchPreOpenAcc matchDelayedOpenAcc encodeDelayedOpenAcc pacc1 pacc2
+  = matchPreOpenAcc matchDelayedOpenAcc pacc1 pacc2
 
 matchDelayedOpenAcc (Delayed _ sh1 ix1 lx1) (Delayed _ sh2 ix2 lx2)
-  | Just Refl <- matchPreOpenExp matchDelayedOpenAcc encodeDelayedOpenAcc sh1 sh2
-  , Just Refl <- matchPreOpenFun matchDelayedOpenAcc encodeDelayedOpenAcc ix1 ix2
-  , Just Refl <- matchPreOpenFun matchDelayedOpenAcc encodeDelayedOpenAcc lx1 lx2
+  | Just Refl <- matchOpenExp sh1 sh2
+  , Just Refl <- matchOpenFun ix1 ix2
+  , Just Refl <- matchOpenFun lx1 lx2
   = Just Refl
 
 matchDelayedOpenAcc _ _
@@ -299,9 +292,9 @@ matchDelayedOpenAcc _ _
 rnfDelayedOpenAcc :: DelayedOpenAcc aenv t -> ()
 rnfDelayedOpenAcc (Manifest pacc)         = rnfPreOpenAcc rnfDelayedOpenAcc pacc
 rnfDelayedOpenAcc (Delayed repr sh ix lx) = rnfArrayR  repr
-                                      `seq` rnfPreOpenExp rnfDelayedOpenAcc sh
-                                      `seq` rnfPreOpenFun rnfDelayedOpenAcc ix
-                                      `seq` rnfPreOpenFun rnfDelayedOpenAcc lx
+                                      `seq` rnfOpenExp sh
+                                      `seq` rnfOpenFun ix
+                                      `seq` rnfOpenFun lx
 
 {--
 rnfDelayedSeq :: DelayedSeq t -> ()
@@ -321,18 +314,18 @@ rnfExtend rnfA (PushEnv env a) = rnfExtend rnfA env `seq` rnfA a
 -- environment variable env' is used to project out the corresponding
 -- index when looking up in the environment congruent expressions.
 --
-data Gamma acc env env' aenv where
-  EmptyExp :: Gamma acc env env' aenv
+data Gamma env env' aenv where
+  EmptyExp :: Gamma env env' aenv
 
-  PushExp  :: Gamma acc env env' aenv
-           -> WeakPreOpenExp acc env aenv t
-           -> Gamma acc env (env', t) aenv
+  PushExp  :: Gamma env env' aenv
+           -> WeakOpenExp env aenv t
+           -> Gamma env (env', t) aenv
 
-data WeakPreOpenExp acc env aenv t where
+data WeakOpenExp env aenv t where
   Subst    :: env :> env'
-           -> PreOpenExp     acc env  aenv t
-           -> PreOpenExp     acc env' aenv t {- LAZY -}
-           -> WeakPreOpenExp acc env' aenv t
+           -> OpenExp     env  aenv t
+           -> OpenExp     env' aenv t {- LAZY -}
+           -> WeakOpenExp env' aenv t
 
 -- XXX: The simplifier calls this function every time it moves under a let
 -- binding. This means we have a number of calls to 'weakenE' exponential in the
@@ -346,28 +339,26 @@ data WeakPreOpenExp acc env aenv t where
 -- <https://github.com/AccelerateHS/accelerate-llvm/issues/20>
 --
 incExp
-    :: Kit acc
-    => Gamma acc env     env' aenv
-    -> Gamma acc (env,s) env' aenv
+    :: Gamma env     env' aenv
+    -> Gamma (env,s) env' aenv
 incExp EmptyExp        = EmptyExp
 incExp (PushExp env w) = incExp env `PushExp` subs w
   where
-    subs :: forall acc env aenv s t. Kit acc => WeakPreOpenExp acc env aenv t -> WeakPreOpenExp acc (env,s) aenv t
-    subs (Subst k (e :: PreOpenExp acc env_ aenv t) _) = Subst (weakenSucc' k) e (weakenE (weakenSucc' k) e)
+    subs :: forall env aenv s t. WeakOpenExp env aenv t -> WeakOpenExp (env,s) aenv t
+    subs (Subst k (e :: OpenExp env_ aenv t) _) = Subst (weakenSucc' k) e (weakenE (weakenSucc' k) e)
 
-prjExp :: Idx env' t -> Gamma acc env env' aenv -> PreOpenExp acc env aenv t
+prjExp :: Idx env' t -> Gamma env env' aenv -> OpenExp env aenv t
 prjExp ZeroIdx      (PushExp _   (Subst _ _ e)) = e
 prjExp (SuccIdx ix) (PushExp env _)             = prjExp ix env
 prjExp _            _                           = $internalError "prjExp" "inconsistent valuation"
 
-pushExp :: Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Gamma acc env (env',t) aenv
+pushExp :: Gamma env env' aenv -> OpenExp env aenv t -> Gamma env (env',t) aenv
 pushExp env e = env `PushExp` Subst weakenId e e
 
 {--
 lookupExp
-    :: Kit acc
-    => Gamma      acc env env' aenv
-    -> PreOpenExp acc env      aenv t
+    :: Gamma      env env' aenv
+    -> OpenExp env      aenv t
     -> Maybe (Idx env' t)
 lookupExp EmptyExp        _ = Nothing
 lookupExp (PushExp env e) x
@@ -375,17 +366,16 @@ lookupExp (PushExp env e) x
   | otherwise               = SuccIdx `fmap` lookupExp env x
 
 weakenGamma1
-    :: Kit acc
-    => Gamma acc env env' aenv
-    -> Gamma acc env env' (aenv,t)
+    :: Gamma env env' aenv
+    -> Gamma env env' (aenv,t)
 weakenGamma1 EmptyExp        = EmptyExp
 weakenGamma1 (PushExp env e) = PushExp (weakenGamma1 env) (weaken SuccIdx e)
 
 sinkGamma
     :: Kit acc
     => Extend acc aenv aenv'
-    -> Gamma acc env env' aenv
-    -> Gamma acc env env' aenv'
+    -> Gamma env env' aenv
+    -> Gamma env env' aenv'
 sinkGamma _   EmptyExp        = EmptyExp
 sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sinkA ext e)
 --}
@@ -440,24 +430,22 @@ sinkWeaken (PushEnv e (LeftHandSidePair l1 l2) _) = sinkWeaken (PushEnv (PushEnv
 sink1 :: Sink f => Extend s acc env env' -> f (env,t') t -> f (env',t') t
 sink1 env = weaken $ sink $ sinkWeaken env
 
--- Wrapper around PreOpenExp, with the order of type arguments env and aenv flipped
-newtype PreOpenExp' acc aenv env e = PreOpenExp' (PreOpenExp acc env aenv e)
+-- Wrapper around OpenExp, with the order of type arguments env and aenv flipped
+newtype OpenExp' aenv env e = OpenExp' (OpenExp env aenv e)
 
-bindExps :: Kit acc
-         => Extend ScalarType (PreOpenExp' acc aenv) env env'
-         -> PreOpenExp acc env' aenv e
-         -> PreOpenExp acc env  aenv e
+bindExps :: Extend ScalarType (OpenExp' aenv) env env'
+         -> OpenExp env' aenv e
+         -> OpenExp env  aenv e
 bindExps BaseEnv = id
-bindExps (PushEnv g lhs (PreOpenExp' b)) = bindExps g . Let lhs b
+bindExps (PushEnv g lhs (OpenExp' b)) = bindExps g . Let lhs b
 
 
 -- Utilities for working with shapes
-mkShapeBinary :: (HasArraysRepr acc, RebuildableAcc acc)
-              => (forall env'. PreOpenExp acc env' aenv Int -> PreOpenExp acc env' aenv Int -> PreOpenExp acc env' aenv Int)
+mkShapeBinary :: (forall env'. OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int)
               -> ShapeR sh
-              -> PreOpenExp acc env aenv sh
-              -> PreOpenExp acc env aenv sh
-              -> PreOpenExp acc env aenv sh
+              -> OpenExp env aenv sh
+              -> OpenExp env aenv sh
+              -> OpenExp env aenv sh
 mkShapeBinary _ ShapeRz _ _ = Nil
 mkShapeBinary f (ShapeRsnoc shr) (Pair as a) (Pair bs b) = mkShapeBinary f shr as bs `Pair` f a b
 mkShapeBinary f shr (Let lhs bnd a) b = Let lhs bnd $ mkShapeBinary f shr a (weakenE (weakenWithLHS lhs) b)
@@ -469,20 +457,18 @@ mkShapeBinary f shr a b -- `b` is not a Pair
   | DeclareVars lhs k value <- declareVars $ shapeType shr
   = Let lhs b $ mkShapeBinary f shr (weakenE k a) (evars $ value weakenId)
 
-mkIntersect :: (HasArraysRepr acc, RebuildableAcc acc)
-            => ShapeR sh
-            -> PreOpenExp acc env aenv sh
-            -> PreOpenExp acc env aenv sh
-            -> PreOpenExp acc env aenv sh
+mkIntersect :: ShapeR sh
+            -> OpenExp env aenv sh
+            -> OpenExp env aenv sh
+            -> OpenExp env aenv sh
 mkIntersect = mkShapeBinary f
   where
     f a b = PrimApp (PrimMin singleType) $ Pair a b
 
-mkUnion :: (HasArraysRepr acc, RebuildableAcc acc)
-        => ShapeR sh
-        -> PreOpenExp acc env aenv sh
-        -> PreOpenExp acc env aenv sh
-        -> PreOpenExp acc env aenv sh
+mkUnion :: ShapeR sh
+        -> OpenExp env aenv sh
+        -> OpenExp env aenv sh
+        -> OpenExp env aenv sh
 mkUnion = mkShapeBinary f
   where
     f a b = PrimApp (PrimMax singleType) $ Pair a b
