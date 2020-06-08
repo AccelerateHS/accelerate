@@ -132,7 +132,7 @@ test_inject_v2 runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (array sh1 e)
     ys  <- forAll (array sh2 e)
-    let !go = runN (A.zipWith A.V2_) in go xs ys === zipWithRef Vec2 xs ys
+    let !go = runN (A.zipWith A.V2) in go xs ys === zipWithRef Vec2 xs ys
 
 test_inject_v3
     :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
@@ -148,7 +148,7 @@ test_inject_v3 runN dim e =
     xs  <- forAll (array sh1 e)
     ys  <- forAll (array sh2 e)
     zs  <- forAll (array sh3 e)
-    let !go = runN (A.zipWith3 A.V3_) in go xs ys zs === zipWith3Ref Vec3 xs ys zs
+    let !go = runN (A.zipWith3 A.V3) in go xs ys zs === zipWith3Ref Vec3 xs ys zs
 
 test_inject_v4
     :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
@@ -166,17 +166,17 @@ test_inject_v4 runN dim e =
     ys  <- forAll (array sh2 e)
     zs  <- forAll (array sh3 e)
     ws  <- forAll (array sh4 e)
-    let !go = runN (A.zipWith4 A.V4_) in go xs ys zs ws === zipWith4Ref Vec4 xs ys zs ws
+    let !go = runN (A.zipWith4 A.V4) in go xs ys zs ws === zipWith4Ref Vec4 xs ys zs ws
 
 
 unpackVec2' :: VecElt e => Exp (Vec2 e) -> (Exp e, Exp e)
-unpackVec2' (A.V2_ a b) = (a, b)
+unpackVec2' (A.V2 a b) = (a, b)
 
 unpackVec3' :: VecElt e => Exp (Vec3 e) -> (Exp e, Exp e, Exp e)
-unpackVec3' (A.V3_ a b c) = (a, b, c)
+unpackVec3' (A.V3 a b c) = (a, b, c)
 
 unpackVec4' :: VecElt e => Exp (Vec4 e) -> (Exp e, Exp e, Exp e, Exp e)
-unpackVec4' (A.V4_ a b c d) = (a, b, c, d)
+unpackVec4' (A.V4 a b c d) = (a, b, c, d)
 
 
 -- Reference Implementation

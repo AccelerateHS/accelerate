@@ -345,11 +345,11 @@ module Data.Array.Accelerate (
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
-  pattern Vec2, pattern V2_,
-  pattern Vec3, pattern V3_,
-  pattern Vec4, pattern V4_,
-  pattern Vec8, pattern V8_,
-  pattern Vec16, pattern V16_,
+  pattern Vec2, pattern V2,
+  pattern Vec3, pattern V3,
+  pattern Vec4, pattern V4,
+  pattern Vec8, pattern V8,
+  pattern Vec16, pattern V16,
 
   pattern True_, pattern False_,
 

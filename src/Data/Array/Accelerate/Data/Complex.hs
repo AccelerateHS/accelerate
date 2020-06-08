@@ -137,15 +137,15 @@ constructComplex r i = case complexR $ eltType @a of
       r' = coerce @a @(EltRepr a) r
       i' = coerce i
       v :: Exp (Vec2 (EltRepr a))
-      v = V2_ r' i'
+      v = V2 r' i'
     in
       coerce @(Vec2 (EltRepr a)) @(Complex a) $ v
   ComplexRtup   -> coerce $ T2  r i
 
 deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
 deconstructComplex c = case complexR $ eltType @a of
-  ComplexRvec _ -> let V2_ r i = coerce @(Complex a) @(Vec2 (EltRepr a)) c in (coerce r, coerce i)
-  ComplexRtup   -> let T2  r i = coerce c in (r, i)
+  ComplexRvec _ -> let V2 r i = coerce @(Complex a) @(Vec2 (EltRepr a)) c in (coerce r, coerce i)
+  ComplexRtup   -> let T2 r i = coerce c in (r, i)
 
 coerce :: EltRepr a ~ EltRepr b => Exp a -> Exp b
 coerce (Exp e) = Exp e

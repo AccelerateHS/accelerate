@@ -36,11 +36,12 @@ module Data.Array.Accelerate.Pattern (
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
-  pattern V2_, pattern V3_, pattern V4_, pattern V8_, pattern V16_,
+  pattern V2, pattern V3, pattern V4, pattern V8, pattern V16,
 
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Representation                   ( VecR(..) )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -87,6 +88,10 @@ instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
   construct (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
   destruct (Exp t)           = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
 
+-- Newtype wrapper to distinguish between T and V patterns
+--
+newtype VecPattern a = VecPattern a
+
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
 -- (unremarkable) boilerplate for us, but since the implementation is a little
 -- tricky it is debatable whether or not this is a good idea...
@@ -124,12 +129,28 @@ $(runQ $ do
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
+        mkVecPattern :: Int -> Q [Dec]
+        mkVecPattern n = do
+          a <- newName "a"
+          let
+              v = foldr appE [| VecRnil (singleType @(EltRepr $(varT a))) |] (replicate n [| VecRsucc |])
+              r = tupT (replicate n [t| Exp $(varT a) |])
+              t = tupT (replicate n (varT a))
+          --
+          [d| instance VecElt $(varT a) => IsPattern Exp (Vec $(litT (numTyLit (fromIntegral n))) $(varT a)) (VecPattern $r) where
+                construct (VecPattern x) =
+                  case construct x :: Exp $t of
+                    Exp x' -> Exp (SmartExp (VecPack $v x'))
+                destruct (Exp x) = VecPattern (destruct (Exp (SmartExp (VecUnpack $v x)) :: Exp $t))
+            |]
+
         mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [t| EltRepr |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
         mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [t| ArrRepr |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
     es <- mapM mkExpPattern [0..16]
     as <- mapM mkAccPattern [0..16]
-    return $ concat (es ++ as)
+    vs <- mapM mkVecPattern [2,3,4,8,16]
+    return $ concat (es ++ as ++ vs)
  )
 
 -- | Specialised pattern synonyms for tuples, which may be more convenient to
@@ -186,90 +207,24 @@ $(runQ $ do
             , patSynD    name (prefixPatSyn xs) implBidir (foldl (\ps p -> infixP ps ix (varP p)) [p| Z_ |] xs)
             , pragCompleteD [name] Nothing
             ]
+
+        mkV :: Int -> Q [Dec]
+        mkV n = do
+          a <- newName "a"
+          let xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts    = replicate n (varT a)
+              name  = mkName ('V':show n)
+              sig   = foldr (\t r -> [t| Exp $t -> $r |]) [t| Exp (Vec $(litT (numTyLit (fromIntegral n))) $(varT a)) |] ts
+          --
+          sequence
+            [ patSynSigD name [t| VecElt $(varT a) => $sig |]
+            , patSynD    name (prefixPatSyn xs) implBidir [p| Pattern (VecPattern $(tupP (map varP xs))) |]
+            , pragCompleteD [name] Nothing
+            ]
     --
     ts <- mapM mkT [2..16]
     is <- mapM mkI [0..9]
-    return $ concat (ts ++ is)
+    vs <- mapM mkV [2,3,4,8,16]
+    return $ concat (ts ++ is ++ vs)
  )
-
--- Newtype to make difference between T and P instances clear
-newtype VecPattern a = VecPattern a
-
-instance VecElt a => IsPattern Exp (Vec 2 a) (VecPattern (Exp a, Exp a)) where
-  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
-    where
-      r = vecR2 $ singleType @(EltRepr a)
-      Exp tup = construct as :: Exp (a, a)
-  destruct e = VecPattern $ destruct e'
-    where
-      e' :: Exp (a, a)
-      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
-      r  = vecR2 $ singleType @(EltRepr a)
-
-instance VecElt a => IsPattern Exp (Vec 3 a) (VecPattern (Exp a, Exp a, Exp a)) where
-  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
-    where
-      r = vecR3 $ singleType @(EltRepr a)
-      Exp tup = construct as :: Exp (a, a, a)
-  destruct e = VecPattern $ destruct e'
-    where
-      e' :: Exp (a, a, a)
-      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
-      r  = vecR3 $ singleType @(EltRepr a)
-
-instance VecElt a => IsPattern Exp (Vec 4 a) (VecPattern (Exp a, Exp a, Exp a, Exp a)) where
-  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
-    where
-      r = vecR4 $ singleType @(EltRepr a)
-      Exp tup = construct as :: Exp (a, a, a, a)
-  destruct e = VecPattern $ destruct e'
-    where
-      e' :: Exp (a, a, a, a)
-      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
-      r  = vecR4 $ singleType @(EltRepr a)
-
-instance VecElt a => IsPattern Exp (Vec 8 a) (VecPattern (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)) where
-  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
-    where
-      r = vecR8 $ singleType @(EltRepr a)
-      Exp tup = construct as :: Exp (a, a, a, a, a, a, a, a)
-  destruct e = VecPattern $ destruct e'
-    where
-      e' :: Exp (a, a, a, a, a, a, a, a)
-      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
-      r  = vecR8 $ singleType @(EltRepr a)
-
-instance VecElt a => IsPattern Exp (Vec 16 a) (VecPattern (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)) where
-  construct (VecPattern as) = Exp $ SmartExp $ VecPack r tup
-    where
-      r = vecR16 $ singleType @(EltRepr a)
-      Exp tup = construct as :: Exp (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
-  destruct e = VecPattern $ destruct e'
-    where
-      e' :: Exp (a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a)
-      e' = Exp $ SmartExp $ VecUnpack r $ unExp e
-      r  = vecR16 $ singleType @(EltRepr a)
-
-pattern V2_ :: VecElt a => Exp a -> Exp a -> Exp (Vec 2 a)
-pattern V2_ a b = Pattern (VecPattern (a, b))
-{-# COMPLETE V2_ #-}
-
-pattern V3_ :: VecElt a => Exp a -> Exp a -> Exp a -> Exp (Vec 3 a)
-pattern V3_ a b c = Pattern (VecPattern (a, b, c))
-{-# COMPLETE V3_ #-}
-
-pattern V4_ :: VecElt a => Exp a -> Exp a -> Exp a -> Exp a -> Exp (Vec 4 a)
-pattern V4_ a b c d = Pattern (VecPattern (a, b, c, d))
-{-# COMPLETE V4_ #-}
-
-pattern V8_ :: VecElt a => Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp (Vec 8 a)
-pattern V8_ a b c d e f g h = Pattern (VecPattern (a, b, c, d, e, f, g, h))
-{-# COMPLETE V8_ #-}
-
-pattern V16_ :: VecElt a
-             => Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a ->
-                Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp a -> Exp (Vec 16 a)
-pattern V16_ a b c d e f g h
-             i j k l m n o p = Pattern (VecPattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p))
-{-# COMPLETE V16_ #-}
 
