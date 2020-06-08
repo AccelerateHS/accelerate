@@ -1220,7 +1220,7 @@ foreignExp
     -> (Exp x -> Exp y)
     -> Exp x
     -> Exp y
-foreignExp a f (Exp x) = exp $ Foreign (eltType @y) a (unExpFunction f) x
+foreignExp a f (Exp x) = mkExp $ Foreign (eltType @y) a (unExpFunction f) x
 
 
 -- Composition of array computations
@@ -1281,12 +1281,12 @@ toIndex
     => Exp sh                     -- ^ extent of the array
     -> Exp sh                     -- ^ index to remap
     -> Exp Int
-toIndex (Exp sh) (Exp ix) = exp $ ToIndex (shapeR @sh) sh ix
+toIndex (Exp sh) (Exp ix) = mkExp $ ToIndex (shapeR @sh) sh ix
 
 -- | Inverse of 'toIndex'
 --
 fromIndex :: forall sh. Shape sh => Exp sh -> Exp Int -> Exp sh
-fromIndex (Exp sh) (Exp e) = exp $ FromIndex (shapeR @sh) sh e
+fromIndex (Exp sh) (Exp e) = mkExp $ FromIndex (shapeR @sh) sh e
 
 -- | Intersection of two shapes
 --
@@ -1327,7 +1327,7 @@ cond :: Elt t
      -> Exp t                   -- ^ then-expression
      -> Exp t                   -- ^ else-expression
      -> Exp t
-cond (Exp c) (Exp x) (Exp y) = exp $ Cond c x y
+cond (Exp c) (Exp x) (Exp y) = mkExp $ Cond c x y
 
 -- | While construct. Continue to apply the given function, starting with the
 -- initial value, until the test function evaluates to 'False'.
@@ -1338,9 +1338,9 @@ while :: forall e. Elt e
       -> Exp e                  -- ^ initial value
       -> Exp e
 #if __GLASGOW_HASKELL__ < 804
-while c f (Exp e) = exp $ While @SmartAcc @SmartExp @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
+while c f (Exp e) = mkExp $ While @SmartAcc @SmartExp @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
 #else
-while c f (Exp e) = exp $ While                     @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
+while c f (Exp e) = mkExp $ While                     @(EltRepr e) (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e
 #endif
 
 
@@ -1364,7 +1364,7 @@ while c f (Exp e) = exp $ While                     @(EltRepr e) (eltType @e) (u
 --
 infixl 9 !
 (!) :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh -> Exp e
-Acc a ! Exp ix = exp $ Index (eltType @e) a ix
+Acc a ! Exp ix = mkExp $ Index (eltType @e) a ix
 
 -- | Extract the value from an array at the specified linear index.
 -- Multidimensional arrays in Accelerate are stored in row-major order with
@@ -1384,12 +1384,12 @@ Acc a ! Exp ix = exp $ Index (eltType @e) a ix
 --
 infixl 9 !!
 (!!) :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Exp Int -> Exp e
-Acc a !! Exp ix = exp $ LinearIndex (eltType @e) a ix
+Acc a !! Exp ix = mkExp $ LinearIndex (eltType @e) a ix
 
 -- | Extract the shape (extent) of an array.
 --
 shape :: forall sh e. (Shape sh, Elt e) => Acc (Array sh e) -> Exp sh
-shape = exp . Shape (shapeR @sh) . unAcc
+shape = mkExp . Shape (shapeR @sh) . unAcc
 
 -- | The number of elements in the array
 --
@@ -1399,7 +1399,7 @@ size = shapeSize . shape
 -- | The number of elements that would be held by an array of the given shape.
 --
 shapeSize :: forall sh. Shape sh => Exp sh -> Exp Int
-shapeSize (Exp sh) = exp $ ShapeSize (shapeR @sh) sh
+shapeSize (Exp sh) = mkExp $ ShapeSize (shapeR @sh) sh
 
 
 -- Numeric functions

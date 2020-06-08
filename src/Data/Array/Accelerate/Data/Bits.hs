@@ -759,7 +759,7 @@ isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
 isSignedDefault _ = constant (B.isSigned (undefined::b))
 
 constInt :: IsIntegral (EltRepr e) => EltRepr e -> Exp e
-constInt = exp . Const (SingleScalarType $ NumSingleType $ IntegralNumType $ integralType)
+constInt = mkExp . Const (SingleScalarType (NumSingleType (IntegralNumType integralType)))
 
 {--
 _popCountDefault :: forall a. (B.FiniteBits a, IsScalar a, Bits a, Num a) => Exp a -> Exp Int

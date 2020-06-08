@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
   Acc(..), SmartAcc(..), PreSmartAcc(..), PairIdx(..), Exp(..), SmartExp(..), PreSmartExp(..),
-  Boundary(..), PreBoundary(..), Stencil(..), Level, unExp,
+  Boundary(..), PreBoundary(..), Stencil(..), Level,
 
   -- * Smart constructors for literals
   constant, undef,
@@ -57,8 +57,9 @@ module Data.Array.Accelerate.Smart (
   mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce,
 
   -- * Auxiliary functions
-  ($$), ($$$), ($$$$), ($$$$$), unAcc, unAccFunction, ApplyAcc(..), exp, unPair, mkPairToTuple, HasExpType(..), HasArraysRepr(..),
-  vecR2, vecR3, vecR4, vecR5, vecR6, vecR7, vecR8, vecR9, vecR16, unExpFunction,
+  ($$), ($$$), ($$$$), ($$$$$),
+  ApplyAcc(..), HasExpType(..), HasArraysRepr(..),
+  unAcc, unAccFunction, mkExp, unExp, unExpFunction, unPair, mkPairToTuple,
 
   -- Debugging
   showPreAccOp, showPreExpOp,
@@ -1031,24 +1032,25 @@ undef = Exp $ go $ eltType @e
 -- innermost nested loop.
 --
 indexHead :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp a
-indexHead (Exp x) = exp $ Prj PairIdxRight x
+indexHead (Exp x) = mkExp $ Prj PairIdxRight x
 
 -- | Get all but the innermost element of a shape
 --
 indexTail :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
+indexTail (Exp x) = mkExp $ Prj PairIdxLeft x
 
 
 -- Smart constructor for constants
 --
 
 mkMinBound :: (Elt t, IsBounded (EltRepr t)) => Exp t
-mkMinBound = exp $ PrimConst (PrimMinBound boundedType)
+mkMinBound = mkExp $ PrimConst (PrimMinBound boundedType)
 
 mkMaxBound :: (Elt t, IsBounded (EltRepr t)) => Exp t
-mkMaxBound = exp $ PrimConst (PrimMaxBound boundedType)
+mkMaxBound = mkExp $ PrimConst (PrimMaxBound boundedType)
 
 mkPi :: (Elt r, IsFloating (EltRepr r)) => Exp r
-mkPi = exp $ PrimConst (PrimPi floatingType)
+mkPi = mkExp $ PrimConst (PrimPi floatingType)
 
 
 -- Smart constructors for primitive applications
@@ -1063,8 +1065,6 @@ mkCos :: (Elt t, IsFloating (EltRepr t)) => Exp t -> Exp t
 mkCos = mkPrimUnary $ PrimCos floatingType
 
 mkTan :: (Elt t, IsFloating (EltRepr t)) => Exp t -> Exp t
-indexTail (Exp x) = exp $ Prj PairIdxLeft x
-
 mkTan = mkPrimUnary $ PrimTan floatingType
 
 mkAsin :: (Elt t, IsFloating (EltRepr t)) => Exp t -> Exp t
@@ -1139,8 +1139,8 @@ mkRem = mkPrimBinary $ PrimRem integralType
 
 mkQuotRem :: (Elt t, IsIntegral (EltRepr t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkQuotRem (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimQuotRem integralType `PrimApp` (SmartExp $ Pair x y)
-  in  (exp $ Prj PairIdxLeft pair, exp $ Prj PairIdxRight pair)
+  let pair = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair x y)
+  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
 
 mkIDiv :: (Elt t, IsIntegral (EltRepr t)) => Exp t -> Exp t -> Exp t
 mkIDiv = mkPrimBinary $ PrimIDiv integralType
@@ -1150,8 +1150,8 @@ mkMod = mkPrimBinary $ PrimMod integralType
 
 mkDivMod :: (Elt t, IsIntegral (EltRepr t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkDivMod (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimDivMod integralType `PrimApp` (SmartExp $ Pair x y)
-  in  (exp $ Prj PairIdxLeft pair, exp $ Prj PairIdxRight pair)
+  let pair = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair x y)
+  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
 
 -- Operators from Bits and FiniteBits
 
@@ -1280,12 +1280,12 @@ mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 -- Other conversions
 
 mkBoolToInt :: Exp Bool -> Exp Int
-mkBoolToInt (Exp b) = exp $ PrimBoolToInt `PrimApp` b
+mkBoolToInt (Exp b) = mkExp $ PrimBoolToInt `PrimApp` b
 
 -- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
 -- make this version "safe"
 mkBitcast :: forall b a. (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b), BitSizeEq (EltRepr a) (EltRepr b)) => Exp a -> Exp b
-mkBitcast (Exp a) = exp $ Coerce (scalarType @(EltRepr a)) (scalarType @(EltRepr b)) a
+mkBitcast (Exp a) = mkExp $ Coerce (scalarType @(EltRepr a)) (scalarType @(EltRepr b)) a
 
 mkCoerce :: Coerce (EltRepr a) (EltRepr b) => Exp a -> Exp b
 mkCoerce (Exp a) = Exp $ mkCoerce' a
@@ -1300,21 +1300,18 @@ instance (Coerce a1 b1, Coerce a2 b2) => Coerce (a1, a2) (b1, b2) where
   mkCoerce' a = SmartExp $ Pair (mkCoerce' $ SmartExp $ Prj PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj PairIdxRight a)
 
 instance Coerce () () where
-  mkCoerce' _ = SmartExp $ Nil
+  mkCoerce' _ = SmartExp Nil
 
 instance Coerce ((), a) a where
   mkCoerce' a = SmartExp $ Prj PairIdxRight a
 
 instance Coerce a ((), a) where
-  mkCoerce' = SmartExp . Pair (SmartExp $ Nil)
+  mkCoerce' = SmartExp . Pair (SmartExp Nil)
 
 
 
 -- Auxiliary functions
 -- --------------------
-
-exp :: PreSmartExp SmartAcc SmartExp (EltRepr t) -> Exp t
-exp = Exp . SmartExp
 
 infixr 0 $$
 ($$) :: (b -> a) -> (c -> d -> b) -> c -> d -> a
@@ -1338,6 +1335,9 @@ unAcc (Acc a) = a
 unAccFunction :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> SmartAcc (ArrRepr a) -> SmartAcc (ArrRepr b)
 unAccFunction f = unAcc . f . Acc
 
+mkExp :: PreSmartExp SmartAcc SmartExp (EltRepr t) -> Exp t
+mkExp = Exp . SmartExp
+
 unExp :: Elt e => Exp e -> SmartExp (EltRepr e)
 unExp (Exp e) = e
 
@@ -1348,10 +1348,10 @@ unExpBinaryFunction :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> Sma
 unExpBinaryFunction f a b = unExp $ f (Exp a) (Exp b)
 
 mkPrimUnary :: (Elt a, Elt b) => PrimFun (EltRepr a -> EltRepr b) -> Exp a -> Exp b
-mkPrimUnary prim (Exp a) = exp $ PrimApp prim a
+mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
 
 mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltRepr a, EltRepr b) -> EltRepr c) -> Exp a -> Exp b -> Exp c
-mkPrimBinary prim (Exp a) (Exp b) = exp $ PrimApp prim (SmartExp $ Pair a b)
+mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)

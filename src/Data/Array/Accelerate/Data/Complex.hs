@@ -50,7 +50,7 @@ import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Smart                                  hiding (exp)
+import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Complex                                                 ( Complex(..) )
