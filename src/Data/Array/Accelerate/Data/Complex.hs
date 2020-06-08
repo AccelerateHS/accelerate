@@ -83,30 +83,30 @@ instance Elt a => Elt (Complex a) where
     where
       tp = eltType @a
   toElt = case complexR $ eltType @a of
-    ComplexRvec _ -> \(V2 r i)     -> toElt r :+ toElt i
+    ComplexRvec _ -> \(Vec2 r i)   -> toElt r :+ toElt i
     ComplexRtup   -> \(((), r), i) -> toElt r :+ toElt i
   fromElt (r :+ i) = case complexR $ eltType @a of
-    ComplexRvec _ -> V2 (fromElt r) (fromElt i)
+    ComplexRvec _ -> Vec2 (fromElt r) (fromElt i)
     ComplexRtup   -> (((), fromElt r), fromElt i)
 
 type family ComplexRepr a where
-  ComplexRepr Half   = V2 Half
-  ComplexRepr Float  = V2 Float
-  ComplexRepr Double = V2 Double
-  ComplexRepr Int    = V2 Int
-  ComplexRepr Int8   = V2 Int8
-  ComplexRepr Int16  = V2 Int16
-  ComplexRepr Int32  = V2 Int32
-  ComplexRepr Int64  = V2 Int64
-  ComplexRepr Word   = V2 Word
-  ComplexRepr Word8  = V2 Word8
-  ComplexRepr Word16 = V2 Word16
-  ComplexRepr Word32 = V2 Word32
-  ComplexRepr Word64 = V2 Word64
+  ComplexRepr Half   = Vec2 Half
+  ComplexRepr Float  = Vec2 Float
+  ComplexRepr Double = Vec2 Double
+  ComplexRepr Int    = Vec2 Int
+  ComplexRepr Int8   = Vec2 Int8
+  ComplexRepr Int16  = Vec2 Int16
+  ComplexRepr Int32  = Vec2 Int32
+  ComplexRepr Int64  = Vec2 Int64
+  ComplexRepr Word   = Vec2 Word
+  ComplexRepr Word8  = Vec2 Word8
+  ComplexRepr Word16 = Vec2 Word16
+  ComplexRepr Word32 = Vec2 Word32
+  ComplexRepr Word64 = Vec2 Word64
   ComplexRepr a      = Tup2 a a
 
 data ComplexR a c where
-  ComplexRvec :: VecElt a => SingleType a -> ComplexR a (V2 a)
+  ComplexRvec :: VecElt a => SingleType a -> ComplexR a (Vec2 a)
   ComplexRtup :: ComplexR a (Tup2 a a)
 
 complexR :: TupleType a -> ComplexR a (ComplexRepr a)
@@ -136,15 +136,15 @@ constructComplex r i = case complexR $ eltType @a of
       r', i' :: Exp (EltRepr a)
       r' = coerce @a @(EltRepr a) r
       i' = coerce i
-      v :: Exp (V2 (EltRepr a))
+      v :: Exp (Vec2 (EltRepr a))
       v = V2_ r' i'
     in
-      coerce @(V2 (EltRepr a)) @(Complex a) $ v
+      coerce @(Vec2 (EltRepr a)) @(Complex a) $ v
   ComplexRtup   -> coerce $ T2  r i
 
 deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
 deconstructComplex c = case complexR $ eltType @a of
-  ComplexRvec _ -> let V2_ r i = coerce @(Complex a) @(V2 (EltRepr a)) c in (coerce r, coerce i)
+  ComplexRvec _ -> let V2_ r i = coerce @(Complex a) @(Vec2 (EltRepr a)) c in (coerce r, coerce i)
   ComplexRtup   -> let T2  r i = coerce c in (r, i)
 
 coerce :: EltRepr a ~ EltRepr b => Exp a -> Exp b
