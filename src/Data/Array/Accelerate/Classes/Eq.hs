@@ -125,7 +125,7 @@ cond :: Elt t
      -> Exp t                   -- ^ then-expression
      -> Exp t                   -- ^ else-expression
      -> Exp t
-cond (Exp c) (Exp x) (Exp y) = exp $ Cond c x y
+cond (Exp c) (Exp x) (Exp y) = mkExp $ Cond c x y
 
 $(runQ $ do
     let
