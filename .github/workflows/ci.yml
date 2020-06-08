@@ -50,7 +50,7 @@ jobs:
       id: stack-setup
       run: |
         ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
-        echo "::set-output name=stack-root::$(stack path --no-install-ghc --stack-root)"
+        echo "::set-output name=stack-root::$(stack path --system-ghc --no-install-ghc --stack-root)"
 
     - uses: actions/cache@v1
       with:
