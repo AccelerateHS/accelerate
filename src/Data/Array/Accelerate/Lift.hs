@@ -39,6 +39,7 @@ module Data.Array.Accelerate.Lift (
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -46,7 +47,7 @@ import Language.Haskell.TH                                          hiding ( Exp
 import Language.Haskell.TH.Extra
 
 
--- |Lift a unary function into 'Exp'.
+-- | Lift a unary function into 'Exp'.
 --
 lift1 :: (Unlift Exp a, Lift Exp b)
       => (a -> b)
@@ -54,7 +55,7 @@ lift1 :: (Unlift Exp a, Lift Exp b)
       -> Exp (Plain b)
 lift1 f = lift . f . unlift
 
--- |Lift a binary function into 'Exp'.
+-- | Lift a binary function into 'Exp'.
 --
 lift2 :: (Unlift Exp a, Unlift Exp b, Lift Exp c)
       => (a -> b -> c)
@@ -63,7 +64,7 @@ lift2 :: (Unlift Exp a, Unlift Exp b, Lift Exp c)
       -> Exp (Plain c)
 lift2 f x y = lift $ f (unlift x) (unlift y)
 
--- |Lift a ternary function into 'Exp'.
+-- | Lift a ternary function into 'Exp'.
 --
 lift3 :: (Unlift Exp a, Unlift Exp b, Unlift Exp c, Lift Exp d)
       => (a -> b -> c -> d)
@@ -73,17 +74,17 @@ lift3 :: (Unlift Exp a, Unlift Exp b, Unlift Exp c, Lift Exp d)
       -> Exp (Plain d)
 lift3 f x y z = lift $ f (unlift x) (unlift y) (unlift z)
 
--- |Lift a unary function to a computation over rank-1 indices.
+-- | Lift a unary function to a computation over rank-1 indices.
 --
 ilift1 :: (Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1
 ilift1 f = lift1 (\(Z:.i) -> Z :. f i)
 
--- |Lift a binary function to a computation over rank-1 indices.
+-- | Lift a binary function to a computation over rank-1 indices.
 --
 ilift2 :: (Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
 ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
 
--- |Lift a ternary function to a computation over rank-1 indices.
+-- | Lift a ternary function to a computation over rank-1 indices.
 --
 ilift3 :: (Exp Int -> Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
 ilift3 f = lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
@@ -119,7 +120,8 @@ class Lift c e => Unlift c e where
   unlift :: c (Plain e) -> e
 
 
--- identity instances
+-- Identity instances
+-- ------------------
 
 instance Lift Exp (Exp e) where
   type Plain (Exp e) = e
@@ -143,45 +145,40 @@ instance Unlift Acc (Acc a) where
 --   unlift = id
 
 
--- instances for indices
-
-instance Lift Exp () where
-  type Plain () = ()
-  lift _ = Exp $ SmartExp Nil
-
-instance Unlift Exp () where
-  unlift _ = ()
+-- Instances for indices
+-- ---------------------
 
 instance Lift Exp Z where
   type Plain Z = Z
-  lift _ = Exp $ SmartExp Nil
+  lift _ = Z_
 
 instance Unlift Exp Z where
   unlift _ = Z
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
-  lift (ix:.i) = Exp $ SmartExp $ Pair (unExp $ lift ix) (unExp $ expConst i)
+  lift (ix :. i) = lift ix ::. lift i
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
-  lift (ix:.i) = Exp $ SmartExp $ Pair (unExp $ lift ix) (unExp $ constant i)
+  lift (ix :. i) = lift ix ::. constant i
 
 instance (Elt e, Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
-  lift (ix :. Exp i) = Exp $ SmartExp $ Pair (unExp $ lift ix) i
+  lift (ix :. i) = lift ix ::. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
-  unlift (Exp e) = unlift (Exp $ SmartExp $ Prj PairIdxLeft e) :. Exp (SmartExp $ Prj PairIdxRight e)
+  unlift (ix ::. i) = unlift ix :. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt ix) => Unlift Exp (Exp ix :. Exp e) where
-  unlift (Exp e) = (Exp $ SmartExp $ Prj PairIdxLeft e) :. Exp (SmartExp $ Prj PairIdxRight e)
+  unlift (ix ::. i) = ix :. i
 
 instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
   type Plain (Any sh) = Any sh
   lift Any = constant Any
 
--- instances for numeric types
+-- Instances for numeric types
+-- ---------------------------
 
 {-# INLINE expConst #-}
 expConst :: forall e. Elt e => IsScalar (EltRepr e) => e -> Exp e
@@ -300,192 +297,21 @@ instance Lift Exp CUChar where
   lift = expConst
 
 -- Instances for tuples
+-- --------------------
 
-instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (a, b) where
-  type Plain (a, b) = (Plain a, Plain b)
-  lift (a, b) = tup2 (lift a, lift b)
+instance Lift Exp () where
+  type Plain () = ()
+  lift _ = Exp (SmartExp Nil)
 
-instance (Elt a, Elt b) => Unlift Exp (Exp a, Exp b) where
-  unlift = untup2
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c))
-  => Lift Exp (a, b, c) where
-  type Plain (a, b, c) = (Plain a, Plain b, Plain c)
-  lift (a, b, c) = tup3 (lift a, lift b, lift c)
-
-instance (Elt a, Elt b, Elt c) => Unlift Exp (Exp a, Exp b, Exp c) where
-  unlift = untup3
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d))
-  => Lift Exp (a, b, c, d) where
-  type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
-  lift (a, b, c, d) = tup4 (lift a, lift b, lift c, lift d)
-
-instance (Elt a, Elt b, Elt c, Elt d) => Unlift Exp (Exp a, Exp b, Exp c, Exp d) where
-  unlift = untup4
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e))
-  => Lift Exp (a, b, c, d, e) where
-  type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
-  lift (a, b, c, d, e) = tup5 (lift a, lift b, lift c, lift d, lift e)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e) where
-  unlift = untup5
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f))
-  => Lift Exp (a, b, c, d, e, f) where
-  type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
-  lift (a, b, c, d, e, f) = tup6 (lift a, lift b, lift c, lift d, lift e, lift f)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) where
-  unlift = untup6
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f, Lift Exp g,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
-          Elt (Plain g))
-  => Lift Exp (a, b, c, d, e, f, g) where
-  type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
-  lift (a, b, c, d, e, f, g) = tup7 (lift a, lift b, lift c, lift d, lift e, lift f, lift g)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g) where
-  unlift = untup7
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f, Lift Exp g, Lift Exp h,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
-          Elt (Plain g), Elt (Plain h))
-  => Lift Exp (a, b, c, d, e, f, g, h) where
-  type Plain (a, b, c, d, e, f, g, h)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
-  lift (a, b, c, d, e, f, g, h)
-    = tup8 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h) where
-  unlift = untup8
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e,
-          Lift Exp f, Lift Exp g, Lift Exp h, Lift Exp i,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e),
-          Elt (Plain f), Elt (Plain g), Elt (Plain h), Elt (Plain i))
-  => Lift Exp (a, b, c, d, e, f, g, h, i) where
-  type Plain (a, b, c, d, e, f, g, h, i)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
-  lift (a, b, c, d, e, f, g, h, i)
-    = tup9 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
-  unlift = untup9
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e,
-          Lift Exp f, Lift Exp g, Lift Exp h, Lift Exp i, Lift Exp j,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e),
-          Elt (Plain f), Elt (Plain g), Elt (Plain h), Elt (Plain i), Elt (Plain j))
-  => Lift Exp (a, b, c, d, e, f, g, h, i, j) where
-  type Plain (a, b, c, d, e, f, g, h, i, j)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j)
-  lift (a, b, c, d, e, f, g, h, i, j)
-    = tup10 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j) where
-  unlift = untup10
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e,
-          Lift Exp f, Lift Exp g, Lift Exp h, Lift Exp i, Lift Exp j, Lift Exp k,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e),
-          Elt (Plain f), Elt (Plain g), Elt (Plain h), Elt (Plain i), Elt (Plain j), Elt (Plain k))
-  => Lift Exp (a, b, c, d, e, f, g, h, i, j, k) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k)
-  lift (a, b, c, d, e, f, g, h, i, j, k)
-    = tup11 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k) where
-  unlift = untup11
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f,
-          Lift Exp g, Lift Exp h, Lift Exp i, Lift Exp j, Lift Exp k, Lift Exp l,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
-          Elt (Plain g), Elt (Plain h), Elt (Plain i), Elt (Plain j), Elt (Plain k), Elt (Plain l))
-  => Lift Exp (a, b, c, d, e, f, g, h, i, j, k, l) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l)
-    = tup12 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l) where
-  unlift = untup12
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f,
-          Lift Exp g, Lift Exp h, Lift Exp i, Lift Exp j, Lift Exp k, Lift Exp l, Lift Exp m,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
-          Elt (Plain g), Elt (Plain h), Elt (Plain i), Elt (Plain j), Elt (Plain k), Elt (Plain l), Elt (Plain m))
-  => Lift Exp (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    = tup13 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m) where
-  unlift = untup13
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f, Lift Exp g,
-          Lift Exp h, Lift Exp i, Lift Exp j, Lift Exp k, Lift Exp l, Lift Exp m, Lift Exp n,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f), Elt (Plain g),
-          Elt (Plain h), Elt (Plain i), Elt (Plain j), Elt (Plain k), Elt (Plain l), Elt (Plain m), Elt (Plain n))
-  => Lift Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    = tup14 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n) where
-  unlift = untup14
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f, Lift Exp g,
-          Lift Exp h, Lift Exp i, Lift Exp j, Lift Exp k, Lift Exp l, Lift Exp m, Lift Exp n, Lift Exp o,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f), Elt (Plain g),
-          Elt (Plain h), Elt (Plain i), Elt (Plain j), Elt (Plain k), Elt (Plain l), Elt (Plain m), Elt (Plain n), Elt (Plain o))
-  => Lift Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n, Plain o)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    = tup15 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n, lift o)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o) where
-  unlift = untup15
-
-instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f, Lift Exp g, Lift Exp h,
-          Lift Exp i, Lift Exp j, Lift Exp k, Lift Exp l, Lift Exp m, Lift Exp n, Lift Exp o, Lift Exp p,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f), Elt (Plain g), Elt (Plain h),
-          Elt (Plain i), Elt (Plain j), Elt (Plain k), Elt (Plain l), Elt (Plain m), Elt (Plain n), Elt (Plain o), Elt (Plain p))
-  => Lift Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  type Plain (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i, Plain j, Plain k, Plain l, Plain m, Plain n, Plain o, Plain p)
-  lift (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    = tup16 (lift a, lift b, lift c, lift d, lift e, lift f, lift g, lift h, lift i, lift j, lift k, lift l, lift m, lift n, lift o, lift p)
-
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
-  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o, Exp p) where
-  unlift = untup16
-
+instance Unlift Exp () where
+  unlift _ = ()
 
 instance Lift Acc () where
   type Plain () = ()
   lift _ = Acc (SmartAcc Anil)
+
+instance Unlift Acc () where
+  unlift _ = ()
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e
@@ -525,8 +351,10 @@ $(runQ $ do
             |]
 
         mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
+        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
     --
     as <- mapM mkAccInstances [2..16]
-    return $ concat as
+    es <- mapM mkExpInstances [2..16]
+    return $ concat (as ++ es)
  )
 
