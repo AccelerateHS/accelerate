@@ -149,32 +149,32 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
                       , hang shiftwidth (sep [ then_, t' ])
                       , hang shiftwidth (sep [ else_, e' ]) ]
 
-    Aforeign _ ff _ a       -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
-    Awhile p f a            -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
-    Use repr arr            -> "use"          .$ [ prettyArray repr arr ]
-    Unit _ e                -> "unit"         .$ [ ppE e ]
-    Reshape _ sh a          -> "reshape"      .$ [ ppE sh, ppA a ]
-    Generate _ sh f         -> "generate"     .$ [ ppE sh, ppF f ]
-    Transform _ sh p f a    -> "transform"    .$ [ ppE sh, ppF p, ppF f, ppA a ]
-    Replicate _ ix a        -> "replicate"    .$ [ ppE ix, ppA a ]
-    Slice _ a ix            -> "slice"        .$ [ ppE ix, ppA a ]
-    Map _ f a               -> "map"          .$ [ ppF f,  ppA a ]
-    ZipWith _ f a b         -> "zipWith"      .$ [ ppF f,  ppA a, ppA b ]
-    Fold f z a              -> "fold"         .$ [ ppF f,  ppE z, ppA a ]
-    Fold1 f a               -> "fold1"        .$ [ ppF f,  ppA a ]
-    FoldSeg _ f z a s       -> "foldSeg"      .$ [ ppF f,  ppE z, ppA a, ppA s ]
-    Fold1Seg _ f a s        -> "fold1Seg"     .$ [ ppF f,  ppA a, ppA s ]
-    Scanl f z a             -> "scanl"        .$ [ ppF f,  ppE z, ppA a ]
-    Scanl' f z a            -> "scanl'"       .$ [ ppF f,  ppE z, ppA a ]
-    Scanl1 f a              -> "scanl1"       .$ [ ppF f,  ppA a ]
-    Scanr f z a             -> "scanr"        .$ [ ppF f,  ppE z, ppA a ]
-    Scanr' f z a            -> "scanr'"       .$ [ ppF f,  ppE z, ppA a ]
-    Scanr1 f a              -> "scanr1"       .$ [ ppF f,  ppA a ]
-    Permute f d p s         -> "permute"      .$ [ ppF f,  ppA d, ppF p, ppA s ]
-    Backpermute _ sh f a    -> "backpermute"  .$ [ ppE sh, ppF f, ppA a ]
-    Stencil s _ f b a       -> "stencil"      .$ [ ppF f,  ppB (stencilElt s) b, ppA a ]
+    Aforeign _ ff _ a        -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
+    Awhile p f a             -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
+    Use repr arr             -> "use"          .$ [ prettyArray repr arr ]
+    Unit _ e                 -> "unit"         .$ [ ppE e ]
+    Reshape _ sh a           -> "reshape"      .$ [ ppE sh, ppA a ]
+    Generate _ sh f          -> "generate"     .$ [ ppE sh, ppF f ]
+    Transform _ sh p f a     -> "transform"    .$ [ ppE sh, ppF p, ppF f, ppA a ]
+    Replicate _ ix a         -> "replicate"    .$ [ ppE ix, ppA a ]
+    Slice _ a ix             -> "slice"        .$ [ ppE ix, ppA a ]
+    Map _ f a                -> "map"          .$ [ ppF f,  ppA a ]
+    ZipWith _ f a b          -> "zipWith"      .$ [ ppF f,  ppA a, ppA b ]
+    Fold f (Just z) a        -> "fold"         .$ [ ppF f,  ppE z, ppA a ]
+    Fold f Nothing  a        -> "fold1"        .$ [ ppF f,  ppA a ]
+    FoldSeg _ f (Just z) a s -> "foldSeg"      .$ [ ppF f,  ppE z, ppA a, ppA s ]
+    FoldSeg _ f Nothing  a s -> "fold1Seg"     .$ [ ppF f,  ppA a, ppA s ]
+    Scan d f (Just z) a      -> fromString ("scan" ++ show d)
+                                               .$ [ ppF f,  ppE z, ppA a ]
+    Scan d f Nothing  a      -> fromString ("scan" ++ show d ++ "1")
+                                               .$ [ ppF f,  ppA a ]
+    Scan' d f z a            -> fromString ("scan" ++ show d ++ "'")
+                                               .$ [ ppF f,  ppE z, ppA a ]
+    Permute f d p s          -> "permute"      .$ [ ppF f,  ppA d, ppF p, ppA s ]
+    Backpermute _ sh f a     -> "backpermute"  .$ [ ppE sh, ppF f, ppA a ]
+    Stencil s _ f b a        -> "stencil"      .$ [ ppF f,  ppB (stencilElt s) b, ppA a ]
     Stencil2 s1 s2 _ f b1 a1 b2 a2
-                            -> "stencil2"     .$ [ ppF f,  ppB (stencilElt s1) b1, ppA a1, ppB (stencilElt s2) b2, ppA a2 ]
+                             -> "stencil2"     .$ [ ppF f,  ppB (stencilElt s1) b1, ppA a1, ppB (stencilElt s2) b2, ppA a2 ]
   where
     infixr 0 .$
     f .$ xs
@@ -543,18 +543,18 @@ prettyPrimConst PrimPi{}       = "pi"
 -- associativity, and fixity of the primitive scalar operators.
 --
 
-data Direction = L | N | R
+data Dir = L | N | R
   deriving Eq
 
 data Fixity = App | Infix | Prefix
   deriving Eq
 
 type Precedence    = Int
-type Associativity = Direction
+type Associativity = Dir
 
 data Context = Context
   { ctxAssociativity  :: Associativity
-  , ctxPosition       :: Direction
+  , ctxPosition       :: Dir
   , ctxPrecedence     :: Precedence
   }
 
@@ -581,7 +581,7 @@ context0 = Context N N 0
 app :: Context
 app = Context L N 10
 
-arg :: Operator -> Direction -> Context
+arg :: Operator -> Dir -> Context
 arg Operator{..} side = Context opAssociativity side opPrecedence
 
 isPrefix :: Operator -> Bool

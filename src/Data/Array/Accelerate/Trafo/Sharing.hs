@@ -332,16 +332,10 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Map t1 t2 f acc             -> AST.Map t2 (cvtF1 t1 f) (cvtA acc)
       ZipWith t1 t2 t3 f acc1 acc2
                                   -> AST.ZipWith t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
-      Fold tp f e acc             -> AST.Fold (cvtF2 tp tp f) (cvtE e) (cvtA acc)
-      Fold1 tp f acc              -> AST.Fold1 (cvtF2 tp tp f) (cvtA acc)
-      FoldSeg i tp f e acc1 acc2  -> AST.FoldSeg i (cvtF2 tp tp f) (cvtE e) (cvtA acc1) (cvtA acc2)
-      Fold1Seg i tp f acc1 acc2   -> AST.Fold1Seg i (cvtF2 tp tp f) (cvtA acc1) (cvtA acc2)
-      Scanl tp f e acc            -> AST.Scanl (cvtF2 tp tp f) (cvtE e) (cvtA acc)
-      Scanl' tp f e acc           -> AST.Scanl' (cvtF2 tp tp f) (cvtE e) (cvtA acc)
-      Scanl1 tp f acc             -> AST.Scanl1 (cvtF2 tp tp f) (cvtA acc)
-      Scanr tp f e acc            -> AST.Scanr (cvtF2 tp tp f) (cvtE e) (cvtA acc)
-      Scanr' tp f e acc           -> AST.Scanr' (cvtF2 tp tp f) (cvtE e) (cvtA acc)
-      Scanr1 tp f acc             -> AST.Scanr1 (cvtF2 tp tp f) (cvtA acc)
+      Fold tp f e acc             -> AST.Fold (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      FoldSeg i tp f e acc1 acc2  -> AST.FoldSeg i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
+      Scan  d tp f e acc          -> AST.Scan  d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      Scan' d tp f e acc          -> AST.Scan' d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)
       Permute (ArrayR shr tp) f dftAcc perm acc
                                   -> AST.Permute (cvtF2 tp tp f) (cvtA dftAcc) (cvtF1 (shapeType shr) perm) (cvtA acc)
       Backpermute shr newDim perm acc
@@ -1384,22 +1378,16 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              return (Map t1 t2 f' acc', h1 `max` h2 + 1)
             ZipWith t1 t2 t3 f acc1 acc2
                                         -> travF2A2 (ZipWith t1 t2 t3) t1 t2 f acc1 acc2
-            Fold tp f e acc             -> travF2EA (Fold tp) tp tp f e acc
-            Fold1 tp f acc              -> travF2A (Fold1 tp) tp tp f acc
+            Fold tp f e acc             -> travF2MEA (Fold tp) tp tp f e acc
             FoldSeg i tp f e acc1 acc2  -> do
                                              (f'   , h1) <- traverseFun2 lvl tp tp f
-                                             (e'   , h2) <- traverseExp lvl e
+                                             (e'   , h2) <- travME e
                                              (acc1', h3) <- traverseAcc lvl acc1
                                              (acc2', h4) <- traverseAcc lvl acc2
                                              return (FoldSeg i tp f' e' acc1' acc2',
                                                      h1 `max` h2 `max` h3 `max` h4 + 1)
-            Fold1Seg i tp f acc1 acc2   -> travF2A2 (Fold1Seg i tp) tp tp f acc1 acc2
-            Scanl tp f e acc            -> travF2EA (Scanl tp) tp tp f e acc
-            Scanl' tp f e acc           -> travF2EA (Scanl' tp) tp tp f e acc
-            Scanl1 tp f acc             -> travF2A (Scanl1 tp) tp tp f acc
-            Scanr tp f e acc            -> travF2EA (Scanr tp) tp tp f e acc
-            Scanr' tp f e acc           -> travF2EA (Scanr' tp) tp tp f e acc
-            Scanr1 tp f acc             -> travF2A (Scanr1 tp) tp tp f acc
+            Scan  d tp f e acc          -> travF2MEA (Scan  d tp) tp tp f e acc
+            Scan' d tp f e acc          -> travF2EA (Scan' d tp) tp tp f e acc
             Permute repr@(ArrayR shr tp) c acc1 p acc2
                                         -> do
                                              (c'   , h1) <- traverseFun2 lvl tp tp c
@@ -1449,17 +1437,6 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (acc', h2) <- traverseAcc lvl acc
               return (c exp' acc', h1 `max` h2 + 1)
 
-        travF2A :: ((SmartExp b -> SmartExp c -> RootExp d) -> UnscopedAcc arrs'
-                    -> PreSmartAcc UnscopedAcc RootExp arrs)
-                -> TupleType b -> TupleType c
-                -> (SmartExp b -> SmartExp c -> SmartExp d) -> SmartAcc arrs'
-                -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
-        travF2A c t1 t2 fun acc
-          = do
-              (fun', h1) <- traverseFun2 lvl t1 t2 fun
-              (acc', h2) <- traverseAcc lvl acc
-              return (c fun' acc', h1 `max` h2 + 1)
-
         travF2EA :: ((SmartExp b -> SmartExp c -> RootExp d) -> RootExp e -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
                  -> TupleType b -> TupleType c
                  -> (SmartExp b -> SmartExp c -> SmartExp d) -> SmartExp e -> SmartAcc arrs'
@@ -1470,6 +1447,23 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (exp', h2) <- traverseExp lvl exp
               (acc', h3) <- traverseAcc lvl acc
               return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
+
+        travF2MEA :: ((SmartExp b -> SmartExp c -> RootExp d) -> Maybe (RootExp e) -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
+                 -> TupleType b -> TupleType c
+                 -> (SmartExp b -> SmartExp c -> SmartExp d) -> Maybe (SmartExp e) -> SmartAcc arrs'
+                 -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+        travF2MEA c t1 t2 fun exp acc
+          = do
+              (fun', h1) <- traverseFun2 lvl t1 t2 fun
+              (exp', h2) <- travME exp
+              (acc', h3) <- traverseAcc lvl acc
+              return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
+
+        travME :: Maybe (SmartExp t) -> IO (Maybe (RootExp t), Int)
+        travME Nothing  = return (Nothing, 0)
+        travME (Just e) = do
+          (e', c) <- traverseExp lvl e
+          return (Just e', c)
 
         travF2A2 :: ((SmartExp b -> SmartExp c -> RootExp d) -> UnscopedAcc arrs1 -> UnscopedAcc arrs2 -> PreSmartAcc UnscopedAcc RootExp arrs)
                  -> TupleType b -> TupleType c
@@ -2197,23 +2191,17 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      reconstruct (Map t1 t2 f' acc') (accCount1 +++ accCount2)
           ZipWith t1 t2 t3 f acc1 acc2
                                   -> travF2A2 (ZipWith t1 t2 t3) f acc1 acc2
-          Fold tp f z acc         -> travF2EA (Fold tp) f z acc
-          Fold1 tp f acc          -> travF2A (Fold1 tp) f acc
+          Fold tp f z acc         -> travF2MEA (Fold tp) f z acc
           FoldSeg i tp f z acc1 acc2 -> let
                                        (f'   , accCount1)  = scopesFun2 f
-                                       (z'   , accCount2)  = scopesExp  z
+                                       (z'   , accCount2)  = travME z
                                        (acc1', accCount3)  = scopesAcc  acc1
                                        (acc2', accCount4)  = scopesAcc  acc2
                                      in
                                      reconstruct (FoldSeg i tp f' z' acc1' acc2')
                                        (accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
-          Fold1Seg i tp f acc1 acc2 -> travF2A2 (Fold1Seg i tp) f acc1 acc2
-          Scanl tp f z acc        -> travF2EA (Scanl tp) f z acc
-          Scanl' tp f z acc       -> travF2EA (Scanl' tp) f z acc
-          Scanl1 tp f acc         -> travF2A (Scanl1 tp) f acc
-          Scanr tp f z acc        -> travF2EA (Scanr tp) f z acc
-          Scanr' tp f z acc       -> travF2EA (Scanr' tp) f z acc
-          Scanr1 tp f acc         -> travF2A (Scanr1 tp) f acc
+          Scan d tp f z acc       -> travF2MEA (Scan d tp) f z acc
+          Scan' d tp f z acc      -> travF2EA (Scan' d tp) f z acc
           Permute repr fc acc1 fp acc2
                                   -> let
                                        (fc'  , accCount1) = scopesFun2 fc
@@ -2262,16 +2250,6 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (e'  , accCount1) = scopesExp e
             (acc', accCount2) = scopesAcc acc
 
-        travF2A :: ((SmartExp a -> SmartExp b -> ScopedExp c) -> ScopedAcc arrs'
-                    -> PreSmartAcc ScopedAcc ScopedExp arrs)
-                -> (SmartExp a -> SmartExp b -> RootExp c)
-                -> UnscopedAcc arrs'
-                -> (ScopedAcc arrs, NodeCounts)
-        travF2A c f acc = reconstruct (c f' acc') (accCount1 +++ accCount2)
-          where
-            (f'  , accCount1) = scopesFun2 f
-            (acc', accCount2) = scopesAcc  acc
-
         travF2EA :: ((SmartExp a -> SmartExp b -> ScopedExp c) -> ScopedExp e
                      -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
                  -> (SmartExp a -> SmartExp b -> RootExp c)
@@ -2283,6 +2261,23 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (f'  , accCount1) = scopesFun2 f
             (e'  , accCount2) = scopesExp  e
             (acc', accCount3) = scopesAcc  acc
+
+        travF2MEA :: ((SmartExp a -> SmartExp b -> ScopedExp c) -> Maybe (ScopedExp e)
+                     -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
+                 -> (SmartExp a -> SmartExp b -> RootExp c)
+                 -> Maybe (RootExp e)
+                 -> UnscopedAcc arrs'
+                 -> (ScopedAcc arrs, NodeCounts)
+        travF2MEA c f e acc = reconstruct (c f' e' acc') (accCount1 +++ accCount2 +++ accCount3)
+          where
+            (f'  , accCount1) = scopesFun2 f
+            (e'  , accCount2) = travME e
+            (acc', accCount3) = scopesAcc  acc
+        
+        travME :: Maybe (RootExp e) -> (Maybe (ScopedExp e), NodeCounts)
+        travME Nothing  = (Nothing, noNodeCounts)
+        travME (Just e) = (Just e', c)
+          where (e', c) = scopesExp e
 
         travF2A2 :: ((SmartExp a -> SmartExp b -> ScopedExp c) -> ScopedAcc arrs1
                      -> ScopedAcc arrs2 -> PreSmartAcc ScopedAcc ScopedExp arrs)
