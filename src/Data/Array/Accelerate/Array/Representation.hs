@@ -567,8 +567,8 @@ vecPack vecR tuple
 vecUnpack :: forall n single tuple. KnownNat n => VecR n single tuple -> Vec n single -> tuple
 vecUnpack vecR (Vec ba#)
   | VectorType n single <- vecRvector vecR
-  , !(I# n#) <- n
-  , PrimDict <- getPrim single
+  , (I# n#)             <- n
+  , PrimDict            <- getPrim single
   = go (n# -# 1#) vecR
   where
     go :: Prim single => Int# -> VecR n' single tuple' -> tuple'
@@ -626,7 +626,7 @@ showElement tuple value = showElement' tuple value ""
 
     showVector :: VectorType (Vec n a) -> Vec n a -> String
     showVector (VectorType _ single) vec
-      | PrimDict <- getPrim single = "<" ++ (intercalate ", " $ showSingle single <$> vecToArray vec) ++ ">"
+      | PrimDict <- getPrim single = "<" ++ intercalate ", " (showSingle single <$> vecToArray vec) ++ ">"
 
 showArray :: ArrayR (Array sh e) -> Array sh e -> String
 showArray repr@(ArrayR _ tp) = showArray' (showString . showElement tp) repr

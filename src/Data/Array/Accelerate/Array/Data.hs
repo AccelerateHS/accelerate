@@ -9,7 +9,6 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TemplateHaskell        #-}
-{-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UnboxedTuples          #-}
 {-# LANGUAGE UndecidableInstances   #-}
@@ -237,7 +236,7 @@ unsafeWriteArrayData (TupRpair t1 t2) (a1, a2) !ix (v1, v2)
   >> unsafeWriteArrayData t2 a2 ix v2
 unsafeWriteArrayData (TupRsingle (SingleScalarType tp)) arr !ix !val
   | (ScalarDict, from, _) <- singleDict tp = unsafeWriteArray arr ix (from val)
-unsafeWriteArrayData (TupRsingle (VectorScalarType (VectorType (I# w#) tp))) arr !(I# ix#) (Vec ba# :: Vec n t)
+unsafeWriteArrayData (TupRsingle (VectorScalarType (VectorType (I# w#) tp))) arr (I# ix#) (Vec ba# :: Vec n t)
   | (ScalarDict, _, _) <- singleDict tp =
     let
       !bytes# = w# *# sizeOf# (undefined :: ScalarDataRepr e)
