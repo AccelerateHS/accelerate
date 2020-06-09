@@ -46,7 +46,7 @@ jobs:
         enable-stack: true
         ghc-version: ${{ matrix.ghc }}
 
-    - name: Setup Haskell Stack
+    - name: Set up stack
       id: stack-setup
       run: |
         ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
@@ -57,7 +57,7 @@ jobs:
         path: ${{ steps.stack-setup.outputs.stack-root }}
         key: ${{ runner.os }}-${{ matrix.ghc }}-stack
 
-    - name: Build Dependencies
+    - name: Build dependencies
       run: |
         stack build $STACK_FLAGS --test --no-run-tests --only-dependencies
 
