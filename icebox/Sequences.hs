@@ -359,3 +359,23 @@ test_sequences' backend opt =
     testChunking2b =
       testProperty "chunking2b"
         (\ input -> (run backend (chunking2b input) ~?= chunking2Ref input))
+
+foldE :: Elt e
+      => (Exp e -> Exp e -> Exp e)
+      -> Exp e
+      -> Seq [Scalar e]
+      -> Seq (Scalar e)
+foldE f z =
+  S.fold
+      (\a s -> lift (a, elements s))
+      (\(T2 a as) -> A.fold f (the a) as)
+      (unit z)
+
+sumMax
+    :: (Num a, Ord a, Bounded a)
+    => Acc (Vector a)
+    -> Acc (Scalar a, Scalar a)
+sumMax (sliceInner -> xs)
+  = collect
+  $ lift ( foldE (+) 0 xs, foldE max minBound xs )
+
