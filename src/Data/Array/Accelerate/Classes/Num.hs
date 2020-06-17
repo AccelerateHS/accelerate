@@ -20,7 +20,7 @@ module Data.Array.Accelerate.Classes.Num (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 

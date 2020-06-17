@@ -14,10 +14,13 @@
 module Data.Array.Accelerate.Test.NoFib.Base
   where
 
-import Data.Array.Accelerate.Array.Sugar                            ( Arrays, Array, Shape, Elt, DIM0, DIM1, DIM2, DIM3, Z(..), (:.)(..), fromList, size )
-import Data.Array.Accelerate.Smart                                  ( Acc )
-import Data.Array.Accelerate.Trafo.Sharing                          ( Afunction, AfunctionR )
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
+import Data.Array.Accelerate.Trafo.Sharing
 import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
 
 import Control.Monad
 import Data.Primitive.Types

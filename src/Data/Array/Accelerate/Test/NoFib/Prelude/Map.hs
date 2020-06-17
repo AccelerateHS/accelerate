@@ -28,7 +28,9 @@ import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Data.Bits                              as A
-import Data.Array.Accelerate.Array.Sugar                            as Sugar
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -60,18 +62,19 @@ test_map runN =
     testIntegralElt
         :: forall a. ( P.Integral a, P.FiniteBits a
                      , A.Integral a, A.FiniteBits a
-                     , A.FromIntegral a Double, Similar a )
+                     , A.FromIntegral a Double
+                     , Similar a, Show a )
         => Gen a
         -> TestTree
     testIntegralElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim0
         , testDim dim1
         , testDim dim2
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen sh
             -> TestTree
         testDim sh =
@@ -92,18 +95,18 @@ test_map runN =
             ]
 
     testFloatingElt
-        :: forall a. (P.RealFloat a, A.Floating a, A.RealFrac a, Similar a)
+        :: forall a. (P.RealFloat a, A.Floating a, A.RealFrac a, Similar a, Show a)
         => (Range a -> Gen a)
         -> TestTree
     testFloatingElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim0
         , testDim dim1
         , testDim dim2
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen sh
             -> TestTree
         testDim sh =
@@ -144,7 +147,7 @@ test_map runN =
 
 
 test_negate
-    :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh)
+    :: (Shape sh, Show sh, Similar e, Show e, A.Num e, P.Num e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -156,7 +159,7 @@ test_negate runN dim e =
     let !go = runN (A.map negate) in go xs ~~~ mapRef negate xs
 
 test_abs
-    :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh)
+    :: (Shape sh, Show sh, Similar e, Show e, A.Num e, P.Num e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -168,7 +171,7 @@ test_abs runN dim e =
     let !go = runN (A.map abs) in go xs ~~~ mapRef abs xs
 
 test_signum
-    :: (Shape sh, Similar e, A.Num e, P.Num e, P.Eq sh)
+    :: (Shape sh, Show sh, Similar e, Show e, A.Num e, P.Num e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -180,7 +183,7 @@ test_signum runN dim e =
     let !go = runN (A.map signum) in go xs ~~~ mapRef signum xs
 
 test_complement
-    :: (Shape sh, Similar e, A.Bits e, P.Bits e, P.Eq sh)
+    :: (Shape sh, Show sh, Similar e, Show e, A.Bits e, P.Bits e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -192,7 +195,7 @@ test_complement runN dim e =
     let !go = runN (A.map A.complement) in go xs ~~~ mapRef P.complement xs
 
 test_popCount
-    :: (Shape sh, A.Bits e, P.Bits e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, A.Bits e, P.Bits e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -204,7 +207,7 @@ test_popCount runN dim e =
     let !go = runN (A.map A.popCount) in go xs ~~~ mapRef P.popCount xs
 
 test_countLeadingZeros
-    :: (Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -216,7 +219,7 @@ test_countLeadingZeros runN dim e =
     let !go = runN (A.map A.countLeadingZeros) in go xs ~~~ mapRef countLeadingZerosRef xs
 
 test_countTrailingZeros
-    :: (Shape sh, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -228,7 +231,7 @@ test_countTrailingZeros runN dim e =
     let !go = runN (A.map A.countTrailingZeros) in go xs ~~~ mapRef countTrailingZerosRef xs
 
 test_fromIntegral
-    :: forall sh e. (Shape sh, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double)
     => RunN
     -> Gen sh
     -> Gen e
@@ -240,7 +243,7 @@ test_fromIntegral runN dim e =
     let !go = runN (A.map A.fromIntegral) in go xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
 
 test_recip
-    :: (Shape sh, Similar e, P.Eq sh, P.Fractional e, A.Fractional e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Fractional e, A.Fractional e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -252,7 +255,7 @@ test_recip runN dim e =
     let !go = runN (A.map recip) in go xs ~~~ mapRef recip xs
 
 test_sin
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -264,7 +267,7 @@ test_sin runN dim e =
     let !go = runN (A.map sin) in go xs ~~~ mapRef sin xs
 
 test_cos
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -276,7 +279,7 @@ test_cos runN dim e =
     let !go = runN (A.map cos) in go xs ~~~ mapRef cos xs
 
 test_tan
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -288,7 +291,7 @@ test_tan runN dim e =
     let !go = runN (A.map tan) in go xs ~~~ mapRef tan xs
 
 test_asin
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -300,7 +303,7 @@ test_asin runN dim e =
     let !go = runN (A.map asin) in go xs ~~~ mapRef asin xs
 
 test_acos
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -312,7 +315,7 @@ test_acos runN dim e =
     let !go = runN (A.map acos) in go xs ~~~ mapRef acos xs
 
 test_atan
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -324,7 +327,7 @@ test_atan runN dim e =
     let !go = runN (A.map atan) in go xs ~~~ mapRef atan xs
 
 test_asinh
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -336,7 +339,7 @@ test_asinh runN dim e =
     let !go = runN (A.map asinh) in go xs ~~~ mapRef asinh xs
 
 test_acosh
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -348,7 +351,7 @@ test_acosh runN dim e =
     let !go = runN (A.map acosh) in go xs ~~~ mapRef acosh xs
 
 test_atanh
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -360,7 +363,7 @@ test_atanh runN dim e =
     let !go = runN (A.map atanh) in go xs ~~~ mapRef atanh xs
 
 test_exp
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -372,7 +375,7 @@ test_exp runN dim e =
     let !go = runN (A.map exp) in go xs ~~~ mapRef exp xs
 
 test_sqrt
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -384,7 +387,7 @@ test_sqrt runN dim e =
     let !go = runN (A.map sqrt) in go xs ~~~ mapRef sqrt xs
 
 test_log
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -396,7 +399,7 @@ test_log runN dim e =
     let !go = runN (A.map log) in go xs ~~~ mapRef log xs
 
 test_truncate
-    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -408,7 +411,7 @@ test_truncate runN dim e =
     let !go = runN (A.map A.truncate) in go xs ~~~ mapRef (P.truncate :: e -> Int) xs
 
 test_round
-    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -420,7 +423,7 @@ test_round runN dim e =
     let !go = runN (A.map A.round) in go xs ~~~ mapRef (P.round :: e -> Int) xs
 
 test_floor
-    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -432,7 +435,7 @@ test_floor runN dim e =
     let !go = runN (A.map A.floor) in go xs ~~~ mapRef (P.floor :: e -> Int) xs
 
 test_ceiling
-    :: forall sh e. (Shape sh, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -448,7 +451,7 @@ test_ceiling runN dim e =
 -- ------------------------
 
 mapRef :: (Shape sh, Elt a, Elt b) => (a -> b) -> Array sh a -> Array sh b
-mapRef f xs = fromFunction (arrayShape xs) (\ix -> f (xs Sugar.! ix))
+mapRef f xs = fromFunction (arrayShape xs) (\ix -> f (xs S.! ix))
 
 countLeadingZerosRef :: P.FiniteBits a => a -> Int
 #if __GLASGOW_HASKELL__ >= 710

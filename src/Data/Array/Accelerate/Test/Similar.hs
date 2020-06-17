@@ -17,8 +17,10 @@
 module Data.Array.Accelerate.Test.Similar
   where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Data.Complex
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
 import Hedgehog

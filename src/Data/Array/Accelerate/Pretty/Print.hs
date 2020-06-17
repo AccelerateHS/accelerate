@@ -51,16 +51,22 @@ module Data.Array.Accelerate.Pretty.Print (
 
 ) where
 
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Elt
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Sugar.Foreign
+import Data.Array.Accelerate.Type
+
 import Data.Char
 import Data.String
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Prelude                                                      hiding ( exp )
-
-import Data.Array.Accelerate.AST                                    hiding ( Val(..), prj )
-import Data.Array.Accelerate.Array.Sugar                            ( strForeign )
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Type
 
 
 -- Implementation
@@ -172,9 +178,9 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     Scanr1 f a              -> "scanr1"       .$ [ ppF f,  ppA a ]
     Permute f d p s         -> "permute"      .$ [ ppF f,  ppA d, ppF p, ppA s ]
     Backpermute _ sh f a    -> "backpermute"  .$ [ ppE sh, ppF f, ppA a ]
-    Stencil s _ f b a       -> "stencil"      .$ [ ppF f,  ppB (stencilElt s) b, ppA a ]
+    Stencil s _ f b a       -> "stencil"      .$ [ ppF f,  ppB (stencilEltR s) b, ppA a ]
     Stencil2 s1 s2 _ f b1 a1 b2 a2
-                            -> "stencil2"     .$ [ ppF f,  ppB (stencilElt s1) b1, ppA a1, ppB (stencilElt s2) b2, ppA a2 ]
+                            -> "stencil2"     .$ [ ppF f,  ppB (stencilEltR s1) b1, ppA a1, ppB (stencilEltR s2) b2, ppA a2 ]
   where
     infixr 0 .$
     f .$ xs
@@ -194,7 +200,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     ppF = parens . prettyOpenFun Empty aenv
 
     ppB :: forall sh e.
-           TupleType e
+           TypeR e
         -> Boundary aenv (Array sh e)
         -> Adoc
     ppB _  Clamp        = "clamp"
@@ -289,9 +295,9 @@ prettyLhs requiresParens x env0 lhs = case collect lhs of
       _   -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> sep tup))
   where
     ppPair :: LeftHandSide s arrs' env env'' -> (Val env'', Adoc)
-    ppPair (LeftHandSideWildcard TupRunit) = (env0, "()")
-    ppPair (LeftHandSideWildcard _)        = (env0, "_")
-    ppPair (LeftHandSideSingle _)          = (env0 `Push` v, v)
+    ppPair LeftHandSideUnit       = (env0, "()")
+    ppPair LeftHandSideWildcard{} = (env0, "_")
+    ppPair LeftHandSideSingle{}   = (env0 `Push` v, v)
       where
         v = pretty x <> pretty (sizeEnv env0)
     ppPair (LeftHandSidePair a b)          = (env2, tupled [doc1, doc2])
@@ -307,7 +313,7 @@ prettyLhs requiresParens x env0 lhs = case collect lhs of
     collect _ = Nothing
 
 prettyArray :: ArrayR (Array sh e) -> Array sh e -> Adoc
-prettyArray repr = parens . fromString . showArray repr
+prettyArray aR@(ArrayR _ eR) = parens . fromString . showArray (showsElt eR) aR
 
 
 -- Scalar expressions
@@ -424,7 +430,7 @@ prettyOpenExp ctx env aenv exp =
       $ sep [ opName op, x app, y app, z app ]
 
     withTypeRep :: ScalarType t -> Adoc -> Adoc
-    withTypeRep tp op = op <> enclose langle rangle (pretty (showScalarType tp))
+    withTypeRep t op = op <> enclose langle rangle (pretty (show t))
 
 prettyArrayVar
     :: forall aenv a.
@@ -525,9 +531,9 @@ prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
     collect _             = Nothing
 -}
 
-prettyConst :: TupleType e -> e -> Adoc
+prettyConst :: TypeR e -> e -> Adoc
 prettyConst tp x =
-  let y = showElement tp x
+  let y = showElt tp x
   in  parensIf (any isSpace y) (pretty y)
 
 prettyPrimConst :: PrimConst a -> Adoc

@@ -38,9 +38,12 @@ module Data.Array.Accelerate.Lift (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH                                          hiding ( Exp )
@@ -181,8 +184,8 @@ instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
 -- ---------------------------
 
 {-# INLINE expConst #-}
-expConst :: forall e. Elt e => IsScalar (EltRepr e) => e -> Exp e
-expConst = Exp . SmartExp . Const (scalarType @(EltRepr e)) . fromElt
+expConst :: forall e. Elt e => IsScalar (EltR e) => e -> Exp e
+expConst = Exp . SmartExp . Const (scalarType @(EltR e)) . fromElt
 
 instance Lift Exp Int where
   type Plain Int = Int
@@ -319,7 +322,7 @@ instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
 
 -- Lift and Unlift instances for tuples
 --
-$(runQ $ do
+runQ $ do
     let
         mkInstances :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
         mkInstances con cst smart prj nil pair n = do
@@ -356,5 +359,4 @@ $(runQ $ do
     as <- mapM mkAccInstances [2..16]
     es <- mapM mkExpInstances [2..16]
     return $ concat (as ++ es)
- )
 

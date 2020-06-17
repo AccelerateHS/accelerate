@@ -22,8 +22,8 @@ module Data.Array.Accelerate.Unsafe (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 
 
 -- | The function 'coerce' allows you to convert a value between any two types
@@ -36,7 +36,7 @@ import Data.Array.Accelerate.Smart
 --
 -- Furthermore, as we typically declare newtype wrappers similarly to:
 --
--- > type instance EltRepr (Sum a) = ((), EltRepr a)
+-- > type instance EltR (Sum a) = ((), EltR a)
 --
 -- This can be used instead of the newtype constructor, to go from the newtype's
 -- abstract type to the concrete type by dropping the extra @()@ from the
@@ -47,6 +47,6 @@ import Data.Array.Accelerate.Smart
 --
 -- @since 1.2.0.0
 --
-coerce :: Coerce (EltRepr a) (EltRepr b) => Exp a -> Exp b
+coerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
 coerce = mkCoerce
 

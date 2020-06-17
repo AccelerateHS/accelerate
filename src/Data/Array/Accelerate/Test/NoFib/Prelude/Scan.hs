@@ -30,7 +30,8 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Scan (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -60,18 +61,18 @@ test_scanl runN =
     ]
   where
     testElt
-        :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
+        :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -96,18 +97,18 @@ test_scanl1 runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -131,18 +132,18 @@ test_scanl' runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -167,18 +168,18 @@ test_scanr runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -203,18 +204,18 @@ test_scanr1 runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -238,18 +239,18 @@ test_scanr' runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -274,18 +275,18 @@ test_scanlSeg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -309,18 +310,18 @@ test_scanl1Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -343,18 +344,18 @@ test_scanl'Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -378,18 +379,18 @@ test_scanrSeg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -413,18 +414,18 @@ test_scanr1Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -447,18 +448,18 @@ test_scanr'Seg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -472,7 +473,7 @@ scalar :: Elt e => e -> Scalar e
 scalar x = fromFunction Z (const x)
 
 test_scanl_sum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -486,7 +487,7 @@ test_scanl_sum runN dim z e =
     let !go = runN (\v -> A.scanl (+) (the v)) in go (scalar x) arr ~~~ scanlRef (+) x arr
 
 test_scanl1_sum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -498,7 +499,7 @@ test_scanl1_sum runN dim e =
     let !go = runN (A.scanl1 (+)) in go arr ~~~ scanl1Ref (+) arr
 
 test_scanl'_sum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -512,7 +513,7 @@ test_scanl'_sum runN dim z e =
     let !go = runN (\v -> A.scanl' (+) (the v)) in go (scalar x) arr ~~~ scanl'Ref (+) x arr
 
 test_scanr_sum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -525,7 +526,7 @@ test_scanr_sum runN dim z e =
     let !go = runN (\v -> A.scanr (+) (the v)) in go (scalar x) arr ~~~ scanrRef (+) x arr
 
 test_scanr1_sum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -537,7 +538,7 @@ test_scanr1_sum runN dim e =
     let !go = runN (A.scanr1 (+)) in go arr ~~~ scanr1Ref (+) arr
 
 test_scanr'_sum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -551,7 +552,7 @@ test_scanr'_sum runN dim z e =
     let !go = runN (\v -> A.scanr' (+) (the v)) in go (scalar x) arr ~~~ scanr'Ref (+) x arr
 
 test_scanl_interval
-    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -563,7 +564,7 @@ test_scanl_interval runN dim e =
     let !go = runN (A.scanl iappend (constant one)) in go arr ~~~ scanlRef iappendRef one arr
 
 test_scanl1_interval
-    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -575,7 +576,7 @@ test_scanl1_interval runN dim e =
     let !go = runN (A.scanl1 iappend) in go arr ~~~ scanl1Ref iappendRef arr
 
 test_scanl'_interval
-    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -587,7 +588,7 @@ test_scanl'_interval runN dim e =
     let !go = runN (A.scanl' iappend (constant one)) in go arr ~~~ scanl'Ref iappendRef one arr
 
 test_scanr_interval
-    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -599,7 +600,7 @@ test_scanr_interval runN dim e =
     let !go = runN (A.scanr iappend (constant one)) in go arr ~~~ scanrRef iappendRef one arr
 
 test_scanr1_interval
-    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -611,7 +612,7 @@ test_scanr1_interval runN dim e =
     let !go = runN (A.scanr1 iappend) in go arr ~~~ scanr1Ref iappendRef arr
 
 test_scanr'_interval
-    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -623,7 +624,7 @@ test_scanr'_interval runN dim e =
     let !go = runN (A.scanr' iappend (constant one)) in go arr ~~~ scanr'Ref iappendRef one arr
 
 test_scanlSeg_sum
-    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -640,7 +641,7 @@ test_scanlSeg_sum runN dim z e =
     let !go = runN (\v -> A.scanlSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
 
 test_scanl1Seg_sum
-    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -655,7 +656,7 @@ test_scanl1Seg_sum runN dim e =
     let !go = runN (A.scanl1Seg (+)) in go arr seg ~~~ scanl1SegRef (+) arr seg
 
 test_scanl'Seg_sum
-    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -672,7 +673,7 @@ test_scanl'Seg_sum runN dim z e =
     let !go = runN (\v -> A.scanl'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
 
 test_scanrSeg_sum
-    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -689,7 +690,7 @@ test_scanrSeg_sum runN dim z e =
     let !go = runN (\v -> A.scanrSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
 
 test_scanr1Seg_sum
-    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -704,7 +705,7 @@ test_scanr1Seg_sum runN dim e =
     let !go = runN (A.scanr1Seg (+)) in go arr seg ~~~ scanr1SegRef (+) arr seg
 
 test_scanr'Seg_sum
-    :: forall sh e. (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e

@@ -12,9 +12,6 @@
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
-#if __GLASGOW_HASKELL__ <= 800
-{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
-#endif
 -- |
 -- Module      : Data.Array.Accelerate.Pattern
 -- Copyright   : [2018..2019] The Accelerate Team
@@ -40,10 +37,15 @@ module Data.Array.Accelerate.Pattern (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Array.Representation                   ( VecR(..) )
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Representation.Vec
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
 
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
@@ -96,10 +98,10 @@ newtype VecPattern a = VecPattern a
 -- (unremarkable) boilerplate for us, but since the implementation is a little
 -- tricky it is debatable whether or not this is a good idea...
 --
-$(runQ $ do
+runQ $ do
     let
         -- Generate instance declarations for IsPattern of the form:
-        -- instance (Elt x, EltRepr x ~ (((), EltRepr a), EltRepr b), Elt a, Elt b,) => IsPattern Exp x (Exp a, Exp b)
+        -- instance (Elt x, EltR x ~ (((), EltR a), EltR b), Elt a, Elt b,) => IsPattern Exp x (Exp a, Exp b)
         mkIsPattern :: Name -> TypeQ -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
         mkIsPattern con cst repr smart prj nil pair n = do
           a <- newName "a"
@@ -108,7 +110,7 @@ $(runQ $ do
               xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
               -- Last argument to `IsPattern`, eg (Exp, a, Exp b) in the example
               b        = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
-              -- Representation as snoc-list of pairs, eg (((), EltRepr a), EltRepr b)
+              -- Representation as snoc-list of pairs, eg (((), EltR a), EltR b)
               snoc     = foldl (\sn t -> [t| ($sn, $(appT repr $ varT t)) |]) [t| () |] xs
               -- Constraints for the type class, consisting of Elt constraints on all type variables,
               -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
@@ -133,7 +135,7 @@ $(runQ $ do
         mkVecPattern n = do
           a <- newName "a"
           let
-              v = foldr appE [| VecRnil (singleType @(EltRepr $(varT a))) |] (replicate n [| VecRsucc |])
+              v = foldr appE [| VecRnil (singleType @(EltR $(varT a))) |] (replicate n [| VecRsucc |])
               r = tupT (replicate n [t| Exp $(varT a) |])
               t = tupT (replicate n (varT a))
           --
@@ -144,14 +146,14 @@ $(runQ $ do
                 destruct (Exp x) = VecPattern (destruct (Exp (SmartExp (VecUnpack $v x)) :: Exp $t))
             |]
 
-        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [t| EltRepr |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
-        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [t| ArrRepr |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
+        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [t| EltR    |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
+        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [t| ArraysR |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
     es <- mapM mkExpPattern [0..16]
     as <- mapM mkAccPattern [0..16]
     vs <- mapM mkVecPattern [2,3,4,8,16]
     return $ concat (es ++ as ++ vs)
- )
+
 
 -- | Specialised pattern synonyms for tuples, which may be more convenient to
 -- use than 'Data.Array.Accelerate.Lift.lift' and
@@ -173,7 +175,7 @@ $(runQ $ do
 -- > let ix = Ix 2 3    -- :: Exp DIM2
 -- > let I2 y x = ix    -- y :: Exp Int, x :: Exp Int
 --
-$(runQ $ do
+runQ $ do
     let
         mkT :: Int -> Q [Dec]
         mkT n =
@@ -226,5 +228,4 @@ $(runQ $ do
     is <- mapM mkI [0..9]
     vs <- mapM mkV [2,3,4,8,16]
     return $ concat (ts ++ is ++ vs)
- )
 

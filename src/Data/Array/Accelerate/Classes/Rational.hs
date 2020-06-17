@@ -20,6 +20,7 @@ import Data.Array.Accelerate.Data.Bits
 
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq

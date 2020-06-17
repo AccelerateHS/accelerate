@@ -420,15 +420,20 @@ module Data.Array.Accelerate (
 
 ) where
 
--- friends
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, reshape, size, toIndex, fromIndex, intersect, ignore )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Pretty                                 () -- show instances
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            ( Array, Arrays, Scalar, Vector, Matrix, Segments, fromFunction, fromFunctionM, toList, fromList )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, ignore, toIndex, fromIndex, intersect )
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Array.Sugar                  as S
+import Data.Primitive.Vec
+import qualified Data.Array.Accelerate.Sugar.Array                  as S
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Prelude                                                      ( (.), ($), Show, undefined, error, const, otherwise )
 import GHC.Generics                                                 ( Generic )

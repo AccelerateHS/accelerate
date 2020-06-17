@@ -23,19 +23,22 @@ module Data.Array.Accelerate.Analysis.Shape (
 ) where
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Representation.Type
 
--- |Reify the dimensionality of the result type of an array computation
+
+-- | Reify the dimensionality of the result type of an array computation
 --
-accDim :: forall acc aenv sh e. HasArraysRepr acc => acc aenv (Array sh e) -> Int
-accDim = rank . arrayRshape . arrayRepr
+accDim :: forall acc aenv sh e. HasArraysR acc => acc aenv (Array sh e) -> Int
+accDim = rank . arrayRshape . arrayR
 
--- |Reify dimensionality of a scalar expression yielding a shape
+-- | Reify dimensionality of a scalar expression yielding a shape
 --
 expDim :: forall env aenv sh. OpenExp env aenv sh -> Int
 expDim = ndim . expType
 
--- Count the number of components to a tuple type
+-- | Count the number of components to a tuple type
 --
 ndim :: TupR s a -> Int
 ndim TupRunit       = 0

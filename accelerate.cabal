@@ -315,6 +315,10 @@ Library
 
         -- For backend development (hidden)
         Data.Array.Accelerate.AST
+        Data.Array.Accelerate.AST.Environment
+        Data.Array.Accelerate.AST.Idx
+        Data.Array.Accelerate.AST.LeftHandSide
+        Data.Array.Accelerate.AST.Var
         Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
         Data.Array.Accelerate.Analysis.Shape
@@ -325,16 +329,29 @@ Library
         Data.Array.Accelerate.Array.Remote.Class
         Data.Array.Accelerate.Array.Remote.LRU
         Data.Array.Accelerate.Array.Remote.Table
-        Data.Array.Accelerate.Array.Representation
-        Data.Array.Accelerate.Array.Sugar
         Data.Array.Accelerate.Array.Unique
         Data.Array.Accelerate.Async
         Data.Array.Accelerate.Debug
         Data.Array.Accelerate.Error
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
+        Data.Array.Accelerate.Representation.Array
+        Data.Array.Accelerate.Representation.Elt
+        Data.Array.Accelerate.Representation.Shape
+        Data.Array.Accelerate.Representation.Slice
+        Data.Array.Accelerate.Representation.Stencil
+        Data.Array.Accelerate.Representation.Type
+        Data.Array.Accelerate.Representation.Vec
         Data.Array.Accelerate.Smart
+        Data.Array.Accelerate.Sugar.Array
+        Data.Array.Accelerate.Sugar.Elt
+        Data.Array.Accelerate.Sugar.Foreign
+        Data.Array.Accelerate.Sugar.Shape
+        Data.Array.Accelerate.Sugar.Vec
         Data.Array.Accelerate.Trafo
+        Data.Array.Accelerate.Trafo.Config
+        Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Type
 
         -- For testing
@@ -343,6 +360,7 @@ Library
 
         -- Other
         Data.BitSet
+        Data.Primitive.Vec
 
   Other-modules:
         Data.Array.Accelerate.Analysis.Hash.TH
@@ -377,14 +395,13 @@ Library
         Data.Array.Accelerate.Pretty.Graphviz.Type
         Data.Array.Accelerate.Pretty.Print
         Data.Array.Accelerate.Trafo.Algebra
-        Data.Array.Accelerate.Trafo.Base
-        Data.Array.Accelerate.Trafo.Config
-        Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.Delayed
+        Data.Array.Accelerate.Trafo.Environment
         Data.Array.Accelerate.Trafo.LetSplit
-        Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
         Data.Array.Accelerate.Trafo.Substitution
+        Data.Array.Accelerate.Trafo.Var
         Data.Atomic
 
         -- Data.Array.Accelerate.Array.Lifted

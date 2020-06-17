@@ -16,14 +16,14 @@
 module Data.Array.Accelerate.Analysis.Stencil ( positionsR )
   where
 
-import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Representation.Stencil
 
 
--- |Calculate the offset coordinates for each stencil element relative to the
--- focal point. The coordinates are returned as a flattened list from the
--- bottom-left element to the top-right. This ordering matches the Var indexing
--- order.
+-- | Calculate the offset coordinates for each stencil element relative to
+-- the focal point. The coordinates are returned as a flattened list from
+-- the bottom-left element to the top-right. This ordering matches the Var
+-- indexing order.
 --
 positionsR :: StencilR sh e pat -> [sh]
 positionsR StencilRunit3{} = map ((), ) [         -1, 0, 1          ]
@@ -36,7 +36,7 @@ positionsR (StencilRtup3 c b a) = concat
   , map (innermost shr (,  0)) $ positionsR b
   , map (innermost shr (,  1)) $ positionsR a ]
   where
-    shr =  stencilShape a
+    shr =  stencilShapeR a
 
 positionsR (StencilRtup5 e d c b a) = concat
   [ map (innermost shr (, -2)) $ positionsR e
@@ -45,7 +45,7 @@ positionsR (StencilRtup5 e d c b a) = concat
   , map (innermost shr (,  1)) $ positionsR b
   , map (innermost shr (,  2)) $ positionsR a ]
   where
-    shr =  stencilShape a
+    shr =  stencilShapeR a
 
 positionsR (StencilRtup7 g f e d c b a) = concat
   [ map (innermost shr (, -3)) $ positionsR g
@@ -56,7 +56,7 @@ positionsR (StencilRtup7 g f e d c b a) = concat
   , map (innermost shr (,  2)) $ positionsR b
   , map (innermost shr (,  3)) $ positionsR a ]
   where
-    shr =  stencilShape a
+    shr =  stencilShapeR a
 
 positionsR (StencilRtup9 i h g f e d c b a) = concat
   [ map (innermost shr (, -4)) $ positionsR i
@@ -69,7 +69,7 @@ positionsR (StencilRtup9 i h g f e d c b a) = concat
   , map (innermost shr (,  3)) $ positionsR b
   , map (innermost shr (,  4)) $ positionsR a ]
   where
-    shr =  stencilShape a
+    shr =  stencilShapeR a
 
 
 -- Inject a dimension component inner-most

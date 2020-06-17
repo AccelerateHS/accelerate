@@ -28,7 +28,9 @@ import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Test.NoFib.Base
@@ -60,11 +62,11 @@ test_stencil runN =
     ]
   where
     testElt
-        :: forall a. (P.Num a, A.Num a, Similar a)
+        :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim1
         , testDim2
         , testDim3
@@ -96,7 +98,7 @@ test_stencil runN =
 
 
 test_stencil3
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -115,7 +117,7 @@ test_stencil3 runN e =
     go xs ~~~ stencil3Ref r b xs
 
 test_stencil5
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -134,7 +136,7 @@ test_stencil5 runN e =
     go xs ~~~ stencil5Ref r b xs
 
 test_stencil7
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -153,7 +155,7 @@ test_stencil7 runN e =
     go xs ~~~ stencil7Ref r b xs
 
 test_stencil9
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -173,7 +175,7 @@ test_stencil9 runN e =
 
 
 test_stencil3x3
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -194,7 +196,7 @@ test_stencil3x3 runN e =
     go xs ~~~ stencil3x3Ref r b xs
 
 test_stencil5x5
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -215,7 +217,7 @@ test_stencil5x5 runN e =
     go xs ~~~ stencil5x5Ref r b xs
 
 test_stencil7x7
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -236,7 +238,7 @@ test_stencil7x7 runN e =
     go xs ~~~ stencil7x7Ref r b xs
 
 test_stencil9x9
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -257,7 +259,7 @@ test_stencil9x9 runN e =
     go xs ~~~ stencil9x9Ref r b xs
 
 test_stencil3x3x3
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -625,11 +627,11 @@ stencil3x3x3Ref st bnd arr =
 
 bound :: forall sh e. Shape sh => SimpleBoundary e -> sh -> sh -> Either e sh
 bound bnd sh0 ix0 =
-  case go (eltType @sh) (fromElt sh0) (fromElt ix0) of
+  case go (eltR @sh) (fromElt sh0) (fromElt ix0) of
     Left e    -> Left e
     Right ix' -> Right (toElt ix')
   where
-    go :: TupleType t -> t -> t -> Either e t
+    go :: TypeR t -> t -> t -> Either e t
     go TupRunit           ()      ()      = Right ()
     go (TupRpair tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
     go (TupRsingle t)     sh      i

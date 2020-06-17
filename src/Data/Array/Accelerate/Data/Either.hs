@@ -30,7 +30,9 @@ module Data.Array.Accelerate.Data.Either (
 ) where
 
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), shape, ignore, toIndex )
+import Data.Array.Accelerate.Sugar.Array                            ( Array, Vector )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.), empty )
 import Data.Array.Accelerate.Language                               hiding ( chr )
 import Data.Array.Accelerate.Prelude                                hiding ( filter )
 import Data.Array.Accelerate.Interpreter
@@ -151,15 +153,12 @@ tag x = t
   where T3 t _ _ = asTuple x
 
 instance (Elt a, Elt b) => Elt (Either a b) where
-  type EltRepr (Either a b) = Tup3 Word8 (EltRepr a) (EltRepr b)
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType = eltType @(Word8,a,b)
+  type EltR (Either a b) = EltR (Word8,a,b)
+  eltR = eltR @(Word8,a,b)
   toElt ((((),0),a),_)  = Left  (toElt a)
   toElt (_         ,b)  = Right (toElt b)
-  fromElt (Left a)      = ((((),0), fromElt a             ), evalUndef $ eltType @b)
-  fromElt (Right b)     = ((((),1), evalUndef $ eltType @a), fromElt b)
+  fromElt (Left a)      = ((((),0), fromElt a          ), evalUndef $ eltR @b)
+  fromElt (Right b)     = ((((),1), evalUndef $ eltR @a), fromElt b)
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)

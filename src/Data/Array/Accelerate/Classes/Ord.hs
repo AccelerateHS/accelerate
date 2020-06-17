@@ -27,9 +27,11 @@ module Data.Array.Accelerate.Classes.Ord (
 ) where
 
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
 -- We must hide (==), as that operator is used for the literals 0, 1 and 2 in the pattern synonyms for Ordering.
@@ -109,17 +111,17 @@ instance Ord sh => Ord (sh :. Int) where
   x <= y = indexHead x <= indexHead y && indexTail x <= indexTail y
   x >= y = indexHead x >= indexHead y && indexTail x >= indexTail y
   x < y  = indexHead x < indexHead y
-        && case matchTupleType (eltType @sh) (eltType @Z) of
+        && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x < indexTail y
   x > y  = indexHead x > indexHead y
-        && case matchTupleType (eltType @sh) (eltType @Z) of
+        && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x > indexTail y
 
 instance Elt Ordering where
-  type EltRepr Ordering = Int8
-  eltType = TupRsingle scalarType
+  type EltR Ordering = Int8
+  eltR    = TupRsingle scalarType
   fromElt = P.fromIntegral . P.fromEnum
   toElt   = P.toEnum . P.fromIntegral
 

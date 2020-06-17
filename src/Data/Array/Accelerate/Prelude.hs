@@ -117,22 +117,14 @@ module Data.Array.Accelerate.Prelude (
 
 ) where
 
--- avoid clashes with Prelude functions
---
-import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
-import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
-#if __GLASGOW_HASKELL__ == 800
-import Prelude                                                      ( fail )
-#endif
-
--- friends
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), ignore, shape, reshape, size, intersect, toIndex, fromIndex )
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            ( Arrays, Array, Scalar, Vector, Segments,  fromList )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.)(..), All(..), DIM1, DIM2, empty )
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -142,6 +134,11 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Bits
+
+import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
+import GHC.Base                                                     ( Constraint )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
+
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
@@ -707,7 +704,7 @@ fold1All f arr = fold1 f (flatten arr)
 --     40, 170, 0, 138]
 --
 foldSeg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltRepr i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
     => (Exp e -> Exp e -> Exp e)
     -> Exp e
     -> Acc (Array (sh:.Int) e)
@@ -734,7 +731,7 @@ foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
 -- descriptor species the length of each of the logical sub-arrays.
 --
 fold1Seg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltRepr i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
     => (Exp e -> Exp e -> Exp e)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
@@ -744,7 +741,7 @@ fold1Seg f arr seg = fold1Seg' f arr (scanl plus zero seg)
     plus :: Exp i -> Exp i -> Exp i
     zero :: Exp i
     (plus, zero) =
-      case integralType @(EltRepr i) of
+      case integralType @(EltR i) of
         TypeInt{}    -> ((+), 0)
         TypeInt8{}   -> ((+), 0)
         TypeInt16{}  -> ((+), 0)

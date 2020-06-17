@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -23,10 +24,13 @@ import Control.Lens                                                 ( view, _1, 
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
+import Data.Primitive.Types
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -51,16 +55,16 @@ test_simd runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall e. (VecElt e, P.Eq e)
+    testElt :: forall e. (VecElt e, P.Eq e, Show e)
             => Gen e
             -> TestTree
     testElt e =
-      testGroup (show (eltType @e))
+      testGroup (show (eltR @e))
         [ testExtract e
         , testInject  e
         ]
 
-    testExtract :: forall e. (VecElt e, P.Eq e)
+    testExtract :: forall e. (VecElt e, P.Eq e, Show e)
                 => Gen e
                 -> TestTree
     testExtract e =
@@ -70,7 +74,7 @@ test_simd runN =
         , testProperty "V4" $ test_extract_v4 runN dim1 e
         ]
 
-    testInject :: forall e. (VecElt e, P.Eq e)
+    testInject :: forall e. (VecElt e, P.Eq e, Show e)
                => Gen e
                -> TestTree
     testInject e =
@@ -82,7 +86,7 @@ test_simd runN =
 
 
 test_extract_v2
-    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -95,7 +99,7 @@ test_extract_v2 runN dim e =
     let !go = runN (A.map (view _m . unpackVec2')) in go xs === mapRef (view _l . unpackVec2) xs
 
 test_extract_v3
-    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -108,7 +112,7 @@ test_extract_v3 runN dim e =
     let !go = runN (A.map (view _m . unpackVec3')) in go xs === mapRef (view _l . unpackVec3) xs
 
 test_extract_v4
-    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -121,7 +125,7 @@ test_extract_v4 runN dim e =
     let !go = runN (A.map (view _m . unpackVec4')) in go xs === mapRef (view _l . unpackVec4) xs
 
 test_inject_v2
-    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -135,7 +139,7 @@ test_inject_v2 runN dim e =
     let !go = runN (A.zipWith A.V2) in go xs ys === zipWithRef Vec2 xs ys
 
 test_inject_v3
-    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -151,7 +155,7 @@ test_inject_v3 runN dim e =
     let !go = runN (A.zipWith3 A.V3) in go xs ys zs === zipWith3Ref Vec3 xs ys zs
 
 test_inject_v4
-    :: (Shape sh, VecElt e, P.Eq e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
     -> Gen sh
     -> Gen e
@@ -168,6 +172,15 @@ test_inject_v4 runN dim e =
     ws  <- forAll (array sh4 e)
     let !go = runN (A.zipWith4 A.V4) in go xs ys zs ws === zipWith4Ref Vec4 xs ys zs ws
 
+
+unpackVec2 :: Prim e => Vec2 e -> (e, e)
+unpackVec2 (Vec2 a b) = (a, b)
+
+unpackVec3 :: Prim e => Vec3 e -> (e, e, e)
+unpackVec3 (Vec3 a b c) = (a, b, c)
+
+unpackVec4 :: Prim e => Vec4 e -> (e, e, e, e)
+unpackVec4 (Vec4 a b c d) = (a, b, c, d)
 
 unpackVec2' :: VecElt e => Exp (Vec2 e) -> (Exp e, Exp e)
 unpackVec2' (A.V2 a b) = (a, b)

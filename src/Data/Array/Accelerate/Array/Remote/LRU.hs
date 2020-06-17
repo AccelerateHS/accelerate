@@ -37,6 +37,17 @@ module Data.Array.Accelerate.Array.Remote.LRU (
 
 ) where
 
+import Data.Array.Accelerate.Analysis.Match                     ( matchSingleType, (:~:)(..) )
+import Data.Array.Accelerate.Analysis.Type                      ( sizeOfSingleType )
+import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Remote.Class
+import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
+import Data.Array.Accelerate.Array.Unique                       ( touchUniqueArray )
+import Data.Array.Accelerate.Error                              ( internalError )
+import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.Array.Remote.Table       as Basic
+import qualified Data.Array.Accelerate.Debug                    as D
+
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, takeMVar, putMVar, mkWeakMVar )
 import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
@@ -50,17 +61,6 @@ import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
 import Prelude                                                  hiding ( lookup )
 import qualified Data.HashTable.IO                              as HT
-
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Analysis.Type                      ( sizeOfSingleType )
-import Data.Array.Accelerate.Analysis.Match                     ( matchSingleType, (:~:)(..) )
-import Data.Array.Accelerate.Array.Data                         ( ArrayData, ScalarData, ScalarDataRepr, ScalarDict(..), singleDict )
-import Data.Array.Accelerate.Array.Remote.Class
-import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
-import Data.Array.Accelerate.Error                              ( internalError )
-import qualified Data.Array.Accelerate.Array.Remote.Table       as Basic
-import qualified Data.Array.Accelerate.Debug                    as D
-import Data.Array.Accelerate.Array.Unique                       ( touchUniqueArray )
 
 
 -- We build cached memory tables on top of a basic memory table.
@@ -86,14 +86,14 @@ data Status = Clean     -- Array in remote memory matches array in host memory.
 type Timestamp = Integer
 
 data Used task where
-  Used :: ArrayData e ~ ScalarData e
+  Used :: ArrayData e ~ ScalarArrayData e
        => !Timestamp
        -> !Status
        -> {-# UNPACK #-} !Int                   -- Use count
        -> ![task]                               -- Asynchronous tasks using the array
        -> {-# UNPACK #-} !Int                   -- Number of elements
        -> !(SingleType e)
-       -> {-# UNPACK #-} !(Weak (ScalarData e))
+       -> {-# UNPACK #-} !(Weak (ScalarArrayData e))
        -> Used task
 
 -- | A Task represents a process executing asynchronously that can be polled for
@@ -140,9 +140,9 @@ withRemote
     => MemoryTable (RemotePtr m) task
     -> SingleType a
     -> ArrayData a
-    -> (RemotePtr m (ScalarDataRepr a) -> m (task, c))
+    -> (RemotePtr m (ScalarArrayDataR a) -> m (task, c))
     -> m (Maybe c)
-withRemote (MemoryTable !mt !ref _) !tp !arr run | (ScalarDict, _, _) <- singleDict tp = do
+withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArrayDict tp = do
   key <- Basic.makeStableArray tp arr
   mp  <- withMVar' ref $ \utbl -> do
     mu  <- liftIO . HT.mutate utbl key $ \case
@@ -174,7 +174,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | (ScalarDict, _, _) <- singleD
       tasks'  <- cleanUses tasks
       return (Used ts status (count - 1) (task : tasks') n tp' weak_arr)
 
-    copyBack :: UT task -> Used task -> m (RemotePtr m (ScalarDataRepr a))
+    copyBack :: UT task -> Used task -> m (RemotePtr m (ScalarArrayDataR a))
     copyBack utbl (Used ts _ count tasks n tp' weak_arr)
       | Just Refl <- matchSingleType tp tp' = do
         message "withRemote/reuploading-evicted-array"
@@ -187,7 +187,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | (ScalarDict, _, _) <- singleD
     -- because the `permute` operation from the PTX backend requires nested
     -- calls to `withRemote` in order to copy the defaults array.
     --
-    go :: ArrayData a ~ ScalarData a => StableArray -> RemotePtr m (ScalarDataRepr a) -> m c
+    go :: ArrayData a ~ ScalarArrayData a => StableArray -> RemotePtr m (ScalarArrayDataR a) -> m c
     go key ptr = do
       message ("withRemote/using: " ++ show key)
       (task, c) <- run ptr
@@ -224,7 +224,7 @@ malloc :: forall e m task. (RemoteMemory m, MonadIO m, Task task)
        -> Bool            -- ^ True if host array is frozen.
        -> Int             -- ^ Number of elements
        -> m Bool          -- ^ Was the array allocated successfully?
-malloc (MemoryTable mt ref weak_utbl) !tp !ad !frozen !n | (ScalarDict, _, _) <- singleDict tp = do -- Required for ArrayData e ~ ScalarData e
+malloc (MemoryTable mt ref weak_utbl) !tp !ad !frozen !n | SingleArrayDict <- singleArrayDict tp = do -- Required for ArrayData e ~ ScalarArrayData e
   ts  <- liftIO $ getCPUTime
   key <- Basic.makeStableArray tp ad
   --
@@ -243,18 +243,18 @@ malloc (MemoryTable mt ref weak_utbl) !tp !ad !frozen !n | (ScalarDict, _, _) <-
         return False
 
 mallocWithUsage
-    :: forall e m task. (RemoteMemory m, MonadIO m, Task task, ArrayData e ~ ScalarData e)
+    :: forall e m task. (RemoteMemory m, MonadIO m, Task task, ArrayData e ~ ScalarArrayData e)
     => Basic.MemoryTable (RemotePtr m)
     -> UT task
     -> SingleType e
     -> ArrayData e
     -> Used task
-    -> m (RemotePtr m (ScalarDataRepr e))
+    -> m (RemotePtr m (ScalarArrayDataR e))
 mallocWithUsage !mt !utbl !tp !ad !usage@(Used _ _ _ _ n _ _) = malloc'
   where
-    malloc' :: m (RemotePtr m (ScalarDataRepr e))
+    malloc' :: m (RemotePtr m (ScalarArrayDataR e))
     malloc' = do
-      mp <- Basic.malloc @e @m mt tp ad n :: m (Maybe (RemotePtr m (ScalarDataRepr e)))
+      mp <- Basic.malloc @e @m mt tp ad n :: m (Maybe (RemotePtr m (ScalarArrayDataR e)))
       case mp of
         Nothing -> do
           success <- evictLRU utbl mt
@@ -356,9 +356,9 @@ insertUnmanaged
     => MemoryTable (RemotePtr m) task
     -> SingleType e
     -> ArrayData e
-    -> RemotePtr m (ScalarDataRepr e)
+    -> RemotePtr m (ScalarArrayDataR e)
     -> m ()
-insertUnmanaged (MemoryTable mt ref weak_utbl) !tp !arr !ptr | (ScalarDict, _, _) <- singleDict tp = do -- Gives evidence that ArrayData e ~ ScalarData e
+insertUnmanaged (MemoryTable mt ref weak_utbl) !tp !arr !ptr | SingleArrayDict <- singleArrayDict tp = do -- Gives evidence that ArrayData e ~ ScalarArrayData e
   key <- Basic.makeStableArray tp arr
   ()  <- Basic.insertUnmanaged mt tp arr ptr
   liftIO

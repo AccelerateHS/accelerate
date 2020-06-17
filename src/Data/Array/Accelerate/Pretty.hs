@@ -34,7 +34,16 @@ module Data.Array.Accelerate.Pretty (
 
 ) where
 
--- libraries
+import Data.Array.Accelerate.Smart                                  ( Acc, Exp )
+import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
+import Data.Array.Accelerate.Trafo.Delayed
+import Data.Array.Accelerate.Trafo.Sharing
+import Data.Array.Accelerate.Pretty.Graphviz
+
 import Data.Maybe
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.String
@@ -45,15 +54,6 @@ import System.IO.Unsafe
 import qualified Data.Text.Lazy                                     as T
 import qualified System.Console.ANSI                                as Term
 import qualified System.Console.Terminal.Size                       as Term
-
--- friends
-import Data.Array.Accelerate.Smart                                  ( Acc, Exp )
-import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp, Val(..) )
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
-import Data.Array.Accelerate.Trafo
-import Data.Array.Accelerate.Pretty.Graphviz
 
 #if ACCELERATE_DEBUG
 import Control.DeepSeq

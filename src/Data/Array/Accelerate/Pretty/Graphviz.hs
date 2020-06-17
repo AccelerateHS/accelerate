@@ -29,7 +29,22 @@ module Data.Array.Accelerate.Pretty.Graphviz (
 
 ) where
 
--- standard libraries
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Pretty.Graphviz.Monad
+import Data.Array.Accelerate.Pretty.Graphviz.Type
+import Data.Array.Accelerate.Pretty.Print               hiding ( Keyword(..) )
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Sugar.Foreign
+import Data.Array.Accelerate.Trafo.Delayed
+import Data.Array.Accelerate.Trafo.Substitution
+
 import Control.Applicative                              hiding ( Const, empty )
 import Control.Arrow                                    ( (&&&) )
 import Control.Monad.State                              ( modify, gets, state )
@@ -42,16 +57,6 @@ import System.IO.Unsafe                                 ( unsafePerformIO )
 import Prelude                                          hiding ( exp )
 import qualified Data.HashSet                           as Set
 import qualified Data.Sequence                          as Seq
-
--- friends
-import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar                ( strForeign )
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Pretty.Graphviz.Monad
-import Data.Array.Accelerate.Pretty.Graphviz.Type
-import Data.Array.Accelerate.Pretty.Print               hiding ( Keyword(..) )
-import Data.Array.Accelerate.Trafo.Base
 
 
 -- Configuration options
@@ -250,9 +255,9 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
     Backpermute _ sh p xs   -> "backpermute" .$ [ ppE sh, ppF p, ppA xs ]
     Stencil s _ sten bndy xs
-                            -> "stencil"     .$ [ ppF sten, ppB (stencilElt s) bndy, ppA xs ]
+                            -> "stencil"     .$ [ ppF sten, ppB (stencilEltR s) bndy, ppA xs ]
     Stencil2 s1 s2 _ sten bndy1 acc1 bndy2 acc2
-                            -> "stencil2"    .$ [ ppF sten, ppB (stencilElt s1) bndy1, ppA acc1, ppB (stencilElt s2) bndy2, ppA acc2 ]
+                            -> "stencil2"    .$ [ ppF sten, ppB (stencilEltR s1) bndy1, ppA acc1, ppB (stencilEltR s2) bndy2, ppA acc2 ]
     Aforeign _ ff _afun xs  -> "aforeign"    .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
     -- Collect{}               -> error "Collect"
 
@@ -307,14 +312,14 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     ppA (Delayed _ sh f _)
       | Shape a    <- sh                   -- identical shape
       , Just b     <- isIdentityIndexing f -- function is `\ix -> b ! ix`
-      , Just Refl  <- match a b            -- function thus is `\ix -> a ! ix`
+      , Just Refl  <- matchVar a b         -- function thus is `\ix -> a ! ix`
       = ppA $ Manifest $ Avar a
     ppA (Delayed _ sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
 
     ppB :: forall sh e.
-           TupleType e
+           TypeR e
         -> Boundary aenv (Array sh e)
         -> Dot PDoc
     ppB _  Clamp        = return (PDoc "clamp"  [])

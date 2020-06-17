@@ -29,12 +29,15 @@ module Data.Array.Accelerate.Data.Maybe (
 
 ) where
 
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), shape, ignore, toIndex )
+import Data.Array.Accelerate.Interpreter
 import Data.Array.Accelerate.Language                               hiding ( chr )
 import Data.Array.Accelerate.Prelude                                hiding ( filter )
-import Data.Array.Accelerate.Interpreter
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            ( Array, Vector )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.), empty )
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -154,14 +157,11 @@ tag (Exp x) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft x
 
 
 instance Elt a => Elt (Maybe a) where
-  type EltRepr (Maybe a) = Tup2 Word8 (EltRepr a)
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType          = eltType @(Word8,a)
+  type EltR (Maybe a) = EltR (Word8, a)
+  eltR             = eltR @(Word8,a)
   toElt (((),0),_) = Nothing
   toElt (_     ,x) = Just (toElt x)
-  fromElt Nothing  = (((),0), evalUndef $ eltType @a)
+  fromElt Nothing  = (((),0), evalUndef $ eltR @a)
   fromElt (Just a) = (((),1), fromElt a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where

@@ -1,5 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Config
 -- Copyright   : [2008..2019] The Accelerate Team

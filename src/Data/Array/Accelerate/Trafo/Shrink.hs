@@ -33,18 +33,30 @@
 module Data.Array.Accelerate.Trafo.Shrink (
 
   -- Shrinking
-  Shrink(..),
   ShrinkAcc,
+  shrinkExp,
+  shrinkFun,
 
   -- Occurrence counting
   UsesOfAcc, usesOfPreAcc, usesOfExp,
 
 ) where
 
--- standard library
-import Control.Applicative                              hiding ( Const )
-import Prelude                                          hiding ( exp, seq )
-import Data.Maybe                                       ( isJust )
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Environment
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Trafo.Substitution
+
+import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
+
+import Control.Applicative                                          hiding ( Const )
+import Prelude                                                      hiding ( exp, seq )
+import Data.Maybe                                                   ( isJust )
 
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
@@ -52,28 +64,11 @@ import Data.Semigroup
 import Data.Monoid
 #endif
 
--- friends
-import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Error
 
-import qualified Data.Array.Accelerate.Debug.Stats      as Stats
-
-
-class Shrink f where
-  shrink  :: f -> f
-  shrink' :: f -> (Bool, f)
-
-  shrink = snd . shrink'
-
-instance Shrink (OpenExp env aenv e) where
-  shrink' = shrinkExp
-
-instance Shrink (OpenFun env aenv f) where
-  shrink' = shrinkFun
-
-data VarsRange env = VarsRange !(Exists (Idx env)) !Int !(Maybe RangeTuple) -- rightmost variable, count, tuple
+data VarsRange env =
+  VarsRange !(Exists (Idx env))     -- rightmost variable
+            {-# UNPACK #-} !Int     -- count
+            !(Maybe RangeTuple)     -- tuple
 
 data RangeTuple
   = RTNil
@@ -216,6 +211,7 @@ strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard t) k = streng
     TupRpair t1 t2 = t
 strengthenShrunkLHS (LeftHandSideWildcard _) _                        _ = $internalError "strengthenShrunkLHS" "Second LHS defines more variables"
 strengthenShrunkLHS _                        _                        _ = $internalError "strengthenShrunkLHS" "Mismatch LHS single with LHS pair"
+
 
 -- Shrinking
 -- =========
@@ -520,8 +516,8 @@ usesOfPreAcc withShape countAcc idx = count
   where
     countIdx :: Idx aenv a -> Int
     countIdx this
-        | Just Refl <- match this idx   = 1
-        | otherwise                     = 0
+        | Just Refl <- matchIdx this idx = 1
+        | otherwise                      = 0
 
     count :: PreOpenAcc acc aenv a -> Int
     count pacc = case pacc of

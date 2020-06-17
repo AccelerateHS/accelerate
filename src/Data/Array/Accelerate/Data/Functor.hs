@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Data.Functor (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Smart
 

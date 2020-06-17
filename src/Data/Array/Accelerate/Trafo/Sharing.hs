@@ -33,10 +33,10 @@ module Data.Array.Accelerate.Trafo.Sharing (
   -- * HOAS to de Bruijn conversion
   convertAcc, convertAccWith,
 
-  Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr,
+  Afunction, AfunctionR, ArraysFunctionR, AfunctionRepr(..), afunctionRepr,
   convertAfun, convertAfunWith,
 
-  Function, FunctionR, EltReprFunctionR, FunctionRepr(..), functionRepr,
+  Function, FunctionR, EltFunctionR, FunctionRepr(..), functionRepr,
   convertExp, convertExpWith,
   convertFun, convertFunWith,
 
@@ -44,38 +44,44 @@ module Data.Array.Accelerate.Trafo.Sharing (
 
 ) where
 
--- standard library
-import Control.Applicative                              hiding ( Const )
+import Data.Array.Accelerate.AST                                    hiding ( PreOpenAcc(..), OpenAcc(..), Acc, OpenExp(..), Exp, Boundary(..), HasArraysR(..), showPreAccOp )
+import Data.Array.Accelerate.AST.Environment
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Debug.Flags                            as Debug
+import Data.Array.Accelerate.Debug.Trace                            as Debug
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Array                   ( Array, ArraysR, ArrayR(..), showArraysR )
+import Data.Array.Accelerate.Representation.Shape                   hiding ( zip )
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Smart                                  as Smart hiding ( StencilR )
+import Data.Array.Accelerate.Sugar.Array                            hiding ( Array, ArraysR, (!!) )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Trafo.Config
+import Data.Array.Accelerate.Trafo.Var
+import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Type
+import Data.BitSet                                                  ( (\\), member )
+import qualified Data.Array.Accelerate.AST                          as AST
+import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
+import qualified Data.Array.Accelerate.Representation.Stencil       as R
+
+import Control.Applicative                                          hiding ( Const )
 import Control.Monad.Fix
 import Data.Hashable
-import Data.List                                        hiding ( (\\) )
+import Data.List                                                    hiding ( (\\) )
 import Data.Maybe
-import System.IO.Unsafe                                 ( unsafePerformIO )
+import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName
 import Text.Printf
-import qualified Data.HashTable.IO                      as Hash
-import qualified Data.IntMap                            as IntMap
-import qualified Data.HashMap.Strict                    as Map
-import qualified Data.HashSet                           as Set
+import qualified Data.HashTable.IO                                  as Hash
+import qualified Data.IntMap                                        as IntMap
+import qualified Data.HashMap.Strict                                as Map
+import qualified Data.HashSet                                       as Set
 import Prelude
-
--- friends
-import Data.BitSet                                      ( (\\), member )
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Config
-import Data.Array.Accelerate.Array.Representation       hiding ((!!))
-import Data.Array.Accelerate.Array.Sugar                ( Elt, EltRepr, Arrays, ArrRepr, eltType )
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
-import Data.Array.Accelerate.AST                        hiding ( PreOpenAcc(..), OpenAcc(..), Acc
-                                                               , OpenExp(..), Exp
-                                                               , Boundary(..)
-                                                               , showPreAccOp, showPreExpOp, expType, HasArraysRepr(..), arraysRepr )
-import qualified Data.Array.Accelerate.AST              as AST
-import Data.Array.Accelerate.Debug.Trace                as Debug
-import Data.Array.Accelerate.Debug.Flags                as Debug
 
 
 -- Layouts
@@ -101,19 +107,20 @@ type ArrayLayout = Layout ArrayR
 -- The first argument provides context information for error messages in the
 -- case of failure.
 --
-prjIdx :: forall s t env env1. Match s
-       => String
+prjIdx :: forall s t env env1.
+          String
        -> (forall t'. TupR s t' -> ShowS)
+       -> (forall u v. TupR s u -> TupR s v -> Maybe (u :~: v))
        -> TupR s t
        -> Int
        -> Layout s env env1
        -> Vars s env t
-prjIdx context showTp tp = go
+prjIdx context showTp matchTp tp = go
   where
     go :: forall env'. Int -> Layout s env env' -> Vars s env t
     go _ EmptyLayout                        = no "environment does not contain index"
     go 0 (PushLayout _ lhs vars)
-      | Just Refl <- match tp tp'           = vars
+      | Just Refl <- matchTp tp tp'         = vars
       | otherwise                           = no $ printf "couldn't match expected type `%s' with actual type `%s'"
                                                           (showTp tp  "")
                                                           (showTp tp' "")
@@ -128,7 +135,7 @@ prjIdx context showTp tp = go
 --
 incLayout :: env1 :> env2 -> Layout s env1 env' -> Layout s env2 env'
 incLayout _ EmptyLayout            = EmptyLayout
-incLayout k (PushLayout lyt lhs v) = PushLayout (incLayout k lyt) lhs (weaken k v)
+incLayout k (PushLayout lyt lhs v) = PushLayout (incLayout k lyt) lhs (weakenVars k v)
 
 sizeLayout :: Layout s env env' -> Int
 sizeLayout EmptyLayout          = 0
@@ -143,30 +150,30 @@ sizeLayout (PushLayout lyt _ _) = 1 + sizeLayout lyt
 -- | Convert a closed array expression to de Bruijn form while also incorporating sharing
 -- information.
 --
-convertAcc :: Acc arrs -> AST.Acc (ArrRepr arrs)
+convertAcc :: Acc arrs -> AST.Acc (Sugar.ArraysR arrs)
 convertAcc = convertAccWith defaultOptions
 
-convertAccWith :: Config -> Acc arrs -> AST.Acc (ArrRepr arrs)
+convertAccWith :: Config -> Acc arrs -> AST.Acc (Sugar.ArraysR arrs)
 convertAccWith config (Acc acc) = convertOpenAcc config EmptyLayout acc
 
 
 -- | Convert a closed function over array computations, while incorporating
 -- sharing information.
 --
-convertAfun :: Afunction f => f -> AST.Afun (AreprFunctionR f)
+convertAfun :: Afunction f => f -> AST.Afun (ArraysFunctionR f)
 convertAfun = convertAfunWith defaultOptions
 
-convertAfunWith :: Afunction f => Config -> f -> AST.Afun (AreprFunctionR f)
+convertAfunWith :: Afunction f => Config -> f -> AST.Afun (ArraysFunctionR f)
 convertAfunWith config = convertOpenAfun config EmptyLayout
 
 data AfunctionRepr f ar areprr where
   AfunctionReprBody
-    :: Arrays b => AfunctionRepr (Acc b) b (ArrRepr b)
+    :: Arrays b => AfunctionRepr (Acc b) b (Sugar.ArraysR b)
 
   AfunctionReprLam
     :: Arrays a
     => AfunctionRepr b br breprr
-    -> AfunctionRepr (Acc a -> b) (a -> br) (ArrRepr a -> breprr)
+    -> AfunctionRepr (Acc a -> b) (a -> br) (Sugar.ArraysR a -> breprr)
 
 -- Convert a HOAS fragment into de Bruijn form, binding variables into the typed
 -- environment layout one binder at a time.
@@ -177,17 +184,17 @@ data AfunctionRepr f ar areprr where
 --
 class Afunction f where
   type AfunctionR f
-  type AreprFunctionR f
-  afunctionRepr :: AfunctionRepr f (AfunctionR f) (AreprFunctionR f)
-  convertOpenAfun :: Config -> ArrayLayout aenv aenv -> f -> AST.OpenAfun aenv (AreprFunctionR f)
+  type ArraysFunctionR f
+  afunctionRepr :: AfunctionRepr f (AfunctionR f) (ArraysFunctionR f)
+  convertOpenAfun :: Config -> ArrayLayout aenv aenv -> f -> AST.OpenAfun aenv (ArraysFunctionR f)
 
 instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
-  type AfunctionR (Acc a -> r) = a -> AfunctionR r
-  type AreprFunctionR (Acc a -> r) = ArrRepr a -> AreprFunctionR r
+  type AfunctionR      (Acc a -> r) = a -> AfunctionR r
+  type ArraysFunctionR (Acc a -> r) = Sugar.ArraysR a -> ArraysFunctionR r
 
   afunctionRepr = AfunctionReprLam $ afunctionRepr @r
   convertOpenAfun config alyt f
-    | repr <- Sugar.arrays @a
+    | repr <- Sugar.arraysR @a
     , DeclareVars lhs k value <- declareVars repr
     = let
         a     = Acc $ SmartAcc $ Atag repr $ sizeLayout alyt
@@ -196,8 +203,8 @@ instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
         Alam lhs $ convertOpenAfun config alyt' $ f a
 
 instance Arrays b => Afunction (Acc b) where
-  type AfunctionR (Acc b) = b
-  type AreprFunctionR (Acc b) = ArrRepr b
+  type AfunctionR      (Acc b) = b
+  type ArraysFunctionR (Acc b) = Sugar.ArraysR b
   afunctionRepr = AfunctionReprBody
   convertOpenAfun config alyt (Acc body) = Abody $ convertOpenAcc config alyt body
 
@@ -242,10 +249,10 @@ convertSharingAcc
     -> AST.OpenAcc aenv arrs
 convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
   | Just i <- findIndex (matchStableAcc sa) aenv'
-  = avarsIn $ prjIdx (ctxt ++ "; i = " ++ show i) showArraysR repr i alyt
+  = avarsIn AST.OpenAcc
+  $ prjIdx (ctxt ++ "; i = " ++ show i) showArraysR matchArraysR repr i alyt
   | null aenv'
-  = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++
-            show (hashStableNameHeight sa) ++ ")"
+  = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
   | otherwise
   = $internalError "convertSharingAcc" err
   where
@@ -254,7 +261,7 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
     err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  aenv = " ++ show aenv'
 
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
-  = case declareVars $ AST.arraysRepr bound of
+  = case declareVars $ AST.arraysR bound of
       DeclareVars lhs k value ->
         let
           alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
@@ -277,10 +284,10 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtE :: ScopedExp t -> AST.Exp aenv t
         cvtE = convertSharingExp config EmptyLayout alyt [] aenv'
 
-        cvtF1 :: TupleType a -> (SmartExp a -> ScopedExp b) -> AST.Fun aenv (a -> b)
+        cvtF1 :: TypeR a -> (SmartExp a -> ScopedExp b) -> AST.Fun aenv (a -> b)
         cvtF1 = convertSharingFun1 config alyt aenv'
 
-        cvtF2 :: TupleType a -> TupleType b -> (SmartExp a -> SmartExp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
+        cvtF2 :: TypeR a -> TypeR b -> (SmartExp a -> SmartExp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
         cvtF2 = convertSharingFun2 config alyt aenv'
 
         cvtAfun1 :: ArraysR a -> (SmartAcc a -> ScopedAcc b) -> AST.OpenAfun aenv (a -> b)
@@ -292,14 +299,14 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtAprj' :: forall a b c aenv1. PairIdx (a, b) c -> AST.OpenAcc aenv1 (a, b) -> AST.OpenAcc aenv1 c
         cvtAprj' PairIdxLeft  (AST.OpenAcc (AST.Apair a _)) = a
         cvtAprj' PairIdxRight (AST.OpenAcc (AST.Apair _ b)) = b
-        cvtAprj' ix a = case declareVars $ AST.arraysRepr a of
+        cvtAprj' ix a = case declareVars $ AST.arraysR a of
           DeclareVars lhs _ value ->
-            AST.OpenAcc $ AST.Alet lhs a $ cvtAprj' ix $ avarsIn $ value weakenId
+            AST.OpenAcc $ AST.Alet lhs a $ cvtAprj' ix $ avarsIn AST.OpenAcc $ value weakenId
     in
     case preAcc of
 
       Atag repr i
-        -> let AST.OpenAcc a = avarsIn $ prjIdx ("de Bruijn conversion tag " ++ show i) showArraysR repr i alyt
+        -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx ("de Bruijn conversion tag " ++ show i) showArraysR matchArraysR repr i alyt
            in  a
 
       Pipe reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
@@ -310,11 +317,11 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
             alyt'   = PushLayout (incLayout k alyt) lhs (value weakenId)
             bodyAcc = AST.Apply reprC
                         (convertSharingAfun1 config alyt' (noStableSharing : aenv') reprB afun2)
-                        (avarsIn $ value weakenId)
+                        (avarsIn AST.OpenAcc $ value weakenId)
           in AST.Alet lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
       Aforeign repr ff afun acc
-        -> AST.Aforeign repr ff (convertSmartAfun1 config (arraysRepr acc) afun) (cvtA acc)
+        -> AST.Aforeign repr ff (convertSmartAfun1 config (Smart.arraysR acc) afun) (cvtA acc)
 
       Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
       Awhile reprA pred iter init -> AST.Awhile (cvtAfun1 reprA pred) (cvtAfun1 reprA iter) (cvtA init)
@@ -350,10 +357,10 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> AST.Stencil stencil
                        tp
                        (convertSharingStencilFun1 config alyt aenv' stencil f)
-                       (convertSharingBoundary config alyt aenv' (stencilShape stencil) boundary)
+                       (convertSharingBoundary config alyt aenv' (stencilShapeR stencil) boundary)
                        (cvtA acc)
       Stencil2 stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
-        | shr <- stencilShape stencil1
+        | shr <- stencilShapeR stencil1
         -> AST.Stencil2 stencil1
                         stencil2
                         tp
@@ -570,37 +577,37 @@ convertSharingBoundary config alyt aenv shr = cvt
 -- In higher-order abstract syntax, this represents an n-ary, polyvariadic
 -- function.
 --
-convertFun :: Function f => f -> AST.Fun () (EltReprFunctionR f)
+convertFun :: Function f => f -> AST.Fun () (EltFunctionR f)
 convertFun
   = convertFunWith
   $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing] }
 
-convertFunWith :: Function f => Config -> f -> AST.Fun () (EltReprFunctionR f)
+convertFunWith :: Function f => Config -> f -> AST.Fun () (EltFunctionR f)
 convertFunWith config = convertOpenFun config EmptyLayout
 
 data FunctionRepr f r reprr where
   FunctionReprBody
-    :: Elt b => FunctionRepr (Exp b) b (EltRepr b)
+    :: Elt b => FunctionRepr (Exp b) b (EltR b)
 
   FunctionReprLam
     :: Elt a
     => FunctionRepr b br breprr
-    -> FunctionRepr (Exp a -> b) (a -> br) (EltRepr a -> breprr)
+    -> FunctionRepr (Exp a -> b) (a -> br) (EltR a -> breprr)
 
 class Function f where
   type FunctionR f
-  type EltReprFunctionR f
+  type EltFunctionR f
 
-  functionRepr :: FunctionRepr f (FunctionR f) (EltReprFunctionR f)
-  convertOpenFun :: Config -> ELayout env env -> f -> AST.OpenFun env () (EltReprFunctionR f)
+  functionRepr :: FunctionRepr f (FunctionR f) (EltFunctionR f)
+  convertOpenFun :: Config -> ELayout env env -> f -> AST.OpenFun env () (EltFunctionR f)
 
 instance (Elt a, Function r) => Function (Exp a -> r) where
   type FunctionR (Exp a -> r) = a -> FunctionR r
-  type EltReprFunctionR (Exp a -> r) = EltRepr a -> EltReprFunctionR r
+  type EltFunctionR (Exp a -> r) = EltR a -> EltFunctionR r
 
   functionRepr = FunctionReprLam $ functionRepr @r
   convertOpenFun config lyt f
-    | tp <- eltType @a
+    | tp <- eltR @a
     , DeclareVars lhs k value <- declareVars tp
     = let
         e    = Exp $ SmartExp $ Tag tp $ sizeLayout lyt
@@ -610,12 +617,12 @@ instance (Elt a, Function r) => Function (Exp a -> r) where
 
 instance Elt b => Function (Exp b) where
   type FunctionR (Exp b) = b
-  type EltReprFunctionR (Exp b) = EltRepr b
+  type EltFunctionR (Exp b) = EltR b
 
   functionRepr = FunctionReprBody
   convertOpenFun config lyt (Exp body) = Body $ convertOpenExp config lyt body
 
-convertSmartFun :: Config -> TupleType a -> (SmartExp a -> SmartExp b) -> AST.Fun () (a -> b)
+convertSmartFun :: Config -> TypeR a -> (SmartExp a -> SmartExp b) -> AST.Fun () (a -> b)
 convertSmartFun config tp f
   | DeclareVars lhs _ value <- declareVars tp
   = let
@@ -630,12 +637,12 @@ convertSmartFun config tp f
 -- | Convert a closed scalar expression to de Bruijn form while incorporating
 -- sharing information.
 --
-convertExp :: Exp e -> AST.Exp () (EltRepr e)
+convertExp :: Exp e -> AST.Exp () (EltR e)
 convertExp
   = convertExpWith
   $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing] }
 
-convertExpWith :: Config -> Exp e -> AST.Exp () (EltRepr e)
+convertExpWith :: Config -> Exp e -> AST.Exp () (EltR e)
 convertExpWith config (Exp e) = convertOpenExp config EmptyLayout e
 
 convertOpenExp
@@ -661,7 +668,7 @@ convertOpenExp config lyt exp =
 convertSharingExp
     :: forall t env aenv.
        Config
-    -> ELayout env  env         -- scalar environment
+    -> ELayout env env          -- scalar environment
     -> ArrayLayout aenv aenv    -- array environment
     -> [StableSharingExp]       -- currently bound sharing variables of expressions
     -> [StableSharingAcc]       -- currently bound sharing variables of array computations
@@ -674,7 +681,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
     cvt :: ScopedExp t' -> AST.OpenExp env aenv t'
     cvt (ScopedExp _ (VarSharing se tp))
-      | Just i <- findIndex (matchStableExp se) env' = evars (prjIdx (ctx i) showType tp i lyt)
+      | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) shows matchTypeR tp i lyt)
       | otherwise                                    = $internalError "convertSharingExp" msg
       where
         ctx i = printf "shared 'Exp' tree with stable name %d; i=%d" (hashStableNameHeight se) i
@@ -722,14 +729,14 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           ]
 
     cvt (ScopedExp _ (LetSharing se@(StableSharingExp _ boundExp) bodyExp))
-      | DeclareVars lhs k value <- declareVars $ expType boundExp
+      | DeclareVars lhs k value <- declareVars $ typeR boundExp
       = let
           lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
         in
           AST.Let lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
-          Tag tp i              -> evars $ prjIdx ("de Bruijn conversion tag " ++ show i) showType tp i lyt
+          Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " ++ show i) shows matchTypeR tp i lyt
           Const tp v            -> AST.Const tp v
           Undef tp              -> AST.Undef tp
           Prj idx e             -> cvtPrj idx (cvt e)
@@ -747,7 +754,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           LinearIndex _ a i     -> AST.LinearIndex (cvtAvar a) (cvt i)
           Shape _ a             -> AST.Shape (cvtAvar a)
           ShapeSize shr e       -> AST.ShapeSize shr (cvt e)
-          Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (expType e) f) (cvt e)
+          Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
           Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
 
     cvtPrj :: forall a b c env1 aenv1. PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
@@ -755,7 +762,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtPrj PairIdxRight (AST.Pair _ b) = b
     cvtPrj ix a
       | DeclareVars lhs _ value <- declareVars $ AST.expType a
-        = AST.Let lhs a $ cvtPrj ix $ evars $ value weakenId
+        = AST.Let lhs a $ cvtPrj ix $ expVars $ value weakenId
 
     cvtA :: ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
@@ -765,7 +772,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       AST.OpenAcc (AST.Avar var) -> var
       _ -> $internalError "convertSharingExp" "Expected array computation in expression to be floated out"
 
-    cvtFun1 :: TupleType a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
+    cvtFun1 :: TypeR a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
     cvtFun1 tp f
       | DeclareVars lhs k value <- declareVars tp
       = let
@@ -788,7 +795,7 @@ convertSharingFun1
     :: Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]       -- currently bound array sharing-variables
-    -> TupleType a
+    -> TypeR a
     -> (SmartExp a -> ScopedExp b)
     -> AST.Fun aenv (a -> b)
 convertSharingFun1 config alyt aenv tp f
@@ -806,8 +813,8 @@ convertSharingFun2
     :: Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]       -- currently bound array sharing-variables
-    -> TupleType a
-    -> TupleType b
+    -> TypeR a
+    -> TypeR b
     -> (SmartExp a -> SmartExp b -> ScopedExp c)
     -> AST.Fun aenv (a -> b -> c)
 convertSharingFun2 config alyt aenv ta tb f
@@ -828,11 +835,11 @@ convertSharingStencilFun1
     :: Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]               -- currently bound array sharing-variables
-    -> StencilR sh a stencil
+    -> R.StencilR sh a stencil
     -> (SmartExp stencil -> ScopedExp b)
     -> AST.Fun aenv (stencil -> b)
-convertSharingStencilFun1 config alyt aenv stencil stencilFun
-  = convertSharingFun1 config alyt aenv (stencilType stencil) stencilFun
+convertSharingStencilFun1 config alyt aenv sR1 stencil =
+  convertSharingFun1 config alyt aenv (R.stencilR sR1) stencil
 
 -- | Convert a binary stencil function
 --
@@ -840,12 +847,12 @@ convertSharingStencilFun2
     :: Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]               -- currently bound array sharing-variables
-    -> StencilR sh a stencil1
-    -> StencilR sh b stencil2
+    -> R.StencilR sh a stencil1
+    -> R.StencilR sh b stencil2
     -> (SmartExp stencil1 -> SmartExp stencil2 -> ScopedExp c)
     -> AST.Fun aenv (stencil1 -> stencil2 -> c)
-convertSharingStencilFun2 config alyt aenv stencil1 stencil2 stencilFun
-  = convertSharingFun2 config alyt aenv (stencilType stencil1) (stencilType stencil2) stencilFun
+convertSharingStencilFun2 config alyt aenv sR1 sR2 stencil =
+  convertSharingFun2 config alyt aenv (R.stencilR sR1) (R.stencilR sR2) stencil
 
 
 -- Sharing recovery
@@ -1037,10 +1044,10 @@ data SharingAcc acc exp arrs where
   AletSharing :: StableSharingAcc -> acc arrs                   -> SharingAcc acc exp arrs
   AccSharing  :: StableAccName arrs -> PreSmartAcc acc exp arrs -> SharingAcc acc exp arrs
 
-instance HasArraysRepr acc => HasArraysRepr (SharingAcc acc exp) where
-  arraysRepr (AvarSharing _ repr) = repr
-  arraysRepr (AletSharing _ acc)  = arraysRepr acc
-  arraysRepr (AccSharing  _ acc)  = arraysRepr acc
+instance HasArraysR acc => HasArraysR (SharingAcc acc exp) where
+  arraysR (AvarSharing _ repr) = repr
+  arraysR (AletSharing _ acc)  = Smart.arraysR acc
+  arraysR (AccSharing  _ acc)  = Smart.arraysR acc
 
 
 -- Array expression with sharing but shared values have not been scoped; i.e. no let bindings. If
@@ -1048,16 +1055,16 @@ instance HasArraysRepr acc => HasArraysRepr (SharingAcc acc exp) where
 -- immediate surrounding lambdas.
 data UnscopedAcc t = UnscopedAcc [Int] (SharingAcc UnscopedAcc RootExp t)
 
-instance HasArraysRepr UnscopedAcc where
-  arraysRepr (UnscopedAcc _ acc) = arraysRepr acc
+instance HasArraysR UnscopedAcc where
+  arraysR (UnscopedAcc _ acc) = Smart.arraysR acc
 
 
 -- Array expression with sharing. For expressions rooted in functions the list holds a sorted
 -- environment corresponding to the variables bound in the immediate surounding lambdas.
 data ScopedAcc t = ScopedAcc [StableSharingAcc] (SharingAcc ScopedAcc ScopedExp t)
 
-instance HasArraysRepr ScopedAcc where
-  arraysRepr (ScopedAcc _ acc) = arraysRepr acc
+instance HasArraysR ScopedAcc where
+  arraysR (ScopedAcc _ acc) = Smart.arraysR acc
 
 
 -- Stable name for an array computation associated with its sharing-annotated version.
@@ -1100,30 +1107,30 @@ type StableExpName t = StableNameHeight (SmartExp t)
 -- do for array computations.
 --
 data SharingExp acc exp t where
-  VarSharing :: StableExpName t -> TupleType t           -> SharingExp acc exp t
+  VarSharing :: StableExpName t -> TypeR t               -> SharingExp acc exp t
   LetSharing :: StableSharingExp -> exp t                -> SharingExp acc exp t
   ExpSharing :: StableExpName t -> PreSmartExp acc exp t -> SharingExp acc exp t
 
-instance HasExpType exp => HasExpType (SharingExp acc exp) where
-  expType (VarSharing _ tp)  = tp
-  expType (LetSharing _ exp) = expType exp
-  expType (ExpSharing _ exp) = expType exp
+instance HasTypeR exp => HasTypeR (SharingExp acc exp) where
+  typeR (VarSharing _ tp)  = tp
+  typeR (LetSharing _ exp) = Smart.typeR exp
+  typeR (ExpSharing _ exp) = Smart.typeR exp
 
 -- Specifies a scalar expression AST with sharing annotations but no scoping; i.e. no LetSharing
 -- constructors. If the expression is rooted in a function, the list contains the tags of the
 -- variables bound by the immediate surrounding lambdas.
 data UnscopedExp t = UnscopedExp [Int] (SharingExp UnscopedAcc UnscopedExp t)
 
-instance HasExpType UnscopedExp where
-  expType (UnscopedExp _ exp) = expType exp
+instance HasTypeR UnscopedExp where
+  typeR (UnscopedExp _ exp) = Smart.typeR exp
 
 -- Specifies a scalar expression AST with sharing. For expressions rooted in functions the list
 -- holds a sorted environment corresponding to the variables bound in the immediate surounding
 -- lambdas.
 data ScopedExp t = ScopedExp [StableSharingExp] (SharingExp ScopedAcc ScopedExp t)
 
-instance HasExpType ScopedExp where
-  expType (ScopedExp _ exp) = expType exp
+instance HasTypeR ScopedExp where
+  typeR (ScopedExp _ exp) = Smart.typeR exp
 
 -- Expressions rooted in 'SmartAcc' computations.
 --
@@ -1273,12 +1280,12 @@ makeOccMapSharingAcc
     -> IO (UnscopedAcc arrs, Int)
 makeOccMapSharingAcc config accOccMap = traverseAcc
   where
-    traverseFun1 :: Level -> TupleType a -> (SmartExp a -> SmartExp b) -> IO (SmartExp a -> RootExp b, Int)
+    traverseFun1 :: Level -> TypeR a -> (SmartExp a -> SmartExp b) -> IO (SmartExp a -> RootExp b, Int)
     traverseFun1 = makeOccMapFun1 config accOccMap
 
     traverseFun2 :: Level
-                 -> TupleType a
-                 -> TupleType b
+                 -> TypeR a
+                 -> TypeR b
                  -> (SmartExp a -> SmartExp b -> SmartExp c)
                  -> IO (SmartExp a -> SmartExp b -> RootExp c, Int)
     traverseFun2 = makeOccMapFun2 config accOccMap
@@ -1333,7 +1340,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               reconstruct newAcc
                 = case heightIfRepeatedOccurrence of
                     Just height | acc_sharing `member` options config
-                      -> return (UnscopedAcc [] (AvarSharing (StableNameHeight sn height) (arraysRepr pacc)), height)
+                      -> return (UnscopedAcc [] (AvarSharing (StableNameHeight sn height) (Smart.arraysR pacc)), height)
                     _ -> do (acc, height) <- newAcc
                             return (UnscopedAcc [] (AccSharing (StableNameHeight sn height) acc), height)
 
@@ -1415,12 +1422,12 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              return (Backpermute shr e' p' acc', h1 `max` h2 `max` h3 + 1)
             Stencil s tp f bnd acc      -> do
                                              (f'  , h1) <- makeOccMapStencil1 config accOccMap s lvl f
-                                             (bnd', h2) <- traverseBoundary lvl (stencilShape s) bnd
+                                             (bnd', h2) <- traverseBoundary lvl (stencilShapeR s) bnd
                                              (acc', h3) <- traverseAcc lvl acc
                                              return (Stencil s tp f' bnd' acc', h1 `max` h2 `max` h3 + 1)
             Stencil2 s1 s2 tp f bnd1 acc1
                               bnd2 acc2 -> do
-                                             let shr = stencilShape s1
+                                             let shr = stencilShapeR s1
                                              (f'   , h1) <- makeOccMapStencil2 config accOccMap s1 s2 lvl f
                                              (bnd1', h2) <- traverseBoundary lvl shr bnd1
                                              (acc1', h3) <- traverseAcc lvl acc1
@@ -1451,7 +1458,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
 
         travF2A :: ((SmartExp b -> SmartExp c -> RootExp d) -> UnscopedAcc arrs'
                     -> PreSmartAcc UnscopedAcc RootExp arrs)
-                -> TupleType b -> TupleType c
+                -> TypeR b -> TypeR c
                 -> (SmartExp b -> SmartExp c -> SmartExp d) -> SmartAcc arrs'
                 -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2A c t1 t2 fun acc
@@ -1461,7 +1468,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               return (c fun' acc', h1 `max` h2 + 1)
 
         travF2EA :: ((SmartExp b -> SmartExp c -> RootExp d) -> RootExp e -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
-                 -> TupleType b -> TupleType c
+                 -> TypeR b -> TypeR c
                  -> (SmartExp b -> SmartExp c -> SmartExp d) -> SmartExp e -> SmartAcc arrs'
                  -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2EA c t1 t2 fun exp acc
@@ -1472,7 +1479,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
 
         travF2A2 :: ((SmartExp b -> SmartExp c -> RootExp d) -> UnscopedAcc arrs1 -> UnscopedAcc arrs2 -> PreSmartAcc UnscopedAcc RootExp arrs)
-                 -> TupleType b -> TupleType c
+                 -> TypeR b -> TypeR c
                  -> (SmartExp b -> SmartExp c -> SmartExp d) -> SmartAcc arrs1 -> SmartAcc arrs2
                  -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2A2 c t1 t2 fun acc1 acc2
@@ -1540,7 +1547,7 @@ makeOccMapFun1
     :: Config
     -> OccMapHash SmartAcc
     -> Level
-    -> TupleType a
+    -> TypeR a
     -> (SmartExp a -> SmartExp b)
     -> IO (SmartExp a -> RootExp b, Int)
 makeOccMapFun1 config accOccMap lvl tp f = do
@@ -1553,8 +1560,8 @@ makeOccMapFun2
     :: Config
     -> OccMapHash SmartAcc
     -> Level
-    -> TupleType a
-    -> TupleType b
+    -> TypeR a
+    -> TypeR b
     -> (SmartExp a -> SmartExp b -> SmartExp c)
     -> IO (SmartExp a -> SmartExp b -> RootExp c, Int)
 makeOccMapFun2 config accOccMap lvl t1 t2 f = do
@@ -1568,12 +1575,12 @@ makeOccMapStencil1
     :: forall sh a b stencil.
        Config
     -> OccMapHash SmartAcc
-    -> StencilR sh a stencil
+    -> R.StencilR sh a stencil
     -> Level
     -> (SmartExp stencil -> SmartExp b)
     -> IO (SmartExp stencil -> RootExp b, Int)
 makeOccMapStencil1 config accOccMap s lvl stencil = do
-  let x = SmartExp (Tag (stencilType s) lvl)
+  let x = SmartExp (Tag (R.stencilR s) lvl)
   --
   (body, height) <- makeOccMapRootExp config accOccMap (lvl+1) [lvl] (stencil x)
   return (const body, height)
@@ -1582,14 +1589,14 @@ makeOccMapStencil2
     :: forall sh a b c stencil1 stencil2.
        Config
     -> OccMapHash SmartAcc
-    -> StencilR sh a stencil1
-    -> StencilR sh b stencil2
+    -> R.StencilR sh a stencil1
+    -> R.StencilR sh b stencil2
     -> Level
     -> (SmartExp stencil1 -> SmartExp stencil2 -> SmartExp c)
     -> IO (SmartExp stencil1 -> SmartExp stencil2 -> RootExp c, Int)
-makeOccMapStencil2 config accOccMap s1 s2 lvl stencil = do
-  let x = SmartExp (Tag (stencilType s1) (lvl+1))
-      y = SmartExp (Tag (stencilType s2) lvl)
+makeOccMapStencil2 config accOccMap sR1 sR2 lvl stencil = do
+  let x = SmartExp (Tag (R.stencilR sR1) (lvl+1))
+      y = SmartExp (Tag (R.stencilR sR2) lvl)
   --
   (body, height) <- makeOccMapRootExp config accOccMap (lvl+2) [lvl, lvl+1] (stencil x y)
   return (\_ _ -> body, height)
@@ -1652,7 +1659,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               reconstruct newExp
                 = case heightIfRepeatedOccurrence of
                     Just height | exp_sharing `member` options config
-                      -> return (UnscopedExp [] (VarSharing (StableNameHeight sn height) (expType pexp)), height)
+                      -> return (UnscopedExp [] (VarSharing (StableNameHeight sn height) (typeR pexp)), height)
                     _ -> do (exp, height) <- newExp
                             return (UnscopedExp [] (ExpSharing (StableNameHeight sn height) exp), height)
 
@@ -1689,7 +1696,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
         traverseAcc = makeOccMapSharingAcc config accOccMap
 
         traverseFun1 :: Level
-                     -> TupleType a
+                     -> TypeR a
                      -> (SmartExp a -> SmartExp b)
                      -> IO (SmartExp a -> UnscopedExp b, Int)
         traverseFun1 lvl tp f
@@ -2337,7 +2344,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
           = let allCount = (StableSharingAcc sn sharingAcc `insertAccNode` newCount)
             in
             tracePure ("SHARED" ++ completed) (show allCount)
-            (ScopedAcc [] (AvarSharing sn $ arraysRepr newAcc), allCount)
+            (ScopedAcc [] (AvarSharing sn $ Smart.arraysR newAcc), allCount)
               -- neither shared nor free variable => leave it as it is
           | otherwise
           = tracePure ("Normal" ++ completed) (show newCount)
@@ -2585,7 +2592,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
                  -> (ScopedAcc a, StableSharingAcc)
         abstract (ScopedAcc _   (AvarSharing _ _))     _    = $internalError "sharingAccToVar" "AvarSharing"
         abstract (ScopedAcc ssa (AletSharing sa acc))  lets = abstract acc (lets . ScopedAcc ssa . AletSharing sa)
-        abstract acc@(ScopedAcc ssa (AccSharing sn a)) lets = (ScopedAcc ssa (AvarSharing sn $ arraysRepr a), StableSharingAcc sn (lets acc))
+        abstract acc@(ScopedAcc ssa (AccSharing sn a)) lets = (ScopedAcc ssa (AvarSharing sn $ Smart.arraysR a), StableSharingAcc sn (lets acc))
 
         -- Occurrence count of the currently processed node
         expOccCount = let StableNameHeight sn' _ = sn
@@ -2618,7 +2625,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           = let allCount = StableSharingExp sn sharingExp `insertExpNode` newCount
             in
             tracePure ("SHARED" ++ completed) (show allCount)
-            (ScopedExp [] (VarSharing sn $ expType newExp), allCount)
+            (ScopedExp [] (VarSharing sn $ typeR newExp), allCount)
               -- neither shared nor free variable => leave it as it is
           | otherwise
           = tracePure ("Normal" ++ completed) (show newCount)

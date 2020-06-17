@@ -28,24 +28,24 @@ module Data.Array.Accelerate.Trafo.Algebra (
 
 ) where
 
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Pretty.Print                           ( primOperator, isInfix, opName )
+import Data.Array.Accelerate.Trafo.Environment
+import Data.Array.Accelerate.Type
+
+import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
+
 import Data.Bits
 import Data.Char
 import Data.Monoid
-import Data.Text                                        ( Text )
+import Data.Text                                                    ( Text )
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Text
-import GHC.Float                                        ( float2Double, double2Float )
-import Prelude                                          hiding ( exp )
-import qualified Prelude                                as P
-
--- friends
-import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Pretty.Print               ( primOperator, isInfix, opName )
-import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Type
-
-import qualified Data.Array.Accelerate.Debug.Stats      as Stats
+import GHC.Float                                                    ( float2Double, double2Float )
+import Prelude                                                      hiding ( exp )
+import qualified Prelude                                            as P
 
 
 -- Propagate constant expressions, which are either constant valued expressions
@@ -64,7 +64,7 @@ propagate env = cvtE
       PrimConst c                               -> Just (evalPrimConst c)
       Evar (Var _  ix)
         | e             <- prjExp ix env
-        , Nothing       <- match exp e          -> cvtE e
+        , Nothing       <- matchOpenExp exp e   -> cvtE e
       Nil                                       -> Just ()
       Pair e1 e2                                -> (,) <$> cvtE e1 <*> cvtE e2
       _                                         -> Nothing
@@ -324,7 +324,7 @@ evalSub' ty (untup2 -> Just (x,y)) env
   $ Just . snd $ evalPrimApp env (PrimAdd ty) (Const tp (-b) `Pair` x)
   -- (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
-  | Just Refl   <- match x y
+  | Just Refl   <- matchOpenExp x y
   = Stats.ruleFired "x-x"
   $ Just $ Const tp 0
   where

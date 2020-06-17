@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
   subTop, subAtop,
 
   -- ** Weakening
-  (:>), Sink(..), SinkExp(..),
+  (:>), Sink(..), SinkExp(..), weakenVars,
 
   -- ** Strengthening
   (:?>), strengthen, strengthenE,
@@ -45,16 +45,21 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
 ) where
 
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.Environment
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.Array
+import qualified Data.Array.Accelerate.Debug.Stats      as Stats
+
 import Data.Kind
 import Control.Applicative                              hiding ( Const )
 import Control.Monad
 import Prelude                                          hiding ( exp, seq )
-
-import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Error
-import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 
 
 -- NOTE: [Renaming and Substitution]
@@ -88,11 +93,11 @@ lhsFullVars :: forall s a env1 env2. LeftHandSide s a env1 env2 -> Maybe (Vars s
 lhsFullVars = fmap snd . go weakenId
   where
     go :: forall env env' b. (env' :> env2) -> LeftHandSide s b env env' -> Maybe (env :> env2, Vars s env2 b)
-    go k (LeftHandSideWildcard TupRunit) = Just (k, VarsNil)
-    go k (LeftHandSideSingle s) = Just $ (weakenSucc $ k, VarsSingle $ Var s $ k >:> ZeroIdx)
+    go k (LeftHandSideWildcard TupRunit) = Just (k, TupRunit)
+    go k (LeftHandSideSingle s) = Just $ (weakenSucc $ k, TupRsingle $ Var s $ k >:> ZeroIdx)
     go k (LeftHandSidePair l1 l2)
       | Just (k',  v2) <- go k  l2
-      , Just (k'', v1) <- go k' l1 = Just (k'', VarsPair v1 v2)
+      , Just (k'', v1) <- go k' l1 = Just (k'', TupRpair v1 v2)
     go _ _ = Nothing
 
 bindingIsTrivial :: LeftHandSide s a env1 env2 -> Vars s env2 b -> Maybe (a :~: b)
@@ -131,18 +136,19 @@ inlineVars :: forall env env' aenv t1 t2.
 inlineVars lhsBound expr bound
   | Just vars <- lhsFullVars lhsBound = substitute (strengthenWithLHS lhsBound) weakenId vars expr
   where
-    substitute :: forall env1 env2 t.
-               env1 :?> env2
-            -> env :> env2
-            -> ExpVars env1 t1
-            -> OpenExp env1 aenv t
-            -> Maybe (OpenExp env2 aenv t)
+    substitute
+        :: forall env1 env2 t.
+           env1 :?> env2
+        -> env :> env2
+        -> ExpVars env1 t1
+        -> OpenExp env1 aenv t
+        -> Maybe (OpenExp env2 aenv t)
     substitute _ k2 vars (extractExpVars -> Just vars')
       | Just Refl <- matchVars vars vars' = Just $ weakenE k2 bound
     substitute k1 k2 vars e = case e of
       Let lhs e1 e2
         | Exists lhs' <- rebuildLHS lhs
-                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) e2
+                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
       Evar (Var t ix)     -> Evar . Var t <$> k1 ix
       Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
       Pair e1 e2          -> Pair <$> travE e1 <*> travE e2
@@ -180,7 +186,7 @@ inlineVars lhsBound expr bound
             -> Maybe (OpenFun env2 aenv t)
     substituteF k1 k2 vars (Body e) = Body <$> substitute k1 k2 vars e
     substituteF k1 k2 vars (Lam lhs f)
-      | Exists lhs' <- rebuildLHS lhs = Lam lhs' <$> substituteF (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) f
+      | Exists lhs' <- rebuildLHS lhs = Lam lhs' <$> substituteF (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) f
 
 inlineVars _ _ _ = Nothing
 
@@ -362,11 +368,10 @@ instance Sink (Var s) where
   {-# INLINEABLE weaken #-}
   weaken k (Var s ix) = Var s (k >:> ix)
 
-instance Sink (Vars s) where
-  {-# INLINEABLE weaken #-}
-  weaken _  VarsNil       = VarsNil
-  weaken k (VarsSingle v) = VarsSingle $ weaken k v
-  weaken k (VarsPair v w) = VarsPair (weaken k v) (weaken k w)
+weakenVars :: env :> env' -> Vars s env t -> Vars s env' t
+weakenVars _  TupRunit      = TupRunit
+weakenVars k (TupRsingle v) = TupRsingle $ weaken k v
+weakenVars k (TupRpair v w) = TupRpair (weakenVars k v) (weakenVars k w)
 
 rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc env' (Array sh e)
 rebuildWeakenVar k (Var s idx) = Avar $ Var s $ k >:> idx
@@ -465,8 +470,8 @@ strengthenAfter (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
 strengthenAfter (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
   ZeroIdx   -> Just ZeroIdx
   SuccIdx i -> SuccIdx <$> k i
-strengthenAfter (LeftHandSidePair l1 l2) (LeftHandSidePair l1' l2') k
-  = strengthenAfter l2 l2' $ strengthenAfter l1 l1' k
+strengthenAfter (LeftHandSidePair l1 l2) (LeftHandSidePair l1' l2') k =
+  strengthenAfter l2 l2' $ strengthenAfter l1 l1' k
 strengthenAfter _ _ _ = error "Substitution.strengthenAfter: left hand sides do not match"
 
 -- Simultaneous Substitution ===================================================
@@ -783,8 +788,8 @@ rebuildC k v c =
 --}
 
 extractExpVars :: OpenExp env aenv a -> Maybe (ExpVars env a)
-extractExpVars Nil          = Just VarsNil
-extractExpVars (Pair e1 e2) = VarsPair <$> extractExpVars e1 <*> extractExpVars e2
-extractExpVars (Evar v)     = Just $ VarsSingle v
+extractExpVars Nil          = Just TupRunit
+extractExpVars (Pair e1 e2) = TupRpair <$> extractExpVars e1 <*> extractExpVars e2
+extractExpVars (Evar v)     = Just $ TupRsingle v
 extractExpVars _            = Nothing
 

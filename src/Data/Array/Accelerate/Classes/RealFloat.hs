@@ -25,8 +25,8 @@ module Data.Array.Accelerate.Classes.RealFloat (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Language                               ( cond, while )
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -407,8 +407,3 @@ ieee754_f64_decode2 i =
        (T4 1 0 0 0)
        (T4 sign hi lo ie)
 
-cond :: Exp Bool -> Exp a -> Exp a -> Exp a
-cond (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond c x y
-
-while :: forall e. Elt e => (Exp e -> Exp Bool) -> (Exp e -> Exp e) -> Exp e -> Exp e
-while c f (Exp e) = Exp $ SmartExp $ While (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e

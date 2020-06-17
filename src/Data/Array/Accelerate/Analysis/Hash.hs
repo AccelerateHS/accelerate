@@ -36,9 +36,17 @@ module Data.Array.Accelerate.Analysis.Hash (
 ) where
 
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.Analysis.Hash.TH
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Representation.Slice
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
 
 import Crypto.Hash
 import Data.ByteString.Builder
@@ -91,11 +99,11 @@ defaultHashOptions = HashOptions True
 
 
 {-# INLINEABLE hashPreOpenAcc #-}
-hashPreOpenAcc :: HasArraysRepr acc => EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
+hashPreOpenAcc :: HasArraysR acc => EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
 hashPreOpenAcc = hashPreOpenAccWith defaultHashOptions
 
 {-# INLINEABLE hashPreOpenAccWith #-}
-hashPreOpenAccWith :: HasArraysRepr acc => HashOptions -> EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
+hashPreOpenAccWith :: HasArraysR acc => HashOptions -> EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
 hashPreOpenAccWith options encodeAcc
   = hashlazy
   . toLazyByteString
@@ -123,7 +131,7 @@ type EncodeAcc acc = forall aenv a. HashOptions -> acc aenv a -> Builder
 
 {-# INLINEABLE encodePreOpenAcc #-}
 encodePreOpenAcc
-    :: forall acc aenv arrs. HasArraysRepr acc
+    :: forall acc aenv arrs. HasArraysR acc
     => HashOptions
     -> EncodeAcc acc
     -> PreOpenAcc acc aenv arrs
@@ -149,7 +157,7 @@ encodePreOpenAcc options encodeAcc pacc =
       deepE :: forall env' aenv' e. OpenExp env' aenv' e -> Builder
       deepE e
         | perfect options = travE e
-        | otherwise       = encodeTupleType $ expType e
+        | otherwise       = encodeTypeR $ expType e
   in
   case pacc of
     Alet lhs bnd body            -> intHost $(hashQ "Alet")        <> encodeLeftHandSide encodeArrayType lhs <> travA bnd <> travA body
@@ -183,8 +191,8 @@ encodePreOpenAcc options encodeAcc pacc =
     Scanr' f e a                 -> intHost $(hashQ "Scanr'")      <> travF f  <> travE e  <> travA a
     Scanr1 f a                   -> intHost $(hashQ "Scanr1")      <> travF f  <> travA a
     Permute f1 a1 f2 a2          -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
-    Stencil s _ f b a            -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilElt s) b  <> travA a
-    Stencil2 s1 s2 _ f b1 a1 b2 a2 -> intHost $(hashQ "Stencil2")  <> travF f  <> encodeBoundary (stencilElt s1) b1 <> travA a1 <> encodeBoundary (stencilElt s2) b2 <> travA a2
+    Stencil s _ f b a            -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilEltR s) b  <> travA a
+    Stencil2 s1 s2 _ f b1 a1 b2 a2 -> intHost $(hashQ "Stencil2")  <> travF f  <> encodeBoundary (stencilEltR s1) b1 <> travA a1 <> encodeBoundary (stencilEltR s2) b2 <> travA a2
 
 {--
 {-# INLINEABLE encodePreOpenSeq #-}
@@ -249,7 +257,7 @@ encodeLeftHandSide f (LeftHandSidePair r1 r2) = intHost $(hashQ "LeftHandSidePai
 encodeLeftHandSide f (LeftHandSideSingle s)   = intHost $(hashQ "LeftHandSideArray")    <> f s
 
 encodeArrayType :: ArrayR a -> Builder
-encodeArrayType (ArrayR shr tp) = encodeShapeR shr <> encodeTupleType tp
+encodeArrayType (ArrayR shr tp) = encodeShapeR shr <> encodeTypeR tp
 
 encodeArraysType :: ArraysR arrs -> Builder
 encodeArraysType = encodeTupR encodeArrayType
@@ -274,7 +282,7 @@ encodePreOpenAfun options travA afun =
 
 
 encodeBoundary
-    :: TupleType e
+    :: TypeR e
     -> Boundary aenv (Array sh e)
     -> Builder
 encodeBoundary _  Wrap          = intHost $(hashQ "Wrap")
@@ -340,7 +348,7 @@ encodeOpenFun (Body b)    = intHost $(hashQ "Body") <> encodeOpenExp b
 encodeOpenFun (Lam lhs l) = intHost $(hashQ "Lam") <> encodeLeftHandSide encodeScalarType lhs <> encodeOpenFun l
 
 
-encodeConst :: TupleType t -> t -> Builder
+encodeConst :: TypeR t -> t -> Builder
 encodeConst TupRunit         ()    = intHost $(hashQ "nil")
 encodeConst (TupRsingle t)   c     = encodeScalarConst t c
 encodeConst (TupRpair ta tb) (a,b) = intHost $(hashQ "pair") <> encodeConst ta a <> encodeConst tb b
@@ -458,13 +466,13 @@ encodePrimFun PrimChr                    = intHost $(hashQ "PrimChr")
 encodePrimFun PrimBoolToInt              = intHost $(hashQ "PrimBoolToInt")
 
 
-encodeTupleType :: TupleType t -> Builder
-encodeTupleType TupRunit       = intHost $(hashQ "TupRunit")
-encodeTupleType (TupRsingle t) = intHost $(hashQ "TupRsingle") <> encodeScalarType t
-encodeTupleType (TupRpair a b) = intHost $(hashQ "TupRpair")   <> encodeTupleType a <> intHost (depthTypeR a)
-                                                               <> encodeTupleType b <> intHost (depthTypeR b)
+encodeTypeR :: TypeR t -> Builder
+encodeTypeR TupRunit       = intHost $(hashQ "TupRunit")
+encodeTypeR (TupRsingle t) = intHost $(hashQ "TupRsingle") <> encodeScalarType t
+encodeTypeR (TupRpair a b) = intHost $(hashQ "TupRpair")   <> encodeTypeR a <> intHost (depthTypeR a)
+                                                           <> encodeTypeR b <> intHost (depthTypeR b)
 
-depthTypeR :: TupleType t -> Int
+depthTypeR :: TypeR t -> Int
 depthTypeR TupRunit       = 0
 depthTypeR TupRsingle{}   = 1
 depthTypeR (TupRpair a b) = depthTypeR a + depthTypeR b

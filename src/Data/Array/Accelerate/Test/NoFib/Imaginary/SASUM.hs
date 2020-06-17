@@ -23,7 +23,8 @@ module Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM (
 import Prelude                                                  as P
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        as S
+import Data.Array.Accelerate.Sugar.Array                        as S
+import Data.Array.Accelerate.Sugar.Elt                          as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -52,15 +53,15 @@ test_sasum runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a)
+    testElt :: forall a. (P.Num a, P.Eq a, A.Num a, A.Eq a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testProperty (show (eltType @a)) $ test_sasum' runN e
+      testProperty (show (eltR @a)) $ test_sasum' runN e
 
 
 test_sasum'
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property

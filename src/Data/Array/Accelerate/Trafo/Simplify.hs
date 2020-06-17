@@ -24,39 +24,36 @@
 
 module Data.Array.Accelerate.Trafo.Simplify (
 
-  Simplify(..),
+  simplifyFun,
+  simplifyExp
 
 ) where
 
--- standard library
-import Control.Applicative                              hiding ( Const )
-import Control.Lens                                     hiding ( Const, ix )
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Environment
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Array                   ( Array, ArrayR(..) )
+import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..), shapeToList )
+import Data.Array.Accelerate.Trafo.Algebra
+import Data.Array.Accelerate.Trafo.Environment
+import Data.Array.Accelerate.Trafo.Shrink
+import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Type
+
+import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
+import qualified Data.Array.Accelerate.Debug.Flags                  as Debug
+import qualified Data.Array.Accelerate.Debug.Trace                  as Debug
+
+import Control.Applicative                                          hiding ( Const )
+import Control.Lens                                                 hiding ( Const, ix )
 import Data.Maybe
 import Data.Monoid
 import Text.Printf
-import Prelude                                          hiding ( exp, iterate )
-
--- friends
-import Data.Array.Accelerate.AST                        hiding ( prj )
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Trafo.Algebra
-import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Shrink
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Representation       ( Array, shapeToList )
-import qualified Data.Array.Accelerate.Debug.Stats      as Stats
-import qualified Data.Array.Accelerate.Debug.Flags      as Debug
-import qualified Data.Array.Accelerate.Debug.Trace      as Debug
-
-
-class Simplify f where
-  simplify :: f -> f
-
-instance Simplify (Fun aenv f) where
-  simplify = simplifyFun
-
-instance Simplify (Exp aenv e) where
-  simplify = simplifyExp
+import Prelude                                                      hiding ( exp, iterate )
 
 
 -- Scalar optimisations
@@ -268,10 +265,10 @@ simplifyOpenExp env = first getAny . cvtE
          -> (Any, OpenExp env aenv t)
          -> (Any, OpenExp env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
-      | Const _ True  <- p'      = Stats.knownBranch "True"      (yes t')
-      | Const _ False <- p'      = Stats.knownBranch "False"     (yes e')
-      | Just Refl <- match t' e' = Stats.knownBranch "redundant" (yes e')
-      | otherwise                = Cond <$> p <*> t <*> e
+      | Const _ True  <- p'             = Stats.knownBranch "True"      (yes t')
+      | Const _ False <- p'             = Stats.knownBranch "False"     (yes e')
+      | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
+      | otherwise                       = Cond <$> p <*> t <*> e
 
     -- Shape manipulations
     --
@@ -293,16 +290,16 @@ simplifyOpenExp env = first getAny . cvtE
             -> (Any, OpenExp env aenv sh)
             -> (Any, OpenExp env aenv Int)
     toIndex _ (_,sh) (_,FromIndex _ sh' ix)
-      | Just Refl <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
-    toIndex shr sh ix             = ToIndex shr <$> sh <*> ix
+      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
+    toIndex shr sh ix                    = ToIndex shr <$> sh <*> ix
 
     fromIndex :: ShapeR sh
               -> (Any, OpenExp env aenv sh)
               -> (Any, OpenExp env aenv Int)
               -> (Any, OpenExp env aenv sh)
     fromIndex _ (_,sh) (_,ToIndex _ sh' ix)
-      | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
-    fromIndex shr sh ix           = FromIndex shr <$> sh <*> ix
+      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
+    fromIndex shr sh ix                  = FromIndex shr <$> sh <*> ix
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
@@ -336,10 +333,10 @@ lhsExpr (LeftHandSidePair l1 l2) env = lhsExpr l2 $ lhsExpr l1 env
 -- repeatedly until no more changes are made.
 --
 simplifyExp :: Exp aenv t -> Exp aenv t
-simplifyExp = iterate summariseOpenExp (simplifyOpenExp EmptyExp)
+simplifyExp = iterate summariseOpenExp matchOpenExp shrinkExp (simplifyOpenExp EmptyExp)
 
 simplifyFun :: Fun aenv f -> Fun aenv f
-simplifyFun = iterate summariseOpenFun (simplifyOpenFun EmptyExp)
+simplifyFun = iterate summariseOpenFun matchOpenFun shrinkFun (simplifyOpenFun EmptyExp)
 
 
 -- NOTE: [Simplifier iterations]
@@ -359,16 +356,15 @@ simplifyFun = iterate summariseOpenFun (simplifyOpenFun EmptyExp)
 -- With internal checks on, we also issue a warning if the iteration limit is
 -- reached, but it was still possible to make changes to the expression.
 --
-{-# SPECIALISE iterate :: (Exp aenv t -> Stats) -> (Exp aenv t -> (Bool, Exp aenv t)) -> Exp aenv t -> Exp aenv t #-}
-{-# SPECIALISE iterate :: (Fun aenv t -> Stats) -> (Fun aenv t -> (Bool, Fun aenv t)) -> Fun aenv t -> Fun aenv t #-}
 
 iterate
-    :: forall f a. (Match f, Shrink (f a))
-    => (f a -> Stats)
-    -> (f a -> (Bool, f a))
+    :: forall f a. (f a -> Stats)
+    -> (forall s t. f s -> f t -> Maybe (s :~: t))  -- match
+    -> (f a -> (Bool, f a))                         -- shrink
+    -> (f a -> (Bool, f a))                         -- simplify
     -> f a
     -> f a
-iterate summarise f = fix 1 . setup
+iterate summarise match shrink simplify = fix 1 . setup
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
     -- excessive run times, we (should) set this value very low.
@@ -377,18 +373,18 @@ iterate summarise f = fix 1 . setup
     --
     lIMIT       = 25
 
-    simplify'   = Stats.simplifierDone . f
+    simplify'   = Stats.simplifierDone . simplify
     setup x     = Debug.trace Debug.dump_simpl_iterations (msg 0 "init" x)
                 $ snd (trace 1 "simplify" (simplify' x))
 
     fix :: Int -> f a -> f a
     fix i x0
-      | i > lIMIT       = $internalWarning "simplify" "iteration limit reached" (not (x0 ==^ f x0)) x0
+      | i > lIMIT       = $internalWarning "simplify" "iteration limit reached" (not (x0 ==^ simplify x0)) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2
       where
-        (shrunk,     x1) = trace i "shrink"   $ shrink' x0
+        (shrunk,     x1) = trace i "shrink"   $ shrink x0
         (simplified, x2) = trace i "simplify" $ simplify' x1
 
     -- debugging support

@@ -24,20 +24,9 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- This interpreter is meant to be a reference implementation of the semantics
--- of the embedded array language. The emphasis is on defining the semantics
--- clearly, not on performance.
---
-
--- [/Surface types versus representation types:/]
---
--- As a general rule, we perform all computations on representation types and we
--- store all data as values of representation types. To guarantee the type
--- safety of the interpreter, this currently implies a lot of conversions
--- between surface and representation types. Optimising the code by eliminating
--- back and forth conversions is fine, but only where it doesn't negatively
--- affects clarity---after all, the main purpose of the interpreter is to serve
--- as an executable specification.
+-- This interpreter is meant to be a reference implementation of the
+-- semantics of the embedded array language. The emphasis is on defining
+-- the semantics clearly, not on performance.
 --
 
 module Data.Array.Accelerate.Interpreter (
@@ -53,7 +42,29 @@ module Data.Array.Accelerate.Interpreter (
 
 ) where
 
--- standard libraries
+import Data.Array.Accelerate.AST                                    hiding ( Boundary(..) )
+import Data.Array.Accelerate.AST.Environment
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Type                          ( sizeOfSingleType )
+import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Representation.Slice
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.Vec
+import Data.Array.Accelerate.Trafo
+import Data.Array.Accelerate.Trafo.Delayed                          ( DelayedOpenAfun, DelayedOpenAcc )
+import Data.Array.Accelerate.Trafo.Sharing                          ( AfunctionR, AfunctionRepr(..), afunctionRepr )
+import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
+import qualified Data.Array.Accelerate.AST                          as AST
+import qualified Data.Array.Accelerate.Debug                        as D
+import qualified Data.Array.Accelerate.Smart                        as Smart
+import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
+import qualified Data.Array.Accelerate.Trafo.Delayed                as AST
+
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
@@ -66,20 +77,6 @@ import System.IO.Unsafe                                             ( unsafePerf
 import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
 import Prelude                                                      hiding ( (!!), sum )
-
--- friends
-import Data.Array.Accelerate.AST                                    hiding ( Boundary(..) )
-import Data.Array.Accelerate.Analysis.Type                          ( sizeOfSingleType )
-import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Trafo                                  hiding ( Delayed )
-import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.AST                          as AST
-import qualified Data.Array.Accelerate.Array.Sugar                  as Sugar
-import qualified Data.Array.Accelerate.Smart                        as Smart
-import qualified Data.Array.Accelerate.Trafo                        as AST
-import qualified Data.Array.Accelerate.Debug                        as D
 
 
 -- Program execution
@@ -114,7 +111,10 @@ runN f = go
                 return acc
     !go     = eval (afunctionRepr @f) afun Empty
     --
-    eval :: AfunctionRepr g (AfunctionR g) (AreprFunctionR g) -> DelayedOpenAfun aenv (AreprFunctionR g) -> Val aenv -> AfunctionR g
+    eval :: AfunctionRepr g (AfunctionR g) (ArraysFunctionR g)
+         -> DelayedOpenAfun aenv (ArraysFunctionR g)
+         -> Val aenv
+         -> AfunctionR g
     eval (AfunctionReprLam reprF) (Alam lhs f) aenv = \a -> eval reprF f $ aenv `push` (lhs, Sugar.fromArr a)
     eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" D.elapsed (Sugar.toArr . snd <$> evaluate (evalOpenAcc b aenv))
     eval _                        _aenv        _    = error "Two men say they're Jesus; one of them must be wrong"
@@ -177,13 +177,13 @@ evalOpenAcc (AST.Manifest pacc) aenv =
       manifest :: forall a'. DelayedOpenAcc aenv a' -> WithReprs a'
       manifest acc =
         let (repr, a') = evalOpenAcc acc aenv
-        in  rnfArrays repr a' `seq` (repr, a')
+        in  rnfArraysR repr a' `seq` (repr, a')
 
       delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
       delayed AST.Delayed{..} = Delayed reprD (evalE extentD) (evalF indexD) (evalF linearIndexD)
-      delayed a' = Delayed repr (shape a) ((repr, a) !) ((arrayRtype repr, a) !!)
+      delayed a' = Delayed aR (shape a) (indexArray aR a) (linearIndexArray (arrayRtype aR) a)
         where
-          (TupRsingle repr, a) = manifest a'
+          (TupRsingle aR, a) = manifest a'
 
       evalE :: Exp aenv t -> t
       evalE exp = evalExp exp aenv
@@ -254,7 +254,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 -- Array primitives
 -- ----------------
 
-unitOp :: TupleType e -> e -> WithReprs (Scalar e)
+unitOp :: TypeR e -> e -> WithReprs (Scalar e)
 unitOp tp e = fromFunction' (ArrayR ShapeRz tp) () (const e)
 
 
@@ -339,7 +339,7 @@ sliceOp slice (TupRsingle repr@(ArrayR _ tp), arr) slix
         in  $indexCheck "slice" i sz $ (sl', \ix -> (f' ix, i))
 
 
-mapOp :: TupleType b
+mapOp :: TypeR b
       -> (a -> b)
       -> Delayed   (Array sh a)
       -> WithReprs (Array sh b)
@@ -348,7 +348,7 @@ mapOp tp f (Delayed (ArrayR shr _) sh xs _)
 
 
 zipWithOp
-    :: TupleType c
+    :: TypeR c
     -> (a -> b -> c)
     -> Delayed   (Array sh a)
     -> Delayed   (Array sh b)
@@ -425,11 +425,11 @@ scanl1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
     (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh)
 
-      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh (sz, 0)) (ain (sz, 0))
+      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh (sz, 0)) (ain (sz, 0))
           write (sz, i) = do
-            x <- unsafeReadArrayData tp aout (toIndex shr sh (sz, i-1))
+            x <- readArrayData tp aout (toIndex shr sh (sz, i-1))
             let y = ain (sz, i)
-            unsafeWriteArrayData tp aout (toIndex shr sh (sz, i)) (f x y)
+            writeArrayData tp aout (toIndex shr sh (sz, i)) (f x y)
 
       iter shr sh write (>>) (return ())
       return (aout, undefined)
@@ -451,11 +451,11 @@ scanlOp f z (Delayed (ArrayR shr tp) (sh, n) ain _)
     (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh')
 
-      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh' (sz, 0)) z
+      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh' (sz, 0)) z
           write (sz, i) = do
-            x <- unsafeReadArrayData tp aout (toIndex shr sh' (sz, i-1))
+            x <- readArrayData tp aout (toIndex shr sh' (sz, i-1))
             let y = ain (sz, i-1)
-            unsafeWriteArrayData tp aout (toIndex shr sh' (sz, i)) (f x y)
+            writeArrayData tp aout (toIndex shr sh' (sz, i)) (f x y)
 
       iter shr sh' write (>>) (return ())
       return (aout, undefined)
@@ -477,14 +477,14 @@ scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
       asum <- newArrayData tp (size shr' sh)
 
       let write (sz, 0)
-            | n == 0    = unsafeWriteArrayData tp asum (toIndex shr' sh sz) z
-            | otherwise = unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, 0)) z
+            | n == 0    = writeArrayData tp asum (toIndex shr' sh sz) z
+            | otherwise = writeArrayData tp aout (toIndex shr  (sh, n) (sz, 0)) z
           write (sz, i) = do
-            x <- unsafeReadArrayData tp aout (toIndex shr (sh, n) (sz, i-1))
+            x <- readArrayData tp aout (toIndex shr (sh, n) (sz, i-1))
             let y = ain (sz, i-1)
             if i == n
-              then unsafeWriteArrayData tp asum (toIndex shr' sh      sz)      (f x y)
-              else unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, i)) (f x y)
+              then writeArrayData tp asum (toIndex shr' sh      sz)      (f x y)
+              else writeArrayData tp aout (toIndex shr  (sh, n) (sz, i)) (f x y)
 
       iter shr (sh, n+1) write (>>) (return ())
       return ((aout, asum), undefined)
@@ -506,11 +506,11 @@ scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
     (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh')
 
-      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh' (sz, n)) z
+      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh' (sz, n)) z
           write (sz, i) = do
             let x = ain (sz, n-i)
-            y <- unsafeReadArrayData tp aout (toIndex shr sh' (sz, n-i+1))
-            unsafeWriteArrayData tp aout (toIndex shr sh' (sz, n-i)) (f x y)
+            y <- readArrayData tp aout (toIndex shr sh' (sz, n-i+1))
+            writeArrayData tp aout (toIndex shr sh' (sz, n-i)) (f x y)
 
       iter shr sh' write (>>) (return ())
       return (aout, undefined)
@@ -530,11 +530,11 @@ scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
     (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp (size shr sh)
 
-      let write (sz, 0) = unsafeWriteArrayData tp aout (toIndex shr sh (sz, n-1)) (ain (sz, n-1))
+      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh (sz, n-1)) (ain (sz, n-1))
           write (sz, i) = do
             let x = ain (sz, n-i-1)
-            y <- unsafeReadArrayData tp aout (toIndex shr sh (sz, n-i))
-            unsafeWriteArrayData tp aout (toIndex shr sh (sz, n-i-1)) (f x y)
+            y <- readArrayData tp aout (toIndex shr sh (sz, n-i))
+            writeArrayData tp aout (toIndex shr sh (sz, n-i-1)) (f x y)
 
       iter shr sh write (>>) (return ())
       return (aout, undefined)
@@ -556,15 +556,15 @@ scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
       asum <- newArrayData tp (size shr' sh)
 
       let write (sz, 0)
-            | n == 0    = unsafeWriteArrayData tp asum (toIndex shr' sh sz) z
-            | otherwise = unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, n-1)) z
+            | n == 0    = writeArrayData tp asum (toIndex shr' sh sz) z
+            | otherwise = writeArrayData tp aout (toIndex shr  (sh, n) (sz, n-1)) z
 
           write (sz, i) = do
             let x = ain (sz, n-i)
-            y <- unsafeReadArrayData tp aout (toIndex shr (sh, n) (sz, n-i))
+            y <- readArrayData tp aout (toIndex shr (sh, n) (sz, n-i))
             if i == n
-              then unsafeWriteArrayData tp asum (toIndex shr' sh      sz)          (f x y)
-              else unsafeWriteArrayData tp aout (toIndex shr  (sh, n) (sz, n-i-1)) (f x y)
+              then writeArrayData tp asum (toIndex shr' sh      sz)          (f x y)
+              else writeArrayData tp aout (toIndex shr  (sh, n) (sz, n-i-1)) (f x y)
 
       iter shr (sh, n+1) write (>>) (return ())
       return ((aout, asum), undefined)
@@ -592,8 +592,8 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
           init i
             | i >= n'   = return ()
             | otherwise = do
-                x <- unsafeReadArrayData tp adef i
-                unsafeWriteArrayData tp aout i x
+                x <- readArrayData tp adef i
+                writeArrayData tp aout i x
                 init (i+1)
 
           -- project each element onto the destination array and update
@@ -602,10 +602,10 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
                   i     = toIndex shr  sh  src
                   j     = toIndex shr' sh' dst
               in
-              unless (shapeEq shr' dst ignore') $ do
+              unless (eq shr' dst ignore') $ do
                 let x = ain  i
-                y <- unsafeReadArrayData tp aout j
-                unsafeWriteArrayData tp aout j (f x y)
+                y <- readArrayData tp aout j
+                writeArrayData tp aout j (f x y)
 
       init 0
       iter shr sh update (>>) (return ())
@@ -624,7 +624,7 @@ backpermuteOp shr sh' p (Delayed (ArrayR _ tp) _ arr _)
 
 stencilOp
     :: StencilR sh a stencil
-    -> TupleType b
+    -> TypeR b
     -> (stencil -> b)
     -> Boundary (Array sh a)
     -> Delayed  (Array sh a)
@@ -633,13 +633,13 @@ stencilOp stencil tp f bnd arr@(Delayed _ sh _ _)
   = fromFunction' (ArrayR shr tp) sh
   $ f . stencilAccess stencil (bounded shr bnd arr)
   where
-    shr = stencilShape stencil
+    shr = stencilShapeR stencil
 
 
 stencil2Op
     :: StencilR sh a stencil1
     -> StencilR sh b stencil2
-    -> TupleType c
+    -> TypeR c
     -> (stencil1 -> stencil2 -> c)
     -> Boundary (Array sh a)
     -> Delayed  (Array sh a)
@@ -651,14 +651,14 @@ stencil2Op s1 s2 tp stencil bnd1 arr1@(Delayed _ sh1 _ _) bnd2 arr2@(Delayed _ s
   where
     f ix  = stencil (stencilAccess s1 (bounded shr bnd1 arr1) ix)
                     (stencilAccess s2 (bounded shr bnd2 arr2) ix)
-    shr = stencilShape s1
+    shr = stencilShapeR s1
 
 stencilAccess
     :: StencilR sh e stencil
     -> (sh -> e)
     -> sh
     -> stencil
-stencilAccess stencil = goR (stencilShape stencil) stencil
+stencilAccess stencil = goR (stencilShapeR stencil) stencil
   where
     -- Base cases, nothing interesting to do here since we know the lower
     -- dimension is Z.
@@ -915,8 +915,8 @@ evalOpenExp pexp env aenv =
     Pair e1 e2                  -> let !x1 = evalE e1
                                        !x2 = evalE e2
                                    in  (x1, x2)
-    VecPack   vecR e            -> vecPack   vecR $! evalE e
-    VecUnpack vecR e            -> vecUnpack vecR $! evalE e
+    VecPack   vecR e            -> pack   vecR $! evalE e
+    VecUnpack vecR e            -> unpack vecR $! evalE e
     IndexSlice slice slix sh    -> restrict slice (evalE slix)
                                                   (evalE sh)
       where
@@ -968,7 +968,7 @@ evalOpenExp pexp env aenv =
 -- Constant values
 -- ---------------
 
-evalUndef :: TupleType a -> a
+evalUndef :: TypeR a -> a
 evalUndef TupRunit         = ()
 evalUndef (TupRsingle tp)  = evalUndefScalar tp
 evalUndef (TupRpair t1 t2) = (evalUndef t1, evalUndef t2)
