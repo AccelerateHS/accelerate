@@ -169,59 +169,28 @@ matchPreOpenAcc matchAcc = match
 
     match (Fold f1 z1 a1) (Fold f2 z2 a2)
       | Just Refl <- matchFun f1 f2
-      , Just Refl <- matchExp z1 z2
-      , Just Refl <- matchAcc a1 a2
-      = Just Refl
-
-    match (Fold1 f1 a1) (Fold1 f2 a2)
-      | Just Refl <- matchFun f1 f2
+      , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
     match (FoldSeg _ f1 z1 a1 s1) (FoldSeg _ f2 z2 a2 s2)
       | Just Refl <- matchFun f1 f2
-      , Just Refl <- matchExp z1 z2
+      , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc s1 s2
       = Just Refl
 
-    match (Fold1Seg _ f1 a1 s1) (Fold1Seg _ f2 a2 s2)
-      | Just Refl <- matchFun f1 f2
+    match (Scan d1 f1 z1 a1) (Scan d2 f2 z2 a2)
+      | d1 == d2
+      , Just Refl <- matchFun f1 f2
+      , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
-      , Just Refl <- matchAcc s1 s2
       = Just Refl
 
-    match (Scanl f1 z1 a1) (Scanl f2 z2 a2)
-      | Just Refl <- matchFun f1 f2
+    match (Scan' d1 f1 z1 a1) (Scan' d2 f2 z2 a2)
+      | d1 == d2
+      , Just Refl <- matchFun f1 f2
       , Just Refl <- matchExp z1 z2
-      , Just Refl <- matchAcc a1 a2
-      = Just Refl
-
-    match (Scanl' f1 z1 a1) (Scanl' f2 z2 a2)
-      | Just Refl <- matchFun f1 f2
-      , Just Refl <- matchExp z1 z2
-      , Just Refl <- matchAcc a1 a2
-      = Just Refl
-
-    match (Scanl1 f1 a1) (Scanl1 f2 a2)
-      | Just Refl <- matchFun f1 f2
-      , Just Refl <- matchAcc a1 a2
-      = Just Refl
-
-    match (Scanr f1 z1 a1) (Scanr f2 z2 a2)
-      | Just Refl <- matchFun f1 f2
-      , Just Refl <- matchExp z1 z2
-      , Just Refl <- matchAcc a1 a2
-      = Just Refl
-
-    match (Scanr' f1 z1 a1) (Scanr' f2 z2 a2)
-      | Just Refl <- matchFun f1 f2
-      , Just Refl <- matchExp z1 z2
-      , Just Refl <- matchAcc a1 a2
-      = Just Refl
-
-    match (Scanr1 f1 a1) (Scanr1 f2 a2)
-      | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
@@ -323,6 +292,11 @@ matchBoundary _  (Function f) (Function g)
 matchBoundary _ _ _
   = False
 
+matchMaybe :: (s1 -> s2 -> Maybe (t1 :~: t2)) -> Maybe s1 -> Maybe s2 -> Bool
+matchMaybe _ Nothing  Nothing  = True
+matchMaybe f (Just x) (Just y)
+  | Just Refl <- f x y         = True
+matchMaybe _ _        _        = False
 
 {--
 -- Match sequences

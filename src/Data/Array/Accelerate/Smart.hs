@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
   Acc(..), SmartAcc(..), PreSmartAcc(..), PairIdx(..), Exp(..), SmartExp(..), PreSmartExp(..),
-  Boundary(..), PreBoundary(..), Stencil(..), Level,
+  Boundary(..), PreBoundary(..), Stencil(..), Level, Direction(..),
 
   -- * Smart constructors for literals
   constant, undef,
@@ -59,7 +59,7 @@ module Data.Array.Accelerate.Smart (
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
   ApplyAcc(..), HasExpType(..), HasArraysRepr(..),
-  unAcc, unAccFunction, mkExp, unExp, unExpFunction, unPair, mkPairToTuple,
+  unAcc, unAccFunction, mkExp, unExp, unExpFunction, unExpBinaryFunction, unPair, mkPairToTuple,
 
   -- Debugging
   showPreAccOp, showPreExpOp,
@@ -365,63 +365,31 @@ data PreSmartAcc acc exp as where
 
   Fold          :: TupleType e
                 -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array sh e)
-
-  Fold1         :: TupleType e
-                -> (SmartExp e -> SmartExp e -> exp e)
+                -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array sh e)
 
   FoldSeg       :: IntegralType i
                 -> TupleType e
                 -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
+                -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
                 -> acc (Segments i)
                 -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Fold1Seg      :: IntegralType i
+  Scan          :: Direction
                 -> TupleType e
                 -> (SmartExp e -> SmartExp e -> exp e)
-                -> acc (Array (sh, Int) e)
-                -> acc (Segments i)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
-
-  Scanl         :: TupleType e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
+                -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Scanl'        :: TupleType e
+  Scan'         :: Direction
+                -> TupleType e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> exp e
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
-
-  Scanl1        :: TupleType e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
-
-  Scanr         :: TupleType e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
-
-  Scanr'        :: TupleType e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
-
-  Scanr1        :: TupleType e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
 
   Permute       :: ArrayR (Array sh e)
                 -> (SmartExp e -> SmartExp e -> exp e)
@@ -493,18 +461,10 @@ instance HasArraysRepr acc => HasArraysRepr (PreSmartAcc acc exp) where
                                  in  TupRsingle $ ArrayR shr tp
     Fold _ _ _ a              -> let ArrayR (ShapeRsnoc shr) tp = arrayRepr a
                                  in  TupRsingle (ArrayR shr tp)
-    Fold1 _ _ a               -> let ArrayR (ShapeRsnoc shr) tp = arrayRepr a
-                                 in  TupRsingle (ArrayR shr tp)
     FoldSeg _ _ _ _ a _       -> arraysRepr a
-    Fold1Seg _ _ _ a _        -> arraysRepr a
-    Scanl _ _ _ a             -> arraysRepr a
-    Scanl' _ _ _ a            -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayRepr a
+    Scan _ _ _ _ a            -> arraysRepr a
+    Scan' _ _ _ _ a           -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayRepr a
                                  in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
-    Scanl1 _ _ a              -> arraysRepr a
-    Scanr _ _ _ a             -> arraysRepr a
-    Scanr' _ _ _ a            -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayRepr a
-                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
-    Scanr1 _ _ a              -> arraysRepr a
     Permute _ _ a _ _         -> arraysRepr a
     Backpermute shr _ _ a     -> let ArrayR _ tp = arrayRepr a
                                  in  TupRsingle (ArrayR shr tp)
@@ -1410,16 +1370,12 @@ showPreAccOp Replicate{}        = "Replicate"
 showPreAccOp Slice{}            = "Slice"
 showPreAccOp Map{}              = "Map"
 showPreAccOp ZipWith{}          = "ZipWith"
-showPreAccOp Fold{}             = "Fold"
-showPreAccOp Fold1{}            = "Fold1"
-showPreAccOp FoldSeg{}          = "FoldSeg"
-showPreAccOp Fold1Seg{}         = "Fold1Seg"
-showPreAccOp Scanl{}            = "Scanl"
-showPreAccOp Scanl'{}           = "Scanl'"
-showPreAccOp Scanl1{}           = "Scanl1"
-showPreAccOp Scanr{}            = "Scanr"
-showPreAccOp Scanr'{}           = "Scanr'"
-showPreAccOp Scanr1{}           = "Scanr1"
+showPreAccOp (Fold _ _ Just{} _) = "Fold"
+showPreAccOp Fold{}             = "Fold1"
+showPreAccOp (FoldSeg _ _ _ Just{} _ _) = "FoldSeg"
+showPreAccOp FoldSeg{}          = "Fold1Seg"
+showPreAccOp (Scan d _ _ z _)   = "Scan" ++ show d ++ maybe "1" (const "") z -- Scanl, Scanl1, Scanr, Scanr1
+showPreAccOp (Scan' d _ _ _ _)  = "Scan" ++ show d ++ "'"
 showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"

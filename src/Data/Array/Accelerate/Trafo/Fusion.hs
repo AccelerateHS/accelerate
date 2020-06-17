@@ -188,15 +188,9 @@ manifest config (OpenAcc pacc) =
     -- consumer already
     --
     Fold f z a              -> Fold     f z (delayed config a)
-    Fold1 f a               -> Fold1    f (delayed config a)
     FoldSeg i f z a s       -> FoldSeg  i f z (delayed config a) (delayed config s)
-    Fold1Seg i f a s        -> Fold1Seg i f (delayed config a) (delayed config s)
-    Scanl f z a             -> Scanl    f z (delayed config a)
-    Scanl1 f a              -> Scanl1   f (delayed config a)
-    Scanl' f z a            -> Scanl'   f z (delayed config a)
-    Scanr f z a             -> Scanr    f z (delayed config a)
-    Scanr1 f a              -> Scanr1   f (delayed config a)
-    Scanr' f z a            -> Scanr'   f z (delayed config a)
+    Scan  d f z a           -> Scan     d f z (delayed config a)
+    Scan' d f z a           -> Scan'    d f z (delayed config a)
     Permute f d p a         -> Permute  f (manifest config d) p (delayed config a)
     Stencil s tp f x a      -> Stencil  s tp f x (delayed config a)
     Stencil2 s1 s2 tp f x a y b
@@ -397,20 +391,14 @@ embedPreAcc config embedAcc elimAcc pacc
     -- node, so that the producer can be directly embedded into the consumer
     -- during the code generation phase.
     --
-    Fold f z a          -> embed  repr  (into2 Fold           (cvtF f) (cvtE z)) a
-    Fold1 f a           -> embed  repr  (into  Fold1          (cvtF f)) a
-    FoldSeg i f z a s   -> embed2 repr  (into2 (FoldSeg i)    (cvtF f) (cvtE z)) a s
-    Fold1Seg i f a s    -> embed2 repr  (into  (Fold1Seg i)   (cvtF f)) a s
-    Scanl f z a         -> embed  repr  (into2 Scanl          (cvtF f) (cvtE z)) a
-    Scanl1 f a          -> embed  repr  (into  Scanl1         (cvtF f)) a
-    Scanl' f z a        -> embed  repr  (into2 Scanl'         (cvtF f) (cvtE z)) a
-    Scanr f z a         -> embed  repr  (into2 Scanr          (cvtF f) (cvtE z)) a
-    Scanr1 f a          -> embed  repr  (into  Scanr1         (cvtF f)) a
-    Scanr' f z a        -> embed  repr  (into2 Scanr'         (cvtF f) (cvtE z)) a
-    Permute f d p a     -> embed2 repr  (into2 permute        (cvtF f) (cvtF p)) d a
-    Stencil s t f x a   -> embed  repr  (into2 (stencil1 s t) (cvtF f) (cvtB x)) a
+    Fold f z a          -> embed  repr  (into2M Fold           (cvtF f) (cvtE <$> z)) a
+    FoldSeg i f z a s   -> embed2 repr  (into2M (FoldSeg i)    (cvtF f) (cvtE <$> z)) a s
+    Scan  d f z a       -> embed  repr  (into2M (Scan  d)      (cvtF f) (cvtE <$> z)) a
+    Scan' d f z a       -> embed  repr  (into2  (Scan' d)      (cvtF f) (cvtE z)) a
+    Permute f d p a     -> embed2 repr  (into2  permute        (cvtF f) (cvtF p)) d a
+    Stencil s t f x a   -> embed  repr  (into2  (stencil1 s t) (cvtF f) (cvtB x)) a
     Stencil2 s1 s2 t f x a y b
-                        -> embed2 repr  (into3 (stencil2 s1 s2 t) (cvtF f) (cvtB x) (cvtB y)) a b
+                        -> embed2 repr  (into3  (stencil2 s1 s2 t) (cvtF f) (cvtB x) (cvtB y)) a b
 
   where
     repr = arraysRepr pacc
@@ -473,6 +461,10 @@ embedPreAcc config embedAcc elimAcc pacc
     into2 :: (Sink f1, Sink f2)
           => (f1 env' a -> f2 env' b -> c) -> f1 env a -> f2 env b -> Extend ArrayR acc env env' -> c
     into2 op a b env = op (sinkA env a) (sinkA env b)
+
+    into2M :: (Sink f1, Sink f2)
+          => (f1 env' a -> Maybe (f2 env' b) -> c) -> f1 env a -> Maybe (f2 env b) -> Extend ArrayR acc env env' -> c
+    into2M op a b env = op (sinkA env a) (sinkA env <$> b)
 
     into3 :: (Sink f1, Sink f2, Sink f3)
           => (f1 env' a -> f2 env' b -> f3 env' c -> d) -> f1 env a -> f2 env b -> f3 env c -> Extend ArrayR acc env env' -> d
@@ -1435,16 +1427,10 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Slice slix a sl         -> Slice slix (cvtA a) (cvtE sl)
         Replicate slix sh a     -> Replicate slix (cvtE sh) (cvtA a)
         Reshape shr sl a        -> Reshape shr (cvtE sl) (cvtA a)
-        Fold f z a              -> Fold (cvtF f) (cvtE z) (cvtA a)
-        Fold1 f a               -> Fold1 (cvtF f) (cvtA a)
-        FoldSeg i f z a s       -> FoldSeg i (cvtF f) (cvtE z) (cvtA a) (cvtA s)
-        Fold1Seg i f a s        -> Fold1Seg i (cvtF f) (cvtA a) (cvtA s)
-        Scanl f z a             -> Scanl (cvtF f) (cvtE z) (cvtA a)
-        Scanl1 f a              -> Scanl1 (cvtF f) (cvtA a)
-        Scanl' f z a            -> Scanl' (cvtF f) (cvtE z) (cvtA a)
-        Scanr f z a             -> Scanr (cvtF f) (cvtE z) (cvtA a)
-        Scanr1 f a              -> Scanr1 (cvtF f) (cvtA a)
-        Scanr' f z a            -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+        Fold f z a              -> Fold (cvtF f) (cvtE <$> z) (cvtA a)
+        FoldSeg i f z a s       -> FoldSeg i (cvtF f) (cvtE <$> z) (cvtA a) (cvtA s)
+        Scan  d f z a           -> Scan d (cvtF f) (cvtE <$> z) (cvtA a)
+        Scan' d f z a           -> Scan' d (cvtF f) (cvtE z) (cvtA a)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil s t f x a       -> Stencil s t (cvtF f) (cvtB x) (cvtA a)
         Stencil2 s1 s2 t f x a y b
