@@ -11,3 +11,4 @@
 /stack.yaml
 /stack.yaml.lock
 .DS_Store
+*.lock

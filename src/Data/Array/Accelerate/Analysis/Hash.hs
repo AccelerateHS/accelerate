@@ -150,6 +150,14 @@ encodePreOpenAcc options encodeAcc pacc =
       travF :: OpenFun env' aenv' f -> Builder
       travF = encodeOpenFun
 
+      travD :: Direction -> Builder
+      travD LeftToRight = intHost $(hashQ "L")
+      travD RightToLeft = intHost $(hashQ "R")
+
+      travMaybe :: (a -> Builder) -> Maybe a -> Builder
+      travMaybe _ Nothing  = intHost $(hashQ "Nothing")
+      travMaybe f (Just x) = intHost $(hashQ "Just") <> f x
+
       deep :: Builder -> Builder
       deep | perfect options = id
            | otherwise       = const mempty
@@ -180,16 +188,10 @@ encodePreOpenAcc options encodeAcc pacc =
     Slice spec a ix              -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
     Map _ f a                    -> intHost $(hashQ "Map")         <> travF f  <> travA a
     ZipWith _ f a1 a2            -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
-    Fold f e a                   -> intHost $(hashQ "Fold")        <> travF f  <> travE e  <> travA a
-    Fold1 f a                    -> intHost $(hashQ "Fold1")       <> travF f  <> travA a
-    FoldSeg _ f e a s            -> intHost $(hashQ "FoldSeg")     <> travF f  <> travE e  <> travA a  <> travA s
-    Fold1Seg _ f a s             -> intHost $(hashQ "Fold1Seg")    <> travF f  <> travA a  <> travA s
-    Scanl f e a                  -> intHost $(hashQ "Scanl")       <> travF f  <> travE e  <> travA a
-    Scanl' f e a                 -> intHost $(hashQ "Scanl'")      <> travF f  <> travE e  <> travA a
-    Scanl1 f a                   -> intHost $(hashQ "Scanl1")      <> travF f  <> travA a
-    Scanr f e a                  -> intHost $(hashQ "Scanr")       <> travF f  <> travE e  <> travA a
-    Scanr' f e a                 -> intHost $(hashQ "Scanr'")      <> travF f  <> travE e  <> travA a
-    Scanr1 f a                   -> intHost $(hashQ "Scanr1")      <> travF f  <> travA a
+    Fold f e a                   -> intHost $(hashQ "Fold")        <> travF f  <> travMaybe travE e  <> travA a
+    FoldSeg _ f e a s            -> intHost $(hashQ "FoldSeg")     <> travF f  <> travMaybe travE e  <> travA a  <> travA s
+    Scan  d f e a                -> intHost $(hashQ "Scan")        <> travD d  <> travF f  <> travMaybe travE e  <> travA a
+    Scan' d f e a                -> intHost $(hashQ "Scan'")       <> travD d  <> travF f  <>           travE e  <> travA a
     Permute f1 a1 f2 a2          -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
     Stencil s _ f b a            -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilEltR s) b  <> travA a
     Stencil2 s1 s2 _ f b1 a1 b2 a2 -> intHost $(hashQ "Stencil2")  <> travF f  <> encodeBoundary (stencilEltR s1) b1 <> travA a1 <> encodeBoundary (stencilEltR s2) b2 <> travA a2

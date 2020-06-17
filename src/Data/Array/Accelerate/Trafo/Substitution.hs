@@ -520,6 +520,15 @@ shiftE' (LeftHandSideSingle _)   (LeftHandSideSingle _)   v = shiftE v
 shiftE' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) v = shiftE' b1 b2 $ shiftE' a1 a2 v
 shiftE' _ _ _ = error "Substitution: left hand sides do not match"
 
+{-# INLINEABLE rebuildMaybeExp #-}
+rebuildMaybeExp
+    :: (Applicative f, SyntacticExp fe)
+    => RebuildEvar f fe env env' aenv'
+    -> ReindexAvar f aenv aenv'
+    -> Maybe (OpenExp env  aenv t)
+    -> f (Maybe (OpenExp env' aenv' t))
+rebuildMaybeExp _ _  Nothing  = pure Nothing
+rebuildMaybeExp v av (Just x) = Just <$> rebuildOpenExp v av x
 
 {-# INLINEABLE rebuildOpenExp #-}
 rebuildOpenExp
@@ -674,16 +683,10 @@ rebuildPreOpenAcc k av acc =
     Slice sl a slix           -> Slice sl        <$> k av a <*> rebuildOpenExp (pure . IE) av' slix
     Map tp f a                -> Map tp          <$> rebuildFun (pure . IE) av' f <*> k av a
     ZipWith tp f a1 a2        -> ZipWith tp      <$> rebuildFun (pure . IE) av' f <*> k av a1 <*> k av a2
-    Fold f z a                -> Fold            <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
-    Fold1 f a                 -> Fold1           <$> rebuildFun (pure . IE) av' f <*> k av a
-    FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a <*> k av s
-    Fold1Seg itp f a s        -> Fold1Seg itp    <$> rebuildFun (pure . IE) av' f <*> k av a <*> k av s
-    Scanl f z a               -> Scanl           <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
-    Scanl' f z a              -> Scanl'          <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
-    Scanl1 f a                -> Scanl1          <$> rebuildFun (pure . IE) av' f <*> k av a
-    Scanr f z a               -> Scanr           <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
-    Scanr' f z a              -> Scanr'          <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
-    Scanr1 f a                -> Scanr1          <$> rebuildFun (pure . IE) av' f <*> k av a
+    Fold f z a                -> Fold            <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a
+    FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a <*> k av s
+    Scan  d f z a             -> Scan  d         <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a
+    Scan' d f z a             -> Scan' d         <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
     Permute f1 a1 f2 a2       -> Permute         <$> rebuildFun (pure . IE) av' f1 <*> k av a1 <*> rebuildFun (pure . IE) av' f2 <*> k av a2
     Backpermute shr sh f a    -> Backpermute shr <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' f <*> k av a
     Stencil sr tp f b a       -> Stencil sr tp   <$> rebuildFun (pure . IE) av' f <*> rebuildBoundary av' b  <*> k av a

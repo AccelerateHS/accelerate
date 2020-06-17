@@ -216,10 +216,10 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return $ PNode ident doc deps
 
-    Apply _ afun acc        -> apply <$> prettyDelayedAfun    detail     aenv afun
+    Apply _ afun acc         -> apply <$> prettyDelayedAfun    detail     aenv afun
                                      <*> prettyDelayedOpenAcc detail ctx aenv acc
 
-    Awhile p f x            -> do
+    Awhile p f x             -> do
       ident <- mkNodeId atop
       x'    <- replant =<< prettyDelayedOpenAcc detail app aenv x
       p'    <- prettyDelayedAfun detail aenv p
@@ -229,36 +229,32 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
           loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
-    a@(Apair a1 a2)         -> mkNodeId a >>= prettyDelayedApair detail aenv a1 a2
+    a@(Apair a1 a2)          -> mkNodeId a >>= prettyDelayedApair detail aenv a1 a2
 
-    Anil                    -> "()"          .$ []
+    Anil                     -> "()"             .$ []
 
-    Use repr arr            -> "use"         .$ [ return $ PDoc (prettyArray repr arr) [] ]
-    Unit _ e                -> "unit"        .$ [ ppE e ]
-    Generate _ sh f         -> "generate"    .$ [ ppE sh, ppF f ]
-    Transform _ sh ix f xs  -> "transform"   .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
-    Reshape _ sh xs         -> "reshape"     .$ [ ppE sh, ppA xs ]
-    Replicate _ty ix xs     -> "replicate"   .$ [ ppE ix, ppA xs ]
-    Slice _ty xs ix         -> "slice"       .$ [ ppA xs, ppE ix ]
-    Map _ f xs              -> "map"         .$ [ ppF f, ppA xs ]
-    ZipWith _ f xs ys       -> "zipWith"     .$ [ ppF f, ppA xs, ppA ys ]
-    Fold f e xs             -> "fold"        .$ [ ppF f, ppE e, ppA xs ]
-    Fold1 f xs              -> "fold1"       .$ [ ppF f, ppA xs ]
-    FoldSeg _ f e xs ys     -> "foldSeg"     .$ [ ppF f, ppE e, ppA xs, ppA ys ]
-    Fold1Seg _ f xs ys      -> "fold1Seg"    .$ [ ppF f, ppA xs, ppA ys ]
-    Scanl f e xs            -> "scanl"       .$ [ ppF f, ppE e, ppA xs ]
-    Scanl' f e xs           -> "scanl'"      .$ [ ppF f, ppE e, ppA xs ]
-    Scanl1 f xs             -> "scanl1"      .$ [ ppF f, ppA xs ]
-    Scanr f e xs            -> "scanr"       .$ [ ppF f, ppE e, ppA xs ]
-    Scanr' f e xs           -> "scanr'"      .$ [ ppF f, ppE e, ppA xs ]
-    Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppA xs ]
-    Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
-    Backpermute _ sh p xs   -> "backpermute" .$ [ ppE sh, ppF p, ppA xs ]
-    Stencil s _ sten bndy xs
-                            -> "stencil"     .$ [ ppF sten, ppB (stencilEltR s) bndy, ppA xs ]
+    Use repr arr             -> "use"            .$ [ return $ PDoc (prettyArray repr arr) [] ]
+    Unit _ e                 -> "unit"           .$ [ ppE e ]
+    Generate _ sh f          -> "generate"       .$ [ ppE sh, ppF f ]
+    Transform _ sh ix f xs   -> "transform"      .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
+    Reshape _ sh xs          -> "reshape"        .$ [ ppE sh, ppA xs ]
+    Replicate _ty ix xs      -> "replicate"      .$ [ ppE ix, ppA xs ]
+    Slice _ty xs ix          -> "slice"          .$ [ ppA xs, ppE ix ]
+    Map _ f xs               -> "map"            .$ [ ppF f, ppA xs ]
+    ZipWith _ f xs ys        -> "zipWith"        .$ [ ppF f, ppA xs, ppA ys ]
+    Fold f (Just z) a        -> "fold"           .$ [ ppF f,  ppE z, ppA a ]
+    Fold f Nothing  a        -> "fold1"          .$ [ ppF f,  ppA a ]
+    FoldSeg _ f (Just z) a s -> "foldSeg"        .$ [ ppF f,  ppE z, ppA a, ppA s ]
+    FoldSeg _ f Nothing  a s -> "fold1Seg"       .$ [ ppF f,  ppA a, ppA s ]
+    Scan d f (Just z) a      -> ppD "scan" d ""  .$ [ ppF f,  ppE z, ppA a ]
+    Scan d f Nothing  a      -> ppD "scan" d "1" .$ [ ppF f,  ppA a ]
+    Scan' d f z a            -> ppD "scan" d "'" .$ [ ppF f,  ppE z, ppA a ]
+    Permute f dfts p xs      -> "permute"        .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
+    Backpermute _ sh p xs    -> "backpermute"    .$ [ ppE sh, ppF p, ppA xs ]
+    Stencil s _ sten bndy xs -> "stencil"        .$ [ ppF sten, ppB (stencilEltR s) bndy, ppA xs ]
     Stencil2 s1 s2 _ sten bndy1 acc1 bndy2 acc2
-                            -> "stencil2"    .$ [ ppF sten, ppB (stencilEltR s1) bndy1, ppA acc1, ppB (stencilEltR s2) bndy2, ppA acc2 ]
-    Aforeign _ ff _afun xs  -> "aforeign"    .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
+                            -> "stencil2"        .$ [ ppF sten, ppB (stencilEltR s1) bndy1, ppA acc1, ppB (stencilEltR s2) bndy2, ppA acc2 ]
+    Aforeign _ ff _afun xs  -> "aforeign"        .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
     -- Collect{}               -> error "Collect"
 
   where
@@ -333,6 +329,10 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
 
     ppE :: Exp aenv t -> Dot PDoc
     ppE = return . uncurry PDoc . (prettyExp aenv' &&& fvE)
+
+    ppD :: String -> Direction -> String -> Operator
+    ppD f LeftToRight k = fromString (f <> "l" <> k)
+    ppD f RightToLeft k = fromString (f <> "r" <> k)
 
     lift :: DelayedOpenAcc aenv a -> Dot Vertex
     lift Delayed{}                    = $internalError "prettyDelayedOpenAcc" "expected manifest array"

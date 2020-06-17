@@ -77,7 +77,7 @@ module Data.Array.Accelerate.AST (
   -- * Internal AST
   -- ** Array computations
   Afun, PreAfun, OpenAfun, PreOpenAfun(..),
-  Acc, OpenAcc(..), PreOpenAcc(..),
+  Acc, OpenAcc(..), PreOpenAcc(..), Direction(..),
   ALeftHandSide, ArrayVar, ArrayVars,
 
   -- ** Scalar expressions
@@ -307,10 +307,7 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   --
-  Replicate   :: SliceIndex slix                                -- slice type specification
-                            sl
-                            co
-                            sh
+  Replicate   :: SliceIndex slix sl co sh                       -- slice type specification
               -> Exp            aenv slix                       -- slice value specification
               -> acc            aenv (Array sl e)               -- data to be replicated
               -> PreOpenAcc acc aenv (Array sh e)
@@ -318,10 +315,7 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Index a sub-array out of an array; i.e., the dimensions not indexed
   -- are returned whole
   --
-  Slice       :: SliceIndex slix                                -- slice type specification
-                            sl
-                            co
-                            sh
+  Slice       :: SliceIndex slix sl co sh                       -- slice type specification
               -> acc            aenv (Array sh e)               -- array to be indexed
               -> Exp            aenv slix                       -- slice value specification
               -> PreOpenAcc acc aenv (Array sl e)
@@ -347,13 +341,7 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- /associative/ function.
   --
   Fold        :: Fun            aenv (e -> e -> e)              -- combination function
-              -> Exp            aenv e                          -- default value
-              -> acc            aenv (Array (sh, Int) e)        -- folded array
-              -> PreOpenAcc acc aenv (Array sh e)
-
-  -- As 'Fold' without a default value
-  --
-  Fold1       :: Fun            aenv (e -> e -> e)              -- combination function
+              -> Maybe     (Exp aenv e)                         -- default value
               -> acc            aenv (Array (sh, Int) e)        -- folded array
               -> PreOpenAcc acc aenv (Array sh e)
 
@@ -362,62 +350,31 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   --
   FoldSeg     :: IntegralType i
               -> Fun            aenv (e -> e -> e)              -- combination function
-              -> Exp            aenv e                          -- default value
+              -> Maybe     (Exp aenv e)                         -- default value
               -> acc            aenv (Array (sh, Int) e)        -- folded array
               -> acc            aenv (Segments i)               -- segment descriptor
               -> PreOpenAcc acc aenv (Array (sh, Int) e)
 
-  -- As 'FoldSeg' without a default value
+  -- Haskell-style scan of a linear array with a given
+  -- /associative/ function and optionally an initial element
+  -- (which does not need to be the neutral of the associative operations)
+  -- If no initial value is given, this is a scan1
   --
-  Fold1Seg    :: IntegralType i
+  Scan        :: Direction
               -> Fun            aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Array (sh, Int) e)        -- folded array
-              -> acc            aenv (Segments i)               -- segment descriptor
-              -> PreOpenAcc acc aenv (Array (sh, Int) e)
-
-  -- Left-to-right Haskell-style scan of a linear array with a given
-  -- /associative/ function and an initial element (which does not need to
-  -- be the neutral of the associative operations)
-  --
-  Scanl       :: Fun            aenv (e -> e -> e)              -- combination function
-              -> Exp            aenv e                          -- initial value
+              -> Maybe     (Exp aenv e)                         -- initial value
               -> acc            aenv (Array (sh, Int) e)
               -> PreOpenAcc acc aenv (Array (sh, Int) e)
 
-  -- Like 'Scan', but produces a rightmost fold value and an array with the
-  -- same length as the input array (the fold value would be the rightmost
-  -- element in a Haskell-style scan)
+  -- Like 'Scan', but produces a rightmost (in case of a left-to-right scan)
+  -- fold value and an array with the same length as the input array (the
+  -- fold value would be the rightmost element in a Haskell-style scan)
   --
-  Scanl'      :: Fun            aenv (e -> e -> e)              -- combination function
+  Scan'       :: Direction
+              -> Fun            aenv (e -> e -> e)              -- combination function
               -> Exp            aenv e                          -- initial value
               -> acc            aenv (Array (sh, Int) e)
               -> PreOpenAcc acc aenv (Array (sh, Int) e, Array sh e)
-
-  -- Haskell-style scan without an initial value
-  --
-  Scanl1      :: Fun            aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (Array (sh, Int) e)
-
-  -- Right-to-left version of 'Scanl'
-  --
-  Scanr       :: Fun            aenv (e -> e -> e)              -- combination function
-              -> Exp            aenv e                          -- initial value
-              -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (Array (sh, Int) e)
-
-  -- Right-to-left version of 'Scanl\''
-  --
-  Scanr'      :: Fun            aenv (e -> e -> e)              -- combination function
-              -> Exp            aenv e                          -- initial value
-              -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (Array (sh, Int) e, Array sh e)
-
-  -- Right-to-left version of 'Scanl1'
-  --
-  Scanr1      :: Fun            aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (Array (sh, Int) e)
 
   -- Generalised forward permutation is characterised by a permutation function
   -- that determines for each element of the source array where it should go in
@@ -475,6 +432,10 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
               -> Boundary        aenv (Array sh b)                -- boundary condition #2
               -> acc             aenv (Array sh b)                -- source array #2
               -> PreOpenAcc acc  aenv (Array sh c)
+
+
+data Direction = LeftToRight | RightToLeft
+  deriving Eq
 
 
 -- | Vanilla boundary condition specification for stencil operations
@@ -806,18 +767,10 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
                                          in arraysRarray sh tR
   arraysR (Fold _ _ a)                = let ArrayR (ShapeRsnoc sh) tR = arrayR a
                                          in arraysRarray sh tR
-  arraysR (Fold1 _ a)                 = let ArrayR (ShapeRsnoc sh) tR = arrayR a
-                                         in arraysRarray sh tR
   arraysR (FoldSeg _ _ _ a _)         = arraysR a
-  arraysR (Fold1Seg _ _ a _)          = arraysR a
-  arraysR (Scanl _ _ a)               = arraysR a
-  arraysR (Scanl' _ _ a)              = let aR@(ArrayR (ShapeRsnoc sh) tR) = arrayR a
+  arraysR (Scan _ _ _ a)              = arraysR a
+  arraysR (Scan' _ _ _ a)             = let aR@(ArrayR (ShapeRsnoc sh) tR) = arrayR a
                                          in TupRsingle aR `TupRpair` TupRsingle (ArrayR sh tR)
-  arraysR (Scanl1 _ a)                = arraysR a
-  arraysR (Scanr _ _ a)               = arraysR a
-  arraysR (Scanr' _ _ a)              = let aR@(ArrayR (ShapeRsnoc sh) tR) = arrayR a
-                                         in TupRsingle aR `TupRpair` TupRsingle (ArrayR sh tR)
-  arraysR (Scanr1 _ a)                = arraysR a
   arraysR (Permute _ a _ _)           = arraysR a
   arraysR (Backpermute sh _ _ a)      = let ArrayR _ tR = arrayR a
                                          in arraysRarray sh tR
@@ -1032,16 +985,10 @@ rnfPreOpenAcc rnfA pacc =
     Slice slice a sh          -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
     Map tp f a                -> rnfTypeR tp `seq` rnfF f `seq` rnfA a
     ZipWith tp f a1 a2        -> rnfTypeR tp `seq` rnfF f `seq` rnfA a1 `seq` rnfA a2
-    Fold f z a                -> rnfF f `seq` rnfE z `seq` rnfA a
-    Fold1 f a                 -> rnfF f `seq` rnfA a
-    FoldSeg i f z a s         -> rnfIntegralType i `seq` rnfF f `seq` rnfE z `seq` rnfA a `seq` rnfA s
-    Fold1Seg i f a s          -> rnfIntegralType i `seq` rnfF f `seq` rnfA a `seq` rnfA s
-    Scanl f z a               -> rnfF f `seq` rnfE z `seq` rnfA a
-    Scanl1 f a                -> rnfF f `seq` rnfA a
-    Scanl' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
-    Scanr f z a               -> rnfF f `seq` rnfE z `seq` rnfA a
-    Scanr1 f a                -> rnfF f `seq` rnfA a
-    Scanr' f z a              -> rnfF f `seq` rnfE z `seq` rnfA a
+    Fold f z a                -> rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
+    FoldSeg i f z a s         -> rnfIntegralType i `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a `seq` rnfA s
+    Scan d f z a              -> d `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
+    Scan' d f z a             -> d `seq` rnfF f `seq` rnfE z `seq` rnfA a
     Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
     Backpermute shr sh f a    -> rnfShapeR shr `seq` rnfE sh `seq` rnfF f `seq` rnfA a
     Stencil sr tp f b a       ->
@@ -1068,6 +1015,10 @@ rnfBoundary _             Mirror       = ()
 rnfBoundary _             Wrap         = ()
 rnfBoundary (ArrayR _ tR) (Constant c) = rnfConst tR c
 rnfBoundary _             (Function f) = rnfOpenFun f
+
+rnfMaybe :: (a -> ()) -> Maybe a -> ()
+rnfMaybe _ Nothing  = ()
+rnfMaybe f (Just x) = f x
 
 rnfOpenFun :: OpenFun env aenv t -> ()
 rnfOpenFun (Body b)    = rnfOpenExp b
@@ -1238,16 +1189,10 @@ liftPreOpenAcc liftA pacc =
     Slice slix a sh           -> [|| Slice $$(liftSliceIndex slix) $$(liftA a) $$(liftE sh) ||]
     Map tp f a                -> [|| Map $$(liftTypeR tp) $$(liftF f) $$(liftA a) ||]
     ZipWith tp f a b          -> [|| ZipWith $$(liftTypeR tp) $$(liftF f) $$(liftA a) $$(liftA b) ||]
-    Fold f z a                -> [|| Fold $$(liftF f) $$(liftE z) $$(liftA a) ||]
-    Fold1 f a                 -> [|| Fold1 $$(liftF f) $$(liftA a) ||]
-    FoldSeg i f z a s         -> [|| FoldSeg $$(liftIntegralType i) $$(liftF f) $$(liftE z) $$(liftA a) $$(liftA s) ||]
-    Fold1Seg i f a s          -> [|| Fold1Seg $$(liftIntegralType i) $$(liftF f) $$(liftA a) $$(liftA s) ||]
-    Scanl f z a               -> [|| Scanl $$(liftF f) $$(liftE z) $$(liftA a) ||]
-    Scanl1 f a                -> [|| Scanl1 $$(liftF f) $$(liftA a) ||]
-    Scanl' f z a              -> [|| Scanl' $$(liftF f) $$(liftE z) $$(liftA a) ||]
-    Scanr f z a               -> [|| Scanr $$(liftF f) $$(liftE z) $$(liftA a) ||]
-    Scanr1 f a                -> [|| Scanr1 $$(liftF f) $$(liftA a) ||]
-    Scanr' f z a              -> [|| Scanr' $$(liftF f) $$(liftE z) $$(liftA a) ||]
+    Fold f z a                -> [|| Fold $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
+    FoldSeg i f z a s         -> [|| FoldSeg $$(liftIntegralType i) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) $$(liftA s) ||]
+    Scan d f z a              -> [|| Scan  $$(liftDirection d) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
+    Scan' d f z a             -> [|| Scan' $$(liftDirection d) $$(liftF f) $$(liftE z) $$(liftA a) ||]
     Permute f d p a           -> [|| Permute $$(liftF f) $$(liftA d) $$(liftF p) $$(liftA a) ||]
     Backpermute shr sh p a    -> [|| Backpermute $$(liftShapeR shr) $$(liftE sh) $$(liftF p) $$(liftA a) ||]
     Stencil sr tp f b a       ->
@@ -1268,6 +1213,14 @@ liftALeftHandSide = liftLeftHandSide liftArrayR
 
 liftArrayVar :: ArrayVar aenv a -> Q (TExp (ArrayVar aenv a))
 liftArrayVar = liftVar liftArrayR
+
+liftDirection :: Direction -> Q (TExp Direction)
+liftDirection LeftToRight = [|| LeftToRight ||]
+liftDirection RightToLeft = [|| RightToLeft ||]
+
+liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
+liftMaybe _ Nothing  = [|| Nothing ||]
+liftMaybe f (Just x) = [|| Just $$(f x) ||]
 
 liftOpenFun
     :: OpenFun env aenv t
@@ -1402,38 +1355,35 @@ liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $
 
 
 showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
-showPreAccOp Alet{}            = "Alet"
-showPreAccOp (Avar (Var _ ix)) = "Avar a" ++ show (idxToInt ix)
-showPreAccOp (Use aR a)        = "Use " ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
-showPreAccOp Apply{}           = "Apply"
-showPreAccOp Aforeign{}        = "Aforeign"
-showPreAccOp Acond{}           = "Acond"
-showPreAccOp Awhile{}          = "Awhile"
-showPreAccOp Apair{}           = "Apair"
-showPreAccOp Anil              = "Anil"
-showPreAccOp Unit{}            = "Unit"
-showPreAccOp Generate{}        = "Generate"
-showPreAccOp Transform{}       = "Transform"
-showPreAccOp Reshape{}         = "Reshape"
-showPreAccOp Replicate{}       = "Replicate"
-showPreAccOp Slice{}           = "Slice"
-showPreAccOp Map{}             = "Map"
-showPreAccOp ZipWith{}         = "ZipWith"
-showPreAccOp Fold{}            = "Fold"
-showPreAccOp Fold1{}           = "Fold1"
-showPreAccOp FoldSeg{}         = "FoldSeg"
-showPreAccOp Fold1Seg{}        = "Fold1Seg"
-showPreAccOp Scanl{}           = "Scanl"
-showPreAccOp Scanl'{}          = "Scanl'"
-showPreAccOp Scanl1{}          = "Scanl1"
-showPreAccOp Scanr{}           = "Scanr"
-showPreAccOp Scanr'{}          = "Scanr'"
-showPreAccOp Scanr1{}          = "Scanr1"
-showPreAccOp Permute{}         = "Permute"
-showPreAccOp Backpermute{}     = "Backpermute"
-showPreAccOp Stencil{}         = "Stencil"
-showPreAccOp Stencil2{}        = "Stencil2"
+showPreAccOp Alet{}              = "Alet"
+showPreAccOp (Avar (Var _ ix))   = "Avar a" ++ show (idxToInt ix)
+showPreAccOp (Use aR a)          = "Use " ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
+showPreAccOp Apply{}             = "Apply"
+showPreAccOp Aforeign{}          = "Aforeign"
+showPreAccOp Acond{}             = "Acond"
+showPreAccOp Awhile{}            = "Awhile"
+showPreAccOp Apair{}             = "Apair"
+showPreAccOp Anil                = "Anil"
+showPreAccOp Unit{}              = "Unit"
+showPreAccOp Generate{}          = "Generate"
+showPreAccOp Transform{}         = "Transform"
+showPreAccOp Reshape{}           = "Reshape"
+showPreAccOp Replicate{}         = "Replicate"
+showPreAccOp Slice{}             = "Slice"
+showPreAccOp Map{}               = "Map"
+showPreAccOp ZipWith{}           = "ZipWith"
+showPreAccOp (Fold _ z _)        = "Fold" ++ maybe "1" (const "") z
+showPreAccOp (FoldSeg _ _ z _ _) = "Fold" ++ maybe "1" (const "") z ++ "Seg"
+showPreAccOp (Scan d _ z _)      = "Scan" ++ showsDirection d (maybe "1" (const "") z)
+showPreAccOp (Scan' d _ _ _)     = "Scan" ++ showsDirection d "'"
+showPreAccOp Permute{}           = "Permute"
+showPreAccOp Backpermute{}       = "Backpermute"
+showPreAccOp Stencil{}           = "Stencil"
+showPreAccOp Stencil2{}          = "Stencil2"
 
+showsDirection :: Direction -> ShowS
+showsDirection LeftToRight = ('l':)
+showsDirection RightToLeft = ('r':)
 
 showExpOp :: forall aenv env t. OpenExp aenv env t -> String
 showExpOp Let{}             = "Let"

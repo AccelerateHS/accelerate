@@ -236,20 +236,21 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
     -- Consumers
     -- ---------
-    Fold f z acc                -> foldOp (evalF f) (evalE z) (delayed acc)
-    Fold1 f acc                 -> fold1Op (evalF f) (delayed acc)
-    FoldSeg i f z acc seg       -> foldSegOp i (evalF f) (evalE z) (delayed acc) (delayed seg)
-    Fold1Seg i f acc seg        -> fold1SegOp i (evalF f) (delayed acc) (delayed seg)
-    Scanl f z acc               -> scanlOp (evalF f) (evalE z) (delayed acc)
-    Scanl' f z acc              -> scanl'Op (evalF f) (evalE z) (delayed acc)
-    Scanl1 f acc                -> scanl1Op (evalF f) (delayed acc)
-    Scanr f z acc               -> scanrOp (evalF f) (evalE z) (delayed acc)
-    Scanr' f z acc              -> scanr'Op (evalF f) (evalE z) (delayed acc)
-    Scanr1 f acc                -> scanr1Op (evalF f) (delayed acc)
+    Fold f (Just z) acc         -> foldOp (evalF f) (evalE z) (delayed acc)
+    Fold f Nothing  acc         -> fold1Op (evalF f) (delayed acc)
+    FoldSeg i f (Just z) acc seg -> foldSegOp i (evalF f) (evalE z) (delayed acc) (delayed seg)
+    FoldSeg i f Nothing acc seg -> fold1SegOp i (evalF f) (delayed acc) (delayed seg)
+    Scan  d f (Just z) acc      -> dir d scanlOp  scanrOp  (evalF f) (evalE z) (delayed acc)
+    Scan  d f Nothing  acc      -> dir d scanl1Op scanr1Op (evalF f)           (delayed acc)
+    Scan' d f z acc             -> dir d scanl'Op scanr'Op (evalF f) (evalE z) (delayed acc)
     Permute f def p acc         -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
     Stencil s tp sten b acc     -> stencilOp s tp (evalF sten) (evalB b) (delayed acc)
     Stencil2 s1 s2 tp sten b1 a1 b2 a2
                                 -> stencil2Op s1 s2 tp (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
+  where
+    dir :: Direction -> t -> t -> t
+    dir LeftToRight l _ = l
+    dir RightToLeft _ r = r
 
 -- Array primitives
 -- ----------------

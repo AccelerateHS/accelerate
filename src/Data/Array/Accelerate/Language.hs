@@ -123,7 +123,8 @@ import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
-import Prelude                                                      ( ($), (.) )
+import Prelude                                                      ( ($), (.), Maybe(..) )
+
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
@@ -525,7 +526,7 @@ fold :: forall sh a.
      -> Exp a
      -> Acc (Array (sh:.Int) a)
      -> Acc (Array sh a)
-fold = Acc $$$ applyAcc (Fold $ eltR @a)
+fold f (Exp x) = Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) (Just x))
 
 -- | Variant of 'fold' that requires the innermost dimension of the array to be
 -- non-empty and doesn't need an default value.
@@ -542,7 +543,7 @@ fold1 :: forall sh a.
       => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array sh a)
-fold1 = Acc $$ applyAcc (Fold1 $ eltR @a)
+fold1 f = Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) Nothing)
 
 -- | Segmented reduction along the innermost dimension of an array. The
 -- segment descriptor specifies the starting index (offset) along the
@@ -565,7 +566,7 @@ foldSeg'
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-foldSeg' = Acc $$$$ applyAcc (FoldSeg (integralType @i) (eltR @a))
+foldSeg' f (Exp x) = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExpBinaryFunction f) (Just x))
 
 -- | Variant of 'foldSeg'' that requires /all/ segments of the reduced
 -- array to be non-empty, and doesn't need a default value. The segment
@@ -581,7 +582,7 @@ fold1Seg'
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-fold1Seg' = Acc $$$ applyAcc (Fold1Seg (integralType @i) (eltR @a))
+fold1Seg' f = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExpBinaryFunction f) Nothing)
 
 -- Scan functions
 -- --------------
@@ -609,7 +610,7 @@ scanl :: forall sh a.
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanl = Acc $$$ applyAcc (Scanl $ eltR @a)
+scanl f (Exp x) (Acc a) = Acc $ SmartAcc $ Scan LeftToRight (eltR @a) (unExpBinaryFunction f) (Just x) a
 
 -- | Variant of 'scanl', where the last element (final reduction result) along
 -- each dimension is returned separately. Denotationally we have:
@@ -643,7 +644,7 @@ scanl' :: forall sh a.
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanl' = Acc . mkPairToTuple $$$ applyAcc (Scanl' $ eltR @a)
+scanl' = Acc . mkPairToTuple $$$ applyAcc (Scan' LeftToRight $ eltR @a)
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
 -- initial value (aka inclusive scan). The innermost dimension of the array must
@@ -662,7 +663,7 @@ scanl1 :: forall sh a.
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanl1 = Acc $$ applyAcc (Scanl1 $ eltR @a)
+scanl1 f (Acc a) = Acc $ SmartAcc $ Scan LeftToRight (eltR @a) (unExpBinaryFunction f) Nothing a
 
 -- | Right-to-left variant of 'scanl'.
 --
@@ -672,7 +673,7 @@ scanr :: forall sh a.
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanr = Acc $$$ applyAcc (Scanr $ eltR @a)
+scanr f (Exp x) (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunction f) (Just x) a
 
 -- | Right-to-left variant of 'scanl''.
 --
@@ -682,7 +683,7 @@ scanr' :: forall sh a.
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanr' = Acc . mkPairToTuple $$$ applyAcc (Scanr' $ eltR @a)
+scanr' = Acc . mkPairToTuple $$$ applyAcc (Scan' RightToLeft $ eltR @a)
 
 -- | Right-to-left variant of 'scanl1'.
 --
@@ -691,7 +692,7 @@ scanr1 :: forall sh a.
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanr1 = Acc $$ applyAcc (Scanr1 $ eltR @a)
+scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunction f) Nothing a
 
 -- Permutations
 -- ------------

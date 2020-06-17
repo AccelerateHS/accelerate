@@ -543,16 +543,10 @@ usesOfPreAcc withShape countAcc idx = count
       Slice _ a sl               -> countE sl + countA a
       Map _ f a                  -> countF f  + countA a
       ZipWith _ f a1 a2          -> countF f  + countA a1 + countA a2
-      Fold f z a                 -> countF f  + countE z  + countA a
-      Fold1 f a                  -> countF f  + countA a
-      FoldSeg _ f z a s          -> countF f  + countE z  + countA a  + countA s
-      Fold1Seg _ f a s           -> countF f  + countA a  + countA s
-      Scanl f z a                -> countF f  + countE z  + countA a
-      Scanl' f z a               -> countF f  + countE z  + countA a
-      Scanl1 f a                 -> countF f  + countA a
-      Scanr f z a                -> countF f  + countE z  + countA a
-      Scanr' f z a               -> countF f  + countE z  + countA a
-      Scanr1 f a                 -> countF f  + countA a
+      Fold f z a                 -> countF f  + countME z + countA a
+      FoldSeg _ f z a s          -> countF f  + countME z + countA a  + countA s
+      Scan  _ f z a              -> countF f  + countME z + countA a
+      Scan' _ f z a              -> countF f  + countE z  + countA a
       Permute f1 a1 f2 a2        -> countF f1 + countA a1 + countF f2 + countA a2
       Backpermute _ sh f a       -> countE sh + countF f  + countA a
       Stencil _ _ f _ a          -> countF f  + countA a
@@ -585,6 +579,9 @@ usesOfPreAcc withShape countAcc idx = count
         | otherwise              -> 0
       Foreign _ _ _ e            -> countE e
       Coerce _ _ e               -> countE e
+
+    countME :: Maybe (OpenExp env aenv e) -> Int
+    countME = maybe 0 countE
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx

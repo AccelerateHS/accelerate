@@ -30,7 +30,7 @@ module Data.Array.Accelerate.Smart (
   -- * HOAS AST
   -- ** Array computations
   Acc(..), SmartAcc(..), PreSmartAcc(..),
-  Level,
+  Level, Direction(..),
 
   -- ** Scalar expressions
   Exp(..), SmartExp(..), PreSmartExp(..),
@@ -70,7 +70,7 @@ module Data.Array.Accelerate.Smart (
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
   ApplyAcc(..),
-  unAcc, unAccFunction, mkExp, unExp, unExpFunction, unPair, mkPairToTuple,
+  unAcc, unAccFunction, mkExp, unExp, unExpFunction, unExpBinaryFunction, unPair, mkPairToTuple,
 
   -- ** Miscellaneous
   showPreAccOp,
@@ -96,7 +96,8 @@ import qualified Data.Array.Accelerate.Representation.Stencil       as R
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
-import Data.Array.Accelerate.AST                                    ( PrimFun(..), primFunType
+import Data.Array.Accelerate.AST                                    ( Direction(..)
+                                                                    , PrimFun(..), primFunType
                                                                     , PrimConst(..), primConstType )
 import Data.Primitive.Vec
 
@@ -391,63 +392,31 @@ data PreSmartAcc acc exp as where
 
   Fold          :: TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array sh e)
-
-  Fold1         :: TypeR e
-                -> (SmartExp e -> SmartExp e -> exp e)
+                -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array sh e)
 
   FoldSeg       :: IntegralType i
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
+                -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
                 -> acc (Segments i)
                 -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Fold1Seg      :: IntegralType i
+  Scan          :: Direction
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
-                -> acc (Array (sh, Int) e)
-                -> acc (Segments i)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
-
-  Scanl         :: TypeR e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
+                -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Scanl'        :: TypeR e
+  Scan'         :: Direction
+                -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> exp e
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
-
-  Scanl1        :: TypeR e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
-
-  Scanr         :: TypeR e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
-
-  Scanr'        :: TypeR e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> exp e
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
-
-  Scanr1        :: TypeR e
-                -> (SmartExp e -> SmartExp e -> exp e)
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
 
   Permute       :: ArrayR (Array sh e)
                 -> (SmartExp e -> SmartExp e -> exp e)
@@ -831,18 +800,10 @@ instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
                                  in  TupRsingle $ ArrayR shr tp
     Fold _ _ _ a              -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
                                  in  TupRsingle (ArrayR shr tp)
-    Fold1 _ _ a               -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
-                                 in  TupRsingle (ArrayR shr tp)
     FoldSeg _ _ _ _ a _       -> arraysR a
-    Fold1Seg _ _ _ a _        -> arraysR a
-    Scanl _ _ _ a             -> arraysR a
-    Scanl' _ _ _ a            -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
+    Scan _ _ _ _ a            -> arraysR a
+    Scan' _ _ _ _ a           -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
                                  in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
-    Scanl1 _ _ a              -> arraysR a
-    Scanr _ _ _ a             -> arraysR a
-    Scanr' _ _ _ a            -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
-                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
-    Scanr1 _ _ a              -> arraysR a
     Permute _ _ a _ _         -> arraysR a
     Backpermute shr _ _ a     -> let ArrayR _ tp = arrayR a
                                  in  TupRsingle (ArrayR shr tp)
@@ -869,7 +830,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     Prj _ _                         -> error "I never joke about my work"
     VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
     VecUnpack vecR _                -> vecRtuple vecR
-    ToIndex _ _ _                   -> TupRsingle $ scalarTypeInt
+    ToIndex _ _ _                   -> TupRsingle scalarTypeInt
     FromIndex shr _ _               -> shapeType shr
     Cond _ e _                      -> typeR e
     While t _ _ _                   -> t
@@ -878,7 +839,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     Index tp _ _                    -> tp
     LinearIndex tp _ _              -> tp
     Shape shr _                     -> shapeType shr
-    ShapeSize _ _                   -> TupRsingle $ scalarTypeInt
+    ShapeSize _ _                   -> TupRsingle scalarTypeInt
     Foreign tp _ _ _                -> tp
     Undef tp                        -> TupRsingle tp
     Coerce _ tp _                   -> TupRsingle tp
@@ -1313,36 +1274,34 @@ instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) wh
 -- ---------
 
 showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> String
-showPreAccOp (Atag _ i)         = "Atag " ++ show i
-showPreAccOp (Use aR a)         = "Use "  ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
-showPreAccOp Pipe{}             = "Pipe"
-showPreAccOp Acond{}            = "Acond"
-showPreAccOp Awhile{}           = "Awhile"
-showPreAccOp Apair{}            = "Apair"
-showPreAccOp Anil{}             = "Anil"
-showPreAccOp Aprj{}             = "Aprj"
-showPreAccOp Unit{}             = "Unit"
-showPreAccOp Generate{}         = "Generate"
-showPreAccOp Reshape{}          = "Reshape"
-showPreAccOp Replicate{}        = "Replicate"
-showPreAccOp Slice{}            = "Slice"
-showPreAccOp Map{}              = "Map"
-showPreAccOp ZipWith{}          = "ZipWith"
-showPreAccOp Fold{}             = "Fold"
-showPreAccOp Fold1{}            = "Fold1"
-showPreAccOp FoldSeg{}          = "FoldSeg"
-showPreAccOp Fold1Seg{}         = "Fold1Seg"
-showPreAccOp Scanl{}            = "Scanl"
-showPreAccOp Scanl'{}           = "Scanl'"
-showPreAccOp Scanl1{}           = "Scanl1"
-showPreAccOp Scanr{}            = "Scanr"
-showPreAccOp Scanr'{}           = "Scanr'"
-showPreAccOp Scanr1{}           = "Scanr1"
-showPreAccOp Permute{}          = "Permute"
-showPreAccOp Backpermute{}      = "Backpermute"
-showPreAccOp Stencil{}          = "Stencil"
-showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Aforeign{}         = "Aforeign"
+showPreAccOp (Atag _ i)            = "Atag " ++ show i
+showPreAccOp (Use aR a)            = "Use "  ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
+showPreAccOp Pipe{}                = "Pipe"
+showPreAccOp Acond{}               = "Acond"
+showPreAccOp Awhile{}              = "Awhile"
+showPreAccOp Apair{}               = "Apair"
+showPreAccOp Anil{}                = "Anil"
+showPreAccOp Aprj{}                = "Aprj"
+showPreAccOp Unit{}                = "Unit"
+showPreAccOp Generate{}            = "Generate"
+showPreAccOp Reshape{}             = "Reshape"
+showPreAccOp Replicate{}           = "Replicate"
+showPreAccOp Slice{}               = "Slice"
+showPreAccOp Map{}                 = "Map"
+showPreAccOp ZipWith{}             = "ZipWith"
+showPreAccOp (Fold _ _ z _)        = "Fold" ++ maybe "1" (const "") z
+showPreAccOp (FoldSeg _ _ _ z _ _) = "Fold" ++ maybe "1" (const "") z ++ "Seg"
+showPreAccOp (Scan d _ _ z _)      = "Scan" ++ showsDirection d (maybe "1" (const "") z)
+showPreAccOp (Scan' d _ _ _ _)     = "Scan" ++ showsDirection d "'"
+showPreAccOp Permute{}             = "Permute"
+showPreAccOp Backpermute{}         = "Backpermute"
+showPreAccOp Stencil{}             = "Stencil"
+showPreAccOp Stencil2{}            = "Stencil2"
+showPreAccOp Aforeign{}            = "Aforeign"
+
+showsDirection :: Direction -> ShowS
+showsDirection LeftToRight = ('l':)
+showsDirection RightToLeft = ('r':)
 
 showPreExpOp :: PreSmartExp acc exp t -> String
 showPreExpOp (Tag _ i)          = "Tag" ++ show i
