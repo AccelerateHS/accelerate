@@ -120,37 +120,38 @@ showsElt = tuple
     tuple (TupRsingle tp)  val      = scalar tp val
 
     scalar :: ScalarType e -> e -> ShowS
-    scalar (SingleScalarType t) e = showString $ single t e
-    scalar (VectorScalarType t) e = showString $ vector t e
+    scalar (SingleScalarType t) e = single t e
+    scalar (VectorScalarType t) e = vector t e
 
-    single :: SingleType e -> e -> String
-    single (NumSingleType t) e = num t e
+    single :: SingleType e -> e -> ShowS
+    single (NumSingleType t) = num t
 
-    num :: NumType e -> e -> String
-    num (IntegralNumType t) e = integral t e
-    num (FloatingNumType t) e = floating t e
+    num :: NumType e -> e -> ShowS
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
 
-    integral :: IntegralType e -> e -> String
-    integral TypeInt    e = show e
-    integral TypeInt8   e = show e
-    integral TypeInt16  e = show e
-    integral TypeInt32  e = show e
-    integral TypeInt64  e = show e
-    integral TypeWord   e = show e
-    integral TypeWord8  e = show e
-    integral TypeWord16 e = show e
-    integral TypeWord32 e = show e
-    integral TypeWord64 e = show e
+    integral :: IntegralType e -> e -> ShowS
+    integral TypeInt    = shows
+    integral TypeInt8   = shows
+    integral TypeInt16  = shows
+    integral TypeInt32  = shows
+    integral TypeInt64  = shows
+    integral TypeWord   = shows
+    integral TypeWord8  = shows
+    integral TypeWord16 = shows
+    integral TypeWord32 = shows
+    integral TypeWord64 = shows
 
-    floating :: FloatingType e -> e -> String
-    floating TypeHalf   e = show e
-    floating TypeFloat  e = show e
-    floating TypeDouble e = show e
+    floating :: FloatingType e -> e -> ShowS
+    floating TypeHalf   = shows
+    floating TypeFloat  = shows
+    floating TypeDouble = shows
 
-    vector :: VectorType (Vec n a) -> Vec n a -> String
+    vector :: VectorType (Vec n a) -> Vec n a -> ShowS
     vector (VectorType _ s) vec
       | SingleDict <- singleDict s
-      = "<" ++ intercalate ", " (single s <$> listOfVec vec) ++ ">"
+      = showString
+      $ "<" ++ intercalate ", " ((\v -> single s v "") <$> listOfVec vec) ++ ">"
 
 liftElt :: TypeR t -> t -> Q (TExp t)
 liftElt TupRunit         ()    = [|| () ||]
