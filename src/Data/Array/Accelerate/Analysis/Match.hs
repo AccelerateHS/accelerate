@@ -700,7 +700,6 @@ matchPrimFun PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun PrimLNot                   PrimLNot                   = Just Refl
 matchPrimFun PrimOrd                    PrimOrd                    = Just Refl
 matchPrimFun PrimChr                    PrimChr                    = Just Refl
-matchPrimFun PrimBoolToInt              PrimBoolToInt              = Just Refl
 
 matchPrimFun _ _
   = Nothing
@@ -768,7 +767,6 @@ matchPrimFun' PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun' PrimLNot                   PrimLNot                   = Just Refl
 matchPrimFun' PrimOrd                    PrimOrd                    = Just Refl
 matchPrimFun' PrimChr                    PrimChr                    = Just Refl
-matchPrimFun' PrimBoolToInt              PrimBoolToInt              = Just Refl
 
 matchPrimFun' (PrimLt s) (PrimLt t)
   | Just Refl <- matchSingleType s t
@@ -873,30 +871,28 @@ matchBoundedType _                       _                       = Nothing
 
 {-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
-matchIntegralType TypeInt{}    TypeInt{}    = Just Refl
-matchIntegralType TypeInt8{}   TypeInt8{}   = Just Refl
-matchIntegralType TypeInt16{}  TypeInt16{}  = Just Refl
-matchIntegralType TypeInt32{}  TypeInt32{}  = Just Refl
-matchIntegralType TypeInt64{}  TypeInt64{}  = Just Refl
-matchIntegralType TypeWord{}   TypeWord{}   = Just Refl
-matchIntegralType TypeWord8{}  TypeWord8{}  = Just Refl
-matchIntegralType TypeWord16{} TypeWord16{} = Just Refl
-matchIntegralType TypeWord32{} TypeWord32{} = Just Refl
-matchIntegralType TypeWord64{} TypeWord64{} = Just Refl
+matchIntegralType TypeInt    TypeInt    = Just Refl
+matchIntegralType TypeInt8   TypeInt8   = Just Refl
+matchIntegralType TypeInt16  TypeInt16  = Just Refl
+matchIntegralType TypeInt32  TypeInt32  = Just Refl
+matchIntegralType TypeInt64  TypeInt64  = Just Refl
+matchIntegralType TypeWord   TypeWord   = Just Refl
+matchIntegralType TypeWord8  TypeWord8  = Just Refl
+matchIntegralType TypeWord16 TypeWord16 = Just Refl
+matchIntegralType TypeWord32 TypeWord32 = Just Refl
+matchIntegralType TypeWord64 TypeWord64 = Just Refl
 matchIntegralType _            _            = Nothing
 
 {-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
-matchFloatingType TypeHalf{}   TypeHalf{}   = Just Refl
-matchFloatingType TypeFloat{}  TypeFloat{}  = Just Refl
-matchFloatingType TypeDouble{} TypeDouble{} = Just Refl
+matchFloatingType TypeHalf   TypeHalf   = Just Refl
+matchFloatingType TypeFloat  TypeFloat  = Just Refl
+matchFloatingType TypeDouble TypeDouble = Just Refl
 matchFloatingType _            _            = Nothing
 
 {-# INLINEABLE matchNonNumType #-}
 matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
-matchNonNumType TypeBool{} TypeBool{} = Just Refl
-matchNonNumType TypeChar{} TypeChar{} = Just Refl
-matchNonNumType _          _          = Nothing
+matchNonNumType TypeChar TypeChar = Just Refl
 
 
 -- Auxiliary

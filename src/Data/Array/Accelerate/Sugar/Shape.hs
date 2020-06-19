@@ -31,6 +31,7 @@ module Data.Array.Accelerate.Sugar.Shape
   where
 
 import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import qualified Data.Array.Accelerate.Representation.Shape         as R
 import qualified Data.Array.Accelerate.Representation.Slice         as R
@@ -300,6 +301,7 @@ class (Slice (DivisionSlice sl)) => Division sl where
 instance (Elt t, Elt h) => Elt (t :. h) where
   type EltR (t :. h) = (EltR t, EltR h)
   eltR           = TupRpair (eltR @t) (eltR @h)
+  tagsR          = [TagRpair t h | t <- tagsR @t, h <- tagsR @h]
   fromElt (t:.h) = (fromElt t, fromElt h)
   toElt (t, h)   = toElt t :. toElt h
 
@@ -307,6 +309,7 @@ instance Elt (Any Z)
 instance Shape sh => Elt (Any (sh :. Int)) where
   type EltR (Any (sh :. Int)) = (EltR (Any sh), ())
   eltR      = TupRpair (eltR @(Any sh)) TupRunit
+  tagsR     = [TagRpair t TagRunit | t <- tagsR @(Any sh)]
   fromElt _ = (fromElt (Any :: Any sh), ())
   toElt _   = Any
 

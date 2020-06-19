@@ -661,7 +661,6 @@ primOperator PrimLOr                  = Operator "||"                 Infix  R 2
 primOperator PrimLNot                 = Operator "not"                App    L 10
 primOperator PrimOrd                  = Operator "ord"                App    L 10
 primOperator PrimChr                  = Operator "chr"                App    L 10
-primOperator PrimBoolToInt            = Operator "boolToInt"          App    L 10
 primOperator PrimFromIntegral{}       = Operator "fromIntegral"       App    L 10
 primOperator PrimToFloating{}         = Operator "toFloating"         App    L 10
 

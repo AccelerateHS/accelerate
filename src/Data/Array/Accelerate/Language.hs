@@ -123,7 +123,7 @@ import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
-import Prelude                                                      ( ($), (.), Maybe(..) )
+import Prelude                                                      ( ($), (.), Maybe(..), Char )
 
 
 -- $setup
@@ -1255,7 +1255,7 @@ acond :: Arrays a
       -> Acc a                  -- ^ then-array
       -> Acc a                  -- ^ else-array
       -> Acc a
-acond = Acc $$$ applyAcc $ Acond
+acond (Exp p) = Acc $$ applyAcc $ Acond (mkCoerce' p)
 
 -- | An array-level 'while' construct. Continue to apply the given function,
 -- starting with the initial value, until the test function evaluates to
@@ -1266,7 +1266,11 @@ awhile :: forall a. Arrays a
        -> (Acc a -> Acc a)                -- ^ function to apply
        -> Acc a                           -- ^ initial value
        -> Acc a
-awhile = Acc $$$ applyAcc $ Awhile $ arraysR @a
+awhile f = Acc $$ applyAcc $ Awhile (arraysR @a) (unAccFunction g)
+  where
+    -- FIXME: This should be a no-op!
+    g :: Acc a -> Acc (Scalar PrimBool)
+    g = map mkCoerce . f
 
 
 -- Shapes and indices
@@ -1326,7 +1330,7 @@ cond :: Elt t
      -> Exp t                   -- ^ then-expression
      -> Exp t                   -- ^ else-expression
      -> Exp t
-cond (Exp c) (Exp x) (Exp y) = mkExp $ Cond c x y
+cond (Exp c) (Exp x) (Exp y) = mkExp $ Cond (mkCoerce' c) x y
 
 -- | While construct. Continue to apply the given function, starting with the
 -- initial value, until the test function evaluates to 'False'.
@@ -1337,9 +1341,9 @@ while :: forall e. Elt e
       -> Exp e                  -- ^ initial value
       -> Exp e
 #if __GLASGOW_HASKELL__ < 804
-while c f (Exp e) = mkExp $ While @SmartAcc @SmartExp @(EltR e) (eltR @e) (unExp . c . Exp) (unExp . f . Exp) e
+while c f (Exp e) = mkExp $ While @SmartAcc @SmartExp @(EltR e) (eltR @e) (mkCoerce' . unExp . c . Exp) (unExp . f . Exp) e
 #else
-while c f (Exp e) = mkExp $ While                     @(EltR e) (eltR @e) (unExp . c . Exp) (unExp . f . Exp) e
+while c f (Exp e) = mkExp $ While                     @(EltR e) (eltR @e) (mkCoerce' . unExp . c . Exp) (unExp . f . Exp) e
 #endif
 
 
@@ -1500,7 +1504,7 @@ chr = mkChr
 -- into '1'.
 --
 boolToInt :: Exp Bool -> Exp Int
-boolToInt = mkBoolToInt
+boolToInt = mkFromIntegral . mkCoerce @_ @Word8
 
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.

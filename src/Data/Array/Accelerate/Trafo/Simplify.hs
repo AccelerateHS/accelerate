@@ -260,13 +260,13 @@ simplifyOpenExp env = first getAny . cvtE
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
     --
-    cond :: (Any, OpenExp env aenv Bool)
+    cond :: (Any, OpenExp env aenv PrimBool)
          -> (Any, OpenExp env aenv t)
          -> (Any, OpenExp env aenv t)
          -> (Any, OpenExp env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
-      | Const _ True  <- p'             = Stats.knownBranch "True"      (yes t')
-      | Const _ False <- p'             = Stats.knownBranch "False"     (yes e')
+      | Const _ 1 <- p'                 = Stats.knownBranch "True"      (yes t')
+      | Const _ 0 <- p'                 = Stats.knownBranch "False"     (yes e')
       | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                       = Cond <$> p <*> t <*> e
 
@@ -584,7 +584,6 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimLNot                 -> zero
             PrimOrd                  -> zero
             PrimChr                  -> zero
-            PrimBoolToInt            -> zero
             PrimFromIntegral     i n -> travIntegralType i +++ travNumType n
             PrimToFloating       n f -> travNumType n +++ travFloatingType f
 

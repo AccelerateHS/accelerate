@@ -36,6 +36,7 @@ module Data.Array.Accelerate.Smart (
   Exp(..), SmartExp(..), PreSmartExp(..),
   Stencil(..),
   Boundary(..), PreBoundary(..),
+  PrimBool,
 
   -- ** Extracting type information
   HasArraysR(..),
@@ -65,7 +66,7 @@ module Data.Array.Accelerate.Smart (
   mkLAnd, mkLOr, mkLNot, mkIsNaN, mkIsInfinite,
 
   -- ** Smart constructors for type coercion functions
-  mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce,
+  mkOrd, mkChr, mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
@@ -85,6 +86,7 @@ import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil                 hiding ( StencilR, stencilR )
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays )
@@ -303,6 +305,7 @@ newtype SmartAcc a = SmartAcc (PreSmartAcc SmartAcc SmartExp a)
 -- the environment at the defining occurrence.
 --
 type Level = Int
+type PrimBool = TAG
 
 -- | Array-valued collective computations without a recursive knot
 --
@@ -327,13 +330,13 @@ data PreSmartAcc acc exp as where
                 -> acc as
                 -> PreSmartAcc acc exp bs
 
-  Acond         :: exp Bool
+  Acond         :: exp PrimBool
                 -> acc as
                 -> acc as
                 -> PreSmartAcc acc exp as
 
   Awhile        :: ArraysR arrs
-                -> (SmartAcc arrs -> acc (Scalar Bool))
+                -> (SmartAcc arrs -> acc (Scalar PrimBool))
                 -> (SmartAcc arrs -> acc arrs)
                 -> acc arrs
                 -> PreSmartAcc acc exp arrs
@@ -472,7 +475,7 @@ newtype SmartExp t = SmartExp (PreSmartExp SmartAcc SmartExp t)
 -- the type of collective array operations.
 --
 data PreSmartExp acc exp t where
-    -- Needed for conversion to de Bruijn form
+  -- Needed for conversion to de Bruijn form
   Tag           :: TypeR t
                 -> Level                        -- environment size at defining occurrence
                 -> PreSmartExp acc exp t
@@ -513,13 +516,13 @@ data PreSmartExp acc exp t where
                 -> exp Int
                 -> PreSmartExp acc exp sh
 
-  Cond          :: exp Bool
+  Cond          :: exp PrimBool
                 -> exp t
                 -> exp t
                 -> PreSmartExp acc exp t
 
   While         :: TypeR t
-                -> (SmartExp t -> exp Bool)
+                -> (SmartExp t -> exp PrimBool)
                 -> (SmartExp t -> exp t)
                 -> exp t
                 -> PreSmartExp acc exp t
@@ -1095,32 +1098,32 @@ mkAtan2 :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
 mkAtan2 = mkPrimBinary $ PrimAtan2 floatingType
 
 mkIsNaN :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
-mkIsNaN = mkPrimUnary $ PrimIsNaN floatingType
+mkIsNaN = mkPrimUnaryBool $ PrimIsNaN floatingType
 
 mkIsInfinite :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
-mkIsInfinite = mkPrimUnary $ PrimIsInfinite floatingType
+mkIsInfinite = mkPrimUnaryBool $ PrimIsInfinite floatingType
 
 -- FIXME: add missing operations from Floating, RealFrac & RealFloat
 
 -- Relational and equality operators
 
 mkLt :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkLt = mkPrimBinary $ PrimLt singleType
+mkLt = mkPrimBinaryBool $ PrimLt singleType
 
 mkGt :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkGt = mkPrimBinary $ PrimGt singleType
+mkGt = mkPrimBinaryBool $ PrimGt singleType
 
 mkLtEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkLtEq = mkPrimBinary $ PrimLtEq singleType
+mkLtEq = mkPrimBinaryBool $ PrimLtEq singleType
 
 mkGtEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkGtEq = mkPrimBinary $ PrimGtEq singleType
+mkGtEq = mkPrimBinaryBool $ PrimGtEq singleType
 
 mkEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkEq = mkPrimBinary $ PrimEq singleType
+mkEq = mkPrimBinaryBool $ PrimEq singleType
 
 mkNEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkNEq = mkPrimBinary $ PrimNEq singleType
+mkNEq = mkPrimBinaryBool $ PrimNEq singleType
 
 mkMax :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
 mkMax = mkPrimBinary $ PrimMax singleType
@@ -1131,13 +1134,21 @@ mkMin = mkPrimBinary $ PrimMin singleType
 -- Logical operators
 
 mkLAnd :: Exp Bool -> Exp Bool -> Exp Bool
-mkLAnd = mkPrimBinary PrimLAnd
+mkLAnd (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLAnd (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+  where
+    x = SmartExp $ Prj PairIdxLeft a
+    y = SmartExp $ Prj PairIdxLeft b
 
 mkLOr :: Exp Bool -> Exp Bool -> Exp Bool
-mkLOr = mkPrimBinary PrimLOr
+mkLOr (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLOr (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+  where
+    x = SmartExp $ Prj PairIdxLeft a
+    y = SmartExp $ Prj PairIdxLeft b
 
 mkLNot :: Exp Bool -> Exp Bool
-mkLNot = mkPrimUnary PrimLNot
+mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
+  where
+    x = SmartExp $ Prj PairIdxLeft a
 
 -- Character conversions
 
@@ -1157,9 +1168,6 @@ mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 
 -- Other conversions
 
-mkBoolToInt :: Exp Bool -> Exp Int
-mkBoolToInt (Exp b) = mkExp $ PrimBoolToInt `PrimApp` b
-
 -- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
 -- make this version "safe"
 mkBitcast :: forall b a. (Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
@@ -1171,20 +1179,26 @@ mkCoerce (Exp a) = Exp $ mkCoerce' a
 class Coerce a b where
   mkCoerce' :: SmartExp a -> SmartExp b
 
-instance (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b where
+instance {-# OVERLAPS #-} (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b where
   mkCoerce' = SmartExp . Coerce (scalarType @a) (scalarType @b)
 
 instance (Coerce a1 b1, Coerce a2 b2) => Coerce (a1, a2) (b1, b2) where
   mkCoerce' a = SmartExp $ Pair (mkCoerce' $ SmartExp $ Prj PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj PairIdxRight a)
 
-instance Coerce () () where
-  mkCoerce' _ = SmartExp Nil
+instance Coerce a a where
+  mkCoerce' = id
 
 instance Coerce ((), a) a where
   mkCoerce' a = SmartExp $ Prj PairIdxRight a
 
 instance Coerce a ((), a) where
   mkCoerce' = SmartExp . Pair (SmartExp Nil)
+
+instance Coerce (a, ()) a where
+  mkCoerce' a = SmartExp $ Prj PairIdxLeft a
+
+instance Coerce a (a, ()) where
+  mkCoerce' a = SmartExp (Pair a (SmartExp Nil))
 
 
 
@@ -1230,6 +1244,12 @@ mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
 
 mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
+
+mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
+mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary
+
+mkPrimBinaryBool :: (Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
+mkPrimBinaryBool = mkCoerce @PrimBool $$$ mkPrimBinary
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)

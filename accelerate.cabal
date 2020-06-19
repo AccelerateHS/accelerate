@@ -340,6 +340,7 @@ Library
         Data.Array.Accelerate.Representation.Shape
         Data.Array.Accelerate.Representation.Slice
         Data.Array.Accelerate.Representation.Stencil
+        Data.Array.Accelerate.Representation.Tag
         Data.Array.Accelerate.Representation.Type
         Data.Array.Accelerate.Representation.Vec
         Data.Array.Accelerate.Smart

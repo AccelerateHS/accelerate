@@ -102,8 +102,7 @@ type family GArrayData a where
 type ScalarArrayData a = UniqueArray (ScalarArrayDataR a)
 
 -- | Mapping from scalar type to the type as represented in memory in an
--- array. Booleans are stored as Word8, other types are represented as
--- itself.
+-- array.
 --
 type family ScalarArrayDataR t where
   ScalarArrayDataR Int       = Int
@@ -119,7 +118,6 @@ type family ScalarArrayDataR t where
   ScalarArrayDataR Half      = Half
   ScalarArrayDataR Float     = Float
   ScalarArrayDataR Double    = Double
-  -- ScalarArrayDataR Bool      = Word8
   ScalarArrayDataR Char      = Char
   ScalarArrayDataR (Vec n t) = ScalarArrayDataR t
 
@@ -150,7 +148,6 @@ scalarArrayDict = scalar
 
     nonnum :: NonNumType a -> ScalarArrayDict a
     nonnum TypeChar = ScalarArrayDict
-    nonnum TypeBool = undefined
 
     num :: NumType a -> ScalarArrayDict a
     num (IntegralNumType t) = integral t
@@ -183,7 +180,6 @@ singleArrayDict = single
 
     nonnum :: NonNumType a -> SingleArrayDict a
     nonnum TypeChar = SingleArrayDict
-    nonnum TypeBool = undefined
 
     num :: NumType a -> SingleArrayDict a
     num (IntegralNumType t) = integral t

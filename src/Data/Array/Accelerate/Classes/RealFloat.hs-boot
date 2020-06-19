@@ -20,6 +20,7 @@ import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.FromIntegral
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.RealFrac
 
+import Prelude                                                      ( Bool )
 import qualified Prelude                                            as P
 
 

@@ -49,6 +49,7 @@ import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
@@ -78,14 +79,25 @@ pattern r ::+ i <- (deconstructComplex -> (r, i))
 --
 instance Elt a => Elt (Complex a) where
   type EltR (Complex a) = ComplexR (EltR a)
-  eltR = case complexR tp of
-      ComplexVec s -> TupRsingle $ VectorScalarType $ VectorType 2 s
-      ComplexTup   -> TupRunit `TupRpair` tp `TupRpair` tp
-    where
-      tp = eltR @a
+  eltR = let tR = eltR @a
+          in case complexR tR of
+               ComplexVec s -> TupRsingle $ VectorScalarType $ VectorType 2 s
+               ComplexTup   -> TupRunit `TupRpair` tR `TupRpair` tR
+
+  tagsR = let tR = eltR @a
+           in case complexR tR of
+               ComplexVec s -> [ TagRsingle (VectorScalarType (VectorType 2 s)) ]
+               ComplexTup   -> let go :: TypeR t -> [TagR t]
+                                   go TupRunit         = [TagRunit]
+                                   go (TupRsingle s)   = [TagRsingle s]
+                                   go (TupRpair ta tb) = [TagRpair a b | a <- go ta, b <- go tb]
+                                in
+                                [ TagRunit `TagRpair` ta `TagRpair` tb | ta <- go tR, tb <- go tR ]
+
   toElt = case complexR $ eltR @a of
     ComplexVec _ -> \(Vec2 r i)   -> toElt r :+ toElt i
     ComplexTup   -> \(((), r), i) -> toElt r :+ toElt i
+
   fromElt (r :+ i) = case complexR $ eltR @a of
     ComplexVec _ -> Vec2 (fromElt r) (fromElt i)
     ComplexTup   -> (((), fromElt r), fromElt i)
@@ -128,7 +140,6 @@ complexR = tuple
 
     nonnum :: NonNumType a -> ComplexType a (ComplexR a)
     nonnum TypeChar = ComplexTup
-    nonnum TypeBool = ComplexTup
 
     num :: NumType a -> ComplexType a (ComplexR a)
     num (IntegralNumType t) = integral t

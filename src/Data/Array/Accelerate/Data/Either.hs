@@ -52,7 +52,7 @@ import Data.Array.Accelerate.Data.Semigroup
 
 import Data.Either                                                  ( Either(..) )
 import Data.Maybe
-import Prelude                                                      ( (.), ($), const, otherwise )
+import Prelude                                                      ( (.), ($), const, otherwise, undefined )
 
 
 pattern Left_ :: (Elt a, Elt b) => Exp a -> Exp (Either a b)
@@ -152,18 +152,12 @@ tag :: (Elt a, Elt b) => Exp (Either a b) -> Exp Word8
 tag x = t
   where T3 t _ _ = asTuple x
 
-instance (Elt a, Elt b) => Elt (Either a b) where
-  type EltR (Either a b) = EltR (Word8,a,b)
-  eltR = eltR @(Word8,a,b)
-  toElt ((((),0),a),_)  = Left  (toElt a)
-  toElt (_         ,b)  = Right (toElt b)
-  fromElt (Left a)      = ((((),0), fromElt a          ), evalUndef $ eltR @b)
-  fromElt (Right b)     = ((((),1), evalUndef $ eltR @a), fromElt b)
+instance (Elt a, Elt b) => Elt (Either a b)
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)
-  lift (Left a)  = toEither $ T3 (constant 0) (lift a) undef
-  lift (Right b) = toEither $ T3 (constant 1) undef    (lift b)
+  -- lift (Left a)  = toEither $ T3 (constant 0) (lift a) undef
+  -- lift (Right b) = toEither $ T3 (constant 1) undef    (lift b)
 
 
 -- Utilities
@@ -204,8 +198,8 @@ emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = fill (constant empty) undef
 
 asTuple :: Exp (Either a b) -> Exp (Word8, a, b)
-asTuple (Exp e) = Exp e
+asTuple = undefined -- (Exp e) = Exp e
 
 toEither :: Exp (Word8, a, b) -> Exp (Either a b)
-toEither (Exp e) = Exp e
+toEither = undefined -- (Exp e) = Exp e
 

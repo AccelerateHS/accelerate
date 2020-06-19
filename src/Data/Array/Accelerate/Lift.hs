@@ -281,7 +281,8 @@ instance Lift Exp CDouble where
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift = expConst
+  lift True  = Exp . SmartExp $ SmartExp (Const scalarType 1) `Pair` SmartExp Nil
+  lift False = Exp . SmartExp $ SmartExp (Const scalarType 0) `Pair` SmartExp Nil
 
 instance Lift Exp Char where
   type Plain Char = Char

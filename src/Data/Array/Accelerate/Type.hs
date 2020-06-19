@@ -24,7 +24,7 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
---  /Scalar types supported in array computations/
+--  Primitive scalar types supported by Accelerate
 --
 --  Integral types:
 --    * Int
@@ -42,12 +42,8 @@
 --    * Half
 --    * Float
 --    * Double
---
---  Non-numeric types:
---    * Bool
---    * Char
---
---  SIMD vector types:
+
+--  SIMD vector types of the above:
 --    * Vec2
 --    * Vec3
 --    * Vec4
@@ -61,7 +57,7 @@
 
 module Data.Array.Accelerate.Type (
 
-  Half(..), Float, Double, Char, Bool(..),
+  Half(..), Float, Double,
   module Data.Int,
   module Data.Word,
   module Foreign.C.Types,
@@ -139,8 +135,7 @@ data FloatingType a where
 -- | Non-numeric types supported in array computations.
 --
 data NonNumType a where
-  TypeBool  :: NonNumType Bool   --  marshalled to Word8
-  TypeChar  :: NonNumType Char
+  TypeChar :: NonNumType Char
 
 -- | Numeric element types implement Num & Real
 --
@@ -185,8 +180,7 @@ instance Show (FloatingType a) where
   show TypeDouble  = "Double"
 
 instance Show (NonNumType a) where
-  show TypeBool   = "Bool"
-  show TypeChar   = "Char"
+  show TypeChar = "Char"
 
 instance Show (NumType a) where
   show (IntegralNumType ty) = show ty
@@ -261,7 +255,6 @@ floatingDict TypeFloat  = FloatingDict
 floatingDict TypeDouble = FloatingDict
 
 nonNumDict :: NonNumType a -> NonNumDict a
-nonNumDict TypeBool = NonNumDict
 nonNumDict TypeChar = NonNumDict
 
 singleDict :: SingleType a -> SingleDict a
@@ -273,7 +266,6 @@ singleDict = single
 
     nonnum :: NonNumType a -> SingleDict a
     nonnum TypeChar = SingleDict
-    nonnum TypeBool = error "prim: We don't support vector of bools yet"
 
     num :: NumType a -> SingleDict a
     num (IntegralNumType t) = integral t
@@ -297,11 +289,11 @@ singleDict = single
     floating TypeDouble = SingleDict
 
 
-scalarTypeBool :: ScalarType Bool
-scalarTypeBool = SingleScalarType $ NonNumSingleType TypeBool
-
 scalarTypeInt :: ScalarType Int
 scalarTypeInt = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt
+
+scalarTypeWord :: ScalarType Word
+scalarTypeWord = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord
 
 scalarTypeInt32 :: ScalarType Int32
 scalarTypeInt32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt32
@@ -332,8 +324,7 @@ rnfNumType (IntegralNumType t) = rnfIntegralType t
 rnfNumType (FloatingNumType t) = rnfFloatingType t
 
 rnfNonNumType :: NonNumType t -> ()
-rnfNonNumType TypeBool     = ()
-rnfNonNumType TypeChar     = ()
+rnfNonNumType TypeChar = ()
 
 rnfIntegralType :: IntegralType t -> ()
 rnfIntegralType TypeInt    = ()
@@ -369,7 +360,6 @@ liftNum (IntegralNumType t) = liftIntegral t
 liftNum (FloatingNumType t) = liftFloating t
 
 liftNonNum :: NonNumType t -> t -> Q (TExp t)
-liftNonNum TypeBool{} x = [|| x ||]
 liftNonNum TypeChar{} x = [|| x ||]
 
 liftIntegral :: IntegralType t -> t -> Q (TExp t)
@@ -406,7 +396,6 @@ liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]
 liftNumType (FloatingNumType t) = [|| FloatingNumType $$(liftFloatingType t) ||]
 
 liftNonNumType :: NonNumType t -> Q (TExp (NonNumType t))
-liftNonNumType TypeBool{} = [|| TypeBool ||]
 liftNonNumType TypeChar{} = [|| TypeChar ||]
 
 liftBoundedType :: BoundedType t -> Q (TExp (BoundedType t))
@@ -477,12 +466,11 @@ $(runQ $ do
 
       nonNumTypes :: [(Name, Integer)]
       nonNumTypes =
-        [ (''Bool, 8)     -- stored as Word8
-        , (''Char, 32)
+        [ (''Char, 32)
         ]
 
       vectorTypes :: [(Name, Integer)]
-      vectorTypes = integralTypes ++ floatingTypes ++ tail nonNumTypes  -- not Bool, no ArrayElt instances
+      vectorTypes = integralTypes ++ floatingTypes ++ nonNumTypes
 
       mkIntegral :: Name -> Integer -> Q [Dec]
       mkIntegral t n =

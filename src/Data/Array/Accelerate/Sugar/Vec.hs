@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Sugar.Vec
   where
 
 import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Types
@@ -32,6 +33,7 @@ type VecElt a = (Elt a, Prim a, IsSingle a, EltR a ~ a)
 instance (KnownNat n, VecElt a) => Elt (Vec n a) where
   type EltR (Vec n a) = Vec n a
   eltR    = TupRsingle (VectorScalarType (VectorType (fromIntegral (natVal' (proxy# :: Proxy# n))) singleType))
+  tagsR   = [TagRsingle (VectorScalarType (VectorType (fromIntegral (natVal' (proxy# :: Proxy# n))) singleType))]
   toElt   = id
   fromElt = id
 

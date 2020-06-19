@@ -435,7 +435,7 @@ import Data.Primitive.Vec
 import qualified Data.Array.Accelerate.Sugar.Array                  as S
 import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
-import Prelude                                                      ( (.), ($), Show, undefined, error, const, otherwise )
+import Prelude                                                      ( (.), ($), Char, Show, undefined, error, const, otherwise )
 import GHC.Generics                                                 ( Generic )
 
 -- $setup

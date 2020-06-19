@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
@@ -20,12 +21,15 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Sugar.Elt
+module Data.Array.Accelerate.Sugar.Elt ( Elt(..) )
   where
 
+import Data.Array.Accelerate.Representation.Elt
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 
+import Data.Bits
 import Data.Kind
 import Language.Haskell.TH                                          hiding ( Type )
 import Language.Haskell.TH.Extra
@@ -58,10 +62,13 @@ import GHC.Generics
 --  * <https://hackage.haskell.org/package/linear-accelerate linear-accelerate>
 --  * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>
 --
--- For simple product types it is possible to derive 'Elt' automatically,
--- for example:
+-- For simple types it is possible to derive 'Elt' automatically, for
+-- example:
 --
 -- > data Point = Point Int Float
+-- >   deriving (Generic, Elt)
+--
+-- > data Option a = None | Just a
 -- >   deriving (Generic, Elt)
 --
 class Elt a where
@@ -73,66 +80,198 @@ class Elt a where
   type EltR a = GEltR () (Rep a)
   --
   eltR    :: TypeR (EltR a)
+  tagsR   :: [TagR (EltR a)]
   fromElt :: a -> EltR a
   toElt   :: EltR a -> a
 
   default eltR
-    :: (GElt (Rep a), EltR a ~ GEltR () (Rep a))
-    => TypeR (EltR a)
+      :: (GElt (Rep a), EltR a ~ GEltR () (Rep a))
+      => TypeR (EltR a)
   eltR = geltR @(Rep a) TupRunit
 
+  default tagsR
+      :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
+      => [TagR (EltR a)]
+  tagsR = gtagsR @(Rep a) TagRunit
+
   default fromElt
-    :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
-    => a
-    -> EltR a
+      :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
+      => a
+      -> EltR a
   fromElt = gfromElt () . from
 
   default toElt
-    :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
-    => EltR a
-    -> a
+      :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
+      => EltR a
+      -> a
   toElt = to . snd . gtoElt @(Rep a) @()
 
 
 class GElt f where
   type GEltR t f
   geltR    :: TypeR t -> TypeR (GEltR t f)
+  gtagsR   :: TagR t -> [TagR (GEltR t f)]
   gfromElt :: t -> f a -> GEltR t f
   gtoElt   :: GEltR t f -> (t, f a)
+  --
+  gundef   :: t -> GEltR t f
+  guntag   :: TagR t -> TagR (GEltR t f)
 
 instance GElt U1 where
   type GEltR t U1 = t
   geltR t       = t
+  gtagsR t      = [t]
   gfromElt t U1 = t
   gtoElt t      = (t, U1)
+  gundef t      = t
+  guntag t      = t
 
 instance GElt a => GElt (M1 i c a) where
   type GEltR t (M1 i c a) = GEltR t a
   geltR             = geltR @a
+  gtagsR            = gtagsR @a
   gfromElt t (M1 x) = gfromElt t x
   gtoElt         x  = let (t, x1) = gtoElt x in (t, M1 x1)
+  gundef            = gundef @a
+  guntag            = guntag @a
 
 instance Elt a => GElt (K1 i a) where
   type GEltR t (K1 i a) = (t, EltR a)
   geltR t           = TupRpair t (eltR @a)
+  gtagsR t          = TagRpair t <$> tagsR @a
   gfromElt t (K1 x) = (t, fromElt x)
   gtoElt     (t, x) = (t, K1 (toElt x))
+  gundef t          = (t, undefElt (eltR @a))
+  guntag t          = TagRpair t (untag (eltR @a))
 
 instance (GElt a, GElt b) => GElt (a :*: b) where
   type GEltR t (a :*: b) = GEltR (GEltR t a) b
-  geltR                = geltR @b . geltR @a
+  geltR  = geltR @b . geltR @a
+  gtagsR = concatMap (gtagsR @b) . gtagsR @a
   gfromElt t (a :*: b) = gfromElt (gfromElt t a) b
   gtoElt t =
     let (t1, b) = gtoElt t
         (t2, a) = gtoElt t1
     in
     (t2, a :*: b)
+  gundef t = gundef @b (gundef @a t)
+  guntag t = guntag @b (guntag @a t)
+
+instance (GElt a, GElt b, GSumElt (a :+: b)) => GElt (a :+: b) where
+  type GEltR t (a :+: b) = (TAG, GSumEltR t (a :+: b))
+  geltR t      = TupRpair (TupRsingle scalarType) (gsumEltR @(a :+: b) t)
+  gtagsR t     = uncurry TagRtag <$> gsumTagsR @(a :+: b) 0 t
+  gfromElt     = gsumFromElt 0
+  gtoElt (k,x) = gsumToElt k x
+  gundef t     = (0xff, gsumUndef @(a :+: b) t)
+  guntag t     = TagRpair (TagRundef scalarType) (gsumUntag @(a :+: b) t)
+
+
+class GSumElt f where
+  type GSumEltR t f
+  gsumEltR     :: TypeR t -> TypeR (GSumEltR t f)
+  gsumTagsR    :: TAG -> TagR t -> [(TAG, TagR (GSumEltR t f))]
+  gsumFromElt  :: TAG -> t -> f a -> (TAG, GSumEltR t f)
+  gsumToElt    :: TAG -> GSumEltR t f -> (t, f a)
+  gsumUndef    :: t -> GSumEltR t f
+  gsumUntag    :: TagR t -> TagR (GSumEltR t f)
+
+instance GSumElt U1 where
+  type GSumEltR t U1 = t
+  gsumEltR t         = t
+  gsumTagsR n t      = [(n, t)]
+  gsumFromElt n t U1 = (n, t)
+  gsumToElt _ t      = (t, U1)
+  gsumUndef t        = t
+  gsumUntag t        = t
+
+instance GSumElt a => GSumElt (M1 i c a) where
+  type GSumEltR t (M1 i c a) = GSumEltR t a
+  gsumEltR               = gsumEltR @a
+  gsumTagsR              = gsumTagsR @a
+  gsumFromElt n t (M1 x) = gsumFromElt n t x
+  gsumToElt k x          = let (t, x') = gsumToElt k x in (t, M1 x')
+  gsumUntag              = gsumUntag @a
+  gsumUndef              = gsumUndef @a
+
+instance Elt a => GSumElt (K1 i a) where
+  type GSumEltR t (K1 i a) = (t, EltR a)
+  gsumEltR t             = TupRpair t (eltR @a)
+  gsumTagsR n t          = (n,) . TagRpair t <$> tagsR @a
+  gsumFromElt n t (K1 x) = (n, (t, fromElt x))
+  gsumToElt _ (t, x)     = (t, K1 (toElt x))
+  gsumUntag t            = TagRpair t (untag (eltR @a))
+  gsumUndef t            = (t, undefElt (eltR @a))
+
+instance (GElt a, GElt b) => GSumElt (a :*: b) where
+  type GSumEltR t (a :*: b) = GEltR t (a :*: b)
+  gsumEltR                  = geltR @(a :*: b)
+  gsumTagsR n t             = (n,) <$> gtagsR @(a :*: b) t
+  gsumFromElt n t (a :*: b) = (n, gfromElt (gfromElt t a) b)
+  gsumToElt _ t0 =
+    let (t1, b) = gtoElt t0
+        (t2, a) = gtoElt t1
+     in
+     (t2, a :*: b)
+  gsumUndef       = gundef @(a :*: b)
+  gsumUntag       = guntag @(a :*: b)
+
+instance (GSumElt a, GSumElt b) => GSumElt (a :+: b) where
+  type GSumEltR t (a :+: b) = GSumEltR (GSumEltR t a) b
+  gsumEltR = gsumEltR @b . gsumEltR @a
+
+  gsumFromElt n t (L1 a) = let (m,r) = gsumFromElt n t a
+                            in (shiftL m 1, gsumUndef @b r)
+  gsumFromElt n t (R1 b) = let (m,r) = gsumFromElt n (gsumUndef @a t) b
+                            in (setBit (m `shiftL` 1) 0, r)
+
+  gsumToElt k t0 =
+    let (t1, b) = gsumToElt (shiftR k 1) t0
+        (t2, a) = gsumToElt (shiftR k 1) t1
+     in
+     if testBit k 0
+        then (t2, R1 b)
+        else (t2, L1 a)
+
+  gsumTagsR k t =
+    let a = gsumTagsR @a k t
+        b = gsumTagsR @b k (gsumUntag @a t)
+     in
+     map (\(x,y) ->         (x `shiftL` 1, gsumUntag @b y)) a ++
+     map (\(x,y) -> (setBit (x `shiftL` 1) 0, y)) b
+
+  gsumUndef t = gsumUndef @b (gsumUndef @a t)
+  gsumUntag t = gsumUntag @b (gsumUntag @a t)
+
+
+class GTags (f :: Type -> Type) where
+  gtags :: TAG -> [(String, TAG)]
+
+instance GTags a => GTags (D1 c a) where
+  gtags = gtags @a
+
+instance Constructor c => GTags (C1 c a) where
+  gtags k = [ (conName (undefined :: D1 c a ()), k) ]
+
+instance (GTags a, GTags b) => GTags (a :+: b) where
+  gtags k =
+    let as = gtags @a k
+        bs = gtags @b k
+     in
+     map (\(x,y) -> (x,         y `shiftL` 1)   ) as ++
+     map (\(x,y) -> (x, setBit (y `shiftL` 1) 0)) bs
+
+
+untag :: TypeR t -> TagR t
+untag TupRunit         = TagRunit
+untag (TupRsingle t)   = TagRundef t
+untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 
 
 -- Note: [Deriving Elt]
 --
--- We can't use the cunning generalised newtype deriving mechanism, because the
--- generated 'eltType' function does not type check. For example, it will
+-- We can't use the cunning generalised newtype deriving mechanism, because
+-- the generated 'eltR function does not type check. For example, it will
 -- generate the following implementation for 'CShort':
 --
 -- > eltR
@@ -141,7 +280,7 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 -- >       @(TypeR (EltR CShort))
 -- >       (eltR :: TypeR (EltR CShort))
 --
--- Which yields the error "couldn't match type 'EltRepr a0' with 'Int16'".
+-- Which yields the error "couldn't match type 'EltR a0' with 'Int16'".
 -- Since this function returns a type family type, the type signature on the
 -- result is not enough to fix the type 'a'. Instead, we require the use of
 -- (visible) type applications:
@@ -157,11 +296,8 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 -- Instances for basic types are generated at the end of this module.
 --
 
-instance Elt () where
-  type EltR () = ()
-  eltR    = TupRunit
-  fromElt = id
-  toElt   = id
+instance Elt ()
+instance Elt Bool
 
 runQ $ do
   let
@@ -190,8 +326,7 @@ runQ $ do
 
       nonNumTypes :: [Name]
       nonNumTypes =
-        [ ''Bool
-        , ''Char
+        [ ''Char
         ]
 
       newtypes :: [Name]
@@ -217,7 +352,8 @@ runQ $ do
         in
         [d| instance Elt $t where
               type EltR $t = $t
-              eltR = TupRsingle scalarType
+              eltR    = TupRsingle scalarType
+              tagsR   = [TagRsingle scalarType]
               fromElt = id
               toElt   = id
           |]
@@ -257,6 +393,7 @@ runQ $ do
         [d| instance Elt $(conT name) where
               type EltR $(conT name) = $(conT base)
               eltR = TupRsingle scalarType
+              tagsR = [TagRsingle scalarType]
               fromElt $(conP (mkName (nameBase name)) [varP (mkName "x")]) = x
               toElt = $(conE (mkName (nameBase name)))
           |]

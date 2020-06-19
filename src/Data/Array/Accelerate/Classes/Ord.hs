@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Classes.Ord (
 
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Pattern
-import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
@@ -39,10 +39,11 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Classes.Eq                             hiding ( (==) )
 import qualified Data.Array.Accelerate.Classes.Eq                   as A
 
-import Text.Printf
-import Prelude                                                      ( ($), (.), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM, (==) )
+import Data.Char
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
+import Prelude                                                      ( ($), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM, (==) )
+import Text.Printf
 import qualified Prelude                                            as P
 
 infix 4 <
@@ -51,13 +52,13 @@ infix 4 <=
 infix 4 >=
 
 pattern LT_ :: Exp Ordering
-pattern LT_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 0))
+pattern LT_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 0) `Pair` SmartExp Nil))
 
 pattern EQ_ :: Exp Ordering
-pattern EQ_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 1))
+pattern EQ_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 1) `Pair` SmartExp Nil))
 
 pattern GT_ :: Exp Ordering
-pattern GT_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 2))
+pattern GT_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 2) `Pair` SmartExp Nil))
 {-# COMPLETE LT_, EQ_, GT_ #-}
 
 -- | The 'Ord' class for totally ordered datatypes
@@ -88,7 +89,7 @@ class Eq a => Ord a where
 -- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
 --
 ifThenElse :: Elt a => Exp Bool -> Exp a -> Exp a -> Exp a
-ifThenElse (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond c x y
+ifThenElse (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond (mkCoerce' c) x y
 
 instance Ord () where
   (<)     _ _ = constant False
@@ -119,23 +120,19 @@ instance Ord sh => Ord (sh :. Int) where
              Just Refl -> constant True
              Nothing   -> indexTail x > indexTail y
 
-instance Elt Ordering where
-  type EltR Ordering = Int8
-  eltR    = TupRsingle scalarType
-  fromElt = P.fromIntegral . P.fromEnum
-  toElt   = P.toEnum . P.fromIntegral
+instance Elt Ordering
 
 instance Eq Ordering where
-  x == y = mkBitcast x A.== (mkBitcast y :: Exp Int8)
-  x /= y = mkBitcast x   /= (mkBitcast y :: Exp Int8)
+  x == y = mkCoerce x A.== (mkCoerce y :: Exp TAG)
+  x /= y = mkCoerce x A./= (mkCoerce y :: Exp TAG)
 
 instance Ord Ordering where
-  x < y   = mkBitcast x < (mkBitcast y :: Exp Int8)
-  x > y   = mkBitcast x > (mkBitcast y :: Exp Int8)
-  x <= y  = mkBitcast x <= (mkBitcast y :: Exp Int8)
-  x >= y  = mkBitcast x >= (mkBitcast y :: Exp Int8)
-  min x y = mkBitcast $ min (mkBitcast x) (mkBitcast y :: Exp Int8)
-  max x y = mkBitcast $ max (mkBitcast x) (mkBitcast y :: Exp Int8)
+  x < y   = mkCoerce x < (mkCoerce y :: Exp TAG)
+  x > y   = mkCoerce x > (mkCoerce y :: Exp TAG)
+  x <= y  = mkCoerce x <= (mkCoerce y :: Exp TAG)
+  x >= y  = mkCoerce x >= (mkCoerce y :: Exp TAG)
+  min x y = mkCoerce $ min (mkCoerce x) (mkCoerce y :: Exp TAG)
+  max x y = mkCoerce $ max (mkCoerce x) (mkCoerce y :: Exp TAG)
 
 
 -- Instances of 'Prelude.Ord' (mostly) don't make sense with the standard
@@ -189,8 +186,7 @@ $(runQ $ do
 
         nonNumTypes :: [Name]
         nonNumTypes =
-          [ ''Bool
-          , ''Char
+          [ ''Char
           ]
 
         cTypes :: [Name]

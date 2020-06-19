@@ -149,7 +149,6 @@ evalPrimApp env f x
       PrimLNot                  -> evalLNot x env
       PrimOrd                   -> evalOrd x env
       PrimChr                   -> evalChr x env
-      PrimBoolToInt             -> evalBoolToInt x env
       PrimFromIntegral ta tb    -> evalFromIntegral ta tb x env
       PrimToFloating ta tb      -> evalToFloating ta tb x env
 
@@ -266,8 +265,32 @@ eval2 tp f (untup2 -> Just (x,y)) env
   , Just b <- propagate env y
   = Stats.substitution "constant fold"
   $ Just $ Const (SingleScalarType tp) (f a b)
-
 eval2 _ _ _ _
+  = Nothing
+
+fromBool :: Bool -> PrimBool
+fromBool False = 0
+fromBool True  = 1
+
+toBool :: PrimBool -> Bool
+toBool 0 = False
+toBool _ = True
+
+bool1 :: (a -> Bool) -> a :-> PrimBool
+bool1 f x env
+  | Just a <- propagate env x
+  = Stats.substitution "constant fold"
+  . Just $ Const scalarTypeWord8 (fromBool (f a))
+bool1 _ _ _
+  = Nothing
+
+bool2 :: (a -> b -> Bool) -> (a,b) :-> PrimBool
+bool2 f (untup2 -> Just (x,y)) env
+  | Just a <- propagate env x
+  , Just b <- propagate env y
+  = Stats.substitution "constant fold"
+  $ Just $ Const scalarTypeWord8 (fromBool (f a b))
+bool2 _ _ _
   = Nothing
 
 tup2 :: (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
@@ -593,62 +616,66 @@ evalAtan2 ty | FloatingDict <- floatingDict ty = eval2 (NumSingleType $ Floating
 evalTruncate :: FloatingType a -> IntegralType b -> a :-> b
 evalTruncate ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 (NumSingleType $ IntegralNumType tb) truncate
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) truncate
 
 evalRound :: FloatingType a -> IntegralType b -> a :-> b
 evalRound ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 (NumSingleType $ IntegralNumType tb) round
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) round
 
 evalFloor :: FloatingType a -> IntegralType b -> a :-> b
 evalFloor ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 (NumSingleType $ IntegralNumType tb) floor
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) floor
 
 evalCeiling :: FloatingType a -> IntegralType b -> a :-> b
 evalCeiling ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 (NumSingleType $ IntegralNumType tb) ceiling
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) ceiling
 
-evalIsNaN :: FloatingType a -> a :-> Bool
-evalIsNaN ty | FloatingDict <- floatingDict ty = eval1 (NonNumSingleType TypeBool) isNaN
+evalIsNaN :: FloatingType a -> a :-> PrimBool
+evalIsNaN ty | FloatingDict <- floatingDict ty = bool1 isNaN
 
-evalIsInfinite :: FloatingType a -> a :-> Bool
-evalIsInfinite ty | FloatingDict <- floatingDict ty = eval1 (NonNumSingleType TypeBool) isInfinite
+evalIsInfinite :: FloatingType a -> a :-> PrimBool
+evalIsInfinite ty | FloatingDict <- floatingDict ty = bool1 isInfinite
 
 
 -- Relational & Equality
 -- ---------------------
 
-evalLt :: SingleType a -> (a,a) :-> Bool
-evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (<)
-evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (<)
-evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (<)
+evalLt :: SingleType a -> (a,a) :-> PrimBool
+evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (<)
+evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (<)
+evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (<)
 
-evalGt :: SingleType a -> (a,a) :-> Bool
-evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (>)
-evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (>)
-evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (>)
+evalGt :: SingleType a -> (a,a) :-> PrimBool
+evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (>)
+evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (>)
+evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (>)
 
-evalLtEq :: SingleType a -> (a,a) :-> Bool
-evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (<=)
-evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (<=)
-evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (<=)
+evalLtEq :: SingleType a -> (a,a) :-> PrimBool
+evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (<=)
+evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (<=)
+evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (<=)
 
-evalGtEq :: SingleType a -> (a,a) :-> Bool
-evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (>=)
-evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (>=)
-evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (>=)
+evalGtEq :: SingleType a -> (a,a) :-> PrimBool
+evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (>=)
+evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (>=)
+evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (>=)
 
-evalEq :: SingleType a -> (a,a) :-> Bool
-evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (==)
-evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (==)
-evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (==)
+evalEq :: SingleType a -> (a,a) :-> PrimBool
+evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (==)
+evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (==)
+evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (==)
 
-evalNEq :: SingleType a -> (a,a) :-> Bool
-evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (NonNumSingleType TypeBool) (/=)
-evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (NonNumSingleType TypeBool) (/=)
-evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (NonNumSingleType TypeBool) (/=)
+evalNEq :: SingleType a -> (a,a) :-> PrimBool
+evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (/=)
+evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (/=)
+evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (/=)
 
 evalMax :: SingleType a -> (a,a) :-> a
 evalMax ty@(NumSingleType (IntegralNumType ty')) | IntegralDict <- integralDict ty' = eval2 ty max
@@ -663,44 +690,45 @@ evalMin ty@(NonNumSingleType ty')                | NonNumDict   <- nonNumDict ty
 -- Logical operators
 -- -----------------
 
-evalLAnd :: (Bool,Bool) :-> Bool
+evalLAnd :: (PrimBool,PrimBool) :-> PrimBool
 evalLAnd (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = Just $ if a then Stats.ruleFired "True &&" y
-                else Stats.ruleFired "False &&" $ Const scalarTypeBool False
+  = Just
+  $ if toBool a then Stats.ruleFired "True &&" y
+                else Stats.ruleFired "False &&" $ Const scalarTypeWord8 0
 
   | Just b      <- propagate env y
-  = Just $ if b then Stats.ruleFired "True &&" x
-                else Stats.ruleFired "False &&" $ Const scalarTypeBool False
+  = Just
+  $ if toBool b then Stats.ruleFired "True &&" x
+                else Stats.ruleFired "False &&" $ Const scalarTypeWord8 0
 
 evalLAnd _ _
   = Nothing
 
-evalLOr  :: (Bool,Bool) :-> Bool
+evalLOr  :: (PrimBool,PrimBool) :-> PrimBool
 evalLOr (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = Just $ if a then Stats.ruleFired "True ||" $ Const scalarTypeBool True
+  = Just
+  $ if toBool a then Stats.ruleFired "True ||" $ Const scalarTypeWord8 1
                 else Stats.ruleFired "False ||" y
 
   | Just b      <- propagate env y
-  = Just $ if b then Stats.ruleFired "True ||" $ Const scalarTypeBool True
+  = Just
+  $ if toBool b then Stats.ruleFired "True ||" $ Const scalarTypeWord8 1
                 else Stats.ruleFired "False ||" x
 
 evalLOr _ _
   = Nothing
 
-evalLNot :: Bool :-> Bool
+evalLNot :: PrimBool :-> PrimBool
 evalLNot x _   | PrimApp PrimLNot x' <- x = Stats.ruleFired "not/not" $ Just x'
-evalLNot x env                            = eval1 (NonNumSingleType TypeBool) not x env
+evalLNot x env                            = bool1 (not . toBool) x env
 
 evalOrd :: Char :-> Int
 evalOrd = eval1 (NumSingleType $ IntegralNumType $ TypeInt) ord
 
 evalChr :: Int :-> Char
 evalChr = eval1 (NonNumSingleType $ TypeChar) chr
-
-evalBoolToInt :: Bool :-> Int
-evalBoolToInt = eval1 (NumSingleType $ IntegralNumType $ TypeInt) fromEnum
 
 evalFromIntegral :: IntegralType a -> NumType b -> a :-> b
 evalFromIntegral ta (IntegralNumType tb)

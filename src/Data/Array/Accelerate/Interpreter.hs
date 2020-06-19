@@ -38,17 +38,17 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalUndef, evalUndefScalar, evalCoerceScalar,
+  evalPrim, evalPrimConst, evalCoerceScalar,
 
 ) where
 
 import Data.Array.Accelerate.AST                                    hiding ( Boundary(..) )
 import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Var
-import Data.Array.Accelerate.Analysis.Type                          ( sizeOfSingleType )
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil
@@ -63,6 +63,7 @@ import qualified Data.Array.Accelerate.AST                          as AST
 import qualified Data.Array.Accelerate.Debug                        as D
 import qualified Data.Array.Accelerate.Smart                        as Smart
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
+import qualified Data.Array.Accelerate.Sugar.Elt                    as Sugar
 import qualified Data.Array.Accelerate.Trafo.Delayed                as AST
 
 import Control.DeepSeq
@@ -193,6 +194,10 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
       evalB :: AST.Boundary aenv t -> Boundary t
       evalB bnd = evalBoundary bnd aenv
+
+      dir :: Direction -> t -> t -> t
+      dir LeftToRight l _ = l
+      dir RightToLeft _ r = r
   in
   case pacc of
     Avar (Var repr ix)          -> (TupRsingle repr, prj ix aenv)
@@ -206,7 +211,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Apply repr afun acc         -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
     Aforeign repr _ afun acc    -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
-      | evalE p                 -> manifest acc1
+      | toBool (evalE p)        -> manifest acc1
       | otherwise               -> manifest acc2
 
     Awhile cond body acc        -> (repr, go initial)
@@ -215,8 +220,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
         p       = evalOpenAfun cond aenv
         f       = evalOpenAfun body aenv
         go !x
-          | (ArrayR ShapeRz (TupRsingle scalarTypeBool), p x) ! () = go (f x)
-          | otherwise = x
+          | toBool (linearIndexArray (Sugar.eltR @Word8) (p x) 0) = go (f x)
+          | otherwise                                             = x
 
     Use repr arr                -> (TupRsingle repr, arr)
     Unit tp e                   -> unitOp tp (evalE e)
@@ -247,10 +252,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
     Stencil s tp sten b acc     -> stencilOp s tp (evalF sten) (evalB b) (delayed acc)
     Stencil2 s1 s2 tp sten b1 a1 b2 a2
                                 -> stencil2Op s1 s2 tp (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
-  where
-    dir :: Direction -> t -> t -> t
-    dir LeftToRight l _ = l
-    dir RightToLeft _ r = r
+
 
 -- Array primitives
 -- ----------------
@@ -909,7 +911,7 @@ evalOpenExp pexp env aenv =
                                    in  evalOpenExp exp2 env' aenv
     Evar (Var _ ix)             -> prj ix env
     Const _ c                   -> c
-    Undef tp                    -> evalUndefScalar tp
+    Undef tp                    -> undefElt (TupRsingle tp)
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
     Nil                         -> ()
@@ -944,7 +946,7 @@ evalOpenExp pexp env aenv =
     ToIndex shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
     FromIndex shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
     Cond c t e
-      | evalE c                 -> evalE t
+      | toBool (evalE c)        -> evalE t
       | otherwise               -> evalE e
 
     While cond body seed        -> go (evalE seed)
@@ -952,8 +954,8 @@ evalOpenExp pexp env aenv =
         f       = evalF body
         p       = evalF cond
         go !x
-          | p x         = go (f x)
-          | otherwise   = x
+          | toBool (p x) = go (f x)
+          | otherwise    = x
 
     Index acc ix                -> let (TupRsingle repr, a) = evalA acc
                                    in (repr, a) ! evalE ix
@@ -964,43 +966,6 @@ evalOpenExp pexp env aenv =
     ShapeSize shr sh            -> size shr (evalE sh)
     Foreign _ _ f e             -> evalOpenFun f Empty Empty $ evalE e
     Coerce t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
-
-
--- Constant values
--- ---------------
-
-evalUndef :: TypeR a -> a
-evalUndef TupRunit         = ()
-evalUndef (TupRsingle tp)  = evalUndefScalar tp
-evalUndef (TupRpair t1 t2) = (evalUndef t1, evalUndef t2)
-
-evalUndefScalar :: ScalarType a -> a
-evalUndefScalar = scalar
-  where
-    scalar :: ScalarType t -> t
-    scalar (SingleScalarType t) = single t
-    scalar (VectorScalarType t) = vector t
-
-    single :: SingleType t -> t
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
-
-    vector :: VectorType t -> t
-    vector (VectorType n t) = vec (n * sizeOfSingleType t)
-
-    vec :: Int -> Vec n t
-    vec n = runST $ do
-      mba           <- newByteArray n
-      ByteArray ba# <- unsafeFreezeByteArray mba
-      return $ Vec ba#
-
-    num :: NumType t -> t
-    num (IntegralNumType t) | IntegralDict <- integralDict t = 0
-    num (FloatingNumType t) | FloatingDict <- floatingDict t = 0
-
-    nonnum :: NonNumType t -> t
-    nonnum TypeBool{}   = False
-    nonnum TypeChar{}   = chr 0
 
 
 -- Coercions
@@ -1040,12 +1005,7 @@ evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
     floating TypeDouble{}  = poke
 
     nonnum :: NonNumType a -> a -> Vec n b
-    nonnum TypeBool{}   = bool
     nonnum TypeChar{}   = poke
-
-    bool :: Bool -> Vec n b
-    bool False = poke (0::Word8)
-    bool True  = poke (1::Word8)
 
     {-# INLINE poke #-}
     poke :: forall a b n. Prim a => a -> Vec n b
@@ -1083,13 +1043,7 @@ evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
     floating TypeDouble{}  = peek
 
     nonnum :: NonNumType b -> Vec n a -> b
-    nonnum TypeBool{}   = bool
     nonnum TypeChar{}   = peek
-
-    bool :: Vec n a -> Bool
-    bool v = case peek @Word8 v of
-               0 -> False
-               _ -> True
 
     {-# INLINE peek #-}
     peek :: Prim a => Vec n b -> a
@@ -1167,7 +1121,6 @@ evalPrim PrimLOr                     = evalLOr
 evalPrim PrimLNot                    = evalLNot
 evalPrim PrimOrd                     = evalOrd
 evalPrim PrimChr                     = evalChr
-evalPrim PrimBoolToInt               = evalBoolToInt
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
 
@@ -1175,24 +1128,28 @@ evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
 -- Implementation of scalar primitives
 -- -----------------------------------
 
-evalLAnd :: (Bool, Bool) -> Bool
-evalLAnd (x, y) = x && y
+toBool :: PrimBool -> Bool
+toBool 0 = False
+toBool _ = True
 
-evalLOr  :: (Bool, Bool) -> Bool
-evalLOr (x, y) = x || y
+fromBool :: Bool -> PrimBool
+fromBool False = 0
+fromBool True  = 1
 
-evalLNot :: Bool -> Bool
-evalLNot = not
+evalLAnd :: (PrimBool, PrimBool) -> PrimBool
+evalLAnd (x, y) = fromBool (toBool x && toBool y)
+
+evalLOr  :: (PrimBool, PrimBool) -> PrimBool
+evalLOr (x, y) = fromBool (toBool x || toBool y)
+
+evalLNot :: PrimBool -> PrimBool
+evalLNot = fromBool . not . toBool
 
 evalOrd :: Char -> Int
 evalOrd = ord
 
 evalChr :: Int -> Char
 evalChr = chr
-
-evalBoolToInt :: Bool -> Int
-evalBoolToInt True  = 1
-evalBoolToInt False = 0
 
 evalFromIntegral :: IntegralType a -> NumType b -> a -> b
 evalFromIntegral ta (IntegralNumType tb)
@@ -1325,11 +1282,11 @@ evalCeiling ta tb
 evalAtan2 :: FloatingType a -> ((a, a) -> a)
 evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
 
-evalIsNaN :: FloatingType a -> (a -> Bool)
-evalIsNaN ty | FloatingDict <- floatingDict ty = isNaN
+evalIsNaN :: FloatingType a -> (a -> PrimBool)
+evalIsNaN ty | FloatingDict <- floatingDict ty = fromBool . isNaN
 
-evalIsInfinite :: FloatingType a -> (a -> Bool)
-evalIsInfinite ty | FloatingDict <- floatingDict ty = isInfinite
+evalIsInfinite :: FloatingType a -> (a -> PrimBool)
+evalIsInfinite ty | FloatingDict <- floatingDict ty = fromBool . isInfinite
 
 
 -- Methods of Num
@@ -1440,35 +1397,35 @@ evalRecip :: FloatingType a -> (a -> a)
 evalRecip ty | FloatingDict <- floatingDict ty = recip
 
 
-evalLt :: SingleType a -> ((a, a) -> Bool)
-evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<)
-evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<)
-evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<)
+evalLt :: SingleType a -> ((a, a) -> PrimBool)
+evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (<)
+evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (<)
+evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (<)
 
-evalGt :: SingleType a -> ((a, a) -> Bool)
-evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>)
-evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>)
-evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>)
+evalGt :: SingleType a -> ((a, a) -> PrimBool)
+evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (>)
+evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (>)
+evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (>)
 
-evalLtEq :: SingleType a -> ((a, a) -> Bool)
-evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<=)
-evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<=)
-evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<=)
+evalLtEq :: SingleType a -> ((a, a) -> PrimBool)
+evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (<=)
+evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (<=)
+evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (<=)
 
-evalGtEq :: SingleType a -> ((a, a) -> Bool)
-evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>=)
-evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>=)
-evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>=)
+evalGtEq :: SingleType a -> ((a, a) -> PrimBool)
+evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (>=)
+evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (>=)
+evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (>=)
 
-evalEq :: SingleType a -> ((a, a) -> Bool)
-evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (==)
-evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (==)
-evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (==)
+evalEq :: SingleType a -> ((a, a) -> PrimBool)
+evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (==)
+evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (==)
+evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (==)
 
-evalNEq :: SingleType a -> ((a, a) -> Bool)
-evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (/=)
-evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (/=)
-evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (/=)
+evalNEq :: SingleType a -> ((a, a) -> PrimBool)
+evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (/=)
+evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (/=)
+evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (/=)
 
 evalMax :: SingleType a -> ((a, a) -> a)
 evalMax (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry max

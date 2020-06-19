@@ -367,12 +367,7 @@ encodeVectorConst :: VectorType (Vec n t) -> Vec n t -> Builder
 encodeVectorConst (VectorType n t) (Vec ba#) = intHost $(hashQ "Vec") <> intHost n <> encodeSingleType t <> shortByteString (SBS ba#)
 
 encodeNonNumConst :: NonNumType t -> t -> Builder
-encodeNonNumConst TypeBool{} x = intHost $(hashQ "Bool")   <> word8 (fromBool x)
-encodeNonNumConst TypeChar{} x = intHost $(hashQ "Char")   <> charUtf8 x
-
-fromBool :: Bool -> Word8
-fromBool True  = 1
-fromBool False = 0
+encodeNonNumConst TypeChar{} x = intHost $(hashQ "Char") <> charUtf8 x
 
 encodeNumConst :: NumType t -> t -> Builder
 encodeNumConst (IntegralNumType t) = encodeIntegralConst t
@@ -465,7 +460,6 @@ encodePrimFun PrimLOr                    = intHost $(hashQ "PrimLOr")
 encodePrimFun PrimLNot                   = intHost $(hashQ "PrimLNot")
 encodePrimFun PrimOrd                    = intHost $(hashQ "PrimOrd")
 encodePrimFun PrimChr                    = intHost $(hashQ "PrimChr")
-encodePrimFun PrimBoolToInt              = intHost $(hashQ "PrimBoolToInt")
 
 
 encodeTypeR :: TypeR t -> Builder
@@ -495,7 +489,6 @@ encodeBoundedType (IntegralBoundedType t) = intHost $(hashQ "IntegralBoundedType
 encodeBoundedType (NonNumBoundedType t)   = intHost $(hashQ "NonNumBoundedType")   <> encodeNonNumType t
 
 encodeNonNumType :: NonNumType t -> Builder
-encodeNonNumType TypeBool{} = intHost $(hashQ "Bool")
 encodeNonNumType TypeChar{} = intHost $(hashQ "Char")
 
 encodeNumType :: NumType t -> Builder

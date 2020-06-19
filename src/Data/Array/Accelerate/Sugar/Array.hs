@@ -38,6 +38,9 @@ import GHC.Exts                                                     ( IsList )
 import GHC.Generics
 import qualified GHC.Exts                                           as GHC
 
+-- $setup
+-- >>> :seti -XOverloadedLists
+
 
 type Scalar = Array DIM0    -- ^ Scalar arrays hold a single element
 type Vector = Array DIM1    -- ^ Vectors are one-dimensional arrays

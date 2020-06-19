@@ -1571,13 +1571,13 @@ aletD' _ _ lhs (Embed env1 cc1) (Embed env0 cc0)
 --
 acondD :: MatchAcc OpenAcc
        -> EmbedAcc OpenAcc
-       -> Exp              aenv Bool
+       -> Exp              aenv PrimBool
        ->          OpenAcc aenv arrs
        ->          OpenAcc aenv arrs
        -> Embed    OpenAcc aenv arrs
 acondD matchAcc embedAcc p t e
-  | Const _ True  <- p        = Stats.knownBranch "True"      $ embedAcc t
-  | Const _ False <- p        = Stats.knownBranch "False"     $ embedAcc e
+  | Const _ 1 <- p            = Stats.knownBranch "True"      $ embedAcc t
+  | Const _ 0 <- p            = Stats.knownBranch "False"     $ embedAcc e
   | Just Refl <- matchAcc t e = Stats.knownBranch "redundant" $ embedAcc e
   | otherwise                 = done $ Acond p (computeAcc (embedAcc t))
                                                (computeAcc (embedAcc e))

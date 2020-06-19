@@ -73,6 +73,5 @@ sizeOfNumType (IntegralNumType t) | IntegralDict <- integralDict t = F.sizeOf (u
 sizeOfNumType (FloatingNumType t) | FloatingDict <- floatingDict t = F.sizeOf (undefined::t)
 
 sizeOfNonNumType :: forall t. NonNumType t -> Int
-sizeOfNonNumType TypeBool{} = 1 -- stored as Word8
 sizeOfNonNumType t | NonNumDict <- nonNumDict t = F.sizeOf (undefined::t)
 

@@ -103,7 +103,7 @@ fromMaybe d x = cond (isNothing x) d (fromJust x)
 -- instead.
 --
 fromJust :: Elt a => Exp (Maybe a) -> Exp a
-fromJust (Exp x) = Exp $ SmartExp $ PairIdxRight `Prj` x
+fromJust (Exp x) = Exp $ SmartExp (PairIdxRight `Prj` SmartExp (PairIdxRight `Prj` x))
 
 -- | The 'maybe' function takes a default value, a function, and a 'Maybe'
 -- value. If the 'Maybe' value is nothing, the default value is returned;
@@ -153,25 +153,18 @@ instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
 
 
 tag :: Elt a => Exp (Maybe a) -> Exp Word8
-tag (Exp x) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft x
+tag (Exp x) = Exp $ SmartExp $ Prj PairIdxLeft x
 
-
-instance Elt a => Elt (Maybe a) where
-  type EltR (Maybe a) = EltR (Word8, a)
-  eltR             = eltR @(Word8,a)
-  toElt (((),0),_) = Nothing
-  toElt (_     ,x) = Just (toElt x)
-  fromElt Nothing  = (((),0), evalUndef $ eltR @a)
-  fromElt (Just a) = (((),1), fromElt a)
+instance Elt a => Elt (Maybe a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  lift Nothing  = Exp $ SmartExp $ Pair t $ unExp $ undef @(Plain a)
-    where
-      t = SmartExp $ Pair (SmartExp Nil) $ SmartExp $ Const scalarTypeWord8 0
-  lift (Just x) = Exp $ SmartExp $ Pair t $ unExp $ lift x
-    where
-      t = SmartExp $ Pair (SmartExp Nil) $ SmartExp $ Const scalarTypeWord8 1
+  -- lift Nothing  = Exp $ SmartExp $ Pair t $ unExp $ undef @(Plain a)
+  --   where
+  --     t = SmartExp $ Pair (SmartExp Nil) (SmartExp $ Const scalarTypeWord8 0)
+  -- lift (Just x) = Exp $ SmartExp $ Pair t $ unExp $ lift x
+  --   where
+  --     t = SmartExp $ Pair (SmartExp Nil) $ SmartExp $ Const scalarTypeWord8 1
 
 
 -- Utilities

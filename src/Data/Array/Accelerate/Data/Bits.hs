@@ -183,7 +183,7 @@ instance Bits Bool where
   rotate x _   = x
   bit i        = i == 0
   isSigned     = isSignedDefault
-  popCount     = mkBoolToInt
+  popCount     = boolToInt
 
 instance Bits Int where
   (.&.)        = mkBAnd

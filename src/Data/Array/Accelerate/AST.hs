@@ -87,6 +87,7 @@ module Data.Array.Accelerate.AST (
   Boundary(..),
   PrimConst(..),
   PrimFun(..),
+  PrimBool,
 
   -- ** Extracting type information
   HasArraysR(..), arrayR,
@@ -137,6 +138,7 @@ import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Foreign
@@ -146,6 +148,7 @@ import Data.Primitive.Vec
 import Control.DeepSeq
 import Data.Kind
 import Language.Haskell.TH                                          ( Q, TExp )
+import Prelude
 
 import GHC.TypeLits
 
@@ -184,6 +187,9 @@ type Acc = OpenAcc ()
 type ALeftHandSide  = LeftHandSide ArrayR
 type ArrayVar       = Var ArrayR
 type ArrayVars aenv = Vars ArrayR aenv
+
+-- Bool is not a primitive type
+type PrimBool = TAG
 
 
 -- | Collective array computations parametrised over array variables
@@ -251,14 +257,14 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
 
   -- If-then-else for array-level computations
   --
-  Acond       :: Exp            aenv Bool
+  Acond       :: Exp            aenv PrimBool
               -> acc            aenv arrs
               -> acc            aenv arrs
               -> PreOpenAcc acc aenv arrs
 
   -- Value-recursion for array-level computations
   --
-  Awhile      :: PreOpenAfun acc aenv (arrs -> Scalar Bool)     -- continue iteration while true
+  Awhile      :: PreOpenAfun acc aenv (arrs -> Scalar PrimBool) -- continue iteration while true
               -> PreOpenAfun acc aenv (arrs -> arrs)            -- function to iterate
               -> acc             aenv arrs                      -- initial value
               -> PreOpenAcc  acc aenv arrs
@@ -556,15 +562,15 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv sh
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
-  Cond          :: OpenExp env aenv Bool
+  Cond          :: OpenExp env aenv PrimBool
                 -> OpenExp env aenv t
                 -> OpenExp env aenv t
                 -> OpenExp env aenv t
 
   -- Value recursion
-  While         :: OpenFun env aenv (a -> Bool)  -- continue while true
-                -> OpenFun env aenv (a -> a)     -- function to iterate
-                -> OpenExp env aenv a            -- initial value
+  While         :: OpenFun env aenv (a -> PrimBool) -- continue while true
+                -> OpenFun env aenv (a -> a)        -- function to iterate
+                -> OpenExp env aenv a               -- initial value
                 -> OpenExp env aenv a
 
   -- Constant values
@@ -689,18 +695,18 @@ data PrimFun sig where
 
   -- operators from RealFloat
   PrimAtan2          :: FloatingType a -> PrimFun ((a, a) -> a)
-  PrimIsNaN          :: FloatingType a -> PrimFun (a -> Bool)
-  PrimIsInfinite     :: FloatingType a -> PrimFun (a -> Bool)
+  PrimIsNaN          :: FloatingType a -> PrimFun (a -> PrimBool)
+  PrimIsInfinite     :: FloatingType a -> PrimFun (a -> PrimBool)
 
   -- relational and equality operators
-  PrimLt   :: SingleType a -> PrimFun ((a, a) -> Bool)
-  PrimGt   :: SingleType a -> PrimFun ((a, a) -> Bool)
-  PrimLtEq :: SingleType a -> PrimFun ((a, a) -> Bool)
-  PrimGtEq :: SingleType a -> PrimFun ((a, a) -> Bool)
-  PrimEq   :: SingleType a -> PrimFun ((a, a) -> Bool)
-  PrimNEq  :: SingleType a -> PrimFun ((a, a) -> Bool)
-  PrimMax  :: SingleType a -> PrimFun ((a, a) -> a   )
-  PrimMin  :: SingleType a -> PrimFun ((a, a) -> a   )
+  PrimLt   :: SingleType a -> PrimFun ((a, a) -> PrimBool)
+  PrimGt   :: SingleType a -> PrimFun ((a, a) -> PrimBool)
+  PrimLtEq :: SingleType a -> PrimFun ((a, a) -> PrimBool)
+  PrimGtEq :: SingleType a -> PrimFun ((a, a) -> PrimBool)
+  PrimEq   :: SingleType a -> PrimFun ((a, a) -> PrimBool)
+  PrimNEq  :: SingleType a -> PrimFun ((a, a) -> PrimBool)
+  PrimMax  :: SingleType a -> PrimFun ((a, a) -> a)
+  PrimMin  :: SingleType a -> PrimFun ((a, a) -> a)
 
   -- logical operators
   --
@@ -712,16 +718,13 @@ data PrimFun sig where
   -- short-circuiting, while (&&!) and (||!) are strict versions of these
   -- operators, which are defined using PrimLAnd and PrimLOr.
   --
-  PrimLAnd :: PrimFun ((Bool, Bool) -> Bool)
-  PrimLOr  :: PrimFun ((Bool, Bool) -> Bool)
-  PrimLNot :: PrimFun (Bool         -> Bool)
+  PrimLAnd :: PrimFun ((PrimBool, PrimBool) -> PrimBool)
+  PrimLOr  :: PrimFun ((PrimBool, PrimBool) -> PrimBool)
+  PrimLNot :: PrimFun (PrimBool             -> PrimBool)
 
   -- character conversions
   PrimOrd  :: PrimFun (Char -> Int)
   PrimChr  :: PrimFun (Int  -> Char)
-
-  -- boolean conversion
-  PrimBoolToInt :: PrimFun (Bool -> Int)
 
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
@@ -900,9 +903,6 @@ primFunType = \case
   PrimOrd                   -> unary char int
   PrimChr                   -> unary int  char
 
-  -- boolean conversion
-  PrimBoolToInt             -> unary bool int
-
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
   PrimToFloating   a b      -> unary (num a) (floating b)
@@ -919,7 +919,7 @@ primFunType = \case
     integral = num . IntegralNumType
     floating = num . FloatingNumType
 
-    bool     = TupRsingle scalarTypeBool
+    bool     = TupRsingle scalarTypeWord8
     int      = TupRsingle scalarTypeInt
     char     = TupRsingle $ SingleScalarType $ NonNumSingleType TypeChar
 
@@ -1136,7 +1136,6 @@ rnfPrimFun PrimLOr                    = ()
 rnfPrimFun PrimLNot                   = ()
 rnfPrimFun PrimOrd                    = ()
 rnfPrimFun PrimChr                    = ()
-rnfPrimFun PrimBoolToInt              = ()
 rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
 rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
 
@@ -1349,7 +1348,6 @@ liftPrimFun PrimLOr                    = [|| PrimLOr ||]
 liftPrimFun PrimLNot                   = [|| PrimLNot ||]
 liftPrimFun PrimOrd                    = [|| PrimOrd ||]
 liftPrimFun PrimChr                    = [|| PrimChr ||]
-liftPrimFun PrimBoolToInt              = [|| PrimBoolToInt ||]
 liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
 

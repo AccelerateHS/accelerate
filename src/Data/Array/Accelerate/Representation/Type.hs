@@ -86,7 +86,6 @@ liftTypeQ = tuple
 
     nonnum :: NonNumType t -> TypeQ
     nonnum TypeChar = [t| Char |]
-    nonnum TypeBool = [t| Bool |]
 
     num :: NumType t -> TypeQ
     num (IntegralNumType t) = integral t
