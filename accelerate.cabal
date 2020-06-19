@@ -321,9 +321,6 @@ Library
         Data.Array.Accelerate.AST.Var
         Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
-        Data.Array.Accelerate.Analysis.Shape
-        Data.Array.Accelerate.Analysis.Stencil
-        Data.Array.Accelerate.Analysis.Type
         Data.Array.Accelerate.Array.Data
         Data.Array.Accelerate.Array.Remote
         Data.Array.Accelerate.Array.Remote.Class

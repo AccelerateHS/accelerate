@@ -38,12 +38,13 @@ module Data.Array.Accelerate.Array.Remote.LRU (
 ) where
 
 import Data.Array.Accelerate.Analysis.Match                     ( matchSingleType, (:~:)(..) )
-import Data.Array.Accelerate.Analysis.Type                      ( sizeOfSingleType )
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Remote.Class
 import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
 import Data.Array.Accelerate.Array.Unique                       ( touchUniqueArray )
 import Data.Array.Accelerate.Error                              ( internalError )
+import Data.Array.Accelerate.Representation.Elt
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Remote.Table       as Basic
 import qualified Data.Array.Accelerate.Debug                    as D
@@ -311,7 +312,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
     eldest prev _ = return prev
 
     remoteBytes :: SingleType e -> Int -> Int64
-    remoteBytes tp n = fromIntegral (sizeOfSingleType tp) * fromIntegral n
+    remoteBytes tp n = fromIntegral (bytesElt (TupRsingle (SingleScalarType tp))) * fromIntegral n
 
     evictable :: Status -> Bool
     evictable Clean     = True
