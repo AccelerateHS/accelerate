@@ -42,7 +42,7 @@
 --    * Half
 --    * Float
 --    * Double
-
+--
 --  SIMD vector types of the above:
 --    * Vec2
 --    * Vec3
@@ -103,10 +103,6 @@ data FloatingDict a where
                   , RealFloat a, Storable a )
                => FloatingDict a
 
-data NonNumDict a where
-  NonNumDict :: ( Bounded a, Eq a, Ord a, Show a, Storable a )
-             => NonNumDict a
-
 
 -- Scalar type representation
 --
@@ -132,11 +128,6 @@ data FloatingType a where
   TypeFloat   :: FloatingType Float
   TypeDouble  :: FloatingType Double
 
--- | Non-numeric types supported in array computations.
---
-data NonNumType a where
-  TypeChar :: NonNumType Char
-
 -- | Numeric element types implement Num & Real
 --
 data NumType a where
@@ -147,7 +138,6 @@ data NumType a where
 --
 data BoundedType a where
   IntegralBoundedType :: IntegralType a -> BoundedType a
-  NonNumBoundedType   :: NonNumType a   -> BoundedType a
 
 -- | All scalar element types implement Eq & Ord
 --
@@ -156,31 +146,27 @@ data ScalarType a where
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
 
 data SingleType a where
-  NumSingleType    :: NumType a    -> SingleType a
-  NonNumSingleType :: NonNumType a -> SingleType a
+  NumSingleType :: NumType a -> SingleType a
 
 data VectorType a where
-  VectorType       :: KnownNat n => {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
+  VectorType :: KnownNat n => {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
 
 instance Show (IntegralType a) where
-  show TypeInt     = "Int"
-  show TypeInt8    = "Int8"
-  show TypeInt16   = "Int16"
-  show TypeInt32   = "Int32"
-  show TypeInt64   = "Int64"
-  show TypeWord    = "Word"
-  show TypeWord8   = "Word8"
-  show TypeWord16  = "Word16"
-  show TypeWord32  = "Word32"
-  show TypeWord64  = "Word64"
+  show TypeInt    = "Int"
+  show TypeInt8   = "Int8"
+  show TypeInt16  = "Int16"
+  show TypeInt32  = "Int32"
+  show TypeInt64  = "Int64"
+  show TypeWord   = "Word"
+  show TypeWord8  = "Word8"
+  show TypeWord16 = "Word16"
+  show TypeWord32 = "Word32"
+  show TypeWord64 = "Word64"
 
 instance Show (FloatingType a) where
-  show TypeHalf    = "Half"
-  show TypeFloat   = "Float"
-  show TypeDouble  = "Double"
-
-instance Show (NonNumType a) where
-  show TypeChar = "Char"
+  show TypeHalf   = "Half"
+  show TypeFloat  = "Float"
+  show TypeDouble = "Double"
 
 instance Show (NumType a) where
   show (IntegralNumType ty) = show ty
@@ -188,14 +174,12 @@ instance Show (NumType a) where
 
 instance Show (BoundedType a) where
   show (IntegralBoundedType ty) = show ty
-  show (NonNumBoundedType ty)   = show ty
 
 instance Show (SingleType a) where
-  show (NumSingleType ty)    = show ty
-  show (NonNumSingleType ty) = show ty
+  show (NumSingleType ty) = show ty
 
 instance Show (VectorType a) where
-  show (VectorType n ty)     = printf "<%d x %s>" n (show ty)
+  show (VectorType n ty) = printf "<%d x %s>" n (show ty)
 
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
@@ -210,11 +194,6 @@ class (IsSingle a, IsNum a, IsBounded a) => IsIntegral a where
 --
 class (Floating a, IsSingle a, IsNum a) => IsFloating a where
   floatingType :: FloatingType a
-
--- | Querying Non-numeric types
---
-class IsNonNum a where
-  nonNumType :: NonNumType a
 
 -- | Querying Numeric types
 --
@@ -254,18 +233,11 @@ floatingDict TypeHalf   = FloatingDict
 floatingDict TypeFloat  = FloatingDict
 floatingDict TypeDouble = FloatingDict
 
-nonNumDict :: NonNumType a -> NonNumDict a
-nonNumDict TypeChar = NonNumDict
-
 singleDict :: SingleType a -> SingleDict a
 singleDict = single
   where
     single :: SingleType a -> SingleDict a
     single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
-
-    nonnum :: NonNumType a -> SingleDict a
-    nonnum TypeChar = SingleDict
 
     num :: NumType a -> SingleDict a
     num (IntegralNumType t) = integral t
@@ -309,22 +281,17 @@ rnfScalarType (SingleScalarType t) = rnfSingleType t
 rnfScalarType (VectorScalarType t) = rnfVectorType t
 
 rnfSingleType :: SingleType t -> ()
-rnfSingleType (NumSingleType t)    = rnfNumType t
-rnfSingleType (NonNumSingleType t) = rnfNonNumType t
+rnfSingleType (NumSingleType t) = rnfNumType t
 
 rnfVectorType :: VectorType t -> ()
 rnfVectorType (VectorType !_ t) = rnfSingleType t
 
 rnfBoundedType :: BoundedType t -> ()
 rnfBoundedType (IntegralBoundedType t) = rnfIntegralType t
-rnfBoundedType (NonNumBoundedType t)   = rnfNonNumType t
 
 rnfNumType :: NumType t -> ()
 rnfNumType (IntegralNumType t) = rnfIntegralType t
 rnfNumType (FloatingNumType t) = rnfFloatingType t
-
-rnfNonNumType :: NonNumType t -> ()
-rnfNonNumType TypeChar = ()
 
 rnfIntegralType :: IntegralType t -> ()
 rnfIntegralType TypeInt    = ()
@@ -349,8 +316,7 @@ liftScalar (SingleScalarType t) = liftSingle t
 liftScalar (VectorScalarType t) = liftVector t
 
 liftSingle :: SingleType t -> t -> Q (TExp t)
-liftSingle (NumSingleType    t) = liftNum t
-liftSingle (NonNumSingleType t) = liftNonNum t
+liftSingle (NumSingleType t) = liftNum t
 
 liftVector :: VectorType t -> t -> Q (TExp t)
 liftVector VectorType{} = liftVec
@@ -358,9 +324,6 @@ liftVector VectorType{} = liftVec
 liftNum :: NumType t -> t -> Q (TExp t)
 liftNum (IntegralNumType t) = liftIntegral t
 liftNum (FloatingNumType t) = liftFloating t
-
-liftNonNum :: NonNumType t -> t -> Q (TExp t)
-liftNonNum TypeChar{} x = [|| x ||]
 
 liftIntegral :: IntegralType t -> t -> Q (TExp t)
 liftIntegral TypeInt{}    x = [|| x ||]
@@ -385,8 +348,7 @@ liftScalarType (SingleScalarType t) = [|| SingleScalarType $$(liftSingleType t) 
 liftScalarType (VectorScalarType t) = [|| VectorScalarType $$(liftVectorType t) ||]
 
 liftSingleType :: SingleType t -> Q (TExp (SingleType t))
-liftSingleType (NumSingleType t)    = [|| NumSingleType $$(liftNumType t) ||]
-liftSingleType (NonNumSingleType t) = [|| NonNumSingleType $$(liftNonNumType t) ||]
+liftSingleType (NumSingleType t) = [|| NumSingleType $$(liftNumType t) ||]
 
 liftVectorType :: VectorType t -> Q (TExp (VectorType t))
 liftVectorType (VectorType n t) = [|| VectorType n $$(liftSingleType t) ||]
@@ -395,12 +357,8 @@ liftNumType :: NumType t -> Q (TExp (NumType t))
 liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]
 liftNumType (FloatingNumType t) = [|| FloatingNumType $$(liftFloatingType t) ||]
 
-liftNonNumType :: NonNumType t -> Q (TExp (NonNumType t))
-liftNonNumType TypeChar{} = [|| TypeChar ||]
-
 liftBoundedType :: BoundedType t -> Q (TExp (BoundedType t))
 liftBoundedType (IntegralBoundedType t) = [|| IntegralBoundedType $$(liftIntegralType t) ||]
-liftBoundedType (NonNumBoundedType t)   = [|| NonNumBoundedType $$(liftNonNumType t) ||]
 
 liftIntegralType :: IntegralType t -> Q (TExp (IntegralType t))
 liftIntegralType TypeInt{}    = [|| TypeInt ||]
@@ -464,13 +422,8 @@ $(runQ $ do
         , (''Double, 64)
         ]
 
-      nonNumTypes :: [(Name, Integer)]
-      nonNumTypes =
-        [ (''Char, 32)
-        ]
-
       vectorTypes :: [(Name, Integer)]
-      vectorTypes = integralTypes ++ floatingTypes ++ nonNumTypes
+      vectorTypes = integralTypes ++ floatingTypes
 
       mkIntegral :: Name -> Integer -> Q [Dec]
       mkIntegral t n =
@@ -509,23 +462,6 @@ $(runQ $ do
             type instance BitSize $(conT t) = $(litT (numTyLit n))
           |]
 
-      mkNonNum :: Name -> Integer -> Q [Dec]
-      mkNonNum t n =
-        [d| instance IsNonNum $(conT t) where
-              nonNumType = $(conE (mkName ("Type" ++ nameBase t)))
-
-            instance IsBounded $(conT t) where
-              boundedType = NonNumBoundedType nonNumType
-
-            instance IsSingle $(conT t) where
-              singleType = NonNumSingleType nonNumType
-
-            instance IsScalar $(conT t) where
-              scalarType = SingleScalarType singleType
-
-            type instance BitSize $(conT t) = $(litT (numTyLit n))
-          |]
-
       mkVector :: Name -> Integer -> Q [Dec]
       mkVector t n =
         [d| instance KnownNat n => IsScalar (Vec n $(conT t)) where
@@ -536,9 +472,8 @@ $(runQ $ do
       --
   is <- mapM (uncurry mkIntegral) integralTypes
   fs <- mapM (uncurry mkFloating) floatingTypes
-  ns <- mapM (uncurry mkNonNum)   nonNumTypes
   vs <- mapM (uncurry mkVector)   vectorTypes
   --
-  return (concat is ++ concat fs ++ concat ns ++ concat vs)
+  return (concat is ++ concat fs ++ concat vs)
  )
 

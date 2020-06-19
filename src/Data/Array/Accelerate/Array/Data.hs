@@ -138,16 +138,12 @@ scalarArrayDict = scalar
     scalar (VectorScalarType t) = vector t
 
     single :: SingleType a -> ScalarArrayDict a
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
+    single (NumSingleType t) = num t
 
     vector :: VectorType a -> ScalarArrayDict a
     vector (VectorType _ s)
       | ScalarArrayDict <- single s
       = ScalarArrayDict
-
-    nonnum :: NonNumType a -> ScalarArrayDict a
-    nonnum TypeChar = ScalarArrayDict
 
     num :: NumType a -> ScalarArrayDict a
     num (IntegralNumType t) = integral t
@@ -175,11 +171,7 @@ singleArrayDict :: SingleType a -> SingleArrayDict a
 singleArrayDict = single
   where
     single :: SingleType a -> SingleArrayDict a
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
-
-    nonnum :: NonNumType a -> SingleArrayDict a
-    nonnum TypeChar = SingleArrayDict
+    single (NumSingleType t) = num t
 
     num :: NumType a -> SingleArrayDict a
     num (IntegralNumType t) = integral t
@@ -370,15 +362,11 @@ liftArrayData n = tuple
       = liftArrayData (w * n) (TupRsingle (SingleScalarType t))
 
     single :: SingleType e -> ArrayData e -> Q (TExp (ArrayData e))
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
+    single (NumSingleType t) = num t
 
     num :: NumType e -> ArrayData e -> Q (TExp (ArrayData e))
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
-
-    nonnum :: NonNumType e -> ArrayData e -> Q (TExp (ArrayData e))
-    nonnum = undefined
 
     integral :: IntegralType e -> ArrayData e -> Q (TExp (ArrayData e))
     integral TypeInt    = liftUniqueArray n

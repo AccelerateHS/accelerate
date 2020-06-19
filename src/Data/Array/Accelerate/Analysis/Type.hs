@@ -31,7 +31,6 @@ module Data.Array.Accelerate.Analysis.Type (
   sizeOfSingleType,
   sizeOfVectorType,
   sizeOfNumType,
-  sizeOfNonNumType,
 
 ) where
 
@@ -62,8 +61,7 @@ sizeOfScalarType (SingleScalarType t) = sizeOfSingleType t
 sizeOfScalarType (VectorScalarType t) = sizeOfVectorType t
 
 sizeOfSingleType :: SingleType t -> Int
-sizeOfSingleType (NumSingleType t)    = sizeOfNumType t
-sizeOfSingleType (NonNumSingleType t) = sizeOfNonNumType t
+sizeOfSingleType (NumSingleType t) = sizeOfNumType t
 
 sizeOfVectorType :: VectorType t -> Int
 sizeOfVectorType (VectorType n t) = n * sizeOfSingleType t
@@ -71,7 +69,4 @@ sizeOfVectorType (VectorType n t) = n * sizeOfSingleType t
 sizeOfNumType :: forall t. NumType t -> Int
 sizeOfNumType (IntegralNumType t) | IntegralDict <- integralDict t = F.sizeOf (undefined::t)
 sizeOfNumType (FloatingNumType t) | FloatingDict <- floatingDict t = F.sizeOf (undefined::t)
-
-sizeOfNonNumType :: forall t. NonNumType t -> Int
-sizeOfNonNumType t | NonNumDict <- nonNumDict t = F.sizeOf (undefined::t)
 

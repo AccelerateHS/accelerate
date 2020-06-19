@@ -572,8 +572,7 @@ evalEq (SingleScalarType t) = evalEqSingle t
 evalEq (VectorScalarType t) = evalEqVector t
 
 evalEqSingle :: SingleType a -> (a, a) -> Bool
-evalEqSingle (NumSingleType t)                                  = evalEqNum t
-evalEqSingle (NonNumSingleType t) | NonNumDict <- nonNumDict t  = uncurry (==)
+evalEqSingle (NumSingleType t) = evalEqNum t
 
 evalEqVector :: VectorType a -> (a, a) -> Bool
 evalEqVector VectorType{} = uncurry (==)
@@ -698,8 +697,6 @@ matchPrimFun (PrimToFloating _ s)       (PrimToFloating _ t)       = matchFloati
 matchPrimFun PrimLAnd                   PrimLAnd                   = Just Refl
 matchPrimFun PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun PrimLNot                   PrimLNot                   = Just Refl
-matchPrimFun PrimOrd                    PrimOrd                    = Just Refl
-matchPrimFun PrimChr                    PrimChr                    = Just Refl
 
 matchPrimFun _ _
   = Nothing
@@ -765,8 +762,6 @@ matchPrimFun' (PrimToFloating s _)       (PrimToFloating t _)       = matchNumTy
 matchPrimFun' PrimLAnd                   PrimLAnd                   = Just Refl
 matchPrimFun' PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun' PrimLNot                   PrimLNot                   = Just Refl
-matchPrimFun' PrimOrd                    PrimOrd                    = Just Refl
-matchPrimFun' PrimChr                    PrimChr                    = Just Refl
 
 matchPrimFun' (PrimLt s) (PrimLt t)
   | Just Refl <- matchSingleType s t
@@ -842,9 +837,7 @@ matchScalarType _                    _                    = Nothing
 
 {-# INLINEABLE matchSingleType #-}
 matchSingleType :: SingleType s -> SingleType t -> Maybe (s :~: t)
-matchSingleType (NumSingleType s)    (NumSingleType t)    = matchNumType s t
-matchSingleType (NonNumSingleType s) (NonNumSingleType t) = matchNonNumType s t
-matchSingleType _                    _                    = Nothing
+matchSingleType (NumSingleType s) (NumSingleType t) = matchNumType s t
 
 {-# INLINEABLE matchVectorType #-}
 matchVectorType :: forall m n s t. VectorType (Vec n s) -> VectorType (Vec m t) -> Maybe (Vec n s :~: Vec m t)
@@ -866,8 +859,6 @@ matchNumType _                   _                   = Nothing
 {-# INLINEABLE matchBoundedType #-}
 matchBoundedType :: BoundedType s -> BoundedType t -> Maybe (s :~: t)
 matchBoundedType (IntegralBoundedType s) (IntegralBoundedType t) = matchIntegralType s t
-matchBoundedType (NonNumBoundedType s)   (NonNumBoundedType t)   = matchNonNumType s t
-matchBoundedType _                       _                       = Nothing
 
 {-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
@@ -889,10 +880,6 @@ matchFloatingType TypeHalf   TypeHalf   = Just Refl
 matchFloatingType TypeFloat  TypeFloat  = Just Refl
 matchFloatingType TypeDouble TypeDouble = Just Refl
 matchFloatingType _            _            = Nothing
-
-{-# INLINEABLE matchNonNumType #-}
-matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
-matchNonNumType TypeChar TypeChar = Just Refl
 
 
 -- Auxiliary

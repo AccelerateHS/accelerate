@@ -30,6 +30,7 @@ import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 
 import Data.Bits
+import Data.Char
 import Data.Kind
 import Language.Haskell.TH                                          hiding ( Type )
 import Language.Haskell.TH.Extra
@@ -299,6 +300,13 @@ untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 instance Elt ()
 instance Elt Bool
 
+instance Elt Char where
+  type EltR Char = Int
+  eltR    = TupRsingle scalarType
+  tagsR   = [TagRsingle scalarType]
+  toElt   = chr
+  fromElt = ord
+
 runQ $ do
   let
       -- XXX: we might want to do the digItOut trick used by FromIntegral?
@@ -322,11 +330,6 @@ runQ $ do
         [ ''Half
         , ''Float
         , ''Double
-        ]
-
-      nonNumTypes :: [Name]
-      nonNumTypes =
-        [ ''Char
         ]
 
       newtypes :: [Name]
@@ -398,7 +401,7 @@ runQ $ do
               toElt = $(conE (mkName (nameBase name)))
           |]
   --
-  ss <- mapM mkSimple (integralTypes ++ floatingTypes ++ nonNumTypes)
+  ss <- mapM mkSimple (integralTypes ++ floatingTypes)
   ns <- mapM mkNewtype newtypes
   ts <- mapM mkTuple [2..16]
   -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]

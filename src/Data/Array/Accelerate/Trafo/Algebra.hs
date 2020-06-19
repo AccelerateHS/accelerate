@@ -38,7 +38,6 @@ import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
 
 import Data.Bits
-import Data.Char
 import Data.Monoid
 import Data.Text                                                    ( Text )
 import Data.Text.Prettyprint.Doc
@@ -147,8 +146,6 @@ evalPrimApp env f x
       PrimLAnd                  -> evalLAnd x env
       PrimLOr                   -> evalLOr x env
       PrimLNot                  -> evalLNot x env
-      PrimOrd                   -> evalOrd x env
-      PrimChr                   -> evalChr x env
       PrimFromIntegral ta tb    -> evalFromIntegral ta tb x env
       PrimToFloating ta tb      -> evalToFloating ta tb x env
 
@@ -650,42 +647,34 @@ evalIsInfinite ty | FloatingDict <- floatingDict ty = bool1 isInfinite
 evalLt :: SingleType a -> (a,a) :-> PrimBool
 evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (<)
 evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (<)
-evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (<)
 
 evalGt :: SingleType a -> (a,a) :-> PrimBool
 evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (>)
 evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (>)
-evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (>)
 
 evalLtEq :: SingleType a -> (a,a) :-> PrimBool
 evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (<=)
 evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (<=)
-evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (<=)
 
 evalGtEq :: SingleType a -> (a,a) :-> PrimBool
 evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (>=)
 evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (>=)
-evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (>=)
 
 evalEq :: SingleType a -> (a,a) :-> PrimBool
 evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (==)
 evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (==)
-evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (==)
 
 evalNEq :: SingleType a -> (a,a) :-> PrimBool
 evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (/=)
 evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (/=)
-evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = bool2 (/=)
 
 evalMax :: SingleType a -> (a,a) :-> a
 evalMax ty@(NumSingleType (IntegralNumType ty')) | IntegralDict <- integralDict ty' = eval2 ty max
 evalMax ty@(NumSingleType (FloatingNumType ty')) | FloatingDict <- floatingDict ty' = eval2 ty max
-evalMax ty@(NonNumSingleType ty')                | NonNumDict   <- nonNumDict ty'   = eval2 ty max
 
 evalMin :: SingleType a -> (a,a) :-> a
 evalMin ty@(NumSingleType (IntegralNumType ty')) | IntegralDict <- integralDict ty' = eval2 ty min
 evalMin ty@(NumSingleType (FloatingNumType ty')) | FloatingDict <- floatingDict ty' = eval2 ty min
-evalMin ty@(NonNumSingleType ty')                | NonNumDict   <- nonNumDict ty'   = eval2 ty min
 
 -- Logical operators
 -- -----------------
@@ -723,12 +712,6 @@ evalLOr _ _
 evalLNot :: PrimBool :-> PrimBool
 evalLNot x _   | PrimApp PrimLNot x' <- x = Stats.ruleFired "not/not" $ Just x'
 evalLNot x env                            = bool1 (not . toBool) x env
-
-evalOrd :: Char :-> Int
-evalOrd = eval1 (NumSingleType $ IntegralNumType $ TypeInt) ord
-
-evalChr :: Int :-> Char
-evalChr = eval1 (NonNumSingleType $ TypeChar) chr
 
 evalFromIntegral :: IntegralType a -> NumType b -> a :-> b
 evalFromIntegral ta (IntegralNumType tb)
@@ -774,11 +757,9 @@ evalPrimConst (PrimPi       ty) = evalPi ty
 
 evalMinBound :: BoundedType a -> a
 evalMinBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = minBound
-evalMinBound (NonNumBoundedType   ty) | NonNumDict   <- nonNumDict ty   = minBound
 
 evalMaxBound :: BoundedType a -> a
 evalMaxBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = maxBound
-evalMaxBound (NonNumBoundedType   ty) | NonNumDict   <- nonNumDict ty   = maxBound
 
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi

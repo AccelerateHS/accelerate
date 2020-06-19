@@ -360,14 +360,10 @@ encodeScalarConst (SingleScalarType t) = encodeSingleConst t
 encodeScalarConst (VectorScalarType t) = encodeVectorConst t
 
 encodeSingleConst :: SingleType t -> t -> Builder
-encodeSingleConst (NumSingleType t)    = encodeNumConst t
-encodeSingleConst (NonNumSingleType t) = encodeNonNumConst t
+encodeSingleConst (NumSingleType t) = encodeNumConst t
 
 encodeVectorConst :: VectorType (Vec n t) -> Vec n t -> Builder
 encodeVectorConst (VectorType n t) (Vec ba#) = intHost $(hashQ "Vec") <> intHost n <> encodeSingleType t <> shortByteString (SBS ba#)
-
-encodeNonNumConst :: NonNumType t -> t -> Builder
-encodeNonNumConst TypeChar{} x = intHost $(hashQ "Char") <> charUtf8 x
 
 encodeNumConst :: NumType t -> t -> Builder
 encodeNumConst (IntegralNumType t) = encodeIntegralConst t
@@ -458,8 +454,6 @@ encodePrimFun (PrimToFloating a b)       = intHost $(hashQ "PrimToFloating")    
 encodePrimFun PrimLAnd                   = intHost $(hashQ "PrimLAnd")
 encodePrimFun PrimLOr                    = intHost $(hashQ "PrimLOr")
 encodePrimFun PrimLNot                   = intHost $(hashQ "PrimLNot")
-encodePrimFun PrimOrd                    = intHost $(hashQ "PrimOrd")
-encodePrimFun PrimChr                    = intHost $(hashQ "PrimChr")
 
 
 encodeTypeR :: TypeR t -> Builder
@@ -478,18 +472,13 @@ encodeScalarType (SingleScalarType t) = intHost $(hashQ "SingleScalarType") <> e
 encodeScalarType (VectorScalarType t) = intHost $(hashQ "VectorScalarType") <> encodeVectorType t
 
 encodeSingleType :: SingleType t -> Builder
-encodeSingleType (NumSingleType t)    = intHost $(hashQ "NumSingleType")    <> encodeNumType t
-encodeSingleType (NonNumSingleType t) = intHost $(hashQ "NonNumSingleType") <> encodeNonNumType t
+encodeSingleType (NumSingleType t) = intHost $(hashQ "NumSingleType")    <> encodeNumType t
 
 encodeVectorType :: VectorType (Vec n t) -> Builder
 encodeVectorType (VectorType n t) = intHost $(hashQ "VectorType") <> intHost n <> encodeSingleType t
 
 encodeBoundedType :: BoundedType t -> Builder
 encodeBoundedType (IntegralBoundedType t) = intHost $(hashQ "IntegralBoundedType") <> encodeIntegralType t
-encodeBoundedType (NonNumBoundedType t)   = intHost $(hashQ "NonNumBoundedType")   <> encodeNonNumType t
-
-encodeNonNumType :: NonNumType t -> Builder
-encodeNonNumType TypeChar{} = intHost $(hashQ "Char")
 
 encodeNumType :: NumType t -> Builder
 encodeNumType (IntegralNumType t) = intHost $(hashQ "IntegralNumType") <> encodeIntegralType t

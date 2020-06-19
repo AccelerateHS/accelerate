@@ -135,11 +135,7 @@ complexR = tuple
     scalar VectorScalarType{}   = ComplexTup
 
     single :: SingleType a -> ComplexType a (ComplexR a)
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
-
-    nonnum :: NonNumType a -> ComplexType a (ComplexR a)
-    nonnum TypeChar = ComplexTup
+    single (NumSingleType t) = num t
 
     num :: NumType a -> ComplexType a (ComplexR a)
     num (IntegralNumType t) = integral t

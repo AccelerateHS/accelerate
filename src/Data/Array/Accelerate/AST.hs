@@ -722,10 +722,6 @@ data PrimFun sig where
   PrimLOr  :: PrimFun ((PrimBool, PrimBool) -> PrimBool)
   PrimLNot :: PrimFun (PrimBool             -> PrimBool)
 
-  -- character conversions
-  PrimOrd  :: PrimFun (Char -> Int)
-  PrimChr  :: PrimFun (Int  -> Char)
-
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
   PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
@@ -816,7 +812,6 @@ primConstType = \case
   where
     bounded :: BoundedType a -> SingleType a
     bounded (IntegralBoundedType t) = NumSingleType $ IntegralNumType t
-    bounded (NonNumBoundedType t)   = NonNumSingleType t
 
     floating :: FloatingType t -> SingleType t
     floating = NumSingleType . FloatingNumType
@@ -899,10 +894,6 @@ primFunType = \case
   PrimLOr                   -> binary' bool
   PrimLNot                  -> unary' bool
 
-  -- character conversions
-  PrimOrd                   -> unary char int
-  PrimChr                   -> unary int  char
-
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
   PrimToFloating   a b      -> unary (num a) (floating b)
@@ -921,7 +912,6 @@ primFunType = \case
 
     bool     = TupRsingle scalarTypeWord8
     int      = TupRsingle scalarTypeInt
-    char     = TupRsingle $ SingleScalarType $ NonNumSingleType TypeChar
 
 
 -- Normal form data
@@ -1134,8 +1124,6 @@ rnfPrimFun (PrimMin t)                = rnfSingleType t
 rnfPrimFun PrimLAnd                   = ()
 rnfPrimFun PrimLOr                    = ()
 rnfPrimFun PrimLNot                   = ()
-rnfPrimFun PrimOrd                    = ()
-rnfPrimFun PrimChr                    = ()
 rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
 rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
 
@@ -1346,8 +1334,6 @@ liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftSingleType t) ||]
 liftPrimFun PrimLAnd                   = [|| PrimLAnd ||]
 liftPrimFun PrimLOr                    = [|| PrimLOr ||]
 liftPrimFun PrimLNot                   = [|| PrimLNot ||]
-liftPrimFun PrimOrd                    = [|| PrimOrd ||]
-liftPrimFun PrimChr                    = [|| PrimChr ||]
 liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
 

@@ -71,7 +71,6 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.ST
 import Data.Bits
-import Data.Char                                                    ( chr, ord )
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import System.IO.Unsafe                                             ( unsafePerformIO )
@@ -980,8 +979,7 @@ evalCoerceScalar VectorScalarType{}    VectorScalarType{} a = unsafeCoerce a  --
 evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
   where
     vector :: SingleType a -> a -> Vec n b
-    vector (NumSingleType    t) = num t
-    vector (NonNumSingleType t) = nonnum t
+    vector (NumSingleType t) = num t
 
     num :: NumType a -> a -> Vec n b
     num (IntegralNumType t) = integral t
@@ -1004,9 +1002,6 @@ evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
     floating TypeFloat{}   = poke
     floating TypeDouble{}  = poke
 
-    nonnum :: NonNumType a -> a -> Vec n b
-    nonnum TypeChar{}   = poke
-
     {-# INLINE poke #-}
     poke :: forall a b n. Prim a => a -> Vec n b
     poke x = runST $ do
@@ -1018,8 +1013,7 @@ evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
 evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
   where
     scalar :: SingleType b -> Vec n a -> b
-    scalar (NumSingleType    t) = num t
-    scalar (NonNumSingleType t) = nonnum t
+    scalar (NumSingleType t) = num t
 
     num :: NumType b -> Vec n a -> b
     num (IntegralNumType t) = integral t
@@ -1041,9 +1035,6 @@ evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
     floating TypeHalf{}    = peek
     floating TypeFloat{}   = peek
     floating TypeDouble{}  = peek
-
-    nonnum :: NonNumType b -> Vec n a -> b
-    nonnum TypeChar{}   = peek
 
     {-# INLINE peek #-}
     peek :: Prim a => Vec n b -> a
@@ -1119,8 +1110,6 @@ evalPrim (PrimMin                ty) = evalMin ty
 evalPrim PrimLAnd                    = evalLAnd
 evalPrim PrimLOr                     = evalLOr
 evalPrim PrimLNot                    = evalLNot
-evalPrim PrimOrd                     = evalOrd
-evalPrim PrimChr                     = evalChr
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
 
@@ -1144,12 +1133,6 @@ evalLOr (x, y) = fromBool (toBool x || toBool y)
 
 evalLNot :: PrimBool -> PrimBool
 evalLNot = fromBool . not . toBool
-
-evalOrd :: Char -> Int
-evalOrd = ord
-
-evalChr :: Int -> Char
-evalChr = chr
 
 evalFromIntegral :: IntegralType a -> NumType b -> a -> b
 evalFromIntegral ta (IntegralNumType tb)
@@ -1185,17 +1168,9 @@ evalMinBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty
   = minBound
 
-evalMinBound (NonNumBoundedType   ty)
-  | NonNumDict   <- nonNumDict ty
-  = minBound
-
 evalMaxBound :: BoundedType a -> a
 evalMaxBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty
-  = maxBound
-
-evalMaxBound (NonNumBoundedType   ty)
-  | NonNumDict   <- nonNumDict ty
   = maxBound
 
 -- Constant method of floating
@@ -1400,42 +1375,34 @@ evalRecip ty | FloatingDict <- floatingDict ty = recip
 evalLt :: SingleType a -> ((a, a) -> PrimBool)
 evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (<)
 evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (<)
-evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (<)
 
 evalGt :: SingleType a -> ((a, a) -> PrimBool)
 evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (>)
 evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (>)
-evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (>)
 
 evalLtEq :: SingleType a -> ((a, a) -> PrimBool)
 evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (<=)
 evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (<=)
-evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (<=)
 
 evalGtEq :: SingleType a -> ((a, a) -> PrimBool)
 evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (>=)
 evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (>=)
-evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (>=)
 
 evalEq :: SingleType a -> ((a, a) -> PrimBool)
 evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (==)
 evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (==)
-evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (==)
 
 evalNEq :: SingleType a -> ((a, a) -> PrimBool)
 evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (/=)
 evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (/=)
-evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = fromBool . uncurry (/=)
 
 evalMax :: SingleType a -> ((a, a) -> a)
 evalMax (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry max
 evalMax (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry max
-evalMax (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry max
 
 evalMin :: SingleType a -> ((a, a) -> a)
 evalMin (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry min
 evalMin (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry min
-evalMin (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = uncurry min
 
 
 {--

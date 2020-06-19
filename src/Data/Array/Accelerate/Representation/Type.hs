@@ -81,11 +81,7 @@ liftTypeQ = tuple
     vector (VectorType n t) = [t| Vec $(litT (numTyLit (toInteger n))) $(single t) |]
 
     single :: SingleType t -> TypeQ
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
-
-    nonnum :: NonNumType t -> TypeQ
-    nonnum TypeChar = [t| Char |]
+    single (NumSingleType t) = num t
 
     num :: NumType t -> TypeQ
     num (IntegralNumType t) = integral t

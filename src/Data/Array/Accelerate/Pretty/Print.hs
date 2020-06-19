@@ -659,8 +659,6 @@ primOperator PrimMin{}                = Operator "min"                App    L 1
 primOperator PrimLAnd                 = Operator "&&"                 Infix  R 3
 primOperator PrimLOr                  = Operator "||"                 Infix  R 2
 primOperator PrimLNot                 = Operator "not"                App    L 10
-primOperator PrimOrd                  = Operator "ord"                App    L 10
-primOperator PrimChr                  = Operator "chr"                App    L 10
 primOperator PrimFromIntegral{}       = Operator "fromIntegral"       App    L 10
 primOperator PrimToFloating{}         = Operator "toFloating"         App    L 10
 

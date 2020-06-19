@@ -21,7 +21,6 @@ import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
 import Control.Monad.ST
-import Data.Char
 import Data.List                                                    ( intercalate )
 import Data.Primitive.ByteArray
 import Foreign.Storable
@@ -47,11 +46,7 @@ undefElt = tuple
       return (Vec ba#)
 
     single :: SingleType t -> t
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
-
-    nonnum :: NonNumType t -> t
-    nonnum TypeChar = chr 0
+    single (NumSingleType t) = num t
 
     num :: NumType t -> t
     num (IntegralNumType t) = integral t
@@ -90,11 +85,7 @@ bytesElt = tuple
     vector (VectorType n t) = n * single t
 
     single :: SingleType t -> Int
-    single (NumSingleType    t) = num t
-    single (NonNumSingleType t) = nonnum t
-
-    nonnum :: NonNumType t -> Int
-    nonnum TypeChar = sizeOf (undefined::Char)
+    single (NumSingleType t) = num t
 
     num :: NumType t -> Int
     num (IntegralNumType t) = integral t
@@ -133,8 +124,7 @@ showsElt = tuple
     scalar (VectorScalarType t) e = showString $ vector t e
 
     single :: SingleType e -> e -> String
-    single (NumSingleType t)    e = num t e
-    single (NonNumSingleType t) e = nonnum t e
+    single (NumSingleType t) e = num t e
 
     num :: NumType e -> e -> String
     num (IntegralNumType t) e = integral t e
@@ -156,9 +146,6 @@ showsElt = tuple
     floating TypeHalf   e = show e
     floating TypeFloat  e = show e
     floating TypeDouble e = show e
-
-    nonnum :: NonNumType e -> e -> String
-    nonnum TypeChar e = show e
 
     vector :: VectorType (Vec n a) -> Vec n a -> String
     vector (VectorType _ s) vec

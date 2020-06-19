@@ -66,7 +66,7 @@ module Data.Array.Accelerate.Smart (
   mkLAnd, mkLOr, mkLNot, mkIsNaN, mkIsInfinite,
 
   -- ** Smart constructors for type coercion functions
-  mkOrd, mkChr, mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
+  mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
@@ -1149,14 +1149,6 @@ mkLNot :: Exp Bool -> Exp Bool
 mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
   where
     x = SmartExp $ Prj PairIdxLeft a
-
--- Character conversions
-
-mkOrd :: Exp Char -> Exp Int
-mkOrd = mkPrimUnary PrimOrd
-
-mkChr :: Exp Int -> Exp Char
-mkChr = mkPrimUnary PrimChr
 
 -- Numeric conversions
 

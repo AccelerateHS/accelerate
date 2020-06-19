@@ -457,9 +457,6 @@ summariseOpenExp = (terms +~ 1) . goE
     travC (PrimMaxBound t) = travBoundedType t & terms +~ 1
     travC (PrimPi t)       = travFloatingType t & terms +~ 1
 
-    travNonNumType :: NonNumType t -> Stats
-    travNonNumType _ = zero & types +~ 1
-
     travIntegralType :: IntegralType t -> Stats
     travIntegralType _ = zero & types +~ 1
 
@@ -472,15 +469,13 @@ summariseOpenExp = (terms +~ 1) . goE
 
     travBoundedType :: BoundedType t -> Stats
     travBoundedType (IntegralBoundedType t) = travIntegralType t & types +~ 1
-    travBoundedType (NonNumBoundedType t)   = travNonNumType t & types +~ 1
 
     -- travScalarType :: ScalarType t -> Stats
     -- travScalarType (SingleScalarType t) = travSingleType t & types +~ 1
     -- travScalarType (VectorScalarType t) = travVectorType t & types +~ 1
 
     travSingleType :: SingleType t -> Stats
-    travSingleType (NumSingleType t)    = travNumType t & types +~ 1
-    travSingleType (NonNumSingleType t) = travNonNumType t & types +~ 1
+    travSingleType (NumSingleType t) = travNumType t & types +~ 1
 
     -- travVectorType :: VectorType t -> Stats
     -- travVectorType (Vector2Type t)  = travSingleType t & types +~ 1
@@ -582,8 +577,6 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimLAnd                 -> zero
             PrimLOr                  -> zero
             PrimLNot                 -> zero
-            PrimOrd                  -> zero
-            PrimChr                  -> zero
             PrimFromIntegral     i n -> travIntegralType i +++ travNumType n
             PrimToFloating       n f -> travNumType n +++ travFloatingType f
 
