@@ -1,6 +1,5 @@
-{-# LANGUAGE CPP                      #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE MagicHash                #-}
+{-# LANGUAGE CPP       #-}
+{-# LANGUAGE MagicHash #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Timed
 -- Copyright   : [2016..2019] The Accelerate Team
@@ -18,13 +17,15 @@ module Data.Array.Accelerate.Debug.Timed (
 
 ) where
 
-import Data.Array.Accelerate.Debug.Trace
 import Data.Array.Accelerate.Debug.Flags
+import Data.Array.Accelerate.Debug.Trace
 
 import Control.Monad.Trans                              ( MonadIO )
 import Text.Printf
 
 #if ACCELERATE_DEBUG
+import Data.Array.Accelerate.Debug.Clock
+
 import Control.Applicative
 import Control.Monad.Trans                              ( liftIO )
 import Data.List
@@ -75,8 +76,6 @@ timed_simpl fmt action = do
   --
   liftIO $ putTraceMsg (fmt wallTime cpuTime)
   return res
-
-foreign import ccall unsafe "clock_gettime_monotonic_seconds" getMonotonicTime :: IO Double
 
 
 {-# INLINEABLE timed_gc #-}

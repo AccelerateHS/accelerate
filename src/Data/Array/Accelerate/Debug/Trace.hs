@@ -30,6 +30,7 @@ import Data.Array.Accelerate.Debug.Flags
 import Numeric
 
 #ifdef ACCELERATE_DEBUG
+import Data.Array.Accelerate.Debug.Clock
 import System.IO.Unsafe
 import Text.Printf
 import qualified Debug.Trace                            as D
@@ -140,9 +141,5 @@ traceEventIO f msg = do
 #else
 {-# INLINE traceEventIO #-}
 traceEventIO _ _ = return ()
-#endif
-
-#ifdef ACCELERATE_DEBUG
-foreign import ccall unsafe "clock_gettime_elapsed_seconds" getProgramTime :: IO Double
 #endif
 

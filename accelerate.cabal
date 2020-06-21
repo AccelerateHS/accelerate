@@ -378,6 +378,7 @@ Library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
+        Data.Array.Accelerate.Debug.Clock
         Data.Array.Accelerate.Debug.Flags
         Data.Array.Accelerate.Debug.Monitoring
         Data.Array.Accelerate.Debug.Stats
@@ -477,26 +478,12 @@ Library
   hs-source-dirs:
         src
 
-  c-sources:
-        cbits/atomic.c
-        cbits/clock.c
-
   if flag(debug) || flag(ekg)
     ghc-options:
         -optc-DACCELERATE_DEBUG
 
     cpp-options:
         -DACCELERATE_DEBUG
-
-    -- Weird handling of C files because Cabal is not recompile C files on
-    -- changes to cc-options: <https://github.com/haskell/cabal/issues/4937>
-    c-sources:
-        cbits/flags_debug.c
-        cbits/monitoring_debug.c
-  else
-    c-sources:
-        cbits/flags.c
-        cbits/monitoring.c
 
   if flag(ekg)
     cpp-options:
