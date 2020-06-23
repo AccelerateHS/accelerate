@@ -1493,12 +1493,12 @@ x ^^ n
 -- |Convert a character to an 'Int'.
 --
 ord :: Exp Char -> Exp Int
-ord = mkCoerce
+ord = mkFromIntegral
 
 -- |Convert an 'Int' into a character.
 --
 chr :: Exp Int -> Exp Char
-chr = mkCoerce
+chr = mkFromIntegral
 
 -- |Convert a Boolean value to an 'Int', where 'False' turns into '0' and 'True'
 -- into '1'.

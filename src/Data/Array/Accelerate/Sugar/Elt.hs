@@ -301,11 +301,11 @@ instance Elt ()
 instance Elt Bool
 
 instance Elt Char where
-  type EltR Char = Int
+  type EltR Char = Word32
   eltR    = TupRsingle scalarType
   tagsR   = [TagRsingle scalarType]
-  toElt   = chr
-  fromElt = ord
+  toElt   = chr . fromIntegral
+  fromElt = fromIntegral . ord
 
 runQ $ do
   let
