@@ -39,13 +39,16 @@ module Data.Array.Accelerate.Debug.Monitoring (
 import System.Metrics
 import System.Remote.Monitoring
 
-import Control.Monad
 import Control.Concurrent
 import Control.Concurrent.Async
 import Data.IORef
 import Data.Text                                                    ( Text )
 import Text.Printf
 import qualified Data.HashMap.Strict                                as Map
+#endif
+
+#if defined(ACCELERATE_MONITORING) || defined(ACCELERATE_DEBUG)
+import Control.Monad
 #endif
 
 import Data.Atomic                                                  ( Atomic )

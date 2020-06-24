@@ -21,19 +21,18 @@ jobs:
         os: [ubuntu-latest]
         allow_failure: [false]
         ghc:
+          - "8.10"
           - "8.8"
           - "8.6"
-          - "8.4"
-          - "8.2"
         include:
           - os: macOS-latest
-            ghc: 8.8
+            ghc: 8.10
             allow_failure: false
           # ghc-8.8 currently doesn't work on the windows test machines due to a
           # 32-bit linker problem, failing with the error:
           # Access violation in generated code when writing 0x0
           - os: windows-latest
-            ghc: 8.6
+            ghc: 8.10
             allow_failure: false
     env:
       STACK_FLAGS: "--system-ghc --no-install-ghc --fast --flag accelerate:nofib"
@@ -68,5 +67,5 @@ jobs:
     - name: Test
       run: |
         stack test accelerate:doctest $STACK_FLAGS
-        stack test accelerate:nofib-interpreter $STACK_FLAGS --test-arguments='--hedgehog-tests 25'
+        stack test accelerate:nofib-interpreter $STACK_FLAGS
 

@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort (
 ) where
 
 import Data.Function
-import Data.List
+import Data.List                                                    ( sortBy )
 import Prelude                                                      as P
 import qualified Data.Bits                                          as P
 

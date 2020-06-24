@@ -268,7 +268,7 @@ Flag nofib
 
 Library
   Build-depends:
-          base                          >= 4.10 && < 4.14
+          base                          >= 4.12 && < 4.15
         , ansi-terminal                 >= 0.6.2
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2

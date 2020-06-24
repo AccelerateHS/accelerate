@@ -47,8 +47,9 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
-import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH                                          hiding ( Exp, Match, match, tupP, tupE )
 import Language.Haskell.TH.Extra
+import qualified Language.Haskell.TH                                as TH
 
 
 -- | A pattern synonym for working with (product) data types. You can declare
@@ -109,16 +110,15 @@ runQ $ do
               -- Type variables for the elements
               xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
               -- Last argument to `IsPattern`, eg (Exp, a, Exp b) in the example
-              b        = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
+              b        = tupT (map (\t -> [t| $(conT con) $(varT t)|]) xs)
               -- Representation as snoc-list of pairs, eg (((), EltR a), EltR b)
               snoc     = foldl (\sn t -> [t| ($sn, $(appT repr $ varT t)) |]) [t| () |] xs
               -- Constraints for the type class, consisting of Elt constraints on all type variables,
               -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
-              contexts = appT cst [t| $(varT a) |]
+              context  = tupT
+                       $ appT cst [t| $(varT a) |]
                        : [t| $repr $(varT a) ~ $snoc |]
-                       : map (\t -> appT cst (varT t)) xs
-              -- Store all constraints in a tuple
-              context  = foldl (\ts t -> appT ts t) (tupleT $ length contexts) contexts
+                       : map (\t -> [t| $cst $(varT t)|]) xs
               --
               get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
               get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)

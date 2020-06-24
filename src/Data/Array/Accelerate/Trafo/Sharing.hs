@@ -72,7 +72,7 @@ import qualified Data.Array.Accelerate.Representation.Stencil       as R
 import Control.Applicative                                          hiding ( Const )
 import Control.Monad.Fix
 import Data.Hashable
-import Data.List                                                    hiding ( (\\) )
+import Data.List                                                    ( elemIndex, findIndex, groupBy, intercalate, partition )
 import Data.Maybe
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName

@@ -46,7 +46,7 @@ import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
-import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH                                          hiding ( Exp, tupP, tupE )
 import Language.Haskell.TH.Extra
 
 

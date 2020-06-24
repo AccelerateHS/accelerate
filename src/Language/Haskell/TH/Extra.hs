@@ -12,11 +12,25 @@
 module Language.Haskell.TH.Extra
   where
 
-import Language.Haskell.TH
+import Language.Haskell.TH                                          hiding ( tupP, tupE )
+import qualified Language.Haskell.TH                                as TH
 
 
 tupT :: [TypeQ] -> TypeQ
+tupT [t] = t
 tupT tup =
   let n = length tup
    in foldl (\ts t -> [t| $ts $t |]) (tupleT n) tup
+
+tupP :: [PatQ] -> PatQ
+tupP [p] = p
+tupP ps  = TH.tupP ps
+
+tupE :: [ExpQ] -> ExpQ
+tupE [t] = t
+tupE ts  = TH.tupE ts
+
+tyVarBndrName :: TyVarBndr -> Name
+tyVarBndrName (PlainTV  n)   = n
+tyVarBndrName (KindedTV n _) = n
 

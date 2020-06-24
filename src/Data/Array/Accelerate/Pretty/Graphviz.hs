@@ -49,7 +49,7 @@ import Control.Applicative                              hiding ( Const, empty )
 import Control.Arrow                                    ( (&&&) )
 import Control.Monad.State                              ( modify, gets, state )
 import Data.HashSet                                     ( HashSet )
-import Data.List
+import Data.List                                        ( nub, partition )
 import Data.Maybe
 import Data.String
 import Data.Text.Prettyprint.Doc

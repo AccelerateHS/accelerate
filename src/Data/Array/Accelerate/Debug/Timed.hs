@@ -28,7 +28,7 @@ import Data.Array.Accelerate.Debug.Clock
 
 import Control.Applicative
 import Control.Monad.Trans                              ( liftIO )
-import Data.List
+import Data.List                                        ( intercalate )
 import System.CPUTime
 import Prelude
 
