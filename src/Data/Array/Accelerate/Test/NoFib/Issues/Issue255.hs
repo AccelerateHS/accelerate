@@ -28,7 +28,7 @@ import Data.Array.Accelerate.Test.NoFib.Config
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Data.List                                                    as P
+import Data.List                                                    as P ( mapAccumL )
 import Prelude                                                      as P
 
 
