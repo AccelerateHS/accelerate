@@ -3,6 +3,7 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -88,7 +89,7 @@ module Data.Array.Accelerate.Prelude (
   (?|),
 
   -- ** Expression-level
-  (?), caseof,
+  (?), match,
 
   -- * Scalar iteration
   iterate,
@@ -2182,17 +2183,6 @@ infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
 
--- | A case-like control structure
---
-caseof :: (Elt a, Elt b)
-       => Exp a                         -- ^ case subject
-       -> [(Exp a -> Exp Bool, Exp b)]  -- ^ list of cases to attempt
-       -> Exp b                         -- ^ default value
-       -> Exp b
-caseof _ []        e = e
-caseof x ((p,b):l) e = cond (p x) b (caseof x l e)
-
-
 -- | For use with @-XRebindableSyntax@, this class provides 'ifThenElse' lifted
 -- to both scalar and array types.
 --
@@ -2207,6 +2197,80 @@ instance IfThenElse Exp where
 instance IfThenElse Acc where
   type EltT Acc a = Arrays a
   ifThenElse = acond
+
+
+-- | The 'match' operation is the core operation which enables embedded
+-- pattern matching. It is applied to an n-ary scalar function, and
+-- generates the necessary case-statements in the embedded code for each
+-- argument. For example, given the function:
+--
+-- > example1 :: Exp (Maybe Bool) -> Exp Int
+-- > example1 Nothing_ = 0
+-- > example1 (Just_ False_) = 1
+-- > example1 (Just_ True_) = 2
+--
+-- In order to use this function it must be applied to the 'match'
+-- operator:
+--
+-- > match example1
+--
+-- Using the infix-flip operator ('Data.Function.&'), we can also write
+-- case statements inline. For example, instead of this:
+--
+-- > example2 x = case f x of
+-- >   Nothing_ -> ...      -- error: embedded pattern synonym...
+-- >   Just_ y  -> ...      -- ...used outside of 'match' context
+--
+-- This can be written instead as:
+--
+-- > example3 x = f x & match \case
+-- >   Nothing_ -> ...
+-- >   Just_ y  -> ...
+--
+-- And utilising the @LambdaCase@ and @BlockArguments@ syntactic extensions.
+--
+match :: Matching f => f -> f
+match f = mkFun (mkMatch f) id
+
+data Args f where
+  (:->)  :: Exp a -> Args b -> Args (Exp a -> b)
+  Result :: Args (Exp a)
+
+class Matching a where
+  type ResultT a
+  mkMatch :: a -> Args a -> Exp (ResultT a)
+  mkFun   :: (Args f -> Exp (ResultT a))
+          -> (Args a -> Args f)
+          -> a
+
+instance Elt a => Matching (Exp a) where
+  type ResultT (Exp a) = a
+
+  mkFun f k = f (k Result)
+  mkMatch (Exp e) Result =
+    case e of
+      SmartExp (Match _ x) -> Exp x
+      _                    -> Exp e
+
+instance (Elt e, Matching r) => Matching (Exp e -> r) where
+  type ResultT (Exp e -> r) = ResultT r
+
+  mkFun f k x = mkFun f (\xs -> k (x :-> xs))
+  mkMatch f (x@(Exp p) :-> xs) =
+    case p of
+      -- This first case is used when we have nested calls to 'match'
+      SmartExp Match{} -> mkMatch (f x) xs
+
+      -- If there is only a single alternative, we can elide the case
+      -- statement at this point. This can occur when pattern matching on
+      -- product types
+      _ -> case rhs of
+             [(_,r)] -> Exp r
+             _       -> Exp (SmartExp (Case p rhs))
+    where
+      rhs = [ (tag, unExp (mkMatch (f x') xs))
+            | tag <- tagsR @e
+            , let x' = Exp (SmartExp (Match tag p)) ]
 
 
 -- Scalar iteration

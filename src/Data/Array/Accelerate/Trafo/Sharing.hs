@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -70,6 +71,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Representation.Stencil       as R
 
 import Control.Applicative                                          hiding ( Const )
+import Control.Lens                                                 ( over, mapped, _2 )
 import Control.Monad.Fix
 import Data.Hashable
 import Data.List                                                    ( elemIndex, findIndex, groupBy, intercalate, partition )
@@ -77,10 +79,10 @@ import Data.Maybe
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName
 import Text.Printf
-import qualified Data.HashTable.IO                                  as Hash
-import qualified Data.IntMap                                        as IntMap
 import qualified Data.HashMap.Strict                                as Map
 import qualified Data.HashSet                                       as Set
+import qualified Data.HashTable.IO                                  as Hash
+import qualified Data.IntMap                                        as IntMap
 import Prelude
 
 
@@ -731,6 +733,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
           Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " ++ show i) shows matchTypeR tp i lyt
+          Match _ e             -> cvt e  -- XXX: this should probably be an error
           Const tp v            -> AST.Const tp v
           Undef tp              -> AST.Undef tp
           Prj idx e             -> cvtPrj idx (cvt e)
@@ -740,6 +743,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
           FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
+          Case e rhs            -> AST.Case (cvt e) (over (mapped . _2) cvt rhs)
           Cond e1 e2 e3         -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           While tp p it i       -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
           PrimConst c           -> AST.PrimConst c
@@ -1668,6 +1672,11 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             VecUnpack vec e     -> travE1 (VecUnpack vec) e
             ToIndex shr sh ix   -> travE2 (ToIndex shr) sh ix
             FromIndex shr sh e  -> travE2 (FromIndex shr) sh e
+            Match t e           -> travE1 (Match t) e
+            Case e rhs          -> do
+                                     (e',   h1) <- travE lvl e
+                                     (rhs', h2) <- unzip <$> sequence [ travE1 (t,) c | (t,c) <- rhs ]
+                                     return (Case e' rhs', h1 `max` maximum h2 + 1)
             Cond e1 e2 e3       -> travE3 Cond e1 e2 e3
             While t p iter init -> do
                                      (p'   , h1) <- traverseFun1 lvl t p
@@ -1700,25 +1709,29 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               return (const (UnscopedExp [lvl] body), height + 1)
 
 
-        travE1 :: (UnscopedExp b -> PreSmartExp UnscopedAcc UnscopedExp a) -> SmartExp b
-               -> IO (PreSmartExp UnscopedAcc UnscopedExp a, Int)
+        travE1 :: (UnscopedExp b -> r)
+               -> SmartExp b
+               -> IO (r, Int)
         travE1 c e
           = do
               (e', h) <- travE lvl e
               return (c e', h + 1)
 
-        travE2 :: (UnscopedExp b -> UnscopedExp c -> PreSmartExp UnscopedAcc UnscopedExp a)
-               -> SmartExp b -> SmartExp c
-               -> IO (PreSmartExp UnscopedAcc UnscopedExp a, Int)
+        travE2 :: (UnscopedExp b -> UnscopedExp c -> r)
+               -> SmartExp b
+               -> SmartExp c
+               -> IO (r, Int)
         travE2 c e1 e2
           = do
               (e1', h1) <- travE lvl e1
               (e2', h2) <- travE lvl e2
               return (c e1' e2', h1 `max` h2 + 1)
 
-        travE3 :: (UnscopedExp b -> UnscopedExp c -> UnscopedExp d -> PreSmartExp UnscopedAcc UnscopedExp a)
-               -> SmartExp b -> SmartExp c -> SmartExp d
-               -> IO (PreSmartExp UnscopedAcc UnscopedExp a, Int)
+        travE3 :: (UnscopedExp b -> UnscopedExp c -> UnscopedExp d -> r)
+               -> SmartExp b
+               -> SmartExp c
+               -> SmartExp d
+               -> IO (r, Int)
         travE3 c e1 e2 e3
           = do
               (e1', h1) <- travE lvl e1
@@ -1726,16 +1739,18 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               (e3', h3) <- travE lvl e3
               return (c e1' e2' e3', h1 `max` h2 `max` h3 + 1)
 
-        travA :: (UnscopedAcc b -> PreSmartExp UnscopedAcc UnscopedExp a) -> SmartAcc b
-              -> IO (PreSmartExp UnscopedAcc UnscopedExp a, Int)
+        travA :: (UnscopedAcc b -> r)
+              -> SmartAcc b
+              -> IO (r, Int)
         travA c acc
           = do
               (acc', h) <- traverseAcc lvl acc
               return (c acc', h + 1)
 
-        travAE :: (UnscopedAcc b -> UnscopedExp c -> PreSmartExp UnscopedAcc UnscopedExp a)
-               -> SmartAcc b -> SmartExp c
-               -> IO (PreSmartExp UnscopedAcc UnscopedExp a, Int)
+        travAE :: (UnscopedAcc b -> UnscopedExp c -> r)
+               -> SmartAcc b
+               -> SmartExp c
+               -> IO (r, Int)
         travAE c acc e
           = do
               (acc', h1) <- traverseAcc lvl acc
@@ -2516,12 +2531,15 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           VecUnpack vec e       -> travE1 (VecUnpack vec) e
           ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
           FromIndex shr sh e    -> travE2 (FromIndex shr) sh e
+          Match t e             -> travE1 (Match t) e
+          Case e rhs            -> let (e',   accCount1) = scopesExp e
+                                       (rhs', accCount2) = unzip [ ((t,c'), counts)| (t,c) <- rhs, let (c', counts) = scopesExp c ]
+                                    in reconstruct (Case e' rhs') (foldr (+++) accCount1 accCount2)
           Cond e1 e2 e3         -> travE3 Cond e1 e2 e3
-          While tp p it i       -> let
-                                     (p' , accCount1) = scopesFun1 p
-                                     (it', accCount2) = scopesFun1 it
-                                     (i' , accCount3) = scopesExp i
-                                   in reconstruct (While tp p' it' i') (accCount1 +++ accCount2 +++ accCount3)
+          While tp p it i       -> let (p' , accCount1) = scopesFun1 p
+                                       (it', accCount2) = scopesFun1 it
+                                       (i' , accCount3) = scopesExp i
+                                    in reconstruct (While tp p' it' i') (accCount1 +++ accCount2 +++ accCount3)
           PrimConst c           -> reconstruct (PrimConst c) noNodeCounts
           PrimApp p e           -> travE1 (PrimApp p) e
           Index tp a e          -> travAE (Index tp) a e

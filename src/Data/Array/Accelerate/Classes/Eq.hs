@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE ViewPatterns      #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Eq
@@ -42,14 +43,7 @@ import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
 
 
-pattern True_ :: Exp Bool
-pattern True_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 1) `Pair` SmartExp Nil))
-
-pattern False_ :: Exp Bool
-pattern False_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 0) `Pair` SmartExp Nil))
-
-
-{-# COMPLETE True_, False_ #-}
+mkPatterns ''Bool
 
 infix 4 ==
 infix 4 /=

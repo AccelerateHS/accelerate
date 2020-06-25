@@ -58,6 +58,7 @@ import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
@@ -88,6 +89,10 @@ data Keyword
 let_, in_ :: Adoc
 let_ = annotate Statement "let"
 in_  = annotate Statement "in"
+
+case_, of_ :: Adoc
+case_ = annotate Statement "case"
+of_   = annotate Statement "of"
 
 if_, then_, else_ :: Adoc
 if_   = annotate Statement "if"
@@ -320,6 +325,7 @@ prettyArray aR@(ArrayR _ eR) = parens . fromString . showArray (showsElt eR) aR
 
 -- Scalar expressions
 -- ------------------
+
 prettyFun :: Val aenv -> Fun aenv f -> Adoc
 prettyFun = prettyOpenFun Empty
 
@@ -374,6 +380,8 @@ prettyOpenExp ctx env aenv exp =
     Nil                   -> "()"
     VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
     VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
+    Case x xs             -> hang shiftwidth
+                           $ vsep [ case_ <+> ppE x ctx <+> of_, prettyCase env aenv xs ]
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0
@@ -507,6 +515,32 @@ prettyTuple ctx env aenv exp = case collect exp of
     collect (Pair e1 e2)
       | Just tup <- collect e1 = Just $ tup ++ [prettyOpenExp app env aenv e2]
     collect _                  = Nothing
+
+prettyCase
+    :: Val env
+    -> Val aenv
+    -> [(TagR a, OpenExp env aenv b)]
+    -> Adoc
+prettyCase env aenv alts
+  = vcat
+  $ map (\(n,t,e) -> t <+> indent (w-n) ("->" <+> e)) alts'
+  where
+    w     = maximum (map (\(n,_,_) -> n) alts')
+    alts' = map (\(t,e) -> let (n,t') = ppT t
+                               e'     = prettyOpenExp context0 env aenv e
+                            in (n, t', e')) alts
+
+    ppT :: TagR s -> (Int, Adoc)
+    ppT tag = let s = go tag
+                  n = length s
+               in (2*n, encloseSep "" "#" "." s)
+      where
+        go :: TagR s -> [Adoc]
+        go TagRunit         = []
+        go TagRsingle{}     = []
+        go TagRundef{}      = [pretty '.']
+        go (TagRtag t r)    = pretty t : go r
+        go (TagRpair ta tb) = go ta ++ go tb
 
 {-
 

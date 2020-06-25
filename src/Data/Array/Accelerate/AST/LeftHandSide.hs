@@ -45,12 +45,12 @@ pattern LeftHandSideUnit
     => LeftHandSide s v env env'
 pattern LeftHandSideUnit = LeftHandSideWildcard TupRunit
 
-lhsToTupR :: LeftHandSide s arrs aenv aenv' -> TupR s arrs
+lhsToTupR :: LeftHandSide s v env env' -> TupR s v
 lhsToTupR (LeftHandSideSingle s)   = TupRsingle s
 lhsToTupR (LeftHandSideWildcard r) = r
 lhsToTupR (LeftHandSidePair as bs) = TupRpair (lhsToTupR as) (lhsToTupR bs)
 
-rnfLeftHandSide :: (forall b. s b -> ()) -> LeftHandSide s arrs env env' -> ()
+rnfLeftHandSide :: (forall b. s b -> ()) -> LeftHandSide s v env env' -> ()
 rnfLeftHandSide f (LeftHandSideWildcard r) = rnfTupR f r
 rnfLeftHandSide f (LeftHandSideSingle s)   = f s
 rnfLeftHandSide f (LeftHandSidePair as bs) = rnfLeftHandSide f as `seq` rnfLeftHandSide f bs

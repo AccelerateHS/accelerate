@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
@@ -55,14 +56,10 @@ import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
 
 import Control.Applicative                                          hiding ( Const )
-import Prelude                                                      hiding ( exp, seq )
 import Data.Maybe                                                   ( isJust )
-
-#if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
-#else
 import Data.Monoid
-#endif
+import Data.Semigroup
+import Prelude                                                      hiding ( exp, seq )
 
 
 data VarsRange env =
@@ -162,6 +159,9 @@ instance Semigroup Count where
   Infinity      <> _             = Infinity
   _             <> Infinity      = Infinity
   Finite a      <> Finite b      = Finite $ a + b
+
+instance Monoid Count where
+  mempty = Finite 0
 
 loopCount :: Count -> Count
 loopCount (Finite n) | n > 0 = Infinity
@@ -288,6 +288,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       ToIndex shr sh ix         -> ToIndex shr <$> shrinkE sh <*> shrinkE ix
       FromIndex shr sh i        -> FromIndex shr <$> shrinkE sh <*> shrinkE i
+      Case e rhs                -> Case <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ]
       Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
       While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
       PrimConst c               -> pure (PrimConst c)
@@ -484,6 +485,7 @@ usesOfExp range = countE
       IndexFull _ ix sl         -> countE ix <> countE sl
       FromIndex _ sh i          -> countE sh <> countE i
       ToIndex _ sh e            -> countE sh <> countE e
+      Case e rhs                -> countE e  <> mconcat [ countE c | (_,c) <- rhs ]
       Cond p t e                -> countE p  <> countE t <> countE e
       While p f x               -> countE x  <> loopCount (usesOfFun range p) <> loopCount (usesOfFun range f)
       PrimConst _               -> Finite 0
@@ -505,6 +507,8 @@ usesOfFun range (Body b)    = usesOfExp range b
 --
 type UsesOfAcc acc = forall aenv s t. Bool -> Idx aenv s -> acc aenv t -> Int
 
+-- XXX: Should this be converted to use the above 'Count' semigroup?
+--
 usesOfPreAcc
     :: forall acc aenv s t.
        Bool
@@ -567,6 +571,7 @@ usesOfPreAcc withShape countAcc idx = count
       IndexFull _ ix sl          -> countE ix + countE sl
       ToIndex _ sh ix            -> countE sh + countE ix
       FromIndex _ sh i           -> countE sh + countE i
+      Case e rhs                 -> countE e  + sum [ countE c | (_,c) <- rhs ]
       Cond p t e                 -> countE p  + countE t + countE e
       While p f x                -> countF p  + countF f + countE x
       PrimConst _                -> 0

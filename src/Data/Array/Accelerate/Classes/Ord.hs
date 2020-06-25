@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Ord
@@ -46,20 +47,13 @@ import Prelude                                                      ( ($), (>>=)
 import Text.Printf
 import qualified Prelude                                            as P
 
+
+mkPatterns ''Ordering
+
 infix 4 <
 infix 4 >
 infix 4 <=
 infix 4 >=
-
-pattern LT_ :: Exp Ordering
-pattern LT_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 0) `Pair` SmartExp Nil))
-
-pattern EQ_ :: Exp Ordering
-pattern EQ_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 1) `Pair` SmartExp Nil))
-
-pattern GT_ :: Exp Ordering
-pattern GT_ = Exp (SmartExp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) 2) `Pair` SmartExp Nil))
-{-# COMPLETE LT_, EQ_, GT_ #-}
 
 -- | The 'Ord' class for totally ordered datatypes
 --

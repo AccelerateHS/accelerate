@@ -52,6 +52,7 @@ import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Trafo
@@ -944,6 +945,23 @@ evalOpenExp pexp env aenv =
 
     ToIndex shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
     FromIndex shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
+    Case e rhs                  -> evalE (caseof (evalE e) rhs)
+      where
+        caseof :: a -> [(TagR a, OpenExp env aenv b)] -> OpenExp env aenv b
+        caseof v = go
+          where
+            go ((t,cont):cs)
+              | eqTag t v = cont
+              | otherwise = go cs
+            go []         = $internalError "case" "unmatched case"
+
+        eqTag :: TagR a -> a -> Bool
+        eqTag TagRunit         ()    = True
+        eqTag TagRsingle{}     _     = True
+        eqTag TagRundef{}      _     = True
+        eqTag (TagRtag tag aR) (t,a) = tag == t && eqTag aR a
+        eqTag (TagRpair aR bR) (a,b) = eqTag aR a && eqTag bR b
+
     Cond c t e
       | toBool (evalE c)        -> evalE t
       | otherwise               -> evalE e

@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
@@ -35,18 +36,24 @@ module Data.Array.Accelerate.Pattern (
 
   pattern V2, pattern V3, pattern V4, pattern V8, pattern V16,
 
+  mkPatterns,
+
 ) where
 
 import Data.Array.Accelerate.AST.Idx
-import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Vec
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
-import Data.Array.Accelerate.Sugar.Array
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
+import Control.Monad
+import Data.Bits
+import Data.List                                                    ( foldl' )
 import Language.Haskell.TH                                          hiding ( Exp, Match, match, tupP, tupE )
 import Language.Haskell.TH.Extra
 import qualified Language.Haskell.TH                                as TH
@@ -63,7 +70,6 @@ class IsPattern con a t where
   construct :: t -> con a
   destruct  :: con a -> t
 
-
 -- | Pattern synonyms for indices, which may be more convenient to use than
 -- 'Data.Array.Accelerate.Lift.lift' and
 -- 'Data.Array.Accelerate.Lift.unlift'.
@@ -77,6 +83,7 @@ pattern (::.) :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
 pattern a ::. b = Pattern (a :. b)
 {-# COMPLETE (::.) #-}
 
+infixl 3 `Ix`
 pattern Ix :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
 pattern a `Ix` b = a ::. b
 {-# COMPLETE Ix #-}
@@ -94,6 +101,167 @@ instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
 -- Newtype wrapper to distinguish between T and V patterns
 --
 newtype VecPattern a = VecPattern a
+
+
+mkPatterns :: Name -> DecsQ
+mkPatterns nm = do
+  info <- reify nm
+  case info of
+    TyConI dec -> mkDec dec
+    _          -> fail "mkPatterns: expected the name of a newtype or datatype"
+
+mkDec :: Dec -> DecsQ
+mkDec dec =
+  case dec of
+    DataD    _ nm tv _ cs _ -> mkDataD nm tv cs
+    NewtypeD _ nm tv _ c  _ -> mkNewtypeD nm tv c
+    _                      -> fail "mkPatterns: expected the name of a newtype or datatype"
+
+mkNewtypeD :: Name -> [TyVarBndr] -> Con -> DecsQ
+mkNewtypeD tn tvs c = mkDataD tn tvs [c]
+
+mkDataD :: Name -> [TyVarBndr] -> [Con] -> DecsQ
+mkDataD tn tvs cs = do
+  (pats, decs) <- unzip <$> go [] fts cs cts
+  comp         <- pragCompleteD pats Nothing
+  return $ comp : concat decs
+  where
+    fieldTys (NormalC _ fs) = map snd fs
+    fieldTys (RecC _ fs)    = map (\(_,_,t) -> t) fs
+    fieldTys (InfixC a _ b) = [snd a, snd b]
+    fieldTys _              = error "mkPatterns: only constructors for \"vanilla\" syntax are supported"
+
+    st  = length cs > 1
+    fts = map fieldTys cs
+
+    -- TODO: The GTags class demonstrates a way to generate the tags for
+    -- a given constructor, rather than backwards-engineering the structure
+    -- as we've done here. We should use that instead!
+    --
+    cts =
+      let n = length cs
+          m = n `quot` 2
+          l = take m     (iterate (True:) [False])
+          r = take (n-m) (iterate (True:) [True])
+      in
+      map bitsToTag (l ++ r)
+
+    bitsToTag = foldl' f 0
+      where
+        f n False =         n `shiftL` 1
+        f n True  = setBit (n `shiftL` 1) 0
+
+    go prev (this:next) (con:cons) (tag:tags) = do
+      r  <- mkCon st tn tvs prev next tag con
+      rs <- go (this:prev) next cons tags
+      return (r : rs)
+    go _ [] [] [] = return []
+    go _ _  _  _  = fail "mkPatterns: unexpected error"
+
+mkCon :: Bool -> Name -> [TyVarBndr] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
+mkCon st tn tvs prev next tag = \case
+  NormalC nm fs -> mkNormalC st tn (map tyVarBndrName tvs) tag nm prev (map snd fs) next
+  -- RecC nm fs    -> undefined
+  -- InfixC a nm b -> undefined
+  _             -> fail "mkPatterns: only constructors for \"vanilla\" syntax are supported"
+
+mkNormalC :: Bool -> Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
+mkNormalC st tn tvs tag cn ps fs ns = do
+  (fun_mk,    dec_mk)    <- mkNormalC_mk st tn tvs tag cn ps fs ns
+  (fun_match, dec_match) <- mkNormalC_match st tn tvs tag cn ps fs ns
+  (pat,       dec_pat)   <- mkNormalC_pattern tn tvs cn fs fun_mk fun_match
+  return $ (pat, concat [dec_pat, dec_mk, dec_match])
+
+mkNormalC_pattern :: Name -> [Name] -> Name -> [Type] -> Name -> Name -> Q (Name, [Dec])
+mkNormalC_pattern tn tvs cn fs mk match = do
+  xs <- replicateM (length fs) (newName "_x")
+  r  <- sequence [ patSynSigD pat sig
+                 , patSynD    pat
+                     (prefixPatSyn xs)
+                     (explBidir [clause [] (normalB (varE mk)) []])
+                     (parensP $ viewP (varE match) [p| Just $(tupP (map varP xs)) |])
+                 ]
+  return (pat, r)
+  where
+    pat = mkName (nameBase cn ++ "_")
+    sig = forallT
+            (map plainTV tvs)
+            (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+            (foldr (\t ts -> [t| $t -> $ts |])
+                   [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
+                   (map (\t -> [t| Exp $(return t) |]) fs))
+
+mkNormalC_mk :: Bool -> Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
+mkNormalC_mk sum_type tn tvs tag cn fs0 fs fs1 = do
+  fun <- newName ("_mk" ++ nameBase cn)
+  xs  <- replicateM (length fs) (newName "_x")
+  let
+    vs    = foldl' (\es e -> [| SmartExp ($es `Pair` $e) |]) [| SmartExp Nil |]
+          $  map (\t -> [| unExp (undef @ $(return t)) |] ) (concat (reverse fs0))
+          ++ map varE xs
+          ++ map (\t -> [| unExp (undef @ $(return t)) |] ) (concat fs1)
+
+    body  = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
+      where
+        tagged
+          | sum_type  = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
+          | otherwise = [| Exp $vs |]
+
+  r <- sequence [ sigD fun sig
+                , funD fun [body]
+                ]
+  return (fun, r)
+  where
+    sig   = forallT
+              (map plainTV tvs)
+              (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+              (foldr (\t ts -> [t| $t -> $ts |])
+                     [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
+                     (map (\t -> [t| Exp $(return t) |]) fs))
+
+
+mkNormalC_match :: Bool -> Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
+mkNormalC_match sum_type tn tvs tag cn fs0 fs fs1 = do
+  fun     <- newName ("_match" ++ nameBase cn)
+  e       <- newName "_e"
+  x       <- newName "_x"
+  (ps,es) <- extract vs (if sum_type then [| Prj PairIdxRight $(varE x) |] else varE x) [] []
+  let
+    lhs   = [p| (Exp $(varP e)) |]
+    body  = normalB $ caseE (varE e)
+      [ TH.match (conP 'SmartExp [(conP 'Match [matchP ps, varP x])]) (normalB [| Just $(tupE es) |]) []
+      , TH.match (conP 'SmartExp [(recP 'Match [])])                  (normalB [| Nothing         |]) []
+      , TH.match wildP                                                (normalB [| error "Pattern synonym used outside 'match' context" |]) []
+      ]
+
+  r <- sequence [ sigD fun sig
+                , funD fun [clause [lhs] body []]
+                ]
+  return (fun, r)
+  where
+    sig =
+      forallT []
+        (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+        [t| Exp $(foldl' appT (conT tn) (map varT tvs))
+            -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
+
+    matchP us
+      | sum_type  = [p| TagRtag $(litP (IntegerL (toInteger tag))) $pat |]
+      | otherwise = pat
+      where
+        pat = [p| $(foldl (\ps p -> [p| TagRpair $ps $p |]) [p| TagRunit |] us) |]
+
+    extract []     _ ps es = return (ps, es)
+    extract (u:us) x ps es = do
+      _u <- newName "_u"
+      let x' = [| Prj PairIdxLeft (SmartExp $x) |]
+      if not u
+         then extract us x' (wildP:ps)  es
+         else extract us x' (varP _u:ps) ([| Exp (SmartExp (Match $(varE _u) (SmartExp (Prj PairIdxRight (SmartExp $x))))) |] : es)
+
+    vs = reverse
+       $ [ False | _ <- concat fs0 ] ++ [ True | _ <- fs ] ++ [ False | _ <- concat fs1 ]
+
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
 -- (unremarkable) boilerplate for us, but since the implementation is a little

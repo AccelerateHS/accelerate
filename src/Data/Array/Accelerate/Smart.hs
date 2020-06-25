@@ -7,6 +7,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -81,6 +82,7 @@ module Data.Array.Accelerate.Smart (
 
 
 import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Shape
@@ -480,6 +482,11 @@ data PreSmartExp acc exp t where
                 -> Level                        -- environment size at defining occurrence
                 -> PreSmartExp acc exp t
 
+  -- Needed for embedded pattern matching
+  Match         :: TagR t
+                -> exp t
+                -> PreSmartExp acc exp t
+
   -- All the same constructors as 'AST.Exp', plus projection
   Const         :: ScalarType t
                 -> t
@@ -495,7 +502,6 @@ data PreSmartExp acc exp t where
                 -> exp (t1, t2)
                 -> PreSmartExp acc exp t
 
-  -- SIMD vectors
   VecPack       :: KnownNat n
                 => VecR n s tup
                 -> exp tup
@@ -515,6 +521,10 @@ data PreSmartExp acc exp t where
                 -> exp sh
                 -> exp Int
                 -> PreSmartExp acc exp sh
+
+  Case          :: exp a
+                -> [(TagR a, exp b)]
+                -> PreSmartExp acc exp b
 
   Cond          :: exp PrimBool
                 -> exp t
@@ -823,6 +833,7 @@ instance HasTypeR SmartExp where
 instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
   typeR = \case
     Tag tp _                        -> tp
+    Match _ e                       -> typeR e
     Const tp _                      -> TupRsingle tp
     Nil                             -> TupRunit
     Pair e1 e2                      -> typeR e1 `TupRpair` typeR e2
@@ -835,6 +846,8 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     VecUnpack vecR _                -> vecRtuple vecR
     ToIndex _ _ _                   -> TupRsingle scalarTypeInt
     FromIndex shr _ _               -> shapeType shr
+    Case _ ((_,c):_)                -> typeR c
+    Case{}                          -> $internalError "typeR" "encountered empty case"
     Cond _ e _                      -> typeR e
     While t _ _ _                   -> t
     PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
@@ -1222,7 +1235,7 @@ unAccFunction f = unAcc . f . Acc
 mkExp :: PreSmartExp SmartAcc SmartExp (EltR t) -> Exp t
 mkExp = Exp . SmartExp
 
-unExp :: Elt e => Exp e -> SmartExp (EltR e)
+unExp :: Exp e -> SmartExp (EltR e)
 unExp (Exp e) = e
 
 unExpFunction :: (Elt a, Elt b) => (Exp a -> Exp b) -> SmartExp (EltR a) -> SmartExp (EltR b)
@@ -1317,6 +1330,7 @@ showsDirection RightToLeft = ('r':)
 
 showPreExpOp :: PreSmartExp acc exp t -> String
 showPreExpOp (Tag _ i)          = "Tag" ++ show i
+showPreExpOp Match{}            = "Match"
 showPreExpOp (Const t c)        = "Const " ++ showElt (TupRsingle t) c
 showPreExpOp (Undef _)          = "Undef"
 showPreExpOp Nil{}              = "Nil"
@@ -1326,6 +1340,7 @@ showPreExpOp VecPack{}          = "VecPack"
 showPreExpOp VecUnpack{}        = "VecUnpack"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"
+showPreExpOp Case{}             = "Case"
 showPreExpOp Cond{}             = "Cond"
 showPreExpOp While{}            = "While"
 showPreExpOp PrimConst{}        = "PrimConst"

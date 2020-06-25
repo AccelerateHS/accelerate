@@ -8,6 +8,7 @@
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -224,6 +225,7 @@ simplifyOpenExp env = first getAny . cvtE
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
       FromIndex shr sh ix       -> fromIndex shr (cvtE sh) (cvtE ix)
+      Case e rhs                -> Case <$> cvtE e <*> sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> (u<>v, fx)
@@ -417,6 +419,12 @@ instance Show Stats where
   show (Stats a b c d e) =
     printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
 
+instance Semigroup Stats where
+  (<>) = (+++)
+
+instance Monoid Stats where
+  mempty = Stats 0 0 0 0 0
+
 infixl 6 +++
 (+++) :: Stats -> Stats -> Stats
 Stats a1 b1 c1 d1 e1 +++ Stats a2 b2 c2 d2 e2 = Stats (a1+a2) (b1+b2) (c1+c2) (d1+d2) (e1+e2)
@@ -501,6 +509,7 @@ summariseOpenExp = (terms +~ 1) . goE
         IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
         ToIndex _ sh ix       -> travE sh +++ travE ix
         FromIndex _ sh ix     -> travE sh +++ travE ix
+        Case e rhs            -> travE e +++ mconcat [ travE c | (_,c) <- rhs ]
         Cond p t e            -> travE p +++ travE t +++ travE e
         While p f x           -> travF p +++ travF f +++ travE x
         PrimConst c           -> travC c

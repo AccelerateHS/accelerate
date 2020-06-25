@@ -133,6 +133,7 @@ module Data.Array.Accelerate.AST (
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Shape
@@ -561,6 +562,11 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv Int          -- index into linear representation
                 -> OpenExp env aenv sh
 
+  -- Case statement
+  Case          :: OpenExp env aenv a
+                -> [(TagR a, OpenExp env aenv b)]
+                -> OpenExp env aenv b
+
   -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond          :: OpenExp env aenv PrimBool
                 -> OpenExp env aenv t
@@ -694,9 +700,9 @@ data PrimFun sig where
   -- PrimProperFraction :: FloatingType a -> IntegralType b -> PrimFun (a -> (b, a))
 
   -- operators from RealFloat
-  PrimAtan2          :: FloatingType a -> PrimFun ((a, a) -> a)
-  PrimIsNaN          :: FloatingType a -> PrimFun (a -> PrimBool)
-  PrimIsInfinite     :: FloatingType a -> PrimFun (a -> PrimBool)
+  PrimAtan2      :: FloatingType a -> PrimFun ((a, a) -> a)
+  PrimIsNaN      :: FloatingType a -> PrimFun (a -> PrimBool)
+  PrimIsInfinite :: FloatingType a -> PrimFun (a -> PrimBool)
 
   -- relational and equality operators
   PrimLt   :: SingleType a -> PrimFun ((a, a) -> PrimBool)
@@ -791,6 +797,8 @@ expType = \case
   IndexFull  si _ _            -> shapeType $ sliceDomainR si
   ToIndex{}                    -> TupRsingle scalarTypeInt
   FromIndex shr _ _            -> shapeType shr
+  Case _ ((_,e):_)             -> expType e
+  Case _ []                    -> $internalError "expType" "empty case encountered"
   Cond _ e _                   -> expType e
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
@@ -1010,6 +1018,12 @@ rnfMaybe :: (a -> ()) -> Maybe a -> ()
 rnfMaybe _ Nothing  = ()
 rnfMaybe f (Just x) = f x
 
+rnfList :: (a -> ()) -> [a] -> ()
+rnfList r = go
+  where
+    go []     = ()
+    go (x:xs) = r x `seq` go xs
+
 rnfOpenFun :: OpenFun env aenv t -> ()
 rnfOpenFun (Body b)    = rnfOpenExp b
 rnfOpenFun (Lam lhs f) = rnfELeftHandSide lhs `seq` rnfOpenFun f
@@ -1037,6 +1051,7 @@ rnfOpenExp topExp =
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
     FromIndex shr sh ix       -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
+    Case e rhs                -> rnfE e `seq` rnfList (\(t,c) -> rnfTag t `seq` rnfE c) rhs
     Cond p e1 e2              -> rnfE p `seq` rnfE e1 `seq` rnfE e2
     While p f x               -> rnfF p `seq` rnfF f `seq` rnfE x
     PrimConst c               -> rnfPrimConst c
@@ -1209,6 +1224,10 @@ liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
 liftMaybe _ Nothing  = [|| Nothing ||]
 liftMaybe f (Just x) = [|| Just $$(f x) ||]
 
+liftList :: (a -> Q (TExp a)) -> [a] -> Q (TExp [a])
+liftList _ []     = [|| [] ||]
+liftList f (x:xs) = [|| $$(f x) : $$(liftList f xs) ||]
+
 liftOpenFun
     :: OpenFun env aenv t
     -> Q (TExp (OpenFun env aenv t))
@@ -1241,6 +1260,7 @@ liftOpenExp pexp =
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
     FromIndex shr sh ix       -> [|| FromIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
+    Case p rhs                -> [|| Case $$(liftE p) $$(liftList (\(t,c) -> [|| ($$(liftTag t), $$(liftE c)) ||]) rhs) ||]
     Cond p t e                -> [|| Cond $$(liftE p) $$(liftE t) $$(liftE e) ||]
     While p f x               -> [|| While $$(liftF p) $$(liftF f) $$(liftE x) ||]
     PrimConst t               -> [|| PrimConst $$(liftPrimConst t) ||]
@@ -1383,6 +1403,7 @@ showExpOp IndexSlice{}      = "IndexSlice"
 showExpOp IndexFull{}       = "IndexFull"
 showExpOp ToIndex{}         = "ToIndex"
 showExpOp FromIndex{}       = "FromIndex"
+showExpOp Case{}            = "Case"
 showExpOp Cond{}            = "Cond"
 showExpOp While{}           = "While"
 showExpOp PrimConst{}       = "PrimConst"

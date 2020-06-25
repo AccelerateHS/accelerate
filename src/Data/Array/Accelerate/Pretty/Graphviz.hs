@@ -540,6 +540,7 @@ fvOpenExp env aenv = fv
     fv (FromIndex _ sh ix)      = concat [ fv sh, fv ix ]
     fv (ShapeSize _ sh)         = fv sh
     fv Foreign{}                = []
+    fv (Case e rhs)             = concat [ fv e, concat [ fv c | (_,c) <- rhs ] ]
     fv (Cond p t e)             = concat [ fv p, fv t, fv e ]
     fv (While p f x)            = concat [ fvF p, fvF f, fv x ]
     fv (Coerce _ _ e)           = fv e

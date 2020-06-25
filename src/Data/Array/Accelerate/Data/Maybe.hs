@@ -4,10 +4,12 @@
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Maybe
@@ -24,7 +26,6 @@
 module Data.Array.Accelerate.Data.Maybe (
 
   Maybe(..), pattern Nothing_, pattern Just_,
-  just, nothing,
   maybe, isJust, isNothing, fromMaybe, fromJust, justs,
 
 ) where
@@ -33,6 +34,7 @@ import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Interpreter
 import Data.Array.Accelerate.Language                               hiding ( chr )
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude                                hiding ( filter )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Array, Vector )
@@ -54,32 +56,8 @@ import Data.Maybe                                                   ( Maybe(..) 
 import Prelude                                                      ( ($), const, otherwise )
 
 
-pattern Nothing_ :: Elt a => Exp (Maybe a)
-pattern Nothing_ <- _
-  where Nothing_ = nothing
+mkPatterns ''Maybe
 
-pattern Just_ :: Elt a => Exp a -> Exp (Maybe a)
-pattern Just_ <- _
-  where Just_ = just
-
--- | Lift a value into a 'Just' constructor
---
-just :: Elt a => Exp a -> Exp (Maybe a)
-just x = lift (Just x)
-
--- | The 'Nothing' constructor
---
-nothing :: forall a. Elt a => Exp (Maybe a)
-nothing = lift (Nothing :: Maybe (Exp a))
---
--- Note: [lifting Nothing]
---
--- The lift instance for 'Nothing' uses our magic 'undef' term, meaning that our
--- backends will know that we can leave this slot in the values array undefined.
--- If we had instead written 'constant Nothing' this would result in writing an
--- actual (unspecified) value into the values array, which is what we want to
--- avoid.
---
 
 -- | Returns 'True' if the argument is 'Nothing'
 --
@@ -159,12 +137,8 @@ instance Elt a => Elt (Maybe a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  -- lift Nothing  = Exp $ SmartExp $ Pair t $ unExp $ undef @(Plain a)
-  --   where
-  --     t = SmartExp $ Pair (SmartExp Nil) (SmartExp $ Const scalarTypeWord8 0)
-  -- lift (Just x) = Exp $ SmartExp $ Pair t $ unExp $ lift x
-  --   where
-  --     t = SmartExp $ Pair (SmartExp Nil) $ SmartExp $ Const scalarTypeWord8 1
+  lift Nothing  = Nothing_
+  lift (Just a) = Just_ (lift a)
 
 
 -- Utilities

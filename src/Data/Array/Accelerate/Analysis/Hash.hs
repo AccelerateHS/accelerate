@@ -37,13 +37,14 @@ module Data.Array.Accelerate.Analysis.Hash (
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.Idx
-import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Analysis.Hash.TH
 import Data.Array.Accelerate.Representation.Array
-import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Slice
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
@@ -328,6 +329,7 @@ encodeOpenExp exp =
     IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
     ToIndex _ sh i              -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
     FromIndex _ sh i            -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
+    Case e rhs                  -> intHost $(hashQ "Case")        <> travE e  <> mconcat [ encodeTag t <> travE c | (t,c) <- rhs ]
     Cond c t e                  -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
     While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
     PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
@@ -341,6 +343,13 @@ encodeOpenExp exp =
 
 encodeArrayVar :: ArrayVar aenv a -> Builder
 encodeArrayVar (Var repr v) = encodeArrayType repr <> encodeIdx v
+
+encodeTag :: TagR t -> Builder
+encodeTag TagRunit         = intHost $(hashQ "TagRunit")
+encodeTag (TagRsingle t)   = intHost $(hashQ "TagRsingle") <> encodeScalarType t
+encodeTag (TagRundef t)    = intHost $(hashQ "TagRundef")  <> encodeScalarType t
+encodeTag (TagRtag t a)    = intHost $(hashQ "TagRtag")    <> word8 t <> encodeTag a
+encodeTag (TagRpair ta tb) = intHost $(hashQ "TagRpair")   <> encodeTag ta <> encodeTag tb
 
 {-# INLINEABLE encodeOpenFun #-}
 encodeOpenFun

@@ -4,10 +4,12 @@
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Either
@@ -24,20 +26,20 @@
 module Data.Array.Accelerate.Data.Either (
 
   Either(..), pattern Left_, pattern Right_,
-  left, right,
   either, isLeft, isRight, fromLeft, fromRight, lefts, rights,
 
 ) where
 
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Interpreter
+import Data.Array.Accelerate.Language                               hiding ( chr )
+import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Prelude                                hiding ( filter )
+import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Array, Vector )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.), empty )
-import Data.Array.Accelerate.Language                               hiding ( chr )
-import Data.Array.Accelerate.Prelude                                hiding ( filter )
-import Data.Array.Accelerate.Interpreter
-import Data.Array.Accelerate.Pattern
-import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -52,16 +54,11 @@ import Data.Array.Accelerate.Data.Semigroup
 
 import Data.Either                                                  ( Either(..) )
 import Data.Maybe
-import Prelude                                                      ( (.), ($), const, otherwise, undefined )
+import Prelude                                                      ( (.), ($), const, otherwise )
 
 
-pattern Left_ :: (Elt a, Elt b) => Exp a -> Exp (Either a b)
-pattern Left_ <- _
-  where Left_ = left
+mkPatterns ''Either
 
-pattern Right_ :: (Elt a, Elt b) => Exp b -> Exp (Either a b)
-pattern Right_ <- _
-  where Right_ = right
 
 -- | Lift a value into the 'Left' constructor
 --
@@ -91,16 +88,14 @@ isRight x = tag x == 1
 -- instead.
 --
 fromLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp a
-fromLeft x = a
-  where T3 _ a _ = asTuple x
+fromLeft x = let T3 _ a _ = asTuple x in a
 
 -- | The 'fromRight' function extracts the element out of the 'Right'
 -- constructor. If the argument was actually 'Left', you will get an undefined
 -- value instead.
 --
 fromRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp b
-fromRight x = b
-  where T3 _ _ b = asTuple x
+fromRight x = let T3 _ _ b = asTuple x in b
 
 -- | The 'either' function performs case analysis on the 'Either' type. If the
 -- value is @'Left' a@, apply the first function to @a@; if it is @'Right' b@,
@@ -149,15 +144,14 @@ instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
 #endif
 
 tag :: (Elt a, Elt b) => Exp (Either a b) -> Exp Word8
-tag x = t
-  where T3 t _ _ = asTuple x
+tag x = let T3 t _ _ = asTuple x in t
 
 instance (Elt a, Elt b) => Elt (Either a b)
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)
-  -- lift (Left a)  = toEither $ T3 (constant 0) (lift a) undef
-  -- lift (Right b) = toEither $ T3 (constant 1) undef    (lift b)
+  lift (Left a)  = Left_ (lift a)
+  lift (Right b) = Right_ (lift b)
 
 
 -- Utilities
@@ -197,9 +191,9 @@ filter' keep arr
 emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
 emptyArray = fill (constant empty) undef
 
-asTuple :: Exp (Either a b) -> Exp (Word8, a, b)
-asTuple = undefined -- (Exp e) = Exp e
-
-toEither :: Exp (Word8, a, b) -> Exp (Either a b)
-toEither = undefined -- (Exp e) = Exp e
+asTuple :: (Elt a, Elt b) => Exp (Either a b) -> Exp (Word8, a, b)
+asTuple (Exp e) =
+ T3 (Exp $ SmartExp $ Prj PairIdxLeft e)
+    (Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e)
+    (Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e)
 

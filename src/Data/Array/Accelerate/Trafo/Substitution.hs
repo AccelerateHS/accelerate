@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -145,7 +146,7 @@ inlineVars lhsBound expr bound
         -> Maybe (OpenExp env2 aenv t)
     substitute _ k2 vars (extractExpVars -> Just vars')
       | Just Refl <- matchVars vars vars' = Just $ weakenE k2 bound
-    substitute k1 k2 vars e = case e of
+    substitute k1 k2 vars topExp = case topExp of
       Let lhs e1 e2
         | Exists lhs' <- rebuildLHS lhs
                           -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
@@ -159,6 +160,7 @@ inlineVars lhsBound expr bound
       IndexFull  si e1 e2 -> IndexFull  si <$> travE e1 <*> travE e2
       ToIndex   shr e1 e2 -> ToIndex   shr <$> travE e1 <*> travE e2
       FromIndex shr e1 e2 -> FromIndex shr <$> travE e1 <*> travE e2
+      Case e1 rhs         -> Case <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs
       Cond e1 e2 e3       -> Cond <$> travE e1 <*> travE e2 <*> travE e3
       While f1 f2 e1      -> While <$> travF f1 <*> travF f2 <*> travE e1
       Const t c           -> Just $ Const t c
@@ -554,8 +556,9 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
     IndexFull x ix sl   -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
     ToIndex shr sh ix   -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
     FromIndex shr sh ix -> FromIndex shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    Case e rhs          -> Case            <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ]
     Cond p t e          -> Cond            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t  <*> rebuildOpenExp v av e
-    While p f x         -> While           <$> rebuildFun v av p      <*> rebuildFun v av f         <*> rebuildOpenExp v av x
+    While p f x         -> While           <$> rebuildFun v av p      <*> rebuildFun v av f      <*> rebuildOpenExp v av x
     PrimApp f x         -> PrimApp f       <$> rebuildOpenExp v av x
     Index a sh          -> Index           <$> reindex a              <*> rebuildOpenExp v av sh
     LinearIndex a i     -> LinearIndex     <$> reindex a              <*> rebuildOpenExp v av i

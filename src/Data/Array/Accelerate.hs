@@ -361,7 +361,7 @@ module Data.Array.Accelerate (
   fst, afst, snd, asnd, curry, uncurry,
 
   -- *** Flow control
-  (?), caseof, cond, while, iterate,
+  (?), match, cond, while, iterate,
 
   -- *** Scalar reduction
   sfoldl,

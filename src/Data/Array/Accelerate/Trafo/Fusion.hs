@@ -41,10 +41,6 @@ module Data.Array.Accelerate.Trafo.Fusion (
 
 ) where
 
--- standard library
-import Prelude                                          hiding ( exp, until )
-
--- friends
 import Data.BitSet
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.LeftHandSide
@@ -71,6 +67,9 @@ import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe -- for debugging
 #endif
+
+import Control.Lens                                     ( over, mapped, _2 )
+import Prelude                                          hiding ( exp, until )
 
 
 -- Delayed Array Fusion
@@ -1401,6 +1400,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex shR' sh ix              -> ToIndex shR' (cvtE sh) (cvtE ix)
         FromIndex shR' sh i             -> FromIndex shR' (cvtE sh) (cvtE i)
+        Case e rhs                      -> Case (cvtE e) (over (mapped . _2) cvtE rhs)
         Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
         PrimConst c                     -> PrimConst c
         PrimApp g x                     -> PrimApp g (cvtE x)
