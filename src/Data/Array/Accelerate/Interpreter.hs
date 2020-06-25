@@ -7,7 +7,6 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -79,13 +78,15 @@ import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
 import Prelude                                                      hiding ( (!!), sum )
 
+import GHC.Stack
+
 
 -- Program execution
 -- -----------------
 
 -- | Run a complete embedded array program using the reference interpreter.
 --
-run :: Sugar.Arrays a => Smart.Acc a -> a
+run :: (HasCallStack, Sugar.Arrays a) => Smart.Acc a -> a
 run a = unsafePerformIO execute
   where
     !acc    = convertAcc a
@@ -97,12 +98,12 @@ run a = unsafePerformIO execute
 
 -- | This is 'runN' specialised to an array program of one argument.
 --
-run1 :: (Sugar.Arrays a, Sugar.Arrays b) => (Smart.Acc a -> Smart.Acc b) -> a -> b
+run1 :: (HasCallStack, Sugar.Arrays a, Sugar.Arrays b) => (Smart.Acc a -> Smart.Acc b) -> a -> b
 run1 = runN
 
 -- | Prepare and execute an embedded array program.
 --
-runN :: forall f. Afunction f => f -> AfunctionR f
+runN :: forall f. (HasCallStack, Afunction f) => f -> AfunctionR f
 runN f = go
   where
     !acc    = convertAfun f
@@ -160,7 +161,7 @@ fromFunction' repr sh f = (TupRsingle repr, fromFunction repr sh f)
 
 -- Evaluate an open array function
 --
-evalOpenAfun :: DelayedOpenAfun aenv f -> Val aenv -> f
+evalOpenAfun :: HasCallStack => DelayedOpenAfun aenv f -> Val aenv -> f
 evalOpenAfun (Alam lhs f) aenv = \a -> evalOpenAfun f $ aenv `push` (lhs, a)
 evalOpenAfun (Abody b)    aenv = snd $ evalOpenAcc b aenv
 
@@ -168,14 +169,14 @@ evalOpenAfun (Abody b)    aenv = snd $ evalOpenAcc b aenv
 -- The core interpreter for optimised array programs
 --
 evalOpenAcc
-    :: forall aenv a.
-       DelayedOpenAcc aenv a
+    :: forall aenv a. HasCallStack
+    => DelayedOpenAcc aenv a
     -> Val aenv
     -> WithReprs a
-evalOpenAcc AST.Delayed{}       _    = $internalError "evalOpenAcc" "expected manifest array"
+evalOpenAcc AST.Delayed{}       _    = internalError "expected manifest array"
 evalOpenAcc (AST.Manifest pacc) aenv =
   let
-      manifest :: forall a'. DelayedOpenAcc aenv a' -> WithReprs a'
+      manifest :: forall a'. HasCallStack => DelayedOpenAcc aenv a' -> WithReprs a'
       manifest acc =
         let (repr, a') = evalOpenAcc acc aenv
         in  rnfArraysR repr a' `seq` (repr, a')
@@ -281,12 +282,13 @@ transformOp repr sh' p f (Delayed _ _ xs _)
 
 
 reshapeOp
-    :: ShapeR sh
+    :: HasCallStack
+    => ShapeR sh
     -> sh
     -> WithReprs (Array sh' e)
     -> WithReprs (Array sh  e)
 reshapeOp newShapeR newShape (TupRsingle (ArrayR shr tp), (Array sh adata))
-  = $boundsCheck "reshape" "shape mismatch" (size newShapeR newShape == size shr sh)
+  = boundsCheck "shape mismatch" (size newShapeR newShape == size shr sh)
     ( TupRsingle (ArrayR newShapeR tp)
     , Array newShape adata
     )
@@ -328,10 +330,12 @@ sliceOp slice (TupRsingle repr@(ArrayR _ tp), arr) slix
     repr' = ArrayR (sliceShapeR slice) tp
     (sh', pf) = restrict slice slix (shape arr)
 
-    restrict :: SliceIndex slix sl co sh
-             -> slix
-             -> sh
-             -> (sl, sl -> sh)
+    restrict
+        :: HasCallStack
+        => SliceIndex slix sl co sh
+        -> slix
+        -> sh
+        -> (sl, sl -> sh)
     restrict SliceNil              ()        ()
       = ((), const ())
     restrict (SliceAll sliceIdx)   (slx, ()) (sl, sz)
@@ -339,7 +343,7 @@ sliceOp slice (TupRsingle repr@(ArrayR _ tp), arr) slix
         in  ((sl', sz), \(ix, i) -> (f' ix, i))
     restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
       = let (sl', f') = restrict sliceIdx slx sl
-        in  $indexCheck "slice" i sz $ (sl', \ix -> (f' ix, i))
+        in  indexCheck i sz $ (sl', \ix -> (f' ix, i))
 
 
 mapOp :: TypeR b
@@ -370,16 +374,18 @@ foldOp f z (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
 
 
 fold1Op
-    :: (e -> e -> e)
+    :: HasCallStack
+    => (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array sh e)
 fold1Op f (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
-  = $boundsCheck "fold1" "empty array" (n > 0)
+  = boundsCheck "empty array" (n > 0)
   $ fromFunction' (ArrayR shr tp) sh (\ix -> iter1 (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f)
 
 
 foldSegOp
-    :: IntegralType i
+    :: HasCallStack
+    => IntegralType i
     -> (e -> e -> e)
     -> e
     -> Delayed (Array (sh, Int) e)
@@ -387,39 +393,40 @@ foldSegOp
     -> WithReprs (Array (sh, Int) e)
 foldSegOp itp f z (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
   | IntegralDict <- integralDict itp
-  = $boundsCheck "foldSeg" "empty segment descriptor" (n > 0)
+  = boundsCheck "empty segment descriptor" (n > 0)
   $ fromFunction' repr (sh, n-1)
   $ \(sz, ix) ->   let start = fromIntegral $ seg ix
                        end   = fromIntegral $ seg (ix+1)
                    in
-                   $boundsCheck "foldSeg" "empty segment" (end >= start)
+                   boundsCheck "empty segment" (end >= start)
                    $ iter (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
 
 
 fold1SegOp
-    :: IntegralType i
+    :: HasCallStack
+    => IntegralType i
     -> (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> Delayed (Segments i)
     -> WithReprs (Array (sh, Int) e)
 fold1SegOp itp f (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
   | IntegralDict <- integralDict itp
-  = $boundsCheck "foldSeg" "empty segment descriptor" (n > 0)
+  = boundsCheck "empty segment descriptor" (n > 0)
   $ fromFunction' repr (sh, n-1)
   $ \(sz, ix)   -> let start = fromIntegral $ seg ix
                        end   = fromIntegral $ seg (ix+1)
                    in
-                   $boundsCheck "fold1Seg" "empty segment" (end > start)
+                   boundsCheck "empty segment" (end > start)
                    $ iter1 (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f
 
 
 scanl1Op
-    :: forall sh e.
-       (e -> e -> e)
+    :: forall sh e. HasCallStack
+    => (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanl1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
-  = $boundsCheck "scanl1" "empty array" (n > 0)
+  = boundsCheck "empty array" (n > 0)
     ( TupRsingle $ ArrayR shr tp
     , adata `seq` Array sh adata
     )
@@ -520,12 +527,12 @@ scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
 
 
 scanr1Op
-    :: forall sh e.
-       (e -> e -> e)
+    :: forall sh e. HasCallStack
+    => (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
-  = $boundsCheck "scanr1" "empty array" (n > 0)
+  = boundsCheck "empty array" (n > 0)
     ( TupRsingle $ ArrayR shr tp
     , adata `seq` Array sh adata
     )
@@ -626,7 +633,8 @@ backpermuteOp shr sh' p (Delayed (ArrayR _ tp) _ arr _)
 
 
 stencilOp
-    :: StencilR sh a stencil
+    :: HasCallStack
+    => StencilR sh a stencil
     -> TypeR b
     -> (stencil -> b)
     -> Boundary (Array sh a)
@@ -640,7 +648,8 @@ stencilOp stencil tp f bnd arr@(Delayed _ sh _ _)
 
 
 stencil2Op
-    :: StencilR sh a stencil1
+    :: HasCallStack
+    => StencilR sh a stencil1
     -> StencilR sh b stencil2
     -> TypeR c
     -> (stencil1 -> stencil2 -> c)
@@ -784,7 +793,8 @@ stencilAccess stencil = goR (stencilShapeR stencil) stencil
 
 
 bounded
-    :: ShapeR sh
+    :: HasCallStack
+    => ShapeR sh
     -> Boundary (Array sh e)
     -> Delayed (Array sh e)
     -> sh
@@ -809,7 +819,7 @@ bounded shr bnd (Delayed _ sh f _) ix =
     -- Return the index (second argument), updated to obey the given boundary
     -- conditions when outside the bounds of the given shape (first argument)
     --
-    bound :: ShapeR sh -> sh -> sh -> sh
+    bound :: HasCallStack => ShapeR sh -> sh -> sh -> sh
     bound ShapeRz () () = ()
     bound (ShapeRsnoc shr) (sh, sz) (ih, iz) = (bound shr sh ih, ih')
       where
@@ -818,12 +828,12 @@ bounded shr bnd (Delayed _ sh f _) ix =
                           Clamp  -> 0
                           Mirror -> -iz
                           Wrap   -> sz + iz
-                          _      -> $internalError "bound" "unexpected boundary condition"
+                          _      -> internalError "unexpected boundary condition"
           | iz >= sz  = case bnd of
                           Clamp  -> sz - 1
                           Mirror -> sz - (iz - sz + 2)
                           Wrap   -> iz - sz
-                          _      -> $internalError "bound" "unexpected boundary condition"
+                          _      -> internalError "unexpected boundary condition"
           | otherwise = iz
 
 -- toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
@@ -849,7 +859,7 @@ data Boundary t where
   Function :: (sh -> e) -> Boundary (Array sh e)
 
 
-evalBoundary :: AST.Boundary aenv t -> Val aenv -> Boundary t
+evalBoundary :: HasCallStack => AST.Boundary aenv t -> Val aenv -> Boundary t
 evalBoundary bnd aenv =
   case bnd of
     AST.Clamp      -> Clamp
@@ -864,17 +874,17 @@ evalBoundary bnd aenv =
 
 -- Evaluate a closed scalar expression
 --
-evalExp :: Exp aenv t -> Val aenv -> t
+evalExp :: HasCallStack => Exp aenv t -> Val aenv -> t
 evalExp e aenv = evalOpenExp e Empty aenv
 
 -- Evaluate a closed scalar function
 --
-evalFun :: Fun aenv t -> Val aenv -> t
+evalFun :: HasCallStack => Fun aenv t -> Val aenv -> t
 evalFun f aenv = evalOpenFun f Empty aenv
 
 -- Evaluate an open scalar function
 --
-evalOpenFun :: OpenFun env aenv t -> Val env -> Val aenv -> t
+evalOpenFun :: HasCallStack => OpenFun env aenv t -> Val env -> Val aenv -> t
 evalOpenFun (Body e)    env aenv = evalOpenExp e env aenv
 evalOpenFun (Lam lhs f) env aenv =
   \x -> evalOpenFun f (env `push` (lhs, x)) aenv
@@ -889,8 +899,8 @@ evalOpenFun (Lam lhs f) env aenv =
 --     leading to a large amount of wasteful recomputation.
 --
 evalOpenExp
-    :: forall env aenv t.
-       OpenExp env aenv t
+    :: forall env aenv t. HasCallStack
+    => OpenExp env aenv t
     -> Val env
     -> Val aenv
     -> t
@@ -953,7 +963,7 @@ evalOpenExp pexp env aenv =
             go ((t,cont):cs)
               | eqTag t v = cont
               | otherwise = go cs
-            go []         = $internalError "case" "unmatched case"
+            go []         = internalError "unmatched case"
 
         eqTag :: TagR a -> a -> Bool
         eqTag TagRunit         ()    = True
@@ -1569,9 +1579,6 @@ data Val' senv where
 prj' :: Idx senv t -> Val' senv -> Window t
 prj' ZeroIdx       (Push' _   v) = v
 prj' (SuccIdx idx) (Push' val _) = prj' idx val
-#if __GLASGOW_HASKELL__ < 800
-prj' _             _             = $internalError "prj" "inconsistent valuation"
-#endif
 
 -- Projection of a chunk from a window valuation using a sequence
 -- cursor.

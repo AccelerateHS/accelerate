@@ -23,6 +23,7 @@ import Language.Haskell.TH
 import Prelude                                                      hiding ( zip )
 
 import GHC.Base                                                     ( quotInt, remInt )
+import GHC.Stack
 
 
 -- | Shape and index representations as nested pairs
@@ -100,15 +101,15 @@ eq (ShapeRsnoc shr) (sh, i) (sh', i') = i == i' && eq shr sh sh'
 -- representation of the array (first argument is the /shape/, second
 -- argument is the /index/).
 --
-toIndex :: ShapeR sh -> sh -> sh -> Int
+toIndex :: HasCallStack => ShapeR sh -> sh -> sh -> Int
 toIndex ShapeRz () () = 0
 toIndex (ShapeRsnoc shr) (sh, sz) (ix, i)
-  = $indexCheck "toIndex" i sz
+  = indexCheck i sz
   $ toIndex shr sh ix * sz + i
 
 -- | Inverse of 'toIndex'
 --
-fromIndex :: ShapeR sh -> sh -> Int -> sh
+fromIndex :: HasCallStack => ShapeR sh -> sh -> Int -> sh
 fromIndex ShapeRz () _ = ()
 fromIndex (ShapeRsnoc shr) (sh, sz) i
   = (fromIndex shr sh (i `quotInt` sz), r)
@@ -117,7 +118,7 @@ fromIndex (ShapeRsnoc shr) (sh, sz) i
   --
   where
     r = case shr of -- Check if rank of shr is 0
-      ShapeRz -> $indexCheck "fromIndex" i sz i
+      ShapeRz -> indexCheck i sz i
       _       -> i `remInt` sz
 
 -- | Iterate through the entire shape, applying the function in the second
@@ -134,9 +135,9 @@ iter (ShapeRsnoc shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
 
 -- | Variant of 'iter' without an initial value
 --
-iter1 :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a
+iter1 :: HasCallStack => ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a
 iter1 ShapeRz          ()       f _ = f ()
-iter1 (ShapeRsnoc _  ) (_,  0)  _ _ = $boundsError "iter1" "empty iteration space"
+iter1 (ShapeRsnoc _  ) (_,  0)  _ _ = boundsError "empty iteration space"
 iter1 (ShapeRsnoc shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
   where
     iter1' (ix,i) | i == sz-1 = f (ix,i)
@@ -164,7 +165,7 @@ shapeToList (ShapeRsnoc shr) (sh,sz) = sz : shapeToList shr sh
 
 -- | Convert a list of dimensions into a shape
 --
-listToShape :: ShapeR sh -> [Int] -> sh
+listToShape :: HasCallStack => ShapeR sh -> [Int] -> sh
 listToShape shr ds =
   case listToShape' shr ds of
     Just sh -> sh

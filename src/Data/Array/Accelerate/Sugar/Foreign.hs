@@ -18,6 +18,8 @@ import Data.Array.Accelerate.Error
 import Data.Typeable
 import Language.Haskell.TH
 
+import GHC.Stack
+
 
 -- Class for backends to choose their own representation of foreign functions.
 -- By default it has no instances. If a backend wishes to have an FFI it must
@@ -32,6 +34,6 @@ class Typeable asm => Foreign asm where
 
   -- Backends which want to support compile-time embedding must be able to lift
   -- the foreign function into Template Haskell
-  liftForeign :: asm args -> Q (TExp (asm args))
-  liftForeign _ = $internalError "liftForeign" "not supported by this backend"
+  liftForeign :: HasCallStack => asm args -> Q (TExp (asm args))
+  liftForeign _ = internalError "not supported by this backend"
 

@@ -3,7 +3,6 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -22,6 +21,8 @@ module Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.Error
+
+import GHC.Stack
 
 
 -- Valuation for an environment
@@ -75,11 +76,11 @@ infixr 9 .>
 (.>) :: env2 :> env3 -> env1 :> env2 -> env1 :> env3
 (.>) (Weaken f) (Weaken g) = Weaken (f . g)
 
-sinkWithLHS :: LeftHandSide s t env1 env1' -> LeftHandSide s t env2 env2' -> env1 :> env2 -> env1' :> env2'
+sinkWithLHS :: HasCallStack => LeftHandSide s t env1 env1' -> LeftHandSide s t env2 env2' -> env1 :> env2 -> env1' :> env2'
 sinkWithLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
 sinkWithLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = sink k
 sinkWithLHS (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k = sinkWithLHS b1 b2 $ sinkWithLHS a1 a2 k
-sinkWithLHS _ _ _ = $internalError "sinkWithLHS" "left hand sides do not match"
+sinkWithLHS _ _ _ = internalError "left hand sides do not match"
 
 weakenWithLHS :: forall s t env env'. LeftHandSide s t env env' -> env :> env'
 weakenWithLHS = go weakenId

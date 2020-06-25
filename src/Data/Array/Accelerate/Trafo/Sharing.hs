@@ -9,7 +9,6 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
@@ -85,6 +84,8 @@ import qualified Data.HashTable.IO                                  as Hash
 import qualified Data.IntMap                                        as IntMap
 import Prelude
 
+import GHC.Stack
+
 
 -- Layouts
 -- -------
@@ -109,8 +110,8 @@ type ArrayLayout = Layout ArrayR
 -- The first argument provides context information for error messages in the
 -- case of failure.
 --
-prjIdx :: forall s t env env1.
-          String
+prjIdx :: forall s t env env1. HasCallStack
+       => String
        -> (forall t'. TupR s t' -> ShowS)
        -> (forall u v. TupR s u -> TupR s v -> Maybe (u :~: v))
        -> TupR s t
@@ -119,7 +120,7 @@ prjIdx :: forall s t env env1.
        -> Vars s env t
 prjIdx context showTp matchTp tp = go
   where
-    go :: forall env'. Int -> Layout s env env' -> Vars s env t
+    go :: forall env'. HasCallStack => Int -> Layout s env env' -> Vars s env t
     go _ EmptyLayout                        = no "environment does not contain index"
     go 0 (PushLayout _ lhs vars)
       | Just Refl <- matchTp tp tp'         = vars
@@ -130,8 +131,8 @@ prjIdx context showTp matchTp tp = go
         tp' = lhsToTupR lhs
     go n (PushLayout l _ _)                 = go (n-1) l
 
-    no :: String -> a
-    no reason = $internalError "prjIdx" (printf "%s\nin the context: %s" reason context)
+    no :: HasCallStack => String -> a
+    no reason = internalError (printf "%s\nin the context: %s" reason context)
 
 -- Add an entry to a layout, incrementing all indices
 --
@@ -152,20 +153,20 @@ sizeLayout (PushLayout lyt _ _) = 1 + sizeLayout lyt
 -- | Convert a closed array expression to de Bruijn form while also incorporating sharing
 -- information.
 --
-convertAcc :: Acc arrs -> AST.Acc (Sugar.ArraysR arrs)
+convertAcc :: HasCallStack => Acc arrs -> AST.Acc (Sugar.ArraysR arrs)
 convertAcc = convertAccWith defaultOptions
 
-convertAccWith :: Config -> Acc arrs -> AST.Acc (Sugar.ArraysR arrs)
+convertAccWith :: HasCallStack => Config -> Acc arrs -> AST.Acc (Sugar.ArraysR arrs)
 convertAccWith config (Acc acc) = convertOpenAcc config EmptyLayout acc
 
 
 -- | Convert a closed function over array computations, while incorporating
 -- sharing information.
 --
-convertAfun :: Afunction f => f -> AST.Afun (ArraysFunctionR f)
+convertAfun :: HasCallStack => Afunction f => f -> AST.Afun (ArraysFunctionR f)
 convertAfun = convertAfunWith defaultOptions
 
-convertAfunWith :: Afunction f => Config -> f -> AST.Afun (ArraysFunctionR f)
+convertAfunWith :: HasCallStack => Afunction f => Config -> f -> AST.Afun (ArraysFunctionR f)
 convertAfunWith config = convertOpenAfun config EmptyLayout
 
 data AfunctionRepr f ar areprr where
@@ -187,8 +188,8 @@ data AfunctionRepr f ar areprr where
 class Afunction f where
   type AfunctionR f
   type ArraysFunctionR f
-  afunctionRepr :: AfunctionRepr f (AfunctionR f) (ArraysFunctionR f)
-  convertOpenAfun :: Config -> ArrayLayout aenv aenv -> f -> AST.OpenAfun aenv (ArraysFunctionR f)
+  afunctionRepr   :: HasCallStack => AfunctionRepr f (AfunctionR f) (ArraysFunctionR f)
+  convertOpenAfun :: HasCallStack => Config -> ArrayLayout aenv aenv -> f -> AST.OpenAfun aenv (ArraysFunctionR f)
 
 instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
   type AfunctionR      (Acc a -> r) = a -> AfunctionR r
@@ -210,7 +211,12 @@ instance Arrays b => Afunction (Acc b) where
   afunctionRepr = AfunctionReprBody
   convertOpenAfun config alyt (Acc body) = Abody $ convertOpenAcc config alyt body
 
-convertSmartAfun1 :: Config -> ArraysR a -> (SmartAcc a -> SmartAcc b) -> AST.Afun (a -> b)
+convertSmartAfun1
+    :: HasCallStack
+    => Config
+    -> ArraysR a
+    -> (SmartAcc a -> SmartAcc b)
+    -> AST.Afun (a -> b)
 convertSmartAfun1 config repr f
   | DeclareVars lhs _ value <- declareVars repr
   = let
@@ -223,7 +229,8 @@ convertSmartAfun1 config repr f
 -- information.
 --
 convertOpenAcc
-    :: Config
+    :: HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> SmartAcc arrs
     -> AST.OpenAcc aenv arrs
@@ -243,8 +250,8 @@ convertOpenAcc config alyt acc =
 -- in reverse chronological order (outermost variable is at the end of the list).
 --
 convertSharingAcc
-    :: forall aenv arrs.
-       Config
+    :: forall aenv arrs. HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]
     -> ScopedAcc arrs
@@ -256,7 +263,7 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
   | null aenv'
   = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
   | otherwise
-  = $internalError "convertSharingAcc" err
+  = internalError err
   where
     aenv' = lams ++ aenv
     ctxt = "shared 'Acc' tree with stable name " ++ show (hashStableNameHeight sa)
@@ -431,7 +438,7 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
           where
             slyt' = incLayout slyt `PushLayout` ZeroIdx
 
-        asIdx :: Arrays a
+        asIdx :: (HasCallStack, Arrays a)
               => ScopedSeq [a]
               -> Idx senv a
         asIdx (ScopedSeq (SvarSharing sn))
@@ -516,8 +523,8 @@ convertSharingSeq config alyt slyt aenv senv s
 --}
 
 convertSharingAfun1
-    :: forall aenv a b.
-       Config
+    :: forall aenv a b. HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]
     -> ArraysR a
@@ -534,8 +541,8 @@ convertSharingAfun1 config alyt aenv reprA f
 -- | Convert a boundary condition
 --
 convertSharingBoundary
-    :: forall aenv sh e.
-       Config
+    :: forall aenv sh e. HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]
     -> ShapeR sh
@@ -573,12 +580,12 @@ convertSharingBoundary config alyt aenv shr = cvt
 -- In higher-order abstract syntax, this represents an n-ary, polyvariadic
 -- function.
 --
-convertFun :: Function f => f -> AST.Fun () (EltFunctionR f)
+convertFun :: (HasCallStack, Function f) => f -> AST.Fun () (EltFunctionR f)
 convertFun
   = convertFunWith
   $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing] }
 
-convertFunWith :: Function f => Config -> f -> AST.Fun () (EltFunctionR f)
+convertFunWith :: (HasCallStack, Function f) => Config -> f -> AST.Fun () (EltFunctionR f)
 convertFunWith config = convertOpenFun config EmptyLayout
 
 data FunctionRepr f r reprr where
@@ -594,8 +601,8 @@ class Function f where
   type FunctionR f
   type EltFunctionR f
 
-  functionRepr :: FunctionRepr f (FunctionR f) (EltFunctionR f)
-  convertOpenFun :: Config -> ELayout env env -> f -> AST.OpenFun env () (EltFunctionR f)
+  functionRepr   :: HasCallStack => FunctionRepr f (FunctionR f) (EltFunctionR f)
+  convertOpenFun :: HasCallStack => Config -> ELayout env env -> f -> AST.OpenFun env () (EltFunctionR f)
 
 instance (Elt a, Function r) => Function (Exp a -> r) where
   type FunctionR (Exp a -> r) = a -> FunctionR r
@@ -618,7 +625,12 @@ instance Elt b => Function (Exp b) where
   functionRepr = FunctionReprBody
   convertOpenFun config lyt (Exp body) = Body $ convertOpenExp config lyt body
 
-convertSmartFun :: Config -> TypeR a -> (SmartExp a -> SmartExp b) -> AST.Fun () (a -> b)
+convertSmartFun
+    :: HasCallStack
+    => Config
+    -> TypeR a
+    -> (SmartExp a -> SmartExp b)
+    -> AST.Fun () (a -> b)
 convertSmartFun config tp f
   | DeclareVars lhs _ value <- declareVars tp
   = let
@@ -633,16 +645,24 @@ convertSmartFun config tp f
 -- | Convert a closed scalar expression to de Bruijn form while incorporating
 -- sharing information.
 --
-convertExp :: Exp e -> AST.Exp () (EltR e)
+convertExp
+    :: HasCallStack
+    => Exp e
+    -> AST.Exp () (EltR e)
 convertExp
   = convertExpWith
   $ defaultOptions { options = options defaultOptions \\ [seq_sharing, acc_sharing] }
 
-convertExpWith :: Config -> Exp e -> AST.Exp () (EltR e)
+convertExpWith
+      :: HasCallStack
+      => Config
+      -> Exp e
+      -> AST.Exp () (EltR e)
 convertExpWith config (Exp e) = convertOpenExp config EmptyLayout e
 
 convertOpenExp
-    :: Config
+    :: HasCallStack
+    => Config
     -> ELayout env env
     -> SmartExp e
     -> AST.OpenExp env () e
@@ -662,8 +682,8 @@ convertOpenExp config lyt exp =
 -- keeping them in reverse chronological order (outermost variable is at the end of the list).
 --
 convertSharingExp
-    :: forall t env aenv.
-       Config
+    :: forall t env aenv. HasCallStack
+    => Config
     -> ELayout env env          -- scalar environment
     -> ArrayLayout aenv aenv    -- array environment
     -> [StableSharingExp]       -- currently bound sharing variables of expressions
@@ -675,10 +695,10 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     -- scalar environment with any lambda bound variables this expression is rooted in
     env' = lams ++ env
 
-    cvt :: ScopedExp t' -> AST.OpenExp env aenv t'
+    cvt :: HasCallStack => ScopedExp t' -> AST.OpenExp env aenv t'
     cvt (ScopedExp _ (VarSharing se tp))
       | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) shows matchTypeR tp i lyt)
-      | otherwise                                    = $internalError "convertSharingExp" msg
+      | otherwise                                    = internalError msg
       where
         ctx i = printf "shared 'Exp' tree with stable name %d; i=%d" (hashStableNameHeight se) i
         msg   = unlines
@@ -762,15 +782,15 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       | DeclareVars lhs _ value <- declareVars $ AST.expType a
         = AST.Let lhs a $ cvtPrj ix $ expVars $ value weakenId
 
-    cvtA :: ScopedAcc a -> AST.OpenAcc aenv a
+    cvtA :: HasCallStack => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
 
-    cvtAvar :: ScopedAcc a -> AST.ArrayVar aenv a
+    cvtAvar :: HasCallStack => ScopedAcc a -> AST.ArrayVar aenv a
     cvtAvar a = case cvtA a of
       AST.OpenAcc (AST.Avar var) -> var
-      _ -> $internalError "convertSharingExp" "Expected array computation in expression to be floated out"
+      _                          -> internalError "Expected array computation in expression to be floated out"
 
-    cvtFun1 :: TypeR a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
+    cvtFun1 :: HasCallStack => TypeR a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
     cvtFun1 tp f
       | DeclareVars lhs k value <- declareVars tp
       = let
@@ -782,7 +802,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     -- Push primitive function applications down through let bindings so that
     -- they are adjacent to their arguments. It looks a bit nicer this way.
     --
-    cvtPrimFun :: AST.PrimFun (a -> r) -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' r
+    cvtPrimFun :: HasCallStack => AST.PrimFun (a -> r) -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' r
     cvtPrimFun f e = case e of
       AST.Let lhs bnd body -> AST.Let lhs bnd (cvtPrimFun f body)
       x                    -> AST.PrimApp f x
@@ -790,7 +810,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 -- | Convert a unary functions
 --
 convertSharingFun1
-    :: Config
+    :: HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]       -- currently bound array sharing-variables
     -> TypeR a
@@ -808,7 +829,8 @@ convertSharingFun1 config alyt aenv tp f
 -- | Convert a binary functions
 --
 convertSharingFun2
-    :: Config
+    :: HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]       -- currently bound array sharing-variables
     -> TypeR a
@@ -830,7 +852,8 @@ convertSharingFun2 config alyt aenv ta tb f
 -- | Convert a unary stencil function
 --
 convertSharingStencilFun1
-    :: Config
+    :: HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]               -- currently bound array sharing-variables
     -> R.StencilR sh a stencil
@@ -842,7 +865,8 @@ convertSharingStencilFun1 config alyt aenv sR1 stencil =
 -- | Convert a binary stencil function
 --
 convertSharingStencilFun2
-    :: Config
+    :: HasCallStack
+    => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]               -- currently bound array sharing-variables
     -> R.StencilR sh a stencil1
@@ -1257,7 +1281,8 @@ matchStableSeq sn1 (StableSharingSeq sn2 _)
 -- They are /not/ directly used to compute the de Brujin indices.
 --
 makeOccMapAcc
-    :: Config
+    :: HasCallStack
+    => Config
     -> Level
     -> SmartAcc arrs
     -> IO (UnscopedAcc arrs, OccMap SmartAcc)
@@ -1271,31 +1296,49 @@ makeOccMapAcc config lvl acc = do
 
 
 makeOccMapSharingAcc
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> Level
     -> SmartAcc arrs
     -> IO (UnscopedAcc arrs, Int)
 makeOccMapSharingAcc config accOccMap = traverseAcc
   where
-    traverseFun1 :: Level -> TypeR a -> (SmartExp a -> SmartExp b) -> IO (SmartExp a -> RootExp b, Int)
+    traverseFun1
+        :: HasCallStack
+        => Level
+        -> TypeR a
+        -> (SmartExp a -> SmartExp b)
+        -> IO (SmartExp a -> RootExp b, Int)
     traverseFun1 = makeOccMapFun1 config accOccMap
 
-    traverseFun2 :: Level
-                 -> TypeR a
-                 -> TypeR b
-                 -> (SmartExp a -> SmartExp b -> SmartExp c)
-                 -> IO (SmartExp a -> SmartExp b -> RootExp c, Int)
+    traverseFun2
+        :: HasCallStack
+        => Level
+        -> TypeR a
+        -> TypeR b
+        -> (SmartExp a -> SmartExp b -> SmartExp c)
+        -> IO (SmartExp a -> SmartExp b -> RootExp c, Int)
     traverseFun2 = makeOccMapFun2 config accOccMap
 
-    traverseAfun1 :: Level -> ArraysR a -> (SmartAcc a -> SmartAcc b) -> IO (SmartAcc a -> UnscopedAcc b, Int)
+    traverseAfun1
+        :: HasCallStack
+        => Level
+        -> ArraysR a
+        -> (SmartAcc a -> SmartAcc b)
+        -> IO (SmartAcc a -> UnscopedAcc b, Int)
     traverseAfun1 = makeOccMapAfun1 config accOccMap
 
-    traverseExp :: Level -> SmartExp e -> IO (RootExp e, Int)
+    traverseExp
+      :: HasCallStack
+      => Level
+      -> SmartExp e
+      -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
     traverseBoundary
-        :: Level
+        :: HasCallStack
+        => Level
         -> ShapeR sh
         -> PreBoundary SmartAcc SmartExp (Array sh e)
         -> IO (PreBoundary UnscopedAcc RootExp (Array sh e), Int)
@@ -1314,7 +1357,11 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
     --             -> IO (RootSeq arrs, Int)
     -- traverseSeq = makeOccMapRootSeq config accOccMap
 
-    traverseAcc :: forall arrs. Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
+    traverseAcc
+        :: forall arrs. HasCallStack
+        => Level
+        -> SmartAcc arrs
+        -> IO (UnscopedAcc arrs, Int)
     traverseAcc lvl acc@(SmartAcc pacc)
       = mfix $ \ ~(_, height) -> do
           -- Compute stable name and enter it into the occurrence map
@@ -1433,25 +1480,35 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
 
 
       where
-        travA :: (UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
-              -> SmartAcc arrs' -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+        travA :: HasCallStack
+              => (UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
+              -> SmartAcc arrs'
+              -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travA c acc
           = do
               (acc', h) <- traverseAcc lvl acc
               return (c acc', h + 1)
 
-        travEA :: (RootExp b -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
-               -> SmartExp b -> SmartAcc arrs' -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+        travEA :: HasCallStack
+               => (RootExp b -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
+               -> SmartExp b
+               -> SmartAcc arrs'
+               -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travEA c exp acc
           = do
               (exp', h1) <- traverseExp lvl exp
               (acc', h2) <- traverseAcc lvl acc
               return (c exp' acc', h1 `max` h2 + 1)
 
-        travF2EA :: ((SmartExp b -> SmartExp c -> RootExp d) -> RootExp e -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
-                 -> TypeR b -> TypeR c
-                 -> (SmartExp b -> SmartExp c -> SmartExp d) -> SmartExp e -> SmartAcc arrs'
-                 -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+        travF2EA
+            :: HasCallStack
+            => ((SmartExp b -> SmartExp c -> RootExp d) -> RootExp e -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
+            -> TypeR b
+            -> TypeR c
+            -> (SmartExp b -> SmartExp c -> SmartExp d)
+            -> SmartExp e
+            -> SmartAcc arrs'
+            -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2EA c t1 t2 fun exp acc
           = do
               (fun', h1) <- traverseFun2 lvl t1 t2 fun
@@ -1459,10 +1516,15 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (acc', h3) <- traverseAcc lvl acc
               return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
 
-        travF2MEA :: ((SmartExp b -> SmartExp c -> RootExp d) -> Maybe (RootExp e) -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
-                 -> TypeR b -> TypeR c
-                 -> (SmartExp b -> SmartExp c -> SmartExp d) -> Maybe (SmartExp e) -> SmartAcc arrs'
-                 -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+        travF2MEA
+            :: HasCallStack
+            => ((SmartExp b -> SmartExp c -> RootExp d) -> Maybe (RootExp e) -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
+            -> TypeR b
+            -> TypeR c
+            -> (SmartExp b -> SmartExp c -> SmartExp d)
+            -> Maybe (SmartExp e)
+            -> SmartAcc arrs'
+            -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2MEA c t1 t2 fun exp acc
           = do
               (fun', h1) <- traverseFun2 lvl t1 t2 fun
@@ -1470,16 +1532,21 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (acc', h3) <- traverseAcc lvl acc
               return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
 
-        travME :: Maybe (SmartExp t) -> IO (Maybe (RootExp t), Int)
+        travME :: HasCallStack => Maybe (SmartExp t) -> IO (Maybe (RootExp t), Int)
         travME Nothing  = return (Nothing, 0)
         travME (Just e) = do
           (e', c) <- traverseExp lvl e
           return (Just e', c)
 
-        travF2A2 :: ((SmartExp b -> SmartExp c -> RootExp d) -> UnscopedAcc arrs1 -> UnscopedAcc arrs2 -> PreSmartAcc UnscopedAcc RootExp arrs)
-                 -> TypeR b -> TypeR c
-                 -> (SmartExp b -> SmartExp c -> SmartExp d) -> SmartAcc arrs1 -> SmartAcc arrs2
-                 -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+        travF2A2
+            :: HasCallStack
+            => ((SmartExp b -> SmartExp c -> RootExp d) -> UnscopedAcc arrs1 -> UnscopedAcc arrs2 -> PreSmartAcc UnscopedAcc RootExp arrs)
+            -> TypeR b
+            -> TypeR c
+            -> (SmartExp b -> SmartExp c -> SmartExp d)
+            -> SmartAcc arrs1
+            -> SmartAcc arrs2
+            -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2A2 c t1 t2 fun acc1 acc2
           = do
               (fun' , h1) <- traverseFun2 lvl t1 t2 fun
@@ -1487,12 +1554,14 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (acc2', h3) <- traverseAcc lvl acc2
               return (c fun' acc1' acc2', h1 `max` h2 `max` h3 + 1)
 
-makeOccMapAfun1 :: Config
-                -> OccMapHash SmartAcc
-                -> Level
-                -> ArraysR a
-                -> (SmartAcc a -> SmartAcc b)
-                -> IO (SmartAcc a -> UnscopedAcc b, Int)
+makeOccMapAfun1
+    :: HasCallStack
+    => Config
+    -> OccMapHash SmartAcc
+    -> Level
+    -> ArraysR a
+    -> (SmartAcc a -> SmartAcc b)
+    -> IO (SmartAcc a -> UnscopedAcc b, Int)
 makeOccMapAfun1 config accOccMap lvl repr f = do
   let x = SmartAcc (Atag repr lvl)
   --
@@ -1534,7 +1603,8 @@ makeOccMapAfun3 config accOccMap lvl f = do
 -- See Note [Traversing functions and side effects]
 --
 makeOccMapExp
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> Level
     -> SmartExp e
@@ -1542,7 +1612,8 @@ makeOccMapExp
 makeOccMapExp config accOccMap lvl = makeOccMapRootExp config accOccMap lvl []
 
 makeOccMapFun1
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> Level
     -> TypeR a
@@ -1555,7 +1626,8 @@ makeOccMapFun1 config accOccMap lvl tp f = do
   return (const body, height)
 
 makeOccMapFun2
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> Level
     -> TypeR a
@@ -1570,8 +1642,8 @@ makeOccMapFun2 config accOccMap lvl t1 t2 f = do
   return (\_ _ -> body, height)
 
 makeOccMapStencil1
-    :: forall sh a b stencil.
-       Config
+    :: forall sh a b stencil. HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> R.StencilR sh a stencil
     -> Level
@@ -1584,8 +1656,8 @@ makeOccMapStencil1 config accOccMap s lvl stencil = do
   return (const body, height)
 
 makeOccMapStencil2
-    :: forall sh a b c stencil1 stencil2.
-       Config
+    :: forall sh a b c stencil1 stencil2. HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> R.StencilR sh a stencil1
     -> R.StencilR sh b stencil2
@@ -1607,7 +1679,8 @@ makeOccMapStencil2 config accOccMap sR1 sR2 lvl stencil = do
 --  2) a local occurrence map for that expression.
 --
 makeOccMapRootExp
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> Level                            -- The level of currently bound scalar variables
     -> [Int]                            -- The tags of newly introduced free scalar variables in this expression
@@ -1625,7 +1698,8 @@ makeOccMapRootExp config accOccMap lvl fvs exp = do
 -- Generate sharing information for an open scalar expression.
 --
 makeOccMapSharingExp
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMapHash SmartAcc
     -> OccMapHash SmartExp
     -> Level                            -- The level of currently bound variables
@@ -1633,7 +1707,7 @@ makeOccMapSharingExp
     -> IO (UnscopedExp e, Int)
 makeOccMapSharingExp config accOccMap expOccMap = travE
   where
-    travE :: forall a. Level -> SmartExp a -> IO (UnscopedExp a, Int)
+    travE :: forall a. HasCallStack => Level -> SmartExp a -> IO (UnscopedExp a, Int)
     travE lvl exp@(SmartExp pexp)
       = mfix $ \ ~(_, height) -> do
           -- Compute stable name and enter it into the occurrence map
@@ -1695,13 +1769,15 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Coerce t1 t2 e      -> travE1 (Coerce t1 t2) e
 
       where
-        traverseAcc :: Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
+        traverseAcc :: HasCallStack => Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
         traverseAcc = makeOccMapSharingAcc config accOccMap
 
-        traverseFun1 :: Level
-                     -> TypeR a
-                     -> (SmartExp a -> SmartExp b)
-                     -> IO (SmartExp a -> UnscopedExp b, Int)
+        traverseFun1
+            :: HasCallStack
+            => Level
+            -> TypeR a
+            -> (SmartExp a -> SmartExp b)
+            -> IO (SmartExp a -> UnscopedExp b, Int)
         traverseFun1 lvl tp f
           = do
               let x = SmartExp (Tag tp lvl)
@@ -1709,15 +1785,14 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               return (const (UnscopedExp [lvl] body), height + 1)
 
 
-        travE1 :: (UnscopedExp b -> r)
-               -> SmartExp b
-               -> IO (r, Int)
+        travE1 :: HasCallStack => (UnscopedExp b -> r) -> SmartExp b -> IO (r, Int)
         travE1 c e
           = do
               (e', h) <- travE lvl e
               return (c e', h + 1)
 
-        travE2 :: (UnscopedExp b -> UnscopedExp c -> r)
+        travE2 :: HasCallStack
+               => (UnscopedExp b -> UnscopedExp c -> r)
                -> SmartExp b
                -> SmartExp c
                -> IO (r, Int)
@@ -1727,7 +1802,8 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               (e2', h2) <- travE lvl e2
               return (c e1' e2', h1 `max` h2 + 1)
 
-        travE3 :: (UnscopedExp b -> UnscopedExp c -> UnscopedExp d -> r)
+        travE3 :: HasCallStack
+               => (UnscopedExp b -> UnscopedExp c -> UnscopedExp d -> r)
                -> SmartExp b
                -> SmartExp c
                -> SmartExp d
@@ -1739,15 +1815,14 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               (e3', h3) <- travE lvl e3
               return (c e1' e2' e3', h1 `max` h2 `max` h3 + 1)
 
-        travA :: (UnscopedAcc b -> r)
-              -> SmartAcc b
-              -> IO (r, Int)
+        travA :: HasCallStack => (UnscopedAcc b -> r) -> SmartAcc b -> IO (r, Int)
         travA c acc
           = do
               (acc', h) <- traverseAcc lvl acc
               return (c acc', h + 1)
 
-        travAE :: (UnscopedAcc b -> UnscopedExp c -> r)
+        travAE :: HasCallStack
+               => (UnscopedAcc b -> UnscopedExp c -> r)
                -> SmartAcc b
                -> SmartExp c
                -> IO (r, Int)
@@ -2047,20 +2122,22 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
 -- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
 -- at 'determineScopesAcc'.
 --
-buildInitialEnvAcc :: [Level] -> [StableSharingAcc] -> [StableSharingAcc]
+buildInitialEnvAcc
+    :: HasCallStack
+    => [Level]
+    -> [StableSharingAcc]
+    -> [StableSharingAcc]
 buildInitialEnvAcc tags sas = map (lookupSA sas) tags
   where
     lookupSA sas tag1
       = case filter hasTag sas of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [sa] -> sa                 -- tag has a unique occurrence
-          sas2 -> $internalError "buildInitialEnvAcc"
-                $ "Encountered duplicate 'ATag's\n  " ++ intercalate ", " (map showSA sas2)
+          sas2 -> internalError ("Encountered duplicate 'ATag's\n  " ++ intercalate ", " (map showSA sas2))
       where
         hasTag (StableSharingAcc _ (AccSharing _ (Atag _ tag2))) = tag1 == tag2
         hasTag sa
-          = $internalError "buildInitialEnvAcc"
-          $ "Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa
+          = internalError ("Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa)
 
         noStableSharing :: StableSharingAcc
         noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
@@ -2078,20 +2155,22 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
 -- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
 -- at 'determineScopesAcc'.
 --
-buildInitialEnvExp :: [Level] -> [StableSharingExp] -> [StableSharingExp]
+buildInitialEnvExp
+    :: HasCallStack
+    => [Level]
+    -> [StableSharingExp]
+    -> [StableSharingExp]
 buildInitialEnvExp tags ses = map (lookupSE ses) tags
   where
     lookupSE ses tag1
       = case filter hasTag ses of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [se] -> se                 -- tag has a unique occurrence
-          ses2 -> $internalError "buildInitialEnvExp"
-                    ("Encountered a duplicate 'Tag'\n  " ++ intercalate ", " (map showSE ses2))
+          ses2 -> internalError ("Encountered a duplicate 'Tag'\n  " ++ intercalate ", " (map showSE ses2))
       where
         hasTag (StableSharingExp _ (ExpSharing _ (Tag _ tag2))) = tag1 == tag2
         hasTag se
-          = $internalError "buildInitialEnvExp"
-              ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se)
+          = internalError ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se)
 
         noStableSharing :: StableSharingExp
         noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
@@ -2124,7 +2203,8 @@ isFreeVar _                                                               = Fals
 -- Precondition: there are only 'AvarSharing' and 'AccSharing' nodes in the argument.
 --
 determineScopesAcc
-    :: Config
+    :: HasCallStack
+    => Config
     -> [Level]
     -> OccMap SmartAcc
     -> UnscopedAcc a
@@ -2135,19 +2215,20 @@ determineScopesAcc config fvs accOccMap rootAcc
     in
     if all isFreeVar counts
        then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
-       else $internalError "determineScopesAcc" ("unbound shared subtrees" ++ show unboundTrees)
+       else internalError ("unbound shared subtrees" ++ show unboundTrees)
 
 
 determineScopesSharingAcc
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMap SmartAcc
     -> UnscopedAcc a
     -> (ScopedAcc a, NodeCounts)
 determineScopesSharingAcc config accOccMap = scopesAcc
   where
-    scopesAcc :: forall arrs. UnscopedAcc arrs -> (ScopedAcc arrs, NodeCounts)
+    scopesAcc :: forall arrs. HasCallStack => UnscopedAcc arrs -> (ScopedAcc arrs, NodeCounts)
     scopesAcc (UnscopedAcc _ (AletSharing _ _))
-      = $internalError "determineScopesSharingAcc: scopesAcc" "unexpected 'AletSharing'"
+      = internalError "unexpected 'AletSharing'"
 
     scopesAcc (UnscopedAcc _ (AvarSharing sn tp))
       = (ScopedAcc [] (AvarSharing sn tp), StableSharingAcc sn (AvarSharing sn tp) `insertAccNode` noNodeCounts)
@@ -2263,7 +2344,8 @@ determineScopesSharingAcc config accOccMap = scopesAcc
           --                            reconstruct (Collect seq') accCount1
 
       where
-        travEA :: (ScopedExp e -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
+        travEA :: HasCallStack
+               => (ScopedExp e -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
                -> RootExp e
                -> UnscopedAcc arrs'
                -> (ScopedAcc arrs, NodeCounts)
@@ -2272,41 +2354,44 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (e'  , accCount1) = scopesExp e
             (acc', accCount2) = scopesAcc acc
 
-        travF2EA :: ((SmartExp a -> SmartExp b -> ScopedExp c) -> ScopedExp e
-                     -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
-                 -> (SmartExp a -> SmartExp b -> RootExp c)
-                 -> RootExp e
-                 -> UnscopedAcc arrs'
-                 -> (ScopedAcc arrs, NodeCounts)
+        travF2EA
+            :: HasCallStack
+            => ((SmartExp a -> SmartExp b -> ScopedExp c) -> ScopedExp e -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
+            -> (SmartExp a -> SmartExp b -> RootExp c)
+            -> RootExp e
+            -> UnscopedAcc arrs'
+            -> (ScopedAcc arrs, NodeCounts)
         travF2EA c f e acc = reconstruct (c f' e' acc') (accCount1 +++ accCount2 +++ accCount3)
           where
             (f'  , accCount1) = scopesFun2 f
             (e'  , accCount2) = scopesExp  e
             (acc', accCount3) = scopesAcc  acc
 
-        travF2MEA :: ((SmartExp a -> SmartExp b -> ScopedExp c) -> Maybe (ScopedExp e)
-                     -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
-                 -> (SmartExp a -> SmartExp b -> RootExp c)
-                 -> Maybe (RootExp e)
-                 -> UnscopedAcc arrs'
-                 -> (ScopedAcc arrs, NodeCounts)
+        travF2MEA
+            :: HasCallStack
+            => ((SmartExp a -> SmartExp b -> ScopedExp c) -> Maybe (ScopedExp e) -> ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
+            -> (SmartExp a -> SmartExp b -> RootExp c)
+            -> Maybe (RootExp e)
+            -> UnscopedAcc arrs'
+            -> (ScopedAcc arrs, NodeCounts)
         travF2MEA c f e acc = reconstruct (c f' e' acc') (accCount1 +++ accCount2 +++ accCount3)
           where
             (f'  , accCount1) = scopesFun2 f
             (e'  , accCount2) = travME e
             (acc', accCount3) = scopesAcc  acc
 
-        travME :: Maybe (RootExp e) -> (Maybe (ScopedExp e), NodeCounts)
+        travME :: HasCallStack => Maybe (RootExp e) -> (Maybe (ScopedExp e), NodeCounts)
         travME Nothing  = (Nothing, noNodeCounts)
         travME (Just e) = (Just e', c)
           where (e', c) = scopesExp e
 
-        travF2A2 :: ((SmartExp a -> SmartExp b -> ScopedExp c) -> ScopedAcc arrs1
-                     -> ScopedAcc arrs2 -> PreSmartAcc ScopedAcc ScopedExp arrs)
-                 -> (SmartExp a -> SmartExp b -> RootExp c)
-                 -> UnscopedAcc arrs1
-                 -> UnscopedAcc arrs2
-                 -> (ScopedAcc arrs, NodeCounts)
+        travF2A2
+            :: HasCallStack
+            => ((SmartExp a -> SmartExp b -> ScopedExp c) -> ScopedAcc arrs1 -> ScopedAcc arrs2 -> PreSmartAcc ScopedAcc ScopedExp arrs)
+            -> (SmartExp a -> SmartExp b -> RootExp c)
+            -> UnscopedAcc arrs1
+            -> UnscopedAcc arrs2
+            -> (ScopedAcc arrs, NodeCounts)
         travF2A2 c f acc1 acc2 = reconstruct (c f' acc1' acc2')
                                              (accCount1 +++ accCount2 +++ accCount3)
           where
@@ -2314,7 +2399,8 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (acc1', accCount2) = scopesAcc  acc1
             (acc2', accCount3) = scopesAcc  acc2
 
-        travA :: (ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
+        travA :: HasCallStack
+              => (ScopedAcc arrs' -> PreSmartAcc ScopedAcc ScopedExp arrs)
               -> UnscopedAcc arrs'
               -> (ScopedAcc arrs, NodeCounts)
         travA c acc = reconstruct (c acc') accCount
@@ -2338,9 +2424,11 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         -- In either case, any completed 'NodeCounts' are injected as bindings using 'AletSharing'
         -- node.
         --
-        reconstruct :: PreSmartAcc ScopedAcc ScopedExp arrs
-                    -> NodeCounts
-                    -> (ScopedAcc arrs, NodeCounts)
+        reconstruct
+            :: HasCallStack
+            => PreSmartAcc ScopedAcc ScopedExp arrs
+            -> NodeCounts
+            -> (ScopedAcc arrs, NodeCounts)
         reconstruct newAcc@(Atag tp _) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
               -- occurrences
@@ -2404,13 +2492,19 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     -- scopesSeq :: forall arrs. RootSeq arrs -> (ScopedSeq arrs, NodeCounts)
     -- scopesSeq = determineScopesSeq config accOccMap
 
-    scopesExp :: RootExp t -> (ScopedExp t, NodeCounts)
+    scopesExp
+        :: HasCallStack
+        => RootExp t
+        -> (ScopedExp t, NodeCounts)
     scopesExp = determineScopesExp config accOccMap
 
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
-    scopesAfun1 :: (SmartAcc a1 -> UnscopedAcc a2) -> (SmartAcc a1 -> ScopedAcc a2, NodeCounts)
+    scopesAfun1
+        :: HasCallStack
+        => (SmartAcc a1 -> UnscopedAcc a2)
+        -> (SmartAcc a1 -> ScopedAcc a2, NodeCounts)
     scopesAfun1 f = (const (ScopedAcc ssa body'), (counts', graph))
       where
         body@(UnscopedAcc fvs _)             = f undefined
@@ -2424,7 +2518,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
-    scopesFun1 :: (SmartExp e1 -> RootExp e2) -> (SmartExp e1 -> ScopedExp e2, NodeCounts)
+    scopesFun1
+        :: HasCallStack
+        => (SmartExp e1 -> RootExp e2)
+        -> (SmartExp e1 -> ScopedExp e2, NodeCounts)
     scopesFun1 f = (const body, counts)
       where
         (body, counts) = scopesExp (f undefined)
@@ -2432,8 +2529,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
-    scopesFun2 :: (SmartExp e1 -> SmartExp e2 -> RootExp e3)
-               -> (SmartExp e1 -> SmartExp e2 -> ScopedExp e3, NodeCounts)
+    scopesFun2
+        :: HasCallStack
+        => (SmartExp e1 -> SmartExp e2 -> RootExp e3)
+        -> (SmartExp e1 -> SmartExp e2 -> ScopedExp e3, NodeCounts)
     scopesFun2 f = (\_ _ -> body, counts)
       where
         (body, counts) = scopesExp (f undefined undefined)
@@ -2441,10 +2540,11 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
-    scopesStencil1 :: forall sh e1 e2 stencil.
-                      UnscopedAcc (Array sh e1){-dummy-}
-                   -> (stencil -> RootExp e2)
-                   -> (stencil -> ScopedExp e2, NodeCounts)
+    scopesStencil1
+        :: forall sh e1 e2 stencil. HasCallStack
+        => UnscopedAcc (Array sh e1){-dummy-}
+        -> (stencil -> RootExp e2)
+        -> (stencil -> ScopedExp e2, NodeCounts)
     scopesStencil1 _ stencilFun = (const body, counts)
       where
         (body, counts) = scopesExp (stencilFun undefined)
@@ -2452,17 +2552,20 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
-    scopesStencil2 :: forall sh e1 e2 e3 stencil1 stencil2.
-                      UnscopedAcc (Array sh e1){-dummy-}
-                   -> UnscopedAcc (Array sh e2){-dummy-}
-                   -> (stencil1 -> stencil2 -> RootExp e3)
-                   -> (stencil1 -> stencil2 -> ScopedExp e3, NodeCounts)
+    scopesStencil2
+        :: forall sh e1 e2 e3 stencil1 stencil2. HasCallStack
+        => UnscopedAcc (Array sh e1){-dummy-}
+        -> UnscopedAcc (Array sh e2){-dummy-}
+        -> (stencil1 -> stencil2 -> RootExp e3)
+        -> (stencil1 -> stencil2 -> ScopedExp e3, NodeCounts)
     scopesStencil2 _ _ stencilFun = (\_ _ -> body, counts)
       where
         (body, counts) = scopesExp (stencilFun undefined undefined)
 
-    scopesBoundary :: PreBoundary UnscopedAcc RootExp t
-                   -> (PreBoundary ScopedAcc ScopedExp t, NodeCounts)
+    scopesBoundary
+        :: HasCallStack
+        => PreBoundary UnscopedAcc RootExp t
+        -> (PreBoundary ScopedAcc ScopedExp t, NodeCounts)
     scopesBoundary bndy =
       case bndy of
         Clamp      -> (Clamp, noNodeCounts)
@@ -2474,7 +2577,8 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
 
 determineScopesExp
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMap SmartAcc
     -> RootExp t
     -> (ScopedExp t, NodeCounts)          -- Root (closed) expression plus Acc node counts
@@ -2490,17 +2594,24 @@ determineScopesExp config accOccMap (RootExp expOccMap exp@(UnscopedExp fvs _))
 
 
 determineScopesSharingExp
-    :: Config
+    :: HasCallStack
+    => Config
     -> OccMap SmartAcc
     -> OccMap SmartExp
     -> UnscopedExp t
     -> (ScopedExp t, NodeCounts)
 determineScopesSharingExp config accOccMap expOccMap = scopesExp
   where
-    scopesAcc :: UnscopedAcc a -> (ScopedAcc a, NodeCounts)
+    scopesAcc
+        :: HasCallStack
+        => UnscopedAcc a
+        -> (ScopedAcc a, NodeCounts)
     scopesAcc = determineScopesSharingAcc config accOccMap
 
-    scopesFun1 :: (SmartExp a -> UnscopedExp b) -> (SmartExp a -> ScopedExp b, NodeCounts)
+    scopesFun1
+        :: HasCallStack
+        => (SmartExp a -> UnscopedExp b)
+        -> (SmartExp a -> ScopedExp b, NodeCounts)
     scopesFun1 f = tracePure ("LAMBDA " ++ show ssa) (show counts) (const (ScopedExp ssa body'), (counts',graph))
       where
         body@(UnscopedExp fvs _)              = f undefined
@@ -2511,10 +2622,12 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         isBoundHere (ExpNodeCount (StableSharingExp _ (ExpSharing _ (Tag _ i))) _) = i `elem` fvs
         isBoundHere _                                                              = False
 
-
-    scopesExp :: forall t. UnscopedExp t -> (ScopedExp t, NodeCounts)
+    scopesExp
+        :: forall t. HasCallStack
+        => UnscopedExp t
+        -> (ScopedExp t, NodeCounts)
     scopesExp (UnscopedExp _ (LetSharing _ _))
-      = $internalError "determineScopesSharingExp: scopesExp" "unexpected 'LetSharing'"
+      = internalError "unexpected 'LetSharing'"
 
     scopesExp (UnscopedExp _ (VarSharing sn tp))
       = (ScopedExp [] (VarSharing sn tp), StableSharingExp sn (VarSharing sn tp) `insertExpNode` noNodeCounts)
@@ -2549,13 +2662,16 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Foreign tp ff f e     -> travE1 (Foreign tp ff f) e
           Coerce t1 t2 e        -> travE1 (Coerce t1 t2) e
       where
-        travE1 :: (ScopedExp a -> PreSmartExp ScopedAcc ScopedExp t) -> UnscopedExp a
+        travE1 :: HasCallStack
+               => (ScopedExp a -> PreSmartExp ScopedAcc ScopedExp t)
+               -> UnscopedExp a
                -> (ScopedExp t, NodeCounts)
         travE1 c e = reconstruct (c e') accCount
           where
             (e', accCount) = scopesExp e
 
-        travE2 :: (ScopedExp a -> ScopedExp b -> PreSmartExp ScopedAcc ScopedExp t)
+        travE2 :: HasCallStack
+               => (ScopedExp a -> ScopedExp b -> PreSmartExp ScopedAcc ScopedExp t)
                -> UnscopedExp a
                -> UnscopedExp b
                -> (ScopedExp t, NodeCounts)
@@ -2564,7 +2680,8 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (e1', accCount1) = scopesExp e1
             (e2', accCount2) = scopesExp e2
 
-        travE3 :: (ScopedExp a -> ScopedExp b -> ScopedExp c -> PreSmartExp ScopedAcc ScopedExp t)
+        travE3 :: HasCallStack
+               => (ScopedExp a -> ScopedExp b -> ScopedExp c -> PreSmartExp ScopedAcc ScopedExp t)
                -> UnscopedExp a
                -> UnscopedExp b
                -> UnscopedExp c
@@ -2575,13 +2692,15 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (e2', accCount2) = scopesExp e2
             (e3', accCount3) = scopesExp e3
 
-        travA :: (ScopedAcc a -> PreSmartExp ScopedAcc ScopedExp t) -> UnscopedAcc a
+        travA :: HasCallStack
+              => (ScopedAcc a -> PreSmartExp ScopedAcc ScopedExp t) -> UnscopedAcc a
               -> (ScopedExp t, NodeCounts)
         travA c acc = floatOutAcc c acc' accCount
           where
             (acc', accCount)  = scopesAcc acc
 
-        travAE :: (ScopedAcc a -> ScopedExp b -> PreSmartExp ScopedAcc ScopedExp t)
+        travAE :: HasCallStack
+               => (ScopedAcc a -> ScopedExp b -> PreSmartExp ScopedAcc ScopedExp t)
                -> UnscopedAcc a
                -> UnscopedExp b
                -> (ScopedExp t, NodeCounts)
@@ -2590,10 +2709,12 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (acc', accCountA) = scopesAcc acc
             (e'  , accCountE) = scopesExp e
 
-        floatOutAcc :: (ScopedAcc a -> PreSmartExp ScopedAcc ScopedExp t)
-                         -> ScopedAcc a
-                         -> NodeCounts
-                         -> (ScopedExp t, NodeCounts)
+        floatOutAcc
+            :: HasCallStack
+            => (ScopedAcc a -> PreSmartExp ScopedAcc ScopedExp t)
+            -> ScopedAcc a
+            -> NodeCounts
+            -> (ScopedExp t, NodeCounts)
         floatOutAcc c acc@(ScopedAcc _ (AvarSharing _ _)) accCount        -- nothing to float out
           = reconstruct (c acc) accCount
         floatOutAcc c acc accCount
@@ -2601,9 +2722,12 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           where
              (var, stableAcc) = abstract acc (\(ScopedAcc _ s) -> s)
 
-        abstract :: ScopedAcc a -> (ScopedAcc a -> SharingAcc ScopedAcc ScopedExp a)
-                 -> (ScopedAcc a, StableSharingAcc)
-        abstract (ScopedAcc _   (AvarSharing _ _))     _    = $internalError "sharingAccToVar" "AvarSharing"
+        abstract
+            :: HasCallStack
+            => ScopedAcc a
+            -> (ScopedAcc a -> SharingAcc ScopedAcc ScopedExp a)
+            -> (ScopedAcc a, StableSharingAcc)
+        abstract (ScopedAcc _   (AvarSharing _ _))     _    = internalError "AvarSharing"
         abstract (ScopedAcc ssa (AletSharing sa acc))  lets = abstract acc (lets . ScopedAcc ssa . AletSharing sa)
         abstract acc@(ScopedAcc ssa (AccSharing sn a)) lets = (ScopedAcc ssa (AvarSharing sn $ Smart.arraysR a), StableSharingAcc sn (lets acc))
 
@@ -2623,8 +2747,11 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         -- In either case, any completed 'NodeCounts' are injected as bindings using 'LetSharing'
         -- node.
         --
-        reconstruct :: PreSmartExp ScopedAcc ScopedExp t -> NodeCounts
-                    -> (ScopedExp t, NodeCounts)
+        reconstruct
+            :: HasCallStack
+            => PreSmartExp ScopedAcc ScopedExp t
+            -> NodeCounts
+            -> (ScopedExp t, NodeCounts)
         reconstruct newExp@(Tag tp _) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
               -- occurrences
@@ -2664,7 +2791,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         --     complete).  Otherwise, we would let-bind subterms before their parents, which leads
         --     scope errors.
         --
-        filterCompleted :: NodeCounts -> (NodeCounts, [StableSharingExp])
+        filterCompleted :: HasCallStack => NodeCounts -> (NodeCounts, [StableSharingExp])
         filterCompleted (ns,graph)
           = let bindable       = map (isBindable bindable (map nodeName ns)) ns
                 (bind, unbind) = partition fst $ zip bindable ns
@@ -2851,7 +2978,8 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
 --
 {-# NOINLINE recoverSharingAcc #-}
 recoverSharingAcc
-    :: Config
+    :: HasCallStack
+    => Config
     -> Level            -- The level of currently bound array variables
     -> [Level]          -- The tags of newly introduced free array variables
     -> SmartAcc a
@@ -2866,7 +2994,8 @@ recoverSharingAcc config alvl avars acc
 
 {-# NOINLINE recoverSharingExp #-}
 recoverSharingExp
-    :: Config
+    :: HasCallStack
+    => Config
     -> Level            -- The level of currently bound scalar variables
     -> [Level]          -- The tags of newly introduced free scalar variables
     -> SmartExp e

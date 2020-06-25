@@ -8,7 +8,6 @@
 {-# LANGUAGE PatternGuards              #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE UnboxedTuples              #-}
@@ -65,6 +64,8 @@ import Data.Array.Accelerate.Lifetime
 import qualified Data.Array.Accelerate.Array.Remote.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
 
+import GHC.Stack
+
 
 -- We use an MVar to the hash table, so that several threads may safely access
 -- it concurrently. This includes the finalisation threads that remove entries
@@ -119,8 +120,7 @@ new release = do
 
 -- | Look for the remote pointer corresponding to a given host-side array.
 --
-lookup :: forall m a.
-          RemoteMemory m
+lookup :: forall m a. (HasCallStack, RemoteMemory m)
        => MemoryTable (RemotePtr m)
        -> SingleType a
        -> ArrayData a
@@ -149,7 +149,7 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
           -- above in the error message.
           --
           Nothing ->
-            makeStableArray tp arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
+            makeStableArray tp arr >>= \x -> internalError $ "dead weak pair: " ++ show x
 
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This may not always use the `malloc` provided by the `RemoteMemory` instance.
@@ -157,7 +157,7 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
 -- arrays will be re-used. In the event that the remote memory is exhausted,
 -- 'Nothing' is returned.
 --
-malloc :: forall a m. (RemoteMemory m, MonadIO m)
+malloc :: forall a m. (HasCallStack, RemoteMemory m, MonadIO m)
        => MemoryTable (RemotePtr m)
        -> SingleType a
        -> ArrayData a

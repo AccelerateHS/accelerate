@@ -109,6 +109,7 @@ import Data.Kind
 import Prelude
 
 import GHC.TypeLits
+import GHC.Stack
 
 
 -- Array computations
@@ -825,7 +826,7 @@ instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
 
 
 class HasTypeR f where
-  typeR :: f t -> TypeR t
+  typeR :: HasCallStack => f t -> TypeR t
 
 instance HasTypeR SmartExp where
   typeR (SmartExp e) = typeR e
@@ -847,7 +848,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     ToIndex _ _ _                   -> TupRsingle scalarTypeInt
     FromIndex shr _ _               -> shapeType shr
     Case _ ((_,c):_)                -> typeR c
-    Case{}                          -> $internalError "typeR" "encountered empty case"
+    Case{}                          -> internalError "encountered empty case"
     Cond _ e _                      -> typeR e
     While t _ _ _                   -> t
     PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
@@ -876,10 +877,10 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
 -- they can be passed as an input to the computation and thus the value can
 -- change without the need to generate fresh code.
 --
-constant :: forall e. Elt e => e -> Exp e
+constant :: forall e. (HasCallStack, Elt e) => e -> Exp e
 constant = Exp . go (eltR @e) . fromElt
   where
-    go :: TypeR t -> t -> SmartExp t
+    go :: HasCallStack => TypeR t -> t -> SmartExp t
     go TupRunit         ()       = SmartExp $ Nil
     go (TupRsingle tp)  c        = SmartExp $ Const tp c
     go (TupRpair t1 t2) (c1, c2) = SmartExp $ go t1 c1 `Pair` go t2 c2

@@ -62,6 +62,8 @@ import Control.Applicative                              hiding ( Const )
 import Control.Monad
 import Prelude                                          hiding ( exp, seq )
 
+import GHC.Stack
+
 
 -- NOTE: [Renaming and Substitution]
 --
@@ -217,7 +219,8 @@ substitute :: LeftHandSide b env envb
 
 -- | Composition of unary functions.
 --
-compose :: OpenFun env aenv (b -> c)
+compose :: HasCallStack
+        => OpenFun env aenv (b -> c)
         -> OpenFun env aenv (a -> b)
         -> OpenFun env aenv (a -> c)
 compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
@@ -524,7 +527,7 @@ shiftE' _ _ _ = error "Substitution: left hand sides do not match"
 
 {-# INLINEABLE rebuildMaybeExp #-}
 rebuildMaybeExp
-    :: (Applicative f, SyntacticExp fe)
+    :: (HasCallStack, Applicative f, SyntacticExp fe)
     => RebuildEvar f fe env env' aenv'
     -> ReindexAvar f aenv aenv'
     -> Maybe (OpenExp env  aenv t)
@@ -534,7 +537,7 @@ rebuildMaybeExp v av (Just x) = Just <$> rebuildOpenExp v av x
 
 {-# INLINEABLE rebuildOpenExp #-}
 rebuildOpenExp
-    :: (Applicative f, SyntacticExp fe)
+    :: (HasCallStack, Applicative f, SyntacticExp fe)
     => RebuildEvar f fe env env' aenv'
     -> ReindexAvar f aenv aenv'
     -> OpenExp env  aenv t
@@ -569,7 +572,7 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun
-    :: (Applicative f, SyntacticExp fe)
+    :: (HasCallStack, Applicative f, SyntacticExp fe)
     => RebuildEvar f fe env env' aenv'
     -> ReindexAvar f aenv aenv'
     -> OpenFun env  aenv  t
@@ -585,7 +588,7 @@ rebuildFun v av fun =
 -- -----------------
 
 type RebuildAcc acc =
-  forall aenv aenv' f fa a. (Applicative f, SyntacticAcc fa)
+  forall aenv aenv' f fa a. (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAvar f fa acc aenv aenv'
     -> acc aenv a
     -> f (acc aenv' a)
@@ -618,7 +621,7 @@ newtype ReindexAvar f aenv aenv' =
 
 reindexAvar
     :: forall f fa acc aenv aenv'.
-       (Applicative f, SyntacticAcc fa)
+       (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAvar f fa acc aenv aenv'
     -> ReindexAvar f        aenv aenv'
 reindexAvar v = ReindexAvar f where
@@ -628,12 +631,12 @@ reindexAvar v = ReindexAvar f where
   g :: fa acc aenv' (Array sh e) -> ArrayVar aenv' (Array sh e)
   g fa = case accOut fa of
     Avar var' -> var'
-    _ -> $internalError "reindexAvar" "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."
+    _ -> internalError "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."
 
 
 {-# INLINEABLE shiftA #-}
 shiftA
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv aenv'
     -> ArrayVar  (aenv,  s) (Array sh e)
@@ -642,7 +645,7 @@ shiftA _ _ (Var s ZeroIdx)      = pure $ avarIn $ Var s ZeroIdx
 shiftA k v (Var s (SuccIdx ix)) = weakenAcc k <$> v (Var s ix)
 
 shiftA'
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => ALeftHandSide t aenv1 aenv1'
     -> ALeftHandSide t aenv2 aenv2'
     -> RebuildAcc acc
@@ -651,11 +654,11 @@ shiftA'
 shiftA' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
 shiftA' (LeftHandSideSingle _)   (LeftHandSideSingle _)   k v = shiftA k v
 shiftA' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftA' b1 b2 k $ shiftA' a1 a2 k v
-shiftA' _ _ _ _ = $internalError "Substitution/shiftA'" "left hand sides do not match"
+shiftA' _ _ _ _ = internalError "left hand sides do not match"
 
 {-# INLINEABLE rebuildOpenAcc #-}
 rebuildOpenAcc
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => (forall sh e. ArrayVar aenv (Array sh e) -> f (fa OpenAcc aenv' (Array sh e)))
     -> OpenAcc aenv  t
     -> f (OpenAcc aenv' t)
@@ -663,7 +666,7 @@ rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc a
 
 {-# INLINEABLE rebuildPreOpenAcc #-}
 rebuildPreOpenAcc
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAcc acc aenv  t
@@ -702,7 +705,7 @@ rebuildPreOpenAcc k av acc =
 
 {-# INLINEABLE rebuildAfun #-}
 rebuildAfun
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAfun acc aenv  t
@@ -713,7 +716,7 @@ rebuildAfun k av (Alam lhs1 f)
   = Alam lhs2 <$> rebuildAfun k (shiftA' lhs1 lhs2 k av) f
 
 rebuildAlet
-    :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (Applicative f, SyntacticAcc fa)
+    :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv1 aenv2
     -> ALeftHandSide bndArrs aenv1 aenv1'

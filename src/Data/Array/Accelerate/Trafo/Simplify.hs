@@ -7,7 +7,6 @@
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeOperators        #-}
@@ -55,6 +54,8 @@ import Data.Maybe
 import Data.Monoid
 import Text.Printf
 import Prelude                                                      hiding ( exp, iterate )
+
+import GHC.Stack
 
 
 -- Scalar optimisations
@@ -334,10 +335,10 @@ lhsExpr (LeftHandSidePair l1 l2) env = lhsExpr l2 $ lhsExpr l1 env
 -- Simplify closed expressions and functions. The process is applied
 -- repeatedly until no more changes are made.
 --
-simplifyExp :: Exp aenv t -> Exp aenv t
+simplifyExp :: HasCallStack => Exp aenv t -> Exp aenv t
 simplifyExp = iterate summariseOpenExp matchOpenExp shrinkExp (simplifyOpenExp EmptyExp)
 
-simplifyFun :: Fun aenv f -> Fun aenv f
+simplifyFun :: HasCallStack => Fun aenv f -> Fun aenv f
 simplifyFun = iterate summariseOpenFun matchOpenFun shrinkFun (simplifyOpenFun EmptyExp)
 
 
@@ -360,7 +361,8 @@ simplifyFun = iterate summariseOpenFun matchOpenFun shrinkFun (simplifyOpenFun E
 --
 
 iterate
-    :: forall f a. (f a -> Stats)
+    :: forall f a. HasCallStack
+    => (f a -> Stats)
     -> (forall s t. f s -> f t -> Maybe (s :~: t))  -- match
     -> (f a -> (Bool, f a))                         -- shrink
     -> (f a -> (Bool, f a))                         -- simplify
@@ -381,7 +383,7 @@ iterate summarise match shrink simplify = fix 1 . setup
 
     fix :: Int -> f a -> f a
     fix i x0
-      | i > lIMIT       = $internalWarning "simplify" "iteration limit reached" (not (x0 ==^ simplify x0)) x0
+      | i > lIMIT       = internalWarning "iteration limit reached" (not (x0 ==^ simplify x0)) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2

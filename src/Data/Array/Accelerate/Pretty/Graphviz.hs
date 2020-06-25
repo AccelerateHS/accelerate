@@ -6,7 +6,6 @@
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -58,6 +57,8 @@ import Prelude                                          hiding ( exp )
 import qualified Data.HashSet                           as Set
 import qualified Data.Sequence                          as Seq
 
+import GHC.Stack
+
 
 -- Configuration options
 -- ---------------------
@@ -88,9 +89,6 @@ avalToVal (Apush aenv _ v) = Push (avalToVal aenv) (pretty v)
 aprj :: Idx aenv t -> Aval aenv -> (NodeId, Label)        -- TLM: (Vertex, Label) ??
 aprj ZeroIdx      (Apush _    n v) = (n,v)
 aprj (SuccIdx ix) (Apush aenv _ _) = aprj ix aenv
-#if __GLASGOW_HASKELL__ < 800
-aprj _            _                = $internalError "aprj" "inconsistent valuation"
-#endif
 
 
 -- Graph construction
@@ -149,20 +147,20 @@ simple _      = False
 -- | Generate a dependency graph for the given computation
 --
 {-# NOINLINE graphDelayedAcc #-}
-graphDelayedAcc :: Detail -> DelayedAcc a -> Graph
+graphDelayedAcc :: HasCallStack => Detail -> DelayedAcc a -> Graph
 graphDelayedAcc detail acc =
   unsafePerformIO $! evalDot (graphDelayedOpenAcc detail Aempty acc)
 
 -- | Generate a dependency graph for an array function
 --
 {-# NOINLINE graphDelayedAfun #-}
-graphDelayedAfun :: Detail -> DelayedAfun f -> Graph
+graphDelayedAfun :: HasCallStack => Detail -> DelayedAfun f -> Graph
 graphDelayedAfun detail afun = unsafePerformIO . evalDot $! do
   l <- prettyDelayedAfun detail Aempty afun
   state $ \s ->
     case Seq.viewl (dotGraph s) of
       g@(Graph l' _) Seq.:< gs | l == l' -> (g, s { dotGraph = gs })
-      _                                  -> $internalError "graphDelaydAfun" "unexpected error"
+      _                                  -> internalError "unexpected error"
 
 
 -- Pretty-printing data-dependency graphs
@@ -175,7 +173,8 @@ data PDoc  = PDoc Adoc [Vertex]
 data PNode = PNode NodeId (Tree (Maybe Port, Adoc)) [(Vertex, Maybe Port)]
 
 graphDelayedOpenAcc
-    :: Detail
+    :: HasCallStack
+    => Detail
     -> Aval aenv
     -> DelayedOpenAcc aenv a
     -> Dot Graph
@@ -189,13 +188,13 @@ graphDelayedOpenAcc detail aenv acc = do
 -- Generate a graph for the given term.
 --
 prettyDelayedOpenAcc
-    :: forall aenv arrs.
-       Detail                               -- simplified output: only print operator name
+    :: forall aenv arrs. HasCallStack
+    => Detail                               -- simplified output: only print operator name
     -> Context
     -> Aval aenv
     -> DelayedOpenAcc aenv arrs
     -> Dot PNode
-prettyDelayedOpenAcc _      _   _    Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
+prettyDelayedOpenAcc _      _   _    Delayed{}            = internalError "expected manifest array"
 prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
   case pacc of
     Avar ix                 -> pnode (avar ix)
@@ -217,7 +216,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
       return $ PNode ident doc deps
 
     Apply _ afun acc         -> apply <$> prettyDelayedAfun    detail     aenv afun
-                                     <*> prettyDelayedOpenAcc detail ctx aenv acc
+                                      <*> prettyDelayedOpenAcc detail ctx aenv acc
 
     Awhile p f x             -> do
       ident <- mkNodeId atop
@@ -296,7 +295,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     aenv' :: Val aenv
     aenv' = avalToVal aenv
 
-    ppA :: DelayedOpenAcc aenv a -> Dot PDoc
+    ppA :: HasCallStack => DelayedOpenAcc aenv a -> Dot PDoc
     ppA (Manifest (Avar ix)) = return (avar ix)
     ppA acc@Manifest{}       = do
       -- Lift out and draw as a separate node. This can occur with the manifest
@@ -314,8 +313,8 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
 
-    ppB :: forall sh e.
-           TypeR e
+    ppB :: forall sh e. HasCallStack
+        => TypeR e
         -> Boundary aenv (Array sh e)
         -> Dot PDoc
     ppB _  Clamp        = return (PDoc "clamp"  [])
@@ -324,18 +323,18 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     ppB tp (Constant e) = return (PDoc (prettyConst tp e) [])
     ppB _  (Function f) = ppF f
 
-    ppF :: Fun aenv t -> Dot PDoc
+    ppF :: HasCallStack => Fun aenv t -> Dot PDoc
     ppF = return . uncurry PDoc . (parens . prettyFun aenv' &&& fvF)
 
-    ppE :: Exp aenv t -> Dot PDoc
+    ppE :: HasCallStack => Exp aenv t -> Dot PDoc
     ppE = return . uncurry PDoc . (prettyExp aenv' &&& fvE)
 
     ppD :: String -> Direction -> String -> Operator
     ppD f LeftToRight k = fromString (f <> "l" <> k)
     ppD f RightToLeft k = fromString (f <> "r" <> k)
 
-    lift :: DelayedOpenAcc aenv a -> Dot Vertex
-    lift Delayed{}                    = $internalError "prettyDelayedOpenAcc" "expected manifest array"
+    lift :: HasCallStack => DelayedOpenAcc aenv a -> Dot Vertex
+    lift Delayed{}                    = internalError "expected manifest array"
     lift (Manifest (Avar (Var _ ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
     lift acc                          = do
       acc'  <- prettyDelayedOpenAcc detail context0 aenv acc
@@ -363,7 +362,8 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
 -- otherwise the referenced node will be drawn inside of the subgraph.
 --
 prettyDelayedAfun
-    :: Detail
+    :: HasCallStack
+    => Detail
     -> Aval aenv
     -> DelayedOpenAfun aenv afun
     -> Dot Label
@@ -394,11 +394,11 @@ prettyDelayedAfun detail aenv afun = do
     collect (Apush a i _) = Set.insert i (collect a)
 
 prettyLetALeftHandSide
-  :: forall repr aenv aenv'.
-     NodeId
-  -> Aval aenv
-  -> ALeftHandSide repr aenv aenv'
-  -> Dot (Aval aenv', Label)
+    :: forall repr aenv aenv'. HasCallStack
+    => NodeId
+    -> Aval aenv
+    -> ALeftHandSide repr aenv aenv'
+    -> Dot (Aval aenv', Label)
 prettyLetALeftHandSide _     aenv (LeftHandSideWildcard repr) = return (aenv, doc)
   where
     doc = case repr of
@@ -413,8 +413,8 @@ prettyLetALeftHandSide ident aenv (LeftHandSidePair lhs1 lhs2) = do
   return (aenv2, "(" <> d1 <> ", " <> d2 <> ")")
 
 prettyLambdaALeftHandSide
-    :: forall repr aenv aenv'.
-       Aval aenv
+    :: forall repr aenv aenv'. HasCallStack
+    => Aval aenv
     -> ALeftHandSide repr aenv aenv'
     -> Dot (Aval aenv')
 prettyLambdaALeftHandSide aenv (LeftHandSideWildcard _) = return aenv
@@ -430,8 +430,8 @@ prettyLambdaALeftHandSide aenv (LeftHandSidePair lhs1 lhs2) = do
 -- Display array tuples. This is a little tricky...
 --
 prettyDelayedApair
-    :: forall aenv a1 a2.
-       Detail
+    :: forall aenv a1 a2. HasCallStack
+    => Detail
     -> Aval aenv
     -> DelayedOpenAcc aenv a1
     -> DelayedOpenAcc aenv a2

@@ -8,7 +8,6 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -62,6 +61,8 @@ import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
 import Prelude                                                  hiding ( lookup )
 import qualified Data.HashTable.IO                              as HT
+
+import GHC.Stack
 
 
 -- We build cached memory tables on top of a basic memory table.
@@ -137,7 +138,7 @@ new release = do
 -- more accesses of the remote pointer.
 --
 withRemote
-    :: forall task m a c. (Task task, RemoteMemory m, MonadIO m, Functor m)
+    :: forall task m a c. (HasCallStack, Task task, RemoteMemory m, MonadIO m, Functor m)
     => MemoryTable (RemotePtr m) task
     -> SingleType a
     -> ArrayData a
@@ -162,7 +163,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
                 Nothing
                   | isEvicted u -> copyBack utbl (incCount u)
                   | otherwise   -> do message ("lost array " ++ show key)
-                                      $internalError "withRemote" "non-evicted array has been lost"
+                                      internalError "non-evicted array has been lost"
         return (Just ptr)
   --
   case mp of
@@ -175,26 +176,29 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
       tasks'  <- cleanUses tasks
       return (Used ts status (count - 1) (task : tasks') n tp' weak_arr)
 
-    copyBack :: UT task -> Used task -> m (RemotePtr m (ScalarArrayDataR a))
+    copyBack :: HasCallStack => UT task -> Used task -> m (RemotePtr m (ScalarArrayDataR a))
     copyBack utbl (Used ts _ count tasks n tp' weak_arr)
       | Just Refl <- matchSingleType tp tp' = do
         message "withRemote/reuploading-evicted-array"
         p <- mallocWithUsage mt utbl tp arr (Used ts Clean count tasks n tp weak_arr)
         pokeRemote tp n p arr
         return p
-      | otherwise = $internalError "withRemote" "Type mismatch"
+      | otherwise = internalError "Type mismatch"
 
     -- We can't combine the use of `withMVar ref` above with the one here
     -- because the `permute` operation from the PTX backend requires nested
     -- calls to `withRemote` in order to copy the defaults array.
     --
-    go :: ArrayData a ~ ScalarArrayData a => StableArray -> RemotePtr m (ScalarArrayDataR a) -> m c
+    go :: (HasCallStack, ArrayData a ~ ScalarArrayData a)
+       => StableArray
+       -> RemotePtr m (ScalarArrayDataR a)
+       -> m c
     go key ptr = do
       message ("withRemote/using: " ++ show key)
       (task, c) <- run ptr
       liftIO . withMVar ref  $ \utbl -> do
         HT.mutateIO utbl key $ \case
-          Nothing -> $internalError "withRemote" "invariant violated"
+          Nothing -> internalError "invariant violated"
           Just u  -> do
             u' <- updateTask u task
             return (Just u', ())
@@ -218,7 +222,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
 -- On return, 'True' indicates that we allocated some remote memory, and 'False'
 -- indicates that we did not need to.
 --
-malloc :: forall e m task. (RemoteMemory m, MonadIO m, Task task)
+malloc :: forall e m task. (HasCallStack, RemoteMemory m, MonadIO m, Task task)
        => MemoryTable (RemotePtr m) task
        -> SingleType e
        -> ArrayData e
@@ -244,7 +248,7 @@ malloc (MemoryTable mt ref weak_utbl) !tp !ad !frozen !n | SingleArrayDict <- si
         return False
 
 mallocWithUsage
-    :: forall e m task. (RemoteMemory m, MonadIO m, Task task, ArrayData e ~ ScalarArrayData e)
+    :: forall e m task. (HasCallStack, RemoteMemory m, MonadIO m, Task task, ArrayData e ~ ScalarArrayData e)
     => Basic.MemoryTable (RemotePtr m)
     -> UT task
     -> SingleType e
@@ -253,21 +257,21 @@ mallocWithUsage
     -> m (RemotePtr m (ScalarArrayDataR e))
 mallocWithUsage !mt !utbl !tp !ad !usage@(Used _ _ _ _ n _ _) = malloc'
   where
-    malloc' :: m (RemotePtr m (ScalarArrayDataR e))
+    malloc' :: HasCallStack => m (RemotePtr m (ScalarArrayDataR e))
     malloc' = do
       mp <- Basic.malloc @e @m mt tp ad n :: m (Maybe (RemotePtr m (ScalarArrayDataR e)))
       case mp of
         Nothing -> do
           success <- evictLRU utbl mt
           if success then malloc'
-                     else $internalError "malloc" "Remote memory exhausted"
+                     else internalError "Remote memory exhausted"
         Just p -> liftIO $ do
           key <- Basic.makeStableArray tp ad
           HT.insert utbl key usage
           return p
 
 evictLRU
-    :: forall m task. (RemoteMemory m, MonadIO m, Task task)
+    :: forall m task. (HasCallStack, RemoteMemory m, MonadIO m, Task task)
     => UT task
     -> Basic.MemoryTable (RemotePtr m)
     -> m Bool
@@ -300,15 +304,17 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
   where
     -- Find the eldest, not currently in use, array.
     eldest :: (Maybe (StableArray, Used task)) -> (StableArray, Used task) -> IO (Maybe (StableArray, Used task))
-    eldest prev (sa, used@(Used ts status count tasks n tp weak_arr)) | count == 0
-                                                                   , evictable status = do
-      tasks' <- cleanUses tasks
-      HT.insert utbl sa (Used ts status count tasks' n tp weak_arr)
-      case tasks' of
-        [] | Just (_, Used ts' _ _ _ _ _ _) <- prev
-           , ts < ts'        -> return (Just (sa, used))
-           | Nothing <- prev -> return (Just (sa, used))
-        _  -> return prev
+    eldest prev (sa, used@(Used ts status count tasks n tp weak_arr))
+      | count == 0
+      , evictable status
+      = do
+          tasks' <- cleanUses tasks
+          HT.insert utbl sa (Used ts status count tasks' n tp weak_arr)
+          case tasks' of
+            [] | Just (_, Used ts' _ _ _ _ _ _) <- prev
+               , ts < ts'        -> return (Just (sa, used))
+               | Nothing <- prev -> return (Just (sa, used))
+            _  -> return prev
     eldest prev _ = return prev
 
     remoteBytes :: SingleType e -> Int -> Int64
@@ -323,7 +329,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
     copyIfNecessary :: Status -> Int -> SingleType e -> ArrayData e -> m ()
     copyIfNecessary Clean     _ _  _  = return ()
     copyIfNecessary Unmanaged _ _  _  = return ()
-    copyIfNecessary Evicted   _ _  _  = $internalError "evictLRU" "Attempting to evict already evicted array"
+    copyIfNecessary Evicted   _ _  _  = internalError "Attempting to evict already evicted array"
     copyIfNecessary Dirty     n tp ad = do
       mp <- liftIO $ Basic.lookup @m mt tp ad
       case mp of
@@ -334,7 +340,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
 -- Typically this should only be called in very specific circumstances. This
 -- operation is not thread-safe.
 --
-free :: forall m a task. (RemoteMemory m)
+free :: forall m a task. (HasCallStack, RemoteMemory m)
      => MemoryTable (RemotePtr m) task
      -> SingleType a
      -> ArrayData a
@@ -353,7 +359,7 @@ free (MemoryTable !mt !ref _) !tp !arr
 -- This typically only has use for backends that provide an FFI.
 --
 insertUnmanaged
-    :: (MonadIO m, RemoteMemory m)
+    :: (HasCallStack, MonadIO m, RemoteMemory m)
     => MemoryTable (RemotePtr m) task
     -> SingleType e
     -> ArrayData e
@@ -388,7 +394,7 @@ delete = HT.delete
 -- have matching host-side equivalents.
 --
 reclaim
-    :: forall m task. (RemoteMemory m, MonadIO m)
+    :: forall m task. (HasCallStack, RemoteMemory m, MonadIO m)
     => MemoryTable (RemotePtr m) task
     -> m ()
 reclaim (MemoryTable !mt _ _) = Basic.reclaim mt

@@ -32,6 +32,8 @@ import Text.Show                                                    ( showListWi
 import Prelude                                                      hiding ( (!!) )
 import qualified Data.Vector.Unboxed                                as U
 
+import GHC.Stack
+
 
 -- | Array data type, where the type arguments regard the representation
 -- types of the shape and elements.
@@ -159,9 +161,9 @@ concatVectors tR vs = adata `seq` Array ((), len) adata
 shape :: Array sh e -> sh
 shape (Array sh _) = sh
 
-reshape :: ShapeR sh -> sh -> ShapeR sh' -> Array sh' e -> Array sh e
+reshape :: HasCallStack => ShapeR sh -> sh -> ShapeR sh' -> Array sh' e -> Array sh e
 reshape shR sh shR' (Array sh' adata)
-  = $boundsCheck "reshape" "shape mismatch" (size shR sh == size shR' sh')
+  = boundsCheck "shape mismatch" (size shR sh == size shR' sh')
   $ Array sh adata
 
 (!) :: (ArrayR (Array sh e), Array sh e) -> sh -> e

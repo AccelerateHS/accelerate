@@ -4,7 +4,6 @@
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE ViewPatterns        #-}
@@ -43,6 +42,8 @@ import Data.Array.Accelerate.Classes.RealFrac
 import Text.Printf
 import Prelude                                                      ( (.), ($), String, error, undefined, unlines, otherwise )
 import qualified Prelude                                            as P
+
+import GHC.Stack
 
 
 -- | Efficient, machine-independent access to the components of a floating-point
@@ -201,10 +202,10 @@ preludeError x
             ]
 
 
-ieee754 :: forall a b. P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
+ieee754 :: forall a b. HasCallStack => P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
 ieee754 name f x
   | P.isIEEE (undefined::a) = f x
-  | otherwise               = $internalError (printf "RealFloat.%s" name) "Not implemented for non-IEEE floating point"
+  | otherwise               = internalError (printf "%s: Not implemented for non-IEEE floating point" name)
 
 -- From: ghc/libraries/base/cbits/primFloat.c
 -- ------------------------------------------

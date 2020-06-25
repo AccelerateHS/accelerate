@@ -61,6 +61,8 @@ import Data.Array.Accelerate.Debug.Flags
 import Data.Array.Accelerate.Debug.Stats
 #endif
 
+import GHC.Stack
+
 
 instance Arrays arrs => Show (Acc arrs) where
   show = withSimplStats . show . convertAcc
@@ -149,7 +151,7 @@ extractOpenAcc :: OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
 extractOpenAcc (OpenAcc pacc) = pacc
 
 
-prettyDelayedOpenAcc :: PrettyAcc DelayedOpenAcc
+prettyDelayedOpenAcc :: HasCallStack => PrettyAcc DelayedOpenAcc
 prettyDelayedOpenAcc context aenv (Manifest pacc)
   = prettyPreOpenAcc context prettyDelayedOpenAcc extractDelayedOpenAcc aenv pacc
 prettyDelayedOpenAcc _       aenv (Delayed _ sh f _)
@@ -160,9 +162,9 @@ prettyDelayedOpenAcc _       aenv (Delayed _ sh f _)
         , parens $ prettyOpenFun     Empty aenv f
         ]
 
-extractDelayedOpenAcc :: DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
+extractDelayedOpenAcc :: HasCallStack => DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
 extractDelayedOpenAcc (Manifest pacc) = pacc
-extractDelayedOpenAcc Delayed{}       = $internalError "extractDelayedOpenAcc" "expected manifest array"
+extractDelayedOpenAcc Delayed{}       = internalError "expected manifest array"
 
 
 -- Debugging

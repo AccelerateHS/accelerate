@@ -1,6 +1,5 @@
-{-# LANGUAGE BangPatterns    #-}
-{-# LANGUAGE LambdaCase      #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase   #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Nursery
 -- Copyright   : [2008..2019] The Accelerate Team
@@ -31,6 +30,8 @@ import Prelude                                                  hiding ( lookup 
 import qualified Data.HashTable.IO                              as HT
 import qualified Data.Sequence                                  as Seq
 import qualified Data.Traversable                               as Seq
+
+import GHC.Stack
 
 
 -- The nursery is a place to store remote memory arrays that are no longer
@@ -64,7 +65,7 @@ new delete = do
 -- | Look for an entry with the requested size.
 --
 {-# INLINEABLE lookup #-}
-lookup :: Int -> Nursery ptr -> IO (Maybe (ptr Word8))
+lookup :: HasCallStack => Int -> Nursery ptr -> IO (Maybe (ptr Word8))
 lookup !key (Nursery !ref !_) =
   withMVar ref $ \nrs ->
     HT.mutateIO nrs key $ \case
@@ -77,7 +78,7 @@ lookup !key (Nursery !ref !_) =
               then return (Nothing, Just v)   -- delete this entry from the map
               else return (Just vs, Just v)   -- re-insert the tail
           --
-          Seq.EmptyL  -> $internalError "lookup" "expected non-empty sequence"
+          Seq.EmptyL  -> internalError "expected non-empty sequence"
 
 
 -- | Add an entry to the nursery

@@ -61,6 +61,8 @@ import Data.Monoid
 import Data.Semigroup
 import Prelude                                                      hiding ( exp, seq )
 
+import GHC.Stack
+
 
 data VarsRange env =
   VarsRange !(Exists (Idx env))     -- rightmost variable
@@ -167,15 +169,19 @@ loopCount :: Count -> Count
 loopCount (Finite n) | n > 0 = Infinity
 loopCount c                  = c
 
-shrinkLhs :: Count -> LeftHandSide s t env1 env2 -> Maybe (Exists (LeftHandSide s t env1))
+shrinkLhs
+    :: HasCallStack
+    => Count
+    -> LeftHandSide s t env1 env2
+    -> Maybe (Exists (LeftHandSide s t env1))
 shrinkLhs _ (LeftHandSideWildcard _) = Nothing -- We cannot shrink this
 shrinkLhs (Finite 0)          lhs = Just $ Exists $ LeftHandSideWildcard $ lhsToTupR lhs -- LHS isn't used at all, replace with a wildcard
 shrinkLhs (Impossible usages) lhs = case go usages lhs of
     (True , [], lhs') -> Just lhs'
     (False, [], _   ) -> Nothing -- No variables were dropped. Thus lhs == lhs'.
-    _                 -> $internalError "shrinkLhs" "Mismatch in length of usages array and LHS"
+    _                 -> internalError "Mismatch in length of usages array and LHS"
   where
-    go :: Usages -> LeftHandSide s t env1 env2 -> (Bool, Usages, Exists (LeftHandSide s t env1))
+    go :: HasCallStack => Usages -> LeftHandSide s t env1 env2 -> (Bool, Usages, Exists (LeftHandSide s t env1))
     go us           (LeftHandSideWildcard tp) = (False, us, Exists $ LeftHandSideWildcard tp)
     go (True  : us) (LeftHandSideSingle tp)   = (False, us, Exists $ LeftHandSideSingle tp)
     go (False : us) (LeftHandSideSingle tp)   = (True , us, Exists $ LeftHandSideWildcard $ TupRsingle tp)
@@ -190,14 +196,19 @@ shrinkLhs (Impossible usages) lhs = case go usages lhs of
             | otherwise = LeftHandSidePair l1' l2''
         in
           (c1 || c2, us'', Exists lhs')
-    go _ _ = $internalError "shrinkLhs" "Empty array, mismatch in length of usages array and LHS"
+    go _ _ = internalError "Empty array, mismatch in length of usages array and LHS"
 shrinkLhs _ _ = Nothing
 
 -- The first LHS should be 'larger' than the second, eg the second may have
 -- a wildcard if the first LHS does bind variables there, but not the other
 -- way around.
 --
-strengthenShrunkLHS :: LeftHandSide s t env1 env2 -> LeftHandSide s t env1' env2' -> env1 :?> env1' -> env2 :?> env2'
+strengthenShrunkLHS
+    :: HasCallStack
+    => LeftHandSide s t env1 env2
+    -> LeftHandSide s t env1' env2'
+    -> env1 :?> env1'
+    -> env2 :?> env2'
 strengthenShrunkLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
 strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
   ZeroIdx     -> Just ZeroIdx
@@ -209,8 +220,8 @@ strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideWildcard _) k = \ix ->
 strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard t) k = strengthenShrunkLHS h (LeftHandSideWildcard t2) $ strengthenShrunkLHS l (LeftHandSideWildcard t1) k
   where
     TupRpair t1 t2 = t
-strengthenShrunkLHS (LeftHandSideWildcard _) _                        _ = $internalError "strengthenShrunkLHS" "Second LHS defines more variables"
-strengthenShrunkLHS _                        _                        _ = $internalError "strengthenShrunkLHS" "Mismatch LHS single with LHS pair"
+strengthenShrunkLHS (LeftHandSideWildcard _) _                        _ = internalError "Second LHS defines more variables"
+strengthenShrunkLHS _                        _                        _ = internalError "Mismatch LHS single with LHS pair"
 
 
 -- Shrinking
@@ -220,7 +231,7 @@ strengthenShrunkLHS _                        _                        _ = $inter
 -- instance of beta-reduction to cases where the bound variable is used zero
 -- (dead-code elimination) or one (linear inlining) times.
 --
-shrinkExp :: OpenExp env aenv t -> (Bool, OpenExp env aenv t)
+shrinkExp :: HasCallStack => OpenExp env aenv t -> (Bool, OpenExp env aenv t)
 shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
   where
     -- If the bound variable is used at most this many times, it will be inlined
@@ -231,25 +242,25 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     lIMIT = 1
 
     cheap :: OpenExp env aenv t -> Bool
-    cheap (Evar _) = True
-    cheap (Pair e1 e2) = cheap e1 && cheap e2
-    cheap Nil = True
-    cheap Const{} = True
-    cheap PrimConst{} = True
-    cheap Undef{} = True
+    cheap (Evar _)       = True
+    cheap (Pair e1 e2)   = cheap e1 && cheap e2
+    cheap Nil            = True
+    cheap Const{}        = True
+    cheap PrimConst{}    = True
+    cheap Undef{}        = True
     cheap (Coerce _ _ e) = cheap e
-    cheap _ = False
+    cheap _              = False
 
-    shrinkE :: OpenExp env aenv t -> (Any, OpenExp env aenv t)
+    shrinkE :: HasCallStack => OpenExp env aenv t -> (Any, OpenExp env aenv t)
     shrinkE exp = case exp of
       Let (LeftHandSideSingle _) bnd@Evar{} body -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
       Let lhs bnd body
         | shouldInline -> case inlineVars lhs (snd body') (snd bnd') of
             Just inlined -> Stats.betaReduce msg . yes $ shrinkE inlined
-            _            -> $internalError "shrinkExp" "Unexpected failure while trying to inline some expression."
+            _            -> internalError "Unexpected failure while trying to inline some expression."
         | Just (Exists lhs') <- shrinkLhs count lhs -> case strengthenE (strengthenShrunkLHS lhs lhs' Just) (snd body') of
            Just body'' -> (Any True, Let lhs' (snd bnd') body'')
-           Nothing     -> $internalError "shrinkExp" "Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
+           Nothing     -> internalError "Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
         | otherwise    -> Let lhs <$> bnd' <*> body'
         where
           shouldInline = case count of
@@ -300,7 +311,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Foreign repr ff f e       -> Foreign repr ff <$> shrinkF f <*> shrinkE e
       Coerce t1 t2 e            -> Coerce t1 t2 <$> shrinkE e
 
-    shrinkF :: OpenFun env aenv t -> (Any, OpenFun env aenv t)
+    shrinkF :: HasCallStack => OpenFun env aenv t -> (Any, OpenFun env aenv t)
     shrinkF = first Any . shrinkFun
 
     first :: (a -> a') -> (a,b) -> (a',b)
@@ -309,7 +320,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     yes :: (Any, x) -> (Any, x)
     yes (_, x) = (Any True, x)
 
-shrinkFun :: OpenFun env aenv f -> (Bool, OpenFun env aenv f)
+shrinkFun :: HasCallStack => OpenFun env aenv f -> (Bool, OpenFun env aenv f)
 shrinkFun (Lam lhs f) = case lhsVarsRange lhs of
   Left Refl ->
     let b' = case lhs of
@@ -322,7 +333,7 @@ shrinkFun (Lam lhs f) = case lhsVarsRange lhs of
     in case shrinkLhs count lhs of
         Just (Exists lhs') -> case strengthenE (strengthenShrunkLHS lhs lhs' Just) f' of
           Just f'' -> (True, Lam lhs' f'')
-          Nothing  -> $internalError "shrinkFun" "Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
+          Nothing  -> internalError "Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
         Nothing -> (b, Lam lhs f')
   where
     (b, f') = shrinkFun f

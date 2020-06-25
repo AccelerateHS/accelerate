@@ -152,6 +152,7 @@ import Language.Haskell.TH                                          ( Q, TExp )
 import Prelude
 
 import GHC.TypeLits
+import GHC.Stack
 
 
 -- Array expressions
@@ -784,7 +785,7 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
   arraysR (Stencil2 _ _ tR _ _ a _ _) = let ArrayR sh _ = arrayR a
                                          in arraysRarray sh tR
 
-expType :: OpenExp aenv env t -> TypeR t
+expType :: HasCallStack => OpenExp aenv env t -> TypeR t
 expType = \case
   Let _ _ body                 -> expType body
   Evar (Var tR _)              -> TupRsingle tR
@@ -798,7 +799,7 @@ expType = \case
   ToIndex{}                    -> TupRsingle scalarTypeInt
   FromIndex shr _ _            -> shapeType shr
   Case _ ((_,e):_)             -> expType e
-  Case _ []                    -> $internalError "expType" "empty case encountered"
+  Case _ []                    -> internalError "empty case encountered"
   Cond _ e _                   -> expType e
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"

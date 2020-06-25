@@ -77,6 +77,7 @@ import Prelude                                                      hiding ( map
 import GHC.Base
 import GHC.ForeignPtr
 import GHC.Ptr
+import GHC.Stack
 
 
 -- | Immutable array representation
@@ -198,7 +199,7 @@ singleArrayDict = single
 -- Array operations
 -- ----------------
 
-newArrayData :: TupR ScalarType e -> Int -> IO (MutableArrayData e)
+newArrayData :: HasCallStack => TupR ScalarType e -> Int -> IO (MutableArrayData e)
 newArrayData TupRunit         !_     = return ()
 newArrayData (TupRpair t1 t2) !size  = (,) <$> newArrayData t1 size <*> newArrayData t2 size
 newArrayData (TupRsingle t)  !size
@@ -303,9 +304,9 @@ runArrayData st = unsafePerformIO $ do
 -- spaces (e.g. GPUs), we will not increase host memory pressure simply to track
 -- intermediate arrays that contain meaningful data only on the device.
 --
-allocateArray :: forall e. Storable e => Int -> IO (UniqueArray e)
+allocateArray :: forall e. (HasCallStack, Storable e) => Int -> IO (UniqueArray e)
 allocateArray !size
-  = $internalCheck "newArrayData" "size must be >= 0" (size >= 0)
+  = internalCheck "size must be >= 0" (size >= 0)
   $ newUniqueArray <=< unsafeInterleaveIO $ do
       let bytes = size * sizeOf (undefined :: e)
       new <- readIORef __mallocForeignPtrBytes

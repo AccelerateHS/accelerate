@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Environment
@@ -27,6 +26,8 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Debug.Stats                            as Stats
+
+import GHC.Stack
 
 
 -- An environment that holds let-bound scalar expressions. The second
@@ -66,10 +67,10 @@ incExp (PushExp env w) = incExp env `PushExp` subs w
     subs :: forall env aenv s t. WeakOpenExp env aenv t -> WeakOpenExp (env,s) aenv t
     subs (Subst k (e :: OpenExp env_ aenv t) _) = Subst (weakenSucc' k) e (weakenE (weakenSucc' k) e)
 
-prjExp :: Idx env' t -> Gamma env env' aenv -> OpenExp env aenv t
+prjExp :: HasCallStack => Idx env' t -> Gamma env env' aenv -> OpenExp env aenv t
 prjExp ZeroIdx      (PushExp _   (Subst _ _ e)) = e
 prjExp (SuccIdx ix) (PushExp env _)             = prjExp ix env
-prjExp _            _                           = $internalError "prjExp" "inconsistent valuation"
+prjExp _            _                           = internalError "inconsistent valuation"
 
 pushExp :: Gamma env env' aenv -> OpenExp env aenv t -> Gamma env (env',t) aenv
 pushExp env e = env `PushExp` Subst weakenId e e
