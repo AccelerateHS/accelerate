@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP             #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Error
@@ -19,8 +20,9 @@ module Data.Array.Accelerate.Error (
 ) where
 
 import Debug.Trace
+import Data.List                                          ( intercalate )
 import Text.Printf
-import Prelude                                          hiding ( error )
+import Prelude                                            hiding ( error )
 
 import GHC.Stack
 
@@ -90,16 +92,33 @@ warning kind msg cond k =
     False -> trace (format kind msg) k
 
 format :: HasCallStack => Check -> String -> String
-format kind msg = unlines [ header, msg, "", prettyCallStack callStack ]
+format kind msg = intercalate "\n" [ header, msg, ppCallStack callStack ]
   where
     header
-      = unlines
+      = intercalate "\n"
       $ case kind of
           Internal -> [""
                       ,"*** Internal error in package accelerate ***"
                       ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]
           _        -> []
 
+ppCallStack :: CallStack -> String
+ppCallStack = intercalate "\n" . ppLines
+  where
+    ppLines cs =
+      case getCallStack cs of
+        [] -> []
+        st -> "CallStack (from HasCallStack):"
+            : map (("  " ++) . ppCallSite) st
+
+    ppCallSite (f, loc) = f ++ ": " ++ ppSrcLoc loc
+
+    ppSrcLoc SrcLoc{..} =
+      foldr (++) ""
+        [ srcLocModule, ":"
+        , show srcLocStartLine, ":"
+        , show srcLocStartCol
+        ]
 
 -- CPP malarky
 -- -----------
