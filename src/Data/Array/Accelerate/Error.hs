@@ -99,7 +99,8 @@ format kind msg = intercalate "\n" [ header, msg, ppCallStack callStack ]
       $ case kind of
           Internal -> [""
                       ,"*** Internal error in package accelerate ***"
-                      ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]
+                      ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"
+                      ,""]
           _        -> []
 
 ppCallStack :: CallStack -> String
