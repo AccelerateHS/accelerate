@@ -60,7 +60,7 @@ test_sharing =
       , testCase "unused"               $ sharingExp test_unused_iteration
       ]
     , testGroup "nested data-parallelism"
-      [ expectFail $ testCase "mvm"     $ sharingAcc test_nested_data_praallelism
+      [ expectFail $ testCase "mvm"     $ sharingAcc test_nested_data_parallelism
       ]
     ]
   where
@@ -312,8 +312,8 @@ test_unused_iteration =
 -- This program contains nested data-parallelism and thus sharing recovery
 -- will fail.
 --
-test_nested_data_praallelism :: Acc (Vector Float)
-test_nested_data_praallelism =
+test_nested_data_parallelism :: Acc (Vector Float)
+test_nested_data_parallelism =
   mvm (use $ fromList (Z:.10:.10) [0..]) (use $ fromList (Z:.10) [0..])
   where
     dotp :: A.Num e => Acc (Vector e) -> Acc (Vector e) -> Acc (Scalar e)
