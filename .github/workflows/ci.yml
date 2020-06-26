@@ -32,7 +32,7 @@ jobs:
           # 32-bit linker problem, failing with the error:
           # Access violation in generated code when writing 0x0
           - os: windows-latest
-            ghc: "8.10"
+            ghc: "8.6"
             allow_failure: false
     env:
       STACK_FLAGS: "--system-ghc --no-install-ghc --fast --flag accelerate:nofib"
