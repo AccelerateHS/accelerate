@@ -56,7 +56,7 @@ import Data.Maybe                                                   ( Maybe(..) 
 import Prelude                                                      ( ($), const, otherwise )
 
 
-mkPatterns ''Maybe
+mkPattern ''Maybe
 
 
 -- | Returns 'True' if the argument is 'Nothing'

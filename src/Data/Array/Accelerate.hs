@@ -351,7 +351,7 @@ module Data.Array.Accelerate (
   pattern Vec8, pattern V8,
   pattern Vec16, pattern V16,
 
-  pattern True_, pattern False_,
+  mkPattern, mkPatterns,
 
   -- ** Scalar operations
   -- *** Introduction
@@ -412,7 +412,8 @@ module Data.Array.Accelerate (
   Int, Int8, Int16, Int32, Int64,
   Word, Word8, Word16, Word32, Word64,
   Half(..), Float, Double,
-  Bool(..), Char,
+  Bool(..), pattern True_, pattern False_,
+  Char,
 
   CFloat, CDouble,
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,

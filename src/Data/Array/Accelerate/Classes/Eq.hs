@@ -43,7 +43,7 @@ import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
 
 
-mkPatterns ''Bool
+mkPattern ''Bool
 
 infix 4 ==
 infix 4 /=

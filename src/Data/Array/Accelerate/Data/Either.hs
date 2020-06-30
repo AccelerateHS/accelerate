@@ -57,7 +57,7 @@ import Data.Maybe
 import Prelude                                                      ( (.), ($), const, otherwise )
 
 
-mkPatterns ''Either
+mkPattern ''Either
 
 
 -- | Lift a value into the 'Left' constructor

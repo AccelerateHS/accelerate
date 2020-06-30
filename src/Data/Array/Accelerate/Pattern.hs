@@ -1,10 +1,11 @@
-{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ParallelListComp      #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -36,6 +37,7 @@ module Data.Array.Accelerate.Pattern (
 
   pattern V2, pattern V3, pattern V4, pattern V8, pattern V16,
 
+  mkPattern,
   mkPatterns,
 
 ) where
@@ -103,8 +105,11 @@ instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
 newtype VecPattern a = VecPattern a
 
 
-mkPatterns :: Name -> DecsQ
-mkPatterns nm = do
+mkPatterns :: [Name] -> DecsQ
+mkPatterns nms = concat <$> mapM mkPattern nms
+
+mkPattern :: Name -> DecsQ
+mkPattern nm = do
   info <- reify nm
   case info of
     TyConI dec -> mkDec dec
@@ -115,188 +120,309 @@ mkDec dec =
   case dec of
     DataD    _ nm tv _ cs _ -> mkDataD nm tv cs
     NewtypeD _ nm tv _ c  _ -> mkNewtypeD nm tv c
-    _                      -> fail "mkPatterns: expected the name of a newtype or datatype"
+    _                       -> fail "mkPatterns: expected the name of a newtype or datatype"
 
 mkNewtypeD :: Name -> [TyVarBndr] -> Con -> DecsQ
 mkNewtypeD tn tvs c = mkDataD tn tvs [c]
 
 mkDataD :: Name -> [TyVarBndr] -> [Con] -> DecsQ
 mkDataD tn tvs cs = do
-  (pats, decs) <- unzip <$> go [] fts cs cts
+  (pats, decs) <- unzip <$> go cs
   comp         <- pragCompleteD pats Nothing
   return $ comp : concat decs
   where
+    go []  = fail "mkPatterns: empty data declarations not supported"
+    go [c] = return <$> mkConP tn tvs c
+    go _   = go' [] (map fieldTys cs) ctags cs
+
+    go' prev (this:next) (tag:tags) (con:cons) = do
+      r  <- mkConS tn tvs prev next tag con
+      rs <- go' (this:prev) next tags cons
+      return (r : rs)
+    go' _ [] [] [] = return []
+    go' _ _  _  _  = fail "mkPatterns: unexpected error"
+
     fieldTys (NormalC _ fs) = map snd fs
     fieldTys (RecC _ fs)    = map (\(_,_,t) -> t) fs
     fieldTys (InfixC a _ b) = [snd a, snd b]
     fieldTys _              = error "mkPatterns: only constructors for \"vanilla\" syntax are supported"
 
-    st  = length cs > 1
-    fts = map fieldTys cs
-
     -- TODO: The GTags class demonstrates a way to generate the tags for
     -- a given constructor, rather than backwards-engineering the structure
     -- as we've done here. We should use that instead!
     --
-    cts =
+    ctags =
       let n = length cs
           m = n `quot` 2
           l = take m     (iterate (True:) [False])
           r = take (n-m) (iterate (True:) [True])
+          --
+          bitsToTag = foldl' f 0
+            where
+              f i False =         i `shiftL` 1
+              f i True  = setBit (i `shiftL` 1) 0
       in
       map bitsToTag (l ++ r)
 
-    bitsToTag = foldl' f 0
+
+mkConP :: Name -> [TyVarBndr] -> Con -> Q (Name, [Dec])
+mkConP tn' tvs' = \case
+  NormalC cn fs -> mkNormalC tn' cn (map tyVarBndrName tvs') (map snd fs)
+  RecC cn fs    -> mkRecC tn' cn (map tyVarBndrName tvs') (map (rename . fst3) fs) (map thd3 fs)
+  InfixC a cn b -> mkInfixC tn' cn (map tyVarBndrName tvs') [snd a, snd b]
+  _             -> fail "mkPatterns: only constructors for \"vanilla\" syntax are supported"
+  where
+    mkNormalC :: Name -> Name -> [Name] -> [Type] -> Q (Name, [Dec])
+    mkNormalC tn cn tvs fs = do
+      xs <- replicateM (length fs) (newName "_x")
+      r  <- sequence [ patSynSigD pat sig
+                     , patSynD    pat
+                         (prefixPatSyn xs)
+                         implBidir
+                         [p| Pattern $(tupP (map varP xs)) |]
+                     ]
+      return (pat, r)
       where
-        f n False =         n `shiftL` 1
-        f n True  = setBit (n `shiftL` 1) 0
+        pat = rename cn
+        sig = forallT
+                (map plainTV tvs)
+                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (foldr (\t ts -> [t| $t -> $ts |])
+                       [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
+                       (map (\t -> [t| Exp $(return t) |]) fs))
 
-    go prev (this:next) (con:cons) (tag:tags) = do
-      r  <- mkCon st tn tvs prev next tag con
-      rs <- go (this:prev) next cons tags
-      return (r : rs)
-    go _ [] [] [] = return []
-    go _ _  _  _  = fail "mkPatterns: unexpected error"
+    mkRecC :: Name -> Name -> [Name] -> [Name] -> [Type] -> Q (Name, [Dec])
+    mkRecC tn cn tvs xs fs = do
+      r  <- sequence [ patSynSigD pat sig
+                     , patSynD    pat
+                         (recordPatSyn xs)
+                         implBidir
+                         [p| Pattern $(tupP (map varP xs)) |]
+                     ]
+      return (pat, r)
+      where
+        pat = rename cn
+        sig = forallT
+                (map plainTV tvs)
+                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (foldr (\t ts -> [t| $t -> $ts |])
+                       [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
+                       (map (\t -> [t| Exp $(return t) |]) fs))
 
-mkCon :: Bool -> Name -> [TyVarBndr] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
-mkCon st tn tvs prev next tag = \case
-  NormalC nm fs -> mkNormalC st tn (map tyVarBndrName tvs) tag nm prev (map snd fs) next
+    mkInfixC :: Name -> Name -> [Name] -> [Type] -> Q (Name, [Dec])
+    mkInfixC tn cn tvs fs = do
+      _a <- newName "_a"
+      _b <- newName "_b"
+      r  <- sequence [ patSynSigD pat sig
+                     , patSynD    pat
+                         (infixPatSyn _a _b)
+                         implBidir
+                         [p| Pattern $(tupP [varP _a, varP _b]) |]
+                     ]
+      return (pat, r)
+      where
+        pat = mkName (':' : nameBase cn)
+        sig = forallT
+                (map plainTV tvs)
+                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (foldr (\t ts -> [t| $t -> $ts |])
+                       [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
+                       (map (\t -> [t| Exp $(return t) |]) fs))
+
+mkConS :: Name -> [TyVarBndr] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
+mkConS tn' tvs' prev' next' tag' = \case
+  NormalC nm fs -> mkNormalC tn' (map tyVarBndrName tvs') tag' nm prev' (map snd fs) next'
   -- RecC nm fs    -> undefined
   -- InfixC a nm b -> undefined
   _             -> fail "mkPatterns: only constructors for \"vanilla\" syntax are supported"
-
-mkNormalC :: Bool -> Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
-mkNormalC st tn tvs tag cn ps fs ns = do
-  (fun_mk,    dec_mk)    <- mkNormalC_mk st tn tvs tag cn ps fs ns
-  (fun_match, dec_match) <- mkNormalC_match st tn tvs tag cn ps fs ns
-  (pat,       dec_pat)   <- mkNormalC_pattern tn tvs cn fs fun_mk fun_match
-  return $ (pat, concat [dec_pat, dec_mk, dec_match])
-
-mkNormalC_pattern :: Name -> [Name] -> Name -> [Type] -> Name -> Name -> Q (Name, [Dec])
-mkNormalC_pattern tn tvs cn fs mk match = do
-  xs <- replicateM (length fs) (newName "_x")
-  r  <- sequence [ patSynSigD pat sig
-                 , patSynD    pat
-                     (prefixPatSyn xs)
-                     (explBidir [clause [] (normalB (varE mk)) []])
-                     (parensP $ viewP (varE match) [p| Just $(tupP (map varP xs)) |])
-                 ]
-  return (pat, r)
   where
-    pat = mkName (nameBase cn ++ "_")
-    sig = forallT
-            (map plainTV tvs)
+    mkNormalC :: Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
+    mkNormalC tn tvs tag cn ps fs ns = do
+      (fun_mk,    dec_mk)    <- mkNormalC_mk tn tvs tag cn ps fs ns
+      (fun_match, dec_match) <- mkNormalC_match tn tvs tag cn ps fs ns
+      (pat,       dec_pat)   <- mkNormalC_pattern tn tvs cn fs fun_mk fun_match
+      return $ (pat, concat [dec_pat, dec_mk, dec_match])
+
+    mkNormalC_pattern :: Name -> [Name] -> Name -> [Type] -> Name -> Name -> Q (Name, [Dec])
+    mkNormalC_pattern tn tvs cn fs mk match = do
+      xs <- replicateM (length fs) (newName "_x")
+      r  <- sequence [ patSynSigD pat sig
+                     , patSynD    pat
+                         (prefixPatSyn xs)
+                         (explBidir [clause [] (normalB (varE mk)) []])
+                         (parensP $ viewP (varE match) [p| Just $(tupP (map varP xs)) |])
+                     ]
+      return (pat, r)
+      where
+        pat = rename cn
+        sig = forallT
+                (map plainTV tvs)
+                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (foldr (\t ts -> [t| $t -> $ts |])
+                       [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
+                       (map (\t -> [t| Exp $(return t) |]) fs))
+
+    mkNormalC_mk :: Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
+    mkNormalC_mk tn tvs tag cn fs0 fs fs1 = do
+      fun <- newName ("_mk" ++ nameBase cn)
+      xs  <- replicateM (length fs) (newName "_x")
+      let
+        vs    = foldl' (\es e -> [| SmartExp ($es `Pair` $e) |]) [| SmartExp Nil |]
+              $  map (\t -> [| unExp (undef @ $(return t)) |] ) (concat (reverse fs0))
+              ++ map varE xs
+              ++ map (\t -> [| unExp (undef @ $(return t)) |] ) (concat fs1)
+
+        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
+        body   = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
+
+      r <- sequence [ sigD fun sig
+                    , funD fun [body]
+                    ]
+      return (fun, r)
+      where
+        sig   = forallT
+                  (map plainTV tvs)
+                  (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                  (foldr (\t ts -> [t| $t -> $ts |])
+                         [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
+                         (map (\t -> [t| Exp $(return t) |]) fs))
+
+
+    mkNormalC_match :: Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
+    mkNormalC_match tn tvs tag cn fs0 fs fs1 = do
+      fun     <- newName ("_match" ++ nameBase cn)
+      e       <- newName "_e"
+      x       <- newName "_x"
+      (ps,es) <- extract vs [| Prj PairIdxRight $(varE x) |] [] []
+      let
+        lhs   = [p| (Exp $(varP e)) |]
+        body  = normalB $ caseE (varE e)
+          [ TH.match (conP 'SmartExp [(conP 'Match [matchP ps, varP x])]) (normalB [| Just $(tupE es) |]) []
+          , TH.match (conP 'SmartExp [(recP 'Match [])])                  (normalB [| Nothing         |]) []
+          , TH.match wildP                                                (normalB [| error "Pattern synonym used outside 'match' context" |]) []
+          ]
+
+      r <- sequence [ sigD fun sig
+                    , funD fun [clause [lhs] body []]
+                    ]
+      return (fun, r)
+      where
+        sig =
+          forallT []
             (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
-            (foldr (\t ts -> [t| $t -> $ts |])
-                   [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
-                   (map (\t -> [t| Exp $(return t) |]) fs))
+            [t| Exp $(foldl' appT (conT tn) (map varT tvs))
+                -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
 
-mkNormalC_mk :: Bool -> Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
-mkNormalC_mk sum_type tn tvs tag cn fs0 fs fs1 = do
-  fun <- newName ("_mk" ++ nameBase cn)
-  xs  <- replicateM (length fs) (newName "_x")
+        matchP us = [p| TagRtag $(litP (IntegerL (toInteger tag))) $pat |]
+          where
+            pat = [p| $(foldl (\ps p -> [p| TagRpair $ps $p |]) [p| TagRunit |] us) |]
+
+        extract []     _ ps es = return (ps, es)
+        extract (u:us) x ps es = do
+          _u <- newName "_u"
+          let x' = [| Prj PairIdxLeft (SmartExp $x) |]
+          if not u
+             then extract us x' (wildP:ps)  es
+             else extract us x' (varP _u:ps) ([| Exp (SmartExp (Match $(varE _u) (SmartExp (Prj PairIdxRight (SmartExp $x))))) |] : es)
+
+        vs = reverse
+           $ [ False | _ <- concat fs0 ] ++ [ True | _ <- fs ] ++ [ False | _ <- concat fs1 ]
+
+fst3 :: (a,b,c) -> a
+fst3 (a,_,_) = a
+
+thd3 :: (a,b,c) -> c
+thd3 (_,_,c) = c
+
+rename :: Name -> Name
+rename nm =
   let
-    vs    = foldl' (\es e -> [| SmartExp ($es `Pair` $e) |]) [| SmartExp Nil |]
-          $  map (\t -> [| unExp (undef @ $(return t)) |] ) (concat (reverse fs0))
-          ++ map varE xs
-          ++ map (\t -> [| unExp (undef @ $(return t)) |] ) (concat fs1)
-
-    body  = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
-      where
-        tagged
-          | sum_type  = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
-          | otherwise = [| Exp $vs |]
-
-  r <- sequence [ sigD fun sig
-                , funD fun [body]
-                ]
-  return (fun, r)
-  where
-    sig   = forallT
-              (map plainTV tvs)
-              (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
-              (foldr (\t ts -> [t| $t -> $ts |])
-                     [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
-                     (map (\t -> [t| Exp $(return t) |]) fs))
+      split acc []     = (reverse acc, '\0')  -- shouldn't happen
+      split acc [l]    = (reverse acc, l)
+      split acc (l:ls) = split (l:acc) ls
+      --
+      nm'              = nameBase nm
+      (base, suffix)   = split [] nm'
+   in
+   case suffix of
+     '_' -> mkName base
+     _   -> mkName (nm' ++ "_")
 
 
-mkNormalC_match :: Bool -> Name -> [Name] -> Word8 -> Name -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
-mkNormalC_match sum_type tn tvs tag cn fs0 fs fs1 = do
-  fun     <- newName ("_match" ++ nameBase cn)
-  e       <- newName "_e"
-  x       <- newName "_x"
-  (ps,es) <- extract vs (if sum_type then [| Prj PairIdxRight $(varE x) |] else varE x) [] []
-  let
-    lhs   = [p| (Exp $(varP e)) |]
-    body  = normalB $ caseE (varE e)
-      [ TH.match (conP 'SmartExp [(conP 'Match [matchP ps, varP x])]) (normalB [| Just $(tupE es) |]) []
-      , TH.match (conP 'SmartExp [(recP 'Match [])])                  (normalB [| Nothing         |]) []
-      , TH.match wildP                                                (normalB [| error "Pattern synonym used outside 'match' context" |]) []
-      ]
-
-  r <- sequence [ sigD fun sig
-                , funD fun [clause [lhs] body []]
-                ]
-  return (fun, r)
-  where
-    sig =
-      forallT []
-        (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
-        [t| Exp $(foldl' appT (conT tn) (map varT tvs))
-            -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
-
-    matchP us
-      | sum_type  = [p| TagRtag $(litP (IntegerL (toInteger tag))) $pat |]
-      | otherwise = pat
-      where
-        pat = [p| $(foldl (\ps p -> [p| TagRpair $ps $p |]) [p| TagRunit |] us) |]
-
-    extract []     _ ps es = return (ps, es)
-    extract (u:us) x ps es = do
-      _u <- newName "_u"
-      let x' = [| Prj PairIdxLeft (SmartExp $x) |]
-      if not u
-         then extract us x' (wildP:ps)  es
-         else extract us x' (varP _u:ps) ([| Exp (SmartExp (Match $(varE _u) (SmartExp (Prj PairIdxRight (SmartExp $x))))) |] : es)
-
-    vs = reverse
-       $ [ False | _ <- concat fs0 ] ++ [ True | _ <- fs ] ++ [ False | _ <- concat fs1 ]
-
-
--- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
--- (unremarkable) boilerplate for us, but since the implementation is a little
--- tricky it is debatable whether or not this is a good idea...
+-- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of
+-- the (unremarkable) boilerplate for us.
 --
 runQ $ do
     let
         -- Generate instance declarations for IsPattern of the form:
-        -- instance (Elt x, EltR x ~ (((), EltR a), EltR b), Elt a, Elt b,) => IsPattern Exp x (Exp a, Exp b)
-        mkIsPattern :: Name -> TypeQ -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern con cst repr smart prj nil pair n = do
+        -- instance (Arrays x, ArraysR x ~ (((), ArraysR a), ArraysR b), Arrays a, Arrays b,) => IsPattern Acc x (Acc a, Acc b)
+        mkAccPattern :: Int -> Q [Dec]
+        mkAccPattern n = do
           a <- newName "a"
           let
               -- Type variables for the elements
               xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              -- Last argument to `IsPattern`, eg (Acc a, Acc b) in the example
+              b        = tupT (map (\t -> [t| Acc $(varT t)|]) xs)
+              -- Representation as snoc-list of pairs, eg (((), ArraysR a), ArraysR b)
+              snoc     = foldl (\sn t -> [t| ($sn, ArraysR $(varT t)) |]) [t| () |] xs
+              -- Constraints for the type class, consisting of Arrays constraints on all type variables,
+              -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
+              context  = tupT
+                       $ [t| Arrays $(varT a) |]
+                       : [t| ArraysR $(varT a) ~ $snoc |]
+                       : map (\t -> [t| Arrays $(varT t)|]) xs
+              --
+              get x 0 = [| Acc (SmartAcc (Aprj PairIdxRight $x)) |]
+              get x i = get  [| SmartAcc (Aprj PairIdxLeft $x) |] (i-1)
+          --
+          _x <- newName "_x"
+          [d| instance $context => IsPattern Acc $(varT a) $b where
+                construct $(tupP (map (\x -> [p| Acc $(varP x)|]) xs)) =
+                  Acc $(foldl (\vs v -> [| SmartAcc ($vs `Apair` $(varE v)) |]) [| SmartAcc Anil |] xs)
+                destruct (Acc $(varP _x)) =
+                  $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
+            |]
+
+        -- Generate instance declarations for IsPattern of the form:
+        -- instance (Elt x, EltR x ~ (((), EltR a), EltR b), Elt a, Elt b,) => IsPattern Exp x (Exp a, Exp b)
+        mkExpPattern :: Int -> Q [Dec]
+        mkExpPattern n = do
+          a <- newName "a"
+          let
+              -- Type variables for the elements
+              xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              -- Variables for sub-pattern matches
+              ms       = [ mkName ('m' : show i) | i <- [0 .. n-1] ]
+              tags     = foldl (\ts t -> [p| $ts `TagRpair` $(varP t) |]) [p| TagRunit |] ms
               -- Last argument to `IsPattern`, eg (Exp, a, Exp b) in the example
-              b        = tupT (map (\t -> [t| $(conT con) $(varT t)|]) xs)
+              b        = tupT (map (\t -> [t| Exp $(varT t)|]) xs)
               -- Representation as snoc-list of pairs, eg (((), EltR a), EltR b)
-              snoc     = foldl (\sn t -> [t| ($sn, $(appT repr $ varT t)) |]) [t| () |] xs
+              snoc     = foldl (\sn t -> [t| ($sn, EltR $(varT t)) |]) [t| () |] xs
               -- Constraints for the type class, consisting of Elt constraints on all type variables,
               -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
               context  = tupT
-                       $ appT cst [t| $(varT a) |]
-                       : [t| $repr $(varT a) ~ $snoc |]
-                       : map (\t -> [t| $cst $(varT t)|]) xs
+                       $ [t| Elt $(varT a) |]
+                       : [t| EltR $(varT a) ~ $snoc |]
+                       : map (\t -> [t| Elt $(varT t)|]) xs
               --
-              get x 0 = [| $(conE con) ($smart ($prj PairIdxRight $x)) |]
-              get x i = get [| $smart ($prj PairIdxLeft $x) |] (i-1)
+              get x 0 =     [| SmartExp (Prj PairIdxRight $x) |]
+              get x i = get [| SmartExp (Prj PairIdxLeft $x)  |] (i-1)
           --
           _x <- newName "_x"
-          [d| instance $context => IsPattern $(conT con) $(varT a) $b where
-                construct $(tupP (map (conP con . return . varP) xs)) =
-                  $(conE con) $(foldl (\vs v -> appE smart (appE (appE pair vs) (varE v))) (appE smart nil) xs)
-                destruct $(conP con [varP _x]) =
-                  $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
+          _y <- newName "_y"
+          [d| instance $context => IsPattern Exp $(varT a) $b where
+                construct $(tupP (map (\x -> [p| Exp $(varP x)|]) xs)) =
+                  let _unmatch :: SmartExp a -> SmartExp a
+                      _unmatch (SmartExp (Match _ $(varP _y))) = $(varE _y)
+                      _unmatch x = x
+                  in
+                  Exp $(foldl (\vs v -> [| SmartExp ($vs `Pair` _unmatch $(varE v)) |]) [| SmartExp Nil |] xs)
+                destruct (Exp $(varP _x)) =
+                  case $(varE _x) of
+                    SmartExp (Match $tags $(varP _y))
+                      -> $(tupE [[| Exp (SmartExp (Match $(varE m) $(get (varE _x) i))) |] | m <- ms | i <- [(n-1), (n-2) .. 0]])
+                    _ -> $(tupE [[| Exp $(get (varE _x) i) |] | i <- [(n-1), (n-2) .. 0]])
             |]
 
         mkVecPattern :: Int -> Q [Dec]
@@ -313,9 +439,6 @@ runQ $ do
                     Exp x' -> Exp (SmartExp (VecPack $v x'))
                 destruct (Exp x) = VecPattern (destruct (Exp (SmartExp (VecUnpack $v x)) :: Exp $t))
             |]
-
-        mkExpPattern = mkIsPattern (mkName "Exp") [t| Elt    |] [t| EltR    |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
-        mkAccPattern = mkIsPattern (mkName "Acc") [t| Arrays |] [t| ArraysR |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
     --
     es <- mapM mkExpPattern [0..16]
     as <- mapM mkAccPattern [0..16]

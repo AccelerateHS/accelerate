@@ -48,7 +48,7 @@ import Text.Printf
 import qualified Prelude                                            as P
 
 
-mkPatterns ''Ordering
+mkPattern ''Ordering
 
 infix 4 <
 infix 4 >
