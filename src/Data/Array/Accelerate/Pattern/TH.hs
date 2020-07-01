@@ -171,6 +171,7 @@ mkConP tn' tvs' con' = do
 
     mkInfixC :: Name -> Name -> [Name] -> [Type] -> Q (Name, [Dec])
     mkInfixC tn cn tvs fs = do
+      mf <- reifyFixity cn
       _a <- newName "_a"
       _b <- newName "_b"
       r  <- sequence [ patSynSigD pat sig
@@ -179,7 +180,10 @@ mkConP tn' tvs' con' = do
                          implBidir
                          [p| Pattern $(tupP [varP _a, varP _b]) |]
                      ]
-      return (pat, r)
+      r' <- case mf of
+              Nothing -> return r
+              Just f  -> return (InfixD f pat : r)
+      return (pat, r')
       where
         pat = mkName (':' : nameBase cn)
         sig = forallT
@@ -258,6 +262,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
 
     mkInfixC_pattern :: Name -> Name -> [Name] -> [Type] -> Name -> Name -> Q (Name, [Dec])
     mkInfixC_pattern tn cn tvs fs build match = do
+      mf <- reifyFixity cn
       _a <- newName "_a"
       _b <- newName "_b"
       r  <- sequence [ patSynSigD pat sig
@@ -266,7 +271,10 @@ mkConS tn' tvs' prev' next' tag' con' = do
                          (explBidir [clause [] (normalB (varE build)) []])
                          (parensP $ viewP (varE match) [p| Just $(tupP [varP _a, varP _b]) |])
                      ]
-      return (pat, r)
+      r' <- case mf of
+              Nothing -> return r
+              Just f  -> return (InfixD f pat : r)
+      return (pat, r')
       where
         pat = mkName (':' : nameBase cn)
         sig = forallT
