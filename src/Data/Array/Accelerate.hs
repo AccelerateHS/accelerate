@@ -85,7 +85,7 @@
 --
 --      - For more information on LULESH: <https://codesign.llnl.gov/lulesh.php>.
 --
---      <<https://codesign.llnl.gov/images/sedov-3d-LLNL.png>>
+--      <<https://i.imgur.com/bIkODKd.jpg>>
 --
 -- [/Starting a new project:/]
 --
@@ -604,11 +604,10 @@ arrayReshape = S.reshape
 -- in two-dimensional space:
 --
 -- > data Point = Point_ Float Float
--- >   deriving (Show, Generic, Elt, IsTuple)
+-- >   deriving (Generic, Elt)
 --
--- Here we derive instances for both the 'Elt' class, so that this data type can
--- be used within Accelerate scalar expressions, and the 'IsTuple' class, as
--- this is a product type (contains multiple values).
+-- Here we derive instance an instance of the 'Elt' class (via 'Generic'),
+-- so that this data type can be used within scalar Accelerate expressions
 --
 -- In order to access the individual fields of the data constructor from within
 -- an Accelerate expression, we define the following pattern synonym:
@@ -631,7 +630,7 @@ arrayReshape = S.reshape
 -- use record syntax to generate field accessors, if we desire:
 --
 -- > data SparseVector a = SparseVector_ (Vector Int) (Vector a)
--- >   deriving (Show, Generic, Arrays, IsAtuple)
+-- >   deriving (Generic, Arrays)
 -- >
 -- > pattern SparseVector :: Elt a => Acc (Vector Int) -> Acc (Vector a) -> Acc (SparseVector a)
 -- > pattern SparseVector { indices, values } = Pattern (indices, values)

@@ -72,6 +72,9 @@ import GHC.Generics
 -- > data Option a = None | Just a
 -- >   deriving (Generic, Elt)
 --
+-- See the function 'Data.Array.Accelerate.match' for details on how to use
+-- sum types in embedded code.
+--
 class Elt a where
   -- | Type representation mapping, which explains how to convert a type
   -- from the surface type into the internal representation type consisting

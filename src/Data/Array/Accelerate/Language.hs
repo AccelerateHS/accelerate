@@ -128,6 +128,7 @@ import Prelude                                                      ( ($), (.), 
 -- >>> :seti -XTypeOperators
 -- >>> :seti -XViewPatterns
 -- >>> import Data.Array.Accelerate
+-- >>> import Data.Array.Accelerate.Data.Maybe
 -- >>> import Data.Array.Accelerate.Interpreter
 -- >>> :{
 --   let runExp :: Elt e => Exp e -> e
@@ -270,7 +271,7 @@ replicate = Acc $$ applyAcc (Replicate $ sliceIndex @slix)
 -- For example, the following will generate a one-dimensional array
 -- (`Vector`) of three floating point numbers:
 --
--- >>> run $ generate (index1 3) (\_ -> 1.2) :: Vector Float
+-- >>> run $ generate (I1 3) (\_ -> 1.2) :: Vector Float
 -- Vector (Z :. 3) [1.2,1.2,1.2]
 --
 -- Or equivalently:
@@ -280,7 +281,7 @@ replicate = Acc $$ applyAcc (Replicate $ sliceIndex @slix)
 --
 -- The following will create a vector with the elements @[1..10]@:
 --
--- >>> run $ generate (index1 10) (\ix -> unindex1 ix + 1) :: Vector Int
+-- >>> run $ generate (I1 10) (\(I1 i) -> i + 1) :: Vector Int
 -- Vector (Z :. 10) [1,2,3,4,5,6,7,8,9,10]
 --
 -- [/NOTE:/]
@@ -489,24 +490,23 @@ zipWith = Acc $$$ applyAcc (ZipWith (eltR @a) (eltR @b) (eltR @c))
 --           => Acc (Array (sh :. Int) e)
 --           -> Acc (Array sh e)
 --       maximumSegmentSum
---         = map (\v -> let (x,_,_,_) = unlift v :: (Exp e, Exp e, Exp e, Exp e) in x)
+--         = map (\(T4 x _ _ _) -> x)
 --         . fold1 f
 --         . map g
 --         where
 --           f :: (Num a, Ord a) => Exp (a,a,a,a) -> Exp (a,a,a,a) -> Exp (a,a,a,a)
 --           f x y =
---             let (mssx, misx, mcsx, tsx) = unlift x
---                 (mssy, misy, mcsy, tsy) = unlift y
+--             let T4 mssx misx mcsx tsx = x
+--                 T4 mssy misy mcsy tsy = y
 --             in
---             lift ( mssx `max` (mssy `max` (mcsx+misy))
---                  , misx `max` (tsx+misy)
---                  , mcsy `max` (mcsx+tsy)
---                  , tsx+tsy
---                  )
+--             T4 (mssx `max` (mssy `max` (mcsx+misy)))
+--                (misx `max` (tsx+misy))
+--                (mcsy `max` (mcsx+tsy))
+--                (tsx+tsy)
 --           --
 --           g :: (Num a, Ord a) => Exp a -> Exp (a,a,a,a)
 --           g x = let y = max x 0
---                 in  lift (y,y,y,x)
+--                  in T4 y y y x
 -- :}
 --
 -- >>> let vec = fromList (Z:.10) [-2,1,-3,4,-1,2,1,-5,4,0] :: Vector Int
@@ -716,7 +716,7 @@ scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunct
 --         let zeros = fill (constant (Z:.10)) 0
 --             ones  = fill (shape xs)         1
 --         in
---         permute (+) zeros (\ix -> index1 (xs!ix)) ones
+--         permute (+) zeros (\ix -> Just_ (I1 (xs!ix))) ones
 -- :}
 --
 -- >>> let xs = fromList (Z :. 20) [0,0,1,2,1,1,2,4,8,3,4,9,8,3,2,5,5,3,1,2] :: Vector Int
@@ -730,10 +730,10 @@ scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunct
 -- >>> :{
 --   let identity :: Num a => Exp Int -> Acc (Matrix a)
 --       identity n =
---         let zeros = fill (index2 n n) 0
---             ones  = fill (index1 n)   1
+--         let zeros = fill (I2 n n) 0
+--             ones  = fill (I1 n)   1
 --         in
---         permute const zeros (\(unindex1 -> i) -> index2 i i) ones
+--         permute const zeros (\(I1 i) -> Just_ (I2 i i)) ones
 -- :}
 --
 -- >>> run $ identity 5 :: Matrix Int

@@ -37,7 +37,7 @@ import qualified Language.Haskell.TH                                as TH
 import GHC.Stack
 
 
--- | As 'mkPattern, but for a list of types
+-- | As 'mkPattern', but for a list of types
 --
 mkPatterns :: [Name] -> DecsQ
 mkPatterns nms = concat <$> mapM mkPattern nms
