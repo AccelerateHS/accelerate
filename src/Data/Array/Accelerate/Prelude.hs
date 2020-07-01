@@ -2229,6 +2229,15 @@ instance IfThenElse Acc where
 --
 -- And utilising the @LambdaCase@ and @BlockArguments@ syntactic extensions.
 --
+-- The Template Haskell splice 'Data.Array.Accelerate.mkPattern' (or
+-- 'Data.Array.Accelerate.mkPatterns') can be used to generate the pattern
+-- synonyms for a given Haskell'98 sum or product data type. For example:
+--
+-- > data Option a = None | Some a
+-- >   deriving (Generic, Elt)
+-- >
+-- > mkPattern ''Option
+--
 match :: Matching f => f -> f
 match f = mkFun (mkMatch f) id
 
