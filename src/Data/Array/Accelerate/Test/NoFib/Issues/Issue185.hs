@@ -23,6 +23,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue185 (
 ) where
 
 import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Data.Maybe                             as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -144,6 +145,6 @@ scatterIf
     -> Acc (Vector e')
 scatterIf to maskV p def input = permute const def pf input'
   where
-    pf ix       = p (maskV ! ix) ? ( index1 (to ! ix), ignore )
+    pf ix       = p (maskV ! ix) ? ( Just_ (index1 (to ! ix)), Nothing_ )
     input'      = backpermute (shape to `intersect` shape input) id input
 

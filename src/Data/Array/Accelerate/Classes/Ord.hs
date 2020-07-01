@@ -30,6 +30,7 @@ module Data.Array.Accelerate.Classes.Ord (
 
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Ordering
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
@@ -44,12 +45,10 @@ import qualified Data.Array.Accelerate.Classes.Eq                   as A
 import Data.Char
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
-import Prelude                                                      ( ($), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM, (==) )
+import Prelude                                                      ( ($), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
 import Text.Printf
 import qualified Prelude                                            as P
 
-
-mkPattern ''Ordering
 
 infix 4 <
 infix 4 >
@@ -114,8 +113,6 @@ instance Ord sh => Ord (sh :. Int) where
         && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x > indexTail y
-
-instance Elt Ordering
 
 instance Eq Ordering where
   x == y = mkCoerce x A.== (mkCoerce y :: Exp TAG)

@@ -240,7 +240,6 @@ module Data.Array.Accelerate (
   -- *** Permutations
   -- **** Forward permutation (scatter)
   permute,
-  ignore,
   scatter,
 
   -- **** Backward permutation (gather)
@@ -252,7 +251,7 @@ module Data.Array.Accelerate (
   reverseOn, transposeOn,
 
   -- *** Filtering
-  filter,
+  filter, compact,
 
   -- ** Folding
   fold, fold1, foldAll, fold1All,
@@ -424,12 +423,13 @@ module Data.Array.Accelerate (
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.TH
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Pretty                                 () -- show instances
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Array, Arrays, Scalar, Vector, Matrix, Segments, fromFunction, fromFunctionM, toList, fromList )
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, ignore, toIndex, fromIndex, intersect )
+import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, toIndex, fromIndex, intersect )
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec

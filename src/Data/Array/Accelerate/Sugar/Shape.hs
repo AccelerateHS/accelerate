@@ -148,11 +148,6 @@ size = R.size (shapeR @sh) . fromElt
 empty :: forall sh. Shape sh => sh
 empty = toElt $ R.empty (shapeR @sh)
 
--- | Magic value identifying elements ignored in 'permute'
---
-ignore :: forall sh. Shape sh => sh
-ignore = toElt $ R.ignore (shapeR @sh)
-
 -- | Yield the intersection of two shapes
 intersect :: forall sh. Shape sh => sh -> sh -> sh
 intersect x y = toElt $ R.intersect (shapeR @sh) (fromElt x) (fromElt y)

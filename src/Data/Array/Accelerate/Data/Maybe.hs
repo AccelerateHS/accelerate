@@ -32,19 +32,17 @@ module Data.Array.Accelerate.Data.Maybe (
 ) where
 
 import Data.Array.Accelerate.AST.Idx
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Interpreter
 import Data.Array.Accelerate.Language                               hiding ( chr )
-import Data.Array.Accelerate.Pattern
-import Data.Array.Accelerate.Prelude                                hiding ( filter )
+import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Pattern.Maybe
+import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Array, Vector )
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.), empty )
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, (:.) )
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
-import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
@@ -54,10 +52,7 @@ import Data.Array.Accelerate.Data.Semigroup
 #endif
 
 import Data.Maybe                                                   ( Maybe(..) )
-import Prelude                                                      ( ($), const, otherwise )
-
-
-mkPattern ''Maybe
+import Prelude                                                      ( ($) )
 
 
 -- | Returns 'True' if the argument is 'Nothing'
@@ -99,7 +94,7 @@ maybe d f x = cond (isNothing x) d (f (fromJust x))
 justs :: (Shape sh, Slice sh, Elt a)
       => Acc (Array (sh:.Int) (Maybe a))
       -> Acc (Vector a, Array sh Int)
-justs xs = filter' (map isJust xs) (map fromJust xs)
+justs xs = compact (map isJust xs) (map fromJust xs)
 
 
 instance Functor Maybe where
@@ -134,48 +129,8 @@ instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
 tag :: Elt a => Exp (Maybe a) -> Exp Word8
 tag (Exp x) = Exp $ SmartExp $ Prj PairIdxLeft x
 
-instance Elt a => Elt (Maybe a)
-
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
   lift Nothing  = Nothing_
   lift (Just a) = Just_ (lift a)
-
-
--- Utilities
--- ---------
-
-filter'
-    :: forall sh e. (Shape sh, Slice sh, Elt e)
-    => Acc (Array (sh:.Int) Bool)     -- tags
-    -> Acc (Array (sh:.Int) e)        -- values
-    -> Acc (Vector e, Array sh Int)
-filter' keep arr
-  | Just Refl <- matchShapeType @sh @Z
-  = let
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
-        dummy           = fill (index1 (the len)) undef
-        result          = permute const dummy prj arr
-    in
-    null keep ?| ( lift (emptyArray, fill (constant Z) 0)
-                 , lift (result, len)
-                 )
-  | otherwise
-  = let
-        sz              = indexTail (shape arr)
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
-        prj ix          = cond (keep!ix)
-                               (index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix)
-                               ignore
-        dummy           = fill (index1 (the valid)) undef
-        result          = permute const dummy prj arr
-    in
-    null keep ?| ( lift (emptyArray, fill sz 0)
-                 , lift (result, len)
-                 )
-
-emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = fill (constant empty) undef
 

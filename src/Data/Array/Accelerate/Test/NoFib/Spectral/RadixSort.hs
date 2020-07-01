@@ -29,6 +29,7 @@ import qualified Data.Bits                                          as P
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Data.Bits                              as A
+import Data.Array.Accelerate.Data.Maybe                             as A
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
@@ -176,7 +177,7 @@ radixsortBy rdx arr = foldr1 (>->) (P.map radixPass [0..p-1]) arr
                         iup     = A.map (size v - 1 -) . prescanr (+) 0 $ flags
                         index   = A.zipWith deal flags (A.zip idown iup)
                     in
-                    permute const v (\ix -> index1 (index!ix)) v
+                    permute const v (\ix -> Just_ (index1 (index!ix))) v
 
 
 -- This is rather slow. Speeding up the reference implementation by using, say,

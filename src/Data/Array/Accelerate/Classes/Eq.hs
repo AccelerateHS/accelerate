@@ -32,6 +32,7 @@ module Data.Array.Accelerate.Classes.Eq (
 
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Bool
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
@@ -45,8 +46,6 @@ import Language.Haskell.TH                                          hiding ( Exp
 import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
 
-
-mkPattern ''Bool
 
 infix 4 ==
 infix 4 /=

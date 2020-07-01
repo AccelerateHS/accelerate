@@ -20,6 +20,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue137 (
 ) where
 
 import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Data.Maybe                             as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -51,6 +52,6 @@ test1 =
                             , lift (b1, A.min b2 a1)
                             ))
             infsA
-            (\ix -> index1 (msA A.! ix))
+            (\ix -> Just_ (index1 (msA A.! ix)))
             inpA
 

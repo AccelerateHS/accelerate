@@ -98,9 +98,6 @@ module Data.Array.Accelerate.Language (
   -- * Conversions
   ord, chr, boolToInt, bitcast,
 
-  -- * Constants
-  ignore
-
 ) where
 
 import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
@@ -115,7 +112,6 @@ import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Sugar.Shape                            ( Shape(..), Slice(..), (:.) )
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Representation.Array         as R
-import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Fractional
@@ -704,8 +700,8 @@ scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunct
 -- the given defaults and any further values that are permuted into the result
 -- array are added to the current value using the given combination function.
 --
--- The combination function must be /associative/ and /commutative/. Elements
--- that are mapped to the magic index 'ignore' by the permutation function are
+-- The combination function must be /associative/ and /commutative/.
+-- Elements for which the permutation function returns 'Nothing' are
 -- dropped.
 --
 -- The combination function is given the new value being permuted as its first
@@ -793,7 +789,7 @@ permute
     :: forall sh sh' a. (Shape sh, Shape sh', Elt a)
     => (Exp a -> Exp a -> Exp a)        -- ^ combination function
     -> Acc (Array sh' a)                -- ^ array of default values
-    -> (Exp sh -> Exp sh')              -- ^ index permutation function
+    -> (Exp sh -> Exp (Maybe sh'))      -- ^ index permutation function
     -> Acc (Array sh  a)                -- ^ array of source values to be permuted
     -> Acc (Array sh' a)
 permute = Acc $$$$ applyAcc (Permute $ arrayR @sh @a)
@@ -1514,13 +1510,4 @@ bitcast
     => Exp a
     -> Exp b
 bitcast = mkBitcast
-
-
--- Constants
--- ---------
-
--- | Magic index identifying elements that are ignored in a forward permutation.
---
-ignore :: Shape sh => Exp sh
-ignore = constant S.ignore
 

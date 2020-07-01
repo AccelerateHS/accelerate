@@ -388,6 +388,11 @@ Library
         Data.Array.Accelerate.Lift
         Data.Array.Accelerate.Orphans
         Data.Array.Accelerate.Pattern
+        Data.Array.Accelerate.Pattern.Bool
+        Data.Array.Accelerate.Pattern.Either
+        Data.Array.Accelerate.Pattern.Maybe
+        Data.Array.Accelerate.Pattern.Ordering
+        Data.Array.Accelerate.Pattern.TH
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz
         Data.Array.Accelerate.Pretty.Graphviz.Monad

@@ -72,12 +72,6 @@ empty :: ShapeR sh -> sh
 empty ShapeRz          = ()
 empty (ShapeRsnoc shr) = (empty shr, 0)
 
--- | Magic value identifying elements ignored in 'Data.Array.Accelerate.permute'
---
-ignore :: ShapeR sh -> sh
-ignore ShapeRz          = ()
-ignore (ShapeRsnoc shr) = (ignore shr, -1)
-
 -- | Yield the intersection of two shapes
 --
 intersect :: ShapeR sh -> sh -> sh -> sh

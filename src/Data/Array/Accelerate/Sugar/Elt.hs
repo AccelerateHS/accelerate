@@ -299,6 +299,9 @@ untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 
 instance Elt ()
 instance Elt Bool
+instance Elt Ordering
+instance Elt a => Elt (Maybe a)
+instance (Elt a, Elt b) => Elt (Either a b)
 
 instance Elt Char where
   type EltR Char = Word32

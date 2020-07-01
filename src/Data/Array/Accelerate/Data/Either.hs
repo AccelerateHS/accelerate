@@ -32,19 +32,17 @@ module Data.Array.Accelerate.Data.Either (
 ) where
 
 import Data.Array.Accelerate.AST.Idx
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Interpreter
 import Data.Array.Accelerate.Language                               hiding ( chr )
-import Data.Array.Accelerate.Pattern
-import Data.Array.Accelerate.Prelude                                hiding ( filter )
+import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Pattern.Either
+import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Array, Vector )
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.), empty )
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, (:.) )
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
-import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
@@ -54,11 +52,7 @@ import Data.Array.Accelerate.Data.Semigroup
 #endif
 
 import Data.Either                                                  ( Either(..) )
-import Data.Maybe
-import Prelude                                                      ( (.), ($), const, otherwise )
-
-
-mkPattern ''Either
+import Prelude                                                      ( (.), ($) )
 
 
 -- | Lift a value into the 'Left' constructor
@@ -89,14 +83,14 @@ isRight x = tag x == 1
 -- instead.
 --
 fromLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp a
-fromLeft x = let T3 _ a _ = asTuple x in a
+fromLeft (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'fromRight' function extracts the element out of the 'Right'
 -- constructor. If the argument was actually 'Left', you will get an undefined
 -- value instead.
 --
 fromRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp b
-fromRight x = let T3 _ _ b = asTuple x in b
+fromRight (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'either' function performs case analysis on the 'Either' type. If the
 -- value is @'Left' a@, apply the first function to @a@; if it is @'Right' b@,
@@ -114,7 +108,7 @@ either f g x =
 lefts :: (Shape sh, Slice sh, Elt a, Elt b)
       => Acc (Array (sh:.Int) (Either a b))
       -> Acc (Vector a, Array sh Int)
-lefts es = filter' (map isLeft es) (map fromLeft es)
+lefts es = compact (map isLeft es) (map fromLeft es)
 
 -- | Extract from the array of 'Either' all of the 'Right' elements, together
 -- with a segment descriptor indicating how many elements along each dimension
@@ -123,7 +117,7 @@ lefts es = filter' (map isLeft es) (map fromLeft es)
 rights :: (Shape sh, Slice sh, Elt a, Elt b)
        => Acc (Array (sh:.Int) (Either a b))
        -> Acc (Vector b, Array sh Int)
-rights es = filter' (map isRight es) (map fromRight es)
+rights es = compact (map isRight es) (map fromRight es)
 
 
 instance Elt a => Functor (Either a) where
@@ -145,56 +139,10 @@ instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
 #endif
 
 tag :: (Elt a, Elt b) => Exp (Either a b) -> Exp Word8
-tag x = let T3 t _ _ = asTuple x in t
-
-instance (Elt a, Elt b) => Elt (Either a b)
+tag (Exp e) = Exp $ SmartExp $ Prj PairIdxLeft e
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)
   lift (Left a)  = Left_ (lift a)
   lift (Right b) = Right_ (lift b)
-
-
--- Utilities
--- ---------
-
-filter'
-    :: forall sh e. (Shape sh, Slice sh, Elt e)
-    => Acc (Array (sh:.Int) Bool)     -- tags
-    -> Acc (Array (sh:.Int) e)        -- values
-    -> Acc (Vector e, Array sh Int)
-filter' keep arr
-  | Just Refl <- matchShapeType @sh @Z
-  = let
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
-        dummy           = fill (index1 (the len)) undef
-        result          = permute const dummy prj arr
-    in
-    null keep ?| ( lift (emptyArray, fill (constant Z) 0)
-                 , lift (result, len)
-                 )
-  | otherwise
-  = let
-        sz              = indexTail (shape arr)
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
-        prj ix          = cond (keep!ix)
-                               (index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix)
-                               ignore
-        dummy           = fill (index1 (the valid)) undef
-        result          = permute const dummy prj arr
-    in
-    null keep ?| ( lift (emptyArray, fill sz 0)
-                 , lift (result, len)
-                 )
-
-emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = fill (constant empty) undef
-
-asTuple :: (Elt a, Elt b) => Exp (Either a b) -> Exp (Word8, a, b)
-asTuple (Exp e) =
- T3 (Exp $ SmartExp $ Prj PairIdxLeft e)
-    (Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e)
-    (Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e)
 

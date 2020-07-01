@@ -38,6 +38,7 @@ module Data.Array.Accelerate.Smart (
   Stencil(..),
   Boundary(..), PreBoundary(..),
   PrimBool,
+  PrimMaybe,
 
   -- ** Extracting type information
   HasArraysR(..),
@@ -101,6 +102,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
 import Data.Array.Accelerate.AST                                    ( Direction(..)
+                                                                    , PrimBool, PrimMaybe
                                                                     , PrimFun(..), primFunType
                                                                     , PrimConst(..), primConstType )
 import Data.Primitive.Vec
@@ -308,7 +310,6 @@ newtype SmartAcc a = SmartAcc (PreSmartAcc SmartAcc SmartExp a)
 -- the environment at the defining occurrence.
 --
 type Level = Int
-type PrimBool = TAG
 
 -- | Array-valued collective computations without a recursive knot
 --
@@ -427,7 +428,7 @@ data PreSmartAcc acc exp as where
   Permute       :: ArrayR (Array sh e)
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> acc (Array sh' e)
-                -> (SmartExp sh -> exp sh')
+                -> (SmartExp sh -> exp (PrimMaybe sh'))
                 -> acc (Array sh e)
                 -> PreSmartAcc acc exp (Array sh' e)
 

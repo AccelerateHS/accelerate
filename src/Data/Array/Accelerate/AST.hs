@@ -88,6 +88,7 @@ module Data.Array.Accelerate.AST (
   PrimConst(..),
   PrimFun(..),
   PrimBool,
+  PrimMaybe,
 
   -- ** Extracting type information
   HasArraysR(..), arrayR,
@@ -191,7 +192,8 @@ type ArrayVar       = Var ArrayR
 type ArrayVars aenv = Vars ArrayR aenv
 
 -- Bool is not a primitive type
-type PrimBool = TAG
+type PrimBool    = TAG
+type PrimMaybe a = (TAG, ((), a))
 
 
 -- | Collective array computations parametrised over array variables
@@ -406,7 +408,7 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   --
   Permute     :: Fun            aenv (e -> e -> e)              -- combination function
               -> acc            aenv (Array sh' e)              -- default values
-              -> Fun            aenv (sh -> sh')                -- permutation function
+              -> Fun            aenv (sh -> PrimMaybe sh')      -- permutation function
               -> acc            aenv (Array sh e)               -- source array
               -> PreOpenAcc acc aenv (Array sh' e)
 

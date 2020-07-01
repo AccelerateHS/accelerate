@@ -65,7 +65,7 @@ module Data.Array.Accelerate.Prelude (
 
   -- * Working with predicates
   -- ** Filtering
-  filter,
+  filter, compact,
 
   -- ** Scatter / Gather
   scatter, scatterIf,
@@ -122,6 +122,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Maybe
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays, Array, Scalar, Vector, Segments,  fromList )
 import Data.Array.Accelerate.Sugar.Elt
@@ -997,7 +998,7 @@ scanlSeg f z arr seg =
     seg'      = map (+1) seg
     arr'      = permute const
                         (fill (sh ::. sz + length seg) z)
-                        (\(sx ::. i) -> sx ::. i + fromIntegral (inc ! I1 i))
+                        (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc ! I1 i)))
                         (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
@@ -1090,7 +1091,7 @@ scanl'Seg f z arr seg =
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
                 $ permute (+) (fill (I1 $ size arr + 1) 0)
-                              (\ix -> index1' $ offset ! ix)
+                              (\ix -> Just_ (index1' (offset ! ix)))
                               (fill (shape seg) (1 :: Exp i))
 
     len         = offset ! I1 (length offset - 1)
@@ -1218,7 +1219,7 @@ scanrSeg f z arr seg =
     seg'        = map (+1) seg
     arr'        = permute const
                           (fill (sh ::. sz + length seg) z)
-                          (\(sx ::. i) -> sx ::. i + fromIntegral (inc !! i) - 1)
+                          (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc !! i) - 1))
                           (drop (sz - length flags) arr)
 
 
@@ -1364,7 +1365,7 @@ mkHeadFlags
     -> Acc (Segments i)
 mkHeadFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1' (offset ! ix)) ones
+  $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
   where
     T2 offset len = scanl' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1379,7 +1380,7 @@ mkTailFlags
     -> Acc (Segments i)
 mkTailFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1' (the len - 1 - offset ! ix)) ones
+  $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
   where
     T2 offset len = scanr' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1631,18 +1632,34 @@ concatOn dim xs ys =
 -- >>> run $ filter odd (use mat)
 -- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19],Vector (Z :. 4) [5,5,0,10])
 --
-filter :: forall sh e. (Shape sh, Elt e)
+filter :: (Shape sh, Elt e)
        => (Exp e -> Exp Bool)
        -> Acc (Array (sh:.Int) e)
        -> Acc (Vector e, Array sh Int)
-filter p arr
+filter p arr = compact (map p arr) arr
+{-# NOINLINE filter #-}
+{-# RULES
+  "ACC filter/filter" forall f g arr.
+    filter f (afst (filter g arr)) = filter (\x -> g x && f x) arr
+ #-}
+
+
+-- | As 'filter', but with separate arrays for the data elements and the
+-- flags indicating which elements of that array should be kept.
+--
+compact :: forall sh e. (Shape sh, Elt e)
+        => Acc (Array (sh:.Int) Bool)
+        -> Acc (Array (sh:.Int) e)
+        -> Acc (Vector e, Array sh Int)
+compact keep arr
   -- Optimise 1-dimensional arrays, where we can avoid additional computations
   -- for the offset indices.
   | Just Refl <- matchShapeType @sh @Z
   = let
-        keep            = map p arr
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
-        prj ix          = keep!ix ? ( I1 (target!ix), ignore )
+        prj ix          = if keep!ix
+                             then Just_ (I1 (target!ix))
+                             else Nothing_
         dummy           = fill (I1 (the len)) undef
         result          = permute const dummy prj arr
     in
@@ -1650,27 +1667,20 @@ filter p arr
       then T2 emptyArray (fill Z_ 0)
       else T2 result len
 
-filter p arr
+compact keep arr
   = let
         sz              = indexTail (shape arr)
-        keep            = map p arr
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
-                            then I1 $ offset !! (toIndex sz (indexTail ix)) + target!ix
-                            else ignore
+                            then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
+                            else Nothing_
         dummy           = fill (I1 (the valid)) undef
         result          = permute const dummy prj arr
     in
     if null arr
       then T2 emptyArray (fill sz 0)
       else T2 result len
-
-{-# NOINLINE filter #-}
-{-# RULES
-  "ACC filter/filter" forall f g arr.
-    filter f (afst (filter g arr)) = filter (\x -> g x && f x) arr
- #-}
 
 
 -- Gather operations
@@ -1745,7 +1755,7 @@ scatter
     -> Acc (Vector e)
 scatter to defaults input = permute const defaults pf input'
   where
-    pf ix   = I1 (to ! ix)
+    pf ix   = Just_ (I1 (to ! ix))
     input'  = backpermute (shape to `intersect` shape input) id input
 
 
@@ -1772,8 +1782,10 @@ scatterIf
     -> Acc (Vector b)
 scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
-    pf ix   = pred (maskV ! ix) ? ( I1 (to ! ix), ignore )
     input'  = backpermute (shape to `intersect` shape input) id input
+    pf ix   = if pred (maskV ! ix)
+                 then Just_ (I1 (to ! ix))
+                 else Nothing_
 
 
 -- Permutations
@@ -2467,7 +2479,7 @@ length = unindex1 . shape
 --                       new =
 --                         let m     = c2-c1
 --                             put i = let s = sieves ! i
---                                      in s >= 0 && s < m ? (I1 s, ignore)
+--                                      in s >= 0 && s < m ? (Just_ (I1 s), Nothing_)
 --                         in
 --                         afst
 --                           $ filter (> 0)
@@ -2501,7 +2513,7 @@ expand f g xs =
 
           m             = the len
           n             = m + 1
-          put ix        = I1 (offset ! ix)
+          put ix        = Just_ (I1 (offset ! ix))
 
           head_flags    :: Acc (Vector Int)
           head_flags    = permute const (fill (I1 n) 0) put (fill (shape szs) 1)

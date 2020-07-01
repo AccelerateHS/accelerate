@@ -111,8 +111,8 @@ test_scatter runN dim dim' e =
               ts <- shfl (Set.insert t seen) (i+1)
               --
               case Set.member t seen of
-                True  -> return (S.ignore          : ts)
-                False -> return (S.fromIndex sh' t : ts)
+                True  -> return (Nothing                  : ts)
+                False -> return (Just (S.fromIndex sh' t) : ts)
     --
     def <- forAll (array sh' e)
     new <- forAll (array sh  e)
@@ -138,8 +138,8 @@ test_accumulate runN dim dim' e =
         def = S.fromFunction sh' (const 0)
     --
     xs  <- forAll (array sh e)
-    ix  <- forAll (array sh (Gen.choice [ return S.ignore
-                                        , S.fromIndex sh' <$> Gen.int (Range.linear 0 (n'-1))
+    ix  <- forAll (array sh (Gen.choice [ return Nothing
+                                        , Just . S.fromIndex sh' <$> Gen.int (Range.linear 0 (n'-1))
                                         ]))
     let !go = runN $ \i d v -> A.permute (+) d (i A.!) v
     go ix def xs ~~~ permuteRef (+) def (ix S.!) xs
@@ -149,7 +149,7 @@ permuteRef
     :: forall sh sh' e. (Shape sh, Shape sh', P.Eq sh', Elt e)
     => (e -> e -> e)
     -> Array sh' e
-    -> (sh -> sh')
+    -> (sh -> Maybe sh')
     -> Array sh e
     -> Array sh' e
 permuteRef f def@(Array (R.Array _ aold)) p arr@(Array (R.Array _ anew)) =
@@ -164,13 +164,13 @@ permuteRef f def@(Array (R.Array _ aold)) p arr@(Array (R.Array _ anew)) =
           | i P.>= n  = return ()
           | otherwise = do
               let ix  = S.fromIndex sh i
-                  ix' = p ix
-              --
-              unless (ix' P.== S.ignore) $ do
-                let i'  = S.toIndex sh' ix'
-                x  <- toElt <$> readArrayData tp anew i
-                x' <- toElt <$> readArrayData tp aold i'
-                writeArrayData tp aold i' (fromElt (f x x'))
+              case p ix of
+                Nothing  -> return ()
+                Just ix' -> do
+                  let i'  = S.toIndex sh' ix'
+                  x  <- toElt <$> readArrayData tp anew i
+                  x' <- toElt <$> readArrayData tp aold i'
+                  writeArrayData tp aold i' (fromElt (f x x'))
               --
               go (i+1)
     --

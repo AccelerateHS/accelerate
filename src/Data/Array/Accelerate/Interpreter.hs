@@ -581,10 +581,10 @@ scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
 
 
 permuteOp
-    :: forall sh sh' e.
-       (e -> e -> e)
+    :: forall sh sh' e. HasCallStack
+    => (e -> e -> e)
     -> WithReprs (Array sh' e)
-    -> (sh -> sh')
+    -> (sh -> PrimMaybe sh')
     -> Delayed   (Array sh  e)
     -> WithReprs (Array sh' e)
 permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR shr tp) sh _ ain)
@@ -592,8 +592,6 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
   where
     sh'         = shape def
     n'          = size shr' sh'
-
-    ignore' = ignore shr'
     --
     (adata, _)  = runArrayData @e $ do
       aout <- newArrayData tp n'
@@ -608,14 +606,16 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
 
           -- project each element onto the destination array and update
           update src
-            = let dst   = p src
-                  i     = toIndex shr  sh  src
-                  j     = toIndex shr' sh' dst
-              in
-              unless (eq shr' dst ignore') $ do
-                let x = ain  i
-                y <- readArrayData tp aout j
-                writeArrayData tp aout j (f x y)
+            = case p src of
+                (0,_)        -> return ()
+                (1,((),dst)) -> do
+                  let i = toIndex shr  sh  src
+                      j = toIndex shr' sh' dst
+                      x = ain i
+                  --
+                  y <- readArrayData tp aout j
+                  writeArrayData tp aout j (f x y)
+                _            -> internalError "unexpected tag"
 
       init 0
       iter shr sh update (>>) (return ())

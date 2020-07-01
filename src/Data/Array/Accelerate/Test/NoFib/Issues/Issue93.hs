@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue93 (
 ) where
 
 import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Data.Maybe                             as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -32,7 +33,7 @@ xs :: Array DIM2 Int
 xs = fromList (Z :. 1 :. 1) [5]
 
 test1 :: Acc (Array DIM2 Int)
-test1 = permute (\c _ -> c) (fill (shape xs') (constant 0)) id xs'
+test1 = permute (\c _ -> c) (fill (shape xs') (constant 0)) Just_ xs'
   where
     xs' = use xs
 
