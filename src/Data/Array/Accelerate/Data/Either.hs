@@ -1,6 +1,8 @@
+{-# LANGUAGE BlockArguments        #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE PatternSynonyms       #-}
@@ -32,7 +34,7 @@ module Data.Array.Accelerate.Data.Either (
 ) where
 
 import Data.Array.Accelerate.AST.Idx
-import Data.Array.Accelerate.Language                               hiding ( chr )
+import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern.Either
 import Data.Array.Accelerate.Prelude
@@ -55,28 +57,15 @@ import Data.Either                                                  ( Either(..)
 import Prelude                                                      ( (.), ($) )
 
 
--- | Lift a value into the 'Left' constructor
---
-left :: forall a b. (Elt a, Elt b) => Exp a -> Exp (Either a b)
-left a = lift (Left a :: Either (Exp a) (Exp b))
-
--- | Lift a value into the 'Right' constructor
---
-right :: forall a b. (Elt a, Elt b) => Exp b -> Exp (Either a b)
-right b = lift (Right b :: Either (Exp a) (Exp b))
---
--- See Note: [lifting Nothing]
-
-
 -- | Return 'True' if the argument is a 'Left'-value
 --
 isLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isLeft x = tag x == 0
+isLeft = not . isRight
 
 -- | Return 'True' if the argument is a 'Right'-value
 --
 isRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isRight x = tag x == 1
+isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp Nil
 
 -- | The 'fromLeft' function extracts the element out of the 'Left' constructor.
 -- If the argument was actually 'Right', you will get an undefined value
@@ -97,9 +86,9 @@ fromRight (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRi
 -- apply the second function to @b@.
 --
 either :: (Elt a, Elt b, Elt c) => (Exp a -> Exp c) -> (Exp b -> Exp c) -> Exp (Either a b) -> Exp c
-either f g x =
-  cond (isLeft x) (f (fromLeft x)) (g (fromRight x))
-
+either f g = match \case
+  Left_  x -> f x
+  Right_ x -> g x
 
 -- | Extract from the array of 'Either' all of the 'Left' elements, together
 -- with a segment descriptor indicating how many elements along each dimension
@@ -121,25 +110,27 @@ rights es = compact (map isRight es) (map fromRight es)
 
 
 instance Elt a => Functor (Either a) where
-  fmap f = either left (right . f)
+  fmap f = either Left_ (Right_ . f)
 
 instance (Eq a, Eq b) => Eq (Either a b) where
-  ex == ey = isLeft  ex && isLeft  ey ? ( fromLeft ex  == fromLeft ey
-           , isRight ex && isRight ey ? ( fromRight ex == fromRight ey
-           , {- else -}                   False_ ))
+  (==) = match go
+    where
+      go (Left_ x)  (Left_ y)  = x == y
+      go (Right_ x) (Right_ y) = x == y
+      go _          _          = False_
 
 instance (Ord a, Ord b) => Ord (Either a b) where
-  compare ex ey = isLeft  ex && isLeft  ey ? ( compare (fromLeft ex) (fromLeft ey)
-                , isRight ex && isRight ey ? ( compare (fromRight ex) (fromRight ey)
-                , {- else -}                   compare (tag ex) (tag ey) ))
+  compare = match go
+    where
+      go (Left_ x)  (Left_ y)  = compare x y
+      go (Right_ x) (Right_ y) = compare x y
+      go Left_{}    Right_{}   = LT_
+      go Right_{}   Left_{}    = GT_
 
 #if __GLASGOW_HASKELL__ >= 800
 instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
   ex <> ey = isLeft ex ? ( ey, ex )
 #endif
-
-tag :: (Elt a, Elt b) => Exp (Either a b) -> Exp Word8
-tag (Exp e) = Exp $ SmartExp $ Prj PairIdxLeft e
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)

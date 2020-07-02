@@ -2250,6 +2250,13 @@ instance IfThenElse Acc where
 -- >
 -- > mkPattern ''Option
 --
+-- Which can then be used such as:
+--
+-- > isNone :: Elt a => Exp (Option a) -> Exp Bool
+-- > isNone = match \case
+-- >   None_   -> True_
+-- >   Some_{} -> False_
+--
 match :: Matching f => f -> f
 match f = mkFun (mkMatch f) id
 
