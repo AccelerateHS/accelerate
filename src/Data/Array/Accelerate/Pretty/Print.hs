@@ -522,9 +522,9 @@ prettyCase
     -> [(TagR a, OpenExp env aenv b)]
     -> Adoc
 prettyCase env aenv alts
-  = vcat
-  $ map (\(n,t,e) -> t <+> indent (w-n) ("->" <+> e)) alts'
+  = flatAlt (vcat cases) (encloseSep "{ " " }" "; " cases)
   where
+    cases = map (\(n,t,e) -> t <+> flatAlt (indent (w-n) ("->" <+> e)) ("->" <+> e)) alts'
     w     = maximum (map (\(n,_,_) -> n) alts')
     alts' = map (\(t,e) -> let (n,t') = ppT t
                                e'     = prettyOpenExp context0 env aenv e
