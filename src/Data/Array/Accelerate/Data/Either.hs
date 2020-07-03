@@ -66,6 +66,8 @@ isLeft = not . isRight
 --
 isRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
 isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp Nil
+  -- TLM: This is a sneaky hack because we know that the tag bits for Right
+  -- and True are identical.
 
 -- | The 'fromLeft' function extracts the element out of the 'Left' constructor.
 -- If the argument was actually 'Right', you will get an undefined value
