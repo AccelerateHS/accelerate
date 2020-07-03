@@ -34,15 +34,15 @@ module Data.Array.Accelerate.Pretty (
 
 ) where
 
-import Data.Array.Accelerate.Smart                                  ( Acc, Exp )
 import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Pretty.Graphviz
+import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
+import Data.Array.Accelerate.Smart                                  ( Acc, Exp )
 import Data.Array.Accelerate.Sugar.Array
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
+import Data.Array.Accelerate.Trafo
 import Data.Array.Accelerate.Trafo.Delayed
-import Data.Array.Accelerate.Trafo.Sharing
-import Data.Array.Accelerate.Pretty.Graphviz
 
 import Data.Maybe
 import Data.Text.Prettyprint.Doc

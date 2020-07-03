@@ -380,8 +380,7 @@ prettyOpenExp ctx env aenv exp =
     Nil                   -> "()"
     VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
     VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
-    Case x xs             -> hang shiftwidth
-                           $ vsep [ case_ <+> ppE x ctx <+> of_, prettyCase env aenv xs ]
+    Case x xs             -> prettyCase env aenv x xs
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0
@@ -519,13 +518,18 @@ prettyTuple ctx env aenv exp = case collect exp of
 prettyCase
     :: Val env
     -> Val aenv
+    -> OpenExp env aenv a
     -> [(TagR a, OpenExp env aenv b)]
     -> Adoc
-prettyCase env aenv alts
-  = flatAlt (vcat cases) (encloseSep "{ " " }" "; " cases)
+prettyCase env aenv x alts
+  = hang shiftwidth
+  $ vsep [ case_ <+> x' <+> of_
+         , flatAlt (vcat cases) (encloseSep "{ " " }" "; " cases)
+         ]
   where
     cases = map (\(n,t,e) -> t <+> flatAlt (indent (w-n) ("->" <+> e)) ("->" <+> e)) alts'
     w     = maximum (map (\(n,_,_) -> n) alts')
+    x'    = prettyOpenExp context0 env aenv x
     alts' = map (\(t,e) -> let (n,t') = ppT t
                                e'     = prettyOpenExp context0 env aenv e
                             in (n, t', e')) alts
