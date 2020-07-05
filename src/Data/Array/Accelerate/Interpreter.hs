@@ -955,22 +955,17 @@ evalOpenExp pexp env aenv =
 
     ToIndex shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
     FromIndex shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
-    Case e rhs                  -> evalE (caseof (evalE e) rhs)
+    Case e rhs def              -> evalE (caseof (evalE e) rhs)
       where
-        caseof :: a -> [(TagR a, OpenExp env aenv b)] -> OpenExp env aenv b
-        caseof v = go
+        caseof :: TAG -> [(TAG, OpenExp env aenv t)] -> OpenExp env aenv t
+        caseof tag = go
           where
-            go ((t,cont):cs)
-              | eqTag t v = cont
+            go ((t,c):cs)
+              | tag == t  = c
               | otherwise = go cs
-            go []         = internalError "unmatched case"
-
-        eqTag :: TagR a -> a -> Bool
-        eqTag TagRunit         ()    = True
-        eqTag TagRsingle{}     _     = True
-        eqTag TagRundef{}      _     = True
-        eqTag (TagRtag tag aR) (t,a) = tag == t && eqTag aR a
-        eqTag (TagRpair aR bR) (a,b) = eqTag aR a && eqTag bR b
+            go []
+              | Just d <- def = d
+              | otherwise     = internalError "unmatched case"
 
     Cond c t e
       | toBool (evalE c)        -> evalE t

@@ -299,7 +299,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       ToIndex shr sh ix         -> ToIndex shr <$> shrinkE sh <*> shrinkE ix
       FromIndex shr sh i        -> FromIndex shr <$> shrinkE sh <*> shrinkE i
-      Case e rhs                -> Case <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ]
+      Case e rhs def            -> Case <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ] <*> shrinkMaybeE def
       Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
       While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
       PrimConst c               -> pure (PrimConst c)
@@ -313,6 +313,10 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
 
     shrinkF :: HasCallStack => OpenFun env aenv t -> (Any, OpenFun env aenv t)
     shrinkF = first Any . shrinkFun
+
+    shrinkMaybeE :: HasCallStack => Maybe (OpenExp env aenv t) -> (Any, Maybe (OpenExp env aenv t))
+    shrinkMaybeE Nothing  = pure Nothing
+    shrinkMaybeE (Just e) = Just <$> shrinkE e
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
@@ -496,7 +500,7 @@ usesOfExp range = countE
       IndexFull _ ix sl         -> countE ix <> countE sl
       FromIndex _ sh i          -> countE sh <> countE i
       ToIndex _ sh e            -> countE sh <> countE e
-      Case e rhs                -> countE e  <> mconcat [ countE c | (_,c) <- rhs ]
+      Case e rhs def            -> countE e  <> mconcat [ countE c | (_,c) <- rhs ] <> maybe (Finite 0) countE def
       Cond p t e                -> countE p  <> countE t <> countE e
       While p f x               -> countE x  <> loopCount (usesOfFun range p) <> loopCount (usesOfFun range f)
       PrimConst _               -> Finite 0
@@ -582,7 +586,7 @@ usesOfPreAcc withShape countAcc idx = count
       IndexFull _ ix sl          -> countE ix + countE sl
       ToIndex _ sh ix            -> countE sh + countE ix
       FromIndex _ sh i           -> countE sh + countE i
-      Case e rhs                 -> countE e  + sum [ countE c | (_,c) <- rhs ]
+      Case e rhs def             -> countE e  + sum [ countE c | (_,c) <- rhs ] + maybe 0 countE def
       Cond p t e                 -> countE p  + countE t + countE e
       While p f x                -> countF p  + countF f + countE x
       PrimConst _                -> 0

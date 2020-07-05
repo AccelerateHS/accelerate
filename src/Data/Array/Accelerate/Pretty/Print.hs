@@ -380,7 +380,7 @@ prettyOpenExp ctx env aenv exp =
     Nil                   -> "()"
     VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
     VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
-    Case x xs             -> prettyCase env aenv x xs
+    Case x xs d           -> prettyCase env aenv x xs d
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0
@@ -519,32 +519,20 @@ prettyCase
     :: Val env
     -> Val aenv
     -> OpenExp env aenv a
-    -> [(TagR a, OpenExp env aenv b)]
+    -> [(TAG, OpenExp env aenv b)]
+    -> Maybe (OpenExp env aenv b)
     -> Adoc
-prettyCase env aenv x alts
+prettyCase env aenv x xs def
   = hang shiftwidth
   $ vsep [ case_ <+> x' <+> of_
-         , flatAlt (vcat cases) (encloseSep "{ " " }" "; " cases)
+         , flatAlt (vcat xs') (encloseSep "{ " " }" "; " xs')
          ]
   where
-    cases = map (\(n,t,e) -> t <+> flatAlt (indent (w-n) ("->" <+> e)) ("->" <+> e)) alts'
-    w     = maximum (map (\(n,_,_) -> n) alts')
-    x'    = prettyOpenExp context0 env aenv x
-    alts' = map (\(t,e) -> let (n,t') = ppT t
-                               e'     = prettyOpenExp context0 env aenv e
-                            in (n, t', e')) alts
-
-    ppT :: TagR s -> (Int, Adoc)
-    ppT tag = let s = go tag
-                  n = length s
-               in (2*n, encloseSep "" "#" "." s)
-      where
-        go :: TagR s -> [Adoc]
-        go TagRunit         = []
-        go TagRsingle{}     = []
-        go TagRundef{}      = [pretty '.']
-        go (TagRtag t r)    = pretty t : go r
-        go (TagRpair ta tb) = go ta ++ go tb
+    x'  = prettyOpenExp context0 env aenv x
+    xs' = map (\(t,e) -> pretty t <+> "->" <+> prettyOpenExp context0 env aenv e) xs
+       ++ case def of
+            Nothing -> []
+            Just d  -> ["_" <+> "->" <+> prettyOpenExp context0 env aenv d]
 
 {-
 

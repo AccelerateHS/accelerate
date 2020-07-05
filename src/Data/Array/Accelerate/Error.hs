@@ -109,7 +109,8 @@ ppCallStack = intercalate "\n" . ppLines
     ppLines cs =
       case getCallStack cs of
         [] -> []
-        st -> "CallStack (from HasCallStack):"
+        st -> ""
+            : "CallStack (from HasCallStack):"
             : map (("  " ++) . ppCallSite) st
 
     ppCallSite (f, loc) = f ++ ": " ++ ppSrcLoc loc

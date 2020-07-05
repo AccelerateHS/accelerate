@@ -49,32 +49,35 @@ import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Debug.Flags                            as Debug
 import Data.Array.Accelerate.Debug.Trace                            as Debug
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array                   ( Array, ArraysR, ArrayR(..), showArraysR )
 import Data.Array.Accelerate.Representation.Shape                   hiding ( zip )
 import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart                                  as Smart hiding ( StencilR )
 import Data.Array.Accelerate.Sugar.Array                            hiding ( Array, ArraysR, (!!) )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Trafo.Config
-import Data.Array.Accelerate.Trafo.Var
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Trafo.Var
 import Data.Array.Accelerate.Type
 import Data.BitSet                                                  ( (\\), member )
 import qualified Data.Array.Accelerate.AST                          as AST
-import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Representation.Stencil       as R
+import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 
 import Control.Applicative                                          hiding ( Const )
-import Control.Lens                                                 ( over, mapped, _2 )
+import Control.Lens                                                 ( over, mapped, _1, _2 )
 import Control.Monad.Fix
+import Data.Function                                                ( on )
 import Data.Hashable
 import Data.List                                                    ( elemIndex, findIndex, groupBy, intercalate, partition )
 import Data.Maybe
+import Data.Monoid                                                  ( Any(..) )
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName
 import Text.Printf
@@ -763,7 +766,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
           FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
-          Case e rhs            -> AST.Case (cvt e) (over (mapped . _2) cvt rhs)
+          Case e rhs            -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
           Cond e1 e2 e3         -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           While tp p it i       -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
           PrimConst c           -> AST.PrimConst c
@@ -780,7 +783,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtPrj PairIdxRight (AST.Pair _ b) = b
     cvtPrj ix a
       | DeclareVars lhs _ value <- declareVars $ AST.expType a
-        = AST.Let lhs a $ cvtPrj ix $ expVars $ value weakenId
+      = AST.Let lhs a (cvtPrj ix (expVars (value weakenId)))
 
     cvtA :: HasCallStack => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
@@ -806,6 +809,89 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtPrimFun f e = case e of
       AST.Let lhs bnd body -> AST.Let lhs bnd (cvtPrimFun f body)
       x                    -> AST.PrimApp f x
+
+    -- Convert the flat list of equations into nested case statement
+    -- directly on the tag variables.
+    --
+    cvtCase :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
+    cvtCase s es
+      | AST.Pair{} <- s
+      = nested s es
+      | DeclareVars lhs _ value <- declareVars (AST.expType s)
+      = AST.Let lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
+      where
+        nested :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
+        nested _ [(_,r)] = r
+        nested s rs      =
+          let groups = groupBy (eqT `on` fst) rs
+              tags   = map (firstT . fst . head) groups
+              e      = prjT (fst (head rs)) s
+              rhs    = map (nested s . map (over _1 ignore)) groups
+          in
+          AST.Case e (zip tags rhs) Nothing
+
+        -- Extract the variable representing this particular tag from the
+        -- scrutinee. This is safe because we let-bind the argument first.
+        prjT :: TagR a -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' TAG
+        prjT = fromJust $$ go
+          where
+            go :: TagR a -> AST.OpenExp env' aenv' a -> Maybe (AST.OpenExp env' aenv' TAG)
+            go TagRtag{}        (AST.Pair l _) = Just l
+            go (TagRpair ta tb) (AST.Pair l r) =
+              case go ta l of
+                Just t  -> Just t
+                Nothing -> go tb r
+            go _ _ = Nothing
+
+        -- Equality up to the first constructor tag encountered
+        eqT :: TagR a -> TagR a -> Bool
+        eqT a b = snd $ go a b
+          where
+            go :: TagR a -> TagR a -> (Any, Bool)
+            go TagRunit          TagRunit          = no True
+            go TagRsingle{}      TagRsingle{}      = no True
+            go TagRundef{}       TagRundef{}       = no True
+            go (TagRtag v1 _)    (TagRtag v2 _)    = yes (v1 == v2)
+            go (TagRpair a1 b1)  (TagRpair a2 b2)  =
+              let (Any r, s) = go a1 a2
+               in case r of
+                    True  -> yes s
+                    False -> go b1 b2
+            go _ _ = no False
+
+        firstT :: TagR a -> TAG
+        firstT = fromJust . go
+          where
+            go :: TagR a -> Maybe TAG
+            go (TagRtag v _)  = Just v
+            go (TagRpair a b) =
+              case go a of
+                Just t  -> Just t
+                Nothing -> go b
+            go _ = Nothing
+
+        -- Replace the first constructor tag encountered with a regular
+        -- scalar tag, so that that tag will be ignored in the recursive
+        -- case.
+        ignore = snd . go
+          where
+            go :: TagR a -> (Any, TagR a)
+            go TagRunit         = no  $ TagRunit
+            go (TagRsingle t)   = no  $ TagRsingle t
+            go (TagRundef t)    = no  $ TagRundef t
+            go (TagRtag _ a)    = yes $ TagRpair (TagRundef scalarType) a
+            go (TagRpair a1 a2) =
+              let (Any r, a1') = go a1
+               in case r of
+                    True  -> yes $ TagRpair a1' a2
+                    False -> TagRpair a1' <$> go a2
+
+        yes :: x -> (Any, x)
+        yes e = (Any True, e)
+
+        no :: x -> (Any, x)
+        no = pure
+
 
 -- | Convert a unary functions
 --

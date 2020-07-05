@@ -138,8 +138,9 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Data.Bits
 
 import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
-import GHC.Base                                                     ( Constraint )
 import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
+
+import GHC.Base                                                     ( Constraint )
 
 
 -- $setup
@@ -2291,7 +2292,7 @@ instance (Elt e, Matching r) => Matching (Exp e -> r) where
 
       -- If there is only a single alternative, we can elide the case
       -- statement at this point. This can occur when pattern matching on
-      -- product types
+      -- product types.
       _ -> case rhs of
              [(_,r)] -> Exp r
              _       -> Exp (SmartExp (Case p rhs))

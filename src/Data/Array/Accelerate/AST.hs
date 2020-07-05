@@ -566,8 +566,9 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv sh
 
   -- Case statement
-  Case          :: OpenExp env aenv a
-                -> [(TagR a, OpenExp env aenv b)]
+  Case          :: OpenExp env aenv TAG
+                -> [(TAG, OpenExp env aenv b)]      -- list of equations
+                -> Maybe (OpenExp env aenv b)       -- default case
                 -> OpenExp env aenv b
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
@@ -800,8 +801,9 @@ expType = \case
   IndexFull  si _ _            -> shapeType $ sliceDomainR si
   ToIndex{}                    -> TupRsingle scalarTypeInt
   FromIndex shr _ _            -> shapeType shr
-  Case _ ((_,e):_)             -> expType e
-  Case _ []                    -> internalError "empty case encountered"
+  Case _ ((_,e):_) _           -> expType e
+  Case _ [] (Just e)           -> expType e
+  Case{}                       -> internalError "empty case encountered"
   Cond _ e _                   -> expType e
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
@@ -1054,7 +1056,7 @@ rnfOpenExp topExp =
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
     FromIndex shr sh ix       -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
-    Case e rhs                -> rnfE e `seq` rnfList (\(t,c) -> rnfTag t `seq` rnfE c) rhs
+    Case e rhs def            -> rnfE e `seq` rnfList (\(t,c) -> t `seq` rnfE c) rhs `seq` rnfMaybe rnfE def
     Cond p e1 e2              -> rnfE p `seq` rnfE e1 `seq` rnfE e2
     While p f x               -> rnfF p `seq` rnfF f `seq` rnfE x
     PrimConst c               -> rnfPrimConst c
@@ -1263,7 +1265,7 @@ liftOpenExp pexp =
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
     FromIndex shr sh ix       -> [|| FromIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
-    Case p rhs                -> [|| Case $$(liftE p) $$(liftList (\(t,c) -> [|| ($$(liftTag t), $$(liftE c)) ||]) rhs) ||]
+    Case p rhs def            -> [|| Case $$(liftE p) $$(liftList (\(t,c) -> [|| (t, $$(liftE c)) ||]) rhs) $$(liftMaybe liftE def) ||]
     Cond p t e                -> [|| Cond $$(liftE p) $$(liftE t) $$(liftE e) ||]
     While p f x               -> [|| While $$(liftF p) $$(liftF f) $$(liftE x) ||]
     PrimConst t               -> [|| PrimConst $$(liftPrimConst t) ||]

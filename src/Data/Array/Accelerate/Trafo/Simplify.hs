@@ -226,7 +226,7 @@ simplifyOpenExp env = first getAny . cvtE
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
       FromIndex shr sh ix       -> fromIndex shr (cvtE sh) (cvtE ix)
-      Case e rhs                -> Case <$> cvtE e <*> sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]
+      Case e rhs def            -> Case <$> cvtE e <*> sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ] <*> cvtMaybeE def
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> (u<>v, fx)
@@ -246,6 +246,10 @@ simplifyOpenExp env = first getAny . cvtE
 
     cvtF :: Gamma env' env' aenv -> OpenFun env' aenv f -> (Any, OpenFun env' aenv f)
     cvtF env' = first Any . simplifyOpenFun env'
+
+    cvtMaybeE :: Maybe (OpenExp env aenv e') -> (Any, Maybe (OpenExp env aenv e'))
+    cvtMaybeE Nothing  = pure Nothing
+    cvtMaybeE (Just e) = Just <$> cvtE e
 
     cvtLet :: Gamma env' env' aenv
            -> ELeftHandSide bnd env' env''
@@ -511,7 +515,7 @@ summariseOpenExp = (terms +~ 1) . goE
         IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
         ToIndex _ sh ix       -> travE sh +++ travE ix
         FromIndex _ sh ix     -> travE sh +++ travE ix
-        Case e rhs            -> travE e +++ mconcat [ travE c | (_,c) <- rhs ]
+        Case e rhs def        -> travE e +++ mconcat [ travE c | (_,c) <- rhs ] +++ maybe zero travE def
         Cond p t e            -> travE p +++ travE t +++ travE e
         While p f x           -> travF p +++ travF f +++ travE x
         PrimConst c           -> travC c

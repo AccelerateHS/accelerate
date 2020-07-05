@@ -44,7 +44,6 @@ import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil
-import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
@@ -155,10 +154,6 @@ encodePreOpenAcc options encodeAcc pacc =
       travD LeftToRight = intHost $(hashQ "L")
       travD RightToLeft = intHost $(hashQ "R")
 
-      travMaybe :: (a -> Builder) -> Maybe a -> Builder
-      travMaybe _ Nothing  = intHost $(hashQ "Nothing")
-      travMaybe f (Just x) = intHost $(hashQ "Just") <> f x
-
       deep :: Builder -> Builder
       deep | perfect options = id
            | otherwise       = const mempty
@@ -189,9 +184,9 @@ encodePreOpenAcc options encodeAcc pacc =
     Slice spec a ix              -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
     Map _ f a                    -> intHost $(hashQ "Map")         <> travF f  <> travA a
     ZipWith _ f a1 a2            -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
-    Fold f e a                   -> intHost $(hashQ "Fold")        <> travF f  <> travMaybe travE e  <> travA a
-    FoldSeg _ f e a s            -> intHost $(hashQ "FoldSeg")     <> travF f  <> travMaybe travE e  <> travA a  <> travA s
-    Scan  d f e a                -> intHost $(hashQ "Scan")        <> travD d  <> travF f  <> travMaybe travE e  <> travA a
+    Fold f e a                   -> intHost $(hashQ "Fold")        <> travF f  <> encodeMaybe travE e  <> travA a
+    FoldSeg _ f e a s            -> intHost $(hashQ "FoldSeg")     <> travF f  <> encodeMaybe travE e  <> travA a  <> travA s
+    Scan  d f e a                -> intHost $(hashQ "Scan")        <> travD d  <> travF f  <> encodeMaybe travE e  <> travA a
     Scan' d f e a                -> intHost $(hashQ "Scan'")       <> travD d  <> travF f  <>           travE e  <> travA a
     Permute f1 a1 f2 a2          -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
     Stencil s _ f b a            -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilEltR s) b  <> travA a
@@ -329,7 +324,7 @@ encodeOpenExp exp =
     IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
     ToIndex _ sh i              -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
     FromIndex _ sh i            -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
-    Case e rhs                  -> intHost $(hashQ "Case")        <> travE e  <> mconcat [ encodeTag t <> travE c | (t,c) <- rhs ]
+    Case e rhs def              -> intHost $(hashQ "Case")        <> travE e  <> mconcat [ word8 t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
     Cond c t e                  -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
     While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
     PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
@@ -343,13 +338,6 @@ encodeOpenExp exp =
 
 encodeArrayVar :: ArrayVar aenv a -> Builder
 encodeArrayVar (Var repr v) = encodeArrayType repr <> encodeIdx v
-
-encodeTag :: TagR t -> Builder
-encodeTag TagRunit         = intHost $(hashQ "TagRunit")
-encodeTag (TagRsingle t)   = intHost $(hashQ "TagRsingle") <> encodeScalarType t
-encodeTag (TagRundef t)    = intHost $(hashQ "TagRundef")  <> encodeScalarType t
-encodeTag (TagRtag t a)    = intHost $(hashQ "TagRtag")    <> word8 t <> encodeTag a
-encodeTag (TagRpair ta tb) = intHost $(hashQ "TagRpair")   <> encodeTag ta <> encodeTag tb
 
 {-# INLINEABLE encodeOpenFun #-}
 encodeOpenFun
@@ -509,4 +497,8 @@ encodeFloatingType :: FloatingType t -> Builder
 encodeFloatingType TypeHalf{}   = intHost $(hashQ "Half")
 encodeFloatingType TypeFloat{}  = intHost $(hashQ "Float")
 encodeFloatingType TypeDouble{} = intHost $(hashQ "Double")
+
+encodeMaybe :: (a -> Builder) -> Maybe a -> Builder
+encodeMaybe _ Nothing  = intHost $(hashQ "Nothing")
+encodeMaybe f (Just x) = intHost $(hashQ "Just") <> f x
 
