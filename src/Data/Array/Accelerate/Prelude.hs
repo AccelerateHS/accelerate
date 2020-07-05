@@ -2258,6 +2258,8 @@ instance IfThenElse Acc where
 -- >   None_   -> True_
 -- >   Some_{} -> False_
 --
+-- @since 1.4.0.0
+--
 match :: Matching f => f -> f
 match f = mkFun (mkMatch f) id
 

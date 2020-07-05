@@ -34,10 +34,12 @@ import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array                   ( Array, ArrayR(..) )
 import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..), shapeToList )
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Environment
 import Data.Array.Accelerate.Trafo.Shrink
@@ -50,10 +52,12 @@ import qualified Data.Array.Accelerate.Debug.Trace                  as Debug
 
 import Control.Applicative                                          hiding ( Const )
 import Control.Lens                                                 hiding ( Const, ix )
+import Data.List                                                    ( partition )
 import Data.Maybe
 import Data.Monoid
 import Text.Printf
 import Prelude                                                      hiding ( exp, iterate )
+import qualified Data.Map.Strict                                    as Map
 
 import GHC.Stack
 
@@ -226,7 +230,7 @@ simplifyOpenExp env = first getAny . cvtE
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
       FromIndex shr sh ix       -> fromIndex shr (cvtE sh) (cvtE ix)
-      Case e rhs def            -> Case <$> cvtE e <*> sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ] <*> cvtMaybeE def
+      Case e rhs def            -> caseof (cvtE e) (sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]) (cvtMaybeE def)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> (u<>v, fx)
@@ -276,6 +280,40 @@ simplifyOpenExp env = first getAny . cvtE
       | Const _ 0 <- p'                 = Stats.knownBranch "False"     (yes e')
       | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                       = Cond <$> p <*> t <*> e
+
+    caseof :: (Any, OpenExp env aenv TAG)
+           -> (Any, [(TAG, OpenExp env aenv b)])
+           -> (Any, Maybe (OpenExp env aenv b))
+           -> (Any, OpenExp env aenv b)
+    caseof x@(_,x') xs@(_,xs') md@(_,md')
+      | Const _ t   <- x'
+      = Stats.caseElim "known" (yes (fromJust $ lookup t xs'))
+      | Just d      <- md'
+      , []          <- xs'
+      = Stats.caseElim "redundant" (yes d)
+      | Just d      <- md'
+      , [(_,(_,u))] <- us
+      , Just Refl   <- matchOpenExp d u
+      = Stats.caseDefault "merge" $ yes (Case x' (map snd vs) (Just u))
+      | Nothing     <- md'
+      , []          <- vs
+      , [(_,(_,u))] <- us
+      = Stats.caseElim "overlap" (yes u)
+      | Nothing     <- md'
+      , [(_,(_,u))] <- us
+      = Stats.caseDefault "introduction" $ yes (Case x' (map snd vs) (Just u))
+      | otherwise
+      = Case <$> x <*> xs <*> md
+      where
+        (us,vs) = partition (\(n,_) -> n > 1)
+                $ Map.elems
+                . Map.fromListWith merge
+                $ [ (hashOpenExp e, (1,(t, e))) | (t,e) <- xs' ]
+
+        merge :: (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b))
+        merge (n,(_,a)) (m,(_,b))
+          = internalCheck "hashOpenExp/collision" (maybe False (const True) (matchOpenExp a b))
+          $ (n+m, (0xff, a))
 
     -- Shape manipulations
     --
