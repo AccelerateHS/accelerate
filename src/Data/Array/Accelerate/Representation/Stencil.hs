@@ -102,8 +102,6 @@ stencilR (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) = tupR9 (stencilR s1) (stenci
 stencilArrayR :: StencilR sh e pat -> ArrayR (Array sh e)
 stencilArrayR sR = ArrayR (stencilShapeR sR) (stencilEltR sR)
 
--- XXX: This is incorrect: stencils are not required to be rectangular
---
 stencilHalo :: StencilR sh e stencil -> (ShapeR sh, sh)
 stencilHalo = go'
   where
