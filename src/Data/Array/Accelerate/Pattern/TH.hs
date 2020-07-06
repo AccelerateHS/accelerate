@@ -204,27 +204,30 @@ mkConS tn' tvs' prev' next' tag' con' = do
   where
     mkNormalC :: Name -> Name -> Word8 -> [Name] -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
     mkNormalC tn cn tag tvs ps fs ns = do
+      let pat = rename cn
       (fun_build, dec_build) <- mkBuild tn (nameBase cn) tvs tag ps fs ns
-      (fun_match, dec_match) <- mkMatch tn (nameBase cn) tvs tag ps fs ns
-      (pat,       dec_pat)   <- mkNormalC_pattern tn cn tvs fs fun_build fun_match
+      (fun_match, dec_match) <- mkMatch tn (nameBase pat) (nameBase cn) tvs tag ps fs ns
+      dec_pat                <- mkNormalC_pattern tn pat tvs fs fun_build fun_match
       return $ (pat, concat [dec_pat, dec_build, dec_match])
 
     mkRecC :: Name -> Name -> Word8 -> [Name] -> [Name] -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
     mkRecC tn cn tag tvs xs ps fs ns = do
+      let pat = rename cn
       (fun_build, dec_build) <- mkBuild tn (nameBase cn) tvs tag ps fs ns
-      (fun_match, dec_match) <- mkMatch tn (nameBase cn) tvs tag ps fs ns
-      (pat,       dec_pat)   <- mkRecC_pattern tn cn tvs xs fs fun_build fun_match
+      (fun_match, dec_match) <- mkMatch tn (nameBase pat) (nameBase cn) tvs tag ps fs ns
+      dec_pat                <- mkRecC_pattern tn pat tvs xs fs fun_build fun_match
       return $ (pat, concat [dec_pat, dec_build, dec_match])
 
     mkInfixC :: Name -> Name -> Word8 -> [Name] -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
     mkInfixC tn cn tag tvs ps fs ns = do
+      let pat = mkName (':' : nameBase cn)
       (fun_build, dec_build) <- mkBuild tn (zencode (nameBase cn)) tvs tag ps fs ns
-      (fun_match, dec_match) <- mkMatch tn (zencode (nameBase cn)) tvs tag ps fs ns
-      (pat,       dec_pat)   <- mkInfixC_pattern tn cn tvs fs fun_build fun_match
+      (fun_match, dec_match) <- mkMatch tn ("(" ++ nameBase pat ++ ")") (zencode (nameBase cn)) tvs tag ps fs ns
+      dec_pat                <- mkInfixC_pattern tn cn pat tvs fs fun_build fun_match
       return $ (pat, concat [dec_pat, dec_build, dec_match])
 
-    mkNormalC_pattern :: Name -> Name -> [Name] -> [Type] -> Name -> Name -> Q (Name, [Dec])
-    mkNormalC_pattern tn cn tvs fs build match = do
+    mkNormalC_pattern :: Name -> Name -> [Name] -> [Type] -> Name -> Name -> Q [Dec]
+    mkNormalC_pattern tn pat tvs fs build match = do
       xs <- replicateM (length fs) (newName "_x")
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
@@ -232,9 +235,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
                          (explBidir [clause [] (normalB (varE build)) []])
                          (parensP $ viewP (varE match) [p| Just $(tupP (map varP xs)) |])
                      ]
-      return (pat, r)
+      return r
       where
-        pat = rename cn
         sig = forallT
                 (map plainTV tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
@@ -242,17 +244,16 @@ mkConS tn' tvs' prev' next' tag' con' = do
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
 
-    mkRecC_pattern :: Name -> Name -> [Name] -> [Name] -> [Type] -> Name -> Name -> Q (Name, [Dec])
-    mkRecC_pattern tn cn tvs xs fs build match = do
+    mkRecC_pattern :: Name -> Name -> [Name] -> [Name] -> [Type] -> Name -> Name -> Q [Dec]
+    mkRecC_pattern tn pat tvs xs fs build match = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (recordPatSyn xs)
                          (explBidir [clause [] (normalB (varE build)) []])
                          (parensP $ viewP (varE match) [p| Just $(tupP (map varP xs)) |])
                      ]
-      return (pat, r)
+      return r
       where
-        pat = rename cn
         sig = forallT
                 (map plainTV tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
@@ -260,8 +261,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
 
-    mkInfixC_pattern :: Name -> Name -> [Name] -> [Type] -> Name -> Name -> Q (Name, [Dec])
-    mkInfixC_pattern tn cn tvs fs build match = do
+    mkInfixC_pattern :: Name -> Name -> Name -> [Name] -> [Type] -> Name -> Name -> Q [Dec]
+    mkInfixC_pattern tn cn pat tvs fs build match = do
       mf <- reifyFixity cn
       _a <- newName "_a"
       _b <- newName "_b"
@@ -274,9 +275,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r' <- case mf of
               Nothing -> return r
               Just f  -> return (InfixD f pat : r)
-      return (pat, r')
+      return r'
       where
-        pat = mkName (':' : nameBase cn)
         sig = forallT
                 (map plainTV tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
@@ -310,8 +310,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
                        (map (\t -> [t| Exp $(return t) |]) fs))
 
 
-    mkMatch :: Name -> String -> [Name] -> Word8 -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
-    mkMatch tn cn tvs tag fs0 fs fs1 = do
+    mkMatch :: Name -> String -> String -> [Name] -> Word8 -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
+    mkMatch tn pn cn tvs tag fs0 fs fs1 = do
       fun     <- newName ("_match" ++ cn)
       e       <- newName "_e"
       x       <- newName "_x"
@@ -319,9 +319,9 @@ mkConS tn' tvs' prev' next' tag' con' = do
       let
         lhs   = [p| (Exp $(varP e)) |]
         body  = normalB $ caseE (varE e)
-          [ TH.match (conP 'SmartExp [(conP 'Match [matchP ps, varP x])]) (normalB [| Just $(tupE es) |]) []
-          , TH.match (conP 'SmartExp [(recP 'Match [])])                  (normalB [| Nothing         |]) []
-          , TH.match wildP                                                (normalB [| error "Pattern synonym used outside 'match' context" |]) []
+          [ TH.match (conP 'SmartExp [(conP 'Match [matchP ps, varP x])]) (normalB [| Just $(tupE es)  |]) []
+          , TH.match (conP 'SmartExp [(recP 'Match [])])                  (normalB [| Nothing          |]) []
+          , TH.match wildP                                                (normalB [| error $error_msg |]) []
           ]
 
       r <- sequence [ sigD fun sig
@@ -348,6 +348,24 @@ mkConS tn' tvs' prev' next' tag' con' = do
 
         vs = reverse
            $ [ False | _ <- concat fs0 ] ++ [ True | _ <- fs ] ++ [ False | _ <- concat fs1 ]
+
+        error_msg =
+          let pv = unwords
+                 $ take (length fs + 1)
+                 $ concatMap (map reverse)
+                 $ iterate (concatMap (\xs -> [ x:xs | x <- ['a'..'z'] ])) [""]
+           in stringE $ unlines
+             [ "Embedded pattern synonym used outside 'match' context."
+             , ""
+             , "To use case statements in the embedded language the case statement must"
+             , "be applied as an n-ary function to the 'match' operator. For single"
+             , "argument case statements this can be done inline using LambdaCase, for"
+             , "example:"
+             , ""
+             , "> x & match \\case"
+             , printf ">   %s%s -> ..." pn pv
+             , printf ">   _%s -> ..." (replicate (length pn + length pv - 1) ' ')
+             ]
 
 fst3 :: (a,b,c) -> a
 fst3 (a,_,_) = a

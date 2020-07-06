@@ -403,8 +403,8 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Useful re-exports
-  (.), ($), error, undefined, const, otherwise,
-  Show, Generic,
+  (.), ($), (&), error, undefined, const, otherwise,
+  Show, Generic, HasCallStack,
 
   -- ---------------------------------------------------------------------------
   -- Types
@@ -436,8 +436,12 @@ import Data.Primitive.Vec
 import qualified Data.Array.Accelerate.Sugar.Array                  as S
 import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
+import Data.Function                                                ( (&) )
 import Prelude                                                      ( (.), ($), Char, Show, undefined, error, const, otherwise )
+
 import GHC.Generics                                                 ( Generic )
+import GHC.Stack
+
 
 -- $setup
 -- >>> :seti -XTypeOperators
