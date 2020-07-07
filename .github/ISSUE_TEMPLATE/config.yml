@@ -1,9 +1,10 @@
 blank_issues_enabled: true
 contact_links:
   - name: Accelerate community chat
-    about: Community chat room
+    about: Ask and answer questions here
     url: https://gitter.im/AccelerateHS/Lobby
   - name: Accelerate mailing list
-    about: Please ask and answer questions here
-    url: mailto:accelerate-haskell@googlegroups.com
+    about: Ask and answer questions here
+    url: http://groups.google.com/group/accelerate-haskell
+    # url: mailto:accelerate-haskell@googlegroups.com
 
