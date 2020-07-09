@@ -118,7 +118,6 @@ type family ScalarArrayDataR t where
   ScalarArrayDataR Half      = Half
   ScalarArrayDataR Float     = Float
   ScalarArrayDataR Double    = Double
-  ScalarArrayDataR Char      = Char
   ScalarArrayDataR (Vec n t) = ScalarArrayDataR t
 
 
