@@ -124,8 +124,10 @@ type family ScalarArrayDataR t where
 
 
 data ScalarArrayDict a where
-  ScalarArrayDict :: ( GArrayData a ~ ScalarArrayData a )
-                  => ScalarArrayDict a
+  ScalarArrayDict :: ( GArrayData a ~ ScalarArrayData a, ScalarArrayDataR a ~ ScalarArrayDataR b )
+                  => {-# UNPACK #-} !Int    -- vector width
+                  -> SingleType b           -- base type
+                  -> ScalarArrayDict a
 
 data SingleArrayDict a where
   SingleArrayDict :: ( GArrayData a ~ ScalarArrayData a, ScalarArrayDataR a ~ a )
@@ -135,38 +137,15 @@ scalarArrayDict :: ScalarType a -> ScalarArrayDict a
 scalarArrayDict = scalar
   where
     scalar :: ScalarType a -> ScalarArrayDict a
-    scalar (SingleScalarType t) = single t
     scalar (VectorScalarType t) = vector t
-
-    single :: SingleType a -> ScalarArrayDict a
-    single (NumSingleType t) = num t
+    scalar (SingleScalarType t)
+      | SingleArrayDict <- singleArrayDict t
+      = ScalarArrayDict 1 t
 
     vector :: VectorType a -> ScalarArrayDict a
-    vector (VectorType _ s)
-      | ScalarArrayDict <- single s
-      = ScalarArrayDict
-
-    num :: NumType a -> ScalarArrayDict a
-    num (IntegralNumType t) = integral t
-    num (FloatingNumType t) = floating t
-
-    integral :: IntegralType a -> ScalarArrayDict a
-    integral TypeInt    = ScalarArrayDict
-    integral TypeInt8   = ScalarArrayDict
-    integral TypeInt16  = ScalarArrayDict
-    integral TypeInt32  = ScalarArrayDict
-    integral TypeInt64  = ScalarArrayDict
-    integral TypeWord   = ScalarArrayDict
-    integral TypeWord8  = ScalarArrayDict
-    integral TypeWord16 = ScalarArrayDict
-    integral TypeWord32 = ScalarArrayDict
-    integral TypeWord64 = ScalarArrayDict
-
-    floating :: FloatingType a -> ScalarArrayDict a
-    floating TypeHalf   = ScalarArrayDict
-    floating TypeFloat  = ScalarArrayDict
-    floating TypeDouble = ScalarArrayDict
-
+    vector (VectorType w s)
+      | SingleArrayDict <- singleArrayDict s
+      = ScalarArrayDict w s
 
 singleArrayDict :: SingleType a -> SingleArrayDict a
 singleArrayDict = single
@@ -269,14 +248,14 @@ writeArrayData (TupRsingle t)   arr      !ix !val
 
 unsafeArrayDataPtr :: ScalarType e -> ArrayData e -> Ptr (ScalarArrayDataR e)
 unsafeArrayDataPtr t arr
-  | ScalarArrayDict <- scalarArrayDict t
+  | ScalarArrayDict{} <- scalarArrayDict t
   = unsafeUniqueArrayPtr arr
 
 touchArrayData :: TupR ScalarType e -> ArrayData e -> IO ()
 touchArrayData TupRunit         ()       = return ()
 touchArrayData (TupRpair t1 t2) (a1, a2) = touchArrayData t1 a1 >> touchArrayData t2 a2
 touchArrayData (TupRsingle t)   arr
-  | ScalarArrayDict <- scalarArrayDict t
+  | ScalarArrayDict{} <- scalarArrayDict t
   = touchUniqueArray arr
 
 rnfArrayData :: TupR ScalarType e -> ArrayData e -> ()
