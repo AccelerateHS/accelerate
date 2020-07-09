@@ -76,4 +76,3 @@ avarsOut extract = \case
     -> Just (TupRpair as bs)
   _ -> Nothing
 
-

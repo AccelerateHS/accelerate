@@ -348,6 +348,7 @@ Library
         Data.Array.Accelerate.Sugar.Vec
         Data.Array.Accelerate.Trafo
         Data.Array.Accelerate.Trafo.Config
+        Data.Array.Accelerate.Trafo.Delayed
         Data.Array.Accelerate.Trafo.Fusion
         Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Type
@@ -399,7 +400,6 @@ Library
         Data.Array.Accelerate.Pretty.Graphviz.Type
         Data.Array.Accelerate.Pretty.Print
         Data.Array.Accelerate.Trafo.Algebra
-        Data.Array.Accelerate.Trafo.Delayed
         Data.Array.Accelerate.Trafo.Environment
         Data.Array.Accelerate.Trafo.LetSplit
         Data.Array.Accelerate.Trafo.Shrink
