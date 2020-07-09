@@ -23,7 +23,6 @@ import Language.Haskell.TH
 import Prelude                                                      hiding ( zip )
 
 import GHC.Base                                                     ( quotInt, remInt )
-import GHC.Stack
 
 
 -- | Shape and index representations as nested pairs

@@ -153,7 +153,6 @@ import Language.Haskell.TH                                          ( Q, TExp )
 import Prelude
 
 import GHC.TypeLits
-import GHC.Stack
 
 
 -- Array expressions

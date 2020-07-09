@@ -87,8 +87,6 @@ import qualified Data.HashTable.IO                                  as Hash
 import qualified Data.IntMap                                        as IntMap
 import Prelude
 
-import GHC.Stack
-
 
 -- Layouts
 -- -------

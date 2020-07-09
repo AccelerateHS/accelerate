@@ -32,8 +32,6 @@ import Text.Show                                                    ( showListWi
 import Prelude                                                      hiding ( (!!) )
 import qualified Data.Vector.Unboxed                                as U
 
-import GHC.Stack
-
 
 -- | Array data type, where the type arguments regard the representation
 -- types of the shape and elements.

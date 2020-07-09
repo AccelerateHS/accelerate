@@ -13,6 +13,7 @@
 
 module Data.Array.Accelerate.Error (
 
+  HasCallStack,
   internalError,   boundsError,   unsafeError,
   internalCheck,   boundsCheck,   unsafeCheck,   indexCheck,
   internalWarning, boundsWarning, unsafeWarning,

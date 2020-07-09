@@ -43,8 +43,6 @@ import Text.Printf
 import Prelude                                                      ( (.), ($), String, error, undefined, unlines, otherwise )
 import qualified Prelude                                            as P
 
-import GHC.Stack
-
 
 -- | Efficient, machine-independent access to the components of a floating-point
 -- number

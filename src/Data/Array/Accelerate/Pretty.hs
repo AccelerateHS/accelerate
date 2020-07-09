@@ -61,8 +61,6 @@ import Data.Array.Accelerate.Debug.Flags
 import Data.Array.Accelerate.Debug.Stats
 #endif
 
-import GHC.Stack
-
 
 instance Arrays arrs => Show (Acc arrs) where
   show = withSimplStats . show . convertAcc

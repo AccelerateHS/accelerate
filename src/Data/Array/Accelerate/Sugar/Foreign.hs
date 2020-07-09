@@ -18,8 +18,6 @@ import Data.Array.Accelerate.Error
 import Data.Typeable
 import Language.Haskell.TH
 
-import GHC.Stack
-
 
 -- Class for backends to choose their own representation of foreign functions.
 -- By default it has no instances. If a backend wishes to have an FFI it must

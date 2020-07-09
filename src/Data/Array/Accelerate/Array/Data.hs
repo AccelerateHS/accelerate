@@ -77,7 +77,6 @@ import Prelude                                                      hiding ( map
 import GHC.Base
 import GHC.ForeignPtr
 import GHC.Ptr
-import GHC.Stack
 
 
 -- | Immutable array representation

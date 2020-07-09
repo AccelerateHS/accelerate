@@ -70,8 +70,6 @@ import System.IO.Unsafe -- for debugging
 import Control.Lens                                     ( over, mapped, _2 )
 import Prelude                                          hiding ( exp, until )
 
-import GHC.Stack
-
 
 -- Delayed Array Fusion
 -- ====================

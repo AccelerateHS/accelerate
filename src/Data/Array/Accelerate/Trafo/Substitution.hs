@@ -62,8 +62,6 @@ import Control.Applicative                              hiding ( Const )
 import Control.Monad
 import Prelude                                          hiding ( exp, seq )
 
-import GHC.Stack
-
 
 -- NOTE: [Renaming and Substitution]
 --

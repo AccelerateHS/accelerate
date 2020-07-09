@@ -31,8 +31,6 @@ import qualified Data.HashTable.IO                              as HT
 import qualified Data.Sequence                                  as Seq
 import qualified Data.Traversable                               as Seq
 
-import GHC.Stack
-
 
 -- The nursery is a place to store remote memory arrays that are no longer
 -- needed. Often it is quicker to reuse an existing array, rather than call out

@@ -27,8 +27,6 @@ import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Debug.Stats                            as Stats
 
-import GHC.Stack
-
 
 -- An environment that holds let-bound scalar expressions. The second
 -- environment variable env' is used to project out the corresponding

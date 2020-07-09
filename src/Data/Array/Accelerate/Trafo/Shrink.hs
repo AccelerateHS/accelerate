@@ -61,8 +61,6 @@ import Data.Monoid
 import Data.Semigroup
 import Prelude                                                      hiding ( exp, seq )
 
-import GHC.Stack
-
 
 data VarsRange env =
   VarsRange !(Exists (Idx env))     -- rightmost variable

@@ -77,8 +77,6 @@ import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
 import Prelude                                                      hiding ( (!!), sum )
 
-import GHC.Stack
-
 
 -- Program execution
 -- -----------------

@@ -111,7 +111,6 @@ import Data.Kind
 import Prelude
 
 import GHC.TypeLits
-import GHC.Stack
 
 
 -- Array computations

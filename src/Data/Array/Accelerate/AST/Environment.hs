@@ -22,8 +22,6 @@ import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.Error
 
-import GHC.Stack
-
 
 -- Valuation for an environment
 --

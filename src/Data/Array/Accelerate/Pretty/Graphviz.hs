@@ -57,8 +57,6 @@ import Prelude                                          hiding ( exp )
 import qualified Data.HashSet                           as Set
 import qualified Data.Sequence                          as Seq
 
-import GHC.Stack
-
 
 -- Configuration options
 -- ---------------------

@@ -59,8 +59,6 @@ import Text.Printf
 import Prelude                                                      hiding ( exp, iterate )
 import qualified Data.Map.Strict                                    as Map
 
-import GHC.Stack
-
 
 -- Scalar optimisations
 -- ====================
