@@ -2,7 +2,7 @@
 {-# LANGUAGE MagicHash #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Timed
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>

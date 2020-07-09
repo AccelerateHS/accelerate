@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Var
--- Copyright   : [2012..2019] The Accelerate Team
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>

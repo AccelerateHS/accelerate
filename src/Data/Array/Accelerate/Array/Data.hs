@@ -9,7 +9,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
--- Copyright   : [2008..2019] The Accelerate Team
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>

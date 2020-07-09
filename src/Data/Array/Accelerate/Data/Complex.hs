@@ -15,7 +15,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Complex
--- Copyright   : [2015..2019] The Accelerate Team
+-- Copyright   : [2015..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>

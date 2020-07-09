@@ -1,7 +1,7 @@
 {-# LANGUAGE RebindableSyntax #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Functor
--- Copyright   : [2018..2019] The Accelerate Team
+-- Copyright   : [2018..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>

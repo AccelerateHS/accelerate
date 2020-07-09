@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.RealFloat
--- Copyright   : [2019] The Accelerate Team
+-- Copyright   : [2019..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
