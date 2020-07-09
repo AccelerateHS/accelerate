@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE MonoLocalBinds      #-}
@@ -454,30 +453,8 @@ mapRef :: (Shape sh, Elt a, Elt b) => (a -> b) -> Array sh a -> Array sh b
 mapRef f xs = fromFunction (arrayShape xs) (\ix -> f (xs S.! ix))
 
 countLeadingZerosRef :: P.FiniteBits a => a -> Int
-#if __GLASGOW_HASKELL__ >= 710
 countLeadingZerosRef = P.countLeadingZeros
-#else
-countLeadingZerosRef = clz
-  where
-    clz x = (w-1) - go (w-1)
-      where
-        go i | i < 0         = i  -- no bit set
-             | P.testBit x i = i
-             | otherwise     = go (i-1)
-        w = P.finiteBitSize x
-#endif
 
 countTrailingZerosRef :: P.FiniteBits a => a -> Int
-#if __GLASGOW_HASKELL__ >= 710
 countTrailingZerosRef = P.countTrailingZeros
-#else
-countTrailingZerosRef = ctz
-  where
-    ctz x = go 0
-      where
-        go i | i >= w        = i
-             | P.testBit x i = i
-             | otherwise     = go (i+1)
-        w = P.finiteBitSize x
-#endif
 

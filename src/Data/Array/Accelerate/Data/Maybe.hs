@@ -1,5 +1,4 @@
 {-# LANGUAGE BlockArguments        #-}
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -49,9 +48,7 @@ import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Data.Monoid
-#if __GLASGOW_HASKELL__ >= 800
 import Data.Array.Accelerate.Data.Semigroup
-#endif
 
 import Data.Maybe                                                   ( Maybe(..) )
 import Prelude                                                      ( ($), (.) )
@@ -125,19 +122,12 @@ instance Ord a => Ord (Maybe a) where
       go Just_{}   Nothing_{} = GT_
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
-  mempty        = Nothing_
-#if __GLASGOW_HASKELL__ < 804
-  mappend ma mb = cond (isNothing ma) mb
-                $ cond (isNothing mb) ma
-                $ lift (Just (fromJust ma `mappend` fromJust mb))
-#endif
+  mempty = Nothing_
 
-#if __GLASGOW_HASKELL__ >= 800
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
   ma <> mb = cond (isNothing ma) mb
            $ cond (isNothing mb) mb
            $ lift (Just (fromJust ma <> fromJust mb))
-#endif
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)

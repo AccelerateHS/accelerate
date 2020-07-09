@@ -81,31 +81,14 @@ timed_simpl fmt action = do
 {-# INLINEABLE timed_gc #-}
 timed_gc :: MonadIO m => (Double -> Double -> String) -> m a -> m a
 timed_gc fmt action = do
-#if __GLASGOW_HASKELL__ < 802
-  gc0   <- liftIO getGCStats
-  res   <- action
-  gc1   <- liftIO getGCStats
-#else
   rts0  <- liftIO getRTSStats
   res   <- action
   rts1  <- liftIO getRTSStats
-#endif
   --
   let
       w64 (W64# w#) = D# (word2Double# w#)
       i64 (I64# i#) = D# (int2Double# i#)
       --
-#if __GLASGOW_HASKELL__ < 802
-      allocated   = i64 (bytesAllocated gc1 - bytesAllocated gc0)
-      copied      = i64 (bytesCopied gc1 - bytesCopied gc0)
-      totalWall   = wallSeconds gc1 - wallSeconds gc0
-      totalCPU    = cpuSeconds gc1 - cpuSeconds gc0
-      mutatorWall = mutatorWallSeconds gc1 - mutatorWallSeconds gc0
-      mutatorCPU  = mutatorCpuSeconds gc1 - mutatorCpuSeconds gc0
-      gcWall      = gcWallSeconds gc1 - gcWallSeconds gc0
-      gcCPU       = gcCpuSeconds gc1 - gcCpuSeconds gc0
-      totalGCs    = numGcs gc1 - numGcs gc0
-#else
       allocated   = w64 (allocated_bytes rts1 - allocated_bytes rts0)
       copied      = w64 (copied_bytes rts1 - copied_bytes rts0)
       totalWall   = i64 (elapsed_ns rts1 - elapsed_ns rts0) * 1.0E-9
@@ -115,7 +98,6 @@ timed_gc fmt action = do
       gcWall      = i64 (gc_elapsed_ns rts1 - gc_elapsed_ns rts0) * 1.0E-9
       gcCPU       = i64 (gc_cpu_ns rts1 - gc_cpu_ns rts0) * 1.0E-9
       totalGCs    = gcs rts1 - gcs rts0
-#endif
 
   liftIO . putTraceMsg $ intercalate "\n"
     [ fmt totalWall totalCPU
@@ -126,11 +108,6 @@ timed_gc fmt action = do
     ]
   --
   return res
-
-#if __GLASGOW_HASKELL__ < 802
-getRTSStatsEnabled :: IO Bool
-getRTSStatsEnabled = getGCStatsEnabled
-#endif
 #endif
 
 elapsed :: Double -> Double -> String

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -26,9 +25,6 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue364 (
 
 import Prelude                                            ( fromInteger, show )
 import qualified Prelude                                  as P
-#if __GLASGOW_HASKELL__ == 800
-import Prelude                                            ( fail )
-#endif
 
 import Data.Array.Accelerate                              hiding ( fromInteger )
 import Data.Array.Accelerate.Sugar.Elt                    as S

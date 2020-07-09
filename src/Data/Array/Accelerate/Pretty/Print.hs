@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
@@ -716,9 +715,6 @@ sizeEnv (Push env _) = 1 + sizeEnv env
 prj :: Idx env t -> Val env -> Adoc
 prj ZeroIdx      (Push _ v)   = v
 prj (SuccIdx ix) (Push env _) = prj ix env
-#if __GLASGOW_HASKELL__ < 800
-prj _            _            = error "inconsistent valuation"
-#endif
 
 
 -- Utilities

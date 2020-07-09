@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -560,9 +559,6 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                             | AvoidedAcc (a' :: acc aenv' a) <- a
                                             , IsC <- isArraysFlat (undefined :: a)
                                             -> Right (SnocAtup li (replicateA a' size))
-#if __GLASGOW_HASKELL__ < 800
-                               _            -> error "unreachable"
-#endif
 
 
     aprjL :: forall a arrs. (Arrays a, Arrays arrs, IsAtuple arrs, Arrays (Vector' a))
@@ -1876,9 +1872,6 @@ liftedCond pred th el
     cvtT :: ProdR Arrays t -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t)
     cvtT ProdRunit     NilAtup          NilAtup          = NilAtup
     cvtT (ProdRsnoc t) (SnocAtup t1 a1) (SnocAtup t2 a2) = SnocAtup (cvtT t t1 t2) (liftedCond pred a1 a2)
-#if __GLASGOW_HASKELL__ < 800
-    cvtT _             _                _                = error "unreachable"
-#endif
 
     liftedCond1 :: (Elt e, Shape sh) => S.Acc (LiftedArray sh e) -> S.Acc (LiftedArray sh e) -> S.Acc (LiftedArray sh e)
     liftedCond1 t e = liftedArray segs vals

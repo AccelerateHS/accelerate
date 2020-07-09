@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -328,21 +327,13 @@ polar z =  T2 (magnitude z) (phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-#if __GLASGOW_HASKELL__ <= 708
-mkPolar :: forall a. RealFloat a => Exp a -> Exp a -> Exp (Complex a)
-#else
 mkPolar :: forall a. Floating a => Exp a -> Exp a -> Exp (Complex a)
-#endif
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-#if __GLASGOW_HASKELL__ <= 708
-cis :: forall a. RealFloat a => Exp a -> Exp (Complex a)
-#else
 cis :: forall a. Floating a => Exp a -> Exp (Complex a)
-#endif
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number

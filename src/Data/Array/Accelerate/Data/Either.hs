@@ -1,5 +1,4 @@
 {-# LANGUAGE BlockArguments        #-}
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -49,9 +48,7 @@ import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Data.Monoid
-#if __GLASGOW_HASKELL__ >= 800
 import Data.Array.Accelerate.Data.Semigroup
-#endif
 
 import Data.Either                                                  ( Either(..) )
 import Prelude                                                      ( (.), ($) )
@@ -129,10 +126,8 @@ instance (Ord a, Ord b) => Ord (Either a b) where
       go Left_{}    Right_{}   = LT_
       go Right_{}   Left_{}    = GT_
 
-#if __GLASGOW_HASKELL__ >= 800
 instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
   ex <> ey = isLeft ex ? ( ey, ex )
-#endif
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)

@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
@@ -1360,33 +1359,10 @@ evalPopCount :: IntegralType a -> (a -> Int)
 evalPopCount ty | IntegralDict <- integralDict ty = popCount
 
 evalCountLeadingZeros :: IntegralType a -> (a -> Int)
-#if __GLASGOW_HASKELL__ >= 710
 evalCountLeadingZeros ty | IntegralDict <- integralDict ty = countLeadingZeros
-#else
-evalCountLeadingZeros ty | IntegralDict <- integralDict ty = clz
-  where
-    clz x = (w-1) - go (w-1)
-      where
-        go i | i < 0       = i  -- no bit set
-             | testBit x i = i
-             | otherwise   = go (i-1)
-        w = finiteBitSize x
-#endif
 
 evalCountTrailingZeros :: IntegralType a -> (a -> Int)
-#if __GLASGOW_HASKELL__ >= 710
 evalCountTrailingZeros ty | IntegralDict <- integralDict ty = countTrailingZeros
-#else
-evalCountTrailingZeros ty | IntegralDict <- integralDict ty = ctz
-  where
-    ctz x = go 0
-      where
-        go i | i >= w      = i
-             | testBit x i = i
-             | otherwise   = go (i+1)
-        w = finiteBitSize x
-#endif
-
 
 evalFDiv :: FloatingType a -> ((a, a) -> a)
 evalFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)

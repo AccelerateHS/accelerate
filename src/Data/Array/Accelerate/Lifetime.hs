@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP           #-}
 {-# LANGUAGE MagicHash     #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UnboxedTuples #-}
@@ -121,11 +120,7 @@ finalize (Lifetime ref _ _) = finalizer ref
 mkWeak :: Lifetime k -> v -> IO (Weak v)
 mkWeak (Lifetime ref@(IORef (STRef r#)) _ _) v = go (finalizer ref)
   where
-#if __GLASGOW_HASKELL__ >= 800
-    go (IO f)  =  -- GHC-8.x
-#else
-    go f       =  -- GHC-7.x
-#endif
+    go (IO f) =  -- GHC-8.x
       IO $ \s -> case mkWeak# r# v f s of
                    (# s', w# #) -> (# s', Weak w# #)
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MonoLocalBinds        #-}
@@ -55,24 +54,16 @@ $(runQ $ do
         -- Get all the types that our dictionaries reify
         digItOut :: Name -> Q [Name]
         digItOut name = do
-#if __GLASGOW_HASKELL__ < 800
-          TyConI (DataD _ _ _   cons _) <- reify name
-#else
           TyConI (DataD _ _ _ _ cons _) <- reify name
-#endif
           let
             -- This is what a constructor such as IntegralNumType will be reified
             -- as prior to GHC 8.4...
             dig (NormalC _ [(_, AppT (ConT n) (VarT _))])               = digItOut n
-#if __GLASGOW_HASKELL__ < 800
-            dig (ForallC _ _ (NormalC _ [(_, AppT (ConT _) (ConT n))])) = return [n]
-#else
             -- ...but this is what IntegralNumType will be reified as on GHC 8.4
             -- and later, after the changes described in
             -- https://ghc.haskell.org/trac/ghc/wiki/Migration/8.4#TemplateHaskellreificationchangesforGADTs
             dig (ForallC _ _ (GadtC _ [(_, AppT (ConT n) (VarT _))] _)) = digItOut n
             dig (GadtC _ _ (AppT (ConT _) (ConT n)))                    = return [n]
-#endif
             dig _ = error "Unexpected case generating FromIntegral instances"
             --
           concat `fmap` mapM dig cons

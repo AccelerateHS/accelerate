@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
@@ -510,32 +509,10 @@ evalPopCount :: IntegralType a -> a :-> Int
 evalPopCount ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) popCount
 
 evalCountLeadingZeros :: IntegralType a -> a :-> Int
-#if __GLASGOW_HASKELL__ >= 710
 evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) countLeadingZeros
-#else
-evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) clz
-  where
-    clz x = (w-1) - go (w-1)
-      where
-        go i | i < 0       = i  -- no bit set
-             | testBit x i = i
-             | otherwise   = go (i-1)
-        w = finiteBitSize x
-#endif
 
 evalCountTrailingZeros :: IntegralType a -> a :-> Int
-#if __GLASGOW_HASKELL__ >= 710
 evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) countTrailingZeros
-#else
-evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) ctz
-  where
-    ctz x = go 0
-      where
-        go i | i >= w      = i
-             | testBit x i = i
-             | otherwise   = go (i+1)
-        w = finiteBitSize x
-#endif
 
 
 -- Methods of Fractional & Floating

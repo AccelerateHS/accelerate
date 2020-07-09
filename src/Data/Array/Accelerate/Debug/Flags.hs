@@ -4,10 +4,8 @@
 {-# LANGUAGE TypeOperators            #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports     #-}
+{-# OPTIONS_GHC -fno-warn-unused-top-binds   #-}
 {-# OPTIONS_GHC -fobject-code                #-} -- SEE: [linking to .c files]
-#if __GLASGOW_HASKELL__ >= 800
-{-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
-#endif
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2019] The Accelerate Team

@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
@@ -1336,11 +1335,10 @@ while :: forall e. Elt e
       -> (Exp e -> Exp e)       -- ^ function to apply
       -> Exp e                  -- ^ initial value
       -> Exp e
-#if __GLASGOW_HASKELL__ < 804
-while c f (Exp e) = mkExp $ While @SmartAcc @SmartExp @(EltR e) (eltR @e) (mkCoerce' . unExp . c . Exp) (unExp . f . Exp) e
-#else
-while c f (Exp e) = mkExp $ While                     @(EltR e) (eltR @e) (mkCoerce' . unExp . c . Exp) (unExp . f . Exp) e
-#endif
+while c f (Exp e) =
+  mkExp $ While @(EltR e) (eltR @e)
+            (mkCoerce' . unExp . c . Exp)
+            (unExp . f . Exp) e
 
 
 -- Array operations with a scalar result
