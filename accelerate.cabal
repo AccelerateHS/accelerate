@@ -1,7 +1,7 @@
 Name:                   accelerate
 Version:                1.4.0.0
 Cabal-version:          >= 1.18
-Tested-with:            GHC >= 8.2
+Tested-with:            GHC >= 8.6
 Build-type:             Custom
 
 Synopsis:               An embedded language for accelerated array processing
