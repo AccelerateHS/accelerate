@@ -4,7 +4,7 @@
 -- |
 -- Module      : Data.Array.Accelerate
 -- Description : The Accelerate standard prelude
--- Copyright   : [2008..2019] The Accelerate Team
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -85,7 +85,7 @@
 --
 --      - For more information on LULESH: <https://codesign.llnl.gov/lulesh.php>.
 --
---      <<https://codesign.llnl.gov/images/sedov-3d-LLNL.png>>
+--      <<https://i.imgur.com/bIkODKd.jpg>>
 --
 -- [/Starting a new project:/]
 --
@@ -240,7 +240,6 @@ module Data.Array.Accelerate (
   -- *** Permutations
   -- **** Forward permutation (scatter)
   permute,
-  ignore,
   scatter,
 
   -- **** Backward permutation (gather)
@@ -252,7 +251,7 @@ module Data.Array.Accelerate (
   reverseOn, transposeOn,
 
   -- *** Filtering
-  filter,
+  filter, compact,
 
   -- ** Folding
   fold, fold1, foldAll, fold1All,
@@ -351,7 +350,7 @@ module Data.Array.Accelerate (
   pattern Vec8, pattern V8,
   pattern Vec16, pattern V16,
 
-  pattern True_, pattern False_,
+  mkPattern, mkPatterns,
 
   -- ** Scalar operations
   -- *** Introduction
@@ -361,7 +360,7 @@ module Data.Array.Accelerate (
   fst, afst, snd, asnd, curry, uncurry,
 
   -- *** Flow control
-  (?), caseof, cond, while, iterate,
+  (?), match, cond, while, iterate,
 
   -- *** Scalar reduction
   sfoldl,
@@ -404,15 +403,16 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Useful re-exports
-  (.), ($), error, undefined, const, otherwise,
-  Show, Generic,
+  (.), ($), (&), error, undefined, const, otherwise,
+  Show, Generic, HasCallStack,
 
   -- ---------------------------------------------------------------------------
   -- Types
   Int, Int8, Int16, Int32, Int64,
   Word, Word8, Word16, Word32, Word64,
   Half(..), Float, Double,
-  Bool(..), Char,
+  Bool(..), pattern True_, pattern False_,
+  Char,
 
   CFloat, CDouble,
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
@@ -420,18 +420,28 @@ module Data.Array.Accelerate (
 
 ) where
 
--- friends
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, reshape, size, toIndex, fromIndex, intersect, ignore )
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.TH
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Pretty                                 () -- show instances
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            ( Array, Arrays, Scalar, Vector, Matrix, Segments, fromFunction, fromFunctionM, toList, fromList )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, toIndex, fromIndex, intersect )
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Array.Sugar                  as S
+import Data.Primitive.Vec
+import qualified Data.Array.Accelerate.Sugar.Array                  as S
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
-import Prelude                                                      ( (.), ($), Show, undefined, error, const, otherwise )
+import Data.Function                                                ( (&) )
+import Prelude                                                      ( (.), ($), Char, Show, undefined, error, const, otherwise )
+
 import GHC.Generics                                                 ( Generic )
+import GHC.Stack
+
 
 -- $setup
 -- >>> :seti -XTypeOperators
@@ -598,11 +608,10 @@ arrayReshape = S.reshape
 -- in two-dimensional space:
 --
 -- > data Point = Point_ Float Float
--- >   deriving (Show, Generic, Elt, IsTuple)
+-- >   deriving (Generic, Elt)
 --
--- Here we derive instances for both the 'Elt' class, so that this data type can
--- be used within Accelerate scalar expressions, and the 'IsTuple' class, as
--- this is a product type (contains multiple values).
+-- Here we derive instance an instance of the 'Elt' class (via 'Generic'),
+-- so that this data type can be used within scalar Accelerate expressions
 --
 -- In order to access the individual fields of the data constructor from within
 -- an Accelerate expression, we define the following pattern synonym:
@@ -625,7 +634,7 @@ arrayReshape = S.reshape
 -- use record syntax to generate field accessors, if we desire:
 --
 -- > data SparseVector a = SparseVector_ (Vector Int) (Vector a)
--- >   deriving (Show, Generic, Arrays, IsAtuple)
+-- >   deriving (Generic, Arrays)
 -- >
 -- > pattern SparseVector :: Elt a => Acc (Vector Int) -> Acc (Vector a) -> Acc (SparseVector a)
 -- > pattern SparseVector { indices, values } = Pattern (indices, values)

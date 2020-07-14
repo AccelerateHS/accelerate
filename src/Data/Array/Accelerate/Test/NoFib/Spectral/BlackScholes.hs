@@ -8,7 +8,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -25,7 +25,8 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Array                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -47,15 +48,15 @@ test_blackscholes runN =
     ]
   where
     testElt
-        :: forall a. (P.Floating a, P.Ord a, A.Floating a, A.Ord a , Similar a)
+        :: forall a. (P.Floating a, P.Ord a, A.Floating a, A.Ord a , Similar a, Show a)
         => (Range a -> Gen a)
         -> TestTree
     testElt e =
-      testProperty (show (eltType @a)) $ test_blackscholes' runN e
+      testProperty (show (eltR @a)) $ test_blackscholes' runN e
 
 
 test_blackscholes'
-    :: (P.Floating a, P.Ord a, A.Floating a, A.Ord a, Similar a)
+    :: (P.Floating a, P.Ord a, A.Floating a, A.Ord a, Similar a, Show a)
     => RunN
     -> (Range a -> Gen a)
     -> Property

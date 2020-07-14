@@ -4,14 +4,13 @@
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.RealFloat
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -25,8 +24,8 @@ module Data.Array.Accelerate.Classes.RealFloat (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Language                               ( cond, while )
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -201,10 +200,10 @@ preludeError x
             ]
 
 
-ieee754 :: forall a b. P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
+ieee754 :: forall a b. HasCallStack => P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
 ieee754 name f x
   | P.isIEEE (undefined::a) = f x
-  | otherwise               = $internalError (printf "RealFloat.%s" name) "Not implemented for non-IEEE floating point"
+  | otherwise               = internalError (printf "%s: Not implemented for non-IEEE floating point" name)
 
 -- From: ghc/libraries/base/cbits/primFloat.c
 -- ------------------------------------------
@@ -407,8 +406,3 @@ ieee754_f64_decode2 i =
        (T4 1 0 0 0)
        (T4 sign hi lo ie)
 
-cond :: Exp Bool -> Exp a -> Exp a -> Exp a
-cond (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond c x y
-
-while :: forall e. Elt e => (Exp e -> Exp Bool) -> (Exp e -> Exp e) -> Exp e -> Exp e
-while c f (Exp e) = Exp $ SmartExp $ While (eltType @e) (unExp . c . Exp) (unExp . f . Exp) e

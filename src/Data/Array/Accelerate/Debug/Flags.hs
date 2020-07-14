@@ -1,14 +1,14 @@
 {-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports     #-}
-#if __GLASGOW_HASKELL__ >= 800
-{-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
-#endif
+{-# OPTIONS_GHC -fno-warn-unused-top-binds   #-}
+{-# OPTIONS_GHC -fobject-code                #-} -- SEE: [linking to .c files]
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
--- Copyright   : [2008..2019] The Accelerate Team
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -45,13 +45,15 @@ module Data.Array.Accelerate.Debug.Flags (
 ) where
 
 
+import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
 import Data.Bits
 import Data.Int
 import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
-
-import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
+import Language.Haskell.TH.Syntax
+import System.Directory
+import System.FilePath
 import qualified Control.Monad                                      as M
 
 newtype Flag  = Flag  Int
@@ -159,11 +161,11 @@ clearFlags = mapM_ clearFlag
 -- notEnabled = error $ unlines [ "Data.Array.Accelerate: Debugging options are disabled."
 --                              , "Reinstall package 'accelerate' with '-fdebug' to enable them." ]
 
-
 -- Import the underlying flag variables. These are defined in the file
 -- cbits/flags.h as a bitfield and initialised at program initialisation.
 --
 -- SEE: [layout of command line options bitfield]
+-- SEE: [linking to .c files]
 --
 foreign import ccall "&__cmd_line_flags" __cmd_line_flags :: Ptr Word32
 
@@ -204,4 +206,30 @@ dump_ld               = Flag 23 -- trace runtime linker
 dump_asm              = Flag 24 -- trace assembler
 dump_exec             = Flag 25 -- trace execution
 dump_sched            = Flag 26 -- trace scheduler
+
+
+-- Note: [linking to .c files]
+--
+-- We use Template Haskell to tell GHC which .c files need to be compiled
+-- for a particular module, rather than relying on Cabal as is traditional.
+-- Using Cabal:
+--
+--  * loading Accelerate into GHCi only works _after_ compiling the entire
+--    package (which defeats the purpose), presumably because the .c files
+--    are compiled last. This would often lead to errors such "can not find
+--    symbol __cmd_line_flags" etc.
+--
+--  * Cabal would refuse to re-compile .c files when changing command
+--    line flags, see: https://github.com/haskell/cabal/issues/4937
+--
+--  * Linking problems also prevented us from using Template Haskell in
+--    some locations, because GHC was unable to load the project into the
+--    interpreter to run the splices.
+--
+-- Note that for this fix to work in GHCi we also require modules using it
+-- to be loaded as object code.
+--
+runQ $ do
+  addForeignFilePath LangC "cbits/flags.c"
+  return []
 

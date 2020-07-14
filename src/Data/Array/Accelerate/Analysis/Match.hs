@@ -9,7 +9,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Match
--- Copyright   : [2012..2019] The Accelerate Team
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -29,26 +29,32 @@ module Data.Array.Accelerate.Analysis.Match (
   matchPrimFun,  matchPrimFun',
 
   -- auxiliary
-  matchIdx, matchVar, matchVars, matchArrayR, matchArraysR, matchTupleType, matchShapeR,
+  matchIdx, matchVar, matchVars, matchArrayR, matchArraysR, matchTypeR, matchShapeR,
   matchShapeType, matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
   matchLeftHandSide, matchALeftHandSide, matchELeftHandSide, matchSingleType, matchTupR
 
 ) where
 
--- standard library
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Hash
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Representation.Slice
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
+import qualified Data.Array.Accelerate.Sugar.Shape      as Sugar
+
 import Data.Maybe
 import Data.Typeable
 import Unsafe.Coerce                                    ( unsafeCoerce )
 import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
 import Prelude                                          hiding ( exp )
-
--- friends
-import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Analysis.Hash
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
 -- The type of matching array computations
@@ -61,7 +67,7 @@ type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :~: t)
 --
 {-# INLINEABLE matchPreOpenAcc #-}
 matchPreOpenAcc
-    :: forall acc aenv s t. HasArraysRepr acc
+    :: forall acc aenv s t. HasArraysR acc
     => MatchAcc  acc
     -> PreOpenAcc acc aenv s
     -> PreOpenAcc acc aenv t
@@ -123,7 +129,7 @@ matchPreOpenAcc matchAcc = match
       = Just Refl
 
     match (Unit t1 e1) (Unit t2 e2)
-      | Just Refl <- matchTupleType t1 t2
+      | Just Refl <- matchTypeR t1 t2
       , Just Refl <- matchExp e1 e2
       = Just Refl
 
@@ -210,15 +216,15 @@ matchPreOpenAcc matchAcc = match
     match (Stencil s1 _ f1 b1 a1) (Stencil _ _ f2 b2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
-      , matchBoundary (stencilElt s1) b1 b2
+      , matchBoundary (stencilEltR s1) b1 b2
       = Just Refl
 
     match (Stencil2 s1 s2 _ f1 b1  a1  b2  a2) (Stencil2 _ _ _ f2 b1' a1' b2' a2')
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a1'
       , Just Refl <- matchAcc a2 a2'
-      , matchBoundary (stencilElt s1) b1 b1'
-      , matchBoundary (stencilElt s2) b2 b2'
+      , matchBoundary (stencilEltR s1) b1 b1'
+      , matchBoundary (stencilEltR s2) b2 b2'
       = Just Refl
 
     -- match (Collect s1) (Collect s2)
@@ -278,7 +284,7 @@ matchLeftHandSide _ _ _ = Nothing
 -- Match stencil boundaries
 --
 matchBoundary
-    :: TupleType t
+    :: TypeR t
     -> Boundary aenv (Array sh t)
     -> Boundary aenv (Array sh t)
     -> Bool
@@ -411,7 +417,7 @@ matchArraysR = matchTupR matchArrayR
 matchArrayR :: ArrayR s -> ArrayR t -> Maybe (s :~: t)
 matchArrayR (ArrayR shr1 tp1) (ArrayR shr2 tp2)
   | Just Refl <- matchShapeR shr1 shr2
-  , Just Refl <- matchTupleType tp1 tp2 = Just Refl
+  , Just Refl <- matchTypeR tp1 tp2 = Just Refl
 matchArrayR _ _ = Nothing
 
 
@@ -518,7 +524,7 @@ matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   = Just Refl
 
 matchOpenExp (Index a1 x1) (Index a2 x2)
-  | Just Refl <- matchVar a1 a2     -- should only be array indices
+  | Just Refl <- matchVar a1 a2
   , Just Refl <- matchOpenExp x1 x2
   = Just Refl
 
@@ -528,7 +534,7 @@ matchOpenExp (LinearIndex a1 x1) (LinearIndex a2 x2)
   = Just Refl
 
 matchOpenExp (Shape a1) (Shape a2)
-  | Just Refl <- matchVar a1 a2     -- should only be array indices
+  | Just Refl <- matchVar a1 a2
   = Just Refl
 
 matchOpenExp (ShapeSize _ sh1) (ShapeSize _ sh2)
@@ -556,7 +562,7 @@ matchOpenFun _        _        = Nothing
 
 -- Matching constants
 --
-matchConst :: TupleType a -> a -> a -> Bool
+matchConst :: TypeR a -> a -> a -> Bool
 matchConst TupRunit         ()      ()      = True
 matchConst (TupRsingle ty)  a       b       = evalEq ty (a,b)
 matchConst (TupRpair ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
@@ -566,8 +572,7 @@ evalEq (SingleScalarType t) = evalEqSingle t
 evalEq (VectorScalarType t) = evalEqVector t
 
 evalEqSingle :: SingleType a -> (a, a) -> Bool
-evalEqSingle (NumSingleType t)                                  = evalEqNum t
-evalEqSingle (NonNumSingleType t) | NonNumDict <- nonNumDict t  = uncurry (==)
+evalEqSingle (NumSingleType t) = evalEqNum t
 
 evalEqVector :: VectorType a -> (a, a) -> Bool
 evalEqVector VectorType{} = uncurry (==)
@@ -591,10 +596,10 @@ matchVar (Var _ v1) (Var _ v2) = matchIdx v1 v2
 
 {-# INLINEABLE matchVars #-}
 matchVars :: Vars s env t1 -> Vars s env t2 -> Maybe (t1 :~: t2)
-matchVars VarsNil         VarsNil = Just Refl
-matchVars (VarsSingle v1) (VarsSingle v2)
+matchVars TupRunit         TupRunit = Just Refl
+matchVars (TupRsingle v1) (TupRsingle v2)
   | Just Refl <- matchVar v1 v2 = Just Refl
-matchVars (VarsPair v w) (VarsPair x y)
+matchVars (TupRpair v w) (TupRpair x y)
   | Just Refl <- matchVars v x
   , Just Refl <- matchVars w y  = Just Refl
 matchVars _ _ = Nothing
@@ -692,9 +697,6 @@ matchPrimFun (PrimToFloating _ s)       (PrimToFloating _ t)       = matchFloati
 matchPrimFun PrimLAnd                   PrimLAnd                   = Just Refl
 matchPrimFun PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun PrimLNot                   PrimLNot                   = Just Refl
-matchPrimFun PrimOrd                    PrimOrd                    = Just Refl
-matchPrimFun PrimChr                    PrimChr                    = Just Refl
-matchPrimFun PrimBoolToInt              PrimBoolToInt              = Just Refl
 
 matchPrimFun _ _
   = Nothing
@@ -760,9 +762,6 @@ matchPrimFun' (PrimToFloating s _)       (PrimToFloating t _)       = matchNumTy
 matchPrimFun' PrimLAnd                   PrimLAnd                   = Just Refl
 matchPrimFun' PrimLOr                    PrimLOr                    = Just Refl
 matchPrimFun' PrimLNot                   PrimLNot                   = Just Refl
-matchPrimFun' PrimOrd                    PrimOrd                    = Just Refl
-matchPrimFun' PrimChr                    PrimChr                    = Just Refl
-matchPrimFun' PrimBoolToInt              PrimBoolToInt              = Just Refl
 
 matchPrimFun' (PrimLt s) (PrimLt t)
   | Just Refl <- matchSingleType s t
@@ -794,9 +793,9 @@ matchPrimFun' _ _
 
 -- Match reified types
 --
-{-# INLINEABLE matchTupleType #-}
-matchTupleType :: TupleType s -> TupleType t -> Maybe (s :~: t)
-matchTupleType = matchTupR matchScalarType
+{-# INLINEABLE matchTypeR #-}
+matchTypeR :: TypeR s -> TypeR t -> Maybe (s :~: t)
+matchTypeR = matchTupR matchScalarType
 
 
 -- Match shapes (dimensionality)
@@ -823,7 +822,8 @@ matchShapeType
 matchShapeR :: forall s t. ShapeR s -> ShapeR t -> Maybe (s :~: t)
 matchShapeR ShapeRz ShapeRz = Just Refl
 matchShapeR (ShapeRsnoc shr1) (ShapeRsnoc shr2)
-  | Just Refl <- matchShapeR shr1 shr2 = Just Refl
+  | Just Refl <- matchShapeR shr1 shr2
+  = Just Refl
 matchShapeR _ _ = Nothing
 
 
@@ -837,9 +837,7 @@ matchScalarType _                    _                    = Nothing
 
 {-# INLINEABLE matchSingleType #-}
 matchSingleType :: SingleType s -> SingleType t -> Maybe (s :~: t)
-matchSingleType (NumSingleType s)    (NumSingleType t)    = matchNumType s t
-matchSingleType (NonNumSingleType s) (NonNumSingleType t) = matchNonNumType s t
-matchSingleType _                    _                    = Nothing
+matchSingleType (NumSingleType s) (NumSingleType t) = matchNumType s t
 
 {-# INLINEABLE matchVectorType #-}
 matchVectorType :: forall m n s t. VectorType (Vec n s) -> VectorType (Vec m t) -> Maybe (Vec n s :~: Vec m t)
@@ -861,35 +859,27 @@ matchNumType _                   _                   = Nothing
 {-# INLINEABLE matchBoundedType #-}
 matchBoundedType :: BoundedType s -> BoundedType t -> Maybe (s :~: t)
 matchBoundedType (IntegralBoundedType s) (IntegralBoundedType t) = matchIntegralType s t
-matchBoundedType (NonNumBoundedType s)   (NonNumBoundedType t)   = matchNonNumType s t
-matchBoundedType _                       _                       = Nothing
 
 {-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
-matchIntegralType TypeInt{}    TypeInt{}    = Just Refl
-matchIntegralType TypeInt8{}   TypeInt8{}   = Just Refl
-matchIntegralType TypeInt16{}  TypeInt16{}  = Just Refl
-matchIntegralType TypeInt32{}  TypeInt32{}  = Just Refl
-matchIntegralType TypeInt64{}  TypeInt64{}  = Just Refl
-matchIntegralType TypeWord{}   TypeWord{}   = Just Refl
-matchIntegralType TypeWord8{}  TypeWord8{}  = Just Refl
-matchIntegralType TypeWord16{} TypeWord16{} = Just Refl
-matchIntegralType TypeWord32{} TypeWord32{} = Just Refl
-matchIntegralType TypeWord64{} TypeWord64{} = Just Refl
+matchIntegralType TypeInt    TypeInt    = Just Refl
+matchIntegralType TypeInt8   TypeInt8   = Just Refl
+matchIntegralType TypeInt16  TypeInt16  = Just Refl
+matchIntegralType TypeInt32  TypeInt32  = Just Refl
+matchIntegralType TypeInt64  TypeInt64  = Just Refl
+matchIntegralType TypeWord   TypeWord   = Just Refl
+matchIntegralType TypeWord8  TypeWord8  = Just Refl
+matchIntegralType TypeWord16 TypeWord16 = Just Refl
+matchIntegralType TypeWord32 TypeWord32 = Just Refl
+matchIntegralType TypeWord64 TypeWord64 = Just Refl
 matchIntegralType _            _            = Nothing
 
 {-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
-matchFloatingType TypeHalf{}   TypeHalf{}   = Just Refl
-matchFloatingType TypeFloat{}  TypeFloat{}  = Just Refl
-matchFloatingType TypeDouble{} TypeDouble{} = Just Refl
+matchFloatingType TypeHalf   TypeHalf   = Just Refl
+matchFloatingType TypeFloat  TypeFloat  = Just Refl
+matchFloatingType TypeDouble TypeDouble = Just Refl
 matchFloatingType _            _            = Nothing
-
-{-# INLINEABLE matchNonNumType #-}
-matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :~: t)
-matchNonNumType TypeBool{} TypeBool{} = Just Refl
-matchNonNumType TypeChar{} TypeChar{} = Just Refl
-matchNonNumType _          _          = Nothing
 
 
 -- Auxiliary

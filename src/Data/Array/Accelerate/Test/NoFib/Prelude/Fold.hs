@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Fold
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -25,7 +25,8 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Fold (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -55,19 +56,19 @@ test_fold runN =
     ]
   where
     testElt
-        :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+        :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a, Show a)
         => Gen a
         -> Gen a
         -> TestTree
     testElt e small =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -96,18 +97,18 @@ test_foldSeg runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a)
+    testElt :: forall a. (P.Num a, P.Ord a , A.Num a, A.Ord a , Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -124,7 +125,7 @@ scalar :: Elt e => e -> Scalar e
 scalar x = fromFunction Z (const x)
 
 test_sum
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -138,7 +139,7 @@ test_sum runN dim z e =
     let !go = runN (\v -> A.fold (+) (the v)) in go (scalar x) xs ~~~ foldRef (+) x xs
 
 test_mss
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -150,7 +151,7 @@ test_mss runN dim e =
     let !go = runN maximumSegmentSum in go xs ~~~ maximumSegmentSumRef xs
 
 test_minimum
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -162,7 +163,7 @@ test_minimum runN dim e =
     let !go = runN A.minimum in go xs ~~~ fold1Ref P.min xs
 
 test_maximum
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -174,7 +175,7 @@ test_maximum runN dim e =
     let !go = runN A.maximum in go xs ~~~ fold1Ref P.max xs
 
 test_segmented_sum
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -191,7 +192,7 @@ test_segmented_sum runN dim z e =
     let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
 
 test_segmented_minimum
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -206,7 +207,7 @@ test_segmented_minimum runN dim e =
     let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
 
 test_segmented_maximum
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e

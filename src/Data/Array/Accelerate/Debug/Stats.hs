@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Simpl
--- Copyright   : [2008..2019] The Accelerate Team
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -18,7 +18,7 @@
 module Data.Array.Accelerate.Debug.Stats (
 
   simplCount, resetSimplCount, dumpSimplStats,
-  inline, ruleFired, knownBranch, betaReduce, substitution, simplifierDone, fusionDone,
+  inline, ruleFired, knownBranch, caseElim, caseDefault, betaReduce, substitution, simplifierDone, fusionDone,
 
 ) where
 
@@ -42,10 +42,12 @@ import qualified Data.Text.Prettyprint.Doc                as Pretty
 -- Recording statistics
 -- --------------------
 
-ruleFired, inline, knownBranch, betaReduce, substitution :: Text -> a -> a
+ruleFired, inline, knownBranch, caseElim, caseDefault, betaReduce, substitution :: Text -> a -> a
 inline          = annotate Inline
 ruleFired       = annotate RuleFired
 knownBranch     = annotate KnownBranch
+caseElim        = annotate CaseElim
+caseDefault     = annotate CaseDefault
 betaReduce      = annotate BetaReduce
 substitution    = annotate Substitution
 
@@ -166,6 +168,8 @@ data Tick
   = Inline              Id
   | RuleFired           Id
   | KnownBranch         Id
+  | CaseElim            Id
+  | CaseDefault         Id
   | BetaReduce          Id
   | Substitution        Id
 
@@ -202,8 +206,10 @@ tickToTag :: Tick -> Int
 tickToTag Inline{}              = 0
 tickToTag RuleFired{}           = 1
 tickToTag KnownBranch{}         = 2
-tickToTag BetaReduce{}          = 3
-tickToTag Substitution{}        = 4
+tickToTag CaseElim{}            = 3
+tickToTag CaseDefault{}         = 4
+tickToTag BetaReduce{}          = 5
+tickToTag Substitution{}        = 6
 tickToTag SimplifierDone        = 99
 tickToTag FusionDone            = 100
 
@@ -211,6 +217,8 @@ tickToStr :: Tick -> Doc
 tickToStr Inline{}              = "Inline"
 tickToStr RuleFired{}           = "RuleFired"
 tickToStr KnownBranch{}         = "KnownBranch"
+tickToStr CaseElim{}            = "CaseElim"
+tickToStr CaseDefault{}         = "CaseDefault"
 tickToStr BetaReduce{}          = "BetaReduce"
 tickToStr Substitution{}        = "Substitution"
 tickToStr SimplifierDone        = "SimplifierDone"
@@ -220,6 +228,8 @@ pprTickCtx :: Tick -> Doc
 pprTickCtx (Inline v)           = pprId v
 pprTickCtx (RuleFired v)        = pprId v
 pprTickCtx (KnownBranch v)      = pprId v
+pprTickCtx (CaseElim v)         = pprId v
+pprTickCtx (CaseDefault v)      = pprId v
 pprTickCtx (BetaReduce v)       = pprId v
 pprTickCtx (Substitution v)     = pprId v
 pprTickCtx SimplifierDone       = mempty

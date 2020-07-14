@@ -1,7 +1,7 @@
 Name:                   accelerate
 Version:                1.4.0.0
 Cabal-version:          >= 1.18
-Tested-with:            GHC >= 8.2
+Tested-with:            GHC >= 8.6
 Build-type:             Custom
 
 Synopsis:               An embedded language for accelerated array processing
@@ -268,7 +268,7 @@ Flag nofib
 
 Library
   Build-depends:
-          base                          >= 4.10 && < 4.14
+          base                          >= 4.12 && < 4.15
         , ansi-terminal                 >= 0.6.2
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2
@@ -315,26 +315,43 @@ Library
 
         -- For backend development (hidden)
         Data.Array.Accelerate.AST
+        Data.Array.Accelerate.AST.Environment
+        Data.Array.Accelerate.AST.Idx
+        Data.Array.Accelerate.AST.LeftHandSide
+        Data.Array.Accelerate.AST.Var
         Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
-        Data.Array.Accelerate.Analysis.Shape
-        Data.Array.Accelerate.Analysis.Stencil
-        Data.Array.Accelerate.Analysis.Type
         Data.Array.Accelerate.Array.Data
         Data.Array.Accelerate.Array.Remote
         Data.Array.Accelerate.Array.Remote.Class
         Data.Array.Accelerate.Array.Remote.LRU
         Data.Array.Accelerate.Array.Remote.Table
-        Data.Array.Accelerate.Array.Representation
-        Data.Array.Accelerate.Array.Sugar
         Data.Array.Accelerate.Array.Unique
         Data.Array.Accelerate.Async
         Data.Array.Accelerate.Debug
         Data.Array.Accelerate.Error
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
+        Data.Array.Accelerate.Representation.Array
+        Data.Array.Accelerate.Representation.Elt
+        Data.Array.Accelerate.Representation.Shape
+        Data.Array.Accelerate.Representation.Slice
+        Data.Array.Accelerate.Representation.Stencil
+        Data.Array.Accelerate.Representation.Tag
+        Data.Array.Accelerate.Representation.Type
+        Data.Array.Accelerate.Representation.Vec
         Data.Array.Accelerate.Smart
+        Data.Array.Accelerate.Sugar.Array
+        Data.Array.Accelerate.Sugar.Elt
+        Data.Array.Accelerate.Sugar.Foreign
+        Data.Array.Accelerate.Sugar.Shape
+        Data.Array.Accelerate.Sugar.Vec
         Data.Array.Accelerate.Trafo
+        Data.Array.Accelerate.Trafo.Config
+        Data.Array.Accelerate.Trafo.Delayed
+        Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.Sharing
+        Data.Array.Accelerate.Trafo.Substitution
         Data.Array.Accelerate.Type
 
         -- For testing
@@ -343,6 +360,7 @@ Library
 
         -- Other
         Data.BitSet
+        Data.Primitive.Vec
 
   Other-modules:
         Data.Array.Accelerate.Analysis.Hash.TH
@@ -362,6 +380,7 @@ Library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
+        Data.Array.Accelerate.Debug.Clock
         Data.Array.Accelerate.Debug.Flags
         Data.Array.Accelerate.Debug.Monitoring
         Data.Array.Accelerate.Debug.Stats
@@ -371,20 +390,22 @@ Library
         Data.Array.Accelerate.Lift
         Data.Array.Accelerate.Orphans
         Data.Array.Accelerate.Pattern
+        Data.Array.Accelerate.Pattern.Bool
+        Data.Array.Accelerate.Pattern.Either
+        Data.Array.Accelerate.Pattern.Maybe
+        Data.Array.Accelerate.Pattern.Ordering
+        Data.Array.Accelerate.Pattern.TH
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz
         Data.Array.Accelerate.Pretty.Graphviz.Monad
         Data.Array.Accelerate.Pretty.Graphviz.Type
         Data.Array.Accelerate.Pretty.Print
         Data.Array.Accelerate.Trafo.Algebra
-        Data.Array.Accelerate.Trafo.Base
-        Data.Array.Accelerate.Trafo.Config
-        Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.Environment
         Data.Array.Accelerate.Trafo.LetSplit
-        Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
-        Data.Array.Accelerate.Trafo.Substitution
+        Data.Array.Accelerate.Trafo.Var
         Data.Atomic
 
         -- Data.Array.Accelerate.Array.Lifted
@@ -462,26 +483,12 @@ Library
   hs-source-dirs:
         src
 
-  c-sources:
-        cbits/atomic.c
-        cbits/clock.c
-
   if flag(debug) || flag(ekg)
     ghc-options:
         -optc-DACCELERATE_DEBUG
 
     cpp-options:
         -DACCELERATE_DEBUG
-
-    -- Weird handling of C files because Cabal is not recompile C files on
-    -- changes to cc-options: <https://github.com/haskell/cabal/issues/4937>
-    c-sources:
-        cbits/flags_debug.c
-        cbits/monitoring_debug.c
-  else
-    c-sources:
-        cbits/flags.c
-        cbits/monitoring.c
 
   if flag(ekg)
     cpp-options:

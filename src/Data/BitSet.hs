@@ -1,10 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP          #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.BitSet
--- Copyright   : [2019] The Accelerate Team
+-- Copyright   : [2019..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -17,9 +16,6 @@ module Data.BitSet where
 import Data.Bits
 import Prelude                                            hiding ( foldl, foldr )
 import qualified Data.List                                as List
-#if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
-#endif
 
 import GHC.Exts                                           ( IsList, build )
 import qualified GHC.Exts                                 as Exts
@@ -41,9 +37,6 @@ instance (Enum a, Bits c) => Semigroup (BitSet c a) where
 
 instance (Enum a, Bits c, Num c) => Monoid (BitSet c a) where
   mempty = empty
-#if __GLASGOW_HASKELL__ < 804
-  mappend = (<>)
-#endif
 
 instance (Enum a, Bits c, Num c) => IsList (BitSet c a) where
   type Item (BitSet c a) = a

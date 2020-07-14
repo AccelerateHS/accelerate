@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -8,7 +7,7 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue364
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -26,12 +25,10 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue364 (
 
 import Prelude                                            ( fromInteger, show )
 import qualified Prelude                                  as P
-#if __GLASGOW_HASKELL__ == 800
-import Prelude                                            ( fail )
-#endif
 
 import Data.Array.Accelerate                              hiding ( fromInteger )
-import Data.Array.Accelerate.Array.Sugar                  as Sugar
+import Data.Array.Accelerate.Sugar.Elt                    as S
+import Data.Array.Accelerate.Sugar.Shape                  as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 
@@ -53,11 +50,11 @@ test_issue364 runN =
     , at @TestDouble $ testElt f64
     ]
     where
-      testElt :: forall e. (Num e, Eq e, P.Num e, P.Enum e, P.Eq e)
+      testElt :: forall e. (Show e, Num e, Eq e, P.Num e, P.Enum e, P.Eq e)
               => Gen e
               -> TestTree
       testElt _ =
-        testGroup (show (eltType @e))
+        testGroup (show (eltR @e))
           [ testCase "A" $ expectedArray @_ @e Z 64 @=? runN (scanl iappend one) (intervalArray Z 64)
           , testCase "B" $ expectedArray @_ @e Z 65 @=? runN (scanl iappend one) (intervalArray Z 65) -- failed for integral types
           ]
@@ -89,7 +86,7 @@ intervalArray :: (Shape sh, Elt e, P.Num e, P.Enum e)
 intervalArray sh n
   = fromList (sh:.n)
   . P.concat
-  $ P.replicate (Sugar.size sh) [ (i,i) | i <- [0.. (P.fromIntegral n-1)] ]
+  $ P.replicate (S.size sh) [ (i,i) | i <- [0.. (P.fromIntegral n-1)] ]
 
 expectedArray :: (Shape sh, Elt e, P.Num e, P.Enum e)
     => sh
@@ -98,5 +95,5 @@ expectedArray :: (Shape sh, Elt e, P.Num e, P.Enum e)
 expectedArray sh n
   = fromList (sh:.n+1)
   $ P.concat
-  $ P.replicate (Sugar.size sh) $ (-1,-1) : [ (0,i) | i <- [0 .. P.fromIntegral n - 1] ]
+  $ P.replicate (S.size sh) $ (-1,-1) : [ (0,i) | i <- [0 .. P.fromIntegral n - 1] ]
 

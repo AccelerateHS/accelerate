@@ -15,7 +15,7 @@
 #endif
 -- |
 -- Module      : Data.Array.Accelerate.Data.Semigroup
--- Copyright   : [2018..2019] The Accelerate Team
+-- Copyright   : [2018..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -36,7 +36,6 @@ module Data.Array.Accelerate.Data.Semigroup (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Classes.Bounded
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Num
@@ -44,6 +43,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 
 import Data.Function
 import Data.Monoid                                                  ( Monoid(..) )

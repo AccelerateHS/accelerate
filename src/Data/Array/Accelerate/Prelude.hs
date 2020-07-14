@@ -3,6 +3,7 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -14,7 +15,7 @@
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}   -- pattern synonyms
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -64,7 +65,7 @@ module Data.Array.Accelerate.Prelude (
 
   -- * Working with predicates
   -- ** Filtering
-  filter,
+  filter, compact,
 
   -- ** Scatter / Gather
   scatter, scatterIf,
@@ -88,7 +89,7 @@ module Data.Array.Accelerate.Prelude (
   (?|),
 
   -- ** Expression-level
-  (?), caseof,
+  (?), match,
 
   -- * Scalar iteration
   iterate,
@@ -117,22 +118,15 @@ module Data.Array.Accelerate.Prelude (
 
 ) where
 
--- avoid clashes with Prelude functions
---
-import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
-import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
-#if __GLASGOW_HASKELL__ == 800
-import Prelude                                                      ( fail )
-#endif
-
--- friends
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), ignore, shape, reshape, size, intersect, toIndex, fromIndex )
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Maybe
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            ( Arrays, Array, Scalar, Vector, Segments,  fromList )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.)(..), All(..), DIM1, DIM2, empty )
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -142,6 +136,12 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Bits
+
+import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
+
+import GHC.Base                                                     ( Constraint )
+
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
@@ -707,7 +707,7 @@ fold1All f arr = fold1 f (flatten arr)
 --     40, 170, 0, 138]
 --
 foldSeg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltRepr i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
     => (Exp e -> Exp e -> Exp e)
     -> Exp e
     -> Acc (Array (sh:.Int) e)
@@ -734,7 +734,7 @@ foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
 -- descriptor species the length of each of the logical sub-arrays.
 --
 fold1Seg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltRepr i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
     => (Exp e -> Exp e -> Exp e)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
@@ -744,7 +744,7 @@ fold1Seg f arr seg = fold1Seg' f arr (scanl plus zero seg)
     plus :: Exp i -> Exp i -> Exp i
     zero :: Exp i
     (plus, zero) =
-      case integralType @(EltRepr i) of
+      case integralType @(EltR i) of
         TypeInt{}    -> ((+), 0)
         TypeInt8{}   -> ((+), 0)
         TypeInt16{}  -> ((+), 0)
@@ -999,7 +999,7 @@ scanlSeg f z arr seg =
     seg'      = map (+1) seg
     arr'      = permute const
                         (fill (sh ::. sz + length seg) z)
-                        (\(sx ::. i) -> sx ::. i + fromIntegral (inc ! I1 i))
+                        (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc ! I1 i)))
                         (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
@@ -1092,7 +1092,7 @@ scanl'Seg f z arr seg =
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
                 $ permute (+) (fill (I1 $ size arr + 1) 0)
-                              (\ix -> index1' $ offset ! ix)
+                              (\ix -> Just_ (index1' (offset ! ix)))
                               (fill (shape seg) (1 :: Exp i))
 
     len         = offset ! I1 (length offset - 1)
@@ -1220,7 +1220,7 @@ scanrSeg f z arr seg =
     seg'        = map (+1) seg
     arr'        = permute const
                           (fill (sh ::. sz + length seg) z)
-                          (\(sx ::. i) -> sx ::. i + fromIntegral (inc !! i) - 1)
+                          (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc !! i) - 1))
                           (drop (sz - length flags) arr)
 
 
@@ -1366,7 +1366,7 @@ mkHeadFlags
     -> Acc (Segments i)
 mkHeadFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1' (offset ! ix)) ones
+  $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
   where
     T2 offset len = scanl' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1381,7 +1381,7 @@ mkTailFlags
     -> Acc (Segments i)
 mkTailFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1' (the len - 1 - offset ! ix)) ones
+  $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
   where
     T2 offset len = scanr' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1633,18 +1633,34 @@ concatOn dim xs ys =
 -- >>> run $ filter odd (use mat)
 -- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19],Vector (Z :. 4) [5,5,0,10])
 --
-filter :: forall sh e. (Shape sh, Elt e)
+filter :: (Shape sh, Elt e)
        => (Exp e -> Exp Bool)
        -> Acc (Array (sh:.Int) e)
        -> Acc (Vector e, Array sh Int)
-filter p arr
+filter p arr = compact (map p arr) arr
+{-# NOINLINE filter #-}
+{-# RULES
+  "ACC filter/filter" forall f g arr.
+    filter f (afst (filter g arr)) = filter (\x -> g x && f x) arr
+ #-}
+
+
+-- | As 'filter', but with separate arrays for the data elements and the
+-- flags indicating which elements of that array should be kept.
+--
+compact :: forall sh e. (Shape sh, Elt e)
+        => Acc (Array (sh:.Int) Bool)
+        -> Acc (Array (sh:.Int) e)
+        -> Acc (Vector e, Array sh Int)
+compact keep arr
   -- Optimise 1-dimensional arrays, where we can avoid additional computations
   -- for the offset indices.
   | Just Refl <- matchShapeType @sh @Z
   = let
-        keep            = map p arr
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
-        prj ix          = keep!ix ? ( I1 (target!ix), ignore )
+        prj ix          = if keep!ix
+                             then Just_ (I1 (target!ix))
+                             else Nothing_
         dummy           = fill (I1 (the len)) undef
         result          = permute const dummy prj arr
     in
@@ -1652,27 +1668,20 @@ filter p arr
       then T2 emptyArray (fill Z_ 0)
       else T2 result len
 
-filter p arr
+compact keep arr
   = let
         sz              = indexTail (shape arr)
-        keep            = map p arr
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
-                            then I1 $ offset !! (toIndex sz (indexTail ix)) + target!ix
-                            else ignore
+                            then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
+                            else Nothing_
         dummy           = fill (I1 (the valid)) undef
         result          = permute const dummy prj arr
     in
     if null arr
       then T2 emptyArray (fill sz 0)
       else T2 result len
-
-{-# NOINLINE filter #-}
-{-# RULES
-  "ACC filter/filter" forall f g arr.
-    filter f (afst (filter g arr)) = filter (\x -> g x && f x) arr
- #-}
 
 
 -- Gather operations
@@ -1747,7 +1756,7 @@ scatter
     -> Acc (Vector e)
 scatter to defaults input = permute const defaults pf input'
   where
-    pf ix   = I1 (to ! ix)
+    pf ix   = Just_ (I1 (to ! ix))
     input'  = backpermute (shape to `intersect` shape input) id input
 
 
@@ -1774,8 +1783,10 @@ scatterIf
     -> Acc (Vector b)
 scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
-    pf ix   = pred (maskV ! ix) ? ( I1 (to ! ix), ignore )
     input'  = backpermute (shape to `intersect` shape input) id input
+    pf ix   = if pred (maskV ! ix)
+                 then Just_ (I1 (to ! ix))
+                 else Nothing_
 
 
 -- Permutations
@@ -2185,17 +2196,6 @@ infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
 
--- | A case-like control structure
---
-caseof :: (Elt a, Elt b)
-       => Exp a                         -- ^ case subject
-       -> [(Exp a -> Exp Bool, Exp b)]  -- ^ list of cases to attempt
-       -> Exp b                         -- ^ default value
-       -> Exp b
-caseof _ []        e = e
-caseof x ((p,b):l) e = cond (p x) b (caseof x l e)
-
-
 -- | For use with @-XRebindableSyntax@, this class provides 'ifThenElse' lifted
 -- to both scalar and array types.
 --
@@ -2210,6 +2210,98 @@ instance IfThenElse Exp where
 instance IfThenElse Acc where
   type EltT Acc a = Arrays a
   ifThenElse = acond
+
+
+-- | The 'match' operation is the core operation which enables embedded
+-- pattern matching. It is applied to an n-ary scalar function, and
+-- generates the necessary case-statements in the embedded code for each
+-- argument. For example, given the function:
+--
+-- > example1 :: Exp (Maybe Bool) -> Exp Int
+-- > example1 Nothing_ = 0
+-- > example1 (Just_ False_) = 1
+-- > example1 (Just_ True_) = 2
+--
+-- In order to use this function it must be applied to the 'match'
+-- operator:
+--
+-- > match example1
+--
+-- Using the infix-flip operator ('Data.Function.&'), we can also write
+-- case statements inline. For example, instead of this:
+--
+-- > example2 x = case f x of
+-- >   Nothing_ -> ...      -- error: embedded pattern synonym...
+-- >   Just_ y  -> ...      -- ...used outside of 'match' context
+--
+-- This can be written instead as:
+--
+-- > example3 x = f x & match \case
+-- >   Nothing_ -> ...
+-- >   Just_ y  -> ...
+--
+-- And utilising the @LambdaCase@ and @BlockArguments@ syntactic extensions.
+--
+-- The Template Haskell splice 'Data.Array.Accelerate.mkPattern' (or
+-- 'Data.Array.Accelerate.mkPatterns') can be used to generate the pattern
+-- synonyms for a given Haskell'98 sum or product data type. For example:
+--
+-- > data Option a = None | Some a
+-- >   deriving (Generic, Elt)
+-- >
+-- > mkPattern ''Option
+--
+-- Which can then be used such as:
+--
+-- > isNone :: Elt a => Exp (Option a) -> Exp Bool
+-- > isNone = match \case
+-- >   None_   -> True_
+-- >   Some_{} -> False_
+--
+-- @since 1.4.0.0
+--
+match :: Matching f => f -> f
+match f = mkFun (mkMatch f) id
+
+data Args f where
+  (:->)  :: Exp a -> Args b -> Args (Exp a -> b)
+  Result :: Args (Exp a)
+
+class Matching a where
+  type ResultT a
+  mkMatch :: a -> Args a -> Exp (ResultT a)
+  mkFun   :: (Args f -> Exp (ResultT a))
+          -> (Args a -> Args f)
+          -> a
+
+instance Elt a => Matching (Exp a) where
+  type ResultT (Exp a) = a
+
+  mkFun f k = f (k Result)
+  mkMatch (Exp e) Result =
+    case e of
+      SmartExp (Match _ x) -> Exp x
+      _                    -> Exp e
+
+instance (Elt e, Matching r) => Matching (Exp e -> r) where
+  type ResultT (Exp e -> r) = ResultT r
+
+  mkFun f k x = mkFun f (\xs -> k (x :-> xs))
+  mkMatch f (x@(Exp p) :-> xs) =
+    case p of
+      -- This first case is used when we have nested calls to 'match'
+      SmartExp Match{} -> mkMatch (f x) xs
+
+      -- If there is only a single alternative, we can elide the case
+      -- statement at this point. This can occur when pattern matching on
+      -- product types.
+      _ -> case rhs of
+             [(_,r)] -> Exp r
+             _       -> Exp (SmartExp (Case p rhs))
+    where
+      rhs = [ (tag, unExp (mkMatch (f x') xs))
+            | tag <- tagsR @e
+            , let x' = Exp (SmartExp (Match tag p)) ]
 
 
 -- Scalar iteration
@@ -2397,7 +2489,7 @@ length = unindex1 . shape
 --                       new =
 --                         let m     = c2-c1
 --                             put i = let s = sieves ! i
---                                      in s >= 0 && s < m ? (I1 s, ignore)
+--                                      in s >= 0 && s < m ? (Just_ (I1 s), Nothing_)
 --                         in
 --                         afst
 --                           $ filter (> 0)
@@ -2431,7 +2523,7 @@ expand f g xs =
 
           m             = the len
           n             = m + 1
-          put ix        = I1 (offset ! ix)
+          put ix        = Just_ (I1 (offset ! ix))
 
           head_flags    :: Acc (Vector Int)
           head_flags    = permute const (fill (I1 n) 0) put (fill (shape szs) 1)

@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.SMVM (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -45,14 +45,14 @@ test_smvm runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testProperty (show (eltType @a)) $ test_smvm' runN e
+      testProperty (show (eltR @a)) $ test_smvm' runN e
 
 
-test_smvm' :: (A.Num e, P.Num e, Similar e) => RunN -> Gen e -> Property
+test_smvm' :: (A.Num e, P.Num e, Similar e, Show e) => RunN -> Gen e -> Property
 test_smvm' runN e =
   property $ do
     (smat, cols) <- forAll (sparseMatrix e)
@@ -66,7 +66,7 @@ sparseMatrix e = do
   rows  <- Gen.int (Range.linear 1 256)
   cols  <- Gen.int (Range.linear 1 256)
   seg   <- array (Z:.rows) (Gen.int (Range.linear 0 cols))
-  let nnz = P.sum (S.toList seg)
+  let nnz = P.sum (toList seg)
   smat  <- array (Z:.nnz) ((,) <$> Gen.int (Range.linear 0 (cols-1)) <*> e)
   return ((seg,smat), cols)
 
@@ -86,7 +86,7 @@ smvm smat vec
 
 smvmRef :: (Elt a, P.Num a) => SparseMatrix a -> Vector a -> Vector a
 smvmRef (segd, smat) vec =
-  fromList (S.shape segd)
+  fromList (arrayShape segd)
            [ P.sum [ val * indexArray vec (Z :. i) | (i,val) <- row ]
                    | row <- splitPlaces (toList segd) (toList smat) ]
 

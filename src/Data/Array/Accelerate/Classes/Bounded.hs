@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Bounded
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -22,12 +22,12 @@ module Data.Array.Accelerate.Classes.Bounded (
 ) where
 
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( ($), (<$>), Num(..), show, concat, map, mapM )
+import Prelude                                                      ( ($), (<$>), Num(..), Char, Bool, show, concat, map, mapM )
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
@@ -116,8 +116,8 @@ instance P.Bounded (Exp CULLong) where
   maxBound = mkBitcast (mkMaxBound @Word64)
 
 instance P.Bounded (Exp Bool) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = constant P.minBound
+  maxBound = constant P.maxBound
 
 instance P.Bounded (Exp Char) where
   minBound = mkMinBound

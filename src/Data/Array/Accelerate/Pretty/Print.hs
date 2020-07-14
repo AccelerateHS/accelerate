@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
@@ -12,7 +11,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Print
--- Copyright   : [2008..2019] The Accelerate Team
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -51,16 +50,24 @@ module Data.Array.Accelerate.Pretty.Print (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    hiding ( Direction )
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Elt
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Sugar.Foreign
+import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.AST                          as AST
+
 import Data.Char
 import Data.String
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import Prelude                                                      hiding ( exp )
-
-import Data.Array.Accelerate.AST                                    hiding ( Val(..), prj )
-import Data.Array.Accelerate.Array.Sugar                            ( strForeign )
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Type
 
 
 -- Implementation
@@ -81,6 +88,10 @@ data Keyword
 let_, in_ :: Adoc
 let_ = annotate Statement "let"
 in_  = annotate Statement "in"
+
+case_, of_ :: Adoc
+case_ = annotate Statement "case"
+of_   = annotate Statement "of"
 
 if_, then_, else_ :: Adoc
 if_   = annotate Statement "if"
@@ -149,32 +160,29 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
                       , hang shiftwidth (sep [ then_, t' ])
                       , hang shiftwidth (sep [ else_, e' ]) ]
 
-    Aforeign _ ff _ a        -> "aforeign"     .$ [ pretty (strForeign ff), ppA a ]
-    Awhile p f a             -> "awhile"       .$ [ ppAF p, ppAF f, ppA a ]
-    Use repr arr             -> "use"          .$ [ prettyArray repr arr ]
-    Unit _ e                 -> "unit"         .$ [ ppE e ]
-    Reshape _ sh a           -> "reshape"      .$ [ ppE sh, ppA a ]
-    Generate _ sh f          -> "generate"     .$ [ ppE sh, ppF f ]
-    Transform _ sh p f a     -> "transform"    .$ [ ppE sh, ppF p, ppF f, ppA a ]
-    Replicate _ ix a         -> "replicate"    .$ [ ppE ix, ppA a ]
-    Slice _ a ix             -> "slice"        .$ [ ppE ix, ppA a ]
-    Map _ f a                -> "map"          .$ [ ppF f,  ppA a ]
-    ZipWith _ f a b          -> "zipWith"      .$ [ ppF f,  ppA a, ppA b ]
-    Fold f (Just z) a        -> "fold"         .$ [ ppF f,  ppE z, ppA a ]
-    Fold f Nothing  a        -> "fold1"        .$ [ ppF f,  ppA a ]
-    FoldSeg _ f (Just z) a s -> "foldSeg"      .$ [ ppF f,  ppE z, ppA a, ppA s ]
-    FoldSeg _ f Nothing  a s -> "fold1Seg"     .$ [ ppF f,  ppA a, ppA s ]
-    Scan d f (Just z) a      -> fromString ("scan" ++ show d)
-                                               .$ [ ppF f,  ppE z, ppA a ]
-    Scan d f Nothing  a      -> fromString ("scan" ++ show d ++ "1")
-                                               .$ [ ppF f,  ppA a ]
-    Scan' d f z a            -> fromString ("scan" ++ show d ++ "'")
-                                               .$ [ ppF f,  ppE z, ppA a ]
-    Permute f d p s          -> "permute"      .$ [ ppF f,  ppA d, ppF p, ppA s ]
-    Backpermute _ sh f a     -> "backpermute"  .$ [ ppE sh, ppF f, ppA a ]
-    Stencil s _ f b a        -> "stencil"      .$ [ ppF f,  ppB (stencilElt s) b, ppA a ]
+    Aforeign _ ff _ a        -> "aforeign"       .$ [ pretty (strForeign ff), ppA a ]
+    Awhile p f a             -> "awhile"         .$ [ ppAF p, ppAF f, ppA a ]
+    Use repr arr             -> "use"            .$ [ prettyArray repr arr ]
+    Unit _ e                 -> "unit"           .$ [ ppE e ]
+    Reshape _ sh a           -> "reshape"        .$ [ ppE sh, ppA a ]
+    Generate _ sh f          -> "generate"       .$ [ ppE sh, ppF f ]
+    Transform _ sh p f a     -> "transform"      .$ [ ppE sh, ppF p, ppF f, ppA a ]
+    Replicate _ ix a         -> "replicate"      .$ [ ppE ix, ppA a ]
+    Slice _ a ix             -> "slice"          .$ [ ppE ix, ppA a ]
+    Map _ f a                -> "map"            .$ [ ppF f,  ppA a ]
+    ZipWith _ f a b          -> "zipWith"        .$ [ ppF f,  ppA a, ppA b ]
+    Fold f (Just z) a        -> "fold"           .$ [ ppF f,  ppE z, ppA a ]
+    Fold f Nothing  a        -> "fold1"          .$ [ ppF f,  ppA a ]
+    FoldSeg _ f (Just z) a s -> "foldSeg"        .$ [ ppF f,  ppE z, ppA a, ppA s ]
+    FoldSeg _ f Nothing  a s -> "fold1Seg"       .$ [ ppF f,  ppA a, ppA s ]
+    Scan d f (Just z) a      -> ppD "scan" d ""  .$ [ ppF f,  ppE z, ppA a ]
+    Scan d f Nothing  a      -> ppD "scan" d "1" .$ [ ppF f,  ppA a ]
+    Scan' d f z a            -> ppD "scan" d "'" .$ [ ppF f,  ppE z, ppA a ]
+    Permute f d p s          -> "permute"        .$ [ ppF f,  ppA d, ppF p, ppA s ]
+    Backpermute _ sh f a     -> "backpermute"    .$ [ ppE sh, ppF f, ppA a ]
+    Stencil s _ f b a        -> "stencil"        .$ [ ppF f,  ppB (stencilEltR s) b, ppA a ]
     Stencil2 s1 s2 _ f b1 a1 b2 a2
-                             -> "stencil2"     .$ [ ppF f,  ppB (stencilElt s1) b1, ppA a1, ppB (stencilElt s2) b2, ppA a2 ]
+                             -> "stencil2"       .$ [ ppF f,  ppB (stencilEltR s1) b1, ppA a1, ppB (stencilEltR s2) b2, ppA a2 ]
   where
     infixr 0 .$
     f .$ xs
@@ -194,7 +202,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     ppF = parens . prettyOpenFun Empty aenv
 
     ppB :: forall sh e.
-           TupleType e
+           TypeR e
         -> Boundary aenv (Array sh e)
         -> Adoc
     ppB _  Clamp        = "clamp"
@@ -202,6 +210,10 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     ppB _  Wrap         = "wrap"
     ppB tp (Constant e) = prettyConst tp e
     ppB _  (Function f) = ppF f
+
+    ppD :: String -> AST.Direction -> String -> Operator
+    ppD f AST.LeftToRight k = fromString (f <> "l" <> k)
+    ppD f AST.RightToLeft k = fromString (f <> "r" <> k)
 
 
 prettyAlet
@@ -289,9 +301,9 @@ prettyLhs requiresParens x env0 lhs = case collect lhs of
       _   -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> sep tup))
   where
     ppPair :: LeftHandSide s arrs' env env'' -> (Val env'', Adoc)
-    ppPair (LeftHandSideWildcard TupRunit) = (env0, "()")
-    ppPair (LeftHandSideWildcard _)        = (env0, "_")
-    ppPair (LeftHandSideSingle _)          = (env0 `Push` v, v)
+    ppPair LeftHandSideUnit       = (env0, "()")
+    ppPair LeftHandSideWildcard{} = (env0, "_")
+    ppPair LeftHandSideSingle{}   = (env0 `Push` v, v)
       where
         v = pretty x <> pretty (sizeEnv env0)
     ppPair (LeftHandSidePair a b)          = (env2, tupled [doc1, doc2])
@@ -307,11 +319,12 @@ prettyLhs requiresParens x env0 lhs = case collect lhs of
     collect _ = Nothing
 
 prettyArray :: ArrayR (Array sh e) -> Array sh e -> Adoc
-prettyArray repr = parens . fromString . showArray repr
+prettyArray aR@(ArrayR _ eR) = parens . fromString . showArray (showsElt eR) aR
 
 
 -- Scalar expressions
 -- ------------------
+
 prettyFun :: Val aenv -> Fun aenv f -> Adoc
 prettyFun = prettyOpenFun Empty
 
@@ -366,6 +379,7 @@ prettyOpenExp ctx env aenv exp =
     Nil                   -> "()"
     VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
     VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
+    Case x xs d           -> prettyCase env aenv x xs d
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0
@@ -424,7 +438,7 @@ prettyOpenExp ctx env aenv exp =
       $ sep [ opName op, x app, y app, z app ]
 
     withTypeRep :: ScalarType t -> Adoc -> Adoc
-    withTypeRep tp op = op <> enclose langle rangle (pretty (showScalarType tp))
+    withTypeRep t op = op <> enclose langle rangle (pretty (show t))
 
 prettyArrayVar
     :: forall aenv a.
@@ -500,6 +514,25 @@ prettyTuple ctx env aenv exp = case collect exp of
       | Just tup <- collect e1 = Just $ tup ++ [prettyOpenExp app env aenv e2]
     collect _                  = Nothing
 
+prettyCase
+    :: Val env
+    -> Val aenv
+    -> OpenExp env aenv a
+    -> [(TAG, OpenExp env aenv b)]
+    -> Maybe (OpenExp env aenv b)
+    -> Adoc
+prettyCase env aenv x xs def
+  = hang shiftwidth
+  $ vsep [ case_ <+> x' <+> of_
+         , flatAlt (vcat xs') (encloseSep "{ " " }" "; " xs')
+         ]
+  where
+    x'  = prettyOpenExp context0 env aenv x
+    xs' = map (\(t,e) -> pretty t <+> "->" <+> prettyOpenExp context0 env aenv e) xs
+       ++ case def of
+            Nothing -> []
+            Just d  -> ["_" <+> "->" <+> prettyOpenExp context0 env aenv d]
+
 {-
 
 prettyAtuple
@@ -525,9 +558,9 @@ prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
     collect _             = Nothing
 -}
 
-prettyConst :: TupleType e -> e -> Adoc
+prettyConst :: TypeR e -> e -> Adoc
 prettyConst tp x =
-  let y = showElement tp x
+  let y = showElt tp x
   in  parensIf (any isSpace y) (pretty y)
 
 prettyPrimConst :: PrimConst a -> Adoc
@@ -543,18 +576,18 @@ prettyPrimConst PrimPi{}       = "pi"
 -- associativity, and fixity of the primitive scalar operators.
 --
 
-data Dir = L | N | R
+data Direction = L | N | R
   deriving Eq
 
 data Fixity = App | Infix | Prefix
   deriving Eq
 
 type Precedence    = Int
-type Associativity = Dir
+type Associativity = Direction
 
 data Context = Context
   { ctxAssociativity  :: Associativity
-  , ctxPosition       :: Dir
+  , ctxPosition       :: Direction
   , ctxPrecedence     :: Precedence
   }
 
@@ -581,7 +614,7 @@ context0 = Context N N 0
 app :: Context
 app = Context L N 10
 
-arg :: Operator -> Dir -> Context
+arg :: Operator -> Direction -> Context
 arg Operator{..} side = Context opAssociativity side opPrecedence
 
 isPrefix :: Operator -> Bool
@@ -651,9 +684,6 @@ primOperator PrimMin{}                = Operator "min"                App    L 1
 primOperator PrimLAnd                 = Operator "&&"                 Infix  R 3
 primOperator PrimLOr                  = Operator "||"                 Infix  R 2
 primOperator PrimLNot                 = Operator "not"                App    L 10
-primOperator PrimOrd                  = Operator "ord"                App    L 10
-primOperator PrimChr                  = Operator "chr"                App    L 10
-primOperator PrimBoolToInt            = Operator "boolToInt"          App    L 10
 primOperator PrimFromIntegral{}       = Operator "fromIntegral"       App    L 10
 primOperator PrimToFloating{}         = Operator "toFloating"         App    L 10
 
@@ -685,9 +715,6 @@ sizeEnv (Push env _) = 1 + sizeEnv env
 prj :: Idx env t -> Val env -> Adoc
 prj ZeroIdx      (Push _ v)   = v
 prj (SuccIdx ix) (Push env _) = prj ix env
-#if __GLASGOW_HASKELL__ < 800
-prj _            _            = error "inconsistent valuation"
-#endif
 
 
 -- Utilities

@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeOperators     #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Fold
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -26,12 +26,19 @@ module Data.Array.Accelerate.Data.Fold (
 
 ) where
 
-import Data.Array.Accelerate                                        hiding ( fold, sum, product, length )
+import Data.Array.Accelerate.Classes.Floating                       as A
+import Data.Array.Accelerate.Classes.Fractional                     as A
+import Data.Array.Accelerate.Classes.Num                            as A
 import Data.Array.Accelerate.Data.Monoid
-import qualified Data.Array.Accelerate                              as A
+import Data.Array.Accelerate.Language                               as A
+import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Smart                                  ( Acc, Exp, constant )
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 
-import Control.Applicative                                          as P
 import Prelude                                                      hiding ( sum, product, length )
+import Control.Applicative                                          as P
 import qualified Prelude                                            as P
 
 

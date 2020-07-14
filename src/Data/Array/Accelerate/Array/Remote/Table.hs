@@ -8,7 +8,6 @@
 {-# LANGUAGE PatternGuards              #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE UnboxedTuples              #-}
@@ -16,7 +15,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Table
--- Copyright   : [2008..2019] The Accelerate Team
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -64,6 +63,8 @@ import Data.Array.Accelerate.Array.Remote.Nursery               ( Nursery(..) )
 import Data.Array.Accelerate.Lifetime
 import qualified Data.Array.Accelerate.Array.Remote.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
+
+import GHC.Stack
 
 
 -- We use an MVar to the hash table, so that several threads may safely access
@@ -119,14 +120,13 @@ new release = do
 
 -- | Look for the remote pointer corresponding to a given host-side array.
 --
-lookup :: forall m a.
-          RemoteMemory m
+lookup :: forall m a. (HasCallStack, RemoteMemory m)
        => MemoryTable (RemotePtr m)
        -> SingleType a
        -> ArrayData a
-       -> IO (Maybe (RemotePtr m (ScalarDataRepr a)))
+       -> IO (Maybe (RemotePtr m (ScalarArrayDataR a)))
 lookup (MemoryTable !ref _ _ _) !tp !arr
-  | (ScalarDict, _, _) <- singleDict tp = do
+  | SingleArrayDict <- singleArrayDict tp = do
     sa <- makeStableArray tp arr
     mw <- withMVar ref (`HT.lookup` sa)
     case mw of
@@ -149,7 +149,7 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
           -- above in the error message.
           --
           Nothing ->
-            makeStableArray tp arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
+            makeStableArray tp arr >>= \x -> internalError $ "dead weak pair: " ++ show x
 
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This may not always use the `malloc` provided by the `RemoteMemory` instance.
@@ -157,14 +157,16 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
 -- arrays will be re-used. In the event that the remote memory is exhausted,
 -- 'Nothing' is returned.
 --
-malloc :: forall a m. (RemoteMemory m, MonadIO m)
+malloc :: forall a m. (HasCallStack, RemoteMemory m, MonadIO m)
        => MemoryTable (RemotePtr m)
        -> SingleType a
        -> ArrayData a
        -> Int
-       -> m (Maybe (RemotePtr m (ScalarDataRepr a)))
+       -> m (Maybe (RemotePtr m (ScalarArrayDataR a)))
 malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
-  | (ScalarDict, _, _) <- singleDict tp = do
+  | SingleArrayDict <- singleArrayDict tp
+  , SingleDict      <- singleDict tp
+  = do
     -- Note: [Allocation sizes]
     --
     -- Instead of allocating the exact number of elements requested, we round up to
@@ -175,9 +177,9 @@ malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
     chunk <- remoteAllocationSize
     let -- next highest multiple of f from x
         multiple x f      = (x + (f-1)) `quot` f
-        bytes             = chunk * multiple (n * sizeOf (undefined::(ScalarDataRepr a))) chunk
+        bytes             = chunk * multiple (n * sizeOf (undefined::(ScalarArrayDataR a))) chunk
     --
-    message $ printf "malloc %d bytes (%d x %d bytes, type=%s, pagesize=%d)" bytes n (sizeOf (undefined:: (ScalarDataRepr a))) (show tp) chunk
+    message $ printf "malloc %d bytes (%d x %d bytes, type=%s, pagesize=%d)" bytes n (sizeOf (undefined:: (ScalarArrayDataR a))) (show tp) chunk
     --
     mp <-
       fmap (castRemotePtr @m)
@@ -261,10 +263,10 @@ insert
     => MemoryTable (RemotePtr m)
     -> SingleType a
     -> ArrayData a
-    -> RemotePtr m (ScalarDataRepr a)
+    -> RemotePtr m (ScalarArrayDataR a)
     -> Int
     -> m ()
-insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes | (ScalarDict, _, _) <- singleDict tp = do
+insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes | SingleArrayDict <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
   message $ "insert: " ++ show key
@@ -283,9 +285,9 @@ insertUnmanaged
     => MemoryTable (RemotePtr m)
     -> SingleType a
     -> ArrayData a
-    -> RemotePtr m (ScalarDataRepr a)
+    -> RemotePtr m (ScalarArrayDataR a)
     -> m ()
-insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr | (ScalarDict, _, _)  <- singleDict tp = do
+insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr | SingleArrayDict  <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ remoteFinalizer weak_ref key)
   message $ "insertUnmanaged: " ++ show key
@@ -358,7 +360,8 @@ makeStableArray
     -> ArrayData a
     -> m StableArray
 makeStableArray !tp !ad
-  | (ScalarDict, _, _) <- singleDict tp = return $! StableArray (uniqueArrayId ad)
+  | SingleArrayDict <- singleArrayDict tp
+  = return $! StableArray (uniqueArrayId ad)
 
 
 -- Weak arrays
@@ -374,7 +377,7 @@ makeWeakArrayData
     -> c
     -> Maybe (IO ())
     -> IO (Weak c)
-makeWeakArrayData !tp !ad !c !mf | (ScalarDict, _, _) <- singleDict tp = do
+makeWeakArrayData !tp !ad !c !mf | SingleArrayDict <- singleArrayDict tp = do
   let !uad = uniqueArrayData ad
   case mf of
     Nothing -> return ()

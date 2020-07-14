@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -23,13 +23,14 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort (
 ) where
 
 import Data.Function
-import Data.List
+import Data.List                                                    ( sortBy )
 import Prelude                                                      as P
 import qualified Data.Bits                                          as P
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Data.Bits                              as A
-import Data.Array.Accelerate.Array.Sugar                            as S ( shape, eltType )
+import Data.Array.Accelerate.Data.Maybe                             as A
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -57,18 +58,18 @@ test_radixsort runN =
     -- , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (Similar a, P.Ord a, Radix a)
+    testElt :: forall a. (Similar a, P.Ord a, Radix a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testProperty "ascending"    $ test_sort_ascending runN e
         , testProperty "descending"   $ test_sort_descending runN e
         , testProperty "key-value"    $ test_sort_keyval runN e f32
         ]
 
 test_sort_ascending
-    :: (P.Ord e, Radix e, Similar e)
+    :: (P.Ord e, Radix e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -79,7 +80,7 @@ test_sort_ascending runN e =
     let !go = runN radixsort in go xs ~~~ sortRef P.compare xs
 
 test_sort_descending
-    :: (P.Ord e, Radix e, Similar e)
+    :: (P.Ord e, Radix e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property
@@ -90,7 +91,7 @@ test_sort_descending runN e =
     let !go = runN (radixsortBy complement) in go xs ~~~ sortRef (flip P.compare) xs
 
 test_sort_keyval
-    :: (P.Ord k, Radix k, Similar k, Elt v, Similar v)
+    :: (P.Ord k, Radix k, Similar k, Show k, Elt v, Similar v, Show v)
     => RunN
     -> Gen k
     -> Gen v
@@ -176,12 +177,12 @@ radixsortBy rdx arr = foldr1 (>->) (P.map radixPass [0..p-1]) arr
                         iup     = A.map (size v - 1 -) . prescanr (+) 0 $ flags
                         index   = A.zipWith deal flags (A.zip idown iup)
                     in
-                    permute const v (\ix -> index1 (index!ix)) v
+                    permute const v (\ix -> Just_ (index1 (index!ix))) v
 
 
 -- This is rather slow. Speeding up the reference implementation by using, say,
 -- vector-algorithms, does not significantly change the runtime.
 --
 sortRef :: Elt a => (a -> a -> Ordering) -> Vector a -> Vector a
-sortRef cmp xs = fromList (S.shape xs) (sortBy cmp (toList xs))
+sortRef cmp xs = fromList (arrayShape xs) (sortBy cmp (toList xs))
 

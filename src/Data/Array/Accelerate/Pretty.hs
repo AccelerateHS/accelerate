@@ -10,7 +10,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty
--- Copyright   : [2008..2019] The Accelerate Team
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -34,7 +34,16 @@ module Data.Array.Accelerate.Pretty (
 
 ) where
 
--- libraries
+import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Pretty.Graphviz
+import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
+import Data.Array.Accelerate.Smart                                  ( Acc, Exp )
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Trafo
+import Data.Array.Accelerate.Trafo.Delayed
+
 import Data.Maybe
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.String
@@ -45,15 +54,6 @@ import System.IO.Unsafe
 import qualified Data.Text.Lazy                                     as T
 import qualified System.Console.ANSI                                as Term
 import qualified System.Console.Terminal.Size                       as Term
-
--- friends
-import Data.Array.Accelerate.Smart                                  ( Acc, Exp )
-import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp, Val(..) )
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
-import Data.Array.Accelerate.Trafo
-import Data.Array.Accelerate.Pretty.Graphviz
 
 #if ACCELERATE_DEBUG
 import Control.DeepSeq
@@ -149,7 +149,7 @@ extractOpenAcc :: OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
 extractOpenAcc (OpenAcc pacc) = pacc
 
 
-prettyDelayedOpenAcc :: PrettyAcc DelayedOpenAcc
+prettyDelayedOpenAcc :: HasCallStack => PrettyAcc DelayedOpenAcc
 prettyDelayedOpenAcc context aenv (Manifest pacc)
   = prettyPreOpenAcc context prettyDelayedOpenAcc extractDelayedOpenAcc aenv pacc
 prettyDelayedOpenAcc _       aenv (Delayed _ sh f _)
@@ -160,9 +160,9 @@ prettyDelayedOpenAcc _       aenv (Delayed _ sh f _)
         , parens $ prettyOpenFun     Empty aenv f
         ]
 
-extractDelayedOpenAcc :: DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
+extractDelayedOpenAcc :: HasCallStack => DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
 extractDelayedOpenAcc (Manifest pacc) = pacc
-extractDelayedOpenAcc Delayed{}       = $internalError "extractDelayedOpenAcc" "expected manifest array"
+extractDelayedOpenAcc Delayed{}       = internalError "expected manifest array"
 
 
 -- Debugging

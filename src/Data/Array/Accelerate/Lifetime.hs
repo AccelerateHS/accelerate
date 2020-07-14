@@ -1,11 +1,10 @@
-{-# LANGUAGE CPP           #-}
 {-# LANGUAGE MagicHash     #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UnboxedTuples #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Lifetime
--- Copyright   : [2015..2019] The Accelerate Team
+-- Copyright   : [2015..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -121,11 +120,7 @@ finalize (Lifetime ref _ _) = finalizer ref
 mkWeak :: Lifetime k -> v -> IO (Weak v)
 mkWeak (Lifetime ref@(IORef (STRef r#)) _ _) v = go (finalizer ref)
   where
-#if __GLASGOW_HASKELL__ >= 800
-    go (IO f)  =  -- GHC-8.x
-#else
-    go f       =  -- GHC-7.x
-#endif
+    go (IO f) =  -- GHC-8.x
       IO $ \s -> case mkWeak# r# v f s of
                    (# s', w# #) -> (# s', Weak w# #)
 

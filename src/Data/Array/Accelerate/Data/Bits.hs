@@ -7,7 +7,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Bits
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -25,9 +25,9 @@ module Data.Array.Accelerate.Data.Bits (
 ) where
 
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -183,7 +183,7 @@ instance Bits Bool where
   rotate x _   = x
   bit i        = i == 0
   isSigned     = isSignedDefault
-  popCount     = mkBoolToInt
+  popCount     = boolToInt
 
 instance Bits Int where
   (.&.)        = mkBAnd
@@ -681,42 +681,42 @@ instance FiniteBits CUChar where
 
 -- Default implementations
 -- -----------------------
-bitDefault :: (IsIntegral (EltRepr t), Bits t) => Exp Int -> Exp t
+bitDefault :: (IsIntegral (EltR t), Bits t) => Exp Int -> Exp t
 bitDefault x = constInt 1 `shiftL` x
 
-testBitDefault :: (IsIntegral (EltRepr t), Bits t) => Exp t -> Exp Int -> Exp Bool
+testBitDefault :: (IsIntegral (EltR t), Bits t) => Exp t -> Exp Int -> Exp Bool
 testBitDefault x i = (x .&. bit i) /= constInt 0
 
-shiftDefault :: (FiniteBits t, IsIntegral (EltRepr t), B.Bits t) => Exp t -> Exp Int -> Exp t
+shiftDefault :: (FiniteBits t, IsIntegral (EltR t), B.Bits t) => Exp t -> Exp Int -> Exp t
 shiftDefault x i
   = cond (i >= 0) (shiftLDefault x i)
                   (shiftRDefault x (-i))
 
-shiftLDefault :: (FiniteBits t, IsIntegral (EltRepr t)) => Exp t -> Exp Int -> Exp t
+shiftLDefault :: (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftLDefault x i
   = cond (i >= finiteBitSize x) (constInt 0)
   $ mkBShiftL x i
 
-shiftRDefault :: forall t. (B.Bits t, FiniteBits t, IsIntegral (EltRepr t)) => Exp t -> Exp Int -> Exp t
+shiftRDefault :: forall t. (B.Bits t, FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftRDefault
   | B.isSigned (undefined::t) = shiftRADefault
   | otherwise                 = shiftRLDefault
 
 -- Shift the argument right (signed)
-shiftRADefault :: (FiniteBits t, IsIntegral (EltRepr t)) => Exp t -> Exp Int -> Exp t
+shiftRADefault :: (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftRADefault x i
   = cond (i >= finiteBitSize x) (cond (mkLt x (constInt 0)) (constInt (-1)) (constInt 0))
   $ mkBShiftR x i
 
 -- Shift the argument right (unsigned)
-shiftRLDefault :: (FiniteBits t, IsIntegral (EltRepr t)) => Exp t -> Exp Int -> Exp t
+shiftRLDefault :: (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftRLDefault x i
   = cond (i >= finiteBitSize x) (constInt 0)
   $ mkBShiftR x i
 
-rotateDefault :: forall t. (FiniteBits t, IsIntegral (EltRepr t)) => Exp t -> Exp Int -> Exp t
+rotateDefault :: forall t. (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateDefault =
-  case integralType :: IntegralType (EltRepr t) of
+  case integralType :: IntegralType (EltR t) of
     TypeInt{}     -> rotateDefault' (undefined::Word)
     TypeInt8{}    -> rotateDefault' (undefined::Word8)
     TypeInt16{}   -> rotateDefault' (undefined::Word16)
@@ -729,7 +729,7 @@ rotateDefault =
     TypeWord64{}  -> rotateDefault' (undefined::Word64)
 
 rotateDefault'
-    :: forall i w. (Elt w, FiniteBits i, IsIntegral (EltRepr i), IsIntegral (EltRepr w), IsIntegral (EltRepr i), IsIntegral (EltRepr w), BitSizeEq (EltRepr i) (EltRepr w), BitSizeEq (EltRepr w) (EltRepr i))
+    :: forall i w. (Elt w, FiniteBits i, IsIntegral (EltR i), IsIntegral (EltR w), IsIntegral (EltR i), IsIntegral (EltR w), BitSizeEq (EltR i) (EltR w), BitSizeEq (EltR w) (EltR i))
     => w {- dummy -}
     -> Exp i
     -> Exp Int
@@ -745,12 +745,12 @@ rotateDefault' _ x i
     i'   = i `mkBAnd` (wsib - 1)
     wsib = finiteBitSize x
 
-rotateLDefault :: (Elt t, IsIntegral (EltRepr t)) => Exp t -> Exp Int -> Exp t
+rotateLDefault :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateLDefault x i
   = cond (i == 0) x
   $ mkBRotateL x i
 
-rotateRDefault :: (Elt t, IsIntegral (EltRepr t)) => Exp t -> Exp Int -> Exp t
+rotateRDefault :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateRDefault x i
   = cond (i == 0) x
   $ mkBRotateR x i
@@ -758,7 +758,7 @@ rotateRDefault x i
 isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
 isSignedDefault _ = constant (B.isSigned (undefined::b))
 
-constInt :: IsIntegral (EltRepr e) => EltRepr e -> Exp e
+constInt :: IsIntegral (EltR e) => EltR e -> Exp e
 constInt = mkExp . Const (SingleScalarType (NumSingleType (IntegralNumType integralType)))
 
 {--

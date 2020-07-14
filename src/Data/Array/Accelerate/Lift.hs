@@ -9,16 +9,12 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
-#if __GLASGOW_HASKELL__ <= 708
-{-# LANGUAGE OverlappingInstances  #-}
-{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
-#endif
 #if __GLASGOW_HASKELL__ >= 806
 {-# LANGUAGE UndecidableInstances  #-}
 #endif
 -- |
 -- Module      : Data.Array.Accelerate.Lift
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -38,12 +34,15 @@ module Data.Array.Accelerate.Lift (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
-import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH                                          hiding ( Exp, tupP, tupE )
 import Language.Haskell.TH.Extra
 
 
@@ -181,8 +180,8 @@ instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
 -- ---------------------------
 
 {-# INLINE expConst #-}
-expConst :: forall e. Elt e => IsScalar (EltRepr e) => e -> Exp e
-expConst = Exp . SmartExp . Const (scalarType @(EltRepr e)) . fromElt
+expConst :: forall e. Elt e => IsScalar (EltR e) => e -> Exp e
+expConst = Exp . SmartExp . Const (scalarType @(EltR e)) . fromElt
 
 instance Lift Exp Int where
   type Plain Int = Int
@@ -278,7 +277,8 @@ instance Lift Exp CDouble where
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift = expConst
+  lift True  = Exp . SmartExp $ SmartExp (Const scalarType 1) `Pair` SmartExp Nil
+  lift False = Exp . SmartExp $ SmartExp (Const scalarType 0) `Pair` SmartExp Nil
 
 instance Lift Exp Char where
   type Plain Char = Char
@@ -319,7 +319,7 @@ instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
 
 -- Lift and Unlift instances for tuples
 --
-$(runQ $ do
+runQ $ do
     let
         mkInstances :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
         mkInstances con cst smart prj nil pair n = do
@@ -356,5 +356,4 @@ $(runQ $ do
     as <- mapM mkAccInstances [2..16]
     es <- mapM mkExpInstances [2..16]
     return $ concat (as ++ es)
- )
 

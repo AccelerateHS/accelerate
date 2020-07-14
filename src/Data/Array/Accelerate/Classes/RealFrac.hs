@@ -8,7 +8,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.RealFrac
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -23,11 +23,12 @@ module Data.Array.Accelerate.Classes.RealFrac (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language                               ( (^), cond, even )
 import Data.Array.Accelerate.Lift                                   ( unlift )
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -198,7 +199,6 @@ defaultFloor x
   | otherwise
   = let (n, r) = properFraction x in cond (r < 0) (n-1) n
 
--- mkRound :: (Elt a, Elt b, IsFloating (EltRepr a), IsIntegral (EltRepr b)) => Exp a -> Exp b
 defaultRound :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
 defaultRound x
   | Just IsFloatingDict <- isFloating @a
@@ -222,9 +222,9 @@ data IsFloatingDict a where
 data IsIntegralDict a where
   IsIntegralDict :: IsIntegral a => IsIntegralDict a
 
-isFloating :: forall a. Elt a => Maybe (IsFloatingDict (EltRepr a))
+isFloating :: forall a. Elt a => Maybe (IsFloatingDict (EltR a))
 isFloating
-  | TupRsingle t       <- eltType @a
+  | TupRsingle t       <- eltR @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , FloatingNumType f  <- n
@@ -236,9 +236,9 @@ isFloating
   | otherwise
   = Nothing
 
-isIntegral :: forall a. Elt a => Maybe (IsIntegralDict (EltRepr a))
+isIntegral :: forall a. Elt a => Maybe (IsIntegralDict (EltR a))
 isIntegral
-  | TupRsingle t       <- eltType @a
+  | TupRsingle t       <- eltR @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , IntegralNumType i  <- n

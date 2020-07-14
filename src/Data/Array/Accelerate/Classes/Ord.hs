@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE RebindableSyntax    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -8,10 +9,11 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Ord
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -27,9 +29,12 @@ module Data.Array.Accelerate.Classes.Ord (
 ) where
 
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Ordering
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
 -- We must hide (==), as that operator is used for the literals 0, 1 and 2 in the pattern synonyms for Ordering.
@@ -37,26 +42,18 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Classes.Eq                             hiding ( (==) )
 import qualified Data.Array.Accelerate.Classes.Eq                   as A
 
-import Text.Printf
-import Prelude                                                      ( ($), (.), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM, (==) )
+import Data.Char
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
+import Prelude                                                      ( ($), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
+import Text.Printf
 import qualified Prelude                                            as P
+
 
 infix 4 <
 infix 4 >
 infix 4 <=
 infix 4 >=
-
-pattern LT_ :: Exp Ordering
-pattern LT_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 0))
-
-pattern EQ_ :: Exp Ordering
-pattern EQ_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 1))
-
-pattern GT_ :: Exp Ordering
-pattern GT_ = Exp (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeInt8))) 2))
-{-# COMPLETE LT_, EQ_, GT_ #-}
 
 -- | The 'Ord' class for totally ordered datatypes
 --
@@ -86,7 +83,7 @@ class Eq a => Ord a where
 -- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
 --
 ifThenElse :: Elt a => Exp Bool -> Exp a -> Exp a -> Exp a
-ifThenElse (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond c x y
+ifThenElse (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond (mkCoerce' c) x y
 
 instance Ord () where
   (<)     _ _ = constant False
@@ -109,31 +106,25 @@ instance Ord sh => Ord (sh :. Int) where
   x <= y = indexHead x <= indexHead y && indexTail x <= indexTail y
   x >= y = indexHead x >= indexHead y && indexTail x >= indexTail y
   x < y  = indexHead x < indexHead y
-        && case matchTupleType (eltType @sh) (eltType @Z) of
+        && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x < indexTail y
   x > y  = indexHead x > indexHead y
-        && case matchTupleType (eltType @sh) (eltType @Z) of
+        && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x > indexTail y
 
-instance Elt Ordering where
-  type EltRepr Ordering = Int8
-  eltType = TupRsingle scalarType
-  fromElt = P.fromIntegral . P.fromEnum
-  toElt   = P.toEnum . P.fromIntegral
-
 instance Eq Ordering where
-  x == y = mkBitcast x A.== (mkBitcast y :: Exp Int8)
-  x /= y = mkBitcast x   /= (mkBitcast y :: Exp Int8)
+  x == y = mkCoerce x A.== (mkCoerce y :: Exp TAG)
+  x /= y = mkCoerce x A./= (mkCoerce y :: Exp TAG)
 
 instance Ord Ordering where
-  x < y   = mkBitcast x < (mkBitcast y :: Exp Int8)
-  x > y   = mkBitcast x > (mkBitcast y :: Exp Int8)
-  x <= y  = mkBitcast x <= (mkBitcast y :: Exp Int8)
-  x >= y  = mkBitcast x >= (mkBitcast y :: Exp Int8)
-  min x y = mkBitcast $ min (mkBitcast x) (mkBitcast y :: Exp Int8)
-  max x y = mkBitcast $ max (mkBitcast x) (mkBitcast y :: Exp Int8)
+  x < y   = mkCoerce x < (mkCoerce y :: Exp TAG)
+  x > y   = mkCoerce x > (mkCoerce y :: Exp TAG)
+  x <= y  = mkCoerce x <= (mkCoerce y :: Exp TAG)
+  x >= y  = mkCoerce x >= (mkCoerce y :: Exp TAG)
+  min x y = mkCoerce $ min (mkCoerce x) (mkCoerce y :: Exp TAG)
+  max x y = mkCoerce $ max (mkCoerce x) (mkCoerce y :: Exp TAG)
 
 
 -- Instances of 'Prelude.Ord' (mostly) don't make sense with the standard
@@ -187,8 +178,7 @@ $(runQ $ do
 
         nonNumTypes :: [Name]
         nonNumTypes =
-          [ ''Bool
-          , ''Char
+          [ ''Char
           ]
 
         cTypes :: [Name]

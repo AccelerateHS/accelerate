@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue407
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -27,7 +27,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue407 (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as A
+import Data.Array.Accelerate.Sugar.Elt                              as S
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -42,10 +42,10 @@ test_issue407 runN =
     ]
   where
     testElt
-        :: forall a. (P.Fractional a, A.RealFloat a)
+        :: forall a. (Show a, P.Fractional a, A.RealFloat a)
         => TestTree
     testElt =
-      testGroup (show (A.eltType @a))
+      testGroup (show (eltR @a))
         [ testCase "isNaN"      $ eNaN @=? runN (A.map A.isNaN) xs
         , testCase "isInfinite" $ eInf @=? runN (A.map A.isInfinite) xs
         ]

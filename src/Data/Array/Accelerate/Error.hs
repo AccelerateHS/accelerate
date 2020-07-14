@@ -1,11 +1,9 @@
 {-# LANGUAGE CPP             #-}
-{-# LANGUAGE QuasiQuotes     #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Error
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -15,31 +13,33 @@
 
 module Data.Array.Accelerate.Error (
 
+  HasCallStack,
   internalError,   boundsError,   unsafeError,
   internalCheck,   boundsCheck,   unsafeCheck,   indexCheck,
   internalWarning, boundsWarning, unsafeWarning,
 
 ) where
 
-import Data.List                                        ( intercalate )
 import Debug.Trace
-import Language.Haskell.TH                              hiding ( Unsafe )
+import Data.List                                          ( intercalate )
+import Text.Printf
+import Prelude                                            hiding ( error )
+
+import GHC.Stack
 
 data Check = Bounds | Unsafe | Internal
 
 
 -- | Issue an internal error message
 --
---   $internalError :: String -> String -> a
---
-internalError :: Q Exp
-internalError = appE errorQ [| Internal |]
+internalError :: HasCallStack => String -> a
+internalError = withFrozenCallStack $ error Internal
 
-boundsError :: Q Exp
-boundsError = appE errorQ [| Bounds |]
+boundsError :: HasCallStack => String -> a
+boundsError = withFrozenCallStack $ error Bounds
 
-unsafeError :: Q Exp
-unsafeError = appE errorQ [| Unsafe |]
+unsafeError :: HasCallStack => String -> a
+unsafeError = withFrozenCallStack $ error Unsafe
 
 
 -- | Throw an error if the condition evaluates to False, otherwise evaluate the
@@ -47,96 +47,81 @@ unsafeError = appE errorQ [| Unsafe |]
 --
 --   $internalCheck :: String -> String -> Bool -> a -> a
 --
-internalCheck :: Q Exp
-internalCheck = appE checkQ [| Internal |]
+internalCheck :: HasCallStack => String -> Bool -> a -> a
+internalCheck = withFrozenCallStack $ check Internal
 
-boundsCheck :: Q Exp
-boundsCheck = appE checkQ [| Bounds |]
+boundsCheck :: HasCallStack => String -> Bool -> a -> a
+boundsCheck = withFrozenCallStack $ check Bounds
 
-unsafeCheck :: Q Exp
-unsafeCheck = appE checkQ [| Unsafe |]
+unsafeCheck :: HasCallStack => String -> Bool -> a -> a
+unsafeCheck = withFrozenCallStack $ check Unsafe
 
 
 -- | Throw an error if the index is not in range, otherwise evaluate the result.
 --
---   $boundsCheck :: String -> Int -> Int -> a -> a
---
-indexCheck :: Q Exp
-indexCheck = withLocation
-  [| \format fn i n x ->
-        case not (doChecks Bounds) || (i >= 0 && i < n) of
-           True  -> x
-           False -> errorWithoutStackTrace (format Bounds (call fn ("index out of bounds: " ++ show (i,n)))) x |]
-
+indexCheck :: HasCallStack => Int -> Int -> a -> a
+indexCheck i n =
+  boundsCheck (printf "index out of bounds: i=%d, n=%d" i n) (i >= 0 && i < n)
 
 -- | Print a warning message if the condition evaluates to False.
 --
 --   $internalWarning :: String -> String -> Bool -> a -> a
 --
-internalWarning :: Q Exp
-internalWarning = appE warningQ [| Internal |]
+internalWarning :: HasCallStack => String -> Bool -> a -> a
+internalWarning = withFrozenCallStack $ warning Internal
 
-boundsWarning :: Q Exp
-boundsWarning = appE warningQ [| Bounds |]
+boundsWarning :: HasCallStack => String -> Bool -> a -> a
+boundsWarning = withFrozenCallStack $ warning Bounds
 
-unsafeWarning :: Q Exp
-unsafeWarning = appE warningQ [| Unsafe |]
+unsafeWarning :: HasCallStack => String -> Bool -> a -> a
+unsafeWarning = withFrozenCallStack $ warning Unsafe
 
 
--- Template Haskell implementation
--- -------------------------------
+error :: HasCallStack => Check -> String -> a
+error kind msg = errorWithoutStackTrace (format kind msg)
 
-call :: String -> String -> String
-call f m = concat ["(", f, "): ", m]
+check :: HasCallStack => Check -> String -> Bool -> a -> a
+check kind msg cond k =
+  case not (doChecks kind) || cond of
+    True  -> k
+    False -> errorWithoutStackTrace (format kind msg)
 
-errorQ :: Q Exp
-errorQ = withLocation
-  [| \format kind fn msg -> errorWithoutStackTrace (format kind (call fn msg)) |]
+warning :: HasCallStack => Check -> String -> Bool -> a -> a
+warning kind msg cond k =
+  case not (doChecks kind) || cond of
+    True  -> k
+    False -> trace (format kind msg) k
 
-checkQ :: Q Exp
-checkQ = withLocation
-  [| \format kind fn msg cond x ->
-        case not (doChecks kind) || cond of
-          True  -> x
-          False -> errorWithoutStackTrace (format kind (call fn msg)) |]
-
-warningQ :: Q Exp
-warningQ = withLocation
-  [| \format kind fn msg cond x ->
-        case not (doChecks kind) || cond of
-          True  -> x
-          False -> trace (format kind (call fn msg)) x |]
-
-withLocation :: Q Exp -> Q Exp
-withLocation f =
-  appE f (locatedMessage =<< location)
-
-locatedMessage :: Loc -> Q Exp
-locatedMessage loc =
-  [| \kind msg -> message kind ($(litE (stringL (formatLoc loc))) ++ msg) |]
-
-formatLoc :: Loc -> String
-formatLoc loc =
-  let   file            = loc_filename loc
-        (line,col)      = loc_start loc
-  in
-  intercalate ":" [file, show line, show col, " "]
-
-message :: Check -> String -> String
-message kind msg = unlines header ++ msg
+format :: HasCallStack => Check -> String -> String
+format kind msg = intercalate "\n" [ header, msg, ppCallStack callStack ]
   where
-    header =
-      case kind of
-        Internal -> [""
-                    ,"*** Internal error in package accelerate ***"
-                    ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]
-        _        -> []
+    header
+      = intercalate "\n"
+      $ case kind of
+          Internal -> [""
+                      ,"*** Internal error in package accelerate ***"
+                      ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"
+                      ,""]
+          _        -> []
 
-#if __GLASGOW_HASKELL__ < 800
-errorWithoutStackTrace :: String -> a
-errorWithoutStackTrace = error
-#endif
+ppCallStack :: CallStack -> String
+ppCallStack = intercalate "\n" . ppLines
+  where
+    ppLines cs =
+      case getCallStack cs of
+        [] -> []
+        st -> ""
+            : "CallStack (from HasCallStack):"
+            : map (("  " ++) . ppCallSite) st
 
+    ppCallSite (f, loc) = f ++ ": " ++ ppSrcLoc loc
+
+    ppSrcLoc SrcLoc{..} =
+      foldr (++) ""
+        [ srcLocModule, ":"
+        , show srcLocStartLine, ":"
+        , show srcLocStartCol
+        ]
 
 -- CPP malarky
 -- -----------

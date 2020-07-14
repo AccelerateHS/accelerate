@@ -5,7 +5,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue255
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -28,7 +28,7 @@ import Data.Array.Accelerate.Test.NoFib.Config
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Data.List                                                    as P
+import Data.List                                                    as P ( mapAccumL )
 import Prelude                                                      as P
 
 

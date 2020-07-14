@@ -3,10 +3,12 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE RecordWildCards          #-}
+{-# LANGUAGE TemplateHaskell          #-}
+{-# OPTIONS_GHC -fobject-code #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Monitoring
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -45,12 +47,15 @@ import Text.Printf
 import qualified Data.HashMap.Strict                                as Map
 #endif
 
+#if defined(ACCELERATE_MONITORING) || defined(ACCELERATE_DEBUG)
+import Control.Monad
+#endif
+
 import Data.Atomic                                                  ( Atomic )
 import qualified Data.Atomic                                        as Atomic
 
-import Control.Monad
 import Data.Int
-import Prelude
+import Language.Haskell.TH.Syntax
 
 
 -- | Launch a monitoring server that will collect statistics on the running
@@ -345,9 +350,6 @@ estimateProcessorLoad !var !ref = do
   writeIORef ref (ES time new_inst new_avg)
   return (round new_avg)
 
--- cbits/clock.c
-foreign import ccall unsafe "clock_gettime_monotonic_seconds" getMonotonicTime :: IO Double
-
 {--
 -- Compute the current load on a processor as a percentage of time spent working
 -- over the elapsed time. This is meant to run continuously by a background
@@ -408,4 +410,10 @@ foreign import ccall "&__total_bytes_copied_from_remote"  __total_bytes_copied_f
 foreign import ccall "&__total_bytes_evicted_from_remote" __total_bytes_evicted_from_remote :: Atomic -- total bytes copied from the remote due to evictions
 foreign import ccall "&__num_remote_gcs"                  __num_remote_gcs                  :: Atomic -- number of times the remote memory space was forcibly garbage collected
 foreign import ccall "&__num_evictions"                   __num_evictions                   :: Atomic -- number of LRU eviction events
+
+-- SEE: [linking to .c files]
+--
+runQ $ do
+  addForeignFilePath LangC "cbits/monitoring.c"
+  return []
 

@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -14,7 +15,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Substitution
--- Copyright   : [2012..2019] The Accelerate Team
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -29,7 +30,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
   subTop, subAtop,
 
   -- ** Weakening
-  (:>), Sink(..), SinkExp(..),
+  (:>), Sink(..), SinkExp(..), weakenVars,
 
   -- ** Strengthening
   (:?>), strengthen, strengthenE,
@@ -45,16 +46,21 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
 ) where
 
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.Environment
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.Array
+import qualified Data.Array.Accelerate.Debug.Stats      as Stats
+
 import Data.Kind
 import Control.Applicative                              hiding ( Const )
 import Control.Monad
 import Prelude                                          hiding ( exp, seq )
-
-import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Error
-import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 
 
 -- NOTE: [Renaming and Substitution]
@@ -88,11 +94,11 @@ lhsFullVars :: forall s a env1 env2. LeftHandSide s a env1 env2 -> Maybe (Vars s
 lhsFullVars = fmap snd . go weakenId
   where
     go :: forall env env' b. (env' :> env2) -> LeftHandSide s b env env' -> Maybe (env :> env2, Vars s env2 b)
-    go k (LeftHandSideWildcard TupRunit) = Just (k, VarsNil)
-    go k (LeftHandSideSingle s) = Just $ (weakenSucc $ k, VarsSingle $ Var s $ k >:> ZeroIdx)
+    go k (LeftHandSideWildcard TupRunit) = Just (k, TupRunit)
+    go k (LeftHandSideSingle s) = Just $ (weakenSucc $ k, TupRsingle $ Var s $ k >:> ZeroIdx)
     go k (LeftHandSidePair l1 l2)
       | Just (k',  v2) <- go k  l2
-      , Just (k'', v1) <- go k' l1 = Just (k'', VarsPair v1 v2)
+      , Just (k'', v1) <- go k' l1 = Just (k'', TupRpair v1 v2)
     go _ _ = Nothing
 
 bindingIsTrivial :: LeftHandSide s a env1 env2 -> Vars s env2 b -> Maybe (a :~: b)
@@ -131,18 +137,19 @@ inlineVars :: forall env env' aenv t1 t2.
 inlineVars lhsBound expr bound
   | Just vars <- lhsFullVars lhsBound = substitute (strengthenWithLHS lhsBound) weakenId vars expr
   where
-    substitute :: forall env1 env2 t.
-               env1 :?> env2
-            -> env :> env2
-            -> ExpVars env1 t1
-            -> OpenExp env1 aenv t
-            -> Maybe (OpenExp env2 aenv t)
+    substitute
+        :: forall env1 env2 t.
+           env1 :?> env2
+        -> env :> env2
+        -> ExpVars env1 t1
+        -> OpenExp env1 aenv t
+        -> Maybe (OpenExp env2 aenv t)
     substitute _ k2 vars (extractExpVars -> Just vars')
       | Just Refl <- matchVars vars vars' = Just $ weakenE k2 bound
-    substitute k1 k2 vars e = case e of
+    substitute k1 k2 vars topExp = case topExp of
       Let lhs e1 e2
         | Exists lhs' <- rebuildLHS lhs
-                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) e2
+                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
       Evar (Var t ix)     -> Evar . Var t <$> k1 ix
       Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
       Pair e1 e2          -> Pair <$> travE e1 <*> travE e2
@@ -153,6 +160,7 @@ inlineVars lhsBound expr bound
       IndexFull  si e1 e2 -> IndexFull  si <$> travE e1 <*> travE e2
       ToIndex   shr e1 e2 -> ToIndex   shr <$> travE e1 <*> travE e2
       FromIndex shr e1 e2 -> FromIndex shr <$> travE e1 <*> travE e2
+      Case e1 rhs def     -> Case <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
       Cond e1 e2 e3       -> Cond <$> travE e1 <*> travE e2 <*> travE e3
       While f1 f2 e1      -> While <$> travF f1 <*> travF f2 <*> travE e1
       Const t c           -> Just $ Const t c
@@ -172,6 +180,10 @@ inlineVars lhsBound expr bound
         travF :: OpenFun env1 aenv s -> Maybe (OpenFun env2 aenv s)
         travF = substituteF k1 k2 vars
 
+        travMaybeE :: Maybe (OpenExp env1 aenv s) -> Maybe (Maybe (OpenExp env2 aenv s))
+        travMaybeE Nothing  = pure Nothing
+        travMaybeE (Just x) = Just <$> travE x
+
     substituteF :: forall env1 env2 t.
                env1 :?> env2
             -> env :> env2
@@ -180,7 +192,7 @@ inlineVars lhsBound expr bound
             -> Maybe (OpenFun env2 aenv t)
     substituteF k1 k2 vars (Body e) = Body <$> substitute k1 k2 vars e
     substituteF k1 k2 vars (Lam lhs f)
-      | Exists lhs' <- rebuildLHS lhs = Lam lhs' <$> substituteF (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weaken` vars) f
+      | Exists lhs' <- rebuildLHS lhs = Lam lhs' <$> substituteF (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) f
 
 inlineVars _ _ _ = Nothing
 
@@ -209,7 +221,8 @@ substitute :: LeftHandSide b env envb
 
 -- | Composition of unary functions.
 --
-compose :: OpenFun env aenv (b -> c)
+compose :: HasCallStack
+        => OpenFun env aenv (b -> c)
         -> OpenFun env aenv (a -> b)
         -> OpenFun env aenv (a -> c)
 compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
@@ -362,11 +375,10 @@ instance Sink (Var s) where
   {-# INLINEABLE weaken #-}
   weaken k (Var s ix) = Var s (k >:> ix)
 
-instance Sink (Vars s) where
-  {-# INLINEABLE weaken #-}
-  weaken _  VarsNil       = VarsNil
-  weaken k (VarsSingle v) = VarsSingle $ weaken k v
-  weaken k (VarsPair v w) = VarsPair (weaken k v) (weaken k w)
+weakenVars :: env :> env' -> Vars s env t -> Vars s env' t
+weakenVars _  TupRunit      = TupRunit
+weakenVars k (TupRsingle v) = TupRsingle $ weaken k v
+weakenVars k (TupRpair v w) = TupRpair (weakenVars k v) (weakenVars k w)
 
 rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc env' (Array sh e)
 rebuildWeakenVar k (Var s idx) = Avar $ Var s $ k >:> idx
@@ -465,8 +477,8 @@ strengthenAfter (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
 strengthenAfter (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
   ZeroIdx   -> Just ZeroIdx
   SuccIdx i -> SuccIdx <$> k i
-strengthenAfter (LeftHandSidePair l1 l2) (LeftHandSidePair l1' l2') k
-  = strengthenAfter l2 l2' $ strengthenAfter l1 l1' k
+strengthenAfter (LeftHandSidePair l1 l2) (LeftHandSidePair l1' l2') k =
+  strengthenAfter l2 l2' $ strengthenAfter l1 l1' k
 strengthenAfter _ _ _ = error "Substitution.strengthenAfter: left hand sides do not match"
 
 -- Simultaneous Substitution ===================================================
@@ -517,7 +529,7 @@ shiftE' _ _ _ = error "Substitution: left hand sides do not match"
 
 {-# INLINEABLE rebuildMaybeExp #-}
 rebuildMaybeExp
-    :: (Applicative f, SyntacticExp fe)
+    :: (HasCallStack, Applicative f, SyntacticExp fe)
     => RebuildEvar f fe env env' aenv'
     -> ReindexAvar f aenv aenv'
     -> Maybe (OpenExp env  aenv t)
@@ -527,7 +539,7 @@ rebuildMaybeExp v av (Just x) = Just <$> rebuildOpenExp v av x
 
 {-# INLINEABLE rebuildOpenExp #-}
 rebuildOpenExp
-    :: (Applicative f, SyntacticExp fe)
+    :: (HasCallStack, Applicative f, SyntacticExp fe)
     => RebuildEvar f fe env env' aenv'
     -> ReindexAvar f aenv aenv'
     -> OpenExp env  aenv t
@@ -549,8 +561,9 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
     IndexFull x ix sl   -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
     ToIndex shr sh ix   -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
     FromIndex shr sh ix -> FromIndex shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    Case e rhs def      -> Case            <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ] <*> rebuildMaybeExp v av def
     Cond p t e          -> Cond            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t  <*> rebuildOpenExp v av e
-    While p f x         -> While           <$> rebuildFun v av p      <*> rebuildFun v av f         <*> rebuildOpenExp v av x
+    While p f x         -> While           <$> rebuildFun v av p      <*> rebuildFun v av f      <*> rebuildOpenExp v av x
     PrimApp f x         -> PrimApp f       <$> rebuildOpenExp v av x
     Index a sh          -> Index           <$> reindex a              <*> rebuildOpenExp v av sh
     LinearIndex a i     -> LinearIndex     <$> reindex a              <*> rebuildOpenExp v av i
@@ -561,7 +574,7 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun
-    :: (Applicative f, SyntacticExp fe)
+    :: (HasCallStack, Applicative f, SyntacticExp fe)
     => RebuildEvar f fe env env' aenv'
     -> ReindexAvar f aenv aenv'
     -> OpenFun env  aenv  t
@@ -577,7 +590,7 @@ rebuildFun v av fun =
 -- -----------------
 
 type RebuildAcc acc =
-  forall aenv aenv' f fa a. (Applicative f, SyntacticAcc fa)
+  forall aenv aenv' f fa a. (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAvar f fa acc aenv aenv'
     -> acc aenv a
     -> f (acc aenv' a)
@@ -610,7 +623,7 @@ newtype ReindexAvar f aenv aenv' =
 
 reindexAvar
     :: forall f fa acc aenv aenv'.
-       (Applicative f, SyntacticAcc fa)
+       (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAvar f fa acc aenv aenv'
     -> ReindexAvar f        aenv aenv'
 reindexAvar v = ReindexAvar f where
@@ -620,12 +633,12 @@ reindexAvar v = ReindexAvar f where
   g :: fa acc aenv' (Array sh e) -> ArrayVar aenv' (Array sh e)
   g fa = case accOut fa of
     Avar var' -> var'
-    _ -> $internalError "reindexAvar" "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."
+    _ -> internalError "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."
 
 
 {-# INLINEABLE shiftA #-}
 shiftA
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv aenv'
     -> ArrayVar  (aenv,  s) (Array sh e)
@@ -634,7 +647,7 @@ shiftA _ _ (Var s ZeroIdx)      = pure $ avarIn $ Var s ZeroIdx
 shiftA k v (Var s (SuccIdx ix)) = weakenAcc k <$> v (Var s ix)
 
 shiftA'
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => ALeftHandSide t aenv1 aenv1'
     -> ALeftHandSide t aenv2 aenv2'
     -> RebuildAcc acc
@@ -643,11 +656,11 @@ shiftA'
 shiftA' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
 shiftA' (LeftHandSideSingle _)   (LeftHandSideSingle _)   k v = shiftA k v
 shiftA' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftA' b1 b2 k $ shiftA' a1 a2 k v
-shiftA' _ _ _ _ = $internalError "Substitution/shiftA'" "left hand sides do not match"
+shiftA' _ _ _ _ = internalError "left hand sides do not match"
 
 {-# INLINEABLE rebuildOpenAcc #-}
 rebuildOpenAcc
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => (forall sh e. ArrayVar aenv (Array sh e) -> f (fa OpenAcc aenv' (Array sh e)))
     -> OpenAcc aenv  t
     -> f (OpenAcc aenv' t)
@@ -655,7 +668,7 @@ rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc a
 
 {-# INLINEABLE rebuildPreOpenAcc #-}
 rebuildPreOpenAcc
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAcc acc aenv  t
@@ -694,7 +707,7 @@ rebuildPreOpenAcc k av acc =
 
 {-# INLINEABLE rebuildAfun #-}
 rebuildAfun
-    :: (Applicative f, SyntacticAcc fa)
+    :: (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv aenv'
     -> PreOpenAfun acc aenv  t
@@ -705,7 +718,7 @@ rebuildAfun k av (Alam lhs1 f)
   = Alam lhs2 <$> rebuildAfun k (shiftA' lhs1 lhs2 k av) f
 
 rebuildAlet
-    :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (Applicative f, SyntacticAcc fa)
+    :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv1 aenv2
     -> ALeftHandSide bndArrs aenv1 aenv1'
@@ -786,8 +799,8 @@ rebuildC k v c =
 --}
 
 extractExpVars :: OpenExp env aenv a -> Maybe (ExpVars env a)
-extractExpVars Nil          = Just VarsNil
-extractExpVars (Pair e1 e2) = VarsPair <$> extractExpVars e1 <*> extractExpVars e2
-extractExpVars (Evar v)     = Just $ VarsSingle v
+extractExpVars Nil          = Just TupRunit
+extractExpVars (Pair e1 e2) = TupRpair <$> extractExpVars e1 <*> extractExpVars e2
+extractExpVars (Evar v)     = Just $ TupRsingle v
 extractExpVars _            = Nothing
 

@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Num
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -20,7 +20,7 @@ module Data.Array.Accelerate.Classes.Num (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 

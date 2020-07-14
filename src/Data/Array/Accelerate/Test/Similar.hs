@@ -6,7 +6,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.Similar
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -17,8 +17,10 @@
 module Data.Array.Accelerate.Test.Similar
   where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Data.Complex
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
 import Hedgehog

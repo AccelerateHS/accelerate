@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -16,7 +15,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Complex
--- Copyright   : [2015..2019] The Accelerate Team
+-- Copyright   : [2015..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -45,18 +44,23 @@ module Data.Array.Accelerate.Data.Complex (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
+import Data.Array.Accelerate.Representation.Tag
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
 
 import Data.Complex                                                 ( Complex(..) )
 import Prelude                                                      (($))
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
+
 
 infix 6 ::+
 pattern (::+) :: Elt a => Exp a -> Exp a -> Exp (Complex a)
@@ -69,85 +73,110 @@ pattern r ::+ i <- (deconstructComplex -> (r, i))
 -- This matches the standard C-style layout, but we can use this representation only at
 -- specific types (not for any type 'a') as we can only have vectors of primitive type.
 -- For other types, we use a structure-of-arrays representation. This is handled by the
--- ComplexRepr. We use the GADT ComplexR and function complexR to reconstruct
+-- ComplexR. We use the GADT ComplexR and function complexR to reconstruct
 -- information on how the elements are represented.
 --
 instance Elt a => Elt (Complex a) where
-  type EltRepr (Complex a) = ComplexRepr (EltRepr a)
-  {-# INLINE eltType     #-}
-  {-# INLINE [1] toElt   #-}
-  {-# INLINE [1] fromElt #-}
-  eltType = case complexR tp of
-      ComplexRvec s -> TupRsingle $ VectorScalarType $ VectorType 2 s
-      ComplexRtup   -> TupRunit `TupRpair` tp `TupRpair` tp
-    where
-      tp = eltType @a
-  toElt = case complexR $ eltType @a of
-    ComplexRvec _ -> \(Vec2 r i)   -> toElt r :+ toElt i
-    ComplexRtup   -> \(((), r), i) -> toElt r :+ toElt i
-  fromElt (r :+ i) = case complexR $ eltType @a of
-    ComplexRvec _ -> Vec2 (fromElt r) (fromElt i)
-    ComplexRtup   -> (((), fromElt r), fromElt i)
+  type EltR (Complex a) = ComplexR (EltR a)
+  eltR = let tR = eltR @a
+          in case complexR tR of
+               ComplexVec s -> TupRsingle $ VectorScalarType $ VectorType 2 s
+               ComplexTup   -> TupRunit `TupRpair` tR `TupRpair` tR
 
-type family ComplexRepr a where
-  ComplexRepr Half   = Vec2 Half
-  ComplexRepr Float  = Vec2 Float
-  ComplexRepr Double = Vec2 Double
-  ComplexRepr Int    = Vec2 Int
-  ComplexRepr Int8   = Vec2 Int8
-  ComplexRepr Int16  = Vec2 Int16
-  ComplexRepr Int32  = Vec2 Int32
-  ComplexRepr Int64  = Vec2 Int64
-  ComplexRepr Word   = Vec2 Word
-  ComplexRepr Word8  = Vec2 Word8
-  ComplexRepr Word16 = Vec2 Word16
-  ComplexRepr Word32 = Vec2 Word32
-  ComplexRepr Word64 = Vec2 Word64
-  ComplexRepr a      = Tup2 a a
+  tagsR = let tR = eltR @a
+           in case complexR tR of
+               ComplexVec s -> [ TagRsingle (VectorScalarType (VectorType 2 s)) ]
+               ComplexTup   -> let go :: TypeR t -> [TagR t]
+                                   go TupRunit         = [TagRunit]
+                                   go (TupRsingle s)   = [TagRsingle s]
+                                   go (TupRpair ta tb) = [TagRpair a b | a <- go ta, b <- go tb]
+                                in
+                                [ TagRunit `TagRpair` ta `TagRpair` tb | ta <- go tR, tb <- go tR ]
 
-data ComplexR a c where
-  ComplexRvec :: VecElt a => SingleType a -> ComplexR a (Vec2 a)
-  ComplexRtup :: ComplexR a (Tup2 a a)
+  toElt = case complexR $ eltR @a of
+    ComplexVec _ -> \(Vec2 r i)   -> toElt r :+ toElt i
+    ComplexTup   -> \(((), r), i) -> toElt r :+ toElt i
 
-complexR :: TupleType a -> ComplexR a (ComplexRepr a)
-complexR (TupRsingle (SingleScalarType (NumSingleType (FloatingNumType TypeHalf  )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (FloatingNumType TypeFloat )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (FloatingNumType TypeDouble)))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt   )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt8  )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt16 )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt32 )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt64 )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord  )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord8 )))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord16)))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord32)))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeWord64)))) = ComplexRvec singleType
-complexR (TupRsingle (SingleScalarType (NonNumSingleType TypeChar)))                  = ComplexRtup
-complexR (TupRsingle (SingleScalarType (NonNumSingleType TypeBool)))                  = ComplexRtup
-complexR (TupRsingle (VectorScalarType (_)))                                          = ComplexRtup
-complexR TupRunit                                                                     = ComplexRtup
-complexR TupRpair{}                                                                   = ComplexRtup
+  fromElt (r :+ i) = case complexR $ eltR @a of
+    ComplexVec _ -> Vec2 (fromElt r) (fromElt i)
+    ComplexTup   -> (((), fromElt r), fromElt i)
+
+type family ComplexR a where
+  ComplexR Half   = Vec2 Half
+  ComplexR Float  = Vec2 Float
+  ComplexR Double = Vec2 Double
+  ComplexR Int    = Vec2 Int
+  ComplexR Int8   = Vec2 Int8
+  ComplexR Int16  = Vec2 Int16
+  ComplexR Int32  = Vec2 Int32
+  ComplexR Int64  = Vec2 Int64
+  ComplexR Word   = Vec2 Word
+  ComplexR Word8  = Vec2 Word8
+  ComplexR Word16 = Vec2 Word16
+  ComplexR Word32 = Vec2 Word32
+  ComplexR Word64 = Vec2 Word64
+  ComplexR a      = (((), a), a)
+
+data ComplexType a c where
+  ComplexVec :: VecElt a => SingleType a -> ComplexType a (Vec2 a)
+  ComplexTup ::                             ComplexType a (((), a), a)
+
+complexR :: TypeR a -> ComplexType a (ComplexR a)
+complexR = tuple
+  where
+    tuple :: TypeR a -> ComplexType a (ComplexR a)
+    tuple TupRunit       = ComplexTup
+    tuple TupRpair{}     = ComplexTup
+    tuple (TupRsingle s) = scalar s
+
+    scalar :: ScalarType a -> ComplexType a (ComplexR a)
+    scalar (SingleScalarType t) = single t
+    scalar VectorScalarType{}   = ComplexTup
+
+    single :: SingleType a -> ComplexType a (ComplexR a)
+    single (NumSingleType t) = num t
+
+    num :: NumType a -> ComplexType a (ComplexR a)
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
+
+    integral :: IntegralType a -> ComplexType a (ComplexR a)
+    integral TypeInt    = ComplexVec singleType
+    integral TypeInt8   = ComplexVec singleType
+    integral TypeInt16  = ComplexVec singleType
+    integral TypeInt32  = ComplexVec singleType
+    integral TypeInt64  = ComplexVec singleType
+    integral TypeWord   = ComplexVec singleType
+    integral TypeWord8  = ComplexVec singleType
+    integral TypeWord16 = ComplexVec singleType
+    integral TypeWord32 = ComplexVec singleType
+    integral TypeWord64 = ComplexVec singleType
+
+    floating :: FloatingType a -> ComplexType a (ComplexR a)
+    floating TypeHalf   = ComplexVec singleType
+    floating TypeFloat  = ComplexVec singleType
+    floating TypeDouble = ComplexVec singleType
+
 
 constructComplex :: forall a. Elt a => Exp a -> Exp a -> Exp (Complex a)
-constructComplex r i = case complexR $ eltType @a of
-  ComplexRvec _ ->
+constructComplex r i = case complexR (eltR @a) of
+  ComplexVec _ ->
     let
-      r', i' :: Exp (EltRepr a)
-      r' = coerce @a @(EltRepr a) r
+      r', i' :: Exp (EltR a)
+      r' = coerce @a @(EltR a) r
       i' = coerce i
-      v :: Exp (Vec2 (EltRepr a))
+      v :: Exp (Vec2 (EltR a))
       v = V2 r' i'
     in
-      coerce @(Vec2 (EltRepr a)) @(Complex a) $ v
-  ComplexRtup   -> coerce $ T2  r i
+      coerce @(Vec2 (EltR a)) @(Complex a) $ v
+  ComplexTup   -> coerce $ T2 r i
 
 deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
-deconstructComplex c = case complexR $ eltType @a of
-  ComplexRvec _ -> let V2 r i = coerce @(Complex a) @(Vec2 (EltRepr a)) c in (coerce r, coerce i)
-  ComplexRtup   -> let T2 r i = coerce c in (r, i)
+deconstructComplex c = case complexR (eltR @a) of
+  ComplexVec _ -> let V2 r i = coerce @(Complex a) @(Vec2 (EltR a)) c in (coerce r, coerce i)
+  ComplexTup   -> let T2 r i = coerce c in (r, i)
 
-coerce :: EltRepr a ~ EltRepr b => Exp a -> Exp b
+coerce :: EltR a ~ EltR b => Exp a -> Exp b
 coerce (Exp e) = Exp e
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
@@ -298,21 +327,13 @@ polar z =  T2 (magnitude z) (phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-#if __GLASGOW_HASKELL__ <= 708
-mkPolar :: forall a. RealFloat a => Exp a -> Exp a -> Exp (Complex a)
-#else
 mkPolar :: forall a. Floating a => Exp a -> Exp a -> Exp (Complex a)
-#endif
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-#if __GLASGOW_HASKELL__ <= 708
-cis :: forall a. RealFloat a => Exp a -> Exp (Complex a)
-#else
 cis :: forall a. Floating a => Exp a -> Exp (Complex a)
-#endif
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number

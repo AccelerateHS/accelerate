@@ -1,14 +1,18 @@
-{-# LANGUAGE ConstraintKinds   #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PatternSynonyms   #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TypeFamilies      #-}
-{-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Eq
--- Copyright   : [2016..2019] The Accelerate Team
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -26,25 +30,22 @@ module Data.Array.Accelerate.Classes.Eq (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Bool
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
+import Data.Bool                                                    ( Bool(..) )
+import Data.Char                                                    ( Char )
 import Text.Printf
 import Prelude                                                      ( ($), String, Num(..), show, error, return, concat, map, zipWith, foldr1, mapM )
 import Language.Haskell.TH                                          hiding ( Exp )
 import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
 
-
-pattern True_ :: Exp Bool
-pattern True_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBool)) True))
-
-pattern False_ :: Exp Bool
-pattern False_ = Exp (SmartExp (Const (SingleScalarType (NonNumSingleType TypeBool)) False))
-
-{-# COMPLETE True_, False_ #-}
 
 infix 4 ==
 infix 4 /=
@@ -54,7 +55,11 @@ infix 4 /=
 --
 infixr 3 &&
 (&&) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&) x y = cond x y $ constant False
+(&&) (Exp x) (Exp y) =
+  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+                         (SmartExp $ Prj PairIdxLeft y)
+                         (SmartExp $ Const scalarTypeWord8 0))
+          `Pair` SmartExp Nil
 
 -- | Conjunction: True if both arguments are true. This is a strict version of
 -- '(&&)': it will always evaluate both arguments, even when the first is false.
@@ -69,7 +74,12 @@ infixr 3 &&!
 --
 infixr 2 ||
 (||) :: Exp Bool -> Exp Bool -> Exp Bool
-(||) x y = cond x (constant True) y
+(||) (Exp x) (Exp y) =
+  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+                         (SmartExp $ Const scalarTypeWord8 1)
+                         (SmartExp $ Prj PairIdxLeft y))
+          `Pair` SmartExp Nil
+
 
 -- | Disjunction: True if either argument is true. This is a strict version of
 -- '(||)': it will always evaluate both arguments, even when the first is true.
@@ -109,6 +119,10 @@ instance Eq sh => Eq (sh :. Int) where
   x == y = indexHead x == indexHead y && indexTail x == indexTail y
   x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
 
+instance Eq Bool where
+  x == y = mkCoerce x == (mkCoerce y :: Exp PrimBool)
+  x /= y = mkCoerce x /= (mkCoerce y :: Exp PrimBool)
+
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
 -- a useful error message.
@@ -119,13 +133,6 @@ instance P.Eq (Exp a) where
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
-
-cond :: Elt t
-     => Exp Bool                -- ^ condition
-     -> Exp t                   -- ^ then-expression
-     -> Exp t                   -- ^ else-expression
-     -> Exp t
-cond (Exp c) (Exp x) (Exp y) = mkExp $ Cond c x y
 
 $(runQ $ do
     let
@@ -152,8 +159,7 @@ $(runQ $ do
 
         nonNumTypes :: [Name]
         nonNumTypes =
-          [ ''Bool
-          , ''Char
+          [ ''Char
           ]
 
         cTypes :: [Name]

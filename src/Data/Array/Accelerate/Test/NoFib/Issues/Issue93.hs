@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue93
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue93 (
 ) where
 
 import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Data.Maybe                             as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -32,7 +33,7 @@ xs :: Array DIM2 Int
 xs = fromList (Z :. 1 :. 1) [5]
 
 test1 :: Acc (Array DIM2 Int)
-test1 = permute (\c _ -> c) (fill (shape xs') (constant 0)) id xs'
+test1 = permute (\c _ -> c) (fill (shape xs') (constant 0)) Just_ xs'
   where
     xs' = use xs
 

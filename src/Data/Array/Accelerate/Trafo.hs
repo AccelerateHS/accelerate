@@ -1,13 +1,8 @@
-{-# LANGUAGE CPP                  #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE MonoLocalBinds       #-}
-{-# LANGUAGE RecordWildCards      #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo
--- Copyright   : [2012..2019] The Accelerate Team
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -18,55 +13,36 @@
 module Data.Array.Accelerate.Trafo (
 
   -- * HOAS -> de Bruijn conversion
-  -- ** Options
-  module Data.Array.Accelerate.Trafo.Config,
-
   -- ** Array computations
   convertAcc, convertAccWith,
 
   -- ** Array functions
-  Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr,
+  Afunction, ArraysFunctionR,
   convertAfun, convertAfunWith,
 
   -- ** Sequence computations
   -- convertSeq, convertSeqWith,
 
   -- ** Scalar expressions
-  Function, FunctionR,
+  Function, EltFunctionR,
   convertExp, convertFun,
-
-  -- * Fusion
-  DelayedAcc, DelayedOpenAcc(..),
-  DelayedAfun, DelayedOpenAfun,
-
-  -- * Substitution
-  module Data.Array.Accelerate.Trafo.Substitution,
-
-  -- * Term equality
-  Match(..), (:~:)(..),
-
-  -- ** Auxiliary
-  matchDelayedOpenAcc,
-  encodeDelayedOpenAcc,
 
 ) where
 
-import Control.DeepSeq
-import Data.Typeable
-
+import Data.Array.Accelerate.Sugar.Array                ( ArraysR )
+import Data.Array.Accelerate.Sugar.Elt                  ( EltR )
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                ( ArrRepr, EltRepr )
-import Data.Array.Accelerate.Trafo.Base                 ( Match(..), matchDelayedOpenAcc, encodeDelayedOpenAcc )
 import Data.Array.Accelerate.Trafo.Config
-import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedOpenAcc(..), DelayedAfun, DelayedOpenAfun )
-import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR, AreprFunctionR, AfunctionRepr(..), afunctionRepr, EltReprFunctionR )
-import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Trafo.Delayed
+import Data.Array.Accelerate.Trafo.Sharing              ( Afunction, ArraysFunctionR, Function, EltFunctionR )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.LetSplit   as LetSplit
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 -- import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
+
+import Control.DeepSeq
 
 #ifdef ACCELERATE_DEBUG
 import Text.Printf
@@ -82,10 +58,10 @@ import Data.Array.Accelerate.Debug.Timed
 -- | Convert a closed array expression to de Bruijn form while also
 --   incorporating sharing observation and array fusion.
 --
-convertAcc :: Acc arrs -> DelayedAcc (ArrRepr arrs)
+convertAcc :: Acc arrs -> DelayedAcc (ArraysR arrs)
 convertAcc = convertAccWith defaultOptions
 
-convertAccWith :: Config -> Acc arrs -> DelayedAcc (ArrRepr arrs)
+convertAccWith :: Config -> Acc arrs -> DelayedAcc (ArraysR arrs)
 convertAccWith config
   = phase "array-fusion"           (Fusion.convertAccWith config)
   . phase "array-split-lets"       LetSplit.convertAcc
@@ -96,10 +72,10 @@ convertAccWith config
 -- | Convert a unary function over array computations, incorporating sharing
 --   observation and array fusion
 --
-convertAfun :: Afunction f => f -> DelayedAfun (AreprFunctionR f)
+convertAfun :: Afunction f => f -> DelayedAfun (ArraysFunctionR f)
 convertAfun = convertAfunWith defaultOptions
 
-convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (AreprFunctionR f)
+convertAfunWith :: Afunction f => Config -> f -> DelayedAfun (ArraysFunctionR f)
 convertAfunWith config
   = phase "array-fusion"           (Fusion.convertAfunWith config)
   . phase "array-split-lets"       LetSplit.convertAfun
@@ -110,18 +86,18 @@ convertAfunWith config
 -- | Convert a closed scalar expression, incorporating sharing observation and
 --   optimisation.
 --
-convertExp :: Exp e -> AST.Exp () (EltRepr e)
+convertExp :: Exp e -> AST.Exp () (EltR e)
 convertExp
-  = phase "exp-simplify"     Rewrite.simplify     -- XXX: only if simplification is enabled
+  = phase "exp-simplify"     Rewrite.simplifyExp
   . phase "sharing-recovery" Sharing.convertExp
 
 
 -- | Convert closed scalar functions, incorporating sharing observation and
 --   optimisation.
 --
-convertFun :: Function f => f -> AST.Fun () (EltReprFunctionR f)
+convertFun :: Function f => f -> AST.Fun () (EltFunctionR f)
 convertFun
-  = phase "exp-simplify"     Rewrite.simplify
+  = phase "exp-simplify"     Rewrite.simplifyFun
   . phase "sharing-recovery" Sharing.convertFun
 
 {--
@@ -159,6 +135,6 @@ phase n f x = unsafePerformIO $ do
     then timed dump_phases (\wall cpu -> printf "phase %s: %s" n (elapsed wall cpu)) (return $!! f x)
     else return (f x)
 #else
-phase _ f x = f x
+phase _ f = f
 #endif
 

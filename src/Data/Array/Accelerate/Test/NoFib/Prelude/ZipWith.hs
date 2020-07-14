@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
--- Copyright   : [2009..2019] The Accelerate Team
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -27,11 +27,13 @@ import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Data.Bits                              as A
-import Data.Array.Accelerate.Array.Sugar                            as S
 import Data.Array.Accelerate.Smart                                  ( ($$) )
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import qualified Data.Array.Accelerate.Sugar.Array                  as S
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -60,22 +62,22 @@ test_zipWith runN =
     testIntegralElt
         :: forall a. ( P.Integral a, P.FiniteBits a
                      , A.Integral a, A.FiniteBits a
-                     , Similar a )
+                     , Similar a, Show a )
         => Gen a
         -> TestTree
     testIntegralElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim0
         , testDim dim1
         , testDim dim2
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh, Show sh)
             => Gen sh
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank @sh))
+          testGroup ("DIM" P.++ show (S.rank @sh))
             [ -- operators on Num
               testProperty "(+)"          $ test_plus runN sh e
             , testProperty "(-)"          $ test_minus runN sh e
@@ -110,22 +112,22 @@ test_zipWith runN =
             ]
 
     testFloatingElt
-        :: forall a. (P.RealFloat a, A.RealFloat a, Similar a)
+        :: forall a. (P.RealFloat a, A.RealFloat a, Similar a, Show a)
         => (Range a -> Gen a)
         -> TestTree
     testFloatingElt e =
-      testGroup (show (eltType @a))
+      testGroup (show (eltR @a))
         [ testDim dim0
         , testDim dim1
         , testDim dim2
         ]
       where
         testDim
-            :: forall sh. (Shape sh, P.Eq sh)
+            :: forall sh. (Shape sh, Show sh, P.Eq sh)
             => Gen sh
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank @sh))
+          testGroup ("DIM" P.++ show (S.rank @sh))
             [ -- operators on Num
               testProperty "(+)"          $ test_plus runN sh (full e)
             , testProperty "(-)"          $ test_minus runN sh (full e)
@@ -156,7 +158,7 @@ zero :: (P.Num a, P.Eq a) => a -> Bool
 zero x = x P.== 0
 
 test_plus
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -170,7 +172,7 @@ test_plus runN dim e =
     let !go = runN (A.zipWith (+)) in go xs ys ~~~ zipWithRef (+) xs ys
 
 test_minus
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -184,7 +186,7 @@ test_minus runN dim e =
     let !go = runN (A.zipWith (-)) in go xs ys ~~~ zipWithRef (-) xs ys
 
 test_mult
-    :: (Shape sh, Similar e, P.Eq sh, P.Num e, A.Num e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -198,7 +200,7 @@ test_mult runN dim e =
     let !go = runN (A.zipWith (*)) in go xs ys ~~~ zipWithRef (*) xs ys
 
 test_quot
-    :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -212,7 +214,7 @@ test_quot runN dim e =
     let !go = runN (A.zipWith quot) in go xs ys ~~~ zipWithRef quot xs ys
 
 test_rem
-    :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -226,7 +228,7 @@ test_rem runN dim e =
     let !go = runN (A.zipWith rem) in go xs ys ~~~ zipWithRef rem xs ys
 
 test_quotRem
-    :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -240,7 +242,7 @@ test_quotRem runN dim e =
     let !go = runN (A.zipWith (lift $$ quotRem)) in go xs ys ~~~ zipWithRef quotRem xs ys
 
 test_idiv
-    :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -254,7 +256,7 @@ test_idiv runN dim e =
     let !go = runN (A.zipWith div) in go xs ys ~~~ zipWithRef div xs ys
 
 test_fdiv
-    :: (Shape sh, Similar e, P.Eq sh, P.Eq e, P.Fractional e, A.Fractional e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Eq e, P.Fractional e, A.Fractional e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -268,7 +270,7 @@ test_fdiv runN dim e =
     let !go = runN (A.zipWith (/)) in go xs ys ~~~ zipWithRef (/) xs ys
 
 test_pow
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -282,7 +284,7 @@ test_pow runN dim e =
     let !go = runN (A.zipWith (**)) in go xs ys ~~~ zipWithRef (**) xs ys
 
 test_logBase
-    :: (Shape sh, Similar e, P.Eq sh, P.Floating e, A.Floating e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -296,7 +298,7 @@ test_logBase runN dim e =
     let !go = runN (A.zipWith logBase) in go xs ys ~~~ zipWithRef logBase xs ys
 
 test_atan2
-    :: (Shape sh, Similar e, P.Eq sh, P.RealFloat e, A.RealFloat e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.RealFloat e, A.RealFloat e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -310,7 +312,7 @@ test_atan2 runN dim e =
     let !go = runN (A.zipWith A.atan2) in go xs ys ~~~ zipWithRef P.atan2 xs ys
 
 test_mod
-    :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -324,7 +326,7 @@ test_mod runN dim e =
     let !go = runN (A.zipWith mod) in go xs ys ~~~ zipWithRef mod xs ys
 
 test_divMod
-    :: (Shape sh, Similar e, P.Eq sh, P.Integral e, A.Integral e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -338,7 +340,7 @@ test_divMod runN dim e =
     let !go = runN (A.zipWith (lift $$ divMod)) in go xs ys ~~~ zipWithRef divMod xs ys
 
 test_band
-    :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Bits e, A.Bits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -352,7 +354,7 @@ test_band runN dim e =
     let !go = runN (A.zipWith (A..&.)) in go xs ys ~~~ zipWithRef (P..&.) xs ys
 
 test_bor
-    :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Bits e, A.Bits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -366,7 +368,7 @@ test_bor runN dim e =
     let !go = runN (A.zipWith (A..|.)) in go xs ys ~~~ zipWithRef (P..|.) xs ys
 
 test_xor
-    :: (Shape sh, Similar e, P.Eq sh, P.Bits e, A.Bits e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Bits e, A.Bits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -380,7 +382,7 @@ test_xor runN dim e =
     let !go = runN (A.zipWith A.xor) in go xs ys ~~~ zipWithRef P.xor xs ys
 
 test_shift
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -395,7 +397,7 @@ test_shift runN dim e =
     let !go = runN (A.zipWith A.shift) in go xs ys ~~~ zipWithRef P.shift xs ys
 
 test_shiftL
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -410,7 +412,7 @@ test_shiftL runN dim e =
     let !go = runN (A.zipWith A.shiftL) in go xs ys ~~~ zipWithRef P.shiftL xs ys
 
 test_shiftR
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -425,7 +427,7 @@ test_shiftR runN dim e =
     let !go = runN (A.zipWith A.shiftR) in go xs ys ~~~ zipWithRef P.shiftR xs ys
 
 test_rotate
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -440,7 +442,7 @@ test_rotate runN dim e =
     let !go = runN (A.zipWith A.rotate) in go xs ys ~~~ zipWithRef P.rotate xs ys
 
 test_rotateL
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -455,7 +457,7 @@ test_rotateL runN dim e =
     let !go = runN (A.zipWith A.rotateL) in go xs ys ~~~ zipWithRef P.rotateL xs ys
 
 test_rotateR
-    :: forall sh e. (Shape sh, Similar e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
+    :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -470,7 +472,7 @@ test_rotateR runN dim e =
     let !go = runN (A.zipWith A.rotateR) in go xs ys ~~~ zipWithRef P.rotateR xs ys
 
 test_lt
-    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -484,7 +486,7 @@ test_lt runN dim e =
     let !go = runN (A.zipWith (A.<)) in go xs ys ~~~ zipWithRef (P.<) xs ys
 
 test_gt
-    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -498,7 +500,7 @@ test_gt runN dim e =
     let !go = runN (A.zipWith (A.>)) in go xs ys ~~~ zipWithRef (P.>) xs ys
 
 test_lte
-    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -512,7 +514,7 @@ test_lte runN dim e =
     let !go = runN (A.zipWith (A.<=)) in go xs ys ~~~ zipWithRef (P.<=) xs ys
 
 test_gte
-    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -526,7 +528,7 @@ test_gte runN dim e =
     let !go = runN (A.zipWith (A.>=)) in go xs ys ~~~ zipWithRef (P.>=) xs ys
 
 test_eq
-    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -540,7 +542,7 @@ test_eq runN dim e =
     let !go = runN (A.zipWith (A.==)) in go xs ys ~~~ zipWithRef (P.==) xs ys
 
 test_neq
-    :: (Shape sh, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -554,7 +556,7 @@ test_neq runN dim e =
     let !go = runN (A.zipWith (A./=)) in go xs ys ~~~ zipWithRef (P./=) xs ys
 
 test_min
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
@@ -568,7 +570,7 @@ test_min runN dim e =
     let !go = runN (A.zipWith (A.min)) in go xs ys ~~~ zipWithRef (P.min) xs ys
 
 test_max
-    :: (Shape sh, Similar e, P.Eq sh, P.Ord e, A.Ord e)
+    :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
     -> Gen sh
     -> Gen e
