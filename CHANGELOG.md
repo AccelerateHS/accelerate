@@ -8,7 +8,6 @@ Policy (PVP)](https://pvp.haskell.org)
 
 ## [next]
 ### Changed
-  * Instances of `Elt` are now derivable via `Generic`
   * The `stencil` functions now support fusion. Note however that the source
     (delayed) array will be evaluated at _every_ access to the stencil pattern;
     if the delayed function is expensive, you may wish to explicitly `compute`
@@ -20,14 +19,17 @@ Policy (PVP)](https://pvp.haskell.org)
   * (internal) `EltRepr` is now a class-associated type of `Elt`
   * (internal) `GArrayData` has been simplified
   * (internal) SIMD representation has been improved and generalised
-  * (internal) Massive internal refactoring of the internal AST ([#449], [#455], [#457])
+  * (internal) Internal refactoring ([#449], [#455], [#457], [#460])
 
 ### Added
-  * Pattern synonyms for manipulating custom product types can now be created;
-    see `Pattern`
+  * Instances of `Elt` are now derivable via `Generic` for simple (Haskell'98)
+    product _and_ sum data types.
+  * Pattern synonyms for manipulating custom product and sum types can now be
+    created; see `Pattern`, `mkPattern`
+  * Support for pattern matching in the embedded language; see `match`
 
 ### Removed
-  * Drop support for GHC-7.10, 8.0
+  * Drop support for GHC-7.10 .. 8.4.
 
 ### Contributors
 
