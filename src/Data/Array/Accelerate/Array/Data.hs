@@ -177,9 +177,9 @@ singleArrayDict = single
 -- ----------------
 
 newArrayData :: HasCallStack => TupR ScalarType e -> Int -> IO (MutableArrayData e)
-newArrayData TupRunit         !_     = return ()
-newArrayData (TupRpair t1 t2) !size  = (,) <$> newArrayData t1 size <*> newArrayData t2 size
-newArrayData (TupRsingle t)  !size
+newArrayData TupRunit         !_    = return ()
+newArrayData (TupRpair t1 t2) !size = (,) <$> newArrayData t1 size <*> newArrayData t2 size
+newArrayData (TupRsingle t)   !size
   | SingleScalarType s <- t
   , SingleDict         <- singleDict s
   , SingleArrayDict    <- singleArrayDict s
