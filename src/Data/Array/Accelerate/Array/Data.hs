@@ -25,7 +25,7 @@
 module Data.Array.Accelerate.Array.Data (
 
   -- * Array operations and representations
-  ArrayData, MutableArrayData, GArrayData, ScalarArrayData, ScalarArrayDataR,
+  ArrayData, MutableArrayData, ScalarArrayData, GArrayDataR, ScalarArrayDataR,
   runArrayData,
   newArrayData,
   indexArrayData, readArrayData, writeArrayData,
@@ -85,19 +85,16 @@ type ArrayData e = MutableArrayData e
 
 -- | Mutable array representation
 --
-type MutableArrayData e = GArrayData e
+type MutableArrayData e = GArrayDataR UniqueArray e
 
 -- | Underlying array representation.
 --
--- In previous versions this was abstracted over by the mutable/immutable array
--- representation, but this is now fixed to our UniqueArray type.
---
 -- NOTE: We use a standard (non-strict) pair to enable lazy device-host data transfers
 --
-type family GArrayData a where
-  GArrayData ()     = ()
-  GArrayData (a, b) = (GArrayData a, GArrayData b)
-  GArrayData a      = ScalarArrayData a
+type family GArrayDataR ba a where
+  GArrayDataR ba ()     = ()
+  GArrayDataR ba (a, b) = (GArrayDataR ba a, GArrayDataR ba b)
+  GArrayDataR ba a      = ba (ScalarArrayDataR a)
 
 type ScalarArrayData a = UniqueArray (ScalarArrayDataR a)
 
@@ -122,13 +119,13 @@ type family ScalarArrayDataR t where
 
 
 data ScalarArrayDict a where
-  ScalarArrayDict :: ( GArrayData a ~ ScalarArrayData a, ScalarArrayDataR a ~ ScalarArrayDataR b )
+  ScalarArrayDict :: ( GArrayDataR UniqueArray a ~ ScalarArrayData a, ScalarArrayDataR a ~ ScalarArrayDataR b )
                   => {-# UNPACK #-} !Int    -- vector width
                   -> SingleType b           -- base type
                   -> ScalarArrayDict a
 
 data SingleArrayDict a where
-  SingleArrayDict :: ( GArrayData a ~ ScalarArrayData a, ScalarArrayDataR a ~ a )
+  SingleArrayDict :: ( GArrayDataR UniqueArray a ~ ScalarArrayData a, ScalarArrayDataR a ~ a )
                   => SingleArrayDict a
 
 scalarArrayDict :: ScalarType a -> ScalarArrayDict a
