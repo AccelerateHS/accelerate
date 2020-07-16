@@ -93,14 +93,13 @@ data SingleDict a where
              => SingleDict a
 
 data IntegralDict a where
-  IntegralDict :: ( Bounded a, Eq a, Ord a, Show a
-                  , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
+  IntegralDict :: ( Eq a, Ord a, Show a
+                  , Bounded a, Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
                => IntegralDict a
 
 data FloatingDict a where
   FloatingDict :: ( Eq a, Ord a, Show a
-                  , Floating a, Fractional a, Num a, Real a, RealFrac a
-                  , RealFloat a, Storable a )
+                  , Floating a, Fractional a, Num a, Real a, RealFrac a, RealFloat a, Storable a )
                => FloatingDict a
 
 
@@ -326,21 +325,21 @@ liftNum (IntegralNumType t) = liftIntegral t
 liftNum (FloatingNumType t) = liftFloating t
 
 liftIntegral :: IntegralType t -> t -> Q (TExp t)
-liftIntegral TypeInt{}    x = [|| x ||]
-liftIntegral TypeInt8{}   x = [|| x ||]
-liftIntegral TypeInt16{}  x = [|| x ||]
-liftIntegral TypeInt32{}  x = [|| x ||]
-liftIntegral TypeInt64{}  x = [|| x ||]
-liftIntegral TypeWord{}   x = [|| x ||]
-liftIntegral TypeWord8{}  x = [|| x ||]
-liftIntegral TypeWord16{} x = [|| x ||]
-liftIntegral TypeWord32{} x = [|| x ||]
-liftIntegral TypeWord64{} x = [|| x ||]
+liftIntegral TypeInt    x = [|| x ||]
+liftIntegral TypeInt8   x = [|| x ||]
+liftIntegral TypeInt16  x = [|| x ||]
+liftIntegral TypeInt32  x = [|| x ||]
+liftIntegral TypeInt64  x = [|| x ||]
+liftIntegral TypeWord   x = [|| x ||]
+liftIntegral TypeWord8  x = [|| x ||]
+liftIntegral TypeWord16 x = [|| x ||]
+liftIntegral TypeWord32 x = [|| x ||]
+liftIntegral TypeWord64 x = [|| x ||]
 
 liftFloating :: FloatingType t -> t -> Q (TExp t)
-liftFloating TypeHalf{}   x = [|| x ||]
-liftFloating TypeFloat{}  x = [|| x ||]
-liftFloating TypeDouble{} x = [|| x ||]
+liftFloating TypeHalf   x = [|| x ||]
+liftFloating TypeFloat  x = [|| x ||]
+liftFloating TypeDouble x = [|| x ||]
 
 
 liftScalarType :: ScalarType t -> Q (TExp (ScalarType t))
@@ -361,21 +360,21 @@ liftBoundedType :: BoundedType t -> Q (TExp (BoundedType t))
 liftBoundedType (IntegralBoundedType t) = [|| IntegralBoundedType $$(liftIntegralType t) ||]
 
 liftIntegralType :: IntegralType t -> Q (TExp (IntegralType t))
-liftIntegralType TypeInt{}    = [|| TypeInt ||]
-liftIntegralType TypeInt8{}   = [|| TypeInt8 ||]
-liftIntegralType TypeInt16{}  = [|| TypeInt16 ||]
-liftIntegralType TypeInt32{}  = [|| TypeInt32 ||]
-liftIntegralType TypeInt64{}  = [|| TypeInt64 ||]
-liftIntegralType TypeWord{}   = [|| TypeWord ||]
-liftIntegralType TypeWord8{}  = [|| TypeWord8 ||]
-liftIntegralType TypeWord16{} = [|| TypeWord16 ||]
-liftIntegralType TypeWord32{} = [|| TypeWord32 ||]
-liftIntegralType TypeWord64{} = [|| TypeWord64 ||]
+liftIntegralType TypeInt    = [|| TypeInt ||]
+liftIntegralType TypeInt8   = [|| TypeInt8 ||]
+liftIntegralType TypeInt16  = [|| TypeInt16 ||]
+liftIntegralType TypeInt32  = [|| TypeInt32 ||]
+liftIntegralType TypeInt64  = [|| TypeInt64 ||]
+liftIntegralType TypeWord   = [|| TypeWord ||]
+liftIntegralType TypeWord8  = [|| TypeWord8 ||]
+liftIntegralType TypeWord16 = [|| TypeWord16 ||]
+liftIntegralType TypeWord32 = [|| TypeWord32 ||]
+liftIntegralType TypeWord64 = [|| TypeWord64 ||]
 
 liftFloatingType :: FloatingType t -> Q (TExp (FloatingType t))
-liftFloatingType TypeHalf{}   = [|| TypeHalf ||]
-liftFloatingType TypeFloat{}  = [|| TypeFloat ||]
-liftFloatingType TypeDouble{} = [|| TypeDouble ||]
+liftFloatingType TypeHalf   = [|| TypeHalf ||]
+liftFloatingType TypeFloat  = [|| TypeFloat ||]
+liftFloatingType TypeDouble = [|| TypeDouble ||]
 
 
 -- Type-level bit sizes
