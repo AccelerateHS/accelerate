@@ -60,9 +60,18 @@ pattern Pattern :: forall b a context. IsPattern context a b => b -> context a
 pattern Pattern vars <- (destruct @context -> vars)
   where Pattern = construct @context
 
-class IsPattern con a t where
-  construct :: t -> con a
-  destruct  :: con a -> t
+class IsPattern con a b where
+  construct :: b -> con a
+  destruct  :: con a -> b
+
+
+pattern Vector :: forall b a context. IsVector context a b => b -> context a
+pattern Vector vars <- (vunpack @context -> vars)
+  where Vector = vpack @context
+
+class IsVector context a b where
+  vpack   :: b -> context a
+  vunpack :: context a -> b
 
 -- | Pattern synonyms for indices, which may be more convenient to use than
 -- 'Data.Array.Accelerate.Lift.lift' and
@@ -91,10 +100,6 @@ instance IsPattern Exp Z Z where
 instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
   construct (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
   destruct (Exp t)           = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
-
--- Newtype wrapper to distinguish between T and V patterns
---
-newtype VecPattern a = VecPattern a
 
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of
@@ -173,19 +178,28 @@ runQ $ do
                     _ -> $(tupE [[| Exp $(get (varE _x) i) |] | i <- [(n-1), (n-2) .. 0]])
             |]
 
+        -- Generate instance declarations for IsVector of the form:
+        -- instance (Elt v, EltR v ~ Vec 2 a, Elt a) => IsVector Exp v (Exp a, Exp a)
         mkVecPattern :: Int -> Q [Dec]
         mkVecPattern n = do
           a <- newName "a"
+          v <- newName "v"
           let
-              v = foldr appE [| VecRnil (singleType @(EltR $(varT a))) |] (replicate n [| VecRsucc |])
-              r = tupT (replicate n [t| Exp $(varT a) |])
-              t = tupT (replicate n (varT a))
+              -- Last argument to `IsVector`, eg (Exp, a, Exp a) in the example
+              tup      = tupT (replicate n ([t| Exp $(varT a)|]))
+              -- Representation as a vector, eg (Vec 2 a)
+              vec      = [t| Vec $(litT (numTyLit (fromIntegral n))) $(varT a) |]
+              -- Constraints for the type class, consisting of Elt constraints on all type variables,
+              -- and an equality constraint on the representation type of `a` and the vector representation `vec`.
+              context  = [t| (Elt $(varT v), VecElt $(varT a), EltR $(varT v) ~ $vec) |]
+              --
+              vecR     = foldr appE [| VecRnil (singleType @ $(varT a)) |] (replicate n [| VecRsucc |])
+              tR       = tupT (replicate n (varT a))
           --
-          [d| instance VecElt $(varT a) => IsPattern Exp (Vec $(litT (numTyLit (fromIntegral n))) $(varT a)) (VecPattern $r) where
-                construct (VecPattern x) =
-                  case construct x :: Exp $t of
-                    Exp x' -> Exp (SmartExp (VecPack $v x'))
-                destruct (Exp x) = VecPattern (destruct (Exp (SmartExp (VecUnpack $v x)) :: Exp $t))
+          [d| instance $context => IsVector Exp $(varT v) $tup where
+                vpack x = case construct x :: Exp $tR of
+                            Exp x' -> Exp (SmartExp (VecPack $vecR x'))
+                vunpack (Exp x) = destruct (Exp (SmartExp (VecUnpack $vecR x)) :: Exp $tR)
             |]
     --
     es <- mapM mkExpPattern [0..16]
@@ -250,17 +264,19 @@ runQ $ do
             ]
 
         mkV :: Int -> Q [Dec]
-        mkV n = do
-          a <- newName "a"
+        mkV n =
           let xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-              ts    = replicate n (varT a)
+              ts    = map varT xs
               name  = mkName ('V':show n)
-              sig   = foldr (\t r -> [t| Exp $t -> $r |]) [t| Exp (Vec $(litT (numTyLit (fromIntegral n))) $(varT a)) |] ts
-          --
+              con   = varT (mkName "con")
+              ty1   = varT (mkName "vec")
+              ty2   = tupT (map (con `appT`) ts)
+              sig   = foldr (\t r -> [t| $con $t -> $r |]) (appT con ty1) ts
+          in
           sequence
-            [ patSynSigD name [t| VecElt $(varT a) => $sig |]
-            , patSynD    name (prefixPatSyn xs) implBidir [p| Pattern (VecPattern $(tupP (map varP xs))) |]
-            , pragCompleteD [name] Nothing
+            [ patSynSigD name [t| IsVector $con $ty1 $ty2 => $sig |]
+            , patSynD    name (prefixPatSyn xs) implBidir [p| Vector $(tupP (map varP xs)) |]
+            , pragCompleteD [name] (Just ''Exp)
             ]
     --
     ts <- mapM mkT [2..16]

@@ -50,6 +50,7 @@ import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Vec
@@ -57,7 +58,7 @@ import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
 import Data.Complex                                                 ( Complex(..) )
-import Prelude                                                      (($))
+import Prelude                                                      ( ($) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
 
@@ -117,6 +118,10 @@ type family ComplexR a where
   ComplexR Word64 = Vec2 Word64
   ComplexR a      = (((), a), a)
 
+-- This isn't ideal because we gather the evidence based on the
+-- representation type, so we really get the evidence (VecElt (EltR a)),
+-- which is not very useful...
+--    - TLM 2020-07-16
 data ComplexType a c where
   ComplexVec :: VecElt a => SingleType a -> ComplexType a (Vec2 a)
   ComplexTup ::                             ComplexType a (((), a), a)
@@ -159,22 +164,17 @@ complexR = tuple
 
 
 constructComplex :: forall a. Elt a => Exp a -> Exp a -> Exp (Complex a)
-constructComplex r i = case complexR (eltR @a) of
-  ComplexVec _ ->
-    let
-      r', i' :: Exp (EltR a)
-      r' = coerce @a @(EltR a) r
-      i' = coerce i
-      v :: Exp (Vec2 (EltR a))
-      v = V2 r' i'
-    in
-      coerce @(Vec2 (EltR a)) @(Complex a) $ v
-  ComplexTup   -> coerce $ T2 r i
+constructComplex r i =
+  case complexR (eltR @a) of
+    ComplexTup   -> coerce $ T2 r i
+    ComplexVec _ -> V2 (coerce @a @(EltR a) r) (coerce @a @(EltR a) i)
 
 deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
-deconstructComplex c = case complexR (eltR @a) of
-  ComplexVec _ -> let V2 r i = coerce @(Complex a) @(Vec2 (EltR a)) c in (coerce r, coerce i)
-  ComplexTup   -> let T2 r i = coerce c in (r, i)
+deconstructComplex c@(Exp c') =
+  case complexR (eltR @a) of
+    ComplexTup   -> let T2 r i = coerce c in (r, i)
+    ComplexVec t -> let T2 r i = Exp (SmartExp (VecUnpack (VecRsucc (VecRsucc (VecRnil t))) c'))
+                     in (r, i)
 
 coerce :: EltR a ~ EltR b => Exp a -> Exp b
 coerce (Exp e) = Exp e

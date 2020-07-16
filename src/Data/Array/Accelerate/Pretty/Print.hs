@@ -377,8 +377,8 @@ prettyOpenExp ctx env aenv exp =
     Const tp c            -> prettyConst (TupRsingle tp) c
     Pair{}                -> prettyTuple ctx env aenv exp
     Nil                   -> "()"
-    VecPack   _ e         -> ppF1 "vecPack"   (ppE e)
-    VecUnpack _ e         -> ppF1 "vecUnpack" (ppE e)
+    VecPack   _ e         -> ppF1 "pack"   (ppE e)
+    VecUnpack _ e         -> ppF1 "unpack" (ppE e)
     Case x xs d           -> prettyCase env aenv x xs d
     Cond p t e            -> flatAlt multi single
       where
