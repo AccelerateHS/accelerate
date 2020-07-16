@@ -119,13 +119,13 @@ type family ScalarArrayDataR t where
 
 
 data ScalarArrayDict a where
-  ScalarArrayDict :: ( GArrayDataR UniqueArray a ~ ScalarArrayData a, ScalarArrayDataR a ~ ScalarArrayDataR b )
+  ScalarArrayDict :: ( ArrayData a ~ ScalarArrayData a, ScalarArrayDataR a ~ ScalarArrayDataR b )
                   => {-# UNPACK #-} !Int    -- vector width
                   -> SingleType b           -- base type
                   -> ScalarArrayDict a
 
 data SingleArrayDict a where
-  SingleArrayDict :: ( GArrayDataR UniqueArray a ~ ScalarArrayData a, ScalarArrayDataR a ~ a )
+  SingleArrayDict :: ( ArrayData a ~ ScalarArrayData a, ScalarArrayDataR a ~ a )
                   => SingleArrayDict a
 
 scalarArrayDict :: ScalarType a -> ScalarArrayDict a
