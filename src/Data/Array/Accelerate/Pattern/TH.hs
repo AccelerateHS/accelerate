@@ -316,9 +316,11 @@ mkConS tn' tvs' prev' next' tag' con' = do
       e       <- newName "_e"
       x       <- newName "_x"
       (ps,es) <- extract vs [| Prj PairIdxRight $(varE x) |] [] []
+      unbind  <- isExtEnabled RebindableSyntax
       let
+        eqE   = if unbind then letE [funD (mkName "==") [clause [] (normalB (varE '(==))) []]] else id
         lhs   = [p| (Exp $(varP e)) |]
-        body  = normalB $ caseE (varE e)
+        body  = normalB $ eqE $ caseE (varE e)
           [ TH.match (conP 'SmartExp [(conP 'Match [matchP ps, varP x])]) (normalB [| Just $(tupE es)  |]) []
           , TH.match (conP 'SmartExp [(recP 'Match [])])                  (normalB [| Nothing          |]) []
           , TH.match wildP                                                (normalB [| error $error_msg |]) []
