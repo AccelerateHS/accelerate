@@ -438,7 +438,7 @@ prettyOpenExp ctx env aenv exp =
       $ sep [ opName op, x app, y app, z app ]
 
     withTypeRep :: ScalarType t -> Adoc -> Adoc
-    withTypeRep t op = op <> enclose langle rangle (pretty (show t))
+    withTypeRep t op = op <+> "@" <> pretty (show t)
 
 prettyArrayVar
     :: forall aenv a.
