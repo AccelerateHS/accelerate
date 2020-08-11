@@ -1442,6 +1442,8 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Undef tR                        -> Undef tR
         Nil                             -> Nil
         Pair e1 e2                      -> Pair (cvtE e1) (cvtE e2)
+        VecPack vR e                    -> VecPack vR (cvtE e)
+        VecUnpack vR e                  -> VecUnpack vR (cvtE e)
         IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex shR' sh ix              -> ToIndex shR' (cvtE sh) (cvtE ix)
