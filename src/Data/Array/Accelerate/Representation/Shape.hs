@@ -41,6 +41,7 @@ showShape shr = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList sh
 type DIM0 = ()
 type DIM1 = ((), Int)
 type DIM2 = (((), Int), Int)
+type DIM3 = ((((), Int), Int), Int)
 
 dim0 :: ShapeR DIM0
 dim0 = ShapeRz
@@ -50,6 +51,9 @@ dim1 = ShapeRsnoc dim0
 
 dim2 :: ShapeR DIM2
 dim2 = ShapeRsnoc dim1
+
+dim3 :: ShapeR DIM3
+dim3 = ShapeRsnoc dim2
 
 -- | Number of dimensions of a /shape/ or /index/ (>= 0)
 --
