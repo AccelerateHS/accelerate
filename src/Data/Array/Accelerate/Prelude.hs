@@ -2514,31 +2514,32 @@ expand :: (Elt a, Elt b)
        -> Acc (Vector a)
        -> Acc (Vector b)
 expand f g xs =
-  if length xs == 0
+  let
+      szs           = map f xs
+      T2 offset len = scanl' (+) 0 szs
+      m             = the len
+  in
+  if length xs == 0 || m == 0
      then use $ fromList (Z:.0) []
      else
       let
-          szs           = map f xs
-          T2 offset len = scanl' (+) 0 szs
+          n          = m + 1
+          put ix     = Just_ (I1 (offset ! ix))
 
-          m             = the len
-          n             = m + 1
-          put ix        = Just_ (I1 (offset ! ix))
+          head_flags :: Acc (Vector Int)
+          head_flags = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
 
-          head_flags    :: Acc (Vector Int)
-          head_flags    = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
+          idxs       = map (subtract 1)
+                     $ map snd
+                     $ scanl1 (segmentedL (+))
+                     $ zip head_flags
+                     $ fill (I1 m) 1
 
-          idxs          = map (subtract 1)
-                        $ map snd
-                        $ scanl1 (segmentedL (+))
-                        $ zip head_flags
-                        $ fill (I1 m) 1
-
-          iotas         = map snd
-                        $ scanl1 (segmentedL const)
-                        $ zip head_flags
-                        $ permute const (fill (I1 n) undef) put
-                        $ enumFromN (shape xs) 0
+          iotas      = map snd
+                     $ scanl1 (segmentedL const)
+                     $ zip head_flags
+                     $ permute const (fill (I1 n) undef) put
+                     $ enumFromN (shape xs) 0
       in
       zipWith g (gather iotas xs) idxs
 
@@ -2611,4 +2612,3 @@ _2 = lens (\ix   -> let _  :. y :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int
 _3 :: forall sh. Elt sh => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
 _3 = lens (\ix   -> let _  :. z :. _ :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in z)
           (\ix z -> let sh :. _ :. y :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in lift (sh :. z :. y :. x))
-
