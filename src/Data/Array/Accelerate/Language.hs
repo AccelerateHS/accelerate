@@ -1214,7 +1214,7 @@ foreignExp
     -> (Exp x -> Exp y)
     -> Exp x
     -> Exp y
-foreignExp a f (Exp x) = mkExp $ Foreign (eltR @y) a (unExpFunction f) x
+foreignExp asm f (Exp x) = mkExp $ Foreign (eltR @y) asm (unExpFunction f) x
 
 
 -- Composition of array computations
