@@ -32,7 +32,6 @@ import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Ord
-import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Integral                       ()
 
 import Prelude                                                      ( (.), ($), undefined, otherwise )
@@ -715,6 +714,20 @@ shiftRLDefault x i
   $ mkBShiftR x i
 
 rotateDefault :: forall t. (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+rotateDefault x i
+  = cond (i < 0) (mkBRotateR x (-i))
+  $ cond (i > 0) (mkBRotateL x i)
+  $ x
+
+{--
+-- Rotation can be implemented in terms of two shifts, but care is needed
+-- for negative values. This suggested implementation assumes
+-- 2's-complement arithmetic.
+--
+-- This is disabled because (at least) LLVM-9 generates incorrect code on
+-- the Turing architecture for negative shift amounts of 64-bit values.
+--
+rotateDefault :: forall t. (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateDefault =
   case integralType :: IntegralType (EltR t) of
     TypeInt{}     -> rotateDefault' (undefined::Word)
@@ -744,6 +757,7 @@ rotateDefault' _ x i
     x'   = i2w x
     i'   = i `mkBAnd` (wsib - 1)
     wsib = finiteBitSize x
+--}
 
 rotateLDefault :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateLDefault x i
