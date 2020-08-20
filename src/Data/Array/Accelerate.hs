@@ -412,6 +412,7 @@ module Data.Array.Accelerate (
   Word, Word8, Word16, Word32, Word64,
   Half(..), Float, Double,
   Bool(..), pattern True_, pattern False_,
+  Maybe(..), pattern Nothing_, pattern Just_,
   Char,
 
   CFloat, CDouble,
@@ -421,6 +422,7 @@ module Data.Array.Accelerate (
 ) where
 
 import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.TH
