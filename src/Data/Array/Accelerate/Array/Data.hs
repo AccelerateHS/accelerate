@@ -211,7 +211,7 @@ readArrayData (TupRsingle t)   arr      !ix
         !addr#  = unPtr# (unsafeUniqueArrayPtr arr) `plusAddr#` (ix# *# bytes#)
      in
      IO $ \s0 ->
-       case newByteArray# bytes# s0                      of { (# s1, mba# #) ->
+       case newAlignedPinnedByteArray# bytes# 16# s0     of { (# s1, mba# #) ->
        case copyAddrToByteArray# addr# mba# 0# bytes# s1 of { s2             ->
        case unsafeFreezeByteArray# mba# s2               of { (# s3, ba# #)  ->
          (# s3, Vec ba# #)
