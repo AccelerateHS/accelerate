@@ -20,7 +20,6 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue137 (
 ) where
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Data.Maybe                             as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty

@@ -29,7 +29,6 @@ import qualified Data.Bits                                          as P
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Data.Bits                              as A
-import Data.Array.Accelerate.Data.Maybe                             as A
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
