@@ -16,7 +16,7 @@ Policy (PVP)](https://pvp.haskell.org)
   * Improve fusion for `zipWith*` ([#453])
 
   * (internal) Visible type applications are used instead of `Proxy` types
-  * (internal) `EltRepr` is now a class-associated type of `Elt`
+  * (internal) `EltR` is now a class-associated type of `Elt`
   * (internal) `GArrayData` has been simplified
   * (internal) SIMD representation has been improved and generalised
   * (internal) Internal refactoring ([#449], [#455], [#457], [#460])
@@ -41,6 +41,17 @@ Special thanks to those who contributed patches as part of this release:
   * David van Balen (@dpvanbalen)
   * Jaro Reinders (@noughtmare)
   * Alex Lang (@alang9)
+  * Paul Wilson (@status_failed)
+  * @lennonhill
+  * Travis Whitaker (@TravisWhitaker)
+  * Roger Bosman (@rogerbosman)
+  * Robbert van der Helm (@robbert-vdh)
+  * Sam (@sam-340453)
+  * Lars van den Haak (@sakehl)
+  * Rinat Striungis (@Haskell-mouse)
+  * Viktor Kronvall (@considerate)
+  * Tom Smeding (@tomsmeding)
+  * Ryan Scott (@RyanGlScott)
 
 
 ## [1.2.0.1] - 2018-10-06
