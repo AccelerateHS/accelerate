@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                1.4.0.0
+Version:                1.3.0.0
 Cabal-version:          >= 1.18
 Tested-with:            GHC >= 8.6
 Build-type:             Custom
@@ -41,16 +41,24 @@ Description:
       greater. See the following table for supported GPUs:
       <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
   .
-    * @accelerate-examples@: Computational kernels and applications showcasing
-      the use of Accelerate.
+    * @accelerate-examples@: Computational kernels and applications
+      demonstrating the use of Accelerate.
   .
-    * @accelerate-io@: Fast conversions between Accelerate arrays and other
-      array formats (including vector and repa).
+    * @accelerate-io*@: Fast conversions between Accelerate arrays and other
+      array and data formats.
   .
     * @accelerate-fft@: Discrete Fourier transforms, with FFI bindings to
       optimised implementations.
   .
+    * @accelerate-blas@: Numeric linear algebra, with FFI bindings to optimised
+      implementations.
+  .
     * @accelerate-bignum@: Fixed-width large integer arithmetic.
+  .
+    * @containers-accelerate@: Container types for use with Accelerate.
+  .
+    * @hashable-accelerate@: Class for types which can be converted to a hash
+      value.
   .
     * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV,
       and HSL).
@@ -76,7 +84,7 @@ Description:
   .
     * An implementation of the Canny edge detection algorithm
   .
-    * An interactive Mandelbrot set generator
+    * Interactive Mandelbrot and Julia set generators
   .
     * A particle-based simulation of stable fluid flows
   .
@@ -592,7 +600,7 @@ source-repository head
 
 source-repository this
   Type:                 git
-  Tag:                  v1.4.0.0
+  Tag:                  v1.3.0.0
   Location:             git://github.com/AccelerateHS/accelerate.git
 
 -- vim: nospell
