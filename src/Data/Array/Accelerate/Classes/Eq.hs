@@ -64,6 +64,8 @@ infixr 3 &&
 -- | Conjunction: True if both arguments are true. This is a strict version of
 -- '(&&)': it will always evaluate both arguments, even when the first is false.
 --
+-- @since 1.3.0.0
+--
 infixr 3 &&!
 (&&!) :: Exp Bool -> Exp Bool -> Exp Bool
 (&&!) = mkLAnd
@@ -83,6 +85,8 @@ infixr 2 ||
 
 -- | Disjunction: True if either argument is true. This is a strict version of
 -- '(||)': it will always evaluate both arguments, even when the first is true.
+--
+-- @since 1.3.0.0
 --
 infixr 2 ||!
 (||!) :: Exp Bool -> Exp Bool -> Exp Bool

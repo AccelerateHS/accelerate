@@ -36,6 +36,8 @@ module Data.Array.Accelerate.Debug.Monitoring (
 ) where
 
 #ifdef ACCELERATE_MONITORING
+import Data.Array.Accelerate.Debug.Clock
+
 import System.Metrics
 import System.Remote.Monitoring
 

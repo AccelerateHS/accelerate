@@ -110,6 +110,12 @@
 -- * <https://hackage.haskell.org/package/accelerate-bignum accelerate-bignum>:
 -- Fixed-width large integer arithmetic.
 --
+-- * <https://hackage.haskell.org/package/containers-accelerate containers-accelerate>:
+-- Container types for use with Accelerate.
+--
+-- * <https://hackage.haskell.org/package/hashable-accelerate hashable-accelerate>:
+-- Class for types which can be converted to a value.
+--
 -- * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>:
 -- Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
 --
