@@ -1,12 +1,12 @@
-Name:                   accelerate
-Version:                1.3.0.0
-Cabal-version:          >= 1.18
-Tested-with:            GHC >= 8.6
-Build-type:             Custom
+name:                   accelerate
+version:                1.3.0.0
+cabal-version:          1.18
+tested-with:            GHC >= 8.6
+build-type:             Custom
 
-Synopsis:               An embedded language for accelerated array processing
+synopsis:               An embedded language for accelerated array processing
 
-Description:
+description:
   @Data.Array.Accelerate@ defines an embedded array language for computations
   for high-performance computing in Haskell. Computations on multi-dimensional,
   regular arrays are expressed in the form of parameterised collective
@@ -118,23 +118,23 @@ Description:
       <https://github.com/AccelerateHS/accelerate/issues>
   .
 
-License:                BSD3
-License-file:           LICENSE
-Author:                 The Accelerate Team
-Maintainer:             Trevor L. McDonell <trevor.mcdonell@gmail.com>
-Homepage:               https://github.com/AccelerateHS/accelerate/
-Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
+license:                BSD3
+license-file:           LICENSE
+author:                 The Accelerate Team
+maintainer:             Trevor L. McDonell <trevor.mcdonell@gmail.com>
+homepage:               https://github.com/AccelerateHS/accelerate/
+bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 
-Category:               Accelerate, Compilers/Interpreters, Concurrency, Data, Parallelism
-Stability:              Experimental
+category:               Accelerate, Compilers/Interpreters, Concurrency, Data, Parallelism
+stability:              Experimental
 
-Extra-source-files:
+extra-source-files:
     README.md
     CHANGELOG.md
     cbits/*.c
     cbits/*.h
 
-Extra-doc-files:
+extra-doc-files:
     images/*.png
 
 custom-setup
@@ -143,9 +143,9 @@ custom-setup
     , Cabal
     , cabal-doctest     >= 1.0
 
-Flag debug
-  Default:              False
-  Description:
+flag debug
+  default:              False
+  description:
     Enable debug tracing messages. The following options are read from the
     environment variable @ACCELERATE_FLAGS@, and via the command-line as:
     .
@@ -220,9 +220,9 @@ Flag debug
       * @dump-sched@: Print information related to execution scheduling.
     .
 
-Flag ekg
-  Default:              False
-  Description:
+flag ekg
+  default:              False
+  description:
     Enable hooks for monitoring the running application using EKG. Implies
     @debug@ mode. In order to view the metrics, your application will need to
     call @Data.Array.Accelerate.Debug.beginMonitoring@ before running any
@@ -256,26 +256,26 @@ Flag ekg
     > -with-rtsopts=-T
     .
 
-Flag bounds-checks
-  Description:          Enable bounds checking
-  Default:              True
+flag bounds-checks
+  description:          Enable bounds checking
+  default:              True
 
-Flag unsafe-checks
-  Description:          Enable bounds checking in unsafe operations
-  Default:              False
+flag unsafe-checks
+  description:          Enable bounds checking in unsafe operations
+  default:              False
 
-Flag internal-checks
-  Description:          Enable internal consistency checks
-  Default:              False
+flag internal-checks
+  description:          Enable internal consistency checks
+  default:              False
 
 -- Enabling this drastically increases build times
 -- See: https://gitlab.haskell.org/ghc/ghc/issues/15751
-Flag nofib
-  Default:              False
-  Description:          Build the nofib test suite (required for backend testing)
+flag nofib
+  default:              False
+  description:          Build the nofib test suite (required for backend testing)
 
-Library
-  Build-depends:
+library
+  build-depends:
           base                          >= 4.12 && < 4.15
         , ansi-terminal                 >= 0.6.2
         , base-orphans                  >= 0.3
@@ -305,7 +305,7 @@ Library
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
 
-  Exposed-modules:
+  exposed-modules:
         -- The core language and reference implementation
         Data.Array.Accelerate
         Data.Array.Accelerate.Interpreter
@@ -370,7 +370,7 @@ Library
         Data.BitSet
         Data.Primitive.Vec
 
-  Other-modules:
+  other-modules:
         Data.Array.Accelerate.Analysis.Hash.TH
         Data.Array.Accelerate.Array.Remote.Nursery
         Data.Array.Accelerate.Classes
