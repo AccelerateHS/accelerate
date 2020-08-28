@@ -3,13 +3,11 @@
 {-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
---               [2013..2017] Robert Clifton-Everest
---               [2014..2014] Frederik M. Madsen
+-- Description : The Accelerate standard prelude
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -87,7 +85,7 @@
 --
 --      - For more information on LULESH: <https://codesign.llnl.gov/lulesh.php>.
 --
---      <<https://codesign.llnl.gov/images/sedov-3d-LLNL.png>>
+--      <<https://i.imgur.com/bIkODKd.jpg>>
 --
 -- [/Starting a new project:/]
 --
@@ -111,6 +109,12 @@
 --
 -- * <https://hackage.haskell.org/package/accelerate-bignum accelerate-bignum>:
 -- Fixed-width large integer arithmetic.
+--
+-- * <https://hackage.haskell.org/package/containers-accelerate containers-accelerate>:
+-- Container types for use with Accelerate.
+--
+-- * <https://hackage.haskell.org/package/hashable-accelerate hashable-accelerate>:
+-- Class for types which can be converted to a value.
 --
 -- * <https://hackage.haskell.org/package/colour-accelerate colour-accelerate>:
 -- Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
@@ -142,10 +146,7 @@
 --
 -- * Bug reports: https://github.com/AccelerateHS/accelerate/issues
 --
--- * Maintainers:
---
---     * Trevor L. McDonell: <mailto:tmcdonell@cse.unsw.edu.au>
---     * Manuel M T Chakravarty: <mailto:chak@cse.unsw.edu.au>
+-- * Maintainer: Trevor L. McDonell: <mailto:trevor.mcdonell@gmail.com>
 --
 -- [/Tip:/]
 --
@@ -203,6 +204,9 @@ module Data.Array.Accelerate (
   -- *** Concatenation
   (++), concatOn,
 
+  -- *** Expansion
+  expand,
+
   -- ** Composition
   -- *** Flow control
   (?|), acond, awhile,
@@ -242,7 +246,6 @@ module Data.Array.Accelerate (
   -- *** Permutations
   -- **** Forward permutation (scatter)
   permute,
-  ignore,
   scatter,
 
   -- **** Backward permutation (gather)
@@ -254,13 +257,14 @@ module Data.Array.Accelerate (
   reverseOn, transposeOn,
 
   -- *** Filtering
-  filter,
+  filter, compact,
 
   -- ** Folding
   fold, fold1, foldAll, fold1All,
 
   -- *** Segmented reductions
-  foldSeg, fold1Seg,
+  foldSeg,  fold1Seg,
+  foldSeg', fold1Seg',
 
   -- *** Specialised reductions
   all, any, and, or, sum, product, minimum, maximum,
@@ -304,17 +308,20 @@ module Data.Array.Accelerate (
   -- ** Scalar data types
   Exp,
 
+  -- ** SIMD vectors
+  Vec, VecElt,
+
   -- ** Type classes
   -- *** Basic type classes
   Eq(..),
-  Ord(..), Ordering(..),
+  Ord(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
 
   -- *** Numeric type classes
   Num, (+), (-), (*), negate, abs, signum, fromInteger,
-  -- Real, -- vacuous
   Integral, quot, rem, div, mod, quotRem, divMod,
+  Rational(..),
   Fractional, (/), recip, fromRational,
   Floating, pi, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, exp, sqrt, log, (**), logBase,
   RealFrac(..), div', mod', divMod',
@@ -334,10 +341,22 @@ module Data.Array.Accelerate (
   -- ** Pattern synonyms
   -- $pattern_synonyms
   --
-  pattern Pattern, IsProduct, IsTuple, IsAtuple,
+  pattern Pattern,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
+
+  pattern Z_, pattern Ix, pattern (::.),
+  pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
+  pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
+
+  pattern Vec2, pattern V2,
+  pattern Vec3, pattern V3,
+  pattern Vec4, pattern V4,
+  pattern Vec8, pattern V8,
+  pattern Vec16, pattern V16,
+
+  mkPattern, mkPatterns,
 
   -- ** Scalar operations
   -- *** Introduction
@@ -347,7 +366,7 @@ module Data.Array.Accelerate (
   fst, afst, snd, asnd, curry, uncurry,
 
   -- *** Flow control
-  (?), caseof, cond, while, iterate,
+  (?), match, cond, while, iterate,
 
   -- *** Scalar reduction
   sfoldl,
@@ -390,38 +409,47 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Useful re-exports
-  (.), ($), error, undefined, const, otherwise,
-  Show, Generic,
+  (.), ($), (&), error, undefined, const, otherwise,
+  Show, Generic, HasCallStack,
 
   -- ---------------------------------------------------------------------------
   -- Types
   Int, Int8, Int16, Int32, Int64,
   Word, Word8, Word16, Word32, Word64,
   Half(..), Float, Double,
-  Bool(..), Char,
+  Bool(..), pattern True_, pattern False_,
+  Maybe(..), pattern Nothing_, pattern Just_,
+  Char,
 
   CFloat, CDouble,
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
   CChar, CSChar, CUChar,
 
-  -- Avoid using these in your own functions wherever possible.
-  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
-
 ) where
 
--- friends
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), rank, shape, reshape, size, toIndex, fromIndex, intersect, ignore )
 import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.TH
 import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Trafo                                  () -- show instances
+import Data.Array.Accelerate.Pretty                                 () -- show instances
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            ( Array, Arrays, Scalar, Vector, Matrix, Segments, fromFunction, fromFunctionM, toList, fromList )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, toIndex, fromIndex, intersect )
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Array.Sugar                  as S
+import Data.Primitive.Vec
+import qualified Data.Array.Accelerate.Sugar.Array                  as S
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
-import Prelude                                                      ( (.), ($), Show, undefined, error, const, otherwise )
+import Data.Function                                                ( (&) )
+import Prelude                                                      ( (.), ($), Char, Show, undefined, error, const, otherwise )
+
 import GHC.Generics                                                 ( Generic )
+import GHC.Stack
+
 
 -- $setup
 -- >>> :seti -XTypeOperators
@@ -588,11 +616,10 @@ arrayReshape = S.reshape
 -- in two-dimensional space:
 --
 -- > data Point = Point_ Float Float
--- >   deriving (Show, Generic, Elt, IsTuple)
+-- >   deriving (Generic, Elt)
 --
--- Here we derive instances for both the 'Elt' class, so that this data type can
--- be used within Accelerate scalar expressions, and the 'IsTuple' class, as
--- this is a product type (contains multiple values).
+-- Here we derive instance an instance of the 'Elt' class (via 'Generic'),
+-- so that this data type can be used within scalar Accelerate expressions
 --
 -- In order to access the individual fields of the data constructor from within
 -- an Accelerate expression, we define the following pattern synonym:
@@ -615,7 +642,7 @@ arrayReshape = S.reshape
 -- use record syntax to generate field accessors, if we desire:
 --
 -- > data SparseVector a = SparseVector_ (Vector Int) (Vector a)
--- >   deriving (Show, Generic, Arrays, IsAtuple)
+-- >   deriving (Generic, Arrays)
 -- >
 -- > pattern SparseVector :: Elt a => Acc (Vector Int) -> Acc (Vector a) -> Acc (SparseVector a)
 -- > pattern SparseVector { indices, values } = Pattern (indices, values)

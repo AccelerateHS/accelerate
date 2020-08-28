@@ -7,10 +7,10 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue264
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -23,11 +23,12 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue264 (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -56,11 +57,11 @@ test_issue264 runN =
     ]
   where
     testElt
-        :: forall a. (Similar a, P.Num a, A.Num a)
+        :: forall a. (Similar a, Show a, P.Num a, A.Num a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltR @a))
         [ testProperty "neg.neg"        $ test_neg_neg runN e
         ]
 
@@ -119,7 +120,7 @@ test_not_not_or runN =
     let !go = runN (A.zipWith (\u v -> A.not (A.not (u A.|| v)))) in go xs ys === zipWithRef (\u v -> P.not (P.not (u P.|| v))) xs ys
 
 test_neg_neg
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property

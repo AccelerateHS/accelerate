@@ -3,10 +3,10 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Base
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -14,12 +14,16 @@
 module Data.Array.Accelerate.Test.NoFib.Base
   where
 
-import Data.Array.Accelerate.Array.Sugar                            ( Arrays, Array, Shape, Elt, DIM0, DIM1, DIM2, DIM3, Z(..), (:.)(..), fromList, size )
-import Data.Array.Accelerate.Smart                                  ( Acc )
-import Data.Array.Accelerate.Trafo.Sharing                          ( Afunction, AfunctionR )
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
+import Data.Array.Accelerate.Trafo.Sharing
 import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
 
 import Control.Monad
+import Data.Primitive.Types
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -89,6 +93,22 @@ f32 = Gen.float (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
 
 f64 :: Gen Double
 f64 = Gen.double (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
+
+v2 :: Prim a => Gen a -> Gen (Vec2 a)
+v2 a = Vec2 <$> a <*> a
+
+v3 :: Prim a => Gen a -> Gen (Vec3 a)
+v3 a = Vec3 <$> a <*> a <*> a
+
+v4 :: Prim a => Gen a -> Gen (Vec4 a)
+v4 a = Vec4 <$> a <*> a <*> a <*> a
+
+v8 :: Prim a => Gen a -> Gen (Vec8 a)
+v8 a = Vec8 <$> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
+
+v16 :: Prim a => Gen a -> Gen (Vec16 a)
+v16 a = Vec16 <$> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
+              <*> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
 
 log_flt_max :: RealFloat a => a
 log_flt_max = log flt_max

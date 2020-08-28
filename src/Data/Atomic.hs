@@ -1,13 +1,15 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE MagicHash                #-}
 {-# LANGUAGE NoImplicitPrelude        #-}
+{-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE UnboxedTuples            #-}
+{-# OPTIONS_GHC -fobject-code #-}
 -- |
 -- Module      : Data.Atomic
--- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -22,6 +24,7 @@ module Data.Atomic (
 ) where
 
 import Data.Int
+import Language.Haskell.TH.Syntax
 
 import GHC.Ptr
 import GHC.Base
@@ -65,4 +68,10 @@ foreign import ccall unsafe "atomic_fetch_and_and_64" and :: Atomic -> Int64 -> 
 -- | Decrement the atomic value by the given amount. Return the old value.
 --
 foreign import ccall unsafe "atomic_fetch_and_sub_64" subtract :: Atomic -> Int64 -> IO Int64
+
+-- SEE: [linking to .c files]
+--
+runQ $ do
+  addForeignFilePath LangC "cbits/atomic.c"
+  return []
 

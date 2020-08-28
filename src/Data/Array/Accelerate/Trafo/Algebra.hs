@@ -1,6 +1,6 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -10,10 +10,10 @@
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Algebra
--- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -27,70 +27,55 @@ module Data.Array.Accelerate.Trafo.Algebra (
 
 ) where
 
-import Data.Bits
-import Data.Char
-import Data.Monoid
-import GHC.Float                                        ( float2Double, double2Float )
-import Text.PrettyPrint.ANSI.Leijen
-import Prelude                                          hiding ( exp )
-import qualified Prelude                                as P
-
--- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                hiding ( Any )
-import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
-import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Pretty.Print                           ( primOperator, isInfix, opName )
+import Data.Array.Accelerate.Trafo.Environment
 import Data.Array.Accelerate.Type
 
-import qualified Data.Array.Accelerate.Debug            as Stats
+import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
+
+import Data.Bits
+import Data.Monoid
+import Data.Text                                                    ( Text )
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Text
+import GHC.Float                                                    ( float2Double, double2Float )
+import Prelude                                                      hiding ( exp )
+import qualified Prelude                                            as P
 
 
 -- Propagate constant expressions, which are either constant valued expressions
 -- or constant let bindings. Be careful not to follow self-cycles.
 --
 propagate
-    :: forall acc env aenv exp. Kit acc
-    => Gamma acc env env aenv
-    -> PreOpenExp acc env aenv exp
+    :: forall env aenv exp.
+       Gamma env env aenv
+    -> OpenExp env aenv exp
     -> Maybe exp
 propagate env = cvtE
   where
-    cvtE :: PreOpenExp acc env aenv e -> Maybe e
+    cvtE :: OpenExp env aenv e -> Maybe e
     cvtE exp = case exp of
-      Const c                                   -> Just (toElt c)
+      Const _ c                                 -> Just c
       PrimConst c                               -> Just (evalPrimConst c)
-      Prj ix (Var v) | Tuple t <- prjExp v env  -> cvtT ix t
-      Prj ix e       | Just c  <- cvtE e        -> cvtP ix (fromTuple c)
-      Var ix
+      Evar (Var _  ix)
         | e             <- prjExp ix env
-        , Nothing       <- match exp e          -> cvtE e
-      --
-      IndexHead (cvtE -> Just (_  :. z))        -> Just z
-      IndexTail (cvtE -> Just (sh :. _))        -> Just sh
+        , Nothing       <- matchOpenExp exp e   -> cvtE e
+      Nil                                       -> Just ()
+      Pair e1 e2                                -> (,) <$> cvtE e1 <*> cvtE e2
       _                                         -> Nothing
-
-    cvtP :: TupleIdx t e -> t -> Maybe e
-    cvtP ZeroTupIdx       (_, v)   = Just v
-    cvtP (SuccTupIdx idx) (tup, _) = cvtP idx tup
-
-    cvtT :: TupleIdx t e -> Tuple (PreOpenExp acc env aenv) t -> Maybe e
-    cvtT ZeroTupIdx       (SnocTup _   e) = cvtE e
-    cvtT (SuccTupIdx idx) (SnocTup tup _) = cvtT idx tup
-#if __GLASGOW_HASKELL__ < 800
-    cvtT _                _               = error "hey what's the head angle on that thing?"
-#endif
 
 
 -- Attempt to evaluate primitive function applications
 --
 evalPrimApp
-    :: forall acc env aenv a r. (Kit acc, Elt a, Elt r)
-    => Gamma acc env env aenv
+    :: forall env aenv a r.
+       Gamma env env aenv
     -> PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> (Any, PreOpenExp acc env aenv r)
+    -> OpenExp env aenv a
+    -> (Any, OpenExp env aenv r)
 evalPrimApp env f x
   -- First attempt to move constant values towards the left
   | Just r      <- commutes f x env     = evalPrimApp env f r
@@ -160,9 +145,6 @@ evalPrimApp env f x
       PrimLAnd                  -> evalLAnd x env
       PrimLOr                   -> evalLOr x env
       PrimLNot                  -> evalLNot x env
-      PrimOrd                   -> evalOrd x env
-      PrimChr                   -> evalChr x env
-      PrimBoolToInt             -> evalBoolToInt x env
       PrimFromIntegral ta tb    -> evalFromIntegral ta tb x env
       PrimToFloating ta tb      -> evalToFloating ta tb x env
 
@@ -172,11 +154,11 @@ evalPrimApp env f x
 -- to the left of the operator. Returning Nothing indicates no change is made.
 --
 commutes
-    :: forall acc env aenv a r. Kit acc
-    => PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> Gamma acc env env aenv
-    -> Maybe (PreOpenExp acc env aenv a)
+    :: forall env aenv a r.
+       PrimFun (a -> r)
+    -> OpenExp env aenv a
+    -> Gamma env env aenv
+    -> Maybe (OpenExp env aenv a)
 commutes f x env = case f of
   PrimAdd _     -> swizzle x
   PrimMul _     -> swizzle x
@@ -189,12 +171,12 @@ commutes f x env = case f of
   PrimMin _     -> swizzle x
   _             -> Nothing
   where
-    swizzle :: PreOpenExp acc env aenv (b,b) -> Maybe (PreOpenExp acc env aenv (b,b))
-    swizzle (Tuple (NilTup `SnocTup` a `SnocTup` b))
+    swizzle :: OpenExp env aenv (b,b) -> Maybe (OpenExp env aenv (b,b))
+    swizzle (Pair a b)
       | Nothing         <- propagate env a
       , Just _          <- propagate env b
       = Stats.ruleFired (pprFun "commutes" f)
-      $ Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
+      $ Just $ Pair b a
 
 --    TLM: changing the ordering here when neither term can be reduced can be
 --         disadvantageous: for example in (x &&* y), the user might have put a
@@ -226,8 +208,8 @@ commutes f x env = case f of
 associates
     :: (Elt a, Elt r)
     => PrimFun (a -> r)
-    -> PreOpenExp acc env aenv a
-    -> Maybe (PreOpenExp acc env aenv r)
+    -> OpenExp env aenv a
+    -> Maybe (OpenExp env aenv r)
 associates fun exp = case fun of
   PrimAdd _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
   PrimSub _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
@@ -239,7 +221,7 @@ associates fun exp = case fun of
     ty  = undefined
     ops = [ PrimMul ty, PrimFDiv ty, PrimAdd ty, PrimSub ty, PrimBAnd ty, PrimBOr ty, PrimBXor ty ]
 
-    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> PreOpenExp acc env aenv a -> [PrimFun (a -> r)] -> Maybe (PreOpenExp acc env aenv r)
+    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> OpenExp env aenv a -> [PrimFun (a -> r)] -> Maybe (OpenExp env aenv r)
     swizzle f x lvl
       | Just Refl       <- matches f ops
       , Just (a,bc)     <- untup2 x
@@ -266,58 +248,90 @@ associates fun exp = case fun of
 -- Helper functions
 -- ----------------
 
-type a :-> b = forall acc env aenv. Kit acc => PreOpenExp acc env aenv a -> Gamma acc env env aenv -> Maybe (PreOpenExp acc env aenv b)
+type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Maybe (OpenExp env aenv b)
 
-eval1 :: Elt b => (a -> b) -> a :-> b
-eval1 f x env
-  | Just a <- propagate env x   = Stats.substitution "constant fold" . Just $ Const (fromElt (f a))
+eval1 :: SingleType b -> (a -> b) -> a :-> b
+eval1 tp f x env
+  | Just a <- propagate env x   = Stats.substitution "constant fold" . Just $ Const (SingleScalarType tp) (f a)
   | otherwise                   = Nothing
 
-eval2 :: Elt c => (a -> b -> c) -> (a,b) :-> c
-eval2 f (untup2 -> Just (x,y)) env
+eval2 :: SingleType c -> (a -> b -> c) -> (a,b) :-> c
+eval2 tp f (untup2 -> Just (x,y)) env
   | Just a <- propagate env x
   , Just b <- propagate env y
   = Stats.substitution "constant fold"
-  $ Just $ Const (fromElt (f a b))
-
-eval2 _ _ _
+  $ Just $ Const (SingleScalarType tp) (f a b)
+eval2 _ _ _ _
   = Nothing
 
-tup2 :: (Elt a, Elt b) => (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b) -> PreOpenExp acc env aenv (a, b)
-tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
+fromBool :: Bool -> PrimBool
+fromBool False = 0
+fromBool True  = 1
 
-untup2 :: PreOpenExp acc env aenv (a, b) -> Maybe (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b)
+toBool :: PrimBool -> Bool
+toBool 0 = False
+toBool _ = True
+
+bool1 :: (a -> Bool) -> a :-> PrimBool
+bool1 f x env
+  | Just a <- propagate env x
+  = Stats.substitution "constant fold"
+  . Just $ Const scalarTypeWord8 (fromBool (f a))
+bool1 _ _ _
+  = Nothing
+
+bool2 :: (a -> b -> Bool) -> (a,b) :-> PrimBool
+bool2 f (untup2 -> Just (x,y)) env
+  | Just a <- propagate env x
+  , Just b <- propagate env y
+  = Stats.substitution "constant fold"
+  $ Just $ Const scalarTypeWord8 (fromBool (f a b))
+bool2 _ _ _
+  = Nothing
+
+tup2 :: (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
+tup2 (a,b) = Pair a b
+
+untup2 :: OpenExp env aenv (a, b) -> Maybe (OpenExp env aenv a, OpenExp env aenv b)
 untup2 exp
-  | Tuple (NilTup `SnocTup` a `SnocTup` b) <- exp = Just (a, b)
-  | otherwise                                     = Nothing
+  | Pair a b <- exp = Just (a, b)
+  | otherwise       = Nothing
 
 
-pprFun :: String -> PrimFun f -> String
-pprFun rule f = show $ text rule <+> snd (prettyPrim f)
+pprFun :: Text -> PrimFun f -> Text
+pprFun rule f
+  = renderStrict
+  . layoutCompact
+  $ pretty rule <+> f'
+  where
+    op = primOperator f
+    f' = if isInfix op
+           then parens (opName op)
+           else opName op
 
 
 -- Methods of Num
 -- --------------
 
-evalAdd :: Elt a => NumType a -> (a,a) :-> a
-evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = evalAdd'
-evalAdd (FloatingNumType ty) | FloatingDict <- floatingDict ty = evalAdd'
+evalAdd :: NumType a -> (a,a) :-> a
+evalAdd ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalAdd' ty
+evalAdd ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalAdd' ty
 
-evalAdd' :: (Elt a, Eq a, Num a) => (a,a) :-> a
-evalAdd' (untup2 -> Just (x,y)) env
+evalAdd' :: (Eq a, Num a) => NumType a -> (a,a) :-> a
+evalAdd' _  (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   , a == 0
   = Stats.ruleFired "x+0" $ Just y
 
-evalAdd' arg env
-  = eval2 (+) arg env
+evalAdd' ty arg env
+  = eval2 (NumSingleType ty) (+) arg env
 
 
-evalSub :: Elt a => NumType a -> (a,a) :-> a
+evalSub :: NumType a -> (a,a) :-> a
 evalSub ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalSub' ty
 evalSub ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalSub' ty
 
-evalSub' :: forall a. (Elt a, Eq a, Num a) => NumType a -> (a,a) :-> a
+evalSub' :: forall a. (Eq a, Num a) => NumType a -> (a,a) :-> a
 evalSub' ty (untup2 -> Just (x,y)) env
   | Just b      <- propagate env y
   , b == 0
@@ -326,22 +340,25 @@ evalSub' ty (untup2 -> Just (x,y)) env
   | Nothing     <- propagate env x
   , Just b      <- propagate env y
   = Stats.ruleFired "-y+x"
-  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
+  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Const tp (-b) `Pair` x)
+  -- (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
-  | Just Refl   <- match x y
+  | Just Refl   <- matchOpenExp x y
   = Stats.ruleFired "x-x"
-  $ Just $ Const (fromElt (0::a))
+  $ Just $ Const tp 0
+  where
+    tp = SingleScalarType $ NumSingleType ty
 
-evalSub' _ arg env
-  = eval2 (-) arg env
+evalSub' ty arg env
+  = eval2 (NumSingleType ty) (-) arg env
 
 
-evalMul :: Elt a => NumType a -> (a,a) :-> a
-evalMul (IntegralNumType ty) | IntegralDict <- integralDict ty = evalMul'
-evalMul (FloatingNumType ty) | FloatingDict <- floatingDict ty = evalMul'
+evalMul :: NumType a -> (a,a) :-> a
+evalMul ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalMul' ty
+evalMul ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalMul' ty
 
-evalMul' :: (Elt a, Eq a, Num a) => (a,a) :-> a
-evalMul' (untup2 -> Just (x,y)) env
+evalMul' :: (Eq a, Num a) => NumType a -> (a,a) :-> a
+evalMul' _  (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   , Nothing     <- propagate env y
   = case a of
@@ -349,21 +366,21 @@ evalMul' (untup2 -> Just (x,y)) env
       1         -> Stats.ruleFired "x*1" $ Just y
       _         -> Nothing
 
-evalMul' arg env
-  = eval2 (*) arg env
+evalMul' ty arg env
+  = eval2 (NumSingleType ty) (*) arg env
 
-evalNeg :: Elt a => NumType a -> a :-> a
+evalNeg :: NumType a -> a :-> a
 evalNeg _                    x _   | PrimApp PrimNeg{} x' <- x       = Stats.ruleFired "negate/negate" $ Just x'
-evalNeg (IntegralNumType ty) x env | IntegralDict <- integralDict ty = eval1 negate x env
-evalNeg (FloatingNumType ty) x env | FloatingDict <- floatingDict ty = eval1 negate x env
+evalNeg (IntegralNumType ty) x env | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType ty) negate x env
+evalNeg (FloatingNumType ty) x env | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) negate x env
 
-evalAbs :: Elt a => NumType a -> a :-> a
-evalAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 abs
-evalAbs (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 abs
+evalAbs :: NumType a -> a :-> a
+evalAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType ty) abs
+evalAbs (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) abs
 
-evalSig :: Elt a => NumType a -> a :-> a
-evalSig (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 signum
-evalSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 signum
+evalSig :: NumType a -> a :-> a
+evalSig (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType ty) signum
+evalSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) signum
 
 
 -- Methods of Integral & Bits
@@ -387,17 +404,19 @@ evalRem _ _ _
 
 evalQuotRem :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalQuotRem ty exp env
-  | IntegralDict                           <- integralDict ty
-  , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
-  , Just b                                 <- propagate env y
+  | IntegralDict <- integralDict ty
+  , Just (x, y)  <- untup2 exp
+  , Just b       <- propagate env y
   = case b of
       0 -> Nothing
-      1 -> Stats.ruleFired "quotRem x 1" $ Just (tup2 (x, Const (fromElt (0::a))))
+      1 -> Stats.ruleFired "quotRem x 1" $ Just (tup2 (x, Const tp 0))
       _ -> case propagate env x of
              Nothing -> Nothing
              Just a  -> Stats.substitution "constant fold"
                       $ Just $ let (u,v) = quotRem a b
-                               in  tup2 (Const (fromElt u), Const (fromElt v))
+                               in  tup2 (Const tp u, Const tp v)
+  where
+    tp = SingleScalarType $ NumSingleType $ IntegralNumType ty
 evalQuotRem _ _ _
   = Nothing
 
@@ -420,356 +439,289 @@ evalMod _ _ _
 
 evalDivMod :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalDivMod ty exp env
-  | IntegralDict                           <- integralDict ty
-  , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
-  , Just b                                 <- propagate env y
+  | IntegralDict <- integralDict ty
+  , Just (x, y)  <- untup2 exp
+  , Just b       <- propagate env y
   = case b of
       0 -> Nothing
-      1 -> Stats.ruleFired "divMod x 1" $ Just (tup2 (x, Const (fromElt (0::a))))
+      1 -> Stats.ruleFired "divMod x 1" $ Just (tup2 (x, Const tp 0))
       _ -> case propagate env x of
              Nothing -> Nothing
              Just a  -> Stats.substitution "constant fold"
                       $ Just $ let (u,v) = divMod a b
-                               in  tup2 (Const (fromElt u), Const (fromElt v))
+                               in  tup2 (Const tp u, Const tp v)
+  where
+    tp = SingleScalarType $ NumSingleType $ IntegralNumType ty
 evalDivMod _ _ _
   = Nothing
 
-evalBAnd :: Elt a => IntegralType a -> (a,a) :-> a
-evalBAnd ty | IntegralDict <- integralDict ty = eval2 (.&.)
+evalBAnd :: IntegralType a -> (a,a) :-> a
+evalBAnd ty | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) (.&.)
 
-evalBOr :: Elt a => IntegralType a -> (a,a) :-> a
-evalBOr ty | IntegralDict <- integralDict ty = eval2 (.|.)
+evalBOr :: IntegralType a -> (a,a) :-> a
+evalBOr ty | IntegralDict <- integralDict ty = evalBOr' ty
 
-evalBXor :: Elt a => IntegralType a -> (a,a) :-> a
-evalBXor ty | IntegralDict <- integralDict ty = eval2 xor
+evalBOr' :: (Eq a, Num a, Bits a) => IntegralType a -> (a,a) :-> a
+evalBOr' _ (untup2 -> Just (x,y)) env
+  | Just 0 <- propagate env x
+  = Stats.ruleFired "x .|. 0" $ Just y
 
-evalBNot :: Elt a => IntegralType a -> a :-> a
-evalBNot ty | IntegralDict <- integralDict ty = eval1 complement
+evalBOr' ty arg env
+  = eval2 (NumSingleType $ IntegralNumType ty) (.|.) arg env
 
-evalBShiftL :: Elt a => IntegralType a -> (a,Int) :-> a
+evalBXor :: IntegralType a -> (a,a) :-> a
+evalBXor ty | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) xor
+
+evalBNot :: IntegralType a -> a :-> a
+evalBNot ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType ty) complement
+
+evalBShiftL :: IntegralType a -> (a,Int) :-> a
 evalBShiftL _ (untup2 -> Just (x,i)) env
   | Just 0 <- propagate env i
   = Stats.ruleFired "x `shiftL` 0" $ Just x
 
 evalBShiftL ty arg env
-  | IntegralDict <- integralDict ty = eval2 shiftL arg env
+  | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) shiftL arg env
 
-evalBShiftR :: Elt a => IntegralType a -> (a,Int) :-> a
+evalBShiftR :: IntegralType a -> (a,Int) :-> a
 evalBShiftR _ (untup2 -> Just (x,i)) env
   | Just 0 <- propagate env i
   = Stats.ruleFired "x `shiftR` 0" $ Just x
 
 evalBShiftR ty arg env
-  | IntegralDict <- integralDict ty = eval2 shiftR arg env
+  | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) shiftR arg env
 
-evalBRotateL :: Elt a => IntegralType a -> (a,Int) :-> a
+evalBRotateL :: IntegralType a -> (a,Int) :-> a
 evalBRotateL _ (untup2 -> Just (x,i)) env
   | Just 0 <- propagate env i
   = Stats.ruleFired "x `rotateL` 0" $ Just x
 evalBRotateL ty arg env
-  | IntegralDict <- integralDict ty = eval2 rotateL arg env
+  | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) rotateL arg env
 
-evalBRotateR :: Elt a => IntegralType a -> (a,Int) :-> a
+evalBRotateR :: IntegralType a -> (a,Int) :-> a
 evalBRotateR _ (untup2 -> Just (x,i)) env
   | Just 0 <- propagate env i
   = Stats.ruleFired "x `rotateR` 0" $ Just x
 evalBRotateR ty arg env
-  | IntegralDict <- integralDict ty = eval2 rotateR arg env
+  | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) rotateR arg env
 
 evalPopCount :: IntegralType a -> a :-> Int
-evalPopCount ty | IntegralDict <- integralDict ty = eval1 popCount
+evalPopCount ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) popCount
 
 evalCountLeadingZeros :: IntegralType a -> a :-> Int
-#if __GLASGOW_HASKELL__ >= 710
-evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 countLeadingZeros
-#else
-evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 clz
-  where
-    clz x = (w-1) - go (w-1)
-      where
-        go i | i < 0       = i  -- no bit set
-             | testBit x i = i
-             | otherwise   = go (i-1)
-        w = finiteBitSize x
-#endif
+evalCountLeadingZeros ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) countLeadingZeros
 
 evalCountTrailingZeros :: IntegralType a -> a :-> Int
-#if __GLASGOW_HASKELL__ >= 710
-evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 countTrailingZeros
-#else
-evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 ctz
-  where
-    ctz x = go 0
-      where
-        go i | i >= w      = i
-             | testBit x i = i
-             | otherwise   = go (i+1)
-        w = finiteBitSize x
-#endif
+evalCountTrailingZeros ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType TypeInt) countTrailingZeros
 
 
 -- Methods of Fractional & Floating
 -- --------------------------------
 
-evalFDiv :: Elt a => FloatingType a -> (a,a) :-> a
-evalFDiv ty | FloatingDict <- floatingDict ty = evalFDiv'
+evalFDiv :: FloatingType a -> (a,a) :-> a
+evalFDiv ty | FloatingDict <- floatingDict ty = evalFDiv' ty
 
-evalFDiv' :: (Elt a, Fractional a, Eq a) => (a,a) :-> a
-evalFDiv' (untup2 -> Just (x,y)) env
+evalFDiv' :: (Fractional a, Eq a) => FloatingType a -> (a,a) :-> a
+evalFDiv' _ (untup2 -> Just (x,y)) env
   | Just 1      <- propagate env y
   = Stats.ruleFired "x/1" $ Just x
 
-evalFDiv' arg env
-  = eval2 (/) arg env
+evalFDiv' ty arg env
+  = eval2 (NumSingleType $ FloatingNumType ty) (/) arg env
 
 
-evalRecip :: Elt a => FloatingType a -> a :-> a
-evalRecip ty | FloatingDict <- floatingDict ty = eval1 recip
+evalRecip :: FloatingType a -> a :-> a
+evalRecip ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) recip
 
-evalSin :: Elt a => FloatingType a -> a :-> a
-evalSin ty | FloatingDict <- floatingDict ty = eval1 sin
+evalSin :: FloatingType a -> a :-> a
+evalSin ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) sin
 
-evalCos :: Elt a => FloatingType a -> a :-> a
-evalCos ty | FloatingDict <- floatingDict ty = eval1 cos
+evalCos :: FloatingType a -> a :-> a
+evalCos ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) cos
 
-evalTan :: Elt a => FloatingType a -> a :-> a
-evalTan ty | FloatingDict <- floatingDict ty = eval1 tan
+evalTan :: FloatingType a -> a :-> a
+evalTan ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) tan
 
-evalAsin :: Elt a => FloatingType a -> a :-> a
-evalAsin ty | FloatingDict <- floatingDict ty = eval1 asin
+evalAsin :: FloatingType a -> a :-> a
+evalAsin ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) asin
 
-evalAcos :: Elt a => FloatingType a -> a :-> a
-evalAcos ty | FloatingDict <- floatingDict ty = eval1 acos
+evalAcos :: FloatingType a -> a :-> a
+evalAcos ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) acos
 
-evalAtan :: Elt a => FloatingType a -> a :-> a
-evalAtan ty | FloatingDict <- floatingDict ty = eval1 atan
+evalAtan :: FloatingType a -> a :-> a
+evalAtan ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) atan
 
-evalSinh :: Elt a => FloatingType a -> a :-> a
-evalSinh ty | FloatingDict <- floatingDict ty = eval1 sinh
+evalSinh :: FloatingType a -> a :-> a
+evalSinh ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) sinh
 
-evalCosh :: Elt a => FloatingType a -> a :-> a
-evalCosh ty | FloatingDict <- floatingDict ty = eval1 cosh
+evalCosh :: FloatingType a -> a :-> a
+evalCosh ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) cosh
 
-evalTanh :: Elt a => FloatingType a -> a :-> a
-evalTanh ty | FloatingDict <- floatingDict ty = eval1 tanh
+evalTanh :: FloatingType a -> a :-> a
+evalTanh ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) tanh
 
-evalAsinh :: Elt a => FloatingType a -> a :-> a
-evalAsinh ty | FloatingDict <- floatingDict ty = eval1 asinh
+evalAsinh :: FloatingType a -> a :-> a
+evalAsinh ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) asinh
 
-evalAcosh :: Elt a => FloatingType a -> a :-> a
-evalAcosh ty | FloatingDict <- floatingDict ty = eval1 acosh
+evalAcosh :: FloatingType a -> a :-> a
+evalAcosh ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) acosh
 
-evalAtanh :: Elt a => FloatingType a -> a :-> a
-evalAtanh ty | FloatingDict <- floatingDict ty = eval1 atanh
+evalAtanh :: FloatingType a -> a :-> a
+evalAtanh ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) atanh
 
-evalExpFloating :: Elt a => FloatingType a -> a :-> a
-evalExpFloating ty | FloatingDict <- floatingDict ty = eval1 P.exp
+evalExpFloating :: FloatingType a -> a :-> a
+evalExpFloating ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) P.exp
 
-evalSqrt :: Elt a => FloatingType a -> a :-> a
-evalSqrt ty | FloatingDict <- floatingDict ty = eval1 sqrt
+evalSqrt :: FloatingType a -> a :-> a
+evalSqrt ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) sqrt
 
-evalLog :: Elt a => FloatingType a -> a :-> a
-evalLog ty | FloatingDict <- floatingDict ty = eval1 log
+evalLog :: FloatingType a -> a :-> a
+evalLog ty | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) log
 
-evalFPow :: Elt a => FloatingType a -> (a,a) :-> a
-evalFPow ty | FloatingDict <- floatingDict ty = eval2 (**)
+evalFPow :: FloatingType a -> (a,a) :-> a
+evalFPow ty | FloatingDict <- floatingDict ty = eval2 (NumSingleType $ FloatingNumType ty) (**)
 
-evalLogBase :: Elt a => FloatingType a -> (a,a) :-> a
-evalLogBase ty | FloatingDict <- floatingDict ty = eval2 logBase
+evalLogBase :: FloatingType a -> (a,a) :-> a
+evalLogBase ty | FloatingDict <- floatingDict ty = eval2 (NumSingleType $ FloatingNumType ty) logBase
 
-evalAtan2 :: Elt a => FloatingType a -> (a,a) :-> a
-evalAtan2 ty | FloatingDict <- floatingDict ty = eval2 atan2
+evalAtan2 :: FloatingType a -> (a,a) :-> a
+evalAtan2 ty | FloatingDict <- floatingDict ty = eval2 (NumSingleType $ FloatingNumType ty) atan2
 
-evalTruncate :: Elt b => FloatingType a -> IntegralType b -> a :-> b
+evalTruncate :: FloatingType a -> IntegralType b -> a :-> b
 evalTruncate ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 truncate
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) truncate
 
-evalRound :: Elt b => FloatingType a -> IntegralType b -> a :-> b
+evalRound :: FloatingType a -> IntegralType b -> a :-> b
 evalRound ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 round
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) round
 
-evalFloor :: Elt b => FloatingType a -> IntegralType b -> a :-> b
+evalFloor :: FloatingType a -> IntegralType b -> a :-> b
 evalFloor ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 floor
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) floor
 
-evalCeiling :: Elt b => FloatingType a -> IntegralType b -> a :-> b
+evalCeiling :: FloatingType a -> IntegralType b -> a :-> b
 evalCeiling ta tb
   | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb = eval1 ceiling
+  , IntegralDict <- integralDict tb
+  = eval1 (NumSingleType $ IntegralNumType tb) ceiling
 
-evalIsNaN :: FloatingType a -> a :-> Bool
-evalIsNaN ty | FloatingDict <- floatingDict ty = eval1 isNaN
+evalIsNaN :: FloatingType a -> a :-> PrimBool
+evalIsNaN ty | FloatingDict <- floatingDict ty = bool1 isNaN
 
-evalIsInfinite :: FloatingType a -> a :-> Bool
-evalIsInfinite ty | FloatingDict <- floatingDict ty = eval1 isInfinite
+evalIsInfinite :: FloatingType a -> a :-> PrimBool
+evalIsInfinite ty | FloatingDict <- floatingDict ty = bool1 isInfinite
 
 
 -- Relational & Equality
 -- ---------------------
 
-evalLt :: SingleType a -> (a,a) :-> Bool
-evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (<)
-evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (<)
-evalLt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (<)
+evalLt :: SingleType a -> (a,a) :-> PrimBool
+evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (<)
+evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (<)
 
--- evalLt (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (<)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (<)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (<)
--- evalLt (VectorScalarType (Vector2Type s)) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- t -> eval2 (<)
---     NumSingleType (FloatingNumType t) | FloatingDict <- t -> eval2 (<)
---     NonNumSingleType t                | NonNumDict   <- t -> eval2 (<)
+evalGt :: SingleType a -> (a,a) :-> PrimBool
+evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (>)
+evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (>)
 
-evalGt :: SingleType a -> (a,a) :-> Bool
-evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (>)
-evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (>)
-evalGt (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (>)
+evalLtEq :: SingleType a -> (a,a) :-> PrimBool
+evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (<=)
+evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (<=)
 
--- evalGt (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (>)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (>)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (>)
+evalGtEq :: SingleType a -> (a,a) :-> PrimBool
+evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (>=)
+evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (>=)
 
-evalLtEq :: SingleType a -> (a,a) :-> Bool
-evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (<=)
-evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (<=)
-evalLtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (<=)
+evalEq :: SingleType a -> (a,a) :-> PrimBool
+evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (==)
+evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (==)
 
--- evalLtEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (<=)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (<=)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (<=)
+evalNEq :: SingleType a -> (a,a) :-> PrimBool
+evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = bool2 (/=)
+evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = bool2 (/=)
 
-evalGtEq :: SingleType a -> (a,a) :-> Bool
-evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (>=)
-evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (>=)
-evalGtEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (>=)
+evalMax :: SingleType a -> (a,a) :-> a
+evalMax ty@(NumSingleType (IntegralNumType ty')) | IntegralDict <- integralDict ty' = eval2 ty max
+evalMax ty@(NumSingleType (FloatingNumType ty')) | FloatingDict <- floatingDict ty' = eval2 ty max
 
--- evalGtEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (>=)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (>=)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (>=)
-
-evalEq :: SingleType a -> (a,a) :-> Bool
-evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (==)
-evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (==)
-evalEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (==)
-
--- evalEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (==)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (==)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (==)
-
-evalNEq :: SingleType a -> (a,a) :-> Bool
-evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 (/=)
-evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 (/=)
-evalNEq (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (/=)
-
--- evalNEq (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 (/=)
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 (/=)
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 (/=)
-
-evalMax :: Elt a => SingleType a -> (a,a) :-> a
-evalMax (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 max
-evalMax (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 max
-evalMax (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 max
-
--- evalMax (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 max
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 max
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 max
-
-evalMin :: Elt a => SingleType a -> (a,a) :-> a
-evalMin (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 min
-evalMin (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 min
-evalMin (NonNumSingleType ty)                | NonNumDict   <- nonNumDict ty   = eval2 min
-
--- evalMin (SingleScalarType s) =
---   case s of
---     NumSingleType (IntegralNumType t) | IntegralDict <- integralDict t -> eval2 min
---     NumSingleType (FloatingNumType t) | FloatingDict <- floatingDict t -> eval2 min
---     NonNumSingleType t                | NonNumDict   <- nonNumDict t   -> eval2 min
-
+evalMin :: SingleType a -> (a,a) :-> a
+evalMin ty@(NumSingleType (IntegralNumType ty')) | IntegralDict <- integralDict ty' = eval2 ty min
+evalMin ty@(NumSingleType (FloatingNumType ty')) | FloatingDict <- floatingDict ty' = eval2 ty min
 
 -- Logical operators
 -- -----------------
 
-evalLAnd :: (Bool,Bool) :-> Bool
+evalLAnd :: (PrimBool,PrimBool) :-> PrimBool
 evalLAnd (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = Just $ if a then Stats.ruleFired "True &&" y
-                else Stats.ruleFired "False &&" $ Const (fromElt False)
+  = Just
+  $ if toBool a then Stats.ruleFired "True &&" y
+                else Stats.ruleFired "False &&" $ Const scalarTypeWord8 0
+
+  | Just b      <- propagate env y
+  = Just
+  $ if toBool b then Stats.ruleFired "True &&" x
+                else Stats.ruleFired "False &&" $ Const scalarTypeWord8 0
 
 evalLAnd _ _
   = Nothing
 
-evalLOr  :: (Bool,Bool) :-> Bool
+evalLOr  :: (PrimBool,PrimBool) :-> PrimBool
 evalLOr (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = Just $ if a then Stats.ruleFired "True ||" $ Const (fromElt True)
+  = Just
+  $ if toBool a then Stats.ruleFired "True ||" $ Const scalarTypeWord8 1
                 else Stats.ruleFired "False ||" y
+
+  | Just b      <- propagate env y
+  = Just
+  $ if toBool b then Stats.ruleFired "True ||" $ Const scalarTypeWord8 1
+                else Stats.ruleFired "False ||" x
 
 evalLOr _ _
   = Nothing
 
-evalLNot :: Bool :-> Bool
+evalLNot :: PrimBool :-> PrimBool
 evalLNot x _   | PrimApp PrimLNot x' <- x = Stats.ruleFired "not/not" $ Just x'
-evalLNot x env                            = eval1 not x env
+evalLNot x env                            = bool1 (not . toBool) x env
 
-evalOrd :: Char :-> Int
-evalOrd = eval1 ord
-
-evalChr :: Int :-> Char
-evalChr = eval1 chr
-
-evalBoolToInt :: Bool :-> Int
-evalBoolToInt = eval1 fromEnum
-
-evalFromIntegral :: Elt b => IntegralType a -> NumType b -> a :-> b
+evalFromIntegral :: IntegralType a -> NumType b -> a :-> b
 evalFromIntegral ta (IntegralNumType tb)
   | IntegralDict <- integralDict ta
-  , IntegralDict <- integralDict tb = eval1 fromIntegral
+  , IntegralDict <- integralDict tb = eval1 (NumSingleType $ IntegralNumType tb) fromIntegral
 
 evalFromIntegral ta (FloatingNumType tb)
   | IntegralDict <- integralDict ta
-  , FloatingDict <- floatingDict tb = eval1 fromIntegral
+  , FloatingDict <- floatingDict tb = eval1 (NumSingleType $ FloatingNumType tb) fromIntegral
 
-evalToFloating :: Elt b => NumType a -> FloatingType b -> a :-> b
+evalToFloating :: NumType a -> FloatingType b -> a :-> b
 evalToFloating (IntegralNumType ta) tb x env
   | IntegralDict <- integralDict ta
-  , FloatingDict <- floatingDict tb = eval1 realToFrac x env
+  , FloatingDict <- floatingDict tb = eval1 (NumSingleType $ FloatingNumType tb) realToFrac x env
 
 evalToFloating (FloatingNumType ta) tb x env
-  | TypeHalf   FloatingDict <- ta
-  , TypeHalf   FloatingDict <- tb = Just x
+  | TypeHalf   <- ta
+  , TypeHalf   <- tb = Just x
 
-  | TypeFloat  FloatingDict <- ta
-  , TypeFloat  FloatingDict <- tb = Just x
+  | TypeFloat  <- ta
+  , TypeFloat  <- tb = Just x
 
-  | TypeDouble FloatingDict <- ta
-  , TypeDouble FloatingDict <- tb = Just x
+  | TypeDouble <- ta
+  , TypeDouble <- tb = Just x
 
-  | TypeFloat  FloatingDict <- ta
-  , TypeDouble FloatingDict <- tb = eval1 float2Double x env
+  | TypeFloat  <- ta
+  , TypeDouble <- tb = eval1 (NumSingleType $ FloatingNumType tb) float2Double x env
 
-  | TypeDouble FloatingDict <- ta
-  , TypeFloat  FloatingDict <- tb = eval1 double2Float x env
+  | TypeDouble <- ta
+  , TypeFloat  <- tb = eval1 (NumSingleType $ FloatingNumType tb) double2Float x env
 
   | FloatingDict <- floatingDict ta
-  , FloatingDict <- floatingDict tb = eval1 realToFrac x env
+  , FloatingDict <- floatingDict tb = eval1 (NumSingleType $ FloatingNumType tb) realToFrac x env
 
 
 -- Scalar primitives
@@ -782,11 +734,9 @@ evalPrimConst (PrimPi       ty) = evalPi ty
 
 evalMinBound :: BoundedType a -> a
 evalMinBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = minBound
-evalMinBound (NonNumBoundedType   ty) | NonNumDict   <- nonNumDict ty   = minBound
 
 evalMaxBound :: BoundedType a -> a
 evalMaxBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = maxBound
-evalMaxBound (NonNumBoundedType   ty) | NonNumDict   <- nonNumDict ty   = maxBound
 
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi

@@ -1,0 +1,68 @@
+name: CI
+
+# Trigger the workflow on push or pull request
+on:
+  pull_request:
+  push:
+    # but only for the master branch
+    # branches: [master]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  stack:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        allow_failure: [false]
+        ghc:
+          - "8.10"
+          - "8.8"
+          - "8.6"
+        include:
+          - os: macOS-latest
+            ghc: "8.10"
+            allow_failure: false
+          # - os: windows-latest
+          #   ghc: "8.10"
+          #   allow_failure: true
+    env:
+      STACK_FLAGS: "--system-ghc --no-install-ghc --fast --flag accelerate:nofib"
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/setup-haskell@v1.1
+      with:
+        enable-stack: true
+        ghc-version: ${{ matrix.ghc }}
+
+    - name: Set up stack
+      id: stack-setup
+      run: |
+        ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
+        echo "::set-output name=stack-root::$(stack path --system-ghc --no-install-ghc --stack-root)"
+
+    - uses: actions/cache@v1
+      with:
+        path: ${{ steps.stack-setup.outputs.stack-root }}
+        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
+
+    - name: Build dependencies
+      run: |
+        stack build $STACK_FLAGS --test --no-run-tests --only-dependencies
+
+    - name: Build
+      run: |
+        stack build $STACK_FLAGS --test --no-run-tests
+
+    - name: Test
+      run: |
+        stack test accelerate:doctest $STACK_FLAGS
+        stack test accelerate:nofib-interpreter $STACK_FLAGS
+

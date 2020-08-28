@@ -2,10 +2,10 @@
 {-# LANGUAGE FlexibleContexts  #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.RealFloat
--- Copyright   : [2019] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2019..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -20,6 +20,7 @@ import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.FromIntegral
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.RealFrac
 
+import Prelude                                                      ( Bool )
 import qualified Prelude                                            as P
 
 

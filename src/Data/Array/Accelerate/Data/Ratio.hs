@@ -10,7 +10,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Ratio
--- Copyright   : [2019] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2019..2020] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -29,12 +29,11 @@ module Data.Array.Accelerate.Data.Ratio (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language
-import Data.Array.Accelerate.Orphans                                ()
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Enum
@@ -55,7 +54,6 @@ import qualified Prelude                                            as P
 
 
 instance Elt a => Elt (Ratio a)
-instance Elt a => IsProduct Elt (Ratio a)
 
 pattern (:%) :: Elt a => Exp a -> Exp a -> Exp (Ratio a)
 pattern (:%) { numerator, denominator } = Pattern (numerator, denominator)

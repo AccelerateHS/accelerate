@@ -3,10 +3,10 @@
 {-# LANGUAGE RankNTypes       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue228
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -61,8 +61,8 @@ merge (onL, lenL) (onR, lenR) = (onL * onR, onL * lenR + lenL)
 mergeExp :: Exp (Int,Int) -> Exp (Int,Int) -> Exp (Int,Int)
 mergeExp e1 e2 =
   let
-    v1 = unlift e1 :: (Exp Int,Exp Int)
-    v2 = unlift e2 :: (Exp Int,Exp Int)
+    t1 = unlift e1 :: (Exp Int,Exp Int)
+    t2 = unlift e2 :: (Exp Int,Exp Int)
   in
-  lift $ merge v1 v2
+  lift $ merge t1 t2
 

@@ -6,11 +6,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Orphans
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2018] Trevor L. McDonell
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -18,6 +17,7 @@
 module Data.Array.Accelerate.Orphans ()
   where
 
+import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
 import Data.Primitive.Types
 import Data.Ratio
 import Foreign.C.Types

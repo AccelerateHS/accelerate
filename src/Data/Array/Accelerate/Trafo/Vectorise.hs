@@ -1,7 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -19,10 +17,10 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Vectorise
--- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everest
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -45,7 +43,6 @@ module Data.Array.Accelerate.Trafo.Vectorise (
 
 import Prelude                                          hiding ( exp, replicate, concat )
 import qualified Prelude                                as P
-import Data.Typeable
 import Control.Applicative                              hiding ( Const )
 import Data.Maybe
 
@@ -58,7 +55,6 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Classes.Eq       as S
 import qualified Data.Array.Accelerate.Language         as S
@@ -75,7 +71,7 @@ import Data.Array.Accelerate.Error
 --
 data Context env aenv env' aenv' where
   -- All environments are empty
-  EmptyC     :: Context () () () ()
+  EmptyC    :: Context () () () ()
 
   -- An expression that has already been lifted
   PushLExpC :: Elt e
@@ -109,7 +105,7 @@ type VectoriseAcc acc = forall aenv aenv' t.
                      -> LiftedAcc acc aenv' t
 
 data None sh = None sh
-  deriving (Typeable, Show, Eq)
+  deriving (Show, Eq)
 
 type instance EltRepr (None sh) = EltRepr sh
 
@@ -123,12 +119,6 @@ instance Shape sh => Slice (None sh) where
   type CoSliceShape (None sh) = sh
   type FullShape    (None sh) = sh
   sliceIndex _ = sliceNoneIndex (undefined :: sh)
-
-instance Shape sh => IsProduct Elt (None sh) where
-  type ProdRepr (None sh) = ((),sh)
-  fromProd _ (None sh) = ((),sh)
-  toProd _ ((),sh)     = None sh
-  prod _ _ = ProdRsnoc ProdRunit
 
 -- Lifting terms
 -- -------------
@@ -569,9 +559,6 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                             | AvoidedAcc (a' :: acc aenv' a) <- a
                                             , IsC <- isArraysFlat (undefined :: a)
                                             -> Right (SnocAtup li (replicateA a' size))
-#if __GLASGOW_HASKELL__ < 800
-                               _            -> error "unreachable"
-#endif
 
 
     aprjL :: forall a arrs. (Arrays a, Arrays arrs, IsAtuple arrs, Arrays (Vector' a))
@@ -1885,9 +1872,6 @@ liftedCond pred th el
     cvtT :: ProdR Arrays t -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t)
     cvtT ProdRunit     NilAtup          NilAtup          = NilAtup
     cvtT (ProdRsnoc t) (SnocAtup t1 a1) (SnocAtup t2 a2) = SnocAtup (cvtT t t1 t2) (liftedCond pred a1 a2)
-#if __GLASGOW_HASKELL__ < 800
-    cvtT _             _                _                = error "unreachable"
-#endif
 
     liftedCond1 :: (Elt e, Shape sh) => S.Acc (LiftedArray sh e) -> S.Acc (LiftedArray sh e) -> S.Acc (LiftedArray sh e)
     liftedCond1 t e = liftedArray segs vals

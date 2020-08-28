@@ -1,13 +1,16 @@
-An Embedded Language for Accelerated Array Computations
-=======================================================
+<div align="center">
+<img width="450" src="https://github.com/AccelerateHS/accelerate/raw/master/images/accelerate-logo-text-v.png?raw=true" alt="henlo, my name is Theia"/>
 
-[![Travis](https://img.shields.io/travis/AccelerateHS/accelerate/master.svg?label=linux)](https://travis-ci.org/AccelerateHS/accelerate)
-[![AppVeyor](https://img.shields.io/appveyor/ci/tmcdonell/accelerate/master.svg?label=windows)](https://ci.appveyor.com/project/tmcdonell/accelerate)
+# High-performance parallel arrays for Haskell
+
+[![GitHub CI](https://github.com/tmcdonell/accelerate/workflows/CI/badge.svg)](https://github.com/tmcdonell/accelerate/actions)
+[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
+<br>
 [![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)
 [![Stackage Nightly](https://stackage.org/package/accelerate/badge/nightly)](https://stackage.org/nightly/package/accelerate)
 [![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
-[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
 
+</div>
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
@@ -17,6 +20,7 @@ For more details, see our papers:
  * [Optimising Purely Functional GPU Programs][MCKL13] ([slides][MCKL13-slides])
  * [Embedding Foreign Code][CMCK14]
  * [Type-safe Runtime Code Generation: Accelerate to LLVM][MCGN15] ([slides][MCGN15-slides]) ([video][MCGN15-video])
+ * [Streaming Irregular Arrays][CMCK17] ([video][CMCK17-video])
 
 There are also slides from some fairly recent presentations:
 
@@ -37,6 +41,7 @@ Chapter 6 of Simon Marlow's book [Parallel and Concurrent Programming in Haskell
   - [Requirements](#requirements)
   - [Documentation](#documentation)
   - [Examples](#examples)
+  - [Who are we?](#who-are-we)
   - [Mailing list and contacts](#mailing-list-and-contacts)
   - [Citing Accelerate](#citing-accelerate)
   - [What's missing?](#whats-missing)
@@ -106,8 +111,8 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
   * A cellular automata simulation
   * A "password recovery" tool, for dictionary lookup of MD5 hashes
 
-[![Mandelbrot](http://i.imgur.com/5Tbsp1j.jpg "accelerate-mandelbrot")](http://i.imgur.com/RgXRqsc.jpg)
-[![Raytracer](http://i.imgur.com/7ohhKm9.jpg "accelerate-ray")](http://i.imgur.com/ZNEGEJK.jpg)
+[![Mandelbrot](https://i.imgur.com/5Tbsp1j.jpg "accelerate-mandelbrot")](https://i.imgur.com/RgXRqsc.jpg)
+[![Raytracer](https://i.imgur.com/7ohhKm9.jpg "accelerate-ray")](https://i.imgur.com/ZNEGEJK.jpg)
 
 <!--
 <video width=400 height=300 controls=false autoplay loop>
@@ -120,12 +125,7 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
 
 [LULESH-accelerate][lulesh-accelerate] is in implementation of the Livermore Unstructured Lagrangian Explicit Shock Hydrodynamics (LULESH) mini-app. [LULESH][LULESH] represents a typical hydrodynamics code such as [ALE3D][ALE3D], but is a highly simplified application, hard-coded to solve the Sedov blast problem on an unstructured hexahedron mesh.
 
-![LULESH mesh](https://codesign.llnl.gov/images/sedov-3d-LLNL.png)
-
-
-### Λ ○ λ (Lol)
-
-Λ ○ λ ([Lol][lol]) is a general-purpose library for ring-based lattice cryptography. Lol has applications in, for example, symmetric-key somewhat-homomorphic encryption schemes. The [lol-accelerate][lol-accelerate] package provides an Accelerate backend for Lol.
+![LULESH mesh](https://i.imgur.com/bIkODKd.jpg)
 
 
 ### Additional examples
@@ -133,27 +133,50 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
 Accelerate users have also built some substantial applications of their own.
 Please feel free to add your own examples!
 
+  * Jonathan Fraser, [GPUVAC](https://github.com/GeneralFusion/gpuvac): An explicit advection magnetohydrodynamics simulation
+  * David van Balen, [Sudokus](https://github.com/dpvanbalen/Sudokus): A sudoku solver
+  * Trevor L. McDonell, [lol-accelerate][lol-accelerate]: A backend to the Λ ○ λ ([Lol][lol]) library for ring-based lattice cryptography
   * Henning Thielemann, [patch-image](http://hackage.haskell.org/package/patch-image): Combine a collage of overlapping images
   * apunktbau, [bildpunkt](https://github.com/abau/bildpunkt): A ray-marching distance field renderer
   * klarh, [hasdy](https://github.com/klarh/hasdy): Molecular dynamics in Haskell using Accelerate
   * Alexandros Gremm used Accelerate as part of the [2014 CSCS summer school](http://user.cscs.ch/blog/2014/cscs_usi_summer_school_2014_30_june_10_july_2014_in_serpiano_tessin/index.html) ([code](https://github.com/agremm/cscs))
 
 
+Who are we?
+-----------
+
+The Accelerate team (past and present) consists of:
+
+  * Manuel M T Chakravarty ([@mchakravarty])  <!-- 2008..2017? -->
+  * Gabriele Keller ([@gckeller])             <!-- 2008..     -->
+  * Trevor L. McDonell ([@tmcdonell])         <!-- 2009..     -->
+  * Robert Clifton-Everest ([@robeverest])    <!-- 2013..     -->
+  * Frederik M. Madsen ([@fmma])              <!-- 2014       -->
+  * Ryan R. Newton ([@rrnewton])              <!-- 2012..2013 -->
+  * Joshua Meredith ([@JoshMeredith])         <!-- 2018..     -->
+  * Ben Lever ([@blever])                     <!-- 2010..2011 -->
+  * Sean Seefried ([@sseefried])              <!-- 2010..2011 -->
+  * Ivo Gabe de Wolff ([@ivogabe])            <!-- 2019..     -->
+
+The maintainer and principal developer of Accelerate is Trevor L.
+McDonell <trevor.mcdonell@gmail.com>.
+
+
 Mailing list and contacts
 -------------------------
 
   * Mailing list: [`accelerate-haskell@googlegroups.com`](mailto:accelerate-haskell@googlegroups.com) (discussions on both use and development are welcome)
-  * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group].
-  * Bug reports and issues tracking: [GitHub project page][Issues].
-
-The maintainers of Accelerate are Manuel M T Chakravarty <chak@cse.unsw.edu.au> and Trevor L McDonell <tmcdonell@cse.unsw.edu.au>.
+  * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group]
+  * Bug reports and issues tracking: [GitHub project page][Issues]
+  * Chat with us on [gitter](https://gitter.im/AccelerateHS/Lobby)
 
 
 Citing Accelerate
 -----------------
 
 If you use Accelerate for academic research, you are encouraged (though not
-required) to cite the following papers ([BibTeX](http://www.cse.unsw.edu.au/~tmcdonell/papers/accelerate.bib)):
+required) to cite the following papers:
+<!-- ([BibTeX](http://www.cse.unsw.edu.au/~tmcdonell/papers/accelerate.bib)): -->
 
   * Manuel M. T. Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell, and Vinod Grover.
     [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11].
@@ -171,6 +194,11 @@ required) to cite the following papers ([BibTeX](http://www.cse.unsw.edu.au/~tmc
     [Type-safe Runtime Code Generation: Accelerate to LLVM][MCGN15].
     In _Haskell '15: The 8th ACM SIGPLAN Symposium on Haskell_, ACM, 2015.
 
+  * Robert Clifton-Everest, Trevor L. McDonell, Manuel M. T. Chakravarty, and Gabriele Keller.
+    [Streaming Irregular Arrays][CMCK17].
+    In Haskell '17: The 10th ACM SIGPLAN Symposium on Haskell, ACM, 2017.
+
+
 Accelerate is primarily developed by academics, so citations matter a lot to us.
 As an added benefit, you increase Accelerate's exposure and potential user (and
 developer!) base, which is a benefit to all users of Accelerate. Thanks in advance!
@@ -182,17 +210,29 @@ What's missing?
 Here is a list of features that are currently missing:
 
  * Preliminary API (parts of the API may still change in subsequent releases)
+ * Many more features... contact us!
 
+  [@mchakravarty]:              https://github.com/mchakravarty
+  [@gckeller]:                  https://github.com/gckeller
+  [@tmcdonell]:                 https://github.com/tmcdonell
+  [@robeverest]:                https://github.com/robeverest
+  [@fmma]:                      https://github.com/fmma
+  [@rrnewton]:                  https://github.com/rrnewton
+  [@JoshMeredith]:              https://github.com/JoshMeredith
+  [@blever]:                    https://github.com/blever
+  [@sseefried]:                 https://github.com/sseefried
+  [@ivogabe]:                   https://github.com/ivogabe
 
-
-  [CKLM+11]:                    http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
-  [MCKL13]:                     http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
+  [CKLM+11]:                    https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-cuda-damp2011.pdf
+  [MCKL13]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-optim-icfp2013.pdf
   [MCKL13-slides]:              https://speakerdeck.com/tmcdonell/optimising-purely-functional-gpu-programs
-  [CMCK14]:                     http://www.cse.unsw.edu.au/~chak/papers/CMCK14.html
-  [MCGN15]:                     http://www.cse.unsw.edu.au/~chak/papers/MCGN15.html
+  [CMCK14]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-ffi-padl2014.pdf
+  [MCGN15]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-llvm-haskell2015.pdf
   [MCGN15-slides]:              https://speakerdeck.com/tmcdonell/type-safe-runtime-code-generation-accelerate-to-llvm
   [MCGN15-video]:               https://www.youtube.com/watch?v=snXhXA5noVc
   [HIW'09]:                     https://wiki.haskell.org/HaskellImplementorsWorkshop
+  [CMCK17]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-seq2-haskell2017.pdf
+  [CMCK17-video]:               https://www.youtube.com/watch?v=QIWSqp7AaNo
   [Mar13]:                      http://chimera.labs.oreilly.com/books/1230000000929
   [Embedded]:                   https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
   [Hackage]:                    http://hackage.haskell.org/package/accelerate
@@ -215,7 +255,8 @@ Here is a list of features that are currently missing:
   [Wiki]:                       https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                     https://github.com/AccelerateHS/accelerate/issues
   [Google-Group]:               http://groups.google.com/group/accelerate-haskell
-  [HOAS-conv]:                  http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
+  [HOAS-conv]:                  https://github.com/mchakravarty/hoas-conv
+  <!-- [HOAS-conv]:                  https://web.archive.org/web/20180805092417/http://www.cse.unsw.edu.au/~chak/haskell/term-conv/ -->
   [repa]:                       http://hackage.haskell.org/package/repa
   [wiki-cc]:                    https://en.wikipedia.org/wiki/CUDA#Supported_GPUs
   [YLJ13-video]:                http://youtu.be/ARqE4yT2Z0o
@@ -226,7 +267,7 @@ Here is a list of features that are currently missing:
   [wiki-nbody]:                 https://en.wikipedia.org/wiki/N-body
   [wiki-raytracing]:            https://en.wikipedia.org/wiki/Ray_tracing
   [wiki-pagerank]:              https://en.wikipedia.org/wiki/Pagerank
-  [Trevor-thesis]:              http://www.cse.unsw.edu.au/~tmcdonell/papers/TrevorMcDonell_PhD_submission.pdf
+  [Trevor-thesis]:              https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/TrevorMcDonell_PhD_Thesis.pdf
   [colour-accelerate]:          https://github.com/tmcdonell/colour-accelerate
   [gloss]:                      https://hackage.haskell.org/package/gloss
   [gloss-accelerate]:           https://github.com/tmcdonell/gloss-accelerate

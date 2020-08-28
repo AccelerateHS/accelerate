@@ -1,0 +1,38 @@
+# vim: nospell
+
+clone_folder: "c:\\accelerate"
+
+skip_commits:
+  message: /\[ci skip\]/
+
+environment:
+  global:
+    STACK_ROOT: "c:\\sr"
+  matrix:
+    - GHC: "8.8"
+    - GHC: "8.6"
+    - GHC: "8.4"
+    - GHC: "8.2"
+
+before_build:
+  # http://help.appveyor.com/discussions/problems/6312-curl-command-not-found
+  - set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
+  - set PATH=C:\Users\appveyor\AppData\Roaming\local\bin;%PATH%
+
+  # install stack
+  - curl -sS -ostack.zip -L --insecure https://www.stackage.org/stack/windows-x86_64
+  - 7z x stack.zip stack.exe
+  - stack --version
+
+  - ln -s stack-%GHC%.yaml stack.yaml
+  - stack setup --no-terminal > NUL
+  - stack build --no-terminal --copy-bins --fast happy
+  - stack build --no-terminal --no-copy-bins --fast --jobs=1 --only-dependencies --test
+
+build_script:
+  - stack build --no-terminal --no-copy-bins --fast --only-dependencies --test --no-run-tests --flag accelerate:nofib
+
+test_script:
+  - stack test accelerate:doctest --flag accelerate:nofib
+  - stack test accelerate:nofib-interpreter --test-arguments="--hedgehog-tests 25" --flag accelerate:nofib
+

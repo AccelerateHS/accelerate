@@ -1,24 +1,23 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Smart
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
---               [2013..2017] Robert Clifton-Everest
---               [2014..2014] Frederik M. Madsen
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -30,19 +29,28 @@
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), PreBoundary(..), Stencil(..), Level,
+  -- ** Array computations
+  Acc(..), SmartAcc(..), PreSmartAcc(..),
+  Level, Direction(..),
 
-  -- * Smart constructors for literals
+  -- ** Scalar expressions
+  Exp(..), SmartExp(..), PreSmartExp(..),
+  Stencil(..),
+  Boundary(..), PreBoundary(..),
+  PrimBool,
+  PrimMaybe,
+
+  -- ** Extracting type information
+  HasArraysR(..),
+  HasTypeR(..),
+
+  -- ** Smart constructors for literals
   constant, undef,
 
-  -- * Smart constructors and destructors for tuples
-  tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9, tup10, tup11, tup12, tup13, tup14, tup15, tup16,
-  untup2, untup3, untup4, untup5, untup6, untup7, untup8, untup9, untup10, untup11, untup12, untup13, untup14, untup15, untup16,
+  -- ** Smart destructors for shapes
+  indexHead, indexTail,
 
-  atup2, atup3, atup4, atup5, atup6, atup7, atup8, atup9, atup10, atup11, atup12, atup13, atup14, atup15, atup16,
-  unatup2, unatup3, unatup4, unatup5, unatup6, unatup7, unatup8, unatup9, unatup10, unatup11, unatup12, unatup13, unatup14, unatup15, unatup16,
-
-  -- * Smart constructors for constants
+  -- ** Smart constructors for constants
   mkMinBound, mkMaxBound, mkPi,
   mkSin, mkCos, mkTan,
   mkAsin, mkAcos, mkAtan,
@@ -53,37 +61,57 @@ module Data.Array.Accelerate.Smart (
   mkTruncate, mkRound, mkFloor, mkCeiling,
   mkAtan2,
 
-  -- * Smart constructors for primitive functions
+  -- ** Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkQuotRem, mkIDiv, mkMod, mkDivMod,
   mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR, mkPopCount, mkCountLeadingZeros, mkCountTrailingZeros,
   mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq, mkEq, mkNEq, mkMax, mkMin,
   mkLAnd, mkLOr, mkLNot, mkIsNaN, mkIsInfinite,
 
-  -- * Smart constructors for type coercion functions
-  mkOrd, mkChr, mkBoolToInt, mkFromIntegral, mkToFloating, mkBitcast, mkUnsafeCoerce,
+  -- ** Smart constructors for type coercion functions
+  mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
-  -- * Auxiliary functions
+  -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
+  ApplyAcc(..),
+  unAcc, unAccFunction, mkExp, unExp, unExpFunction, unExpBinaryFunction, unPair, mkPairToTuple,
 
-  -- Debugging
-  showPreAccOp, showPreExpOp,
+  -- ** Miscellaneous
+  showPreAccOp,
+  showPreExpOp,
 
 ) where
 
--- standard library
-import Prelude                                  hiding ( exp )
-import Data.List
-import Data.Typeable
 
--- friends
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Elt
+import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Representation.Slice
+import Data.Array.Accelerate.Representation.Stencil                 hiding ( StencilR, stencilR )
+import Data.Array.Accelerate.Representation.Tag
+import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.Vec
+import Data.Array.Accelerate.Sugar.Array                            ( Arrays )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Foreign
+import Data.Array.Accelerate.Sugar.Shape                            ( (:.)(..) )
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.AST                hiding ( PreOpenAcc(..), OpenAcc(..), Acc
-                                                       , PreOpenExp(..), OpenExp, PreExp, Exp
-                                                       , Stencil(..), PreBoundary(..), Boundary
-                                                       , showPreAccOp, showPreExpOp )
-import qualified Data.Array.Accelerate.AST      as AST
+import qualified Data.Array.Accelerate.Representation.Stencil       as R
+import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
+import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
+
+import Data.Array.Accelerate.AST                                    ( Direction(..)
+                                                                    , PrimBool, PrimMaybe
+                                                                    , PrimFun(..), primFunType
+                                                                    , PrimConst(..), primConstType )
+import Data.Primitive.Vec
+
+import Data.Kind
+import Prelude
+
+import GHC.TypeLits
+
 
 -- Array computations
 -- ------------------
@@ -271,303 +299,167 @@ import qualified Data.Array.Accelerate.AST      as AST
 --    fusion) and, if the target architecture has a separate memory space, as is
 --    the case of GPUs, to prevent excessive data transfers.
 --
-newtype Acc a = Acc (PreAcc Acc Exp a)
-deriving instance Typeable Acc
+newtype Acc a = Acc (SmartAcc (Sugar.ArraysR a))
+
+newtype SmartAcc a = SmartAcc (PreSmartAcc SmartAcc SmartExp a)
 
 
--- The level of lambda-bound variables. The root has level 0; then it increases with each bound
--- variable — i.e., it is the same as the size of the environment at the defining occurrence.
+-- The level of lambda-bound variables. The root has level 0; then it
+-- increases with each bound variable — i.e., it is the same as the size of
+-- the environment at the defining occurrence.
 --
 type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
-data PreAcc acc exp as where
+data PreSmartAcc acc exp as where
     -- Needed for conversion to de Bruijn form
-  Atag          :: Arrays as
-                => Level                        -- environment size at defining occurrence
-                -> PreAcc acc exp as
+  Atag          :: ArraysR as
+                -> Level                        -- environment size at defining occurrence
+                -> PreSmartAcc acc exp as
 
-  Pipe          :: (Arrays as, Arrays bs, Arrays cs)
-                => (Acc as -> acc bs)
-                -> (Acc bs -> acc cs)
+  Pipe          :: ArraysR as
+                -> ArraysR bs
+                -> ArraysR cs
+                -> (SmartAcc as -> acc bs)
+                -> (SmartAcc bs -> acc cs)
                 -> acc as
-                -> PreAcc acc exp cs
+                -> PreSmartAcc acc exp cs
 
-  Aforeign      :: (Arrays as, Arrays bs, Foreign asm)
-                => asm (as -> bs)
-                -> (Acc as -> Acc bs)
+  Aforeign      :: Foreign asm
+                => ArraysR bs
+                -> asm (as -> bs)
+                -> (SmartAcc as -> SmartAcc bs)
                 -> acc as
-                -> PreAcc acc exp bs
+                -> PreSmartAcc acc exp bs
 
-  Acond         :: Arrays as
-                => exp Bool
+  Acond         :: exp PrimBool
                 -> acc as
                 -> acc as
-                -> PreAcc acc exp as
+                -> PreSmartAcc acc exp as
 
-  Awhile        :: Arrays arrs
-                => (Acc arrs -> acc (Scalar Bool))
-                -> (Acc arrs -> acc arrs)
+  Awhile        :: ArraysR arrs
+                -> (SmartAcc arrs -> acc (Scalar PrimBool))
+                -> (SmartAcc arrs -> acc arrs)
                 -> acc arrs
-                -> PreAcc acc exp arrs
+                -> PreSmartAcc acc exp arrs
 
-  Atuple        :: (Arrays arrs, IsAtuple arrs)
-                => Atuple acc (TupleRepr arrs)
-                -> PreAcc acc exp arrs
+  Anil          :: PreSmartAcc acc exp ()
 
-  Aprj          :: (Arrays arrs, IsAtuple arrs, Arrays a)
-                => TupleIdx (TupleRepr arrs) a
-                ->        acc     arrs
-                -> PreAcc acc exp a
+  Apair         :: acc arrs1
+                -> acc arrs2
+                -> PreSmartAcc acc exp (arrs1, arrs2)
 
-  Use           :: Arrays arrs
-                => arrs
-                -> PreAcc acc exp arrs
+  Aprj          :: PairIdx (arrs1, arrs2) arrs
+                -> acc (arrs1, arrs2)
+                -> PreSmartAcc acc exp arrs
 
-  Unit          :: Elt e
-                => exp e
-                -> PreAcc acc exp (Scalar e)
+  Use           :: ArrayR (Array sh e)
+                -> Array sh e
+                -> PreSmartAcc acc exp (Array sh e)
 
-  Generate      :: (Shape sh, Elt e)
-                => exp sh
-                -> (Exp sh -> exp e)
-                -> PreAcc acc exp (Array sh e)
+  Unit          :: TypeR e
+                -> exp e
+                -> PreSmartAcc acc exp (Scalar e)
 
-  Reshape       :: (Shape sh, Shape sh', Elt e)
-                => exp sh
+  Generate      :: ArrayR (Array sh e)
+                -> exp sh
+                -> (SmartExp sh -> exp e)
+                -> PreSmartAcc acc exp (Array sh e)
+
+  Reshape       :: ShapeR sh
+                -> exp sh
                 -> acc (Array sh' e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreSmartAcc acc exp (Array sh e)
 
-  Replicate     :: (Slice slix, Elt e)
-                => exp slix
-                -> acc            (Array (SliceShape slix) e)
-                -> PreAcc acc exp (Array (FullShape  slix) e)
-
-  Slice         :: (Slice slix, Elt e)
-                => acc            (Array (FullShape  slix) e)
+  Replicate     :: SliceIndex slix sl co sh
                 -> exp slix
-                -> PreAcc acc exp (Array (SliceShape slix) e)
+                -> acc                 (Array sl e)
+                -> PreSmartAcc acc exp (Array sh e)
 
-  Map           :: (Shape sh, Elt e, Elt e')
-                => (Exp e -> exp e')
+  Slice         :: SliceIndex slix sl co sh
+                -> acc                 (Array sh e)
+                -> exp slix
+                -> PreSmartAcc acc exp (Array sl e)
+
+  Map           :: TypeR e
+                -> TypeR e'
+                -> (SmartExp e -> exp e')
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh e')
+                -> PreSmartAcc acc exp (Array sh e')
 
-  ZipWith       :: (Shape sh, Elt e1, Elt e2, Elt e3)
-                => (Exp e1 -> Exp e2 -> exp e3)
+  ZipWith       :: TypeR e1
+                -> TypeR e2
+                -> TypeR e3
+                -> (SmartExp e1 -> SmartExp e2 -> exp e3)
                 -> acc (Array sh e1)
                 -> acc (Array sh e2)
-                -> PreAcc acc exp (Array sh e3)
+                -> PreSmartAcc acc exp (Array sh e3)
 
-  Fold          :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
-                -> exp e
-                -> acc (Array (sh:.Int) e)
-                -> PreAcc acc exp (Array sh e)
+  Fold          :: TypeR e
+                -> (SmartExp e -> SmartExp e -> exp e)
+                -> Maybe (exp e)
+                -> acc (Array (sh, Int) e)
+                -> PreSmartAcc acc exp (Array sh e)
 
-  Fold1         :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
-                -> acc (Array (sh:.Int) e)
-                -> PreAcc acc exp (Array sh e)
-
-  FoldSeg       :: (Shape sh, Elt e, Elt i, IsIntegral i)
-                => (Exp e -> Exp e -> exp e)
-                -> exp e
-                -> acc (Array (sh:.Int) e)
+  FoldSeg       :: IntegralType i
+                -> TypeR e
+                -> (SmartExp e -> SmartExp e -> exp e)
+                -> Maybe (exp e)
+                -> acc (Array (sh, Int) e)
                 -> acc (Segments i)
-                -> PreAcc acc exp (Array (sh:.Int) e)
+                -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Fold1Seg      :: (Shape sh, Elt e, Elt i, IsIntegral i)
-                => (Exp e -> Exp e -> exp e)
-                -> acc (Array (sh:.Int) e)
-                -> acc (Segments i)
-                -> PreAcc acc exp (Array (sh:.Int) e)
+  Scan          :: Direction
+                -> TypeR e
+                -> (SmartExp e -> SmartExp e -> exp e)
+                -> Maybe (exp e)
+                -> acc (Array (sh, Int) e)
+                -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Scanl         :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
+  Scan'         :: Direction
+                -> TypeR e
+                -> (SmartExp e -> SmartExp e -> exp e)
                 -> exp e
-                -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
+                -> acc (Array (sh, Int) e)
+                -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
 
-  Scanl'        :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
-                -> exp e
-                -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e, Array sh e)
-
-  Scanl1        :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
-                -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
-
-  Scanr         :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
-                -> exp e
-                -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
-
-  Scanr'        :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
-                -> exp e
-                -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e, Array sh e)
-
-  Scanr1        :: (Shape sh, Elt e)
-                => (Exp e -> Exp e -> exp e)
-                -> acc (Array (sh :. Int) e)
-                -> PreAcc acc exp (Array (sh :. Int) e)
-
-  Permute       :: (Shape sh, Shape sh', Elt e)
-                => (Exp e -> Exp e -> exp e)
+  Permute       :: ArrayR (Array sh e)
+                -> (SmartExp e -> SmartExp e -> exp e)
                 -> acc (Array sh' e)
-                -> (Exp sh -> exp sh')
+                -> (SmartExp sh -> exp (PrimMaybe sh'))
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh' e)
+                -> PreSmartAcc acc exp (Array sh' e)
 
-  Backpermute   :: (Shape sh, Shape sh', Elt e)
-                => exp sh'
-                -> (Exp sh' -> exp sh)
+  Backpermute   :: ShapeR sh'
+                -> exp sh'
+                -> (SmartExp sh' -> exp sh)
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh' e)
+                -> PreSmartAcc acc exp (Array sh' e)
 
-  Stencil       :: (Shape sh, Elt a, Elt b, Stencil sh a stencil)
-                => (stencil -> exp b)
+  Stencil       :: R.StencilR sh a stencil
+                -> TypeR b
+                -> (SmartExp stencil -> exp b)
                 -> PreBoundary acc exp (Array sh a)
                 -> acc (Array sh a)
-                -> PreAcc acc exp (Array sh b)
+                -> PreSmartAcc acc exp (Array sh b)
 
-  Stencil2      :: (Shape sh, Elt a, Elt b, Elt c, Stencil sh a stencil1, Stencil sh b stencil2)
-                => (stencil1 -> stencil2 -> exp c)
+  Stencil2      :: R.StencilR sh a stencil1
+                -> R.StencilR sh b stencil2
+                -> TypeR c
+                -> (SmartExp stencil1 -> SmartExp stencil2 -> exp c)
                 -> PreBoundary acc exp (Array sh a)
                 -> acc (Array sh a)
                 -> PreBoundary acc exp (Array sh b)
                 -> acc (Array sh b)
-                -> PreAcc acc exp (Array sh c)
-
-  -- Collect       :: Arrays arrs
-  --               => seq arrs
-  --               -> PreAcc acc seq exp arrs
-
-
-{--
-data PreSeq acc seq exp arrs where
-  -- Convert the given Haskell-list of arrays to a sequence.
-  StreamIn :: Arrays a
-           => [a]
-           -> PreSeq acc seq exp [a]
-
-  -- Convert the given array to a sequence.
-  -- Example:
-  -- slix = Z :. All :. Split :. All :. All :. Split
-  --              ^       ^       ^      ^      ^
-  --              |        \     /      /       |
-  --              |         \___/______/_______ Iteration space.
-  --              |            /      /
-  --           Element________/______/
-  --            shape.
-  --
-  ToSeq :: ( Elt e
-           , Slice slix
-           , Division slsix
-           , DivisionSlice slsix ~ slix
-           , Typeable (FullShape slix)
-           , Typeable (SliceShape slix)
-           )
-        => slsix
-        -> acc (Array (FullShape slix) e)
-        -> PreSeq acc seq exp [Array (SliceShape slix) e]
-
-  -- Apply the given the given function to all elements of the given sequence.
-  MapSeq :: (Arrays a, Arrays b)
-         => (Acc a -> acc b)
-         -> seq [a]
-         -> PreSeq acc seq exp [b]
-
-  -- Apply a given binary function pairwise to all elements of the given sequences.
-  -- The length of the result is the length of the shorter of the two argument
-  -- arrays.
-  ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
-             => (Acc a -> Acc b -> acc c)
-             -> seq [a]
-             -> seq [b]
-             -> PreSeq acc seq exp [c]
-
-  -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
-  -- using the given binary operation (+). (+) must be associative:
-  --
-  --   Forall a b c. (a + b) + c = a + (b + c),
-  --
-  -- and a0 must be the identity element for (+):
-  --
-  --   Forall a. a0 + a = a = a + a0.
-  --
-  ScanSeq :: Elt a
-          => (Exp a -> Exp a -> exp a)
-          -> exp a
-          -> seq [Scalar a]
-          -> PreSeq acc seq exp [Scalar a]
-
-  -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
-  -- using the given binary operation (+). (+) must be associative:
-  --
-  --   Forall a b c. (a + b) + c = a + (b + c),
-  --
-  -- and a0 must be the identity element for (+):
-  --
-  --   Forall a. a0 + a = a = a + a0.
-  --
-  FoldSeq :: Elt a
-          => (Exp a -> Exp a -> exp a)
-          -> exp a
-          -> seq [Scalar a]
-          -> PreSeq acc seq exp (Scalar a)
-
-  -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct
-  -- where reduction with the companion operator corresponds to
-  -- flattening. f must be semi-associative, with vecotor append (++)
-  -- as the companion operator:
-  --
-  --   Forall b s1 a2 sh2 a2.
-  --     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
-  --
-  -- It is common to ignore the shape vectors, yielding the usual
-  -- semi-associativity law:
-  --
-  --   f b a _ = b + a,
-  --
-  -- for some (+) satisfying:
-  --
-  --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
-  --
-  FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
-                 => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> acc a)
-                 -> acc a
-                 -> seq [Array sh e]
-                 -> PreSeq acc seq exp a
-
-  -- Tuple up the results of a sequence computation. Note that the Arrays
-  -- constraint requires that the elements of the tuple are Arrays, not
-  -- streams ([]).
-  Stuple :: (Arrays arrs, IsAtuple arrs)
-         => Atuple (seq) (TupleRepr arrs)
-         -> PreSeq acc seq exp arrs
-
--- |Array-valued sequence computations
---
-newtype Seq a = Seq (PreSeq Acc Seq Exp a)
-
-deriving instance Typeable Seq
---}
+                -> PreSmartAcc acc exp (Array sh c)
 
 
 -- Embedded expressions of the surface language
 -- --------------------------------------------
 
 -- HOAS expressions mirror the constructors of 'AST.OpenExp', but with the 'Tag'
--- constructor instead of variables in the form of de Bruijn indices. Moreover,
--- HOAS expression use n-tuples and the type class 'Elt' to constrain element
--- types, whereas 'AST.OpenExp' uses nested pairs and the GADT 'TupleType'.
+-- constructor instead of variables in the form of de Bruijn indices.
 --
 
 -- | The type 'Exp' represents embedded scalar expressions. The collective
@@ -579,589 +471,113 @@ deriving instance Typeable Seq
 -- efficiently on constrained hardware such as GPUs, and is thus currently
 -- unsupported.
 --
-newtype Exp t = Exp (PreExp Acc Exp t)
-
-deriving instance Typeable Exp
+newtype Exp t = Exp (SmartExp (EltR t))
+newtype SmartExp t = SmartExp (PreSmartExp SmartAcc SmartExp t)
 
 -- | Scalar expressions to parametrise collective array operations, themselves parameterised over
 -- the type of collective array operations.
 --
-data PreExp acc exp t where
-    -- Needed for conversion to de Bruijn form
-  Tag           :: Elt t
-                => Level                        -- environment size at defining occurrence
-                -> PreExp acc exp t
+data PreSmartExp acc exp t where
+  -- Needed for conversion to de Bruijn form
+  Tag           :: TypeR t
+                -> Level                        -- environment size at defining occurrence
+                -> PreSmartExp acc exp t
 
-  -- All the same constructors as 'AST.Exp'
-  Const         :: Elt t
-                => t
-                -> PreExp acc exp t
-
-  Tuple         :: (Elt t, IsTuple t)
-                => Tuple exp (TupleRepr t)
-                -> PreExp acc exp t
-
-  Prj           :: (Elt t, IsTuple t, Elt e)
-                => TupleIdx (TupleRepr t) e
+  -- Needed for embedded pattern matching
+  Match         :: TagR t
                 -> exp t
-                -> PreExp acc exp e
+                -> PreSmartExp acc exp t
 
-  IndexNil      :: PreExp acc exp Z
+  -- All the same constructors as 'AST.Exp', plus projection
+  Const         :: ScalarType t
+                -> t
+                -> PreSmartExp acc exp t
 
-  IndexCons     :: (Elt sl, Elt a)
-                => exp sl
-                -> exp a
-                -> PreExp acc exp (sl:.a)
+  Nil           :: PreSmartExp acc exp ()
 
-  IndexHead     :: (Elt sl, Elt a)
-                => exp (sl:.a)
-                -> PreExp acc exp a
+  Pair          :: exp t1
+                -> exp t2
+                -> PreSmartExp acc exp (t1, t2)
 
-  IndexTail     :: (Elt sl, Elt a)
-                => exp (sl:.a)
-                -> PreExp acc exp sl
+  Prj           :: PairIdx (t1, t2) t
+                -> exp (t1, t2)
+                -> PreSmartExp acc exp t
 
-  IndexAny      :: Shape sh
-                => PreExp acc exp (Any sh)
+  VecPack       :: KnownNat n
+                => VecR n s tup
+                -> exp tup
+                -> PreSmartExp acc exp (Vec n s)
 
-  ToIndex       :: Shape sh
-                => exp sh
+  VecUnpack     :: KnownNat n
+                => VecR n s tup
+                -> exp (Vec n s)
+                -> PreSmartExp acc exp tup
+
+  ToIndex       :: ShapeR sh
                 -> exp sh
-                -> PreExp acc exp Int
+                -> exp sh
+                -> PreSmartExp acc exp Int
 
-  FromIndex     :: Shape sh
-                => exp sh
+  FromIndex     :: ShapeR sh
+                -> exp sh
                 -> exp Int
-                -> PreExp acc exp sh
+                -> PreSmartExp acc exp sh
 
-  Cond          :: Elt t
-                => exp Bool
+  Case          :: exp a
+                -> [(TagR a, exp b)]
+                -> PreSmartExp acc exp b
+
+  Cond          :: exp PrimBool
                 -> exp t
                 -> exp t
-                -> PreExp acc exp t
+                -> PreSmartExp acc exp t
 
-  While         :: Elt t
-                => (Exp t -> exp Bool)
-                -> (Exp t -> exp t)
+  While         :: TypeR t
+                -> (SmartExp t -> exp PrimBool)
+                -> (SmartExp t -> exp t)
                 -> exp t
-                -> PreExp acc exp t
+                -> PreSmartExp acc exp t
 
-  PrimConst     :: Elt t
-                => PrimConst t
-                -> PreExp acc exp t
+  PrimConst     :: PrimConst t
+                -> PreSmartExp acc exp t
 
-  PrimApp       :: (Elt a, Elt r)
-                => PrimFun (a -> r)
+  PrimApp       :: PrimFun (a -> r)
                 -> exp a
-                -> PreExp acc exp r
+                -> PreSmartExp acc exp r
 
-  Index         :: (Shape sh, Elt t)
-                => acc (Array sh t)
+  Index         :: TypeR t
+                -> acc (Array sh t)
                 -> exp sh
-                -> PreExp acc exp t
+                -> PreSmartExp acc exp t
 
-  LinearIndex   :: (Shape sh, Elt t)
-                => acc (Array sh t)
+  LinearIndex   :: TypeR t
+                -> acc (Array sh t)
                 -> exp Int
-                -> PreExp acc exp t
+                -> PreSmartExp acc exp t
 
-  Shape         :: (Shape sh, Elt e)
-                => acc (Array sh e)
-                -> PreExp acc exp sh
+  Shape         :: ShapeR sh
+                -> acc (Array sh e)
+                -> PreSmartExp acc exp sh
 
-  ShapeSize     :: Shape sh
-                => exp sh
-                -> PreExp acc exp Int
-
-  Intersect     :: Shape sh
-                => exp sh
+  ShapeSize     :: ShapeR sh
                 -> exp sh
-                -> PreExp acc exp sh
+                -> PreSmartExp acc exp Int
 
-  Union         :: Shape sh
-                => exp sh
-                -> exp sh
-                -> PreExp acc exp sh
-
-  Foreign       :: (Elt x, Elt y, Foreign asm)
-                => asm (x -> y)
-                -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
+  Foreign       :: Foreign asm
+                => TypeR y
+                -> asm (x -> y)
+                -> (SmartExp x -> SmartExp y) -- RCE: Using SmartExp instead of exp to aid in sharing recovery.
                 -> exp x
-                -> PreExp acc exp y
+                -> PreSmartExp acc exp y
 
-  Undef         :: Elt t
-                => PreExp acc exp t
+  Undef         :: ScalarType t
+                -> PreSmartExp acc exp t
 
-  Coerce        :: (Elt a, Elt b)
-                => exp a
-                -> PreExp acc exp b
-
-
-
--- Smart constructors and destructors for array tuples
--- ---------------------------------------------------
-
-atup2 :: (Arrays a, Arrays b)
-      => (Acc a, Acc b)
-      -> Acc (a, b)
-atup2 (a, b)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-
-atup3 :: (Arrays a, Arrays b, Arrays c)
-      => (Acc a, Acc b, Acc c)
-      -> Acc (a, b, c)
-atup3 (a, b, c)
-  = Acc $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-
-atup4 :: (Arrays a, Arrays b, Arrays c, Arrays d)
-      => (Acc a, Acc b, Acc c, Acc d)
-      -> Acc (a, b, c, d)
-atup4 (a, b, c, d)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-
-atup5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
-      => (Acc a, Acc b, Acc c, Acc d, Acc e)
-      -> Acc (a, b, c, d, e)
-atup5 (a, b, c, d, e)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-
-atup6 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-      => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
-      -> Acc (a, b, c, d, e, f)
-atup6 (a, b, c, d, e, f)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-
-atup7 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
-      => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
-      -> Acc (a, b, c, d, e, f, g)
-atup7 (a, b, c, d, e, f, g)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-
-atup8 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
-      => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
-      -> Acc (a, b, c, d, e, f, g, h)
-atup8 (a, b, c, d, e, f, g, h)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-
-atup9 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
-      => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
-      -> Acc (a, b, c, d, e, f, g, h, i)
-atup9 (a, b, c, d, e, f, g, h, i)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-
-atup10 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
-       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j)
-       -> Acc (a, b, c, d, e, f, g, h, i, j)
-atup10 (a, b, c, d, e, f, g, h, i, j)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-
-atup11 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
-       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k)
-       -> Acc (a, b, c, d, e, f, g, h, i, j, k)
-atup11 (a, b, c, d, e, f, g, h, i, j, k)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-
-atup12 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
-       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l)
-       -> Acc (a, b, c, d, e, f, g, h, i, j, k, l)
-atup12 (a, b, c, d, e, f, g, h, i, j, k, l)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-
-atup13 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
-       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m)
-       -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m)
-atup13 (a, b, c, d, e, f, g, h, i, j, k, l, m)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
-
-atup14 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
-       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n)
-       -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-atup14 (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
-            `SnocAtup` n
-
-atup15 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
-       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
-       -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-atup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
-            `SnocAtup` n
-            `SnocAtup` o
-
-atup16 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
-       => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p)
-       -> Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-atup16 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-  = Acc
-  $ Atuple
-  $ NilAtup `SnocAtup` a
-            `SnocAtup` b
-            `SnocAtup` c
-            `SnocAtup` d
-            `SnocAtup` e
-            `SnocAtup` f
-            `SnocAtup` g
-            `SnocAtup` h
-            `SnocAtup` i
-            `SnocAtup` j
-            `SnocAtup` k
-            `SnocAtup` l
-            `SnocAtup` m
-            `SnocAtup` n
-            `SnocAtup` o
-            `SnocAtup` p
-
-unatup2 :: (Arrays a, Arrays b)
-        => Acc (a, b)
-        -> (Acc a, Acc b)
-unatup2 e =
-  ( Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup3 :: (Arrays a, Arrays b, Arrays c)
-        => Acc (a, b, c)
-        -> (Acc a, Acc b, Acc c)
-unatup3 e =
-  ( Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup4
-    :: (Arrays a, Arrays b, Arrays c, Arrays d)
-    => Acc (a, b, c, d)
-    -> (Acc a, Acc b, Acc c, Acc d)
-unatup4 e =
-  ( Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup5
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
-    => Acc (a, b, c, d, e)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e)
-unatup5 e =
-  ( Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup6
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-    => Acc (a, b, c, d, e, f)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
-unatup6 e =
-  ( Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup7
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
-    => Acc (a, b, c, d, e, f, g)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
-unatup7 e =
-  ( Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup8
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
-    => Acc (a, b, c, d, e, f, g, h)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
-unatup8 e =
-  ( Acc $ tix7 `Aprj` e
-  , Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup9
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
-    => Acc (a, b, c, d, e, f, g, h, i)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
-unatup9 e =
-  ( Acc $ tix8 `Aprj` e
-  , Acc $ tix7 `Aprj` e
-  , Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup10
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
-    => Acc (a, b, c, d, e, f, g, h, i, j)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j)
-unatup10 e =
-  ( Acc $ tix9 `Aprj` e
-  , Acc $ tix8 `Aprj` e
-  , Acc $ tix7 `Aprj` e
-  , Acc $ tix6 `Aprj` e
-  , Acc $ tix5 `Aprj` e
-  , Acc $ tix4 `Aprj` e
-  , Acc $ tix3 `Aprj` e
-  , Acc $ tix2 `Aprj` e
-  , Acc $ tix1 `Aprj` e
-  , Acc $ tix0 `Aprj` e )
-
-unatup11
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
-    => Acc (a, b, c, d, e, f, g, h, i, j, k)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k)
-unatup11 e =
-  ( Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
-
-unatup12
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
-    => Acc (a, b, c, d, e, f, g, h, i, j, k, l)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l)
-unatup12 e =
-  ( Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
-
-unatup13
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
-    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m)
-unatup13 e =
-  ( Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
-
-unatup14
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
-    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n)
-unatup14 e =
-  ( Acc $ tix13 `Aprj` e
-  , Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
-
-unatup15
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
-    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o)
-unatup15 e =
-  ( Acc $ tix14 `Aprj` e
-  , Acc $ tix13 `Aprj` e
-  , Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
-
-unatup16
-    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o, Arrays p)
-    => Acc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-    -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i, Acc j, Acc k, Acc l, Acc m, Acc n, Acc o, Acc p)
-unatup16 e =
-  ( Acc $ tix15 `Aprj` e
-  , Acc $ tix14 `Aprj` e
-  , Acc $ tix13 `Aprj` e
-  , Acc $ tix12 `Aprj` e
-  , Acc $ tix11 `Aprj` e
-  , Acc $ tix10 `Aprj` e
-  , Acc $ tix9  `Aprj` e
-  , Acc $ tix8  `Aprj` e
-  , Acc $ tix7  `Aprj` e
-  , Acc $ tix6  `Aprj` e
-  , Acc $ tix5  `Aprj` e
-  , Acc $ tix4  `Aprj` e
-  , Acc $ tix3  `Aprj` e
-  , Acc $ tix2  `Aprj` e
-  , Acc $ tix1  `Aprj` e
-  , Acc $ tix0  `Aprj` e )
+  Coerce        :: BitSizeEq a b
+                => ScalarType a
+                -> ScalarType b
+                -> exp a
+                -> PreSmartExp acc exp b
 
 
 -- Smart constructors for stencils
@@ -1169,297 +585,285 @@ unatup16 e =
 
 -- | Boundary condition specification for stencil operations
 --
-newtype Boundary t = Boundary (PreBoundary Acc Exp t)
+data Boundary t where
+  Boundary  :: PreBoundary SmartAcc SmartExp (Array (EltR sh) (EltR e))
+            -> Boundary (Sugar.Array sh e)
 
 data PreBoundary acc exp t where
   Clamp     :: PreBoundary acc exp t
   Mirror    :: PreBoundary acc exp t
   Wrap      :: PreBoundary acc exp t
 
-  Constant  :: Elt e
-            => e
+  Constant  :: e
             -> PreBoundary acc exp (Array sh e)
 
-  Function  :: (Shape sh, Elt e)
-            => (Exp sh -> exp e)
+  Function  :: (SmartExp sh -> exp e)
             -> PreBoundary acc exp (Array sh e)
 
 
 -- Stencil reification
+-- -------------------
 --
--- In the AST representation, we turn the stencil type from nested tuples of Accelerate expressions
--- into an Accelerate expression whose type is a tuple nested in the same manner.  This enables us
--- to represent the stencil function as a unary function (which also only needs one de Bruijn
--- index). The various positions in the stencil are accessed via tuple indices (i.e., projections).
+-- In the AST representation, we turn the stencil type from nested tuples
+-- of Accelerate expressions into an Accelerate expression whose type is
+-- a tuple nested in the same manner. This enables us to represent the
+-- stencil function as a unary function (which also only needs one de
+-- Bruijn index). The various positions in the stencil are accessed via
+-- tuple indices (i.e., projections).
 --
-class (Elt (StencilRepr sh stencil), AST.Stencil sh a (StencilRepr sh stencil)) => Stencil sh a stencil where
-  type StencilRepr sh stencil :: *
-  stencilPrj :: Exp (StencilRepr sh stencil)
-             -> stencil
+class Stencil sh e stencil where
+  type StencilR sh stencil :: Type
+
+  stencilR   :: R.StencilR (EltR sh) (EltR e) (StencilR sh stencil)
+  stencilPrj :: SmartExp (StencilR sh stencil) -> stencil
 
 -- DIM1
-instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e) where
-  type StencilRepr DIM1 (Exp e, Exp e, Exp e)
-    = (e, e, e)
-  stencilPrj s = (Exp $ Prj tix2 s,
-                  Exp $ Prj tix1 s,
-                  Exp $ Prj tix0 s)
+instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
+  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e)
+    = EltR (e, e, e)
+  stencilR = StencilRunit3 @(EltR e) $ eltR @e
+  stencilPrj s = (Exp $ prj2 s,
+                  Exp $ prj1 s,
+                  Exp $ prj0 s)
 
-instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
-  type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
-    = (e, e, e, e, e)
-  stencilPrj s = (Exp $ Prj tix4 s,
-                  Exp $ Prj tix3 s,
-                  Exp $ Prj tix2 s,
-                  Exp $ Prj tix1 s,
-                  Exp $ Prj tix0 s)
+instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
+  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
+    = EltR (e, e, e, e, e)
+  stencilR = StencilRunit5 $ eltR @e
+  stencilPrj s = (Exp $ prj4 s,
+                  Exp $ prj3 s,
+                  Exp $ prj2 s,
+                  Exp $ prj1 s,
+                  Exp $ prj0 s)
 
-instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
-  type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = (e, e, e, e, e, e, e)
-  stencilPrj s = (Exp $ Prj tix6 s,
-                  Exp $ Prj tix5 s,
-                  Exp $ Prj tix4 s,
-                  Exp $ Prj tix3 s,
-                  Exp $ Prj tix2 s,
-                  Exp $ Prj tix1 s,
-                  Exp $ Prj tix0 s)
+instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
+  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
+    = EltR (e, e, e, e, e, e, e)
+  stencilR = StencilRunit7 $ eltR @e
+  stencilPrj s = (Exp $ prj6 s,
+                  Exp $ prj5 s,
+                  Exp $ prj4 s,
+                  Exp $ prj3 s,
+                  Exp $ prj2 s,
+                  Exp $ prj1 s,
+                  Exp $ prj0 s)
 
-instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
+instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
   where
-  type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = (e, e, e, e, e, e, e, e, e)
-  stencilPrj s = (Exp $ Prj tix8 s,
-                  Exp $ Prj tix7 s,
-                  Exp $ Prj tix6 s,
-                  Exp $ Prj tix5 s,
-                  Exp $ Prj tix4 s,
-                  Exp $ Prj tix3 s,
-                  Exp $ Prj tix2 s,
-                  Exp $ Prj tix1 s,
-                  Exp $ Prj tix0 s)
+  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
+    = EltR (e, e, e, e, e, e, e, e, e)
+  stencilR = StencilRunit9 $ eltR @e
+  stencilPrj s = (Exp $ prj8 s,
+                  Exp $ prj7 s,
+                  Exp $ prj6 s,
+                  Exp $ prj5 s,
+                  Exp $ prj4 s,
+                  Exp $ prj3 s,
+                  Exp $ prj2 s,
+                  Exp $ prj1 s,
+                  Exp $ prj0 s)
 
 -- DIM(n+1)
 instance (Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row2, row1, row0) where
-  type StencilRepr (sh:.Int:.Int) (row2, row1, row0)
-    = (StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row0)
-  stencilPrj s = (stencilPrj @(sh:.Int) @a (Exp $ Prj tix2 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix1 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix0 s))
+  type StencilR (sh:.Int:.Int) (row2, row1, row0)
+    = Tup3 (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
+  stencilR = StencilRtup3 (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = (stencilPrj @(sh:.Int) @a $ prj2 s,
+                  stencilPrj @(sh:.Int) @a $ prj1 s,
+                  stencilPrj @(sh:.Int) @a $ prj0 s)
 
-instance (Stencil (sh:.Int) a row1,
-          Stencil (sh:.Int) a row2,
+instance (Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row3,
-          Stencil (sh:.Int) a row4,
-          Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
-  type StencilRepr (sh:.Int:.Int) (row1, row2, row3, row4, row5)
-    = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
-       StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5)
-  stencilPrj s = (stencilPrj @(sh:.Int) @a (Exp $ Prj tix4 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix3 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix2 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix1 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix0 s))
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row4, row3, row2, row1, row0) where
+  type StencilR (sh:.Int:.Int) (row4, row3, row2, row1, row0)
+    = Tup5 (StencilR (sh:.Int) row4) (StencilR (sh:.Int) row3) (StencilR (sh:.Int) row2)
+       (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
+  stencilR = StencilRtup5 (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
+                  (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = (stencilPrj @(sh:.Int) @a $ prj4 s,
+                  stencilPrj @(sh:.Int) @a $ prj3 s,
+                  stencilPrj @(sh:.Int) @a $ prj2 s,
+                  stencilPrj @(sh:.Int) @a $ prj1 s,
+                  stencilPrj @(sh:.Int) @a $ prj0 s)
 
-instance (Stencil (sh:.Int) a row1,
-          Stencil (sh:.Int) a row2,
-          Stencil (sh:.Int) a row3,
-          Stencil (sh:.Int) a row4,
+instance (Stencil (sh:.Int) a row6,
           Stencil (sh:.Int) a row5,
-          Stencil (sh:.Int) a row6,
-          Stencil (sh:.Int) a row7)
-  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
-  type StencilRepr (sh:.Int:.Int) (row1, row2, row3, row4, row5, row6, row7)
-    = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
-       StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5, StencilRepr (sh:.Int) row6,
-       StencilRepr (sh:.Int) row7)
-  stencilPrj s = (stencilPrj @(sh:.Int) @a (Exp $ Prj tix6 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix5 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix4 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix3 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix2 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix1 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix0 s))
-
-instance (Stencil (sh:.Int) a row1,
-          Stencil (sh:.Int) a row2,
-          Stencil (sh:.Int) a row3,
           Stencil (sh:.Int) a row4,
-          Stencil (sh:.Int) a row5,
-          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row0)
+  => Stencil (sh:.Int:.Int) a (row6, row5, row4, row3, row2, row1, row0) where
+  type StencilR (sh:.Int:.Int) (row6, row5, row4, row3, row2, row1, row0)
+    = Tup7 (StencilR (sh:.Int) row6) (StencilR (sh:.Int) row5) (StencilR (sh:.Int) row4)
+       (StencilR (sh:.Int) row3) (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1)
+       (StencilR (sh:.Int) row0)
+  stencilR = StencilRtup7 (stencilR @(sh:.Int) @a @row6)
+                  (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
+                  (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = (stencilPrj @(sh:.Int) @a $ prj6 s,
+                  stencilPrj @(sh:.Int) @a $ prj5 s,
+                  stencilPrj @(sh:.Int) @a $ prj4 s,
+                  stencilPrj @(sh:.Int) @a $ prj3 s,
+                  stencilPrj @(sh:.Int) @a $ prj2 s,
+                  stencilPrj @(sh:.Int) @a $ prj1 s,
+                  stencilPrj @(sh:.Int) @a $ prj0 s)
+
+instance (Stencil (sh:.Int) a row8,
           Stencil (sh:.Int) a row7,
-          Stencil (sh:.Int) a row8,
-          Stencil (sh:.Int) a row9)
-  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
-  type StencilRepr (sh:.Int:.Int) (row1, row2, row3, row4, row5, row6, row7, row8, row9)
-    = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
-       StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5, StencilRepr (sh:.Int) row6,
-       StencilRepr (sh:.Int) row7, StencilRepr (sh:.Int) row8, StencilRepr (sh:.Int) row9)
-  stencilPrj s = (stencilPrj @(sh:.Int) @a (Exp $ Prj tix8 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix7 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix6 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix5 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix4 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix3 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix2 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix1 s),
-                  stencilPrj @(sh:.Int) @a (Exp $ Prj tix0 s))
+          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row5,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row0)
+  => Stencil (sh:.Int:.Int) a (row8, row7, row6, row5, row4, row3, row2, row1, row0) where
+  type StencilR (sh:.Int:.Int) (row8, row7, row6, row5, row4, row3, row2, row1, row0)
+    = Tup9 (StencilR (sh:.Int) row8) (StencilR (sh:.Int) row7) (StencilR (sh:.Int) row6)
+       (StencilR (sh:.Int) row5) (StencilR (sh:.Int) row4) (StencilR (sh:.Int) row3)
+       (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
+  stencilR = StencilRtup9
+                  (stencilR @(sh:.Int) @a @row8) (stencilR @(sh:.Int) @a @row7) (stencilR @(sh:.Int) @a @row6)
+                  (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
+                  (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = (stencilPrj @(sh:.Int) @a $ prj8 s,
+                  stencilPrj @(sh:.Int) @a $ prj7 s,
+                  stencilPrj @(sh:.Int) @a $ prj6 s,
+                  stencilPrj @(sh:.Int) @a $ prj5 s,
+                  stencilPrj @(sh:.Int) @a $ prj4 s,
+                  stencilPrj @(sh:.Int) @a $ prj3 s,
+                  stencilPrj @(sh:.Int) @a $ prj2 s,
+                  stencilPrj @(sh:.Int) @a $ prj1 s,
+                  stencilPrj @(sh:.Int) @a $ prj0 s)
 
--- Auxiliary tuple index constants
---
-tix0 :: TupleIdx (t, s0) s0
-tix0 = ZeroTupIdx
+prjTail :: SmartExp (t, a) -> SmartExp t
+prjTail = SmartExp . Prj PairIdxLeft
 
-tix1 :: TupleIdx ((t, s1), s0) s1
-tix1 = SuccTupIdx tix0
+prj0 :: SmartExp (t, a) -> SmartExp a
+prj0 = SmartExp . Prj PairIdxRight
 
-tix2 :: TupleIdx (((t, s2), s1), s0) s2
-tix2 = SuccTupIdx tix1
+prj1 :: SmartExp ((t, a), s0) -> SmartExp a
+prj1 = prj0 . prjTail
 
-tix3 :: TupleIdx ((((t, s3), s2), s1), s0) s3
-tix3 = SuccTupIdx tix2
+prj2 :: SmartExp (((t, a), s1), s0) -> SmartExp a
+prj2 = prj1 . prjTail
 
-tix4 :: TupleIdx (((((t, s4), s3), s2), s1), s0) s4
-tix4 = SuccTupIdx tix3
+prj3 :: SmartExp ((((t, a), s2), s1), s0) -> SmartExp a
+prj3 = prj2 . prjTail
 
-tix5 :: TupleIdx ((((((t, s5), s4), s3), s2), s1), s0) s5
-tix5 = SuccTupIdx tix4
+prj4 :: SmartExp (((((t, a), s3), s2), s1), s0) -> SmartExp a
+prj4 = prj3 . prjTail
 
-tix6 :: TupleIdx (((((((t, s6), s5), s4), s3), s2), s1), s0) s6
-tix6 = SuccTupIdx tix5
+prj5 :: SmartExp ((((((t, a), s4), s3), s2), s1), s0) -> SmartExp a
+prj5 = prj4 . prjTail
 
-tix7 :: TupleIdx ((((((((t, s7), s6), s5), s4), s3), s2), s1), s0) s7
-tix7 = SuccTupIdx tix6
+prj6 :: SmartExp (((((((t, a), s5), s4), s3), s2), s1), s0) -> SmartExp a
+prj6 = prj5 . prjTail
 
-tix8 :: TupleIdx (((((((((t, s8), s7), s6), s5), s4), s3), s2), s1), s0) s8
-tix8 = SuccTupIdx tix7
+prj7 :: SmartExp ((((((((t, a), s6), s5), s4), s3), s2), s1), s0) -> SmartExp a
+prj7 = prj6 . prjTail
 
-tix9 :: TupleIdx ((((((((((t, s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s9
-tix9 = SuccTupIdx tix8
+prj8 :: SmartExp (((((((((t, a), s7), s6), s5), s4), s3), s2), s1), s0) -> SmartExp a
+prj8 = prj7 . prjTail
 
-tix10 :: TupleIdx (((((((((((t, s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s10
-tix10 = SuccTupIdx tix9
 
-tix11 :: TupleIdx ((((((((((((t, s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s11
-tix11 = SuccTupIdx tix10
+-- Extracting type information
+-- ---------------------------
 
-tix12 :: TupleIdx (((((((((((((t, s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s12
-tix12 = SuccTupIdx tix11
+class HasArraysR f where
+  arraysR :: f a -> ArraysR a
 
-tix13 :: TupleIdx ((((((((((((((t, s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s13
-tix13 = SuccTupIdx tix12
+instance HasArraysR SmartAcc where
+  arraysR (SmartAcc e) = arraysR e
 
-tix14 :: TupleIdx (((((((((((((((t, s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s14
-tix14 = SuccTupIdx tix13
+arrayR :: HasArraysR f => f (Array sh e) -> ArrayR (Array sh e)
+arrayR acc = case arraysR acc of
+  TupRsingle repr -> repr
 
-tix15 :: TupleIdx ((((((((((((((((t, s15), s14), s13), s12), s11), s10), s9), s8), s7), s6), s5), s4), s3), s2), s1), s0) s15
-tix15 = SuccTupIdx tix14
+instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
+  arraysR = \case
+    Atag repr _               -> repr
+    Pipe _ _ repr  _ _ _      -> repr
+    Aforeign repr _ _ _       -> repr
+    Acond _ a _               -> arraysR a
+    Awhile _ _ _ a            -> arraysR a
+    Anil                      -> TupRunit
+    Apair a1 a2               -> arraysR a1 `TupRpair` arraysR a2
+    Aprj idx a | TupRpair t1 t2 <- arraysR a
+                              -> case idx of
+                                   PairIdxLeft  -> t1
+                                   PairIdxRight -> t2
+    Aprj _ _                  -> error "Ejector seat? You're joking!"
+    Use repr _                -> TupRsingle repr
+    Unit tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
+    Generate repr _ _         -> TupRsingle repr
+    Reshape shr _ a           -> let ArrayR _ tp = arrayR a
+                                 in  TupRsingle $ ArrayR shr tp
+    Replicate si _ a          -> let ArrayR _ tp = arrayR a
+                                 in  TupRsingle $ ArrayR (sliceDomainR si) tp
+    Slice si a _              -> let ArrayR _ tp = arrayR a
+                                 in  TupRsingle $ ArrayR (sliceShapeR si) tp
+    Map _ tp _ a              -> let ArrayR shr _ = arrayR a
+                                 in  TupRsingle $ ArrayR shr tp
+    ZipWith _ _ tp _ a _      -> let ArrayR shr _ = arrayR a
+                                 in  TupRsingle $ ArrayR shr tp
+    Fold _ _ _ a              -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
+                                 in  TupRsingle (ArrayR shr tp)
+    FoldSeg _ _ _ _ a _       -> arraysR a
+    Scan _ _ _ _ a            -> arraysR a
+    Scan' _ _ _ _ a           -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
+                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
+    Permute _ _ a _ _         -> arraysR a
+    Backpermute shr _ _ a     -> let ArrayR _ tp = arrayR a
+                                 in  TupRsingle (ArrayR shr tp)
+    Stencil s tp _ _ _        -> TupRsingle $ ArrayR (stencilShapeR s) tp
+    Stencil2 s _ tp _ _ _ _ _ -> TupRsingle $ ArrayR (stencilShapeR s) tp
 
-{--
--- Smart constructors for array tuples in sequence computations
--- ---------------------------------------------------
 
-stup2 :: (Arrays a, Arrays b) => (Seq a, Seq b) -> Seq (a, b)
-stup2 (a, b) = Seq $ Stuple (NilAtup `SnocAtup` a `SnocAtup` b)
+class HasTypeR f where
+  typeR :: HasCallStack => f t -> TypeR t
 
-stup3 :: (Arrays a, Arrays b, Arrays c) => (Seq a, Seq b, Seq c) -> Seq (a, b, c)
-stup3 (a, b, c) = Seq $ Stuple (NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c)
+instance HasTypeR SmartExp where
+  typeR (SmartExp e) = typeR e
 
-stup4 :: (Arrays a, Arrays b, Arrays c, Arrays d)
-      => (Seq a, Seq b, Seq c, Seq d) -> Seq (a, b, c, d)
-stup4 (a, b, c, d)
-  = Seq $ Stuple (NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d)
+instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
+  typeR = \case
+    Tag tp _                        -> tp
+    Match _ e                       -> typeR e
+    Const tp _                      -> TupRsingle tp
+    Nil                             -> TupRunit
+    Pair e1 e2                      -> typeR e1 `TupRpair` typeR e2
+    Prj idx e
+      | TupRpair t1 t2 <- typeR e   -> case idx of
+                                         PairIdxLeft  -> t1
+                                         PairIdxRight -> t2
+    Prj _ _                         -> error "I never joke about my work"
+    VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
+    VecUnpack vecR _                -> vecRtuple vecR
+    ToIndex _ _ _                   -> TupRsingle scalarTypeInt
+    FromIndex shr _ _               -> shapeType shr
+    Case _ ((_,c):_)                -> typeR c
+    Case{}                          -> internalError "encountered empty case"
+    Cond _ e _                      -> typeR e
+    While t _ _ _                   -> t
+    PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
+    PrimApp f _                     -> snd $ primFunType f
+    Index tp _ _                    -> tp
+    LinearIndex tp _ _              -> tp
+    Shape shr _                     -> shapeType shr
+    ShapeSize _ _                   -> TupRsingle scalarTypeInt
+    Foreign tp _ _ _                -> tp
+    Undef tp                        -> TupRsingle tp
+    Coerce _ tp _                   -> TupRsingle tp
 
-stup5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
-      => (Seq a, Seq b, Seq c, Seq d, Seq e) -> Seq (a, b, c, d, e)
-stup5 (a, b, c, d, e)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
 
-stup6 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
-      => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f) -> Seq (a, b, c, d, e, f)
-stup6 (a, b, c, d, e, f)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
-              `SnocAtup` d `SnocAtup` e `SnocAtup` f
-
-stup7 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
-      => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g)
-      -> Seq (a, b, c, d, e, f, g)
-stup7 (a, b, c, d, e, f, g)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
-              `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
-
-stup8 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
-      => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h)
-      -> Seq (a, b, c, d, e, f, g, h)
-stup8 (a, b, c, d, e, f, g, h)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d
-              `SnocAtup` e `SnocAtup` f `SnocAtup` g `SnocAtup` h
-
-stup9 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
-      => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i)
-      -> Seq (a, b, c, d, e, f, g, h, i)
-stup9 (a, b, c, d, e, f, g, h, i)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d
-              `SnocAtup` e `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i
-
-stup10 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j)
-       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j)
-       -> Seq (a, b, c, d, e, f, g, h, i, j)
-stup10 (a, b, c, d, e, f, g, h, i, j)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
-              `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j
-
-stup11 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k)
-       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k)
-       -> Seq (a, b, c, d, e, f, g, h, i, j, k)
-stup11 (a, b, c, d, e, f, g, h, i, j, k)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e
-              `SnocAtup` f `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k
-
-stup12 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l)
-       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l)
-       -> Seq (a, b, c, d, e, f, g, h, i, j, k, l)
-stup12 (a, b, c, d, e, f, g, h, i, j, k, l)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f
-              `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l
-
-stup13 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m)
-       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l, Seq m)
-       -> Seq (a, b, c, d, e, f, g, h, i, j, k, l, m)
-stup13 (a, b, c, d, e, f, g, h, i, j, k, l, m)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f
-              `SnocAtup` g `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m
-
-stup14 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n)
-       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l, Seq m, Seq n)
-       -> Seq (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-stup14 (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
-              `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m `SnocAtup` n
-
-stup15 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i, Arrays j, Arrays k, Arrays l, Arrays m, Arrays n, Arrays o)
-       => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i, Seq j, Seq k, Seq l, Seq m, Seq n, Seq o)
-       -> Seq (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-stup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-  = Seq $ Stuple $
-      NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c `SnocAtup` d `SnocAtup` e `SnocAtup` f `SnocAtup` g
-              `SnocAtup` h `SnocAtup` i `SnocAtup` j `SnocAtup` k `SnocAtup` l `SnocAtup` m `SnocAtup` n `SnocAtup` o
---}
-
--- Smart constructor for literals
---
+-- Smart constructors
+-- ------------------
 
 -- | Scalar expression inlet: make a Haskell value available for processing in
 -- an Accelerate scalar expression.
@@ -1473,8 +877,13 @@ stup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 -- they can be passed as an input to the computation and thus the value can
 -- change without the need to generate fresh code.
 --
-constant :: Elt t => t -> Exp t
-constant = Exp . Const
+constant :: forall e. (HasCallStack, Elt e) => e -> Exp e
+constant = Exp . go (eltR @e) . fromElt
+  where
+    go :: HasCallStack => TypeR t -> t -> SmartExp t
+    go TupRunit         ()       = SmartExp $ Nil
+    go (TupRsingle tp)  c        = SmartExp $ Const tp c
+    go (TupRpair t1 t2) (c1, c2) = SmartExp $ go t1 c1 `Pair` go t2 c2
 
 -- | 'undef' can be used anywhere a constant is expected, and indicates that the
 -- consumer of the value can receive an unspecified bit pattern.
@@ -1499,467 +908,44 @@ constant = Exp . Const
 --
 -- @since 1.2.0.0
 --
-undef :: Elt t => Exp t
-undef = Exp Undef
+undef :: forall e. Elt e => Exp e
+undef = Exp $ go $ eltR @e
+  where
+    go :: TypeR t -> SmartExp t
+    go TupRunit         = SmartExp $ Nil
+    go (TupRsingle t)   = SmartExp $ Undef t
+    go (TupRpair t1 t2) = SmartExp $ go t1 `Pair` go t2
 
--- Smart constructor and destructors for scalar tuples
+-- | Get the innermost dimension of a shape.
 --
-tup2 :: (Elt a, Elt b) => (Exp a, Exp b) -> Exp (a, b)
-tup2 (a, b)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
+-- The innermost dimension (right-most component of the shape) is the index of
+-- the array which varies most rapidly, and corresponds to elements of the array
+-- which are adjacent in memory.
+--
+-- Another way to think of this is, for example when writing nested loops over
+-- an array in C, this index corresponds to the index iterated over by the
+-- innermost nested loop.
+--
+indexHead :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp a
+indexHead (Exp x) = mkExp $ Prj PairIdxRight x
 
-tup3 :: (Elt a, Elt b, Elt c)
-     => (Exp a, Exp b, Exp c)
-     -> Exp (a, b, c)
-tup3 (a, b, c)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-
-tup4 :: (Elt a, Elt b, Elt c, Elt d)
-     => (Exp a, Exp b, Exp c, Exp d)
-     -> Exp (a, b, c, d)
-tup4 (a, b, c, d)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-
-tup5 :: (Elt a, Elt b, Elt c, Elt d, Elt e)
-     => (Exp a, Exp b, Exp c, Exp d, Exp e)
-     -> Exp (a, b, c, d, e)
-tup5 (a, b, c, d, e)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-
-tup6 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
-     -> Exp (a, b, c, d, e, f)
-tup6 (a, b, c, d, e, f)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-
-tup7 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
-     -> Exp (a, b, c, d, e, f, g)
-tup7 (a, b, c, d, e, f, g)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-
-tup8 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
-     -> Exp (a, b, c, d, e, f, g, h)
-tup8 (a, b, c, d, e, f, g, h)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-
-tup9 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
-     -> Exp (a, b, c, d, e, f, g, h, i)
-tup9 (a, b, c, d, e, f, g, h, i)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-
-tup10 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j)
-      -> Exp (a, b, c, d, e, f, g, h, i, j)
-tup10 (a, b, c, d, e, f, g, h, i, j)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-           `SnocTup` j
-
-tup11 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
-      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k)
-      -> Exp (a, b, c, d, e, f, g, h, i, j, k)
-tup11 (a, b, c, d, e, f, g, h, i, j, k)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-           `SnocTup` j
-           `SnocTup` k
-
-tup12 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
-      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l)
-      -> Exp (a, b, c, d, e, f, g, h, i, j, k, l)
-tup12 (a, b, c, d, e, f, g, h, i, j, k, l)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-           `SnocTup` j
-           `SnocTup` k
-           `SnocTup` l
-
-tup13 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
-      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m)
-      -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m)
-tup13 (a, b, c, d, e, f, g, h, i, j, k, l, m)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-           `SnocTup` j
-           `SnocTup` k
-           `SnocTup` l
-           `SnocTup` m
-
-tup14 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
-      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n)
-      -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-tup14 (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-           `SnocTup` j
-           `SnocTup` k
-           `SnocTup` l
-           `SnocTup` m
-           `SnocTup` n
-
-tup15 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
-      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o)
-      -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-tup15 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-           `SnocTup` j
-           `SnocTup` k
-           `SnocTup` l
-           `SnocTup` m
-           `SnocTup` n
-           `SnocTup` o
-
-tup16 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
-      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o, Exp p)
-      -> Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-tup16 (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-  = Exp
-  $ Tuple
-  $ NilTup `SnocTup` a
-           `SnocTup` b
-           `SnocTup` c
-           `SnocTup` d
-           `SnocTup` e
-           `SnocTup` f
-           `SnocTup` g
-           `SnocTup` h
-           `SnocTup` i
-           `SnocTup` j
-           `SnocTup` k
-           `SnocTup` l
-           `SnocTup` m
-           `SnocTup` n
-           `SnocTup` o
-           `SnocTup` p
-
-untup2 :: (Elt a, Elt b) => Exp (a, b) -> (Exp a, Exp b)
-untup2 e =
-  ( Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup3 :: (Elt a, Elt b, Elt c) => Exp (a, b, c) -> (Exp a, Exp b, Exp c)
-untup3 e =
-  ( Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup4 :: (Elt a, Elt b, Elt c, Elt d)
-       => Exp (a, b, c, d)
-       -> (Exp a, Exp b, Exp c, Exp d)
-untup4 e =
-  ( Exp $ tix3 `Prj` e
-  , Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup5 :: (Elt a, Elt b, Elt c, Elt d, Elt e)
-       => Exp (a, b, c, d, e)
-       -> (Exp a, Exp b, Exp c, Exp d, Exp e)
-untup5 e =
-  ( Exp $ tix4 `Prj` e
-  , Exp $ tix3 `Prj` e
-  , Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup6 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-       => Exp (a, b, c, d, e, f)
-       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
-untup6 e =
-  ( Exp $ tix5 `Prj` e
-  , Exp $ tix4 `Prj` e
-  , Exp $ tix3 `Prj` e
-  , Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup7 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-       => Exp (a, b, c, d, e, f, g)
-       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
-untup7 e =
-  ( Exp $ tix6 `Prj` e
-  , Exp $ tix5 `Prj` e
-  , Exp $ tix4 `Prj` e
-  , Exp $ tix3 `Prj` e
-  , Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup8 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-       => Exp (a, b, c, d, e, f, g, h)
-       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
-untup8 e =
-  ( Exp $ tix7 `Prj` e
-  , Exp $ tix6 `Prj` e
-  , Exp $ tix5 `Prj` e
-  , Exp $ tix4 `Prj` e
-  , Exp $ tix3 `Prj` e
-  , Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup9 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-       => Exp (a, b, c, d, e, f, g, h, i)
-       -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
-untup9 e =
-  ( Exp $ tix8 `Prj` e
-  , Exp $ tix7 `Prj` e
-  , Exp $ tix6 `Prj` e
-  , Exp $ tix5 `Prj` e
-  , Exp $ tix4 `Prj` e
-  , Exp $ tix3 `Prj` e
-  , Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup10 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
-        => Exp (a, b, c, d, e, f, g, h, i, j)
-        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j)
-untup10 e =
-  ( Exp $ tix9 `Prj` e
-  , Exp $ tix8 `Prj` e
-  , Exp $ tix7 `Prj` e
-  , Exp $ tix6 `Prj` e
-  , Exp $ tix5 `Prj` e
-  , Exp $ tix4 `Prj` e
-  , Exp $ tix3 `Prj` e
-  , Exp $ tix2 `Prj` e
-  , Exp $ tix1 `Prj` e
-  , Exp $ tix0 `Prj` e )
-
-untup11 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k)
-        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k)
-untup11 e =
-  ( Exp $ tix10 `Prj` e
-  , Exp $ tix9  `Prj` e
-  , Exp $ tix8  `Prj` e
-  , Exp $ tix7  `Prj` e
-  , Exp $ tix6  `Prj` e
-  , Exp $ tix5  `Prj` e
-  , Exp $ tix4  `Prj` e
-  , Exp $ tix3  `Prj` e
-  , Exp $ tix2  `Prj` e
-  , Exp $ tix1  `Prj` e
-  , Exp $ tix0  `Prj` e )
-
-untup12 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l)
-        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l)
-untup12 e =
-  ( Exp $ tix11 `Prj` e
-  , Exp $ tix10 `Prj` e
-  , Exp $ tix9  `Prj` e
-  , Exp $ tix8  `Prj` e
-  , Exp $ tix7  `Prj` e
-  , Exp $ tix6  `Prj` e
-  , Exp $ tix5  `Prj` e
-  , Exp $ tix4  `Prj` e
-  , Exp $ tix3  `Prj` e
-  , Exp $ tix2  `Prj` e
-  , Exp $ tix1  `Prj` e
-  , Exp $ tix0  `Prj` e )
-
-untup13 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m)
-        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m)
-untup13 e =
-  ( Exp $ tix12 `Prj` e
-  , Exp $ tix11 `Prj` e
-  , Exp $ tix10 `Prj` e
-  , Exp $ tix9  `Prj` e
-  , Exp $ tix8  `Prj` e
-  , Exp $ tix7  `Prj` e
-  , Exp $ tix6  `Prj` e
-  , Exp $ tix5  `Prj` e
-  , Exp $ tix4  `Prj` e
-  , Exp $ tix3  `Prj` e
-  , Exp $ tix2  `Prj` e
-  , Exp $ tix1  `Prj` e
-  , Exp $ tix0  `Prj` e )
-
-untup14 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n)
-untup14 e =
-  ( Exp $ tix13 `Prj` e
-  , Exp $ tix12 `Prj` e
-  , Exp $ tix11 `Prj` e
-  , Exp $ tix10 `Prj` e
-  , Exp $ tix9  `Prj` e
-  , Exp $ tix8  `Prj` e
-  , Exp $ tix7  `Prj` e
-  , Exp $ tix6  `Prj` e
-  , Exp $ tix5  `Prj` e
-  , Exp $ tix4  `Prj` e
-  , Exp $ tix3  `Prj` e
-  , Exp $ tix2  `Prj` e
-  , Exp $ tix1  `Prj` e
-  , Exp $ tix0  `Prj` e )
-
-untup15 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o)
-untup15 e =
-  ( Exp $ tix14 `Prj` e
-  , Exp $ tix13 `Prj` e
-  , Exp $ tix12 `Prj` e
-  , Exp $ tix11 `Prj` e
-  , Exp $ tix10 `Prj` e
-  , Exp $ tix9  `Prj` e
-  , Exp $ tix8  `Prj` e
-  , Exp $ tix7  `Prj` e
-  , Exp $ tix6  `Prj` e
-  , Exp $ tix5  `Prj` e
-  , Exp $ tix4  `Prj` e
-  , Exp $ tix3  `Prj` e
-  , Exp $ tix2  `Prj` e
-  , Exp $ tix1  `Prj` e
-  , Exp $ tix0  `Prj` e )
-
-untup16 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, Elt k, Elt l, Elt m, Elt n, Elt o, Elt p)
-        => Exp (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-        -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i, Exp j, Exp k, Exp l, Exp m, Exp n, Exp o, Exp p)
-untup16 e =
-  ( Exp $ tix15 `Prj` e
-  , Exp $ tix14 `Prj` e
-  , Exp $ tix13 `Prj` e
-  , Exp $ tix12 `Prj` e
-  , Exp $ tix11 `Prj` e
-  , Exp $ tix10 `Prj` e
-  , Exp $ tix9  `Prj` e
-  , Exp $ tix8  `Prj` e
-  , Exp $ tix7  `Prj` e
-  , Exp $ tix6  `Prj` e
-  , Exp $ tix5  `Prj` e
-  , Exp $ tix4  `Prj` e
-  , Exp $ tix3  `Prj` e
-  , Exp $ tix2  `Prj` e
-  , Exp $ tix1  `Prj` e
-  , Exp $ tix0  `Prj` e )
+-- | Get all but the innermost element of a shape
+--
+indexTail :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
+indexTail (Exp x) = mkExp $ Prj PairIdxLeft x
 
 
 -- Smart constructor for constants
 --
 
-mkMinBound :: (Elt t, IsBounded t) => Exp t
-mkMinBound = Exp $ PrimConst (PrimMinBound boundedType)
+mkMinBound :: (Elt t, IsBounded (EltR t)) => Exp t
+mkMinBound = mkExp $ PrimConst (PrimMinBound boundedType)
 
-mkMaxBound :: (Elt t, IsBounded t) => Exp t
-mkMaxBound = Exp $ PrimConst (PrimMaxBound boundedType)
+mkMaxBound :: (Elt t, IsBounded (EltR t)) => Exp t
+mkMaxBound = mkExp $ PrimConst (PrimMaxBound boundedType)
 
-mkPi :: (Elt r, IsFloating r) => Exp r
-mkPi = Exp $ PrimConst (PrimPi floatingType)
+mkPi :: (Elt r, IsFloating (EltR r)) => Exp r
+mkPi = mkExp $ PrimConst (PrimPi floatingType)
 
 
 -- Smart constructors for primitive applications
@@ -1967,234 +953,259 @@ mkPi = Exp $ PrimConst (PrimPi floatingType)
 
 -- Operators from Floating
 
-mkSin :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkSin x = Exp $ PrimSin floatingType `PrimApp` x
+mkSin :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSin = mkPrimUnary $ PrimSin floatingType
 
-mkCos :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkCos x = Exp $ PrimCos floatingType `PrimApp` x
+mkCos :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkCos = mkPrimUnary $ PrimCos floatingType
 
-mkTan :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkTan x = Exp $ PrimTan floatingType `PrimApp` x
+mkTan :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkTan = mkPrimUnary $ PrimTan floatingType
 
-mkAsin :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkAsin x = Exp $ PrimAsin floatingType `PrimApp` x
+mkAsin :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAsin = mkPrimUnary $ PrimAsin floatingType
 
-mkAcos :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkAcos x = Exp $ PrimAcos floatingType `PrimApp` x
+mkAcos :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAcos = mkPrimUnary $ PrimAcos floatingType
 
-mkAtan :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkAtan x = Exp $ PrimAtan floatingType `PrimApp` x
+mkAtan :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAtan = mkPrimUnary $ PrimAtan floatingType
 
-mkSinh :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkSinh x = Exp $ PrimSinh floatingType `PrimApp` x
+mkSinh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSinh = mkPrimUnary $ PrimSinh floatingType
 
-mkCosh :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkCosh x = Exp $ PrimCosh floatingType `PrimApp` x
+mkCosh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkCosh = mkPrimUnary $ PrimCosh floatingType
 
-mkTanh :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkTanh x = Exp $ PrimTanh floatingType `PrimApp` x
+mkTanh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkTanh = mkPrimUnary $ PrimTanh floatingType
 
-mkAsinh :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkAsinh x = Exp $ PrimAsinh floatingType `PrimApp` x
+mkAsinh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAsinh = mkPrimUnary $ PrimAsinh floatingType
 
-mkAcosh :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkAcosh x = Exp $ PrimAcosh floatingType `PrimApp` x
+mkAcosh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAcosh = mkPrimUnary $ PrimAcosh floatingType
 
-mkAtanh :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkAtanh x = Exp $ PrimAtanh floatingType `PrimApp` x
+mkAtanh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAtanh = mkPrimUnary $ PrimAtanh floatingType
 
-mkExpFloating :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkExpFloating x = Exp $ PrimExpFloating floatingType `PrimApp` x
+mkExpFloating :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkExpFloating = mkPrimUnary $ PrimExpFloating floatingType
 
-mkSqrt :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkSqrt x = Exp $ PrimSqrt floatingType `PrimApp` x
+mkSqrt :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSqrt = mkPrimUnary $ PrimSqrt floatingType
 
-mkLog :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkLog x = Exp $ PrimLog floatingType `PrimApp` x
+mkLog :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkLog = mkPrimUnary $ PrimLog floatingType
 
-mkFPow :: (Elt t, IsFloating t) => Exp t -> Exp t -> Exp t
-mkFPow x y = Exp $ PrimFPow floatingType `PrimApp` tup2 (x, y)
+mkFPow :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkFPow = mkPrimBinary $ PrimFPow floatingType
 
-mkLogBase :: (Elt t, IsFloating t) => Exp t -> Exp t -> Exp t
-mkLogBase x y = Exp $ PrimLogBase floatingType `PrimApp` tup2 (x, y)
+mkLogBase :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkLogBase = mkPrimBinary $ PrimLogBase floatingType
 
 -- Operators from Num
 
-mkAdd :: (Elt t, IsNum t) => Exp t -> Exp t -> Exp t
-mkAdd x y = Exp $ PrimAdd numType `PrimApp` tup2 (x, y)
+mkAdd :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkAdd = mkPrimBinary $ PrimAdd numType
 
-mkSub :: (Elt t, IsNum t) => Exp t -> Exp t -> Exp t
-mkSub x y = Exp $ PrimSub numType `PrimApp` tup2 (x, y)
+mkSub :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkSub = mkPrimBinary $ PrimSub numType
 
-mkMul :: (Elt t, IsNum t) => Exp t -> Exp t -> Exp t
-mkMul x y = Exp $ PrimMul numType `PrimApp` tup2 (x, y)
+mkMul :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkMul = mkPrimBinary $ PrimMul numType
 
-mkNeg :: (Elt t, IsNum t) => Exp t -> Exp t
-mkNeg x = Exp $ PrimNeg numType `PrimApp` x
+mkNeg :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkNeg = mkPrimUnary $ PrimNeg numType
 
-mkAbs :: (Elt t, IsNum t) => Exp t -> Exp t
-mkAbs x = Exp $ PrimAbs numType `PrimApp` x
+mkAbs :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkAbs = mkPrimUnary $ PrimAbs numType
 
-mkSig :: (Elt t, IsNum t) => Exp t -> Exp t
-mkSig x = Exp $ PrimSig numType `PrimApp` x
+mkSig :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkSig = mkPrimUnary $ PrimSig numType
 
 -- Operators from Integral
 
-mkQuot :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
-mkQuot x y = Exp $ PrimQuot integralType `PrimApp` tup2 (x, y)
+mkQuot :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkQuot = mkPrimBinary $ PrimQuot integralType
 
-mkRem :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
-mkRem x y = Exp $ PrimRem integralType `PrimApp` tup2 (x, y)
+mkRem :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkRem = mkPrimBinary $ PrimRem integralType
 
-mkQuotRem :: (Elt t, IsIntegral t) => Exp t -> Exp t -> (Exp t, Exp t)
-mkQuotRem x y = untup2 $ Exp $ PrimQuotRem integralType `PrimApp` tup2 (x ,y)
+mkQuotRem :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
+mkQuotRem (Exp x) (Exp y) =
+  let pair = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair x y)
+  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
 
-mkIDiv :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
-mkIDiv x y = Exp $ PrimIDiv integralType `PrimApp` tup2 (x, y)
+mkIDiv :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkIDiv = mkPrimBinary $ PrimIDiv integralType
 
-mkMod :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
-mkMod x y = Exp $ PrimMod integralType `PrimApp` tup2 (x, y)
+mkMod :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkMod = mkPrimBinary $ PrimMod integralType
 
-mkDivMod :: (Elt t, IsIntegral t) => Exp t -> Exp t -> (Exp t, Exp t)
-mkDivMod x y = untup2 $ Exp $ PrimDivMod integralType `PrimApp` tup2 (x ,y)
-
+mkDivMod :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
+mkDivMod (Exp x) (Exp y) =
+  let pair = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair x y)
+  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
 
 -- Operators from Bits and FiniteBits
 
-mkBAnd :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
-mkBAnd x y = Exp $ PrimBAnd integralType `PrimApp` tup2 (x, y)
+mkBAnd :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBAnd = mkPrimBinary $ PrimBAnd integralType
 
-mkBOr :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
-mkBOr x y = Exp $ PrimBOr integralType `PrimApp` tup2 (x, y)
+mkBOr :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBOr = mkPrimBinary $ PrimBOr integralType
 
-mkBXor :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
-mkBXor x y = Exp $ PrimBXor integralType `PrimApp` tup2 (x, y)
+mkBXor :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBXor = mkPrimBinary $ PrimBXor integralType
 
-mkBNot :: (Elt t, IsIntegral t) => Exp t -> Exp t
-mkBNot x = Exp $ PrimBNot integralType `PrimApp` x
+mkBNot :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
+mkBNot = mkPrimUnary $ PrimBNot integralType
 
-mkBShiftL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-mkBShiftL x i = Exp $ PrimBShiftL integralType `PrimApp` tup2 (x, i)
+mkBShiftL :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBShiftL = mkPrimBinary $ PrimBShiftL integralType
 
-mkBShiftR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-mkBShiftR x i = Exp $ PrimBShiftR integralType `PrimApp` tup2 (x, i)
+mkBShiftR :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBShiftR = mkPrimBinary $ PrimBShiftR integralType
 
-mkBRotateL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-mkBRotateL x i = Exp $ PrimBRotateL integralType `PrimApp` tup2 (x, i)
+mkBRotateL :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBRotateL = mkPrimBinary $ PrimBRotateL integralType
 
-mkBRotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-mkBRotateR x i = Exp $ PrimBRotateR integralType `PrimApp` tup2 (x, i)
+mkBRotateR :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBRotateR = mkPrimBinary $ PrimBRotateR integralType
 
-mkPopCount :: (Elt t, IsIntegral t) => Exp t -> Exp Int
-mkPopCount x = Exp $ PrimPopCount integralType `PrimApp` x
+mkPopCount :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
+mkPopCount = mkPrimUnary $ PrimPopCount integralType
 
-mkCountLeadingZeros :: (Elt t, IsIntegral t) => Exp t -> Exp Int
-mkCountLeadingZeros x = Exp $ PrimCountLeadingZeros integralType `PrimApp` x
+mkCountLeadingZeros :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
+mkCountLeadingZeros = mkPrimUnary $ PrimCountLeadingZeros integralType
 
-mkCountTrailingZeros :: (Elt t, IsIntegral t) => Exp t -> Exp Int
-mkCountTrailingZeros x = Exp $ PrimCountTrailingZeros integralType `PrimApp` x
+mkCountTrailingZeros :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
+mkCountTrailingZeros = mkPrimUnary $ PrimCountTrailingZeros integralType
 
 
 -- Operators from Fractional
 
-mkFDiv :: (Elt t, IsFloating t) => Exp t -> Exp t -> Exp t
-mkFDiv x y = Exp $ PrimFDiv floatingType `PrimApp` tup2 (x, y)
+mkFDiv :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkFDiv = mkPrimBinary $ PrimFDiv floatingType
 
-mkRecip :: (Elt t, IsFloating t) => Exp t -> Exp t
-mkRecip x = Exp $ PrimRecip floatingType `PrimApp` x
+mkRecip :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkRecip = mkPrimUnary $ PrimRecip floatingType
 
 -- Operators from RealFrac
 
-mkTruncate :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-mkTruncate x = Exp $ PrimTruncate floatingType integralType `PrimApp` x
+mkTruncate :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkTruncate = mkPrimUnary $ PrimTruncate floatingType integralType
 
-mkRound :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-mkRound x = Exp $ PrimRound floatingType integralType `PrimApp` x
+mkRound :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkRound = mkPrimUnary $ PrimRound floatingType integralType
 
-mkFloor :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-mkFloor x = Exp $ PrimFloor floatingType integralType `PrimApp` x
+mkFloor :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkFloor = mkPrimUnary $ PrimFloor floatingType integralType
 
-mkCeiling :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-mkCeiling x = Exp $ PrimCeiling floatingType integralType `PrimApp` x
+mkCeiling :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkCeiling = mkPrimUnary $ PrimCeiling floatingType integralType
 
 -- Operators from RealFloat
 
-mkAtan2 :: (Elt t, IsFloating t) => Exp t -> Exp t -> Exp t
-mkAtan2 x y = Exp $ PrimAtan2 floatingType `PrimApp` tup2 (x, y)
+mkAtan2 :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkAtan2 = mkPrimBinary $ PrimAtan2 floatingType
 
-mkIsNaN :: (Elt t, IsFloating t) => Exp t -> Exp Bool
-mkIsNaN x = Exp $ PrimIsNaN floatingType `PrimApp` x
+mkIsNaN :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
+mkIsNaN = mkPrimUnaryBool $ PrimIsNaN floatingType
 
-mkIsInfinite :: (Elt t, IsFloating t) => Exp t -> Exp Bool
-mkIsInfinite x = Exp $ PrimIsInfinite floatingType `PrimApp` x
+mkIsInfinite :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
+mkIsInfinite = mkPrimUnaryBool $ PrimIsInfinite floatingType
 
 -- FIXME: add missing operations from Floating, RealFrac & RealFloat
 
 -- Relational and equality operators
 
-mkLt :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
-mkLt x y = Exp $ PrimLt singleType `PrimApp` tup2 (x, y)
+mkLt :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkLt = mkPrimBinaryBool $ PrimLt singleType
 
-mkGt :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
-mkGt x y = Exp $ PrimGt singleType `PrimApp` tup2 (x, y)
+mkGt :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkGt = mkPrimBinaryBool $ PrimGt singleType
 
-mkLtEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
-mkLtEq x y = Exp $ PrimLtEq singleType `PrimApp` tup2 (x, y)
+mkLtEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkLtEq = mkPrimBinaryBool $ PrimLtEq singleType
 
-mkGtEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
-mkGtEq x y = Exp $ PrimGtEq singleType `PrimApp` tup2 (x, y)
+mkGtEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkGtEq = mkPrimBinaryBool $ PrimGtEq singleType
 
-mkEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
-mkEq x y = Exp $ PrimEq singleType `PrimApp` tup2 (x, y)
+mkEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkEq = mkPrimBinaryBool $ PrimEq singleType
 
-mkNEq :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp Bool
-mkNEq x y = Exp $ PrimNEq singleType `PrimApp` tup2 (x, y)
+mkNEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkNEq = mkPrimBinaryBool $ PrimNEq singleType
 
-mkMax :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp t
-mkMax x y = Exp $ PrimMax singleType `PrimApp` tup2 (x, y)
+mkMax :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
+mkMax = mkPrimBinary $ PrimMax singleType
 
-mkMin :: (Elt t, IsSingle t) => Exp t -> Exp t -> Exp t
-mkMin x y = Exp $ PrimMin singleType `PrimApp` tup2 (x, y)
+mkMin :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
+mkMin = mkPrimBinary $ PrimMin singleType
 
 -- Logical operators
 
 mkLAnd :: Exp Bool -> Exp Bool -> Exp Bool
-mkLAnd x y = Exp $ PrimLAnd `PrimApp` tup2 (x, y)
+mkLAnd (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLAnd (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+  where
+    x = SmartExp $ Prj PairIdxLeft a
+    y = SmartExp $ Prj PairIdxLeft b
 
 mkLOr :: Exp Bool -> Exp Bool -> Exp Bool
-mkLOr x y = Exp $ PrimLOr `PrimApp` tup2 (x, y)
+mkLOr (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLOr (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+  where
+    x = SmartExp $ Prj PairIdxLeft a
+    y = SmartExp $ Prj PairIdxLeft b
 
 mkLNot :: Exp Bool -> Exp Bool
-mkLNot x = Exp $ PrimLNot `PrimApp` x
-
--- Character conversions
-
-mkOrd :: Exp Char -> Exp Int
-mkOrd x = Exp $ PrimOrd `PrimApp` x
-
-mkChr :: Exp Int -> Exp Char
-mkChr x = Exp $ PrimChr `PrimApp` x
+mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
+  where
+    x = SmartExp $ Prj PairIdxLeft a
 
 -- Numeric conversions
 
-mkFromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
-mkFromIntegral x = Exp $ PrimFromIntegral integralType numType `PrimApp` x
+mkFromIntegral :: (Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
+mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 
-mkToFloating :: (Elt a, Elt b, IsNum a, IsFloating b) => Exp a -> Exp b
-mkToFloating x = Exp $ PrimToFloating numType floatingType `PrimApp` x
+mkToFloating :: (Elt a, Elt b, IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
+mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 
 -- Other conversions
 
-mkBoolToInt :: Exp Bool -> Exp Int
-mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b
-
 -- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
 -- make this version "safe"
-mkBitcast :: forall b a. (Elt a, Elt b, IsScalar (EltRepr a), IsScalar (EltRepr b), BitSizeEq (EltRepr a) (EltRepr b)) => Exp a -> Exp b
-mkBitcast = mkUnsafeCoerce
+mkBitcast :: forall b a. (Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
+mkBitcast (Exp a) = mkExp $ Coerce (scalarType @(EltR a)) (scalarType @(EltR b)) a
 
-mkUnsafeCoerce :: forall b a. (Elt a, Elt b) => Exp a -> Exp b
-mkUnsafeCoerce = Exp . Coerce
+mkCoerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
+mkCoerce (Exp a) = Exp $ mkCoerce' a
+
+class Coerce a b where
+  mkCoerce' :: SmartExp a -> SmartExp b
+
+instance {-# OVERLAPS #-} (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b where
+  mkCoerce' = SmartExp . Coerce (scalarType @a) (scalarType @b)
+
+instance (Coerce a1 b1, Coerce a2 b2) => Coerce (a1, a2) (b1, b2) where
+  mkCoerce' a = SmartExp $ Pair (mkCoerce' $ SmartExp $ Prj PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj PairIdxRight a)
+
+instance Coerce a a where
+  mkCoerce' = id
+
+instance Coerce ((), a) a where
+  mkCoerce' a = SmartExp $ Prj PairIdxRight a
+
+instance Coerce a ((), a) where
+  mkCoerce' = SmartExp . Pair (SmartExp Nil)
+
+instance Coerce (a, ()) a where
+  mkCoerce' a = SmartExp $ Prj PairIdxLeft a
+
+instance Coerce a (a, ()) where
+  mkCoerce' a = SmartExp (Pair a (SmartExp Nil))
+
 
 
 -- Auxiliary functions
@@ -2216,88 +1227,121 @@ infixr 0 $$$$$
 ($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
 (f $$$$$ g) x y z u v = f (g x y z u v)
 
+unAcc :: Arrays a => Acc a -> SmartAcc (Sugar.ArraysR a)
+unAcc (Acc a) = a
+
+unAccFunction :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> SmartAcc (Sugar.ArraysR a) -> SmartAcc (Sugar.ArraysR b)
+unAccFunction f = unAcc . f . Acc
+
+mkExp :: PreSmartExp SmartAcc SmartExp (EltR t) -> Exp t
+mkExp = Exp . SmartExp
+
+unExp :: Exp e -> SmartExp (EltR e)
+unExp (Exp e) = e
+
+unExpFunction :: (Elt a, Elt b) => (Exp a -> Exp b) -> SmartExp (EltR a) -> SmartExp (EltR b)
+unExpFunction f = unExp . f . Exp
+
+unExpBinaryFunction :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> SmartExp (EltR a) -> SmartExp (EltR b) -> SmartExp (EltR c)
+unExpBinaryFunction f a b = unExp $ f (Exp a) (Exp b)
+
+mkPrimUnary :: (Elt a, Elt b) => PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
+mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
+
+mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
+mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
+
+mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
+mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary
+
+mkPrimBinaryBool :: (Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
+mkPrimBinaryBool = mkCoerce @PrimBool $$$ mkPrimBinary
+
+unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
+unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)
+
+mkPairToTuple :: SmartAcc (a, b) -> SmartAcc (((), a), b)
+mkPairToTuple e = SmartAcc Anil `pair` a `pair` b
+  where
+    a = SmartAcc $ Aprj PairIdxLeft e
+    b = SmartAcc $ Aprj PairIdxRight e
+    pair x y = SmartAcc $ Apair x y
+
+class ApplyAcc a where
+  type FromApplyAcc a
+  applyAcc :: FromApplyAcc a -> a
+
+instance ApplyAcc (SmartAcc a) where
+  type FromApplyAcc (SmartAcc a) = PreSmartAcc SmartAcc SmartExp a
+  applyAcc = SmartAcc
+
+instance (Arrays a, ApplyAcc t) => ApplyAcc (Acc a -> t) where
+  type FromApplyAcc (Acc a -> t) = SmartAcc (Sugar.ArraysR a) -> FromApplyAcc t
+  applyAcc f a = applyAcc $ f (unAcc a)
+
+instance (Elt a, ApplyAcc t) => ApplyAcc (Exp a -> t) where
+  type FromApplyAcc (Exp a -> t) = SmartExp (EltR a) -> FromApplyAcc t
+  applyAcc f a = applyAcc $ f (unExp a)
+
+instance (Elt a, Elt b, ApplyAcc t) => ApplyAcc ((Exp a -> Exp b) -> t) where
+  type FromApplyAcc ((Exp a -> Exp b) -> t) = (SmartExp (EltR a) -> SmartExp (EltR b)) -> FromApplyAcc t
+  applyAcc f a = applyAcc $ f (unExpFunction a)
+
+instance (Elt a, Elt b, Elt c, ApplyAcc t) => ApplyAcc ((Exp a -> Exp b -> Exp c) -> t) where
+  type FromApplyAcc ((Exp a -> Exp b -> Exp c) -> t) = (SmartExp (EltR a) -> SmartExp (EltR b) -> SmartExp (EltR c)) -> FromApplyAcc t
+  applyAcc f a = applyAcc $ f (unExpBinaryFunction a)
+
+instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) where
+  type FromApplyAcc ((Acc a -> Acc b) -> t) = (SmartAcc (Sugar.ArraysR a) -> SmartAcc (Sugar.ArraysR b)) -> FromApplyAcc t
+  applyAcc f a = applyAcc $ f (unAccFunction a)
+
 
 -- Debugging
 -- ---------
 
-showPreAccOp :: forall acc exp arrs. PreAcc acc exp arrs -> String
-showPreAccOp (Atag i)           = "Atag " ++ show i
-showPreAccOp (Use a)            = "Use "  ++ showArrays a
-showPreAccOp Pipe{}             = "Pipe"
-showPreAccOp Acond{}            = "Acond"
-showPreAccOp Awhile{}           = "Awhile"
-showPreAccOp Atuple{}           = "Atuple"
-showPreAccOp Aprj{}             = "Aprj"
-showPreAccOp Unit{}             = "Unit"
-showPreAccOp Generate{}         = "Generate"
-showPreAccOp Reshape{}          = "Reshape"
-showPreAccOp Replicate{}        = "Replicate"
-showPreAccOp Slice{}            = "Slice"
-showPreAccOp Map{}              = "Map"
-showPreAccOp ZipWith{}          = "ZipWith"
-showPreAccOp Fold{}             = "Fold"
-showPreAccOp Fold1{}            = "Fold1"
-showPreAccOp FoldSeg{}          = "FoldSeg"
-showPreAccOp Fold1Seg{}         = "Fold1Seg"
-showPreAccOp Scanl{}            = "Scanl"
-showPreAccOp Scanl'{}           = "Scanl'"
-showPreAccOp Scanl1{}           = "Scanl1"
-showPreAccOp Scanr{}            = "Scanr"
-showPreAccOp Scanr'{}           = "Scanr'"
-showPreAccOp Scanr1{}           = "Scanr1"
-showPreAccOp Permute{}          = "Permute"
-showPreAccOp Backpermute{}      = "Backpermute"
-showPreAccOp Stencil{}          = "Stencil"
-showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Aforeign{}         = "Aforeign"
--- showPreAccOp Collect{}          = "Collect"
+showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> String
+showPreAccOp (Atag _ i)            = "Atag " ++ show i
+showPreAccOp (Use aR a)            = "Use "  ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
+showPreAccOp Pipe{}                = "Pipe"
+showPreAccOp Acond{}               = "Acond"
+showPreAccOp Awhile{}              = "Awhile"
+showPreAccOp Apair{}               = "Apair"
+showPreAccOp Anil{}                = "Anil"
+showPreAccOp Aprj{}                = "Aprj"
+showPreAccOp Unit{}                = "Unit"
+showPreAccOp Generate{}            = "Generate"
+showPreAccOp Reshape{}             = "Reshape"
+showPreAccOp Replicate{}           = "Replicate"
+showPreAccOp Slice{}               = "Slice"
+showPreAccOp Map{}                 = "Map"
+showPreAccOp ZipWith{}             = "ZipWith"
+showPreAccOp (Fold _ _ z _)        = "Fold" ++ maybe "1" (const "") z
+showPreAccOp (FoldSeg _ _ _ z _ _) = "Fold" ++ maybe "1" (const "") z ++ "Seg"
+showPreAccOp (Scan d _ _ z _)      = "Scan" ++ showsDirection d (maybe "1" (const "") z)
+showPreAccOp (Scan' d _ _ _ _)     = "Scan" ++ showsDirection d "'"
+showPreAccOp Permute{}             = "Permute"
+showPreAccOp Backpermute{}         = "Backpermute"
+showPreAccOp Stencil{}             = "Stencil"
+showPreAccOp Stencil2{}            = "Stencil2"
+showPreAccOp Aforeign{}            = "Aforeign"
 
-{--
-showPreSeqOp :: PreSeq acc seq exp arrs -> String
-showPreSeqOp (StreamIn{})       = "StreamIn"
-showPreSeqOp (ToSeq{})          = "ToSeq"
-showPreSeqOp (MapSeq{})         = "MapSeq"
-showPreSeqOp (ZipWithSeq{})     = "ZipWithSeq"
-showPreSeqOp (ScanSeq{})        = "ScanSeq"
-showPreSeqOp (FoldSeq{})        = "FoldSeq"
-showPreSeqOp (FoldSeqFlatten{}) = "FoldSeqFlatten"
-showPreSeqOp (Stuple{})         = "Stuple"
---}
+showsDirection :: Direction -> ShowS
+showsDirection LeftToRight = ('l':)
+showsDirection RightToLeft = ('r':)
 
-showArrays :: forall arrs. Arrays arrs => arrs -> String
-showArrays = display . collect (arrays @arrs) . fromArr
-  where
-    collect :: ArraysR a -> a -> [String]
-    collect ArraysRunit         _        = []
-    collect ArraysRarray        arr      = [showShortendArr arr]
-    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
-    --
-    display []  = []
-    display [x] = x
-    display xs  = "(" ++ intercalate ", " xs ++ ")"
-
-
-showShortendArr :: (Shape sh, Elt e) => Array sh e -> String
-showShortendArr arr
-  = show (take cutoff l) ++ if length l > cutoff then ".." else ""
-  where
-    l      = toList arr
-    cutoff = 5
-
-
-showPreExpOp :: PreExp acc exp t -> String
-showPreExpOp (Tag i)            = "Tag" ++ show i
-showPreExpOp (Const c)          = "Const " ++ show c
-showPreExpOp Undef              = "Undef"
-showPreExpOp Tuple{}            = "Tuple"
+showPreExpOp :: PreSmartExp acc exp t -> String
+showPreExpOp (Tag _ i)          = "Tag" ++ show i
+showPreExpOp Match{}            = "Match"
+showPreExpOp (Const t c)        = "Const " ++ showElt (TupRsingle t) c
+showPreExpOp (Undef _)          = "Undef"
+showPreExpOp Nil{}              = "Nil"
+showPreExpOp Pair{}             = "Pair"
 showPreExpOp Prj{}              = "Prj"
-showPreExpOp IndexNil           = "IndexNil"
-showPreExpOp IndexCons{}        = "IndexCons"
-showPreExpOp IndexHead{}        = "IndexHead"
-showPreExpOp IndexTail{}        = "IndexTail"
-showPreExpOp IndexAny           = "IndexAny"
+showPreExpOp VecPack{}          = "VecPack"
+showPreExpOp VecUnpack{}        = "VecUnpack"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"
+showPreExpOp Case{}             = "Case"
 showPreExpOp Cond{}             = "Cond"
 showPreExpOp While{}            = "While"
 showPreExpOp PrimConst{}        = "PrimConst"
@@ -2306,8 +1350,6 @@ showPreExpOp Index{}            = "Index"
 showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
-showPreExpOp Intersect{}        = "Intersect"
-showPreExpOp Union{}            = "Union"
 showPreExpOp Foreign{}          = "Foreign"
 showPreExpOp Coerce{}           = "Coerce"
 

@@ -6,10 +6,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.Similar
--- Copyright   : [2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -17,8 +17,10 @@
 module Data.Array.Accelerate.Test.Similar
   where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Data.Complex
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
 import Hedgehog

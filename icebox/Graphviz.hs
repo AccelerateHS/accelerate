@@ -1,10 +1,12 @@
-{-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Graphviz
--- Copyright   : [2010..2011] Sean Seefried
+-- Copyright   : [2010..2011] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --

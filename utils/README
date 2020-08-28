@@ -1,5 +1,0 @@
-This directory contains some utilities to use Accelerate from within GHCi.
-
-Symling (or copy) the wrapper script 'ghci' to the root directory of the
-accelerate source tree.
-

@@ -3,6 +3,7 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -11,13 +12,13 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}   -- pattern synonyms
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
--- Copyright   : [2009..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
---               [2010..2011] Ben Lever
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -41,6 +42,7 @@ module Data.Array.Accelerate.Prelude (
 
   -- * Reductions
   foldAll, fold1All,
+  foldSeg, fold1Seg,
 
   -- ** Specialised folds
   all, any, and, or, sum, product, minimum, maximum,
@@ -63,7 +65,7 @@ module Data.Array.Accelerate.Prelude (
 
   -- * Working with predicates
   -- ** Filtering
-  filter,
+  filter, compact,
 
   -- ** Scatter / Gather
   scatter, scatterIf,
@@ -87,7 +89,7 @@ module Data.Array.Accelerate.Prelude (
   (?|),
 
   -- ** Expression-level
-  (?), caseof,
+  (?), match,
 
   -- * Scalar iteration
   iterate,
@@ -108,26 +110,23 @@ module Data.Array.Accelerate.Prelude (
   -- * Array operations with a scalar result
   the, null, length,
 
+  -- * Irregular data-parallelism
+  expand,
+
   -- * Sequence operations
   -- fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
 
 ) where
 
--- avoid clashes with Prelude functions
---
-import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
-import GHC.Base                                                     ( Constraint )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
-#if __GLASGOW_HASKELL__ == 800
-import Prelude                                                      ( fail )
-#endif
-
--- friends
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), (!!), ignore, shape, reshape, size, intersect, toIndex, fromIndex )
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Maybe
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            ( Arrays, Array, Scalar, Vector, Segments,  fromList )
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.)(..), All(..), DIM1, DIM2, empty )
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -138,7 +137,14 @@ import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Bits
 
+import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
+import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
+
+import GHC.Base                                                     ( Constraint )
+
+
 -- $setup
+-- >>> :seti -XFlexibleContexts
 -- >>> import Data.Array.Accelerate
 -- >>> import Data.Array.Accelerate.Interpreter
 -- >>> :{
@@ -163,7 +169,7 @@ import Data.Array.Accelerate.Data.Bits
 --     (Z :. 2 :. 0,8.0), (Z :. 2 :. 1,9.0), (Z :. 2 :. 2,10.0), (Z :. 2 :. 3,11.0)]
 --
 indexed :: (Shape sh, Elt a) => Acc (Array sh a) -> Acc (Array sh (sh, a))
-indexed xs = zip (generate (shape xs) id) xs
+indexed = imap T2
 
 -- | Apply a function to every element of an array and its index
 --
@@ -172,6 +178,17 @@ imap :: (Shape sh, Elt a, Elt b)
      -> Acc (Array sh a)
      -> Acc (Array sh b)
 imap f xs = zipWith f (generate (shape xs) id) xs
+
+-- | Used to define the zipWith functions on more than two arrays
+--
+zipWithInduction
+    :: (Shape sh, Elt a, Elt b)
+    => ((Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
+    -> (Exp a -> Exp b -> rest)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> result
+zipWithInduction prev f as bs = prev (\(T2 a b) -> f a b) (zip as bs)
 
 
 -- | Zip three arrays with the given function, analogous to 'zipWith'.
@@ -183,9 +200,7 @@ zipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-zipWith3 f as bs cs
-  = generate (shape as `intersect` shape bs `intersect` shape cs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix))
+zipWith3 = zipWithInduction zipWith
 
 -- | Zip four arrays with the given function, analogous to 'zipWith'.
 --
@@ -197,10 +212,7 @@ zipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-zipWith4 f as bs cs ds
-  = generate (shape as `intersect` shape bs `intersect`
-              shape cs `intersect` shape ds)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
+zipWith4 = zipWithInduction zipWith3
 
 -- | Zip five arrays with the given function, analogous to 'zipWith'.
 --
@@ -213,10 +225,7 @@ zipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-zipWith5 f as bs cs ds es
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
+zipWith5 = zipWithInduction zipWith4
 
 -- | Zip six arrays with the given function, analogous to 'zipWith'.
 --
@@ -230,11 +239,7 @@ zipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-zipWith6 f as bs cs ds es fs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
+zipWith6 = zipWithInduction zipWith5
 
 -- | Zip seven arrays with the given function, analogous to 'zipWith'.
 --
@@ -249,11 +254,7 @@ zipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-zipWith7 f as bs cs ds es fs gs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
+zipWith7 = zipWithInduction zipWith6
 
 -- | Zip eight arrays with the given function, analogous to 'zipWith'.
 --
@@ -269,12 +270,7 @@ zipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-zipWith8 f as bs cs ds es fs gs hs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
+zipWith8 = zipWithInduction zipWith7
 
 -- | Zip nine arrays with the given function, analogous to 'zipWith'.
 --
@@ -291,12 +287,19 @@ zipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-zipWith9 f as bs cs ds es fs gs hs is
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs `intersect` shape is)
-             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
+zipWith9 = zipWithInduction zipWith8
+
+
+-- | Used to define the izipWith functions on two or more arrays
+--
+izipWithInduction
+    :: (Shape sh, Elt a, Elt b)
+    => ((Exp sh -> Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
+    -> (Exp sh -> Exp a -> Exp b -> rest)
+    -> Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> result
+izipWithInduction prev f as bs = prev (\ix (T2 a b) -> f ix a b) (zip as bs)
 
 
 -- | Zip two arrays with a function that also takes the element index
@@ -307,9 +310,7 @@ izipWith
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh c)
-izipWith f as bs
-  = generate (shape as `intersect` shape bs)
-             (\ix -> f ix (as ! ix) (bs ! ix))
+izipWith = izipWithInduction imap
 
 -- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
@@ -321,9 +322,7 @@ izipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-izipWith3 f as bs cs
-  = generate (shape as `intersect` shape bs `intersect` shape cs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix))
+izipWith3 = izipWithInduction izipWith
 
 -- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -336,10 +335,7 @@ izipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-izipWith4 f as bs cs ds
-  = generate (shape as `intersect` shape bs `intersect`
-              shape cs `intersect` shape ds)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
+izipWith4 = izipWithInduction izipWith3
 
 -- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -353,10 +349,7 @@ izipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-izipWith5 f as bs cs ds es
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
+izipWith5 = izipWithInduction izipWith4
 
 -- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -371,11 +364,7 @@ izipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-izipWith6 f as bs cs ds es fs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
+izipWith6 = izipWithInduction izipWith5
 
 -- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -391,11 +380,7 @@ izipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-izipWith7 f as bs cs ds es fs gs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
+izipWith7 = izipWithInduction izipWith6
 
 -- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -412,12 +397,7 @@ izipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-izipWith8 f as bs cs ds es fs gs hs
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
+izipWith8 = izipWithInduction izipWith7
 
 -- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -435,12 +415,7 @@ izipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-izipWith9 f as bs cs ds es fs gs hs is
-  = generate (shape as `intersect` shape bs `intersect` shape cs
-                       `intersect` shape ds `intersect` shape es
-                       `intersect` shape fs `intersect` shape gs
-                       `intersect` shape hs `intersect` shape is)
-             (\ix -> f ix (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
+izipWith9 = izipWithInduction izipWith8
 
 
 -- | Combine the elements of two arrays pairwise. The shape of the result is the
@@ -460,7 +435,7 @@ zip :: (Shape sh, Elt a, Elt b)
     => Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh (a, b))
-zip = zipWith (curry lift)
+zip = zipWith T2
 
 -- | Take three arrays and return an array of triples, analogous to zip.
 --
@@ -469,7 +444,7 @@ zip3 :: (Shape sh, Elt a, Elt b, Elt c)
      -> Acc (Array sh b)
      -> Acc (Array sh c)
      -> Acc (Array sh (a, b, c))
-zip3 = zipWith3 (\a b c -> lift (a,b,c))
+zip3 = zipWith3 T3
 
 -- | Take four arrays and return an array of quadruples, analogous to zip.
 --
@@ -479,7 +454,7 @@ zip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
      -> Acc (Array sh c)
      -> Acc (Array sh d)
      -> Acc (Array sh (a, b, c, d))
-zip4 = zipWith4 (\a b c d -> lift (a,b,c,d))
+zip4 = zipWith4 T4
 
 -- | Take five arrays and return an array of five-tuples, analogous to zip.
 --
@@ -490,7 +465,7 @@ zip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
      -> Acc (Array sh d)
      -> Acc (Array sh e)
      -> Acc (Array sh (a, b, c, d, e))
-zip5 = zipWith5 (\a b c d e -> lift (a,b,c,d,e))
+zip5 = zipWith5 T5
 
 -- | Take six arrays and return an array of six-tuples, analogous to zip.
 --
@@ -502,7 +477,7 @@ zip6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
      -> Acc (Array sh e)
      -> Acc (Array sh f)
      -> Acc (Array sh (a, b, c, d, e, f))
-zip6 = zipWith6 (\a b c d e f -> lift (a,b,c,d,e,f))
+zip6 = zipWith6 T6
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -515,7 +490,7 @@ zip7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
      -> Acc (Array sh f)
      -> Acc (Array sh g)
      -> Acc (Array sh (a, b, c, d, e, f, g))
-zip7 = zipWith7 (\a b c d e f g -> lift (a,b,c,d,e,f,g))
+zip7 = zipWith7 T7
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -529,7 +504,7 @@ zip8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
      -> Acc (Array sh g)
      -> Acc (Array sh h)
      -> Acc (Array sh (a, b, c, d, e, f, g, h))
-zip8 = zipWith8 (\a b c d e f g h -> lift (a,b,c,d,e,f,g,h))
+zip8 = zipWith8 T8
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -544,7 +519,7 @@ zip9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i
      -> Acc (Array sh h)
      -> Acc (Array sh i)
      -> Acc (Array sh (a, b, c, d, e, f, g, h, i))
-zip9 = zipWith9 (\a b c d e f g h i -> lift (a,b,c,d,e,f,g,h,i))
+zip9 = zipWith9 T9
 
 
 -- | The converse of 'zip', but the shape of the two results is identical to the
@@ -564,9 +539,9 @@ unzip3 :: (Shape sh, Elt a, Elt b, Elt c)
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
 unzip3 xs = (map get1 xs, map get2 xs, map get3 xs)
   where
-    get1 x = let (a,_,_) = untup3 x in a
-    get2 x = let (_,b,_) = untup3 x in b
-    get3 x = let (_,_,c) = untup3 x in c
+    get1 (T3 a _ _) = a
+    get2 (T3 _ b _) = b
+    get3 (T3 _ _ c) = c
 
 
 -- | Take an array of quadruples and return four arrays, analogous to 'unzip'.
@@ -576,10 +551,10 @@ unzip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
 unzip4 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs)
   where
-    get1 x = let (a,_,_,_) = untup4 x in a
-    get2 x = let (_,b,_,_) = untup4 x in b
-    get3 x = let (_,_,c,_) = untup4 x in c
-    get4 x = let (_,_,_,d) = untup4 x in d
+    get1 (T4 a _ _ _) = a
+    get2 (T4 _ b _ _) = b
+    get3 (T4 _ _ c _) = c
+    get4 (T4 _ _ _ d) = d
 
 -- | Take an array of 5-tuples and return five arrays, analogous to 'unzip'.
 --
@@ -588,11 +563,11 @@ unzip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d), Acc (Array sh e))
 unzip5 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs, map get5 xs)
   where
-    get1 x = let (a,_,_,_,_) = untup5 x in a
-    get2 x = let (_,b,_,_,_) = untup5 x in b
-    get3 x = let (_,_,c,_,_) = untup5 x in c
-    get4 x = let (_,_,_,d,_) = untup5 x in d
-    get5 x = let (_,_,_,_,e) = untup5 x in e
+    get1 (T5 a _ _ _ _) = a
+    get2 (T5 _ b _ _ _) = b
+    get3 (T5 _ _ c _ _) = c
+    get4 (T5 _ _ _ d _) = d
+    get5 (T5 _ _ _ _ e) = e
 
 -- | Take an array of 6-tuples and return six arrays, analogous to 'unzip'.
 --
@@ -602,12 +577,12 @@ unzip6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
           , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f))
 unzip6 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs, map get5 xs, map get6 xs)
   where
-    get1 x = let (a,_,_,_,_,_) = untup6 x in a
-    get2 x = let (_,b,_,_,_,_) = untup6 x in b
-    get3 x = let (_,_,c,_,_,_) = untup6 x in c
-    get4 x = let (_,_,_,d,_,_) = untup6 x in d
-    get5 x = let (_,_,_,_,e,_) = untup6 x in e
-    get6 x = let (_,_,_,_,_,f) = untup6 x in f
+    get1 (T6 a _ _ _ _ _) = a
+    get2 (T6 _ b _ _ _ _) = b
+    get3 (T6 _ _ c _ _ _) = c
+    get4 (T6 _ _ _ d _ _) = d
+    get5 (T6 _ _ _ _ e _) = e
+    get6 (T6 _ _ _ _ _ f) = f
 
 -- | Take an array of 7-tuples and return seven arrays, analogous to 'unzip'.
 --
@@ -620,13 +595,13 @@ unzip7 xs = ( map get1 xs, map get2 xs, map get3 xs
             , map get4 xs, map get5 xs, map get6 xs
             , map get7 xs )
   where
-    get1 x = let (a,_,_,_,_,_,_) = untup7 x in a
-    get2 x = let (_,b,_,_,_,_,_) = untup7 x in b
-    get3 x = let (_,_,c,_,_,_,_) = untup7 x in c
-    get4 x = let (_,_,_,d,_,_,_) = untup7 x in d
-    get5 x = let (_,_,_,_,e,_,_) = untup7 x in e
-    get6 x = let (_,_,_,_,_,f,_) = untup7 x in f
-    get7 x = let (_,_,_,_,_,_,g) = untup7 x in g
+    get1 (T7 a _ _ _ _ _ _) = a
+    get2 (T7 _ b _ _ _ _ _) = b
+    get3 (T7 _ _ c _ _ _ _) = c
+    get4 (T7 _ _ _ d _ _ _) = d
+    get5 (T7 _ _ _ _ e _ _) = e
+    get6 (T7 _ _ _ _ _ f _) = f
+    get7 (T7 _ _ _ _ _ _ g) = g
 
 -- | Take an array of 8-tuples and return eight arrays, analogous to 'unzip'.
 --
@@ -639,16 +614,16 @@ unzip8 xs = ( map get1 xs, map get2 xs, map get3 xs
             , map get4 xs, map get5 xs, map get6 xs
             , map get7 xs, map get8 xs )
   where
-    get1 x = let (a,_,_,_,_,_,_,_) = untup8 x in a
-    get2 x = let (_,b,_,_,_,_,_,_) = untup8 x in b
-    get3 x = let (_,_,c,_,_,_,_,_) = untup8 x in c
-    get4 x = let (_,_,_,d,_,_,_,_) = untup8 x in d
-    get5 x = let (_,_,_,_,e,_,_,_) = untup8 x in e
-    get6 x = let (_,_,_,_,_,f,_,_) = untup8 x in f
-    get7 x = let (_,_,_,_,_,_,g,_) = untup8 x in g
-    get8 x = let (_,_,_,_,_,_,_,h) = untup8 x in h
+    get1 (T8 a _ _ _ _ _ _ _) = a
+    get2 (T8 _ b _ _ _ _ _ _) = b
+    get3 (T8 _ _ c _ _ _ _ _) = c
+    get4 (T8 _ _ _ d _ _ _ _) = d
+    get5 (T8 _ _ _ _ e _ _ _) = e
+    get6 (T8 _ _ _ _ _ f _ _) = f
+    get7 (T8 _ _ _ _ _ _ g _) = g
+    get8 (T8 _ _ _ _ _ _ _ h) = h
 
--- | Take an array of 8-tuples and return eight arrays, analogous to 'unzip'.
+-- | Take an array of 9-tuples and return nine arrays, analogous to 'unzip'.
 --
 unzip9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
        => Acc (Array sh (a, b, c, d, e, f, g, h, i))
@@ -659,15 +634,15 @@ unzip9 xs = ( map get1 xs, map get2 xs, map get3 xs
             , map get4 xs, map get5 xs, map get6 xs
             , map get7 xs, map get8 xs, map get9 xs )
   where
-    get1 x = let (a,_,_,_,_,_,_,_,_) = untup9 x in a
-    get2 x = let (_,b,_,_,_,_,_,_,_) = untup9 x in b
-    get3 x = let (_,_,c,_,_,_,_,_,_) = untup9 x in c
-    get4 x = let (_,_,_,d,_,_,_,_,_) = untup9 x in d
-    get5 x = let (_,_,_,_,e,_,_,_,_) = untup9 x in e
-    get6 x = let (_,_,_,_,_,f,_,_,_) = untup9 x in f
-    get7 x = let (_,_,_,_,_,_,g,_,_) = untup9 x in g
-    get8 x = let (_,_,_,_,_,_,_,h,_) = untup9 x in h
-    get9 x = let (_,_,_,_,_,_,_,_,i) = untup9 x in i
+    get1 (T9 a _ _ _ _ _ _ _ _) = a
+    get2 (T9 _ b _ _ _ _ _ _ _) = b
+    get3 (T9 _ _ c _ _ _ _ _ _) = c
+    get4 (T9 _ _ _ d _ _ _ _ _) = d
+    get5 (T9 _ _ _ _ e _ _ _ _) = e
+    get6 (T9 _ _ _ _ _ f _ _ _) = f
+    get7 (T9 _ _ _ _ _ _ g _ _) = g
+    get8 (T9 _ _ _ _ _ _ _ h _) = h
+    get9 (T9 _ _ _ _ _ _ _ _ i) = i
 
 
 -- Reductions
@@ -703,6 +678,83 @@ fold1All
     -> Acc (Array sh a)
     -> Acc (Scalar a)
 fold1All f arr = fold1 f (flatten arr)
+
+
+-- | Segmented reduction along the innermost dimension of an array. The segment
+-- descriptor specifies the lengths of the logical sub-arrays, each of which is
+-- reduced independently. The innermost dimension must contain at least as many
+-- elements as required by the segment descriptor (sum thereof).
+--
+-- >>> let seg = fromList (Z:.4) [1,4,0,3] :: Segments Int
+-- >>> seg
+-- Vector (Z :. 4) [1,4,0,3]
+--
+-- >>> let mat = fromList (Z:.5:.10) [0..] :: Matrix Int
+-- >>> mat
+-- Matrix (Z :. 5 :. 10)
+--   [  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+--     10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+--     20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+--     30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+--     40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+--
+-- >>> run $ foldSeg (+) 0 (use mat) (use seg)
+-- Matrix (Z :. 5 :. 4)
+--   [  0,  10, 0,  18,
+--     10,  50, 0,  48,
+--     20,  90, 0,  78,
+--     30, 130, 0, 108,
+--     40, 170, 0, 138]
+--
+foldSeg
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp e
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
+  where
+    (plus, zero) =
+      case integralType @i of
+        TypeInt{}    -> ((+), 0)
+        TypeInt8{}   -> ((+), 0)
+        TypeInt16{}  -> ((+), 0)
+        TypeInt32{}  -> ((+), 0)
+        TypeInt64{}  -> ((+), 0)
+        TypeWord{}   -> ((+), 0)
+        TypeWord8{}  -> ((+), 0)
+        TypeWord16{} -> ((+), 0)
+        TypeWord32{} -> ((+), 0)
+        TypeWord64{} -> ((+), 0)
+
+
+-- | Variant of 'foldSeg' that requires /all/ segments of the reduced array
+-- to be non-empty, and does not need a default value. The segment
+-- descriptor species the length of each of the logical sub-arrays.
+--
+fold1Seg
+    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
+    => (Exp e -> Exp e -> Exp e)
+    -> Acc (Array (sh:.Int) e)
+    -> Acc (Segments i)
+    -> Acc (Array (sh:.Int) e)
+fold1Seg f arr seg = fold1Seg' f arr (scanl plus zero seg)
+  where
+    plus :: Exp i -> Exp i -> Exp i
+    zero :: Exp i
+    (plus, zero) =
+      case integralType @(EltR i) of
+        TypeInt{}    -> ((+), 0)
+        TypeInt8{}   -> ((+), 0)
+        TypeInt16{}  -> ((+), 0)
+        TypeInt32{}  -> ((+), 0)
+        TypeInt64{}  -> ((+), 0)
+        TypeWord{}   -> ((+), 0)
+        TypeWord8{}  -> ((+), 0)
+        TypeWord16{} -> ((+), 0)
+        TypeWord32{} -> ((+), 0)
+        TypeWord64{} -> ((+), 0)
 
 
 -- Specialised reductions
@@ -754,14 +806,14 @@ any f = or . map f
 and :: Shape sh
     => Acc (Array (sh:.Int) Bool)
     -> Acc (Array sh Bool)
-and = fold (&&) (constant True)
+and = fold (&&) True_
 
 -- | Check if any element along the innermost dimension is 'True'.
 --
 or :: Shape sh
    => Acc (Array (sh:.Int) Bool)
    -> Acc (Array sh Bool)
-or = fold (||) (constant False)
+or = fold (||) False_
 
 -- | Compute the sum of elements along the innermost dimension of the array. To
 -- find the sum of the entire array, 'flatten' it first.
@@ -932,33 +984,31 @@ scanlSeg
     -> Acc (Array (sh:.Int) e)
 scanlSeg f z arr seg =
   if null arr || null flags
-    then fill (lift (sh:.sz + length seg)) z
+    then fill (sh ::. sz + length seg) z
     else scanl1Seg f arr' seg'
   where
-    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
-
     -- Segmented exclusive scan is implemented by first injecting the seed
     -- element at the head of each segment, and then performing a segmented
     -- inclusive scan.
     --
-    -- This is done by creating a creating a vector entirely of the seed
-    -- element, and overlaying the input data in all places other than at the
-    -- start of a segment.
+    -- This is done by creating a vector entirely of the seed element, and
+    -- overlaying the input data in all places other than at the start of
+    -- a segment.
     --
-    seg'        = map (+1) seg
-    arr'        = permute const
-                          (fill (lift (sh :. sz + length seg)) z)
-                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
-                                  in  lift (sx :. i + fromIntegral (inc ! index1 i)))
-                          (take (length flags) arr)
+    sh ::. sz = shape arr
+    seg'      = map (+1) seg
+    arr'      = permute const
+                        (fill (sh ::. sz + length seg) z)
+                        (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc ! I1 i)))
+                        (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
     -- place for each successive segment, to make room for the seed element.
     -- Here, we make use of the fact that the vector returned by 'mkHeadFlags'
     -- contains non-unit entries, which indicate zero length segments.
     --
-    flags       = mkHeadFlags seg
-    inc         = scanl1 (+) flags
+    flags     = mkHeadFlags seg
+    inc       = scanl1 (+) flags
 
 
 -- | Segmented version of 'scanl'' along the innermost dimension of an array. The
@@ -1007,8 +1057,8 @@ scanl'Seg
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
 scanl'Seg f z arr seg =
   if null arr
-    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
-    else lift (body, sums)
+    then T2 arr  (fill (indexTail (shape arr) ::. length seg) z)
+    else T2 body sums
   where
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
     -- scan, to separate the final value and scan body.
@@ -1027,9 +1077,8 @@ scanl'Seg f z arr seg =
     seg'        = map (+1) seg
     tails       = zipWith (+) seg $ prescanl (+) 0 seg'
     sums        = backpermute
-                    (lift (indexTail (shape arr') :. length seg))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. fromIntegral (tails ! index1 i)))
+                    (indexTail (shape arr') ::. length seg)
+                    (\(sz ::. i) -> sz ::. fromIntegral (tails ! I1 i))
                     arr'
 
     -- Slice out the body of each segment.
@@ -1042,15 +1091,14 @@ scanl'Seg f z arr seg =
     --
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
-                $ permute (+) (fill (index1 $ size arr + 1) 0)
-                              (\ix -> index1' $ offset ! ix)
+                $ permute (+) (fill (I1 $ size arr + 1) 0)
+                              (\ix -> Just_ (index1' (offset ! ix)))
                               (fill (shape seg) (1 :: Exp i))
 
-    len         = offset ! index1 (length offset - 1)
+    len         = offset ! I1 (length offset - 1)
     body        = backpermute
-                    (lift (indexTail (shape arr) :. fromIntegral len))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                    (indexTail (shape arr) ::. fromIntegral len)
+                    (\(sz ::. i) -> sz ::. i + fromIntegral (inc ! I1 i))
                     arr'
 
 
@@ -1094,7 +1142,7 @@ scanl1Seg
     -> Acc (Array (sh:.Int) e)
 scanl1Seg f arr seg
   = map snd
-  . scanl1 (segmented f)
+  . scanl1 (segmentedL f)
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkHeadFlags seg)) arr
 
 -- |Segmented version of 'prescanl'.
@@ -1157,10 +1205,10 @@ scanrSeg
     -> Acc (Array (sh:.Int) e)
 scanrSeg f z arr seg =
   if null arr || null flags
-    then fill (lift (sh :. sz + length seg)) z
+    then fill (sh ::. sz + length seg) z
     else scanr1Seg f arr' seg'
   where
-    sh :. sz    = unlift (shape arr) :: Exp sh :. Exp Int
+    sh ::. sz    = shape arr
 
     -- Using technique described for 'scanlSeg', where we intersperse the array
     -- with the seed element at the start of each segment, and then perform an
@@ -1171,9 +1219,8 @@ scanrSeg f z arr seg =
 
     seg'        = map (+1) seg
     arr'        = permute const
-                          (fill (lift (sh :. sz + length seg)) z)
-                          (\ix -> let sx :. i = unlift ix :: Exp sh :. Exp Int
-                                  in  lift (sx :. i + fromIntegral (inc ! index1 i) - 1))
+                          (fill (sh ::. sz + length seg) z)
+                          (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc !! i) - 1))
                           (drop (sz - length flags) arr)
 
 
@@ -1217,8 +1264,8 @@ scanr'Seg
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
 scanr'Seg f z arr seg =
   if null arr
-    then lift (arr,  fill (lift (indexTail (shape arr) :. length seg)) z)
-    else lift (body, sums)
+    then T2 arr  (fill (indexTail (shape arr) ::. length seg) z)
+    else T2 body sums
   where
     -- Using technique described for scanl'Seg
     --
@@ -1228,18 +1275,16 @@ scanr'Seg f z arr seg =
     seg'        = map (+1) seg
     heads       = prescanl (+) 0 seg'
     sums        = backpermute
-                    (lift (indexTail (shape arr') :. length seg))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. fromIntegral (heads ! index1 i)))
+                    (indexTail (shape arr') ::. length seg)
+                    (\(sz ::.i) -> sz ::. fromIntegral (heads ! I1 i))
                     arr'
 
     -- body segments
     flags       = mkHeadFlags seg
     inc         = scanl1 (+) flags
     body        = backpermute
-                    (lift (indexTail (shape arr) :. indexHead (shape flags)))
-                    (\ix -> let sz:.i = unlift ix :: Exp sh :. Exp Int
-                            in  lift (sz :. i + fromIntegral (inc ! index1 i)))
+                    (indexTail (shape arr) ::. indexHead (shape flags))
+                    (\(sz ::. i) -> sz ::. i + fromIntegral (inc ! I1 i))
                     arr'
 
 
@@ -1274,7 +1319,7 @@ scanr1Seg
     -> Acc (Array (sh:.Int) e)
 scanr1Seg f arr seg
   = map snd
-  . scanr1 (flip (segmented f))
+  . scanr1 (segmentedR f)
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkTailFlags seg)) arr
 
 
@@ -1308,7 +1353,7 @@ postscanrSeg f e vec seg
 -- Segmented scan helpers
 -- ----------------------
 
--- |Compute head flags vector from segment vector for left-scans.
+-- | Compute head flags vector from segment vector for left-scans.
 --
 -- The vector will be full of zeros in the body of a segment, and non-zero
 -- otherwise. The "flag" value, if greater than one, indicates that several
@@ -1321,14 +1366,14 @@ mkHeadFlags
     -> Acc (Segments i)
 mkHeadFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1' (offset ! ix)) ones
+  $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
   where
-    (offset, len)       = unlift (scanl' (+) 0 seg)
-    zeros               = fill (index1' $ the len + 1) 0
-    ones                = fill (index1  $ size offset) 1
+    T2 offset len = scanl' (+) 0 seg
+    zeros         = fill (index1' $ the len + 1) 0
+    ones          = fill (index1  $ size offset) 1
 
--- |Compute tail flags vector from segment vector for right-scans. That is, the
--- flag is placed at the last place in each segment.
+-- | Compute tail flags vector from segment vector for right-scans. That
+-- is, the flag is placed at the last place in each segment.
 --
 mkTailFlags
     :: (Integral i, FromIntegral i Int)
@@ -1336,29 +1381,31 @@ mkTailFlags
     -> Acc (Segments i)
 mkTailFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1' (the len - 1 - offset ! ix)) ones
+  $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
   where
-    (offset, len)       = unlift (scanr' (+) 0 seg)
-    zeros               = fill (index1' $ the len + 1) 0
-    ones                = fill (index1  $ size offset) 1
+    T2 offset len = scanr' (+) 0 seg
+    zeros         = fill (index1' $ the len + 1) 0
+    ones          = fill (index1  $ size offset) 1
 
--- |Construct a segmented version of a function from a non-segmented version.
--- The segmented apply operates on a head-flag value tuple, and follows the
--- procedure of Sengupta et. al.
+-- | Construct a segmented version of a function from a non-segmented
+-- version. The segmented apply operates on a head-flag value tuple, and
+-- follows the procedure of Sengupta et. al.
 --
-segmented
+segmentedL
     :: (Elt e, Num i, Bits i)
     => (Exp e -> Exp e -> Exp e)
-    -> Exp (i, e)
-    -> Exp (i, e)
-    -> Exp (i, e)
-segmented f a b =
-  let (aF, aV) = unlift a
-      (bF, bV) = unlift b
-  in
-  lift (aF .|. bF, bF /= 0 ? (bV, f aV bV))
+    -> (Exp (i, e) -> Exp (i, e) -> Exp (i, e))
+segmentedL f (T2 aF aV) (T2 bF bV) =
+  T2 (aF .|. bF)
+     (bF /= 0 ? (bV, f aV bV))
 
--- |Index construction and destruction generalised to integral types.
+segmentedR
+    :: (Elt e, Num i, Bits i)
+    => (Exp e -> Exp e -> Exp e)
+    -> (Exp (i, e) -> Exp (i, e) -> Exp (i, e))
+segmentedR f y x = segmentedL (flip f) x y
+
+-- | Index construction and destruction generalised to integral types.
 --
 -- We generalise the segment descriptor to integral types because some
 -- architectures, such as GPUs, have poor performance for 64-bit types. So,
@@ -1384,7 +1431,7 @@ flatten a
   | Just Refl <- matchShapeType @sh @DIM1
   = a
 flatten a
-  = reshape (index1 (size a)) a
+  = reshape (I1 (size a)) a
 
 
 -- Enumeration and filling
@@ -1435,7 +1482,7 @@ enumFromStepN
     -> Acc (Array sh e)
 enumFromStepN sh x y
   = reshape sh
-  $ generate (index1 $ shapeSize sh)
+  $ generate (I1 (shapeSize sh))
              (\ix -> (fromIntegral (unindex1 ix :: Exp Int) * y) + x)
 
 -- Concatenation
@@ -1476,7 +1523,7 @@ enumFromStepN sh x y
 --     40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 12, 13, 14]
 --
 infixr 5 ++
-(++) :: forall sh e. (Shape sh, Elt e)
+(++) :: (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1586,46 +1633,55 @@ concatOn dim xs ys =
 -- >>> run $ filter odd (use mat)
 -- (Vector (Z :. 20) [1,3,5,7,9,1,1,1,1,1,1,3,5,7,9,11,13,15,17,19],Vector (Z :. 4) [5,5,0,10])
 --
-filter :: forall sh e. (Shape sh, Elt e)
+filter :: (Shape sh, Elt e)
        => (Exp e -> Exp Bool)
        -> Acc (Array (sh:.Int) e)
        -> Acc (Vector e, Array sh Int)
-filter p arr
-  -- Optimise 1-dimensional arrays, where we can avoid additional computations
-  -- for the offset indices.
-  | Just Refl <- matchShapeType @sh @Z
-  = let
-        keep            = map p arr
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        prj ix          = keep!ix ? ( index1 (target!ix), ignore )
-        dummy           = fill (index1 (the len)) undef
-        result          = permute const dummy prj arr
-    in
-    if null arr
-      then lift (emptyArray, fill (constant Z) 0)
-      else lift (result, len)
-
-filter p arr
-  = let
-        sz              = indexTail (shape arr)
-        keep            = map p arr
-        (target, len)   = unlift $ scanl' (+) 0 (map boolToInt keep)
-        (offset, valid) = unlift $ scanl' (+) 0 (flatten len)
-        prj ix          = if keep!ix
-                            then index1 $ offset!index1 (toIndex sz (indexTail ix)) + target!ix
-                            else ignore
-        dummy           = fill (index1 (the valid)) undef
-        result          = permute const dummy prj arr
-    in
-    if null arr
-      then lift (emptyArray, fill sz 0)
-      else lift (result, len)
-
+filter p arr = compact (map p arr) arr
 {-# NOINLINE filter #-}
 {-# RULES
   "ACC filter/filter" forall f g arr.
     filter f (afst (filter g arr)) = filter (\x -> g x && f x) arr
  #-}
+
+
+-- | As 'filter', but with separate arrays for the data elements and the
+-- flags indicating which elements of that array should be kept.
+--
+compact :: forall sh e. (Shape sh, Elt e)
+        => Acc (Array (sh:.Int) Bool)
+        -> Acc (Array (sh:.Int) e)
+        -> Acc (Vector e, Array sh Int)
+compact keep arr
+  -- Optimise 1-dimensional arrays, where we can avoid additional computations
+  -- for the offset indices.
+  | Just Refl <- matchShapeType @sh @Z
+  = let
+        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+        prj ix          = if keep!ix
+                             then Just_ (I1 (target!ix))
+                             else Nothing_
+        dummy           = fill (I1 (the len)) undef
+        result          = permute const dummy prj arr
+    in
+    if null arr
+      then T2 emptyArray (fill Z_ 0)
+      else T2 result len
+
+compact keep arr
+  = let
+        sz              = indexTail (shape arr)
+        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+        T2 offset valid = scanl' (+) 0 (flatten len)
+        prj ix          = if keep!ix
+                            then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
+                            else Nothing_
+        dummy           = fill (I1 (the valid)) undef
+        result          = permute const dummy prj arr
+    in
+    if null arr
+      then T2 emptyArray (fill sz 0)
+      else T2 result len
 
 
 -- Gather operations
@@ -1700,8 +1756,8 @@ scatter
     -> Acc (Vector e)
 scatter to defaults input = permute const defaults pf input'
   where
-    pf ix       = index1 (to ! ix)
-    input'      = backpermute (shape to `intersect` shape input) id input
+    pf ix   = Just_ (I1 (to ! ix))
+    input'  = backpermute (shape to `intersect` shape input) id input
 
 
 -- | Conditionally overwrite elements of the destination by scattering values of
@@ -1727,8 +1783,10 @@ scatterIf
     -> Acc (Vector b)
 scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
-    pf ix       = pred (maskV ! ix) ? ( index1 (to ! ix), ignore )
-    input'      = backpermute (shape to `intersect` shape input) id input
+    input'  = backpermute (shape to `intersect` shape input) id input
+    pf ix   = if pred (maskV ! ix)
+                 then Just_ (I1 (to ! ix))
+                 else Nothing_
 
 
 -- Permutations
@@ -1868,7 +1926,7 @@ transposeOn dim1 dim2 xs =
 --     30, 31, 32, 33, 34,
 --     40, 41, 42, 43, 44]
 --
-take :: forall sh e. (Shape sh, Elt e)
+take :: (Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1895,7 +1953,7 @@ take = takeOn _1
 --     37, 38, 39,
 --     47, 48, 49]
 --
-drop :: forall sh e. (Shape sh, Elt e)
+drop :: (Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
@@ -1921,7 +1979,7 @@ drop = dropOn _1
 --     30, 31, 32, 33, 34, 35, 36, 37, 38,
 --     40, 41, 42, 43, 44, 45, 46, 47, 48]
 --
-init :: forall sh e. (Shape sh, Elt e)
+init :: (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
 init = initOn _1
@@ -1947,7 +2005,7 @@ init = initOn _1
 --     31, 32, 33, 34, 35, 36, 37, 38, 39,
 --     41, 42, 43, 44, 45, 46, 47, 48, 49]
 --
-tail :: forall sh e. (Shape sh, Elt e)
+tail :: (Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
 tail = tailOn _1
@@ -1958,7 +2016,7 @@ tail = tailOn _1
 --
 -- > slit i n = take n . drop i
 --
-slit :: forall sh e. (Shape sh, Elt e)
+slit :: (Shape sh, Elt e)
      => Exp Int                     -- ^ starting index
      -> Exp Int                     -- ^ length
      -> Acc (Array (sh :. Int) e)
@@ -2138,17 +2196,6 @@ infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
 
--- | A case-like control structure
---
-caseof :: (Elt a, Elt b)
-       => Exp a                         -- ^ case subject
-       -> [(Exp a -> Exp Bool, Exp b)]  -- ^ list of cases to attempt
-       -> Exp b                         -- ^ default value
-       -> Exp b
-caseof _ []        e = e
-caseof x ((p,b):l) e = cond (p x) b (caseof x l e)
-
-
 -- | For use with @-XRebindableSyntax@, this class provides 'ifThenElse' lifted
 -- to both scalar and array types.
 --
@@ -2165,22 +2212,112 @@ instance IfThenElse Acc where
   ifThenElse = acond
 
 
+-- | The 'match' operation is the core operation which enables embedded
+-- pattern matching. It is applied to an n-ary scalar function, and
+-- generates the necessary case-statements in the embedded code for each
+-- argument. For example, given the function:
+--
+-- > example1 :: Exp (Maybe Bool) -> Exp Int
+-- > example1 Nothing_ = 0
+-- > example1 (Just_ False_) = 1
+-- > example1 (Just_ True_) = 2
+--
+-- In order to use this function it must be applied to the 'match'
+-- operator:
+--
+-- > match example1
+--
+-- Using the infix-flip operator ('Data.Function.&'), we can also write
+-- case statements inline. For example, instead of this:
+--
+-- > example2 x = case f x of
+-- >   Nothing_ -> ...      -- error: embedded pattern synonym...
+-- >   Just_ y  -> ...      -- ...used outside of 'match' context
+--
+-- This can be written instead as:
+--
+-- > example3 x = f x & match \case
+-- >   Nothing_ -> ...
+-- >   Just_ y  -> ...
+--
+-- And utilising the @LambdaCase@ and @BlockArguments@ syntactic extensions.
+--
+-- The Template Haskell splice 'Data.Array.Accelerate.mkPattern' (or
+-- 'Data.Array.Accelerate.mkPatterns') can be used to generate the pattern
+-- synonyms for a given Haskell'98 sum or product data type. For example:
+--
+-- > data Option a = None | Some a
+-- >   deriving (Generic, Elt)
+-- >
+-- > mkPattern ''Option
+--
+-- Which can then be used such as:
+--
+-- > isNone :: Elt a => Exp (Option a) -> Exp Bool
+-- > isNone = match \case
+-- >   None_   -> True_
+-- >   Some_{} -> False_
+--
+-- @since 1.4.0.0
+--
+match :: Matching f => f -> f
+match f = mkFun (mkMatch f) id
+
+data Args f where
+  (:->)  :: Exp a -> Args b -> Args (Exp a -> b)
+  Result :: Args (Exp a)
+
+class Matching a where
+  type ResultT a
+  mkMatch :: a -> Args a -> Exp (ResultT a)
+  mkFun   :: (Args f -> Exp (ResultT a))
+          -> (Args a -> Args f)
+          -> a
+
+instance Elt a => Matching (Exp a) where
+  type ResultT (Exp a) = a
+
+  mkFun f k = f (k Result)
+  mkMatch (Exp e) Result =
+    case e of
+      SmartExp (Match _ x) -> Exp x
+      _                    -> Exp e
+
+instance (Elt e, Matching r) => Matching (Exp e -> r) where
+  type ResultT (Exp e -> r) = ResultT r
+
+  mkFun f k x = mkFun f (\xs -> k (x :-> xs))
+  mkMatch f (x@(Exp p) :-> xs) =
+    case p of
+      -- This first case is used when we have nested calls to 'match'
+      SmartExp Match{} -> mkMatch (f x) xs
+
+      -- If there is only a single alternative, we can elide the case
+      -- statement at this point. This can occur when pattern matching on
+      -- product types.
+      _ -> case rhs of
+             [(_,r)] -> Exp r
+             _       -> Exp (SmartExp (Case p rhs))
+    where
+      rhs = [ (tag, unExp (mkMatch (f x') xs))
+            | tag <- tagsR @e
+            , let x' = Exp (SmartExp (Match tag p)) ]
+
+
 -- Scalar iteration
 -- ----------------
 
 -- | Repeatedly apply a function a fixed number of times
 --
 iterate
-    :: forall a. Elt a
+    :: Elt a
     => Exp Int
     -> (Exp a -> Exp a)
     -> Exp a
     -> Exp a
 iterate n f z
-  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
-        step (i, acc)   = ( i+1, f acc )
-    in
-    snd $ while (\v -> fst v < n) (lift1 step) (lift (0, z))
+  = let step (T2 i acc) = T2 (i+1) (f acc)
+     in snd $ while (\v -> fst v < n) step (T2 0 z)
 
 
 -- Scalar bulk operations
@@ -2189,18 +2326,16 @@ iterate n f z
 -- | Reduce along an innermost slice of an array /sequentially/, by applying a
 -- binary operator to a starting value and the array from left to right.
 --
-sfoldl :: forall sh a b. (Shape sh, Elt a, Elt b)
+sfoldl :: (Shape sh, Elt a, Elt b)
        => (Exp a -> Exp b -> Exp a)
        -> Exp a
        -> Exp sh
        -> Acc (Array (sh :. Int) b)
        -> Exp a
 sfoldl f z ix xs
-  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
-        step (i, acc)   = ( i+1, acc `f` (xs ! lift (ix :. i)) )
-        (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
-    in
-    snd $ while (\v -> fst v < n) (lift1 step) (lift (0, z))
+  = let n               = indexHead (shape xs)
+        step (T2 i acc) = T2 (i+1) (acc `f` (xs ! (ix ::. i)))
+     in snd $ while (\v -> fst v < n) step (T2 0 z)
 
 
 -- Tuples
@@ -2208,22 +2343,22 @@ sfoldl f z ix xs
 
 -- |Extract the first component of a scalar pair.
 --
-fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
-fst e = let (x, _::Exp b) = unlift e in x
+fst :: (Elt a, Elt b) => Exp (a, b) -> Exp a
+fst (T2 a _) = a
 
 -- |Extract the first component of an array pair.
 {-# NOINLINE[1] afst #-}
-afst :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc a
-afst a = let (x, _::Acc b) = unlift a in x
+afst :: (Arrays a, Arrays b) => Acc (a, b) -> Acc a
+afst (T2 a _) = a
 
 -- |Extract the second component of a scalar pair.
 --
-snd :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp b
-snd e = let (_:: Exp a, y) = unlift e in y
+snd :: (Elt a, Elt b) => Exp (a, b) -> Exp b
+snd (T2 _ b) = b
 
 -- | Extract the second component of an array pair
-asnd :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc b
-asnd a = let (_::Acc a, y) = unlift a in y
+asnd :: (Arrays a, Arrays b) => Acc (a, b) -> Acc b
+asnd (T2 _ b) = b
 
 -- |Converts an uncurried function to a curried function.
 --
@@ -2266,12 +2401,10 @@ index2 i j = lift (Z :. i :. j)
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
 unindex2
-    :: forall i. Elt i
+    :: Elt i
     => Exp (Z :. i :. i)
     -> Exp (i, i)
-unindex2 ix
-  = let Z :. i :. j = unlift ix :: Z :. Exp i :. Exp i
-    in  lift (i, j)
+unindex2 (Z_ ::. i ::. j) = T2 i j
 
 -- | Create a rank-3 index from three Exp Int`s
 --
@@ -2281,15 +2414,14 @@ index3
     -> Exp i
     -> Exp i
     -> Exp (Z :. i :. i :. i)
-index3 k j i = lift (Z :. k :. j :. i)
+index3 k j i = Z_ ::. k ::. j ::. i
 
 -- | Destruct a rank-3 index into an Exp tuple of Int`s
 unindex3
-    :: forall i. Elt i
+    :: Elt i
     => Exp (Z :. i :. i :. i)
     -> Exp (i, i, i)
-unindex3 ix = let Z :. k :. j :. i = unlift ix  :: Z :. Exp i :. Exp i :. Exp i
-              in  lift (k, j, i)
+unindex3 (Z_ ::. k ::. j ::. i) = T3 k j i
 
 
 -- Array operations with a scalar result
@@ -2313,9 +2445,108 @@ length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
 
 
+-- Operations to facilitate irregular data parallelism
+-- ---------------------------------------------------
+
+-- | A recipe for generating flattened implementations of some kinds of
+-- irregular nested parallelism. Given two functions that:
+--
+--   (1) for each source element, determine how many target
+--       elements it expands into; and
+--
+--   (2) computes a particular target element based on a source element and
+--       the target element index associated with the source
+--
+-- The following example implements the Sieve of Eratosthenes,
+-- a contraction style algorithm which first computes all primes less than
+-- /sqrt n/, then uses this intermediate result to sieve away all numbers
+-- in the range /[sqrt n .. n]/. The 'expand' function is used to calculate
+-- and flatten the sieves. For each prime /p/ and upper limit /c2/,
+-- function /sz/ computes the number of contributions in the sieve. Then,
+-- for each prime /p/ and sieve index /i/, the function /get/ computes the
+-- sieve contribution. The final step produces all the new primes in the
+-- interval /[c1 .. c2]/.
+--
+-- >>> :{
+--   primes :: Exp Int -> Acc (Vector Int)
+--   primes n = afst loop
+--     where
+--       c0    = unit 2
+--       a0    = use $ fromList (Z:.0) []
+--       limit = truncate (sqrt (fromIntegral (n+1) :: Exp Float))
+--       loop  = awhile
+--                 (\(T2 _   c) -> map (< n+1) c)
+--                 (\(T2 old c) ->
+--                   let c1 = the c
+--                       c2 = c1 < limit ? ( c1*c1, n+1 )
+--                       --
+--                       sieves =
+--                         let sz p    = (c2 - p) `quot` p
+--                             get p i = (2+i)*p
+--                         in
+--                         map (subtract c1) (expand sz get old)
+--                       --
+--                       new =
+--                         let m     = c2-c1
+--                             put i = let s = sieves ! i
+--                                      in s >= 0 && s < m ? (Just_ (I1 s), Nothing_)
+--                         in
+--                         afst
+--                           $ filter (> 0)
+--                           $ permute const (enumFromN (I1 m) c1) put
+--                           $ fill (shape sieves) 0
+--                    in
+--                    T2 (old ++ new) (unit c2))
+--                 (T2 a0 c0)
+-- :}
+--
+-- >>> run $ primes 100
+-- Vector (Z :. 25) [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
+--
+-- Inspired by the paper /Data-Parallel Flattening by Expansion/ by Martin
+-- Elsman, Troels Henddriksen, and Niels Gustav Westphal Serup, ARRAY'19.
+--
+-- @since 1.4.0.0
+--
+expand :: (Elt a, Elt b)
+       => (Exp a -> Exp Int)
+       -> (Exp a -> Exp Int -> Exp b)
+       -> Acc (Vector a)
+       -> Acc (Vector b)
+expand f g xs =
+  let
+      szs           = map f xs
+      T2 offset len = scanl' (+) 0 szs
+      m             = the len
+  in
+  if length xs == 0 || m == 0
+     then use $ fromList (Z:.0) []
+     else
+      let
+          n          = m + 1
+          put ix     = Just_ (I1 (offset ! ix))
+
+          head_flags :: Acc (Vector Int)
+          head_flags = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
+
+          idxs       = map (subtract 1)
+                     $ map snd
+                     $ scanl1 (segmentedL (+))
+                     $ zip head_flags
+                     $ fill (I1 m) 1
+
+          iotas      = map snd
+                     $ scanl1 (segmentedL const)
+                     $ zip head_flags
+                     $ permute const (fill (I1 n) undef) put
+                     $ enumFromN (shape xs) 0
+      in
+      zipWith g (gather iotas xs) idxs
+
+
 {--
 -- Sequence operations
--- --------------------------------------
+-- -------------------
 
 -- | Reduce a sequence by appending all the shapes and all the elements in two
 -- separate vectors.

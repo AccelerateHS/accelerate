@@ -6,10 +6,10 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue185
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -144,6 +144,6 @@ scatterIf
     -> Acc (Vector e')
 scatterIf to maskV p def input = permute const def pf input'
   where
-    pf ix       = p (maskV ! ix) ? ( index1 (to ! ix), ignore )
+    pf ix       = p (maskV ! ix) ? ( Just_ (index1 (to ! ix)), Nothing_ )
     input'      = backpermute (shape to `intersect` shape input) id input
 

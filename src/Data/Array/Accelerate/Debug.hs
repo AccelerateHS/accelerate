@@ -2,11 +2,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -20,8 +19,6 @@ module Data.Array.Accelerate.Debug (
   module Debug,
 
   dumpGraph,
-  dumpSimplStats,
-
   debuggingIsEnabled,
   monitoringIsEnabled,
   boundsChecksAreEnabled,
@@ -95,21 +92,6 @@ internalChecksAreEnabled :: Bool
 internalChecksAreEnabled = True
 #else
 internalChecksAreEnabled = False
-#endif
-
-
--- | Display simplifier statistics. The counts are reset afterwards.
---
-{-# INLINEABLE dumpSimplStats #-}
-dumpSimplStats :: MonadIO m => m ()
-#ifdef ACCELERATE_DEBUG
-dumpSimplStats = do
-  liftIO $ Debug.when dump_simpl_stats $ do
-    stats <- simplCount
-    putTraceMsg (show stats)
-    resetSimplCount
-#else
-dumpSimplStats = return ()
 #endif
 
 

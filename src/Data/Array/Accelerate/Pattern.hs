@@ -1,19 +1,24 @@
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ParallelListComp      #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pattern
--- Copyright   : [2018..2018] Joshua Meredith, Trevor L. McDonell
+-- Copyright   : [2018..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -25,13 +30,27 @@ module Data.Array.Accelerate.Pattern (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
+  pattern Z_, pattern Ix, pattern (::.),
+  pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
+  pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
+
+  pattern V2, pattern V3, pattern V4, pattern V8, pattern V16,
+
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.Representation.Tag
+import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
+import Data.Array.Accelerate.Sugar.Vec
+import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
 
-import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH                                          hiding ( Exp, Match, tupP, tupE )
+import Language.Haskell.TH.Extra
 
 
 -- | A pattern synonym for working with (product) data types. You can declare
@@ -41,9 +60,153 @@ pattern Pattern :: forall b a context. IsPattern context a b => b -> context a
 pattern Pattern vars <- (destruct @context -> vars)
   where Pattern = construct @context
 
-class IsPattern con a t where
-  construct :: t -> con a
-  destruct  :: con a -> t
+class IsPattern con a b where
+  construct :: b -> con a
+  destruct  :: con a -> b
+
+
+pattern Vector :: forall b a context. IsVector context a b => b -> context a
+pattern Vector vars <- (vunpack @context -> vars)
+  where Vector = vpack @context
+
+class IsVector context a b where
+  vpack   :: b -> context a
+  vunpack :: context a -> b
+
+-- | Pattern synonyms for indices, which may be more convenient to use than
+-- 'Data.Array.Accelerate.Lift.lift' and
+-- 'Data.Array.Accelerate.Lift.unlift'.
+--
+pattern Z_ :: Exp DIM0
+pattern Z_ = Pattern Z
+{-# COMPLETE Z_ #-}
+
+infixl 3 ::.
+pattern (::.) :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
+pattern a ::. b = Pattern (a :. b)
+{-# COMPLETE (::.) #-}
+
+infixl 3 `Ix`
+pattern Ix :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
+pattern a `Ix` b = a ::. b
+{-# COMPLETE Ix #-}
+
+-- IsPattern instances for Shape nil and cons
+--
+instance IsPattern Exp Z Z where
+  construct _ = constant Z
+  destruct _  = Z
+
+instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
+  construct (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
+  destruct (Exp t)           = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
+
+
+-- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of
+-- the (unremarkable) boilerplate for us.
+--
+runQ $ do
+    let
+        -- Generate instance declarations for IsPattern of the form:
+        -- instance (Arrays x, ArraysR x ~ (((), ArraysR a), ArraysR b), Arrays a, Arrays b,) => IsPattern Acc x (Acc a, Acc b)
+        mkAccPattern :: Int -> Q [Dec]
+        mkAccPattern n = do
+          a <- newName "a"
+          let
+              -- Type variables for the elements
+              xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              -- Last argument to `IsPattern`, eg (Acc a, Acc b) in the example
+              b        = tupT (map (\t -> [t| Acc $(varT t)|]) xs)
+              -- Representation as snoc-list of pairs, eg (((), ArraysR a), ArraysR b)
+              snoc     = foldl (\sn t -> [t| ($sn, ArraysR $(varT t)) |]) [t| () |] xs
+              -- Constraints for the type class, consisting of Arrays constraints on all type variables,
+              -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
+              context  = tupT
+                       $ [t| Arrays $(varT a) |]
+                       : [t| ArraysR $(varT a) ~ $snoc |]
+                       : map (\t -> [t| Arrays $(varT t)|]) xs
+              --
+              get x 0 = [| Acc (SmartAcc (Aprj PairIdxRight $x)) |]
+              get x i = get  [| SmartAcc (Aprj PairIdxLeft $x) |] (i-1)
+          --
+          _x <- newName "_x"
+          [d| instance $context => IsPattern Acc $(varT a) $b where
+                construct $(tupP (map (\x -> [p| Acc $(varP x)|]) xs)) =
+                  Acc $(foldl (\vs v -> [| SmartAcc ($vs `Apair` $(varE v)) |]) [| SmartAcc Anil |] xs)
+                destruct (Acc $(varP _x)) =
+                  $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
+            |]
+
+        -- Generate instance declarations for IsPattern of the form:
+        -- instance (Elt x, EltR x ~ (((), EltR a), EltR b), Elt a, Elt b,) => IsPattern Exp x (Exp a, Exp b)
+        mkExpPattern :: Int -> Q [Dec]
+        mkExpPattern n = do
+          a <- newName "a"
+          let
+              -- Type variables for the elements
+              xs       = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              -- Variables for sub-pattern matches
+              ms       = [ mkName ('m' : show i) | i <- [0 .. n-1] ]
+              tags     = foldl (\ts t -> [p| $ts `TagRpair` $(varP t) |]) [p| TagRunit |] ms
+              -- Last argument to `IsPattern`, eg (Exp, a, Exp b) in the example
+              b        = tupT (map (\t -> [t| Exp $(varT t)|]) xs)
+              -- Representation as snoc-list of pairs, eg (((), EltR a), EltR b)
+              snoc     = foldl (\sn t -> [t| ($sn, EltR $(varT t)) |]) [t| () |] xs
+              -- Constraints for the type class, consisting of Elt constraints on all type variables,
+              -- and an equality constraint on the representation type of `a` and the snoc representation `snoc`.
+              context  = tupT
+                       $ [t| Elt $(varT a) |]
+                       : [t| EltR $(varT a) ~ $snoc |]
+                       : map (\t -> [t| Elt $(varT t)|]) xs
+              --
+              get x 0 =     [| SmartExp (Prj PairIdxRight $x) |]
+              get x i = get [| SmartExp (Prj PairIdxLeft $x)  |] (i-1)
+          --
+          _x <- newName "_x"
+          _y <- newName "_y"
+          [d| instance $context => IsPattern Exp $(varT a) $b where
+                construct $(tupP (map (\x -> [p| Exp $(varP x)|]) xs)) =
+                  let _unmatch :: SmartExp a -> SmartExp a
+                      _unmatch (SmartExp (Match _ $(varP _y))) = $(varE _y)
+                      _unmatch x = x
+                  in
+                  Exp $(foldl (\vs v -> [| SmartExp ($vs `Pair` _unmatch $(varE v)) |]) [| SmartExp Nil |] xs)
+                destruct (Exp $(varP _x)) =
+                  case $(varE _x) of
+                    SmartExp (Match $tags $(varP _y))
+                      -> $(tupE [[| Exp (SmartExp (Match $(varE m) $(get (varE _x) i))) |] | m <- ms | i <- [(n-1), (n-2) .. 0]])
+                    _ -> $(tupE [[| Exp $(get (varE _x) i) |] | i <- [(n-1), (n-2) .. 0]])
+            |]
+
+        -- Generate instance declarations for IsVector of the form:
+        -- instance (Elt v, EltR v ~ Vec 2 a, Elt a) => IsVector Exp v (Exp a, Exp a)
+        mkVecPattern :: Int -> Q [Dec]
+        mkVecPattern n = do
+          a <- newName "a"
+          v <- newName "v"
+          let
+              -- Last argument to `IsVector`, eg (Exp, a, Exp a) in the example
+              tup      = tupT (replicate n ([t| Exp $(varT a)|]))
+              -- Representation as a vector, eg (Vec 2 a)
+              vec      = [t| Vec $(litT (numTyLit (fromIntegral n))) $(varT a) |]
+              -- Constraints for the type class, consisting of Elt constraints on all type variables,
+              -- and an equality constraint on the representation type of `a` and the vector representation `vec`.
+              context  = [t| (Elt $(varT v), VecElt $(varT a), EltR $(varT v) ~ $vec) |]
+              --
+              vecR     = foldr appE [| VecRnil (singleType @ $(varT a)) |] (replicate n [| VecRsucc |])
+              tR       = tupT (replicate n (varT a))
+          --
+          [d| instance $context => IsVector Exp $(varT v) $tup where
+                vpack x = case construct x :: Exp $tR of
+                            Exp x' -> Exp (SmartExp (VecPack $vecR x'))
+                vunpack (Exp x) = destruct (Exp (SmartExp (VecUnpack $vecR x)) :: Exp $tR)
+            |]
+    --
+    es <- mapM mkExpPattern [0..16]
+    as <- mapM mkAccPattern [0..16]
+    vs <- mapM mkVecPattern [2,3,4,8,16]
+    return $ concat (es ++ as ++ vs)
+
 
 -- | Specialised pattern synonyms for tuples, which may be more convenient to
 -- use than 'Data.Array.Accelerate.Lift.lift' and
@@ -59,154 +222,65 @@ class IsPattern con a t where
 --
 -- These pattern synonyms can be used for both 'Exp' and 'Acc' terms.
 --
-pattern T2 :: IsPattern con (a,b) (con a, con b) => con a -> con b -> con (a, b)
-pattern T2 a b = Pattern (a, b)
-{-# COMPLETE T2 :: Exp #-}
-{-# COMPLETE T2 :: Acc #-}
-
-pattern T3 :: IsPattern con (a,b,c) (con a, con b, con c) => con a -> con b -> con c -> con (a, b, c)
-pattern T3 a b c = Pattern (a, b, c)
-{-# COMPLETE T3 :: Exp #-}
-{-# COMPLETE T3 :: Acc #-}
-
-pattern T4
-    :: IsPattern con (a,b,c,d) (con a, con b, con c, con d)
-    => con a -> con b -> con c -> con d
-    -> con (a, b, c, d)
-pattern T4 a b c d = Pattern (a, b, c, d)
-{-# COMPLETE T4 :: Exp #-}
-{-# COMPLETE T4 :: Acc #-}
-
-pattern T5
-    :: IsPattern con (a,b,c,d,e) (con a, con b, con c, con d, con e)
-    => con a -> con b -> con c -> con d -> con e
-    -> con (a, b, c, d, e)
-pattern T5 a b c d e = Pattern (a, b, c, d, e)
-{-# COMPLETE T5 :: Exp #-}
-{-# COMPLETE T5 :: Acc #-}
-
-pattern T6
-    :: IsPattern con (a,b,c,d,e,f) (con a, con b, con c, con d, con e, con f)
-    => con a -> con b -> con c -> con d -> con e -> con f
-    -> con (a, b, c, d, e, f)
-pattern T6 a b c d e f = Pattern (a, b, c, d, e, f)
-{-# COMPLETE T6 :: Exp #-}
-{-# COMPLETE T6 :: Acc #-}
-
-pattern T7
-    :: IsPattern con (a,b,c,d,e,f,g) (con a, con b, con c, con d, con e, con f, con g)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g
-    -> con (a, b, c, d, e, f, g)
-pattern T7 a b c d e f g = Pattern (a, b, c, d, e, f, g)
-{-# COMPLETE T7 :: Exp #-}
-{-# COMPLETE T7 :: Acc #-}
-
-pattern T8
-    :: IsPattern con (a,b,c,d,e,f,g,h) (con a, con b, con c, con d, con e, con f, con g, con h)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h
-    -> con (a, b, c, d, e, f, g, h)
-pattern T8 a b c d e f g h = Pattern (a, b, c, d, e, f, g, h)
-{-# COMPLETE T8 :: Exp #-}
-{-# COMPLETE T8 :: Acc #-}
-
-pattern T9
-    :: IsPattern con (a,b,c,d,e,f,g,h,i) (con a, con b, con c, con d, con e, con f, con g, con h, con i)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i
-    -> con (a, b, c, d, e, f, g, h, i)
-pattern T9 a b c d e f g h i = Pattern (a, b, c, d, e, f, g, h, i)
-{-# COMPLETE T9 :: Exp #-}
-{-# COMPLETE T9 :: Acc #-}
-
-pattern T10
-    :: IsPattern con (a,b,c,d,e,f,g,h,i,j) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j
-    -> con (a, b, c, d, e, f, g, h, i, j)
-pattern T10 a b c d e f g h i j = Pattern (a, b, c, d, e, f, g, h, i, j)
-{-# COMPLETE T10 :: Exp #-}
-{-# COMPLETE T10 :: Acc #-}
-
-pattern T11
-    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k
-    -> con (a, b, c, d, e, f, g, h, i, j, k)
-pattern T11 a b c d e f g h i j k = Pattern (a, b, c, d, e, f, g, h, i, j, k)
-{-# COMPLETE T11 :: Exp #-}
-{-# COMPLETE T11 :: Acc #-}
-
-pattern T12
-    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l
-    -> con (a, b, c, d, e, f, g, h, i, j, k, l)
-pattern T12 a b c d e f g h i j k l = Pattern (a, b, c, d, e, f, g, h, i, j, k, l)
-{-# COMPLETE T12 :: Exp #-}
-{-# COMPLETE T12 :: Acc #-}
-
-pattern T13
-    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m
-    -> con (a, b, c, d, e, f, g, h, i, j, k, l, m)
-pattern T13 a b c d e f g h i j k l m = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m)
-{-# COMPLETE T13 :: Exp #-}
-{-# COMPLETE T13 :: Acc #-}
-
-pattern T14
-    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n
-    -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-pattern T14 a b c d e f g h i j k l m n = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
-{-# COMPLETE T14 :: Exp #-}
-{-# COMPLETE T14 :: Acc #-}
-
-pattern T15
-    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o
-    -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-pattern T15 a b c d e f g h i j k l m n o = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
-{-# COMPLETE T15 :: Exp #-}
-{-# COMPLETE T15 :: Acc #-}
-
-pattern T16
-    :: IsPattern con (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) (con a, con b, con c, con d, con e, con f, con g, con h, con i, con j, con k, con l, con m, con n, con o, con p)
-    => con a -> con b -> con c -> con d -> con e -> con f -> con g -> con h -> con i -> con j -> con k -> con l -> con m -> con n -> con o -> con p
-    -> con (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-pattern T16 a b c d e f g h i j k l m n o p = Pattern (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
-{-# COMPLETE T16 :: Exp #-}
-{-# COMPLETE T16 :: Acc #-}
-
--- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of the
--- (unremarkable) boilerplate for us, but since the implementation is a little
--- tricky it is debatable whether or not this is a good idea...
+-- Similarly, we have patterns for constructing and destructing indices of
+-- a given dimensionality:
 --
-$(runQ $ do
+-- > let ix = Ix 2 3    -- :: Exp DIM2
+-- > let I2 y x = ix    -- y :: Exp Int, x :: Exp Int
+--
+runQ $ do
     let
-        mkIsPattern :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
-        mkIsPattern con cst tup prj nil snoc n =
-          let
-              xs      = [ mkName ('x' : show i) | i <- [0 .. n-1]]
-              b       = foldl (\ts t -> appT ts (appT (conT con) (varT t))) (tupleT n) xs
-              repr    = foldl (\ts t -> [t| ($ts, $(varT t)) |]) [t| () |] xs
-              context = foldl (\ts t -> appT ts (appT cst (varT t))) (tupleT n) xs
-              --
-              tix 0   = [| ZeroTupIdx |]
-              tix i   = [| SuccTupIdx $(tix (i-1)) |]
-              get x i = [| $(conE con) ($prj $(tix i) $x) |]
+        mkT :: Int -> Q [Dec]
+        mkT n =
+          let xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts    = map varT xs
+              name  = mkName ('T':show n)
+              con   = varT (mkName "con")
+              ty1   = tupT ts
+              ty2   = tupT (map (con `appT`) ts)
+              sig   = foldr (\t r -> [t| $con $t -> $r |]) (appT con ty1) ts
           in
-          [d| instance
-                ( IsProduct $cst a
-                , ProdRepr a ~ $repr
-                , $cst a
-                , $context
-                ) => IsPattern $(conT con) a $b where
-                  construct $(tupP (map varP xs)) = $(conE con) ($tup $(foldl (\vs v -> appE (appE snoc vs) (varE v)) nil xs))
-                  destruct _x = $(tupE (map (get [|_x|]) [(n-1), (n-2) .. 0]))
-            |]
+          sequence
+            [ patSynSigD name [t| IsPattern $con $ty1 $ty2 => $sig |]
+            , patSynD    name (prefixPatSyn xs) implBidir [p| Pattern $(tupP (map varP xs)) |]
+            , pragCompleteD [name] (Just ''Acc)
+            , pragCompleteD [name] (Just ''Exp)
+            ]
 
-        mkAccPatern = mkIsPattern (mkName "Acc") [t| Arrays |] [| Atuple |] [| Aprj |] [| NilAtup |] [| SnocAtup |]
-        mkExpPatern = mkIsPattern (mkName "Exp") [t| Elt    |] [| Tuple  |] [| Prj  |] [| NilTup  |] [| SnocTup  |]
+        mkI :: Int -> Q [Dec]
+        mkI n =
+          let xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts      = map varT xs
+              name    = mkName ('I':show n)
+              ix      = mkName "Ix"
+              cst     = tupT (map (\t -> [t| Elt $t |]) ts)
+              dim     = foldl (\h t -> [t| $h :. $t |]) [t| Z |] ts
+              sig     = foldr (\t r -> [t| Exp $t -> $r |]) [t| Exp $dim |] ts
+          in
+          sequence
+            [ patSynSigD name [t| $cst => $sig |]
+            , patSynD    name (prefixPatSyn xs) implBidir (foldl (\ps p -> infixP ps ix (varP p)) [p| Z_ |] xs)
+            , pragCompleteD [name] Nothing
+            ]
+
+        mkV :: Int -> Q [Dec]
+        mkV n =
+          let xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
+              ts    = map varT xs
+              name  = mkName ('V':show n)
+              con   = varT (mkName "con")
+              ty1   = varT (mkName "vec")
+              ty2   = tupT (map (con `appT`) ts)
+              sig   = foldr (\t r -> [t| $con $t -> $r |]) (appT con ty1) ts
+          in
+          sequence
+            [ patSynSigD name [t| IsVector $con $ty1 $ty2 => $sig |]
+            , patSynD    name (prefixPatSyn xs) implBidir [p| Vector $(tupP (map varP xs)) |]
+            , pragCompleteD [name] (Just ''Exp)
+            ]
     --
-    --
-    as <- mapM mkAccPatern [0..16]
-    es <- mapM mkExpPatern [0..16]
-    return (concat as ++ concat es)
- )
+    ts <- mapM mkT [2..16]
+    is <- mapM mkI [0..9]
+    vs <- mapM mkV [2,3,4,8,16]
+    return $ concat (ts ++ is ++ vs)
 

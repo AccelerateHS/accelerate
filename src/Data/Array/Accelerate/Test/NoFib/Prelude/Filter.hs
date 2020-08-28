@@ -9,10 +9,10 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Filter
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -23,11 +23,12 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Filter (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -55,18 +56,18 @@ test_filter runN =
     ]
   where
     testIntegralElt
-        :: forall a. (P.Integral a, A.Integral a, Similar a)
+        :: forall a. (P.Integral a, A.Integral a, Similar a, Show a)
         => Gen a
         -> TestTree
     testIntegralElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -75,18 +76,18 @@ test_filter runN =
             ]
 
     testFloatingElt
-        :: forall a. (P.Floating a, P.Ord a, A.Floating a, A.Ord a, Similar a)
+        :: forall a. (P.Floating a, P.Ord a, A.Floating a, A.Ord a, Similar a, Show a)
         => Gen a
         -> TestTree
     testFloatingElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -96,7 +97,7 @@ test_filter runN =
 
 
 test_even
-    :: (Shape sh, Slice sh, Similar e, P.Eq sh, P.Integral e, A.Integral e)
+    :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -108,7 +109,7 @@ test_even runN dim e =
     let !go = runN (A.filter A.even) in go xs ~~~ filterRef P.even xs
 
 test_positive
-    :: (Shape sh, Slice sh, Similar e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
+    :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e

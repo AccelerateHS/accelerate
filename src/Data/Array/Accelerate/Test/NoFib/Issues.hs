@@ -1,10 +1,10 @@
 {-# LANGUAGE RankNTypes #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -30,8 +30,12 @@ module Data.Array.Accelerate.Test.NoFib.Issues (
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue287,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue288,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue362,
+  module Data.Array.Accelerate.Test.NoFib.Issues.Issue364,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue407,
   module Data.Array.Accelerate.Test.NoFib.Issues.Issue409,
+  module Data.Array.Accelerate.Test.NoFib.Issues.Issue436,
+  module Data.Array.Accelerate.Test.NoFib.Issues.Issue437,
+  module Data.Array.Accelerate.Test.NoFib.Issues.Issue439,
 
 ) where
 
@@ -55,8 +59,12 @@ import Data.Array.Accelerate.Test.NoFib.Issues.Issue264
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue287
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue288
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue362
+import Data.Array.Accelerate.Test.NoFib.Issues.Issue364
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue407
 import Data.Array.Accelerate.Test.NoFib.Issues.Issue409
+import Data.Array.Accelerate.Test.NoFib.Issues.Issue436
+import Data.Array.Accelerate.Test.NoFib.Issues.Issue437
+import Data.Array.Accelerate.Test.NoFib.Issues.Issue439
 
 
 test_issues :: RunN -> TestTree
@@ -79,7 +87,11 @@ test_issues runN =
     , test_issue287 runN
     , test_issue288 runN
     , test_issue362 runN
+    , test_issue364 runN
     , test_issue407 runN
     , test_issue409 runN
+    , test_issue436 runN
+    , test_issue437 runN
+    , test_issue439 runN
     ]
 

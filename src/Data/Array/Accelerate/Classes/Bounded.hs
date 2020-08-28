@@ -1,14 +1,15 @@
 {-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeApplications  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Bounded
--- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -21,10 +22,14 @@ module Data.Array.Accelerate.Classes.Bounded (
 ) where
 
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
+import Prelude                                                      ( ($), (<$>), Num(..), Char, Bool, show, concat, map, mapM )
+import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
 
 
@@ -111,8 +116,8 @@ instance P.Bounded (Exp CULLong) where
   maxBound = mkBitcast (mkMaxBound @Word64)
 
 instance P.Bounded (Exp Bool) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = constant P.minBound
+  maxBound = constant P.maxBound
 
 instance P.Bounded (Exp Char) where
   minBound = mkMinBound
@@ -130,78 +135,21 @@ instance P.Bounded (Exp CUChar) where
   minBound = mkBitcast (mkMinBound @Word8)
   maxBound = mkBitcast (mkMaxBound @Word8)
 
-instance (Bounded a, Bounded b)
-    => P.Bounded (Exp (a,b)) where
-  minBound = tup2 (P.minBound, P.minBound)
-  maxBound = tup2 (P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c)
-    => P.Bounded (Exp (a,b,c)) where
-  minBound = tup3 (P.minBound, P.minBound, P.minBound)
-  maxBound = tup3 (P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d)
-    => P.Bounded (Exp (a,b,c,d)) where
-  minBound = tup4 (P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup4 (P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e)
-    => P.Bounded (Exp (a,b,c,d,e)) where
-  minBound = tup5 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup5 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f)
-    => P.Bounded (Exp (a,b,c,d,e,f)) where
-  minBound = tup6 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup6 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g)
-    => P.Bounded (Exp (a,b,c,d,e,f,g)) where
-  minBound = tup7 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup7 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h)) where
-  minBound = tup8 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup8 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i)) where
-  minBound = tup9 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup9 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i, Bounded j)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i,j)) where
-  minBound = tup10 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup10 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i, Bounded j, Bounded k)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i,j,k)) where
-  minBound = tup11 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup11 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i, Bounded j, Bounded k, Bounded l)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i,j,k,l)) where
-  minBound = tup12 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup12 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i, Bounded j, Bounded k, Bounded l, Bounded m)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i,j,k,l,m)) where
-  minBound = tup13 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup13 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i, Bounded j, Bounded k, Bounded l, Bounded m, Bounded n)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i,j,k,l,m,n)) where
-  minBound = tup14 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup14 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i, Bounded j, Bounded k, Bounded l, Bounded m, Bounded n, Bounded o)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)) where
-  minBound = tup15 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup15 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
-
-instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e, Bounded f, Bounded g, Bounded h, Bounded i, Bounded j, Bounded k, Bounded l, Bounded m, Bounded n, Bounded o, Bounded p)
-    => P.Bounded (Exp (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)) where
-  minBound = tup16 (P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound, P.minBound)
-  maxBound = tup16 (P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound, P.maxBound)
+$(runQ $ do
+    let
+        mkInstance :: Int -> Q [Dec]
+        mkInstance n =
+          let
+              xs      = [ mkName ('x':show i) | i <- [0 .. n-1] ]
+              cst     = tupT (map (\x -> [t| Bounded $(varT x) |]) xs)
+              res     = tupT (map varT xs)
+              app x   = appsE (conE (mkName ('T':show n)) : P.replicate n x)
+          in
+          [d| instance $cst => P.Bounded (Exp $res) where
+                minBound = $(app [| P.minBound |])
+                maxBound = $(app [| P.maxBound |])
+            |]
+    --
+    concat <$> mapM mkInstance [2..16]
+ )
 

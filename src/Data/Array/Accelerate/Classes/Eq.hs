@@ -1,32 +1,49 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Eq
--- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
 
 module Data.Array.Accelerate.Classes.Eq (
 
+  Bool(..), pattern True_, pattern False_,
   Eq(..),
-  (&&),
-  (||),
+  (&&), (&&!),
+  (||), (||!),
   not,
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Bool
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
+import Data.Bool                                                    ( Bool(..) )
+import Data.Char                                                    ( Char )
 import Text.Printf
-import Prelude                                                      ( String, error)
+import Prelude                                                      ( ($), String, Num(..), show, error, return, concat, map, zipWith, foldr1, mapM )
+import Language.Haskell.TH                                          hiding ( Exp )
+import Language.Haskell.TH.Extra
 import qualified Prelude                                            as P
 
 
@@ -38,7 +55,20 @@ infix 4 /=
 --
 infixr 3 &&
 (&&) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&) = mkLAnd
+(&&) (Exp x) (Exp y) =
+  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+                         (SmartExp $ Prj PairIdxLeft y)
+                         (SmartExp $ Const scalarTypeWord8 0))
+          `Pair` SmartExp Nil
+
+-- | Conjunction: True if both arguments are true. This is a strict version of
+-- '(&&)': it will always evaluate both arguments, even when the first is false.
+--
+-- @since 1.3.0.0
+--
+infixr 3 &&!
+(&&!) :: Exp Bool -> Exp Bool -> Exp Bool
+(&&!) = mkLAnd
 
 -- | Disjunction: True if either argument is true. This is a short-circuit
 -- operator, so the second argument will be evaluated only if the first is
@@ -46,7 +76,21 @@ infixr 3 &&
 --
 infixr 2 ||
 (||) :: Exp Bool -> Exp Bool -> Exp Bool
-(||) = mkLOr
+(||) (Exp x) (Exp y) =
+  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+                         (SmartExp $ Const scalarTypeWord8 1)
+                         (SmartExp $ Prj PairIdxLeft y))
+          `Pair` SmartExp Nil
+
+
+-- | Disjunction: True if either argument is true. This is a strict version of
+-- '(||)': it will always evaluate both arguments, even when the first is true.
+--
+-- @since 1.3.0.0
+--
+infixr 2 ||!
+(||!) :: Exp Bool -> Exp Bool -> Exp Bool
+(||!) = mkLOr
 
 -- | Logical negation
 --
@@ -68,241 +112,20 @@ class Elt a => Eq a where
 
 
 instance Eq () where
-  _ == _ = constant True   -- force arguments?
-  _ /= _ = constant False  -- force arguments?
+  _ == _ = True_
+  _ /= _ = False_
 
-instance Eq Int where
-  (==) = mkEq
-  (/=) = mkNEq
+instance Eq Z where
+  _ == _ = True_
+  _ /= _ = False_
 
-instance Eq Int8 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Int16 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Int32 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Int64 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Word where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Word8 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Word16 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Word32 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Word64 where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq CInt where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CUInt where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CLong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CULong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CLLong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CULLong where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CShort where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CUShort where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
+instance Eq sh => Eq (sh :. Int) where
+  x == y = indexHead x == indexHead y && indexTail x == indexTail y
+  x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
 
 instance Eq Bool where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Char where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq CChar where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CUChar where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CSChar where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq Half where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Float where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq Double where
-  (==) = mkEq
-  (/=) = mkNEq
-
-instance Eq CFloat where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance Eq CDouble where
-  (==) = lift2 mkEq
-  (/=) = lift2 mkNEq
-
-instance (Eq a, Eq b) => Eq (a, b) where
-  x == y = let (a1,b1) = untup2 x
-               (a2,b2) = untup2 y
-           in a1 == a2 && b1 == b2
-  x /= y = let (a1,b1) = untup2 x
-               (a2,b2) = untup2 y
-           in a1 /= a2 || b1 /= b2
-
-instance (Eq a, Eq b, Eq c) => Eq (a, b, c) where
-  x == y = let (a1,b1,c1) = untup3 x
-               (a2,b2,c2) = untup3 y
-           in a1 == a2 && b1 == b2 && c1 == c2
-  x /= y = let (a1,b1,c1) = untup3 x
-               (a2,b2,c2) = untup3 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2
-
-instance (Eq a, Eq b, Eq c, Eq d) => Eq (a, b, c, d) where
-  x == y = let (a1,b1,c1,d1) = untup4 x
-               (a2,b2,c2,d2) = untup4 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2
-  x /= y = let (a1,b1,c1,d1) = untup4 x
-               (a2,b2,c2,d2) = untup4 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e) => Eq (a, b, c, d, e) where
-  x == y = let (a1,b1,c1,d1,e1) = untup5 x
-               (a2,b2,c2,d2,e2) = untup5 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2
-  x /= y = let (a1,b1,c1,d1,e1) = untup5 x
-               (a2,b2,c2,d2,e2) = untup5 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f) => Eq (a, b, c, d, e, f) where
-  x == y = let (a1,b1,c1,d1,e1,f1) = untup6 x
-               (a2,b2,c2,d2,e2,f2) = untup6 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2
-  x /= y = let (a1,b1,c1,d1,e1,f1) = untup6 x
-               (a2,b2,c2,d2,e2,f2) = untup6 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) => Eq (a, b, c, d, e, f, g) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1) = untup7 x
-               (a2,b2,c2,d2,e2,f2,g2) = untup7 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1) = untup7 x
-               (a2,b2,c2,d2,e2,f2,g2) = untup7 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h) => Eq (a, b, c, d, e, f, g, h) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1) = untup8 x
-               (a2,b2,c2,d2,e2,f2,g2,h2) = untup8 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1) = untup8 x
-               (a2,b2,c2,d2,e2,f2,g2,h2) = untup8 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i) => Eq (a, b, c, d, e, f, g, h, i) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1) = untup9 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2) = untup9 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1) = untup9 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2) = untup9 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j) => Eq (a, b, c, d, e, f, g, h, i, j) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1) = untup10 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2) = untup10 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1) = untup10 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2) = untup10 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k) => Eq (a, b, c, d, e, f, g, h, i, j, k) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1) = untup11 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2) = untup11 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2 && k1 == k2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1) = untup11 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2) = untup11 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l) => Eq (a, b, c, d, e, f, g, h, i, j, k, l) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1) = untup12 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2) = untup12 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2 && k1 == k2 && l1 == l2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1) = untup12 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2) = untup12 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2 || l1 /= l2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l, Eq m) => Eq (a, b, c, d, e, f, g, h, i, j, k, l, m) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1) = untup13 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2) = untup13 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2 && k1 == k2 && l1 == l2 && m1 == m2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1) = untup13 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2) = untup13 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2 || l1 /= l2 || m1 /= m2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l, Eq m, Eq n) => Eq (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1) = untup14 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2) = untup14 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2 && k1 == k2 && l1 == l2 && m1 == m2 && n1 == n2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1) = untup14 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2) = untup14 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2 || l1 /= l2 || m1 /= m2 || n1 /= n2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l, Eq m, Eq n, Eq o) => Eq (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1) = untup15 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2) = untup15 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2 && k1 == k2 && l1 == l2 && m1 == m2 && n1 == n2 && o1 == o2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1) = untup15 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2) = untup15 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2 || l1 /= l2 || m1 /= m2 || n1 /= n2 || o1 /= o2
-
-instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i, Eq j, Eq k, Eq l, Eq m, Eq n, Eq o, Eq p) => Eq (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
-  x == y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1,p1) = untup16 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2,p2) = untup16 y
-           in a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && e1 == e2 && f1 == f2 && g1 == g2 && h1 == h2 && i1 == i2 && j1 == j2 && k1 == k2 && l1 == l2 && m1 == m2 && n1 == n2 && o1 == o2 && p1 == p2
-  x /= y = let (a1,b1,c1,d1,e1,f1,g1,h1,i1,j1,k1,l1,m1,n1,o1,p1) = untup16 x
-               (a2,b2,c2,d2,e2,f2,g2,h2,i2,j2,k2,l2,m2,n2,o2,p2) = untup16 y
-           in a1 /= a2 || b1 /= b2 || c1 /= c2 || d1 /= d2 || e1 /= e2 || f1 /= f2 || g1 /= g2 || h1 /= h2 || i1 /= i2 || j1 /= j2 || k1 /= k2 || l1 /= l2 || m1 /= m2 || n1 /= n2 || o1 /= o2 || p1 /= p2
-
+  x == y = mkCoerce x == (mkCoerce y :: Exp PrimBool)
+  x /= y = mkCoerce x /= (mkCoerce y :: Exp PrimBool)
 
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
@@ -315,10 +138,77 @@ instance P.Eq (Exp a) where
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
 
-lift2 :: (Elt a, Elt b, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp b -> Exp Bool)
-      -> Exp a
-      -> Exp a
-      -> Exp Bool
-lift2 f x y = f (mkUnsafeCoerce x) (mkUnsafeCoerce y)
+$(runQ $ do
+    let
+        integralTypes :: [Name]
+        integralTypes =
+          [ ''Int
+          , ''Int8
+          , ''Int16
+          , ''Int32
+          , ''Int64
+          , ''Word
+          , ''Word8
+          , ''Word16
+          , ''Word32
+          , ''Word64
+          ]
+
+        floatingTypes :: [Name]
+        floatingTypes =
+          [ ''Half
+          , ''Float
+          , ''Double
+          ]
+
+        nonNumTypes :: [Name]
+        nonNumTypes =
+          [ ''Char
+          ]
+
+        cTypes :: [Name]
+        cTypes =
+          [ ''CInt
+          , ''CUInt
+          , ''CLong
+          , ''CULong
+          , ''CLLong
+          , ''CULLong
+          , ''CShort
+          , ''CUShort
+          , ''CChar
+          , ''CUChar
+          , ''CSChar
+          , ''CFloat
+          , ''CDouble
+          ]
+
+        mkPrim :: Name -> Q [Dec]
+        mkPrim t =
+          [d| instance Eq $(conT t) where
+                (==) = mkEq
+                (/=) = mkNEq
+            |]
+
+        mkTup :: Int -> Q [Dec]
+        mkTup n =
+          let
+              xs      = [ mkName ('x':show i) | i <- [0 .. n-1] ]
+              ys      = [ mkName ('y':show i) | i <- [0 .. n-1] ]
+              cst     = tupT (map (\x -> [t| Eq $(varT x) |]) xs)
+              res     = tupT (map varT xs)
+              pat vs  = conP (mkName ('T':show n)) (map varP vs)
+          in
+          [d| instance ($cst) => Eq $res where
+                $(pat xs) == $(pat ys) = $(foldr1 (\vs v -> [| $vs && $v |]) (zipWith (\x y -> [| $x == $y |]) (map varE xs) (map varE ys)))
+                $(pat xs) /= $(pat ys) = $(foldr1 (\vs v -> [| $vs || $v |]) (zipWith (\x y -> [| $x /= $y |]) (map varE xs) (map varE ys)))
+            |]
+
+    is <- mapM mkPrim integralTypes
+    fs <- mapM mkPrim floatingTypes
+    ns <- mapM mkPrim nonNumTypes
+    cs <- mapM mkPrim cTypes
+    ts <- mapM mkTup [2..16]
+    return $ concat (concat [is,fs,ns,cs,ts])
+ )
 

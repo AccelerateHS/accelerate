@@ -6,26 +6,35 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
-## [next]
+## [1.3.0.0] - 2020-08-26
+### Added
+  * Instances of `Elt` are now derivable via `Generic` for simple (Haskell'98)
+    product _and_ sum data types.
+  * Pattern synonyms for manipulating custom product and sum types can now be
+    created; see `Pattern`, `mkPattern`
+  * Added pattern synonyms for accessing tuples and indices, as an alternative
+    to `lift` and `unlift`.
+  * Support for pattern matching in the embedded language; see `match`
+
 ### Changed
-  * Instances of `Elt` are now derivable via `Generic`
   * The `stencil` functions now support fusion. Note however that the source
     (delayed) array will be evaluated at _every_ access to the stencil pattern;
     if the delayed function is expensive, you may wish to explicitly `compute`
     the source array first, matching the old behaviour.
   * Removed `Slice` constraint from some indexing operations
+  * Improve fusion for `zipWith*` ([#453])
+  * The indexing function to `permute` now returns a `Maybe` type ([#87])
 
   * (internal) Visible type applications are used instead of `Proxy` types
-  * (internal) `EltRepr` is now a class-associated type of `Elt`
+  * (internal) `EltR` is now a class-associated type of `Elt`
   * (internal) `GArrayData` has been simplified
   * (internal) SIMD representation has been improved and generalised
+  * (internal) Internal refactoring ([#449], [#455], [#457], [#460])
 
-### Added
-  * Pattern synonyms for manipulating custom product types can now be created;
-    see `Pattern`
+  * Probably many others I have forgotten about
 
 ### Removed
-  * Drop support for GHC-7.10
+  * Drop support for GHC-7.10 .. 8.4.
 
 ### Contributors
 
@@ -33,6 +42,21 @@ Special thanks to those who contributed patches as part of this release:
 
   * Trevor L. McDonell (@tmcdonell)
   * Joshua Meredith (@JoshMeredith)
+  * Ivo Gabe de Wolff (@ivogabe)
+  * David van Balen (@dpvanbalen)
+  * Jaro Reinders (@noughtmare)
+  * Alex Lang (@alang9)
+  * Paul Wilson (@status_failed)
+  * @lennonhill
+  * Travis Whitaker (@TravisWhitaker)
+  * Roger Bosman (@rogerbosman)
+  * Robbert van der Helm (@robbert-vdh)
+  * Sam (@sam-340453)
+  * Lars van den Haak (@sakehl)
+  * Rinat Striungis (@Haskell-mouse)
+  * Viktor Kronvall (@considerate)
+  * Tom Smeding (@tomsmeding)
+  * Ryan Scott (@RyanGlScott)
 
 
 ## [1.2.0.1] - 2018-10-06
@@ -162,7 +186,7 @@ Special thanks to those who contributed patches as part of this release:
   * Initial release of the CUDA backend
 
 
-[next]:             https://github.com/AccelerateHS/accelerate/compare/v1.2.0.1...HEAD
+[1.3.0.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.2.0.1...v1.3.0.0
 [1.2.0.1]:          https://github.com/AccelerateHS/accelerate/compare/v1.2.0.0...v1.2.0.1
 [1.2.0.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.2.0.0
 [1.1.1.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.1.1.0
@@ -178,6 +202,12 @@ Special thanks to those who contributed patches as part of this release:
 [0.9.0.0]:          https://github.com/AccelerateHS/accelerate/compare/0_8_1_0...0.9.0.0
 [0.7.1.0]:          https://github.com/AccelerateHS/accelerate/compare/0_6_0_0...0_7_1_0
 
+[#87]:              https://github.com/AccelerateHS/accelerate/issues/87
 [#340]:             https://github.com/AccelerateHS/accelerate/issues/340
 [#390]:             https://github.com/AccelerateHS/accelerate/issues/390
+[#453]:             https://github.com/AccelerateHS/accelerate/pull/453
+[#449]:             https://github.com/AccelerateHS/accelerate/pull/449
+[#455]:             https://github.com/AccelerateHS/accelerate/pull/455
+[#457]:             https://github.com/AccelerateHS/accelerate/pull/457
+[#460]:             https://github.com/AccelerateHS/accelerate/pull/460
 

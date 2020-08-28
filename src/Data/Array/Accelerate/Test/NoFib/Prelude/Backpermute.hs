@@ -7,10 +7,10 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -21,11 +21,12 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -55,18 +56,18 @@ test_backpermute runN =
     ]
   where
     testElt
-        :: forall a. (Similar a, Elt a)
+        :: forall a. (Similar a, Elt a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. (Shape sh, Slice sh, P.Eq sh)
+            :: forall sh. (Shape sh, Slice sh, Show sh, P.Eq sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -80,7 +81,7 @@ test_backpermute runN =
             ]
 
 test_take
-    :: (Shape sh, Slice sh, Similar e, P.Eq sh, Elt e)
+    :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, Elt e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -93,7 +94,7 @@ test_take runN dim e =
     let !go = runN (\v -> A.take (the v)) in go (scalar i) xs ~~~ takeRef i xs
 
 test_drop
-    :: (Shape sh, Slice sh, Similar e, P.Eq sh, Elt e)
+    :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, Elt e)
     => RunN
     -> Gen (sh:.Int)
     -> Gen e
@@ -106,7 +107,7 @@ test_drop runN dim e =
     let !go = runN (\v -> A.drop (the v)) in go (scalar i) xs ~~~ dropRef i xs
 
 test_gather
-    :: (Shape sh, Shape sh', P.Eq sh', Similar e, Elt e)
+    :: (Shape sh, Shape sh', Show sh, Show sh', P.Eq sh', Similar e, Show e, Elt e)
     => RunN
     -> Gen sh
     -> Gen sh'

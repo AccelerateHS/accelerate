@@ -1,9 +1,11 @@
+{-# LANGUAGE MonoLocalBinds        #-}
+{-# LANGUAGE FlexibleContexts      #-}
 -- |
 -- Module      : Data.Array.Accelerate.Unsafe
--- Copyright   : [2009..2018] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -15,12 +17,13 @@
 module Data.Array.Accelerate.Unsafe (
 
   -- ** Unsafe operations
-  undef, coerce,
+  Coerce, coerce,
+  undef,
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 
 
 -- | The function 'coerce' allows you to convert a value between any two types
@@ -33,17 +36,17 @@ import Data.Array.Accelerate.Smart
 --
 -- Furthermore, as we typically declare newtype wrappers similarly to:
 --
--- > type instance EltRepr (Sum a) = ((), EltRepr a)
+-- > type instance EltR (Sum a) = ((), EltR a)
 --
 -- This can be used instead of the newtype constructor, to go from the newtype's
 -- abstract type to the concrete type by dropping the extra @()@ from the
 -- representation, and vice-versa.
 --
--- You will get a runtime error if it fails to find a coercion between the two
--- representations.
+-- The type class 'Coerce' assures that there is a coercion between the two
+-- types.
 --
 -- @since 1.2.0.0
 --
-coerce :: (Elt a, Elt b) => Exp a -> Exp b
-coerce = mkUnsafeCoerce
+coerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
+coerce = mkCoerce
 

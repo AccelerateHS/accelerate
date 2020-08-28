@@ -1,10 +1,10 @@
 {-# LANGUAGE GADTs #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Normalise
--- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -17,7 +17,6 @@ module Data.Array.Accelerate.Trafo.Normalise (
 
 import Prelude                                          hiding ( exp )
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Substitution
 
 

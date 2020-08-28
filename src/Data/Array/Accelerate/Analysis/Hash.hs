@@ -9,10 +9,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Hash
--- Copyright   : [2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2017..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -21,25 +21,32 @@ module Data.Array.Accelerate.Analysis.Hash (
 
   -- hashing expressions
   Hash,
-  hashPreOpenAcc,
-  hashPreOpenFun,
-  hashPreOpenExp,
+  HashOptions(..), defaultHashOptions,
+  hashPreOpenAcc, hashPreOpenAccWith,
+  hashOpenFun, hashOpenExp,
 
   -- auxiliary
   EncodeAcc,
-  encodePreOpenAcc, encodeOpenAcc,
-  encodePreOpenExp, encodeOpenExp,
-  encodePreOpenFun,
+  encodePreOpenAcc,
+  encodeOpenExp,
+  encodeOpenFun,
+  encodeArraysType,
   hashQ,
 
 ) where
 
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Analysis.Hash.TH
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Array.Representation                   ( SliceIndex(..) )
-import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Representation.Array
+import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Representation.Slice
+import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
+import Data.Primitive.Vec
 
 import Crypto.Hash
 import Data.ByteString.Builder
@@ -56,83 +63,134 @@ import Prelude                                                      hiding ( exp
 
 type Hash = Digest SHA3_256
 
+data HashOptions = HashOptions
+  { perfect :: Bool
+    -- ^ Should the hash function include _all_ substructure, recursively?
+    --
+    -- Set to true (the default) if you want a truly unique fingerprint for
+    -- the entire expression:
+    --
+    -- Example:
+    --
+    -- xs, ys :: Acc (Vector Float)
+    -- xs = fill (constant (Z:.10)) 1.0
+    -- ys = fill (constant (Z:.20)) 1.0
+    --
+    -- with perfect=True:
+    --
+    --   hash xs = 2e1f91aca4c476d13b36f22462e73c15bbdd9fcacb0d4996280f6004058e9732
+    --   hash ys = 2fce5c849b6c652192b09aaeafdc8029e57b9f006c1ecd79ccf9114f349aaf9e
+    --
+    -- However, for a code generating backend the object code used to
+    -- evaluate both of these expressions is likely to be identical.
+    --
+    -- Setting perfect=False results in:
+    --
+    --   hash xs = hash ys = f97944b0ec64ab8aa989fd60c8b50e7ec3eff759d22d2b340039d837d74dfc3c
+    --
+    -- Note that to be useful the provided 'EncodeAcc' function must also
+    -- understand this option, and the consumer of the hash value must be
+    -- agnostic to the elided details.
+  }
+  deriving Show
+
+defaultHashOptions :: HashOptions
+defaultHashOptions = HashOptions True
+
+
 {-# INLINEABLE hashPreOpenAcc #-}
-hashPreOpenAcc :: EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
-hashPreOpenAcc encodeAcc = hashlazy . toLazyByteString . encodePreOpenAcc encodeAcc
+hashPreOpenAcc :: HasArraysR acc => EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
+hashPreOpenAcc = hashPreOpenAccWith defaultHashOptions
 
-{-# INLINEABLE hashPreOpenFun #-}
-hashPreOpenFun :: EncodeAcc acc -> PreOpenFun acc env aenv f -> Hash
-hashPreOpenFun encodeAcc = hashlazy . toLazyByteString . encodePreOpenFun encodeAcc
+{-# INLINEABLE hashPreOpenAccWith #-}
+hashPreOpenAccWith :: HasArraysR acc => HashOptions -> EncodeAcc acc -> PreOpenAcc acc aenv a -> Hash
+hashPreOpenAccWith options encodeAcc
+  = hashlazy
+  . toLazyByteString
+  . encodePreOpenAcc options encodeAcc
 
-{-# INLINEABLE hashPreOpenExp #-}
-hashPreOpenExp :: EncodeAcc acc -> PreOpenExp acc env aenv t -> Hash
-hashPreOpenExp encodeAcc = hashlazy . toLazyByteString . encodePreOpenExp encodeAcc
+{-# INLINEABLE hashOpenFun #-}
+hashOpenFun :: OpenFun env aenv f -> Hash
+hashOpenFun
+  = hashlazy
+  . toLazyByteString
+  . encodeOpenFun
+
+{-# INLINEABLE hashOpenExp #-}
+hashOpenExp :: OpenExp env aenv t -> Hash
+hashOpenExp
+  = hashlazy
+  . toLazyByteString
+  . encodeOpenExp
 
 
 -- Array computations
 -- ------------------
 
-type EncodeAcc acc = forall aenv a. acc aenv a -> Builder
-
-{-# INLINEABLE encodeOpenAcc #-}
-encodeOpenAcc :: OpenAcc aenv arrs -> Builder
-encodeOpenAcc (OpenAcc pacc) = encodePreOpenAcc encodeOpenAcc pacc
+type EncodeAcc acc = forall aenv a. HashOptions -> acc aenv a -> Builder
 
 {-# INLINEABLE encodePreOpenAcc #-}
 encodePreOpenAcc
-    :: forall acc aenv arrs.
-       EncodeAcc acc
+    :: forall acc aenv arrs. HasArraysR acc
+    => HashOptions
+    -> EncodeAcc acc
     -> PreOpenAcc acc aenv arrs
     -> Builder
-encodePreOpenAcc encodeAcc pacc =
+encodePreOpenAcc options encodeAcc pacc =
   let
-      travA :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travA a = encodeArraysType (arrays @a) <> encodeAcc a
+      travA :: forall aenv' a. acc aenv' a -> Builder
+      travA = encodeAcc options
 
-      travE :: PreOpenExp acc env' aenv' e -> Builder
-      travE = encodePreOpenExp encodeAcc
+      travAF :: PreOpenAfun acc aenv' f -> Builder
+      travAF = encodePreOpenAfun options encodeAcc
 
-      travF :: PreOpenFun acc env' aenv' f -> Builder
-      travF = encodePreOpenFun encodeAcc
+      travE :: OpenExp env' aenv' e -> Builder
+      travE = encodeOpenExp
 
-      travB :: PreBoundary acc aenv' (Array sh e) -> Builder
-      travB = encodePreBoundary encodeAcc
+      travF :: OpenFun env' aenv' f -> Builder
+      travF = encodeOpenFun
 
-      nacl :: Arrays arrs => Builder
-      nacl = encodeArraysType (arrays @arrs)
+      travD :: Direction -> Builder
+      travD LeftToRight = intHost $(hashQ "L")
+      travD RightToLeft = intHost $(hashQ "R")
+
+      deep :: Builder -> Builder
+      deep | perfect options = id
+           | otherwise       = const mempty
+
+      deepE :: forall env' aenv' e. OpenExp env' aenv' e -> Builder
+      deepE e
+        | perfect options = travE e
+        | otherwise       = encodeTypeR $ expType e
   in
   case pacc of
-    Alet bnd body               -> intHost $(hashQ "Alet")        <> travA bnd <> travA body
-    Avar v                      -> intHost $(hashQ "Avar")        <> nacl <> encodeIdx v
-    Atuple t                    -> intHost $(hashQ "Atuple")      <> nacl <> encodeAtuple encodeAcc t
-    Aprj ix a                   -> intHost $(hashQ "Aprj")        <> nacl <> encodeTupleIdx ix <> travA a
-    Apply f a                   -> intHost $(hashQ "Apply")       <> nacl <> encodePreOpenAfun encodeAcc f <> travA a
-    Aforeign _ f a              -> intHost $(hashQ "Aforeign")    <> nacl <> encodePreOpenAfun encodeAcc f <> travA a
-    Use a                       -> intHost $(hashQ "Use")         <> encodeArrays (arrays @arrs) a
-    Awhile p f a                -> intHost $(hashQ "Awhile")      <> encodePreOpenAfun encodeAcc f <> encodePreOpenAfun encodeAcc p <> travA a
-    Unit e                      -> intHost $(hashQ "Unit")        <> travE e
-    Generate e f                -> intHost $(hashQ "Generate")    <> travE e  <> travF f
-    Acond e a1 a2               -> intHost $(hashQ "Acond")       <> travE e  <> travA a1 <> travA a2
-    Reshape sh a                -> intHost $(hashQ "Reshape")     <> travE sh <> travA a
-    Transform sh f1 f2 a        -> intHost $(hashQ "Transform")   <> travE sh <> travF f1 <> travF f2 <> travA a
-    Replicate spec ix a         -> intHost $(hashQ "Replicate")   <> travE ix <> travA a  <> encodeSliceIndex spec
-    Slice spec a ix             -> intHost $(hashQ "Slice")       <> travE ix <> travA a  <> encodeSliceIndex spec
-    Map f a                     -> intHost $(hashQ "Map")         <> travF f  <> travA a
-    ZipWith f a1 a2             -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
-    Fold f e a                  -> intHost $(hashQ "Fold")        <> travF f  <> travE e  <> travA a
-    Fold1 f a                   -> intHost $(hashQ "Fold1")       <> travF f  <> travA a
-    FoldSeg f e a s             -> intHost $(hashQ "FoldSeg")     <> travF f  <> travE e  <> travA a  <> travA s
-    Fold1Seg f a s              -> intHost $(hashQ "Fold1Seg")    <> travF f  <> travA a  <> travA s
-    Scanl f e a                 -> intHost $(hashQ "Scanl")       <> travF f  <> travE e  <> travA a
-    Scanl' f e a                -> intHost $(hashQ "Scanl'")      <> travF f  <> travE e  <> travA a
-    Scanl1 f a                  -> intHost $(hashQ "Scanl1")      <> travF f  <> travA a
-    Scanr f e a                 -> intHost $(hashQ "Scanr")       <> travF f  <> travE e  <> travA a
-    Scanr' f e a                -> intHost $(hashQ "Scanr'")      <> travF f  <> travE e  <> travA a
-    Scanr1 f a                  -> intHost $(hashQ "Scanr1")      <> travF f  <> travA a
-    Backpermute sh f a          -> intHost $(hashQ "Backpermute") <> travF f  <> travE sh <> travA a
-    Permute f1 a1 f2 a2         -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
-    Stencil f b a               -> intHost $(hashQ "Stencil")     <> travF f  <> travB b  <> travA a
-    Stencil2 f b1 a1 b2 a2      -> intHost $(hashQ "Stencil2")    <> travF f  <> travB b1 <> travA a1 <> travB b2 <> travA a2
+    Alet lhs bnd body            -> intHost $(hashQ "Alet")        <> encodeLeftHandSide encodeArrayType lhs <> travA bnd <> travA body
+    Avar (Var repr v)            -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
+    Apair a1 a2                  -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
+    Anil                         -> intHost $(hashQ "Anil")
+    Apply _ f a                  -> intHost $(hashQ "Apply")       <> travAF f <> travA a
+    Aforeign _ _ f a             -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
+    Use repr a                   -> intHost $(hashQ "Use")         <> encodeArrayType repr <> deep (encodeArray a)
+    Awhile p f a                 -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
+    Unit _ e                     -> intHost $(hashQ "Unit")        <> travE e
+    Generate _ e f               -> intHost $(hashQ "Generate")    <> deepE e <> travF f
+    -- We don't need to encode the type of 'e' when perfect is False, as 'e' is an expression of type Bool.
+    -- We thus use `deep (travE e)` instead of `deepE e`.
+    Acond e a1 a2                -> intHost $(hashQ "Acond")       <> deep (travE e) <> travA a1 <> travA a2
+    Reshape _ sh a               -> intHost $(hashQ "Reshape")     <> deepE sh <> travA a
+    Backpermute _ sh f a         -> intHost $(hashQ "Backpermute") <> deepE sh <> travF f  <> travA a
+    Transform _ sh f1 f2 a       -> intHost $(hashQ "Transform")   <> deepE sh <> travF f1 <> travF f2 <> travA a
+    Replicate spec ix a          -> intHost $(hashQ "Replicate")   <> deepE ix <> travA a  <> encodeSliceIndex spec
+    Slice spec a ix              -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
+    Map _ f a                    -> intHost $(hashQ "Map")         <> travF f  <> travA a
+    ZipWith _ f a1 a2            -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
+    Fold f e a                   -> intHost $(hashQ "Fold")        <> travF f  <> encodeMaybe travE e  <> travA a
+    FoldSeg _ f e a s            -> intHost $(hashQ "FoldSeg")     <> travF f  <> encodeMaybe travE e  <> travA a  <> travA s
+    Scan  d f e a                -> intHost $(hashQ "Scan")        <> travD d  <> travF f  <> encodeMaybe travE e  <> travA a
+    Scan' d f e a                -> intHost $(hashQ "Scan'")       <> travD d  <> travF f  <>           travE e  <> travA a
+    Permute f1 a1 f2 a2          -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
+    Stencil s _ f b a            -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilEltR s) b  <> travA a
+    Stencil2 s1 s2 _ f b1 a1 b2 a2 -> intHost $(hashQ "Stencil2")  <> travF f  <> encodeBoundary (stencilEltR s1) b1 <> travA a1 <> encodeBoundary (stencilEltR s2) b2 <> travA a2
 
 {--
 {-# INLINEABLE encodePreOpenSeq #-}
@@ -142,14 +200,14 @@ encodePreOpenSeq encodeAcc s =
       travA :: acc aenv' a -> Builder
       travA = encodeAcc -- XXX: plus type information?
 
-      travE :: PreOpenExp acc env' aenv' e -> Builder
-      travE = encodePreOpenExp encodeAcc
+      travE :: OpenExp env' aenv' e -> Builder
+      travE = encodeOpenExp encodeAcc
 
       travAF :: PreOpenAfun acc aenv' f -> Builder
       travAF = encodePreOpenAfun encodeAcc
 
-      travF :: PreOpenFun acc env' aenv' f -> Builder
-      travF = encodePreOpenFun encodeAcc
+      travF :: OpenFun env' aenv' f -> Builder
+      travF = encodeOpenFun encodeAcc
 
       travS :: PreOpenSeq acc aenv senv' arrs' -> Builder
       travS = encodePreOpenSeq encodeAcc
@@ -183,46 +241,53 @@ encodePreOpenSeq encodeAcc s =
 encodeIdx :: Idx env t -> Builder
 encodeIdx = intHost . idxToInt
 
-encodeTupleIdx :: TupleIdx tup e -> Builder
-encodeTupleIdx = intHost . tupleIdxToInt
+encodeArray :: Array sh e -> Builder
+encodeArray ad = intHost . unsafePerformIO $! hashStableName <$> makeStableName ad
 
-encodeArrays :: ArraysR a -> a -> Builder
-encodeArrays ArraysRunit         ()       = mempty
-encodeArrays (ArraysRpair r1 r2) (a1, a2) = encodeArrays r1 a1 <> encodeArrays r2 a2
-encodeArrays ArraysRarray        ad       = intHost . unsafePerformIO $! hashStableName `fmap` makeStableName ad
+encodeTupR :: (forall b. s b -> Builder) -> TupR s a -> Builder
+encodeTupR _ TupRunit         = intHost $(hashQ "TupRunit")
+encodeTupR f (TupRpair r1 r2) = intHost $(hashQ "TupRpair")   <> encodeTupR f r1 <> encodeTupR f r2
+encodeTupR f (TupRsingle s)   = intHost $(hashQ "TupRsingle") <> f s
 
-encodeArraysType :: forall a. ArraysR a -> Builder
-encodeArraysType ArraysRunit         = intHost $(hashQ "ArraysRunit")
-encodeArraysType (ArraysRpair r1 r2) = intHost $(hashQ "ArraysRpair")  <> encodeArraysType r1 <> encodeArraysType r2
-encodeArraysType ArraysRarray        = intHost $(hashQ "ArraysRarray") <> encodeArrayType @a
-  where
-    encodeArrayType :: forall array sh e. (array ~ Array sh e, Shape sh, Elt e) => Builder
-    encodeArrayType = encodeTupleType (eltType @sh) <> encodeTupleType (eltType @e)
+encodeLeftHandSide :: (forall b. s b -> Builder) -> LeftHandSide s a env env' -> Builder
+encodeLeftHandSide f (LeftHandSideWildcard r) = intHost $(hashQ "LeftHandSideWildcard") <> encodeTupR f r
+encodeLeftHandSide f (LeftHandSidePair r1 r2) = intHost $(hashQ "LeftHandSidePair")     <> encodeLeftHandSide f r1 <> encodeLeftHandSide f r2
+encodeLeftHandSide f (LeftHandSideSingle s)   = intHost $(hashQ "LeftHandSideArray")    <> f s
 
-encodeAtuple :: EncodeAcc acc -> Atuple (acc aenv) a -> Builder
-encodeAtuple _     NilAtup        = intHost $(hashQ "NilAtup")
-encodeAtuple travA (SnocAtup t a) = intHost $(hashQ "SnocAtup") <> encodeAtuple travA t <> travA a
+encodeArrayType :: ArrayR a -> Builder
+encodeArrayType (ArrayR shr tp) = encodeShapeR shr <> encodeTypeR tp
 
-encodePreOpenAfun :: forall acc aenv f. EncodeAcc acc -> PreOpenAfun acc aenv f -> Builder
-encodePreOpenAfun travA afun =
+encodeArraysType :: ArraysR arrs -> Builder
+encodeArraysType = encodeTupR encodeArrayType
+
+encodeShapeR :: ShapeR sh -> Builder
+encodeShapeR = intHost . rank
+
+encodePreOpenAfun
+    :: forall acc aenv f.
+       HashOptions
+    -> EncodeAcc acc
+    -> PreOpenAfun acc aenv f
+    -> Builder
+encodePreOpenAfun options travA afun =
   let
-      travB :: forall aenv' a. Arrays a => acc aenv' a -> Builder
-      travB b = encodeArraysType (arrays @a) <> travA b
-
-      travL :: forall aenv' a b. Arrays a => PreOpenAfun acc (aenv',a) b -> Builder
-      travL l = encodeArraysType (arrays @a) <> encodePreOpenAfun travA l
+      travL :: forall aenv1 aenv2 a b. ALeftHandSide a aenv1 aenv2 -> PreOpenAfun acc aenv2 b -> Builder
+      travL lhs l = encodeLeftHandSide encodeArrayType lhs <> encodePreOpenAfun options travA l
   in
   case afun of
-    Abody b -> intHost $(hashQ "Abody") <> travB b
-    Alam  l -> intHost $(hashQ "Alam")  <> travL l
+    Abody b    -> intHost $(hashQ "Abody") <> travA options b
+    Alam lhs l -> intHost $(hashQ "Alam")  <> travL lhs  l
 
 
-encodePreBoundary :: forall acc aenv sh e. EncodeAcc acc -> PreBoundary acc aenv (Array sh e) -> Builder
-encodePreBoundary _ Wrap          = intHost $(hashQ "Wrap")
-encodePreBoundary _ Clamp         = intHost $(hashQ "Clamp")
-encodePreBoundary _ Mirror        = intHost $(hashQ "Mirror")
-encodePreBoundary _ (Constant c)  = intHost $(hashQ "Constant") <> encodeConst (eltType @e) c
-encodePreBoundary h (Function f)  = intHost $(hashQ "Function") <> encodePreOpenFun h f
+encodeBoundary
+    :: TypeR e
+    -> Boundary aenv (Array sh e)
+    -> Builder
+encodeBoundary _  Wrap          = intHost $(hashQ "Wrap")
+encodeBoundary _  Clamp         = intHost $(hashQ "Clamp")
+encodeBoundary _  Mirror        = intHost $(hashQ "Mirror")
+encodeBoundary tp (Constant c)  = intHost $(hashQ "Constant") <> encodeConst tp c
+encodeBoundary _  (Function f)  = intHost $(hashQ "Function") <> encodeOpenFun f
 
 encodeSliceIndex :: SliceIndex slix sl co sh -> Builder
 encodeSliceIndex SliceNil         = intHost $(hashQ "SliceNil")
@@ -234,94 +299,68 @@ encodeSliceIndex (SliceFixed r)   = intHost $(hashQ "sliceFixed") <> encodeSlice
 -- ------------------
 
 {-# INLINEABLE encodeOpenExp #-}
-encodeOpenExp :: OpenExp env aenv exp -> Builder
-encodeOpenExp = encodePreOpenExp encodeOpenAcc
-
-{-# INLINEABLE encodePreOpenExp #-}
-encodePreOpenExp :: forall acc env aenv exp. EncodeAcc acc -> PreOpenExp acc env aenv exp -> Builder
-encodePreOpenExp travA exp =
+encodeOpenExp
+    :: forall env aenv exp.
+       OpenExp env aenv exp
+    -> Builder
+encodeOpenExp exp =
   let
-      travE :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
-      travE e =  encodeTupleType (eltType @e) <> encodePreOpenExp travA e
+      travE :: forall env' aenv' e. OpenExp env' aenv' e -> Builder
+      travE e = encodeOpenExp e
 
-      travF :: PreOpenFun acc env' aenv' f -> Builder
-      travF = encodePreOpenFun travA
-
-      nacl :: Elt exp => Builder
-      nacl = encodeTupleType (eltType @exp)
+      travF :: OpenFun env' aenv' f -> Builder
+      travF = encodeOpenFun
   in
   case exp of
-    Let bnd body                -> intHost $(hashQ "Let")         <> travE bnd <> travE body
-    Var ix                      -> intHost $(hashQ "Var")         <> nacl <> encodeIdx ix
-    Tuple t                     -> intHost $(hashQ "Tuple")       <> nacl <> encodeTuple travA t
-    Prj i e                     -> intHost $(hashQ "Prj")         <> nacl <> encodeTupleIdx i <> travE e -- XXX: here multiplied nacl by hashTupleIdx
-    Const c                     -> intHost $(hashQ "Const")       <> encodeConst (eltType @exp) c
-    Undef                       -> intHost $(hashQ "Undef")
-    IndexAny                    -> intHost $(hashQ "IndexAny")    <> nacl
-    IndexNil                    -> intHost $(hashQ "IndexNil")
-    IndexCons sh sz             -> intHost $(hashQ "IndexCons")   <> travE sh <> travE sz
-    IndexHead sl                -> intHost $(hashQ "IndexHead")   <> travE sl
-    IndexTail sl                -> intHost $(hashQ "IndexTail")   <> travE sl
+    Let lhs bnd body            -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
+    Evar (Var tp ix)            -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
+    Nil                         -> intHost $(hashQ "Nil")
+    Pair e1 e2                  -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
+    VecPack   _ e               -> intHost $(hashQ "VecPack")     <> travE e
+    VecUnpack _ e               -> intHost $(hashQ "VecUnpack")   <> travE e
+    Const tp c                  -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
+    Undef tp                    -> intHost $(hashQ "Undef")       <> encodeScalarType tp
     IndexSlice spec ix sh       -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec
     IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
-    ToIndex sh i                -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
-    FromIndex sh i              -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
+    ToIndex _ sh i              -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
+    FromIndex _ sh i            -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
+    Case e rhs def              -> intHost $(hashQ "Case")        <> travE e  <> mconcat [ word8 t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
     Cond c t e                  -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
     While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
     PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
     PrimConst c                 -> intHost $(hashQ "PrimConst")   <> encodePrimConst c
-    Index a ix                  -> intHost $(hashQ "Index")       <> travA a  <> travE ix
-    LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> travA a  <> travE ix
-    Shape a                     -> intHost $(hashQ "Shape")       <> travA a
-    ShapeSize sh                -> intHost $(hashQ "ShapeSize")   <> travE sh
-    Intersect sa sb             -> intHost $(hashQ "Intersect")   <> travE sa <> travE sb
-    Union sa sb                 -> intHost $(hashQ "Union")       <> travE sa <> travE sb
-    Foreign _ f e               -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
-    Coerce e                    -> intHost $(hashQ "Coerce")      <> travE e
+    Index a ix                  -> intHost $(hashQ "Index")       <> encodeArrayVar a <> travE ix
+    LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> encodeArrayVar a <> travE ix
+    Shape a                     -> intHost $(hashQ "Shape")       <> encodeArrayVar a
+    ShapeSize _ sh              -> intHost $(hashQ "ShapeSize")   <> travE sh
+    Foreign _ _ f e             -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
+    Coerce _ tp e               -> intHost $(hashQ "Coerce")      <> encodeScalarType tp <> travE e
+
+encodeArrayVar :: ArrayVar aenv a -> Builder
+encodeArrayVar (Var repr v) = encodeArrayType repr <> encodeIdx v
+
+{-# INLINEABLE encodeOpenFun #-}
+encodeOpenFun
+    :: OpenFun env aenv f
+    -> Builder
+encodeOpenFun (Body b)    = intHost $(hashQ "Body") <> encodeOpenExp b
+encodeOpenFun (Lam lhs l) = intHost $(hashQ "Lam") <> encodeLeftHandSide encodeScalarType lhs <> encodeOpenFun l
 
 
-{-# INLINEABLE encodePreOpenFun #-}
-encodePreOpenFun :: forall acc env aenv f. EncodeAcc acc -> PreOpenFun acc env aenv f -> Builder
-encodePreOpenFun travA fun =
-  let
-      travB :: forall env' aenv' e. Elt e => PreOpenExp acc env' aenv' e -> Builder
-      travB b = encodeTupleType (eltType @e) <> encodePreOpenExp travA b
-
-      travL :: forall env' aenv' a b. Elt a => PreOpenFun acc (env',a) aenv' b -> Builder
-      travL l = encodeTupleType (eltType @a) <> encodePreOpenFun travA l
-  in
-  case fun of
-    Body b -> intHost $(hashQ "Body") <> travB b
-    Lam l  -> intHost $(hashQ "Lam")  <> travL l
-
-encodeTuple :: EncodeAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Builder
-encodeTuple _ NilTup        = intHost $(hashQ "NilTup")
-encodeTuple h (SnocTup t e) = intHost $(hashQ "SnocTup") <> encodeTuple h t <> encodePreOpenExp h e
-
-
-encodeConst :: TupleType t -> t -> Builder
-encodeConst TypeRunit         ()    = mempty
-encodeConst (TypeRscalar t)   c     = encodeScalarConst t c
-encodeConst (TypeRpair ta tb) (a,b) = encodeConst ta a <> encodeConst tb b
+encodeConst :: TypeR t -> t -> Builder
+encodeConst TupRunit         ()    = intHost $(hashQ "nil")
+encodeConst (TupRsingle t)   c     = encodeScalarConst t c
+encodeConst (TupRpair ta tb) (a,b) = intHost $(hashQ "pair") <> encodeConst ta a <> encodeConst tb b
 
 encodeScalarConst :: ScalarType t -> t -> Builder
 encodeScalarConst (SingleScalarType t) = encodeSingleConst t
 encodeScalarConst (VectorScalarType t) = encodeVectorConst t
 
 encodeSingleConst :: SingleType t -> t -> Builder
-encodeSingleConst (NumSingleType t)    = encodeNumConst t
-encodeSingleConst (NonNumSingleType t) = encodeNonNumConst t
+encodeSingleConst (NumSingleType t) = encodeNumConst t
 
 encodeVectorConst :: VectorType (Vec n t) -> Vec n t -> Builder
 encodeVectorConst (VectorType n t) (Vec ba#) = intHost $(hashQ "Vec") <> intHost n <> encodeSingleType t <> shortByteString (SBS ba#)
-
-encodeNonNumConst :: NonNumType t -> t -> Builder
-encodeNonNumConst TypeBool{} x = intHost $(hashQ "Bool")   <> word8 (fromBool x)
-encodeNonNumConst TypeChar{} x = intHost $(hashQ "Char")   <> charUtf8 x
-
-fromBool :: Bool -> Word8
-fromBool True  = 1
-fromBool False = 0
 
 encodeNumConst :: NumType t -> t -> Builder
 encodeNumConst (IntegralNumType t) = encodeIntegralConst t
@@ -412,40 +451,31 @@ encodePrimFun (PrimToFloating a b)       = intHost $(hashQ "PrimToFloating")    
 encodePrimFun PrimLAnd                   = intHost $(hashQ "PrimLAnd")
 encodePrimFun PrimLOr                    = intHost $(hashQ "PrimLOr")
 encodePrimFun PrimLNot                   = intHost $(hashQ "PrimLNot")
-encodePrimFun PrimOrd                    = intHost $(hashQ "PrimOrd")
-encodePrimFun PrimChr                    = intHost $(hashQ "PrimChr")
-encodePrimFun PrimBoolToInt              = intHost $(hashQ "PrimBoolToInt")
 
 
-encodeTupleType :: TupleType t -> Builder
-encodeTupleType TypeRunit       = intHost $(hashQ "TypeRunit")
-encodeTupleType (TypeRscalar t) = intHost $(hashQ "TypeRscalar") <> encodeScalarType t
-encodeTupleType (TypeRpair a b) = intHost $(hashQ "TypeRpair")   <> encodeTupleType a <> intHost (depthTypeR a)
-                                                                 <> encodeTupleType b <> intHost (depthTypeR b)
+encodeTypeR :: TypeR t -> Builder
+encodeTypeR TupRunit       = intHost $(hashQ "TupRunit")
+encodeTypeR (TupRsingle t) = intHost $(hashQ "TupRsingle") <> encodeScalarType t
+encodeTypeR (TupRpair a b) = intHost $(hashQ "TupRpair")   <> encodeTypeR a <> intHost (depthTypeR a)
+                                                           <> encodeTypeR b <> intHost (depthTypeR b)
 
-depthTypeR :: TupleType t -> Int
-depthTypeR TypeRunit       = 0
-depthTypeR TypeRscalar{}   = 1
-depthTypeR (TypeRpair a b) = depthTypeR a + depthTypeR b
+depthTypeR :: TypeR t -> Int
+depthTypeR TupRunit       = 0
+depthTypeR TupRsingle{}   = 1
+depthTypeR (TupRpair a b) = depthTypeR a + depthTypeR b
 
 encodeScalarType :: ScalarType t -> Builder
 encodeScalarType (SingleScalarType t) = intHost $(hashQ "SingleScalarType") <> encodeSingleType t
 encodeScalarType (VectorScalarType t) = intHost $(hashQ "VectorScalarType") <> encodeVectorType t
 
 encodeSingleType :: SingleType t -> Builder
-encodeSingleType (NumSingleType t)    = intHost $(hashQ "NumSingleType")    <> encodeNumType t
-encodeSingleType (NonNumSingleType t) = intHost $(hashQ "NonNumSingleType") <> encodeNonNumType t
+encodeSingleType (NumSingleType t) = intHost $(hashQ "NumSingleType")    <> encodeNumType t
 
 encodeVectorType :: VectorType (Vec n t) -> Builder
 encodeVectorType (VectorType n t) = intHost $(hashQ "VectorType") <> intHost n <> encodeSingleType t
 
 encodeBoundedType :: BoundedType t -> Builder
 encodeBoundedType (IntegralBoundedType t) = intHost $(hashQ "IntegralBoundedType") <> encodeIntegralType t
-encodeBoundedType (NonNumBoundedType t)   = intHost $(hashQ "NonNumBoundedType")   <> encodeNonNumType t
-
-encodeNonNumType :: NonNumType t -> Builder
-encodeNonNumType TypeBool{} = intHost $(hashQ "Bool")
-encodeNonNumType TypeChar{} = intHost $(hashQ "Char")
 
 encodeNumType :: NumType t -> Builder
 encodeNumType (IntegralNumType t) = intHost $(hashQ "IntegralNumType") <> encodeIntegralType t
@@ -467,4 +497,8 @@ encodeFloatingType :: FloatingType t -> Builder
 encodeFloatingType TypeHalf{}   = intHost $(hashQ "Half")
 encodeFloatingType TypeFloat{}  = intHost $(hashQ "Float")
 encodeFloatingType TypeDouble{} = intHost $(hashQ "Double")
+
+encodeMaybe :: (a -> Builder) -> Maybe a -> Builder
+encodeMaybe _ Nothing  = intHost $(hashQ "Nothing")
+encodeMaybe f (Just x) = intHost $(hashQ "Just") <> f x
 

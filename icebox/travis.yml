@@ -1,0 +1,72 @@
+# vim: nospell
+#
+language: minimal
+dist: xenial
+
+cache:
+  timeout: 600
+  directories:
+    - $HOME/.stack
+    - $HOME/.local/bin
+    - $TRAVIS_BUILD_DIR/.stack-work
+
+before_cache:
+  # - rm -vrf $(stack path --local-install-root)/bin
+  - rm -rf  $(stack path --local-install-root)/doc
+  - rm -f $HOME/.stack/programs/*/*.tar.bz2
+
+addons:
+  apt:
+    sources: &apt_sources
+      - hvr-ghc
+
+    packages: &apt_packages
+      - alex-3.1.7
+      - happy-1.19.5
+      - libgmp-dev
+
+matrix:
+  fast_finish: true
+  include:
+    - env: GHC=8.8.3
+      compiler: "GHC 8.8"
+
+    - env: GHC=8.6.5
+      compiler: "GHC 8.6"
+
+    - env: GHC=8.4.4
+      compiler: "GHC 8.4"
+
+    - env: GHC=8.2.2
+      compiler: "GHC 8.2"
+
+before_install:
+  - export PATH=/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:${PATH}
+  - source .travis/install-stack.sh
+  - |
+      case ${GHC%.*} in
+        8.0) ;; # too slow ._.
+        *  ) export HADDOCK="--haddock --no-haddock-deps" ;;
+      esac
+
+  # build environment
+  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - stack --version
+
+install:
+  - export FLAGS="--fast --no-terminal --no-copy-bins --flag accelerate:nofib"
+  - travis_retry stack build $FLAGS --only-dependencies --test
+
+script:
+  - stack build $FLAGS $HADDOCK --test --no-run-tests
+  - stack test accelerate:doctest $FLAGS
+  - stack test accelerate:nofib-interpreter $FLAGS --test-arguments='--hedgehog-tests 25'
+
+after_success:
+  - source .travis/update-accelerate-buildbot.sh
+
+after_failure:
+  - ulimit -a
+  - df -h
+  - dmesg
+

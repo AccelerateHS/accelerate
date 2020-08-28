@@ -6,10 +6,10 @@
 {-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -20,11 +20,12 @@ module Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                  as P
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        as S
+import Data.Array.Accelerate.Sugar.Array                        as S
+import Data.Array.Accelerate.Sugar.Elt                          as S
+import Data.Array.Accelerate.Sugar.Shape                        as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
@@ -53,15 +54,15 @@ test_saxpy runN =
     , at @TestDouble $ testElt f64
     ]
   where
-    testElt :: forall a. (P.Num a, A.Num a, Similar a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testProperty (show (typeOf (undefined :: a))) $ test_saxpy' runN e
+      testProperty (show (eltR @a)) $ test_saxpy' runN e
 
 
 test_saxpy'
-    :: (P.Num e, A.Num e, Similar e)
+    :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
     -> Gen e
     -> Property

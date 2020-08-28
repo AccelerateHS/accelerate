@@ -7,10 +7,10 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Prelude.Permute
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -21,18 +21,15 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Permute (
 
 ) where
 
-import Control.Monad
-import Data.Typeable
-import System.IO.Unsafe
-import Prelude                                                      as P
-import qualified Data.Set                                           as Set
-
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Array.Sugar                            as S
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt                              as S
+import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import qualified Data.Array.Accelerate.Representation.Array         as R
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -40,6 +37,11 @@ import qualified Hedgehog.Range                                     as Range
 
 import Test.Tasty
 import Test.Tasty.Hedgehog
+
+import Control.Monad
+import System.IO.Unsafe
+import Prelude                                                      as P
+import qualified Data.Set                                           as Set
 
 
 test_permute :: RunN -> TestTree
@@ -59,18 +61,18 @@ test_permute runN =
     ]
   where
     testElt
-        :: forall a. (Similar a, P.Num a, A.Num a)
+        :: forall a. (Similar a, P.Num a, A.Num a, Show a)
         => Gen a
         -> TestTree
     testElt e =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltR @a))
         [ testDim dim1
         , testDim dim2
         , testDim dim3
         ]
       where
         testDim
-            :: forall sh. Shape sh
+            :: forall sh. (Shape sh, Show sh)
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
@@ -86,7 +88,7 @@ test_permute runN =
 
 
 test_scatter
-    :: forall sh sh' e. (Shape sh, Shape sh', P.Eq sh', Similar e, Elt e)
+    :: forall sh sh' e. (Shape sh, Shape sh', Show sh, Show sh', P.Eq sh', Similar e, Elt e, Show e)
     => RunN
     -> Gen sh
     -> Gen sh'
@@ -109,8 +111,8 @@ test_scatter runN dim dim' e =
               ts <- shfl (Set.insert t seen) (i+1)
               --
               case Set.member t seen of
-                True  -> return (S.ignore          : ts)
-                False -> return (S.fromIndex sh' t : ts)
+                True  -> return (Nothing                  : ts)
+                False -> return (Just (S.fromIndex sh' t) : ts)
     --
     def <- forAll (array sh' e)
     new <- forAll (array sh  e)
@@ -121,7 +123,7 @@ test_scatter runN dim dim' e =
 
 
 test_accumulate
-    :: (Shape sh, Shape sh', P.Eq sh', Similar e, P.Num e, A.Num e)
+    :: (Shape sh, Shape sh', Show sh, Show sh', P.Eq sh', Similar e, P.Num e, A.Num e, Show e)
     => RunN
     -> Gen sh
     -> Gen sh'
@@ -136,23 +138,24 @@ test_accumulate runN dim dim' e =
         def = S.fromFunction sh' (const 0)
     --
     xs  <- forAll (array sh e)
-    ix  <- forAll (array sh (Gen.choice [ return S.ignore
-                                        , S.fromIndex sh' <$> Gen.int (Range.linear 0 (n'-1))
+    ix  <- forAll (array sh (Gen.choice [ return Nothing
+                                        , Just . S.fromIndex sh' <$> Gen.int (Range.linear 0 (n'-1))
                                         ]))
     let !go = runN $ \i d v -> A.permute (+) d (i A.!) v
     go ix def xs ~~~ permuteRef (+) def (ix S.!) xs
 
 
 permuteRef
-    :: (Shape sh, Shape sh', P.Eq sh', Elt e)
+    :: forall sh sh' e. (Shape sh, Shape sh', P.Eq sh', Elt e)
     => (e -> e -> e)
     -> Array sh' e
-    -> (sh -> sh')
+    -> (sh -> Maybe sh')
     -> Array sh e
     -> Array sh' e
-permuteRef f def@(Array _ aold) p arr@(Array _ anew) =
+permuteRef f def@(Array (R.Array _ aold)) p arr@(Array (R.Array _ anew)) =
   unsafePerformIO $ do
     let
+        tp  = S.eltR @e
         sh  = S.shape arr
         sh' = S.shape def
         n   = S.size sh
@@ -161,13 +164,13 @@ permuteRef f def@(Array _ aold) p arr@(Array _ anew) =
           | i P.>= n  = return ()
           | otherwise = do
               let ix  = S.fromIndex sh i
-                  ix' = p ix
-              --
-              unless (ix' P.== S.ignore) $ do
-                let i'  = S.toIndex sh' ix'
-                x  <- toElt <$> unsafeReadArrayData anew i
-                x' <- toElt <$> unsafeReadArrayData aold i'
-                unsafeWriteArrayData aold i' (fromElt (f x x'))
+              case p ix of
+                Nothing  -> return ()
+                Just ix' -> do
+                  let i'  = S.toIndex sh' ix'
+                  x  <- toElt <$> readArrayData tp anew i
+                  x' <- toElt <$> readArrayData tp aold i'
+                  writeArrayData tp aold i' (fromElt (f x x'))
               --
               go (i+1)
     --

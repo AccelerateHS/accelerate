@@ -1,23 +1,22 @@
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Unique
--- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everest
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Array.Unique (
+module Data.Array.Accelerate.Array.Unique
+  where
 
-  UniqueArray(..),
-  newUniqueArray,
-  withUniqueArrayPtr,
-  unsafeUniqueArrayPtr,
-  touchUniqueArray,
-
-) where
+-- friends
+import Data.Array.Accelerate.Lifetime
 
 -- library
 import Control.Applicative
@@ -25,11 +24,14 @@ import Control.Concurrent.Unique
 import Control.DeepSeq
 import Foreign.ForeignPtr
 import Foreign.ForeignPtr.Unsafe
+import Foreign.Marshal.Array
 import Foreign.Ptr
+import Foreign.Storable
+import Language.Haskell.TH
+import Language.Haskell.TH.Syntax
+import Data.Word
+import System.IO.Unsafe
 import Prelude
-
--- friends
-import Data.Array.Accelerate.Lifetime
 
 
 -- | A uniquely identifiable array.
@@ -52,8 +54,7 @@ data UniqueArray e = UniqueArray
     }
 
 instance NFData (UniqueArray e) where
-  rnf (UniqueArray _ ad) = unsafeGetValue ad `seq` ()
-
+  rnf = rnfUniqueArray
 
 -- | Create a new UniqueArray
 --
@@ -72,6 +73,30 @@ newUniqueArray fp = UniqueArray <$> newUnique <*> newLifetime fp
 withUniqueArrayPtr :: UniqueArray a -> (Ptr a -> IO b) -> IO b
 withUniqueArrayPtr ua go =
   withLifetime (uniqueArrayData ua) $ \fp -> withForeignPtr fp go
+
+-- | Returns the element of an immutable array at the specified index. This
+-- does no bounds checking.
+--
+{-# INLINE unsafeIndexArray #-}
+unsafeIndexArray :: Storable e => UniqueArray e -> Int -> e
+unsafeIndexArray !ua !i =
+  unsafePerformIO $! unsafeReadArray ua i
+
+-- | Read an element from a mutable array at the given index. This does no
+-- bounds checking.
+--
+{-# INLINE unsafeReadArray #-}
+unsafeReadArray :: Storable e => UniqueArray e -> Int -> IO e
+unsafeReadArray !ua !i =
+  withUniqueArrayPtr ua $ \ptr -> peekElemOff ptr i
+
+-- | Write an element into a mutable array at the given index. This does no
+-- bounds checking.
+--
+{-# INLINE unsafeWriteArray #-}
+unsafeWriteArray :: Storable e => UniqueArray e -> Int -> e -> IO ()
+unsafeWriteArray !ua !i !e =
+  withUniqueArrayPtr ua $ \ptr -> pokeElemOff ptr i e
 
 
 -- | Extract the pointer backing the unique array.
@@ -95,4 +120,19 @@ unsafeUniqueArrayPtr = unsafeForeignPtrToPtr . unsafeGetValue . uniqueArrayData
 {-# INLINE touchUniqueArray #-}
 touchUniqueArray :: UniqueArray a -> IO ()
 touchUniqueArray = touchLifetime . uniqueArrayData
+
+
+rnfUniqueArray :: UniqueArray a -> ()
+rnfUniqueArray (UniqueArray _ ad) = unsafeGetValue ad `seq` ()
+
+-- TODO: Make sure that the data is correctly aligned...
+--
+liftUniqueArray :: forall a. Storable a => Int -> UniqueArray a -> Q (TExp (UniqueArray a))
+liftUniqueArray sz ua = do
+  bytes <- runIO $ peekArray (sizeOf (undefined::a) * sz) (castPtr (unsafeUniqueArrayPtr ua) :: Ptr Word8)
+  [|| unsafePerformIO $ do
+       fp  <- newForeignPtr_ $$( unsafeTExpCoerce [| Ptr $(litE (StringPrimL bytes)) |] )
+       ua' <- newUniqueArray (castForeignPtr fp)
+       return ua'
+   ||]
 

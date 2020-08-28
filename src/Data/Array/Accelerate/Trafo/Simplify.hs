@@ -2,64 +2,62 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
--- Copyright   : [2012..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
 
 module Data.Array.Accelerate.Trafo.Simplify (
 
-  Simplify(..),
+  simplifyFun,
+  simplifyExp
 
 ) where
 
--- standard library
-import Control.Applicative                              hiding ( Const )
-import Control.Lens                                     hiding ( Const, ix )
-import Data.List                                        ( nubBy )
+import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST.Environment
+import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.AST.LeftHandSide
+import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Hash
+import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Array                   ( Array, ArrayR(..) )
+import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..), shapeToList )
+import Data.Array.Accelerate.Representation.Tag
+import Data.Array.Accelerate.Trafo.Algebra
+import Data.Array.Accelerate.Trafo.Environment
+import Data.Array.Accelerate.Trafo.Shrink
+import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Type
+
+import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
+import qualified Data.Array.Accelerate.Debug.Flags                  as Debug
+import qualified Data.Array.Accelerate.Debug.Trace                  as Debug
+
+import Control.Applicative                                          hiding ( Const )
+import Control.Lens                                                 hiding ( Const, ix )
+import Data.List                                                    ( partition )
 import Data.Maybe
 import Data.Monoid
-import Data.Typeable
 import Text.Printf
-import Prelude                                          hiding ( exp, iterate )
-
--- friends
-import Data.Array.Accelerate.AST                        hiding ( prj )
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Analysis.Shape
-import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Trafo.Algebra
-import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Shrink
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar                ( Array, Shape, Elt(..), Z(..), (:.)(..)
-                                                        , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
-import qualified Data.Array.Accelerate.Debug            as Stats
-
-
-class Simplify f where
-  simplify :: f -> f
-
-instance Kit acc => Simplify (PreFun acc aenv f) where
-  simplify = simplifyFun
-
-instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
-  simplify = simplifyExp
+import Prelude                                                      hiding ( exp, iterate )
+import qualified Data.Map.Strict                                    as Map
 
 
 -- Scalar optimisations
@@ -88,10 +86,10 @@ instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
 -- tricky and target-dependent issue by, for now, simply ignoring it.
 --
 localCSE :: (Kit acc, Elt a)
-         => Gamma      acc env env aenv
-         -> PreOpenExp acc env     aenv a
-         -> PreOpenExp acc (env,a) aenv b
-         -> Maybe (PreOpenExp acc env aenv b)
+         => Gamma acc env env aenv
+         -> OpenExp env aenv a
+         -> OpenExp (env,a) aenv b
+         -> Maybe (OpenExp env aenv b)
 localCSE env bnd body
   | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline body (Var ix)
   | otherwise                    = Nothing
@@ -104,9 +102,9 @@ localCSE env bnd body
 -- > let x = e in .. e ..
 --
 globalCSE :: (Kit acc, Elt t)
-          => Gamma      acc env env aenv
-          -> PreOpenExp acc env     aenv t
-          -> Maybe (PreOpenExp acc env aenv t)
+          => Gamma acc env env aenv
+          -> OpenExp env aenv t
+          -> Maybe (OpenExp env aenv t)
 globalCSE env exp
   | Just ix <- lookupExp env exp = Stats.ruleFired "CSE" . Just $ Var ix
   | otherwise                    = Nothing
@@ -142,10 +140,10 @@ globalCSE env exp
 --
 recoverLoops
     :: (Kit acc, Elt b)
-    => Gamma      acc env env aenv
-    -> PreOpenExp acc env     aenv a
-    -> PreOpenExp acc (env,a) aenv b
-    -> Maybe (PreOpenExp acc env aenv b)
+    => Gamma acc env env aenv
+    -> OpenExp env aenv a
+    -> OpenExp (env,a) aenv b
+    -> Maybe (OpenExp env aenv b)
 recoverLoops _ bnd e3
   -- To introduce scaler loops, we look for expressions of the form:
   --
@@ -180,15 +178,15 @@ recoverLoops _ bnd e3
   = Nothing
 
   where
-    plus :: PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv Int
+    plus :: OpenExp env aenv Int -> OpenExp env aenv Int -> OpenExp env aenv Int
     plus x y = PrimApp (PrimAdd numType) $ Tuple $ NilTup `SnocTup` x `SnocTup` y
 
-    constant :: Int -> PreOpenExp acc env aenv Int
+    constant :: Int -> OpenExp env aenv Int
     constant i = Const ((),i)
 
     matchEnvTop :: (Elt s, Elt t)
-                => PreOpenExp acc (env,s) aenv f
-                -> PreOpenExp acc (env,t) aenv g
+                => OpenExp (env,s) aenv f
+                -> OpenExp (env,t) aenv g
                 -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast Refl
 --}
@@ -201,38 +199,36 @@ recoverLoops _ bnd e3
 --       introduced by the fusion transformation. This would benefit from a
 --       rewrite rule schema.
 --
+-- TODO: We currently pass around an environment Gamma, but we do not use it.
+--       It might be helpful to do some inlining if this enables other optimizations.
+--       Eg, for `let x = -y in -x`, the inlining would allow us to shorten it to `y`.
+--       If we do not want to do inlining, we should remove the environment here.
+--
 simplifyOpenExp
-    :: forall acc env aenv e. (Kit acc, Elt e)
-    => Gamma acc env env aenv
-    -> PreOpenExp acc env aenv e
-    -> (Bool, PreOpenExp acc env aenv e)
+    :: forall env aenv e.
+       Gamma env env aenv
+    -> OpenExp env aenv e
+    -> (Bool, OpenExp env aenv e)
 simplifyOpenExp env = first getAny . cvtE
   where
-    cvtE :: Elt t => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    cvtE :: OpenExp env aenv t -> (Any, OpenExp env aenv t)
     cvtE exp = case exp of
-      Let bnd body
-        -- Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        -- Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
-        | otherwise -> Let <$> bnd' <*> body'
+      Let lhs bnd body -> (u <> v, exp')
         where
-          bnd'  = cvtE bnd
-          env'  = env `pushExp` snd bnd'
-          body' = cvtE' (incExp env') body
-
-      Var ix                    -> pure $ Var ix
-      Const c                   -> pure $ Const c
-      Undef                     -> pure Undef
-      Tuple tup                 -> Tuple <$> cvtT tup
-      Prj ix t                  -> prj env ix (cvtE t)
-      IndexNil                  -> pure IndexNil
-      IndexAny                  -> pure IndexAny
-      IndexCons sh sz           -> indexCons (cvtE sh) (cvtE sz)
-      IndexHead sh              -> indexHead (cvtE sh)
-      IndexTail sh              -> indexTail (cvtE sh)
+          (u, bnd') = cvtE bnd
+          (v, exp') = cvtLet env lhs bnd' (\env' -> cvtE' env' body)
+      Evar var                  -> pure $ Evar var
+      Const tp c                -> pure $ Const tp c
+      Undef tp                  -> pure $ Undef tp
+      Nil                       -> pure Nil
+      Pair e1 e2                -> Pair <$> cvtE e1 <*> cvtE e2
+      VecPack   vec e           -> VecPack   vec <$> cvtE e
+      VecUnpack vec e           -> VecUnpack vec <$> cvtE e
       IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
-      ToIndex sh ix             -> toIndex (cvtE sh) (cvtE ix)
-      FromIndex sh ix           -> fromIndex (cvtE sh) (cvtE ix)
+      ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
+      FromIndex shr sh ix       -> fromIndex shr (cvtE sh) (cvtE ix)
+      Case e rhs def            -> caseof (cvtE e) (sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]) (cvtMaybeE def)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> (u<>v, fx)
@@ -242,180 +238,111 @@ simplifyOpenExp env = first getAny . cvtE
       Index a sh                -> Index a <$> cvtE sh
       LinearIndex a i           -> LinearIndex a <$> cvtE i
       Shape a                   -> shape a
-      ShapeSize sh              -> shapeSize (cvtE sh)
-      Intersect s t             -> cvtE s `intersect` cvtE t
-      Union s t                 -> cvtE s `union` cvtE t
-      Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
+      ShapeSize shr sh          -> shapeSize shr (cvtE sh)
+      Foreign tp ff f e         -> Foreign tp ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
-      Coerce e                  -> Coerce <$> cvtE e
+      Coerce t1 t2 e            -> Coerce t1 t2 <$> cvtE e
 
-    cvtT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
-    cvtT NilTup        = pure NilTup
-    cvtT (SnocTup t e) = SnocTup <$> cvtT t <*> cvtE e
-
-    cvtE' :: Elt e' => Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
+    cvtE' :: Gamma env' env' aenv -> OpenExp env' aenv e' -> (Any, OpenExp env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
 
-    cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
+    cvtF :: Gamma env' env' aenv -> OpenFun env' aenv f -> (Any, OpenFun env' aenv f)
     cvtF env' = first Any . simplifyOpenFun env'
 
-    -- Return the minimal set of unique shapes to intersect. This is a bit
-    -- inefficient, but the number of shapes is expected to be small so should
-    -- be fine in practice.
-    --
-    intersect :: Shape t
-              => (Any, PreOpenExp acc env aenv t)
-              -> (Any, PreOpenExp acc env aenv t)
-              -> (Any, PreOpenExp acc env aenv t)
-    intersect (c1, sh1) (c2, sh2)
-      | Nothing <- match sh sh' = Stats.ruleFired "intersect" (yes sh')
-      | otherwise               = (c1 <> c2, sh')
-      where
-        sh      = Intersect sh1 sh2
-        sh'     = foldl1 Intersect
-                $ nubBy (\x y -> isJust (match x y))
-                $ leaves sh1 ++ leaves sh2
+    cvtMaybeE :: Maybe (OpenExp env aenv e') -> (Any, Maybe (OpenExp env aenv e'))
+    cvtMaybeE Nothing  = pure Nothing
+    cvtMaybeE (Just e) = Just <$> cvtE e
 
-        leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
-        leaves (Intersect x y)  = leaves x ++ leaves y
-        leaves rest             = [rest]
-
-    -- Return the minimal set of unique shapes to take the union of. This is a bit
-    -- inefficient, but the number of shapes is expected to be small so should
-    -- be fine in practice.
-    --
-    union :: Shape t
-          => (Any, PreOpenExp acc env aenv t)
-          -> (Any, PreOpenExp acc env aenv t)
-          -> (Any, PreOpenExp acc env aenv t)
-    union (c1, sh1) (c2, sh2)
-      | Nothing <- match sh sh' = Stats.ruleFired "union" (yes sh')
-      | otherwise               = (c1 <> c2, sh')
-      where
-        sh      = Union sh1 sh2
-        sh'     = foldl1 Union
-                $ nubBy (\x y -> isJust (match x y))
-                $ leaves sh1 ++ leaves sh2
-
-        leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
-        leaves (Union x y)  = leaves x ++ leaves y
-        leaves rest         = [rest]
-
+    cvtLet :: Gamma env' env' aenv
+           -> ELeftHandSide bnd env' env''
+           -> OpenExp env' aenv bnd
+           -> (Gamma env'' env'' aenv -> (Any, OpenExp env'' aenv t))
+           -> (Any, OpenExp env' aenv t)
+    cvtLet env' lhs@(LeftHandSideSingle _) bnd          body = Let lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
+    cvtLet env' (LeftHandSideWildcard _)   _            body = body env'                                 -- Binding not used, remove let binding
+    cvtLet env' (LeftHandSidePair l1 l2)   (Pair e1 e2) body                                             -- Split binding to multiple bindings
+      = first (const $ Any True)
+      $ cvtLet env' l1 e1
+      $ \env'' -> cvtLet env'' l2 (weakenE (weakenWithLHS l1) e2) body
+    cvtLet env' lhs                        bnd          body = Let lhs bnd <$> body (lhsExpr lhs env')   -- Cannot split this binding.
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
     --
-    cond :: forall t. Elt t
-         => (Any, PreOpenExp acc env aenv Bool)
-         -> (Any, PreOpenExp acc env aenv t)
-         -> (Any, PreOpenExp acc env aenv t)
-         -> (Any, PreOpenExp acc env aenv t)
+    cond :: (Any, OpenExp env aenv PrimBool)
+         -> (Any, OpenExp env aenv t)
+         -> (Any, OpenExp env aenv t)
+         -> (Any, OpenExp env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
-      | Const True  <- p'        = Stats.knownBranch "True"      (yes t')
-      | Const False <- p'        = Stats.knownBranch "False"     (yes e')
-      | Just Refl <- match t' e' = Stats.knownBranch "redundant" (yes e')
-      | otherwise                = Cond <$> p <*> t <*> e
+      | Const _ 1 <- p'                 = Stats.knownBranch "True"      (yes t')
+      | Const _ 0 <- p'                 = Stats.knownBranch "False"     (yes e')
+      | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
+      | otherwise                       = Cond <$> p <*> t <*> e
 
-    -- If we are projecting elements from a tuple structure or tuple of constant
-    -- valued tuple, pick out the appropriate component directly.
-    --
-    -- Follow variable bindings, but only if they result in a simplification.
-    --
-    prj :: forall env' s t. (Elt s, Elt t, IsTuple t)
-        => Gamma acc env' env' aenv
-        -> TupleIdx (TupleRepr t) s
-        -> (Any, PreOpenExp acc env' aenv t)
-        -> (Any, PreOpenExp acc env' aenv s)
-    prj env' ix top@(_,e) = case e of
-      Tuple t                      -> Stats.inline "prj/Tuple" . yes $ prjT ix t
-      Const c                      -> Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
-      Var v   | Just x <- prjV v   -> Stats.inline "prj/Var"   . yes $ x
-      Let a b | Just x <- prjL a b -> Stats.inline "prj/Let"   . yes $ x
-      _                            -> Prj ix <$> top
+    caseof :: (Any, OpenExp env aenv TAG)
+           -> (Any, [(TAG, OpenExp env aenv b)])
+           -> (Any, Maybe (OpenExp env aenv b))
+           -> (Any, OpenExp env aenv b)
+    caseof x@(_,x') xs@(_,xs') md@(_,md')
+      | Const _ t   <- x'
+      = Stats.caseElim "known" (yes (fromJust $ lookup t xs'))
+      | Just d      <- md'
+      , []          <- xs'
+      = Stats.caseElim "redundant" (yes d)
+      | Just d      <- md'
+      , [(_,(_,u))] <- us
+      , Just Refl   <- matchOpenExp d u
+      = Stats.caseDefault "merge" $ yes (Case x' (map snd vs) (Just u))
+      | Nothing     <- md'
+      , []          <- vs
+      , [(_,(_,u))] <- us
+      = Stats.caseElim "overlap" (yes u)
+      | Nothing     <- md'
+      , [(_,(_,u))] <- us
+      = Stats.caseDefault "introduction" $ yes (Case x' (map snd vs) (Just u))
+      | otherwise
+      = Case <$> x <*> xs <*> md
       where
-        prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s
-        prjT ZeroTupIdx       (SnocTup _ v) = v
-        prjT (SuccTupIdx idx) (SnocTup t _) = prjT idx t
-#if __GLASGOW_HASKELL__ < 800
-        prjT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
-#endif
+        (us,vs) = partition (\(n,_) -> n > 1)
+                $ Map.elems
+                . Map.fromListWith merge
+                $ [ (hashOpenExp e, (1,(t, e))) | (t,e) <- xs' ]
 
-        prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env' aenv s
-        prjC ZeroTupIdx       (_,   v) = Const (fromElt v)
-        prjC (SuccTupIdx idx) (tup, _) = prjC idx tup
-
-        prjV :: Idx env' t -> Maybe (PreOpenExp acc env' aenv s)
-        prjV var
-          | e'      <- prjExp var env'
-          , Nothing <- match e e'
-          = case e' of
-              -- Don't push through nested let-bindings; this leads to code explosion
-              Let _ _                                    -> Nothing
-              _ | (Any True, x) <- prj env' ix (pure e') -> Just x
-              _                                          -> Nothing
-          | otherwise
-          = Nothing
-
-        prjL :: Elt a
-             => PreOpenExp acc env'     aenv a
-             -> PreOpenExp acc (env',a) aenv t
-             -> Maybe (PreOpenExp acc env' aenv s)
-        prjL a b
-          | (Any True, c) <- prj (incExp $ pushExp env' a) ix (pure b) = Just (Let a c)
-        prjL _ _                                                       = Nothing
-
+        merge :: (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b))
+        merge (n,(_,a)) (m,(_,b))
+          = internalCheck "hashOpenExp/collision" (maybe False (const True) (matchOpenExp a b))
+          $ (n+m, (0xff, a))
 
     -- Shape manipulations
     --
-    indexCons :: (Elt sl, Elt sz)
-              => (Any, PreOpenExp acc env aenv sl)
-              -> (Any, PreOpenExp acc env aenv sz)
-              -> (Any, PreOpenExp acc env aenv (sl :. sz))
-    indexCons (_,IndexNil) (_,Const c)
-      | Just c'         <- cast c       -- EltRepr Z ~ EltRepr ()
-      = Stats.ruleFired "Z:.const" $ yes (Const c')
-    indexCons (_,IndexNil) (_,IndexHead sz')
-      | 1               <- expDim sz'   -- no type information that this is a 1D shape, hence gcast next
-      , Just sh'        <- gcast sz'
-      = Stats.ruleFired "Z:.indexHead" $ yes sh'
-    indexCons (_,IndexTail sl') (_,IndexHead sz')
-      | Just Refl       <- match sl' sz'
-      = Stats.ruleFired "indexTail:.indexHead" $ yes sl'
-    indexCons sl sz
-      = IndexCons <$> sl <*> sz
-
-    indexHead :: forall sl sz. (Elt sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sz)
-    indexHead (_, Const c)
-      | _ :. sz <- toElt c :: sl :. sz  = Stats.ruleFired "indexHead/const"     $ yes (Const (fromElt sz))
-    indexHead (_, IndexCons _ sz)       = Stats.ruleFired "indexHead/indexCons" $ yes sz
-    indexHead sh                        = IndexHead <$> sh
-
-    indexTail :: forall sl sz. (Elt sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sl)
-    indexTail (_, Const c)
-      | sl :. _ <- toElt c :: sl :. sz  = Stats.ruleFired "indexTail/const"     $ yes (Const (fromElt sl))
-    indexTail (_, IndexCons sl _)       = Stats.ruleFired "indexTail/indexCons" $ yes sl
-    indexTail sh                        = IndexTail <$> sh
-
-    shape :: forall sh t. (Shape sh, Elt t) => acc aenv (Array sh t) -> (Any, PreOpenExp acc env aenv sh)
-    shape _
-      | Just Refl <- matchTupleType (eltType @sh) (eltType @Z)
-      = Stats.ruleFired "shape/Z" $ yes (Const (fromElt Z))
+    shape :: ArrayVar aenv (Array sh t) -> (Any, OpenExp env aenv sh)
+    shape (Var (ArrayR ShapeRz _) _)
+      = Stats.ruleFired "shape/Z" $ yes Nil
     shape a
       = pure $ Shape a
 
-    shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
-    shapeSize (_, Const c) = Stats.ruleFired "shapeSize/const" $ yes (Const (product (shapeToList (toElt c :: sh))))
-    shapeSize sh           = ShapeSize <$> sh
+    shapeSize :: ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int)
+    shapeSize shr (_, sh)
+      | Just c <- extractConstTuple sh
+      = Stats.ruleFired "shapeSize/const" $ yes (Const scalarTypeInt (product (shapeToList shr c)))
+    shapeSize shr sh
+      = ShapeSize shr <$> sh
 
-    toIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
-    toIndex  (_,sh) (_,FromIndex sh' ix)
-      | Just Refl <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
-    toIndex sh ix                 = ToIndex <$> sh <*> ix
+    toIndex :: ShapeR sh
+            -> (Any, OpenExp env aenv sh)
+            -> (Any, OpenExp env aenv sh)
+            -> (Any, OpenExp env aenv Int)
+    toIndex _ (_,sh) (_,FromIndex _ sh' ix)
+      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
+    toIndex shr sh ix                    = ToIndex shr <$> sh <*> ix
 
-    fromIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
-    fromIndex  (_,sh) (_,ToIndex sh' ix)
-      | Just Refl <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
-    fromIndex sh ix               = FromIndex <$> sh <*> ix
+    fromIndex :: ShapeR sh
+              -> (Any, OpenExp env aenv sh)
+              -> (Any, OpenExp env aenv Int)
+              -> (Any, OpenExp env aenv sh)
+    fromIndex _ (_,sh) (_,ToIndex _ sh' ix)
+      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
+    fromIndex shr sh ix                  = FromIndex shr <$> sh <*> ix
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
@@ -423,28 +350,36 @@ simplifyOpenExp env = first getAny . cvtE
     yes :: x -> (Any, x)
     yes x = (Any True, x)
 
+extractConstTuple :: OpenExp env aenv t -> Maybe t
+extractConstTuple Nil          = Just ()
+extractConstTuple (Pair e1 e2) = (,) <$> extractConstTuple e1 <*> extractConstTuple e2
+extractConstTuple (Const _ c)  = Just c
+extractConstTuple _            = Nothing
 
 -- Simplification for open functions
 --
 simplifyOpenFun
-    :: Kit acc
-    => Gamma acc env env aenv
-    -> PreOpenFun acc env aenv f
-    -> (Bool, PreOpenFun acc env aenv f)
-simplifyOpenFun env (Body e) = Body <$> simplifyOpenExp env  e
-simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
+    :: Gamma env env aenv
+    -> OpenFun env aenv f
+    -> (Bool, OpenFun env aenv f)
+simplifyOpenFun env (Body e)    = Body    <$> simplifyOpenExp env  e
+simplifyOpenFun env (Lam lhs f) = Lam lhs <$> simplifyOpenFun env' f
   where
-    env' = incExp env `pushExp` Var ZeroIdx
+    env' = lhsExpr lhs env
 
+lhsExpr :: ELeftHandSide t env env' -> Gamma env env aenv -> Gamma env' env' aenv
+lhsExpr (LeftHandSideWildcard _) env = env
+lhsExpr (LeftHandSideSingle  tp) env = incExp env `pushExp` Evar (Var tp ZeroIdx)
+lhsExpr (LeftHandSidePair l1 l2) env = lhsExpr l2 $ lhsExpr l1 env
 
 -- Simplify closed expressions and functions. The process is applied
 -- repeatedly until no more changes are made.
 --
-simplifyExp :: (Elt t, Kit acc) => PreExp acc aenv t -> PreExp acc aenv t
-simplifyExp = iterate summariseOpenExp (simplifyOpenExp EmptyExp)
+simplifyExp :: HasCallStack => Exp aenv t -> Exp aenv t
+simplifyExp = iterate summariseOpenExp matchOpenExp shrinkExp (simplifyOpenExp EmptyExp)
 
-simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
-simplifyFun = iterate summariseOpenFun (simplifyOpenFun EmptyExp)
+simplifyFun :: HasCallStack => Fun aenv f -> Fun aenv f
+simplifyFun = iterate summariseOpenFun matchOpenFun shrinkFun (simplifyOpenFun EmptyExp)
 
 
 -- NOTE: [Simplifier iterations]
@@ -464,16 +399,16 @@ simplifyFun = iterate summariseOpenFun (simplifyOpenFun EmptyExp)
 -- With internal checks on, we also issue a warning if the iteration limit is
 -- reached, but it was still possible to make changes to the expression.
 --
-{-# SPECIALISE iterate :: (Exp aenv t -> Stats) -> (Exp aenv t -> (Bool, Exp aenv t)) -> Exp aenv t -> Exp aenv t #-}
-{-# SPECIALISE iterate :: (Fun aenv t -> Stats) -> (Fun aenv t -> (Bool, Fun aenv t)) -> Fun aenv t -> Fun aenv t #-}
 
 iterate
-    :: forall f a. (Match f, Shrink (f a))
+    :: forall f a. HasCallStack
     => (f a -> Stats)
-    -> (f a -> (Bool, f a))
+    -> (forall s t. f s -> f t -> Maybe (s :~: t))  -- match
+    -> (f a -> (Bool, f a))                         -- shrink
+    -> (f a -> (Bool, f a))                         -- simplify
     -> f a
     -> f a
-iterate summarise f = fix 1 . setup
+iterate summarise match shrink simplify = fix 1 . setup
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
     -- excessive run times, we (should) set this value very low.
@@ -482,18 +417,18 @@ iterate summarise f = fix 1 . setup
     --
     lIMIT       = 25
 
-    simplify'   = Stats.simplifierDone . f
-    setup x     = Stats.trace Stats.dump_simpl_iterations (msg 0 "init" x)
+    simplify'   = Stats.simplifierDone . simplify
+    setup x     = Debug.trace Debug.dump_simpl_iterations (msg 0 "init" x)
                 $ snd (trace 1 "simplify" (simplify' x))
 
     fix :: Int -> f a -> f a
     fix i x0
-      | i > lIMIT       = $internalWarning "simplify" "iteration limit reached" (not (x0 ==^ f x0)) x0
+      | i > lIMIT       = internalWarning "iteration limit reached" (not (x0 ==^ simplify x0)) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2
       where
-        (shrunk,     x1) = trace i "shrink"   $ shrink' x0
+        (shrunk,     x1) = trace i "shrink"   $ shrink x0
         (simplified, x2) = trace i "simplify" $ simplify' x1
 
     -- debugging support
@@ -501,7 +436,7 @@ iterate summarise f = fix 1 . setup
     u ==^ (_,v)         = isJust (match u v)
 
     trace i s v@(changed,x)
-      | changed         = Stats.trace Stats.dump_simpl_iterations (msg i s x) v
+      | changed         = Debug.trace Debug.dump_simpl_iterations (msg i s x) v
       | otherwise       = v
 
     msg :: Int -> String -> f a -> String
@@ -526,6 +461,12 @@ instance Show Stats where
   show (Stats a b c d e) =
     printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
 
+instance Semigroup Stats where
+  (<>) = (+++)
+
+instance Monoid Stats where
+  mempty = Stats 0 0 0 0 0
+
 infixl 6 +++
 (+++) :: Stats -> Stats -> Stats
 Stats a1 b1 c1 d1 e1 +++ Stats a2 b2 c2 d2 e2 = Stats (a1+a2) (b1+b2) (c1+c2) (d1+d2) (e1+e2)
@@ -543,39 +484,28 @@ ops     = lens _ops     (\Stats{..} v -> Stats { _ops     = v, ..})
 {-# INLINE vars    #-}
 {-# INLINE ops     #-}
 
-summariseOpenFun :: PreOpenFun acc env aenv f -> Stats
-summariseOpenFun (Body e) = summariseOpenExp e & terms +~ 1
-summariseOpenFun (Lam f)  = summariseOpenFun f & terms +~ 1 & binders +~ 1
+summariseOpenFun :: OpenFun env aenv f -> Stats
+summariseOpenFun (Body e)  = summariseOpenExp e & terms +~ 1
+summariseOpenFun (Lam _ f) = summariseOpenFun f & terms +~ 1 & binders +~ 1
 
-summariseOpenExp :: PreOpenExp acc env aenv t -> Stats
+summariseOpenExp :: OpenExp env aenv t -> Stats
 summariseOpenExp = (terms +~ 1) . goE
   where
     zero = Stats 0 0 0 0 0
 
-    travE :: PreOpenExp acc env aenv t -> Stats
+    travE :: OpenExp env aenv t -> Stats
     travE = summariseOpenExp
 
-    travF :: PreOpenFun acc env aenv t -> Stats
+    travF :: OpenFun env aenv t -> Stats
     travF = summariseOpenFun
 
     travA :: acc aenv a -> Stats
     travA _ = zero & vars +~ 1  -- assume an array index, else we should have failed elsewhere
 
-    travT :: Tuple (PreOpenExp acc env aenv) t -> Stats
-    travT NilTup        = zero & terms +~ 1
-    travT (SnocTup t e) = travT t +++ travE e & terms +~ 1
-
-    travTix :: TupleIdx t e -> Stats
-    travTix ZeroTupIdx     = zero & terms +~ 1
-    travTix (SuccTupIdx t) = travTix t & terms +~ 1
-
     travC :: PrimConst c -> Stats
     travC (PrimMinBound t) = travBoundedType t & terms +~ 1
     travC (PrimMaxBound t) = travBoundedType t & terms +~ 1
     travC (PrimPi t)       = travFloatingType t & terms +~ 1
-
-    travNonNumType :: NonNumType t -> Stats
-    travNonNumType _ = zero & types +~ 1
 
     travIntegralType :: IntegralType t -> Stats
     travIntegralType _ = zero & types +~ 1
@@ -589,15 +519,13 @@ summariseOpenExp = (terms +~ 1) . goE
 
     travBoundedType :: BoundedType t -> Stats
     travBoundedType (IntegralBoundedType t) = travIntegralType t & types +~ 1
-    travBoundedType (NonNumBoundedType t)   = travNonNumType t & types +~ 1
 
     -- travScalarType :: ScalarType t -> Stats
     -- travScalarType (SingleScalarType t) = travSingleType t & types +~ 1
     -- travScalarType (VectorScalarType t) = travVectorType t & types +~ 1
 
     travSingleType :: SingleType t -> Stats
-    travSingleType (NumSingleType t)    = travNumType t & types +~ 1
-    travSingleType (NonNumSingleType t) = travNonNumType t & types +~ 1
+    travSingleType (NumSingleType t) = travNumType t & types +~ 1
 
     -- travVectorType :: VectorType t -> Stats
     -- travVectorType (Vector2Type t)  = travSingleType t & types +~ 1
@@ -607,36 +535,32 @@ summariseOpenExp = (terms +~ 1) . goE
     -- travVectorType (Vector16Type t) = travSingleType t & types +~ 1
 
     -- The scrutinee has already been counted
-    goE :: PreOpenExp acc env aenv t -> Stats
+    goE :: OpenExp env aenv t -> Stats
     goE exp =
       case exp of
-        Let bnd body          -> travE bnd +++ travE body & binders +~ 1
-        Var{}                 -> zero & vars +~ 1
-        Foreign _ _ x         -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
+        Let _ bnd body        -> travE bnd +++ travE body & binders +~ 1
+        Evar{}                -> zero & vars +~ 1
+        Foreign _ _ _ x       -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
         Const{}               -> zero
-        Undef                 -> zero
-        Tuple tup             -> travT tup & terms +~ 1
-        Prj ix e              -> travTix ix +++ travE e
-        IndexNil              -> zero
-        IndexCons sh sz       -> travE sh +++ travE sz
-        IndexHead sh          -> travE sh
-        IndexTail sh          -> travE sh
-        IndexAny              -> zero
+        Undef _               -> zero
+        Nil                   -> zero & terms +~ 1
+        Pair e1 e2            -> travE e1 +++ travE e2 & terms +~ 1
+        VecPack   _ e         -> travE e
+        VecUnpack _ e         -> travE e
         IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
         IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
-        ToIndex sh ix         -> travE sh +++ travE ix
-        FromIndex sh ix       -> travE sh +++ travE ix
+        ToIndex _ sh ix       -> travE sh +++ travE ix
+        FromIndex _ sh ix     -> travE sh +++ travE ix
+        Case e rhs def        -> travE e +++ mconcat [ travE c | (_,c) <- rhs ] +++ maybe zero travE def
         Cond p t e            -> travE p +++ travE t +++ travE e
         While p f x           -> travF p +++ travF f +++ travE x
         PrimConst c           -> travC c
         Index a ix            -> travA a +++ travE ix
         LinearIndex a ix      -> travA a +++ travE ix
         Shape a               -> travA a
-        ShapeSize sh          -> travE sh
-        Intersect sh1 sh2     -> travE sh1 +++ travE sh2
-        Union sh1 sh2         -> travE sh1 +++ travE sh2
+        ShapeSize _ sh        -> travE sh
         PrimApp f x           -> travPrimFun f +++ travE x
-        Coerce e              -> travE e
+        Coerce _ _ e          -> travE e
 
     travPrimFun :: PrimFun f -> Stats
     travPrimFun = (ops +~ 1) . goF
@@ -704,9 +628,6 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimLAnd                 -> zero
             PrimLOr                  -> zero
             PrimLNot                 -> zero
-            PrimOrd                  -> zero
-            PrimChr                  -> zero
-            PrimBoolToInt            -> zero
             PrimFromIntegral     i n -> travIntegralType i +++ travNumType n
             PrimToFloating       n f -> travNumType n +++ travFloatingType f
 

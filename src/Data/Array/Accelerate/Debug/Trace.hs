@@ -3,11 +3,10 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Trace
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -31,6 +30,7 @@ import Data.Array.Accelerate.Debug.Flags
 import Numeric
 
 #ifdef ACCELERATE_DEBUG
+import Data.Array.Accelerate.Debug.Clock
 import System.IO.Unsafe
 import Text.Printf
 import qualified Debug.Trace                            as D
@@ -141,9 +141,5 @@ traceEventIO f msg = do
 #else
 {-# INLINE traceEventIO #-}
 traceEventIO _ _ = return ()
-#endif
-
-#ifdef ACCELERATE_DEBUG
-foreign import ccall unsafe "clock_gettime_elapsed_seconds" getProgramTime :: IO Double
 #endif
 

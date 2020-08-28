@@ -1,14 +1,11 @@
-{-# LANGUAGE BangPatterns    #-}
-{-# LANGUAGE LambdaCase      #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase   #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Nursery
--- Copyright   : [2008..2017] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2017] Trevor L. McDonell
---               [2015..2017] Robert Clifton-Everest
+-- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -66,7 +63,7 @@ new delete = do
 -- | Look for an entry with the requested size.
 --
 {-# INLINEABLE lookup #-}
-lookup :: Int -> Nursery ptr -> IO (Maybe (ptr Word8))
+lookup :: HasCallStack => Int -> Nursery ptr -> IO (Maybe (ptr Word8))
 lookup !key (Nursery !ref !_) =
   withMVar ref $ \nrs ->
     HT.mutateIO nrs key $ \case
@@ -79,7 +76,7 @@ lookup !key (Nursery !ref !_) =
               then return (Nothing, Just v)   -- delete this entry from the map
               else return (Just vs, Just v)   -- re-insert the tail
           --
-          Seq.EmptyL  -> $internalError "lookup" "expected non-empty sequence"
+          Seq.EmptyL  -> internalError "expected non-empty sequence"
 
 
 -- | Add an entry to the nursery

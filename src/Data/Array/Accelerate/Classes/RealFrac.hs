@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
@@ -7,10 +8,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.RealFrac
--- Copyright   : [2016..2017] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -22,9 +23,12 @@ module Data.Array.Accelerate.Classes.RealFrac (
 
 ) where
 
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language                               ( (^), cond, even )
+import Data.Array.Accelerate.Lift                                   ( unlift )
+import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
@@ -34,11 +38,9 @@ import Data.Array.Accelerate.Classes.Fractional
 import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
-import Data.Array.Accelerate.Classes.Real
 import Data.Array.Accelerate.Classes.ToFloating
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.RealFloat       -- defaultProperFraction
 
-import Data.Typeable
 import Data.Maybe
 import Text.Printf
 import Prelude                                                      ( ($), String, error, unlines, otherwise )
@@ -72,7 +74,7 @@ divMod' n d = (f, n - (toFloating f) * d)
 
 -- | Extracting components of fractions.
 --
-class (Real a, Fractional a) => RealFrac a where
+class (Ord a, Fractional a) => RealFrac a where
   -- | The function 'properFraction' takes a real fractional number @x@ and
   -- returns a pair @(n,f)@ such that @x = n+f@, and:
   --
@@ -102,20 +104,20 @@ class (Real a, Fractional a) => RealFrac a where
   -- splitFraction / fraction are from numeric-prelude Algebra.RealRing
 
   -- | @truncate x@ returns the integer nearest @x@ between zero and @x@
-  truncate       :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  truncate :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   truncate = defaultTruncate
 
   -- | @'round' x@ returns the nearest integer to @x@; the even integer if @x@
   -- is equidistant between two integers
-  round          :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  round    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   round    = defaultRound
 
   -- | @'ceiling' x@ returns the least integer not less than @x@
-  ceiling        :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  ceiling  :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   ceiling  = defaultCeiling
 
   -- | @'floor' x@ returns the greatest integer not greater than @x@
-  floor          :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  floor    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
   floor    = defaultFloor
 
 instance RealFrac Half where
@@ -129,17 +131,17 @@ instance RealFrac Double where
 
 instance RealFrac CFloat where
   properFraction  = defaultProperFraction
-  truncate        = lift1 defaultTruncate
-  round           = lift1 defaultRound
-  ceiling         = lift1 defaultCeiling
-  floor           = lift1 defaultFloor
+  truncate        = defaultTruncate
+  round           = defaultRound
+  ceiling         = defaultCeiling
+  floor           = defaultFloor
 
 instance RealFrac CDouble where
   properFraction  = defaultProperFraction
-  truncate        = lift1 defaultTruncate
-  round           = lift1 defaultRound
-  ceiling         = lift1 defaultCeiling
-  floor           = lift1 defaultFloor
+  truncate        = defaultTruncate
+  round           = defaultRound
+  ceiling         = defaultCeiling
+  floor           = defaultFloor
 
 
 -- Must test for ±0.0 to avoid returning -0.0 in the second component of the
@@ -150,7 +152,7 @@ instance RealFrac CDouble where
 --     => Exp a
 --     -> (Exp b, Exp a)
 -- defaultProperFraction x =
---   untup2 $ Exp
+--   unlift $ Exp
 --          $ Cond (x == 0) (tup2 (0, 0))
 --                          (tup2 (n, f))
 --   where
@@ -162,10 +164,10 @@ defaultProperFraction
     => Exp a
     -> (Exp b, Exp a)
 defaultProperFraction x
-  = untup2
+  = unlift
   $ cond (n >= 0)
-      (tup2 (fromIntegral m * (2 ^ n), 0.0))
-      (tup2 (fromIntegral q, encodeFloat r n))
+      (T2 (fromIntegral m * (2 ^ n)) 0.0)
+      (T2 (fromIntegral q) (encodeFloat r n))
   where
     (m, n) = decodeFloat x
     (q, r) = quotRem m (2 ^ (negate n))
@@ -209,7 +211,9 @@ defaultRound x
         half_down = abs r - 0.5
         p         = compare half_down 0.0
     in
-    cond (constant LT == p || even n) n m
+    cond (constant LT == p) n                   $
+    cond (constant EQ == p) (cond (even n) n m) $
+            {- otherwise -} m
 
 
 data IsFloatingDict a where
@@ -218,10 +222,9 @@ data IsFloatingDict a where
 data IsIntegralDict a where
   IsIntegralDict :: IsIntegral a => IsIntegralDict a
 
-isFloating :: forall a. Elt a => Maybe (IsFloatingDict a)
+isFloating :: forall a. Elt a => Maybe (IsFloatingDict (EltR a))
 isFloating
-  | Just Refl          <- eqT @a @(EltRepr a)
-  , TypeRscalar t      <- eltType @a
+  | TupRsingle t       <- eltR @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , FloatingNumType f  <- n
@@ -233,10 +236,9 @@ isFloating
   | otherwise
   = Nothing
 
-isIntegral :: forall a. Elt a => Maybe (IsIntegralDict a)
+isIntegral :: forall a. Elt a => Maybe (IsIntegralDict (EltR a))
 isIntegral
-  | Just Refl          <- eqT @a @(EltRepr a)
-  , TypeRscalar t      <- eltType @a
+  | TupRsingle t       <- eltR @a
   , SingleScalarType s <- t
   , NumSingleType n    <- s
   , IntegralNumType i  <- n
@@ -273,10 +275,3 @@ preludeError x
             , "These Prelude.RealFrac instances are present only to fulfil superclass"
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
-
-lift1 :: (Elt a, Elt b, Elt c, IsScalar b, b ~ EltRepr a)
-      => (Exp b -> Exp c)
-      -> Exp a
-      -> Exp c
-lift1 f x = f (mkUnsafeCoerce x)
-

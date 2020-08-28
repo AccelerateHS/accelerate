@@ -6,10 +6,10 @@
 {-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue409
--- Copyright   : [2009..2017] Trevor L. McDonell
+-- Copyright   : [2009..2020] The Accelerate Team
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -22,10 +22,10 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue409 (
 
 ) where
 
-import Data.Typeable
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Sugar.Elt                              as S
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
@@ -40,10 +40,10 @@ test_issue409 runN =
     ]
   where
     testElt
-        :: forall a. (P.Floating a, P.Eq a, A.Floating a)
+        :: forall a. (Show a, P.Floating a, P.Eq a, A.Floating a)
         => TestTree
     testElt =
-      testGroup (show (typeOf (undefined :: a)))
+      testGroup (show (eltR @a))
         [ testCase "A" $ e1 @=? indexArray (runN (A.map f) t1) Z
         ]
       where
