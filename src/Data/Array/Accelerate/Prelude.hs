@@ -2258,7 +2258,7 @@ instance IfThenElse Acc where
 -- >   None_   -> True_
 -- >   Some_{} -> False_
 --
--- @since 1.4.0.0
+-- @since 1.3.0.0
 --
 match :: Matching f => f -> f
 match f = mkFun (mkMatch f) id
@@ -2506,7 +2506,7 @@ length = unindex1 . shape
 -- Inspired by the paper /Data-Parallel Flattening by Expansion/ by Martin
 -- Elsman, Troels Henddriksen, and Niels Gustav Westphal Serup, ARRAY'19.
 --
--- @since 1.4.0.0
+-- @since 1.3.0.0
 --
 expand :: (Elt a, Elt b)
        => (Exp a -> Exp Int)
