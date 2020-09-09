@@ -2504,7 +2504,7 @@ length = unindex1 . shape
 -- Vector (Z :. 25) [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
 --
 -- Inspired by the paper /Data-Parallel Flattening by Expansion/ by Martin
--- Elsman, Troels Henddriksen, and Niels Gustav Westphal Serup, ARRAY'19.
+-- Elsman, Troels Henriksen, and Niels Gustav Westphal Serup, ARRAY'19.
 --
 -- @since 1.3.0.0
 --
