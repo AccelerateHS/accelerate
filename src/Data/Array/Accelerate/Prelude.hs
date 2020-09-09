@@ -2538,7 +2538,15 @@ expand f g xs =
           iotas      = map snd
                      $ scanl1 (segmentedL const)
                      $ zip head_flags
-                     $ permute const (fill (I1 n) undef) put
+                     $ permute const
+                               (fill (I1 n) undef)
+                               -- If any of the elements expand to zero new
+                               -- elements then this would result in multiple
+                               -- writes to the same index since the offsets are
+                               -- also the same, which is undefined behaviour
+                               (\ix -> if szs ! ix > 0
+                                         then put ix
+                                         else Nothing_)
                      $ enumFromN (shape xs) 0
       in
       zipWith g (gather iotas xs) idxs
