@@ -57,12 +57,12 @@ import Language.Haskell.TH.Extra
 -- your own pattern synonyms based off of this.
 --
 pattern Pattern :: forall b a context. IsPattern context a b => b -> context a
-pattern Pattern vars <- (destruct @context -> vars)
-  where Pattern = construct @context
+pattern Pattern vars <- (matcher @context -> vars)
+  where Pattern = builder @context
 
-class IsPattern con a b where
-  construct :: b -> con a
-  destruct  :: con a -> b
+class IsPattern context a b where
+  builder :: b -> context a
+  matcher :: context a -> b
 
 
 pattern Vector :: forall b a context. IsVector context a b => b -> context a
@@ -94,12 +94,12 @@ pattern a `Ix` b = a ::. b
 -- IsPattern instances for Shape nil and cons
 --
 instance IsPattern Exp Z Z where
-  construct _ = constant Z
-  destruct _  = Z
+  builder _ = constant Z
+  matcher _ = Z
 
 instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
-  construct (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
-  destruct (Exp t)           = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
+  builder (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
+  matcher (Exp t)          = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
 
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of
@@ -131,9 +131,9 @@ runQ $ do
           --
           _x <- newName "_x"
           [d| instance $context => IsPattern Acc $(varT a) $b where
-                construct $(tupP (map (\x -> [p| Acc $(varP x)|]) xs)) =
+                builder $(tupP (map (\x -> [p| Acc $(varP x)|]) xs)) =
                   Acc $(foldl (\vs v -> [| SmartAcc ($vs `Apair` $(varE v)) |]) [| SmartAcc Anil |] xs)
-                destruct (Acc $(varP _x)) =
+                matcher (Acc $(varP _x)) =
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
@@ -165,13 +165,13 @@ runQ $ do
           _x <- newName "_x"
           _y <- newName "_y"
           [d| instance $context => IsPattern Exp $(varT a) $b where
-                construct $(tupP (map (\x -> [p| Exp $(varP x)|]) xs)) =
+                builder $(tupP (map (\x -> [p| Exp $(varP x)|]) xs)) =
                   let _unmatch :: SmartExp a -> SmartExp a
                       _unmatch (SmartExp (Match _ $(varP _y))) = $(varE _y)
                       _unmatch x = x
                   in
                   Exp $(foldl (\vs v -> [| SmartExp ($vs `Pair` _unmatch $(varE v)) |]) [| SmartExp Nil |] xs)
-                destruct (Exp $(varP _x)) =
+                matcher (Exp $(varP _x)) =
                   case $(varE _x) of
                     SmartExp (Match $tags $(varP _y))
                       -> $(tupE [[| Exp (SmartExp (Match $(varE m) $(get (varE _x) i))) |] | m <- ms | i <- [(n-1), (n-2) .. 0]])
@@ -197,9 +197,9 @@ runQ $ do
               tR       = tupT (replicate n (varT a))
           --
           [d| instance $context => IsVector Exp $(varT v) $tup where
-                vpack x = case construct x :: Exp $tR of
+                vpack x = case builder x :: Exp $tR of
                             Exp x' -> Exp (SmartExp (VecPack $vecR x'))
-                vunpack (Exp x) = destruct (Exp (SmartExp (VecUnpack $vecR x)) :: Exp $tR)
+                vunpack (Exp x) = matcher (Exp (SmartExp (VecUnpack $vecR x)) :: Exp $tR)
             |]
     --
     es <- mapM mkExpPattern [0..16]
