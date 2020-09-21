@@ -79,8 +79,9 @@ floatingToRational x = fromIntegral u :% fromIntegral v
                                  (m :% shiftL 1 (negate e))
 
 -- Stolen from GHC.Float.ConversionUtils
+-- Double mantissa have 53 bits, which fits in an Int64
 --
-elimZeros :: Exp Int64 -> Exp Int -> (Exp Int64, Exp Int) -- Integer
+elimZeros :: Exp Int64 -> Exp Int -> (Exp Int64, Exp Int)
 elimZeros x y = (u, v)
   where
     T3 _ u v = while (\(T3 p _ _) -> p) elim (T3 moar x y)
