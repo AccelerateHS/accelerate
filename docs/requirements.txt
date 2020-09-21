@@ -1,0 +1,7 @@
+# Sync with readthedocs
+sphinx
+sphinx_rtd_theme
+
+# Full-page search UI for RTD: https://readthedocs-sphinx-search.readthedocs.io
+readthedocs-sphinx-search
+

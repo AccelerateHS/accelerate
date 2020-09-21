@@ -12,3 +12,4 @@
 /stack.yaml.lock
 .DS_Store
 *.lock
+/docs/_build
