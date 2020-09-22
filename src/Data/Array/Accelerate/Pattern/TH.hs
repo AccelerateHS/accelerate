@@ -21,7 +21,7 @@ import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Elt ( Elt(..) )
 import Data.Array.Accelerate.Type
 
 import Control.Monad
