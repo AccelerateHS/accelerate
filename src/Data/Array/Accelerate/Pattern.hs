@@ -43,7 +43,7 @@ import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array
-import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Elt ( Elt(..) )
 import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type

@@ -392,9 +392,9 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   --
   -- Other characteristics of the permutation function 'f':
   --
-  --   1. 'f' is a partial function: if it evaluates to the magic value 'ignore'
-  --      (i.e. a tuple of -1 values) then those elements of the domain are
-  --      dropped.
+  --   1. 'f' is a (morally) partial function: only the elements of the domain
+  --      for which the function evealuates to a 'Just' value are mapped in the
+  --      result. Other elements are dropped.
   --
   --   2. 'f' is not surjective: positions in the target array need not be
   --      picked up by the permutation function, so the target array must first
