@@ -353,6 +353,7 @@ library
         Data.Array.Accelerate.Sugar.Elt
         Data.Array.Accelerate.Sugar.Foreign
         Data.Array.Accelerate.Sugar.Shape
+        Data.Array.Accelerate.Sugar.Tag
         Data.Array.Accelerate.Sugar.Vec
         Data.Array.Accelerate.Trafo
         Data.Array.Accelerate.Trafo.Config
