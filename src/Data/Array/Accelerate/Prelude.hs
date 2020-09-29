@@ -140,8 +140,6 @@ import Data.Array.Accelerate.Data.Bits
 import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
 import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
 
-import GHC.Base                                                     ( Constraint )
-
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
@@ -2196,19 +2194,22 @@ infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
 
--- | For use with @-XRebindableSyntax@, this class provides 'ifThenElse' lifted
--- to both scalar and array types.
+-- | For use with @-XRebindableSyntax@, this class provides 'ifThenElse'
+-- for host and embedded scalar and array types.
 --
-class IfThenElse t where
-  type EltT t a :: Constraint
-  ifThenElse :: EltT t a => Exp Bool -> t a -> t a -> t a
+class IfThenElse bool a where
+  ifThenElse :: bool -> a -> a -> a
 
-instance IfThenElse Exp where
-  type EltT Exp t = Elt t
+instance IfThenElse Bool a where
+  ifThenElse p t e =
+    case p of
+      True  -> t
+      False -> e
+
+instance Elt a => IfThenElse (Exp Bool) (Exp a) where
   ifThenElse = cond
 
-instance IfThenElse Acc where
-  type EltT Acc a = Arrays a
+instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
   ifThenElse = acond
 
 
