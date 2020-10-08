@@ -125,10 +125,10 @@ fromIndex (ShapeRsnoc shr) (sh, sz) i
 --
 iter :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a -> a
 iter ShapeRz          ()       f _ _ = f ()
-iter (ShapeRsnoc shr) (sh, sz) f c r = iter shr sh (\ix -> iter' (ix,0)) c r
+iter (ShapeRsnoc shr) (sh, sz) f c z = iter shr sh (\ix -> iter' (ix,0) z) c z
   where
-    iter' (ix,i) | i >= sz   = r
-                 | otherwise = f (ix,i) `c` iter' (ix,i+1)
+    iter' (ix,i) r | i >= sz   = r
+                   | otherwise = iter' (ix,i+1) (r `c` f (ix,i))
 
 -- | Variant of 'iter' without an initial value
 --
