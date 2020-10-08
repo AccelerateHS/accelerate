@@ -391,11 +391,11 @@ foldSegOp itp f z (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
   | IntegralDict <- integralDict itp
   = boundsCheck "empty segment descriptor" (n > 0)
   $ fromFunction' repr (sh, n-1)
-  $ \(sz, ix) ->   let start = fromIntegral $ seg ix
-                       end   = fromIntegral $ seg (ix+1)
-                   in
-                   boundsCheck "empty segment" (end >= start)
-                   $ iter (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
+  $ \(sz, ix) -> let start = fromIntegral $ seg ix
+                     end   = fromIntegral $ seg (ix+1)
+                 in
+                 boundsCheck "empty segment" (end >= start)
+                 $ iter (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
 
 
 fold1SegOp
