@@ -32,7 +32,7 @@ jobs:
           #   ghc: "8.10"
           #   allow_failure: true
     env:
-      STACK_FLAGS: "--system-ghc --no-install-ghc --fast --flag accelerate:nofib"
+      STACK_FLAGS: "--system-ghc --fast --flag accelerate:nofib"
 
     steps:
     - uses: actions/checkout@v2
@@ -46,7 +46,7 @@ jobs:
       id: stack-setup
       run: |
         ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
-        echo "::set-output name=stack-root::$(stack path --system-ghc --no-install-ghc --stack-root)"
+        echo "::set-output name=stack-root::$(stack path --system-ghc --stack-root)"
 
     - uses: actions/cache@v1
       with:
