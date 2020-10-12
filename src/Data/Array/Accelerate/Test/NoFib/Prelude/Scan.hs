@@ -494,7 +494,7 @@ test_scanl1_sum
     -> Property
 test_scanl1_sum runN dim e =
   property $ do
-    sh  <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    sh  <- forAll dim
     arr <- forAll (array sh e)
     let !go = runN (A.scanl1 (+)) in go arr ~~~ scanl1Ref (+) arr
 
@@ -533,7 +533,7 @@ test_scanr1_sum
     -> Property
 test_scanr1_sum runN dim e =
   property $ do
-    sh  <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    sh  <- forAll dim
     arr <- forAll (array sh e)
     let !go = runN (A.scanr1 (+)) in go arr ~~~ scanr1Ref (+) arr
 
@@ -559,7 +559,7 @@ test_scanl_interval
     -> Property
 test_scanl_interval runN dim e =
   property $ do
-    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    sh :. n <- forAll dim
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl iappend (constant one)) in go arr ~~~ scanlRef iappendRef one arr
 
@@ -571,7 +571,7 @@ test_scanl1_interval
     -> Property
 test_scanl1_interval runN dim e =
   property $ do
-    sh :. n <- forAll (dim `except` \v -> S.size v P.== 0)
+    sh :. n <- forAll dim
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl1 iappend) in go arr ~~~ scanl1Ref iappendRef arr
 
@@ -583,7 +583,7 @@ test_scanl'_interval
     -> Property
 test_scanl'_interval runN dim e =
   property $ do
-    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    sh :. n <- forAll dim
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl' iappend (constant one)) in go arr ~~~ scanl'Ref iappendRef one arr
 
@@ -595,7 +595,7 @@ test_scanr_interval
     -> Property
 test_scanr_interval runN dim e =
   property $ do
-    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    sh :. n <- forAll dim
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr iappend (constant one)) in go arr ~~~ scanrRef iappendRef one arr
 
@@ -607,7 +607,7 @@ test_scanr1_interval
     -> Property
 test_scanr1_interval runN dim e =
   property $ do
-    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    sh :. n <- forAll dim
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr1 iappend) in go arr ~~~ scanr1Ref iappendRef arr
 
@@ -619,7 +619,7 @@ test_scanr'_interval
     -> Property
 test_scanr'_interval runN dim e =
   property $ do
-    sh :. n <- forAll (dim `except` \(_:.n) -> n P.== 0)
+    sh :. n <- forAll dim
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr' iappend (constant one)) in go arr ~~~ scanr'Ref iappendRef one arr
 
@@ -648,7 +648,7 @@ test_scanl1Seg_sum
     -> Property
 test_scanl1Seg_sum runN dim e =
   property $ do
-    sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
+    sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 1 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
@@ -697,7 +697,7 @@ test_scanr1Seg_sum
     -> Property
 test_scanr1Seg_sum runN dim e =
   property $ do
-    sh:.n1  <- forAll (dim `except` \v -> S.size v P.== 0)
+    sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 1 64))
     n       <- return (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))

@@ -421,9 +421,8 @@ scanl1Op
     => (e -> e -> e)
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
-scanl1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
-  = boundsCheck "empty array" (n > 0)
-    ( TupRsingle $ ArrayR shr tp
+scanl1Op f (Delayed (ArrayR shr tp) sh ain _)
+  = ( TupRsingle $ ArrayR shr tp
     , adata `seq` Array sh adata
     )
   where
@@ -528,8 +527,7 @@ scanr1Op
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
-  = boundsCheck "empty array" (n > 0)
-    ( TupRsingle $ ArrayR shr tp
+  = ( TupRsingle $ ArrayR shr tp
     , adata `seq` Array sh adata
     )
   where
