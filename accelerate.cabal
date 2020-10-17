@@ -179,6 +179,8 @@ flag debug
     The following options control debug message output, and are enabled with
     @-d\<flag\>@.
     .
+      * @debug@: Include debug symbols in the generated and compiled kernels.
+    .
       * @verbose@: Be extra chatty.
     .
       * @dump-phases@: Print timing information about each phase of the compiler.
@@ -204,8 +206,6 @@ flag debug
     .
       * @dump-gc-stats@: Print aggregate garbage collection information at the
         end of program execution.
-    .
-      * @dubug-cc@: Include debug symbols in the generated and compiled kernels.
     .
       * @dump-cc@: Print information related to kernel code
         generation/compilation. Print the generated code if @verbose@.
