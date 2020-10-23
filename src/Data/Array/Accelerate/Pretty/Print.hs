@@ -225,7 +225,7 @@ prettyAlet
     -> PreOpenAcc acc aenv arrs
     -> Adoc
 prettyAlet ctx prettyAcc extractAcc aenv0
-  = parensIf (needsParens ctx "let")
+  = parensIf (ctxPrecedence ctx > 0)
   . align . wrap . collect aenv0
   where
     collect :: Val aenv' -> PreOpenAcc acc aenv' a -> ([Adoc], Adoc)
@@ -456,7 +456,7 @@ prettyLet
     -> OpenExp env aenv t
     -> Adoc
 prettyLet ctx env0 aenv
-  = parensIf (needsParens ctx "let")
+  = parensIf (ctxPrecedence ctx > 0)
   . align . wrap . collect env0
   where
     collect :: Val env' -> OpenExp env' aenv e -> ([Adoc], Adoc)
