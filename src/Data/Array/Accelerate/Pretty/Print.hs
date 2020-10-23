@@ -140,7 +140,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
   case pacc of
     Avar (Var _ idx)        -> prj idx aenv
     Alet{}                  -> prettyAlet ctx prettyAcc extractAcc aenv pacc
-    Apair{}                 -> prettyAtuple prettyAcc extractAcc aenv pacc
+    Apair{}                 -> prettyAtuple ctx prettyAcc extractAcc aenv pacc
     Anil                    -> "()"
     Apply _ f a             -> apply
       where
@@ -261,18 +261,19 @@ prettyAlet ctx prettyAcc extractAcc aenv0
 
 prettyAtuple
     :: forall acc aenv arrs.
-       PrettyAcc acc
+       Context
+    -> PrettyAcc acc
     -> ExtractAcc acc
     -> Val aenv
     -> PreOpenAcc acc aenv arrs
     -> Adoc
-prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
+prettyAtuple ctx prettyAcc extractAcc aenv0 acc = case collect acc of
     Nothing  -> align $ ppPair acc
     Just tup ->
       case tup of
         []  -> "()"
         [t] -> t
-        _   -> align $ "T" <> pretty (length tup) <+> sep tup
+        _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
   where
     ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
     ppPair (Apair a1 a2) = "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc context0 aenv0 a2 <> ")"
