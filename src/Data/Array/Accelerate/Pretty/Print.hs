@@ -273,7 +273,7 @@ prettyAtuple ctx prettyAcc extractAcc aenv0 acc = case collect acc of
       case tup of
         []  -> "()"
         [t] -> t
-        _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
+        _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> align (sep tup))
   where
     ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
     ppPair (Apair a1 a2) = "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc context0 aenv0 a2 <> ")"
@@ -299,7 +299,7 @@ prettyLhs requiresParens x env0 lhs = case collect lhs of
   Just (env1, tup) ->
     case tup of
       []  -> (env1, "()")
-      _   -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> sep tup))
+      _   -> (env1, parensIf requiresParens (pretty 'T' <> pretty (length tup) <+> align (sep tup)))
   where
     ppPair :: LeftHandSide s arrs' env env'' -> (Val env'', Adoc)
     ppPair LeftHandSideUnit       = (env0, "()")
@@ -506,7 +506,7 @@ prettyTuple ctx env aenv exp = case collect exp of
       case tup of
         []  -> "()"
         [t] -> t
-        _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> sep tup)
+        _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> align (sep tup))
   where
     ppPair :: OpenExp env aenv t' -> Adoc
     ppPair (Pair e1 e2) = "(" <> ppPair e1 <> "," <+> prettyOpenExp context0 env aenv e2 <> ")"
