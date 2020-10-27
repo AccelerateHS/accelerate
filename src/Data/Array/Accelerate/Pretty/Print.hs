@@ -485,10 +485,13 @@ prettyLet ctx env0 aenv
     wrap ([b],  body)
       = sep [ nest shiftwidth (sep [let_, b]), in_, body ]
     wrap (bnds, body)
-      = vsep [ nest shiftwidth (vsep (let_ : bnds))
+      = vsep [ nest shiftwidth (vsep [let_, sepBy (flatAlt "" " ; ") bnds])
              , in_
              , body
              ]
+
+    sepBy :: Adoc -> [Adoc] -> Adoc
+    sepBy = encloseSep mempty mempty
 
 prettyTuple
     :: forall env aenv t.
