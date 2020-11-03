@@ -90,16 +90,18 @@ instance Function (Exp a -> f) => Show (Exp a -> f) where
 --
 
 instance PrettyEnv aenv => Show (OpenAcc aenv a) where
-  show = renderForTerminal . prettyOpenAcc context0 (prettyEnv (pretty 'a'))
+  show = renderForTerminal . prettyOpenAcc configPlain context0 (prettyEnv (pretty 'a'))
 
 instance PrettyEnv aenv => Show (OpenAfun aenv f) where
-  show = renderForTerminal . prettyPreOpenAfun prettyOpenAcc (prettyEnv (pretty 'a'))
+  show = renderForTerminal . prettyPreOpenAfun configPlain prettyOpenAcc (prettyEnv (pretty 'a'))
 
 instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
-  show = renderForTerminal . prettyDelayedOpenAcc context0 (prettyEnv (pretty 'a'))
+  -- TODO: this usage of configWithHash should be configurable by the user
+  show = renderForTerminal . prettyDelayedOpenAcc configWithHash context0 (prettyEnv (pretty 'a'))
 
 instance PrettyEnv aenv => Show (DelayedOpenAfun aenv f) where
-  show = renderForTerminal . prettyPreOpenAfun prettyDelayedOpenAcc (prettyEnv (pretty 'a'))
+  -- TODO: this usage of configWithHash should be configurable by the user
+  show = renderForTerminal . prettyPreOpenAfun configWithHash prettyDelayedOpenAcc (prettyEnv (pretty 'a'))
 
 instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenExp env aenv e) where
   show = renderForTerminal . prettyOpenExp context0 (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
@@ -142,17 +144,17 @@ terminalLayoutOptions
                         | otherwise = 0.8
 
 prettyOpenAcc :: PrettyAcc OpenAcc
-prettyOpenAcc context aenv (OpenAcc pacc) =
-  prettyPreOpenAcc context prettyOpenAcc extractOpenAcc aenv pacc
+prettyOpenAcc config context aenv (OpenAcc pacc) =
+  prettyPreOpenAcc config context prettyOpenAcc extractOpenAcc aenv pacc
 
 extractOpenAcc :: OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
 extractOpenAcc (OpenAcc pacc) = pacc
 
 
 prettyDelayedOpenAcc :: HasCallStack => PrettyAcc DelayedOpenAcc
-prettyDelayedOpenAcc context aenv (Manifest pacc)
-  = prettyPreOpenAcc context prettyDelayedOpenAcc extractDelayedOpenAcc aenv pacc
-prettyDelayedOpenAcc _       aenv (Delayed _ sh f _)
+prettyDelayedOpenAcc config context aenv (Manifest pacc)
+  = prettyPreOpenAcc config context prettyDelayedOpenAcc extractDelayedOpenAcc aenv pacc
+prettyDelayedOpenAcc _      _       aenv (Delayed _ sh f _)
   = parens
   $ nest shiftwidth
   $ sep [ delayed "delayed"
