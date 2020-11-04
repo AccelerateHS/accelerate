@@ -272,7 +272,6 @@ prettyAtuple ctx prettyAcc extractAcc aenv0 acc = case collect acc of
     Just tup ->
       case tup of
         []  -> "()"
-        [t] -> t
         _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> align (sep tup))
   where
     ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
@@ -505,7 +504,6 @@ prettyTuple ctx env aenv exp = case collect exp of
     Just tup ->
       case tup of
         []  -> "()"
-        [t] -> t
         _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> align (sep tup))
   where
     ppPair :: OpenExp env aenv t' -> Adoc
