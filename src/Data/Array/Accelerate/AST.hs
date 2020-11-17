@@ -208,8 +208,8 @@ type PrimMaybe a = (TAG, ((), a))
 --   need to hoist array expressions out of scalar expressions---they occur
 --   in scalar indexing and in determining an arrays shape.)
 --
--- The data type is parameterised over the surface types (not the
--- representation type).
+-- The data type is parameterised over the representation types (not the
+-- surface type).
 --
 -- We use a non-recursive variant parametrised over the recursive closure,
 -- to facilitate attribute calculation in the backend.
@@ -393,7 +393,7 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Other characteristics of the permutation function 'f':
   --
   --   1. 'f' is a (morally) partial function: only the elements of the domain
-  --      for which the function evealuates to a 'Just' value are mapped in the
+  --      for which the function evaluates to a 'Just' value are mapped in the
   --      result. Other elements are dropped.
   --
   --   2. 'f' is not surjective: positions in the target array need not be
