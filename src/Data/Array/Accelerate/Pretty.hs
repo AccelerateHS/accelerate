@@ -35,6 +35,7 @@ module Data.Array.Accelerate.Pretty (
 ) where
 
 import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
+import Data.Array.Accelerate.Debug.Flags
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Graphviz
 import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
@@ -57,7 +58,6 @@ import qualified System.Console.Terminal.Size                       as Term
 
 #if ACCELERATE_DEBUG
 import Control.DeepSeq
-import Data.Array.Accelerate.Debug.Flags
 import Data.Array.Accelerate.Debug.Stats
 #endif
 
@@ -96,12 +96,12 @@ instance PrettyEnv aenv => Show (OpenAfun aenv f) where
   show = renderForTerminal . prettyPreOpenAfun configPlain prettyOpenAcc (prettyEnv (pretty 'a'))
 
 instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
-  -- TODO: this usage of configWithHash should be configurable by the user
-  show = renderForTerminal . prettyDelayedOpenAcc configWithHash context0 (prettyEnv (pretty 'a'))
+  show = let config = if shouldPrintHash then configWithHash else configPlain
+         in renderForTerminal . prettyDelayedOpenAcc config context0 (prettyEnv (pretty 'a'))
 
 instance PrettyEnv aenv => Show (DelayedOpenAfun aenv f) where
-  -- TODO: this usage of configWithHash should be configurable by the user
-  show = renderForTerminal . prettyPreOpenAfun configWithHash prettyDelayedOpenAcc (prettyEnv (pretty 'a'))
+  show = let config = if shouldPrintHash then configWithHash else configPlain
+         in renderForTerminal . prettyPreOpenAfun config prettyDelayedOpenAcc (prettyEnv (pretty 'a'))
 
 instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenExp env aenv e) where
   show = renderForTerminal . prettyOpenExp context0 (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
@@ -165,6 +165,19 @@ prettyDelayedOpenAcc _      _       aenv (Delayed _ sh f _)
 extractDelayedOpenAcc :: HasCallStack => DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
 extractDelayedOpenAcc (Manifest pacc) = pacc
 extractDelayedOpenAcc Delayed{}       = internalError "expected manifest array"
+
+
+-- Unfortunately, using unsafePerformIO here means that the getFlag will be
+-- evaluated only once when the first 'show' is performed on a Delayed value;
+-- afterwards, the thunk will have been evaluated, and all future pretty-print
+-- outputs will use the same result.
+-- This cannot be prevented using a NOINLINE pragma, since then the function
+-- itself is still a thunk that will only be evaluated once.
+--
+-- The practical result of this is that @setFlag verbose@ will not change
+-- anything after a Delayed has already been printed once.
+shouldPrintHash :: Bool
+shouldPrintHash = unsafePerformIO $ getFlag verbose
 
 
 -- Debugging
