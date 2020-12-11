@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Accelerate discussions
+    about: Ask and answer questions here
+    url: https://github.com/AccelerateHS/accelerate/discussions
   - name: Accelerate community chat
     about: Ask and answer questions here
     url: https://gitter.im/AccelerateHS/Lobby
