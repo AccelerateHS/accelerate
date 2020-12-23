@@ -150,6 +150,7 @@ import Data.Primitive.Vec
 import Control.DeepSeq
 import Data.Kind
 import Language.Haskell.TH                                          ( Q, TExp )
+import qualified Language.Haskell.TH.Syntax as TH
 import Prelude
 
 import GHC.TypeLits
@@ -272,6 +273,10 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
               -> acc             aenv arrs                      -- initial value
               -> PreOpenAcc  acc aenv arrs
 
+  Atrace      :: String
+              -> acc             aenv arrs1
+              -> acc             aenv arrs2
+              -> PreOpenAcc  acc aenv arrs2
 
   -- Array inlet. Triggers (possibly) asynchronous host->device transfer if
   -- necessary.
@@ -754,6 +759,7 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
   arraysR (Avar (Var aR _))           = TupRsingle aR
   arraysR (Apair as bs)               = TupRpair (arraysR as) (arraysR bs)
   arraysR Anil                        = TupRunit
+  arraysR (Atrace _ _ bs)             = arraysR bs
   arraysR (Apply aR _ _)              = aR
   arraysR (Aforeign r _ _ _)          = r
   arraysR (Acond _ a _)               = arraysR a
@@ -974,6 +980,7 @@ rnfPreOpenAcc rnfA pacc =
     Avar var                  -> rnfArrayVar var
     Apair as bs               -> rnfA as `seq` rnfA bs
     Anil                      -> ()
+    Atrace msg as bs          -> rnf msg `seq` rnfA as `seq` rnfA bs
     Apply repr afun acc       -> rnfTupR rnfArrayR repr `seq` rnfAF afun `seq` rnfA acc
     Aforeign repr asm afun a  -> rnfTupR rnfArrayR repr `seq` rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
@@ -1182,6 +1189,7 @@ liftPreOpenAcc liftA pacc =
     Avar var                  -> [|| Avar $$(liftArrayVar var) ||]
     Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
     Anil                      -> [|| Anil ||]
+    Atrace msg as bs          -> [|| Atrace $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) $$(liftA as) $$(liftA bs) ||]
     Apply repr f a            -> [|| Apply $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
     Aforeign repr asm f a     -> [|| Aforeign $$(liftArraysR repr) $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
@@ -1366,6 +1374,7 @@ showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
 showPreAccOp Alet{}              = "Alet"
 showPreAccOp (Avar (Var _ ix))   = "Avar a" ++ show (idxToInt ix)
 showPreAccOp (Use aR a)          = "Use " ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
+showPreAccOp Atrace{}            = "Atrace"
 showPreAccOp Apply{}             = "Apply"
 showPreAccOp Aforeign{}          = "Aforeign"
 showPreAccOp Acond{}             = "Acond"

@@ -49,6 +49,7 @@ import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
 import Crypto.Hash
+import qualified Data.Hashable as Hashable
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
 import Data.ByteString.Short.Internal                               ( ShortByteString(..) )
@@ -168,6 +169,7 @@ encodePreOpenAcc options encodeAcc pacc =
     Avar (Var repr v)            -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
     Apair a1 a2                  -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
     Anil                         -> intHost $(hashQ "Anil")
+    Atrace msg as bs             -> intHost $(hashQ "Atrace")      <> intHost (Hashable.hash msg) <> travA as <> travA bs
     Apply _ f a                  -> intHost $(hashQ "Apply")       <> travAF f <> travA a
     Aforeign _ _ f a             -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
     Use repr a                   -> intHost $(hashQ "Use")         <> encodeArrayType repr <> deep (encodeArray a)

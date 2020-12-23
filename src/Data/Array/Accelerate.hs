@@ -290,6 +290,9 @@ module Data.Array.Accelerate (
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
 
+  -- *** Debugging
+  atrace, atraceArray, atraceId, atraceExp,
+
   -- -- ** Sequence operations
   -- collect,
 

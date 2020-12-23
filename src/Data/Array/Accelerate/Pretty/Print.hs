@@ -142,6 +142,7 @@ prettyPreOpenAcc ctx prettyAcc extractAcc aenv pacc =
     Alet{}                  -> prettyAlet ctx prettyAcc extractAcc aenv pacc
     Apair{}                 -> prettyAtuple ctx prettyAcc extractAcc aenv pacc
     Anil                    -> "()"
+    Atrace msg as bs        -> "atrace" .$ [ fromString (show msg), ppA as, ppA bs ]
     Apply _ f a             -> apply
       where
         op    = Operator ">->" Infix L 1

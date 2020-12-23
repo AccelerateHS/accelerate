@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalCoerceScalar,
+  evalPrim, evalPrimConst, evalCoerceScalar, atraceOp,
 
 ) where
 
@@ -205,6 +205,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
                                      in
                                      (TupRpair r1 r2, (a1, a2))
     Anil                          -> (TupRunit, ())
+    Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ uncurry (atraceOp msg) (manifest as)
     Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
     Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
@@ -862,6 +863,21 @@ evalBoundary bnd aenv =
     AST.Constant v -> Constant v
     AST.Function f -> Function (evalFun f aenv)
 
+atraceOp :: String -> ArraysR as -> as -> IO ()
+atraceOp msg TupRunit () = do
+  putStrLn msg
+atraceOp msg (TupRsingle (ArrayR ShapeRz tp)) as = do
+  putStr msg
+  putStr ": "
+  putStrLn $ showElt tp $ linearIndexArray tp as 0
+atraceOp msg (TupRsingle (ArrayR shr tp)) as = do
+  putStr msg
+  putStr ": "
+  putStrLn $ showArray (showsElt tp) (ArrayR shr tp) as
+atraceOp msg repr as = do
+  putStr msg
+  putStrLn ":"
+  putStrLn $ showArrays repr as
 
 -- Scalar expression evaluation
 -- ----------------------------
