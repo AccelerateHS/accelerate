@@ -73,7 +73,7 @@ module Data.Array.Accelerate.Language (
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
 
-  -- * Debugging
+  -- * Tracing
   atrace, atraceArray, atraceId, atraceExp,
 
   -- * Foreign functions
@@ -1181,38 +1181,34 @@ collect = Acc . Collect
 -- | Outputs the trace message to the console before the 'Acc' computation can proceed
 -- with the result of the second argument.
 --
--- Note that arrays are printed in their internal representation (using 'ArraysR'),
--- which causes that tuples or custom data types are shown differently.
+-- @since 1.4.0.0
 --
-atrace :: Arrays as => String -> Acc as -> Acc as
+atrace :: Arrays a => String -> Acc a -> Acc a
 atrace message = atraceArray message (Acc $ SmartAcc Anil :: Acc ())
 
 -- | Outputs the trace message and the array(s) from the second argument to the console,
 -- before the 'Acc' computation can proceed with the result of the third argument.
 --
--- Note that arrays are printed in their internal representation (using 'ArraysR'),
--- which causes that tuples or custom data types are shown differently.
+-- @since 1.4.0.0
 --
-atraceArray :: (Arrays as, Arrays bs) => String -> Acc as -> Acc bs -> Acc bs
+atraceArray :: (Arrays a, Arrays b) => String -> Acc a -> Acc b -> Acc b
 atraceArray message (Acc inspect) (Acc result) = Acc $ SmartAcc $ Atrace message inspect result
 
 -- | Outputs the trace message and the array(s) to the console,
 -- before the 'Acc' computation can proceed with the result of
 -- that array.
 --
--- Note that arrays are printed in their internal representation (using 'ArraysR'),
--- which causes that tuples or custom data types are shown differently.
+-- @since 1.4.0.0
 --
-atraceId :: Arrays as => String -> Acc as -> Acc as
+atraceId :: Arrays a => String -> Acc a -> Acc a
 atraceId message value = atraceArray message value value
 
 -- | Outputs the trace message and a scalar value to the console,
 -- before the 'Acc' computation can prroceed with the result of the third argument.
 --
--- Note that arrays are printed in their internal representation (using 'ArraysR'),
--- which causes that tuples or custom data types are shown differently.
+-- @since 1.4.0.0
 --
-atraceExp :: (Elt e, Arrays as) => String -> Exp e -> Acc as -> Acc as
+atraceExp :: (Elt e, Arrays a) => String -> Exp e -> Acc a -> Acc a
 atraceExp message = atraceArray message . unit
 
 -- Foreign function calling

@@ -290,7 +290,9 @@ module Data.Array.Accelerate (
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
 
-  -- *** Debugging
+  -- ** Tracing
+  -- $tracing
+  --
   atrace, atraceArray, atraceId, atraceExp,
 
   -- -- ** Sequence operations
@@ -673,5 +675,19 @@ arrayReshape = S.reshape
 --  * <https://hackage.haskell.org/package/bmp BMP>: uncompressed BMP image files
 --  * <https://hackage.haskell.org/package/bytestring bytestring> compact, immutable binary data
 --  * As well as copying data directly from raw 'Foreign.Ptr.Ptr's
+--
+
+-- $tracing
+--
+-- The 'atrace', 'atraceArray', 'atraceId', and 'atraceExp' functions print
+-- messages to an output stream. They are intended for \"printf
+-- debugging\", that is: tracing the flow of execution and printing
+-- interesting values.
+--
+-- Note that arrays are printed in their internal representation (using
+-- 'Data.Array.Accelerate.Sugar.Array.ArraysR'), which causes that tuples
+-- or custom data types are shown differently.
+--
+-- These functions have the same caveats as those defined in "Debug.Trace".
 --
 
