@@ -72,6 +72,7 @@ import Control.Monad.ST
 import Data.Bits
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
+import Debug.Trace
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
@@ -864,20 +865,10 @@ evalBoundary bnd aenv =
     AST.Function f -> Function (evalFun f aenv)
 
 atraceOp :: String -> ArraysR as -> as -> IO ()
-atraceOp msg TupRunit () = do
-  putStrLn msg
-atraceOp msg (TupRsingle (ArrayR ShapeRz tp)) as = do
-  putStr msg
-  putStr ": "
-  putStrLn $ showElt tp $ linearIndexArray tp as 0
-atraceOp msg (TupRsingle (ArrayR shr tp)) as = do
-  putStr msg
-  putStr ": "
-  putStrLn $ showArray (showsElt tp) (ArrayR shr tp) as
-atraceOp msg repr as = do
-  putStr msg
-  putStrLn ":"
-  putStrLn $ showArrays repr as
+atraceOp msg TupRunit                         () = traceIO msg
+atraceOp msg (TupRsingle (ArrayR ShapeRz eR)) as = traceIO $ printf "%s: %s" msg (showElt eR $ linearIndexArray eR as 0)
+atraceOp msg (TupRsingle (ArrayR shR eR))     as = traceIO $ printf "%s: %s" msg (showArray (showsElt eR) (ArrayR shR eR) as)
+atraceOp msg aR                               as = traceIO $ printf "%s: %s" msg (showArrays aR as)
 
 -- Scalar expression evaluation
 -- ----------------------------
