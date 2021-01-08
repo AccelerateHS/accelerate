@@ -28,6 +28,8 @@ import Data.Array.Accelerate.Representation.Type
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import System.IO.Unsafe
+import Data.List                                                    ( intersperse )
+import Data.Maybe                                                   ( isJust )
 import Text.Show                                                    ( showListWith )
 import Prelude                                                      hiding ( (!!) )
 import qualified Data.Vector.Unboxed                                as U
@@ -226,6 +228,59 @@ showMatrix f (ArrayR _ arrR) arr@(Array sh _)
               | otherwise                  = ',' : ppMat r (c+1)
         in
         before ++ cell ++ after
+
+showArrays :: ArraysR arrs -> arrs -> String
+showArrays repr arrs = showsArrays repr arrs ""
+
+showsArrays :: ArraysR arrs -> arrs -> ShowS
+showsArrays repr arrs = go 0 repr arrs
+  where
+    go :: Int -> ArraysR a -> a -> ShowS
+    go _     TupRunit                ()
+      = showString "()"
+    go level repr' arrs'
+      | Just tuple <- extractTuple repr' arrs'
+      = let
+          constructor = 'T' : show (length tuple)
+          level' = level + length constructor + 1
+          content = intersperse (('\n' :) . indent level') $ map ($ level') tuple
+        in
+          showString constructor . (' ' :) . foldr (flip (.)) id content
+    go level (TupRpair repr1 repr2)  (arrs1, arrs2)
+      = showString "( " . go (level + 2) repr1 arrs1 . showString "\n"
+      . indent level . showString ", " . go (level + 1) repr2 arrs2 . showString "\n"
+      . indent level . showString ")"
+    go level (TupRsingle r@ArrayR{}) arr
+      = showString $ indents level $ showArray (showsElt $ arrayRtype r) r arr
+
+    indent :: Int -> ShowS
+    indent 0 str = str
+    indent n str = ' ' : indent (n - 1) str
+
+    indents :: Int -> String -> String
+    indents _     []          = []
+    indents level ('\n' : xs) = '\n' : indent level (indents level xs)
+    indents level (x    : xs) = x : indents level xs
+
+    -- Tries to extract the representation of a tuple.
+    -- Tuples are represented as a snoc-list built with
+    -- pairs and nil.
+    -- The tuple is returned a list of pretty-printed
+    -- elements, in reverse order.
+    extractTuple :: ArraysR a -> a -> Maybe [Int -> ShowS]
+    extractTuple TupRunit        ()      = Just []
+    extractTuple (TupRpair rs r) (as, a) = (current :) <$> extractTuple rs as
+      where
+        current level
+          -- Avoid duplicate parentheses for () and pairs which don't form a tuple
+          | needsParens r a = showString "( " . go (level + 2) r a . showString " )"
+          | otherwise       = go level r a
+    extractTuple _               _       = Nothing
+
+    needsParens :: ArraysR a -> a -> Bool
+    needsParens TupRunit _ = False
+    needsParens repr'@(TupRpair _ _) as = isJust $ extractTuple repr' as
+    needsParens _ _ = True
 
 reduceRank :: ArrayR (Array (sh, Int) e) -> ArrayR (Array sh e)
 reduceRank (ArrayR (ShapeRsnoc shR) aeR) = ArrayR shR aeR

@@ -176,6 +176,7 @@ manifest config (OpenAcc pacc) =
     Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest config a)
     Apair a1 a2             -> Apair (manifest config a1) (manifest config a2)
     Anil                    -> Anil
+    Atrace msg a1 a2        -> Atrace msg (manifest config a1) (manifest config a2)
     Apply repr f a          -> apply repr (cvtAF f) (manifest config a)
     Aforeign repr ff f a    -> Aforeign repr ff (cvtAF f) (manifest config a)
 
@@ -366,6 +367,7 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     Apply aR f a        -> done $ Apply aR (cvtAF f) (cvtA a)
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Apair a1 a2         -> done $ Apair (cvtA a1) (cvtA a2)
+    Atrace msg a1 a2    -> done $ Atrace msg (cvtA a1) (cvtA a2)
     Aforeign aR ff f a  -> done $ Aforeign aR ff (cvtAF f) (cvtA a)
     -- Collect s           -> collectD s
 

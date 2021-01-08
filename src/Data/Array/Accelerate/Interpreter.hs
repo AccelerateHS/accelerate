@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalCoerceScalar,
+  evalPrim, evalPrimConst, evalCoerceScalar, atraceOp,
 
 ) where
 
@@ -72,6 +72,7 @@ import Control.Monad.ST
 import Data.Bits
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
+import Debug.Trace
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
@@ -205,6 +206,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
                                      in
                                      (TupRpair r1 r2, (a1, a2))
     Anil                          -> (TupRunit, ())
+    Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ uncurry (atraceOp msg) (manifest as)
     Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
     Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
@@ -862,6 +864,11 @@ evalBoundary bnd aenv =
     AST.Constant v -> Constant v
     AST.Function f -> Function (evalFun f aenv)
 
+atraceOp :: String -> ArraysR as -> as -> IO ()
+atraceOp msg TupRunit                         () = traceIO msg
+atraceOp msg (TupRsingle (ArrayR ShapeRz eR)) as = traceIO $ printf "%s: %s" msg (showElt eR $ linearIndexArray eR as 0)
+atraceOp msg (TupRsingle (ArrayR shR eR))     as = traceIO $ printf "%s: %s" msg (showArray (showsElt eR) (ArrayR shR eR) as)
+atraceOp msg aR                               as = traceIO $ printf "%s: %s" msg (showArrays aR as)
 
 -- Scalar expression evaluation
 -- ----------------------------
