@@ -144,6 +144,7 @@ custom-setup
     , cabal-doctest     >= 1.0
 
 flag debug
+  manual:               True
   default:              False
   description:
     Enable debug tracing messages. The following options are read from the
@@ -221,6 +222,7 @@ flag debug
     .
 
 flag ekg
+  manual:               True
   default:              False
   description:
     Enable hooks for monitoring the running application using EKG. Implies
@@ -257,20 +259,24 @@ flag ekg
     .
 
 flag bounds-checks
-  description:          Enable bounds checking
+  manual:               True
   default:              True
+  description:          Enable bounds checking
 
 flag unsafe-checks
-  description:          Enable bounds checking in unsafe operations
+  manual:               True
   default:              False
+  description:          Enable bounds checking in unsafe operations
 
 flag internal-checks
-  description:          Enable internal consistency checks
+  manual:               True
   default:              False
+  description:          Enable internal consistency checks
 
 -- Enabling this drastically increases build times
 -- See: https://gitlab.haskell.org/ghc/ghc/issues/15751
 flag nofib
+  manual:               True
   default:              False
   description:          Build the nofib test suite (required for backend testing)
 
