@@ -236,7 +236,7 @@ singleDict :: SingleType a -> SingleDict a
 singleDict = single
   where
     single :: SingleType a -> SingleDict a
-    single (NumSingleType    t) = num t
+    single (NumSingleType t) = num t
 
     num :: NumType a -> SingleDict a
     num (IntegralNumType t) = integral t
