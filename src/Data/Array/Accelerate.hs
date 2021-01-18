@@ -665,16 +665,18 @@ arrayReshape = S.reshape
 --
 -- We often need to generate or read data into an 'Array' so that it can be used
 -- in Accelerate. The base @accelerate@ library includes basic conversions
--- routines, but for additional functionality see the
--- <http://hackage.haskell.org/package/accelerate-io accelerate-io> package,
--- which includes conversions between:
+-- routines, but additional functionality is contained in external
+-- libraries, for example:
 --
---  * <https://hackage.haskell.org/package/repa repa>: another Haskell library for high-performance parallel arrays
---  * <https://hackage.haskell.org/package/vector vector>: efficient boxed and unboxed one-dimensional arrays
---  * <https://hackage.haskell.org/package/array array>: immutable arrays
---  * <https://hackage.haskell.org/package/bmp BMP>: uncompressed BMP image files
---  * <https://hackage.haskell.org/package/bytestring bytestring> compact, immutable binary data
---  * As well as copying data directly from raw 'Foreign.Ptr.Ptr's
+--  * <https://hackage.haskell.org/package/accelerate-io accelerate-io>: For copying data directly from raw 'Foreign.Ptr.Ptr's
+--  * <https://hackage.haskell.org/package/accelerate-io-array accelerate-io-array>: immutable arrays
+--  * <https://hackage.haskell.org/package/accelerate-io-bmp accelerate-io-bmp>: uncompressed BMP image files
+--  * <https://hackage.haskell.org/package/accelerate-io-bytestring accelerate-io-bytestring>: compact, immutable binary data
+--  * <https://hackage.haskell.org/package/accelerate-io-cereal accelerate-io-cereal>: binary serialisation of arrays using <https://hackage.haskell.org/package/cereal cereal>
+--  * <https://hackage.haskell.org/package/accelerate-io-JuicyPixels accelerate-io-JuicyPixels>: images in various pixel formats
+--  * <https://hackage.haskell.org/package/accelerate-io-repa accelerate-io-repa>: another Haskell library for high-performance parallel arrays
+--  * <https://hackage.haskell.org/package/accelerate-io-serialise accelerate-io-serialise>: binary serialisation of arrays using <https://hackage.haskell.org/package/serialise serialise>
+--  * <https://hackage.haskell.org/package/accelerate-io-vector accelerate-io-vector>: efficient boxed and unboxed one-dimensional arrays
 --
 
 -- $tracing

@@ -72,7 +72,16 @@ The following supported add-ons are available as separate packages:
   * [accelerate-llvm-native][accelerate-llvm-native]: Backend targeting multicore CPUs
   * [accelerate-llvm-ptx][accelerate-llvm-ptx]: Backend targeting CUDA-enabled NVIDIA GPUs. Requires a GPU with compute capability 2.0 or greater (see the [table on Wikipedia][wiki-cc])
   * [accelerate-examples][accelerate-examples]: Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
-  * [accelerate-io][accelerate-io]: Fast conversion between Accelerate arrays and other array formats (for example, Repa and Vector)
+  * Conversion between various formats:
+    * [accelerate-io](https://hackage.haskell.org/package/accelerate-io): For copying data directly between raw pointers
+    * [accelerate-io-array](https://hackage.haskell.org/package/accelerate-io-array): Immutable arrays
+    * [accelerate-io-bmp](https://hackage.haskell.org/package/accelerate-io-bmp): Uncompressed BMP image files
+    * [accelerate-io-bytestring](https://hackage.haskell.org/package/accelerate-io-bytestring): Compact, immutable binary data
+    * [accelerate-io-cereal](https://hackage.haskell.org/package/accelerate-io-cereal): Binary serialisation of arrays using [cereal](https://hackage.haskell.org/package/cereal)
+    * [accelerate-io-JuicyPixels](https://hackage.haskell.org/package/accelerate-io-JuicyPixels): Images in various pixel formats
+    * [accelerate-io-repa](https://hackage.haskell.org/package/accelerate-io-repa): Another Haskell library for high-performance parallel arrays
+    * [accelerate-io-serialise](https://hackage.haskell.org/package/accelerate-io-serialise): Binary serialisation of arrays using [serialise](https://hackage.haskell.org/package/serialise)
+    * [accelerate-io-vector](https://hackage.haskell.org/package/accelerate-io-vector): Efficient boxed and unboxed one-dimensional arrays
   * [accelerate-fft][accelerate-fft]: Fast Fourier transform implementation, with FFI bindings to optimised implementations
   * [accelerate-blas][accelerate-blas]: BLAS and LAPACK operations, with FFI bindings to optimised implementations
   * [accelerate-bignum][accelerate-bignum]: Fixed-width large integer arithmetic
