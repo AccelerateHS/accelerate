@@ -60,13 +60,16 @@ description:
     * @hashable-accelerate@: Class for types which can be converted to a hash
       value.
   .
-    * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV,
-      and HSL).
+    * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
+  .
+    * @containers-accelerate@: Hashing-based container types
   .
     * @gloss-accelerate@: Generate gloss pictures from Accelerate.
   .
     * @gloss-raster-accelerate@: Parallel rendering of raster images and
       animations.
+  .
+    * @hashable-accelerate@: A class for types which can be converted into a hash value
   .
     * @lens-accelerate@: Lens operators for Accelerate types.
   .

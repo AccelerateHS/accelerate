@@ -86,8 +86,10 @@ The following supported add-ons are available as separate packages:
   * [accelerate-blas][accelerate-blas]: BLAS and LAPACK operations, with FFI bindings to optimised implementations
   * [accelerate-bignum][accelerate-bignum]: Fixed-width large integer arithmetic
   * [colour-accelerate][colour-accelerate]: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL)
+  * [containers-accelerate](http://hackage.haskell.org/package/containers-accelerate): Hashing-based container types
   * [gloss-accelerate][gloss-accelerate]: Generate [gloss][gloss] pictures from Accelerate
   * [gloss-raster-accelerate][gloss-raster-accelerate]: Parallel rendering of raster images and animations
+  * [hashable-accelerate](http://hackage.haskell.org/package/hashable-accelerate): A class for types which can be converted into a hash value
   * [lens-accelerate][lens-accelerate]: [Lens][lens] operators for Accelerate types
   * [linear-accelerate][linear-accelerate]: [Linear][linear] vector spaces in Accelerate
   * [mwc-random-accelerate][mwc-random-accelerate]: Generate Accelerate arrays filled with high quality pseudorandom numbers
