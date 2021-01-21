@@ -45,7 +45,6 @@ module Data.Array.Accelerate.Data.Complex (
 ) where
 
 import Data.Array.Accelerate.Classes
-import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Representation.Tag

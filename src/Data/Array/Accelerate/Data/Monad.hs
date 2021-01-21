@@ -1,6 +1,5 @@
-{-# LANGUAGE RebindableSyntax #-}
 -- |
--- Module      : Data.Array.Accelerate.Data.Functor
+-- Module      : Data.Array.Accelerate.Data.Monad
 -- Copyright   : [2018..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -8,12 +7,12 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- A functor performs a uniform action over a parameterised type
+-- A monad sequences actions over a parametrised type.
 --
--- This is essentially the same as the standard Haskell 'Prelude.Functor' class,
+-- This is essentially the same as the standard Haskell 'Control.Monad' class,
 -- lifted to Accelerate 'Exp' terms.
 --
--- @since 1.2.0.0
+-- @since 1.4.0.0
 --
 
 module Data.Array.Accelerate.Data.Monad (
@@ -30,11 +29,15 @@ import Data.Array.Accelerate.Smart
 import qualified Prelude as P
 
 
--- | The 'Functor' class is used for scalar types which can be mapped over.
--- Instances of 'Functor' should satisfy the following laws:
+-- | The 'Monad' class is used for scalar types which can be sequenced.
+-- Instances of 'Monad' should satisfy the following laws:
 --
--- > fmap id      == id
--- > fmap (f . g) == fmap f . fmap g
+-- [Left identity]  @'return' a '>>=' k  =  k a@
+-- [Right identity] @m '>>=' 'return'  =  m@
+-- [Associativity]  @m '>>=' (\\x -> k x '>>=' h)  =  (m '>>=' k) '>>=' h@
+-- 
+-- Furthermore, the 'Monad' and 'Functor' operations should relate as follows:
+-- * @'fmap' f xs  =  xs '>>=' 'return' . f@
 --
 class Functor m => Monad m where
   -- | Sequentially compose two actions, passing any value produced
