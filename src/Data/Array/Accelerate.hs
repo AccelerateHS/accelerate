@@ -322,6 +322,8 @@ module Data.Array.Accelerate (
   Ord(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
+  Functor(..), (<$>), ($>), void,
+  Monad(..),
 
   -- *** Numeric type classes
   Num, (+), (-), (*), negate, abs, signum, fromInteger,
@@ -422,8 +424,9 @@ module Data.Array.Accelerate (
   Int, Int8, Int16, Int32, Int64,
   Word, Word8, Word16, Word32, Word64,
   Half(..), Float, Double,
-  Bool(..), pattern True_, pattern False_,
-  Maybe(..), pattern Nothing_, pattern Just_,
+  Bool(..),   pattern True_,    pattern False_,
+  Maybe(..),  pattern Nothing_, pattern Just_,
+  Either(..), pattern Left_,    pattern Right_,
   Char,
 
   CFloat, CDouble,
@@ -434,6 +437,7 @@ module Data.Array.Accelerate (
 
 import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Data.Maybe
+import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.TH

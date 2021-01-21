@@ -47,6 +47,7 @@ import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
+import Data.Array.Accelerate.Data.Monad
 import Data.Array.Accelerate.Data.Monoid
 import Data.Array.Accelerate.Data.Semigroup
 
@@ -105,6 +106,12 @@ instance Functor Maybe where
   fmap f = match \case
     Nothing_ -> Nothing_
     Just_ x  -> Just_ (f x)
+
+instance Monad Maybe where
+  return = Just_
+  (=<<) f = match \case
+    Nothing_ -> Nothing_
+    Just_ x -> f x
 
 instance Eq a => Eq (Maybe a) where
   (==) = match go

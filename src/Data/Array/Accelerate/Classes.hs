@@ -20,6 +20,8 @@ module Data.Array.Accelerate.Classes (
   module Ord,
   module Enum,
   module Bounded,
+  module Functor,
+  module Monad,
 
   -- *** Numeric type classes
   module Num,
@@ -49,4 +51,5 @@ import Data.Array.Accelerate.Classes.Ord                            as Ord
 import Data.Array.Accelerate.Classes.RealFloat                      as RealFloat
 import Data.Array.Accelerate.Classes.RealFrac                       as RealFrac
 import Data.Array.Accelerate.Classes.ToFloating                     as ToFloating
-
+import Data.Array.Accelerate.Data.Functor                           as Functor
+import Data.Array.Accelerate.Data.Monad                             as Monad

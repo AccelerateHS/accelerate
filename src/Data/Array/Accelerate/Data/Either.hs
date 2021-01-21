@@ -47,6 +47,7 @@ import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Functor
+import Data.Array.Accelerate.Data.Monad
 import Data.Array.Accelerate.Data.Monoid
 import Data.Array.Accelerate.Data.Semigroup
 
@@ -110,6 +111,10 @@ rights es = compact (map isRight es) (map fromRight es)
 
 instance Elt a => Functor (Either a) where
   fmap f = either Left_ (Right_ . f)
+
+instance Elt a => Monad (Either a) where
+  return = Right_
+  x >>= f = either Left_ f x
 
 instance (Eq a, Eq b) => Eq (Either a b) where
   (==) = match go
