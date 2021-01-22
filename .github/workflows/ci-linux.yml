@@ -31,21 +31,21 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: $HOME/.local/bin
-          key: ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles('stack-${{ matrix.ghc }}.yaml') }}
+          key: ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles("stack-${{ matrix.ghc }}.yaml") }}
           restore-keys: |
             ${{ runner.os }}-local-bin-${{ matrix.ghc }}
 
       - uses: actions/cache@v2
         with:
           path: $HOME/.stack
-          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('stack-${{ matrix.ghc }}.yaml') }}
+          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles("stack-${{ matrix.ghc }}.yaml") }}
           restore-keys: |
             ${{ runner.os }}-stack-global-${{ matrix.ghc }}
 
       - uses: actions/cache@v2
         with:
           path: .stack-work
-          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-${{ matrix.ghc }}.yaml') }}
+          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles("stack-${{ matrix.ghc }}.yaml") }}
           restore-keys: |
             ${{ runner.os }}-stack-local-${{ matrix.ghc }}
 
@@ -61,7 +61,7 @@ jobs:
 
       - name: Install GHC
         run: |
-          stack setup $STACK_FLAGS --install-ghc
+          stack setup --install-ghc
 
       - name: Build dependencies
         run: |

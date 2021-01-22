@@ -23,7 +23,7 @@ jobs:
           # - "8.8"
           # - "8.6"
     env:
-      STACK_FLAGS: "--no-terminal --fast --flag accelerate:nofib --stack-yaml=stack-${{ matrix.ghc }}.yaml"
+      STACK_FLAGS: "--no-terminal --fast --flag accelerate:nofib"
 
     steps:
       - uses: actions/checkout@v2
@@ -53,10 +53,11 @@ jobs:
         run: |
           curl -sL https://get.haskellstack.org/stable/windows-x86_64.zip -o stack.zip
           7z x stack.zip stack.exe
+          mv stack-${{ matrix.ghc }}.yaml stack.yaml
 
       - name: Install GHC
         run: |
-          ./stack setup $STACK_FLAGS --install-ghc
+          ./stack --no-terminal setup --install-ghc
 
       - name: Build dependencies
         run: |

@@ -62,7 +62,7 @@ jobs:
 
       - name: Install GHC
         run: |
-          stack setup $STACK_FLAGS --install-ghc
+          stack setup --install-ghc
 
       - name: Build dependencies
         run: |
