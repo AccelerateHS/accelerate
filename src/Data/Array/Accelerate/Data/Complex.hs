@@ -44,7 +44,14 @@ module Data.Array.Accelerate.Data.Complex (
 
 ) where
 
-import Data.Array.Accelerate.Classes
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Floating
+import Data.Array.Accelerate.Classes.Fractional
+import Data.Array.Accelerate.Classes.FromIntegral
+import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Ord
+import Data.Array.Accelerate.Classes.RealFloat
+import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Representation.Tag

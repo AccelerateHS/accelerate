@@ -384,7 +384,6 @@ library
   other-modules:
         Data.Array.Accelerate.Analysis.Hash.TH
         Data.Array.Accelerate.Array.Remote.Nursery
-        Data.Array.Accelerate.Classes
         Data.Array.Accelerate.Classes.Bounded
         Data.Array.Accelerate.Classes.Enum
         Data.Array.Accelerate.Classes.Eq
