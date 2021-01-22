@@ -123,7 +123,7 @@ test_gather runN dim dim' e =
         toIxArr = fromList sh' . P.map (S.fromIndex sh)
     --
     xs  <- forAll (array sh e)
-    ix  <- forAll (toIxArr <$> Gen.list (Range.singleton n') (Gen.int (Range.linear 0 (n-1))))
+    ix  <- forAll (toIxArr P.<$> Gen.list (Range.singleton n') (Gen.int (Range.linear 0 (n-1))))
     --
     let !go = runN $ \i -> A.backpermute (A.shape i) (i A.!)
     --

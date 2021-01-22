@@ -66,12 +66,12 @@ test_sharing =
   where
     sharingAcc :: Arrays a => Acc a -> Assertion
     sharingAcc acc =
-      catch (rnf (convertAcc acc) `seq` return ())
+      catch (rnf (convertAcc acc) `seq` pure ())
             (\(e :: SomeException) -> assertFailure (show e))
 
     sharingExp :: Elt e => Exp e -> Assertion
     sharingExp exp =
-      catch (rnf (convertExp exp) `seq` return ())
+      catch (rnf (convertExp exp) `seq` pure ())
             (\(e :: SomeException) -> assertFailure (show e))
 
 

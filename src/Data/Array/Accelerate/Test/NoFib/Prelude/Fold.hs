@@ -74,7 +74,7 @@ test_fold runN =
         testDim sh =
           testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [
-              testProperty "sum"              $ test_sum runN sh (return 0) e
+              testProperty "sum"              $ test_sum runN sh (pure 0) e
             , testProperty "non-neutral sum"  $ test_sum runN sh e e
             , testProperty "non-commutative"  $ test_mss runN sh small
             , testProperty "minimum"          $ test_minimum runN sh e
@@ -114,7 +114,7 @@ test_foldSeg runN =
         testDim sh =
           testGroup ("DIM" P.++ show (rank @(sh:.Int)))
             [
-              testProperty "sum"              $ test_segmented_sum runN sh (return 0) e
+              testProperty "sum"              $ test_segmented_sum runN sh (pure 0) e
             , testProperty "non-neutral sum"  $ test_segmented_sum runN sh e e
             , testProperty "minimum"          $ test_segmented_minimum runN sh e
             , testProperty "maximum"          $ test_segmented_maximum runN sh e
@@ -186,7 +186,7 @@ test_segmented_sum runN dim z e =
     x       <- forAll z
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
-    n       <- return (P.min n1 n2) -- don't generate too many segments
+    n       <- pure   (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
@@ -201,7 +201,7 @@ test_segmented_minimum runN dim e =
   property $ do
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
-    n       <- return (P.min n1 n2) -- don't generate too many segments
+    n       <- pure   (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
@@ -216,7 +216,7 @@ test_segmented_maximum runN dim e =
   property $ do
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
-    n       <- return (P.min n1 n2) -- don't generate too many segments
+    n       <- pure   (P.min n1 n2) -- don't generate too many segments
     seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.max) in go xs seg ~~~ fold1SegRef P.max xs seg

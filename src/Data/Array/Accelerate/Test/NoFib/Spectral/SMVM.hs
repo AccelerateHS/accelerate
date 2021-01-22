@@ -67,8 +67,8 @@ sparseMatrix e = do
   cols  <- Gen.int (Range.linear 1 256)
   seg   <- array (Z:.rows) (Gen.int (Range.linear 0 cols))
   let nnz = P.sum (toList seg)
-  smat  <- array (Z:.nnz) ((,) <$> Gen.int (Range.linear 0 (cols-1)) <*> e)
-  return ((seg,smat), cols)
+  smat  <- array (Z:.nnz) ((,) P.<$> Gen.int (Range.linear 0 (cols-1)) <*> e)
+  P.return ((seg,smat), cols)
 
 
 type SparseVector e = Vector (Int, e)

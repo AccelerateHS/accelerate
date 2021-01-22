@@ -67,7 +67,7 @@ test_dotp'
     -> Property
 test_dotp' runN e =
   property $ do
-    sh <- forAll ((Z:.) <$> Gen.int (Range.linear 0 16384))
+    sh <- forAll ((Z:.) P.<$> Gen.int (Range.linear 0 16384))
     xs <- forAll (array sh e)
     ys <- forAll (array sh e)
     let !go = runN dotp in go xs ys S.! Z ~~~ dotpRef xs ys

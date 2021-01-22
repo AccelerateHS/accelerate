@@ -62,10 +62,10 @@ test_blackscholes'
     -> Property
 test_blackscholes' runN e =
   property $ do
-    sh  <- forAll ((Z :.) <$> Gen.int (Range.linear 0 16384))
-    psy <- forAll (array sh ((,,) <$> e (Range.linearFrac 5 30)
-                                  <*> e (Range.linearFrac 1 100)
-                                  <*> e (Range.linearFrac 0.25 10)))
+    sh  <- forAll ((Z :.) P.<$> Gen.int (Range.linear 0 16384))
+    psy <- forAll (array sh ((,,) P.<$> e (Range.linearFrac 5 30)
+                                  P.<*> e (Range.linearFrac 1 100)
+                                  P.<*> e (Range.linearFrac 0.25 10)))
     --
     let !go = runN blackscholes in go psy ~~~ blackscholesRef psy
 

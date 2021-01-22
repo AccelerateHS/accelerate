@@ -43,7 +43,7 @@ test_issue427 runN
   where
     by x = do
       y <- Gen.int (Range.linear 0 1024)
-      return (Z :. y :. x)
+      pure (Z :. y :. x)
 
 
 test_indicesOfTruth
