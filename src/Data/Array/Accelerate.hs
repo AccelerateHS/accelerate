@@ -416,7 +416,7 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Useful re-exports
-  (.), ($), (&), error, undefined, const, otherwise,
+  (.), ($), (&), flip, error, undefined, const, otherwise,
   Show, Generic, HasCallStack,
 
   -- ---------------------------------------------------------------------------
@@ -435,9 +435,23 @@ module Data.Array.Accelerate (
 
 ) where
 
-import Data.Array.Accelerate.Classes
-import Data.Array.Accelerate.Data.Maybe
+import Data.Array.Accelerate.Classes.Bounded
+import Data.Array.Accelerate.Classes.Enum
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.Floating
+import Data.Array.Accelerate.Classes.Fractional
+import Data.Array.Accelerate.Classes.FromIntegral
+import Data.Array.Accelerate.Classes.Integral
+import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Ord
+import Data.Array.Accelerate.Classes.Rational
+import Data.Array.Accelerate.Classes.RealFloat
+import Data.Array.Accelerate.Classes.RealFrac
+import Data.Array.Accelerate.Classes.ToFloating
 import Data.Array.Accelerate.Data.Either
+import Data.Array.Accelerate.Data.Functor
+import Data.Array.Accelerate.Data.Maybe
+import Data.Array.Accelerate.Data.Monad
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.TH
@@ -454,7 +468,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as S
 import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Data.Function                                                ( (&) )
-import Prelude                                                      ( (.), ($), Char, Show, undefined, error, const, otherwise )
+import Prelude                                                      ( (.), ($), Char, Show, flip, undefined, error, const, otherwise )
 
 import GHC.Generics                                                 ( Generic )
 import GHC.Stack

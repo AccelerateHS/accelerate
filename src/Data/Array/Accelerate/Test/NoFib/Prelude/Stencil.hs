@@ -104,7 +104,7 @@ test_stencil3
     -> Property
 test_stencil3 runN e =
   property $ do
-    sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 2 256))
+    sh        <- forAll ((Z :.) P.<$> Gen.int (Range.linear 2 256))
     xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P3 _ a r  <- forAll pattern3
@@ -123,7 +123,7 @@ test_stencil5
     -> Property
 test_stencil5 runN e =
   property $ do
-    sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 3 256))
+    sh        <- forAll ((Z :.) P.<$> Gen.int (Range.linear 3 256))
     xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P5 _ a r  <- forAll pattern5
@@ -142,7 +142,7 @@ test_stencil7
     -> Property
 test_stencil7 runN e =
   property $ do
-    sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 4 256))
+    sh        <- forAll ((Z :.) P.<$> Gen.int (Range.linear 4 256))
     xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P7 _ a r  <- forAll pattern7
@@ -161,7 +161,7 @@ test_stencil9
     -> Property
 test_stencil9 runN e =
   property $ do
-    sh        <- forAll ((Z :.) <$> Gen.int (Range.linear 5 256))
+    sh        <- forAll ((Z :.) P.<$> Gen.int (Range.linear 5 256))
     xs        <- forAll (array sh e)
     b         <- forAll (boundary e)
     P9 _ a r  <- forAll pattern9
@@ -307,10 +307,10 @@ data SimpleBoundary e
 boundary :: Gen e -> Gen (SimpleBoundary e)
 boundary e =
   Gen.choice
-    [ Constant <$> e
-    , return Clamp
-    , return Wrap
-    , return Mirror
+    [ Constant P.<$> e
+    , pure Clamp
+    , pure Wrap
+    , pure Mirror
     ]
 
 data Pattern3 a = P3 [Int] (Stencil3 a -> Exp a) (Stencil3Ref a -> a)
@@ -341,28 +341,28 @@ instance Show (Pattern3x3x3 a) where show (P3x3x3 ix _ _) = show ix
 pattern3 :: (P.Num a, A.Num a) => Gen (Pattern3 a)
 pattern3 = do
   i <- Gen.subsequence [0..2]
-  return $
+  pure $
     P3 i (\(x0,x1,x2) -> P.sum (P.map ([x0,x1,x2] P.!!) i))
          (\(x0,x1,x2) -> P.sum (P.map ([x0,x1,x2] P.!!) i))
 
 pattern5 :: (P.Num a, A.Num a) => Gen (Pattern5 a)
 pattern5 = do
   i <- Gen.subsequence [0..4]
-  return $
+  pure $
     P5 i (\(x0,x1,x2,x3,x4) -> P.sum (P.map ([x0,x1,x2,x3,x4] P.!!) i))
          (\(x0,x1,x2,x3,x4) -> P.sum (P.map ([x0,x1,x2,x3,x4] P.!!) i))
 
 pattern7 :: (P.Num a, A.Num a) => Gen (Pattern7 a)
 pattern7 = do
   i <- Gen.subsequence [0..6]
-  return $
+  pure $
     P7 i (\(x0,x1,x2,x3,x4,x5,x6) -> P.sum (P.map ([x0,x1,x2,x3,x4,x5,x6] P.!!) i))
          (\(x0,x1,x2,x3,x4,x5,x6) -> P.sum (P.map ([x0,x1,x2,x3,x4,x5,x6] P.!!) i))
 
 pattern9 :: (P.Num a, A.Num a) => Gen (Pattern9 a)
 pattern9 = do
   i <- Gen.subsequence [0..8]
-  return $
+  pure $
     P9 i (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum (P.map ([x0,x1,x2,x3,x4,x5,x6,x7,x8] P.!!) i))
          (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum (P.map ([x0,x1,x2,x3,x4,x5,x6,x7,x8] P.!!) i))
 
@@ -371,7 +371,7 @@ pattern3x3 = do
   P3 i0 a0 r0 <- pattern3
   P3 i1 a1 r1 <- pattern3
   P3 i2 a2 r2 <- pattern3
-  return $
+  pure $
     P3x3 [i0,i1,i2]
          (\(x0,x1,x2) -> P.sum [a0 x0, a1 x1, a2 x2])
          (\(x0,x1,x2) -> P.sum [r0 x0, r1 x1, r2 x2])
@@ -383,7 +383,7 @@ pattern5x5 = do
   P5 i2 a2 r2 <- pattern5
   P5 i3 a3 r3 <- pattern5
   P5 i4 a4 r4 <- pattern5
-  return $
+  pure $
     P5x5 [i0,i1,i2,i3,i4]
          (\(x0,x1,x2,x3,x4) -> P.sum [a0 x0, a1 x1, a2 x2, a3 x3, a4 x4])
          (\(x0,x1,x2,x3,x4) -> P.sum [r0 x0, r1 x1, r2 x2, r3 x3, r4 x4])
@@ -397,7 +397,7 @@ pattern7x7 = do
   P7 i4 a4 r4 <- pattern7
   P7 i5 a5 r5 <- pattern7
   P7 i6 a6 r6 <- pattern7
-  return $
+  pure $
     P7x7 [i0,i1,i2,i3,i4,i5,i6]
          (\(x0,x1,x2,x3,x4,x5,x6) -> P.sum [a0 x0, a1 x1, a2 x2, a3 x3, a4 x4, a5 x5, a6 x6])
          (\(x0,x1,x2,x3,x4,x5,x6) -> P.sum [r0 x0, r1 x1, r2 x2, r3 x3, r4 x4, r5 x5, r6 x6])
@@ -413,7 +413,7 @@ pattern9x9 = do
   P9 i6 a6 r6 <- pattern9
   P9 i7 a7 r7 <- pattern9
   P9 j8 a8 r8 <- pattern9
-  return $
+  pure $
     P9x9 [i0,i1,i2,i3,i4,i5,i6,i7,j8]
          (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum [a0 x0, a1 x1, a2 x2, a3 x3, a4 x4, a5 x5, a6 x6, a7 x7, a8 x8])
          (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum [r0 x0, r1 x1, r2 x2, r3 x3, r4 x4, r5 x5, r6 x6, r7 x7, r8 x8])
@@ -423,7 +423,7 @@ pattern3x3x3 = do
   P3x3 i0 a0 r0 <- pattern3x3
   P3x3 i1 a1 r1 <- pattern3x3
   P3x3 i2 a2 r2 <- pattern3x3
-  return $
+  pure $
     P3x3x3 [i0,i1,i2]
            (\(x0,x1,x2) -> P.sum [a0 x0, a1 x1, a2 x2])
            (\(x0,x1,x2) -> P.sum [r0 x0, r1 x1, r2 x2])

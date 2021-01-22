@@ -68,7 +68,7 @@ test_saxpy'
     -> Property
 test_saxpy' runN e =
   property $ do
-    sh    <- forAll ((Z:.) <$> Gen.int (Range.linear 0 16384))
+    sh    <- forAll ((Z:.) P.<$> Gen.int (Range.linear 0 16384))
     alpha <- forAll e
     xs    <- forAll (array sh e)
     ys    <- forAll (array sh e)

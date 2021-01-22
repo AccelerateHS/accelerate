@@ -108,7 +108,7 @@ instance Functor Maybe where
     Just_ x  -> Just_ (f x)
 
 instance Monad Maybe where
-  return = Just_
+  return  = Just_
   (=<<) f = match \case
     Nothing_ -> Nothing_
     Just_ x -> f x

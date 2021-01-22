@@ -1,0 +1,81 @@
+name: ci-windows
+
+# Trigger the workflow on push or pull request
+on:
+  pull_request:
+    # branches: [master]
+  push:
+    paths:
+      - '.github/workflows/ci-windows.yml'
+      - 'stack*.yaml'
+      - '*.cabal'
+      - 'src/**'
+      - 'test/**'
+      - 'cbits/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        ghc:
+          - "8.10"
+          # - "8.8"
+          # - "8.6"
+    env:
+      STACK_FLAGS: "--no-terminal --fast --flag accelerate:nofib"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/cache@v2
+        with:
+          path: C:\Users\runneradmin\AppData\Local\Programs\stack\
+          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-local-${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        with:
+          path: C:\Users\runneradmin\AppData\Roaming\stack\
+          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-global-${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        with:
+          path: .stack-work
+          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-local-${{ matrix.ghc }}
+
+      - name: Install stack
+        run: |
+          curl -sL https://get.haskellstack.org/stable/windows-x86_64.zip -o stack.zip
+          7z x stack.zip stack.exe
+          mv stack-${{ matrix.ghc }}.yaml stack.yaml
+
+      - name: Install GHC
+        run: |
+          ./stack --no-terminal setup --install-ghc
+
+      - name: Build dependencies
+        run: |
+          ./stack build $STACK_FLAGS --test --no-run-tests --only-dependencies
+
+      - name: Build
+        run: |
+          ./stack build $STACK_FLAGS --test --no-run-tests
+
+      - name: Test doctest
+        run: |
+          ./stack test accelerate:doctest $STACK_FLAGS
+
+      - name: Test nofib
+        run: |
+          ./stack test accelerate:nofib-interpreter $STACK_FLAGS
+
+      - name: Test haddock generation
+        run: |
+          ./stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" $STACK_FLAGS
+

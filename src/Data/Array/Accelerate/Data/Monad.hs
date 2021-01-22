@@ -26,7 +26,7 @@ import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Smart
 
-import qualified Prelude as P
+import Prelude                                                      ( flip )
 
 
 -- | The 'Monad' class is used for scalar types which can be sequenced.
@@ -35,7 +35,7 @@ import qualified Prelude as P
 -- [Left identity]  @'return' a '>>=' k  =  k a@
 -- [Right identity] @m '>>=' 'return'  =  m@
 -- [Associativity]  @m '>>=' (\\x -> k x '>>=' h)  =  (m '>>=' k) '>>=' h@
--- 
+--
 -- Furthermore, the 'Monad' and 'Functor' operations should relate as follows:
 -- * @'fmap' f xs  =  xs '>>=' 'return' . f@
 --
@@ -49,11 +49,14 @@ class Functor m => Monad m where
   -- do a <- as
   --    bs a
   -- @
+  --
   (>>=) :: (Elt a, Elt b, Elt (m a), Elt (m b)) => Exp (m a) -> (Exp a -> Exp (m b)) -> Exp (m b)
-  (>>=) = P.flip (=<<)
+  (>>=) = flip (=<<)
 
+  -- | Same as '>>=', but with the arguments interchanged
+  --
   (=<<) :: (Elt a, Elt b, Elt (m a), Elt (m b)) => (Exp a -> Exp (m b)) -> Exp (m a) -> Exp (m b)
-  (=<<) = P.flip (>>=)
+  (=<<) = flip (>>=)
 
   -- | Sequentially compose two actions, discarding any value produced
   -- by the first, like sequencing operators (such as the semicolon)
@@ -65,16 +68,12 @@ class Functor m => Monad m where
   -- do as
   --    bs
   -- @
+  --
   (>>) :: (Elt a, Elt b, Elt (m a), Elt (m b)) => Exp (m a) -> Exp (m b) -> Exp (m b)
   m >> k = m >>= \_ -> k
   {-# INLINE (>>) #-}
 
-  -- | Inject a value into the monadic type.
+  -- | Inject a value into the monadic type
+  --
   return :: (Elt a, Elt (m a)) => Exp a -> Exp (m a)
-  return = pure
 
-  -- | Inject a value into the monadic type.
-  pure :: (Elt a, Elt (m a)) => Exp a -> Exp (m a)
-  pure = return
-
-  {-# MINIMAL ((>>=) | (=<<)), (return | pure) #-}

@@ -67,7 +67,7 @@ test_sasum'
     -> Property
 test_sasum' runN e =
   property $ do
-    sh <- forAll ((Z:.) <$> Gen.int (Range.linear 0 16384))
+    sh <- forAll ((Z:.) P.<$> Gen.int (Range.linear 0 16384))
     xs <- forAll (array sh e)
     let !go = runN sasum in go xs S.! Z ~~~ sasumRef xs
 

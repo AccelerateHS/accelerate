@@ -1,0 +1,87 @@
+name: ci-macos
+
+# Trigger the workflow on push or pull request
+on:
+  pull_request:
+    # branches: [master]
+  push:
+    paths:
+      - '.github/workflows/ci-macos.yml'
+      - 'stack*.yaml'
+      - '*.cabal'
+      - 'src/**'
+      - 'test/**'
+      - 'cbits/**'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        ghc:
+          - "8.10"
+          # - "8.8"
+          # - "8.6"
+    env:
+      STACK_FLAGS: "--fast --flag accelerate:nofib"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/cache@v2
+        with:
+          path: $HOME/.local/bin
+          key: ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-local-bin-${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        with:
+          path: $HOME/.stack
+          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-global-${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        with:
+          path: .stack-work
+          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-stack-local-${{ matrix.ghc }}
+
+      - name: Install stack
+        run: |
+          mkdir -p $HOME/.local/bin
+          if [[ ! -x $HOME/.local/bin/stack ]]; then
+            brew install gnu-tar
+            curl -sL https://get.haskellstack.org/stable/osx-x86_64.tar.gz | gtar xz --wildcards --strip-components=1 -C $HOME/.local/bin '*/stack'
+            chmod a+x $HOME/.local/bin/stack
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
+
+      - name: Install GHC
+        run: |
+          stack setup --install-ghc
+
+      - name: Build dependencies
+        run: |
+          stack build $STACK_FLAGS --test --no-run-tests --only-dependencies
+
+      - name: Build
+        run: |
+          stack build $STACK_FLAGS --test --no-run-tests
+
+      - name: Test doctest
+        run: |
+          stack test accelerate:doctest $STACK_FLAGS
+
+      - name: Test nofib
+        run: |
+          stack test accelerate:nofib-interpreter $STACK_FLAGS
+
+      - name: Test haddock generation
+        run: |
+          stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" $STACK_FLAGS
+
+

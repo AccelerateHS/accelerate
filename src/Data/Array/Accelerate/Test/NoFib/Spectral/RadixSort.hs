@@ -74,7 +74,7 @@ test_sort_ascending
     -> Property
 test_sort_ascending runN e =
   property $ do
-    sh <- forAll ((Z :.) <$> Gen.int (Range.linear 0 128))  -- just pick a small array; the algorithm is terrible
+    sh <- forAll ((Z :.) P.<$> Gen.int (Range.linear 0 128))  -- just pick a small array; the algorithm is terrible
     xs <- forAll (array sh e)
     let !go = runN radixsort in go xs ~~~ sortRef P.compare xs
 
@@ -85,7 +85,7 @@ test_sort_descending
     -> Property
 test_sort_descending runN e =
   property $ do
-    sh <- forAll ((Z :.) <$> Gen.int (Range.linear 0 128))
+    sh <- forAll ((Z :.) P.<$> Gen.int (Range.linear 0 128))
     xs <- forAll (array sh e)
     let !go = runN (radixsortBy complement) in go xs ~~~ sortRef (flip P.compare) xs
 
@@ -97,8 +97,8 @@ test_sort_keyval
     -> Property
 test_sort_keyval runN key val =
   property $ do
-    sh <- forAll ((Z :.) <$> Gen.int (Range.linear 0 128))
-    xs <- forAll (array sh ((,) <$> key <*> val))
+    sh <- forAll ((Z :.) P.<$> Gen.int (Range.linear 0 128))
+    xs <- forAll (array sh ((,) P.<$> key P.<*> val))
     let !go = runN (radixsortBy A.fst) in go xs ~~~ sortRef (P.compare `on` P.fst) xs
 
 

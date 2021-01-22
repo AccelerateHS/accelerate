@@ -3,7 +3,9 @@
 
 # High-performance parallel arrays for Haskell
 
-[![GitHub CI](https://github.com/tmcdonell/accelerate/workflows/CI/badge.svg)](https://github.com/tmcdonell/accelerate/actions)
+[![CI-Linux](https://github.com/tmcdonell/accelerate/workflows/ci-linux/badge.svg)](https://github.com/tmcdonell/accelerate/actions?query=workflow%3Aci-linux)
+[![CI-MacOS](https://github.com/tmcdonell/accelerate/workflows/ci-macos/badge.svg)](https://github.com/tmcdonell/accelerate/actions?query=workflow%3Aci-macos)
+[![CI-Windows](https://github.com/tmcdonell/accelerate/workflows/ci-windows/badge.svg)](https://github.com/tmcdonell/accelerate/actions?query=workflow%3Aci-windows)
 [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
 <br>
 [![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)

@@ -38,7 +38,6 @@ import qualified Hedgehog.Range                                     as Range
 import Test.Tasty
 import Test.Tasty.Hedgehog
 
-import Control.Monad
 import System.IO.Unsafe
 import Prelude                                                      as P
 import qualified Data.Set                                           as Set
@@ -103,20 +102,20 @@ test_scatter runN dim dim' e =
         n'  = S.size sh'
         --
         shfl seen i
-          | i P.>= n  = return []
+          | i P.>= n  = pure []
           | otherwise = do
-              t  <- Gen.choice [ return  (-1)
+              t  <- Gen.choice [ pure (-1)
                                , Gen.int (Range.linear 0 (n'-1))
                                ]
               ts <- shfl (Set.insert t seen) (i+1)
               --
               case Set.member t seen of
-                True  -> return (Nothing                  : ts)
-                False -> return (Just (S.fromIndex sh' t) : ts)
+                True  -> pure (Nothing                  : ts)
+                False -> pure (Just (S.fromIndex sh' t) : ts)
     --
     def <- forAll (array sh' e)
     new <- forAll (array sh  e)
-    ix  <- forAll (fromList sh <$> shfl (Set.singleton (-1)) 0)
+    ix  <- forAll (fromList sh P.<$> shfl (Set.singleton (-1)) 0)
     --
     let !go = runN $ \i d v -> A.permute const d (i A.!) v
     go ix def new ~~~ permuteRef const def (ix S.!) new
@@ -138,8 +137,8 @@ test_accumulate runN dim dim' e =
         def = S.fromFunction sh' (const 0)
     --
     xs  <- forAll (array sh e)
-    ix  <- forAll (array sh (Gen.choice [ return Nothing
-                                        , Just . S.fromIndex sh' <$> Gen.int (Range.linear 0 (n'-1))
+    ix  <- forAll (array sh (Gen.choice [ pure Nothing
+                                        , Just . S.fromIndex sh' P.<$> Gen.int (Range.linear 0 (n'-1))
                                         ]))
     let !go = runN $ \i d v -> A.permute (+) d (i A.!) v
     go ix def xs ~~~ permuteRef (+) def (ix S.!) xs
@@ -161,19 +160,19 @@ permuteRef f def@(Array (R.Array _ aold)) p arr@(Array (R.Array _ anew)) =
         n   = S.size sh
         --
         go !i
-          | i P.>= n  = return ()
+          | i P.>= n  = pure ()
           | otherwise = do
               let ix  = S.fromIndex sh i
               case p ix of
-                Nothing  -> return ()
+                Nothing  -> pure ()
                 Just ix' -> do
                   let i'  = S.toIndex sh' ix'
-                  x  <- toElt <$> readArrayData tp anew i
-                  x' <- toElt <$> readArrayData tp aold i'
+                  x  <- toElt P.<$> readArrayData tp anew i
+                  x' <- toElt P.<$> readArrayData tp aold i'
                   writeArrayData tp aold i' (fromElt (f x x'))
               --
               go (i+1)
     --
     go 0
-    return def
+    pure def
 
