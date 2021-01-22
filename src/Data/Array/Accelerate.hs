@@ -416,7 +416,7 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- * Useful re-exports
-  (.), ($), (&), error, undefined, const, otherwise,
+  (.), ($), (&), flip, error, undefined, const, otherwise,
   Show, Generic, HasCallStack,
 
   -- ---------------------------------------------------------------------------
@@ -468,7 +468,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as S
 import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Data.Function                                                ( (&) )
-import Prelude                                                      ( (.), ($), Char, Show, undefined, error, const, otherwise )
+import Prelude                                                      ( (.), ($), Char, Show, flip, undefined, error, const, otherwise )
 
 import GHC.Generics                                                 ( Generic )
 import GHC.Stack
