@@ -81,6 +81,40 @@ class Functor m => Monad m where
   --
   return :: (Elt a, Elt (m a)) => Exp a -> Exp (m a)
 
+-- | The 'join' function is the conventional monad join operator. It
+-- is used to remove one level of monadic structure, projecting its
+-- bound argument into the outer level.
+--
+--
+-- \'@'join' bss@\' can be understood as the @do@ expression
+--
+-- @
+-- do bs <- bss
+--    bs
+-- @
+join              :: (Monad m) => m (m a) -> m a
+join x            =  x >>= id
+
+-- | Left-to-right composition of Kleisli arrows.
+--
+-- \'@(bs '>=>' cs) a@\' can be understood as the @do@ expression
+--
+-- @
+-- do b <- bs a
+--    cs b
+-- @
+(>=>)       :: Monad m => (a -> m b) -> (b -> m c) -> (a -> m c)
+f >=> g     = \x -> f x >>= g
+
+-- | Right-to-left composition of Kleisli arrows. @('>=>')@, with the arguments
+-- flipped.
+--
+-- Note how this operator resembles function composition @('.')@:
+--
+-- > (.)   ::            (b ->   c) -> (a ->   b) -> a ->   c
+-- > (<=<) :: Monad m => (b -> m c) -> (a -> m b) -> a -> m c
+(<=<)       :: Monad m => (b -> m c) -> (a -> m b) -> (a -> m c)
+(<=<)       = flip (>=>)
 
 -- | Conditional execution of a monadic expression
 --
