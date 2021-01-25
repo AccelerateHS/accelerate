@@ -67,9 +67,9 @@ jobs:
         run: |
           ./stack --no-terminal build --ghc-options -fexternal-interpreter --fast --flag accelerate:nofib --test --no-run-tests
 
-      - name: Test doctest
-        run: |
-          ./stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
+      # - name: Test doctest
+      #   run: |
+      #     ./stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
 
       - name: Test nofib
         run: |
