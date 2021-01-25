@@ -30,14 +30,14 @@ jobs:
 
       - uses: actions/cache@v2
         with:
-          path: $HOME/.local/bin
+          path: ~/.local/bin
           key: ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
           restore-keys: |
             ${{ runner.os }}-local-bin-${{ matrix.ghc }}
 
       - uses: actions/cache@v2
         with:
-          path: $HOME/.stack
+          path: ~/.stack
           key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
           restore-keys: |
             ${{ runner.os }}-stack-global-${{ matrix.ghc }}
@@ -51,13 +51,13 @@ jobs:
 
       - name: Install stack
         run: |
-          mkdir -p $HOME/.local/bin
-          if [[ ! -x $HOME/.local/bin/stack ]]; then
+          mkdir -p ~/.local/bin
+          if [[ ! -x ~/.local/bin/stack ]]; then
             brew install gnu-tar
-            curl -sL https://get.haskellstack.org/stable/osx-x86_64.tar.gz | gtar xz --wildcards --strip-components=1 -C $HOME/.local/bin '*/stack'
-            chmod a+x $HOME/.local/bin/stack
+            curl -sL https://get.haskellstack.org/stable/osx-x86_64.tar.gz | gtar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+            chmod a+x ~/.local/bin/stack
           fi
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "~/.local/bin" >> $GITHUB_PATH
           ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
 
       - name: Install GHC
