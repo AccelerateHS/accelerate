@@ -23,7 +23,7 @@ jobs:
           # - "8.8"
           # - "8.6"
     env:
-      STACK_FLAGS: "--no-terminal --fast --flag accelerate:nofib"
+      STACK_FLAGS: --no-terminal --fast --flag accelerate:nofib
 
     steps:
       - uses: actions/checkout@v2
