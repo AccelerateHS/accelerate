@@ -61,21 +61,21 @@ jobs:
 
       - name: Build dependencies
         run: |
-          ./stack build %STACK_FLAGS% --test --no-run-tests --only-dependencies
+          ./stack build ${env:STACK_FLAGS} --test --no-run-tests --only-dependencies
 
       - name: Build
         run: |
-          ./stack build %STACK_FLAGS% --test --no-run-tests
+          ./stack build ${env:STACK_FLAGS} --test --no-run-tests
 
       # - name: Test doctest
       #   run: |
-      #     ./stack test accelerate:doctest %STACK_FLAGS%
+      #     ./stack test accelerate:doctest ${env:STACK_FLAGS}
 
       - name: Test nofib
         run: |
-          ./stack test accelerate:nofib-interpreter %STACK_FLAGS%
+          ./stack test accelerate:nofib-interpreter ${env:STACK_FLAGS}
 
       - name: Test haddock generation
         run: |
-          ./stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" %STACK_FLAGS%
+          ./stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" ${env:STACK_FLAGS}
 
