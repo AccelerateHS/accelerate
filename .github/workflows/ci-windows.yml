@@ -22,8 +22,6 @@ jobs:
           - "8.10"
           # - "8.8"
           # - "8.6"
-    env:
-      __COMPAT_LAYER: ""
 
     steps:
       - uses: actions/checkout@v2
@@ -71,9 +69,9 @@ jobs:
       #   run: |
       #     ./stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
 
-      - name: Test nofib
-        run: |
-          ./stack --no-terminal test accelerate:nofib-interpreter --ghc-options -fexternal-interpreter --fast --flag accelerate:nofib
+      # - name: Test nofib
+      #   run: |
+      #     ./stack --no-terminal test accelerate:nofib-interpreter --ghc-options -fexternal-interpreter --fast --flag accelerate:nofib
 
       - name: Test haddock generation
         run: |
