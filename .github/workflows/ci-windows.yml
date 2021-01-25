@@ -23,7 +23,7 @@ jobs:
           # - "8.8"
           # - "8.6"
     env:
-      __COMPAT_LAYER:
+      __COMPAT_LAYER: ""
 
     steps:
       - uses: actions/checkout@v2
