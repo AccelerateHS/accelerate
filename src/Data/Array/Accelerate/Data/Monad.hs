@@ -18,8 +18,18 @@
 
 module Data.Array.Accelerate.Data.Monad (
 
+  -- * Monad class
   Monad(..),
-  when,
+
+  -- * Functions
+  -- ** Basic functions
+  (=<<), (>>),
+  (>=>), (<=<),
+
+  -- ** Conditional execution of monadic expressions
+  when, unless,
+
+  -- ** Monadic lifting operations
   liftM, liftM2, liftM3, liftM4, liftM5,
 
 ) where
@@ -54,38 +64,86 @@ class Functor m => Monad m where
   --    bs a
   -- @
   --
-  (>>=) :: (Elt a, Elt b, Elt (m a), Elt (m b)) => Exp (m a) -> (Exp a -> Exp (m b)) -> Exp (m b)
-  (>>=) = flip (=<<)
-
-  -- | Same as '>>=', but with the arguments interchanged
-  --
-  (=<<) :: (Elt a, Elt b, Elt (m a), Elt (m b)) => (Exp a -> Exp (m b)) -> Exp (m a) -> Exp (m b)
-  (=<<) = flip (>>=)
-
-  -- | Sequentially compose two actions, discarding any value produced
-  -- by the first, like sequencing operators (such as the semicolon)
-  -- in imperative languages.
-  --
-  -- \'@as '>>' bs@\' can be understood as the @do@ expression
-  --
-  -- @
-  -- do as
-  --    bs
-  -- @
-  --
-  (>>) :: (Elt a, Elt b, Elt (m a), Elt (m b)) => Exp (m a) -> Exp (m b) -> Exp (m b)
-  m >> k = m >>= \_ -> k
-  {-# INLINE (>>) #-}
+  infixl 1 >>=
+  (>>=) :: (Elt a, Elt b, Elt (m a), Elt (m b))
+        => Exp (m a)
+        -> (Exp a -> Exp (m b))
+        -> Exp (m b)
 
   -- | Inject a value into the monadic type
   --
   return :: (Elt a, Elt (m a)) => Exp a -> Exp (m a)
 
 
+-- | Same as '>>=', but with the arguments interchanged
+--
+infixr 1 =<<
+(=<<) :: (Monad m, Elt a, Elt b, Elt (m a), Elt (m b))
+      => (Exp a -> Exp (m b))
+      -> Exp (m a)
+      -> Exp (m b)
+(=<<) = flip (>>=)
+
+-- | Sequentially compose two actions, discarding any value produced by the
+-- first, like sequencing operators (such as the semicolon) in imperative
+-- languages.
+--
+-- \'@as '>>' bs@\' can be understood as the @do@ expression
+--
+-- @
+-- do as
+--    bs
+-- @
+--
+infixl 1 >>
+(>>) :: (Monad m, Elt a, Elt b, Elt (m a), Elt (m b))
+     => Exp (m a)
+     -> Exp (m b)
+     -> Exp (m b)
+m >> k = m >>= \_ -> k
+
+
+-- | Left-to-right composition of Kleisli arrows.
+--
+-- \'@(bs '>=>' cs) a@\' can be understood as the @do@ expression
+--
+-- @
+-- do b <- bs a
+--    cs b
+-- @
+--
+infixr 1 >=>
+(>=>) :: (Monad m, Elt a, Elt b, Elt c, Elt (m b), Elt (m c))
+      => (Exp a -> Exp (m b))
+      -> (Exp b -> Exp (m c))
+      -> (Exp a -> Exp (m c))
+f >=> g = \x -> f x >>= g
+
+-- | Right-to-left composition of Kleisli arrows. @('>=>')@, with the arguments
+-- flipped.
+--
+-- Note how this operator resembles function composition @('.')@:
+--
+-- > (.)   ::            (b ->   c) -> (a ->   b) -> a ->   c
+-- > (<=<) :: Monad m => (b -> m c) -> (a -> m b) -> a -> m c
+--
+infixr 1 <=<
+(<=<) :: (Monad m, Elt a, Elt b, Elt c, Elt (m b), Elt (m c))
+      => (Exp b -> Exp (m c))
+      -> (Exp a -> Exp (m b))
+      -> (Exp a -> Exp (m c))
+(<=<) = flip (>=>)
+
+
 -- | Conditional execution of a monadic expression
 --
 when :: (Monad m, Elt (m ())) => Exp Bool -> Exp (m ()) -> Exp (m ())
 when p s = cond p s (return (constant ()))
+
+-- | The reverse of 'when'
+--
+unless :: (Monad m, Elt (m ())) => Exp Bool -> Exp (m ()) -> Exp (m ())
+unless p s = cond p (return (constant ())) s
 
 -- | Promote a function to a monad
 --
