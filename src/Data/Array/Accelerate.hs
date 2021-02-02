@@ -418,6 +418,8 @@ module Data.Array.Accelerate (
   -- * Useful re-exports
   (.), ($), (&), flip, error, undefined, const, otherwise,
   Show, Generic, HasCallStack,
+  fromString, -- -XOverloadedStrings
+  fromListN,  -- -XOverloadedLists
 
   -- ---------------------------------------------------------------------------
   -- Types
@@ -470,6 +472,7 @@ import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 import Data.Function                                                ( (&) )
 import Prelude                                                      ( (.), ($), Char, Show, flip, undefined, error, const, otherwise )
 
+import GHC.Exts                                                     ( fromListN, fromString )
 import GHC.Generics                                                 ( Generic )
 import GHC.Stack
 
