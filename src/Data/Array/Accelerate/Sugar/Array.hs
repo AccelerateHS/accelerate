@@ -103,13 +103,13 @@ instance (Shape sh, Elt e, Eq sh, Eq e) => Eq (Array sh e) where
 instance (Shape sh, Elt e, Show e) => Show (Array sh e) where
   show (Array arr) = R.showArray (shows . toElt @e) (arrayR @sh @e) arr
 
-instance Elt e => IsList (Array DIM1 e) where
+instance Elt e => IsList (Vector e) where
   type Item (Vector e) = e
   toList      = toList
   fromListN n = fromList (Z:.n)
   fromList xs = GHC.fromListN (length xs) xs
 
-instance IsString (Array DIM1 Char) where
+instance IsString (Vector Char) where
   fromString s = fromList (Z :. length s) s
 
 instance (Shape sh, Elt e) => NFData (Array sh e) where
