@@ -34,7 +34,7 @@ import Language.Haskell.TH                                          hiding ( Typ
 import Language.Haskell.TH.Extra
 import System.IO.Unsafe
 
-import GHC.Exts                                                     ( IsList )
+import GHC.Exts                                                     ( IsList, IsString )
 import GHC.Generics
 import qualified GHC.Exts                                           as GHC
 
@@ -108,6 +108,9 @@ instance Elt e => IsList (Array DIM1 e) where
   toList      = toList
   fromListN n = fromList (Z:.n)
   fromList xs = GHC.fromListN (length xs) xs
+
+instance IsString (Array DIM1 Char) where
+  fromString s = fromList (Z :. length s) s
 
 instance (Shape sh, Elt e) => NFData (Array sh e) where
   rnf (Array arr) = R.rnfArray (arrayR @sh @e) arr
