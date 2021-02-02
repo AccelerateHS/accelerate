@@ -1663,8 +1663,11 @@ compact keep arr
         result          = permute const dummy prj arr
     in
     if null arr
-      then T2 emptyArray (fill Z_ 0)
-      else T2 result len
+       then T2 emptyArray (fill Z_ 0)
+       else
+    if the len == unindex1 (shape arr)
+       then T2 arr    len
+       else T2 result len
 
 compact keep arr
   = let
@@ -1672,8 +1675,8 @@ compact keep arr
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
-                            then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
-                            else Nothing_
+                             then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
+                             else Nothing_
         dummy           = fill (I1 (the valid)) undef
         result          = permute const dummy prj arr
     in
