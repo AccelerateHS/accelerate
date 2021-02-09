@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP       #-}
 {-# LANGUAGE MagicHash #-}
 -- |
--- Module      : Data.Array.Accelerate.Debug.Timed
+-- Module      : Data.Array.Accelerate.Debug.Internal.Timed
 -- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -10,21 +10,21 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Debug.Timed (
+module Data.Array.Accelerate.Debug.Internal.Timed (
 
   timed,
   elapsed,
 
 ) where
 
-import Data.Array.Accelerate.Debug.Flags
-import Data.Array.Accelerate.Debug.Trace
+import Data.Array.Accelerate.Debug.Internal.Flags
+import Data.Array.Accelerate.Debug.Internal.Trace
 
 import Control.Monad.Trans                              ( MonadIO )
 import Text.Printf
 
 #if ACCELERATE_DEBUG
-import Data.Array.Accelerate.Debug.Clock
+import Data.Array.Accelerate.Debug.Internal.Clock
 
 import Control.Applicative
 import Control.Monad.Trans                              ( liftIO )

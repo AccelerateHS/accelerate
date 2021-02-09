@@ -18,18 +18,20 @@ module Data.Array.Accelerate.Array.Remote.Nursery (
 
 -- friends
 import Data.Array.Accelerate.Error
-import qualified Data.Array.Accelerate.Debug                    as Debug
+import Data.Array.Accelerate.Debug.Internal.Flags                   as Debug
+import Data.Array.Accelerate.Debug.Internal.Monitoring              as Debug
+import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
 
 -- libraries
 import Control.Concurrent.MVar
 import Data.Int
-import Data.Sequence                                            ( Seq )
+import Data.Sequence                                                ( Seq )
 import Data.Word
-import System.Mem.Weak                                          ( Weak )
-import Prelude                                                  hiding ( lookup )
-import qualified Data.HashTable.IO                              as HT
-import qualified Data.Sequence                                  as Seq
-import qualified Data.Traversable                               as Seq
+import System.Mem.Weak                                              ( Weak )
+import Prelude                                                      hiding ( lookup )
+import qualified Data.HashTable.IO                                  as HT
+import qualified Data.Sequence                                      as Seq
+import qualified Data.Traversable                                   as Seq
 
 
 -- The nursery is a place to store remote memory arrays that are no longer

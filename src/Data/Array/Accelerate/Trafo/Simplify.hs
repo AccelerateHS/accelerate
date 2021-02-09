@@ -46,9 +46,9 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
 
-import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
-import qualified Data.Array.Accelerate.Debug.Flags                  as Debug
-import qualified Data.Array.Accelerate.Debug.Trace                  as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
+import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import Control.Applicative                                          hiding ( Const )
 import Control.Lens                                                 hiding ( Const, ix )

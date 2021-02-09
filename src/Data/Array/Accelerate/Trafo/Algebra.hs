@@ -34,7 +34,7 @@ import Data.Array.Accelerate.Pretty.Print                           ( primOperat
 import Data.Array.Accelerate.Trafo.Environment
 import Data.Array.Accelerate.Type
 
-import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
+import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
 
 import Data.Bits
 import Data.Monoid

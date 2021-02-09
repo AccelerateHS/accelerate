@@ -53,22 +53,22 @@ import Data.Array.Accelerate.Trafo.Environment
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Representation.Array       ( Array, ArrayR(..), ArraysR )
-import Data.Array.Accelerate.Representation.Shape       ( ShapeR(..), shapeType )
+import Data.Array.Accelerate.Representation.Array                   ( Array, ArrayR(..), ArraysR )
+import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..), shapeType )
 import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Type
 
-import Data.Array.Accelerate.Debug.Flags                ( array_fusion )
-import qualified Data.Array.Accelerate.Debug.Stats      as Stats
+import Data.Array.Accelerate.Debug.Internal.Flags                   ( array_fusion )
+import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe -- for debugging
 #endif
 
 import Data.Function
-import Control.Lens                                     ( over, mapped, _2 )
-import Prelude                                          hiding ( exp, until )
+import Control.Lens                                                 ( over, mapped, _2 )
+import Prelude                                                      hiding ( exp, until )
 
 
 -- Delayed Array Fusion

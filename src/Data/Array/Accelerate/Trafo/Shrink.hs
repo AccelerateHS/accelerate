@@ -53,7 +53,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Trafo.Substitution
 
-import qualified Data.Array.Accelerate.Debug.Stats                  as Stats
+import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
 
 import Control.Applicative                                          hiding ( Const )
 import Data.Maybe                                                   ( isJust )

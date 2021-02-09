@@ -59,7 +59,10 @@ import Data.Array.Accelerate.Trafo.Sharing                          ( AfunctionR
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 import qualified Data.Array.Accelerate.AST                          as AST
-import qualified Data.Array.Accelerate.Debug                        as D
+import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Graph         as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Timed         as Debug
 import qualified Data.Array.Accelerate.Smart                        as Smart
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Elt                    as Sugar
@@ -89,9 +92,9 @@ run a = unsafePerformIO execute
   where
     !acc    = convertAcc a
     execute = do
-      D.dumpGraph $!! acc
-      D.dumpSimplStats
-      res <- phase "execute" D.elapsed $ evaluate $ evalOpenAcc acc Empty
+      Debug.dumpGraph $!! acc
+      Debug.dumpSimplStats
+      res <- phase "execute" Debug.elapsed $ evaluate $ evalOpenAcc acc Empty
       return $ Sugar.toArr $ snd res
 
 -- | This is 'runN' specialised to an array program of one argument.
@@ -106,8 +109,8 @@ runN f = go
   where
     !acc    = convertAfun f
     !afun   = unsafePerformIO $ do
-                D.dumpGraph $!! acc
-                D.dumpSimplStats
+                Debug.dumpGraph $!! acc
+                Debug.dumpSimplStats
                 return acc
     !go     = eval (afunctionRepr @f) afun Empty
     --
@@ -116,7 +119,7 @@ runN f = go
          -> Val aenv
          -> AfunctionR g
     eval (AfunctionReprLam reprF) (Alam lhs f) aenv = \a -> eval reprF f $ aenv `push` (lhs, Sugar.fromArr a)
-    eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" D.elapsed (Sugar.toArr . snd <$> evaluate (evalOpenAcc b aenv))
+    eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" Debug.elapsed (Sugar.toArr . snd <$> evaluate (evalOpenAcc b aenv))
     eval _                        _aenv        _    = error "Two men say they're Jesus; one of them must be wrong"
 
 -- -- | Stream a lazily read list of input arrays through the given program,
@@ -131,7 +134,7 @@ runN f = go
 -- ---------
 
 phase :: String -> (Double -> Double -> String) -> IO a -> IO a
-phase n fmt go = D.timed D.dump_phases (\wall cpu -> printf "phase %s: %s" n (fmt wall cpu)) go
+phase n fmt go = Debug.timed Debug.dump_phases (\wall cpu -> printf "phase %s: %s" n (fmt wall cpu)) go
 
 
 -- Delayed Arrays

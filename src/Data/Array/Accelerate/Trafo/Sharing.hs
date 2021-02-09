@@ -50,8 +50,8 @@ import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Debug.Flags                            as Debug
-import Data.Array.Accelerate.Debug.Trace                            as Debug
+import Data.Array.Accelerate.Debug.Internal.Flags                   as Debug
+import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array                   ( Array, ArraysR, ArrayR(..), showArraysR )
 import Data.Array.Accelerate.Representation.Shape                   hiding ( zip )

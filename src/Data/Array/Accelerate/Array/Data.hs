@@ -55,9 +55,9 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
-import Data.Array.Accelerate.Debug.Flags
-import Data.Array.Accelerate.Debug.Monitoring
-import Data.Array.Accelerate.Debug.Trace
+import Data.Array.Accelerate.Debug.Internal.Flags
+import Data.Array.Accelerate.Debug.Internal.Monitoring
+import Data.Array.Accelerate.Debug.Internal.Trace
 
 
 -- standard libraries

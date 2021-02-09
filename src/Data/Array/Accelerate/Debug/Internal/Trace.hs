@@ -2,7 +2,7 @@
 {-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 -- |
--- Module      : Data.Array.Accelerate.Debug.Trace
+-- Module      : Data.Array.Accelerate.Debug.Internal.Trace
 -- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -15,7 +15,7 @@
 -- in performance code.
 --
 
-module Data.Array.Accelerate.Debug.Trace (
+module Data.Array.Accelerate.Debug.Internal.Trace (
 
   showFFloatSIBase,
 
@@ -25,12 +25,12 @@ module Data.Array.Accelerate.Debug.Trace (
 
 ) where
 
-import Data.Array.Accelerate.Debug.Flags
+import Data.Array.Accelerate.Debug.Internal.Flags
 
 import Numeric
 
 #ifdef ACCELERATE_DEBUG
-import Data.Array.Accelerate.Debug.Clock
+import Data.Array.Accelerate.Debug.Internal.Clock
 import System.IO.Unsafe
 import Text.Printf
 import qualified Debug.Trace                            as D
