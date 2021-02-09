@@ -1175,21 +1175,18 @@ collect :: Arrays arrs => Seq arrs -> Acc arrs
 collect = Acc . Collect
 --}
 
+
 -- Debugging
 -- ---------
 
 -- | Outputs the trace message to the console before the 'Acc' computation can proceed
 -- with the result of the second argument.
 --
--- @since 1.4.0.0
---
 atrace :: Arrays a => String -> Acc a -> Acc a
 atrace message = atraceArray message (Acc $ SmartAcc Anil :: Acc ())
 
 -- | Outputs the trace message and the array(s) from the second argument to the console,
 -- before the 'Acc' computation can proceed with the result of the third argument.
---
--- @since 1.4.0.0
 --
 atraceArray :: (Arrays a, Arrays b) => String -> Acc a -> Acc b -> Acc b
 atraceArray message (Acc inspect) (Acc result) = Acc $ SmartAcc $ Atrace message inspect result
@@ -1198,18 +1195,15 @@ atraceArray message (Acc inspect) (Acc result) = Acc $ SmartAcc $ Atrace message
 -- before the 'Acc' computation can proceed with the result of
 -- that array.
 --
--- @since 1.4.0.0
---
 atraceId :: Arrays a => String -> Acc a -> Acc a
 atraceId message value = atraceArray message value value
 
 -- | Outputs the trace message and a scalar value to the console,
 -- before the 'Acc' computation can prroceed with the result of the third argument.
 --
--- @since 1.4.0.0
---
 atraceExp :: (Elt e, Arrays a) => String -> Exp e -> Acc a -> Acc a
 atraceExp message = atraceArray message . unit
+
 
 -- Foreign function calling
 -- ------------------------
