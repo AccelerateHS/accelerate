@@ -238,8 +238,8 @@ class Arrays a where
   type ArraysR a = GArraysR () (Rep a)
 
   arraysR :: R.ArraysR (ArraysR a)
-  toArr   :: ArraysR  a -> a
-  fromArr :: a -> ArraysR  a
+  toArr   :: ArraysR a -> a
+  fromArr :: a -> ArraysR a
 
   default arraysR
     :: (GArrays (Rep a), ArraysR a ~ GArraysR () (Rep a))

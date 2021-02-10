@@ -1,3 +1,6 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Trace
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -23,6 +26,12 @@ module Data.Array.Accelerate.Debug.Trace (
 ) where
 
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt
+import qualified Data.Array.Accelerate.Representation.Array         as R
+import qualified Data.Array.Accelerate.Representation.Shape         as R
+
 
 -- $tracing
 --
@@ -37,3 +46,39 @@ import Data.Array.Accelerate.Language
 --
 -- These functions have the same caveats as those defined in "Debug.Trace".
 --
+
+-- | Outputs the trace message to the console before the 'Acc' computation
+-- proceeds with the result of the second argument.
+--
+atrace :: Arrays a => String -> Acc a -> Acc a
+atrace message (Acc result)
+  = Acc
+  $ SmartAcc
+  $ Atrace (Message (\_ -> "") [|| \_ -> "" ||] message) (SmartAcc Anil :: SmartAcc ()) result
+
+-- | Outputs the trace message and the array(s) from the second argument to
+-- the console, before the 'Acc' computation proceeds with the result of
+-- the third argument.
+--
+atraceArray :: forall a b. (Arrays a, Arrays b, Show a) => String -> Acc a -> Acc b -> Acc b
+atraceArray message (Acc inspect) (Acc result)
+  = Acc
+  $ SmartAcc
+  $ Atrace (Message (show . toArr @a) [|| show . toArr @a ||] message) inspect result
+
+-- | Outputs the trace message and the array(s) to the console, before the
+-- 'Acc' computation proceeds with the result of that array.
+--
+atraceId :: (Arrays a, Show a) => String -> Acc a -> Acc a
+atraceId message value = atraceArray message value value
+
+-- | Outputs the trace message and a scalar value to the console, before
+-- the 'Acc' computation proceeds with the result of the third argument.
+--
+atraceExp :: forall e a. (Elt e, Show e, Arrays a) => String -> Exp e -> Acc a -> Acc a
+atraceExp message value (Acc result) =
+  let Acc inspect = unit value
+   in Acc
+    $ SmartAcc
+    $ Atrace (Message (\a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ()))) [|| \a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())) ||] message) inspect result
+

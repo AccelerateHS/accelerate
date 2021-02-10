@@ -73,9 +73,6 @@ module Data.Array.Accelerate.Language (
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
 
-  -- * Tracing
-  atrace, atraceArray, atraceId, atraceExp,
-
   -- * Foreign functions
   foreignAcc,
   foreignExp,
@@ -121,7 +118,7 @@ import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
-import Prelude                                                      ( ($), (.), Maybe(..), Char, String )
+import Prelude                                                      ( ($), (.), Maybe(..), Char )
 
 
 -- $setup
@@ -1174,35 +1171,6 @@ foldSeqFlatten = Seq $$$ FoldSeqFlatten
 collect :: Arrays arrs => Seq arrs -> Acc arrs
 collect = Acc . Collect
 --}
-
-
--- Debugging
--- ---------
-
--- | Outputs the trace message to the console before the 'Acc' computation
--- proceeds with the result of the second argument.
---
-atrace :: Arrays a => String -> Acc a -> Acc a
-atrace message = atraceArray message (Acc $ SmartAcc Anil :: Acc ())
-
--- | Outputs the trace message and the array(s) from the second argument to
--- the console, before the 'Acc' computation proceeds with the result of
--- the third argument.
---
-atraceArray :: (Arrays a, Arrays b) => String -> Acc a -> Acc b -> Acc b
-atraceArray message (Acc inspect) (Acc result) = Acc $ SmartAcc $ Atrace message inspect result
-
--- | Outputs the trace message and the array(s) to the console, before the
--- 'Acc' computation proceeds with the result of that array.
---
-atraceId :: Arrays a => String -> Acc a -> Acc a
-atraceId message value = atraceArray message value value
-
--- | Outputs the trace message and a scalar value to the console, before
--- the 'Acc' computation proceeds with the result of the third argument.
---
-atraceExp :: (Elt e, Arrays a) => String -> Exp e -> Acc a -> Acc a
-atraceExp message = atraceArray message . unit
 
 
 -- Foreign function calling

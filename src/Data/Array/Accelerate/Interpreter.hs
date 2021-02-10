@@ -209,7 +209,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
                                      in
                                      (TupRpair r1 r2, (a1, a2))
     Anil                          -> (TupRunit, ())
-    Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ uncurry (atraceOp msg) (manifest as)
+    Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd $ manifest as)
     Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
     Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
@@ -867,11 +867,18 @@ evalBoundary bnd aenv =
     AST.Constant v -> Constant v
     AST.Function f -> Function (evalFun f aenv)
 
-atraceOp :: String -> ArraysR as -> as -> IO ()
-atraceOp msg TupRunit                         () = traceIO msg
-atraceOp msg (TupRsingle (ArrayR ShapeRz eR)) as = traceIO $ printf "%s: %s" msg (showElt eR $ linearIndexArray eR as 0)
-atraceOp msg (TupRsingle (ArrayR shR eR))     as = traceIO $ printf "%s: %s" msg (showArray (showsElt eR) (ArrayR shR eR) as)
-atraceOp msg aR                               as = traceIO $ printf "%s: %s" msg (showArrays aR as)
+atraceOp :: Message as -> as -> IO ()
+atraceOp (Message show _ msg) as =
+  let str = show as
+   in if null str
+         then traceIO msg
+         else traceIO $ printf "%s: %s" msg str
+
+-- atraceOp :: String -> ArraysR as -> as -> IO ()
+-- atraceOp msg TupRunit                         () = traceIO msg
+-- atraceOp msg (TupRsingle (ArrayR ShapeRz eR)) as = traceIO $ printf "%s: %s" msg (showElt eR $ linearIndexArray eR as 0)
+-- atraceOp msg (TupRsingle (ArrayR shR eR))     as = traceIO $ printf "%s: %s" msg (showArray (showsElt eR) (ArrayR shR eR) as)
+-- atraceOp msg aR                               as = traceIO $ printf "%s: %s" msg (showArrays aR as)
 
 -- Scalar expression evaluation
 -- ----------------------------

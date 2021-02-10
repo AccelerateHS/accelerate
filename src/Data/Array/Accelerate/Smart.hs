@@ -31,7 +31,7 @@ module Data.Array.Accelerate.Smart (
   -- * HOAS AST
   -- ** Array computations
   Acc(..), SmartAcc(..), PreSmartAcc(..),
-  Level, Direction(..),
+  Level, Direction(..), Message(..),
 
   -- ** Scalar expressions
   Exp(..), SmartExp(..), PreSmartExp(..),
@@ -101,7 +101,7 @@ import qualified Data.Array.Accelerate.Representation.Stencil       as R
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
-import Data.Array.Accelerate.AST                                    ( Direction(..)
+import Data.Array.Accelerate.AST                                    ( Direction(..), Message(..)
                                                                     , PrimBool, PrimMaybe
                                                                     , PrimFun(..), primFunType
                                                                     , PrimConst(..), primConstType )
@@ -354,7 +354,7 @@ data PreSmartAcc acc exp as where
                 -> acc (arrs1, arrs2)
                 -> PreSmartAcc acc exp arrs
 
-  Atrace        :: String
+  Atrace        :: Message arrs1
                 -> acc arrs1
                 -> acc arrs2
                 -> PreSmartAcc acc exp arrs2
