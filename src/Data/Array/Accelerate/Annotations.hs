@@ -10,12 +10,31 @@
 --
 -- * Implementation status
 --
+-- There are more todos sprinkled around the code. Use the following mystical
+-- one-liner to find them:
+--
+-- @
+-- git diff -U0 master...feature/annotations | grep '^+.*\(TODO\|HACK\|FIXME\)' | cut -c2- | git grep -nFf- feature/annotations
+-- @
+--
 -- TODO: Instead of deriving show, we should modify the pretty printer to show
 --       these annotations in a nice way. Should we also present source mapping
 --       information? That would be very useful but it also adds a lot of noise,
 --       is there some 'verbose' pretty printing mode?
 -- TODO: Tests!
 --
+-- ** Annotations in the smart AST
+--
+-- TODO: Only a few @PreSmartExp@ constructors have an annotation field right
+--       now
+-- TODO: There are no annotations in @PreSmartAcc@ yet
+--
+-- ** Annotations in the de Bruijn AST
+--
+-- TODO: Add the same annotations as in the Smart ASTs, and make sure that they
+--       are propagated properly through the transformations.
+--
+-- TODO: The rest of the process up until codegen
 module Data.Array.Accelerate.Annotations where
 
 -- TODO: Add an explicit export list
@@ -24,6 +43,8 @@ import           Control.Exception              ( assert )
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(FreezeCallStack) )
 
+
+-- * Internal types and functions
 
 -- | This annotation type would store source information if available and any
 -- additional annotation types added by the programmer sdderiv.
