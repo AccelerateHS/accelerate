@@ -377,6 +377,7 @@ library
         Data.Array.Accelerate.Unsafe
 
         -- For backend development (hidden)
+        Data.Array.Accelerate.Annotations
         Data.Array.Accelerate.AST
         Data.Array.Accelerate.AST.Environment
         Data.Array.Accelerate.AST.Idx
