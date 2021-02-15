@@ -53,3 +53,24 @@ data Optimizations = Optimizations
     , optUnrollIters  :: Maybe Int
     }
     deriving Show
+
+-- | Create an empty annotation with call site information if available. This
+-- only works when all smart constructors have the 'HasCallStack' constraint.
+-- This function __must__ be called with 'withFrozenCallStacks'.
+mkAnn :: HasCallStack => Ann
+mkAnn = assert callStackIsFrozen
+    $ Ann (callerLoc $ getCallStack callStack) defaultOptimizations
+  where
+    -- To prevent incorrect usage of this API, we assert that the call stacks
+    -- are frozen before this function is called. In most simple use cases we
+    -- could also have looked at the second entry in the call stack but that
+    -- would be very error prone when recursion starts getting involved.
+    callStackIsFrozen = case callStack of
+        (FreezeCallStack _) -> True
+        _                   -> False
+
+    callerLoc ((_, loc) : _) = Just loc
+    callerLoc _              = Nothing
+
+    defaultOptimizations =
+        Optimizations { optAlwaysInline = False, optUnrollIters = Nothing }
