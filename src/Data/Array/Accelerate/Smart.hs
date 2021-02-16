@@ -71,6 +71,9 @@ module Data.Array.Accelerate.Smart (
   -- ** Smart constructors for type coercion functions
   mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
+  -- ** Annotations
+  alwaysInline, unRollIters, HasAnnotations(),
+
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
   ApplyAcc(..),
@@ -1217,6 +1220,34 @@ instance Coerce a (a, ()) where
   mkCoerce' a = SmartExp (Pair a (SmartExp Nil))
 
 
+-- Annotations
+-- -----------
+--
+-- These functions are exposed to the user to apply annotations to the AST.
+
+-- | Instruct the compiler to always inline this expression and to not perform
+-- any sharing recovery. This will allow inexpensive calculations whose values
+-- are used in multiple places to be fused, potentially increasing performance
+-- since the values don't have to be written to memory anymore.
+alwaysInline :: HasAnnotations a => a -> a
+alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
+
+-- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
+unRollIters :: HasAnnotations a => Int -> a -> a
+unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
+
+class HasAnnotations a where
+  modifyAnn :: (Ann -> Ann) -> a -> a
+
+  withOptimizations :: (Optimizations -> Optimizations) -> a -> a
+  withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
+
+-- TODO: Add an instance for 'Acc' once we add annotation fields there
+
+instance HasAnnotations (Exp a) where
+  modifyAnn f (Exp (SmartExp (Const ann t c))) = mkExp $ Const (f ann) t c
+  -- TODO: All other constructors as we add more annotations
+  modifyAnn _ e = e
 
 -- Auxiliary functions
 -- --------------------

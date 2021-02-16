@@ -39,6 +39,18 @@
 --       are propagated properly through the transformations.
 --
 -- TODO: The rest of the process up until codegen
+--
+-- ** Annotating ASTs
+--
+-- AST nodes will automatically contain source mapping information because of
+-- the use of smart constructors. The user can specify optimization flags for an
+-- AST node by using the optimization functions exposed from
+-- @Data.Array.Accelerate.Smart@.
+--
+-- XXX: Right now it would be possible to specify some nonsensible flags, like
+--      setting loop unrolling for a constant value. Should we just silently
+--      ignore these things like we do now, or should be printing warnings? I
+--      don't think Accelerate has any other non-fatal compiler diagnostics.
 module Data.Array.Accelerate.Annotations
     ( Ann(..)
     , Optimizations(..)

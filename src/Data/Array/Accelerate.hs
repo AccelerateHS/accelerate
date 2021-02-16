@@ -389,6 +389,14 @@ module Data.Array.Accelerate (
   ord, chr, boolToInt, bitcast,
 
   -- ---------------------------------------------------------------------------
+  -- * Annotations
+  --
+  -- TODO: What would be a logical place to expose these in this huge list of
+  --       functions and type classes?
+  HasAnnotations(),
+  alwaysInline, unRollIters,
+
+  -- ---------------------------------------------------------------------------
   -- * Foreign Function Interface (FFI)
   foreignAcc,
   foreignExp,
