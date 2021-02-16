@@ -1,6 +1,6 @@
 {-# LANGUAGE RebindableSyntax #-}
 -- |
--- Module      : Data.Array.Accelerate.Data.Monad
+-- Module      : Data.Array.Accelerate.Control.Monad
 -- Copyright   : [2018..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -16,7 +16,7 @@
 -- @since 1.4.0.0
 --
 
-module Data.Array.Accelerate.Data.Monad (
+module Data.Array.Accelerate.Control.Monad (
 
   -- * Monad class
   Monad(..),

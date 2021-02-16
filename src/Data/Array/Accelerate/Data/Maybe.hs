@@ -46,8 +46,8 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Ord
 
+import Data.Array.Accelerate.Control.Monad
 import Data.Array.Accelerate.Data.Functor
-import Data.Array.Accelerate.Data.Monad
 import Data.Array.Accelerate.Data.Monoid
 import Data.Array.Accelerate.Data.Semigroup
 

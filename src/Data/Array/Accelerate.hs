@@ -450,10 +450,10 @@ import Data.Array.Accelerate.Classes.Rational
 import Data.Array.Accelerate.Classes.RealFloat
 import Data.Array.Accelerate.Classes.RealFrac
 import Data.Array.Accelerate.Classes.ToFloating
+import Data.Array.Accelerate.Control.Monad
 import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Data.Maybe
-import Data.Array.Accelerate.Data.Monad
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.TH
