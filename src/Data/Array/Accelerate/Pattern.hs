@@ -30,7 +30,7 @@ module Data.Array.Accelerate.Pattern (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
-  pattern Z_, pattern Ix, pattern (::.),
+  pattern Z_, pattern Ix, pattern (::.), pattern All_, pattern Any_,
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
@@ -90,6 +90,16 @@ infixl 3 `Ix`
 pattern Ix :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
 pattern a `Ix` b = a ::. b
 {-# COMPLETE Ix #-}
+
+pattern All_ :: Exp All
+pattern All_ <- (const True -> True)
+  where All_ = constant All
+{-# COMPLETE All_ #-}
+
+pattern Any_ :: (Shape sh, Elt (Any sh)) => Exp (Any sh)
+pattern Any_ <- (const True -> True)
+  where Any_ = constant Any
+{-# COMPLETE Any_ #-}
 
 -- IsPattern instances for Shape nil and cons
 --
