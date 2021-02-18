@@ -58,13 +58,13 @@ import Prelude                                                      ( (.), ($) )
 
 -- | Return 'True' if the argument is a 'Left'-value
 --
-isLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isLeft = not . isRight
+isLeft :: HasCallStack => (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
+isLeft = withFrozenCallStack $ not . isRight
 
 -- | Return 'True' if the argument is a 'Right'-value
 --
-isRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp (Nil mkAnn)
+isRight :: (HasCallStack, Elt a, Elt b) => Exp (Either a b) -> Exp Bool
+isRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp (Nil mkAnn)
   -- TLM: This is a sneaky hack because we know that the tag bits for Right
   -- and True are identical.
 
@@ -72,22 +72,22 @@ isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartEx
 -- If the argument was actually 'Right', you will get an undefined value
 -- instead.
 --
-fromLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp a
-fromLeft (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
+fromLeft :: (HasCallStack, Elt a, Elt b) => Exp (Either a b) -> Exp a
+fromLeft (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'fromRight' function extracts the element out of the 'Right'
 -- constructor. If the argument was actually 'Left', you will get an undefined
 -- value instead.
 --
-fromRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp b
-fromRight (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
+fromRight :: (HasCallStack, Elt a, Elt b) => Exp (Either a b) -> Exp b
+fromRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'either' function performs case analysis on the 'Either' type. If the
 -- value is @'Left' a@, apply the first function to @a@; if it is @'Right' b@,
 -- apply the second function to @b@.
 --
-either :: (Elt a, Elt b, Elt c) => (Exp a -> Exp c) -> (Exp b -> Exp c) -> Exp (Either a b) -> Exp c
-either f g = match \case
+either :: (HasCallStack, Elt a, Elt b, Elt c) => (Exp a -> Exp c) -> (Exp b -> Exp c) -> Exp (Either a b) -> Exp c
+either f g = withFrozenCallStack $ match \case
   Left_  x -> f x
   Right_ x -> g x
 
@@ -95,48 +95,49 @@ either f g = match \case
 -- with a segment descriptor indicating how many elements along each dimension
 -- were returned.
 --
-lefts :: (Shape sh, Slice sh, Elt a, Elt b)
+lefts :: (HasCallStack, Shape sh, Slice sh, Elt a, Elt b)
       => Acc (Array (sh:.Int) (Either a b))
       -> Acc (Vector a, Array sh Int)
-lefts es = compact (map isLeft es) (map fromLeft es)
+lefts es = withFrozenCallStack $ compact (map isLeft es) (map fromLeft es)
 
 -- | Extract from the array of 'Either' all of the 'Right' elements, together
 -- with a segment descriptor indicating how many elements along each dimension
 -- were returned.
 --
-rights :: (Shape sh, Slice sh, Elt a, Elt b)
+rights :: (HasCallStack, Shape sh, Slice sh, Elt a, Elt b)
        => Acc (Array (sh:.Int) (Either a b))
        -> Acc (Vector b, Array sh Int)
-rights es = compact (map isRight es) (map fromRight es)
+rights es = withFrozenCallStack $ compact (map isRight es) (map fromRight es)
 
 
 instance Elt a => Functor (Either a) where
-  fmap f = either Left_ (Right_ . f)
+  fmap f = withFrozenCallStack $ either Left_ (Right_ . f)
 
 instance Elt a => Monad (Either a) where
-  return = Right_
-  x >>= f = either Left_ f x
+  return = withFrozenCallStack Right_
+  x >>= f = withFrozenCallStack $ either Left_ f x
 
 instance (Eq a, Eq b) => Eq (Either a b) where
-  (==) = match go
+  (==) = withFrozenCallStack $ match go
     where
+      go :: HasCallStack => Exp (Either a b) -> Exp (Either a b) -> Exp Bool
       go (Left_ x)  (Left_ y)  = x == y
       go (Right_ x) (Right_ y) = x == y
       go _          _          = False_
 
 instance (Ord a, Ord b) => Ord (Either a b) where
-  compare = match go
+  compare = withFrozenCallStack $ match go
     where
+      go :: HasCallStack => Exp (Either a b) -> Exp (Either a b) -> Exp Ordering
       go (Left_ x)  (Left_ y)  = compare x y
       go (Right_ x) (Right_ y) = compare x y
       go Left_{}    Right_{}   = LT_
       go Right_{}   Left_{}    = GT_
 
 instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
-  ex <> ey = isLeft ex ? ( ey, ex )
+  ex <> ey = withFrozenCallStack (isLeft ex ? ( ey, ex ))
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)
-  lift (Left a)  = Left_ (lift a)
-  lift (Right b) = Right_ (lift b)
-
+  lift (Left a)  = withFrozenCallStack $ Left_ (lift a)
+  lift (Right b) = withFrozenCallStack $ Right_ (lift b)
