@@ -59,13 +59,13 @@ import Prelude                                                      ( ($), (.) )
 
 -- | Returns 'True' if the argument is 'Nothing'
 --
-isNothing :: Elt a => Exp (Maybe a) -> Exp Bool
-isNothing = not . isJust
+isNothing :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp Bool
+isNothing = withFrozenCallStack $ not . isJust
 
 -- | Returns 'True' if the argument is of the form @Just _@
 --
-isJust :: Elt a => Exp (Maybe a) -> Exp Bool
-isJust (Exp x) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp (Nil mkAnn)
+isJust :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp Bool
+isJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp (Nil mkAnn)
   -- TLM: This is a sneaky hack because we know that the tag bits for Just
   -- and True are identical.
 
@@ -73,8 +73,8 @@ isJust (Exp x) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp
 -- 'Maybe' is 'Nothing', the default value is returned; otherwise, it returns
 -- the value contained in the 'Maybe'.
 --
-fromMaybe :: Elt a => Exp a -> Exp (Maybe a) -> Exp a
-fromMaybe d = match \case
+fromMaybe :: (HasCallStack, Elt a) => Exp a -> Exp (Maybe a) -> Exp a
+fromMaybe d = withFrozenCallStack $ match \case
   Nothing_ -> d
   Just_ x  -> x
 
@@ -82,64 +82,66 @@ fromMaybe d = match \case
 -- If the argument was actually 'Nothing', you will get an undefined value
 -- instead.
 --
-fromJust :: Elt a => Exp (Maybe a) -> Exp a
-fromJust (Exp x) = Exp $ SmartExp (PairIdxRight `Prj` SmartExp (PairIdxRight `Prj` x))
+fromJust :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp a
+fromJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp (PairIdxRight `Prj` SmartExp (PairIdxRight `Prj` x))
 
 -- | The 'maybe' function takes a default value, a function, and a 'Maybe'
 -- value. If the 'Maybe' value is nothing, the default value is returned;
 -- otherwise, it applies the function to the value inside the 'Just' and returns
 -- the result
 --
-maybe :: (Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
-maybe d f = match \case
+maybe :: (HasCallStack, Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
+maybe d f = withFrozenCallStack $ match \case
   Nothing_ -> d
   Just_ x  -> f x
 
 -- | Extract from an array all of the 'Just' values, together with a segment
 -- descriptor indicating how many elements along each dimension were returned.
 --
-justs :: (Shape sh, Slice sh, Elt a)
+justs :: (HasCallStack, Shape sh, Slice sh, Elt a)
       => Acc (Array (sh:.Int) (Maybe a))
       -> Acc (Vector a, Array sh Int)
-justs xs = compact (map isJust xs) (map fromJust xs)
+justs xs = withFrozenCallStack $ compact (map isJust xs) (map fromJust xs)
 
 
 instance Functor Maybe where
-  fmap f = match \case
+  fmap f = withFrozenCallStack $ match \case
     Nothing_ -> Nothing_
     Just_ x  -> Just_ (f x)
 
 instance Monad Maybe where
-  return   = Just_
-  mx >>= f = mx & match \case
+  return   = withFrozenCallStack Just_
+  mx >>= f = withFrozenCallStack $ mx & match \case
     Nothing_ -> Nothing_
     Just_ x  -> f x
 
 instance Eq a => Eq (Maybe a) where
-  (==) = match go
+  (==) = withFrozenCallStack $ match go
     where
+      go :: HasCallStack => Exp (Maybe a) -> Exp (Maybe a) -> Exp Bool
       go Nothing_  Nothing_  = True_
       go (Just_ x) (Just_ y) = x == y
       go _         _         = False_
 
 instance Ord a => Ord (Maybe a) where
-  compare = match go
+  compare = withFrozenCallStack $ match go
     where
+      go :: HasCallStack => Exp (Maybe a) -> Exp (Maybe a) -> Exp Ordering
       go (Just_ x) (Just_ y)  = compare x y
       go Nothing_  Nothing_   = EQ_
       go Nothing_  Just_{}    = LT_
       go Just_{}   Nothing_{} = GT_
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
-  mempty = Nothing_
+  mempty = withFrozenCallStack Nothing_
 
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
-  ma <> mb = cond (isNothing ma) mb
+  ma <> mb = withFrozenCallStack
+           $ cond (isNothing ma) mb
            $ cond (isNothing mb) mb
            $ lift (Just (fromJust ma <> fromJust mb))
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  lift Nothing  = Nothing_
-  lift (Just a) = Just_ (lift a)
-
+  lift Nothing  = withFrozenCallStack Nothing_
+  lift (Just a) = withFrozenCallStack $ Just_ (lift a)
