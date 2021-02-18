@@ -77,8 +77,8 @@ mkNewtypeD :: Name -> [TyVarBndr ()] -> Con -> DecsQ
 mkNewtypeD tn tvs c = mkDataD tn tvs [c]
 
 -- TODO: The view pattern function of the generated pattern synonym should be
---       wrapped in @withFrozenCallStacks@, or with an empty frozen call stack
---       on GHC 9.0.x and below.
+--       wrapped in @withFrozenCallStack@, or with an empty frozen call stack on
+--       GHC 9.0.x and below.
 mkDataD :: Name -> [TyVarBndr ()] -> [Con] -> DecsQ
 mkDataD tn tvs cs = do
   (pats, decs) <- unzip <$> go cs
