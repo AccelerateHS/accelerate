@@ -64,10 +64,13 @@ import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
 import Data.Complex                                                 ( Complex(..) )
+import GHC.Stack
 import Prelude                                                      ( ($) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
 
+
+-- TODO: Freeze the call stacks here
 
 infix 6 ::+
 pattern (::+) :: Elt a => Exp a -> Exp a -> Exp (Complex a)
@@ -169,13 +172,13 @@ complexR = tuple
     floating TypeDouble = ComplexVec singleType
 
 
-constructComplex :: forall a. Elt a => Exp a -> Exp a -> Exp (Complex a)
+constructComplex :: forall a. (HasCallStack, Elt a) => Exp a -> Exp a -> Exp (Complex a)
 constructComplex r i =
   case complexR (eltR @a) of
     ComplexTup   -> coerce $ T2 r i
     ComplexVec _ -> V2 (coerce @a @(EltR a) r) (coerce @a @(EltR a) i)
 
-deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
+deconstructComplex :: forall a. (HasCallStack, Elt a) => Exp (Complex a) -> (Exp a, Exp a)
 deconstructComplex c@(Exp c') =
   case complexR (eltR @a) of
     ComplexTup   -> let T2 r i = coerce c in (r, i)
@@ -187,16 +190,17 @@ coerce (Exp e) = Exp e
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
-  lift (r :+ i) = lift r ::+ lift i
+  lift (r :+ i) = withFrozenCallStack $ lift r ::+ lift i
 
 instance Elt a => Unlift Exp (Complex (Exp a)) where
-  unlift (r ::+ i) = r :+ i
+  unlift = withFrozenCallStack $ \(r ::+ i) -> r :+ i
 
 
 instance Eq a => Eq (Complex a) where
-  r1 ::+ c1 == r2 ::+ c2 = r1 == r2 && c1 == c2
-  r1 ::+ c1 /= r2 ::+ c2 = r1 /= r2 || c1 /= c2
+  (==) = withFrozenCallStack $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 == r2 && c1 == c2
+  (/=) = withFrozenCallStack $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 /= r2 || c1 /= c2
 
+-- TODO: Can we capture call stacks here and in the other prelude classes below?
 instance RealFloat a => P.Num (Exp (Complex a)) where
   (+)    = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
   (-)    = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
@@ -290,72 +294,71 @@ instance RealFloat a => P.Floating (Exp (Complex a)) where
 
 
 instance (FromIntegral a b, Num b, Elt (Complex b)) => FromIntegral a (Complex b) where
-  fromIntegral x = fromIntegral x ::+ 0
+  fromIntegral x = withFrozenCallStack $ fromIntegral x ::+ 0
 
 -- | @since 1.2.0.0
 --
 instance Functor Complex where
-  fmap f (r ::+ i) = f r ::+ f i
+  fmap f = withFrozenCallStack $ \(r ::+ i) -> f r ::+ f i
 
 
 -- | The non-negative magnitude of a complex number
 --
-magnitude :: RealFloat a => Exp (Complex a) -> Exp a
-magnitude (r ::+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
-  where
-    k     = max (exponent r) (exponent i)
-    mk    = -k
-    sqr z = z * z
+magnitude :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp a
+magnitude = withFrozenCallStack $ \(r ::+ i) ->
+    let k  = max (exponent r) (exponent i)
+        mk = -k
+        sqr z = z * z
+    in  scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
 
 -- | As 'magnitude', but ignore floating point rounding and use the traditional
 -- (simpler to evaluate) definition.
 --
 -- @since 1.3.0.0
 --
-magnitude' :: RealFloat a => Exp (Complex a) -> Exp a
-magnitude' (r ::+ i) = sqrt (r*r + i*i)
+magnitude' :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp a
+magnitude' = withFrozenCallStack $ \(r ::+ i) -> sqrt (r*r + i*i)
 
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
-phase :: RealFloat a => Exp (Complex a) -> Exp a
-phase z@(r ::+ i) =
-  if z == 0
-    then 0
-    else atan2 i r
+phase :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp a
+phase = withFrozenCallStack $ \z@(r ::+ i) ->
+    if z == 0
+      then 0
+      else atan2 i r
 
 -- | The function 'polar' takes a complex number and returns a (magnitude,
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
-polar :: RealFloat a => Exp (Complex a) -> Exp (a,a)
-polar z =  T2 (magnitude z) (phase z)
+polar :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp (a,a)
+polar z = withFrozenCallStack $ T2 (magnitude z) (phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-mkPolar :: forall a. Floating a => Exp a -> Exp a -> Exp (Complex a)
-mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
+mkPolar :: forall a. (HasCallStack, Floating a) => Exp a -> Exp a -> Exp (Complex a)
+mkPolar = withFrozenCallStack $ lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-cis :: forall a. Floating a => Exp a -> Exp (Complex a)
-cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
+cis :: forall a. (HasCallStack, Floating a) => Exp a -> Exp (Complex a)
+cis = withFrozenCallStack $ lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
 --
-real :: Elt a => Exp (Complex a) -> Exp a
-real (r ::+ _) = r
+real :: (HasCallStack, Elt a) => Exp (Complex a) -> Exp a
+real = withFrozenCallStack $ \(r ::+ _) -> r
 
 -- | Return the imaginary part of a complex number
 --
-imag :: Elt a => Exp (Complex a) -> Exp a
-imag (_ ::+ i) = i
+imag :: (HasCallStack, Elt a) => Exp (Complex a) -> Exp a
+imag = withFrozenCallStack $ \(_ ::+ i) -> i
 
 -- | Return the complex conjugate of a complex number, defined as
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: Num a => Exp (Complex a) -> Exp (Complex a)
-conjugate z = real z ::+ (- imag z)
-
+conjugate :: (HasCallStack, Num a) => Exp (Complex a) -> Exp (Complex a)
+conjugate z = withFrozenCallStack $ real z ::+ (- imag z)
