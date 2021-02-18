@@ -43,6 +43,8 @@ import qualified Prelude                                            as P
 type Integral a = (Enum a, Ord a, Num a, P.Integral (Exp a))
 
 
+-- TODO: We cannot add 'HasCallStack' here and freeze the call stacks
+
 instance P.Integral (Exp Int) where
   quot      = mkQuot
   rem       = mkRem
