@@ -48,6 +48,7 @@ import Data.Array.Accelerate.Sugar.Elt
 import Data.Function
 import Data.Monoid                                                  ( Monoid(..) )
 import Data.Semigroup
+import GHC.Stack
 import qualified Prelude                                            as P
 
 
@@ -59,11 +60,13 @@ instance Elt a => Elt (Min a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Min a) where
   type Plain (Min a) = Min (Plain a)
-  lift (Min a)       = Min_ (lift a)
+  lift (Min a)       = withFrozenCallStack $ Min_ (lift a)
 
 instance Elt a => Unlift Exp (Min (Exp a)) where
-  unlift (Min_ a) = Min a
+  unlift = withFrozenCallStack $ \(Min_ a) -> Min a
 
+-- TODO: Frozen call stacks for prelude classes, possibly using RTS execution
+--       stacks?
 instance Bounded a => P.Bounded (Exp (Min a)) where
   minBound = lift $ Min (minBound :: Exp a)
   maxBound = lift $ Min (maxBound :: Exp a)
@@ -78,8 +81,8 @@ instance Num a => P.Num (Exp (Min a)) where
   fromInteger x = lift (P.fromInteger x :: Min (Exp a))
 
 instance Eq a => Eq (Min a) where
-  (==) = lift2 ((==) `on` getMin)
-  (/=) = lift2 ((/=) `on` getMin)
+  (==) = withFrozenCallStack $ lift2 ((==) `on` getMin)
+  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getMin)
 
 instance Ord a => Ord (Min a) where
   (<)     = lift2 ((<) `on` getMin)
@@ -89,6 +92,7 @@ instance Ord a => Ord (Min a) where
   min x y = lift . Min $ lift2 (min `on` getMin) x y
   max x y = lift . Min $ lift2 (max `on` getMin) x y
 
+-- TODO: These are also prelude classes (same in other modules)
 instance Ord a => Semigroup (Exp (Min a)) where
   x <> y  = lift . Min $ lift2 (min `on` getMin) x y
   stimes  = stimesIdempotent
@@ -106,10 +110,10 @@ instance Elt a => Elt (Max a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Max a) where
   type Plain (Max a) = Max (Plain a)
-  lift (Max a)       = Max_ (lift a)
+  lift (Max a)       = withFrozenCallStack $ Max_ (lift a)
 
 instance Elt a => Unlift Exp (Max (Exp a)) where
-  unlift (Max_ a) = Max a
+  unlift = withFrozenCallStack $ \(Max_ a) -> Max a
 
 instance Bounded a => P.Bounded (Exp (Max a)) where
   minBound = Max_ minBound
@@ -125,16 +129,16 @@ instance Num a => P.Num (Exp (Max a)) where
   fromInteger x = lift (P.fromInteger x :: Max (Exp a))
 
 instance Eq a => Eq (Max a) where
-  (==) = lift2 ((==) `on` getMax)
-  (/=) = lift2 ((/=) `on` getMax)
+  (==) = withFrozenCallStack $ lift2 ((==) `on` getMax)
+  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getMax)
 
 instance Ord a => Ord (Max a) where
-  (<)     = lift2 ((<) `on` getMax)
-  (>)     = lift2 ((>) `on` getMax)
-  (<=)    = lift2 ((<=) `on` getMax)
-  (>=)    = lift2 ((>=) `on` getMax)
-  min x y = Max_ $ lift2 (min `on` getMax) x y
-  max x y = Max_ $ lift2 (max `on` getMax) x y
+  (<)     = withFrozenCallStack $ lift2 ((<) `on` getMax)
+  (>)     = withFrozenCallStack $ lift2 ((>) `on` getMax)
+  (<=)    = withFrozenCallStack $ lift2 ((<=) `on` getMax)
+  (>=)    = withFrozenCallStack $ lift2 ((>=) `on` getMax)
+  min x y = withFrozenCallStack $ Max_ $ lift2 (min `on` getMax) x y
+  max x y = withFrozenCallStack $ Max_ $ lift2 (max `on` getMax) x y
 
 instance Ord a => Semigroup (Exp (Max a)) where
   x <> y  = Max_ $ lift2 (max `on` getMax) x y
