@@ -1,11 +1,14 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE ImplicitParams        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ParallelListComp      #-}
 {-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
@@ -36,6 +39,9 @@ module Data.Array.Accelerate.Pattern (
 
   pattern V2, pattern V3, pattern V4, pattern V8, pattern V16,
 
+  -- Used internally in other pattern synonyms
+  withEmptyOrFrozenCallStack,
+
 ) where
 
 import Data.Array.Accelerate.Annotations
@@ -50,19 +56,51 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
+import GHC.Stack
+import GHC.Stack.Types                                              ( CallStack(FreezeCallStack) )
 import Language.Haskell.TH.Extra                                    hiding ( Exp, Match )
+
+
+-- | Workaround for pattern synonyms and call stacks not working as expected in
+-- GHC versions 9.0.x and below. See the issue linked below. On this versions we
+-- will freeze an empty call stack instead of the call stack wasn't already
+-- frozen. This function is implemented in the same way as the regular
+-- 'withFrozenCallStack'.
+--
+-- HACK: Call stacks didn't play nicely with pattern synonyms in GHC version
+--       before 9.2, so to prevent incorrect source annotations we'll prevent
+--       them from being generated completely.
+--
+--       https://gitlab.haskell.org/ghc/ghc/-/issues/19289
+-- TODO: Since 'Pattern' isn't meant to be used directly, should we strip off
+--       two layers of call stack?
+withEmptyOrFrozenCallStack :: HasCallStack => (HasCallStack => a) -> a
+withEmptyOrFrozenCallStack dewit =
+  let ?callStack =
+#if MIN_VERSION_GLASGOW_HASKELL(9,1,0,0)
+        -- Same definition as in 'withFrozenCallStack'
+        freezeCallStack (popCallStack callStack)
+#else
+        -- Only freeze an empty call stack of the call stack isn't already
+        -- frozen, i.e. when it is used internally within Accelerate's front end
+        -- standard library
+        case ?callStack of
+          x@(FreezeCallStack _) -> x
+          _                     -> freezeCallStack emptyCallStack
+#endif
+  in  dewit
 
 
 -- | A pattern synonym for working with (product) data types. You can declare
 -- your own pattern synonyms based off of this.
 --
-pattern Pattern :: forall b a context. IsPattern context a b => b -> context a
-pattern Pattern vars <- (matcher @context -> vars)
-  where Pattern = builder @context
+pattern Pattern :: forall b a context. (HasCallStack, IsPattern context a b) => b -> context a
+pattern Pattern vars <- (withEmptyOrFrozenCallStack (matcher @context) -> vars)
+  where Pattern = withEmptyOrFrozenCallStack (builder @context)
 
 class IsPattern context a b where
-  builder :: b -> context a
-  matcher :: context a -> b
+  builder :: HasCallStack => b -> context a
+  matcher :: HasCallStack => context a -> b
 
 
 pattern Vector :: forall b a context. IsVector context a b => b -> context a

@@ -70,12 +70,10 @@ import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
 
 
--- TODO: Freeze the call stacks here
-
 infix 6 ::+
-pattern (::+) :: Elt a => Exp a -> Exp a -> Exp (Complex a)
-pattern r ::+ i <- (deconstructComplex -> (r, i))
-  where (::+) = constructComplex
+pattern (::+) :: (HasCallStack, Elt a) => Exp a -> Exp a -> Exp (Complex a)
+pattern r ::+ i <- (withEmptyOrFrozenCallStack deconstructComplex -> (r, i))
+  where (::+) = withEmptyOrFrozenCallStack constructComplex
 {-# COMPLETE (::+) #-}
 
 
