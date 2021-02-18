@@ -48,45 +48,45 @@ import Language.Haskell.TH.Extra                                    hiding ( Exp
 
 -- | Lift a unary function into 'Exp'.
 --
-lift1 :: (Unlift Exp a, Lift Exp b)
+lift1 :: (HasCallStack, Unlift Exp a, Lift Exp b)
       => (a -> b)
       -> Exp (Plain a)
       -> Exp (Plain b)
-lift1 f = lift . f . unlift
+lift1 f = withFrozenCallStack $ lift . f . unlift
 
 -- | Lift a binary function into 'Exp'.
 --
-lift2 :: (Unlift Exp a, Unlift Exp b, Lift Exp c)
+lift2 :: (HasCallStack, Unlift Exp a, Unlift Exp b, Lift Exp c)
       => (a -> b -> c)
       -> Exp (Plain a)
       -> Exp (Plain b)
       -> Exp (Plain c)
-lift2 f x y = lift $ f (unlift x) (unlift y)
+lift2 f x y = withFrozenCallStack $ lift $ f (unlift x) (unlift y)
 
 -- | Lift a ternary function into 'Exp'.
 --
-lift3 :: (Unlift Exp a, Unlift Exp b, Unlift Exp c, Lift Exp d)
+lift3 :: (HasCallStack, Unlift Exp a, Unlift Exp b, Unlift Exp c, Lift Exp d)
       => (a -> b -> c -> d)
       -> Exp (Plain a)
       -> Exp (Plain b)
       -> Exp (Plain c)
       -> Exp (Plain d)
-lift3 f x y z = lift $ f (unlift x) (unlift y) (unlift z)
+lift3 f x y z = withFrozenCallStack $ lift $ f (unlift x) (unlift y) (unlift z)
 
 -- | Lift a unary function to a computation over rank-1 indices.
 --
-ilift1 :: (Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1
-ilift1 f = lift1 (\(Z:.i) -> Z :. f i)
+ilift1 :: HasCallStack => (Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1
+ilift1 f = withFrozenCallStack $ lift1 (\(Z:.i) -> Z :. f i)
 
 -- | Lift a binary function to a computation over rank-1 indices.
 --
-ilift2 :: (Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
-ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
+ilift2 :: HasCallStack => (Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
+ilift2 f = withFrozenCallStack $ lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
 
 -- | Lift a ternary function to a computation over rank-1 indices.
 --
-ilift3 :: (Exp Int -> Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
-ilift3 f = lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
+ilift3 :: HasCallStack => (Exp Int -> Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
+ilift3 f = withFrozenCallStack $ lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
 
 
 -- | The class of types @e@ which can be lifted into @c@.
@@ -107,7 +107,7 @@ class Lift c e where
   -- expressions or 'Acc' for array computations. The value may already contain
   -- subexpressions in 'c'.
   --
-  lift :: e -> c (Plain e)
+  lift :: HasCallStack => e -> c (Plain e)
 
 -- | A limited subset of types which can be lifted, can also be unlifted.
 class Lift c e => Unlift c e where
@@ -116,7 +116,7 @@ class Lift c e => Unlift c e where
   -- possible if the constructor is fully determined by its type - i.e., it is a
   -- singleton.
   --
-  unlift :: c (Plain e) -> e
+  unlift :: HasCallStack => c (Plain e) -> e
 
 
 -- Identity instances
@@ -124,17 +124,17 @@ class Lift c e => Unlift c e where
 
 instance Lift Exp (Exp e) where
   type Plain (Exp e) = e
-  lift = id
+  lift = withFrozenCallStack id
 
 instance Unlift Exp (Exp e) where
-  unlift = id
+  unlift = withFrozenCallStack id
 
 instance Lift Acc (Acc a) where
   type Plain (Acc a) = a
-  lift = id
+  lift = withFrozenCallStack id
 
 instance Unlift Acc (Acc a) where
-  unlift = id
+  unlift = withFrozenCallStack id
 
 -- instance Lift Seq (Seq a) where
 --   type Plain (Seq a) = a
@@ -149,159 +149,159 @@ instance Unlift Acc (Acc a) where
 
 instance Lift Exp Z where
   type Plain Z = Z
-  lift _ = Z_
+  lift _ = withFrozenCallStack Z_
 
 instance Unlift Exp Z where
   unlift _ = Z
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
-  lift (ix :. i) = lift ix ::. lift i
+  lift = withFrozenCallStack $ \(ix :. i) -> lift ix ::. lift i
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
-  lift (ix :. i) = lift ix ::. constant i
+  lift = withFrozenCallStack $ \(ix :. i) -> lift ix ::. constant i
 
 instance (Elt e, Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
-  lift (ix :. i) = lift ix ::. i
+  lift = withFrozenCallStack $ \(ix :. i) -> lift ix ::. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
-  unlift (ix ::. i) = unlift ix :. i
+  unlift = withFrozenCallStack $ \(ix ::. i) -> unlift ix :. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt ix) => Unlift Exp (Exp ix :. Exp e) where
-  unlift (ix ::. i) = ix :. i
+  unlift = withFrozenCallStack $ \(ix ::. i) -> ix :. i
 
 instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
   type Plain (Any sh) = Any sh
-  lift Any = constant Any
+  lift Any = withFrozenCallStack $ constant Any
 
 -- Instances for numeric types
 -- ---------------------------
 
 {-# INLINE expConst #-}
-expConst :: forall e. Elt e => IsScalar (EltR e) => e -> Exp e
-expConst = Exp . SmartExp . Const mkAnn (scalarType @(EltR e)) . fromElt
+expConst :: forall e. (HasCallStack, Elt e) => IsScalar (EltR e) => e -> Exp e
+expConst = withFrozenCallStack $ Exp . SmartExp . Const mkAnn (scalarType @(EltR e)) . fromElt
 
 instance Lift Exp Int where
   type Plain Int = Int
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Int8 where
   type Plain Int8 = Int8
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Int16 where
   type Plain Int16 = Int16
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Int32 where
   type Plain Int32 = Int32
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Int64 where
   type Plain Int64 = Int64
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Word where
   type Plain Word = Word
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Word8 where
   type Plain Word8 = Word8
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Word16 where
   type Plain Word16 = Word16
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Word32 where
   type Plain Word32 = Word32
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Word64 where
   type Plain Word64 = Word64
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CShort where
   type Plain CShort = CShort
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CUShort where
   type Plain CUShort = CUShort
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CInt where
   type Plain CInt = CInt
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CUInt where
   type Plain CUInt = CUInt
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CLong where
   type Plain CLong = CLong
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CULong where
   type Plain CULong = CULong
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CLLong where
   type Plain CLLong = CLLong
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CULLong where
   type Plain CULLong = CULLong
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Half where
   type Plain Half = Half
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Float where
   type Plain Float = Float
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Double where
   type Plain Double = Double
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CFloat where
   type Plain CFloat = CFloat
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CDouble where
   type Plain CDouble = CDouble
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift True  = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 1) `Pair` SmartExp (Nil mkAnn)
-  lift False = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 0) `Pair` SmartExp (Nil mkAnn)
+  lift True  = withFrozenCallStack $ Exp . SmartExp $ SmartExp (Const mkAnn scalarType 1) `Pair` SmartExp (Nil mkAnn)
+  lift False = withFrozenCallStack $ Exp . SmartExp $ SmartExp (Const mkAnn scalarType 0) `Pair` SmartExp (Nil mkAnn)
 
 instance Lift Exp Char where
   type Plain Char = Char
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CChar where
   type Plain CChar = CChar
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CSChar where
   type Plain CSChar = CSChar
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 instance Lift Exp CUChar where
   type Plain CUChar = CUChar
-  lift = expConst
+  lift = withFrozenCallStack expConst
 
 -- Instances for tuples
 -- --------------------
 
 instance Lift Exp () where
   type Plain () = ()
-  lift _ = Exp (SmartExp (Nil mkAnn))
+  lift _ = withFrozenCallStack $ Exp (SmartExp (Nil mkAnn))
 
 instance Unlift Exp () where
   unlift _ = ()
@@ -315,7 +315,7 @@ instance Unlift Acc () where
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e
-  lift (Array arr) = Acc $ SmartAcc $ Use (arrayR @sh @e) arr
+  lift (Array arr) = withFrozenCallStack $ Acc $ SmartAcc $ Use (arrayR @sh @e) arr
 
 -- Lift and Unlift instances for tuples
 --
@@ -340,6 +340,7 @@ runQ $ do
           [d| instance ($ctx1, $ctx2) => Lift $(conT con) $res1 where
                 type Plain $res1 = $plain
                 lift $(tupP (map varP xs)) =
+                  withFrozenCallStack $
                   $(conE con)
                   $(foldl (\vs v -> do _v <- newName "_v"
                                        [| let $(conP con [varP _v]) = lift $(varE v)
@@ -347,6 +348,7 @@ runQ $ do
 
               instance $ctx3 => Unlift $(conT con) $res2 where
                 unlift $(conP con [varP _x]) =
+                  withFrozenCallStack $
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
