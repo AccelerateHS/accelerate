@@ -25,6 +25,8 @@ module Data.Array.Accelerate.Unsafe (
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 
+import GHC.Stack
+
 
 -- | The function 'coerce' allows you to convert a value between any two types
 -- whose underlying representations have the same bit size at each component.
@@ -47,6 +49,5 @@ import Data.Array.Accelerate.Sugar.Elt
 --
 -- @since 1.2.0.0
 --
-coerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
-coerce = mkCoerce
-
+coerce :: (HasCallStack, Coerce (EltR a) (EltR b)) => Exp a -> Exp b
+coerce = withFrozenCallStack mkCoerce
