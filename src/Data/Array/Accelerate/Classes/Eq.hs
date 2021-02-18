@@ -60,7 +60,7 @@ infixr 3 &&
   mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
                          (SmartExp $ Prj PairIdxLeft y)
                          (SmartExp $ Const mkAnn scalarTypeWord8 0))
-          `Pair` SmartExp Nil
+          `Pair` SmartExp (Nil mkAnn)
 
 -- | Conjunction: True if both arguments are true. This is a strict version of
 -- '(&&)': it will always evaluate both arguments, even when the first is false.
@@ -81,7 +81,7 @@ infixr 2 ||
   mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
                          (SmartExp $ Const mkAnn scalarTypeWord8 1)
                          (SmartExp $ Prj PairIdxLeft y))
-          `Pair` SmartExp Nil
+          `Pair` SmartExp (Nil mkAnn)
 
 
 -- | Disjunction: True if either argument is true. This is a strict version of

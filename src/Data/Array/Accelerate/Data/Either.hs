@@ -32,6 +32,7 @@ module Data.Array.Accelerate.Data.Either (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -63,7 +64,7 @@ isLeft = not . isRight
 -- | Return 'True' if the argument is a 'Right'-value
 --
 isRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp Nil
+isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp (Nil mkAnn)
   -- TLM: This is a sneaky hack because we know that the tag bits for Right
   -- and True are identical.
 

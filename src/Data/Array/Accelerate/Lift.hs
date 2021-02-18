@@ -277,8 +277,8 @@ instance Lift Exp CDouble where
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift True  = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 1) `Pair` SmartExp Nil
-  lift False = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 0) `Pair` SmartExp Nil
+  lift True  = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 1) `Pair` SmartExp (Nil mkAnn)
+  lift False = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 0) `Pair` SmartExp (Nil mkAnn)
 
 instance Lift Exp Char where
   type Plain Char = Char
@@ -301,7 +301,7 @@ instance Lift Exp CUChar where
 
 instance Lift Exp () where
   type Plain () = ()
-  lift _ = Exp (SmartExp Nil)
+  lift _ = Exp (SmartExp (Nil mkAnn))
 
 instance Unlift Exp () where
   unlift _ = ()
@@ -350,8 +350,8 @@ runQ $ do
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil |] [| Apair |]
-        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj  |] [| Nil  |] [| Pair  |]
+        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil        |] [| Apair |]
+        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj  |] [| (Nil mkAnn) |] [| Pair  |]
     --
     as <- mapM mkAccInstances [2..16]
     es <- mapM mkExpInstances [2..16]

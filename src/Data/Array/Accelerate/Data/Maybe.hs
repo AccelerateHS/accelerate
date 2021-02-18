@@ -32,6 +32,7 @@ module Data.Array.Accelerate.Data.Maybe (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -64,7 +65,7 @@ isNothing = not . isJust
 -- | Returns 'True' if the argument is of the form @Just _@
 --
 isJust :: Elt a => Exp (Maybe a) -> Exp Bool
-isJust (Exp x) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp Nil
+isJust (Exp x) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp (Nil mkAnn)
   -- TLM: This is a sneaky hack because we know that the tag bits for Just
   -- and True are identical.
 

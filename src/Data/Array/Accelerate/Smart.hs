@@ -318,6 +318,7 @@ type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
+-- TODO: Add annotations to most of the constructors
 data PreSmartAcc acc exp as where
     -- Needed for conversion to de Bruijn form
   Atag          :: ArraysR as
@@ -488,6 +489,7 @@ newtype SmartExp t = SmartExp (PreSmartExp SmartAcc SmartExp t)
 -- | Scalar expressions to parametrise collective array operations, themselves parameterised over
 -- the type of collective array operations.
 --
+-- TODO: Add annotations to the rest of the constructors
 data PreSmartExp acc exp t where
   -- Needed for conversion to de Bruijn form
   Tag           :: TypeR t
@@ -505,7 +507,8 @@ data PreSmartExp acc exp t where
                 -> t
                 -> PreSmartExp acc exp t
 
-  Nil           :: PreSmartExp acc exp ()
+  Nil           :: Ann
+                -> PreSmartExp acc exp ()
 
   Pair          :: exp t1
                 -> exp t2
@@ -849,7 +852,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     Tag tp _                        -> tp
     Match _ e                       -> typeR e
     Const _ tp _                    -> TupRsingle tp
-    Nil                             -> TupRunit
+    Nil _                           -> TupRunit
     Pair e1 e2                      -> typeR e1 `TupRpair` typeR e2
     Prj idx e
       | TupRpair t1 t2 <- typeR e   -> case idx of
@@ -894,7 +897,7 @@ constant :: forall e. (HasCallStack, Elt e) => e -> Exp e
 constant = Exp . go (eltR @e) . fromElt
   where
     go :: HasCallStack => TypeR t -> t -> SmartExp t
-    go TupRunit         ()       = SmartExp $ Nil
+    go TupRunit         ()       = SmartExp $ (Nil mkAnn)
     go (TupRsingle tp)  c        = SmartExp $ Const mkAnn tp c
     go (TupRpair t1 t2) (c1, c2) = SmartExp $ go t1 c1 `Pair` go t2 c2
 
@@ -925,7 +928,7 @@ undef :: forall e. Elt e => Exp e
 undef = Exp $ go $ eltR @e
   where
     go :: TypeR t -> SmartExp t
-    go TupRunit         = SmartExp $ Nil
+    go TupRunit         = SmartExp $ (Nil mkAnn)
     go (TupRsingle t)   = SmartExp $ Undef t
     go (TupRpair t1 t2) = SmartExp $ go t1 `Pair` go t2
 
@@ -1161,19 +1164,19 @@ mkMin = mkPrimBinary $ PrimMin singleType
 -- Logical operators
 
 mkLAnd :: Exp Bool -> Exp Bool -> Exp Bool
-mkLAnd (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLAnd (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+mkLAnd (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLAnd (SmartExp $ Pair x y)) `Pair` SmartExp (Nil mkAnn)
   where
     x = SmartExp $ Prj PairIdxLeft a
     y = SmartExp $ Prj PairIdxLeft b
 
 mkLOr :: Exp Bool -> Exp Bool -> Exp Bool
-mkLOr (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLOr (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+mkLOr (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLOr (SmartExp $ Pair x y)) `Pair` SmartExp (Nil mkAnn)
   where
     x = SmartExp $ Prj PairIdxLeft a
     y = SmartExp $ Prj PairIdxLeft b
 
 mkLNot :: Exp Bool -> Exp Bool
-mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
+mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp (Nil mkAnn)
   where
     x = SmartExp $ Prj PairIdxLeft a
 
@@ -1211,13 +1214,13 @@ instance Coerce ((), a) a where
   mkCoerce' a = SmartExp $ Prj PairIdxRight a
 
 instance Coerce a ((), a) where
-  mkCoerce' = SmartExp . Pair (SmartExp Nil)
+  mkCoerce' = SmartExp . Pair (SmartExp (Nil mkAnn))
 
 instance Coerce (a, ()) a where
   mkCoerce' a = SmartExp $ Prj PairIdxLeft a
 
 instance Coerce a (a, ()) where
-  mkCoerce' a = SmartExp (Pair a (SmartExp Nil))
+  mkCoerce' a = SmartExp (Pair a (SmartExp (Nil mkAnn)))
 
 
 -- Annotations
@@ -1246,6 +1249,7 @@ class HasAnnotations a where
 
 instance HasAnnotations (Exp a) where
   modifyAnn f (Exp (SmartExp (Const ann t c))) = mkExp $ Const (f ann) t c
+  modifyAnn f (Exp (SmartExp (Nil ann)))       = mkExp $ Nil (f ann)
   -- TODO: All other constructors as we add more annotations
   modifyAnn _ e = e
 

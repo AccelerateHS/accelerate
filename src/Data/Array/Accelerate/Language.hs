@@ -99,6 +99,7 @@ module Data.Array.Accelerate.Language (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Representation.Array                   ( ArrayR(..) )
@@ -1293,7 +1294,7 @@ intersect :: forall sh. Shape sh => Exp sh -> Exp sh -> Exp sh
 intersect (Exp shx) (Exp shy) = Exp $ intersect' (shapeR @sh) shx shy
   where
     intersect' :: ShapeR t -> SmartExp t -> SmartExp t -> SmartExp t
-    intersect' ShapeRz _ _ = SmartExp Nil
+    intersect' ShapeRz _ _ = SmartExp (Nil mkAnn)
     intersect' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ intersect' shR xs ys `Pair`
@@ -1306,7 +1307,7 @@ union :: forall sh. Shape sh => Exp sh -> Exp sh -> Exp sh
 union (Exp shx) (Exp shy) = Exp $ union' (shapeR @sh) shx shy
   where
     union' :: ShapeR t -> SmartExp t -> SmartExp t -> SmartExp t
-    union' ShapeRz _ _ = SmartExp Nil
+    union' ShapeRz _ _ = SmartExp (Nil mkAnn)
     union' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ union' shR xs ys `Pair`

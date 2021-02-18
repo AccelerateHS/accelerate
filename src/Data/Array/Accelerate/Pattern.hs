@@ -38,6 +38,7 @@ module Data.Array.Accelerate.Pattern (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Vec
@@ -179,7 +180,7 @@ runQ $ do
                       _unmatch (SmartExp (Match _ $(varP _y))) = $(varE _y)
                       _unmatch x = x
                   in
-                  Exp $(foldl (\vs v -> [| SmartExp ($vs `Pair` _unmatch $(varE v)) |]) [| SmartExp Nil |] xs)
+                  Exp $(foldl (\vs v -> [| SmartExp ($vs `Pair` _unmatch $(varE v)) |]) [| SmartExp (Nil mkAnn) |] xs)
                 matcher (Exp $(varP _x)) =
                   case $(varE _x) of
                     SmartExp (Match $tags $(varP _y))

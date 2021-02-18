@@ -51,6 +51,9 @@
 --      setting loop unrolling for a constant value. Should we just silently
 --      ignore these things like we do now, or should be printing warnings? I
 --      don't think Accelerate has any other non-fatal compiler diagnostics.
+--
+-- TODO: Call stacks should be frozen for any function exposed to the user,
+--       right now this is not yet the case.
 module Data.Array.Accelerate.Annotations
     ( Ann(..)
     , Optimizations(..)
