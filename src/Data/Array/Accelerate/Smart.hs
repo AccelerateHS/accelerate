@@ -83,6 +83,7 @@ module Data.Array.Accelerate.Smart (
 ) where
 
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
@@ -496,7 +497,8 @@ data PreSmartExp acc exp t where
                 -> PreSmartExp acc exp t
 
   -- All the same constructors as 'AST.Exp', plus projection
-  Const         :: ScalarType t
+  Const         :: Ann
+                -> ScalarType t
                 -> t
                 -> PreSmartExp acc exp t
 
@@ -843,7 +845,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
   typeR = \case
     Tag tp _                        -> tp
     Match _ e                       -> typeR e
-    Const tp _                      -> TupRsingle tp
+    Const _ tp _                    -> TupRsingle tp
     Nil                             -> TupRunit
     Pair e1 e2                      -> typeR e1 `TupRpair` typeR e2
     Prj idx e
@@ -890,7 +892,7 @@ constant = Exp . go (eltR @e) . fromElt
   where
     go :: HasCallStack => TypeR t -> t -> SmartExp t
     go TupRunit         ()       = SmartExp $ Nil
-    go (TupRsingle tp)  c        = SmartExp $ Const tp c
+    go (TupRsingle tp)  c        = SmartExp $ Const mkAnn tp c
     go (TupRpair t1 t2) (c1, c2) = SmartExp $ go t1 c1 `Pair` go t2 c2
 
 -- | 'undef' can be used anywhere a constant is expected, and indicates that the
@@ -1340,10 +1342,11 @@ formatPreAccOp = later $ \case
   Stencil2{}          -> "Stencil2"
   Aforeign{}          -> "Aforeign"
 
+-- TODO: Show annotations
 formatPreExpOp :: Format r (PreSmartExp acc exp t -> r)
 formatPreExpOp = later $ \case
   Tag _ i       -> bformat ("Tag " % int) i
-  Const t c     -> bformat ("Const " % string) (showElt (TupRsingle t) c)
+  Const _ t c   -> bformat ("Const " % string) (showElt (TupRsingle t) c)
   Match{}       -> "Match"
   Undef{}       -> "Undef"
   Nil{}         -> "Nil"

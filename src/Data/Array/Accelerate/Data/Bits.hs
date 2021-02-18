@@ -24,6 +24,7 @@ module Data.Array.Accelerate.Data.Bits (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
@@ -773,7 +774,7 @@ isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
 isSignedDefault _ = constant (B.isSigned (undefined::b))
 
 constInt :: IsIntegral (EltR e) => EltR e -> Exp e
-constInt = mkExp . Const (SingleScalarType (NumSingleType (IntegralNumType integralType)))
+constInt = mkExp . Const mkAnn (SingleScalarType (NumSingleType (IntegralNumType integralType)))
 
 {--
 _popCountDefault :: forall a. (B.FiniteBits a, IsScalar a, Bits a, Num a) => Exp a -> Exp Int

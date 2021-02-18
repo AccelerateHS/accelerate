@@ -28,6 +28,10 @@
 -- TODO: Only a few @PreSmartExp@ constructors have an annotation field right
 --       now
 -- TODO: There are no annotations in @PreSmartAcc@ yet
+-- TODO: Annotations for product pattern synnoyms using @Pattern@/@IsPattern@
+-- TODO: Insert @withFrozenCallStacks@ at the right location in the view pattern
+--       of the pattern synonyms generated using @mkPattern@. This should use an
+--       empty frozen call stack with GHC 9.0.x and below instead.
 --
 -- ** Annotations in the de Bruijn AST
 --
@@ -35,9 +39,14 @@
 --       are propagated properly through the transformations.
 --
 -- TODO: The rest of the process up until codegen
-module Data.Array.Accelerate.Annotations where
-
--- TODO: Add an explicit export list
+module Data.Array.Accelerate.Annotations
+    ( Ann(..)
+    , Optimizations(..)
+    , mkAnn
+      -- Re-exported for convenience
+    , HasCallStack
+    , withFrozenCallStack
+    ) where
 
 import           Control.Exception              ( assert )
 import           GHC.Stack
@@ -78,6 +87,10 @@ data Optimizations = Optimizations
 -- | Create an empty annotation with call site information if available. This
 -- only works when all smart constructors have the 'HasCallStack' constraint.
 -- This function __must__ be called with 'withFrozenCallStacks'.
+--
+-- XXX: Should there be some convenience wrapper for @withFrozenCallStack
+--      mkAnn@? That could get rid of some noise, but it also sort of defeats
+--      the purpose of asserting that the call stack is frozen.
 mkAnn :: HasCallStack => Ann
 mkAnn = assert callStackIsFrozen
     $ Ann (callerLoc $ getCallStack callStack) defaultOptimizations

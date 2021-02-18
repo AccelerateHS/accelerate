@@ -17,6 +17,7 @@ module Data.Array.Accelerate.Pattern.TH (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Representation.Tag
@@ -32,8 +33,6 @@ import Language.Haskell.TH.Extra                                    hiding ( Exp
 import Numeric
 import Text.Printf
 import qualified Language.Haskell.TH.Extra                          as TH
-
-import GHC.Stack
 
 
 -- | As 'mkPattern', but for a list of types
@@ -77,6 +76,9 @@ mkDec dec =
 mkNewtypeD :: Name -> [TyVarBndr ()] -> Con -> DecsQ
 mkNewtypeD tn tvs c = mkDataD tn tvs [c]
 
+-- TODO: The view pattern function of the generated pattern synonym should be
+--       wrapped in @withFrozenCallStacks@, or with an empty frozen call stack
+--       on GHC 9.0.x and below.
 mkDataD :: Name -> [TyVarBndr ()] -> [Con] -> DecsQ
 mkDataD tn tvs cs = do
   (pats, decs) <- unzip <$> go cs
@@ -293,7 +295,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
               ++ map varE xs
               ++ map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat fs1)
 
-        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
+        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const mkAnn (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
         body   = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
 
       r <- sequence [ sigD fun sig

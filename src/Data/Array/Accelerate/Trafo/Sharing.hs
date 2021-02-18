@@ -757,7 +757,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       = case pexp of
           Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
           Match _ e             -> cvt e  -- XXX: this should probably be an error
-          Const tp v            -> AST.Const tp v
+          Const _ tp v          -> AST.Const tp v
           Undef tp              -> AST.Undef tp
           Prj idx e             -> cvtPrj idx (cvt e)
           Nil                   -> AST.Nil
@@ -1842,7 +1842,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
 
           reconstruct $ case pexp of
             Tag tp i            -> return (Tag tp i, 0)      -- height is 0!
-            Const tp c          -> return (Const tp c, 1)
+            Const ann tp c      -> return (Const ann tp c, 1)
             Undef tp            -> return (Undef tp, 1)
             Nil                 -> return (Nil, 1)
             Pair e1 e2          -> travE2 Pair e1 e2
@@ -2748,7 +2748,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
     scopesExp (UnscopedExp _ (ExpSharing sn pexp))
       = case pexp of
           Tag tp i              -> reconstruct (Tag tp i) noNodeCounts
-          Const tp c            -> reconstruct (Const tp c) noNodeCounts
+          Const ann tp c        -> reconstruct (Const ann tp c) noNodeCounts
           Undef tp              -> reconstruct (Undef tp) noNodeCounts
           Pair e1 e2            -> travE2 Pair e1 e2
           Nil                   -> reconstruct Nil noNodeCounts

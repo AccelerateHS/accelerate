@@ -30,6 +30,7 @@ module Data.Array.Accelerate.Classes.Eq (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.Bool
@@ -58,7 +59,7 @@ infixr 3 &&
 (&&) (Exp x) (Exp y) =
   mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
                          (SmartExp $ Prj PairIdxLeft y)
-                         (SmartExp $ Const scalarTypeWord8 0))
+                         (SmartExp $ Const mkAnn scalarTypeWord8 0))
           `Pair` SmartExp Nil
 
 -- | Conjunction: True if both arguments are true. This is a strict version of
@@ -78,7 +79,7 @@ infixr 2 ||
 (||) :: Exp Bool -> Exp Bool -> Exp Bool
 (||) (Exp x) (Exp y) =
   mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
-                         (SmartExp $ Const scalarTypeWord8 1)
+                         (SmartExp $ Const mkAnn scalarTypeWord8 1)
                          (SmartExp $ Prj PairIdxLeft y))
           `Pair` SmartExp Nil
 

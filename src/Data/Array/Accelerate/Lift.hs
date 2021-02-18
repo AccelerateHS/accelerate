@@ -34,6 +34,7 @@ module Data.Array.Accelerate.Lift (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
@@ -180,7 +181,7 @@ instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
 
 {-# INLINE expConst #-}
 expConst :: forall e. Elt e => IsScalar (EltR e) => e -> Exp e
-expConst = Exp . SmartExp . Const (scalarType @(EltR e)) . fromElt
+expConst = Exp . SmartExp . Const mkAnn (scalarType @(EltR e)) . fromElt
 
 instance Lift Exp Int where
   type Plain Int = Int
@@ -276,8 +277,8 @@ instance Lift Exp CDouble where
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift True  = Exp . SmartExp $ SmartExp (Const scalarType 1) `Pair` SmartExp Nil
-  lift False = Exp . SmartExp $ SmartExp (Const scalarType 0) `Pair` SmartExp Nil
+  lift True  = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 1) `Pair` SmartExp Nil
+  lift False = Exp . SmartExp $ SmartExp (Const mkAnn scalarType 0) `Pair` SmartExp Nil
 
 instance Lift Exp Char where
   type Plain Char = Char
