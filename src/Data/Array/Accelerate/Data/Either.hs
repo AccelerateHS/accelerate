@@ -64,7 +64,7 @@ isLeft = withFrozenCallStack $ not . isRight
 -- | Return 'True' if the argument is a 'Right'-value
 --
 isRight :: (HasCallStack, Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp (Nil mkAnn)
+isRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj PairIdxLeft e) (SmartExp (Nil mkAnn))
   -- TLM: This is a sneaky hack because we know that the tag bits for Right
   -- and True are identical.
 

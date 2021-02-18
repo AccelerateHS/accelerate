@@ -146,7 +146,7 @@ instance IsPattern Exp Z Z where
   matcher _ = Z
 
 instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
-  builder (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
+  builder (Exp a :. Exp b) = Exp $ SmartExp $ Pair mkAnn a b
   matcher (Exp t)          = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
 
 
@@ -218,7 +218,7 @@ runQ $ do
                       _unmatch (SmartExp (Match _ $(varP _y))) = $(varE _y)
                       _unmatch x = x
                   in
-                  Exp $(foldl (\vs v -> [| SmartExp ($vs `Pair` _unmatch $(varE v)) |]) [| SmartExp (Nil mkAnn) |] xs)
+                  Exp $(foldl (\vs v -> [| SmartExp (Pair mkAnn $vs (_unmatch $(varE v))) |]) [| SmartExp (Nil mkAnn) |] xs)
                 matcher (Exp $(varP _x)) =
                   case $(varE _x) of
                     SmartExp (Match $tags $(varP _y))

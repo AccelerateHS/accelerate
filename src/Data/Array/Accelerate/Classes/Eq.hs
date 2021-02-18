@@ -58,11 +58,12 @@ infixr 3 &&
 (&&) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 (&&) (Exp x) (Exp y) =
   withFrozenCallStack
-        $ mkExp
-        $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
-                         (SmartExp $ Prj PairIdxLeft y)
-                         (SmartExp $ Const mkAnn scalarTypeWord8 0))
-          `Pair` SmartExp (Nil mkAnn)
+    $ mkExp
+    $ Pair mkAnn
+        (SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+                        (SmartExp $ Prj PairIdxLeft y)
+                        (SmartExp $ Const mkAnn scalarTypeWord8 0)))
+        (SmartExp (Nil mkAnn))
 
 -- | Conjunction: True if both arguments are true. This is a strict version of
 -- '(&&)': it will always evaluate both arguments, even when the first is false.
@@ -81,11 +82,12 @@ infixr 2 ||
 (||) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 (||) (Exp x) (Exp y) =
   withFrozenCallStack
-        $ mkExp
-        $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
-                         (SmartExp $ Const mkAnn scalarTypeWord8 1)
-                         (SmartExp $ Prj PairIdxLeft y))
-          `Pair` SmartExp (Nil mkAnn)
+    $ mkExp
+    $ Pair mkAnn
+        (SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+                  (SmartExp $ Const mkAnn scalarTypeWord8 1)
+                  (SmartExp $ Prj PairIdxLeft y)))
+        (SmartExp (Nil mkAnn))
 
 
 -- | Disjunction: True if either argument is true. This is a strict version of

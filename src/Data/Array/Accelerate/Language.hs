@@ -1297,8 +1297,8 @@ intersect (Exp shx) (Exp shy) = withFrozenCallStack $ Exp $ intersect' (shapeR @
     intersect' ShapeRz _ _ = SmartExp (Nil mkAnn)
     intersect' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
-      $ intersect' shR xs ys `Pair`
-        SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)
+      $ Pair mkAnn (intersect' shR xs ys)
+                   (SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair mkAnn x y))
 
 
 -- | Union of two shapes
@@ -1310,8 +1310,8 @@ union (Exp shx) (Exp shy) = withFrozenCallStack $ Exp $ union' (shapeR @sh) shx 
     union' ShapeRz _ _ = SmartExp (Nil mkAnn)
     union' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
-      $ union' shR xs ys `Pair`
-        SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
+      $ Pair mkAnn (union' shR xs ys)
+                   (SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair mkAnn x y))
 
 
 -- Flow-control

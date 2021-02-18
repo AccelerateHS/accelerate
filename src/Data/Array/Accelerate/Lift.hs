@@ -277,8 +277,8 @@ instance Lift Exp CDouble where
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift True  = withFrozenCallStack $ Exp . SmartExp $ SmartExp (Const mkAnn scalarType 1) `Pair` SmartExp (Nil mkAnn)
-  lift False = withFrozenCallStack $ Exp . SmartExp $ SmartExp (Const mkAnn scalarType 0) `Pair` SmartExp (Nil mkAnn)
+  lift True  = withFrozenCallStack $ Exp . SmartExp $ Pair mkAnn (SmartExp (Const mkAnn scalarType 1)) (SmartExp (Nil mkAnn))
+  lift False = withFrozenCallStack $ Exp . SmartExp $ Pair mkAnn (SmartExp (Const mkAnn scalarType 0)) (SmartExp (Nil mkAnn))
 
 instance Lift Exp Char where
   type Plain Char = Char
@@ -352,8 +352,8 @@ runQ $ do
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil        |] [| Apair |]
-        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj  |] [| (Nil mkAnn) |] [| Pair  |]
+        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil        |] [| Apair      |]
+        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj  |] [| (Nil mkAnn) |] [| Pair mkAnn |]
     --
     as <- mapM mkAccInstances [2..16]
     es <- mapM mkExpInstances [2..16]

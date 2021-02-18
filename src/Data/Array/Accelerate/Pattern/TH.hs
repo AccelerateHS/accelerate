@@ -290,12 +290,12 @@ mkConS tn' tvs' prev' next' tag' con' = do
       fun <- newName ("_build" ++ cn)
       xs  <- replicateM (length fs) (newName "_x")
       let
-        vs    = foldl' (\es e -> [| SmartExp ($es `Pair` $e) |]) [| SmartExp (Nil mkAnn) |]
+        vs    = foldl' (\es e -> [| SmartExp (Pair mkAnn $es  $e) |]) [| SmartExp (Nil mkAnn) |]
               $  map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat (reverse fs0))
               ++ map varE xs
               ++ map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat fs1)
 
-        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const mkAnn (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
+        tagged = [| Exp $ SmartExp $ Pair mkAnn (SmartExp (Const mkAnn (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
         body   = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
 
       r <- sequence [ sigD fun sig

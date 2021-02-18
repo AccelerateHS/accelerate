@@ -65,7 +65,7 @@ isNothing = withFrozenCallStack $ not . isJust
 -- | Returns 'True' if the argument is of the form @Just _@
 --
 isJust :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp Bool
-isJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp (Nil mkAnn)
+isJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj PairIdxLeft x) (SmartExp (Nil mkAnn))
   -- TLM: This is a sneaky hack because we know that the tag bits for Just
   -- and True are identical.
 
