@@ -29,6 +29,7 @@ module Data.Array.Accelerate.Data.Ratio (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Prelude
@@ -55,7 +56,7 @@ import qualified Prelude                                            as P
 
 instance Elt a => Elt (Ratio a)
 
-pattern (:%) :: Elt a => Exp a -> Exp a -> Exp (Ratio a)
+pattern (:%) :: (HasCallStack, Elt a) => Exp a -> Exp a -> Exp (Ratio a)
 pattern (:%) { numerator, denominator } = Pattern (numerator, denominator)
 {-# COMPLETE (:%) #-}
 
@@ -64,7 +65,7 @@ pattern (:%) { numerator, denominator } = Pattern (numerator, denominator)
 -- a ratio by dividing both numerator and denominator by their greatest common
 -- divisor.
 --
-reduce ::  Integral a => Exp a -> Exp a -> Exp (Ratio a)
+reduce :: (HasCallStack, Integral a) => Exp a -> Exp a -> Exp (Ratio a)
 reduce x y =
   if y == 0
     then infinity
@@ -74,24 +75,25 @@ reduce x y =
 -- | Form the ratio of two integral numbers
 --
 infixl 7 %
-(%) :: Integral a => Exp a -> Exp a -> Exp (Ratio a)
-x % y =  reduce (x * signum y) (abs y)
+(%) :: (HasCallStack, Integral a) => Exp a -> Exp a -> Exp (Ratio a)
+x % y = withFrozenCallStack $ reduce (x * signum y) (abs y)
 
-infinity :: Integral a => Exp (Ratio a)
-infinity = 1 :% 0
+infinity :: (HasCallStack, Integral a) => Exp (Ratio a)
+infinity = withFrozenCallStack $ 1 :% 0
 
 
 -- Instances
 -- ---------
 
 instance Integral a => Eq (Ratio a) where
-  (x :% y) == (z :% w) = x == z && y == w
-  (x :% y) /= (z :% w) = x /= z || y /= w
+  (==) = withFrozenCallStack $ \(x :% y) (z :% w) -> x == z && y == w
+  (/=) = withFrozenCallStack $ \(x :% y) (z :% w) -> x /= z || y /= w
 
 instance Integral a => Ord (Ratio a)  where
-  (x :% y) <= (z :% w)  =  x * w <= z * y
-  (x :% y) <  (z :% w)  =  x * w <  z * y
+  (<=) = withFrozenCallStack $ \(x :% y) (z :% w) -> x * w <= z * y
+  (<)  = withFrozenCallStack $ \(x :% y) (z :% w) -> x * w <  z * y
 
+-- TODO: Can we provide frozen call stacks for prelude classes?
 instance Integral a => P.Num (Exp (Ratio a)) where
   (x :% y) + (z :% w) = reduce (x*w + z*y) (y*w)
   (x :% y) - (z :% w) = reduce (x*w - z*y) (y*w)
@@ -110,18 +112,18 @@ instance Integral a => P.Fractional (Exp (Ratio a))  where
   fromRational r = fromInteger (P.numerator r) % fromInteger (P.denominator r)
 
 instance (Integral a, FromIntegral a Int64) => RealFrac (Ratio a) where
-  properFraction (x :% y) =
+  properFraction = withFrozenCallStack $ \(x :% y) ->
     let (q,r) = quotRem x y
     in  (fromIntegral (fromIntegral q :: Exp Int64), r :% y)
 
 
 instance (Integral a, ToFloating a b) => ToFloating (Ratio a) b where
-  toFloating (x :% y) =
+  toFloating = withFrozenCallStack $ \(x :% y) ->
     let x' :% y' = reduce x y
     in  toFloating x' / toFloating y'
 
 instance (FromIntegral a b, Integral b) => FromIntegral a (Ratio b) where
-  fromIntegral x = fromIntegral x :% 1
+  fromIntegral x = withFrozenCallStack $ fromIntegral x :% 1
 
 instance Integral a => P.Enum (Exp (Ratio a))  where
   succ x   = x + 1
