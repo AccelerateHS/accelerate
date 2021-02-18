@@ -50,13 +50,16 @@ import Data.Array.Accelerate.Type
 import Data.Function
 import Data.Monoid                                                  hiding ( (<>) )
 import Data.Semigroup
+import GHC.Stack
 import qualified Prelude                                            as P
 
 
 -- Sum: Monoid under addition
 -- --------------------------
 
-pattern Sum_ :: Elt a => Exp a -> Exp (Sum a)
+-- TODO: How does call stack freezing work here? Same for the other pattern
+--       synonyms here.
+pattern Sum_ :: (HasCallStack, Elt a) => Exp a -> Exp (Sum a)
 pattern Sum_ x = Pattern x
 {-# COMPLETE Sum_ #-}
 
@@ -64,11 +67,12 @@ instance Elt a => Elt (Sum a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Sum a) where
   type Plain (Sum a) = Sum (Plain a)
-  lift (Sum a)       = Sum_ (lift a)
+  lift (Sum a)       = withFrozenCallStack $ Sum_ (lift a)
 
 instance Elt a => Unlift Exp (Sum (Exp a)) where
-  unlift (Sum_ a) = Sum a
+  unlift (Sum_ a) = withFrozenCallStack $ Sum a
 
+-- TODO: Can we use call stacks in these prelude type classes?
 instance Bounded a => P.Bounded (Exp (Sum a)) where
   minBound = Sum_ minBound
   maxBound = Sum_ maxBound
@@ -83,24 +87,25 @@ instance Num a => P.Num (Exp (Sum a)) where
   fromInteger x   = lift (P.fromInteger x :: Sum (Exp a))
 
 instance Eq a => Eq (Sum a) where
-  (==) = lift2 ((==) `on` getSum)
-  (/=) = lift2 ((/=) `on` getSum)
+  (==) = withFrozenCallStack $ lift2 ((==) `on` getSum)
+  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getSum)
 
 instance Ord a => Ord (Sum a) where
-  (<)     = lift2 ((<) `on` getSum)
-  (>)     = lift2 ((>) `on` getSum)
-  (<=)    = lift2 ((<=) `on` getSum)
-  (>=)    = lift2 ((>=) `on` getSum)
-  min x y = Sum_ $ lift2 (min `on` getSum) x y
-  max x y = Sum_ $ lift2 (max `on` getSum) x y
+  (<)     = withFrozenCallStack $ lift2 ((<) `on` getSum)
+  (>)     = withFrozenCallStack $ lift2 ((>) `on` getSum)
+  (<=)    = withFrozenCallStack $ lift2 ((<=) `on` getSum)
+  (>=)    = withFrozenCallStack $ lift2 ((>=) `on` getSum)
+  min x y = withFrozenCallStack $ Sum_ $ lift2 (min `on` getSum) x y
+  max x y = withFrozenCallStack $ Sum_ $ lift2 (max `on` getSum) x y
 
 instance Num a => Monoid (Exp (Sum a)) where
-  mempty = 0
+  -- TODO: Does this work like you'd expect?
+  mempty = withFrozenCallStack 0
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
-  (<>)              = (+)
-  stimes n (Sum_ x) = Sum_ $ P.fromIntegral n * x
+  (<>)              = withFrozenCallStack (+)
+  stimes n (Sum_ x) = withFrozenCallStack $ Sum_ $ P.fromIntegral n * x
 
 
 -- Product: Monoid under multiplication
@@ -114,10 +119,10 @@ instance Elt a => Elt (Product a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   type Plain (Product a) = Product (Plain a)
-  lift (Product a)       = Product_ (lift a)
+  lift (Product a)       = withFrozenCallStack $ Product_ (lift a)
 
 instance Elt a => Unlift Exp (Product (Exp a)) where
-  unlift (Product_ a) = Product a
+  unlift (Product_ a) = withFrozenCallStack $ Product a
 
 instance Bounded a => P.Bounded (Exp (Product a)) where
   minBound = Product_ minBound
@@ -133,41 +138,41 @@ instance Num a => P.Num (Exp (Product a)) where
   fromInteger x   = lift (P.fromInteger x :: Product (Exp a))
 
 instance Eq a => Eq (Product a) where
-  (==) = lift2 ((==) `on` getProduct)
-  (/=) = lift2 ((/=) `on` getProduct)
+  (==) = withFrozenCallStack $ lift2 ((==) `on` getProduct)
+  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getProduct)
 
 instance Ord a => Ord (Product a) where
-  (<)     = lift2 ((<) `on` getProduct)
-  (>)     = lift2 ((>) `on` getProduct)
-  (<=)    = lift2 ((<=) `on` getProduct)
-  (>=)    = lift2 ((>=) `on` getProduct)
-  min x y = Product_ $ lift2 (min `on` getProduct) x y
-  max x y = Product_ $ lift2 (max `on` getProduct) x y
+  (<)     = withFrozenCallStack $ lift2 ((<) `on` getProduct)
+  (>)     = withFrozenCallStack $ lift2 ((>) `on` getProduct)
+  (<=)    = withFrozenCallStack $ lift2 ((<=) `on` getProduct)
+  (>=)    = withFrozenCallStack $ lift2 ((>=) `on` getProduct)
+  min x y = withFrozenCallStack $ Product_ $ lift2 (min `on` getProduct) x y
+  max x y = withFrozenCallStack $ Product_ $ lift2 (max `on` getProduct) x y
 
 instance Num a => Monoid (Exp (Product a)) where
-  mempty = 1
+  -- TODO: Does this work?
+  mempty = withFrozenCallStack 1
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
-  (<>)                  = (*)
-  stimes n (Product_ x) = Product_ $ x ^ (P.fromIntegral n :: Exp Int)
+  (<>)                  = withFrozenCallStack (*)
+  stimes n (Product_ x) = withFrozenCallStack $ Product_ $ x ^ (P.fromIntegral n :: Exp Int)
 
 
 -- Instances for unit and tuples
 -- -----------------------------
 
 instance Monoid (Exp ()) where
-  mempty = constant ()
+  mempty = withFrozenCallStack $ constant ()
 
 instance (Elt a, Elt b, Monoid (Exp a), Monoid (Exp b)) => Monoid (Exp (a,b)) where
-  mempty = T2 mempty mempty
+  mempty = withFrozenCallStack $ T2 mempty mempty
 
 instance (Elt a, Elt b, Elt c, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c)) => Monoid (Exp (a,b,c)) where
-  mempty = T3 mempty mempty mempty
+  mempty = withFrozenCallStack $ T3 mempty mempty mempty
 
 instance (Elt a, Elt b, Elt c, Elt d, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d)) => Monoid (Exp (a,b,c,d)) where
-  mempty = T4 mempty mempty mempty mempty
+  mempty = withFrozenCallStack $ T4 mempty mempty mempty mempty
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d), Monoid (Exp e)) => Monoid (Exp (a,b,c,d,e)) where
-  mempty = T5 mempty mempty mempty mempty mempty
-
+  mempty = withFrozenCallStack $ T5 mempty mempty mempty mempty mempty
