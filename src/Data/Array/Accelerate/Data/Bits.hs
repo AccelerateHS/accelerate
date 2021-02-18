@@ -56,109 +56,111 @@ class Eq a => Bits a where
               isSigned, testBit, bit, popCount #-}
 
   -- | Bitwise "and"
-  (.&.)         :: Exp a -> Exp a -> Exp a
+  (.&.)         :: HasCallStack => Exp a -> Exp a -> Exp a
 
   -- | Bitwise "or"
-  (.|.)         :: Exp a -> Exp a -> Exp a
+  (.|.)         :: HasCallStack => Exp a -> Exp a -> Exp a
 
   -- | Bitwise "xor"
-  xor           :: Exp a -> Exp a -> Exp a
+  xor           :: HasCallStack => Exp a -> Exp a -> Exp a
 
   -- | Reverse all bits in the argument
-  complement    :: Exp a -> Exp a
+  complement    :: HasCallStack => Exp a -> Exp a
 
   -- | @'shift' x i@ shifts @x@ left by @i@ bits if @i@ is positive, or right by
   -- @-i@ bits otherwise. Right shifts perform sign extension on signed number
   -- types; i.e. they fill the top bits with 1 if the @x@ is negative and with
   -- 0 otherwise.
-  shift         :: Exp a -> Exp Int -> Exp a
+  shift         :: HasCallStack => Exp a -> Exp Int -> Exp a
   shift x i
-    = cond (i < 0) (x `shiftR` (-i))
+    = withFrozenCallStack
+    $ cond (i < 0) (x `shiftR` (-i))
     $ cond (i > 0) (x `shiftL` i)
     $ x
 
   -- | @'rotate' x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right
   -- by @-i@ bits otherwise.
-  rotate        :: Exp a -> Exp Int -> Exp a
+  rotate        :: HasCallStack => Exp a -> Exp Int -> Exp a
   rotate x i
-    = cond (i < 0) (x `rotateR` (-i))
+    = withFrozenCallStack
+    $ cond (i < 0) (x `rotateR` (-i))
     $ cond (i > 0) (x `rotateL` i)
     $ x
 
   -- | The value with all bits unset
-  zeroBits      :: Exp a
-  zeroBits = clearBit (bit 0) 0
+  zeroBits      :: HasCallStack => Exp a
+  zeroBits = withFrozenCallStack $ clearBit (bit 0) 0
 
   -- | @bit /i/@ is a value with the @/i/@th bit set and all other bits clear.
-  bit           :: Exp Int -> Exp a
+  bit           :: HasCallStack => Exp Int -> Exp a
 
   -- | @x \`setBit\` i@ is the same as @x .|. bit i@
-  setBit        :: Exp a -> Exp Int -> Exp a
-  setBit x i = x .|. bit i
+  setBit        :: HasCallStack => Exp a -> Exp Int -> Exp a
+  setBit x i = withFrozenCallStack $ x .|. bit i
 
   -- | @x \`clearBit\` i@ is the same as @x .&. complement (bit i)@
-  clearBit      :: Exp a -> Exp Int -> Exp a
-  clearBit x i = x .&. complement (bit i)
+  clearBit      :: HasCallStack => Exp a -> Exp Int -> Exp a
+  clearBit x i = withFrozenCallStack $ x .&. complement (bit i)
 
   -- | @x \`complementBit\` i@ is the same as @x \`xor\` bit i@
-  complementBit :: Exp a -> Exp Int -> Exp a
-  complementBit x i = x `xor` bit i
+  complementBit :: HasCallStack => Exp a -> Exp Int -> Exp a
+  complementBit x i = withFrozenCallStack $ x `xor` bit i
 
   -- | Return 'True' if the @n@th bit of the argument is 1
-  testBit       :: Exp a -> Exp Int -> Exp Bool
+  testBit       :: HasCallStack => Exp a -> Exp Int -> Exp Bool
 
   -- | Return 'True' if the argument is a signed type.
-  isSigned      :: Exp a -> Exp Bool
+  isSigned      :: HasCallStack => Exp a -> Exp Bool
 
   -- | Shift the argument left by the specified number of bits (which must be
   -- non-negative).
-  shiftL        :: Exp a -> Exp Int -> Exp a
-  shiftL x i = x `shift` i
+  shiftL        :: HasCallStack => Exp a -> Exp Int -> Exp a
+  shiftL x i = withFrozenCallStack $ x `shift` i
 
   -- | Shift the argument left by the specified number of bits. The result is
   -- undefined for negative shift amounts and shift amounts greater or equal to
   -- the 'finiteBitSize'.
-  unsafeShiftL  :: Exp a -> Exp Int -> Exp a
-  unsafeShiftL = shiftL
+  unsafeShiftL  :: HasCallStack => Exp a -> Exp Int -> Exp a
+  unsafeShiftL = withFrozenCallStack shiftL
 
   -- | Shift the first argument right by the specified number of bits (which
   -- must be non-negative).
   --
   -- Right shifts perform sign extension on signed number types; i.e. they fill
   -- the top bits with 1 if @x@ is negative and with 0 otherwise.
-  shiftR        :: Exp a -> Exp Int -> Exp a
-  shiftR x i = x `shift` (-i)
+  shiftR        :: HasCallStack => Exp a -> Exp Int -> Exp a
+  shiftR x i = withFrozenCallStack $ x `shift` (-i)
 
   -- | Shift the first argument right by the specified number of bits. The
   -- result is undefined for negative shift amounts and shift amounts greater or
   -- equal to the 'finiteBitSize'.
-  unsafeShiftR  :: Exp a -> Exp Int -> Exp a
-  unsafeShiftR = shiftR
+  unsafeShiftR  :: HasCallStack => Exp a -> Exp Int -> Exp a
+  unsafeShiftR = withFrozenCallStack shiftR
 
   -- | Rotate the argument left by the specified number of bits (which must be
   -- non-negative).
-  rotateL       :: Exp a -> Exp Int -> Exp a
-  rotateL x i = x `rotate` i
+  rotateL       :: HasCallStack => Exp a -> Exp Int -> Exp a
+  rotateL x i = withFrozenCallStack $ x `rotate` i
 
   -- | Rotate the argument right by the specified number of bits (which must be non-negative).
-  rotateR       :: Exp a -> Exp Int -> Exp a
-  rotateR x i = x `rotate` (-i)
+  rotateR       :: HasCallStack => Exp a -> Exp Int -> Exp a
+  rotateR x i = withFrozenCallStack $ x `rotate` (-i)
 
   -- | Return the number of set bits in the argument. This number is known as
   -- the population count or the Hamming weight.
-  popCount      :: Exp a -> Exp Int
+  popCount      :: HasCallStack => Exp a -> Exp Int
 
 
 class Bits b => FiniteBits b where
   -- | Return the number of bits in the type of the argument.
-  finiteBitSize :: Exp b -> Exp Int
+  finiteBitSize :: HasCallStack => Exp b -> Exp Int
 
   -- | Count the number of zero bits preceding the most significant set bit.
   -- This can be used to compute a base-2 logarithm via:
   --
   -- > logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
   --
-  countLeadingZeros :: Exp b -> Exp Int
+  countLeadingZeros :: HasCallStack => Exp b -> Exp Int
 
   -- | Count the number of zero bits following the least significant set bit.
   -- The related
@@ -167,401 +169,401 @@ class Bits b => FiniteBits b where
   --
   -- > findFirstSet x = 1 + countTrailingZeros x
   --
-  countTrailingZeros :: Exp b -> Exp Int
+  countTrailingZeros :: HasCallStack => Exp b -> Exp Int
 
 
 -- Instances for Bits
 -- ------------------
 
 instance Bits Bool where
-  (.&.)        = (&&)
-  (.|.)        = (||)
-  xor          = (/=)
-  complement   = not
-  shift x i    = cond (i == 0) x (constant False)
-  testBit x i  = cond (i == 0) x (constant False)
-  rotate x _   = x
-  bit i        = i == 0
-  isSigned     = isSignedDefault
-  popCount     = boolToInt
+  (.&.)        = withFrozenCallStack (&&)
+  (.|.)        = withFrozenCallStack (||)
+  xor          = withFrozenCallStack (/=)
+  complement   = withFrozenCallStack not
+  shift x i    = withFrozenCallStack $ cond (i == 0) x (constant False)
+  testBit x i  = withFrozenCallStack $ cond (i == 0) x (constant False)
+  rotate x _   = withFrozenCallStack x
+  bit i        = withFrozenCallStack (i == 0)
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack boolToInt
 
 instance Bits Int where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Int8 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Int16 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Int32 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Int64 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Word where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Word8 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Word16 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Word32 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits Word64 where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = bitDefault
-  testBit      = testBitDefault
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack bitDefault
+  testBit      = withFrozenCallStack testBitDefault
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack mkPopCount
 
 instance Bits CInt where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Int32
-  testBit b    = testBitDefault (mkBitcast @Int32 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Int32
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Int32
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Int32 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Int32
 
 instance Bits CUInt where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Word32
-  testBit b    = testBitDefault (mkBitcast @Word32 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Word32
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Word32
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Word32 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Word32
 
 instance Bits CLong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @HTYPE_CLONG
-  testBit b    = testBitDefault (mkBitcast @HTYPE_CLONG b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @HTYPE_CLONG
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @HTYPE_CLONG
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @HTYPE_CLONG b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @HTYPE_CLONG
 
 instance Bits CULong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @HTYPE_CULONG
-  testBit b    = testBitDefault (mkBitcast @HTYPE_CULONG b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @HTYPE_CULONG
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @HTYPE_CULONG
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @HTYPE_CULONG b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @HTYPE_CULONG
 
 instance Bits CLLong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Int64
-  testBit b    = testBitDefault (mkBitcast @Int64 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Int64
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Int64
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Int64 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Int64
 
 instance Bits CULLong where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Word64
-  testBit b    = testBitDefault (mkBitcast @Word64 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Word64
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Word64
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Word64 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Word64
 
 instance Bits CShort where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Int16
-  testBit b    = testBitDefault (mkBitcast @Int16 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Int16
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Int16
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Int16 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Int16
 
 instance Bits CUShort where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Word16
-  testBit b    = testBitDefault (mkBitcast @Word16 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Word16
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Word16
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Word16 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Word16
 
 instance Bits CChar where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @HTYPE_CCHAR
-  testBit b    = testBitDefault (mkBitcast @HTYPE_CCHAR b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @HTYPE_CCHAR
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @HTYPE_CCHAR
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @HTYPE_CCHAR b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @HTYPE_CCHAR
 
 instance Bits CSChar where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Int8
-  testBit b    = testBitDefault (mkBitcast @Int8 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Int8
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Int8
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Int8 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Int8
 
 instance Bits CUChar where
-  (.&.)        = mkBAnd
-  (.|.)        = mkBOr
-  xor          = mkBXor
-  complement   = mkBNot
-  bit          = mkBitcast . bitDefault @Word8
-  testBit b    = testBitDefault (mkBitcast @Word8 b)
-  shift        = shiftDefault
-  shiftL       = shiftLDefault
-  shiftR       = shiftRDefault
-  unsafeShiftL = mkBShiftL
-  unsafeShiftR = mkBShiftR
-  rotate       = rotateDefault
-  rotateL      = rotateLDefault
-  rotateR      = rotateRDefault
-  isSigned     = isSignedDefault
-  popCount     = mkPopCount . mkBitcast @Word8
+  (.&.)        = withFrozenCallStack mkBAnd
+  (.|.)        = withFrozenCallStack mkBOr
+  xor          = withFrozenCallStack mkBXor
+  complement   = withFrozenCallStack mkBNot
+  bit          = withFrozenCallStack $ mkBitcast . bitDefault @Word8
+  testBit b    = withFrozenCallStack $ testBitDefault (mkBitcast @Word8 b)
+  shift        = withFrozenCallStack shiftDefault
+  shiftL       = withFrozenCallStack shiftLDefault
+  shiftR       = withFrozenCallStack shiftRDefault
+  unsafeShiftL = withFrozenCallStack mkBShiftL
+  unsafeShiftR = withFrozenCallStack mkBShiftR
+  rotate       = withFrozenCallStack rotateDefault
+  rotateL      = withFrozenCallStack rotateLDefault
+  rotateR      = withFrozenCallStack rotateRDefault
+  isSigned     = withFrozenCallStack isSignedDefault
+  popCount     = withFrozenCallStack $ mkPopCount . mkBitcast @Word8
 
 
 
@@ -569,152 +571,152 @@ instance Bits CUChar where
 -- ------------------------
 
 instance FiniteBits Bool where
-  finiteBitSize _      = constInt 8 -- stored as Word8 {- (B.finiteBitSize (undefined::Bool)) -}
-  countLeadingZeros  x = cond x 0 1
-  countTrailingZeros x = cond x 0 1
+  finiteBitSize _      = withFrozenCallStack $ constInt 8 -- stored as Word8 {- (B.finiteBitSize (undefined::Bool)) -}
+  countLeadingZeros  x = withFrozenCallStack $ cond x 0 1
+  countTrailingZeros x = withFrozenCallStack $ cond x 0 1
 
 instance FiniteBits Int where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Int))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Int))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Int8 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Int8))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Int8))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Int16 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Int16))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Int16))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Int32 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Int32))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Int32))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Int64 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Int64))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Int64))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Word where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Word))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Word))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Word8 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Word8))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Word8))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Word16 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Word16))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Word16))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Word32 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Word32))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Word32))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits Word64 where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::Word64))
-  countLeadingZeros  = mkCountLeadingZeros
-  countTrailingZeros = mkCountTrailingZeros
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::Word64))
+  countLeadingZeros  = withFrozenCallStack mkCountLeadingZeros
+  countTrailingZeros = withFrozenCallStack mkCountTrailingZeros
 
 instance FiniteBits CInt where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CInt))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int32
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int32
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CInt))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Int32
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Int32
 
 instance FiniteBits CUInt where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CUInt))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word32
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word32
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CUInt))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Word32
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Word32
 
 instance FiniteBits CLong where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CLong))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CLONG
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CLONG
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CLong))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @HTYPE_CLONG
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @HTYPE_CLONG
 
 instance FiniteBits CULong where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CULong))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CULONG
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CULONG
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CULong))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @HTYPE_CULONG
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @HTYPE_CULONG
 
 instance FiniteBits CLLong where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CLLong))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int64
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int64
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CLLong))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Int64
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Int64
 
 instance FiniteBits CULLong where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CULLong))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word64
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word64
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CULLong))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Word64
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Word64
 
 instance FiniteBits CShort where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CShort))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int16
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int16
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CShort))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Int16
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Int16
 
 instance FiniteBits CUShort where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CUShort))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word16
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word16
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CUShort))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Word16
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Word16
 
 instance FiniteBits CChar where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CChar))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @HTYPE_CCHAR
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @HTYPE_CCHAR
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CChar))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @HTYPE_CCHAR
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @HTYPE_CCHAR
 
 instance FiniteBits CSChar where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CSChar))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Int8
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Int8
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CSChar))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Int8
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Int8
 
 instance FiniteBits CUChar where
-  finiteBitSize _    = constInt (B.finiteBitSize (undefined::CUChar))
-  countLeadingZeros  = mkCountLeadingZeros  . mkBitcast @Word8
-  countTrailingZeros = mkCountTrailingZeros . mkBitcast @Word8
+  finiteBitSize _    = withFrozenCallStack $ constInt (B.finiteBitSize (undefined::CUChar))
+  countLeadingZeros  = withFrozenCallStack $ mkCountLeadingZeros  . mkBitcast @Word8
+  countTrailingZeros = withFrozenCallStack $ mkCountTrailingZeros . mkBitcast @Word8
 
 
 -- Default implementations
 -- -----------------------
-bitDefault :: (IsIntegral (EltR t), Bits t) => Exp Int -> Exp t
+bitDefault :: HasCallStack => (IsIntegral (EltR t), Bits t) => Exp Int -> Exp t
 bitDefault x = constInt 1 `shiftL` x
 
-testBitDefault :: (IsIntegral (EltR t), Bits t) => Exp t -> Exp Int -> Exp Bool
+testBitDefault :: HasCallStack => (IsIntegral (EltR t), Bits t) => Exp t -> Exp Int -> Exp Bool
 testBitDefault x i = (x .&. bit i) /= constInt 0
 
-shiftDefault :: (FiniteBits t, IsIntegral (EltR t), B.Bits t) => Exp t -> Exp Int -> Exp t
+shiftDefault :: HasCallStack => (FiniteBits t, IsIntegral (EltR t), B.Bits t) => Exp t -> Exp Int -> Exp t
 shiftDefault x i
   = cond (i >= 0) (shiftLDefault x i)
                   (shiftRDefault x (-i))
 
-shiftLDefault :: (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+shiftLDefault :: HasCallStack => (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftLDefault x i
   = cond (i >= finiteBitSize x) (constInt 0)
   $ mkBShiftL x i
 
-shiftRDefault :: forall t. (B.Bits t, FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+shiftRDefault :: forall t. (HasCallStack, B.Bits t, FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftRDefault
   | B.isSigned (undefined::t) = shiftRADefault
   | otherwise                 = shiftRLDefault
 
 -- Shift the argument right (signed)
-shiftRADefault :: (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+shiftRADefault :: (HasCallStack, FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftRADefault x i
   = cond (i >= finiteBitSize x) (cond (mkLt x (constInt 0)) (constInt (-1)) (constInt 0))
   $ mkBShiftR x i
 
 -- Shift the argument right (unsigned)
-shiftRLDefault :: (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+shiftRLDefault :: (HasCallStack, FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 shiftRLDefault x i
   = cond (i >= finiteBitSize x) (constInt 0)
   $ mkBShiftR x i
 
-rotateDefault :: forall t. (FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+rotateDefault :: forall t. (HasCallStack, FiniteBits t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateDefault x i
   = cond (i < 0) (mkBRotateR x (-i))
   $ cond (i > 0) (mkBRotateL x i)
@@ -760,20 +762,20 @@ rotateDefault' _ x i
     wsib = finiteBitSize x
 --}
 
-rotateLDefault :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+rotateLDefault :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateLDefault x i
   = cond (i == 0) x
   $ mkBRotateL x i
 
-rotateRDefault :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+rotateRDefault :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 rotateRDefault x i
   = cond (i == 0) x
   $ mkBRotateR x i
 
-isSignedDefault :: forall b. B.Bits b => Exp b -> Exp Bool
+isSignedDefault :: forall b. (HasCallStack, B.Bits b) => Exp b -> Exp Bool
 isSignedDefault _ = constant (B.isSigned (undefined::b))
 
-constInt :: IsIntegral (EltR e) => EltR e -> Exp e
+constInt :: HasCallStack => IsIntegral (EltR e) => EltR e -> Exp e
 constInt = mkExp . Const mkAnn (SingleScalarType (NumSingleType (IntegralNumType integralType)))
 
 {--
