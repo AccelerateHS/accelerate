@@ -55,9 +55,11 @@ infix 4 /=
 -- operator, so the second argument will be evaluated only if the first is true.
 --
 infixr 3 &&
-(&&) :: Exp Bool -> Exp Bool -> Exp Bool
+(&&) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 (&&) (Exp x) (Exp y) =
-  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+  withFrozenCallStack
+        $ mkExp
+        $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
                          (SmartExp $ Prj PairIdxLeft y)
                          (SmartExp $ Const mkAnn scalarTypeWord8 0))
           `Pair` SmartExp (Nil mkAnn)
@@ -68,17 +70,19 @@ infixr 3 &&
 -- @since 1.3.0.0
 --
 infixr 3 &&!
-(&&!) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&!) = mkLAnd
+(&&!) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
+(&&!) = withFrozenCallStack mkLAnd
 
 -- | Disjunction: True if either argument is true. This is a short-circuit
 -- operator, so the second argument will be evaluated only if the first is
 -- false.
 --
 infixr 2 ||
-(||) :: Exp Bool -> Exp Bool -> Exp Bool
+(||) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 (||) (Exp x) (Exp y) =
-  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+  withFrozenCallStack
+        $ mkExp
+        $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
                          (SmartExp $ Const mkAnn scalarTypeWord8 1)
                          (SmartExp $ Prj PairIdxLeft y))
           `Pair` SmartExp (Nil mkAnn)
@@ -90,13 +94,13 @@ infixr 2 ||
 -- @since 1.3.0.0
 --
 infixr 2 ||!
-(||!) :: Exp Bool -> Exp Bool -> Exp Bool
-(||!) = mkLOr
+(||!) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
+(||!) = withFrozenCallStack mkLOr
 
 -- | Logical negation
 --
-not :: Exp Bool -> Exp Bool
-not = mkLNot
+not :: HasCallStack => Exp Bool -> Exp Bool
+not = withFrozenCallStack mkLNot
 
 
 -- | The 'Eq' class defines equality '==' and inequality '/=' for scalar
@@ -105,20 +109,19 @@ not = mkLNot
 -- For convenience, we include 'Elt' as a superclass.
 --
 class Elt a => Eq a where
-  (==) :: Exp a -> Exp a -> Exp Bool
-  (/=) :: Exp a -> Exp a -> Exp Bool
+  (==) :: HasCallStack => Exp a -> Exp a -> Exp Bool
+  (/=) :: HasCallStack => Exp a -> Exp a -> Exp Bool
   {-# MINIMAL (==) | (/=) #-}
-  x == y = mkLNot (x /= y)
-  x /= y = mkLNot (x == y)
-
+  x == y = withFrozenCallStack $ mkLNot (x /= y)
+  x /= y = withFrozenCallStack $ mkLNot (x == y)
 
 instance Eq () where
-  _ == _ = True_
-  _ /= _ = False_
+  _ == _ = withFrozenCallStack True_
+  _ /= _ = withFrozenCallStack False_
 
 instance Eq Z where
-  _ == _ = True_
-  _ /= _ = False_
+  _ == _ = withFrozenCallStack True_
+  _ /= _ = withFrozenCallStack False_
 
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
@@ -179,8 +182,8 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim t =
         [d| instance Eq $(conT t) where
-              (==) = mkEq
-              (/=) = mkNEq
+              (==) = withFrozenCallStack mkEq
+              (/=) = withFrozenCallStack mkNEq
           |]
 
       mkTup :: Int -> Q [Dec]
@@ -193,8 +196,8 @@ runQ $ do
             pat vs  = conP (mkName ('T':show n)) (map varP vs)
         in
         [d| instance ($cst) => Eq $res where
-              $(pat xs) == $(pat ys) = $(foldr1 (\vs v -> [| $vs && $v |]) (zipWith (\x y -> [| $x == $y |]) (map varE xs) (map varE ys)))
-              $(pat xs) /= $(pat ys) = $(foldr1 (\vs v -> [| $vs || $v |]) (zipWith (\x y -> [| $x /= $y |]) (map varE xs) (map varE ys)))
+              $(pat xs) == $(pat ys) = withFrozenCallStack $ $(foldr1 (\vs v -> [| $vs && $v |]) (zipWith (\x y -> [| $x == $y |]) (map varE xs) (map varE ys)))
+              $(pat xs) /= $(pat ys) = withFrozenCallStack $ $(foldr1 (\vs v -> [| $vs || $v |]) (zipWith (\x y -> [| $x /= $y |]) (map varE xs) (map varE ys)))
           |]
 
   is <- mapM mkPrim integralTypes
@@ -205,14 +208,13 @@ runQ $ do
   return $ concat (concat [is,fs,ns,cs,ts])
 
 instance Eq sh => Eq (sh :. Int) where
-  x == y = indexHead x == indexHead y && indexTail x == indexTail y
-  x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
+  x == y = withFrozenCallStack $ indexHead x == indexHead y && indexTail x == indexTail y
+  x /= y = withFrozenCallStack $ indexHead x /= indexHead y || indexTail x /= indexTail y
 
 instance Eq Bool where
-  x == y = mkCoerce x == (mkCoerce y :: Exp PrimBool)
-  x /= y = mkCoerce x /= (mkCoerce y :: Exp PrimBool)
+  x == y = withFrozenCallStack $ mkCoerce x == (mkCoerce y :: Exp PrimBool)
+  x /= y = withFrozenCallStack $ mkCoerce x /= (mkCoerce y :: Exp PrimBool)
 
 instance Eq Ordering where
-  x == y = mkCoerce x == (mkCoerce y :: Exp TAG)
-  x /= y = mkCoerce x /= (mkCoerce y :: Exp TAG)
-
+  x == y = withFrozenCallStack $ mkCoerce x == (mkCoerce y :: Exp TAG)
+  x /= y = withFrozenCallStack $ mkCoerce x /= (mkCoerce y :: Exp TAG)
