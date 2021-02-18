@@ -514,7 +514,8 @@ data PreSmartExp acc exp t where
                 -> exp t2
                 -> PreSmartExp acc exp (t1, t2)
 
-  Prj           :: PairIdx (t1, t2) t
+  Prj           :: Ann
+                -> PairIdx (t1, t2) t
                 -> exp (t1, t2)
                 -> PreSmartExp acc exp t
 
@@ -757,10 +758,10 @@ instance (Stencil (sh:.Int) a row8,
                                       stencilPrj @(sh:.Int) @a $ prj0 s)
 
 prjTail :: HasCallStack => SmartExp (t, a) -> SmartExp t
-prjTail = withFrozenCallStack $ SmartExp . Prj PairIdxLeft
+prjTail = withFrozenCallStack $ SmartExp . Prj mkAnn PairIdxLeft
 
 prj0 :: HasCallStack => SmartExp (t, a) -> SmartExp a
-prj0 = withFrozenCallStack $ SmartExp . Prj PairIdxRight
+prj0 = withFrozenCallStack $ SmartExp . Prj mkAnn PairIdxRight
 
 prj1 :: HasCallStack => SmartExp ((t, a), s0) -> SmartExp a
 prj1 = withFrozenCallStack $ prj0 . prjTail
@@ -854,11 +855,11 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     Const _ tp _                    -> TupRsingle tp
     Nil _                           -> TupRunit
     Pair _ e1 e2                    -> typeR e1 `TupRpair` typeR e2
-    Prj idx e
+    Prj _ idx e
       | TupRpair t1 t2 <- typeR e   -> case idx of
                                          PairIdxLeft  -> t1
                                          PairIdxRight -> t2
-    Prj _ _                         -> error "I never joke about my work"
+    Prj _ _ _                       -> error "I never joke about my work"
     VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
     VecUnpack vecR _                -> vecRtuple vecR
     ToIndex _ _ _                   -> TupRsingle scalarTypeInt
@@ -943,12 +944,12 @@ undef = withFrozenCallStack $ Exp $ go $ eltR @e
 -- innermost nested loop.
 --
 indexHead :: (HasCallStack, Elt sh, Elt a) => Exp (sh :. a) -> Exp a
-indexHead (Exp x) = withFrozenCallStack $ mkExp $ Prj PairIdxRight x
+indexHead (Exp x) = withFrozenCallStack $ mkExp $ Prj mkAnn PairIdxRight x
 
 -- | Get all but the innermost element of a shape
 --
 indexTail :: (HasCallStack, Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
-indexTail (Exp x) = withFrozenCallStack $ mkExp $ Prj PairIdxLeft x
+indexTail (Exp x) = withFrozenCallStack $ mkExp $ Prj mkAnn PairIdxLeft x
 
 
 -- Smart constructor for constants
@@ -1051,7 +1052,7 @@ mkRem = mkPrimBinary $ PrimRem integralType
 mkQuotRem :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkQuotRem (Exp x) (Exp y) =
   let pair = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair mkAnn x y)
-  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
+  in  (mkExp $ Prj mkAnn PairIdxLeft pair, mkExp $ Prj mkAnn PairIdxRight pair)
 
 mkIDiv :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkIDiv = mkPrimBinary $ PrimIDiv integralType
@@ -1062,7 +1063,7 @@ mkMod = mkPrimBinary $ PrimMod integralType
 mkDivMod :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkDivMod (Exp x) (Exp y) =
   let pair = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair mkAnn x y)
-  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
+  in  (mkExp $ Prj mkAnn PairIdxLeft pair, mkExp $ Prj mkAnn PairIdxRight pair)
 
 -- Operators from Bits and FiniteBits
 
@@ -1166,19 +1167,19 @@ mkMin = mkPrimBinary $ PrimMin singleType
 mkLAnd :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 mkLAnd (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp PrimLAnd (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
   where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+    x = SmartExp $ Prj mkAnn PairIdxLeft a
+    y = SmartExp $ Prj mkAnn PairIdxLeft b
 
 mkLOr :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 mkLOr (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp PrimLOr (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
   where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+    x = SmartExp $ Prj mkAnn PairIdxLeft a
+    y = SmartExp $ Prj mkAnn PairIdxLeft b
 
 mkLNot :: HasCallStack => Exp Bool -> Exp Bool
 mkLNot (Exp a) = mkExp $ Pair mkAnn (SmartExp (PrimApp PrimLNot x)) (SmartExp (Nil mkAnn))
   where
-    x = SmartExp $ Prj PairIdxLeft a
+    x = SmartExp $ Prj mkAnn PairIdxLeft a
 
 -- Numeric conversions
 
@@ -1205,19 +1206,19 @@ instance {-# OVERLAPS #-} (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b 
   mkCoerce' = SmartExp . Coerce (scalarType @a) (scalarType @b)
 
 instance (Coerce a1 b1, Coerce a2 b2) => Coerce (a1, a2) (b1, b2) where
-  mkCoerce' a = SmartExp $ Pair mkAnn (mkCoerce' $ SmartExp $ Prj PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj PairIdxRight a)
+  mkCoerce' a = SmartExp $ Pair mkAnn (mkCoerce' $ SmartExp $ Prj mkAnn PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj mkAnn PairIdxRight a)
 
 instance Coerce a a where
   mkCoerce' = id
 
 instance Coerce ((), a) a where
-  mkCoerce' a = SmartExp $ Prj PairIdxRight a
+  mkCoerce' a = SmartExp $ Prj mkAnn PairIdxRight a
 
 instance Coerce a ((), a) where
   mkCoerce' = SmartExp . Pair mkAnn (SmartExp (Nil mkAnn))
 
 instance Coerce (a, ()) a where
-  mkCoerce' a = SmartExp $ Prj PairIdxLeft a
+  mkCoerce' a = SmartExp $ Prj mkAnn PairIdxLeft a
 
 instance Coerce a (a, ()) where
   mkCoerce' a = SmartExp (Pair mkAnn a (SmartExp (Nil mkAnn)))
@@ -1248,9 +1249,10 @@ class HasAnnotations a where
 -- TODO: Add an instance for 'Acc' once we add annotation fields there
 
 instance HasAnnotations (Exp a) where
-  modifyAnn f (Exp (SmartExp (Const ann t c ))) = mkExp $ Const (f ann) t c
-  modifyAnn f (Exp (SmartExp (Nil ann       ))) = mkExp $ Nil (f ann)
-  modifyAnn f (Exp (SmartExp (Pair ann e1 e2))) = mkExp $ Pair (f ann) e1 e2
+  modifyAnn f (Exp (SmartExp (Const ann t c  ))) = mkExp $ Const (f ann) t c
+  modifyAnn f (Exp (SmartExp (Nil ann        ))) = mkExp $ Nil (f ann)
+  modifyAnn f (Exp (SmartExp (Pair ann e1  e2))) = mkExp $ Pair (f ann) e1 e2
+  modifyAnn f (Exp (SmartExp (Prj  ann idx e ))) = mkExp $ Prj (f ann) idx e
   -- TODO: All other constructors as we add more annotations
   modifyAnn _ e = e
 
@@ -1304,7 +1306,7 @@ mkPrimBinaryBool :: (HasCallStack, Elt a, Elt b) => PrimFun ((EltR a, EltR b) ->
 mkPrimBinaryBool = mkCoerce @PrimBool $$$ mkPrimBinary
 
 unPair :: HasCallStack => SmartExp (a, b) -> (SmartExp a, SmartExp b)
-unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)
+unPair e = (SmartExp $ Prj mkAnn PairIdxLeft e, SmartExp $ Prj mkAnn PairIdxRight e)
 
 mkPairToTuple :: HasCallStack => SmartAcc (a, b) -> SmartAcc (((), a), b)
 mkPairToTuple e = SmartAcc Anil `pair` a `pair` b

@@ -316,7 +316,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       fun     <- newName ("_match" ++ cn)
       e       <- newName "_e"
       x       <- newName "_x"
-      (ps,es) <- extract vs [| Prj PairIdxRight $(varE x) |] [] []
+      (ps,es) <- extract vs [| Prj mkAnn PairIdxRight $(varE x) |] [] []
       unbind  <- isExtEnabled RebindableSyntax
       let
         eqE   = if unbind then letE [funD (mkName "==") [clause [] (normalB (varE '(==))) []]] else id
@@ -344,10 +344,10 @@ mkConS tn' tvs' prev' next' tag' con' = do
         extract []     _ ps es = return (ps, es)
         extract (u:us) x ps es = do
           _u <- newName "_u"
-          let x' = [| Prj PairIdxLeft (SmartExp $x) |]
+          let x' = [| Prj mkAnn PairIdxLeft (SmartExp $x) |]
           if not u
              then extract us x' (wildP:ps)  es
-             else extract us x' (varP _u:ps) ([| Exp (SmartExp (Match $(varE _u) (SmartExp (Prj PairIdxRight (SmartExp $x))))) |] : es)
+             else extract us x' (varP _u:ps) ([| Exp (SmartExp (Match $(varE _u) (SmartExp (Prj mkAnn PairIdxRight (SmartExp $x))))) |] : es)
 
         vs = reverse
            $ [ False | _ <- concat fs0 ] ++ [ True | _ <- fs ] ++ [ False | _ <- concat fs1 ]

@@ -147,7 +147,7 @@ instance IsPattern Exp Z Z where
 
 instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
   builder (Exp a :. Exp b) = Exp $ SmartExp $ Pair mkAnn a b
-  matcher (Exp t)          = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
+  matcher (Exp t)          = Exp (SmartExp $ Prj mkAnn PairIdxLeft t) :. Exp (SmartExp $ Prj mkAnn PairIdxRight t)
 
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of
@@ -207,8 +207,8 @@ runQ $ do
                        : [t| EltR $(varT a) ~ $snoc |]
                        : map (\t -> [t| Elt $(varT t)|]) xs
               --
-              get x 0 =     [| SmartExp (Prj PairIdxRight $x) |]
-              get x i = get [| SmartExp (Prj PairIdxLeft $x)  |] (i-1)
+              get x 0 =     [| SmartExp (Prj mkAnn PairIdxRight $x) |]
+              get x i = get [| SmartExp (Prj mkAnn PairIdxLeft $x)  |] (i-1)
           --
           _x <- newName "_x"
           _y <- newName "_y"

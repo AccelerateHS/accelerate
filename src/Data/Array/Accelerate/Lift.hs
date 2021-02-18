@@ -352,8 +352,8 @@ runQ $ do
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj |] [| Anil        |] [| Apair      |]
-        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj  |] [| (Nil mkAnn) |] [| Pair mkAnn |]
+        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj      |] [| Anil        |] [| Apair      |]
+        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj mkAnn |] [| (Nil mkAnn) |] [| Pair mkAnn |]
     --
     as <- mapM mkAccInstances [2..16]
     es <- mapM mkExpInstances [2..16]

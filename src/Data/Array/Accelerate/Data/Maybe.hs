@@ -65,7 +65,7 @@ isNothing = withFrozenCallStack $ not . isJust
 -- | Returns 'True' if the argument is of the form @Just _@
 --
 isJust :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp Bool
-isJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj PairIdxLeft x) (SmartExp (Nil mkAnn))
+isJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj mkAnn PairIdxLeft x) (SmartExp (Nil mkAnn))
   -- TLM: This is a sneaky hack because we know that the tag bits for Just
   -- and True are identical.
 
@@ -83,7 +83,7 @@ fromMaybe d = withFrozenCallStack $ match \case
 -- instead.
 --
 fromJust :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp a
-fromJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp (PairIdxRight `Prj` SmartExp (PairIdxRight `Prj` x))
+fromJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Prj mkAnn PairIdxRight $ SmartExp $ Prj mkAnn PairIdxRight x
 
 -- | The 'maybe' function takes a default value, a function, and a 'Maybe'
 -- value. If the 'Maybe' value is nothing, the default value is returned;

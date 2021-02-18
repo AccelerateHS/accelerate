@@ -60,8 +60,8 @@ infixr 3 &&
   withFrozenCallStack
     $ mkExp
     $ Pair mkAnn
-        (SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
-                        (SmartExp $ Prj PairIdxLeft y)
+        (SmartExp (Cond (SmartExp $ Prj mkAnn PairIdxLeft x)
+                        (SmartExp $ Prj mkAnn PairIdxLeft y)
                         (SmartExp $ Const mkAnn scalarTypeWord8 0)))
         (SmartExp (Nil mkAnn))
 
@@ -84,9 +84,9 @@ infixr 2 ||
   withFrozenCallStack
     $ mkExp
     $ Pair mkAnn
-        (SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
+        (SmartExp (Cond (SmartExp $ Prj mkAnn PairIdxLeft x)
                   (SmartExp $ Const mkAnn scalarTypeWord8 1)
-                  (SmartExp $ Prj PairIdxLeft y)))
+                  (SmartExp $ Prj mkAnn PairIdxLeft y)))
         (SmartExp (Nil mkAnn))
 
 

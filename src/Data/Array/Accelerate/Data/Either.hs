@@ -64,7 +64,7 @@ isLeft = withFrozenCallStack $ not . isRight
 -- | Return 'True' if the argument is a 'Right'-value
 --
 isRight :: (HasCallStack, Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj PairIdxLeft e) (SmartExp (Nil mkAnn))
+isRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj mkAnn PairIdxLeft e) (SmartExp (Nil mkAnn))
   -- TLM: This is a sneaky hack because we know that the tag bits for Right
   -- and True are identical.
 
@@ -73,14 +73,14 @@ isRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ 
 -- instead.
 --
 fromLeft :: (HasCallStack, Elt a, Elt b) => Exp (Either a b) -> Exp a
-fromLeft (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
+fromLeft (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Prj mkAnn PairIdxRight $ SmartExp $ Prj mkAnn PairIdxLeft $ SmartExp $ Prj mkAnn PairIdxRight e
 
 -- | The 'fromRight' function extracts the element out of the 'Right'
 -- constructor. If the argument was actually 'Left', you will get an undefined
 -- value instead.
 --
 fromRight :: (HasCallStack, Elt a, Elt b) => Exp (Either a b) -> Exp b
-fromRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
+fromRight (Exp e) = withFrozenCallStack $ Exp $ SmartExp $ Prj mkAnn PairIdxRight $ SmartExp $ Prj mkAnn PairIdxRight e
 
 -- | The 'either' function performs case analysis on the 'Either' type. If the
 -- value is @'Left' a@, apply the first function to @a@; if it is @'Right' b@,

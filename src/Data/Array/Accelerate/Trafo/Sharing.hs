@@ -759,7 +759,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Match _ e             -> cvt e  -- XXX: this should probably be an error
           Const _ tp v          -> AST.Const tp v
           Undef tp              -> AST.Undef tp
-          Prj idx e             -> cvtPrj idx (cvt e)
+          Prj _ idx e           -> cvtPrj idx (cvt e)
           Nil _                 -> AST.Nil
           Pair _ e1 e2          -> AST.Pair (cvt e1) (cvt e2)
           VecPack   vec e       -> AST.VecPack   vec (cvt e)
@@ -1846,7 +1846,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Undef tp            -> return (Undef tp, 1)
             Nil ann             -> return (Nil ann, 1)
             Pair ann e1 e2      -> travE2 (Pair ann) e1 e2
-            Prj i e             -> travE1 (Prj i) e
+            Prj ann i e         -> travE1 (Prj ann i) e
             VecPack   vec e     -> travE1 (VecPack   vec) e
             VecUnpack vec e     -> travE1 (VecUnpack vec) e
             ToIndex shr sh ix   -> travE2 (ToIndex shr) sh ix
@@ -2752,7 +2752,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Undef tp              -> reconstruct (Undef tp) noNodeCounts
           Pair ann e1 e2        -> travE2 (Pair ann) e1 e2
           Nil ann               -> reconstruct (Nil ann) noNodeCounts
-          Prj i e               -> travE1 (Prj i) e
+          Prj ann i e           -> travE1 (Prj ann i) e
           VecPack   vec e       -> travE1 (VecPack   vec) e
           VecUnpack vec e       -> travE1 (VecUnpack vec) e
           ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
