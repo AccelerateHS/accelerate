@@ -54,7 +54,8 @@ atrace :: Arrays a => String -> Acc a -> Acc a
 atrace message (Acc result)
   = Acc
   $ SmartAcc
-  $ Atrace (Message (\_ -> "") [|| \_ -> "" ||] message) (SmartAcc Anil :: SmartAcc ()) result
+  $ Atrace (Message (\_ -> "")
+           (Just [|| \_ -> "" ||]) message) (SmartAcc Anil :: SmartAcc ()) result
 
 -- | Outputs the trace message and the array(s) from the second argument to
 -- the console, before the 'Acc' computation proceeds with the result of
@@ -64,7 +65,8 @@ atraceArray :: forall a b. (Arrays a, Arrays b, Show a) => String -> Acc a -> Ac
 atraceArray message (Acc inspect) (Acc result)
   = Acc
   $ SmartAcc
-  $ Atrace (Message (show . toArr @a) [|| show . toArr @a ||] message) inspect result
+  $ Atrace (Message (show . toArr @a)
+           (Just [|| show . toArr @a ||]) message) inspect result
 
 -- | Outputs the trace message and the array(s) to the console, before the
 -- 'Acc' computation proceeds with the result of that array.
@@ -80,5 +82,6 @@ atraceExp message value (Acc result) =
   let Acc inspect = unit value
    in Acc
     $ SmartAcc
-    $ Atrace (Message (\a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ()))) [|| \a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())) ||] message) inspect result
+    $ Atrace (Message (\a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())))
+             (Just [|| \a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())) ||]) message) inspect result
 

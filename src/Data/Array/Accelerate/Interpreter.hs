@@ -874,11 +874,6 @@ atraceOp (Message show _ msg) as =
          then traceIO msg
          else traceIO $ printf "%s: %s" msg str
 
--- atraceOp :: String -> ArraysR as -> as -> IO ()
--- atraceOp msg TupRunit                         () = traceIO msg
--- atraceOp msg (TupRsingle (ArrayR ShapeRz eR)) as = traceIO $ printf "%s: %s" msg (showElt eR $ linearIndexArray eR as 0)
--- atraceOp msg (TupRsingle (ArrayR shR eR))     as = traceIO $ printf "%s: %s" msg (showArray (showsElt eR) (ArrayR shR eR) as)
--- atraceOp msg aR                               as = traceIO $ printf "%s: %s" msg (showArrays aR as)
 
 -- Scalar expression evaluation
 -- ----------------------------

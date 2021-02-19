@@ -149,6 +149,7 @@ import Data.Primitive.Vec
 
 import Control.DeepSeq
 import Data.Kind
+import Data.Maybe
 import Language.Haskell.TH                                          ( Q, TExp )
 import qualified Language.Haskell.TH.Syntax as TH
 import Prelude
@@ -198,7 +199,7 @@ type PrimMaybe a = (TAG, ((), a))
 -- Trace messages
 data Message a where
   Message :: (a -> String)                    -- embedded show
-          -> (Q (TExp (a -> String)))         -- lifted version of show, for TH
+          -> Maybe (Q (TExp (a -> String)))   -- lifted version of show, for TH
           -> String
           -> Message a
 
@@ -982,7 +983,7 @@ rnfPreOpenAcc rnfA pacc =
       rnfB = rnfBoundary
 
       rnfM :: Message a -> ()
-      rnfM (Message f g msg) = f `seq` g `seq` rnf msg
+      rnfM (Message f g msg) = f `seq` rnfMaybe (\x -> x `seq` ()) g `seq` rnf msg
   in
   case pacc of
     Alet lhs bnd body         -> rnfALeftHandSide lhs `seq` rnfA bnd `seq` rnfA body
@@ -1192,15 +1193,26 @@ liftPreOpenAcc liftA pacc =
       liftB :: ArrayR (Array sh e) -> Boundary aenv (Array sh e) -> Q (TExp (Boundary aenv (Array sh e)))
       liftB = liftBoundary
 
-      liftM :: Message arrs -> Q (TExp (Message arrs))
-      liftM (Message _ fmt msg) = [|| Message $$fmt (internalError "nested liftPreOpenAcc") $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) ||]
+      liftM :: Message arrs -> acc aenv arrs -> Q (TExp (Message arrs))
+      liftM (Message _ fmt msg) a =
+        let
+            -- We (ironically?) can't lift TExp, so if we have nested
+            -- occurrences of liftPreOpenAcc we fall back to displaying in
+            -- representation format
+            fmtR :: ArraysR arrs' -> Q (TExp (arrs' -> String))
+            fmtR TupRunit                         = [|| \() -> "()" ||]
+            fmtR (TupRsingle (ArrayR ShapeRz eR)) = [|| \as -> showElt $$(liftTypeR eR) $ linearIndexArray $$(liftTypeR eR) as 0 ||]
+            fmtR (TupRsingle (ArrayR shR eR))     = [|| \as -> showArray (showsElt $$(liftTypeR eR)) (ArrayR $$(liftShapeR shR) $$(liftTypeR eR)) as ||]
+            fmtR aR                               = [|| \as -> showArrays $$(liftArraysR aR) as ||]
+        in
+        [|| Message $$(fromMaybe (fmtR (arraysR a)) fmt) Nothing $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) ||]
   in
   case pacc of
     Alet lhs bnd body         -> [|| Alet $$(liftALeftHandSide lhs) $$(liftA bnd) $$(liftA body) ||]
     Avar var                  -> [|| Avar $$(liftArrayVar var) ||]
     Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
     Anil                      -> [|| Anil ||]
-    Atrace msg as bs          -> [|| Atrace $$(liftM msg) $$(liftA as) $$(liftA bs) ||]
+    Atrace msg as bs          -> [|| Atrace $$(liftM msg as) $$(liftA as) $$(liftA bs) ||]
     Apply repr f a            -> [|| Apply $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
     Aforeign repr asm f a     -> [|| Aforeign $$(liftArraysR repr) $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
