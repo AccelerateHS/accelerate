@@ -22,7 +22,7 @@ module Data.Array.Accelerate.Trafo.Config (
 
 import Data.Bits
 import Data.BitSet
-import Data.Array.Accelerate.Debug.Flags                  as F
+import Data.Array.Accelerate.Debug.Internal.Flags                   as F
 
 import Data.Word
 import System.IO.Unsafe

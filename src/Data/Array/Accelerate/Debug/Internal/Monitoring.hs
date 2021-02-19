@@ -7,7 +7,7 @@
 {-# OPTIONS_GHC -fobject-code #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Debug.Monitoring
+-- Module      : Data.Array.Accelerate.Debug.Internal.Monitoring
 -- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -16,7 +16,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Debug.Monitoring (
+module Data.Array.Accelerate.Debug.Internal.Monitoring (
 
   beginMonitoring,
   initAccMetrics,
@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Debug.Monitoring (
 ) where
 
 #ifdef ACCELERATE_MONITORING
-import Data.Array.Accelerate.Debug.Clock
+import Data.Array.Accelerate.Debug.Internal.Clock
 
 import System.Metrics
 import System.Remote.Monitoring

@@ -290,11 +290,6 @@ module Data.Array.Accelerate (
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
 
-  -- ** Tracing
-  -- $tracing
-  --
-  atrace, atraceArray, atraceId, atraceExp,
-
   -- -- ** Sequence operations
   -- collect,
 
@@ -698,19 +693,5 @@ arrayReshape = S.reshape
 --  * <https://hackage.haskell.org/package/accelerate-io-repa accelerate-io-repa>: another Haskell library for high-performance parallel arrays
 --  * <https://hackage.haskell.org/package/accelerate-io-serialise accelerate-io-serialise>: binary serialisation of arrays using <https://hackage.haskell.org/package/serialise serialise>
 --  * <https://hackage.haskell.org/package/accelerate-io-vector accelerate-io-vector>: efficient boxed and unboxed one-dimensional arrays
---
-
--- $tracing
---
--- The 'atrace', 'atraceArray', 'atraceId', and 'atraceExp' functions print
--- messages to an output stream. They are intended for \"printf
--- debugging\", that is: tracing the flow of execution and printing
--- interesting values.
---
--- Note that arrays are printed in their internal representation (using
--- 'Data.Array.Accelerate.Sugar.Array.ArraysR'), which causes that tuples
--- or custom data types are shown differently.
---
--- These functions have the same caveats as those defined in "Debug.Trace".
 --
 

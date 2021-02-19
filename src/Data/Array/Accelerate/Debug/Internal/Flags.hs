@@ -7,7 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-top-binds   #-}
 {-# OPTIONS_GHC -fobject-code                #-} -- SEE: [linking to .c files]
 -- |
--- Module      : Data.Array.Accelerate.Debug.Flags
+-- Module      : Data.Array.Accelerate.Debug.Internal.Flags
 -- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -18,7 +18,7 @@
 -- Option parsing for debug flags
 --
 
-module Data.Array.Accelerate.Debug.Flags (
+module Data.Array.Accelerate.Debug.Internal.Flags (
 
   Value,
   unfolding_use_threshold,

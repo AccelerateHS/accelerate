@@ -329,6 +329,7 @@ library
         Data.Array.Accelerate.Data.Maybe
         Data.Array.Accelerate.Data.Monoid
         Data.Array.Accelerate.Data.Ratio
+        Data.Array.Accelerate.Debug.Trace
         Data.Array.Accelerate.Unsafe
 
         -- For backend development (hidden)
@@ -346,8 +347,8 @@ library
         Data.Array.Accelerate.Array.Remote.Table
         Data.Array.Accelerate.Array.Unique
         Data.Array.Accelerate.Async
-        Data.Array.Accelerate.Debug
         Data.Array.Accelerate.Error
+        Data.Array.Accelerate.Debug.Internal
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Representation.Array
@@ -398,12 +399,13 @@ library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
-        Data.Array.Accelerate.Debug.Clock
-        Data.Array.Accelerate.Debug.Flags
-        Data.Array.Accelerate.Debug.Monitoring
-        Data.Array.Accelerate.Debug.Stats
-        Data.Array.Accelerate.Debug.Timed
-        Data.Array.Accelerate.Debug.Trace
+        Data.Array.Accelerate.Debug.Internal.Clock
+        Data.Array.Accelerate.Debug.Internal.Flags
+        Data.Array.Accelerate.Debug.Internal.Graph
+        Data.Array.Accelerate.Debug.Internal.Monitoring
+        Data.Array.Accelerate.Debug.Internal.Stats
+        Data.Array.Accelerate.Debug.Internal.Timed
+        Data.Array.Accelerate.Debug.Internal.Trace
         Data.Array.Accelerate.Language
         Data.Array.Accelerate.Lift
         Data.Array.Accelerate.Orphans
