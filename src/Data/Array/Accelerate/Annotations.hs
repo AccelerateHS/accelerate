@@ -1,3 +1,6 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ImplicitParams #-}
+
 -- | Annotations for Accelerate's abstract syntax trees.
 --
 -- TODO: Document what exactly we are annotations, how, and with what once this
@@ -58,6 +61,7 @@ module Data.Array.Accelerate.Annotations
     ( Ann(..)
     , Optimizations(..)
     , mkAnn
+    , withEmptyCallStack
       -- Re-exported for convenience
     , HasCallStack
     , withFrozenCallStack
@@ -123,3 +127,11 @@ mkAnn = assert callStackIsFrozen
 
     defaultOptimizations =
         Optimizations { optAlwaysInline = False, optUnrollIters = Nothing }
+
+-- | Compute the argument (which can be either a term or a function) without
+-- collecting call stacks. This can be useful when dealing with situations where
+-- we might want to collect call stacks but can't, so we don't end up capturing
+-- some unrelated call stacks instead.
+withEmptyCallStack :: (HasCallStack => a) -> a
+withEmptyCallStack dewit =
+    let ?callStack = freezeCallStack emptyCallStack in dewit
