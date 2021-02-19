@@ -130,13 +130,13 @@ pattern a `Ix` b = a ::. b
 {-# COMPLETE Ix #-}
 
 pattern All_ :: Exp All
-pattern All_ <- (const True -> True)
-  where All_ = constant All
+pattern All_ <- (withEmptyOrFrozenCallStack (const True) -> True)
+  where All_ = withEmptyOrFrozenCallStack $ constant All
 {-# COMPLETE All_ #-}
 
 pattern Any_ :: (Shape sh, Elt (Any sh)) => Exp (Any sh)
-pattern Any_ <- (const True -> True)
-  where Any_ = constant Any
+pattern Any_ <- (withEmptyOrFrozenCallStack (const True) -> True)
+  where Any_ = withEmptyOrFrozenCallStack $ constant Any
 {-# COMPLETE Any_ #-}
 
 -- IsPattern instances for Shape nil and cons
