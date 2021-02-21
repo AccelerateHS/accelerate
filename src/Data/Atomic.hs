@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE MagicHash                #-}
 {-# LANGUAGE NoImplicitPrelude        #-}
@@ -49,6 +50,12 @@ newtype Atomic = Atomic ( Ptr Int64 )
 --   write a v
 --   return a
 
+-- FIXME: HLS requires stubs because it does not process the
+--        'addForeignFilePath' calls when evaluating Template Haskell
+--
+--        https://github.com/haskell/haskell-language-server/issues/365
+#ifndef __GHCIDE__
+
 -- | Get the current value.
 --
 foreign import ccall unsafe "atomic_read_64" read :: Atomic -> IO Int64
@@ -68,6 +75,25 @@ foreign import ccall unsafe "atomic_fetch_and_and_64" and :: Atomic -> Int64 -> 
 -- | Decrement the atomic value by the given amount. Return the old value.
 --
 foreign import ccall unsafe "atomic_fetch_and_sub_64" subtract :: Atomic -> Int64 -> IO Int64
+
+#else
+
+read :: Atomic -> IO Int64
+read = undefined
+
+write :: Atomic -> Int64 -> IO ()
+write = undefined
+
+add :: Atomic -> Int64 -> IO Int64
+add = undefined
+
+and :: Atomic -> Int64 -> IO Int64
+and = undefined
+
+subtract :: Atomic -> Int64 -> IO Int64
+subtract = undefined
+
+#endif
 
 -- SEE: [linking to .c files]
 --
