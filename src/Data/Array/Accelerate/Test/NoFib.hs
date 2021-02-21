@@ -35,12 +35,9 @@ import Data.Array.Accelerate.Test.NoFib.Imaginary
 import Data.Array.Accelerate.Test.NoFib.Spectral
 import Data.Array.Accelerate.Test.NoFib.Issues
 
-import Text.Read
 import Test.Tasty
 import Test.Tasty.Runners
-import Test.Tasty.Hedgehog
 import Test.Tasty.Ingredients.Rerun
-import Hedgehog.Internal.Property
 import System.Environment
 #endif
 
@@ -53,12 +50,8 @@ nofib _    = error $ unlines [ "Data.Array.Accelerate: the nofib test-suite has 
 #else
 nofib runN = do
   me <- getProgName
-  -- mn <- lookupEnv "TASTY_HEDGEHOG_TESTS"
   defaultMainWithIngredients [rerunningTests (nofibIngredient : defaultIngredients)]
     $ localOption (NumThreads 1)                        -- run each test sequentially with many cores
-    -- $ localOption (mkTimeout 60000000)                  -- timeout each test after 60 s
-    -- $ localOption (HedgehogTestLimit (testLimit mn))    -- number of each test to run
-    -- $ localOption (HedgehogDiscardLimit (Just 10000))   -- maximum number of discard cases before a test fails
     $ testGroup me
         [ test_sharing
         , test_prelude runN
@@ -66,13 +59,5 @@ nofib runN = do
         , test_spectral runN
         , test_issues runN
         ]
-
--- testLimit :: Maybe String -> Maybe TestLimit
--- testLimit Nothing  = Just 1000
--- testLimit (Just s)
---   | null s    = Nothing
---   | otherwise = case readMaybe s of
---                   Nothing -> testLimit Nothing
---                   Just n  -> Just (TestLimit n)
 #endif
 
