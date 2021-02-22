@@ -161,6 +161,12 @@ clearFlags = mapM_ clearFlag
 -- notEnabled = error $ unlines [ "Data.Array.Accelerate: Debugging options are disabled."
 --                              , "Reinstall package 'accelerate' with '-fdebug' to enable them." ]
 
+-- FIXME: HLS requires stubs because it does not process the
+--        'addForeignFilePath' calls when evaluating Template Haskell
+--
+--        https://github.com/haskell/haskell-language-server/issues/365
+#ifndef __GHCIDE__
+
 -- Import the underlying flag variables. These are defined in the file
 -- cbits/flags.h as a bitfield and initialised at program initialisation.
 --
@@ -173,6 +179,19 @@ foreign import ccall "&__cmd_line_flags" __cmd_line_flags :: Ptr Word32
 --
 foreign import ccall "&__unfolding_use_threshold"   unfolding_use_threshold   :: Value  -- the magic cut-off figure for inlining
 foreign import ccall "&__max_simplifier_iterations" max_simplifier_iterations :: Value  -- maximum number of scalar simplification passes
+
+#else
+
+__cmd_line_flags :: Ptr Word32
+__cmd_line_flags = undefined
+
+unfolding_use_threshold :: Value
+unfolding_use_threshold = undefined
+
+max_simplifier_iterations :: Value
+max_simplifier_iterations = undefined
+
+#endif
 
 -- These @-f<blah>@ flags can be reversed with @-fno-<blah>@
 --
