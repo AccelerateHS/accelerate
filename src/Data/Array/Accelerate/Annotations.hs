@@ -1,6 +1,8 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- | Annotations for Accelerate's abstract syntax trees.
 --
@@ -83,7 +85,9 @@ import           Control.Exception              ( assert )
 import qualified Data.HashSet                  as S
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(FreezeCallStack) )
-import           Language.Haskell.TH
+import           Language.Haskell.TH            ( Q
+                                                , TExp
+                                                )
 
 
 -- * Internal types and functions
@@ -98,7 +102,7 @@ import           Language.Haskell.TH
 --       involve adding another type index to 'Exp' that's not going to be a
 --       feasible approach.
 data Ann = Ann
-    { location      :: S.HashSet SrcLoc
+    { locations     :: S.HashSet SrcLoc
     , optimizations :: Optimizations
     }
     deriving Show
@@ -155,7 +159,7 @@ withEmptyCallStack dewit =
     let ?callStack = freezeCallStack emptyCallStack in dewit
 
 instance Semigroup Ann where
-    (Ann loc1 opts1) <> (Ann loc2 opts2) = Ann (loc1 <> loc2) (opts1 <> opts2)
+    (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)
 
 instance Monoid Ann where
     mempty = mkDummyAnn
@@ -180,9 +184,30 @@ instance Semigroup Optimizations where
 -- Used as part of 'rnfPreOpenAcc'.
 
 rnfAnn :: Ann -> ()
-rnfAnn Ann { location, optimizations } =
-    rnf location `seq` rnfOptimizations optimizations
+rnfAnn (Ann src opts) = rnf src `seq` rnfOptimizations opts
 
 rnfOptimizations :: Optimizations -> ()
 rnfOptimizations Optimizations { optAlwaysInline, optUnrollIters } =
     optAlwaysInline `seq` rnf optUnrollIters
+
+-- ** Quotation
+--
+-- Used as part of 'liftOpenExp' when quoting an AST.
+
+liftAnn :: Ann -> Q (TExp Ann)
+liftAnn (Ann src opts) =
+    [|| Ann $$(liftLocations src) $$(liftOptimizations opts) ||]
+
+liftOptimizations :: Optimizations -> Q (TExp Optimizations)
+liftOptimizations Optimizations { .. } = [|| Optimizations { .. } ||]
+
+liftLocations :: S.HashSet SrcLoc -> Q (TExp (S.HashSet SrcLoc))
+liftLocations locs = [|| S.fromList $$(liftLocs $ S.toList locs) ||]
+  where
+    -- TODO: Is there some combinator for this transformation?
+    liftLocs :: [SrcLoc] -> Q (TExp [SrcLoc])
+    liftLocs (x : xs) = [|| $$(liftSrcLoc x) : $$(liftLocs xs) ||]
+    liftLocs []       = [|| [] ||]
+
+liftSrcLoc :: SrcLoc -> Q (TExp SrcLoc)
+liftSrcLoc SrcLoc { .. } = [|| SrcLoc { .. } ||]
