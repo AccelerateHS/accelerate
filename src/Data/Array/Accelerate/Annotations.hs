@@ -50,6 +50,10 @@
 -- AST node by using the optimization functions exposed from
 -- @Data.Array.Accelerate.Smart@.
 --
+-- The annotation type stores source mapping information in a set so we can
+-- easily merge and transform AST nodes in the optimization process while still
+-- preserving information about the node's origins.
+--
 -- XXX: Right now it would be possible to specify some nonsensible flags, like
 --      setting loop unrolling for a constant value. Should we just silently
 --      ignore these things like we do now, or should be printing warnings? I
@@ -66,21 +70,25 @@ module Data.Array.Accelerate.Annotations
       -- Re-exported for convenience
     , HasCallStack
     , withFrozenCallStack
+      -- Internals
+    , rnfAnn
+    , liftAnn
     ) where
 
+import           Data.Array.Accelerate.Orphans  ( )
+
 import           Control.Exception              ( assert )
+import qualified Data.HashSet                  as S
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(FreezeCallStack) )
+import           Language.Haskell.TH
 
 
 -- * Internal types and functions
 
 -- | This annotation type would store source information if available and any
--- additional annotation types added by the programmer sdderiv.
+-- additional annotation types added by the programmer.
 --
--- TODO: We might need to replace location with @Set SrcLoc@ as we'll likely need
---       to combine multiple smart AST nodes in later steps of the compilation
---       process. With that setup we could even merge adjacent 'SrcLoc's.
 -- TODO: The set of optimizations is now the same for 'Exp' and 'Acc'. Should we
 --       have separate sets of 'Optimizations' flags? Ideally we would only
 --       allow adding optimization flags for constructs that make sense (e.g.
@@ -88,7 +96,7 @@ import           GHC.Stack.Types                ( CallStack(FreezeCallStack) )
 --       involve adding another type index to 'Exp' that's not going to be a
 --       feasible approach.
 data Ann = Ann
-    { location      :: Maybe SrcLoc
+    { location      :: S.HashSet SrcLoc
     , optimizations :: Optimizations
     }
     deriving Show
@@ -123,8 +131,8 @@ mkAnn = assert callStackIsFrozen
         (FreezeCallStack _) -> True
         _                   -> False
 
-    callerLoc ((_, loc) : _) = Just loc
-    callerLoc _              = Nothing
+    callerLoc ((_, loc) : _) = S.singleton loc
+    callerLoc _              = S.empty
 
     defaultOptimizations =
         Optimizations { optAlwaysInline = False, optUnrollIters = Nothing }
