@@ -19,10 +19,12 @@ module Data.Array.Accelerate.Orphans ()
 
 import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
 import Data.Primitive.Types
+import Data.Hashable
 import Data.Ratio
 import Foreign.C.Types
 import GHC.Generics
 import GHC.Real
+import GHC.Stack
 import Numeric.Half
 
 
@@ -43,7 +45,12 @@ deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
 deriving instance Generic (Ratio a)
 
+deriving instance Generic SrcLoc
+
 -- primitive
 --
 deriving instance Prim Half
 
+-- hashable
+--
+instance Hashable SrcLoc
