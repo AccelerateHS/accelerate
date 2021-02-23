@@ -151,3 +151,22 @@ mkDummyAnn = withEmptyCallStack mkAnn
 withEmptyCallStack :: (HasCallStack => a) -> a
 withEmptyCallStack dewit =
     let ?callStack = freezeCallStack emptyCallStack in dewit
+
+instance Semigroup Ann where
+    (Ann loc1 opts1) <> (Ann loc2 opts2) = Ann (loc1 <> loc2) (opts1 <> opts2)
+
+instance Monoid Ann where
+    mempty = mkDummyAnn
+
+instance Semigroup Optimizations where
+    a <> b = Optimizations
+        { optAlwaysInline = optAlwaysInline a || optAlwaysInline b
+        , optUnrollIters  = (max `maybeOn` optUnrollIters) a b
+        }
+      where
+        -- 'on' from 'Data.Function' but for comparing 'Maybe' values.
+        maybeOn f on' x y = case (on' x, on' y) of
+            (Just x', Just y') -> Just $ f x' y'
+            (Just x', _      ) -> Just x'
+            (_      , Just y') -> Just y'
+            _                  -> Nothing
