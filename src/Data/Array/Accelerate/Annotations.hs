@@ -61,6 +61,7 @@ module Data.Array.Accelerate.Annotations
     ( Ann(..)
     , Optimizations(..)
     , mkAnn
+    , mkDummyAnn
     , withEmptyCallStack
       -- Re-exported for convenience
     , HasCallStack
@@ -127,6 +128,13 @@ mkAnn = assert callStackIsFrozen
 
     defaultOptimizations =
         Optimizations { optAlwaysInline = False, optUnrollIters = Nothing }
+
+-- | Create a new 'Ann' without any source information.
+--
+-- TODO: This should not be necessary anymore once we add the remaining
+--       annotation fields
+mkDummyAnn :: Ann
+mkDummyAnn = withEmptyCallStack mkAnn
 
 -- | Compute the argument (which can be either a term or a function) without
 -- collecting call stacks. This can be useful when dealing with situations where
