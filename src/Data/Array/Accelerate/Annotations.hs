@@ -1,5 +1,6 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- | Annotations for Accelerate's abstract syntax trees.
 --
@@ -77,6 +78,7 @@ module Data.Array.Accelerate.Annotations
 
 import           Data.Array.Accelerate.Orphans  ( )
 
+import           Control.DeepSeq                ( rnf )
 import           Control.Exception              ( assert )
 import qualified Data.HashSet                  as S
 import           GHC.Stack
@@ -170,3 +172,17 @@ instance Semigroup Optimizations where
             (Just x', _      ) -> Just x'
             (_      , Just y') -> Just y'
             _                  -> Nothing
+
+-- * Internal
+--
+-- ** Normal form data
+--
+-- Used as part of 'rnfPreOpenAcc'.
+
+rnfAnn :: Ann -> ()
+rnfAnn Ann { location, optimizations } =
+    rnf location `seq` rnfOptimizations optimizations
+
+rnfOptimizations :: Optimizations -> ()
+rnfOptimizations Optimizations { optAlwaysInline, optUnrollIters } =
+    optAlwaysInline `seq` rnf optUnrollIters
