@@ -931,7 +931,7 @@ evalOpenExp pexp env aenv =
                                        env' = env `push` (lhs, v1)
                                    in  evalOpenExp exp2 env' aenv
     Evar (Var _ ix)             -> prj ix env
-    Const _ c                   -> c
+    Const _ _ c                 -> c
     Undef tp                    -> undefElt (TupRsingle tp)
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)

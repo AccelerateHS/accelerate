@@ -757,7 +757,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       = case pexp of
           Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
           Match _ e             -> cvt e  -- XXX: this should probably be an error
-          Const _ tp v          -> AST.Const tp v
+          Const ann tp v        -> AST.Const ann tp v
           Undef tp              -> AST.Undef tp
           Prj _ idx e           -> cvtPrj idx (cvt e)
           Nil _                 -> AST.Nil

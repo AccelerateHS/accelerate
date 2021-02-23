@@ -1468,7 +1468,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
                                            in  Let lhs (cvtE x) (replaceE (weakenE k sh') (weakenE k f') avar y)
         Evar var                        -> Evar var
         Foreign tR ff f e               -> Foreign tR ff f (cvtE e)
-        Const tR c                      -> Const tR c
+        Const ann tR c                  -> Const ann tR c
         Undef tR                        -> Undef tR
         Nil                             -> Nil
         Pair e1 e2                      -> Pair (cvtE e1) (cvtE e2)
@@ -1658,11 +1658,11 @@ acondD :: HasCallStack
        ->          OpenAcc aenv arrs
        -> Embed    OpenAcc aenv arrs
 acondD matchAcc embedAcc p t e
-  | Const _ 1 <- p            = Stats.knownBranch "True"      $ embedAcc t
-  | Const _ 0 <- p            = Stats.knownBranch "False"     $ embedAcc e
-  | Just Refl <- matchAcc t e = Stats.knownBranch "redundant" $ embedAcc e
-  | otherwise                 = done $ Acond p (computeAcc (embedAcc t))
-                                               (computeAcc (embedAcc e))
+  | Const _ _ 1 <- p            = Stats.knownBranch "True"      $ embedAcc t
+  | Const _ _ 0 <- p            = Stats.knownBranch "False"     $ embedAcc e
+  | Just Refl   <- matchAcc t e = Stats.knownBranch "redundant" $ embedAcc e
+  | otherwise                   = done $ Acond p (computeAcc (embedAcc t))
+                                                 (computeAcc (embedAcc e))
 
 
 -- Scalar expressions

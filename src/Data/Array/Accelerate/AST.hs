@@ -133,6 +133,7 @@ module Data.Array.Accelerate.AST (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
@@ -600,7 +601,8 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv a
 
   -- Constant values
-  Const         :: ScalarType t
+  Const         :: Ann
+                -> ScalarType t
                 -> t
                 -> OpenExp env aenv t
 
@@ -824,7 +826,7 @@ expType = \case
   Cond _ e _                   -> expType e
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
-  Const tR _                   -> TupRsingle tR
+  Const _ tR _                 -> TupRsingle tR
   PrimConst c                  -> TupRsingle $ SingleScalarType $ primConstType c
   PrimApp f _                  -> snd $ primFunType f
   Index (Var repr _) _         -> arrayRtype repr
@@ -1067,7 +1069,7 @@ rnfOpenExp topExp =
     Let lhs bnd body          -> rnfELeftHandSide lhs `seq` rnfE bnd `seq` rnfE body
     Evar v                    -> rnfExpVar v
     Foreign tp asm f x        -> rnfTypeR tp `seq` rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
-    Const tp c                -> c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
+    Const ann tp c            -> rnfAnn ann `seq` c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
     Undef tp                  -> rnfScalarType tp
     Pair a b                  -> rnfE a `seq` rnfE b
     Nil                       -> ()
@@ -1287,7 +1289,7 @@ liftOpenExp pexp =
     Let lhs bnd body          -> [|| Let $$(liftELeftHandSide lhs) $$(liftOpenExp bnd) $$(liftOpenExp body) ||]
     Evar var                  -> [|| Evar $$(liftExpVar var) ||]
     Foreign repr asm f x      -> [|| Foreign $$(liftTypeR repr) $$(liftForeign asm) $$(liftOpenFun f) $$(liftE x) ||]
-    Const tp c                -> [|| Const $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]
+    Const ann tp c            -> [|| Const $$(liftAnn ann) $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]
     Undef tp                  -> [|| Undef $$(liftScalarType tp) ||]
     Pair a b                  -> [|| Pair $$(liftE a) $$(liftE b) ||]
     Nil                       -> [|| Nil ||]
@@ -1429,11 +1431,12 @@ formatPreAccOp = later $ \case
   Stencil{}         -> "Stencil"
   Stencil2{}        -> "Stencil2"
 
+-- TODO: Show annotations
 formatExpOp :: Format r (OpenExp aenv env t -> r)
 formatExpOp = later $ \case
   Let{}           -> "Let"
   Evar (Var _ ix) -> bformat ("Var x" % int) (idxToInt ix)
-  Const tp c      -> bformat ("Const " % string) (showElt (TupRsingle tp) c)
+  Const _ tp c    -> bformat ("Const " % string) (showElt (TupRsingle tp) c)
   Undef{}         -> "Undef"
   Foreign{}       -> "Foreign"
   Pair{}          -> "Pair"

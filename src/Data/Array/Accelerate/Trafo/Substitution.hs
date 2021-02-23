@@ -163,7 +163,7 @@ inlineVars lhsBound expr bound
       Case e1 rhs def     -> Case <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
       Cond e1 e2 e3       -> Cond <$> travE e1 <*> travE e2 <*> travE e3
       While f1 f2 e1      -> While <$> travF f1 <*> travF f2 <*> travE e1
-      Const t c           -> Just $ Const t c
+      Const ann t c       -> Just $ Const ann t c
       PrimConst c         -> Just $ PrimConst c
       PrimApp p e1        -> PrimApp p <$> travE e1
       Index a e1          -> Index a <$> travE e1
@@ -546,7 +546,7 @@ rebuildOpenExp
     -> f (OpenExp env' aenv' t)
 rebuildOpenExp v av@(ReindexAvar reindex) exp =
   case exp of
-    Const t c           -> pure $ Const t c
+    Const ann t c       -> pure $ Const ann t c
     PrimConst c         -> pure $ PrimConst c
     Undef t             -> pure $ Undef t
     Evar var            -> expOut          <$> v var

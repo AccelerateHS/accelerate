@@ -455,7 +455,7 @@ matchOpenExp (Foreign _ ff1 f1 e1) (Foreign _ ff2 f2 e2)
   , Just Refl <- matchOpenFun f1 f2
   = Just Refl
 
-matchOpenExp (Const t1 c1) (Const t2 c2)
+matchOpenExp (Const _ t1 c1) (Const _ t2 c2)
   | Just Refl <- matchScalarType t1 t2
   , matchConst (TupRsingle t1) c1 c2
   = Just Refl

@@ -394,6 +394,7 @@ prettyOpenFun env0 aenv = next (pretty '\\') env0
       let (env', lhs') = prettyELhs True env lhs
       in  next (vs <> lhs' <> space) env' lam
 
+-- TODO: We should probably show optimization flags in some way
 prettyOpenExp
     :: forall env aenv t.
        Context
@@ -413,7 +414,7 @@ prettyOpenExp ctx env aenv exp =
         op' = isInfix op ? (Operator (parens (opName op)) App L 10, op)
     --
     PrimConst c           -> prettyPrimConst c
-    Const tp c            -> prettyConst (TupRsingle tp) c
+    Const _ tp c          -> prettyConst (TupRsingle tp) c
     Pair{}                -> prettyTuple ctx env aenv exp
     Nil                   -> "()"
     VecPack   _ e         -> ppF1 "pack"   (ppE e)

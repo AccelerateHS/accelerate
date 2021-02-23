@@ -287,7 +287,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
             _        -> "inline exp"   -- forced inlining when lIMIT > 1
       --
       Evar v                    -> pure (Evar v)
-      Const t c                 -> pure (Const t c)
+      Const ann t c             -> pure (Const ann t c)
       Undef t                   -> pure (Undef t)
       Nil                       -> pure Nil
       Pair x y                  -> Pair <$> shrinkE x <*> shrinkE y
@@ -488,7 +488,7 @@ usesOfExp range = countE
         Nothing                 -> Finite 0
       --
       Let lhs bnd body          -> countE bnd <> usesOfExp (weakenVarsRange lhs range) body
-      Const _ _                 -> Finite 0
+      Const _ _ _               -> Finite 0
       Undef _                   -> Finite 0
       Nil                       -> Finite 0
       Pair e1 e2                -> countE e1 <> countE e2
@@ -575,7 +575,7 @@ usesOfPreAcc withShape countAcc idx = count
     countE exp = case exp of
       Let _ bnd body             -> countE bnd + countE body
       Evar _                     -> 0
-      Const _ _                  -> 0
+      Const _ _ _                -> 0
       Undef _                    -> 0
       Nil                        -> 0
       Pair x y                   -> countE x + countE y

@@ -320,7 +320,7 @@ encodeOpenExp exp =
     Pair e1 e2                  -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
     VecPack   _ e               -> intHost $(hashQ "VecPack")     <> travE e
     VecUnpack _ e               -> intHost $(hashQ "VecUnpack")   <> travE e
-    Const tp c                  -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
+    Const _ tp c                -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
     Undef tp                    -> intHost $(hashQ "Undef")       <> encodeScalarType tp
     IndexSlice spec ix sh       -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec
     IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec

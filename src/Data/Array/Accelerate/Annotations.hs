@@ -64,6 +64,13 @@
 --
 -- TODO: Call stacks should be frozen for any function exposed to the user,
 --       right now this is not yet the case.
+--
+-- ** AST transformations
+--
+-- When doing transformations over the AST, for instance when applying
+-- simplification rules, then we'll combine existing annotation fields to create
+-- new annotations for any new artificially generated AST nodes. This allows
+-- both optimization flags and source mapping information to be preserved.
 module Data.Array.Accelerate.Annotations
     ( Ann(..)
     , Optimizations(..)

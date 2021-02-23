@@ -30,6 +30,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
@@ -220,7 +221,7 @@ simplifyOpenExp env = first getAny . cvtE
           (u, bnd') = cvtE bnd
           (v, exp') = cvtLet env lhs bnd' (\env' -> cvtE' env' body)
       Evar var                  -> pure $ Evar var
-      Const tp c                -> pure $ Const tp c
+      Const ann tp c            -> pure $ Const ann tp c
       Undef tp                  -> pure $ Undef tp
       Nil                       -> pure Nil
       Pair e1 e2                -> Pair <$> cvtE e1 <*> cvtE e2
@@ -276,8 +277,8 @@ simplifyOpenExp env = first getAny . cvtE
          -> (Any, OpenExp env aenv t)
          -> (Any, OpenExp env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
-      | Const _ 1 <- p'                 = Stats.knownBranch "True"      (yes t')
-      | Const _ 0 <- p'                 = Stats.knownBranch "False"     (yes e')
+      | Const _ _ 1 <- p'               = Stats.knownBranch "True"      (yes t')
+      | Const _ _ 0 <- p'               = Stats.knownBranch "False"     (yes e')
       | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                       = Cond <$> p <*> t <*> e
 
@@ -286,7 +287,7 @@ simplifyOpenExp env = first getAny . cvtE
            -> (Any, Maybe (OpenExp env aenv b))
            -> (Any, OpenExp env aenv b)
     caseof x@(_,x') xs@(_,xs') md@(_,md')
-      | Const _ t   <- x'
+      | Const _ _ t <- x'
       = Stats.caseElim "known" (yes (fromJust $ lookup t xs'))
       | Just d      <- md'
       , []          <- xs'
@@ -325,8 +326,8 @@ simplifyOpenExp env = first getAny . cvtE
 
     shapeSize :: ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int)
     shapeSize shr (_, sh)
-      | Just c <- extractConstTuple sh
-      = Stats.ruleFired "shapeSize/const" $ yes (Const scalarTypeInt (product (shapeToList shr c)))
+      | Just (c, ann) <- extractConstTuple sh
+      = Stats.ruleFired "shapeSize/const" $ yes (Const ann scalarTypeInt (product (shapeToList shr c)))
     shapeSize shr sh
       = ShapeSize shr <$> sh
 
@@ -352,11 +353,13 @@ simplifyOpenExp env = first getAny . cvtE
     yes :: x -> (Any, x)
     yes x = (Any True, x)
 
-extractConstTuple :: OpenExp env aenv t -> Maybe t
-extractConstTuple Nil          = Just ()
-extractConstTuple (Pair e1 e2) = (,) <$> extractConstTuple e1 <*> extractConstTuple e2
-extractConstTuple (Const _ c)  = Just c
-extractConstTuple _            = Nothing
+-- TODO: Replace the dummy annotations with the actual annotations once we add
+--       those fields
+extractConstTuple :: OpenExp env aenv t -> Maybe (t, Ann)
+extractConstTuple Nil             = Just ((), mkDummyAnn)
+extractConstTuple (Pair e1 e2)    = (\(a, _) (b, _) -> ((a, b), mkDummyAnn)) <$> extractConstTuple e1 <*> extractConstTuple e2
+extractConstTuple (Const ann _ c) = Just (c, ann)
+extractConstTuple _               = Nothing
 
 -- Simplification for open functions
 --
