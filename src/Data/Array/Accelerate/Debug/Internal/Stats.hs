@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 -- |
--- Module      : Data.Array.Accelerate.Debug.Simpl
+-- Module      : Data.Array.Accelerate.Debug.Internal.Stats
 -- Copyright   : [2008..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -15,15 +15,15 @@
 -- purposes.
 --
 
-module Data.Array.Accelerate.Debug.Stats (
+module Data.Array.Accelerate.Debug.Internal.Stats (
 
   simplCount, resetSimplCount, dumpSimplStats,
   inline, ruleFired, knownBranch, caseElim, caseDefault, betaReduce, substitution, simplifierDone, fusionDone,
 
 ) where
 
-import Data.Array.Accelerate.Debug.Flags
-import Data.Array.Accelerate.Debug.Trace
+import Data.Array.Accelerate.Debug.Internal.Flags
+import Data.Array.Accelerate.Debug.Internal.Trace
 
 import Data.Function                                      ( on )
 import Data.IORef

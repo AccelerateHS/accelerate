@@ -39,30 +39,32 @@ module Data.Array.Accelerate.Array.Remote.Table (
 
 ) where
 
-import Control.Concurrent                                       ( yield )
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, mkWeakMVar )
-import Control.Concurrent.Unique                                ( Unique )
-import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
+import Control.Concurrent                                           ( yield )
+import Control.Concurrent.MVar                                      ( MVar, newMVar, withMVar, mkWeakMVar )
+import Control.Concurrent.Unique                                    ( Unique )
+import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
 import Data.Functor
-import Data.Hashable                                            ( hash, Hashable )
-import Data.Maybe                                               ( isJust )
+import Data.Hashable                                                ( hash, Hashable )
+import Data.Maybe                                                   ( isJust )
 import Data.Word
-import Foreign.Storable                                         ( sizeOf )
-import System.Mem                                               ( performGC )
-import System.Mem.Weak                                          ( Weak, deRefWeak )
+import Foreign.Storable                                             ( sizeOf )
+import System.Mem                                                   ( performGC )
+import System.Mem.Weak                                              ( Weak, deRefWeak )
 import Text.Printf
-import Prelude                                                  hiding ( lookup, id )
-import qualified Data.HashTable.IO                              as HT
+import Prelude                                                      hiding ( lookup, id )
+import qualified Data.HashTable.IO                                  as HT
 
-import Data.Array.Accelerate.Error                              ( internalError )
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Unique                       ( UniqueArray(..) )
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Remote.Class
-import Data.Array.Accelerate.Array.Remote.Nursery               ( Nursery(..) )
+import Data.Array.Accelerate.Array.Remote.Nursery                   ( Nursery(..) )
+import Data.Array.Accelerate.Array.Unique                           ( UniqueArray(..) )
+import Data.Array.Accelerate.Error                                  ( internalError )
 import Data.Array.Accelerate.Lifetime
-import qualified Data.Array.Accelerate.Array.Remote.Nursery     as N
-import qualified Data.Array.Accelerate.Debug                    as D
+import Data.Array.Accelerate.Type
+import qualified Data.Array.Accelerate.Array.Remote.Nursery         as N
+import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Monitoring    as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import GHC.Stack
 
@@ -249,7 +251,7 @@ freeStable (MemoryTable !ref _ !nrs _) !sa =
       Just (RemoteArray !p !bytes _) -> do
         message ("free/nursery: " ++ show sa ++ " of " ++ showBytes bytes)
         N.insert bytes (castRemotePtr @m p) nrs
-        D.decreaseCurrentBytesRemote (fromIntegral bytes)
+        Debug.decreaseCurrentBytesRemote (fromIntegral bytes)
 
     return (Nothing, ())
 
@@ -270,7 +272,7 @@ insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes | SingleArrayDict <- sin
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
   message $ "insert: " ++ show key
-  liftIO  $ D.increaseCurrentBytesRemote (fromIntegral bytes)
+  liftIO  $ Debug.increaseCurrentBytesRemote (fromIntegral bytes)
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) bytes weak)
 
 
@@ -308,7 +310,7 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
   -- that finalizers are often significantly delayed, it is worth our while
   -- traversing the table and explicitly freeing any dead entires.
   --
-  D.didRemoteGC
+  Debug.didRemoteGC
   performGC
   yield
   mr <- deRefWeak weak_ref
@@ -390,7 +392,7 @@ makeWeakArrayData !tp !ad !c !mf | SingleArrayDict <- singleArrayDict tp = do
 
 {-# INLINE showBytes #-}
 showBytes :: Integral n => n -> String
-showBytes x = D.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
+showBytes x = Debug.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
 
 {-# INLINE trace #-}
 trace :: MonadIO m => String -> m a -> m a
@@ -398,12 +400,12 @@ trace msg next = message msg >> next
 
 {-# INLINE message #-}
 message :: MonadIO m => String -> m ()
-message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
+message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " ++ msg)
 
 {-# INLINE management #-}
 management :: (RemoteMemory m, MonadIO m) => String -> Nursery p -> m a -> m a
 management msg nrs next = do
-  yes <- liftIO $ D.getFlag D.dump_gc
+  yes <- liftIO $ Debug.getFlag Debug.dump_gc
   if yes
     then do
       total       <- totalRemoteMem

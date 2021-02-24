@@ -36,6 +36,8 @@ import Data.Array.Accelerate.Test.NoFib.Spectral
 import Data.Array.Accelerate.Test.NoFib.Issues
 
 import Test.Tasty
+import Test.Tasty.Runners
+import Test.Tasty.Ingredients.Rerun
 import System.Environment
 #endif
 
@@ -48,13 +50,14 @@ nofib _    = error $ unlines [ "Data.Array.Accelerate: the nofib test-suite has 
 #else
 nofib runN = do
   me <- getProgName
-  defaultMainWithIngredients (nofibIngredient : defaultIngredients) $
-    testGroup me
-      [ test_sharing
-      , test_prelude runN
-      , test_imaginary runN
-      , test_spectral runN
-      , test_issues runN
-      ]
+  defaultMainWithIngredients [rerunningTests (nofibIngredient : defaultIngredients)]
+    $ localOption (NumThreads 1)                        -- run each test sequentially with many cores
+    $ testGroup me
+        [ test_sharing
+        , test_prelude runN
+        , test_imaginary runN
+        , test_spectral runN
+        , test_issues runN
+        ]
 #endif
 

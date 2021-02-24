@@ -89,7 +89,7 @@ module Data.Array.Accelerate.Prelude (
   (?|),
 
   -- ** Expression-level
-  (?), match,
+  (?), match, Matching(..),
 
   -- * Scalar iteration
   iterate,
@@ -1663,8 +1663,11 @@ compact keep arr
         result          = permute const dummy prj arr
     in
     if null arr
-      then T2 emptyArray (fill Z_ 0)
-      else T2 result len
+       then T2 emptyArray (fill Z_ 0)
+       else
+    if the len == unindex1 (shape arr)
+       then T2 arr    len
+       else T2 result len
 
 compact keep arr
   = let
@@ -1672,8 +1675,8 @@ compact keep arr
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
-                            then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
-                            else Nothing_
+                             then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
+                             else Nothing_
         dummy           = fill (I1 (the valid)) undef
         result          = permute const dummy prj arr
     in
@@ -2270,13 +2273,15 @@ data Args f where
 
 class Matching a where
   type ResultT a
-  mkMatch :: a -> Args a -> Exp (ResultT a)
+  type ReprT a
+  mkMatch :: a -> Args (ReprT a) -> Exp (ResultT a)
   mkFun   :: (Args f -> Exp (ResultT a))
-          -> (Args a -> Args f)
+          -> (Args (ReprT a) -> Args f)
           -> a
 
 instance Elt a => Matching (Exp a) where
   type ResultT (Exp a) = a
+  type ReprT (Exp a) = (Exp a)
 
   mkFun f k = f (k Result)
   mkMatch (Exp e) Result =
@@ -2286,6 +2291,7 @@ instance Elt a => Matching (Exp a) where
 
 instance (Elt e, Matching r) => Matching (Exp e -> r) where
   type ResultT (Exp e -> r) = ResultT r
+  type ReprT (Exp e -> r) = Exp e -> (ReprT r)
 
   mkFun f k x = mkFun f (\xs -> k (x :-> xs))
   mkMatch f (x@(Exp p) :-> xs) =

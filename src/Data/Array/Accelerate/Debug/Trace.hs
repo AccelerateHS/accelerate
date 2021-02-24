@@ -1,6 +1,6 @@
-{-# LANGUAGE BangPatterns             #-}
-{-# LANGUAGE CPP                      #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Trace
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -11,135 +11,77 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- Functions for tracing and monitoring execution. These are useful for
--- investigating bugs and performance problems, but by default are not enabled
--- in performance code.
+-- investigating bugs.
+--
+-- @since 1.4.0.0
 --
 
 module Data.Array.Accelerate.Debug.Trace (
 
-  showFFloatSIBase,
-
-  putTraceMsg,
-  trace, traceIO,
-  traceEvent, traceEventIO,
+  -- * Tracing
+  -- $tracing
+  --
+  atrace, atraceArray, atraceId, atraceExp,
 
 ) where
 
-import Data.Array.Accelerate.Debug.Flags
-
-import Numeric
-
-#ifdef ACCELERATE_DEBUG
-import Data.Array.Accelerate.Debug.Clock
-import System.IO.Unsafe
-import Text.Printf
-import qualified Debug.Trace                            as D
-#endif
+import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Array                            as S
+import Data.Array.Accelerate.Sugar.Elt
+import qualified Data.Array.Accelerate.Representation.Array         as R
+import qualified Data.Array.Accelerate.Representation.Shape         as R
 
 
--- | Show a signed 'RealFloat' value using SI unit prefixes. In the call to:
+-- $tracing
 --
--- > showFFloatSIBase prec base val
+-- The 'atrace', 'atraceArray', 'atraceId', and 'atraceExp' functions print
+-- messages to an output stream. They are intended for \"printf
+-- debugging\", that is: tracing the flow of execution and printing
+-- interesting values.
 --
--- If @prec@ is @'Nothing'@ the value is shown to full precision, and if @prec@
--- is @'Just' d@, then at most @d@ digits are shown after the decimal place.
--- Here @base@ represents the increment size between multiples of the original
--- unit. For measures in base-10 this will be 1000 and for values in base-2 this
--- is usually 1024, for example when measuring seconds versus bytes,
--- respectively.
+-- Note that arrays are printed in their internal representation (using
+-- 'Data.Array.Accelerate.Sugar.Array.ArraysR'), which causes that tuples
+-- or custom data types are shown differently.
 --
-showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> ShowS
-showFFloatSIBase prec !base !k
-  = showString
-  $ case pow of
-      4   -> with "T"
-      3   -> with "G"
-      2   -> with "M"
-      1   -> with "k"
-      -1  -> with "m"
-      -2  -> with "µ"
-      -3  -> with "n"
-      -4  -> with "p"
-      _   -> showGFloat prec k " "      -- no unit or unhandled SI prefix
-  where
-    !k'         = k / (base ^^ pow)
-    !pow        = floor (logBase base k) :: Int
-    with unit   = showFFloat prec k' (' ':unit)
-
-
--- | The 'trace' function outputs the message given as its second argument when
--- the debug mode indicated by the first argument is enabled, before returning
--- the third argument as its result. The message is prefixed with a time stamp.
+-- These functions have the same caveats as those defined in "Debug.Trace".
 --
-trace :: Flag -> String -> a -> a
-#ifdef ACCELERATE_DEBUG
-{-# NOINLINE trace #-}
-trace f msg expr = unsafePerformIO $ do
-  traceIO f msg
-  return expr
-#else
-{-# INLINE trace #-}
-trace _ _ expr = expr
-#endif
 
-
--- | The 'traceIO' function outputs the trace message together with a time stamp
--- from the IO monad. This sequences the output with respect to other IO
--- actions.
-
--- TLM: Perhaps we should automatically format the log messages. Namely:
---        * prefix with a description of the mode (e.g. "gc: foo")
---        * align multi-line messages
+-- | Outputs the trace message to the console before the 'Acc' computation
+-- proceeds with the result of the second argument.
 --
-traceIO :: Flag -> String -> IO ()
-#ifdef ACCELERATE_DEBUG
-traceIO f msg = when f $ putTraceMsg msg
-#else
-{-# INLINE traceIO #-}
-traceIO _ _   = return ()
-#endif
+atrace :: Arrays a => String -> Acc a -> Acc a
+atrace message (Acc result)
+  = Acc
+  $ SmartAcc
+  $ Atrace (Message (\_ -> "")
+           (Just [|| \_ -> "" ||]) message) (SmartAcc Anil :: SmartAcc ()) result
 
-
--- | The 'traceEvent' function behaves like 'trace' with the difference that the
--- message is emitted to the eventlog, if eventlog profiling is enabled at
--- runtime.
+-- | Outputs the trace message and the array(s) from the second argument to
+-- the console, before the 'Acc' computation proceeds with the result of
+-- the third argument.
 --
-traceEvent :: Flag -> String -> a -> a
-#ifdef ACCELERATE_DEBUG
-{-# NOINLINE traceEvent #-}
-traceEvent f msg expr = unsafePerformIO $ do
-  traceEventIO f msg
-  return expr
-#else
-{-# INLINE traceEvent #-}
-traceEvent _ _ expr = expr
-#endif
+atraceArray :: forall a b. (Arrays a, Arrays b, Show a) => String -> Acc a -> Acc b -> Acc b
+atraceArray message (Acc inspect) (Acc result)
+  = Acc
+  $ SmartAcc
+  $ Atrace (Message (show . toArr @a)
+           (Just [|| show . toArr @a ||]) message) inspect result
 
-
--- | Print a message prefixed with the current elapsed wall-clock time.
+-- | Outputs the trace message and the array(s) to the console, before the
+-- 'Acc' computation proceeds with the result of that array.
 --
-putTraceMsg :: String -> IO ()
-#ifdef ACCELERATE_DEBUG
-putTraceMsg msg = do
-  timestamp <- getProgramTime
-  D.traceIO  $ printf "[%8.3f] %s" timestamp msg
-#else
-putTraceMsg _   = return ()
-#endif
+atraceId :: (Arrays a, Show a) => String -> Acc a -> Acc a
+atraceId message value = atraceArray message value value
 
-
--- | The 'traceEventIO' function emits a message to the eventlog, if eventlog
--- profiling is available and enabled at runtime.
+-- | Outputs the trace message and a scalar value to the console, before
+-- the 'Acc' computation proceeds with the result of the third argument.
 --
--- Compared to 'traceEvent', 'traceEventIO' sequences the event with respect to
--- other IO actions.
---
-traceEventIO :: Flag -> String -> IO ()
-#ifdef ACCELERATE_DEBUG
-traceEventIO f msg = do
-  when f $ D.traceEventIO msg
-#else
-{-# INLINE traceEventIO #-}
-traceEventIO _ _ = return ()
-#endif
+atraceExp :: forall e a. (Elt e, Show e, Arrays a) => String -> Exp e -> Acc a -> Acc a
+atraceExp message value (Acc result) =
+  let Acc inspect = unit value
+   in Acc
+    $ SmartAcc
+    $ Atrace (Message (\a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())))
+             (Just [|| \a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())) ||]) message) inspect result
 

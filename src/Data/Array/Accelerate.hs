@@ -290,11 +290,6 @@ module Data.Array.Accelerate (
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
 
-  -- ** Tracing
-  -- $tracing
-  --
-  atrace, atraceArray, atraceId, atraceExp,
-
   -- -- ** Sequence operations
   -- collect,
 
@@ -353,7 +348,7 @@ module Data.Array.Accelerate (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
-  pattern Z_, pattern Ix, pattern (::.),
+  pattern Z_, pattern Ix, pattern (::.), pattern All_, pattern Any_,
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
@@ -418,6 +413,8 @@ module Data.Array.Accelerate (
   -- * Useful re-exports
   (.), ($), (&), flip, error, undefined, const, otherwise,
   Show, Generic, HasCallStack,
+  fromString, -- -XOverloadedStrings
+  fromListN,  -- -XOverloadedLists
 
   -- ---------------------------------------------------------------------------
   -- Types
@@ -448,10 +445,10 @@ import Data.Array.Accelerate.Classes.Rational
 import Data.Array.Accelerate.Classes.RealFloat
 import Data.Array.Accelerate.Classes.RealFrac
 import Data.Array.Accelerate.Classes.ToFloating
+import Data.Array.Accelerate.Control.Monad
 import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Data.Maybe
-import Data.Array.Accelerate.Data.Monad
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.TH
@@ -470,6 +467,7 @@ import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 import Data.Function                                                ( (&) )
 import Prelude                                                      ( (.), ($), Char, Show, flip, undefined, error, const, otherwise )
 
+import GHC.Exts                                                     ( fromListN, fromString )
 import GHC.Generics                                                 ( Generic )
 import GHC.Stack
 
@@ -695,19 +693,5 @@ arrayReshape = S.reshape
 --  * <https://hackage.haskell.org/package/accelerate-io-repa accelerate-io-repa>: another Haskell library for high-performance parallel arrays
 --  * <https://hackage.haskell.org/package/accelerate-io-serialise accelerate-io-serialise>: binary serialisation of arrays using <https://hackage.haskell.org/package/serialise serialise>
 --  * <https://hackage.haskell.org/package/accelerate-io-vector accelerate-io-vector>: efficient boxed and unboxed one-dimensional arrays
---
-
--- $tracing
---
--- The 'atrace', 'atraceArray', 'atraceId', and 'atraceExp' functions print
--- messages to an output stream. They are intended for \"printf
--- debugging\", that is: tracing the flow of execution and printing
--- interesting values.
---
--- Note that arrays are printed in their internal representation (using
--- 'Data.Array.Accelerate.Sugar.Array.ArraysR'), which causes that tuples
--- or custom data types are shown differently.
---
--- These functions have the same caveats as those defined in "Debug.Trace".
 --
 

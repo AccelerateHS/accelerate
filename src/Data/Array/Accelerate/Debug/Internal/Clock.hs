@@ -2,7 +2,7 @@
 {-# LANGUAGE TemplateHaskell          #-}
 {-# OPTIONS_GHC -fobject-code #-}
 -- |
--- Module      : Data.Array.Accelerate.Debug.Clock
+-- Module      : Data.Array.Accelerate.Debug.Internal.Clock
 -- Copyright   : [2016..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -11,7 +11,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Debug.Clock
+module Data.Array.Accelerate.Debug.Internal.Clock
   where
 
 import Language.Haskell.TH.Syntax

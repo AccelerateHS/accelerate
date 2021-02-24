@@ -35,7 +35,7 @@ module Data.Array.Accelerate.Pretty (
 ) where
 
 import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
-import Data.Array.Accelerate.Debug.Flags
+import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Graphviz
 import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
@@ -58,7 +58,7 @@ import qualified System.Console.Terminal.Size                       as Term
 
 #if ACCELERATE_DEBUG
 import Control.DeepSeq
-import Data.Array.Accelerate.Debug.Stats
+import Data.Array.Accelerate.Debug.Internal.Stats
 #endif
 
 

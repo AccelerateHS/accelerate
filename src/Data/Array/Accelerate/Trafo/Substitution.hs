@@ -55,12 +55,12 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Array
-import qualified Data.Array.Accelerate.Debug.Stats      as Stats
+import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
 
 import Data.Kind
-import Control.Applicative                              hiding ( Const )
+import Control.Applicative                                          hiding ( Const )
 import Control.Monad
-import Prelude                                          hiding ( exp, seq )
+import Prelude                                                      hiding ( exp, seq )
 
 
 -- NOTE: [Renaming and Substitution]

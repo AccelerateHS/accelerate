@@ -34,7 +34,7 @@ import Language.Haskell.TH                                          hiding ( Typ
 import Language.Haskell.TH.Extra
 import System.IO.Unsafe
 
-import GHC.Exts                                                     ( IsList )
+import GHC.Exts                                                     ( IsList, IsString )
 import GHC.Generics
 import qualified GHC.Exts                                           as GHC
 
@@ -103,11 +103,14 @@ instance (Shape sh, Elt e, Eq sh, Eq e) => Eq (Array sh e) where
 instance (Shape sh, Elt e, Show e) => Show (Array sh e) where
   show (Array arr) = R.showArray (shows . toElt @e) (arrayR @sh @e) arr
 
-instance Elt e => IsList (Array DIM1 e) where
+instance Elt e => IsList (Vector e) where
   type Item (Vector e) = e
   toList      = toList
   fromListN n = fromList (Z:.n)
   fromList xs = GHC.fromListN (length xs) xs
+
+instance IsString (Vector Char) where
+  fromString s = fromList (Z :. length s) s
 
 instance (Shape sh, Elt e) => NFData (Array sh e) where
   rnf (Array arr) = R.rnfArray (arrayR @sh @e) arr
@@ -235,8 +238,8 @@ class Arrays a where
   type ArraysR a = GArraysR () (Rep a)
 
   arraysR :: R.ArraysR (ArraysR a)
-  toArr   :: ArraysR  a -> a
-  fromArr :: a -> ArraysR  a
+  toArr   :: ArraysR a -> a
+  fromArr :: a -> ArraysR a
 
   default arraysR
     :: (GArrays (Rep a), ArraysR a ~ GArraysR () (Rep a))

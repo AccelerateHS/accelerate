@@ -6,7 +6,8 @@ resolver: lts-14.27
 packages:
 - .
 
-# extra-deps: []
+extra-deps:
+- tasty-rerun-1.1.18
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

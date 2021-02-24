@@ -320,15 +320,24 @@ library
         Data.Array.Accelerate.Interpreter
 
         -- Prelude-like
+        Data.Array.Accelerate.Control.Monad
+        Data.Array.Accelerate.Control.Monad.Trans
+        Data.Array.Accelerate.Control.Monad.Trans.Except
+        Data.Array.Accelerate.Control.Monad.Trans.Functor
+        Data.Array.Accelerate.Control.Monad.Trans.Monad
+        Data.Array.Accelerate.Control.Monad.Trans.Class
+        Data.Array.Accelerate.Control.Monad.Trans.Maybe
+        Data.Array.Accelerate.Control.Monad.Trans.State
         Data.Array.Accelerate.Data.Bits
         Data.Array.Accelerate.Data.Complex
         Data.Array.Accelerate.Data.Either
         Data.Array.Accelerate.Data.Fold
         Data.Array.Accelerate.Data.Functor
+        Data.Array.Accelerate.Data.Identity
         Data.Array.Accelerate.Data.Maybe
-        Data.Array.Accelerate.Data.Monad
         Data.Array.Accelerate.Data.Monoid
         Data.Array.Accelerate.Data.Ratio
+        Data.Array.Accelerate.Debug.Trace
         Data.Array.Accelerate.Unsafe
 
         -- For backend development (hidden)
@@ -346,8 +355,8 @@ library
         Data.Array.Accelerate.Array.Remote.Table
         Data.Array.Accelerate.Array.Unique
         Data.Array.Accelerate.Async
-        Data.Array.Accelerate.Debug
         Data.Array.Accelerate.Error
+        Data.Array.Accelerate.Debug.Internal
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Representation.Array
@@ -398,18 +407,20 @@ library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
-        Data.Array.Accelerate.Debug.Clock
-        Data.Array.Accelerate.Debug.Flags
-        Data.Array.Accelerate.Debug.Monitoring
-        Data.Array.Accelerate.Debug.Stats
-        Data.Array.Accelerate.Debug.Timed
-        Data.Array.Accelerate.Debug.Trace
+        Data.Array.Accelerate.Debug.Internal.Clock
+        Data.Array.Accelerate.Debug.Internal.Flags
+        Data.Array.Accelerate.Debug.Internal.Graph
+        Data.Array.Accelerate.Debug.Internal.Monitoring
+        Data.Array.Accelerate.Debug.Internal.Stats
+        Data.Array.Accelerate.Debug.Internal.Timed
+        Data.Array.Accelerate.Debug.Internal.Trace
         Data.Array.Accelerate.Language
         Data.Array.Accelerate.Lift
         Data.Array.Accelerate.Orphans
         Data.Array.Accelerate.Pattern
         Data.Array.Accelerate.Pattern.Bool
         Data.Array.Accelerate.Pattern.Either
+        Data.Array.Accelerate.Pattern.Identity
         Data.Array.Accelerate.Pattern.Maybe
         Data.Array.Accelerate.Pattern.Ordering
         Data.Array.Accelerate.Pattern.TH
@@ -440,6 +451,7 @@ library
           tasty-expected-failure        >= 0.11
         , tasty-hedgehog                >= 0.1
         , tasty-hunit                   >= 0.9
+        , tasty-rerun                   >= 1.1
     --     , pipes                         >= 4.1.6   -- #286
 
     other-modules:

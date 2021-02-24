@@ -105,6 +105,7 @@ static const struct option longopts[] =
  */
 static void parse_options(int argc, char *argv[])
 {
+#if !defined(WIN32)
   const struct option* opt;
   char* this;
   int   did_show_banner;
@@ -194,12 +195,14 @@ static void parse_options(int argc, char *argv[])
       abort();
     }
   }
-
+#endif
 #if !defined(ACCELERATE_DEBUG)
   if (__cmd_line_flags.bitfield & 0x7fffc00) {  // SEE: [layout of command line options bitfield]
     fprintf(stderr, "Data.Array.Accelerate: Debugging options are disabled.\n");
     fprintf(stderr, "Reinstall package 'accelerate' with '-fdebug' to enable them.\n");
   }
+#elif defined(WIN32)
+  fprintf(stderr, "Data.Array.Accelerate: Debugging options are not supported on Windows");
 #endif
 }
 

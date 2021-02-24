@@ -25,7 +25,7 @@ import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
 
-import Data.Array.Accelerate.Debug.Stats                            as Stats
+import Data.Array.Accelerate.Debug.Internal.Stats                   as Stats
 
 
 -- An environment that holds let-bound scalar expressions. The second

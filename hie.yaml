@@ -1,0 +1,11 @@
+# Tooling support. Technically not needed, but makes things explicit and exposes missing modules in accelerate.cabal.
+cradle:
+  stack:
+    - path: "src"
+      component: "accelerate:lib"
+
+    - path: "test/doctest"
+      component: "accelerate:test:doctest"
+
+    - path: "test/nofib"
+      component: "accelerate:test:nofib-interpreter"

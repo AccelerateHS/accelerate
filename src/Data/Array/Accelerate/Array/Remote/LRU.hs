@@ -36,31 +36,33 @@ module Data.Array.Accelerate.Array.Remote.LRU (
 
 ) where
 
-import Data.Array.Accelerate.Analysis.Match                     ( matchSingleType, (:~:)(..) )
+import Data.Array.Accelerate.Analysis.Match                         ( matchSingleType, (:~:)(..) )
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Remote.Class
-import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
-import Data.Array.Accelerate.Array.Unique                       ( touchUniqueArray )
-import Data.Array.Accelerate.Error                              ( internalError )
+import Data.Array.Accelerate.Array.Remote.Table                     ( StableArray, makeWeakArrayData )
+import Data.Array.Accelerate.Array.Unique                           ( touchUniqueArray )
+import Data.Array.Accelerate.Error                                  ( internalError )
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Array.Remote.Table       as Basic
-import qualified Data.Array.Accelerate.Debug                    as D
+import qualified Data.Array.Accelerate.Array.Remote.Table           as Basic
+import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Monitoring    as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, takeMVar, putMVar, mkWeakMVar )
-import Control.Monad                                            ( filterM )
+import Control.Concurrent.MVar                                      ( MVar, newMVar, withMVar, takeMVar, putMVar, mkWeakMVar )
+import Control.Monad                                                ( filterM )
 import Control.Monad.Catch
-import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
+import Control.Monad.IO.Class                                       ( MonadIO, liftIO )
 import Data.Functor
 #if __GLASGOW_HASKELL__ < 808
-import Data.Int                                                 ( Int64 )
+import Data.Int                                                     ( Int64 )
 #endif
-import Data.Maybe                                               ( isNothing )
+import Data.Maybe                                                   ( isNothing )
 import System.CPUTime
-import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
-import Prelude                                                  hiding ( lookup )
-import qualified Data.HashTable.IO                              as HT
+import System.Mem.Weak                                              ( Weak, deRefWeak, finalize )
+import Prelude                                                      hiding ( lookup )
+import qualified Data.HashTable.IO                                  as HT
 
 import GHC.Stack
 
@@ -296,7 +298,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
         Just arr -> do
           message ("evictLRU/evicting " ++ show sa)
           copyIfNecessary status n tp arr
-          liftIO $ D.didEvictBytes (remoteBytes tp n)
+          liftIO $ Debug.didEvictBytes (remoteBytes tp n)
           liftIO $ Basic.freeStable @m mt sa
           liftIO $ HT.insert utbl sa (Used ts Evicted count tasks n tp weak_arr)
       return True
@@ -446,5 +448,5 @@ trace msg next = message msg >> next
 
 {-# INLINE message #-}
 message :: MonadIO m => String -> m ()
-message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
+message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " ++ msg)
 

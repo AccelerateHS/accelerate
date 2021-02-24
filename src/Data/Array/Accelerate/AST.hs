@@ -77,7 +77,7 @@ module Data.Array.Accelerate.AST (
   -- * Internal AST
   -- ** Array computations
   Afun, PreAfun, OpenAfun, PreOpenAfun(..),
-  Acc, OpenAcc(..), PreOpenAcc(..), Direction(..),
+  Acc, OpenAcc(..), PreOpenAcc(..), Direction(..), Message(..),
   ALeftHandSide, ArrayVar, ArrayVars,
 
   -- ** Scalar expressions
@@ -124,6 +124,7 @@ module Data.Array.Accelerate.AST (
   liftBoundary,
   liftPrimConst,
   liftPrimFun,
+  liftMessage,
 
   -- ** Miscellaneous
   showPreAccOp,
@@ -149,6 +150,7 @@ import Data.Primitive.Vec
 
 import Control.DeepSeq
 import Data.Kind
+import Data.Maybe
 import Language.Haskell.TH                                          ( Q, TExp )
 import qualified Language.Haskell.TH.Syntax as TH
 import Prelude
@@ -195,6 +197,12 @@ type ArrayVars aenv = Vars ArrayR aenv
 type PrimBool    = TAG
 type PrimMaybe a = (TAG, ((), a))
 
+-- Trace messages
+data Message a where
+  Message :: (a -> String)                    -- embedded show
+          -> Maybe (Q (TExp (a -> String)))   -- lifted version of show, for TH
+          -> String
+          -> Message a
 
 -- | Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
@@ -273,7 +281,7 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
               -> acc             aenv arrs                      -- initial value
               -> PreOpenAcc  acc aenv arrs
 
-  Atrace      :: String
+  Atrace      :: Message              arrs1
               -> acc             aenv arrs1
               -> acc             aenv arrs2
               -> PreOpenAcc  acc aenv arrs2
@@ -974,13 +982,16 @@ rnfPreOpenAcc rnfA pacc =
 
       rnfB :: ArrayR (Array sh e) -> Boundary aenv' (Array sh e) -> ()
       rnfB = rnfBoundary
+
+      rnfM :: Message a -> ()
+      rnfM (Message f g msg) = f `seq` rnfMaybe (\x -> x `seq` ()) g `seq` rnf msg
   in
   case pacc of
     Alet lhs bnd body         -> rnfALeftHandSide lhs `seq` rnfA bnd `seq` rnfA body
     Avar var                  -> rnfArrayVar var
     Apair as bs               -> rnfA as `seq` rnfA bs
     Anil                      -> ()
-    Atrace msg as bs          -> rnf msg `seq` rnfA as `seq` rnfA bs
+    Atrace msg as bs          -> rnfM msg `seq` rnfA as `seq` rnfA bs
     Apply repr afun acc       -> rnfTupR rnfArrayR repr `seq` rnfAF afun `seq` rnfA acc
     Aforeign repr asm afun a  -> rnfTupR rnfArrayR repr `seq` rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
@@ -1182,14 +1193,13 @@ liftPreOpenAcc liftA pacc =
 
       liftB :: ArrayR (Array sh e) -> Boundary aenv (Array sh e) -> Q (TExp (Boundary aenv (Array sh e)))
       liftB = liftBoundary
-
   in
   case pacc of
     Alet lhs bnd body         -> [|| Alet $$(liftALeftHandSide lhs) $$(liftA bnd) $$(liftA body) ||]
     Avar var                  -> [|| Avar $$(liftArrayVar var) ||]
     Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
     Anil                      -> [|| Anil ||]
-    Atrace msg as bs          -> [|| Atrace $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) $$(liftA as) $$(liftA bs) ||]
+    Atrace msg as bs          -> [|| Atrace $$(liftMessage (arraysR as) msg) $$(liftA as) $$(liftA bs) ||]
     Apply repr f a            -> [|| Apply $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
     Aforeign repr asm f a     -> [|| Aforeign $$(liftArraysR repr) $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
@@ -1210,16 +1220,14 @@ liftPreOpenAcc liftA pacc =
     Permute f d p a           -> [|| Permute $$(liftF f) $$(liftA d) $$(liftF p) $$(liftA a) ||]
     Backpermute shr sh p a    -> [|| Backpermute $$(liftShapeR shr) $$(liftE sh) $$(liftF p) $$(liftA a) ||]
     Stencil sr tp f b a       ->
-      let
-        TupRsingle (ArrayR shr _) = arraysR a
-        repr = ArrayR shr $ stencilEltR sr
-      in [|| Stencil $$(liftStencilR sr) $$(liftTypeR tp) $$(liftF f) $$(liftB repr b) $$(liftA a) ||]
+      let TupRsingle (ArrayR shr _) = arraysR a
+          repr = ArrayR shr $ stencilEltR sr
+       in [|| Stencil $$(liftStencilR sr) $$(liftTypeR tp) $$(liftF f) $$(liftB repr b) $$(liftA a) ||]
     Stencil2 sr1 sr2 tp f b1 a1 b2 a2 ->
-      let
-        TupRsingle (ArrayR shr _) = arraysR a1
-        repr1 = ArrayR shr $ stencilEltR sr1
-        repr2 = ArrayR shr $ stencilEltR sr2
-      in [|| Stencil2 $$(liftStencilR sr1) $$(liftStencilR sr2) $$(liftTypeR tp) $$(liftF f) $$(liftB repr1 b1) $$(liftA a1) $$(liftB repr2 b2) $$(liftA a2) ||]
+      let TupRsingle (ArrayR shr _) = arraysR a1
+          repr1 = ArrayR shr $ stencilEltR sr1
+          repr2 = ArrayR shr $ stencilEltR sr2
+       in [|| Stencil2 $$(liftStencilR sr1) $$(liftStencilR sr2) $$(liftTypeR tp) $$(liftF f) $$(liftB repr1 b1) $$(liftA a1) $$(liftB repr2 b2) $$(liftA a2) ||]
 
 
 liftALeftHandSide :: ALeftHandSide arrs aenv aenv' -> Q (TExp (ALeftHandSide arrs aenv aenv'))
@@ -1231,6 +1239,19 @@ liftArrayVar = liftVar liftArrayR
 liftDirection :: Direction -> Q (TExp Direction)
 liftDirection LeftToRight = [|| LeftToRight ||]
 liftDirection RightToLeft = [|| RightToLeft ||]
+
+liftMessage :: ArraysR a -> Message a -> Q (TExp (Message a))
+liftMessage aR (Message _ fmt msg) =
+  let
+      -- We (ironically?) can't lift TExp, so nested occurrences must fall
+      -- back to displaying in representation format
+      fmtR :: ArraysR arrs' -> Q (TExp (arrs' -> String))
+      fmtR TupRunit                         = [|| \() -> "()" ||]
+      fmtR (TupRsingle (ArrayR ShapeRz eR)) = [|| \as -> showElt $$(liftTypeR eR) $ linearIndexArray $$(liftTypeR eR) as 0 ||]
+      fmtR (TupRsingle (ArrayR shR eR))     = [|| \as -> showArray (showsElt $$(liftTypeR eR)) (ArrayR $$(liftShapeR shR) $$(liftTypeR eR)) as ||]
+      fmtR aR'                              = [|| \as -> showArrays $$(liftArraysR aR') as ||]
+  in
+  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) ||]
 
 liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
 liftMaybe _ Nothing  = [|| Nothing ||]
