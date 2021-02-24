@@ -27,6 +27,7 @@ module Data.Array.Accelerate.Control.Monad (
   (>=>), (<=<),
   join,
   
+
   -- ** Conditional execution of monadic expressions
   when, unless,
 
@@ -88,6 +89,66 @@ class Functor m => Monad m where
 -- @
 join              :: (Monad m, Elt a, Elt (m a), Elt (m (m a))) => Exp (m (m a)) -> Exp (m a)
 join x            =  x >>= (\y -> y)
+
+-- | Same as '>>=', but with the arguments interchanged
+--
+infixr 1 =<<
+(=<<) :: (Monad m, Elt a, Elt b, Elt (m a), Elt (m b))
+      => (Exp a -> Exp (m b))
+      -> Exp (m a)
+      -> Exp (m b)
+(=<<) = flip (>>=)
+
+-- | Sequentially compose two actions, discarding any value produced by the
+-- first, like sequencing operators (such as the semicolon) in imperative
+-- languages.
+--
+-- \'@as '>>' bs@\' can be understood as the @do@ expression
+--
+-- @
+-- do as
+--    bs
+-- @
+--
+infixl 1 >>
+(>>) :: (Monad m, Elt a, Elt b, Elt (m a), Elt (m b))
+     => Exp (m a)
+     -> Exp (m b)
+     -> Exp (m b)
+m >> k = m >>= \_ -> k
+
+
+-- | Left-to-right composition of Kleisli arrows.
+--
+-- \'@(bs '>=>' cs) a@\' can be understood as the @do@ expression
+--
+-- @
+-- do b <- bs a
+--    cs b
+-- @
+--
+infixr 1 >=>
+(>=>) :: (Monad m, Elt a, Elt b, Elt c, Elt (m b), Elt (m c))
+      => (Exp a -> Exp (m b))
+      -> (Exp b -> Exp (m c))
+      -> (Exp a -> Exp (m c))
+f >=> g = \x -> f x >>= g
+
+-- | Right-to-left composition of Kleisli arrows. @('>=>')@, with the arguments
+-- flipped.
+--
+-- Note how this operator resembles function composition @('.')@:
+--
+-- > (.)   ::            (b ->   c) -> (a ->   b) -> a ->   c
+-- > (<=<) :: Monad m => (b -> m c) -> (a -> m b) -> a -> m c
+--
+infixr 1 <=<
+(<=<) :: (Monad m, Elt a, Elt b, Elt c, Elt (m b), Elt (m c))
+      => (Exp b -> Exp (m c))
+      -> (Exp a -> Exp (m b))
+      -> (Exp a -> Exp (m c))
+(<=<) = flip (>=>)
+
 
 -- | Same as '>>=', but with the arguments interchanged
 --
