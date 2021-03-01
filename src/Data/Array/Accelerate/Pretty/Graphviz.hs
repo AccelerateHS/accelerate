@@ -136,6 +136,9 @@ simple :: Detail -> Bool
 simple Simple = True
 simple _      = False
 
+-- TODO: Should we incorporate data from annotations in the graph? Is there a
+--       way to do this without everything becoming too cluttered?
+
 -- | Generate a dependency graph for the given computation
 --
 {-# NOINLINE graphDelayedAcc #-}
@@ -521,7 +524,7 @@ fvOpenExp env aenv = fv
     fv Const{}                  = []
     fv PrimConst{}              = []
     fv (PrimApp _ x)            = fv x
-    fv (Pair e1 e2)             = concat [ fv e1, fv e2]
+    fv (Pair _ e1 e2)           = concat [ fv e1, fv e2]
     fv Nil                      = []
     fv (VecPack   _ e)          = fv e
     fv (VecUnpack _ e)          = fv e

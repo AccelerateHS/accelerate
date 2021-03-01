@@ -57,6 +57,9 @@ import System.Mem.StableName
 import Prelude                                          hiding ( exp )
 
 
+-- TODO: Should we match annotations? If we do, then we should probably only
+--       compare the optimization flags.
+
 -- The type of matching array computations
 --
 type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :~: t)
@@ -467,7 +470,7 @@ matchOpenExp (Coerce _ t1 e1) (Coerce _ t2 e2)
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
 
-matchOpenExp (Pair a1 b1) (Pair a2 b2)
+matchOpenExp (Pair _ a1 b1) (Pair _ a2 b2)
   | Just Refl <- matchOpenExp a1 a2
   , Just Refl <- matchOpenExp b1 b2
   = Just Refl
@@ -910,8 +913,8 @@ commutes f x = case f of
   where
     swizzle :: OpenExp env aenv (a',a') -> OpenExp env aenv (a',a')
     swizzle exp
-      | (a `Pair` b)  <- exp
-      , hashOpenExp a > hashOpenExp b = b `Pair` a
+      | (Pair ann a b) <- exp
+      , hashOpenExp a > hashOpenExp b = Pair ann b a
       --
       | otherwise                               = exp
 

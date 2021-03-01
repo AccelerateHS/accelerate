@@ -224,7 +224,7 @@ simplifyOpenExp env = first getAny . cvtE
       Const ann tp c            -> pure $ Const ann tp c
       Undef tp                  -> pure $ Undef tp
       Nil                       -> pure Nil
-      Pair e1 e2                -> Pair <$> cvtE e1 <*> cvtE e2
+      Pair ann e1 e2            -> Pair ann <$> cvtE e1 <*> cvtE e2
       VecPack   vec e           -> VecPack   vec <$> cvtE e
       VecUnpack vec e           -> VecUnpack vec <$> cvtE e
       IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
@@ -261,9 +261,9 @@ simplifyOpenExp env = first getAny . cvtE
            -> OpenExp env' aenv bnd
            -> (Gamma env'' env'' aenv -> (Any, OpenExp env'' aenv t))
            -> (Any, OpenExp env' aenv t)
-    cvtLet env' lhs@(LeftHandSideSingle _) bnd          body = Let lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
-    cvtLet env' (LeftHandSideWildcard _)   _            body = body env'                                 -- Binding not used, remove let binding
-    cvtLet env' (LeftHandSidePair l1 l2)   (Pair e1 e2) body                                             -- Split binding to multiple bindings
+    cvtLet env' lhs@(LeftHandSideSingle _) bnd            body = Let lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
+    cvtLet env' (LeftHandSideWildcard _)   _              body = body env'                                 -- Binding not used, remove let binding
+    cvtLet env' (LeftHandSidePair l1 l2)   (Pair _ e1 e2) body                                             -- Split binding to multiple bindings
       = first (const $ Any True)
       $ cvtLet env' l1 e1
       $ \env'' -> cvtLet env'' l2 (weakenE (weakenWithLHS l1) e2) body
@@ -356,10 +356,10 @@ simplifyOpenExp env = first getAny . cvtE
 -- TODO: Replace the dummy annotations with the actual annotations once we add
 --       those fields
 extractConstTuple :: OpenExp env aenv t -> Maybe (t, Ann)
-extractConstTuple Nil             = Just ((), mkDummyAnn)
-extractConstTuple (Pair e1 e2)    = (\(a, _) (b, _) -> ((a, b), mkDummyAnn)) <$> extractConstTuple e1 <*> extractConstTuple e2
-extractConstTuple (Const ann _ c) = Just (c, ann)
-extractConstTuple _               = Nothing
+extractConstTuple Nil              = Just ((), mkDummyAnn)
+extractConstTuple (Pair ann e1 e2) = (\(a, _) (b, _) -> ((a, b), ann)) <$> extractConstTuple e1 <*> extractConstTuple e2
+extractConstTuple (Const ann _ c)  = Just (c, ann)
+extractConstTuple _                = Nothing
 
 -- Simplification for open functions
 --
@@ -548,7 +548,7 @@ summariseOpenExp = (terms +~ 1) . goE
         Const{}               -> zero
         Undef _               -> zero
         Nil                   -> zero & terms +~ 1
-        Pair e1 e2            -> travE e1 +++ travE e2 & terms +~ 1
+        Pair _ e1 e2          -> travE e1 +++ travE e2 & terms +~ 1
         VecPack   _ e         -> travE e
         VecUnpack _ e         -> travE e
         IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex

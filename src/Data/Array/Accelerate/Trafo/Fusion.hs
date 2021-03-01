@@ -40,6 +40,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
 ) where
 
 import Data.BitSet
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Environment
@@ -1471,7 +1472,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Const ann tR c                  -> Const ann tR c
         Undef tR                        -> Undef tR
         Nil                             -> Nil
-        Pair e1 e2                      -> Pair (cvtE e1) (cvtE e2)
+        Pair ann e1 e2                  -> Pair ann (cvtE e1) (cvtE e2)
         VecPack vR e                    -> VecPack vR (cvtE e)
         VecUnpack vR e                  -> VecUnpack vR (cvtE e)
         IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
@@ -1689,7 +1690,7 @@ fromIndex shR sh
 intersect :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 intersect = mkShapeBinary f
   where
-    f a b = PrimApp (PrimMin singleType) $ Pair a b
+    f a b = PrimApp (PrimMin singleType) $ Pair mkDummyAnn a b
 
 -- union :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 -- union = mkShapeBinary f
@@ -1703,7 +1704,7 @@ mkShapeBinary
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
 mkShapeBinary _ ShapeRz _ _ = Nil
-mkShapeBinary f (ShapeRsnoc shR) (Pair as a) (Pair bs b) = mkShapeBinary f shR as bs `Pair` f a b
+mkShapeBinary f (ShapeRsnoc shR) (Pair a1 as a) (Pair a2 bs b) = Pair (a1 <> a2) (mkShapeBinary f shR as bs) (f a b)
 mkShapeBinary f shR (Let lhs bnd a) b = Let lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
 mkShapeBinary f shR a (Let lhs bnd b) = Let lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b
 mkShapeBinary f shR a b@Pair{} -- `a` is not Pair

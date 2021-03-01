@@ -407,7 +407,7 @@ prettyOpenExp ctx env aenv exp =
     Evar (Var _ idx)      -> prj idx env
     Let{}                 -> prettyLet ctx env aenv exp
     PrimApp f x
-      | a `Pair` b <- x   -> ppF2 op  (ppE a) (ppE b)
+      | Pair _ a b <- x   -> ppF2 op  (ppE a) (ppE b)
       | otherwise         -> ppF1 op' (ppE x)
       where
         op  = primOperator f
@@ -547,12 +547,12 @@ prettyTuple ctx env aenv exp = case collect exp of
         _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> align (sep tup))
   where
     ppPair :: OpenExp env aenv t' -> Adoc
-    ppPair (Pair e1 e2) = "(" <> ppPair e1 <> "," <+> prettyOpenExp context0 env aenv e2 <> ")"
-    ppPair e            = prettyOpenExp context0 env aenv e
+    ppPair (Pair _ e1 e2) = "(" <> ppPair e1 <> "," <+> prettyOpenExp context0 env aenv e2 <> ")"
+    ppPair e              = prettyOpenExp context0 env aenv e
 
     collect :: OpenExp env aenv t' -> Maybe [Adoc]
     collect Nil                = Just []
-    collect (Pair e1 e2)
+    collect (Pair _ e1 e2)
       | Just tup <- collect e1 = Just $ tup ++ [prettyOpenExp app env aenv e2]
     collect _                  = Nothing
 

@@ -936,7 +936,7 @@ evalOpenExp pexp env aenv =
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
     Nil                         -> ()
-    Pair e1 e2                  -> let !x1 = evalE e1
+    Pair _ e1 e2                -> let !x1 = evalE e1
                                        !x2 = evalE e2
                                    in  (x1, x2)
     VecPack   vecR e            -> pack   vecR $! evalE e

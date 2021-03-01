@@ -512,7 +512,10 @@ type ExpVars env   = Vars ScalarType env
 expVars :: ExpVars env t -> OpenExp env aenv t
 expVars TupRunit         = Nil
 expVars (TupRsingle var) = Evar var
-expVars (TupRpair v1 v2) = expVars v1 `Pair` expVars v2
+-- FIXME: What should we be using here for the annotation? Is this pair only
+--        used temporarily as part of the transformations or does this make it
+--        to the final converted AST?
+expVars (TupRpair v1 v2) = Pair mkDummyAnn (expVars v1) (expVars v2)
 
 
 -- | Vanilla open expressions using de Bruijn indices for variables ranging
@@ -543,7 +546,8 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv y
 
   -- Tuples
-  Pair          :: OpenExp env aenv t1
+  Pair          :: Ann
+                -> OpenExp env aenv t1
                 -> OpenExp env aenv t2
                 -> OpenExp env aenv (t1, t2)
 
@@ -812,7 +816,7 @@ expType = \case
   Let _ _ body                 -> expType body
   Evar (Var tR _)              -> TupRsingle tR
   Foreign tR _ _ _             -> tR
-  Pair e1 e2                   -> TupRpair (expType e1) (expType e2)
+  Pair _ e1 e2                 -> TupRpair (expType e1) (expType e2)
   Nil                          -> TupRunit
   VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
   VecUnpack vecR _             -> vecRtuple vecR
@@ -1071,7 +1075,7 @@ rnfOpenExp topExp =
     Foreign tp asm f x        -> rnfTypeR tp `seq` rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
     Const ann tp c            -> rnfAnn ann `seq` c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
     Undef tp                  -> rnfScalarType tp
-    Pair a b                  -> rnfE a `seq` rnfE b
+    Pair ann a b              -> rnfAnn ann `seq` rnfE a `seq` rnfE b
     Nil                       -> ()
     VecPack   vecr e          -> rnfVecR vecr `seq` rnfE e
     VecUnpack vecr e          -> rnfVecR vecr `seq` rnfE e
@@ -1291,7 +1295,7 @@ liftOpenExp pexp =
     Foreign repr asm f x      -> [|| Foreign $$(liftTypeR repr) $$(liftForeign asm) $$(liftOpenFun f) $$(liftE x) ||]
     Const ann tp c            -> [|| Const $$(liftAnn ann) $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]
     Undef tp                  -> [|| Undef $$(liftScalarType tp) ||]
-    Pair a b                  -> [|| Pair $$(liftE a) $$(liftE b) ||]
+    Pair ann a b              -> [|| Pair $$(liftAnn ann) $$(liftE a) $$(liftE b) ||]
     Nil                       -> [|| Nil ||]
     VecPack   vecr e          -> [|| VecPack   $$(liftVecR vecr) $$(liftE e) ||]
     VecUnpack vecr e          -> [|| VecUnpack $$(liftVecR vecr) $$(liftE e) ||]

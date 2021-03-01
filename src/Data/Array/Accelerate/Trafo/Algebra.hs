@@ -67,7 +67,7 @@ propagate env = cvtE
         | e             <- prjExp ix env
         , Nothing       <- matchOpenExp exp e   -> cvtE e
       Nil                                       -> Just ((), mkDummyAnn)
-      Pair e1 e2                                -> (\(x, _) (y, _) -> ((x, y), mkDummyAnn)) <$> cvtE e1 <*> cvtE e2
+      Pair ann e1 e2                            -> (\(x, _) (y, _) -> ((x, y), ann)) <$> cvtE e1 <*> cvtE e2
       _                                         -> Nothing
 
 
@@ -175,11 +175,11 @@ commutes f x env = case f of
   _             -> Nothing
   where
     swizzle :: OpenExp env aenv (b,b) -> Maybe (OpenExp env aenv (b,b))
-    swizzle (Pair a b)
+    swizzle (Pair ann a b)
       | Nothing         <- propagate env a
       , Just _          <- propagate env b
       = Stats.ruleFired (pprFun "commutes" f)
-      $ Just $ Pair b a
+      $ Just $ Pair ann b a
 
 --    TLM: changing the ordering here when neither term can be reduced can be
 --         disadvantageous: for example in (x &&* y), the user might have put a
@@ -293,13 +293,17 @@ bool2 f (untup2 -> Just (x,y)) env
 bool2 _ _ _
   = Nothing
 
+-- TODO: We should be passing another argument for an annotation here, and that
+--       annotation should be built by combining the annotations of the original
+--       AST nodes we're rewriting.
 tup2 :: (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
-tup2 (a,b) = Pair a b
+tup2 (a,b) = Pair mkDummyAnn a b
 
+-- TODO: Should we just throw away the annotation here?
 untup2 :: OpenExp env aenv (a, b) -> Maybe (OpenExp env aenv a, OpenExp env aenv b)
 untup2 exp
-  | Pair a b <- exp = Just (a, b)
-  | otherwise       = Nothing
+  | Pair _ a b <- exp = Just (a, b)
+  | otherwise         = Nothing
 
 
 pprFun :: Text -> PrimFun f -> Text
@@ -344,7 +348,7 @@ evalSub' ty (untup2 -> Just (x,y)) env
   | Nothing         <- propagate env x
   , Just (b, _)     <- propagate env y
   = Stats.ruleFired "-y+x"
-  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Const ann tp (-b) `Pair` x)
+  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Pair ann (Const ann tp (-b)) x)
   -- (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
   | Just Refl   <- matchOpenExp x y

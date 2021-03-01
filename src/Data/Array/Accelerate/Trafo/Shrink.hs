@@ -109,7 +109,7 @@ matchEVarsRange (VarsRange (Exists first) _ (Just rt)) expr = isJust $ go (idxTo
     go i RTNil Nil = Just i
     go i RTSingle (Evar (Var _ ix))
       | checkIdx i ix = Just (i + 1)
-    go i (RTPair t1 t2) (Pair e1 e2)
+    go i (RTPair t1 t2) (Pair _ e1 e2)
       | Just i' <- go i t2 e2 = go i' t1 e1
     go _ _ _ = Nothing
 
@@ -241,7 +241,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
 
     cheap :: OpenExp env aenv t -> Bool
     cheap (Evar _)       = True
-    cheap (Pair e1 e2)   = cheap e1 && cheap e2
+    cheap (Pair _ e1 e2) = cheap e1 && cheap e2
     cheap Nil            = True
     cheap Const{}        = True
     cheap PrimConst{}    = True
@@ -290,7 +290,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Const ann t c             -> pure (Const ann t c)
       Undef t                   -> pure (Undef t)
       Nil                       -> pure Nil
-      Pair x y                  -> Pair <$> shrinkE x <*> shrinkE y
+      Pair ann x y              -> Pair ann <$> shrinkE x <*> shrinkE y
       VecPack   vec e           -> VecPack   vec <$> shrinkE e
       VecUnpack vec e           -> VecUnpack vec <$> shrinkE e
       IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
@@ -491,7 +491,7 @@ usesOfExp range = countE
       Const _ _ _               -> Finite 0
       Undef _                   -> Finite 0
       Nil                       -> Finite 0
-      Pair e1 e2                -> countE e1 <> countE e2
+      Pair _ e1 e2              -> countE e1 <> countE e2
       VecPack   _ e             -> countE e
       VecUnpack _ e             -> countE e
       IndexSlice _ ix sh        -> countE ix <> countE sh
@@ -578,7 +578,7 @@ usesOfPreAcc withShape countAcc idx = count
       Const _ _ _                -> 0
       Undef _                    -> 0
       Nil                        -> 0
-      Pair x y                   -> countE x + countE y
+      Pair _ x y                 -> countE x + countE y
       VecPack   _ e              -> countE e
       VecUnpack _ e              -> countE e
       IndexSlice _ ix sh         -> countE ix + countE sh

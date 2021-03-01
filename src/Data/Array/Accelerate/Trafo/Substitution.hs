@@ -152,7 +152,7 @@ inlineVars lhsBound expr bound
                           -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
       Evar (Var t ix)     -> Evar . Var t <$> k1 ix
       Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
-      Pair e1 e2          -> Pair <$> travE e1 <*> travE e2
+      Pair ann e1 e2      -> Pair ann <$> travE e1 <*> travE e2
       Nil                 -> Just Nil
       VecPack   vec e1    -> VecPack   vec <$> travE e1
       VecUnpack vec e1    -> VecUnpack vec <$> travE e1
@@ -553,7 +553,7 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
     Let lhs a b
       | Exists lhs' <- rebuildLHS lhs
                         -> Let lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
-    Pair e1 e2          -> Pair            <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
+    Pair ann e1 e2      -> Pair ann        <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
     Nil                 -> pure Nil
     VecPack   vec e     -> VecPack   vec   <$> rebuildOpenExp v av e
     VecUnpack vec e     -> VecUnpack vec   <$> rebuildOpenExp v av e
@@ -800,8 +800,7 @@ rebuildC k v c =
 --}
 
 extractExpVars :: OpenExp env aenv a -> Maybe (ExpVars env a)
-extractExpVars Nil          = Just TupRunit
-extractExpVars (Pair e1 e2) = TupRpair <$> extractExpVars e1 <*> extractExpVars e2
-extractExpVars (Evar v)     = Just $ TupRsingle v
-extractExpVars _            = Nothing
-
+extractExpVars Nil            = Just TupRunit
+extractExpVars (Pair _ e1 e2) = TupRpair <$> extractExpVars e1 <*> extractExpVars e2
+extractExpVars (Evar v)       = Just $ TupRsingle v
+extractExpVars _              = Nothing

@@ -761,7 +761,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Undef tp              -> AST.Undef tp
           Prj _ idx e           -> cvtPrj idx (cvt e)
           Nil _                 -> AST.Nil
-          Pair _ e1 e2          -> AST.Pair (cvt e1) (cvt e2)
+          Pair ann e1 e2        -> AST.Pair ann (cvt e1) (cvt e2)
           VecPack   vec e       -> AST.VecPack   vec (cvt e)
           VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
@@ -778,9 +778,10 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
           Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
 
+    -- TODO: How does this interact with annotations stored in the pair?
     cvtPrj :: forall a b c env1 aenv1. PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
-    cvtPrj PairIdxLeft  (AST.Pair a _) = a
-    cvtPrj PairIdxRight (AST.Pair _ b) = b
+    cvtPrj PairIdxLeft  (AST.Pair _ a _) = a
+    cvtPrj PairIdxRight (AST.Pair _ _ b) = b
     cvtPrj ix a
       | DeclareVars lhs _ value <- declareVars $ AST.expType a
       = AST.Let lhs a (cvtPrj ix (expVars (value weakenId)))
@@ -832,12 +833,13 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
         -- Extract the variable representing this particular tag from the
         -- scrutinee. This is safe because we let-bind the argument first.
+        -- TODO: Should we just throw away the annotations from the pair here?
         prjT :: TagR a -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' TAG
         prjT = fromJust $$ go
           where
             go :: TagR a -> AST.OpenExp env' aenv' a -> Maybe (AST.OpenExp env' aenv' TAG)
-            go TagRtag{}        (AST.Pair l _) = Just l
-            go (TagRpair ta tb) (AST.Pair l r) =
+            go TagRtag{}        (AST.Pair _ l _) = Just l
+            go (TagRpair ta tb) (AST.Pair _ l r) =
               case go ta l of
                 Just t  -> Just t
                 Nothing -> go tb r

@@ -317,7 +317,7 @@ encodeOpenExp exp =
     Let lhs bnd body            -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
     Evar (Var tp ix)            -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
     Nil                         -> intHost $(hashQ "Nil")
-    Pair e1 e2                  -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
+    Pair _ e1 e2                -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
     VecPack   _ e               -> intHost $(hashQ "VecPack")     <> travE e
     VecUnpack _ e               -> intHost $(hashQ "VecUnpack")   <> travE e
     Const _ tp c                -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
