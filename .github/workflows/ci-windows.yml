@@ -31,21 +31,21 @@ jobs:
           path: C:\Users\runneradmin\AppData\Local\Programs\stack\
           key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}
+            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
 
       - uses: actions/cache@v2
         with:
           path: C:\Users\runneradmin\AppData\Roaming\stack\
           key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-stack-global-${{ matrix.ghc }}
+            ${{ runner.os }}-stack-global-${{ matrix.ghc }}-
 
       - uses: actions/cache@v2
         with:
           path: .stack-work
           key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}
+            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
 
       - name: Install stack
         run: |
