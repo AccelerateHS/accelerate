@@ -71,7 +71,7 @@ import qualified Data.Array.Accelerate.Representation.Stencil       as R
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 
 import Control.Applicative                                          hiding ( Const )
-import Control.Lens                                                 ( over, mapped, _1, _2 )
+import Lens.Micro                                                 ( over, mapped, _1, _2 )
 import Control.Monad.Fix
 import Data.Function                                                ( on )
 import Data.Hashable

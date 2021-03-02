@@ -67,7 +67,7 @@ import System.IO.Unsafe -- for debugging
 #endif
 
 import Data.Function
-import Control.Lens                                                 ( over, mapped, _2 )
+import Lens.Micro                                                 ( over, mapped, _2 )
 import Prelude                                                      hiding ( exp, until )
 
 

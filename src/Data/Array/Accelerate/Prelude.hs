@@ -137,7 +137,7 @@ import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Bits
 
-import Control.Lens                                                 ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
+import Lens.Micro                                                   ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
 import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
 
 
