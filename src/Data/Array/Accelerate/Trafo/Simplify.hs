@@ -51,7 +51,7 @@ import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import Control.Applicative                                          hiding ( Const )
-import Control.Lens                                                 hiding ( Const, ix )
+import Lens.Micro                                                   hiding ( ix )
 import Data.List                                                    ( partition )
 import Data.Maybe
 import Data.Monoid
