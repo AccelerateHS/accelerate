@@ -90,7 +90,11 @@ test_issue255 runN =
 
 
 within :: Integer -> TestTree -> TestTree
-within usec = localOption (mkTimeout usec)
+within usec = adjustOption sup
+  where
+    sup :: Timeout -> Timeout
+    sup t@(Timeout u _) | u P.> usec = t
+    sup _                            = mkTimeout usec
 
 -- within :: Int -> Scalar Double -> Assertion
 -- within n arr = do
