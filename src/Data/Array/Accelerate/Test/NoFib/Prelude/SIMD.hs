@@ -20,7 +20,7 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.SIMD (
 
 ) where
 
-import Control.Lens                                                 ( view, _1, _2, _3, _4 )
+import Lens.Micro                                                 ( view, _1, _2, _3, _4 )
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
