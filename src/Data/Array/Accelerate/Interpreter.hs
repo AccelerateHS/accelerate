@@ -935,7 +935,7 @@ evalOpenExp pexp env aenv =
     Undef tp                    -> undefElt (TupRsingle tp)
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
-    Nil                         -> ()
+    Nil _                       -> ()
     Pair _ e1 e2                -> let !x1 = evalE e1
                                        !x2 = evalE e2
                                    in  (x1, x2)

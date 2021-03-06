@@ -223,7 +223,7 @@ simplifyOpenExp env = first getAny . cvtE
       Evar var                  -> pure $ Evar var
       Const ann tp c            -> pure $ Const ann tp c
       Undef tp                  -> pure $ Undef tp
-      Nil                       -> pure Nil
+      Nil ann                   -> pure $ Nil ann
       Pair ann e1 e2            -> Pair ann <$> cvtE e1 <*> cvtE e2
       VecPack   vec e           -> VecPack   vec <$> cvtE e
       VecUnpack vec e           -> VecUnpack vec <$> cvtE e
@@ -320,7 +320,7 @@ simplifyOpenExp env = first getAny . cvtE
     --
     shape :: ArrayVar aenv (Array sh t) -> (Any, OpenExp env aenv sh)
     shape (Var (ArrayR ShapeRz _) _)
-      = Stats.ruleFired "shape/Z" $ yes Nil
+      = Stats.ruleFired "shape/Z" $ yes (Nil mkDummyAnn)
     shape a
       = pure $ Shape a
 
@@ -353,10 +353,8 @@ simplifyOpenExp env = first getAny . cvtE
     yes :: x -> (Any, x)
     yes x = (Any True, x)
 
--- TODO: Replace the dummy annotations with the actual annotations once we add
---       those fields
 extractConstTuple :: OpenExp env aenv t -> Maybe (t, Ann)
-extractConstTuple Nil              = Just ((), mkDummyAnn)
+extractConstTuple (Nil ann)        = Just ((), ann)
 extractConstTuple (Pair ann e1 e2) = (\(a, _) (b, _) -> ((a, b), ann)) <$> extractConstTuple e1 <*> extractConstTuple e2
 extractConstTuple (Const ann _ c)  = Just (c, ann)
 extractConstTuple _                = Nothing
@@ -547,7 +545,7 @@ summariseOpenExp = (terms +~ 1) . goE
         Foreign _ _ _ x       -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
         Const{}               -> zero
         Undef _               -> zero
-        Nil                   -> zero & terms +~ 1
+        Nil{}                 -> zero & terms +~ 1
         Pair _ e1 e2          -> travE e1 +++ travE e2 & terms +~ 1
         VecPack   _ e         -> travE e
         VecUnpack _ e         -> travE e

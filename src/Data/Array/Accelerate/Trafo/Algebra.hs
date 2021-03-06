@@ -66,7 +66,7 @@ propagate env = cvtE
       Evar (Var _  ix)
         | e             <- prjExp ix env
         , Nothing       <- matchOpenExp exp e   -> cvtE e
-      Nil                                       -> Just ((), mkDummyAnn)
+      Nil ann                                   -> Just ((), ann)
       Pair ann e1 e2                            -> (\(x, _) (y, _) -> ((x, y), ann)) <$> cvtE e1 <*> cvtE e2
       _                                         -> Nothing
 

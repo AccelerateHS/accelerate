@@ -509,12 +509,12 @@ type ELeftHandSide = LeftHandSide ScalarType
 type ExpVar        = Var ScalarType
 type ExpVars env   = Vars ScalarType env
 
-expVars :: ExpVars env t -> OpenExp env aenv t
-expVars TupRunit         = Nil
-expVars (TupRsingle var) = Evar var
 -- FIXME: What should we be using here for the annotation? Is this pair only
 --        used temporarily as part of the transformations or does this make it
 --        to the final converted AST?
+expVars :: ExpVars env t -> OpenExp env aenv t
+expVars TupRunit         = Nil mkDummyAnn
+expVars (TupRsingle var) = Evar var
 expVars (TupRpair v1 v2) = Pair mkDummyAnn (expVars v1) (expVars v2)
 
 
@@ -551,7 +551,8 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv t2
                 -> OpenExp env aenv (t1, t2)
 
-  Nil           :: OpenExp env aenv ()
+  Nil           :: Ann
+                -> OpenExp env aenv ()
 
   -- SIMD vectors
   VecPack       :: KnownNat n
@@ -817,7 +818,7 @@ expType = \case
   Evar (Var tR _)              -> TupRsingle tR
   Foreign tR _ _ _             -> tR
   Pair _ e1 e2                 -> TupRpair (expType e1) (expType e2)
-  Nil                          -> TupRunit
+  Nil _                        -> TupRunit
   VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
   VecUnpack vecR _             -> vecRtuple vecR
   IndexSlice si _ _            -> shapeType $ sliceShapeR si
@@ -1076,7 +1077,7 @@ rnfOpenExp topExp =
     Const ann tp c            -> rnfAnn ann `seq` c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
     Undef tp                  -> rnfScalarType tp
     Pair ann a b              -> rnfAnn ann `seq` rnfE a `seq` rnfE b
-    Nil                       -> ()
+    Nil ann                   -> rnfAnn ann
     VecPack   vecr e          -> rnfVecR vecr `seq` rnfE e
     VecUnpack vecr e          -> rnfVecR vecr `seq` rnfE e
     IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
@@ -1296,7 +1297,7 @@ liftOpenExp pexp =
     Const ann tp c            -> [|| Const $$(liftAnn ann) $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]
     Undef tp                  -> [|| Undef $$(liftScalarType tp) ||]
     Pair ann a b              -> [|| Pair $$(liftAnn ann) $$(liftE a) $$(liftE b) ||]
-    Nil                       -> [|| Nil ||]
+    Nil ann                   -> [|| Nil $$(liftAnn ann) ||]
     VecPack   vecr e          -> [|| VecPack   $$(liftVecR vecr) $$(liftE e) ||]
     VecUnpack vecr e          -> [|| VecUnpack $$(liftVecR vecr) $$(liftE e) ||]
     IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]

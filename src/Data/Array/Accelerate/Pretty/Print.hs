@@ -416,7 +416,7 @@ prettyOpenExp ctx env aenv exp =
     PrimConst c           -> prettyPrimConst c
     Const _ tp c          -> prettyConst (TupRsingle tp) c
     Pair{}                -> prettyTuple ctx env aenv exp
-    Nil                   -> "()"
+    Nil _                 -> "()"
     VecPack   _ e         -> ppF1 "pack"   (ppE e)
     VecUnpack _ e         -> ppF1 "unpack" (ppE e)
     Case x xs d           -> prettyCase env aenv x xs d
@@ -551,7 +551,7 @@ prettyTuple ctx env aenv exp = case collect exp of
     ppPair e              = prettyOpenExp context0 env aenv e
 
     collect :: OpenExp env aenv t' -> Maybe [Adoc]
-    collect Nil                = Just []
+    collect (Nil _)            = Just []
     collect (Pair _ e1 e2)
       | Just tup <- collect e1 = Just $ tup ++ [prettyOpenExp app env aenv e2]
     collect _                  = Nothing

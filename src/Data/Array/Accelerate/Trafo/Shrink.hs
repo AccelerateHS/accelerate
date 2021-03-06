@@ -106,7 +106,7 @@ matchEVarsRange :: VarsRange env -> OpenExp env aenv t -> Bool
 matchEVarsRange (VarsRange (Exists first) _ (Just rt)) expr = isJust $ go (idxToInt first) rt expr
   where
     go :: Int -> RangeTuple -> OpenExp env aenv t -> Maybe Int
-    go i RTNil Nil = Just i
+    go i RTNil (Nil _) = Just i
     go i RTSingle (Evar (Var _ ix))
       | checkIdx i ix = Just (i + 1)
     go i (RTPair t1 t2) (Pair _ e1 e2)
@@ -242,7 +242,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     cheap :: OpenExp env aenv t -> Bool
     cheap (Evar _)       = True
     cheap (Pair _ e1 e2) = cheap e1 && cheap e2
-    cheap Nil            = True
+    cheap (Nil _)        = True
     cheap Const{}        = True
     cheap PrimConst{}    = True
     cheap Undef{}        = True
@@ -289,7 +289,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Evar v                    -> pure (Evar v)
       Const ann t c             -> pure (Const ann t c)
       Undef t                   -> pure (Undef t)
-      Nil                       -> pure Nil
+      Nil ann                   -> pure (Nil ann)
       Pair ann x y              -> Pair ann <$> shrinkE x <*> shrinkE y
       VecPack   vec e           -> VecPack   vec <$> shrinkE e
       VecUnpack vec e           -> VecUnpack vec <$> shrinkE e
@@ -490,7 +490,7 @@ usesOfExp range = countE
       Let lhs bnd body          -> countE bnd <> usesOfExp (weakenVarsRange lhs range) body
       Const _ _ _               -> Finite 0
       Undef _                   -> Finite 0
-      Nil                       -> Finite 0
+      Nil _                     -> Finite 0
       Pair _ e1 e2              -> countE e1 <> countE e2
       VecPack   _ e             -> countE e
       VecUnpack _ e             -> countE e
@@ -577,7 +577,7 @@ usesOfPreAcc withShape countAcc idx = count
       Evar _                     -> 0
       Const _ _ _                -> 0
       Undef _                    -> 0
-      Nil                        -> 0
+      Nil _                      -> 0
       Pair _ x y                 -> countE x + countE y
       VecPack   _ e              -> countE e
       VecUnpack _ e              -> countE e

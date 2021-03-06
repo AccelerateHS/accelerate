@@ -1471,7 +1471,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Foreign tR ff f e               -> Foreign tR ff f (cvtE e)
         Const ann tR c                  -> Const ann tR c
         Undef tR                        -> Undef tR
-        Nil                             -> Nil
+        Nil ann                         -> Nil ann
         Pair ann e1 e2                  -> Pair ann (cvtE e1) (cvtE e2)
         VecPack vR e                    -> VecPack vR (cvtE e)
         VecUnpack vR e                  -> VecUnpack vR (cvtE e)
@@ -1703,7 +1703,9 @@ mkShapeBinary
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
-mkShapeBinary _ ShapeRz _ _ = Nil
+mkShapeBinary _ ShapeRz (Nil a1) (Nil a2) = Nil (a1 <> a2)
+-- This pattern shouldn't be matched, but it could happen when we get malformed shapes
+mkShapeBinary _ ShapeRz _ _ = Nil mkDummyAnn
 mkShapeBinary f (ShapeRsnoc shR) (Pair a1 as a) (Pair a2 bs b) = Pair (a1 <> a2) (mkShapeBinary f shR as bs) (f a b)
 mkShapeBinary f shR (Let lhs bnd a) b = Let lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
 mkShapeBinary f shR a (Let lhs bnd b) = Let lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b

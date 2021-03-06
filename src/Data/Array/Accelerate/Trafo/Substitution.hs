@@ -153,7 +153,7 @@ inlineVars lhsBound expr bound
       Evar (Var t ix)     -> Evar . Var t <$> k1 ix
       Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
       Pair ann e1 e2      -> Pair ann <$> travE e1 <*> travE e2
-      Nil                 -> Just Nil
+      Nil ann             -> Just (Nil ann)
       VecPack   vec e1    -> VecPack   vec <$> travE e1
       VecUnpack vec e1    -> VecUnpack vec <$> travE e1
       IndexSlice si e1 e2 -> IndexSlice si <$> travE e1 <*> travE e2
@@ -554,7 +554,7 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
       | Exists lhs' <- rebuildLHS lhs
                         -> Let lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
     Pair ann e1 e2      -> Pair ann        <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
-    Nil                 -> pure Nil
+    Nil ann             -> pure (Nil ann)
     VecPack   vec e     -> VecPack   vec   <$> rebuildOpenExp v av e
     VecUnpack vec e     -> VecUnpack vec   <$> rebuildOpenExp v av e
     IndexSlice x ix sh  -> IndexSlice x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
@@ -800,7 +800,7 @@ rebuildC k v c =
 --}
 
 extractExpVars :: OpenExp env aenv a -> Maybe (ExpVars env a)
-extractExpVars Nil            = Just TupRunit
+extractExpVars (Nil  _)       = Just TupRunit
 extractExpVars (Pair _ e1 e2) = TupRpair <$> extractExpVars e1 <*> extractExpVars e2
 extractExpVars (Evar v)       = Just $ TupRsingle v
 extractExpVars _              = Nothing

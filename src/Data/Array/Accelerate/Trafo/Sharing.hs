@@ -760,7 +760,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Const ann tp v        -> AST.Const ann tp v
           Undef tp              -> AST.Undef tp
           Prj _ idx e           -> cvtPrj idx (cvt e)
-          Nil _                 -> AST.Nil
+          Nil ann               -> AST.Nil ann
           Pair ann e1 e2        -> AST.Pair ann (cvt e1) (cvt e2)
           VecPack   vec e       -> AST.VecPack   vec (cvt e)
           VecUnpack vec e       -> AST.VecUnpack vec (cvt e)

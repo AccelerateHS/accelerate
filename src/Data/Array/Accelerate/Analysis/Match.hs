@@ -475,7 +475,7 @@ matchOpenExp (Pair _ a1 b1) (Pair _ a2 b2)
   , Just Refl <- matchOpenExp b1 b2
   = Just Refl
 
-matchOpenExp Nil Nil
+matchOpenExp (Nil _) (Nil _)
   = Just Refl
 
 matchOpenExp (IndexSlice sliceIndex1 ix1 sh1) (IndexSlice sliceIndex2 ix2 sh2)
