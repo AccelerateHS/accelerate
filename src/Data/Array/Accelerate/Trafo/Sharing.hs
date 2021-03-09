@@ -349,7 +349,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Reshape shr e acc           -> AST.Reshape shr (cvtE e) (cvtA acc)
       Replicate si ix acc         -> AST.Replicate si (cvtE ix) (cvtA acc)
       Slice si acc ix             -> AST.Slice si (cvtA acc) (cvtE ix)
-      Map t1 t2 f acc             -> AST.Map t2 (cvtF1 t1 f) (cvtA acc)
+      Map _ t1 t2 f acc           -> AST.Map t2 (cvtF1 t1 f) (cvtA acc)
       ZipWith t1 t2 t3 f acc1 acc2
                                   -> AST.ZipWith t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
       Fold tp f e acc             -> AST.Fold (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
@@ -1546,10 +1546,10 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
             Reshape shr e acc           -> travEA (Reshape shr) e acc
             Replicate si e acc          -> travEA (Replicate si) e acc
             Slice si acc e              -> travEA (flip $ Slice si) e acc
-            Map t1 t2 f acc             -> do
+            Map ann t1 t2 f acc         -> do
                                              (f'  , h1) <- traverseFun1 lvl t1 f
                                              (acc', h2) <- traverseAcc lvl acc
-                                             return (Map t1 t2 f' acc', h1 `max` h2 + 1)
+                                             return (Map ann t1 t2 f' acc', h1 `max` h2 + 1)
             ZipWith t1 t2 t3 f acc1 acc2
                                         -> travF2A2 (ZipWith t1 t2 t3) t1 t2 f acc1 acc2
             Fold tp f e acc             -> travF2MEA (Fold tp) tp tp f e acc
@@ -2411,11 +2411,11 @@ determineScopesSharingAcc config accOccMap = scopesAcc
           Reshape shr sh acc      -> travEA (Reshape shr) sh acc
           Replicate si n acc      -> travEA (Replicate si) n acc
           Slice si acc i          -> travEA (flip $ Slice si) i acc
-          Map t1 t2 f acc         -> let
+          Map ann t1 t2 f acc     -> let
                                        (f'  , accCount1) = scopesFun1 f
                                        (acc', accCount2) = scopesAcc  acc
                                      in
-                                     reconstruct (Map t1 t2 f' acc') (accCount1 +++ accCount2)
+                                     reconstruct (Map ann t1 t2 f' acc') (accCount1 +++ accCount2)
           ZipWith t1 t2 t3 f acc1 acc2
                                   -> travF2A2 (ZipWith t1 t2 t3) f acc1 acc2
           Fold tp f z acc         -> travF2MEA (Fold tp) f z acc

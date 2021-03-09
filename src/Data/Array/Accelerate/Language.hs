@@ -417,7 +417,7 @@ map :: forall sh a b.
     => (Exp a -> Exp b)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
-map = withFrozenCallStack $ Acc $$ applyAcc (Map (eltR @a) (eltR @b))
+map = withFrozenCallStack $ Acc $$ applyAcc (Map mkAnn (eltR @a) (eltR @b))
 
 -- | Apply the given binary function element-wise to the two arrays. The extent
 -- of the resulting array is the intersection of the extents of the two source

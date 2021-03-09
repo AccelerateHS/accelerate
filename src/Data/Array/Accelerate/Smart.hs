@@ -393,7 +393,8 @@ data PreSmartAcc acc exp as where
                 -> exp slix
                 -> PreSmartAcc acc exp (Array sl e)
 
-  Map           :: TypeR e
+  Map           :: Ann
+                -> TypeR e
                 -> TypeR e'
                 -> (SmartExp e -> exp e')
                 -> acc (Array sh e)
@@ -825,7 +826,7 @@ instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
                                  in  TupRsingle $ ArrayR (sliceDomainR si) tp
     Slice si a _              -> let ArrayR _ tp = arrayR a
                                  in  TupRsingle $ ArrayR (sliceShapeR si) tp
-    Map _ tp _ a              -> let ArrayR shr _ = arrayR a
+    Map _ _ tp _ a            -> let ArrayR shr _ = arrayR a
                                  in  TupRsingle $ ArrayR shr tp
     ZipWith _ _ tp _ a _      -> let ArrayR shr _ = arrayR a
                                  in  TupRsingle $ ArrayR shr tp
@@ -1246,7 +1247,10 @@ class HasAnnotations a where
   withOptimizations :: (Optimizations -> Optimizations) -> a -> a
   withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
 
--- TODO: Add an instance for 'Acc' once we add annotation fields there
+instance HasAnnotations (Acc a) where
+  modifyAnn f (Acc (SmartAcc (Map ann t1 t2 f' acc))) = Acc . SmartAcc $ Map (f ann) t1 t2 f' acc
+  -- TODO: All other constructors as we add more annotations
+  modifyAnn _ e = e
 
 instance HasAnnotations (Exp a) where
   modifyAnn f (Exp (SmartExp (Const ann t c  ))) = mkExp $ Const (f ann) t c
