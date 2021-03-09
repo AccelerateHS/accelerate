@@ -45,6 +45,7 @@ module Data.Array.Accelerate.Trafo.Sharing (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST                                    hiding ( PreOpenAcc(..), OpenAcc(..), Acc, OpenExp(..), Exp, Boundary(..), HasArraysR(..), formatPreAccOp )
 import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
@@ -752,14 +753,17 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       = let
           lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
         in
-          AST.Let lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
+          -- FIXME: We don't have any annotation to reuse here, right? And
+          --        semi-related, this let binding should not exist when
+          --        @boundExp@ has been annotated with 'alwaysInline'.
+          AST.Let mkDummyAnn lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
           Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
           Match _ e             -> cvt e  -- XXX: this should probably be an error
           Const ann tp v        -> AST.Const ann tp v
           Undef tp              -> AST.Undef tp
-          Prj _ idx e           -> cvtPrj idx (cvt e)
+          Prj ann idx e         -> cvtPrj ann idx (cvt e)
           Nil ann               -> AST.Nil ann
           Pair ann e1 e2        -> AST.Pair ann (cvt e1) (cvt e2)
           VecPack   vec e       -> AST.VecPack   vec (cvt e)
@@ -778,13 +782,16 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
           Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
 
-    -- TODO: How does this interact with annotations stored in the pair?
-    cvtPrj :: forall a b c env1 aenv1. PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
-    cvtPrj PairIdxLeft  (AST.Pair _ a _) = a
-    cvtPrj PairIdxRight (AST.Pair _ _ b) = b
-    cvtPrj ix a
+    -- TODO: We throw away any annotations on the projection here. We should
+    --       probably merge them into @a@ and @b@.
+    cvtPrj :: forall a b c env1 aenv1. Ann -> PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
+    cvtPrj _ PairIdxLeft  (AST.Pair _ a _) = a
+    cvtPrj _ PairIdxRight (AST.Pair _ _ b) = b
+    cvtPrj ann ix a
       | DeclareVars lhs _ value <- declareVars $ AST.expType a
-      = AST.Let lhs a (cvtPrj ix (expVars (value weakenId)))
+      -- FIXME: Recursively passing the same @ann@ is probably not correct. This
+      --        should be the annotation of @a@.
+      = AST.Let ann lhs a (cvtPrj ann ix (expVars (value weakenId)))
 
     cvtA :: HasCallStack => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
@@ -808,8 +815,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     --
     cvtPrimFun :: HasCallStack => AST.PrimFun (a -> r) -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' r
     cvtPrimFun f e = case e of
-      AST.Let lhs bnd body -> AST.Let lhs bnd (cvtPrimFun f body)
-      x                    -> AST.PrimApp f x
+      AST.Let ann lhs bnd body -> AST.Let ann lhs bnd (cvtPrimFun f body)
+      x                        -> AST.PrimApp f x
 
     -- Convert the flat list of equations into nested case statement
     -- directly on the tag variables.
@@ -819,7 +826,9 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       | AST.Pair{} <- s
       = nested s es
       | DeclareVars lhs _ value <- declareVars (AST.expType s)
-      = AST.Let lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
+      -- TODO: Should we reuse the annotation from @s@ instead? Or mconcat all
+      --       annotations in this level?
+      = AST.Let mkDummyAnn lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
       where
         nested :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
         nested _ [(_,r)] = r

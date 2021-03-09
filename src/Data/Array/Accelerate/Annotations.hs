@@ -152,8 +152,9 @@ mkAnn = assert callStackIsFrozen
 
 -- | Create a new 'Ann' without any source information.
 --
--- TODO: This should not be necessary anymore once we add the remaining
---       annotation fields
+-- TODO: Ever everything has been implemented, check whether the uses of this
+--       are justified and if we're not throwing away any existing annotations
+--       when reconstructing ASTs
 mkDummyAnn :: Ann
 mkDummyAnn = withEmptyCallStack mkAnn
 

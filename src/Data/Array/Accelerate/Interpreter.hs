@@ -927,7 +927,7 @@ evalOpenExp pexp env aenv =
       evalA (Var repr ix) = (TupRsingle repr, prj ix aenv)
   in
   case pexp of
-    Let lhs exp1 exp2           -> let !v1  = evalE exp1
+    Let _ lhs exp1 exp2         -> let !v1  = evalE exp1
                                        env' = env `push` (lhs, v1)
                                    in  evalOpenExp exp2 env' aenv
     Evar (Var _ ix)             -> prj ix env

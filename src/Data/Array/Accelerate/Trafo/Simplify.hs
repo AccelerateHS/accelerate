@@ -216,10 +216,10 @@ simplifyOpenExp env = first getAny . cvtE
   where
     cvtE :: OpenExp env aenv t -> (Any, OpenExp env aenv t)
     cvtE exp = case exp of
-      Let lhs bnd body -> (u <> v, exp')
+      Let ann lhs bnd body -> (u <> v, exp')
         where
           (u, bnd') = cvtE bnd
-          (v, exp') = cvtLet env lhs bnd' (\env' -> cvtE' env' body)
+          (v, exp') = cvtLet ann env lhs bnd' (\env' -> cvtE' env' body)
       Evar var                  -> pure $ Evar var
       Const ann tp c            -> pure $ Const ann tp c
       Undef tp                  -> pure $ Undef tp
@@ -256,18 +256,20 @@ simplifyOpenExp env = first getAny . cvtE
     cvtMaybeE Nothing  = pure Nothing
     cvtMaybeE (Just e) = Just <$> cvtE e
 
-    cvtLet :: Gamma env' env' aenv
+    -- TODO: Is passing around the same annotation correct?
+    cvtLet :: Ann
+           -> Gamma env' env' aenv
            -> ELeftHandSide bnd env' env''
            -> OpenExp env' aenv bnd
            -> (Gamma env'' env'' aenv -> (Any, OpenExp env'' aenv t))
            -> (Any, OpenExp env' aenv t)
-    cvtLet env' lhs@(LeftHandSideSingle _) bnd            body = Let lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
-    cvtLet env' (LeftHandSideWildcard _)   _              body = body env'                                 -- Binding not used, remove let binding
-    cvtLet env' (LeftHandSidePair l1 l2)   (Pair _ e1 e2) body                                             -- Split binding to multiple bindings
+    cvtLet ann env' lhs@(LeftHandSideSingle _) bnd            body = Let ann lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
+    cvtLet _   env' (LeftHandSideWildcard _)   _              body = body env'                                 -- Binding not used, remove let binding
+    cvtLet ann env' (LeftHandSidePair l1 l2)   (Pair _ e1 e2) body                                             -- Split binding to multiple bindings
       = first (const $ Any True)
-      $ cvtLet env' l1 e1
-      $ \env'' -> cvtLet env'' l2 (weakenE (weakenWithLHS l1) e2) body
-    cvtLet env' lhs                        bnd          body = Let lhs bnd <$> body (lhsExpr lhs env')   -- Cannot split this binding.
+      $ cvtLet ann env' l1 e1
+      $ \env'' -> cvtLet ann env'' l2 (weakenE (weakenWithLHS l1) e2) body
+    cvtLet ann env' lhs                        bnd          body = Let ann lhs bnd <$> body (lhsExpr lhs env')   -- Cannot split this binding.
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
@@ -540,7 +542,7 @@ summariseOpenExp = (terms +~ 1) . goE
     goE :: OpenExp env aenv t -> Stats
     goE exp =
       case exp of
-        Let _ bnd body        -> travE bnd +++ travE body & binders +~ 1
+        Let _ _ bnd body      -> travE bnd +++ travE body & binders +~ 1
         Evar{}                -> zero & vars +~ 1
         Foreign _ _ _ x       -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
         Const{}               -> zero

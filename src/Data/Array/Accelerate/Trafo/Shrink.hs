@@ -251,15 +251,15 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
 
     shrinkE :: HasCallStack => OpenExp env aenv t -> (Any, OpenExp env aenv t)
     shrinkE exp = case exp of
-      Let (LeftHandSideSingle _) bnd@Evar{} body -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
-      Let lhs bnd body
+      Let _ (LeftHandSideSingle _) bnd@Evar{} body -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
+      Let ann lhs bnd body
         | shouldInline -> case inlineVars lhs (snd body') (snd bnd') of
             Just inlined -> Stats.betaReduce msg . yes $ shrinkE inlined
             _            -> internalError "Unexpected failure while trying to inline some expression."
         | Just (Exists lhs') <- shrinkLhs count lhs -> case strengthenE (strengthenShrunkLHS lhs lhs' Just) (snd body') of
-           Just body'' -> (Any True, Let lhs' (snd bnd') body'')
+           Just body'' -> (Any True, Let ann lhs' (snd bnd') body'')
            Nothing     -> internalError "Unexpected failure in strenthenE. Variable was analysed to be unused in usesOfExp, but appeared to be used in strenthenE."
-        | otherwise    -> Let lhs <$> bnd' <*> body'
+        | otherwise    -> Let ann lhs <$> bnd' <*> body'
         where
           shouldInline = case count of
             Finite 0     -> False -- Handled by shrinkLhs
@@ -487,7 +487,7 @@ usesOfExp range = countE
         Just cs                 -> Impossible cs
         Nothing                 -> Finite 0
       --
-      Let lhs bnd body          -> countE bnd <> usesOfExp (weakenVarsRange lhs range) body
+      Let _ lhs bnd body        -> countE bnd <> usesOfExp (weakenVarsRange lhs range) body
       Const _ _ _               -> Finite 0
       Undef _                   -> Finite 0
       Nil _                     -> Finite 0
@@ -573,7 +573,7 @@ usesOfPreAcc withShape countAcc idx = count
 
     countE :: OpenExp env aenv e -> Int
     countE exp = case exp of
-      Let _ bnd body             -> countE bnd + countE body
+      Let _ _ bnd body           -> countE bnd + countE body
       Evar _                     -> 0
       Const _ _ _                -> 0
       Undef _                    -> 0

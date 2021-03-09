@@ -46,6 +46,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
@@ -147,9 +148,9 @@ inlineVars lhsBound expr bound
     substitute _ k2 vars (extractExpVars -> Just vars')
       | Just Refl <- matchVars vars vars' = Just $ weakenE k2 bound
     substitute k1 k2 vars topExp = case topExp of
-      Let lhs e1 e2
+      Let ann lhs e1 e2
         | Exists lhs' <- rebuildLHS lhs
-                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
+                          -> Let ann lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
       Evar (Var t ix)     -> Evar . Var t <$> k1 ix
       Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
       Pair ann e1 e2      -> Pair ann <$> travE e1 <*> travE e2
@@ -233,7 +234,7 @@ compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
   | Exists lhsB' <- rebuildLHS lhsB
   = Lam lhsA
   $ Body
-  $ Let lhsB' b
+  $ Let mkDummyAnn lhsB' b
   $ weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c
   -- = Stats.substitution "compose" . Lam lhs2 . Body $ substitute' f g
 compose _
@@ -550,9 +551,9 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
     PrimConst c         -> pure $ PrimConst c
     Undef t             -> pure $ Undef t
     Evar var            -> expOut          <$> v var
-    Let lhs a b
+    Let ann lhs a b
       | Exists lhs' <- rebuildLHS lhs
-                        -> Let lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
+                        -> Let ann lhs'    <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
     Pair ann e1 e2      -> Pair ann        <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
     Nil ann             -> pure (Nil ann)
     VecPack   vec e     -> VecPack   vec   <$> rebuildOpenExp v av e

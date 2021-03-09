@@ -440,7 +440,7 @@ matchOpenExp
     -> OpenExp env aenv t
     -> Maybe (s :~: t)
 
-matchOpenExp (Let lhs1 x1 e1) (Let lhs2 x2 e2)
+matchOpenExp (Let _ lhs1 x1 e1) (Let _ lhs2 x2 e2)
   | Just Refl <- matchELeftHandSide lhs1 lhs2
   , Just Refl <- matchOpenExp x1 x2
   , Just Refl <- matchOpenExp e1 e2

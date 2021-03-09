@@ -1223,15 +1223,17 @@ zipWithD tR f cc1 cc0
       -- combine them as done in `combineLHS`. As this will probably not occur often and requires
       -- additional weakening, we do a quick check whether the left hand sides are equal.
       --
+      -- TODO: Should we extract annotations from the functions here?
+      --
       = case matchELeftHandSide lhs1 lhs2 of
           Just Refl
             | Lam lhsA (Lam lhsB (Body c')) <- weakenE (weakenWithLHS lhs1) c
-              -> Lam lhs1 $ Body $ Let lhsA ixa'  $ Let lhsB (weakenE (weakenWithLHS lhsA)       ixb') c'
+              -> Lam lhs1 $ Body $ Let mkDummyAnn lhsA ixa'  $ Let mkDummyAnn lhsB (weakenE (weakenWithLHS lhsA)       ixb') c'
           Nothing
             | CombinedLHS lhs k1 k2         <- combineLHS lhs1 lhs2
             , Lam lhsA (Lam lhsB (Body c')) <- weakenE (weakenWithLHS lhs) c
             , ixa''                         <- weakenE k1 ixa'
-              -> Lam lhs  $ Body $ Let lhsA ixa'' $ Let lhsB (weakenE (weakenWithLHS lhsA .> k2) ixb') c'
+              -> Lam lhs  $ Body $ Let mkDummyAnn lhsA ixa'' $ Let mkDummyAnn lhsB (weakenE (weakenWithLHS lhsA .> k2) ixb') c'
           _
               -> error "how's your break?"
       --
@@ -1465,8 +1467,8 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
              -> OpenExp env aenv t
     replaceE sh' f' avar@(Var (ArrayR shR _) _) exp =
       case exp of
-        Let lhs x y                     -> let k = weakenWithLHS lhs
-                                           in  Let lhs (cvtE x) (replaceE (weakenE k sh') (weakenE k f') avar y)
+        Let ann lhs x y                 -> let k = weakenWithLHS lhs
+                                           in  Let ann lhs (cvtE x) (replaceE (weakenE k sh') (weakenE k f') avar y)
         Evar var                        -> Evar var
         Foreign tR ff f e               -> Foreign tR ff f (cvtE e)
         Const ann tR c                  -> Const ann tR c
@@ -1491,17 +1493,21 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
           | Just Refl <- matchVar a avar -> Stats.substitution "replaceE/shape" sh'
           | otherwise                    -> exp
 
+        -- TODO: Propagate the proper annotations for these constructors (and
+        --       likely others) once we add them
         Index a sh
           | Just Refl        <- matchVar a avar
-          , Lam lhs (Body b) <- f'      -> Stats.substitution "replaceE/!" . cvtE $ Let lhs sh b
+          , Lam lhs (Body b) <- f'      -> Stats.substitution "replaceE/!" . cvtE $ Let mkDummyAnn lhs sh b
           | otherwise                   -> Index a (cvtE sh)
 
         LinearIndex a i
           | Just Refl        <- matchVar a avar
           , Lam lhs (Body b) <- f'
                                         -> Stats.substitution "replaceE/!!" . cvtE
-                                         $ Let lhs
-                                               (Let (LeftHandSideSingle scalarTypeInt) i
+                                         $ Let mkDummyAnn
+                                               lhs
+                                               (Let mkDummyAnn
+                                                    (LeftHandSideSingle scalarTypeInt) i
                                                     $ FromIndex shR (weakenE (weakenSucc' weakenId) sh')
                                                     $ Evar
                                                     $ Var scalarTypeInt ZeroIdx)
@@ -1697,6 +1703,10 @@ intersect = mkShapeBinary f
 --   where
 --     f a b = PrimApp (PrimMax singleType) $ Pair a b
 
+-- TODO: Since the annotations here are likely not going to be important, we're
+--       just using 'mkDummyAnn' everywhere for now. For correctness sake we
+--       should just extract the annotations from both expressions and mappend
+--       them.
 mkShapeBinary
     :: (forall env'. OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int)
     -> ShapeR sh
@@ -1707,14 +1717,14 @@ mkShapeBinary _ ShapeRz (Nil a1) (Nil a2) = Nil (a1 <> a2)
 -- This pattern shouldn't be matched, but it could happen when we get malformed shapes
 mkShapeBinary _ ShapeRz _ _ = Nil mkDummyAnn
 mkShapeBinary f (ShapeRsnoc shR) (Pair a1 as a) (Pair a2 bs b) = Pair (a1 <> a2) (mkShapeBinary f shR as bs) (f a b)
-mkShapeBinary f shR (Let lhs bnd a) b = Let lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
-mkShapeBinary f shR a (Let lhs bnd b) = Let lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b
+mkShapeBinary f shR (Let _ lhs bnd a) b = Let mkDummyAnn lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
+mkShapeBinary f shR a (Let _ lhs bnd b) = Let mkDummyAnn lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b
 mkShapeBinary f shR a b@Pair{} -- `a` is not Pair
   | DeclareVars lhs k value <- declareVars $ shapeType shR
-  = Let lhs a $ mkShapeBinary f shR (expVars $ value weakenId) (weakenE k b)
+  = Let mkDummyAnn lhs a $ mkShapeBinary f shR (expVars $ value weakenId) (weakenE k b)
 mkShapeBinary f shR a b -- `b` is not a Pair
   | DeclareVars lhs k value <- declareVars $ shapeType shR
-  = Let lhs b $ mkShapeBinary f shR (weakenE k a) (expVars $ value weakenId)
+  = Let mkDummyAnn lhs b $ mkShapeBinary f shR (weakenE k a) (expVars $ value weakenId)
 
 reindex :: ShapeR sh'
         -> OpenExp env aenv sh'

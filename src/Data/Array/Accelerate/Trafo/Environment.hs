@@ -16,6 +16,7 @@
 module Data.Array.Accelerate.Trafo.Environment
   where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
@@ -159,5 +160,5 @@ bindExps :: Extend ScalarType (OpenExp' aenv) env env'
          -> OpenExp env' aenv e
          -> OpenExp env  aenv e
 bindExps BaseEnv = id
-bindExps (PushEnv g lhs (OpenExp' b)) = bindExps g . Let lhs b
-
+-- TODO: This function is never used. We should use the annotation from the expression, but ¯\_(ツ)_/¯
+bindExps (PushEnv g lhs (OpenExp' b)) = bindExps g . Let mkDummyAnn lhs b

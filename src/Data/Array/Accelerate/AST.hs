@@ -528,7 +528,8 @@ expVars (TupRpair v1 v2) = Pair mkDummyAnn (expVars v1) (expVars v2)
 data OpenExp env aenv t where
 
   -- Local binding of a scalar expression
-  Let           :: ELeftHandSide bnd_t env env'
+  Let           :: Ann
+                -> ELeftHandSide bnd_t env env'
                 -> OpenExp env  aenv bnd_t
                 -> OpenExp env' aenv body_t
                 -> OpenExp env  aenv body_t
@@ -814,7 +815,7 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
 
 expType :: HasCallStack => OpenExp aenv env t -> TypeR t
 expType = \case
-  Let _ _ body                 -> expType body
+  Let _ _ _ body               -> expType body
   Evar (Var tR _)              -> TupRsingle tR
   Foreign tR _ _ _             -> tR
   Pair _ e1 e2                 -> TupRpair (expType e1) (expType e2)
@@ -1071,7 +1072,7 @@ rnfOpenExp topExp =
       rnfE = rnfOpenExp
   in
   case topExp of
-    Let lhs bnd body          -> rnfELeftHandSide lhs `seq` rnfE bnd `seq` rnfE body
+    Let ann lhs bnd body      -> rnfAnn ann `seq` rnfELeftHandSide lhs `seq` rnfE bnd `seq` rnfE body
     Evar v                    -> rnfExpVar v
     Foreign tp asm f x        -> rnfTypeR tp `seq` rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
     Const ann tp c            -> rnfAnn ann `seq` c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
@@ -1291,7 +1292,7 @@ liftOpenExp pexp =
       liftF = liftOpenFun
   in
   case pexp of
-    Let lhs bnd body          -> [|| Let $$(liftELeftHandSide lhs) $$(liftOpenExp bnd) $$(liftOpenExp body) ||]
+    Let ann lhs bnd body      -> [|| Let $$(liftAnn ann) $$(liftELeftHandSide lhs) $$(liftOpenExp bnd) $$(liftOpenExp body) ||]
     Evar var                  -> [|| Evar $$(liftExpVar var) ||]
     Foreign repr asm f x      -> [|| Foreign $$(liftTypeR repr) $$(liftForeign asm) $$(liftOpenFun f) $$(liftE x) ||]
     Const ann tp c            -> [|| Const $$(liftAnn ann) $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]

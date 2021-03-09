@@ -501,7 +501,7 @@ prettyLet ctx env0 aenv
     collect :: Val env' -> OpenExp env' aenv e -> ([Adoc], Adoc)
     collect env =
       \case
-        Let lhs e1 e2 ->
+        Let _ lhs e1 e2 ->
           let (env', v)       = prettyELhs False env lhs
               e1'             = ppE env e1
               bnd | isLet e1  = nest shiftwidth (vsep [v <+> equals, e1'])

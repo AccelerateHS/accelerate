@@ -317,7 +317,7 @@ encodeOpenExp exp =
       travF = encodeOpenFun
   in
   case exp of
-    Let lhs bnd body            -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
+    Let _ lhs bnd body          -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
     Evar (Var tp ix)            -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
     Nil _                       -> intHost $(hashQ "Nil")
     Pair _ e1 e2                -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2

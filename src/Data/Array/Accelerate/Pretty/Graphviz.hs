@@ -516,7 +516,7 @@ fvOpenExp env aenv = fv
     fv (Index acc i)            = concat [ fvAvar aenv acc, fv i ]
     fv (LinearIndex acc i)      = concat [ fvAvar aenv acc, fv i ]
     --
-    fv (Let lhs e1 e2)          = concat [ fv e1, fvOpenExp env' aenv e2 ]
+    fv (Let _ lhs e1 e2)        = concat [ fv e1, fvOpenExp env' aenv e2 ]
       where
         (env', _) = prettyELhs False env lhs
     fv Evar{}                   = []
