@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalCoerceScalar, atraceOp,
+  evalPrim, evalPrimConst, evalCoerceScalar, atraceOp, aerrorOp,
 
 ) where
 
@@ -210,6 +210,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
                                      (TupRpair r1 r2, (a1, a2))
     Anil                          -> (TupRunit, ())
     Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd $ manifest as)
+    Aerror _ msg as               -> aerrorOp msg $ snd $ manifest as
     Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
     Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
@@ -874,6 +875,12 @@ atraceOp (Message show _ msg) as =
          then traceIO msg
          else traceIO $ printf "%s: %s" msg str
 
+aerrorOp :: Message as -> as -> bs
+aerrorOp (Message show _ msg) as =
+  let str = show as
+   in if null str
+         then error msg
+         else error $ printf "%s: %s" msg str
 
 -- Scalar expression evaluation
 -- ----------------------------

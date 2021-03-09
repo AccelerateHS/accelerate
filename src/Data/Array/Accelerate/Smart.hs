@@ -359,6 +359,11 @@ data PreSmartAcc acc exp as where
                 -> acc arrs2
                 -> PreSmartAcc acc exp arrs2
 
+  Aerror        :: ArraysR arrs2
+                -> Message arrs1
+                -> acc arrs1
+                -> PreSmartAcc acc exp arrs2
+
   Use           :: ArrayR (Array sh e)
                 -> Array sh e
                 -> PreSmartAcc acc exp (Array sh e)
@@ -805,6 +810,7 @@ instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
                                    PairIdxRight -> t2
     Aprj _ _                  -> error "Ejector seat? You're joking!"
     Atrace _ _ a              -> arraysR a
+    Aerror repr _ _           -> repr
     Use repr _                -> TupRsingle repr
     Unit tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
     Generate repr _ _         -> TupRsingle repr
@@ -1315,6 +1321,7 @@ showPreAccOp Apair{}               = "Apair"
 showPreAccOp Anil{}                = "Anil"
 showPreAccOp Aprj{}                = "Aprj"
 showPreAccOp Atrace{}              = "Atrace"
+showPreAccOp Aerror{}              = "Aerror"
 showPreAccOp Unit{}                = "Unit"
 showPreAccOp Generate{}            = "Generate"
 showPreAccOp Reshape{}             = "Reshape"

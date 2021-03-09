@@ -544,6 +544,7 @@ usesOfPreAcc withShape countAcc idx = count
       Apair a1 a2                -> countA a1 + countA a2
       Anil                       -> 0
       Atrace _ a1 a2             -> countA a1 + countA a2
+      Aerror _ _ a1              -> countA a1
       Apply _ f a                -> countAF f idx + countA a
       Aforeign _ _ _ a           -> countA a
       Acond p t e                -> countE p + countA t + countA e

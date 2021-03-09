@@ -170,6 +170,7 @@ encodePreOpenAcc options encodeAcc pacc =
     Apair a1 a2                     -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
     Anil                            -> intHost $(hashQ "Anil")
     Atrace (Message _ _ msg) as bs  -> intHost $(hashQ "Atrace")      <> intHost (Hashable.hash msg) <> travA as <> travA bs
+    Aerror r (Message _ _ msg) as   -> intHost $(hashQ "Aerror")      <> encodeArraysType r <> intHost (Hashable.hash msg) <> travA as
     Apply _ f a                     -> intHost $(hashQ "Apply")       <> travAF f <> travA a
     Aforeign _ _ f a                -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
     Use repr a                      -> intHost $(hashQ "Use")         <> encodeArrayType repr <> deep (encodeArray a)

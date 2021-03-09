@@ -340,6 +340,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Aprj ix a                   -> let AST.OpenAcc a' = cvtAprj ix a
                                      in a'
       Atrace msg acc1 acc2        -> AST.Atrace msg (cvtA acc1) (cvtA acc2)
+      Aerror repr msg acc1        -> AST.Aerror repr msg (cvtA acc1)
       Use repr array              -> AST.Use repr array
       Unit tp e                   -> AST.Unit tp (cvtE e)
       Generate repr@(ArrayR shr _) sh f
@@ -1507,6 +1508,9 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (a', h1) <- traverseAcc lvl acc1
                                              (b', h2) <- traverseAcc lvl acc2
                                              return (Atrace msg a' b', h1 `max` h2 + 1)
+            Aerror repr msg acc1        -> do
+                                             (a', h1) <- traverseAcc lvl acc1
+                                             return (Aerror repr msg a', h1 + 1)
             Use repr arr                -> return (Use repr arr, 1)
             Unit tp e                   -> do
                                              (e', h) <- traverseExp lvl e
@@ -2368,6 +2372,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                        (a2', accCount2) = scopesAcc a2
                                      in
                                        reconstruct (Atrace msg a1' a2') (accCount1 +++ accCount2)
+          Aerror repr msg a1      -> let
+                                       (a1', accCount1) = scopesAcc a1
+                                     in
+                                       reconstruct (Aerror repr msg a1') accCount1
           Use repr arr            -> reconstruct (Use repr arr) noNodeCounts
           Unit tp e               -> let
                                        (e', accCount) = scopesExp e

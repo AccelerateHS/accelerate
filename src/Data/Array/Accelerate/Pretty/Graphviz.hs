@@ -230,6 +230,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
 
     Anil                            -> "()"             .$ []
     Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (fromString msg) [], ppA as, ppA bs ]
+    Aerror _ (Message _ _ msg) as   -> "aerror"         .$ [ return $ PDoc (fromString msg) [], ppA as ]
     Use repr arr                    -> "use"            .$ [ return $ PDoc (prettyArray repr arr) [] ]
     Unit _ e                        -> "unit"           .$ [ ppE e ]
     Generate _ sh f                 -> "generate"       .$ [ ppE sh, ppF f ]
