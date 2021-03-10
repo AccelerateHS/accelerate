@@ -108,6 +108,9 @@ import           Language.Haskell.TH            ( Q
 --       allow unrolling @awhile@, but not @acond@), but since this would
 --       involve adding another type index to 'Exp' that's not going to be a
 --       feasible approach.
+-- TODO: We store plain 'SrcLoc's now. Is there a situation where we might want
+--       to store the entire call stack? For instance, for use in error messages
+--       and assertion failures.
 data Ann = Ann
     { locations     :: S.HashSet SrcLoc
     , optimizations :: Optimizations
