@@ -234,7 +234,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
     -- Producers
     -- ---------
-    Map tp f acc                  -> mapOp tp (evalF f) (delayed acc)
+    Map _ tp f acc                -> mapOp tp (evalF f) (delayed acc)
     Generate repr sh f            -> generateOp repr (evalE sh) (evalF f)
     Transform repr sh p f acc     -> transformOp repr (evalE sh) (evalF p) (evalF f) (delayed acc)
     Backpermute shr sh p acc      -> backpermuteOp shr (evalE sh) (evalF p) (delayed acc)

@@ -691,7 +691,7 @@ rebuildPreOpenAcc k av acc =
     Transform repr sh ix f a  -> Transform repr  <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' ix <*> rebuildFun (pure . IE) av' f <*> k av a
     Replicate sl slix a       -> Replicate sl    <$> rebuildOpenExp (pure . IE) av' slix <*> k av a
     Slice sl a slix           -> Slice sl        <$> k av a <*> rebuildOpenExp (pure . IE) av' slix
-    Map tp f a                -> Map tp          <$> rebuildFun (pure . IE) av' f <*> k av a
+    Map ann tp f a            -> Map ann tp      <$> rebuildFun (pure . IE) av' f <*> k av a
     ZipWith tp f a1 a2        -> ZipWith tp      <$> rebuildFun (pure . IE) av' f <*> k av a1 <*> k av a2
     Fold f z a                -> Fold            <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a
     FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a <*> k av s

@@ -559,7 +559,7 @@ usesOfPreAcc withShape countAcc idx = count
       Transform _ sh ix f a      -> countE sh + countF ix + countF f  + countA a
       Replicate _ sh a           -> countE sh + countA a
       Slice _ a sl               -> countE sl + countA a
-      Map _ f a                  -> countF f  + countA a
+      Map _ _ f a                -> countF f  + countA a
       ZipWith _ f a1 a2          -> countF f  + countA a1 + countA a2
       Fold f z a                 -> countF f  + countME z + countA a
       FoldSeg _ f z a s          -> countF f  + countME z + countA a  + countA s

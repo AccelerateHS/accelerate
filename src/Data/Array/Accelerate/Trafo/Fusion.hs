@@ -72,6 +72,10 @@ import Lens.Micro                                                 ( over, mapped
 import Prelude                                                      hiding ( exp, until )
 
 
+-- TODO: Go through all of this, replace the 'mkDummyAnn's in delayed array
+--       computations with the proper propagated annotations
+
+
 -- Delayed Array Fusion
 -- ====================
 
@@ -190,7 +194,7 @@ manifest config (OpenAcc pacc) =
     -- of a let-binding to be used multiple times. The input array here
     -- should be a evaluated array term, else something went wrong.
     --
-    Map t f a               -> Map t f (delayed config a)
+    Map ann t f a           -> Map ann t f (delayed config a)
     Generate repr sh f      -> Generate repr sh f
     Transform repr sh p f a -> Transform repr sh p f (delayed config a)
     Backpermute shR sh p a  -> Backpermute shR sh p (delayed config a)
@@ -393,9 +397,9 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     -- sequences of these operations.
     --
     Generate aR sh f        -> generateD aR (cvtE sh) (cvtF f)
-    Map t f a               -> mapD t (cvtF f) (embedAcc a)
+    Map ann t f a           -> mapD ann t (cvtF f) (embedAcc a)
     ZipWith t f a b         -> fuse2 (into (zipWithD t) (cvtF f)) a b
-    Transform aR sh p f a   -> transformD aR (cvtE sh) (cvtF p) (cvtF f) (embedAcc a)
+    Transform aR sh p f a   -> transformD mkDummyAnn aR (cvtE sh) (cvtF p) (cvtF f) (embedAcc a)
     Backpermute slr sl p a  -> fuse (into2 (backpermuteD slr) (cvtE sl) (cvtF p)) a
     Slice slix a sl         -> fuse (into  (sliceD slix)      (cvtE sl)) a
     Replicate slix sh a     -> fuse (into  (replicateD slix)  (cvtE sh)) a
@@ -753,6 +757,9 @@ data ExtendProducer acc aenv senv arrs where
 -- of the fusion algorithm for an AST of N terms becomes O(r^n), where r is the
 -- number of different rules we have for combining terms.
 --
+-- TODO: Think of how we should embed the annotations into delayed array
+--       computations. Right now all 'Ann' arguments are just ignored.
+--
 data Embed acc aenv a where
   Embed :: Extend ArrayR acc aenv aenv'
         -> Cunctation r           aenv' a
@@ -963,8 +970,9 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
              ZeroIdx
                | LeftHandSideSingle ArrayR{} <- lhs
                , Just (OpenAccFun g) <- strengthen noTop (OpenAccFun f)
-                    -> bindA bot (OpenAcc (Map (arrayRtype repr) g top))
-             _      -> bindA env (OpenAcc (Map (arrayRtype repr) f (avarIn OpenAcc v)))
+                       -- TODO: Where should these annotations come from?
+                    -> bindA bot (OpenAcc (Map mkDummyAnn (arrayRtype repr) g top))
+             _      -> bindA env (OpenAcc (Map mkDummyAnn (arrayRtype repr) f (avarIn OpenAcc v)))
 
         | Just Refl <- isIdentity f
         -> case ix of
@@ -1021,7 +1029,7 @@ compute cc = simplify cc & \case
     Yield aR sh f                 -> Generate aR sh f
     Step (ArrayR shR tR) sh p f v
       | Just Refl <- matchOpenExp sh (arrayShape v)
-      , Just Refl <- isIdentity p -> Map tR f (avarIn OpenAcc v)
+      , Just Refl <- isIdentity p -> Map mkDummyAnn tR f (avarIn OpenAcc v)
       | Just Refl <- isIdentity f -> Backpermute shR sh p (avarIn OpenAcc v)
       | otherwise                 -> Transform (ArrayR shR tR) sh p f (avarIn OpenAcc v)
 
@@ -1043,12 +1051,13 @@ generateD repr sh f
 -- be executed in constant time; SEE [unzipD]
 --
 mapD :: HasCallStack
-     => TypeR b
+     => Ann
+     -> TypeR b
      -> Fun           aenv (a -> b)
      -> Embed OpenAcc aenv (Array sh a)
      -> Embed OpenAcc aenv (Array sh b)
-mapD tR f (unzipD tR f -> Just a) = a
-mapD tR f (Embed env cc)
+mapD ann tR f (unzipD ann tR f -> Just a) = a
+mapD _   tR f (Embed env cc)
   = Stats.ruleFired "mapD"
   $ Embed env (go (delaying cc))
   where
@@ -1061,17 +1070,18 @@ mapD tR f (Embed env cc)
 --
 unzipD
     :: HasCallStack
-    => TypeR b
+    => Ann
+    -> TypeR b
     -> Fun                  aenv (a -> b)
     -> Embed OpenAcc        aenv (Array sh a)
     -> Maybe (Embed OpenAcc aenv (Array sh b))
-unzipD tR f (Embed env cc@(Done v))
+unzipD ann tR f (Embed env cc@(Done v))
   | Lam lhs (Body a) <- f
   , Just vars        <- extractExpVars a
   , ArrayR shR _     <- arrayR cc
   , f'               <- Lam lhs $ Body $ expVars vars
-  = Just $ Embed (env `pushArrayEnv` OpenAcc (Map tR f' $ avarsIn OpenAcc v)) $ doneZeroIdx $ ArrayR shR tR
-unzipD _ _ _
+  = Just $ Embed (env `pushArrayEnv` OpenAcc (Map ann tR f' $ avarsIn OpenAcc v)) $ doneZeroIdx $ ArrayR shR tR
+unzipD _ _ _ _
   = Nothing
 
 -- Fuse an index space transformation function that specifies where elements in
@@ -1094,16 +1104,17 @@ backpermuteD shR' sh' p = Stats.ruleFired "backpermuteD" . go . delaying
 --
 transformD
     :: HasCallStack
-    => ArrayR (Array sh' b)
+    => Ann
+    -> ArrayR (Array sh' b)
     -> Exp           aenv sh'
     -> Fun           aenv (sh' -> sh)
     -> Fun           aenv (a   -> b)
     -> Embed OpenAcc aenv (Array sh  a)
     -> Embed OpenAcc aenv (Array sh' b)
-transformD (ArrayR shR' tR) sh' p f
+transformD ann (ArrayR shR' tR) sh' p f
   = Stats.ruleFired "transformD"
   . fuse (into2 (backpermuteD shR') sh' p)
-  . mapD tR f
+  . mapD ann tR f
   where
     fuse :: HasCallStack
          => (forall r aenv'. Extend ArrayR OpenAcc aenv aenv' -> Cunctation r aenv' as -> Cunctation D aenv' bs)
@@ -1560,7 +1571,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Apply repr f a          -> Apply repr (cvtAF f) (cvtA a)
         Aforeign repr ff f a    -> Aforeign repr ff f (cvtA a)       -- no sharing between f and a
         Generate repr sh f      -> Generate repr (cvtE sh) (cvtF f)
-        Map tR f a              -> Map tR (cvtF f) (cvtA a)
+        Map ann tR f a          -> Map ann tR (cvtF f) (cvtA a)
         ZipWith tR f a b        -> ZipWith tR (cvtF f) (cvtA a) (cvtA b)
         Backpermute shR sh p a  -> Backpermute shR (cvtE sh) (cvtF p) (cvtA a)
         Transform repr sh p f a -> Transform repr (cvtE sh) (cvtF p) (cvtF f) (cvtA a)

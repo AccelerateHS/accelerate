@@ -49,7 +49,7 @@ convertPreOpenAcc = \case
   Transform repr sh f g a         -> Transform repr sh f g (convertAcc a)
   Replicate slix sl a             -> Replicate slix sl (convertAcc a)
   Slice slix a sl                 -> Slice slix (convertAcc a) sl
-  Map tp f a                      -> Map tp f (convertAcc a)
+  Map ann tp f a                  -> Map ann tp f (convertAcc a)
   ZipWith tp f a1 a2              -> ZipWith tp f (convertAcc a1) (convertAcc a2)
   Fold f e a                      -> Fold f e (convertAcc a)
   FoldSeg i f e a s               -> FoldSeg i f e (convertAcc a) (convertAcc s)

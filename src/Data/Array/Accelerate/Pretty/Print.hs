@@ -159,6 +159,7 @@ prettyPreOpenAfun config prettyAcc aenv0 = next (pretty '\\') aenv0
       let (aenv', lhs') = prettyALhs True aenv lhs
       in  next (vs <> lhs' <> space) aenv' lam
 
+-- TODO: We should probably show optimization flags in some way
 prettyPreOpenAcc
     :: forall acc aenv arrs.
        PrettyConfig acc
@@ -203,7 +204,7 @@ prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
     Transform _ sh p f a            -> ppN "transform"   .$ [ ppE sh, ppF p, ppF f, ppA a ]
     Replicate _ ix a                -> ppN "replicate"   .$ [ ppE ix, ppA a ]
     Slice _ a ix                    -> ppN "slice"       .$ [ ppE ix, ppA a ]
-    Map _ f a                       -> ppN "map"         .$ [ ppF f,  ppA a ]
+    Map _ _ f a                     -> ppN "map"         .$ [ ppF f,  ppA a ]
     ZipWith _ f a b                 -> ppN "zipWith"     .$ [ ppF f,  ppA a, ppA b ]
     Fold f (Just z) a               -> ppN "fold"        .$ [ ppF f,  ppE z, ppA a ]
     Fold f Nothing  a               -> ppN "fold1"       .$ [ ppF f,  ppA a ]

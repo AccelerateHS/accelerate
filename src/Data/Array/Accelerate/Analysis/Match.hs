@@ -165,7 +165,7 @@ matchPreOpenAcc matchAcc = match
       , Just Refl <- matchExp ix1 ix2
       = Just Refl
 
-    match (Map _ f1 a1) (Map _ f2 a2)
+    match (Map _ _ f1 a1) (Map _ _ f2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       = Just Refl

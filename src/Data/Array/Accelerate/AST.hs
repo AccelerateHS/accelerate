@@ -349,7 +349,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
 
   -- Apply the given unary function to all elements of the given array
   --
-  Map         :: TypeR e'
+  Map         :: Ann
+              -> TypeR e'
               -> Fun            aenv (e -> e')
               -> acc            aenv (Array sh e)
               -> PreOpenAcc acc aenv (Array sh e')
@@ -795,7 +796,7 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
                                          in arraysRarray (sliceDomainR slice) tR
   arraysR (Slice slice a _)           = let ArrayR _ tR = arrayR a
                                          in arraysRarray (sliceShapeR slice) tR
-  arraysR (Map tR _ a)                = let ArrayR sh _ = arrayR a
+  arraysR (Map _  tR _ a)             = let ArrayR sh _ = arrayR a
                                          in arraysRarray sh tR
   arraysR (ZipWith tR _ a _)          = let ArrayR sh _ = arrayR a
                                          in arraysRarray sh tR
@@ -1015,7 +1016,7 @@ rnfPreOpenAcc rnfA pacc =
     Transform repr sh p f a   -> rnfArrayR repr `seq` rnfE sh `seq` rnfF p `seq` rnfF f `seq` rnfA a
     Replicate slice sh a      -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
     Slice slice a sh          -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
-    Map tp f a                -> rnfTypeR tp `seq` rnfF f `seq` rnfA a
+    Map ann tp f a            -> rnfAnn ann `seq` rnfTypeR tp `seq` rnfF f `seq` rnfA a
     ZipWith tp f a1 a2        -> rnfTypeR tp `seq` rnfF f `seq` rnfA a1 `seq` rnfA a2
     Fold f z a                -> rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
     FoldSeg i f z a s         -> rnfIntegralType i `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a `seq` rnfA s
@@ -1223,7 +1224,7 @@ liftPreOpenAcc liftA pacc =
     Transform repr sh p f a   -> [|| Transform $$(liftArrayR repr) $$(liftE sh) $$(liftF p) $$(liftF f) $$(liftA a) ||]
     Replicate slix sl a       -> [|| Replicate $$(liftSliceIndex slix) $$(liftE sl) $$(liftA a) ||]
     Slice slix a sh           -> [|| Slice $$(liftSliceIndex slix) $$(liftA a) $$(liftE sh) ||]
-    Map tp f a                -> [|| Map $$(liftTypeR tp) $$(liftF f) $$(liftA a) ||]
+    Map ann tp f a            -> [|| Map $$(liftAnn ann) $$(liftTypeR tp) $$(liftF f) $$(liftA a) ||]
     ZipWith tp f a b          -> [|| ZipWith $$(liftTypeR tp) $$(liftF f) $$(liftA a) $$(liftA b) ||]
     Fold f z a                -> [|| Fold $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
     FoldSeg i f z a s         -> [|| FoldSeg $$(liftIntegralType i) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) $$(liftA s) ||]

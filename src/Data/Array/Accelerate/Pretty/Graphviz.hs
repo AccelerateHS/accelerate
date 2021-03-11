@@ -234,7 +234,7 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
     Reshape _ sh xs                 -> "reshape"        .$ [ ppE sh, ppA xs ]
     Replicate _ty ix xs             -> "replicate"      .$ [ ppE ix, ppA xs ]
     Slice _ty xs ix                 -> "slice"          .$ [ ppA xs, ppE ix ]
-    Map _ f xs                      -> "map"            .$ [ ppF f, ppA xs ]
+    Map _ _ f xs                    -> "map"            .$ [ ppF f, ppA xs ]
     ZipWith _ f xs ys               -> "zipWith"        .$ [ ppF f, ppA xs, ppA ys ]
     Fold f (Just z) a               -> "fold"           .$ [ ppF f,  ppE z, ppA a ]
     Fold f Nothing  a               -> "fold1"          .$ [ ppF f,  ppA a ]

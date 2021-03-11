@@ -46,6 +46,15 @@
 --
 -- TODO: The rest of the process up until codegen
 --
+-- ** Annotations the transformations
+--
+-- TODO: There are a lot of TODOs, FIXMEs and dummy annotations there left
+--
+-- ** Annotations in the delayed representation
+--
+-- TODO: Figure out how this is going to work. Currently all array level
+--       annotations are thrown out when we reach fusion.
+--
 -- ** Annotating ASTs
 --
 -- AST nodes will automatically contain source mapping information because of
