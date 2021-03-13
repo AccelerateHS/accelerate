@@ -298,12 +298,12 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
       v     <- mkLabel
       ident <- mkNode acc' (Just v)
       return $ PDoc (pretty v) [Vertex ident Nothing]
-    ppA (Delayed _ sh f _)
+    ppA (Delayed _ _ sh f _)
       | Shape a    <- sh                   -- identical shape
       , Just b     <- isIdentityIndexing f -- function is `\ix -> b ! ix`
       , Just Refl  <- matchVar a b         -- function thus is `\ix -> a ! ix`
       = ppA $ Manifest $ Avar a
-    ppA (Delayed _ sh f _) = do
+    ppA (Delayed _ _ sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
 

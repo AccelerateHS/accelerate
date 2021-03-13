@@ -24,6 +24,7 @@
 module Data.Array.Accelerate.Trafo.Delayed
   where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Hash
 import Data.Array.Accelerate.Analysis.Match
@@ -52,8 +53,12 @@ data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a
                         -> DelayedOpenAcc aenv a
 
+  -- TODO: The current idea is to merge annotations from any AST constructors we
+  --       convert to the delayed representation. Does this make sense wrt
+  --       things like loop unrolling?
   Delayed               ::
-    { reprD             :: ArrayR (Array sh e)
+    { annD              :: Ann
+    , reprD             :: ArrayR (Array sh e)
     , extentD           :: Exp aenv sh
     , indexD            :: Fun aenv (sh  -> e)
     , linearIndexD      :: Fun aenv (Int -> e)
@@ -67,7 +72,7 @@ instance Rebuildable DelayedOpenAcc where
   type AccClo DelayedOpenAcc = DelayedOpenAcc
   rebuildPartial v = \case
     Manifest pacc -> Manifest <$> rebuildPartial v pacc
-    Delayed{..}   -> (\e i l -> Delayed reprD (unOpenAccExp e) (unOpenAccFun i) (unOpenAccFun l))
+    Delayed{..}   -> (\e i l -> Delayed annD reprD (unOpenAccExp e) (unOpenAccFun i) (unOpenAccFun l))
                               <$> rebuildPartial v (OpenAccExp extentD)
                               <*> rebuildPartial v (OpenAccFun indexD)
                               <*> rebuildPartial v (OpenAccFun linearIndexD)
@@ -81,6 +86,8 @@ instance NFData (DelayedOpenAfun aenv t) where
 instance NFData (DelayedOpenAcc aenv t) where
   rnf = rnfDelayedOpenAcc
 
+-- TODO: Like elsewhere, we should probably consider optimization flags in the
+--       hashes
 encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
 encodeDelayedOpenAcc options acc =
   let
@@ -98,13 +105,15 @@ encodeDelayedOpenAcc options acc =
             | otherwise       = encodeArraysType . arraysR
   in
   case acc of
-    Manifest pacc    -> intHost $(hashQ ("Manifest" :: String)) <> deepA pacc
-    Delayed _ sh f g -> intHost $(hashQ ("Delayed"  :: String)) <> travE sh <> travF f <> travF g
+    Manifest pacc      -> intHost $(hashQ ("Manifest" :: String)) <> deepA pacc
+    Delayed _ _ sh f g -> intHost $(hashQ ("Delayed"  :: String)) <> travE sh <> travF f <> travF g
 
+-- TODO: Like everywhere else, we should probably consider at least the
+--       optimization flags when matching ASTs.
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
 matchDelayedOpenAcc (Manifest pacc1) (Manifest pacc2)
   = matchPreOpenAcc matchDelayedOpenAcc pacc1 pacc2
-matchDelayedOpenAcc (Delayed _ sh1 ix1 lx1) (Delayed _ sh2 ix2 lx2)
+matchDelayedOpenAcc (Delayed _ _ sh1 ix1 lx1) (Delayed _ _ sh2 ix2 lx2)
   | Just Refl <- matchOpenExp sh1 sh2
   , Just Refl <- matchOpenFun ix1 ix2
   , Just Refl <- matchOpenFun lx1 lx2
@@ -115,12 +124,11 @@ matchDelayedOpenAcc _ _
 rnfDelayedOpenAcc :: NFDataAcc DelayedOpenAcc
 rnfDelayedOpenAcc (Manifest pacc) =
   rnfPreOpenAcc rnfDelayedOpenAcc pacc
-rnfDelayedOpenAcc (Delayed aR sh ix lx) =
-  rnfArrayR aR `seq` rnfOpenExp sh `seq` rnfOpenFun ix `seq` rnfOpenFun lx
+rnfDelayedOpenAcc (Delayed ann aR sh ix lx) =
+  rnfAnn ann `seq` rnfArrayR aR `seq` rnfOpenExp sh `seq` rnfOpenFun ix `seq` rnfOpenFun lx
 
 liftDelayedOpenAcc :: LiftAcc DelayedOpenAcc
 liftDelayedOpenAcc (Manifest pacc) =
   [|| Manifest $$(liftPreOpenAcc liftDelayedOpenAcc pacc) ||]
-liftDelayedOpenAcc (Delayed aR sh ix lx) =
-  [|| Delayed $$(liftArrayR aR) $$(liftOpenExp sh) $$(liftOpenFun ix) $$(liftOpenFun lx) ||]
-
+liftDelayedOpenAcc (Delayed ann aR sh ix lx) =
+  [|| Delayed $$(liftAnn ann) $$(liftArrayR aR) $$(liftOpenExp sh) $$(liftOpenFun ix) $$(liftOpenFun lx) ||]

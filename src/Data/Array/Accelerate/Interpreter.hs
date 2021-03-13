@@ -185,6 +185,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
         let (repr, a') = evalOpenAcc acc aenv
         in  rnfArraysR repr a' `seq` (repr, a')
 
+      -- XXX: We throw away annotations here, are there any optimizations that
+      --      would be relevant to the interpreter?
       delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
       delayed AST.Delayed{..} = Delayed reprD (evalE extentD) (evalF indexD) (evalF linearIndexD)
       delayed a' = Delayed aR (shape a) (indexArray aR a) (linearIndexArray (arrayRtype aR) a)

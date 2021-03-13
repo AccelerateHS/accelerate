@@ -72,10 +72,6 @@ import Lens.Micro                                                 ( over, mapped
 import Prelude                                                      hiding ( exp, until )
 
 
--- TODO: Go through all of this, replace the 'mkDummyAnn's in delayed array
---       computations with the proper propagated annotations
-
-
 -- Delayed Array Fusion
 -- ====================
 
@@ -151,11 +147,11 @@ delayed config (embedOpenAcc config -> Embed env cc)
   = simplify cc & \case
       Left (Done v)                                           -> avarsIn Manifest v
       Right d       -> d & \case
-        Yield aR sh f                                         -> Delayed aR sh f (f `compose` fromIndex (arrayRshape aR) sh)
-        Step  aR sh p f v
+        Yield ann aR sh f                                     -> Delayed ann aR sh f (f `compose` fromIndex (arrayRshape aR) sh)
+        Step  ann aR sh p f v
           | Just Refl <- matchOpenExp sh (arrayShape v)
-          , Just Refl <- isIdentity p                         -> Delayed aR sh (f `compose` indexArray v) (f `compose` linearIndex v)
-          | f'        <- f `compose` indexArray v `compose` p -> Delayed aR sh f' (f' `compose` fromIndex (arrayRshape aR) sh)
+          , Just Refl <- isIdentity p                         -> Delayed ann aR sh (f `compose` indexArray v) (f `compose` linearIndex v)
+          | f'        <- f `compose` indexArray v `compose` p -> Delayed ann aR sh f' (f' `compose` fromIndex (arrayRshape aR) sh)
   --
   | otherwise
   = manifest config (computeAcc (Embed env cc))
@@ -793,10 +789,14 @@ data Cunctation r aenv a where
   Done  :: ArrayVars    aenv arrs
         -> Cunctation M aenv arrs
 
+  -- TODO: For the delayed representation, can we just combine annotations as we
+  --       go? How does this interact with things like loop unrolling?
+
   -- We can represent an array by its shape and a function to compute an element
   -- at each index.
   --
-  Yield :: ArrayR (Array sh e)
+  Yield :: Ann
+        -> ArrayR (Array sh e)
         -> Exp          aenv sh
         -> Fun          aenv (sh -> e)
         -> Cunctation D aenv (Array sh e)
@@ -807,7 +807,8 @@ data Cunctation r aenv a where
   -- array stored as an environment index, so that the term is non-recursive and
   -- it is always possible to embed into a collective operation.
   --
-  Step  :: ArrayR (Array sh' b)
+  Step  :: Ann
+        -> ArrayR (Array sh' b)
         -> Exp          aenv sh'
         -> Fun          aenv (sh' -> sh)
         -> Fun          aenv (a   -> b)
@@ -815,15 +816,15 @@ data Cunctation r aenv a where
         -> Cunctation D aenv (Array sh' b)
 
 instance HasArraysR (Cunctation r) where
-  arraysR (Done v)          = varsType v
-  arraysR (Yield aR _ _)    = TupRsingle aR
-  arraysR (Step aR _ _ _ _) = TupRsingle aR
+  arraysR (Done v)            = varsType v
+  arraysR (Yield _ aR _ _)    = TupRsingle aR
+  arraysR (Step _ aR _ _ _ _) = TupRsingle aR
 
 instance Sink (Cunctation r) where
   weaken k = \case
-    Done v            -> Done (weakenVars k v)
-    Step aR sh p f v  -> Step  aR (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
-    Yield aR sh f     -> Yield aR (weaken k sh) (weaken k f)
+    Done v                -> Done (weakenVars k v)
+    Step ann aR sh p f v  -> Step  ann aR (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
+    Yield ann aR sh f     -> Yield ann aR (weaken k sh) (weaken k f)
 
 simplify
     :: HasCallStack
@@ -832,15 +833,15 @@ simplify
 simplify = \case
   Done v
     -> Left  $ Done v
-  Yield aR (simplifyExp -> sh) (simplifyFun -> f)
-    -> Right $ Yield aR sh f
-  Step aR (simplifyExp -> sh) (simplifyFun -> p) (simplifyFun -> f) v
+  Yield ann aR (simplifyExp -> sh) (simplifyFun -> f)
+    -> Right $ Yield ann aR sh f
+  Step ann aR (simplifyExp -> sh) (simplifyFun -> p) (simplifyFun -> f) v
     | Just Refl <- matchOpenExp sh (arrayShape v)
     , Just Refl <- isIdentity p
     , Just Refl <- isIdentity f
     -> Left  $ (Done (TupRsingle v))
     | otherwise
-    -> Right $ Step aR sh p f v
+    -> Right $ Step ann aR sh p f v
 
 
 -- Convert a real AST node into the internal representation
@@ -864,8 +865,9 @@ yield :: HasCallStack
 yield cc =
   case cc of
     Yield{}                        -> cc
-    Step tR sh p f v               -> Yield tR sh (f `compose` indexArray v `compose` p)
-    Done (TupRsingle v@(Var tR _)) -> Yield tR (arrayShape v) (indexArray v)
+    Step ann tR sh p f v           -> Yield ann tR sh (f `compose` indexArray v `compose` p)
+    -- FIXME: Extract the annotation from `v`, somehow
+    Done (TupRsingle v@(Var tR _)) -> Yield mkDummyAnn tR (arrayShape v) (indexArray v)
 
 -- Recast a cunctation into a delayed representation
 --
@@ -881,15 +883,16 @@ delaying cc =
       | TupRsingle v  <- u
       , Var aR _      <- v
       , ArrayR shR tR <- aR
-     -> Step aR (arrayShape v) (identity (shapeType shR)) (identity tR) v
+      -- TODO: Pull the annotation from the array, somehow
+     -> Step mkDummyAnn aR (arrayShape v) (identity (shapeType shR)) (identity tR) v
 
 -- Get the shape of a delayed array
 --
 shape :: HasCallStack => Cunctation r aenv (Array sh e) -> Exp aenv sh
 shape cc =
   case delaying cc of
-    Step _ sh _ _ _ -> sh
-    Yield _ sh _    -> sh
+    Step  _ _ sh _ _ _ -> sh
+    Yield _ _ sh _     -> sh
 
 
 -- prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
@@ -960,19 +963,18 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
   simplify cc & \case
     Left (Done v) -> bindA env (avarsIn OpenAcc v)
     Right d       -> d & \case
-      Yield repr sh f
+      Yield _ repr sh f
         -> bindA env (OpenAcc (Generate repr sh f))
 
-      Step repr sh p f v@(Var _ ix)
+      Step ann repr sh p f v@(Var _ ix)
         | Just Refl <- matchOpenExp sh (arrayShape v)
         , Just Refl <- isIdentity p
         -> case ix of
              ZeroIdx
                | LeftHandSideSingle ArrayR{} <- lhs
                , Just (OpenAccFun g) <- strengthen noTop (OpenAccFun f)
-                       -- TODO: Where should these annotations come from?
-                    -> bindA bot (OpenAcc (Map mkDummyAnn (arrayRtype repr) g top))
-             _      -> bindA env (OpenAcc (Map mkDummyAnn (arrayRtype repr) f (avarIn OpenAcc v)))
+                    -> bindA bot (OpenAcc (Map ann (arrayRtype repr) g top))
+             _      -> bindA env (OpenAcc (Map ann (arrayRtype repr) f (avarIn OpenAcc v)))
 
         | Just Refl <- isIdentity f
         -> case ix of
@@ -1026,12 +1028,16 @@ compute cc = simplify cc & \case
     TupRsingle v@(Var ArrayR{} _) -> Avar v
     TupRpair v1 v2                -> avarsIn OpenAcc v1 `Apair` avarsIn OpenAcc v2
   Right d -> d & \case
-    Yield aR sh f                 -> Generate aR sh f
-    Step (ArrayR shR tR) sh p f v
+    Yield _ aR sh f                 -> Generate aR sh f
+    Step ann (ArrayR shR tR) sh p f v
       | Just Refl <- matchOpenExp sh (arrayShape v)
-      , Just Refl <- isIdentity p -> Map mkDummyAnn tR f (avarIn OpenAcc v)
+      , Just Refl <- isIdentity p -> Map ann tR f (avarIn OpenAcc v)
       | Just Refl <- isIdentity f -> Backpermute shR sh p (avarIn OpenAcc v)
       | otherwise                 -> Transform (ArrayR shR tR) sh p f (avarIn OpenAcc v)
+
+
+-- TODO: For all of these transformations, make sure we pull the annotations
+--       from the correct places
 
 
 -- Representation of a generator as a delayed array
@@ -1044,7 +1050,7 @@ generateD
     -> Embed OpenAcc aenv (Array sh e)
 generateD repr sh f
   = Stats.ruleFired "generateD"
-  $ Embed BaseEnv (Yield repr sh f)
+  $ Embed BaseEnv (Yield mkDummyAnn repr sh f)
 
 
 -- Fuse a unary function into a delayed array. Also looks for unzips which can
@@ -1057,12 +1063,12 @@ mapD :: HasCallStack
      -> Embed OpenAcc aenv (Array sh a)
      -> Embed OpenAcc aenv (Array sh b)
 mapD ann tR f (unzipD ann tR f -> Just a) = a
-mapD _   tR f (Embed env cc)
+mapD ann tR f (Embed env cc)
   = Stats.ruleFired "mapD"
   $ Embed env (go (delaying cc))
   where
-    go (Step (ArrayR shR _) sh ix g v) = Step  (ArrayR shR tR) sh ix (sinkA env f `compose` g) v
-    go (Yield (ArrayR shR _) sh g)     = Yield (ArrayR shR tR) sh    (sinkA env f `compose` g)
+    go (Step ann' (ArrayR shR _) sh ix g v) = Step  (ann <> ann') (ArrayR shR tR) sh ix (sinkA env f `compose` g) v
+    go (Yield ann' (ArrayR shR _) sh g)     = Yield (ann <> ann') (ArrayR shR tR) sh    (sinkA env f `compose` g)
 
 
 -- If we are unzipping a manifest array then force the term to be computed;
@@ -1096,8 +1102,8 @@ backpermuteD
     -> Cunctation D aenv (Array sh' e)
 backpermuteD shR' sh' p = Stats.ruleFired "backpermuteD" . go . delaying
   where
-    go (Step (ArrayR _ tR) _ q f v) = Step  (ArrayR shR' tR) sh' (q `compose` p) f v
-    go (Yield (ArrayR _ tR) _ g)    = Yield (ArrayR shR' tR) sh' (g `compose` p)
+    go (Step  ann' (ArrayR _ tR) _ q f v) = Step  ann' (ArrayR shR' tR) sh' (q `compose` p) f v
+    go (Yield ann' (ArrayR _ tR) _ g)     = Yield ann' (ArrayR shR' tR) sh' (g `compose` p)
 
 
 -- Transform as a combined map and backwards permutation
@@ -1204,20 +1210,20 @@ zipWithD tR f cc1 cc0
   -- Two stepper functions identically accessing the same array can be kept in
   -- stepping form. This might yield a simpler final term.
   --
-  | Step (ArrayR shR _) sh1 p1 f1 v1 <- delaying cc1
-  , Step _              sh0 p0 f0 v0 <- delaying cc0
+  | Step a2 (ArrayR shR _) sh1 p1 f1 v1 <- delaying cc1
+  , Step a3 _              sh0 p0 f0 v0 <- delaying cc0
   , Just Refl                        <- matchVar v1 v0
   , Just Refl                        <- matchOpenFun p1 p0
   = Stats.ruleFired "zipWithD/step"
-  $ Step (ArrayR shR tR) (intersect shR sh1 sh0) p0 (combine f f1 f0) v0
+  $ Step (a2 <> a3) (ArrayR shR tR) (intersect shR sh1 sh0) p0 (combine f f1 f0) v0
 
   -- Otherwise transform both delayed terms into (index -> value) mappings and
   -- combine the two indexing functions that way.
   --
-  | Yield (ArrayR shR _) sh1 f1 <- yield cc1
-  , Yield _              sh0 f0 <- yield cc0
+  | Yield a2 (ArrayR shR _) sh1 f1 <- yield cc1
+  , Yield a3 _              sh0 f0 <- yield cc0
   = Stats.ruleFired "zipWithD"
-  $ Yield (ArrayR shR tR) (intersect shR sh1 sh0) (combine f f1 f0)
+  $ Yield (a2 <> a3) (ArrayR shR tR) (intersect shR sh1 sh0) (combine f f1 f0)
 
   | otherwise
   = error "work is stressing me out, I should take a break"
@@ -1419,8 +1425,8 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
   | acc0'   <- sink1 env1 acc0
   = Stats.ruleFired "aletD/eliminate"
   $ case delaying cc1 of
-      Step{}  -> eliminate env1 cc1 acc0'
-      Yield{} -> eliminate env1 cc1 acc0'
+      Step  ann _ _ _ _ _ -> eliminate ann env1 cc1 acc0'
+      Yield ann _ _ _     -> eliminate ann env1 cc1 acc0'
 
   where
     acc0 :: OpenAcc aenv' brrs
@@ -1435,17 +1441,22 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
     -- extra type variables, and ensures we don't do extra work manipulating the
     -- body when not necessary (which can lead to a complexity blowup).
     --
+    -- FIXME: We throw away this @_ann@ from the lhs and also the annotations
+    --        from the cunctations. Should we somehow be stuffing them into
+    --        @cc0'@?
+    --
     eliminate
         :: forall r aenv aenv' sh e brrs. HasCallStack
-        => Extend ArrayR OpenAcc aenv aenv'
+        => Ann
+        -> Extend ArrayR OpenAcc aenv aenv'
         -> Cunctation r aenv' (Array sh e)
         -> OpenAcc (aenv', Array sh e) brrs
         -> Embed OpenAcc aenv brrs
-    eliminate env1 cc1 body
+    eliminate _ann env1 cc1 body
       | Done v1                  <- cc1
       , TupRsingle v1'@(Var r _) <- v1  = elim r (arrayShape v1') (indexArray v1')
-      | Step r sh1 p1 f1 v1      <- cc1 = elim r sh1 (f1 `compose` indexArray v1 `compose` p1)
-      | Yield r sh1 f1           <- cc1 = elim r sh1 f1
+      | Step _  r sh1 p1 f1 v1   <- cc1 = elim r sh1 (f1 `compose` indexArray v1 `compose` p1)
+      | Yield _ r sh1 f1         <- cc1 = elim r sh1 f1
       where
         bnd :: PreOpenAcc OpenAcc aenv' (Array sh e)
         bnd = compute cc1
