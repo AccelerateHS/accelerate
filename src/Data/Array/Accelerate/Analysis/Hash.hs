@@ -189,7 +189,7 @@ encodePreOpenAcc options encodeAcc pacc =
     Slice spec a ix                 -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
     Map _ _ f a                     -> intHost $(hashQ "Map")         <> travF f  <> travA a
     ZipWith _ f a1 a2               -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
-    Fold f e a                      -> intHost $(hashQ "Fold")        <> travF f  <> encodeMaybe travE e  <> travA a
+    Fold _ f e a                    -> intHost $(hashQ "Fold")        <> travF f  <> encodeMaybe travE e  <> travA a
     FoldSeg _ f e a s               -> intHost $(hashQ "FoldSeg")     <> travF f  <> encodeMaybe travE e  <> travA a <> travA s
     Scan  d f e a                   -> intHost $(hashQ "Scan")        <> travD d  <> travF f  <> encodeMaybe travE e <> travA a
     Scan' d f e a                   -> intHost $(hashQ "Scan'")       <> travD d  <> travF f  <>             travE e <> travA a

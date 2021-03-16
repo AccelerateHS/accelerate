@@ -207,14 +207,14 @@ manifest config (OpenAcc pacc) =
     -- with local bindings, these will have been floated up above the
     -- consumer already
     --
-    Fold f z a              -> Fold     f z (delayed config a)
-    FoldSeg i f z a s       -> FoldSeg  i f z (delayed config a) (delayed config s)
-    Scan  d f z a           -> Scan     d f z (delayed config a)
-    Scan' d f z a           -> Scan'    d f z (delayed config a)
-    Permute f d p a         -> Permute  f (manifest config d) p (delayed config a)
-    Stencil s t f x a       -> Stencil  s t f x (delayed config a)
+    Fold ann f z a          -> Fold     ann f z (delayed config a)
+    FoldSeg i f z a s       -> FoldSeg      i f z (delayed config a) (delayed config s)
+    Scan  d f z a           -> Scan         d f z (delayed config a)
+    Scan' d f z a           -> Scan'        d f z (delayed config a)
+    Permute f d p a         -> Permute      f (manifest config d) p (delayed config a)
+    Stencil s t f x a       -> Stencil      s t f x (delayed config a)
     Stencil2 s1 s2 t f x a y b
-                            -> Stencil2 s1 s2 t f x (delayed config a) y (delayed config b)
+                            -> Stencil2     s1 s2 t f x (delayed config a) y (delayed config b)
     -- Collect s               -> Collect  (cvtS s)
 
     where
@@ -417,7 +417,10 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     -- node, so that the producer can be directly embedded into the consumer
     -- during the code generation phase.
     --
-    Fold f z a                  -> embed  aR (into2M Fold               (cvtF f) (cvtE <$> z)) a
+    -- TODO: Should we add the annotation field directory to @Embed@? How do we
+    --       end up combining the annotations of a map fused into a fold?
+    --
+    Fold ann f z a              -> embed  aR (into2M (Fold ann)         (cvtF f) (cvtE <$> z)) a
     FoldSeg i f z a s           -> embed2 aR (into2M (FoldSeg i)        (cvtF f) (cvtE <$> z)) a s
     Scan  d f z a               -> embed  aR (into2M (Scan  d)          (cvtF f) (cvtE <$> z)) a
     Scan' d f z a               -> embed  aR (into2  (Scan' d)          (cvtF f) (cvtE z)) a
@@ -1589,7 +1592,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Slice slix a sl         -> Slice slix (cvtA a) (cvtE sl)
         Replicate slix sh a     -> Replicate slix (cvtE sh) (cvtA a)
         Reshape shR sl a        -> Reshape shR (cvtE sl) (cvtA a)
-        Fold f z a              -> Fold (cvtF f) (cvtE <$> z) (cvtA a)
+        Fold ann f z a          -> Fold ann (cvtF f) (cvtE <$> z) (cvtA a)
         FoldSeg i f z a s       -> FoldSeg i (cvtF f) (cvtE <$> z) (cvtA a) (cvtA s)
         Scan  d f z a           -> Scan d (cvtF f) (cvtE <$> z) (cvtA a)
         Scan' d f z a           -> Scan' d (cvtF f) (cvtE z) (cvtA a)

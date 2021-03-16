@@ -51,7 +51,7 @@ convertPreOpenAcc = \case
   Slice slix a sl                 -> Slice slix (convertAcc a) sl
   Map ann tp f a                  -> Map ann tp f (convertAcc a)
   ZipWith tp f a1 a2              -> ZipWith tp f (convertAcc a1) (convertAcc a2)
-  Fold f e a                      -> Fold f e (convertAcc a)
+  Fold ann f e a                  -> Fold ann f e (convertAcc a)
   FoldSeg i f e a s               -> FoldSeg i f e (convertAcc a) (convertAcc s)
   Scan d f e a                    -> Scan d f e (convertAcc a)
   Scan' d f e a                   -> Scan' d f e (convertAcc a)

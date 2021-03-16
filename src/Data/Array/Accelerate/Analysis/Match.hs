@@ -176,7 +176,7 @@ matchPreOpenAcc matchAcc = match
       , Just Refl <- matchAcc b1 b2
       = Just Refl
 
-    match (Fold f1 z1 a1) (Fold f2 z2 a2)
+    match (Fold _ f1 z1 a1) (Fold _ f2 z2 a2)
       | Just Refl <- matchFun f1 f2
       , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2

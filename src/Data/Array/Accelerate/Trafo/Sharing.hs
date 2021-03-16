@@ -352,7 +352,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Map ann t1 t2 f acc         -> AST.Map ann t2 (cvtF1 t1 f) (cvtA acc)
       ZipWith t1 t2 t3 f acc1 acc2
                                   -> AST.ZipWith t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
-      Fold _ tp f e acc           -> AST.Fold (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      Fold ann tp f e acc         -> AST.Fold ann (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
       FoldSeg i tp f e acc1 acc2  -> AST.FoldSeg i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
       Scan  d tp f e acc          -> AST.Scan  d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
       Scan' d tp f e acc          -> AST.Scan' d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)

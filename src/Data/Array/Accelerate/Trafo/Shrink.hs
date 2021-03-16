@@ -561,7 +561,7 @@ usesOfPreAcc withShape countAcc idx = count
       Slice _ a sl               -> countE sl + countA a
       Map _ _ f a                -> countF f  + countA a
       ZipWith _ f a1 a2          -> countF f  + countA a1 + countA a2
-      Fold f z a                 -> countF f  + countME z + countA a
+      Fold _ f z a               -> countF f  + countME z + countA a
       FoldSeg _ f z a s          -> countF f  + countME z + countA a  + countA s
       Scan  _ f z a              -> countF f  + countME z + countA a
       Scan' _ f z a              -> countF f  + countE z  + countA a

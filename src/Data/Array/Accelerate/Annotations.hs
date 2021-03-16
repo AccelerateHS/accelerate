@@ -43,6 +43,9 @@
 --
 -- TODO: Add the same annotations as in the Smart ASTs, and make sure that they
 --       are propagated properly through the transformations.
+-- TODO: Annotations are completely ignored in 'Match' and 'Hash' at the moment.
+--       We should probably at least consider the optimizations of not the
+--       entire annotation.
 --
 -- TODO: The rest of the process up until codegen
 --

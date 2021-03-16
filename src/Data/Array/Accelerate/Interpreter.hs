@@ -248,8 +248,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
     -- Consumers
     -- ---------
-    Fold f (Just z) acc           -> foldOp (evalF f) (evalE z) (delayed acc)
-    Fold f Nothing  acc           -> fold1Op (evalF f) (delayed acc)
+    Fold _ f (Just z) acc         -> foldOp (evalF f) (evalE z) (delayed acc)
+    Fold _ f Nothing  acc         -> fold1Op (evalF f) (delayed acc)
     FoldSeg i f (Just z) acc seg  -> foldSegOp i (evalF f) (evalE z) (delayed acc) (delayed seg)
     FoldSeg i f Nothing acc seg   -> fold1SegOp i (evalF f) (delayed acc) (delayed seg)
     Scan  d f (Just z) acc        -> dir d scanlOp  scanrOp  (evalF f) (evalE z) (delayed acc)
