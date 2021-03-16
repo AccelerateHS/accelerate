@@ -89,6 +89,7 @@ module Data.Array.Accelerate.Annotations
     , mkAnn
     , mkDummyAnn
     , withEmptyCallStack
+    , withExecutionStackAsCallStack
       -- Re-exported for convenience
     , HasCallStack
     , withFrozenCallStack
@@ -102,6 +103,9 @@ import           Data.Array.Accelerate.Orphans  ( )
 import           Control.DeepSeq                ( rnf )
 import           Control.Exception              ( assert )
 import qualified Data.HashSet                  as S
+import           Data.Maybe                     ( mapMaybe )
+import qualified GHC.ExecutionStack            as ES
+import           GHC.IO                         ( unsafePerformIO )
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(FreezeCallStack) )
 import           Language.Haskell.TH            ( Q
@@ -180,6 +184,51 @@ mkDummyAnn = withEmptyCallStack mkAnn
 withEmptyCallStack :: (HasCallStack => a) -> a
 withEmptyCallStack dewit =
     let ?callStack = freezeCallStack emptyCallStack in dewit
+
+-- | Evaluate a computation after transforming the RTS execution stack into a
+-- frozen GHC call stack so it can interact with our other call stack based
+-- machinery. This is necessary when implementing prelude and other external
+-- type classes since those will not contain the 'HasCallStack' constraint. If
+-- an execution stack frame is not available, then the computation will be
+-- evaluated with an empty call stack instead.
+--
+-- NOTE: Execution stacks __only__ works when GHC has been built with libdw:
+--
+--       $ ghc --info | grep libdw
+--
+-- TODO: Test whether this actually uses the correct stack frame
+withExecutionStackAsCallStack :: HasCallStack => (HasCallStack => a) -> a
+withExecutionStackAsCallStack dewit =
+  -- Only create a frozen call stack if we do not already have a frozen call
+  -- stack
+    let
+        ?callStack = case ?callStack of
+            x@(FreezeCallStack _) -> x
+            _ ->
+                freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
+    in  dewit
+  where
+    -- We don't want the two uppermost stack frames, since those will be in our
+    -- own library code
+    -- TODO: Is this correct? Should we drop only one stack frame?
+    toCallStack :: Maybe [ES.Location] -> CallStack
+    toCallStack (Just (_ : _ : locs)) =
+        fromCallSiteList $ mapMaybe locToCallSite locs
+    toCallStack _ = emptyCallStack
+
+    locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
+    locToCallSite (ES.Location obj fn (Just loc)) = Just
+        ( obj ++ ": " ++ fn
+        , SrcLoc { srcLocPackage   = ""
+                 , srcLocModule    = ""
+                 , srcLocFile      = ES.sourceFile loc
+                 , srcLocStartLine = ES.sourceLine loc
+                 , srcLocStartCol  = ES.sourceColumn loc
+                 , srcLocEndLine   = ES.sourceLine loc
+                 , srcLocEndCol    = ES.sourceColumn loc
+                 }
+        )
+    locToCallSite (ES.Location _ _ Nothing) = Nothing
 
 instance Semigroup Ann where
     (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)
