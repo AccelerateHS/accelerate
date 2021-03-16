@@ -522,7 +522,7 @@ fold :: forall sh a.
      -> Exp a
      -> Acc (Array (sh:.Int) a)
      -> Acc (Array sh a)
-fold f (Exp x) = withFrozenCallStack $ Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) (Just x))
+fold f (Exp x) = withFrozenCallStack $ Acc . applyAcc (Fold mkAnn (eltR @a) (unExpBinaryFunction f) (Just x))
 
 -- | Variant of 'fold' that requires the innermost dimension of the array to be
 -- non-empty and doesn't need an default value.
@@ -539,7 +539,7 @@ fold1 :: forall sh a.
       => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array sh a)
-fold1 f = withFrozenCallStack $ Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) Nothing)
+fold1 f = withFrozenCallStack $ Acc . applyAcc (Fold mkAnn (eltR @a) (unExpBinaryFunction f) Nothing)
 
 -- | Segmented reduction along the innermost dimension of an array. The
 -- segment descriptor specifies the starting index (offset) along the

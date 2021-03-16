@@ -408,7 +408,8 @@ data PreSmartAcc acc exp as where
                 -> acc (Array sh e2)
                 -> PreSmartAcc acc exp (Array sh e3)
 
-  Fold          :: TypeR e
+  Fold          :: Ann
+                -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
@@ -830,7 +831,7 @@ instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
                                  in  TupRsingle $ ArrayR shr tp
     ZipWith _ _ tp _ a _      -> let ArrayR shr _ = arrayR a
                                  in  TupRsingle $ ArrayR shr tp
-    Fold _ _ _ a              -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
+    Fold _ _ _ _ a            -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
                                  in  TupRsingle (ArrayR shr tp)
     FoldSeg _ _ _ _ a _       -> arraysR a
     Scan _ _ _ _ a            -> arraysR a
@@ -1249,6 +1250,7 @@ class HasAnnotations a where
 
 instance HasAnnotations (Acc a) where
   modifyAnn f (Acc (SmartAcc (Map ann t1 t2 f' acc))) = Acc . SmartAcc $ Map (f ann) t1 t2 f' acc
+  modifyAnn f (Acc (SmartAcc (Fold ann tp f' e acc))) = Acc . SmartAcc $ Fold (f ann) tp f' e acc
   -- TODO: All other constructors as we add more annotations
   modifyAnn _ e = e
 
@@ -1374,7 +1376,7 @@ formatPreAccOp = later $ \case
   Slice{}             -> "Slice"
   Map{}               -> "Map"
   ZipWith{}           -> "ZipWith"
-  Fold _ _ z _        -> bformat ("Fold" % maybed "1" (fconst mempty)) z
+  Fold _ _ _ z _      -> bformat ("Fold" % maybed "1" (fconst mempty)) z
   FoldSeg _ _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
   Scan d _ _ z _      -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
   Scan' d _ _ _ _     -> bformat ("Scan" % formatDirection % "\'") d

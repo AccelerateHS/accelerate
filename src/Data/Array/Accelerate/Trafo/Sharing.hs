@@ -352,7 +352,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Map ann t1 t2 f acc         -> AST.Map ann t2 (cvtF1 t1 f) (cvtA acc)
       ZipWith t1 t2 t3 f acc1 acc2
                                   -> AST.ZipWith t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
-      Fold tp f e acc             -> AST.Fold (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      Fold _ tp f e acc           -> AST.Fold (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
       FoldSeg i tp f e acc1 acc2  -> AST.FoldSeg i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
       Scan  d tp f e acc          -> AST.Scan  d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
       Scan' d tp f e acc          -> AST.Scan' d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)
@@ -1552,7 +1552,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              return (Map ann t1 t2 f' acc', h1 `max` h2 + 1)
             ZipWith t1 t2 t3 f acc1 acc2
                                         -> travF2A2 (ZipWith t1 t2 t3) t1 t2 f acc1 acc2
-            Fold tp f e acc             -> travF2MEA (Fold tp) tp tp f e acc
+            Fold ann tp f e acc         -> travF2MEA (Fold ann tp) tp tp f e acc
             FoldSeg i tp f e acc1 acc2  -> do
                                              (f'   , h1) <- traverseFun2 lvl tp tp f
                                              (e'   , h2) <- travME e
@@ -2418,7 +2418,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      reconstruct (Map ann t1 t2 f' acc') (accCount1 +++ accCount2)
           ZipWith t1 t2 t3 f acc1 acc2
                                   -> travF2A2 (ZipWith t1 t2 t3) f acc1 acc2
-          Fold tp f z acc         -> travF2MEA (Fold tp) f z acc
+          Fold ann tp f z acc     -> travF2MEA (Fold ann tp) f z acc
           FoldSeg i tp f z acc1 acc2 -> let
                                        (f'   , accCount1)  = scopesFun2 f
                                        (z'   , accCount2)  = travME z
