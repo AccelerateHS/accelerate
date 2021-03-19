@@ -70,9 +70,6 @@ module Data.Array.Accelerate.Smart (
   -- ** Smart constructors for type coercion functions
   mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
-  -- ** Annotations
-  alwaysInline, unRollIters, HasAnnotations(),
-
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
   ApplyAcc(..),
@@ -1228,39 +1225,35 @@ instance Coerce a (a, ()) where
 
 -- Annotations
 -- -----------
---
--- These functions are exposed to the user to apply annotations to the AST.
-
--- | Instruct the compiler to always inline this expression and to not perform
--- any sharing recovery. This will allow inexpensive calculations whose values
--- are used in multiple places to be fused, potentially increasing performance
--- since the values don't have to be written to memory anymore.
-alwaysInline :: HasAnnotations a => a -> a
-alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
-
--- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
-unRollIters :: HasAnnotations a => Int -> a -> a
-unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
-
-class HasAnnotations a where
-  modifyAnn :: (Ann -> Ann) -> a -> a
-
-  withOptimizations :: (Optimizations -> Optimizations) -> a -> a
-  withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
 
 instance HasAnnotations (Acc a) where
-  modifyAnn f (Acc (SmartAcc (Map ann t1 t2 f' acc))) = Acc . SmartAcc $ Map (f ann) t1 t2 f' acc
-  modifyAnn f (Acc (SmartAcc (Fold ann tp f' e acc))) = Acc . SmartAcc $ Fold (f ann) tp f' e acc
+  modifyAnn f (Acc (SmartAcc (Map ann t1 t2 f' acc))) =
+    Acc . SmartAcc $ Map (f ann) t1 t2 f' acc
+  modifyAnn f (Acc (SmartAcc (Fold ann tp f' e acc))) =
+    Acc . SmartAcc $ Fold (f ann) tp f' e acc
   -- TODO: All other constructors as we add more annotations
   modifyAnn _ e = e
 
+  getAnn (Acc (SmartAcc (Map ann _ _ _ _))) = Just ann
+  getAnn (Acc (SmartAcc (Fold ann _ _ _ _))) = Just ann
+  -- TODO: All other constructors as we add more annotations
+  getAnn _ = Nothing
+
 instance HasAnnotations (Exp a) where
-  modifyAnn f (Exp (SmartExp (Const ann t c  ))) = mkExp $ Const (f ann) t c
-  modifyAnn f (Exp (SmartExp (Nil ann        ))) = mkExp $ Nil (f ann)
-  modifyAnn f (Exp (SmartExp (Pair ann e1  e2))) = mkExp $ Pair (f ann) e1 e2
-  modifyAnn f (Exp (SmartExp (Prj  ann idx e ))) = mkExp $ Prj (f ann) idx e
+  modifyAnn f (Exp (SmartExp (Const ann t c))) = mkExp $ Const (f ann) t c
+  modifyAnn f (Exp (SmartExp (Nil ann))) = mkExp $ Nil (f ann)
+  modifyAnn f (Exp (SmartExp (Pair ann e1 e2))) = mkExp $ Pair (f ann) e1 e2
+  modifyAnn f (Exp (SmartExp (Prj ann idx e))) = mkExp $ Prj (f ann) idx e
   -- TODO: All other constructors as we add more annotations
   modifyAnn _ e = e
+
+  getAnn (Exp (SmartExp (Const ann _ _))) = Just ann
+  getAnn (Exp (SmartExp (Nil ann))) = Just ann
+  getAnn (Exp (SmartExp (Pair ann _ _))) = Just ann
+  getAnn (Exp (SmartExp (Prj ann _ _))) = Just ann
+  -- TODO: All other constructors as we add more annotations
+  getAnn _ = Nothing
+
 
 -- Auxiliary functions
 -- --------------------

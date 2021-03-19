@@ -440,6 +440,7 @@ module Data.Array.Accelerate (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Classes.Bounded
 import Data.Array.Accelerate.Classes.Enum
 import Data.Array.Accelerate.Classes.Eq
@@ -475,7 +476,6 @@ import Prelude                                                      ( (.), ($), 
 
 import GHC.Exts                                                     ( fromListN, fromString )
 import GHC.Generics                                                 ( Generic )
-import GHC.Stack
 
 
 -- $setup

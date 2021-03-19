@@ -84,8 +84,12 @@
 -- new annotations for any new artificially generated AST nodes. This allows
 -- both optimization flags and source mapping information to be preserved.
 module Data.Array.Accelerate.Annotations
-    ( Ann(..)
+    ( alwaysInline
+    , unRollIters
+    , Ann(..)
     , Optimizations(..)
+    , HasAnnotations(..)
+    , withOptimizations
     , mkAnn
     , mkDummyAnn
     , withEmptyCallStack
@@ -111,6 +115,23 @@ import           GHC.Stack.Types                ( CallStack(FreezeCallStack) )
 import           Language.Haskell.TH            ( Q
                                                 , TExp
                                                 )
+
+
+-- * Annotation functions
+--
+-- These are exposed to the user so they can annotate AST nodes.
+
+-- | Instruct the compiler to always inline this expression and to not perform
+-- any sharing recovery. This will allow inexpensive calculations whose values
+-- are used in multiple places to be fused, potentially increasing performance
+-- since the values don't have to be written to memory anymore.
+alwaysInline :: HasAnnotations a => a -> a
+alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
+
+-- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
+unRollIters :: HasAnnotations a => Int -> a -> a
+unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
+
 
 
 -- * Internal types and functions
@@ -143,6 +164,25 @@ data Optimizations = Optimizations
     , optUnrollIters  :: Maybe Int
     }
     deriving Show
+
+-- | Used for modifying an AST node's annotations.
+--
+-- TODO: We could define 'modifyAnn' in terms of 'getAnn' and a 'putAnn', but I
+--       don't think a 'putAnn' on its own is really useful anywhere.
+-- TODO: This require some duplication between 'getAnn' and 'modifyAnn'. A lens
+--       for accessing the annotation of course would get rid of this, but then
+--       you'd have to use lenses.
+class HasAnnotations a where
+  -- | Modify the annotation stored in an AST node. This may not do anything
+  -- when the AST node doesn't support annotations.
+  modifyAnn :: (Ann -> Ann) -> a -> a
+  -- | Extract the annotation from an AST node, if it has one. This is used
+  -- during some of the transformations when we may no longer have access to the
+  -- original AST nodes.
+  getAnn :: a -> Maybe Ann
+
+withOptimizations :: HasAnnotations a => (Optimizations -> Optimizations) -> a -> a
+withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
 
 -- | Create an empty annotation with call site information if available. This
 -- only works when all smart constructors have the 'HasCallStack' constraint.
