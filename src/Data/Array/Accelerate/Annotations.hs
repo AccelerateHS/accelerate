@@ -237,6 +237,9 @@ withEmptyCallStack dewit =
 --       $ ghc --info | grep libdw
 --
 -- TODO: Test whether this actually uses the correct stack frame
+-- FIXME: This may still be incorrect for default implementations in prelude
+--        classes, since the default implementation doesn't use
+--        'withExecutionStackAsCallStack'
 withExecutionStackAsCallStack :: HasCallStack => (HasCallStack => a) -> a
 withExecutionStackAsCallStack dewit =
   -- Only create a frozen call stack if we do not already have a frozen call
