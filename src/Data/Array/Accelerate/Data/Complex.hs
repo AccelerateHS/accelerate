@@ -44,6 +44,7 @@ module Data.Array.Accelerate.Data.Complex (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.Fractional
@@ -64,7 +65,6 @@ import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
 import Data.Complex                                                 ( Complex(..) )
-import GHC.Stack
 import Prelude                                                      ( ($) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
@@ -198,97 +198,99 @@ instance Eq a => Eq (Complex a) where
   (==) = withFrozenCallStack $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 == r2 && c1 == c2
   (/=) = withFrozenCallStack $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 /= r2 || c1 /= c2
 
--- TODO: Can we capture call stacks here and in the other prelude classes below?
 instance RealFloat a => P.Num (Exp (Complex a)) where
-  (+)    = lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  (-)    = lift2 ((-) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  (*)    = lift2 ((*) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  negate = lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
-  signum z@(x ::+ y) =
+  (+)    = withExecutionStackAsCallStack $ lift2 ((+)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  (-)    = withExecutionStackAsCallStack $ lift2 ((-)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  (*)    = withExecutionStackAsCallStack $ lift2 ((*)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  negate = withExecutionStackAsCallStack $ lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
+  signum = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
     if z == 0
        then z
        else let r = magnitude z
              in x/r ::+ y/r
-  abs z         = magnitude z ::+ 0
-  fromInteger n = fromInteger n ::+ 0
+  abs z         = withExecutionStackAsCallStack $ magnitude z ::+ 0
+  fromInteger n = withExecutionStackAsCallStack $ fromInteger n ::+ 0
 
 instance RealFloat a => P.Fractional (Exp (Complex a)) where
-  fromRational x  = fromRational x ::+ 0
-  z / z'          = (x*x''+y*y'') / d ::+ (y*x''-x*y'') / d
-    where
-      x  :+ y   = unlift z
-      x' :+ y'  = unlift z'
-      --
-      x'' = scaleFloat k x'
-      y'' = scaleFloat k y'
-      k   = - max (exponent x') (exponent y')
-      d   = x'*x'' + y'*y''
+  fromRational x  = withExecutionStackAsCallStack $ fromRational x ::+ 0
+  z / z' = withFrozenCallStack
+    $ let x  :+ y   = unlift z
+          x' :+ y'  = unlift z'
+          --
+          x'' = scaleFloat k x'
+          y'' = scaleFloat k y'
+          k   = - max (exponent x') (exponent y')
+          d   = x'*x'' + y'*y''
+      in  (x*x''+y*y'') / d ::+ (y*x''-x*y'') / d
 
 instance RealFloat a => P.Floating (Exp (Complex a)) where
-  pi                = pi ::+ 0
-  exp (x ::+ y)     = let expx = exp x
-                       in expx * cos y ::+ expx * sin y
-  log z             = log (magnitude z) ::+ phase z
-  sqrt z@(x ::+ y)  =
-    if z == 0
-      then 0
-      else u ::+ (y < 0 ? (-v, v))
-    where
-      T2 u v = x < 0 ? (T2 v' u', T2 u' v')
-      v'     = abs y / (u'*2)
-      u'     = sqrt ((magnitude z + abs x) / 2)
+  pi    = withExecutionStackAsCallStack $ pi ::+ 0
+  exp   = withExecutionStackAsCallStack $ \(x ::+ y) ->
+    let expx = exp x
+    in  expx * cos y ::+ expx * sin y
+  log z = withExecutionStackAsCallStack $ log (magnitude z) ::+ phase z
+  sqrt  = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
+    let T2 u v = x < 0 ? (T2 v' u', T2 u' v')
+        v'     = abs y / (u'*2)
+        u'     = sqrt ((magnitude z + abs x) / 2)
+    in  if z == 0
+          then 0
+          else u ::+ (y < 0 ? (-v, v))
 
-  x ** y =
-    if y == 0 then 1 else
-    if x == 0 then if exp_r > 0 then 0 else
-                   if exp_r < 0 then inf ::+ 0
-                                else nan ::+ nan
-              else if isInfinite r || isInfinite i
-                     then if exp_r > 0 then inf ::+ 0 else
-                          if exp_r < 0 then 0
-                                       else nan ::+ nan
-                     else exp (log x * y)
-    where
-      r     ::+ i  = x
-      exp_r ::+ _  = y
-      --
-      inf = 1 / 0
-      nan = 0 / 0
+  x ** y = withEmptyOrFrozenCallStack
+    $ let r     ::+ i  = x
+          exp_r ::+ _  = y
+          --
+          inf = 1 / 0
+          nan = 0 / 0
+      in  if y == 0 then 1 else
+            if x == 0 then if exp_r > 0 then 0 else
+                          if exp_r < 0 then inf ::+ 0
+                                        else nan ::+ nan
+                      else if isInfinite r || isInfinite i
+                            then if exp_r > 0 then inf ::+ 0 else
+                                  if exp_r < 0 then 0
+                                              else nan ::+ nan
+                            else exp (log x * y)
 
-  sin (x ::+ y)  = sin x * cosh y ::+ cos x * sinh y
-  cos (x ::+ y)  = cos x * cosh y ::+ (- sin x * sinh y)
-  tan (x ::+ y)  = (sinx*coshy ::+ cosx*sinhy) / (cosx*coshy ::+ (-sinx*sinhy))
-    where
-      sinx  = sin x
-      cosx  = cos x
-      sinhy = sinh y
-      coshy = cosh y
+  sin = withExecutionStackAsCallStack $ \(x ::+ y) ->
+    sin x * cosh y ::+ cos x * sinh y
+  cos = withExecutionStackAsCallStack $ \(x ::+ y) ->
+    cos x * cosh y ::+ (- sin x * sinh y)
+  tan = withExecutionStackAsCallStack $ \(x ::+ y) ->
+    let sinx  = sin x
+        cosx  = cos x
+        sinhy = sinh y
+        coshy = cosh y
+    in  (sinx*coshy ::+ cosx*sinhy) / (cosx*coshy ::+ (-sinx*sinhy))
 
-  sinh (x ::+ y) = cos y * sinh x ::+ sin  y * cosh x
-  cosh (x ::+ y) = cos y * cosh x ::+ sin y * sinh x
-  tanh (x ::+ y) = (cosy*sinhx ::+ siny*coshx) / (cosy*coshx ::+ siny*sinhx)
-    where
-      siny  = sin y
-      cosy  = cos y
-      sinhx = sinh x
-      coshx = cosh x
+  sinh = withExecutionStackAsCallStack $ \(x ::+ y) ->
+    cos y * sinh x ::+ sin  y * cosh x
+  cosh = withExecutionStackAsCallStack $ \(x ::+ y) ->
+    cos y * cosh x ::+ sin y * sinh x
+  tanh = withExecutionStackAsCallStack $ \(x ::+ y) ->
+    let siny  = sin y
+        cosy  = cos y
+        sinhx = sinh x
+        coshx = cosh x
+    in  (cosy*sinhx ::+ siny*coshx) / (cosy*coshx ::+ siny*sinhx)
 
-  asin z@(x ::+ y) = y' ::+ (-x')
-    where
-      x' ::+ y' = log (((-y) ::+ x) + sqrt (1 - z*z))
+  asin = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
+    let x' ::+ y' = log (((-y) ::+ x) + sqrt (1 - z*z))
+    in  y' ::+ (-x')
 
-  acos z                    = y'' ::+ (-x'')
-    where
-      x'' ::+ y''  = log (z + ((-y') ::+ x'))
-      x'  ::+ y'   = sqrt (1 - z*z)
+  acos z = withExecutionStackAsCallStack
+    $ let x'' ::+ y''  = log (z + ((-y') ::+ x'))
+          x'  ::+ y'   = sqrt (1 - z*z)
+      in   y'' ::+ (-x'')
 
-  atan z@(x ::+ y) = y' ::+ (-x')
-    where
-      x' ::+ y' = log (((1-y) ::+ x) / sqrt (1+z*z))
+  atan = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
+    let x' ::+ y' = log (((1-y) ::+ x) / sqrt (1+z*z))
+    in  y' ::+ (-x')
 
-  asinh z =  log (z + sqrt (1+z*z))
-  acosh z =  log (z + (z+1) * sqrt ((z-1)/(z+1)))
-  atanh z =  0.5 * log ((1.0+z) / (1.0-z))
+  asinh z = withExecutionStackAsCallStack $ log (z + sqrt (1+z*z))
+  acosh z = withExecutionStackAsCallStack $ log (z + (z+1) * sqrt ((z-1)/(z+1)))
+  atanh z = withExecutionStackAsCallStack $ 0.5 * log ((1.0+z) / (1.0-z))
 
 
 instance (FromIntegral a b, Num b, Elt (Complex b)) => FromIntegral a (Complex b) where
