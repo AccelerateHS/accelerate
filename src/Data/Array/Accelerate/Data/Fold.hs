@@ -26,6 +26,7 @@ module Data.Array.Accelerate.Data.Fold (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Classes.Floating                       as A
 import Data.Array.Accelerate.Classes.Fractional                     as A
 import Data.Array.Accelerate.Classes.Num                            as A
@@ -116,47 +117,46 @@ runFold (Fold tally summarise) is
 -- --------------------
 
 instance P.Functor (Fold i) where
-  fmap k (Fold tally summarise) = Fold tally (k . summarise)
+  fmap k (Fold tally summarise) = withExecutionStackAsCallStack $ Fold tally (k . summarise)
 
 instance P.Applicative (Fold i) where
-  pure o                    = Fold (\_ -> constant ()) (\_ -> o)
-  Fold tF sF <*> Fold tX sX = Fold tally summarise
-    where
-      tally i     = lift (tF i, tX i)
-      summarise t = let (mF, mX) = unlift t
-                    in sF mF (sX mX)
+  pure o                    = withExecutionStackAsCallStack $ Fold (\_ -> constant ()) (\_ -> o)
+  Fold tF sF <*> Fold tX sX = withExecutionStackAsCallStack
+    $ let tally i     = lift (tF i, tX i)
+          summarise t = let (mF, mX) = unlift t
+                        in sF mF (sX mX)
+      in  Fold tally summarise
 
 instance A.Num b => P.Num (Fold a (Exp b)) where
-  (+)           = liftA2 (+)
-  (-)           = liftA2 (-)
-  (*)           = liftA2 (*)
-  negate        = fmap negate
-  abs           = fmap abs
-  signum        = fmap signum
-  fromInteger n = pure (A.fromInteger n)
+  (+)           = withExecutionStackAsCallStack $ liftA2 (+)
+  (-)           = withExecutionStackAsCallStack $ liftA2 (-)
+  (*)           = withExecutionStackAsCallStack $ liftA2 (*)
+  negate        = withExecutionStackAsCallStack $ fmap negate
+  abs           = withExecutionStackAsCallStack $ fmap abs
+  signum        = withExecutionStackAsCallStack $ fmap signum
+  fromInteger n = withExecutionStackAsCallStack $ pure (A.fromInteger n)
 
 instance A.Fractional b => P.Fractional (Fold a (Exp b)) where
-  (/)            = liftA2 (/)
-  recip          = fmap recip
-  fromRational n = pure (A.fromRational n)
+  (/)            = withExecutionStackAsCallStack $ liftA2 (/)
+  recip          = withExecutionStackAsCallStack $ fmap recip
+  fromRational n = withExecutionStackAsCallStack $ pure (A.fromRational n)
 
 instance A.Floating b => P.Floating (Fold a (Exp b)) where
-  pi      = pure pi
-  sin     = fmap sin
-  cos     = fmap cos
-  tan     = fmap tan
-  asin    = fmap asin
-  acos    = fmap acos
-  atan    = fmap atan
-  sinh    = fmap sinh
-  cosh    = fmap cosh
-  tanh    = fmap tanh
-  asinh   = fmap asinh
-  acosh   = fmap acosh
-  atanh   = fmap atanh
-  exp     = fmap exp
-  sqrt    = fmap sqrt
-  log     = fmap log
-  (**)    = liftA2 (**)
-  logBase = liftA2 logBase
-
+  pi      = withExecutionStackAsCallStack $ pure pi
+  sin     = withExecutionStackAsCallStack $ fmap sin
+  cos     = withExecutionStackAsCallStack $ fmap cos
+  tan     = withExecutionStackAsCallStack $ fmap tan
+  asin    = withExecutionStackAsCallStack $ fmap asin
+  acos    = withExecutionStackAsCallStack $ fmap acos
+  atan    = withExecutionStackAsCallStack $ fmap atan
+  sinh    = withExecutionStackAsCallStack $ fmap sinh
+  cosh    = withExecutionStackAsCallStack $ fmap cosh
+  tanh    = withExecutionStackAsCallStack $ fmap tanh
+  asinh   = withExecutionStackAsCallStack $ fmap asinh
+  acosh   = withExecutionStackAsCallStack $ fmap acosh
+  atanh   = withExecutionStackAsCallStack $ fmap atanh
+  exp     = withExecutionStackAsCallStack $ fmap exp
+  sqrt    = withExecutionStackAsCallStack $ fmap sqrt
+  log     = withExecutionStackAsCallStack $ fmap log
+  (**)    = withExecutionStackAsCallStack $ liftA2 (**)
+  logBase = withExecutionStackAsCallStack $ liftA2 logBase
