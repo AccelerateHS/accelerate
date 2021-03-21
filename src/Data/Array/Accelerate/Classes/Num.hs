@@ -20,11 +20,12 @@ module Data.Array.Accelerate.Classes.Num (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( (.) )
+import Prelude                                                      ( ($), (.) )
 import qualified Prelude                                            as P
 
 
@@ -68,208 +69,208 @@ type Num a = (Elt a, P.Num (Exp a))
 
 
 instance P.Num (Exp Int) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Int8) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Int16) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Int32) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Int64) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Word) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Word8) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Word16) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Word32) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Word64) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CInt) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CUInt) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CULong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CLLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CULLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CShort) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CUShort) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Half) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Float) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp Double) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CFloat) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
 
 instance P.Num (Exp CDouble) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+  (+)         = withExecutionStackAsCallStack mkAdd
+  (-)         = withExecutionStackAsCallStack mkSub
+  (*)         = withExecutionStackAsCallStack mkMul
+  negate      = withExecutionStackAsCallStack mkNeg
+  abs         = withExecutionStackAsCallStack mkAbs
+  signum      = withExecutionStackAsCallStack mkSig
+  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
