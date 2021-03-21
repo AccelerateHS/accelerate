@@ -25,6 +25,7 @@ module Data.Array.Accelerate.Classes.RealFloat (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Language                               ( cond, while )
 import Data.Array.Accelerate.Pattern
@@ -52,131 +53,138 @@ import qualified Prelude                                            as P
 --
 class (RealFrac a, Floating a) => RealFloat a where
   -- | The radix of the representation (often 2) (constant)
-  floatRadix     :: Exp a -> Exp Int64  -- Integer
-  default floatRadix :: P.RealFloat a => Exp a -> Exp Int64
-  floatRadix _    = P.fromInteger (P.floatRadix (undefined::a))
+  floatRadix         :: HasCallStack => Exp a -> Exp Int64  -- Integer
+  default floatRadix :: (HasCallStack, P.RealFloat a) => Exp a -> Exp Int64
+  floatRadix _    = withFrozenCallStack $ P.fromInteger (P.floatRadix (undefined::a))
 
   -- | The number of digits of 'floatRadix' in the significand (constant)
-  floatDigits    :: Exp a -> Exp Int
-  default floatDigits :: P.RealFloat a => Exp a -> Exp Int
-  floatDigits _   = constant (P.floatDigits (undefined::a))
+  floatDigits         :: HasCallStack => Exp a -> Exp Int
+  default floatDigits :: (HasCallStack, P.RealFloat a) => Exp a -> Exp Int
+  floatDigits _   = withFrozenCallStack $ constant (P.floatDigits (undefined::a))
 
   -- | The lowest and highest values the exponent may assume (constant)
-  floatRange     :: Exp a -> (Exp Int, Exp Int)
-  default floatRange :: P.RealFloat a => Exp a -> (Exp Int, Exp Int)
-  floatRange _    = let (m,n) = P.floatRange (undefined::a)
-                     in (constant m, constant n)
+  floatRange         :: HasCallStack => Exp a -> (Exp Int, Exp Int)
+  default floatRange :: (HasCallStack, P.RealFloat a) => Exp a -> (Exp Int, Exp Int)
+  floatRange _ = withFrozenCallStack
+    $ let (m,n) = P.floatRange (undefined::a)
+       in (constant m, constant n)
 
   -- | Return the significand and an appropriately scaled exponent. If
   -- @(m,n) = 'decodeFloat' x@ then @x = m*b^^n@, where @b@ is the
   -- floating-point radix ('floatRadix'). Furthermore, either @m@ and @n@ are
   -- both zero, or @b^(d-1) <= 'abs' m < b^d@, where @d = 'floatDigits' x@.
-  decodeFloat    :: Exp a -> (Exp Int64, Exp Int)    -- Integer
+  decodeFloat         :: HasCallStack => Exp a -> (Exp Int64, Exp Int)    -- Integer
 
   -- | Inverse of 'decodeFloat'
-  encodeFloat    :: Exp Int64 -> Exp Int -> Exp a    -- Integer
-  default encodeFloat :: (FromIntegral Int a, FromIntegral Int64 a) => Exp Int64 -> Exp Int -> Exp a
-  encodeFloat x e = fromIntegral x * (fromIntegral (floatRadix (undefined :: Exp a)) ** fromIntegral e)
+  encodeFloat         :: HasCallStack => Exp Int64 -> Exp Int -> Exp a    -- Integer
+  default encodeFloat :: (HasCallStack, FromIntegral Int a, FromIntegral Int64 a) => Exp Int64 -> Exp Int -> Exp a
+  encodeFloat x e = withFrozenCallStack $ fromIntegral x * (fromIntegral (floatRadix (undefined :: Exp a)) ** fromIntegral e)
 
   -- | Corresponds to the second component of 'decodeFloat'
-  exponent       :: Exp a -> Exp Int
-  exponent x      = let (m,n) = decodeFloat x
-                     in cond (m == 0)
-                             0
-                             (n + floatDigits x)
+  exponent       :: HasCallStack => Exp a -> Exp Int
+  exponent x = withFrozenCallStack
+    $ let (m,n) = decodeFloat x
+       in cond (m == 0)
+               0
+               (n + floatDigits x)
 
   -- | Corresponds to the first component of 'decodeFloat'
-  significand    :: Exp a -> Exp a
-  significand x   = let (m,_) = decodeFloat x
-                     in encodeFloat m (negate (floatDigits x))
+  significand    :: HasCallStack => Exp a -> Exp a
+  significand x = withFrozenCallStack
+    $ let (m,_) = decodeFloat x
+       in encodeFloat m (negate (floatDigits x))
 
   -- | Multiply a floating point number by an integer power of the radix
-  scaleFloat     :: Exp Int -> Exp a -> Exp a
-  scaleFloat k x  =
-    cond (k == 0 || isFix) x
-         $ encodeFloat m (n + clamp b)
-    where
-      isFix = x == 0 || isNaN x || isInfinite x
-      (m,n) = decodeFloat x
-      (l,h) = floatRange x
-      d     = floatDigits x
-      b     = h - l + 4*d
-      -- n+k may overflow, which would lead to incorrect results, hence we clamp
-      -- the scaling parameter. If (n+k) would be larger than h, (n + clamp b k)
-      -- must be too, similar for smaller than (l-d).
-      clamp bd  = max (-bd) (min bd k)
+  scaleFloat     :: HasCallStack => Exp Int -> Exp a -> Exp a
+  scaleFloat k x = withFrozenCallStack
+    $ let isFix = x == 0 || isNaN x || isInfinite x
+          (m,n) = decodeFloat x
+          (l,h) = floatRange x
+          d     = floatDigits x
+          b     = h - l + 4*d
+          -- n+k may overflow, which would lead to incorrect results, hence we clamp
+          -- the scaling parameter. If (n+k) would be larger than h, (n + clamp b k)
+          -- must be too, similar for smaller than (l-d).
+          clamp bd  = max (-bd) (min bd k)
+       in cond (k == 0 || isFix) x
+               $ encodeFloat m (n + clamp b)
 
   -- | 'True' if the argument is an IEEE \"not-a-number\" (NaN) value
-  isNaN          :: Exp a -> Exp Bool
+  isNaN          :: HasCallStack => Exp a -> Exp Bool
 
   -- | 'True' if the argument is an IEEE infinity or negative-infinity
-  isInfinite     :: Exp a -> Exp Bool
+  isInfinite     :: HasCallStack => Exp a -> Exp Bool
 
   -- | 'True' if the argument is too small to be represented in normalized
   -- format
-  isDenormalized :: Exp a -> Exp Bool
+  isDenormalized :: HasCallStack => Exp a -> Exp Bool
 
   -- | 'True' if the argument is an IEEE negative zero
-  isNegativeZero :: Exp a -> Exp Bool
+  isNegativeZero :: HasCallStack => Exp a -> Exp Bool
 
   -- | 'True' if the argument is an IEEE floating point number
-  isIEEE         :: Exp a -> Exp Bool
-  default isIEEE :: P.RealFloat a => Exp a -> Exp Bool
-  isIEEE _        = constant (P.isIEEE (undefined::a))
+  isIEEE         :: HasCallStack => Exp a -> Exp Bool
+  default isIEEE :: (HasCallStack, P.RealFloat a) => Exp a -> Exp Bool
+  isIEEE _        = withFrozenCallStack $ constant (P.isIEEE (undefined::a))
 
   -- | A version of arctangent taking two real floating-point arguments.
   -- For real floating @x@ and @y@, @'atan2' y x@ computes the angle (from the
   -- positive x-axis) of the vector from the origin to the point @(x,y)@.
   -- @'atan2' y x@ returns a value in the range [@-pi@, @pi@].
-  atan2          :: Exp a -> Exp a -> Exp a
+  atan2          :: HasCallStack => Exp a -> Exp a -> Exp a
 
 
 instance RealFloat Half where
-  atan2           = mkAtan2
-  isNaN           = mkIsNaN
-  isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f16_is_denormalized . mkBitcast)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f16_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f16_decode (mkBitcast x)
-                                                     in (fromIntegral m, n))
+  atan2           = withExecutionStackAsCallStack mkAtan2
+  isNaN           = withExecutionStackAsCallStack mkIsNaN
+  isInfinite      = withExecutionStackAsCallStack mkIsInfinite
+  isDenormalized  = withExecutionStackAsCallStack $ ieee754 "isDenormalized" (ieee754_f16_is_denormalized . mkBitcast)
+  isNegativeZero  = withExecutionStackAsCallStack $ ieee754 "isNegativeZero" (ieee754_f16_is_negative_zero . mkBitcast)
+  decodeFloat     = withExecutionStackAsCallStack $ ieee754 "decodeFloat"
+    (\x -> let T2 m n = ieee754_f16_decode (mkBitcast x)
+            in (fromIntegral m, n))
 
 instance RealFloat Float where
-  atan2           = mkAtan2
-  isNaN           = mkIsNaN
-  isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f32_decode (mkBitcast x)
-                                                     in (fromIntegral m, n))
+  atan2           = withFrozenCallStack mkAtan2
+  isNaN           = withFrozenCallStack mkIsNaN
+  isInfinite      = withFrozenCallStack mkIsInfinite
+  isDenormalized  = withFrozenCallStack $ ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
+  isNegativeZero  = withFrozenCallStack $ ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
+  decodeFloat     = withFrozenCallStack $ ieee754 "decodeFloat"
+    (\x -> let T2 m n = ieee754_f32_decode (mkBitcast x)
+            in (fromIntegral m, n))
 
 instance RealFloat Double where
-  atan2           = mkAtan2
-  isNaN           = mkIsNaN
-  isInfinite      = mkIsInfinite
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f64_decode (mkBitcast x)
-                                                     in (m, n))
+  atan2           = withFrozenCallStack mkAtan2
+  isNaN           = withFrozenCallStack mkIsNaN
+  isInfinite      = withFrozenCallStack mkIsInfinite
+  isDenormalized  = withFrozenCallStack $ ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
+  isNegativeZero  = withFrozenCallStack $ ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
+  decodeFloat     = withFrozenCallStack $ ieee754 "decodeFloat"
+    (\x -> let T2 m n = ieee754_f64_decode (mkBitcast x)
+            in (m, n))
 
 instance RealFloat CFloat where
-  atan2           = mkAtan2
-  isNaN           = mkIsNaN . mkBitcast @Float
-  isInfinite      = mkIsInfinite . mkBitcast @Float
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f32_decode (mkBitcast x)
-                                                    in  (fromIntegral m, n))
-  encodeFloat x e = mkBitcast (encodeFloat @Float x e)
+  atan2           = withFrozenCallStack mkAtan2
+  isNaN           = withFrozenCallStack mkIsNaN . mkBitcast @Float
+  isInfinite      = withFrozenCallStack mkIsInfinite . mkBitcast @Float
+  isDenormalized  = withFrozenCallStack $ ieee754 "isDenormalized" (ieee754_f32_is_denormalized . mkBitcast)
+  isNegativeZero  = withFrozenCallStack $ ieee754 "isNegativeZero" (ieee754_f32_is_negative_zero . mkBitcast)
+  decodeFloat     = withFrozenCallStack $ ieee754 "decodeFloat"
+    (\x -> let T2 m n = ieee754_f32_decode (mkBitcast x)
+            in  (fromIntegral m, n))
+  encodeFloat x e = withFrozenCallStack $ mkBitcast (encodeFloat @Float x e)
 
 instance RealFloat CDouble where
-  atan2           = mkAtan2
-  isNaN           = mkIsNaN . mkBitcast @Double
-  isInfinite      = mkIsInfinite . mkBitcast @Double
-  isDenormalized  = ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
-  isNegativeZero  = ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
-  decodeFloat     = ieee754 "decodeFloat"    (\x -> let T2 m n = ieee754_f64_decode (mkBitcast x)
-                                                     in (m, n))
-  encodeFloat x e = mkBitcast (encodeFloat @Double x e)
+  atan2           = withFrozenCallStack mkAtan2
+  isNaN           = withFrozenCallStack mkIsNaN . mkBitcast @Double
+  isInfinite      = withFrozenCallStack mkIsInfinite . mkBitcast @Double
+  isDenormalized  = withFrozenCallStack $ ieee754 "isDenormalized" (ieee754_f64_is_denormalized . mkBitcast)
+  isNegativeZero  = withFrozenCallStack $ ieee754 "isNegativeZero" (ieee754_f64_is_negative_zero . mkBitcast)
+  decodeFloat     = withFrozenCallStack $ ieee754 "decodeFloat"
+    (\x -> let T2 m n = ieee754_f64_decode (mkBitcast x)
+            in (m, n))
+  encodeFloat x e = withFrozenCallStack $ mkBitcast (encodeFloat @Double x e)
 
 
 -- To satisfy superclass constraints
@@ -203,7 +211,7 @@ preludeError x
             ]
 
 
-ieee754 :: forall a b. HasCallStack => P.RealFloat a => Builder -> (Exp a -> b) -> Exp a -> b
+ieee754 :: forall a b. (HasCallStack, P.RealFloat a) => Builder -> (Exp a -> b) -> Exp a -> b
 ieee754 name f x
   | P.isIEEE (undefined::a) = f x
   | otherwise               = internalError (builder % ": Not implemented for non-IEEE floating point") name
@@ -216,36 +224,36 @@ ieee754 name f x
 --   * mantissa is non-zero.
 --   * (don't care about setting of sign bit.)
 --
-ieee754_f64_is_denormalized :: Exp Word64 -> Exp Bool
+ieee754_f64_is_denormalized :: HasCallStack => Exp Word64 -> Exp Bool
 ieee754_f64_is_denormalized x =
   ieee754_f64_mantissa x == 0 &&
   ieee754_f64_exponent x /= 0
 
-ieee754_f32_is_denormalized :: Exp Word32 -> Exp Bool
+ieee754_f32_is_denormalized :: HasCallStack => Exp Word32 -> Exp Bool
 ieee754_f32_is_denormalized x =
   ieee754_f32_mantissa x == 0 &&
   ieee754_f32_exponent x /= 0
 
-ieee754_f16_is_denormalized :: Exp Word16 -> Exp Bool
+ieee754_f16_is_denormalized :: HasCallStack => Exp Word16 -> Exp Bool
 ieee754_f16_is_denormalized x =
   ieee754_f16_mantissa x == 0 &&
   ieee754_f16_exponent x /= 0
 
 -- Negative zero if only the sign bit is set
 --
-ieee754_f64_is_negative_zero :: Exp Word64 -> Exp Bool
+ieee754_f64_is_negative_zero :: HasCallStack => Exp Word64 -> Exp Bool
 ieee754_f64_is_negative_zero x =
   ieee754_f64_negative x &&
   ieee754_f64_exponent x == 0 &&
   ieee754_f64_mantissa x == 0
 
-ieee754_f32_is_negative_zero :: Exp Word32 -> Exp Bool
+ieee754_f32_is_negative_zero :: HasCallStack => Exp Word32 -> Exp Bool
 ieee754_f32_is_negative_zero x =
   ieee754_f32_negative x &&
   ieee754_f32_exponent x == 0 &&
   ieee754_f32_mantissa x == 0
 
-ieee754_f16_is_negative_zero :: Exp Word16 -> Exp Bool
+ieee754_f16_is_negative_zero :: HasCallStack => Exp Word16 -> Exp Bool
 ieee754_f16_is_negative_zero x =
   ieee754_f16_negative x &&
   ieee754_f16_exponent x == 0 &&
@@ -262,13 +270,13 @@ ieee754_f16_is_negative_zero x =
 -- exponent     62-52        exponent (biased by 1023)
 -- fraction     51-0         fraction (bits to right of binary point)
 --
-ieee754_f64_mantissa :: Exp Word64 -> Exp Word64
+ieee754_f64_mantissa :: HasCallStack => Exp Word64 -> Exp Word64
 ieee754_f64_mantissa x = x .&. 0xFFFFFFFFFFFFF
 
-ieee754_f64_exponent :: Exp Word64 -> Exp Word16
+ieee754_f64_exponent :: HasCallStack => Exp Word64 -> Exp Word16
 ieee754_f64_exponent x = fromIntegral (x `unsafeShiftR` 52) .&. 0x7FF
 
-ieee754_f64_negative :: Exp Word64 -> Exp Bool
+ieee754_f64_negative :: HasCallStack => Exp Word64 -> Exp Bool
 ieee754_f64_negative x = testBit x 63
 
 -- Representation of single precision IEEE floating point number:
@@ -277,13 +285,13 @@ ieee754_f64_negative x = testBit x 63
 -- exponent     30-23        exponent (biased by 127)
 -- fraction     22-0         fraction (bits to right of binary point)
 --
-ieee754_f32_mantissa :: Exp Word32 -> Exp Word32
+ieee754_f32_mantissa :: HasCallStack => Exp Word32 -> Exp Word32
 ieee754_f32_mantissa x = x .&. 0x7FFFFF
 
-ieee754_f32_exponent :: Exp Word32 -> Exp Word8
+ieee754_f32_exponent :: HasCallStack => Exp Word32 -> Exp Word8
 ieee754_f32_exponent x = fromIntegral (x `unsafeShiftR` 23)
 
-ieee754_f32_negative :: Exp Word32 -> Exp Bool
+ieee754_f32_negative :: HasCallStack => Exp Word32 -> Exp Bool
 ieee754_f32_negative x = testBit x 31
 
 -- Representation of half precision IEEE floating point number:
@@ -292,19 +300,19 @@ ieee754_f32_negative x = testBit x 31
 -- exponent     14-10        exponent (biased by 15)
 -- fraction     9-0          fraction (bits to right of binary point)
 --
-ieee754_f16_mantissa :: Exp Word16 -> Exp Word16
+ieee754_f16_mantissa :: HasCallStack => Exp Word16 -> Exp Word16
 ieee754_f16_mantissa x = x .&. 0x3FF
 
-ieee754_f16_exponent :: Exp Word16 -> Exp Word8
+ieee754_f16_exponent :: HasCallStack => Exp Word16 -> Exp Word8
 ieee754_f16_exponent x = fromIntegral (x `unsafeShiftR` 10) .&. 0x1F
 
-ieee754_f16_negative :: Exp Word16 -> Exp Bool
+ieee754_f16_negative :: HasCallStack => Exp Word16 -> Exp Bool
 ieee754_f16_negative x = testBit x 15
 
 
 -- reverse engineered following the below
 
-ieee754_f16_decode :: Exp Word16 -> Exp (Int16, Int)
+ieee754_f16_decode :: HasCallStack => Exp Word16 -> Exp (Int16, Int)
 ieee754_f16_decode i =
   let
       _HHIGHBIT                       = 0x0400
@@ -338,7 +346,7 @@ ieee754_f16_decode i =
 -- From: ghc/rts/StgPrimFloat.c
 -- ----------------------------
 
-ieee754_f32_decode :: Exp Word32 -> Exp (Int32, Int)
+ieee754_f32_decode :: HasCallStack => Exp Word32 -> Exp (Int32, Int)
 ieee754_f32_decode i =
   let
       _FHIGHBIT                     = 0x00800000
@@ -362,19 +370,19 @@ ieee754_f32_decode i =
                           (\(T2 h e) -> T2 (h `unsafeShiftL` 1) (e-1))
                           (T2 high2 exp2))
 
-      high4 = cond (fromIntegral i < (0 :: Exp Int32)) (-high3) high3
+      high4 = cond (fromIntegral i < (0 :: HasCallStack => Exp Int32)) (-high3) high3
   in
   cond (high1 .&. complement _FMSBIT == 0)
        (T2 0 0)
        (T2 high4 exp3)
 
 
-ieee754_f64_decode :: Exp Word64 -> Exp (Int64, Int)
+ieee754_f64_decode :: HasCallStack => Exp Word64 -> Exp (Int64, Int)
 ieee754_f64_decode i =
   let T4 s h l e = ieee754_f64_decode2 i
    in T2 (fromIntegral s * (fromIntegral h `unsafeShiftL` 32 .|. fromIntegral l)) e
 
-ieee754_f64_decode2 :: Exp Word64 -> Exp (Int, Word32, Word32, Int)
+ieee754_f64_decode2 :: HasCallStack => Exp Word64 -> Exp (Int, Word32, Word32, Int)
 ieee754_f64_decode2 i =
   let
       _DHIGHBIT                     = 0x00100000
