@@ -19,6 +19,7 @@ module Data.Array.Accelerate.Classes.FromIntegral (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -35,7 +36,7 @@ import Prelude                                                      hiding ( Int
 --
 class FromIntegral a b where
   -- | General coercion from integral types
-  fromIntegral :: Integral a => Exp a -> Exp b
+  fromIntegral :: HasCallStack => Integral a => Exp a -> Exp b
 
 -- instance {-# OVERLAPPABLE #-} (Elt a, Elt b, IsIntegral a, IsNum b) => FromIntegral a b where
 --   fromIntegral = mkFromIntegral
@@ -72,7 +73,7 @@ $(runQ $ do
         thFromIntegral a b =
           let
               ty  = AppT (AppT (ConT (mkName "FromIntegral")) (ConT a)) (ConT b)
-              dec = ValD (VarP (mkName "fromIntegral")) (NormalB (VarE (mkName f))) []
+              dec = ValD (VarP (mkName "fromIntegral")) (NormalB (AppE (VarE (mkName "withExecutionStackAsCallStack")) (VarE (mkName f)))) []
               f | a == b    = "id"
                 | otherwise = "mkFromIntegral"
           in
@@ -82,4 +83,3 @@ $(runQ $ do
     bs <- digItOut ''NumType
     sequence [ thFromIntegral a b | a <- as, b <- bs ]
  )
-
