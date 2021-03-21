@@ -19,6 +19,7 @@ module Data.Array.Accelerate.Classes.ToFloating (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -37,7 +38,7 @@ import Prelude                                                      hiding ( Num
 --
 class ToFloating a b where
   -- | General coercion to floating types
-  toFloating :: (Num a, Floating b) => Exp a -> Exp b
+  toFloating :: (HasCallStack, Num a, Floating b) => Exp a -> Exp b
 
 -- instance (Elt a, Elt b, IsNum a, IsFloating b) => ToFloating a b where
 --   toFloating = mkToFloating
@@ -67,7 +68,7 @@ $(runQ $ do
         thToFloating a b =
           let
               ty  = AppT (AppT (ConT (mkName "ToFloating")) (ConT a)) (ConT b)
-              dec = ValD (VarP (mkName "toFloating")) (NormalB (VarE (mkName f))) []
+              dec = ValD (VarP (mkName "toFloating")) (NormalB (AppE (VarE (mkName "withFrozenCallStack")) (VarE (mkName f)))) []
               f | a == b    = "id"
                 | otherwise = "mkToFloating"
           in
