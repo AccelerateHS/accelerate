@@ -83,7 +83,7 @@ class Eq a => Ord a where
 -- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
 --
 ifThenElse :: (HasCallStack, Elt a) => Exp Bool -> Exp a -> Exp a -> Exp a
-ifThenElse (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond (mkCoerce' c) x y
+ifThenElse (Exp c) (Exp x) (Exp y) = withFrozenCallStack $ Exp $ SmartExp $ Cond (mkCoerce' c) x y
 
 instance Ord () where
   (<)     _ _ = withFrozenCallStack $ constant False
@@ -111,15 +111,13 @@ instance Ord Z where
 -- accelerate instances defined here. This allows us to use operations such as
 -- 'Prelude.minimum' and 'Prelude.maximum'.
 --
--- TODO: We cannot add call stacks to prelude min and max, can we?
---
 instance Ord a => P.Ord (Exp a) where
   (<)     = preludeError "Ord.(<)"  "(<)"
   (<=)    = preludeError "Ord.(<=)" "(<=)"
   (>)     = preludeError "Ord.(>)"  "(>)"
   (>=)    = preludeError "Ord.(>=)" "(>=)"
-  min     = min
-  max     = max
+  min     = withExecutionStackAsCallStack min
+  max     = withExecutionStackAsCallStack max
 
 preludeError :: String -> String -> a
 preludeError x y
@@ -231,9 +229,9 @@ runQ $ do
   return $ concat (concat [is,fs,ns,cs,ts])
 
 instance Ord sh => Ord (sh :. Int) where
-  x <= y = withFrozencallStack $ indexHead x <= indexHead y && indexTail x <= indexTail y
-  x >= y = withFrozencallStack $ indexHead x >= indexHead y && indexTail x >= indexTail y
-  x < y  = withFrozencallStack $ indexHead x < indexHead y
+  x <= y = withFrozenCallStack $ indexHead x <= indexHead y && indexTail x <= indexTail y
+  x >= y = withFrozenCallStack $ indexHead x >= indexHead y && indexTail x >= indexTail y
+  x < y  = withFrozenCallStack $ indexHead x < indexHead y
         && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x < indexTail y
