@@ -25,13 +25,14 @@ module Data.Array.Accelerate.Data.Functor (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Smart
 
 import Data.Monoid
 import Data.Semigroup
-import Prelude                                                      ( (.), const, flip )
+import Prelude                                                      ( ($), (.), const, flip )
 
 
 -- | The 'Functor' class is used for scalar types which can be mapped over.
@@ -41,15 +42,15 @@ import Prelude                                                      ( (.), const
 -- > fmap (f . g) == fmap f . fmap g
 --
 class Functor f where
-  fmap :: (Elt a, Elt b, Elt (f a), Elt (f b)) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
+  fmap :: (HasCallStack, Elt a, Elt b, Elt (f a), Elt (f b)) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
 
   -- | Replace all locations in the input with the same value. The default
   -- definition is @fmap . const@, but this may be overridden with a more
   -- efficient version.
   --
   infixl 4 <$
-  (<$) :: (Elt a, Elt b, Elt (f a), Elt (f b)) => Exp a -> Exp (f b) -> Exp (f a)
-  (<$) = fmap . const
+  (<$) :: (HasCallStack, Elt a, Elt b, Elt (f a), Elt (f b)) => Exp a -> Exp (f b) -> Exp (f a)
+  (<$) = withFrozenCallStack $ fmap . const
 
 
 -- | An infix synonym for 'fmap'
@@ -64,32 +65,31 @@ class Functor f where
 -- lifted over a 'Functor'.
 --
 infixl 4 <$>
-(<$>) :: (Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
-(<$>) = fmap
+(<$>) :: (HasCallStack, Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
+(<$>) = withFrozenCallStack fmap
 
 
 -- | A flipped version of '(<$)'.
 --
 infixl 4 $>
-($>) :: (Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => Exp (f a) -> Exp b -> Exp (f b)
-($>) = flip (<$)
+($>) :: (HasCallStack, Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => Exp (f a) -> Exp b -> Exp (f b)
+($>) = withFrozenCallStack $ flip (<$)
 
 
 -- | @'void' value@ discards or ignores the result of evaluation.
 --
-void :: (Functor f, Elt a, Elt (f a), Elt (f ())) => Exp (f a) -> Exp (f ())
-void x = constant () <$ x
+void :: (HasCallStack, Functor f, Elt a, Elt (f a), Elt (f ())) => Exp (f a) -> Exp (f ())
+void x = withFrozenCallStack $ constant () <$ x
 
 
 instance Functor Sum where
-  fmap f = lift1 (fmap f)
+  fmap f = withFrozenCallStack $ lift1 (fmap f)
 
 instance Functor Product where
-  fmap f = lift1 (fmap f)
+  fmap f = withFrozenCallStack $ lift1 (fmap f)
 
 instance Functor Min where
-  fmap f = lift1 (fmap f)
+  fmap f = withFrozenCallStack $ lift1 (fmap f)
 
 instance Functor Max where
-  fmap f = lift1 (fmap f)
-
+  fmap f = withFrozenCallStack $ lift1 (fmap f)
