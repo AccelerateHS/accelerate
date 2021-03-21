@@ -30,11 +30,13 @@ module Data.Array.Accelerate.Classes.Floating (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Fractional
 
+import Prelude                                                      ( ($) )
 import qualified Prelude                                            as P
 
 
@@ -44,102 +46,101 @@ type Floating a = (Fractional a, P.Floating (Exp a))
 
 
 instance P.Floating (Exp Half) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
+  pi      = withExecutionStackAsCallStack mkPi
+  sin     = withExecutionStackAsCallStack mkSin
+  cos     = withExecutionStackAsCallStack mkCos
+  tan     = withExecutionStackAsCallStack mkTan
+  asin    = withExecutionStackAsCallStack mkAsin
+  acos    = withExecutionStackAsCallStack mkAcos
+  atan    = withExecutionStackAsCallStack mkAtan
+  sinh    = withExecutionStackAsCallStack mkSinh
+  cosh    = withExecutionStackAsCallStack mkCosh
+  tanh    = withExecutionStackAsCallStack mkTanh
+  asinh   = withExecutionStackAsCallStack mkAsinh
+  acosh   = withExecutionStackAsCallStack mkAcosh
+  atanh   = withExecutionStackAsCallStack mkAtanh
+  exp     = withExecutionStackAsCallStack mkExpFloating
+  sqrt    = withExecutionStackAsCallStack mkSqrt
+  log     = withExecutionStackAsCallStack mkLog
+  (**)    = withExecutionStackAsCallStack mkFPow
+  logBase = withExecutionStackAsCallStack mkLogBase
 
 instance P.Floating (Exp Float) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
+  pi      = withExecutionStackAsCallStack mkPi
+  sin     = withExecutionStackAsCallStack mkSin
+  cos     = withExecutionStackAsCallStack mkCos
+  tan     = withExecutionStackAsCallStack mkTan
+  asin    = withExecutionStackAsCallStack mkAsin
+  acos    = withExecutionStackAsCallStack mkAcos
+  atan    = withExecutionStackAsCallStack mkAtan
+  sinh    = withExecutionStackAsCallStack mkSinh
+  cosh    = withExecutionStackAsCallStack mkCosh
+  tanh    = withExecutionStackAsCallStack mkTanh
+  asinh   = withExecutionStackAsCallStack mkAsinh
+  acosh   = withExecutionStackAsCallStack mkAcosh
+  atanh   = withExecutionStackAsCallStack mkAtanh
+  exp     = withExecutionStackAsCallStack mkExpFloating
+  sqrt    = withExecutionStackAsCallStack mkSqrt
+  log     = withExecutionStackAsCallStack mkLog
+  (**)    = withExecutionStackAsCallStack mkFPow
+  logBase = withExecutionStackAsCallStack mkLogBase
 
 instance P.Floating (Exp Double) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
+  pi      = withExecutionStackAsCallStack mkPi
+  sin     = withExecutionStackAsCallStack mkSin
+  cos     = withExecutionStackAsCallStack mkCos
+  tan     = withExecutionStackAsCallStack mkTan
+  asin    = withExecutionStackAsCallStack mkAsin
+  acos    = withExecutionStackAsCallStack mkAcos
+  atan    = withExecutionStackAsCallStack mkAtan
+  sinh    = withExecutionStackAsCallStack mkSinh
+  cosh    = withExecutionStackAsCallStack mkCosh
+  tanh    = withExecutionStackAsCallStack mkTanh
+  asinh   = withExecutionStackAsCallStack mkAsinh
+  acosh   = withExecutionStackAsCallStack mkAcosh
+  atanh   = withExecutionStackAsCallStack mkAtanh
+  exp     = withExecutionStackAsCallStack mkExpFloating
+  sqrt    = withExecutionStackAsCallStack mkSqrt
+  log     = withExecutionStackAsCallStack mkLog
+  (**)    = withExecutionStackAsCallStack mkFPow
+  logBase = withExecutionStackAsCallStack mkLogBase
 
 instance P.Floating (Exp CFloat) where
-  pi      = mkBitcast (mkPi @Float)
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
+  pi      = withExecutionStackAsCallStack $ mkBitcast (mkPi @Float)
+  sin     = withExecutionStackAsCallStack mkSin
+  cos     = withExecutionStackAsCallStack mkCos
+  tan     = withExecutionStackAsCallStack mkTan
+  asin    = withExecutionStackAsCallStack mkAsin
+  acos    = withExecutionStackAsCallStack mkAcos
+  atan    = withExecutionStackAsCallStack mkAtan
+  sinh    = withExecutionStackAsCallStack mkSinh
+  cosh    = withExecutionStackAsCallStack mkCosh
+  tanh    = withExecutionStackAsCallStack mkTanh
+  asinh   = withExecutionStackAsCallStack mkAsinh
+  acosh   = withExecutionStackAsCallStack mkAcosh
+  atanh   = withExecutionStackAsCallStack mkAtanh
+  exp     = withExecutionStackAsCallStack mkExpFloating
+  sqrt    = withExecutionStackAsCallStack mkSqrt
+  log     = withExecutionStackAsCallStack mkLog
+  (**)    = withExecutionStackAsCallStack mkFPow
+  logBase = withExecutionStackAsCallStack mkLogBase
 
 instance P.Floating (Exp CDouble) where
-  pi      = mkBitcast (mkPi @Double)
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
-
+  pi      = withExecutionStackAsCallStack $ mkBitcast (mkPi @Double)
+  sin     = withExecutionStackAsCallStack mkSin
+  cos     = withExecutionStackAsCallStack mkCos
+  tan     = withExecutionStackAsCallStack mkTan
+  asin    = withExecutionStackAsCallStack mkAsin
+  acos    = withExecutionStackAsCallStack mkAcos
+  atan    = withExecutionStackAsCallStack mkAtan
+  sinh    = withExecutionStackAsCallStack mkSinh
+  cosh    = withExecutionStackAsCallStack mkCosh
+  tanh    = withExecutionStackAsCallStack mkTanh
+  asinh   = withExecutionStackAsCallStack mkAsinh
+  acosh   = withExecutionStackAsCallStack mkAcosh
+  atanh   = withExecutionStackAsCallStack mkAtanh
+  exp     = withExecutionStackAsCallStack mkExpFloating
+  sqrt    = withExecutionStackAsCallStack mkSqrt
+  log     = withExecutionStackAsCallStack mkLog
+  (**)    = withExecutionStackAsCallStack mkFPow
+  logBase = withExecutionStackAsCallStack mkLogBase
