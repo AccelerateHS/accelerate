@@ -133,10 +133,10 @@ instance Ord a => Ord (Maybe a) where
       go Just_{}   Nothing_{} = GT_
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
-  mempty = withFrozenCallStack Nothing_
+  mempty = withExecutionStackAsCallStack Nothing_
 
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
-  ma <> mb = withFrozenCallStack
+  ma <> mb = withExecutionStackAsCallStack
            $ cond (isNothing ma) mb
            $ cond (isNothing mb) mb
            $ lift (Just (fromJust ma <> fromJust mb))
