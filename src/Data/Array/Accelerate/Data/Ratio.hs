@@ -93,23 +93,22 @@ instance Integral a => Ord (Ratio a)  where
   (<=) = withFrozenCallStack $ \(x :% y) (z :% w) -> x * w <= z * y
   (<)  = withFrozenCallStack $ \(x :% y) (z :% w) -> x * w <  z * y
 
--- TODO: Can we provide frozen call stacks for prelude classes?
 instance Integral a => P.Num (Exp (Ratio a)) where
-  (x :% y) + (z :% w) = reduce (x*w + z*y) (y*w)
-  (x :% y) - (z :% w) = reduce (x*w - z*y) (y*w)
-  (x :% y) * (z :% w) = reduce (x * z) (y * w)
-  negate (x:%y)       = (-x) :% y
-  abs (x:%y)          = abs x :% y
-  signum (x:%_)       = signum x :% 1
-  fromInteger x       = fromInteger x :% 1
+  (+)           = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> reduce (x*w + z*y) (y*w)
+  (-)           = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> reduce (x*w - z*y) (y*w)
+  (*)           = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> reduce (x * z) (y * w)
+  negate        = withExecutionStackAsCallStack $ \(x:%y) -> (-x) :% y
+  abs           = withExecutionStackAsCallStack $ \(x:%y) -> abs x :% y
+  signum        = withExecutionStackAsCallStack $ \(x:%_) -> signum x :% 1
+  fromInteger x = withExecutionStackAsCallStack $ fromInteger x :% 1
 
 instance Integral a => P.Fractional (Exp (Ratio a))  where
-  (x :% y) / (z :% w) = (x*w) % (y*z)
-  recip (x :% y)      =
+  (/)   = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> (x*w) % (y*z)
+  recip = withExecutionStackAsCallStack $ \(x :% y) ->
     if x == 0 then infinity else
     if x <  0 then negate y :% negate x
               else y :% x
-  fromRational r = fromInteger (P.numerator r) % fromInteger (P.denominator r)
+  fromRational r = withExecutionStackAsCallStack $ fromInteger (P.numerator r) % fromInteger (P.denominator r)
 
 instance (Integral a, FromIntegral a Int64) => RealFrac (Ratio a) where
   properFraction = withFrozenCallStack $ \(x :% y) ->
@@ -126,10 +125,10 @@ instance (FromIntegral a b, Integral b) => FromIntegral a (Ratio b) where
   fromIntegral x = withFrozenCallStack $ fromIntegral x :% 1
 
 instance Integral a => P.Enum (Exp (Ratio a))  where
-  succ x   = x + 1
-  pred x   = x - 1
-  toEnum   = preludeError "Enum" "toEnum"
-  fromEnum = preludeError "Enum" "fromEnum"
+  succ x   = withExecutionStackAsCallStack $ x + 1
+  pred x   = withExecutionStackAsCallStack $ x - 1
+  toEnum   = withExecutionStackAsCallStack $ preludeError "Enum" "toEnum"
+  fromEnum = withExecutionStackAsCallStack $ preludeError "Enum" "fromEnum"
 
 
 preludeError :: String -> String -> a
