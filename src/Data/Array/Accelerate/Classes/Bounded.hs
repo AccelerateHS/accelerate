@@ -21,6 +21,7 @@ module Data.Array.Accelerate.Classes.Bounded (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
@@ -39,100 +40,100 @@ type Bounded a = (Elt a, P.Bounded (Exp a))
 
 
 instance P.Bounded (Exp ()) where
-  minBound = constant ()
-  maxBound = constant ()
+  minBound = withExecutionStackAsCallStack $ constant ()
+  maxBound = withExecutionStackAsCallStack $ constant ()
 
 instance P.Bounded (Exp Int) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Int8) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Int16) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Int32) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Int64) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Word) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Word8) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Word16) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Word32) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp Word64) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp CShort) where
-  minBound = mkBitcast (mkMinBound @Int16)
-  maxBound = mkBitcast (mkMaxBound @Int16)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Int16)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Int16)
 
 instance P.Bounded (Exp CUShort) where
-  minBound = mkBitcast (mkMinBound @Word16)
-  maxBound = mkBitcast (mkMaxBound @Word16)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Word16)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Word16)
 
 instance P.Bounded (Exp CInt) where
-  minBound = mkBitcast (mkMinBound @Int32)
-  maxBound = mkBitcast (mkMaxBound @Int32)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Int32)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Int32)
 
 instance P.Bounded (Exp CUInt) where
-  minBound = mkBitcast (mkMinBound @Word32)
-  maxBound = mkBitcast (mkMaxBound @Word32)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Word32)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Word32)
 
 instance P.Bounded (Exp CLong) where
-  minBound = mkBitcast (mkMinBound @HTYPE_CLONG)
-  maxBound = mkBitcast (mkMaxBound @HTYPE_CLONG)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @HTYPE_CLONG)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @HTYPE_CLONG)
 
 instance P.Bounded (Exp CULong) where
-  minBound = mkBitcast (mkMinBound @HTYPE_CULONG)
-  maxBound = mkBitcast (mkMaxBound @HTYPE_CULONG)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @HTYPE_CULONG)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @HTYPE_CULONG)
 
 instance P.Bounded (Exp CLLong) where
-  minBound = mkBitcast (mkMinBound @Int64)
-  maxBound = mkBitcast (mkMaxBound @Int64)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Int64)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Int64)
 
 instance P.Bounded (Exp CULLong) where
-  minBound = mkBitcast (mkMinBound @Word64)
-  maxBound = mkBitcast (mkMaxBound @Word64)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Word64)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Word64)
 
 instance P.Bounded (Exp Bool) where
-  minBound = constant P.minBound
-  maxBound = constant P.maxBound
+  minBound = withExecutionStackAsCallStack $ constant P.minBound
+  maxBound = withExecutionStackAsCallStack $ constant P.maxBound
 
 instance P.Bounded (Exp Char) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
+  minBound = withExecutionStackAsCallStack mkMinBound
+  maxBound = withExecutionStackAsCallStack mkMaxBound
 
 instance P.Bounded (Exp CChar) where
-  minBound = mkBitcast (mkMinBound @HTYPE_CCHAR)
-  maxBound = mkBitcast (mkMaxBound @HTYPE_CCHAR)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @HTYPE_CCHAR)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @HTYPE_CCHAR)
 
 instance P.Bounded (Exp CSChar) where
-  minBound = mkBitcast (mkMinBound @Int8)
-  maxBound = mkBitcast (mkMaxBound @Int8)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Int8)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Int8)
 
 instance P.Bounded (Exp CUChar) where
-  minBound = mkBitcast (mkMinBound @Word8)
-  maxBound = mkBitcast (mkMaxBound @Word8)
+  minBound = withExecutionStackAsCallStack $ mkBitcast (mkMinBound @Word8)
+  maxBound = withExecutionStackAsCallStack $ mkBitcast (mkMaxBound @Word8)
 
 $(runQ $ do
     let
@@ -145,8 +146,8 @@ $(runQ $ do
               app x   = appsE (conE (mkName ('T':show n)) : P.replicate n x)
           in
           [d| instance $cst => P.Bounded (Exp $res) where
-                minBound = $(app [| P.minBound |])
-                maxBound = $(app [| P.maxBound |])
+                minBound = withExecutionStackAsCallStack $ $(app [| P.minBound |])
+                maxBound = withExecutionStackAsCallStack $ $(app [| P.maxBound |])
             |]
     --
     concat <$> mapM mkInstance [2..16]
