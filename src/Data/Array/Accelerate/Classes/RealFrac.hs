@@ -23,6 +23,7 @@ module Data.Array.Accelerate.Classes.RealFrac (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Language                               ( (^), cond, even )
 import Data.Array.Accelerate.Lift                                   ( unlift )
 import Data.Array.Accelerate.Pattern
@@ -49,27 +50,26 @@ import qualified Prelude                                            as P
 
 -- | Generalisation of 'P.div' to any instance of 'RealFrac'
 --
-div' :: (RealFrac a, FromIntegral Int64 b, Integral b) => Exp a -> Exp a -> Exp b
-div' n d = floor (n / d)
+div' :: (HasCallStack, RealFrac a, FromIntegral Int64 b, Integral b) => Exp a -> Exp a -> Exp b
+div' n d = withFrozenCallStack $ floor (n / d)
 
 -- | Generalisation of 'P.mod' to any instance of 'RealFrac'
 --
-mod' :: (Floating a, RealFrac a, ToFloating Int64 a) => Exp a -> Exp a -> Exp a
-mod' n d = n - (toFloating f) * d
-  where
-    f :: Exp Int64
-    f = div' n d
+mod' :: (HasCallStack, Floating a, RealFrac a, ToFloating Int64 a) => Exp a -> Exp a -> Exp a
+mod' n d = withFrozenCallStack
+  $ let f = div' n d :: Exp Int64
+     in n - (toFloating f) * d
 
 -- | Generalisation of 'P.divMod' to any instance of 'RealFrac'
 --
 divMod'
-    :: (Floating a, RealFrac a, Integral b, FromIntegral Int64 b, ToFloating b a)
+    :: (HasCallStack, Floating a, RealFrac a, Integral b, FromIntegral Int64 b, ToFloating b a)
     => Exp a
     -> Exp a
     -> (Exp b, Exp a)
-divMod' n d = (f, n - (toFloating f) * d)
-  where
-    f = div' n d
+divMod' n d = withFrozenCallStack
+  $ let f = div' n d
+     in (f, n - (toFloating f) * d)
 
 
 -- | Extracting components of fractions.
@@ -85,7 +85,7 @@ class (Ord a, Fractional a) => RealFrac a where
   --
   -- The default definitions of the 'ceiling', 'floor', 'truncate'
   -- and 'round' functions are in terms of 'properFraction'.
-  properFraction :: (Integral b, FromIntegral Int64 b) => Exp a -> (Exp b, Exp a)
+  properFraction :: (HasCallStack, Integral b, FromIntegral Int64 b) => Exp a -> (Exp b, Exp a)
 
   -- The function 'splitFraction' takes a real fractional number @x@ and
   -- returns a pair @(n,f)@ such that @x = n+f@, and:
@@ -104,44 +104,44 @@ class (Ord a, Fractional a) => RealFrac a where
   -- splitFraction / fraction are from numeric-prelude Algebra.RealRing
 
   -- | @truncate x@ returns the integer nearest @x@ between zero and @x@
-  truncate :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
-  truncate = defaultTruncate
+  truncate :: (HasCallStack, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  truncate = withFrozenCallStack defaultTruncate
 
   -- | @'round' x@ returns the nearest integer to @x@; the even integer if @x@
   -- is equidistant between two integers
-  round    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
-  round    = defaultRound
+  round    :: (HasCallStack, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  round    = withFrozenCallStack defaultRound
 
   -- | @'ceiling' x@ returns the least integer not less than @x@
-  ceiling  :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
-  ceiling  = defaultCeiling
+  ceiling  :: (HasCallStack, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  ceiling  = withFrozenCallStack defaultCeiling
 
   -- | @'floor' x@ returns the greatest integer not greater than @x@
-  floor    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
-  floor    = defaultFloor
+  floor    :: (HasCallStack, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  floor    = withFrozenCallStack defaultFloor
 
 instance RealFrac Half where
-  properFraction  = defaultProperFraction
+  properFraction  = withFrozenCallStack defaultProperFraction
 
 instance RealFrac Float where
-  properFraction  = defaultProperFraction
+  properFraction  = withFrozenCallStack defaultProperFraction
 
 instance RealFrac Double where
-  properFraction  = defaultProperFraction
+  properFraction  = withFrozenCallStack defaultProperFraction
 
 instance RealFrac CFloat where
-  properFraction  = defaultProperFraction
-  truncate        = defaultTruncate
-  round           = defaultRound
-  ceiling         = defaultCeiling
-  floor           = defaultFloor
+  properFraction  = withFrozenCallStack defaultProperFraction
+  truncate        = withFrozenCallStack defaultTruncate
+  round           = withFrozenCallStack defaultRound
+  ceiling         = withFrozenCallStack defaultCeiling
+  floor           = withFrozenCallStack defaultFloor
 
 instance RealFrac CDouble where
-  properFraction  = defaultProperFraction
-  truncate        = defaultTruncate
-  round           = defaultRound
-  ceiling         = defaultCeiling
-  floor           = defaultFloor
+  properFraction  = withFrozenCallStack defaultProperFraction
+  truncate        = withFrozenCallStack defaultTruncate
+  round           = withFrozenCallStack defaultRound
+  ceiling         = withFrozenCallStack defaultCeiling
+  floor           = withFrozenCallStack defaultFloor
 
 
 -- Must test for ±0.0 to avoid returning -0.0 in the second component of the
@@ -160,7 +160,7 @@ instance RealFrac CDouble where
 --     f = x - toFloating n
 
 defaultProperFraction
-    :: (RealFloat a, FromIntegral Int64 b, Integral b)
+    :: (HasCallStack, RealFloat a, FromIntegral Int64 b, Integral b)
     => Exp a
     -> (Exp b, Exp a)
 defaultProperFraction x
@@ -172,7 +172,7 @@ defaultProperFraction x
     (m, n) = decodeFloat x
     (q, r) = quotRem m (2 ^ (negate n))
 
-defaultTruncate :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultTruncate :: forall a b. (HasCallStack, RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
 defaultTruncate x
   | Just IsFloatingDict <- isFloating @a
   , Just IsIntegralDict <- isIntegral @b
@@ -181,7 +181,7 @@ defaultTruncate x
   | otherwise
   = let (n, _) = properFraction x in n
 
-defaultCeiling :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultCeiling :: forall a b. (HasCallStack, RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
 defaultCeiling x
   | Just IsFloatingDict <- isFloating @a
   , Just IsIntegralDict <- isIntegral @b
@@ -190,7 +190,7 @@ defaultCeiling x
   | otherwise
   = let (n, r) = properFraction x in cond (r > 0) (n+1) n
 
-defaultFloor :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultFloor :: forall a b. (HasCallStack, RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
 defaultFloor x
   | Just IsFloatingDict <- isFloating @a
   , Just IsIntegralDict <- isIntegral @b
@@ -199,7 +199,7 @@ defaultFloor x
   | otherwise
   = let (n, r) = properFraction x in cond (r < 0) (n-1) n
 
-defaultRound :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultRound :: forall a b. (HasCallStack, RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
 defaultRound x
   | Just IsFloatingDict <- isFloating @a
   , Just IsIntegralDict <- isIntegral @b
