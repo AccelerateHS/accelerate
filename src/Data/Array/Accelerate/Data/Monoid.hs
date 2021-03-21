@@ -35,6 +35,7 @@ module Data.Array.Accelerate.Data.Monoid (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Classes.Bounded
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Num
@@ -50,7 +51,6 @@ import Data.Array.Accelerate.Type
 import Data.Function
 import Data.Monoid                                                  hiding ( (<>) )
 import Data.Semigroup
-import GHC.Stack
 import qualified Prelude                                            as P
 
 
@@ -70,21 +70,20 @@ instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Sum a) where
   lift (Sum a)       = withFrozenCallStack $ Sum_ (lift a)
 
 instance Elt a => Unlift Exp (Sum (Exp a)) where
-  unlift (Sum_ a) = withFrozenCallStack $ Sum a
+  unlift = withFrozenCallStack $ \(Sum_ a) -> Sum a
 
--- TODO: Can we use call stacks in these prelude type classes?
 instance Bounded a => P.Bounded (Exp (Sum a)) where
-  minBound = Sum_ minBound
-  maxBound = Sum_ maxBound
+  minBound = withExecutionStackAsCallStack $ Sum_ minBound
+  maxBound = withExecutionStackAsCallStack $ Sum_ maxBound
 
 instance Num a => P.Num (Exp (Sum a)) where
-  (+)             = lift2 ((+) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
-  (-)             = lift2 ((-) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
-  (*)             = lift2 ((*) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
-  negate          = lift1 (negate :: Sum (Exp a) -> Sum (Exp a))
-  signum          = lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
-  abs             = lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
-  fromInteger x   = lift (P.fromInteger x :: Sum (Exp a))
+  (+)             = withExecutionStackAsCallStack $ lift2 ((+) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
+  (-)             = withExecutionStackAsCallStack $ lift2 ((-) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
+  (*)             = withExecutionStackAsCallStack $ lift2 ((*) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
+  negate          = withExecutionStackAsCallStack $ lift1 (negate :: Sum (Exp a) -> Sum (Exp a))
+  signum          = withExecutionStackAsCallStack $ lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
+  abs             = withExecutionStackAsCallStack $ lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
+  fromInteger x   = withExecutionStackAsCallStack $ lift (P.fromInteger x :: Sum (Exp a))
 
 instance Eq a => Eq (Sum a) where
   (==) = withFrozenCallStack $ lift2 ((==) `on` getSum)
@@ -99,13 +98,12 @@ instance Ord a => Ord (Sum a) where
   max x y = withFrozenCallStack $ Sum_ $ lift2 (max `on` getSum) x y
 
 instance Num a => Monoid (Exp (Sum a)) where
-  -- TODO: Does this work like you'd expect?
-  mempty = withFrozenCallStack 0
+  mempty = withExecutionStackAsCallStack 0
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
-  (<>)              = withFrozenCallStack (+)
-  stimes n (Sum_ x) = withFrozenCallStack $ Sum_ $ P.fromIntegral n * x
+  (<>)     = withExecutionStackAsCallStack (+)
+  stimes n = withExecutionStackAsCallStack $ \(Sum_ x) -> Sum_ $ P.fromIntegral n * x
 
 
 -- Product: Monoid under multiplication
@@ -122,20 +120,20 @@ instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   lift (Product a)       = withFrozenCallStack $ Product_ (lift a)
 
 instance Elt a => Unlift Exp (Product (Exp a)) where
-  unlift (Product_ a) = withFrozenCallStack $ Product a
+  unlift = withFrozenCallStack $ \(Product_ a) -> Product a
 
 instance Bounded a => P.Bounded (Exp (Product a)) where
-  minBound = Product_ minBound
-  maxBound = Product_ maxBound
+  minBound = withExecutionStackAsCallStack $ Product_ minBound
+  maxBound = withExecutionStackAsCallStack $ Product_ maxBound
 
 instance Num a => P.Num (Exp (Product a)) where
-  (+)             = lift2 ((+) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
-  (-)             = lift2 ((-) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
-  (*)             = lift2 ((*) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
-  negate          = lift1 (negate :: Product (Exp a) -> Product (Exp a))
-  signum          = lift1 (signum :: Product (Exp a) -> Product (Exp a))
-  abs             = lift1 (signum :: Product (Exp a) -> Product (Exp a))
-  fromInteger x   = lift (P.fromInteger x :: Product (Exp a))
+  (+)             = withExecutionStackAsCallStack $ lift2 ((+) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
+  (-)             = withExecutionStackAsCallStack $ lift2 ((-) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
+  (*)             = withExecutionStackAsCallStack $ lift2 ((*) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
+  negate          = withExecutionStackAsCallStack $ lift1 (negate :: Product (Exp a) -> Product (Exp a))
+  signum          = withExecutionStackAsCallStack $ lift1 (signum :: Product (Exp a) -> Product (Exp a))
+  abs             = withExecutionStackAsCallStack $ lift1 (signum :: Product (Exp a) -> Product (Exp a))
+  fromInteger x   = withExecutionStackAsCallStack $ lift (P.fromInteger x :: Product (Exp a))
 
 instance Eq a => Eq (Product a) where
   (==) = withFrozenCallStack $ lift2 ((==) `on` getProduct)
@@ -151,28 +149,28 @@ instance Ord a => Ord (Product a) where
 
 instance Num a => Monoid (Exp (Product a)) where
   -- TODO: Does this work?
-  mempty = withFrozenCallStack 1
+  mempty = withExecutionStackAsCallStack 1
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
-  (<>)                  = withFrozenCallStack (*)
-  stimes n (Product_ x) = withFrozenCallStack $ Product_ $ x ^ (P.fromIntegral n :: Exp Int)
+  (<>)     = withFrozenCallStack (*)
+  stimes n = withFrozenCallStack $ \(Product_ x) -> Product_ $ x ^ (P.fromIntegral n :: Exp Int)
 
 
 -- Instances for unit and tuples
 -- -----------------------------
 
 instance Monoid (Exp ()) where
-  mempty = withFrozenCallStack $ constant ()
+  mempty = withExecutionStackAsCallStack $ constant ()
 
 instance (Elt a, Elt b, Monoid (Exp a), Monoid (Exp b)) => Monoid (Exp (a,b)) where
-  mempty = withFrozenCallStack $ T2 mempty mempty
+  mempty = withExecutionStackAsCallStack $ T2 mempty mempty
 
 instance (Elt a, Elt b, Elt c, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c)) => Monoid (Exp (a,b,c)) where
-  mempty = withFrozenCallStack $ T3 mempty mempty mempty
+  mempty = withExecutionStackAsCallStack $ T3 mempty mempty mempty
 
 instance (Elt a, Elt b, Elt c, Elt d, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d)) => Monoid (Exp (a,b,c,d)) where
-  mempty = withFrozenCallStack $ T4 mempty mempty mempty mempty
+  mempty = withExecutionStackAsCallStack $ T4 mempty mempty mempty mempty
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d), Monoid (Exp e)) => Monoid (Exp (a,b,c,d,e)) where
-  mempty = withFrozenCallStack $ T5 mempty mempty mempty mempty mempty
+  mempty = withExecutionStackAsCallStack $ T5 mempty mempty mempty mempty mempty
