@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Classes.Rational (
 import Data.Array.Accelerate.Data.Ratio
 import Data.Array.Accelerate.Data.Bits
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
@@ -42,32 +43,32 @@ import Prelude                                            ( ($) )
 class (Num a, Ord a) => Rational a where
   -- | Convert a number to the quotient of two integers
   --
-  toRational :: (FromIntegral Int64 b, Integral b) => Exp a -> Exp (Ratio b)
+  toRational :: (HasCallStack, FromIntegral Int64 b, Integral b) => Exp a -> Exp (Ratio b)
 
-instance Rational Int    where toRational = integralToRational
-instance Rational Int8   where toRational = integralToRational
-instance Rational Int16  where toRational = integralToRational
-instance Rational Int32  where toRational = integralToRational
-instance Rational Int64  where toRational = integralToRational
-instance Rational Word   where toRational = integralToRational
-instance Rational Word8  where toRational = integralToRational
-instance Rational Word16 where toRational = integralToRational
-instance Rational Word32 where toRational = integralToRational
-instance Rational Word64 where toRational = integralToRational
+instance Rational Int    where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Int8   where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Int16  where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Int32  where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Int64  where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Word   where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Word8  where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Word16 where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Word32 where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Word64 where toRational = withExecutionStackAsCallStack integralToRational
 
-instance Rational Half   where toRational = floatingToRational
-instance Rational Float  where toRational = floatingToRational
-instance Rational Double where toRational = floatingToRational
+instance Rational Half   where toRational = withExecutionStackAsCallStack floatingToRational
+instance Rational Float  where toRational = withExecutionStackAsCallStack floatingToRational
+instance Rational Double where toRational = withExecutionStackAsCallStack floatingToRational
 
 
 integralToRational
-    :: (Integral a, Integral b, FromIntegral a Int64, FromIntegral Int64 b)
+    :: (HasCallStack, Integral a, Integral b, FromIntegral a Int64, FromIntegral Int64 b)
     => Exp a
     -> Exp (Ratio b)
 integralToRational x = fromIntegral (fromIntegral x :: Exp Int64) :% 1
 
 floatingToRational
-    :: (RealFloat a, Integral b, FromIntegral Int64 b)
+    :: (HasCallStack, RealFloat a, Integral b, FromIntegral Int64 b)
     => Exp a
     -> Exp (Ratio b)
 floatingToRational x = fromIntegral u :% fromIntegral v
@@ -81,7 +82,7 @@ floatingToRational x = fromIntegral u :% fromIntegral v
 -- Stolen from GHC.Float.ConversionUtils
 -- Double mantissa have 53 bits, which fits in an Int64
 --
-elimZeros :: Exp Int64 -> Exp Int -> (Exp Int64, Exp Int)
+elimZeros :: HasCallStack => Exp Int64 -> Exp Int -> (Exp Int64, Exp Int)
 elimZeros x y = (u, v)
   where
     T3 _ u v = while (\(T3 p _ _) -> p) elim (T3 moar x y)
