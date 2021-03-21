@@ -20,12 +20,13 @@ module Data.Array.Accelerate.Classes.Fractional (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Num
 
-import Prelude                                                      ( (.) )
+import Prelude                                                      ( ($), (.) )
 import qualified Prelude                                            as P
 
 
@@ -46,27 +47,26 @@ type Fractional a = (Num a, P.Fractional (Exp a))
 
 
 instance P.Fractional (Exp Half) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
+  (/)          = withExecutionStackAsCallStack mkFDiv
+  recip        = withExecutionStackAsCallStack mkRecip
+  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
 
 instance P.Fractional (Exp Float) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
+  (/)          = withExecutionStackAsCallStack mkFDiv
+  recip        = withExecutionStackAsCallStack mkRecip
+  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
 
 instance P.Fractional (Exp Double) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
+  (/)          = withExecutionStackAsCallStack mkFDiv
+  recip        = withExecutionStackAsCallStack mkRecip
+  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
 
 instance P.Fractional (Exp CFloat) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
+  (/)          = withExecutionStackAsCallStack mkFDiv
+  recip        = withExecutionStackAsCallStack mkRecip
+  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
 
 instance P.Fractional (Exp CDouble) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
-
+  (/)          = withExecutionStackAsCallStack mkFDiv
+  recip        = withExecutionStackAsCallStack mkRecip
+  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
