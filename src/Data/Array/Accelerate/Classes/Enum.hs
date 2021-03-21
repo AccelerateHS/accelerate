@@ -20,6 +20,7 @@ module Data.Array.Accelerate.Classes.Enum (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -35,147 +36,147 @@ type Enum a = P.Enum (Exp a)
 
 
 instance P.Enum (Exp Int) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Int8) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Int16) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Int32) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Int64) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Word) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Word8) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Word16) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Word32) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Word64) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CInt) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CUInt) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CLong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CULong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CLLong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CULLong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CShort) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CUShort) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Half) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Float) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp Double) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CFloat) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
 instance P.Enum (Exp CDouble) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
+  succ      = withExecutionStackAsCallStack defaultSucc
+  pred      = withExecutionStackAsCallStack defaultPred
+  toEnum    = withExecutionStackAsCallStack defaultToEnum
+  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
 
-defaultSucc :: Num a => Exp a -> Exp a
+defaultSucc :: (HasCallStack, Num a) => Exp a -> Exp a
 defaultSucc x = x + 1
 
-defaultPred :: Num a => Exp a -> Exp a
+defaultPred :: (HasCallStack, Num a) => Exp a -> Exp a
 defaultPred x = x - 1
 
 defaultToEnum :: Int -> a
