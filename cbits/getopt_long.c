@@ -49,17 +49,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if 0
-#if defined(LIBC_SCCS) && !defined(lint)
-static char *rcsid = "$OpenBSD: getopt_long.c,v 1.16 2004/02/04 18:17:25 millert Exp $";
-#endif /* LIBC_SCCS and not lint */
-#endif
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
 
-#include <err.h>
 #include <errno.h>
 #include <getopt.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -127,6 +122,33 @@ static const char ambig[] = "ambiguous option -- %.*s";
 static const char noarg[] = "option doesn't take an argument -- %.*s";
 static const char illoptstring[] = "unknown option -- %s";
 #endif
+
+/* XXX: work around lack of getprogname() */
+static const char * prognamestring;
+
+/* XXX: stolen from freebsd-src/lib/libc/gen/err.c */
+static void
+vwarnx(const char *fmt, va_list ap)
+{
+        int saved_errno = errno;
+        FILE* err_file  = stderr;   /* XXX: simplified */
+
+        fprintf(err_file, "%s: ", prognamestring);
+        if (fmt != NULL)
+                vfprintf(err_file, fmt, ap);
+        fprintf(err_file, "\n");
+
+        errno = saved_errno;
+}
+
+static void
+warnx(const char* fmt, ...)
+{
+        va_list ap;
+        va_start(ap, fmt);
+        vwarnx(fmt, ap);
+        va_end(ap);
+}
 
 /*
  * Compute the greatest common divisor of a and b.
@@ -363,6 +385,11 @@ getopt_internal(int nargc, char * const *nargv, const char *options,
 
         if (options == NULL)
                 return (-1);
+
+        /*
+         * XXX work around lack of getprogname()
+         */
+        prognamestring = nargv[0];
 
         /*
          * XXX Some GNU programs (like cvs) set optind to 0 instead of
@@ -612,3 +639,4 @@ getopt_long_only(int nargc, char * const *nargv, const char *options,
         return (getopt_internal(nargc, nargv, options, long_options, idx,
             FLAG_PERMUTE|FLAG_LONGONLY));
 }
+
