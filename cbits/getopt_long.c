@@ -65,7 +65,7 @@ __FBSDID("$FreeBSD$");
 
 #define GNU_COMPATIBLE          /* Be more compatible, configure's use us! */
 
-#if 0                           /* we prefer to keep our getopt(3) */
+#if 1                           /* we prefer to keep our getopt(3) */
 #define REPLACE_GETOPT          /* use this getopt as the system getopt(3) */
 #endif
 
