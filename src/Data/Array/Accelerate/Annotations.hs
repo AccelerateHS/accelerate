@@ -36,9 +36,10 @@
 --       now
 -- TODO: There are no annotations in @PreSmartAcc@ yet
 -- TODO: Annotations for product pattern synnoyms using @Pattern@/@IsPattern@
--- TODO: Insert @withFrozenCallStack@ at the right location in the view pattern
---       of the pattern synonyms generated using @mkPattern@. This should use an
---       empty frozen call stack with GHC 9.0.x and below instead.
+-- TODO: Pattern synonyms using 'Pattern' should probably pop another layer of
+--       call stacks since those are never used directly (there's another TODO
+--       for this). Also check if this works for index pattern synonyms like I2
+--       and I3.
 -- TODO: Instead of relying on 'HasCallStack', since we already freeze the call
 --       stacks at the top level we can also use our own implicit parameter.
 --       This would at least alleviate the need to litter every frontend

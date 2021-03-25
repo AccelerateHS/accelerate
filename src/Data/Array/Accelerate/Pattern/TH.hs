@@ -15,6 +15,9 @@ module Data.Array.Accelerate.Pattern.TH (
   mkPattern,
   mkPatterns,
 
+  -- Re-exported, used inside of the sum pattern synonyms
+  withEmptyOrFrozenCallStack,
+
 ) where
 
 import Data.Array.Accelerate.Annotations
@@ -76,9 +79,6 @@ mkDec dec =
 mkNewtypeD :: Name -> [TyVarBndr ()] -> Con -> DecsQ
 mkNewtypeD tn tvs c = mkDataD tn tvs [c]
 
--- TODO: The view pattern function of the generated pattern synonym should be
---       wrapped in @withFrozenCallStack@, or with an empty frozen call stack on
---       GHC 9.0.x and below.
 mkDataD :: Name -> [TyVarBndr ()] -> [Con] -> DecsQ
 mkDataD tn tvs cs = do
   (pats, decs) <- unzip <$> go cs
@@ -147,7 +147,7 @@ mkConP tn' tvs' con' = do
         pat = rename cn
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt $ [t| HasCallStack |] : (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
@@ -165,7 +165,7 @@ mkConP tn' tvs' con' = do
         pat = rename cn
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt $ [t| HasCallStack |] : (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
@@ -189,7 +189,7 @@ mkConP tn' tvs' con' = do
         pat = mkName (':' : nameBase cn)
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt $ [t| HasCallStack |] : (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
@@ -233,14 +233,14 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (prefixPatSyn xs)
-                         (explBidir [clause [] (normalB (varE build)) []])
-                         (parensP $ viewP (varE match) [p| Just $(tupP (map varP xs)) |])
+                         (explBidir [clause [] (normalB (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE build))) []])
+                         (parensP $ viewP (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE match)) [p| Just $(tupP (map varP xs)) |])
                      ]
       return r
       where
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt $ [t| HasCallStack |] : ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
@@ -250,8 +250,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (recordPatSyn xs)
-                         (explBidir [clause [] (normalB (varE build)) []])
-                         (parensP $ viewP (varE match) [p| Just $(tupP (map varP xs)) |])
+                         (explBidir [clause [] (normalB (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE build))) []])
+                         (parensP $ viewP (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE match)) [p| Just $(tupP (map varP xs)) |])
                      ]
       return r
       where
@@ -270,8 +270,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (infixPatSyn _a _b)
-                         (explBidir [clause [] (normalB (varE build)) []])
-                         (parensP $ viewP (varE match) [p| Just $(tupP [varP _a, varP _b]) |])
+                         (explBidir [clause [] (normalB (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE build))) []])
+                         (parensP $ viewP (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE match)) [p| Just $(tupP [varP _a, varP _b]) |])
                      ]
       r' <- case mf of
               Nothing -> return r
@@ -305,7 +305,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       where
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt $ [t| HasCallStack |] : (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
