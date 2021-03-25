@@ -192,9 +192,10 @@ withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
 -- only works when all smart constructors have the 'HasCallStack' constraint.
 -- This function __must__ be called with 'withFrozenCallStack'.
 --
--- XXX: Should there be some convenience wrapper for @withFrozenCallStack
---      mkAnn@? That could get rid of some noise, but it also sort of defeats
---      the purpose of asserting that the call stack is frozen.
+-- TODO: When Accelerate has a logger, this assertion should be replaced by a
+--       warning. If the call stacks are not frozen, then we'll just treat it as
+--       an empty call stack. When running the test suite this should still
+--       count as a hard error though.
 mkAnn :: HasCallStack => Ann
 mkAnn = assert callStackIsFrozen
     $ Ann (callerLoc $ getCallStack callStack) defaultOptimizations
