@@ -1,6 +1,7 @@
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE CPP             #-}
+{-# LANGUAGE ImplicitParams  #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -88,15 +89,16 @@
 -- new annotations for any new artificially generated AST nodes. This allows
 -- both optimization flags and source mapping information to be preserved.
 module Data.Array.Accelerate.Annotations
-    ( alwaysInline
-    , unRollIters
-    , Ann(..)
+    ( Ann(..)
     , Optimizations(..)
     , HasAnnotations(..)
+    , alwaysInline
+    , unRollIters
     , withOptimizations
     , mkAnn
     , mkDummyAnn
     , withEmptyCallStack
+    , withEmptyOrFrozenCallStack
     , withExecutionStackAsCallStack
       -- Re-exported for convenience
     , HasCallStack
@@ -120,25 +122,6 @@ import           Language.Haskell.TH            ( Q
                                                 , TExp
                                                 )
 
-
--- * Annotation functions
---
--- These are exposed to the user so they can annotate AST nodes.
-
--- | Instruct the compiler to always inline this expression and to not perform
--- any sharing recovery. This will allow inexpensive calculations whose values
--- are used in multiple places to be fused, potentially increasing performance
--- since the values don't have to be written to memory anymore.
-alwaysInline :: HasAnnotations a => a -> a
-alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
-
--- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
-unRollIters :: HasAnnotations a => Int -> a -> a
-unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
-
-
-
--- * Internal types and functions
 
 -- | This annotation type would store source information if available and any
 -- additional annotation types added by the programmer.
@@ -168,6 +151,25 @@ data Optimizations = Optimizations
     , optUnrollIters  :: Maybe Int
     }
     deriving Show
+
+
+-- * Annotation functions
+--
+-- These are exposed to the user so they can annotate AST nodes.
+
+-- | Instruct the compiler to always inline this expression and to not perform
+-- any sharing recovery. This will allow inexpensive calculations whose values
+-- are used in multiple places to be fused, potentially increasing performance
+-- since the values don't have to be written to memory anymore.
+alwaysInline :: HasAnnotations a => a -> a
+alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
+
+-- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
+unRollIters :: HasAnnotations a => Int -> a -> a
+unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
+
+
+-- * Internal types and functions
 
 -- | Used for modifying an AST node's annotations.
 --
@@ -229,6 +231,35 @@ mkDummyAnn = withEmptyCallStack mkAnn
 withEmptyCallStack :: (HasCallStack => a) -> a
 withEmptyCallStack dewit =
     let ?callStack = freezeCallStack emptyCallStack in dewit
+
+-- | Workaround for pattern synonyms and call stacks not working as expected in
+-- GHC versions 9.0.x and below. See the issue linked below. On this versions we
+-- will freeze an empty call stack instead of the call stack wasn't already
+-- frozen. This function is implemented in the same way as the regular
+-- 'withFrozenCallStack'.
+--
+-- HACK: Call stacks didn't play nicely with pattern synonyms in GHC version
+--       before 9.2, so to prevent incorrect source annotations we'll prevent
+--       them from being generated completely.
+--
+--       https://gitlab.haskell.org/ghc/ghc/-/issues/19289
+-- TODO: Since 'Pattern' isn't meant to be used directly, should we strip off
+--       two layers of call stack?
+withEmptyOrFrozenCallStack :: HasCallStack => (HasCallStack => a) -> a
+withEmptyOrFrozenCallStack dewit =
+  let ?callStack =
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+        -- Same definition as in 'withFrozenCallStack'
+        freezeCallStack (popCallStack callStack)
+#else
+        -- Only freeze an empty call stack of the call stack isn't already
+        -- frozen, i.e. when it is used internally within Accelerate's front end
+        -- standard library
+        case ?callStack of
+          x@(FreezeCallStack _) -> x
+          _                     -> freezeCallStack emptyCallStack
+#endif
+  in  dewit
 
 -- | Evaluate a computation after transforming the RTS execution stack into a
 -- frozen GHC call stack so it can interact with our other call stack based
