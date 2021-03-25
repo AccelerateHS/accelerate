@@ -250,5 +250,6 @@ dump_sched            = Flag 26 -- trace scheduler
 --
 runQ $ do
   addForeignFilePath LangC "cbits/flags.c"
+  addForeignFilePath LangC "cbits/getopt_long.c"
   return []
 
