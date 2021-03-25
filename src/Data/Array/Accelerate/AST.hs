@@ -957,6 +957,35 @@ primFunType = \case
     tint     = TupRsingle scalarTypeInt
 
 
+-- Annotations
+-- -----------
+
+instance HasAnnotations (OpenAcc aenv t) where
+  modifyAnn f (OpenAcc (Map ann tp f' a)) = OpenAcc $ Map (f ann) tp f' a
+  modifyAnn f (OpenAcc (Fold ann f' z a)) = OpenAcc $ Fold (f ann) f' z a
+  modifyAnn _ e = e
+
+  getAnn (OpenAcc (Map ann _ _ _)) = Just ann
+  getAnn (OpenAcc (Fold ann _ _ _)) = Just ann
+  -- TODO: All other constructors as we add more annotations
+  getAnn _ = Nothing
+
+instance HasAnnotations (OpenExp env aenv t) where
+  modifyAnn f (Let ann lhs bnd body) = Let (f ann) lhs bnd body
+  modifyAnn f (Pair ann e1 e2) = Pair (f ann) e1 e2
+  modifyAnn f (Nil ann) = Nil (f ann)
+  modifyAnn f (Const ann tp c) = Const (f ann) tp c
+  -- TODO: All other constructors as we add more annotations
+  modifyAnn _ e = e
+
+  getAnn (Let ann _ _ _) = Just ann
+  getAnn (Pair ann _ _) = Just ann
+  getAnn (Nil ann) = Just ann
+  getAnn (Const ann _ _) = Just ann
+  -- TODO: All other constructors as we add more annotations
+  getAnn _ = Nothing
+
+
 -- Normal form data
 -- ================
 
