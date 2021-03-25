@@ -47,27 +47,35 @@ import Prelude                                                      hiding ( exp
 import qualified Prelude                                            as P
 
 
+-- TODO: Evaluate the correctness of our annotation propagation.  Honestly, I'm
+--       not sure whether when optimizing @x + y@ with @y = 0@ to just @x@ we
+--       should return just @x@, or whether we should integrate the annotation
+--       (and thus source location) of the whole addition into the returned @x@.
+-- TODO: In line with the above, does it make more sense to directly take the
+--       annotation from the pair (which would match up with the source location
+--       of the primitive operation) or should we combine that pair with the
+--       annotation of both of the elements?
+
+
 -- Propagate constant expressions, which are either constant valued expressions
 -- or constant let bindings. Be careful not to follow self-cycles.
---
--- TODO: Replace the dummy annotations once we add the other annotation fields
 --
 propagate
     :: forall env aenv exp.
        Gamma env env aenv
     -> OpenExp env aenv exp
-    -> Maybe (exp, Ann)
+    -> Maybe exp
 propagate env = cvtE
   where
-    cvtE :: OpenExp env aenv e -> Maybe (e, Ann)
+    cvtE :: OpenExp env aenv e -> Maybe e
     cvtE exp = case exp of
-      Const ann _ c                             -> Just (c, ann)
-      PrimConst c                               -> Just (evalPrimConst c, mkDummyAnn)
+      Const _ _ c                               -> Just c
+      PrimConst c                               -> Just (evalPrimConst c)
       Evar (Var _  ix)
         | e             <- prjExp ix env
         , Nothing       <- matchOpenExp exp e   -> cvtE e
-      Nil ann                                   -> Just ((), ann)
-      Pair ann e1 e2                            -> (\(x, _) (y, _) -> ((x, y), ann)) <$> cvtE e1 <*> cvtE e2
+      Nil _                                     -> Just ()
+      Pair _ e1 e2                              -> (,) <$> cvtE e1 <*> cvtE e2
       _                                         -> Nothing
 
 
@@ -253,18 +261,23 @@ associates fun exp = case fun of
 
 type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Maybe (OpenExp env aenv b)
 
+-- | A helper to extract an annotation from an expression, or to return an empty
+-- annotation if the expression doesn't contain one.
+extractAnn :: OpenExp env aenv a -> Ann
+extractAnn (getAnn -> Just ann) = ann
+extractAnn _                    = mkDummyAnn
+
 eval1 :: SingleType b -> (a -> b) -> a :-> b
 eval1 tp f x env
-  | Just (a, ann) <- propagate env x = Stats.substitution "constant fold" . Just $ Const ann (SingleScalarType tp) (f a)
-  | otherwise                        = Nothing
+  | Just a <- propagate env x = Stats.substitution "constant fold" . Just $ Const (extractAnn x) (SingleScalarType tp) (f a)
+  | otherwise                 = Nothing
 
--- TODO: Is combining annotations here the correct approach?
 eval2 :: SingleType c -> (a -> b -> c) -> (a,b) :-> c
-eval2 tp f (untup2 -> Just (x,y)) env
-  | Just (a, ann1) <- propagate env x
-  , Just (b, ann2) <- propagate env y
+eval2 tp f t@(untup2 -> Just (x,y)) env
+  | Just a <- propagate env x
+  , Just b <- propagate env y
   = Stats.substitution "constant fold"
-  $ Just $ Const (ann1 <> ann2) (SingleScalarType tp) (f a b)
+  $ Just $ Const (extractAnn t <> extractAnn x <> extractAnn y) (SingleScalarType tp) (f a b)
 eval2 _ _ _ _
   = Nothing
 
@@ -278,28 +291,24 @@ toBool _ = True
 
 bool1 :: (a -> Bool) -> a :-> PrimBool
 bool1 f x env
-  | Just (a, ann) <- propagate env x
+  | Just a <- propagate env x
   = Stats.substitution "constant fold"
-  . Just $ Const ann scalarTypeWord8 (fromBool (f a))
+  . Just $ Const (extractAnn x) scalarTypeWord8 (fromBool (f a))
 bool1 _ _ _
   = Nothing
 
 bool2 :: (a -> b -> Bool) -> (a,b) :-> PrimBool
-bool2 f (untup2 -> Just (x,y)) env
-  | Just (a, ann1) <- propagate env x
-  , Just (b, ann2) <- propagate env y
+bool2 f t@(untup2 -> Just (x,y)) env
+  | Just a <- propagate env x
+  , Just b <- propagate env y
   = Stats.substitution "constant fold"
-  $ Just $ Const (ann1 <> ann2) scalarTypeWord8 (fromBool (f a b))
+  $ Just $ Const (extractAnn t <> extractAnn x <> extractAnn y) scalarTypeWord8 (fromBool (f a b))
 bool2 _ _ _
   = Nothing
 
--- TODO: We should be passing another argument for an annotation here, and that
---       annotation should be built by combining the annotations of the original
---       AST nodes we're rewriting.
-tup2 :: (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
-tup2 (a,b) = Pair mkDummyAnn a b
+tup2 :: Ann -> (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
+tup2 ann (a,b) = Pair ann a b
 
--- TODO: Should we just throw away the annotation here?
 untup2 :: OpenExp env aenv (a, b) -> Maybe (OpenExp env aenv a, OpenExp env aenv b)
 untup2 exp
   | Pair _ a b <- exp = Just (a, b)
@@ -326,10 +335,10 @@ evalAdd ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalAdd' t
 evalAdd ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalAdd' ty
 
 evalAdd' :: (Eq a, Num a) => NumType a -> (a,a) :-> a
-evalAdd' _  (untup2 -> Just (x,y)) env
-  | Just (a, _) <- propagate env x
+evalAdd' _  t@(untup2 -> Just (x,y)) env
+  | Just a <- propagate env x
   , a == 0
-  = Stats.ruleFired "x+0" $ Just y
+  = Stats.ruleFired "x+0" . Just $ modifyAnn (<> extractAnn t <> extractAnn x) y
 
 evalAdd' ty arg env
   = eval2 (NumSingleType ty) (+) arg env
@@ -340,25 +349,23 @@ evalSub ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalSub' t
 evalSub ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalSub' ty
 
 evalSub' :: forall a. (Eq a, Num a) => NumType a -> (a,a) :-> a
-evalSub' ty (untup2 -> Just (x,y)) env
-  | Just (b, _)      <- propagate env y
+evalSub' ty t@(untup2 -> Just (x,y)) env
+  | Just b      <- propagate env y
   , b == 0
-  = Stats.ruleFired "x-0" $ Just x
+  = Stats.ruleFired "x-0" . Just $ modifyAnn (const combinedAnn) x
 
-  | Nothing         <- propagate env x
-  , Just (b, _)     <- propagate env y
+  | Nothing     <- propagate env x
+  , Just b      <- propagate env y
   = Stats.ruleFired "-y+x"
-  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Pair ann (Const ann tp (-b)) x)
+  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Pair combinedAnn (Const combinedAnn tp (-b)) x)
   -- (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
   | Just Refl   <- matchOpenExp x y
   = Stats.ruleFired "x-x"
-  $ Just $ Const ann tp 0
+  $ Just $ Const combinedAnn tp 0
   where
     tp = SingleScalarType $ NumSingleType ty
-    -- TODO: Get and merge annotations from @x@ and @y@. We'll probably need
-    --       some way to extract annotations from AST nodes anyway
-    ann = undefined :: Ann
+    combinedAnn = extractAnn t <> extractAnn x <> extractAnn y
 
 evalSub' ty arg env
   = eval2 (NumSingleType ty) (-) arg env
@@ -369,13 +376,15 @@ evalMul ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalMul' t
 evalMul ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalMul' ty
 
 evalMul' :: (Eq a, Num a) => NumType a -> (a,a) :-> a
-evalMul' _  (untup2 -> Just (x,y)) env
-  | Just (a, _) <- propagate env x
+evalMul' _  t@(untup2 -> Just (x,y)) env
+  | Just a      <- propagate env x
   , Nothing     <- propagate env y
   = case a of
-      0         -> Stats.ruleFired "x*0" $ Just x
-      1         -> Stats.ruleFired "x*1" $ Just y
+      0         -> Stats.ruleFired "x*0" . Just $ modifyAnn (const combinedAnn) x
+      1         -> Stats.ruleFired "x*1" . Just $ modifyAnn (const combinedAnn) y
       _         -> Nothing
+  where
+    combinedAnn = extractAnn t <> extractAnn x <> extractAnn y
 
 evalMul' ty arg env
   = eval2 (NumSingleType ty) (*) arg env
@@ -401,7 +410,7 @@ evalQuot :: IntegralType a -> (a,a) :-> a
 evalQuot ty exp env
   | Just qr    <- evalQuotRem ty exp env
   , Just (q,_) <- untup2 qr
-  = Just q
+  = Just $ modifyAnn (<> extractAnn exp) q
 evalQuot _ _ _
   = Nothing
 
@@ -409,7 +418,7 @@ evalRem :: IntegralType a -> (a,a) :-> a
 evalRem ty exp env
   | Just qr    <- evalQuotRem ty exp env
   , Just (_,r) <- untup2 qr
-  = Just r
+  = Just $ modifyAnn (<> extractAnn exp) r
 evalRem _ _ _
   = Nothing
 
@@ -417,19 +426,17 @@ evalQuotRem :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalQuotRem ty exp env
   | IntegralDict <- integralDict ty
   , Just (x, y)  <- untup2 exp
-  , Just (b, _)  <- propagate env y
-  = case b of
-      0 -> Nothing
-      1 -> Stats.ruleFired "quotRem x 1" $ Just (tup2 (x, Const ann tp 0))
-      _ -> case propagate env x of
-             Nothing     -> Nothing
-             Just (a, _) -> Stats.substitution "constant fold"
-                      $ Just $ let (u,v) = quotRem a b
-                               in  tup2 (Const ann tp u, Const ann tp v)
-  where
-    tp = SingleScalarType $ NumSingleType $ IntegralNumType ty
-    -- TODO: Combine annotations from @x@ and @y@
-    ann = undefined :: Ann
+  , Just b       <- propagate env y
+  = let tp = SingleScalarType $ NumSingleType $ IntegralNumType ty
+        combinedAnn = extractAnn exp <> extractAnn x <> extractAnn y
+    in  case b of
+          0 -> Nothing
+          1 -> Stats.ruleFired "quotRem x 1" $ Just (tup2 combinedAnn (x, Const combinedAnn tp 0))
+          _ -> case propagate env x of
+                Nothing     -> Nothing
+                Just a      -> Stats.substitution "constant fold"
+                          $ Just $ let (u,v) = quotRem a b
+                                   in  tup2 combinedAnn (Const combinedAnn tp u, Const combinedAnn tp v)
 evalQuotRem _ _ _
   = Nothing
 
@@ -438,7 +445,7 @@ evalIDiv :: IntegralType a -> (a,a) :-> a
 evalIDiv ty exp env
   | Just dm    <- evalDivMod ty exp env
   , Just (d,_) <- untup2 dm
-  = Just d
+  = Just $ modifyAnn (<> extractAnn exp) d
 evalIDiv _ _ _
   = Nothing
 
@@ -446,7 +453,7 @@ evalMod :: IntegralType a -> (a,a) :-> a
 evalMod ty exp env
   | Just dm    <- evalDivMod ty exp env
   , Just (_,m) <- untup2 dm
-  = Just m
+  = Just $ modifyAnn (<> extractAnn exp) m
 evalMod _ _ _
   = Nothing
 
@@ -454,19 +461,17 @@ evalDivMod :: forall a. IntegralType a -> (a,a) :-> (a,a)
 evalDivMod ty exp env
   | IntegralDict <- integralDict ty
   , Just (x, y)  <- untup2 exp
-  , Just (b, _)  <- propagate env y
-  = case b of
-      0 -> Nothing
-      1 -> Stats.ruleFired "divMod x 1" $ Just (tup2 (x, Const ann tp 0))
-      _ -> case propagate env x of
-             Nothing     -> Nothing
-             Just (a, _) -> Stats.substitution "constant fold"
-                      $ Just $ let (u,v) = divMod a b
-                               in  tup2 (Const ann tp u, Const ann tp v)
-  where
-    tp = SingleScalarType $ NumSingleType $ IntegralNumType ty
-    -- TODO: Combine annotations from @x@ and @y@
-    ann = undefined :: Ann
+  , Just b       <- propagate env y
+  = let tp = SingleScalarType $ NumSingleType $ IntegralNumType ty
+        combinedAnn = extractAnn exp <> extractAnn x <> extractAnn y
+    in  case b of
+          0 -> Nothing
+          1 -> Stats.ruleFired "divMod x 1" $ Just (tup2 combinedAnn (x, Const combinedAnn tp 0))
+          _ -> case propagate env x of
+                Nothing     -> Nothing
+                Just a      -> Stats.substitution "constant fold"
+                          $ Just $ let (u,v) = divMod a b
+                                   in  tup2 combinedAnn (Const combinedAnn tp u, Const combinedAnn tp v)
 evalDivMod _ _ _
   = Nothing
 
@@ -477,9 +482,9 @@ evalBOr :: IntegralType a -> (a,a) :-> a
 evalBOr ty | IntegralDict <- integralDict ty = evalBOr' ty
 
 evalBOr' :: (Eq a, Num a, Bits a) => IntegralType a -> (a,a) :-> a
-evalBOr' _ (untup2 -> Just (x,y)) env
-  | Just (0, _) <- propagate env x
-  = Stats.ruleFired "x .|. 0" $ Just y
+evalBOr' _ t@(untup2 -> Just (x,y)) env
+  | Just 0 <- propagate env x
+  = Stats.ruleFired "x .|. 0" . Just $ modifyAnn (<> extractAnn t <> extractAnn x) y
 
 evalBOr' ty arg env
   = eval2 (NumSingleType $ IntegralNumType ty) (.|.) arg env
@@ -491,32 +496,32 @@ evalBNot :: IntegralType a -> a :-> a
 evalBNot ty | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType ty) complement
 
 evalBShiftL :: IntegralType a -> (a,Int) :-> a
-evalBShiftL _ (untup2 -> Just (x,i)) env
-  | Just (0, _) <- propagate env i
-  = Stats.ruleFired "x `shiftL` 0" $ Just x
+evalBShiftL _ t@(untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `shiftL` 0" . Just $ modifyAnn (<> extractAnn t <> extractAnn i) x
 
 evalBShiftL ty arg env
   | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) shiftL arg env
 
 evalBShiftR :: IntegralType a -> (a,Int) :-> a
-evalBShiftR _ (untup2 -> Just (x,i)) env
-  | Just (0, _) <- propagate env i
-  = Stats.ruleFired "x `shiftR` 0" $ Just x
+evalBShiftR _ t@(untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `shiftR` 0" . Just $ modifyAnn (<> extractAnn t <> extractAnn i) x
 
 evalBShiftR ty arg env
   | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) shiftR arg env
 
 evalBRotateL :: IntegralType a -> (a,Int) :-> a
-evalBRotateL _ (untup2 -> Just (x,i)) env
-  | Just (0, _) <- propagate env i
-  = Stats.ruleFired "x `rotateL` 0" $ Just x
+evalBRotateL _ t@(untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `rotateL` 0" . Just $ modifyAnn (<> extractAnn t <> extractAnn i) x
 evalBRotateL ty arg env
   | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) rotateL arg env
 
 evalBRotateR :: IntegralType a -> (a,Int) :-> a
-evalBRotateR _ (untup2 -> Just (x,i)) env
-  | Just (0, _) <- propagate env i
-  = Stats.ruleFired "x `rotateR` 0" $ Just x
+evalBRotateR _ t@(untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `rotateR` 0" . Just $ modifyAnn (<> extractAnn t <> extractAnn i) x
 evalBRotateR ty arg env
   | IntegralDict <- integralDict ty = eval2 (NumSingleType $ IntegralNumType ty) rotateR arg env
 
@@ -537,9 +542,9 @@ evalFDiv :: FloatingType a -> (a,a) :-> a
 evalFDiv ty | FloatingDict <- floatingDict ty = evalFDiv' ty
 
 evalFDiv' :: (Fractional a, Eq a) => FloatingType a -> (a,a) :-> a
-evalFDiv' _ (untup2 -> Just (x,y)) env
-  | Just (1, _) <- propagate env y
-  = Stats.ruleFired "x/1" $ Just x
+evalFDiv' _ t@(untup2 -> Just (x,y)) env
+  | Just 1 <- propagate env y
+  = Stats.ruleFired "x/1" . Just $ modifyAnn (<> extractAnn t <> extractAnn y) x
 
 evalFDiv' ty arg env
   = eval2 (NumSingleType $ FloatingNumType ty) (/) arg env
@@ -672,37 +677,35 @@ evalMin ty@(NumSingleType (FloatingNumType ty')) | FloatingDict <- floatingDict 
 -- -----------------
 
 evalLAnd :: (PrimBool,PrimBool) :-> PrimBool
-evalLAnd (untup2 -> Just (x,y)) env
-  | Just (a, _) <- propagate env x
+evalLAnd t@(untup2 -> Just (x,y)) env
+  | Just a <- propagate env x
   = Just
-  $ if toBool a then Stats.ruleFired "True &&" y
-                else Stats.ruleFired "False &&" $ Const ann scalarTypeWord8 0
+  $ if toBool a then Stats.ruleFired "True &&" $ modifyAnn (const combinedAnn) y
+                else Stats.ruleFired "False &&" $ Const combinedAnn scalarTypeWord8 0
 
-  | Just (b, _) <- propagate env y
+  | Just b <- propagate env y
   = Just
-  $ if toBool b then Stats.ruleFired "True &&" x
-                else Stats.ruleFired "False &&" $ Const ann scalarTypeWord8 0
+  $ if toBool b then Stats.ruleFired "True &&" $ modifyAnn (const combinedAnn) x
+                else Stats.ruleFired "False &&" $ Const combinedAnn scalarTypeWord8 0
   where
-    -- TODO: Combine annotations from @x@ and @y@
-    ann = undefined :: Ann
+    combinedAnn = extractAnn t <> extractAnn x <> extractAnn y
 
 evalLAnd _ _
   = Nothing
 
 evalLOr  :: (PrimBool,PrimBool) :-> PrimBool
-evalLOr (untup2 -> Just (x,y)) env
-  | Just (a, _) <- propagate env x
+evalLOr t@(untup2 -> Just (x,y)) env
+  | Just a <- propagate env x
   = Just
-  $ if toBool a then Stats.ruleFired "True ||" $ Const ann scalarTypeWord8 1
-                else Stats.ruleFired "False ||" y
+  $ if toBool a then Stats.ruleFired "True ||" $ Const combinedAnn scalarTypeWord8 1
+                else Stats.ruleFired "False ||" $ modifyAnn (const combinedAnn) y
 
-  | Just (b, _) <- propagate env y
+  | Just b <- propagate env y
   = Just
-  $ if toBool b then Stats.ruleFired "True ||" $ Const ann scalarTypeWord8 1
-                else Stats.ruleFired "False ||" x
+  $ if toBool b then Stats.ruleFired "True ||" $ Const combinedAnn scalarTypeWord8 1
+                else Stats.ruleFired "False ||" $ modifyAnn (const combinedAnn) x
   where
-    -- TODO: Combine annotations from @x@ and @y@
-    ann = undefined :: Ann
+    combinedAnn = extractAnn t <> extractAnn x <> extractAnn y
 
 evalLOr _ _
   = Nothing
