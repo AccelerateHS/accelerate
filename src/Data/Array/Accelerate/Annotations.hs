@@ -38,6 +38,10 @@
 -- TODO: Insert @withFrozenCallStack@ at the right location in the view pattern
 --       of the pattern synonyms generated using @mkPattern@. This should use an
 --       empty frozen call stack with GHC 9.0.x and below instead.
+-- TODO: Instead of relying on 'HasCallStack', since we already freeze the call
+--       stacks at the top level we can also use our own implicit parameter.
+--       This would at least alleviate the need to litter every frontend
+--       function with 'HasCallStack'.
 --
 -- ** Annotations in the de Bruijn AST
 --
