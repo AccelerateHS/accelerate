@@ -71,12 +71,12 @@ class IsPattern context a b where
 
 
 pattern Vector :: forall b a context. IsVector context a b => b -> context a
-pattern Vector vars <- (vunpack @context -> vars)
-  where Vector = vpack @context
+pattern Vector vars <- (withEmptyOrFrozenCallStack (vunpack @context) -> vars)
+  where Vector = withEmptyOrFrozenCallStack (vpack @context)
 
 class IsVector context a b where
-  vpack   :: b -> context a
-  vunpack :: context a -> b
+  vpack   :: HasCallStack => b -> context a
+  vunpack :: HasCallStack => context a -> b
 
 -- | Pattern synonyms for indices, which may be more convenient to use than
 -- 'Data.Array.Accelerate.Lift.lift' and
