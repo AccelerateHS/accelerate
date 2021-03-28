@@ -7,9 +7,8 @@
 
 -- | Annotations for Accelerate's abstract syntax trees.
 --
--- TODO: Document what exactly we are annotations, how, and with what once this
+-- TODO: Document what exactly we are annotations and how we do that once this
 --       has been fleshed out a little more.
---
 -- TODO: Add the same file header used in all other modules
 -- TODO: Reformat all of the changes from this branch to the usual Accelerate
 --       style. There's no style guide or formatter config anywhere, so I just
@@ -32,10 +31,14 @@
 --
 -- ** Annotations in the smart AST
 --
--- TODO: Only a few @PreSmartExp@ constructors have an annotation field right
---       now
--- TODO: There are no annotations in @PreSmartAcc@ yet
--- TODO: Annotations for product pattern synnoyms using @Pattern@/@IsPattern@
+--   * At the moment only a handful of 'PreSmartExp' and 'PreSmartAcc'
+--     constructors have annotation fields.
+--   * Call stacks are frozen in all of the exposed front end functions and in
+--     the (generated) pattern synonyms. This allows us to capture them in
+--     'makeAnn' so they can be used later to map an AST back to the original
+--     source location. This does require the 'HasCallStack' constraint to be
+--     added to every function that either directly or indirectly calls 'mkAnn'.
+--
 -- TODO: Pattern synonyms using 'Pattern' should probably pop another layer of
 --       call stacks since those are never used directly (there's another TODO
 --       for this). Also check if this works for index pattern synonyms like I2
@@ -47,48 +50,56 @@
 --
 -- ** Annotations in the de Bruijn AST
 --
--- TODO: Add the same annotations as in the Smart ASTs, and make sure that they
---       are propagated properly through the transformations.
+--   * The internal AST also contains fields in the constructors that correspond
+--     to the annotated constructors of the smart AST.
+--   * Annotations are propagated through the entire transformation pipeline.
+--     When the smart AST gets transformed into the internal AST during sharing
+--     recovery the annotations passed through as is.
+--   * When AST nodes get combined into a new node, for instance during the
+--     simplification and constant folding processes, the new node's annotation
+--     is created by joining the annotations of all involved nodes.
+--
+--     TODO: Elaborate in this
+--
 -- TODO: Annotations are completely ignored in 'Match' and 'Hash' at the moment.
 --       We should probably at least consider the optimizations of not the
 --       entire annotation.
 --
--- TODO: The rest of the process up until codegen
---
--- ** Annotations the transformations
---
--- TODO: There are a lot of TODOs, FIXMEs and dummy annotations there left
---
 -- ** Annotations in the delayed representation
 --
--- TODO: Figure out how this is going to work. Currently all array level
---       annotations are thrown out when we reach fusion.
+--   * In the fusion process some of the original nodes will disappear as they
+--     are replaced with cunctations and eventually end up as delayed array
+--     computations.
+--   * During this process we will preserve the annotations of the delayed and
+--     fused AST nodes in the constructors of those cunctations an delayed
+--     arrays.
+--
+-- TODO: Figure out what to do with conflicting optimization flags in the fusion
+--       process. If we fuse an unrolled map into a fold, should:
+--
+--       a) The resulting fold be unrolled as well? To make things easier this
+--          is the current behaviour.
+--       b) The optimization flag be ignored (with a warning for the user)?
+--       c) We throw a hard error and tell the user to fix this themselves?
+-- TODO: Code gen changes
 --
 -- ** Annotating ASTs
 --
 -- AST nodes will automatically contain source mapping information because of
 -- the use of smart constructors. The user can specify optimization flags for an
 -- AST node by using the optimization functions exposed from
--- @Data.Array.Accelerate.Smart@.
+-- @Data.Array.Accelerate@.
 --
 -- The annotation type stores source mapping information in a set so we can
 -- easily merge and transform AST nodes in the optimization process while still
 -- preserving information about the node's origins.
 --
+-- TODO: Rewrite the above, this was written a while back and it's now both
+--       missing bits and also repeating other information
 -- XXX: Right now it would be possible to specify some nonsensible flags, like
 --      setting loop unrolling for a constant value. Should we just silently
 --      ignore these things like we do now, or should be printing warnings? I
 --      don't think Accelerate has any other non-fatal compiler diagnostics.
---
--- TODO: Call stacks should be frozen for any function exposed to the user,
---       right now this is not yet the case.
---
--- ** AST transformations
---
--- When doing transformations over the AST, for instance when applying
--- simplification rules, then we'll combine existing annotation fields to create
--- new annotations for any new artificially generated AST nodes. This allows
--- both optimization flags and source mapping information to be preserved.
 module Data.Array.Accelerate.Annotations
     ( Ann(..)
     , Optimizations(..)
