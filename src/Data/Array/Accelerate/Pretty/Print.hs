@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -30,6 +31,7 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyConst,
   prettyELhs,
   prettyALhs,
+  prettyAnn,
 
   -- ** Configuration
   PrettyConfig(..),
@@ -55,6 +57,7 @@ module Data.Array.Accelerate.Pretty.Print (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST                                    hiding ( Direction )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
@@ -71,9 +74,12 @@ import qualified Data.Array.Accelerate.Analysis.Hash                as Hash
 import qualified Data.Array.Accelerate.Trafo.Delayed                as Delayed
 
 import Data.Char
+import qualified Data.HashSet                  as S
+import Data.Maybe
 import Data.String
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
+import GHC.Stack
 import Prelude                                                      hiding ( exp )
 
 
@@ -360,6 +366,60 @@ prettyLhs requiresParens x env0 lhs = case collect lhs of
 
 prettyArray :: ArrayR (Array sh e) -> Array sh e -> Adoc
 prettyArray aR@(ArrayR _ eR) = parens . fromString . showArray (showsElt eR) aR
+
+
+-- Annotations
+-- -----------
+
+-- Note that we purposely don't use wild cards or the record's functions.
+-- Otherwise it can be easy to forget to add a new annotation to the pretty
+-- printer.
+-- TODO: Make this, well, prettier
+-- TODO: This should be incorporated in the pretty printing of arrays and
+--       expressions. When we do that, we'll probably need some kind of
+--       verbosity option to be able to hide source mapping information.
+-- TODO: Show the optimalization flags
+prettyAnn :: Ann -> Adoc
+prettyAnn (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
+  hsep . catMaybes $ [Just prettyLoc, prettyOpts]
+ where
+  prettyLoc :: Adoc
+  prettyLoc = case S.toList src of
+    -- We'll only show the 'SrcLoc' belonging to the topmost entry of the call
+    -- stack. This topmost function will be one of the Accelerate frontend
+    -- functions so the name isn't very important, but the source location will
+    -- be in user code. (if we did everything right with freezing call stacks)
+    -- TODO: If an AST node has multiple source locations, then we'll have to
+    --       merge adjacent locations into one. If there are then still
+    --       multiple locations, perhaps show up to two locations and after
+    --       that just only show the first with @(+ <num_remaining>)@ to
+    --       indicate that the node has multiple source locations.
+    (stack : _) ->
+      let ((_fn, loc) : _) = getCallStack stack
+      in  pretty
+            $  srcLocFile loc
+            <> ":"
+            <> show (srcLocStartLine loc)
+            <> ":"
+            <> show (srcLocStartCol loc)
+    _ -> "<unknown>"
+
+  -- We'll print the enabled optimizations like a Haskell record. If no
+  -- optimization flags are enabled, then we won't print anything to avoid
+  -- cluttering the pretty printer output.
+  prettyOpts :: Maybe Adoc
+  prettyOpts =
+    let enabledOpts = catMaybes
+          [ if optAlwaysInline
+              then Just "alwaysInline = True"
+              else Nothing
+          , case optUnrollIters of
+              Just n -> Just $ "unrollIters = " <> unsafeViaShow n
+              _      -> Nothing
+          ]
+    in  if not (null enabledOpts)
+          then Just $ align (encloseSep "{ " " }" ", " enabledOpts)
+          else Nothing
 
 
 -- Scalar expressions

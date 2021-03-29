@@ -34,6 +34,7 @@ module Data.Array.Accelerate.Pretty (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
 import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Error
@@ -108,6 +109,9 @@ instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenExp env aenv e) where
 
 instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenFun env aenv e) where
   show = renderForTerminal . prettyOpenFun (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
+
+instance Show Ann where
+  show = renderForTerminal . prettyAnn
 
 
 -- Internals

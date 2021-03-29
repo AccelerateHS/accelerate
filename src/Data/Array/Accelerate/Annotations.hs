@@ -23,10 +23,6 @@
 -- git diff -U0 master...feature/annotations | grep '^+.*\(TODO\|HACK\|FIXME\)' | cut -c2- | git grep -nFf- feature/annotations
 -- @
 --
--- TODO: Instead of deriving show, we should modify the pretty printer to show
---       these annotations in a nice way. Should we also present source mapping
---       information? That would be very useful but it also adds a lot of noise,
---       is there some 'verbose' pretty printing mode?
 -- TODO: Tests!
 --
 -- ** Annotations in the smart AST
@@ -153,7 +149,6 @@ data Ann = Ann
     { locations     :: S.HashSet CallStack
     , optimizations :: Optimizations
     }
-    deriving Show
 
 -- | Some example annotations. These do not actually do anything yet. Having
 -- these as a record makes it possible to easily pattern match on them without
@@ -164,7 +159,6 @@ data Optimizations = Optimizations
     { optAlwaysInline :: Bool
     , optUnrollIters  :: Maybe Int
     }
-    deriving Show
 
 
 -- * Annotation functions
@@ -179,6 +173,8 @@ alwaysInline :: HasAnnotations a => a -> a
 alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
 
 -- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
+-- TODO: Should we add validation for these kinds of functions? (i.e. reject
+--       negative values for @n@)
 unRollIters :: HasAnnotations a => Int -> a -> a
 unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
 
