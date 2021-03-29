@@ -19,9 +19,9 @@ jobs:
     strategy:
       matrix:
         ghc:
-          - "8.10"
-          # - "8.8"
-          # - "8.6"
+          # - "8.10"  XXX: borked?
+          - "8.8"
+          - "8.6"
 
     steps:
       - uses: actions/checkout@v2
@@ -49,31 +49,30 @@ jobs:
 
       - name: Install stack
         run: |
-          curl -sL https://get.haskellstack.org/stable/windows-x86_64.zip -o stack.zip
-          7z x stack.zip stack.exe
+          choco install haskell-stack
           mv stack-${{ matrix.ghc }}.yaml stack.yaml
 
       - name: Install GHC
         run: |
-          ./stack --no-terminal setup --install-ghc
+          stack --no-terminal setup --install-ghc
 
       - name: Build dependencies
         run: |
-          ./stack --no-terminal build --ghc-options -fexternal-interpreter --fast --flag accelerate:nofib --test --no-run-tests --only-dependencies
+          stack --no-terminal build --ghc-options --fast --flag accelerate:nofib --test --no-run-tests --only-dependencies
 
       - name: Build
         run: |
-          ./stack --no-terminal build --ghc-options -fexternal-interpreter --fast --flag accelerate:nofib --test --no-run-tests
+          stack --no-terminal build --ghc-options --fast --flag accelerate:nofib --test --no-run-tests
 
-      # - name: Test doctest
-      #   run: |
-      #     ./stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
+      - name: Test doctest
+        run: |
+          stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
 
-      # - name: Test nofib
-      #   run: |
-      #     ./stack --no-terminal test accelerate:nofib-interpreter --ghc-options -fexternal-interpreter --fast --flag accelerate:nofib
+      - name: Test nofib
+        run: |
+          stack --no-terminal test accelerate:nofib-interpreter --ghc-options --fast --flag accelerate:nofib
 
       - name: Test haddock generation
         run: |
-          ./stack --no-terminal haddock --ghc-options -fexternal-interpreter --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" --fast --flag accelerate:nofib
+          stack --no-terminal haddock --ghc-options --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" --fast --flag accelerate:nofib
 
