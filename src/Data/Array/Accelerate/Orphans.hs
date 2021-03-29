@@ -25,6 +25,7 @@ import Foreign.C.Types
 import GHC.Generics
 import GHC.Real
 import GHC.Stack
+import GHC.Stack.Types ( CallStack(..) )
 import Numeric.Half
 
 
@@ -45,12 +46,18 @@ deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
 deriving instance Generic (Ratio a)
 
+deriving instance Generic CallStack
 deriving instance Generic SrcLoc
 
 -- primitive
 --
 deriving instance Prim Half
 
+-- eq
+--
+deriving instance Eq CallStack
+
 -- hashable
 --
+instance Hashable CallStack
 instance Hashable SrcLoc

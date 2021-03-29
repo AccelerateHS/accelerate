@@ -129,7 +129,7 @@ import           Data.Maybe                     ( mapMaybe )
 import qualified GHC.ExecutionStack            as ES
 import           GHC.IO                         ( unsafePerformIO )
 import           GHC.Stack
-import           GHC.Stack.Types                ( CallStack(FreezeCallStack) )
+import           GHC.Stack.Types                ( CallStack(..) )
 import           Language.Haskell.TH            ( Q
                                                 , TExp
                                                 )
@@ -138,17 +138,19 @@ import           Language.Haskell.TH            ( Q
 -- | This annotation type would store source information if available and any
 -- additional annotation types added by the programmer.
 --
+-- The locations field contains a call stack pointing to the location in the
+-- user's code where the AST node was created. During the transformation
+-- pipeline multiple AST nodes may be merged, in which case 'locations' can
+-- contain multiple (but likely adjacent) call stacks.
+--
 -- TODO: The set of optimizations is now the same for 'Exp' and 'Acc'. Should we
 --       have separate sets of 'Optimizations' flags? Ideally we would only
 --       allow adding optimization flags for constructs that make sense (e.g.
 --       allow unrolling @awhile@, but not @acond@), but since this would
 --       involve adding another type index to 'Exp' that's not going to be a
 --       feasible approach.
--- TODO: We store plain 'SrcLoc's now. Is there a situation where we might want
---       to store the entire call stack? For instance, for use in error messages
---       and assertion failures.
 data Ann = Ann
-    { locations     :: S.HashSet SrcLoc
+    { locations     :: S.HashSet CallStack
     , optimizations :: Optimizations
     }
     deriving Show
@@ -212,7 +214,7 @@ withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
 --       count as a hard error though.
 mkAnn :: HasCallStack => Ann
 mkAnn = assert callStackIsFrozen
-    $ Ann (callerLoc $ getCallStack callStack) defaultOptimizations
+    $ Ann (maybeCallStack callStack) defaultOptimizations
   where
     -- To prevent incorrect usage of this API, we assert that the call stacks
     -- are frozen before this function is called. In most simple use cases we
@@ -222,8 +224,14 @@ mkAnn = assert callStackIsFrozen
         (FreezeCallStack _) -> True
         _                   -> False
 
-    callerLoc ((_, loc) : _) = S.singleton loc
-    callerLoc _              = S.empty
+    -- If we encounter a frozen empty call stack, then this means that the
+    -- caller of 'getAnn' explicitly stated that there is no source information
+    -- available.
+    maybeCallStack (FreezeCallStack EmptyCallStack) = S.empty
+    maybeCallStack (FreezeCallStack stack         ) = S.singleton stack
+    maybeCallStack _ = error
+      $  "This is unreachable because of the assertion above! But when replace "
+      ++ "that assertion with a warning, we can print our warning here."
 
     defaultOptimizations =
         Optimizations { optAlwaysInline = False, optUnrollIters = Nothing }
@@ -359,18 +367,25 @@ rnfOptimizations Optimizations { optAlwaysInline, optUnrollIters } =
 
 liftAnn :: Ann -> Q (TExp Ann)
 liftAnn (Ann src opts) =
-    [|| Ann $$(liftLocations src) $$(liftOptimizations opts) ||]
+    [|| Ann $$(liftCallStacks src) $$(liftOptimizations opts) ||]
 
 liftOptimizations :: Optimizations -> Q (TExp Optimizations)
 liftOptimizations Optimizations { .. } = [|| Optimizations { .. } ||]
 
-liftLocations :: S.HashSet SrcLoc -> Q (TExp (S.HashSet SrcLoc))
-liftLocations locs = [|| S.fromList $$(liftLocs $ S.toList locs) ||]
+liftCallStacks :: S.HashSet CallStack -> Q (TExp (S.HashSet CallStack))
+liftCallStacks stacks = [|| S.fromList $$(liftStacks $ S.toList stacks) ||]
   where
     -- TODO: Is there some combinator for this transformation?
-    liftLocs :: [SrcLoc] -> Q (TExp [SrcLoc])
-    liftLocs (x : xs) = [|| $$(liftSrcLoc x) : $$(liftLocs xs) ||]
-    liftLocs []       = [|| [] ||]
+    liftStacks :: [CallStack] -> Q (TExp [CallStack])
+    liftStacks (x : xs) = [|| $$(liftCallStack x) : $$(liftStacks xs) ||]
+    liftStacks []       = [|| [] ||]
+
+liftCallStack :: CallStack -> Q (TExp CallStack)
+liftCallStack EmptyCallStack = [|| EmptyCallStack ||]
+liftCallStack (PushCallStack fn loc stack) =
+    [|| PushCallStack fn $$(liftSrcLoc loc) $$(liftCallStack stack) ||]
+liftCallStack (FreezeCallStack stack) =
+    [|| FreezeCallStack $$(liftCallStack stack) ||]
 
 liftSrcLoc :: SrcLoc -> Q (TExp SrcLoc)
-liftSrcLoc SrcLoc { .. } = [|| SrcLoc { .. } ||]
+liftSrcLoc SrcLoc {..} = [|| SrcLoc { .. } ||]
