@@ -31,7 +31,7 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: ~/.local/bin
-          key: ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          key: ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
           restore-keys: |
             ${{ runner.os }}-local-bin-${{ matrix.ghc }}-
 
@@ -40,14 +40,14 @@ jobs:
           path:
             ~/.stack/programs
             ~/.stack/snapshots
-          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
           restore-keys: |
             ${{ runner.os }}-stack-global-${{ matrix.ghc }}-
 
       - uses: actions/cache@v2
         with:
           path: .stack-work
-          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml') }}
+          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
           restore-keys: |
             ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
 
@@ -86,4 +86,7 @@ jobs:
         run: |
           stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" $STACK_FLAGS
 
+      - name: Set up actions/cache@v2
+        run: |
+          stack exec ghc-pkg -- --package-db=$(stack path --snapshot-pkg-db) list > snapshot.pkgdb
 
