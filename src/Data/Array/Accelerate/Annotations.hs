@@ -31,7 +31,7 @@
 --     constructors have annotation fields.
 --   * Call stacks are frozen in all of the exposed front end functions and in
 --     the (generated) pattern synonyms. This allows us to capture them in
---     'makeAnn' so they can be used later to map an AST back to the original
+--     'mkAnn' so they can be used later to map an AST back to the original
 --     source location. This does require the 'HasCallStack' constraint to be
 --     added to every function that either directly or indirectly calls 'mkAnn'.
 --
@@ -222,9 +222,12 @@ mkAnn = assert callStackIsFrozen
 
     -- If we encounter a frozen empty call stack, then this means that the
     -- caller of 'getAnn' explicitly stated that there is no source information
-    -- available.
-    maybeCallStack (FreezeCallStack EmptyCallStack) = S.empty
-    maybeCallStack (FreezeCallStack stack         ) = S.singleton stack
+    -- available. We can get nested frozen call stacks when top level functions
+    -- call other top level functions. In that case we'll recursively strip the
+    -- frozen call stack parts until we get something useful.
+    maybeCallStack (FreezeCallStack EmptyCallStack           ) = S.empty
+    maybeCallStack (FreezeCallStack stack@(FreezeCallStack _)) = maybeCallStack stack
+    maybeCallStack (FreezeCallStack stack                    ) = S.singleton stack
     maybeCallStack _ = error
       $  "This is unreachable because of the assertion above! But when replace "
       ++ "that assertion with a warning, we can print our warning here."
@@ -294,9 +297,9 @@ withEmptyOrFrozenCallStack dewit =
 --        'withExecutionStackAsCallStack'
 withExecutionStackAsCallStack :: HasCallStack => (HasCallStack => a) -> a
 withExecutionStackAsCallStack dewit =
-  -- Only create a frozen call stack if we do not already have a frozen call
-  -- stack
     let
+        -- Only create a frozen call stack if we do not already have a frozen call
+        -- stack
         ?callStack = case ?callStack of
             x@(FreezeCallStack _) -> x
             _ ->
