@@ -29,25 +29,25 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: C:\Users\runneradmin\AppData\Local\Programs\stack\
-          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
+          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
           restore-keys: |
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
+            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
             ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
 
       - uses: actions/cache@v2
         with:
           path: C:\Users\runneradmin\AppData\Roaming\stack\
-          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
+          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
           restore-keys: |
-            ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
+            ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
             ${{ runner.os }}-stack-global-${{ matrix.ghc }}-
 
       - uses: actions/cache@v2
         with:
           path: .stack-work
-          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
+          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
           restore-keys: |
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('**.yaml', 'snapshot.pkgdb') }}
+            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
             ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
 
       - name: Install stack
