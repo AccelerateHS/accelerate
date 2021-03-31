@@ -98,6 +98,7 @@ data Keyword
   | Conditional   -- if then else
   | Manifest      -- collective operations (kernel functions)
   | Delayed       -- fused operators
+  | Annotation    -- source locations and optimization flags
   deriving (Eq, Show)
 
 let_, in_ :: Adoc
@@ -124,6 +125,7 @@ ansiKeyword Statement   = colorDull Yellow
 ansiKeyword Conditional = colorDull Yellow
 ansiKeyword Manifest    = color Blue
 ansiKeyword Delayed     = color Green
+ansiKeyword Annotation  = color Black
 
 -- Configuration for the pretty-printing functions
 data PrettyConfig acc
@@ -374,13 +376,9 @@ prettyArray aR@(ArrayR _ eR) = parens . fromString . showArray (showsElt eR) aR
 -- Otherwise it can be easy to forget to add a new annotation to the pretty
 -- printer.
 -- TODO: Make this, well, prettier
--- TODO: This should be incorporated in the pretty printing of arrays and
---       expressions. When we do that, we'll probably need some kind of
---       verbosity option to be able to hide source mapping information.
--- TODO: Show the optimalization flags
 prettyAnn :: Ann -> Adoc
 prettyAnn (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
-  hsep . catMaybes $ [Just prettyLoc, prettyOpts]
+  annotate Annotation . hsep . catMaybes $ [Just prettyLoc, prettyOpts]
  where
   prettyLoc :: Adoc
   prettyLoc = case S.toList src of
@@ -430,8 +428,6 @@ prettyAnn (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
 --       unknown. When using prelude functions we're now getting a lot of
 --       @(<unknown>)@s in the output, which will look super confusing and don't
 --       add much.
--- TODO: Make these annotations lightgray or something to make it easier to
---       visually skip over the annotations when just read the printed AST.
 -- TODO: There seem to be missing parentheses around nodes now, and 'align'
 --       doesn't do quite the right thing here.
 maybeWithAnn :: HasAnnotations a => a -> Adoc -> Adoc
