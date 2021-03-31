@@ -152,6 +152,7 @@ data AnnotationVerbosity
   -- source information available, we'll print @<unknown>@ instead to indicate
   -- this to the user.
   | Verbose
+  deriving (Eq, Ord)
 
 configPlain :: PrettyConfig acc
 configPlain = PrettyConfig { confOperator            = const fromString
@@ -397,16 +398,28 @@ prettyArray aR@(ArrayR _ eR) = parens . fromString . showArray (showsElt eR) aR
 -- Annotations
 -- -----------
 
--- Note that we purposely don't use wild cards or the record's functions.
--- Otherwise it can be easy to forget to add a new annotation to the pretty
--- printer.
--- TODO: Make this, well, prettier
--- TODO: Implement the different annotation verbosity levels
 prettyAnn :: PrettyConfig acc -> Ann -> Adoc
-prettyAnn config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
-  annotate Annotation . hsep . catMaybes $ [Just prettyLoc, prettyOpts]
+prettyAnn config ann = fromMaybe emptyDoc (prettyAnn' config ann)
+
+-- | Format an annotation based on the current verbosity setting. If we would
+-- end up printing an empty document, we'll return Nothing so we can omit it
+-- when printing the AST. Note that we purposely don't use wild cards or the
+-- record's functions. Otherwise it can be easy to forget to add a new
+-- annotation to the pretty printer.
+--
+-- TODO: Make this, well, prettier
+prettyAnn' :: PrettyConfig acc -> Ann -> Maybe Adoc
+prettyAnn' config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
+  case catMaybes [prettyLoc, prettyOpts] of
+    [] -> Nothing
+    xs -> Just $ annotate Annotation (hsep xs)
  where
-  prettyLoc :: Adoc
+  verbosity = confAnnotationVerbosity config
+
+  -- Depending on the verbosity setting, we'll want to either print no source
+  -- information, only print known source information, or also signal to the
+  -- programmer that source information is missing.
+  prettyLoc :: Maybe Adoc
   prettyLoc = case S.toList src of
     -- We'll only show the 'SrcLoc' belonging to the topmost entry of the call
     -- stack. This topmost function will be one of the Accelerate frontend
@@ -417,15 +430,16 @@ prettyAnn config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
     --       multiple locations, perhaps show up to two locations and after
     --       that just only show the first with @(+ <num_remaining>)@ to
     --       indicate that the node has multiple source locations.
-    (stack : _) ->
+    (stack : _) | verbosity >= Normal ->
       let ((_fn, loc) : _) = getCallStack stack
-      in  pretty
+      in  Just . pretty
             $  srcLocFile loc
             <> ":"
             <> show (srcLocStartLine loc)
             <> ":"
             <> show (srcLocStartCol loc)
-    _ -> "<unknown>"
+    _ | verbosity >= Verbose -> Just "<unknown>"
+    _                        -> Nothing
 
   -- We'll print the enabled optimizations like a Haskell record. If no
   -- optimization flags are enabled, then we won't print anything to avoid
@@ -447,18 +461,13 @@ prettyAnn config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
 -- | If the argument has a annotation, append that annotation to the pretty
 -- printer output.
 --
--- TODO: Should we hide the source location (and only show optimization flags)
---       unless debug mode is enabled? If we only show the optimization flags,
---       we can omit the parentheses.
--- TODO: We should also have an option to hide source locations when they are
---       unknown. When using prelude functions we're now getting a lot of
---       @(<unknown>)@s in the output, which will look super confusing and don't
---       add much.
 -- TODO: There seem to be missing parentheses around nodes now, and 'align'
 --       doesn't do quite the right thing here.
 maybeWithAnn :: HasAnnotations a => PrettyConfig acc -> a -> Adoc -> Adoc
-maybeWithAnn config x doc | Just ann <- getAnn x =
-  sep [doc, align . brackets $ prettyAnn config ann]
+maybeWithAnn config x doc | confAnnotationVerbosity config > Quiet
+                          , Just ann <- getAnn x
+                          , Just pAnn <- prettyAnn' config ann =
+    sep [doc, align $ brackets pAnn]
 maybeWithAnn _ _ doc = doc
 
 
