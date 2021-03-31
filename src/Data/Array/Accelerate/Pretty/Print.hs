@@ -165,7 +165,6 @@ prettyPreOpenAfun config prettyAcc aenv0 = next (pretty '\\') aenv0
       let (aenv', lhs') = prettyALhs True aenv lhs
       in  next (vs <> lhs' <> space) aenv' lam
 
--- TODO: We should probably show optimization flags in some way
 prettyPreOpenAcc
     :: forall acc aenv arrs.
        PrettyConfig acc
@@ -176,7 +175,7 @@ prettyPreOpenAcc
     -> PreOpenAcc acc aenv arrs
     -> Adoc
 prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
-  case pacc of
+  maybeWithAnn pacc $ case pacc of
     Avar (Var _ idx)  -> prj idx aenv
     Alet{}            -> prettyAlet config ctx prettyAcc extractAcc aenv pacc
     Apair{}           -> prettyAtuple config ctx prettyAcc extractAcc aenv pacc
@@ -421,6 +420,24 @@ prettyAnn (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
           then Just $ align (encloseSep "{ " " }" ", " enabledOpts)
           else Nothing
 
+-- | If the argument has a annotation, append that annotation to the pretty
+-- printer output.
+--
+-- TODO: Should we hide the source location (and only show optimization flags)
+--       unless debug mode is enabled? If we only show the optimization flags,
+--       we can omit the parentheses.
+-- TODO: We should also have an option to hide source locations when they are
+--       unknown. When using prelude functions we're now getting a lot of
+--       @(<unknown>)@s in the output, which will look super confusing and don't
+--       add much.
+-- TODO: Make these annotations lightgray or something to make it easier to
+--       visually skip over the annotations when just read the printed AST.
+-- TODO: There seem to be missing parentheses around nodes now, and 'align'
+--       doesn't do quite the right thing here.
+maybeWithAnn :: HasAnnotations a => a -> Adoc -> Adoc
+maybeWithAnn x doc | Just ann <- getAnn x = sep [doc, align . brackets $ prettyAnn ann]
+maybeWithAnn _ doc                        = doc
+
 
 -- Scalar expressions
 -- ------------------
@@ -455,7 +472,6 @@ prettyOpenFun env0 aenv = next (pretty '\\') env0
       let (env', lhs') = prettyELhs True env lhs
       in  next (vs <> lhs' <> space) env' lam
 
--- TODO: We should probably show optimization flags in some way
 prettyOpenExp
     :: forall env aenv t.
        Context
@@ -464,7 +480,7 @@ prettyOpenExp
     -> OpenExp env aenv t
     -> Adoc
 prettyOpenExp ctx env aenv exp =
-  case exp of
+  maybeWithAnn exp $ case exp of
     Evar (Var _ idx)      -> prj idx env
     Let{}                 -> prettyLet ctx env aenv exp
     PrimApp f x
