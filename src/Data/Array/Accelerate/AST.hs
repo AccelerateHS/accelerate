@@ -961,12 +961,16 @@ primFunType = \case
 -- -----------
 
 instance HasAnnotations (OpenAcc aenv t) where
-  modifyAnn f (OpenAcc (Map ann tp f' a)) = OpenAcc $ Map (f ann) tp f' a
-  modifyAnn f (OpenAcc (Fold ann f' z a)) = OpenAcc $ Fold (f ann) f' z a
+  modifyAnn f (OpenAcc pacc) = OpenAcc (modifyAnn f pacc)
+  getAnn (OpenAcc pacc) = getAnn pacc
+
+instance HasAnnotations (PreOpenAcc acc aenv t) where
+  modifyAnn f (Map ann tp f' a) = Map (f ann) tp f' a
+  modifyAnn f (Fold ann f' z a) = Fold (f ann) f' z a
   modifyAnn _ e = e
 
-  getAnn (OpenAcc (Map ann _ _ _)) = Just ann
-  getAnn (OpenAcc (Fold ann _ _ _)) = Just ann
+  getAnn (Map ann _ _ _) = Just ann
+  getAnn (Fold ann _ _ _) = Just ann
   -- TODO: All other constructors as we add more annotations
   getAnn _ = Nothing
 
