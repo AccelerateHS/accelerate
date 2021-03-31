@@ -97,21 +97,23 @@ instance PrettyEnv aenv => Show (OpenAfun aenv f) where
   show = renderForTerminal . prettyPreOpenAfun configPlain prettyOpenAcc (prettyEnv (pretty 'a'))
 
 instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
-  show = let config = if shouldPrintHash then configWithHash else configPlain
-         in renderForTerminal . prettyDelayedOpenAcc config context0 (prettyEnv (pretty 'a'))
+  show = renderForTerminal . prettyDelayedOpenAcc defaultConfig context0 (prettyEnv (pretty 'a'))
 
 instance PrettyEnv aenv => Show (DelayedOpenAfun aenv f) where
-  show = let config = if shouldPrintHash then configWithHash else configPlain
-         in renderForTerminal . prettyPreOpenAfun config prettyDelayedOpenAcc (prettyEnv (pretty 'a'))
+  show = renderForTerminal . prettyPreOpenAfun defaultConfig prettyDelayedOpenAcc (prettyEnv (pretty 'a'))
 
 instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenExp env aenv e) where
-  show = renderForTerminal . prettyOpenExp context0 (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
+  show = renderForTerminal . prettyOpenExp defaultConfig context0 (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
 
 instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenFun env aenv e) where
-  show = renderForTerminal . prettyOpenFun (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
+  show = renderForTerminal . prettyOpenFun defaultConfig (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
 
 instance Show Ann where
-  show = renderForTerminal . prettyAnn
+  show = renderForTerminal . prettyAnn defaultConfig
+
+-- | The default pretty printer config.
+defaultConfig :: PrettyConfig DelayedOpenAcc
+defaultConfig = if shouldPrintHash then configVerbose else configPlain
 
 
 -- Internals
@@ -158,12 +160,12 @@ extractOpenAcc (OpenAcc pacc) = pacc
 prettyDelayedOpenAcc :: HasCallStack => PrettyAcc DelayedOpenAcc
 prettyDelayedOpenAcc config context aenv (Manifest pacc)
   = prettyPreOpenAcc config context prettyDelayedOpenAcc extractDelayedOpenAcc aenv pacc
-prettyDelayedOpenAcc _      _       aenv (Delayed _ _ sh f _)
+prettyDelayedOpenAcc config _       aenv (Delayed _ _ sh f _)
   = parens
   $ nest shiftwidth
   $ sep [ delayed "delayed"
-        ,          prettyOpenExp app Empty aenv sh
-        , parens $ prettyOpenFun     Empty aenv f
+        ,          prettyOpenExp config app Empty aenv sh
+        , parens $ prettyOpenFun config     Empty aenv f
         ]
 
 extractDelayedOpenAcc :: HasCallStack => DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
@@ -180,6 +182,9 @@ extractDelayedOpenAcc Delayed{}       = internalError "expected manifest array"
 --
 -- The practical result of this is that @setFlag verbose@ will not change
 -- anything after a Delayed has already been printed once.
+--
+-- TODO: The verbose flag now also controls the verbosity level of the
+--       annotations in the pretty printer. We should probably rename this.
 shouldPrintHash :: Bool
 shouldPrintHash = unsafePerformIO $ getFlag verbose
 

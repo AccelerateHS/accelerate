@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Pretty.Print (
   -- ** Configuration
   PrettyConfig(..),
   configPlain,
-  configWithHash,
+  configVerbose,
 
   -- ** Internals
   Adoc,
@@ -132,20 +132,45 @@ data PrettyConfig acc
   = PrettyConfig { confOperator :: forall aenv arrs.
                                    PreOpenAcc acc aenv arrs
                                 -> String
-                                -> Operator }
+                                -> Operator
+                 , confAnnotationVerbosity :: AnnotationVerbosity
+                 }
+
+-- | Controls how much annotation information to display when pretty printing an
+-- AST, since the output can become very verbose and not all information is
+-- always necessary.
+data AnnotationVerbosity
+  -- | Don't print anything related to annotations.
+  = Quiet
+  -- | Print enabled optimization flags, but don't print any source information.
+  | OptsOnly
+  -- | Print both source information and optimization flags, but if there is no
+  -- source information available don't indicate that to the user and just skip
+  -- over it.
+  | Normal
+  -- | Print both source information and optimization flags. If there is no
+  -- source information available, we'll print @<unknown>@ instead to indicate
+  -- this to the user.
+  | Verbose
 
 configPlain :: PrettyConfig acc
-configPlain = PrettyConfig { confOperator = const fromString }
+configPlain = PrettyConfig { confOperator            = const fromString
+                           , confAnnotationVerbosity = Normal
+                           }
 
-configWithHash :: PrettyConfig Delayed.DelayedOpenAcc
-configWithHash =
+-- | Include kernel hashes and more verbose annotation information in the pretty
+-- printer output.
+configVerbose :: PrettyConfig Delayed.DelayedOpenAcc
+configVerbose =
   PrettyConfig
     { confOperator = \pacc name ->
         let hashval = Hash.hashPreOpenAccWith
                           (Hash.defaultHashOptions { Hash.perfect = False })
                           Delayed.encodeDelayedOpenAcc
                           pacc
-        in fromString (name ++ "_" ++ show hashval) }
+        in fromString (name ++ "_" ++ show hashval)
+    , confAnnotationVerbosity = Verbose
+    }
 
 
 -- Array computations
@@ -177,7 +202,7 @@ prettyPreOpenAcc
     -> PreOpenAcc acc aenv arrs
     -> Adoc
 prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
-  maybeWithAnn pacc $ case pacc of
+  maybeWithAnn config pacc $ case pacc of
     Avar (Var _ idx)  -> prj idx aenv
     Alet{}            -> prettyAlet config ctx prettyAcc extractAcc aenv pacc
     Apair{}           -> prettyAtuple config ctx prettyAcc extractAcc aenv pacc
@@ -240,10 +265,10 @@ prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
     ppAF = parens . prettyPreOpenAfun config prettyAcc aenv
 
     ppE :: Exp aenv t -> Adoc
-    ppE = prettyOpenExp app Empty aenv
+    ppE = prettyOpenExp config app Empty aenv
 
     ppF :: Fun aenv t -> Adoc
-    ppF = parens . prettyOpenFun Empty aenv
+    ppF = parens . prettyOpenFun config Empty aenv
 
     ppB :: forall sh e.
            TypeR e
@@ -376,8 +401,9 @@ prettyArray aR@(ArrayR _ eR) = parens . fromString . showArray (showsElt eR) aR
 -- Otherwise it can be easy to forget to add a new annotation to the pretty
 -- printer.
 -- TODO: Make this, well, prettier
-prettyAnn :: Ann -> Adoc
-prettyAnn (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
+-- TODO: Implement the different annotation verbosity levels
+prettyAnn :: PrettyConfig acc -> Ann -> Adoc
+prettyAnn config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
   annotate Annotation . hsep . catMaybes $ [Just prettyLoc, prettyOpts]
  where
   prettyLoc :: Adoc
@@ -430,27 +456,29 @@ prettyAnn (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
 --       add much.
 -- TODO: There seem to be missing parentheses around nodes now, and 'align'
 --       doesn't do quite the right thing here.
-maybeWithAnn :: HasAnnotations a => a -> Adoc -> Adoc
-maybeWithAnn x doc | Just ann <- getAnn x = sep [doc, align . brackets $ prettyAnn ann]
-maybeWithAnn _ doc                        = doc
+maybeWithAnn :: HasAnnotations a => PrettyConfig acc -> a -> Adoc -> Adoc
+maybeWithAnn config x doc | Just ann <- getAnn x =
+  sep [doc, align . brackets $ prettyAnn config ann]
+maybeWithAnn _ _ doc = doc
 
 
 -- Scalar expressions
 -- ------------------
 
-prettyFun :: Val aenv -> Fun aenv f -> Adoc
-prettyFun = prettyOpenFun Empty
+prettyFun :: PrettyConfig acc -> Val aenv -> Fun aenv f -> Adoc
+prettyFun config = prettyOpenFun config Empty
 
-prettyExp :: Val aenv -> Exp aenv t -> Adoc
-prettyExp = prettyOpenExp context0 Empty
+prettyExp :: PrettyConfig acc -> Val aenv -> Exp aenv t -> Adoc
+prettyExp config = prettyOpenExp config context0 Empty
 
 prettyOpenFun
-    :: forall env aenv f.
-       Val env
+    :: forall acc env aenv f.
+       PrettyConfig acc
+    -> Val env
     -> Val aenv
     -> OpenFun env aenv f
     -> Adoc
-prettyOpenFun env0 aenv = next (pretty '\\') env0
+prettyOpenFun config env0 aenv = next (pretty '\\') env0
   where
     next :: Adoc -> Val env' -> OpenFun env' aenv f' -> Adoc
     next vs env (Body body)
@@ -463,22 +491,23 @@ prettyOpenFun env0 aenv = next (pretty '\\') env0
       -- = opName op -- surrounding context will add parens
       --
       = hang shiftwidth (sep [ vs <> "->"
-                             , prettyOpenExp context0 env aenv body])
+                             , prettyOpenExp config context0 env aenv body])
     next vs env (Lam lhs lam) =
       let (env', lhs') = prettyELhs True env lhs
       in  next (vs <> lhs' <> space) env' lam
 
 prettyOpenExp
-    :: forall env aenv t.
-       Context
+    :: forall acc env aenv t.
+       PrettyConfig acc
+    -> Context
     -> Val env
     -> Val aenv
     -> OpenExp env aenv t
     -> Adoc
-prettyOpenExp ctx env aenv exp =
-  maybeWithAnn exp $ case exp of
+prettyOpenExp config ctx env aenv exp =
+  maybeWithAnn config exp $ case exp of
     Evar (Var _ idx)      -> prj idx env
-    Let{}                 -> prettyLet ctx env aenv exp
+    Let{}                 -> prettyLet config ctx env aenv exp
     PrimApp f x
       | Pair _ a b <- x   -> ppF2 op  (ppE a) (ppE b)
       | otherwise         -> ppF1 op' (ppE x)
@@ -488,11 +517,11 @@ prettyOpenExp ctx env aenv exp =
     --
     PrimConst c           -> prettyPrimConst c
     Const _ tp c          -> prettyConst (TupRsingle tp) c
-    Pair{}                -> prettyTuple ctx env aenv exp
+    Pair{}                -> prettyTuple config ctx env aenv exp
     Nil _                 -> "()"
     VecPack   _ e         -> ppF1 "pack"   (ppE e)
     VecUnpack _ e         -> ppF1 "unpack" (ppE e)
-    Case x xs d           -> prettyCase env aenv x xs d
+    Case x xs d           -> prettyCase config env aenv x xs d
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0
@@ -521,13 +550,13 @@ prettyOpenExp ctx env aenv exp =
 
   where
     ppE :: OpenExp env aenv e -> Context -> Adoc
-    ppE e c = prettyOpenExp c env aenv e
+    ppE e c = prettyOpenExp config c env aenv e
 
     ppA :: ArrayVar aenv a -> Context -> Adoc
     ppA acc _ = prettyArrayVar aenv acc
 
     ppF :: OpenFun env aenv f -> Context -> Adoc
-    ppF f _ = parens $ prettyOpenFun env aenv f
+    ppF f _ = parens $ prettyOpenFun config env aenv f
 
     ppF1 :: Operator -> (Context -> Adoc) -> Adoc
     ppF1 op x
@@ -561,13 +590,14 @@ prettyArrayVar
 prettyArrayVar aenv (Var _ idx) = prj idx aenv
 
 prettyLet
-    :: forall env aenv t.
-       Context
+    :: forall acc env aenv t.
+       PrettyConfig acc
+    -> Context
     -> Val env
     -> Val aenv
     -> OpenExp env aenv t
     -> Adoc
-prettyLet ctx env0 aenv
+prettyLet config ctx env0 aenv
   = parensIf (ctxPrecedence ctx > 0)
   . align . wrap . collect env0
   where
@@ -590,7 +620,7 @@ prettyLet ctx env0 aenv
     isLet _     = False
 
     ppE :: Val env' -> OpenExp env' aenv t' -> Adoc
-    ppE env = prettyOpenExp context0 env aenv
+    ppE env = prettyOpenExp config context0 env aenv
 
     wrap :: ([Adoc], Adoc) -> Adoc
     wrap ([],   body) = body  -- shouldn't happen!
@@ -606,13 +636,14 @@ prettyLet ctx env0 aenv
     sepBy = encloseSep mempty mempty
 
 prettyTuple
-    :: forall env aenv t.
-       Context
+    :: forall acc env aenv t.
+       PrettyConfig acc
+    -> Context
     -> Val env
     -> Val aenv
     -> OpenExp env aenv t
     -> Adoc
-prettyTuple ctx env aenv exp = case collect exp of
+prettyTuple config ctx env aenv exp = case collect exp of
     Nothing  -> align $ ppPair exp
     Just tup ->
       case tup of
@@ -620,33 +651,34 @@ prettyTuple ctx env aenv exp = case collect exp of
         _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> align (sep tup))
   where
     ppPair :: OpenExp env aenv t' -> Adoc
-    ppPair (Pair _ e1 e2) = "(" <> ppPair e1 <> "," <+> prettyOpenExp context0 env aenv e2 <> ")"
-    ppPair e              = prettyOpenExp context0 env aenv e
+    ppPair (Pair _ e1 e2) = "(" <> ppPair e1 <> "," <+> prettyOpenExp config context0 env aenv e2 <> ")"
+    ppPair e              = prettyOpenExp config context0 env aenv e
 
     collect :: OpenExp env aenv t' -> Maybe [Adoc]
     collect (Nil _)            = Just []
     collect (Pair _ e1 e2)
-      | Just tup <- collect e1 = Just $ tup ++ [prettyOpenExp app env aenv e2]
+      | Just tup <- collect e1 = Just $ tup ++ [prettyOpenExp config app env aenv e2]
     collect _                  = Nothing
 
 prettyCase
-    :: Val env
+    :: PrettyConfig acc
+    -> Val env
     -> Val aenv
     -> OpenExp env aenv a
     -> [(TAG, OpenExp env aenv b)]
     -> Maybe (OpenExp env aenv b)
     -> Adoc
-prettyCase env aenv x xs def
+prettyCase config env aenv x xs def
   = hang shiftwidth
   $ vsep [ case_ <+> x' <+> of_
          , flatAlt (vcat xs') (encloseSep "{ " " }" "; " xs')
          ]
   where
-    x'  = prettyOpenExp context0 env aenv x
-    xs' = map (\(t,e) -> pretty t <+> "->" <+> prettyOpenExp context0 env aenv e) xs
+    x'  = prettyOpenExp config context0 env aenv x
+    xs' = map (\(t,e) -> pretty t <+> "->" <+> prettyOpenExp config context0 env aenv e) xs
        ++ case def of
             Nothing -> []
-            Just d  -> ["_" <+> "->" <+> prettyOpenExp context0 env aenv d]
+            Just d  -> ["_" <+> "->" <+> prettyOpenExp config context0 env aenv d]
 
 {-
 

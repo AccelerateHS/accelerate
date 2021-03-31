@@ -124,11 +124,12 @@ mkTF this =
 class PrettyGraph g where
   ppGraph :: Detail -> g -> Graph
 
+-- FIXME: should be using the same @defaultConfig@ as in D.A.A.Pretty
 instance PrettyGraph (DelayedAcc a) where
-  ppGraph = graphDelayedAcc
+  ppGraph = graphDelayedAcc configPlain
 
 instance PrettyGraph (DelayedAfun a) where
-  ppGraph = graphDelayedAfun
+  ppGraph = graphDelayedAfun configPlain
 
 data Detail = Simple | Full
 
@@ -144,14 +145,14 @@ simple _      = False
 {-# NOINLINE graphDelayedAcc #-}
 graphDelayedAcc :: HasCallStack => Detail -> DelayedAcc a -> Graph
 graphDelayedAcc detail acc =
-  evalDot (graphDelayedOpenAcc detail Aempty acc)
+  evalDot (graphDelayedOpenAcc config detail Aempty acc)
 
 -- | Generate a dependency graph for an array function
 --
 {-# NOINLINE graphDelayedAfun #-}
 graphDelayedAfun :: HasCallStack => Detail -> DelayedAfun f -> Graph
 graphDelayedAfun detail afun = evalDot $! do
-  l <- prettyDelayedAfun detail Aempty afun
+  l <- prettyDelayedAfun config detail Aempty afun
   state $ \s ->
     case Seq.viewl (dotGraph s) of
       g@(Graph l' _) Seq.:< gs | l == l' -> (g, s { dotGraph = gs })
@@ -169,12 +170,13 @@ data PNode = PNode NodeId (Tree (Maybe Port, Adoc)) [(Vertex, Maybe Port)]
 
 graphDelayedOpenAcc
     :: HasCallStack
-    => Detail
+    => PrettyConfig acc
+    -> Detail
     -> Aval aenv
     -> DelayedOpenAcc aenv a
     -> Dot Graph
 graphDelayedOpenAcc detail aenv acc = do
-  r <- prettyDelayedOpenAcc detail context0 aenv acc
+  r <- prettyDelayedOpenAcc config detail context0 aenv acc
   i <- genNodeId
   v <- mkNode r Nothing
   _ <- mkNode (PNode i (Leaf (Nothing,"result")) [(Vertex v Nothing, Nothing)]) Nothing
@@ -183,21 +185,22 @@ graphDelayedOpenAcc detail aenv acc = do
 -- Generate a graph for the given term.
 --
 prettyDelayedOpenAcc
-    :: forall aenv arrs. HasCallStack
-    => Detail                               -- simplified output: only print operator name
+    :: forall acc aenv arrs. HasCallStack
+    => PrettyConfig acc
+    -> Detail                               -- simplified output: only print operator name
     -> Context
     -> Aval aenv
     -> DelayedOpenAcc aenv arrs
     -> Dot PNode
-prettyDelayedOpenAcc _      _   _    Delayed{}            = internalError "expected manifest array"
-prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
+prettyDelayedOpenAcc _      _      _   _    Delayed{}            = internalError "expected manifest array"
+prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
   case pacc of
     Avar ix                 -> pnode (avar ix)
     Alet lhs bnd body       -> do
-      bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc detail context0 aenv bnd
+      bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc config detail context0 aenv bnd
       (aenv1, a) <- prettyLetALeftHandSide ident aenv lhs
       _ <- mkNode bnd' (Just a)
-      body' <- prettyDelayedOpenAcc detail context0 aenv1 body
+      body' <- prettyDelayedOpenAcc config detail context0 aenv1 body
       return body'
 
     Acond p t e             -> do
@@ -210,12 +213,12 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return $ PNode ident doc deps
 
-    Apply _ afun acc         -> apply <$> prettyDelayedAfun    detail     aenv afun
-                                      <*> prettyDelayedOpenAcc detail ctx aenv acc
+    Apply _ afun acc         -> apply <$> prettyDelayedAfun    config detail     aenv afun
+                                      <*> prettyDelayedOpenAcc config detail ctx aenv acc
 
     Awhile p f x             -> do
       ident <- genNodeId
-      x'    <- replant =<< prettyDelayedOpenAcc detail app aenv x
+      x'    <- replant =<< prettyDelayedOpenAcc config detail app aenv x
       p'    <- prettyDelayedAfun detail aenv p
       f'    <- prettyDelayedAfun detail aenv f
       --
@@ -223,7 +226,7 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
           loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
-    Apair a1 a2              -> genNodeId >>= prettyDelayedApair detail aenv a1 a2
+    Apair a1 a2              -> genNodeId >>= prettyDelayedApair config detail aenv a1 a2
 
     Anil                            -> "()"             .$ []
     Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (pretty msg) [], ppA as, ppA bs ]
@@ -294,7 +297,7 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
     ppA acc@Manifest{}       = do
       -- Lift out and draw as a separate node. This can occur with the manifest
       -- array arguments to permute (defaults array) and stencil[2].
-      acc'  <- prettyDelayedOpenAcc detail app aenv acc
+      acc'  <- prettyDelayedOpenAcc config detail app aenv acc
       v     <- mkLabel
       ident <- mkNode acc' (Just v)
       return $ PDoc (pretty v) [Vertex ident Nothing]
@@ -318,10 +321,10 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
     ppB _  (Function f) = ppF f
 
     ppF :: HasCallStack => Fun aenv t -> Dot PDoc
-    ppF = return . uncurry PDoc . (parens . prettyFun aenv' &&& fvF)
+    ppF = return . uncurry PDoc . (parens . prettyFun config aenv' &&& fvF)
 
     ppE :: HasCallStack => Exp aenv t -> Dot PDoc
-    ppE = return . uncurry PDoc . (prettyExp aenv' &&& fvE)
+    ppE = return . uncurry PDoc . (prettyExp config aenv' &&& fvE)
 
     ppD :: String -> Direction -> String -> Operator
     ppD f LeftToRight k = fromString (f <> "l" <> k)
@@ -331,7 +334,7 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
     lift Delayed{}                    = internalError "expected manifest array"
     lift (Manifest (Avar (Var _ ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
     lift acc                          = do
-      acc'  <- prettyDelayedOpenAcc detail context0 aenv acc
+      acc'  <- prettyDelayedOpenAcc config detail context0 aenv acc
       ident <- mkNode acc' Nothing
       return $ Vertex ident Nothing
 
@@ -357,11 +360,12 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
 --
 prettyDelayedAfun
     :: HasCallStack
-    => Detail
+    => PrettyConfig acc
+    -> Detail
     -> Aval aenv
     -> DelayedOpenAfun aenv afun
     -> Dot Label
-prettyDelayedAfun detail aenv afun = do
+prettyDelayedAfun config detail aenv afun = do
   Graph _ ss  <- mkSubgraph (go aenv afun)
   n           <- Seq.length <$> gets dotGraph
   let label         = "afun" <> fromString (show (n+1))
@@ -378,7 +382,7 @@ prettyDelayedAfun detail aenv afun = do
   return label
   where
     go :: Aval aenv' -> DelayedOpenAfun aenv' a' -> Dot Graph
-    go aenv' (Abody b) = graphDelayedOpenAcc detail aenv' b
+    go aenv' (Abody b) = graphDelayedOpenAcc config detail aenv' b
     go aenv' (Alam lhs f) = do
       aenv'' <- prettyLambdaALeftHandSide aenv' lhs
       go aenv'' f
@@ -424,21 +428,22 @@ prettyLambdaALeftHandSide aenv (LeftHandSidePair lhs1 lhs2) = do
 -- Display array tuples. This is a little tricky...
 --
 prettyDelayedApair
-    :: forall aenv a1 a2. HasCallStack
-    => Detail
+    :: forall acc aenv a1 a2. HasCallStack
+    => PrettyConfig acc
+    -> Detail
     -> Aval aenv
     -> DelayedOpenAcc aenv a1
     -> DelayedOpenAcc aenv a2
     -> NodeId
     -> Dot PNode
-prettyDelayedApair detail aenv a1 a2 ident = do
+prettyDelayedApair config detail aenv a1 a2 ident = do
   PNode id1 t1 v1 <- prettyElem a1
   PNode id2 t2 v2 <- prettyElem a2
   modify $ \s -> s { dotEdges = fmap (redirect ident [id1, id2]) (dotEdges s) }
   return $ PNode ident (forest [t1, t2]) (v1 ++ v2)
   where
     prettyElem :: DelayedOpenAcc aenv a -> Dot PNode
-    prettyElem a = replant =<< prettyDelayedOpenAcc detail context0 aenv a
+    prettyElem a = replant =<< prettyDelayedOpenAcc config detail context0 aenv a
 
     -- Redirect any edges that pointed into one of the nodes now part of this
     -- tuple, to instead point to the container node.
