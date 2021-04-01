@@ -37,6 +37,7 @@ module Data.Array.Accelerate.Pretty.Print (
   PrettyConfig(..),
   configPlain,
   configVerbose,
+  defaultConfig,
 
   -- ** Internals
   Adoc,
@@ -62,6 +63,7 @@ import Data.Array.Accelerate.AST                                    hiding ( Dir
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Stencil
@@ -81,6 +83,7 @@ import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import GHC.Stack
 import Prelude                                                      hiding ( exp )
+import System.IO.Unsafe
 
 
 -- Implementation
@@ -172,6 +175,11 @@ configVerbose =
         in fromString (name ++ "_" ++ show hashval)
     , confAnnotationVerbosity = Verbose
     }
+
+
+-- | The default pretty printer config.
+defaultConfig :: PrettyConfig Delayed.DelayedOpenAcc
+defaultConfig = if shouldPrintHash then configVerbose else configPlain
 
 
 -- Array computations
@@ -888,3 +896,21 @@ parensIf :: Bool -> Doc ann -> Doc ann
 parensIf True  = group . parens . align
 parensIf False = id
 
+
+-- Debugging
+-- ---------
+
+-- Unfortunately, using unsafePerformIO here means that the getFlag will be
+-- evaluated only once when the first 'show' is performed on a Delayed value;
+-- afterwards, the thunk will have been evaluated, and all future pretty-print
+-- outputs will use the same result.
+-- This cannot be prevented using a NOINLINE pragma, since then the function
+-- itself is still a thunk that will only be evaluated once.
+--
+-- The practical result of this is that @setFlag verbose@ will not change
+-- anything after a Delayed has already been printed once.
+--
+-- TODO: The verbose flag now also controls the verbosity level of the
+--       annotations in the pretty printer. We should probably rename this.
+shouldPrintHash :: Bool
+shouldPrintHash = unsafePerformIO $ getFlag verbose

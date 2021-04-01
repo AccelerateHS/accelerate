@@ -36,7 +36,9 @@ module Data.Array.Accelerate.Pretty (
 
 import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
+#ifdef ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Flags
+#endif
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Graphviz
 import Data.Array.Accelerate.Pretty.Print                           hiding ( Keyword(..) )
@@ -111,10 +113,6 @@ instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenFun env aenv e) where
 instance Show Ann where
   show = renderForTerminal . prettyAnn configVerbose
 
--- | The default pretty printer config.
-defaultConfig :: PrettyConfig DelayedOpenAcc
-defaultConfig = if shouldPrintHash then configVerbose else configPlain
-
 
 -- Internals
 -- ---------
@@ -171,22 +169,6 @@ prettyDelayedOpenAcc config _       aenv (Delayed _ _ sh f _)
 extractDelayedOpenAcc :: HasCallStack => DelayedOpenAcc aenv a -> PreOpenAcc DelayedOpenAcc aenv a
 extractDelayedOpenAcc (Manifest pacc) = pacc
 extractDelayedOpenAcc Delayed{}       = internalError "expected manifest array"
-
-
--- Unfortunately, using unsafePerformIO here means that the getFlag will be
--- evaluated only once when the first 'show' is performed on a Delayed value;
--- afterwards, the thunk will have been evaluated, and all future pretty-print
--- outputs will use the same result.
--- This cannot be prevented using a NOINLINE pragma, since then the function
--- itself is still a thunk that will only be evaluated once.
---
--- The practical result of this is that @setFlag verbose@ will not change
--- anything after a Delayed has already been printed once.
---
--- TODO: The verbose flag now also controls the verbosity level of the
---       annotations in the pretty printer. We should probably rename this.
-shouldPrintHash :: Bool
-shouldPrintHash = unsafePerformIO $ getFlag verbose
 
 
 -- Debugging

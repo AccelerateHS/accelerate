@@ -124,12 +124,11 @@ mkTF this =
 class PrettyGraph g where
   ppGraph :: Detail -> g -> Graph
 
--- FIXME: should be using the same @defaultConfig@ as in D.A.A.Pretty
 instance PrettyGraph (DelayedAcc a) where
-  ppGraph = graphDelayedAcc configPlain
+  ppGraph = graphDelayedAcc defaultConfig
 
 instance PrettyGraph (DelayedAfun a) where
-  ppGraph = graphDelayedAfun configPlain
+  ppGraph = graphDelayedAfun defaultConfig
 
 data Detail = Simple | Full
 
@@ -143,15 +142,15 @@ simple _      = False
 -- | Generate a dependency graph for the given computation
 --
 {-# NOINLINE graphDelayedAcc #-}
-graphDelayedAcc :: HasCallStack => Detail -> DelayedAcc a -> Graph
-graphDelayedAcc detail acc =
+graphDelayedAcc :: HasCallStack => PrettyConfig acc -> Detail -> DelayedAcc a -> Graph
+graphDelayedAcc config detail acc =
   evalDot (graphDelayedOpenAcc config detail Aempty acc)
 
 -- | Generate a dependency graph for an array function
 --
 {-# NOINLINE graphDelayedAfun #-}
-graphDelayedAfun :: HasCallStack => Detail -> DelayedAfun f -> Graph
-graphDelayedAfun detail afun = evalDot $! do
+graphDelayedAfun :: HasCallStack => PrettyConfig acc -> Detail -> DelayedAfun f -> Graph
+graphDelayedAfun config detail afun = evalDot $! do
   l <- prettyDelayedAfun config detail Aempty afun
   state $ \s ->
     case Seq.viewl (dotGraph s) of
@@ -175,7 +174,7 @@ graphDelayedOpenAcc
     -> Aval aenv
     -> DelayedOpenAcc aenv a
     -> Dot Graph
-graphDelayedOpenAcc detail aenv acc = do
+graphDelayedOpenAcc config detail aenv acc = do
   r <- prettyDelayedOpenAcc config detail context0 aenv acc
   i <- genNodeId
   v <- mkNode r Nothing
@@ -219,8 +218,8 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
     Awhile p f x             -> do
       ident <- genNodeId
       x'    <- replant =<< prettyDelayedOpenAcc config detail app aenv x
-      p'    <- prettyDelayedAfun detail aenv p
-      f'    <- prettyDelayedAfun detail aenv f
+      p'    <- prettyDelayedAfun config detail aenv p
+      f'    <- prettyDelayedAfun config detail aenv f
       --
       let PNode _ (Leaf (Nothing,xb)) fvs = x'
           loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
