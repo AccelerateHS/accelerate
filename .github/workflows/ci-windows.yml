@@ -26,60 +26,46 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: actions/cache@v2
-        with:
-          path: C:\Users\runneradmin\AppData\Local\Programs\stack\
-          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-          restore-keys: |
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
+      - run: mv stack-${{ matrix.ghc }}.yaml stack.yaml
 
       - uses: actions/cache@v2
         with:
-          path: C:\Users\runneradmin\AppData\Roaming\stack\
-          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-          restore-keys: |
-            ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-            ${{ runner.os }}-stack-global-${{ matrix.ghc }}-
+          path: snapshot.pkgdb
+          key: ${{ runner.os }}-${{ matrix.ghc }}-snapshot.pkgdb
 
       - uses: actions/cache@v2
         with:
-          path: .stack-work
-          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
+          path: |
+            C:\Users\runneradmin\AppData\Roaming\stack
+            C:\Users\runneradmin\AppData\Local\Programs\stack
+            .stack-work
+          key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-${{ hashFiles('snapshot.pkgdb') }}
           restore-keys: |
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
+            ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-${{ hashFiles('snapshot.pkgdb') }}
+            ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-
+            ${{ runner.os }}-${{ matrix.ghc }}-
 
       - name: Install stack
-        run: |
-          choco install haskell-stack
-          mv stack-${{ matrix.ghc }}.yaml stack.yaml
+        run: choco install haskell-stack
 
       - name: Install GHC
-        run: |
-          stack --no-terminal setup --install-ghc
+        run: stack --no-terminal setup --install-ghc
 
       - name: Build dependencies
-        run: |
-          stack --no-terminal build --fast --flag accelerate:nofib --test --no-run-tests --only-dependencies
+        run: stack --no-terminal build --fast --flag accelerate:nofib --test --no-run-tests --only-dependencies
 
       - name: Build
-        run: |
-          stack --no-terminal build --fast --flag accelerate:nofib --test --no-run-tests
+        run: stack --no-terminal build --fast --flag accelerate:nofib --test --no-run-tests
 
       # - name: Test doctest
-      #   run: |
-      #     stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
+      #   run: stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
 
       - name: Test nofib
-        run: |
-          stack --no-terminal test accelerate:nofib-interpreter --fast --flag accelerate:nofib
+        run: stack --no-terminal test accelerate:nofib-interpreter --fast --flag accelerate:nofib
 
       - name: Test haddock generation
-        run: |
-          stack --no-terminal haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" --fast --flag accelerate:nofib
+        run: stack --no-terminal haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" --fast --flag accelerate:nofib
 
-      - name: Set up actions/cache@v2
-        run: |
-          stack exec ghc-pkg -- --package-db=$(stack path --snapshot-pkg-db) list > snapshot.pkgdb
+      - name: Save snapshot.pkgdb
+        run: stack exec ghc-pkg -- --package-db=$(stack path --snapshot-pkg-db) list > snapshot.pkgdb
 

@@ -28,31 +28,25 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: actions/cache@v2
-        with:
-          path: ~/.local/bin
-          key: ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-          restore-keys: |
-            ${{ runner.os }}-local-bin-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-            ${{ runner.os }}-local-bin-${{ matrix.ghc }}-
+      - run: ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
 
       - uses: actions/cache@v2
         with:
-          path:
+          path: snapshot.pkgdb
+          key: ${{ runner.os }}-${{ matrix.ghc }}-snapshot.pkgdb
+
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.local/bin
             ~/.stack/programs
             ~/.stack/snapshots
-          key: ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
+            .stack-work
+          key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-${{ hashFiles('snapshot.pkgdb') }}
           restore-keys: |
-            ${{ runner.os }}-stack-global-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-            ${{ runner.os }}-stack-global-${{ matrix.ghc }}-
-
-      - uses: actions/cache@v2
-        with:
-          path: .stack-work
-          key: ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-          restore-keys: |
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-${{ hashFiles('stack-*.yaml', 'snapshot.pkgdb') }}
-            ${{ runner.os }}-stack-local-${{ matrix.ghc }}-
+            ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-${{ hashFiles('snapshot.pkgdb') }}
+            ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-
+            ${{ runner.os }}-${{ matrix.ghc }}-
 
       - name: Install stack
         run: |
@@ -63,33 +57,25 @@ jobs:
             chmod a+x ~/.local/bin/stack
           fi
           echo "~/.local/bin" >> $GITHUB_PATH
-          ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
 
       - name: Install GHC
-        run: |
-          stack setup --install-ghc
+        run: stack setup --install-ghc
 
       - name: Build dependencies
-        run: |
-          stack build $STACK_FLAGS --test --no-run-tests --only-dependencies
+        run: stack build $STACK_FLAGS --test --no-run-tests --only-dependencies
 
       - name: Build
-        run: |
-          stack build $STACK_FLAGS --test --no-run-tests
+        run: stack build $STACK_FLAGS --test --no-run-tests
 
       - name: Test doctest
-        run: |
-          stack test accelerate:doctest $STACK_FLAGS
+        run: stack test accelerate:doctest $STACK_FLAGS
 
       - name: Test nofib
-        run: |
-          stack test accelerate:nofib-interpreter $STACK_FLAGS
+        run: stack test accelerate:nofib-interpreter $STACK_FLAGS
 
       - name: Test haddock generation
-        run: |
-          stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" $STACK_FLAGS
+        run: stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" $STACK_FLAGS
 
-      - name: Set up actions/cache@v2
-        run: |
-          stack exec ghc-pkg -- --package-db=$(stack path --snapshot-pkg-db) list > snapshot.pkgdb
+      - name: Save snapshot.pkgdb
+        run: stack exec ghc-pkg -- --package-db=$(stack path --snapshot-pkg-db) list > snapshot.pkgdb
 
