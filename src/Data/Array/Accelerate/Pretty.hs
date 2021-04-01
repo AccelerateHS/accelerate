@@ -109,7 +109,7 @@ instance (PrettyEnv env, PrettyEnv aenv) => Show (OpenFun env aenv e) where
   show = renderForTerminal . prettyOpenFun defaultConfig (prettyEnv (pretty 'x')) (prettyEnv (pretty 'a'))
 
 instance Show Ann where
-  show = renderForTerminal . prettyAnn defaultConfig
+  show = renderForTerminal . prettyAnn configVerbose
 
 -- | The default pretty printer config.
 defaultConfig :: PrettyConfig DelayedOpenAcc
