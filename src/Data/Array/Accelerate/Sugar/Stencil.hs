@@ -38,22 +38,22 @@ class Stencil sh e stencil where
 
 instance Elt e => Stencil DIM1 e (exp e, exp e, exp e) where
   type StencilR DIM1 (exp e, exp e, exp e) = EltR (e, e, e)
-  stencilR = R.StencilRunit3 $ eltR @e
+  stencilR = R.StencilRunit3 `id` eltR @e
 
 instance Elt e => Stencil DIM1 e (exp e, exp e, exp e, exp e, exp e) where
   type StencilR DIM1 (exp e, exp e, exp e, exp e, exp e) =
     EltR (e, e, e, e, e)
-  stencilR = R.StencilRunit5 $ eltR @e
+  stencilR = R.StencilRunit5 `id` eltR @e
 
 instance Elt e => Stencil DIM1 e (exp e, exp e, exp e, exp e, exp e, exp e, exp e) where
   type StencilR DIM1 (exp e, exp e, exp e, exp e, exp e, exp e, exp e) =
     EltR (e, e, e, e, e, e, e)
-  stencilR = R.StencilRunit7 $ eltR @e
+  stencilR = R.StencilRunit7 `id` eltR @e
 
 instance Elt e => Stencil DIM1 e (exp e, exp e, exp e, exp e, exp e, exp e, exp e, exp e, exp e) where
   type StencilR DIM1 (exp e, exp e, exp e, exp e, exp e, exp e, exp e, exp e, exp e) =
     EltR (e, e, e, e, e, e, e, e, e)
-  stencilR = R.StencilRunit9 $ eltR @e
+  stencilR = R.StencilRunit9 `id` eltR @e
 
 instance ( Stencil (sh:.Int) a row2
          , Stencil (sh:.Int) a row1

@@ -97,7 +97,7 @@ subtract = undefined
 
 -- SEE: [linking to .c files]
 --
-runQ $ do
+runQ `id` do
   addForeignFilePath LangC "cbits/atomic.c"
   return []
 

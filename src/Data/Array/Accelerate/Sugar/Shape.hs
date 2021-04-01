@@ -146,16 +146,16 @@ size = R.size (shapeR @sh) . fromElt
 -- | The empty /shape/
 --
 empty :: forall sh. Shape sh => sh
-empty = toElt $ R.empty (shapeR @sh)
+empty = toElt `id` R.empty (shapeR @sh)
 
 -- | Yield the intersection of two shapes
 intersect :: forall sh. Shape sh => sh -> sh -> sh
-intersect x y = toElt $ R.intersect (shapeR @sh) (fromElt x) (fromElt y)
+intersect x y = toElt `id` R.intersect (shapeR @sh) (fromElt x) (fromElt y)
 
 -- | Yield the union of two shapes
 --
 union :: forall sh. Shape sh => sh -> sh -> sh
-union x y = toElt $ R.union (shapeR @sh) (fromElt x) (fromElt y)
+union x y = toElt `id` R.union (shapeR @sh) (fromElt x) (fromElt y)
 
 -- | Map a multi-dimensional index into one in a linear, row-major
 -- representation of the array (first argument is the /shape/, second
@@ -198,7 +198,7 @@ iter1 sh f = R.iter1 (shapeR @sh) (fromElt sh) (f . toElt)
 -- | Convert a minpoint-maxpoint index into a zero-indexed shape
 --
 rangeToShape :: forall sh. Shape sh => (sh, sh) -> sh
-rangeToShape (u, v) = toElt $ R.rangeToShape (shapeR @sh) (fromElt u, fromElt v)
+rangeToShape (u, v) = toElt `id` R.rangeToShape (shapeR @sh) (fromElt u, fromElt v)
 
 -- | Convert a shape into a minpoint-maxpoint index
 --

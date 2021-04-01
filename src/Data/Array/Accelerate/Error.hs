@@ -33,13 +33,13 @@ data Check = Bounds | Unsafe | Internal
 -- | Issue an internal error message
 --
 internalError :: HasCallStack => String -> a
-internalError = withFrozenCallStack $ error Internal
+internalError = withFrozenCallStack `id` error Internal
 
 boundsError :: HasCallStack => String -> a
-boundsError = withFrozenCallStack $ error Bounds
+boundsError = withFrozenCallStack `id` error Bounds
 
 unsafeError :: HasCallStack => String -> a
-unsafeError = withFrozenCallStack $ error Unsafe
+unsafeError = withFrozenCallStack `id` error Unsafe
 
 
 -- | Throw an error if the condition evaluates to False, otherwise evaluate the
@@ -48,13 +48,13 @@ unsafeError = withFrozenCallStack $ error Unsafe
 --   $internalCheck :: String -> String -> Bool -> a -> a
 --
 internalCheck :: HasCallStack => String -> Bool -> a -> a
-internalCheck = withFrozenCallStack $ check Internal
+internalCheck = withFrozenCallStack `id` check Internal
 
 boundsCheck :: HasCallStack => String -> Bool -> a -> a
-boundsCheck = withFrozenCallStack $ check Bounds
+boundsCheck = withFrozenCallStack `id` check Bounds
 
 unsafeCheck :: HasCallStack => String -> Bool -> a -> a
-unsafeCheck = withFrozenCallStack $ check Unsafe
+unsafeCheck = withFrozenCallStack `id` check Unsafe
 
 
 -- | Throw an error if the index is not in range, otherwise evaluate the result.
@@ -68,13 +68,13 @@ indexCheck i n =
 --   $internalWarning :: String -> String -> Bool -> a -> a
 --
 internalWarning :: HasCallStack => String -> Bool -> a -> a
-internalWarning = withFrozenCallStack $ warning Internal
+internalWarning = withFrozenCallStack `id` warning Internal
 
 boundsWarning :: HasCallStack => String -> Bool -> a -> a
-boundsWarning = withFrozenCallStack $ warning Bounds
+boundsWarning = withFrozenCallStack `id` warning Bounds
 
 unsafeWarning :: HasCallStack => String -> Bool -> a -> a
-unsafeWarning = withFrozenCallStack $ warning Unsafe
+unsafeWarning = withFrozenCallStack `id` warning Unsafe
 
 
 error :: HasCallStack => Check -> String -> a
@@ -97,7 +97,7 @@ format kind msg = intercalate "\n" [ header, msg, ppCallStack callStack ]
   where
     header
       = intercalate "\n"
-      $ case kind of
+      `id` case kind of
           Internal -> [""
                       ,"*** Internal error in package accelerate ***"
                       ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"

@@ -142,19 +142,19 @@ shape (Array arr) = toElt (R.shape arr)
 -- the source and result arrays must be identical.
 --
 reshape :: forall sh sh' e. (Shape sh, Shape sh') => sh -> Array sh' e -> Array sh e
-reshape sh (Array arr) = Array $ R.reshape (shapeR @sh) (fromElt sh) (shapeR @sh') arr
+reshape sh (Array arr) = Array `id` R.reshape (shapeR @sh) (fromElt sh) (shapeR @sh') arr
 
 -- | Return the value of an array at the given multidimensional index
 --
 infixl 9 !
 (!) :: forall sh e. (Shape sh, Elt e) => Array sh e -> sh -> e
-(!) (Array arr) ix = toElt $ R.indexArray (arrayR @sh @e) arr (fromElt ix)
+(!) (Array arr) ix = toElt `id` R.indexArray (arrayR @sh @e) arr (fromElt ix)
 
 -- | Return the value of an array at given the linear (row-major) index
 --
 infixl 9 !!
 (!!) :: forall sh e. Elt e => Array sh e -> Int -> e
-(!!) (Array arr) i = toElt $ R.linearIndexArray (eltR @e) arr i
+(!!) (Array arr) i = toElt `id` R.linearIndexArray (eltR @e) arr i
 
 -- | Create an array from its representation function, applied at each
 -- index of the array
@@ -214,7 +214,7 @@ allocateArray sh = Array <$> R.allocateArray (arrayR @sh @e) (fromElt sh)
 -- thus forcing the spine of the list to be manifest on the heap.
 --
 fromList :: forall sh e. (Shape sh, Elt e) => sh -> [e] -> Array sh e
-fromList sh xs = toArr $ R.fromList (arrayR @sh @e) (fromElt sh) $ map fromElt xs
+fromList sh xs = toArr $ R.fromList (arrayR @sh @e) (fromElt sh) `id` map fromElt xs
 
 -- | Convert an accelerated 'Array' to a list in row-major order
 --
@@ -306,7 +306,7 @@ instance (Shape sh, Elt e) => Arrays (Array sh e) where
   fromArr (Array arr) = arr
   toArr               = Array
 
-runQ $ do
+runQ `id` do
   let
       mkTuple :: Int -> Q Dec
       mkTuple n =

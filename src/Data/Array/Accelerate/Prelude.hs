@@ -1073,7 +1073,7 @@ scanl'Seg f z arr seg =
     -- index of each segment.
     --
     seg'        = map (+1) seg
-    tails       = zipWith (+) seg $ prescanl (+) 0 seg'
+    tails       = zipWith (+) seg `id` prescanl (+) 0 seg'
     sums        = backpermute
                     (indexTail (shape arr') ::. length seg)
                     (\(sz ::. i) -> sz ::. fromIntegral (tails ! I1 i))
@@ -1089,9 +1089,9 @@ scanl'Seg f z arr seg =
     --
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
-                $ permute (+) (fill (I1 $ size arr + 1) 0)
-                              (\ix -> Just_ (index1' (offset ! ix)))
-                              (fill (shape seg) (1 :: Exp i))
+                `id` permute (+) (fill (I1 $ size arr + 1) 0)
+                                 (\ix -> Just_ (index1' (offset ! ix)))
+                                 (fill (shape seg) (1 :: Exp i))
 
     len         = offset ! I1 (length offset - 1)
     body        = backpermute
@@ -1154,7 +1154,7 @@ prescanlSeg
     -> Acc (Array (sh:.Int) e)
 prescanlSeg f e vec seg
   = afst
-  $ scanl'Seg f e vec seg
+  `id` scanl'Seg f e vec seg
 
 -- |Segmented version of 'postscanl'.
 --
@@ -1167,7 +1167,7 @@ postscanlSeg
     -> Acc (Array (sh:.Int) e)
 postscanlSeg f e vec seg
   = map (f e)
-  $ scanl1Seg f vec seg
+  `id` scanl1Seg f vec seg
 
 -- | Segmented version of 'scanr' along the innermost dimension of an array. The
 -- innermost dimension must have at least as many elements as the sum of the
@@ -1332,7 +1332,7 @@ prescanrSeg
     -> Acc (Array (sh:.Int) e)
 prescanrSeg f e vec seg
   = afst
-  $ scanr'Seg f e vec seg
+  `id` scanr'Seg f e vec seg
 
 -- |Segmented version of 'postscanr'.
 --
@@ -1345,7 +1345,7 @@ postscanrSeg
     -> Acc (Array (sh:.Int) e)
 postscanrSeg f e vec seg
   = map (f e)
-  $ scanr1Seg f vec seg
+  `id` scanr1Seg f vec seg
 
 
 -- Segmented scan helpers
@@ -1364,11 +1364,11 @@ mkHeadFlags
     -> Acc (Segments i)
 mkHeadFlags seg
   = init
-  $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
+  `id` permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
   where
     T2 offset len = scanl' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
-    ones          = fill (index1  $ size offset) 1
+    ones          = fill (index1  `id` size offset) 1
 
 -- | Compute tail flags vector from segment vector for right-scans. That
 -- is, the flag is placed at the last place in each segment.
@@ -1379,11 +1379,11 @@ mkTailFlags
     -> Acc (Segments i)
 mkTailFlags seg
   = init
-  $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
+  `id` permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
   where
     T2 offset len = scanr' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
-    ones          = fill (index1  $ size offset) 1
+    ones          = fill (index1  `id` size offset) 1
 
 -- | Construct a segmented version of a function from a non-segmented
 -- version. The segmented apply operates on a head-flag value tuple, and
@@ -1480,8 +1480,8 @@ enumFromStepN
     -> Acc (Array sh e)
 enumFromStepN sh x y
   = reshape sh
-  $ generate (I1 (shapeSize sh))
-             (\ix -> (fromIntegral (unindex1 ix :: Exp Int) * y) + x)
+  `id` generate (I1 (shapeSize sh))
+                (\ix -> (fromIntegral (unindex1 ix :: Exp Int) * y) + x)
 
 -- Concatenation
 -- -------------
@@ -1846,7 +1846,7 @@ reverseOn dim xs =
       sh = shape xs
       n  = sh ^. dim
   in
-  backpermute sh (over dim $ \i -> n - i - 1) xs
+  backpermute sh (over dim `id` \i -> n - i - 1) xs
 
 -- | Generalised version of 'transpose' where the argument 'Lens''s specify
 -- which two dimensions to transpose.
@@ -2321,7 +2321,7 @@ iterate
     -> Exp a
 iterate n f z
   = let step (T2 i acc) = T2 (i+1) (f acc)
-     in snd $ while (\v -> fst v < n) step (T2 0 z)
+     in snd `id` while (\v -> fst v < n) step (T2 0 z)
 
 
 -- Scalar bulk operations
@@ -2524,7 +2524,7 @@ expand f g xs =
       m             = the len
   in
   if length xs == 0 || m == 0
-     then use $ fromList (Z:.0) []
+     then use `id` fromList (Z:.0) []
      else
       let
           n          = m + 1
@@ -2537,7 +2537,7 @@ expand f g xs =
                      $ map snd
                      $ scanl1 (segmentedL (+))
                      $ zip head_flags
-                     $ fill (I1 m) 1
+                     `id` fill (I1 m) 1
 
           iotas      = map snd
                      $ scanl1 (segmentedL const)
@@ -2551,7 +2551,7 @@ expand f g xs =
                                (\ix -> if szs ! ix > 0
                                          then put ix
                                          else Nothing_)
-                     $ enumFromN (shape xs) 0
+                     `id` enumFromN (shape xs) 0
       in
       zipWith g (gather iotas xs) idxs
 

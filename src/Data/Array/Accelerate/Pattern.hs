@@ -108,14 +108,14 @@ instance IsPattern Exp Z Z where
   matcher _ = Z
 
 instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
-  builder (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
-  matcher (Exp t)          = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
+  builder (Exp a :. Exp b) = Exp $ SmartExp `id` Pair a b
+  matcher (Exp t)          = Exp (SmartExp `id` Prj PairIdxLeft t) :. Exp (SmartExp `id` Prj PairIdxRight t)
 
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of
 -- the (unremarkable) boilerplate for us.
 --
-runQ $ do
+runQ `id` do
     let
         -- Generate instance declarations for IsPattern of the form:
         -- instance (Arrays x, ArraysR x ~ (((), ArraysR a), ArraysR b), Arrays a, Arrays b,) => IsPattern Acc x (Acc a, Acc b)
@@ -215,7 +215,7 @@ runQ $ do
     es <- mapM mkExpPattern [0..16]
     as <- mapM mkAccPattern [0..16]
     vs <- mapM mkVecPattern [2,3,4,8,16]
-    return $ concat (es ++ as ++ vs)
+    return `id` concat (es ++ as ++ vs)
 
 
 -- | Specialised pattern synonyms for tuples, which may be more convenient to
@@ -238,7 +238,7 @@ runQ $ do
 -- > let ix = Ix 2 3    -- :: Exp DIM2
 -- > let I2 y x = ix    -- y :: Exp Int, x :: Exp Int
 --
-runQ $ do
+runQ `id` do
     let
         mkT :: Int -> Q [Dec]
         mkT n =
@@ -292,5 +292,5 @@ runQ $ do
     ts <- mapM mkT [2..16]
     is <- mapM mkI [0..9]
     vs <- mapM mkV [2,3,4,8,16]
-    return $ concat (ts ++ is ++ vs)
+    return `id` concat (ts ++ is ++ vs)
 

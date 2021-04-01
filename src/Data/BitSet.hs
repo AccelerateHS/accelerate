@@ -129,7 +129,7 @@ foldl' f z (BitSet bits) = go z (popCount bits) 0
   where
     go !acc 0  !_ = acc
     go !acc !n !b = if bits `testBit` b
-                      then go (f acc $ toEnum b) (pred n) (succ b)
+                      then go (f acc `id` toEnum b) (pred n) (succ b)
                       else go acc n (succ b)
 
 -- | Reduce this bit set by applying a binary function to all elements,

@@ -61,7 +61,7 @@ lift2 :: (Unlift Exp a, Unlift Exp b, Lift Exp c)
       -> Exp (Plain a)
       -> Exp (Plain b)
       -> Exp (Plain c)
-lift2 f x y = lift $ f (unlift x) (unlift y)
+lift2 f x y = lift `id` f (unlift x) (unlift y)
 
 -- | Lift a ternary function into 'Exp'.
 --
@@ -71,7 +71,7 @@ lift3 :: (Unlift Exp a, Unlift Exp b, Unlift Exp c, Lift Exp d)
       -> Exp (Plain b)
       -> Exp (Plain c)
       -> Exp (Plain d)
-lift3 f x y z = lift $ f (unlift x) (unlift y) (unlift z)
+lift3 f x y z = lift `id` f (unlift x) (unlift y) (unlift z)
 
 -- | Lift a unary function to a computation over rank-1 indices.
 --
@@ -315,11 +315,11 @@ instance Unlift Acc () where
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e
-  lift (Array arr) = Acc $ SmartAcc $ Use (arrayR @sh @e) arr
+  lift (Array arr) = Acc $ SmartAcc `id` Use (arrayR @sh @e) arr
 
 -- Lift and Unlift instances for tuples
 --
-runQ $ do
+runQ `id` do
     let
         mkInstances :: Name -> TypeQ -> ExpQ -> ExpQ -> ExpQ -> ExpQ -> Int -> Q [Dec]
         mkInstances con cst smart prj nil pair n = do
@@ -355,5 +355,5 @@ runQ $ do
     --
     as <- mapM mkAccInstances [2..16]
     es <- mapM mkExpInstances [2..16]
-    return $ concat (as ++ es)
+    return `id` concat (as ++ es)
 

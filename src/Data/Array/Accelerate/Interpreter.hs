@@ -94,8 +94,8 @@ run a = unsafePerformIO execute
     execute = do
       Debug.dumpGraph $!! acc
       Debug.dumpSimplStats
-      res <- phase "execute" Debug.elapsed $ evaluate $ evalOpenAcc acc Empty
-      return $ Sugar.toArr $ snd res
+      res <- phase "execute" Debug.elapsed $ evaluate `id` evalOpenAcc acc Empty
+      return $ Sugar.toArr `id` snd res
 
 -- | This is 'runN' specialised to an array program of one argument.
 --
@@ -119,7 +119,7 @@ runN f = go
          -> Val aenv
          -> AfunctionR g
     eval (AfunctionReprLam reprF) (Alam lhs f) aenv = \a -> eval reprF f $ aenv `push` (lhs, Sugar.fromArr a)
-    eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" Debug.elapsed (Sugar.toArr . snd <$> evaluate (evalOpenAcc b aenv))
+    eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO `id` phase "execute" Debug.elapsed (Sugar.toArr . snd <$> evaluate (evalOpenAcc b aenv))
     eval _                        _aenv        _    = error "Two men say they're Jesus; one of them must be wrong"
 
 -- -- | Stream a lazily read list of input arrays through the given program,
@@ -164,7 +164,7 @@ fromFunction' repr sh f = (TupRsingle repr, fromFunction repr sh f)
 --
 evalOpenAfun :: HasCallStack => DelayedOpenAfun aenv f -> Val aenv -> f
 evalOpenAfun (Alam lhs f) aenv = \a -> evalOpenAfun f $ aenv `push` (lhs, a)
-evalOpenAfun (Abody b)    aenv = snd $ evalOpenAcc b aenv
+evalOpenAfun (Abody b)    aenv = snd `id` evalOpenAcc b aenv
 
 
 -- The core interpreter for optimised array programs
@@ -203,15 +203,15 @@ evalOpenAcc (AST.Manifest pacc) aenv =
   in
   case pacc of
     Avar (Var repr ix)            -> (TupRsingle repr, prj ix aenv)
-    Alet lhs acc1 acc2            -> evalOpenAcc acc2 $ aenv `push` (lhs, snd $ manifest acc1)
+    Alet lhs acc1 acc2            -> evalOpenAcc acc2 $ aenv `push` (lhs, snd `id` manifest acc1)
     Apair acc1 acc2               -> let (r1, a1) = manifest acc1
                                          (r2, a2) = manifest acc2
                                      in
                                      (TupRpair r1 r2, (a1, a2))
     Anil                          -> (TupRunit, ())
-    Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd $ manifest as)
-    Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
-    Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
+    Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd `id` manifest as)
+    Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd `id` manifest acc)
+    Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd `id` manifest acc)
     Acond p acc1 acc2
       | toBool (evalE p)          -> manifest acc1
       | otherwise                 -> manifest acc2
@@ -344,7 +344,7 @@ sliceOp slice (TupRsingle repr@(ArrayR _ tp), arr) slix
         in  ((sl', sz), \(ix, i) -> (f' ix, i))
     restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
       = let (sl', f') = restrict sliceIdx slx sl
-        in  indexCheck i sz $ (sl', \ix -> (f' ix, i))
+        in  indexCheck i sz `id` (sl', \ix -> (f' ix, i))
 
 
 mapOp :: TypeR b
@@ -381,7 +381,7 @@ fold1Op
     -> WithReprs (Array sh e)
 fold1Op f (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
   = boundsCheck "empty array" (n > 0)
-  $ fromFunction' (ArrayR shr tp) sh (\ix -> iter1 (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f)
+  `id` fromFunction' (ArrayR shr tp) sh (\ix -> iter1 (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f)
 
 
 foldSegOp
@@ -396,11 +396,11 @@ foldSegOp itp f z (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
   | IntegralDict <- integralDict itp
   = boundsCheck "empty segment descriptor" (n > 0)
   $ fromFunction' repr (sh, n-1)
-  $ \(sz, ix) -> let start = fromIntegral $ seg ix
-                     end   = fromIntegral $ seg (ix+1)
-                 in
-                 boundsCheck "empty segment" (end >= start)
-                 $ iter (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
+  `id` \(sz, ix) -> let start = fromIntegral `id` seg ix
+                        end   = fromIntegral `id` seg (ix+1)
+                    in
+                    boundsCheck "empty segment" (end >= start)
+                    `id` iter (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f z
 
 
 fold1SegOp
@@ -414,11 +414,11 @@ fold1SegOp itp f (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
   | IntegralDict <- integralDict itp
   = boundsCheck "empty segment descriptor" (n > 0)
   $ fromFunction' repr (sh, n-1)
-  $ \(sz, ix)   -> let start = fromIntegral $ seg ix
-                       end   = fromIntegral $ seg (ix+1)
-                   in
-                   boundsCheck "empty segment" (end > start)
-                   $ iter1 (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f
+  `id` \(sz, ix)   -> let start = fromIntegral `id` seg ix
+                          end   = fromIntegral `id` seg (ix+1)
+                      in
+                      boundsCheck "empty segment" (end > start)
+                      `id` iter1 (ShapeRsnoc ShapeRz) ((), end-start) (\((), i) -> arr (sz, start+i)) f
 
 
 scanl1Op
@@ -427,12 +427,12 @@ scanl1Op
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanl1Op f (Delayed (ArrayR shr tp) sh ain _)
-  = ( TupRsingle $ ArrayR shr tp
+  = ( TupRsingle `id` ArrayR shr tp
     , adata `seq` Array sh adata
     )
   where
     --
-    (adata, _)  = runArrayData @e $ do
+    (adata, _)  = runArrayData @e `id` do
       aout <- newArrayData tp (size shr sh)
 
       let write (sz, 0) = writeArrayData tp aout (toIndex shr sh (sz, 0)) (ain (sz, 0))
@@ -452,13 +452,13 @@ scanlOp
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanlOp f z (Delayed (ArrayR shr tp) (sh, n) ain _)
-  = ( TupRsingle $ ArrayR shr tp
+  = ( TupRsingle `id` ArrayR shr tp
     , adata `seq` Array sh' adata
     )
   where
     sh'         = (sh, n+1)
     --
-    (adata, _)  = runArrayData @e $ do
+    (adata, _)  = runArrayData @e `id` do
       aout <- newArrayData tp (size shr sh')
 
       let write (sz, 0) = writeArrayData tp aout (toIndex shr sh' (sz, 0)) z
@@ -482,7 +482,7 @@ scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
     , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
     )
   where
-    ((aout, asum), _) = runArrayData @(e, e) $ do
+    ((aout, asum), _) = runArrayData @(e, e) `id` do
       aout <- newArrayData tp (size shr  (sh, n))
       asum <- newArrayData tp (size shr' sh)
 
@@ -513,7 +513,7 @@ scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
   where
     sh'         = (sz, n+1)
     --
-    (adata, _)  = runArrayData @e $ do
+    (adata, _)  = runArrayData @e `id` do
       aout <- newArrayData tp (size shr sh')
 
       let write (sz, 0) = writeArrayData tp aout (toIndex shr sh' (sz, n)) z
@@ -532,11 +532,11 @@ scanr1Op
     -> Delayed (Array (sh, Int) e)
     -> WithReprs (Array (sh, Int) e)
 scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
-  = ( TupRsingle $ ArrayR shr tp
+  = ( TupRsingle `id` ArrayR shr tp
     , adata `seq` Array sh adata
     )
   where
-    (adata, _)  = runArrayData @e $ do
+    (adata, _)  = runArrayData @e `id` do
       aout <- newArrayData tp (size shr sh)
 
       let write (sz, 0) = writeArrayData tp aout (toIndex shr sh (sz, n-1)) (ain (sz, n-1))
@@ -560,7 +560,7 @@ scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
     , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
     )
   where
-    ((aout, asum), _) = runArrayData @(e, e) $ do
+    ((aout, asum), _) = runArrayData @(e, e) `id` do
       aout <- newArrayData tp (size shr  (sh, n))
       asum <- newArrayData tp (size shr' sh)
 
@@ -587,12 +587,12 @@ permuteOp
     -> Delayed   (Array sh  e)
     -> WithReprs (Array sh' e)
 permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR shr tp) sh _ ain)
-  = (TupRsingle $ ArrayR shr' tp, adata `seq` Array sh' adata)
+  = (TupRsingle `id` ArrayR shr' tp, adata `seq` Array sh' adata)
   where
     sh'         = shape def
     n'          = size shr' sh'
     --
-    (adata, _)  = runArrayData @e $ do
+    (adata, _)  = runArrayData @e `id` do
       aout <- newArrayData tp n'
 
       let -- initialise array with default values
@@ -628,7 +628,7 @@ backpermuteOp
     -> Delayed (Array sh e)
     -> WithReprs (Array sh' e)
 backpermuteOp shr sh' p (Delayed (ArrayR _ tp) _ arr _)
-  = fromFunction' (ArrayR shr tp) sh' (\ix -> arr $ p ix)
+  = fromFunction' (ArrayR shr tp) sh' (\ix -> arr `id` p ix)
 
 
 stencilOp
@@ -872,7 +872,7 @@ atraceOp (Message show _ msg) as =
   let str = show as
    in if null str
          then traceIO msg
-         else traceIO $ printf "%s: %s" msg str
+         else traceIO `id` printf "%s: %s" msg str
 
 
 -- Scalar expression evaluation
@@ -990,9 +990,9 @@ evalOpenExp pexp env aenv =
     LinearIndex acc i           -> let (TupRsingle repr, a) = evalA acc
                                        ix   = fromIndex (arrayRshape repr) (shape a) (evalE i)
                                    in (repr, a) ! ix
-    Shape acc                   -> shape $ snd $ evalA acc
+    Shape acc                   -> shape $ snd `id` evalA acc
     ShapeSize shr sh            -> size shr (evalE sh)
-    Foreign _ _ f e             -> evalOpenFun f Empty Empty $ evalE e
+    Foreign _ _ f e             -> evalOpenFun f Empty Empty `id` evalE e
     Coerce t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
 
 
@@ -1037,7 +1037,7 @@ evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
       mba <- newByteArray (sizeOf (undefined::a))
       writeByteArray mba 0 x
       ByteArray ba# <- unsafeFreezeByteArray mba
-      return $ Vec ba#
+      return `id` Vec ba#
 
 evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
   where

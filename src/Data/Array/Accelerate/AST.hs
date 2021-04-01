@@ -808,10 +808,10 @@ expType = \case
   Foreign tR _ _ _             -> tR
   Pair e1 e2                   -> TupRpair (expType e1) (expType e2)
   Nil                          -> TupRunit
-  VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
+  VecPack   vecR _             -> TupRsingle $ VectorScalarType `id` vecRvector vecR
   VecUnpack vecR _             -> vecRtuple vecR
-  IndexSlice si _ _            -> shapeType $ sliceShapeR si
-  IndexFull  si _ _            -> shapeType $ sliceDomainR si
+  IndexSlice si _ _            -> shapeType `id` sliceShapeR si
+  IndexFull  si _ _            -> shapeType `id` sliceDomainR si
   ToIndex{}                    -> TupRsingle scalarTypeInt
   FromIndex shr _ _            -> shapeType shr
   Case _ ((_,e):_) _           -> expType e
@@ -821,11 +821,11 @@ expType = \case
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
   Const tR _                   -> TupRsingle tR
-  PrimConst c                  -> TupRsingle $ SingleScalarType $ primConstType c
-  PrimApp f _                  -> snd $ primFunType f
+  PrimConst c                  -> TupRsingle $ SingleScalarType `id` primConstType c
+  PrimApp f _                  -> snd `id` primFunType f
   Index (Var repr _) _         -> arrayRtype repr
   LinearIndex (Var repr _) _   -> arrayRtype repr
-  Shape (Var repr _)           -> shapeType $ arrayRshape repr
+  Shape (Var repr _)           -> shapeType `id` arrayRshape repr
   ShapeSize{}                  -> TupRsingle scalarTypeInt
   Undef tR                     -> TupRsingle tR
   Coerce _ tR _                -> TupRsingle tR
@@ -837,7 +837,7 @@ primConstType = \case
   PrimPi       t -> floating t
   where
     bounded :: BoundedType a -> SingleType a
-    bounded (IntegralBoundedType t) = NumSingleType $ IntegralNumType t
+    bounded (IntegralBoundedType t) = NumSingleType `id` IntegralNumType t
 
     floating :: FloatingType t -> SingleType t
     floating = NumSingleType . FloatingNumType
@@ -845,26 +845,26 @@ primConstType = \case
 primFunType :: PrimFun (a -> b) -> (TypeR a, TypeR b)
 primFunType = \case
   -- Num
-  PrimAdd t                 -> binary' $ num t
-  PrimSub t                 -> binary' $ num t
-  PrimMul t                 -> binary' $ num t
-  PrimNeg t                 -> unary'  $ num t
-  PrimAbs t                 -> unary'  $ num t
-  PrimSig t                 -> unary'  $ num t
+  PrimAdd t                 -> binary' `id` num t
+  PrimSub t                 -> binary' `id` num t
+  PrimMul t                 -> binary' `id` num t
+  PrimNeg t                 -> unary'  `id` num t
+  PrimAbs t                 -> unary'  `id` num t
+  PrimSig t                 -> unary'  `id` num t
 
   -- Integral
-  PrimQuot t                -> binary' $ integral t
-  PrimRem  t                -> binary' $ integral t
+  PrimQuot t                -> binary' `id` integral t
+  PrimRem  t                -> binary' `id` integral t
   PrimQuotRem t             -> unary' $ integral t `TupRpair` integral t
-  PrimIDiv t                -> binary' $ integral t
-  PrimMod  t                -> binary' $ integral t
+  PrimIDiv t                -> binary' `id` integral t
+  PrimMod  t                -> binary' `id` integral t
   PrimDivMod t              -> unary' $ integral t `TupRpair` integral t
 
   -- Bits & FiniteBits
-  PrimBAnd t                -> binary' $ integral t
-  PrimBOr t                 -> binary' $ integral t
-  PrimBXor t                -> binary' $ integral t
-  PrimBNot t                -> unary' $ integral t
+  PrimBAnd t                -> binary' `id` integral t
+  PrimBOr t                 -> binary' `id` integral t
+  PrimBXor t                -> binary' `id` integral t
+  PrimBNot t                -> unary' `id` integral t
   PrimBShiftL t             -> (integral t `TupRpair` int, integral t)
   PrimBShiftR t             -> (integral t `TupRpair` int, integral t)
   PrimBRotateL t            -> (integral t `TupRpair` int, integral t)
@@ -874,25 +874,25 @@ primFunType = \case
   PrimCountTrailingZeros t  -> unary (integral t) int
 
   -- Fractional, Floating
-  PrimFDiv t                -> binary' $ floating t
-  PrimRecip t               -> unary'  $ floating t
-  PrimSin t                 -> unary'  $ floating t
-  PrimCos t                 -> unary'  $ floating t
-  PrimTan t                 -> unary'  $ floating t
-  PrimAsin t                -> unary'  $ floating t
-  PrimAcos t                -> unary'  $ floating t
-  PrimAtan t                -> unary'  $ floating t
-  PrimSinh t                -> unary'  $ floating t
-  PrimCosh t                -> unary'  $ floating t
-  PrimTanh t                -> unary'  $ floating t
-  PrimAsinh t               -> unary'  $ floating t
-  PrimAcosh t               -> unary'  $ floating t
-  PrimAtanh t               -> unary'  $ floating t
-  PrimExpFloating t         -> unary'  $ floating t
-  PrimSqrt t                -> unary'  $ floating t
-  PrimLog t                 -> unary'  $ floating t
-  PrimFPow t                -> binary' $ floating t
-  PrimLogBase t             -> binary' $ floating t
+  PrimFDiv t                -> binary' `id` floating t
+  PrimRecip t               -> unary'  `id` floating t
+  PrimSin t                 -> unary'  `id` floating t
+  PrimCos t                 -> unary'  `id` floating t
+  PrimTan t                 -> unary'  `id` floating t
+  PrimAsin t                -> unary'  `id` floating t
+  PrimAcos t                -> unary'  `id` floating t
+  PrimAtan t                -> unary'  `id` floating t
+  PrimSinh t                -> unary'  `id` floating t
+  PrimCosh t                -> unary'  `id` floating t
+  PrimTanh t                -> unary'  `id` floating t
+  PrimAsinh t               -> unary'  `id` floating t
+  PrimAcosh t               -> unary'  `id` floating t
+  PrimAtanh t               -> unary'  `id` floating t
+  PrimExpFloating t         -> unary'  `id` floating t
+  PrimSqrt t                -> unary'  `id` floating t
+  PrimLog t                 -> unary'  `id` floating t
+  PrimFPow t                -> binary' `id` floating t
+  PrimLogBase t             -> binary' `id` floating t
 
   -- RealFrac
   PrimTruncate a b          -> unary (floating a) (integral b)
@@ -901,7 +901,7 @@ primFunType = \case
   PrimCeiling a b           -> unary (floating a) (integral b)
 
   -- RealFloat
-  PrimAtan2 t               -> binary' $ floating t
+  PrimAtan2 t               -> binary' `id` floating t
   PrimIsNaN t               -> unary (floating t) bool
   PrimIsInfinite t          -> unary (floating t) bool
 
@@ -912,8 +912,8 @@ primFunType = \case
   PrimGtEq t                -> compare' t
   PrimEq t                  -> compare' t
   PrimNEq t                 -> compare' t
-  PrimMax t                 -> binary' $ single t
-  PrimMin t                 -> binary' $ single t
+  PrimMax t                 -> binary' `id` single t
+  PrimMin t                 -> binary' `id` single t
 
   -- Logical
   PrimLAnd                  -> binary' bool
@@ -1014,13 +1014,13 @@ rnfPreOpenAcc rnfA pacc =
     Stencil sr tp f b a       ->
       let
         TupRsingle (ArrayR shr _) = arraysR a
-        repr                      = ArrayR shr $ stencilEltR sr
+        repr                      = ArrayR shr `id` stencilEltR sr
       in rnfStencilR sr `seq` rnfTupR rnfScalarType tp `seq` rnfF f `seq` rnfB repr b  `seq` rnfA a
     Stencil2 sr1 sr2 tp f b1 a1 b2 a2 ->
       let
         TupRsingle (ArrayR shr _) = arraysR a1
-        repr1 = ArrayR shr $ stencilEltR sr1
-        repr2 = ArrayR shr $ stencilEltR sr2
+        repr1 = ArrayR shr `id` stencilEltR sr1
+        repr2 = ArrayR shr `id` stencilEltR sr2
       in rnfStencilR sr1 `seq` rnfStencilR sr2 `seq` rnfTupR rnfScalarType tp `seq` rnfF f `seq` rnfB repr1 b1 `seq` rnfB repr2 b2 `seq` rnfA a1 `seq` rnfA a2
 
 rnfArrayVar :: ArrayVar aenv a -> ()
@@ -1221,12 +1221,12 @@ liftPreOpenAcc liftA pacc =
     Backpermute shr sh p a    -> [|| Backpermute $$(liftShapeR shr) $$(liftE sh) $$(liftF p) $$(liftA a) ||]
     Stencil sr tp f b a       ->
       let TupRsingle (ArrayR shr _) = arraysR a
-          repr = ArrayR shr $ stencilEltR sr
+          repr = ArrayR shr `id` stencilEltR sr
        in [|| Stencil $$(liftStencilR sr) $$(liftTypeR tp) $$(liftF f) $$(liftB repr b) $$(liftA a) ||]
     Stencil2 sr1 sr2 tp f b1 a1 b2 a2 ->
       let TupRsingle (ArrayR shr _) = arraysR a1
-          repr1 = ArrayR shr $ stencilEltR sr1
-          repr2 = ArrayR shr $ stencilEltR sr2
+          repr1 = ArrayR shr `id` stencilEltR sr1
+          repr2 = ArrayR shr `id` stencilEltR sr2
        in [|| Stencil2 $$(liftStencilR sr1) $$(liftStencilR sr2) $$(liftTypeR tp) $$(liftF f) $$(liftB repr1 b1) $$(liftA a1) $$(liftB repr2 b2) $$(liftA a2) ||]
 
 
@@ -1247,11 +1247,11 @@ liftMessage aR (Message _ fmt msg) =
       -- back to displaying in representation format
       fmtR :: ArraysR arrs' -> Q (TExp (arrs' -> String))
       fmtR TupRunit                         = [|| \() -> "()" ||]
-      fmtR (TupRsingle (ArrayR ShapeRz eR)) = [|| \as -> showElt $$(liftTypeR eR) $ linearIndexArray $$(liftTypeR eR) as 0 ||]
+      fmtR (TupRsingle (ArrayR ShapeRz eR)) = [|| \as -> showElt $$(liftTypeR eR) `id` linearIndexArray $$(liftTypeR eR) as 0 ||]
       fmtR (TupRsingle (ArrayR shR eR))     = [|| \as -> showArray (showsElt $$(liftTypeR eR)) (ArrayR $$(liftShapeR shR) $$(liftTypeR eR)) as ||]
       fmtR aR'                              = [|| \as -> showArrays $$(liftArraysR aR') as ||]
   in
-  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) ||]
+  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce $ return $ TH.LitE `id` TH.StringL msg) ||]
 
 liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
 liftMaybe _ Nothing  = [|| Nothing ||]

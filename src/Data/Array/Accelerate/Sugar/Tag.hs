@@ -70,7 +70,7 @@ instance Tagged Ordering
 instance Tagged (Maybe a)
 instance Tagged (Either a b)
 
-runQ $ do
+runQ `id` do
   let
       mkTuple :: Int -> Q Dec
       mkTuple n =

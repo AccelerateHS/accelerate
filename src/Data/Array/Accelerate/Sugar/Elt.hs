@@ -295,7 +295,7 @@ instance Elt Char where
   toElt   = chr . fromIntegral
   fromElt = fromIntegral . ord
 
-runQ $ do
+runQ `id` do
   let
       -- XXX: we might want to do the digItOut trick used by FromIntegral?
       --
