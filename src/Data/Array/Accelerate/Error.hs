@@ -23,9 +23,11 @@ module Data.Array.Accelerate.Error (
 import Debug.Trace
 import Data.List                                          ( intercalate )
 import Text.Printf
-import Prelude                                            hiding ( error )
+import Prelude                                            hiding ( error, id )
 
 import GHC.Stack
+
+import Data.Array.Accelerate.Uncurrency
 
 data Check = Bounds | Unsafe | Internal
 

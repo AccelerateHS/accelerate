@@ -146,6 +146,7 @@ import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Uncurrency
 import Data.Primitive.Vec
 
 import Control.DeepSeq
@@ -153,7 +154,7 @@ import Data.Kind
 import Data.Maybe
 import Language.Haskell.TH                                          ( Q, TExp )
 import qualified Language.Haskell.TH.Syntax as TH
-import Prelude
+import Prelude                                                      hiding ( id )
 
 import GHC.TypeLits
 
@@ -808,7 +809,7 @@ expType = \case
   Foreign tR _ _ _             -> tR
   Pair e1 e2                   -> TupRpair (expType e1) (expType e2)
   Nil                          -> TupRunit
-  VecPack   vecR _             -> TupRsingle $ VectorScalarType `id` vecRvector vecR
+  VecPack   vecR _             -> TupRsingle `id` VectorScalarType `id` vecRvector vecR
   VecUnpack vecR _             -> vecRtuple vecR
   IndexSlice si _ _            -> shapeType `id` sliceShapeR si
   IndexFull  si _ _            -> shapeType `id` sliceDomainR si
@@ -821,7 +822,7 @@ expType = \case
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
   Const tR _                   -> TupRsingle tR
-  PrimConst c                  -> TupRsingle $ SingleScalarType `id` primConstType c
+  PrimConst c                  -> TupRsingle `id` SingleScalarType `id` primConstType c
   PrimApp f _                  -> snd `id` primFunType f
   Index (Var repr _) _         -> arrayRtype repr
   LinearIndex (Var repr _) _   -> arrayRtype repr
@@ -855,10 +856,10 @@ primFunType = \case
   -- Integral
   PrimQuot t                -> binary' `id` integral t
   PrimRem  t                -> binary' `id` integral t
-  PrimQuotRem t             -> unary' $ integral t `TupRpair` integral t
+  PrimQuotRem t             -> unary' `id` integral t `TupRpair` integral t
   PrimIDiv t                -> binary' `id` integral t
   PrimMod  t                -> binary' `id` integral t
-  PrimDivMod t              -> unary' $ integral t `TupRpair` integral t
+  PrimDivMod t              -> unary' `id` integral t `TupRpair` integral t
 
   -- Bits & FiniteBits
   PrimBAnd t                -> binary' `id` integral t
@@ -1251,7 +1252,7 @@ liftMessage aR (Message _ fmt msg) =
       fmtR (TupRsingle (ArrayR shR eR))     = [|| \as -> showArray (showsElt $$(liftTypeR eR)) (ArrayR $$(liftShapeR shR) $$(liftTypeR eR)) as ||]
       fmtR aR'                              = [|| \as -> showArrays $$(liftArraysR aR') as ||]
   in
-  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce $ return $ TH.LitE `id` TH.StringL msg) ||]
+  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce `id` return `id` TH.LitE `id` TH.StringL msg) ||]
 
 liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
 liftMaybe _ Nothing  = [|| Nothing ||]

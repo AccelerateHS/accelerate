@@ -426,6 +426,7 @@ library
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
         Data.Array.Accelerate.Trafo.Var
+        Data.Array.Accelerate.Uncurrency
         Data.Atomic
 
         -- Data.Array.Accelerate.Array.Lifted
