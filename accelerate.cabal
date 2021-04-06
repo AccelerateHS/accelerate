@@ -1,6 +1,7 @@
+cabal-version:          2.2
+
 name:                   accelerate
 version:                1.3.0.0
-cabal-version:          1.18
 tested-with:            GHC >= 8.6
 build-type:             Custom
 
@@ -121,7 +122,7 @@ description:
       <https://github.com/AccelerateHS/accelerate/issues>
   .
 
-license:                BSD3
+license:                BSD-3-Clause
 license-file:           LICENSE
 author:                 The Accelerate Team
 maintainer:             Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -136,6 +137,15 @@ extra-source-files:
     CHANGELOG.md
     cbits/*.c
     cbits/*.h
+    cbits/tracy/*.h
+    cbits/tracy/*.hpp
+    cbits/tracy/*.cpp
+    cbits/tracy/common/*.h
+    cbits/tracy/common/*.hpp
+    cbits/tracy/common/*.cpp
+    cbits/tracy/client/*.h
+    cbits/tracy/client/*.hpp
+    cbits/tracy/client/*.cpp
 
 extra-doc-files:
     images/*.png
@@ -260,6 +270,11 @@ flag ekg
     .
     > -with-rtsopts=-T
     .
+
+flag tracy
+  manual:               True
+  default:              False
+  description:          Enable tracy profiler
 
 flag bounds-checks
   manual:               True
@@ -406,6 +421,7 @@ library
         Data.Array.Accelerate.Debug.Internal.Stats
         Data.Array.Accelerate.Debug.Internal.Timed
         Data.Array.Accelerate.Debug.Internal.Trace
+        Data.Array.Accelerate.Debug.Internal.Tracy
         Data.Array.Accelerate.Language
         Data.Array.Accelerate.Lift
         Data.Array.Accelerate.Orphans
@@ -506,8 +522,8 @@ library
         src
 
   if flag(debug) || flag(ekg)
-    ghc-options:
-        -optc-DACCELERATE_DEBUG
+    cc-options:
+        -DACCELERATE_DEBUG
 
     cpp-options:
         -DACCELERATE_DEBUG
@@ -521,6 +537,27 @@ library
         , ekg                           >= 0.1
         , ekg-core                      >= 0.1
         , text                          >= 1.0
+
+  if flag(tracy)
+    cxx-options:
+        -O3
+        -Wall
+        -march=native
+        -std=c++11
+        -DTRACY_ENABLE
+        -DTRACY_NO_SAMPLING
+
+    cpp-options:
+        -DTRACY_ENABLE
+        -DTRACY_NO_SAMPLING
+
+    ghc-options:
+        -optcxx=-std=c++11
+        -optcxx=-Wall
+        -optcxx=-O3
+        -optcxx=-march=native
+        -optcxx=-DTRACY_ENABLE
+        -optcxx=-DTRACY_NO_SAMPLING
 
   if flag(bounds-checks)
     cpp-options:
@@ -544,6 +581,7 @@ library
   cc-options:
         -O3
         -Wall
+        -march=native
 
   ghc-options:
         -O2
@@ -554,6 +592,9 @@ library
         -freduction-depth=100
         -fspec-constr-count=50
         -funbox-strict-fields
+        -optc=-O3
+        -optc=-Wall
+        -optc=-march=native
 
   ghc-prof-options:
         -caf-all
