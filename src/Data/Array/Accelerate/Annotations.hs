@@ -100,9 +100,9 @@ module Data.Array.Accelerate.Annotations
     ( Ann(..)
     , Optimizations(..)
     , HasAnnotations(..)
+    , withOptimizations
     , alwaysInline
     , unRollIters
-    , withOptimizations
     , mkAnn
     , mkDummyAnn
     , withEmptyCallStack
@@ -189,16 +189,25 @@ unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
 --       for accessing the annotation of course would get rid of this, but then
 --       you'd have to use lenses.
 class HasAnnotations a where
-  -- | Modify the annotation stored in an AST node. This may not do anything
-  -- when the AST node doesn't support annotations.
-  modifyAnn :: (Ann -> Ann) -> a -> a
-  -- | Extract the annotation from an AST node, if it has one. This is used
-  -- during some of the transformations when we may no longer have access to the
-  -- original AST nodes.
-  getAnn :: a -> Maybe Ann
+    -- | Modify the annotation stored in an AST node. This may not do anything
+    -- when the AST node doesn't support annotations.
+    modifyAnn :: (Ann -> Ann) -> a -> a
+    -- | Extract the annotation from an AST node, if it has one. This is used
+    -- during some of the transformations when we may no longer have access to the
+    -- original AST nodes.
+    getAnn :: a -> Maybe Ann
 
+-- | Change the optimization flags for an AST node.
 withOptimizations :: HasAnnotations a => (Optimizations -> Optimizations) -> a -> a
 withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
+
+-- | Being able to directly annotate functions makes using this annotation
+-- functionality much more ergonomic.
+instance HasAnnotations r => HasAnnotations (a -> r) where
+    modifyAnn f f' x = modifyAnn f (f' x)
+    -- You cannot get the annotation without evaluating the function first. This
+    -- is kind of an edge cases where getAnn doesn't make any sense.
+    getAnn _ = Nothing
 
 -- | Create an empty annotation with call site information if available. This
 -- only works when all smart constructors have the 'HasCallStack' constraint.
