@@ -271,10 +271,10 @@ flag ekg
     > -with-rtsopts=-T
     .
 
-flag tracy
+flag prof
   manual:               True
   default:              False
-  description:          Enable tracy profiler
+  description:          Enable hooks for profiling the running application using Tracy
 
 flag bounds-checks
   manual:               True
@@ -538,7 +538,7 @@ library
         , ekg-core                      >= 0.1
         , text                          >= 1.0
 
-  if flag(tracy)
+  if flag(prof)
     cxx-options:
         -O3
         -Wall

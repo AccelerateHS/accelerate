@@ -32,6 +32,7 @@ import Data.Array.Accelerate.Debug.Internal.Monitoring              as Debug
 import Data.Array.Accelerate.Debug.Internal.Stats                   as Debug
 import Data.Array.Accelerate.Debug.Internal.Timed                   as Debug
 import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
+import Data.Array.Accelerate.Debug.Internal.Tracy                   as Debug
 
 
 {-# INLINE debuggingIsEnabled #-}

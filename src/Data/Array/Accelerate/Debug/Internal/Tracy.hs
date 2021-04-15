@@ -30,7 +30,7 @@ foreign import ccall unsafe "___tracy_set_thread_name" ___tracy_set_thread_name 
 foreign import ccall unsafe "___tracy_alloc_srcloc" ___tracy_alloc_srcloc :: Word32 -> CString -> CSize -> CString -> CSize -> IO TracyCSrcLoc
 foreign import ccall unsafe "___tracy_alloc_srcloc_name" ___tracy_alloc_srcloc_name :: Word32 -> CString -> CSize -> CString -> CSize -> CString -> CSize -> IO TracyCSrcLoc
 
-foreign import ccall unsafe "___tracy_emit_zone_begin_alloc" ___tracy_emit_zone_begin :: TracyCSrcLoc -> CInt -> IO TracyCZoneCtx
+foreign import ccall unsafe "___tracy_emit_zone_begin_alloc" ___tracy_emit_zone_begin_alloc :: TracyCSrcLoc -> CInt -> IO TracyCZoneCtx
 foreign import ccall unsafe "___tracy_emit_zone_end" ___tracy_emit_zone_end :: TracyCZoneCtx -> IO ()
 foreign import ccall unsafe "___tracy_emit_zone_text" ___tracy_emit_zone_text :: TracyCZoneCtx -> CString -> CSize -> IO ()
 foreign import ccall unsafe "___tracy_emit_zone_name" ___tracy_emit_zone_name :: TracyCZoneCtx -> CString -> CSize -> IO ()
