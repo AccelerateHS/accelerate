@@ -384,7 +384,7 @@ ieee754_f64_decode2 i =
       high  = fromIntegral (i `unsafeShiftR` 32)
 
       iexp  = (fromIntegral ((high `unsafeShiftR` 20) .&. 0x7FF) + _DMINEXP)
-      sign = cond (fromIntegral i < (0 :: Exp Int64)) (-1) 1
+      sign  = cond (fromIntegral i < (0 :: Exp Int64)) (-1) 1
 
       high2 = high .&. (_DHIGHBIT - 1)
       iexp2 = iexp + 1
