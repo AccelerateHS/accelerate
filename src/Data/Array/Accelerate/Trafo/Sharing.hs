@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedLists     #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -71,10 +72,13 @@ import qualified Data.Array.Accelerate.Representation.Stencil       as R
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 
 import Control.Applicative                                          hiding ( Const )
-import Lens.Micro                                                 ( over, mapped, _1, _2 )
+import Lens.Micro                                                   ( over, mapped, _1, _2 )
 import Control.Monad.Fix
 import Data.Function                                                ( on )
 import Data.Hashable
+import Data.Text.Format
+import Data.Text.Lazy.Builder
+import Data.Text.Lazy.Builder.Int
 import Data.List                                                    ( elemIndex, findIndex, groupBy, intercalate, partition )
 import Data.Maybe
 import Data.Monoid                                                  ( Any(..) )
@@ -122,15 +126,15 @@ prjIdx :: forall s t env env1. HasCallStack
 prjIdx context showTp matchTp tp = go
   where
     go :: forall env'. HasCallStack => Int -> Layout s env env' -> Vars s env t
-    go _ EmptyLayout                        = no "environment does not contain index"
+    go _ EmptyLayout                = no "environment does not contain index"
     go 0 (PushLayout _ lhs vars)
-      | Just Refl <- matchTp tp tp'         = vars
-      | otherwise                           = no $ printf "couldn't match expected type `%s' with actual type `%s'"
-                                                          (showTp tp  "")
-                                                          (showTp tp' "")
+      | Just Refl <- matchTp tp tp' = vars
+      | otherwise                   = no $ printf "couldn't match expected type `%s' with actual type `%s'"
+                                                  (showTp tp  "")
+                                                  (showTp tp' "")
       where
         tp' = lhsToTupR lhs
-    go n (PushLayout l _ _)                 = go (n-1) l
+    go n (PushLayout l _ _)         = go (n-1) l
 
     no :: HasCallStack => String -> a
     no reason = internalError (printf "%s\nin the context: %s" reason context)
@@ -1101,7 +1105,7 @@ freezeOccMap :: OccMapHash c -> IO (OccMap c)
 freezeOccMap oc
   = do
       ocl <- Hash.toList oc
-      traceChunk "OccMap" (show ocl)
+      traceChunk "OccMap" (fromString (show ocl))
 
       return . IntMap.fromList
              . map (\kvs -> (key (head kvs), kvs))
@@ -1455,10 +1459,10 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
           heightIfRepeatedOccurrence <- enterOcc accOccMap (StableASTName sn) height
 
           traceLine (showPreAccOp pacc) $ do
-            let hash = show (hashStableName sn)
+            let hash = decimal (hashStableName sn)
             case heightIfRepeatedOccurrence of
-              Just height -> "REPEATED occurrence (sn = " ++ hash ++ "; height = " ++ show height ++ ")"
-              Nothing     -> "first occurrence (sn = " ++ hash ++ ")"
+              Just height -> build "REPEATED occurrence (sn = {}; height = {})" (hash, decimal height)
+              Nothing     -> build "first occurrence (sn = {})" (Only hash)
 
           -- Reconstruct the computation in shared form.
           --
@@ -1805,10 +1809,10 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
           heightIfRepeatedOccurrence <- enterOcc expOccMap (StableASTName sn) height
 
           traceLine (showPreExpOp pexp) $ do
-            let hash = show (hashStableName sn)
+            let hash = decimal (hashStableName sn)
             case heightIfRepeatedOccurrence of
-              Just height -> "REPEATED occurrence (sn = " ++ hash ++ "; height = " ++ show height ++ ")"
-              Nothing     -> "first occurrence (sn = " ++ hash ++ ")"
+              Just height -> build "REPEATED occurrence (sn = {}; height = {})" (hash, decimal height)
+              Nothing     -> build "first occurrence (sn = {})" (Only hash)
 
           -- Reconstruct the computation in shared form.
           --
@@ -2231,8 +2235,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
         noStableSharing :: StableSharingAcc
         noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
 
-    showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++
-                                                       showPreAccOp acc
+    showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++ show (showPreAccOp acc)
     showSA (StableSharingAcc _ (AvarSharing sn _))   = "AvarSharing " ++ show (hashStableNameHeight sn)
     showSA (StableSharingAcc _ (AletSharing sa _))   = "AletSharing " ++ show sa ++ "..."
 
@@ -2264,8 +2267,7 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
         noStableSharing :: StableSharingExp
         noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
 
-    showSE (StableSharingExp _ (ExpSharing sn exp)) = show (hashStableNameHeight sn) ++ ": " ++
-                                                      showPreExpOp exp
+    showSE (StableSharingExp _ (ExpSharing sn exp)) = show (hashStableNameHeight sn) ++ ": " ++ show (showPreExpOp exp)
     showSE (StableSharingExp _ (VarSharing sn _ ))  = "VarSharing " ++ show (hashStableNameHeight sn)
     showSE (StableSharingExp _ (LetSharing se _ ))  = "LetSharing " ++ show se ++ "..."
 
@@ -2528,18 +2530,18 @@ determineScopesSharingAcc config accOccMap = scopesAcc
               -- occurrences
           = let thisCount = StableSharingAcc sn (AccSharing sn newAcc) `insertAccNode` noNodeCounts
             in
-            tracePure "FREE" (show thisCount)
+            tracePure "FREE" (fromString (show thisCount))
             (ScopedAcc [] (AvarSharing sn tp), thisCount)
         reconstruct newAcc subCount
               -- shared subtree => replace by a sharing variable (if 'recoverAccSharing' enabled)
           | accOccCount > 1 && acc_sharing `member` options config
           = let allCount = (StableSharingAcc sn sharingAcc `insertAccNode` newCount)
             in
-            tracePure ("SHARED" ++ completed) (show allCount)
+            tracePure ("SHARED" <> completed) (fromString (show allCount))
             (ScopedAcc [] (AvarSharing sn $ Smart.arraysR newAcc), allCount)
               -- neither shared nor free variable => leave it as it is
           | otherwise
-          = tracePure ("Normal" ++ completed) (show newCount)
+          = tracePure ("Normal" <> completed) (fromString (show newCount))
             (ScopedAcc [] sharingAcc, newCount)
           where
               -- Determine the bindings that need to be attached to the current node...
@@ -2551,7 +2553,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
               -- trace support
             completed | null bindHere = ""
-                      | otherwise     = "(" ++ show (length bindHere) ++ " lets)"
+                      | otherwise     = build "({} lets)" (Only (length bindHere))
 
         -- Extract *leading* nodes that have a complete node count (i.e., their node count is equal
         -- to the number of occurrences of that node in the overall expression).
@@ -2706,7 +2708,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         :: HasCallStack
         => (SmartExp a -> UnscopedExp b)
         -> (SmartExp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = tracePure ("LAMBDA " ++ show ssa) (show counts) (const (ScopedExp ssa body'), (counts',graph))
+    scopesFun1 f = tracePure (build "LAMBDA {}" (show ssa)) (fromString (show counts)) (const (ScopedExp ssa body'), (counts',graph))
       where
         body@(UnscopedExp fvs _)              = f undefined
         (ScopedExp [] body', (counts, graph)) = scopesExp body
@@ -2851,18 +2853,18 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
               -- occurrences
           = let thisCount = StableSharingExp sn (ExpSharing sn newExp) `insertExpNode` noNodeCounts
             in
-            tracePure "FREE" (show thisCount)
+            tracePure "FREE" (fromString (show thisCount))
             (ScopedExp [] (VarSharing sn tp), thisCount)
         reconstruct newExp subCount
               -- shared subtree => replace by a sharing variable (if 'recoverExpSharing' enabled)
           | expOccCount > 1 && exp_sharing `member` options config
           = let allCount = StableSharingExp sn sharingExp `insertExpNode` newCount
             in
-            tracePure ("SHARED" ++ completed) (show allCount)
+            tracePure ("SHARED" <> completed) (fromString (show allCount))
             (ScopedExp [] (VarSharing sn $ typeR newExp), allCount)
               -- neither shared nor free variable => leave it as it is
           | otherwise
-          = tracePure ("Normal" ++ completed) (show newCount)
+          = tracePure ("Normal" <> completed) (fromString (show newCount))
             (ScopedExp [] sharingExp, newCount)
           where
               -- Determine the bindings that need to be attached to the current node...
@@ -2874,7 +2876,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
               -- trace support
             completed | null bindHere = ""
-                      | otherwise     = "(" ++ show (length bindHere) ++ " lets)"
+                      | otherwise     = build "({} lets)" (Only (length bindHere))
 
         -- Extract *leading* nodes that have a complete node count (i.e., their node count is equal
         -- to the number of occurrences of that node in the overall expression).
@@ -3039,7 +3041,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
         producer newSeq subCount
           = let allCount = StableSharingSeq sn (SeqSharing sn newSeq) `insertSeqNode` subCount
             in
-            tracePure "Producer" (show allCount)
+            tracePure "Producer" (fromString (show allCount))
             (ScopedSeq (SvarSharing sn), allCount)
 
         -- Consumers cannot be shared.
@@ -3048,7 +3050,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
                  -> NodeCounts
                  -> (ScopedSeq t, NodeCounts)
         consumer newSeq subCount
-          = tracePure "Consumer" (show subCount)
+          = tracePure "Consumer" (fromString (show subCount))
             (ScopedSeq (SeqSharing sn newSeq), subCount)
 --}
 
@@ -3134,18 +3136,18 @@ recoverSharingSeq config seq
 -- Debugging
 -- ---------
 
-traceLine :: String -> String -> IO ()
+traceLine :: Builder -> Builder -> IO ()
 traceLine header msg
   = Debug.traceIO Debug.dump_sharing
-  $ header ++ ": " ++ msg
+  $ header <> ": " <> msg
 
-traceChunk :: String -> String -> IO ()
+traceChunk :: Builder -> Builder -> IO ()
 traceChunk header msg
   = Debug.traceIO Debug.dump_sharing
-  $ header ++ "\n      " ++ msg
+  $ header <> "\n      " <> msg
 
-tracePure :: String -> String -> a -> a
+tracePure :: Builder -> Builder -> a -> a
 tracePure header msg
   = Debug.trace Debug.dump_sharing
-  $ header ++ ": " ++ msg
+  $ header <> ": " <> msg
 

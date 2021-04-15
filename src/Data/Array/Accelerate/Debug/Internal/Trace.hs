@@ -1,6 +1,6 @@
-{-# LANGUAGE BangPatterns             #-}
-{-# LANGUAGE CPP                      #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Internal.Trace
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -21,19 +21,18 @@ module Data.Array.Accelerate.Debug.Internal.Trace (
 
   putTraceMsg,
   trace, traceIO,
-  traceEvent, traceEventIO,
 
 ) where
 
 import Data.Array.Accelerate.Debug.Internal.Flags
 
-import Numeric
-
 #ifdef ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Clock
+import Data.Text.Lazy.Builder
+import Data.Text.Lazy.Builder.RealFloat
+import Data.Text.Format
+import System.IO
 import System.IO.Unsafe
-import Text.Printf
-import qualified Debug.Trace                            as D
 #endif
 
 
@@ -48,10 +47,11 @@ import qualified Debug.Trace                            as D
 -- is usually 1024, for example when measuring seconds versus bytes,
 -- respectively.
 --
-showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> ShowS
-showFFloatSIBase prec !base !k
-  = showString
-  $ case pow of
+{-# NOINLINE[0] showFFloatSIBase #-}
+{-# SPECIALISE showFFloatSIBase :: Maybe Int -> Double -> Double -> Builder -> Builder #-}
+showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> Builder -> Builder
+showFFloatSIBase mp !base !k !t
+  = case pow of
       4   -> with "T"
       3   -> with "G"
       2   -> with "M"
@@ -60,18 +60,23 @@ showFFloatSIBase prec !base !k
       -2  -> with "µ"
       -3  -> with "n"
       -4  -> with "p"
-      _   -> showGFloat prec k " "      -- no unit or unhandled SI prefix
+      _   -> case mp of       -- no unit or unhandled SI prefix
+               Nothing -> realFloat k <> singleton ' '
+               Just p  -> prec p k    <> singleton ' '
   where
+    with unit   = kb <> singleton ' ' <> unit <> t
     !k'         = k / (base ^^ pow)
     !pow        = floor (logBase base k) :: Int
-    with unit   = showFFloat prec k' (' ':unit)
+    kb          = case mp of
+                    Nothing -> realFloat k'
+                    Just p  -> fixed p k'
 
 
 -- | The 'trace' function outputs the message given as its second argument when
 -- the debug mode indicated by the first argument is enabled, before returning
 -- the third argument as its result. The message is prefixed with a time stamp.
 --
-trace :: Flag -> String -> a -> a
+trace :: Flag -> Builder -> a -> a
 #ifdef ACCELERATE_DEBUG
 {-# NOINLINE trace #-}
 trace f msg expr = unsafePerformIO $ do
@@ -91,55 +96,25 @@ trace _ _ expr = expr
 --        * prefix with a description of the mode (e.g. "gc: foo")
 --        * align multi-line messages
 --
-traceIO :: Flag -> String -> IO ()
+{-# INLINE traceIO #-}
+traceIO :: Flag -> Builder -> IO ()
 #ifdef ACCELERATE_DEBUG
 traceIO f msg = when f $ putTraceMsg msg
 #else
-{-# INLINE traceIO #-}
 traceIO _ _   = return ()
-#endif
-
-
--- | The 'traceEvent' function behaves like 'trace' with the difference that the
--- message is emitted to the eventlog, if eventlog profiling is enabled at
--- runtime.
---
-traceEvent :: Flag -> String -> a -> a
-#ifdef ACCELERATE_DEBUG
-{-# NOINLINE traceEvent #-}
-traceEvent f msg expr = unsafePerformIO $ do
-  traceEventIO f msg
-  return expr
-#else
-{-# INLINE traceEvent #-}
-traceEvent _ _ expr = expr
 #endif
 
 
 -- | Print a message prefixed with the current elapsed wall-clock time.
 --
-putTraceMsg :: String -> IO ()
+{-# INLINE putTraceMsg #-}
+putTraceMsg :: Builder -> IO ()
 #ifdef ACCELERATE_DEBUG
 putTraceMsg msg = do
   timestamp <- getProgramTime
-  D.traceIO  $ printf "[%8.3f] %s" timestamp msg
+  hprint stderr "[{}] {}\n" (left 8 ' ' (fixed 3 timestamp), msg)
+  hFlush stderr
 #else
 putTraceMsg _   = return ()
-#endif
-
-
--- | The 'traceEventIO' function emits a message to the eventlog, if eventlog
--- profiling is available and enabled at runtime.
---
--- Compared to 'traceEvent', 'traceEventIO' sequences the event with respect to
--- other IO actions.
---
-traceEventIO :: Flag -> String -> IO ()
-#ifdef ACCELERATE_DEBUG
-traceEventIO f msg = do
-  when f $ D.traceEventIO msg
-#else
-{-# INLINE traceEventIO #-}
-traceEventIO _ _ = return ()
 #endif
 

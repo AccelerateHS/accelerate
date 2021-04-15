@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -75,6 +76,8 @@ import Control.Monad.ST
 import Data.Bits
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
+import Data.Text.Format
+import Data.Text.Lazy.Builder
 import Debug.Trace
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Text.Printf                                                  ( printf )
@@ -133,8 +136,8 @@ runN f = go
 -- Debugging
 -- ---------
 
-phase :: String -> (Double -> Double -> String) -> IO a -> IO a
-phase n fmt go = Debug.timed Debug.dump_phases (\wall cpu -> printf "phase %s: %s" n (fmt wall cpu)) go
+phase :: Builder -> (Double -> Double -> Builder) -> IO a -> IO a
+phase n fmt go = Debug.timed Debug.dump_phases (\wall cpu -> build "phase {}: {}" (n, fmt wall cpu)) go
 
 
 -- Delayed Arrays

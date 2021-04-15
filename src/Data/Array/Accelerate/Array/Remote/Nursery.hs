@@ -1,5 +1,6 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE LambdaCase   #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Nursery
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -26,6 +27,7 @@ import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
 import Control.Concurrent.MVar
 import Data.Int
 import Data.Sequence                                                ( Seq )
+import Data.Text.Lazy.Builder                                       ( Builder )
 import Data.Word
 import System.Mem.Weak                                              ( Weak )
 import Prelude                                                      hiding ( lookup )
@@ -119,6 +121,6 @@ size (Nursery ref _)
 -- -----
 
 {-# INLINE message #-}
-message :: String -> IO ()
-message msg = Debug.traceIO Debug.dump_gc ("gc: " ++ msg)
+message :: Builder -> IO ()
+message msg = Debug.traceIO Debug.dump_gc ("gc: " <> msg)
 

@@ -1,10 +1,11 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DoAndIfThenElse     #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -59,6 +60,8 @@ import Data.Functor
 import Data.Int                                                     ( Int64 )
 #endif
 import Data.Maybe                                                   ( isNothing )
+import Data.Text.Format
+import Data.Text.Lazy.Builder                                       ( Builder )
 import System.CPUTime
 import System.Mem.Weak                                              ( Weak, deRefWeak, finalize )
 import Prelude                                                      hiding ( lookup )
@@ -155,7 +158,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
     --
     case mu of
       Nothing -> do
-        message ("withRemote/array has never been malloc'd: " ++ show key)
+        message (build "withRemote/array has never been malloc'd: {}" (show key))
         return Nothing -- The array was never in the table
 
       Just u  -> do
@@ -164,7 +167,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
                 Just p          -> return p
                 Nothing
                   | isEvicted u -> copyBack utbl (incCount u)
-                  | otherwise   -> do message ("lost array " ++ show key)
+                  | otherwise   -> do message (build "lost array {}" (show key))
                                       internalError "non-evicted array has been lost"
         return (Just ptr)
   --
@@ -196,7 +199,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
        -> RemotePtr m (ScalarArrayDataR a)
        -> m c
     go key ptr = do
-      message ("withRemote/using: " ++ show key)
+      message (build "withRemote/using: " (show key))
       (task, c) <- run ptr
       liftIO . withMVar ref  $ \utbl -> do
         HT.mutateIO utbl key $ \case
@@ -296,7 +299,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
           message "evictLRU/Accelerate GC interrupted by GHC GC"
 
         Just arr -> do
-          message ("evictLRU/evicting " ++ show sa)
+          message (build "evictLRU/evicting {}" (show sa))
           copyIfNecessary status n tp arr
           liftIO $ Debug.didEvictBytes (remoteBytes tp n)
           liftIO $ Basic.freeStable @m mt sa
@@ -386,7 +389,7 @@ finalizer !key !weak_utbl = do
   mref <- deRefWeak weak_utbl
   case mref of
     Nothing  -> message "finalize cache/dead table"
-    Just ref -> trace  ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
+    Just ref -> trace  (build "finalize cache: {}" (show key)) $ withMVar' ref (`delete` key)
 
 delete :: UT task -> StableArray -> IO ()
 delete = HT.delete
@@ -443,10 +446,10 @@ takeMVar' m = liftIO (takeMVar m)
 -- -----
 
 {-# INLINE trace #-}
-trace :: MonadIO m => String -> m a -> m a
+trace :: MonadIO m => Builder -> m a -> m a
 trace msg next = message msg >> next
 
 {-# INLINE message #-}
-message :: MonadIO m => String -> m ()
-message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " ++ msg)
+message :: MonadIO m => Builder -> m ()
+message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " <> msg)
 

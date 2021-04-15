@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo
@@ -45,7 +46,7 @@ import qualified Data.Array.Accelerate.Trafo.Sharing                as Sharing
 import Control.DeepSeq
 
 #ifdef ACCELERATE_DEBUG
-import Text.Printf
+import Data.Text.Format
 import System.IO.Unsafe
 import Data.Array.Accelerate.Debug.Internal.Flags                   hiding ( when )
 import Data.Array.Accelerate.Debug.Internal.Timed
@@ -132,7 +133,7 @@ phase :: NFData b => String -> (a -> b) -> a -> b
 phase n f x = unsafePerformIO $ do
   enabled <- getFlag dump_phases
   if enabled
-    then timed dump_phases (\wall cpu -> printf "phase %s: %s" n (elapsed wall cpu)) (return $!! f x)
+    then timed dump_phases (\wall cpu -> build "phase {}: {}" (n, elapsed wall cpu)) (return $!! f x)
     else return (f x)
 #else
 phase _ f = f

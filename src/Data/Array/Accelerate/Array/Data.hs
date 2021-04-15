@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns         #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE MagicHash            #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
@@ -67,16 +68,17 @@ import Control.Monad                                                ( (<=<) )
 import Data.Bits
 import Data.IORef
 import Data.Primitive                                               ( sizeOf# )
+import Data.Text.Format
 import Foreign.ForeignPtr
 import Foreign.Storable
 import Language.Haskell.TH                                          hiding ( Type )
 import System.IO.Unsafe
-import Text.Printf
 import Prelude                                                      hiding ( mapM )
 
-import GHC.Base
 import GHC.ForeignPtr
+import GHC.Prim
 import GHC.Ptr
+import GHC.Types
 
 
 -- | Immutable array representation

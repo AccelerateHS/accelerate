@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
@@ -51,11 +52,12 @@ import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import Control.Applicative                                          hiding ( Const )
-import Lens.Micro                                                   hiding ( ix )
 import Data.List                                                    ( partition )
 import Data.Maybe
 import Data.Monoid
-import Text.Printf
+import Data.Text.Format
+import Data.Text.Lazy.Builder
+import Lens.Micro                                                   hiding ( ix )
 import Prelude                                                      hiding ( exp, iterate )
 import qualified Data.Map.Strict                                    as Map
 
@@ -439,11 +441,14 @@ iterate summarise match shrink simplify = fix 1 . setup
       | changed         = Debug.trace Debug.dump_simpl_iterations (msg i s x) v
       | otherwise       = v
 
-    msg :: Int -> String -> f a -> String
-    msg i s x = printf "simpl-iters/%-8s [%d]: %s" s i (ppr x)
+    msg :: Int -> Builder -> f a -> Builder
+    msg i s x = build "simpl-iters/{}-8s [{}]: {}" (s, i, ppr x)
 
-    ppr :: f a -> String
-    ppr = show . summarise
+    ppr :: f a -> Builder
+    ppr = stats . summarise
+
+    stats (Stats a b c d e) =
+      build "terms = {}, types = {}, lets = {}, vars = {}, primops = {}" (a, b, c, d, e)
 
 
 -- Debugging support
@@ -456,10 +461,6 @@ data Stats = Stats
   , _vars     :: {-# UNPACK #-} !Int
   , _ops      :: {-# UNPACK #-} !Int
   }
-
-instance Show Stats where
-  show (Stats a b c d e) =
-    printf "terms = %d, types = %d, lets = %d, vars = %d, primops = %d" a b c d e
 
 instance Semigroup Stats where
   (<>) = (+++)
