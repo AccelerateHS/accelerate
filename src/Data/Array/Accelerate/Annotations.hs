@@ -4,6 +4,7 @@
 {-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns    #-}
 
 -- | Annotations for Accelerate's abstract syntax trees.
 --
@@ -101,6 +102,7 @@ module Data.Array.Accelerate.Annotations
     , Optimizations(..)
     , HasAnnotations(..)
     , withOptimizations
+    , extractAnn
     , alwaysInline
     , unRollIters
     , mkAnn
@@ -200,6 +202,12 @@ class HasAnnotations a where
 -- | Change the optimization flags for an AST node.
 withOptimizations :: HasAnnotations a => (Optimizations -> Optimizations) -> a -> a
 withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
+
+-- | A helper to extract an annotation from an expression, or to return an empty
+-- annotation if the expression doesn't contain one.
+extractAnn :: HasAnnotations a => a -> Ann
+extractAnn (getAnn -> Just ann) = ann
+extractAnn _                    = mkDummyAnn
 
 -- | Being able to directly annotate functions makes using this annotation
 -- functionality much more ergonomic.

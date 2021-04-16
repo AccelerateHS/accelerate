@@ -261,12 +261,6 @@ associates fun exp = case fun of
 
 type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Maybe (OpenExp env aenv b)
 
--- | A helper to extract an annotation from an expression, or to return an empty
--- annotation if the expression doesn't contain one.
-extractAnn :: OpenExp env aenv a -> Ann
-extractAnn (getAnn -> Just ann) = ann
-extractAnn _                    = mkDummyAnn
-
 eval1 :: SingleType b -> (a -> b) -> a :-> b
 eval1 tp f x env
   | Just a <- propagate env x = Stats.substitution "constant fold" . Just $ Const (extractAnn x) (SingleScalarType tp) (f a)
