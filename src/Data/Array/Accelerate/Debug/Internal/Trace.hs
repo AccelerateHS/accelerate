@@ -26,11 +26,12 @@ module Data.Array.Accelerate.Debug.Internal.Trace (
 
 import Data.Array.Accelerate.Debug.Internal.Flags
 
-#ifdef ACCELERATE_DEBUG
-import Data.Array.Accelerate.Debug.Internal.Clock
+import Data.Text.Format
 import Data.Text.Lazy.Builder
 import Data.Text.Lazy.Builder.RealFloat
-import Data.Text.Format
+
+#ifdef ACCELERATE_DEBUG
+import Data.Array.Accelerate.Debug.Internal.Clock
 import System.IO
 import System.IO.Unsafe
 #endif

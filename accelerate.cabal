@@ -234,47 +234,10 @@ flag debug
       * @dump-sched@: Print information related to execution scheduling.
     .
 
-flag ekg
-  manual:               True
-  default:              False
-  description:
-    Enable hooks for monitoring the running application using EKG. Implies
-    @debug@ mode. In order to view the metrics, your application will need to
-    call @Data.Array.Accelerate.Debug.beginMonitoring@ before running any
-    Accelerate computations. This will launch the server on the local machine at
-    port 8000.
-    .
-    Alternatively, if you wish to configure the EKG monitoring server you can
-    initialise it like so:
-    .
-    > import Data.Array.Accelerate.Debug
-    >
-    > import System.Metrics
-    > import System.Remote.Monitoring
-    >
-    > main :: IO ()
-    > main = do
-    >   store  <- initAccMetrics
-    >   registerGcMetrics store      -- optional
-    >
-    >   server <- forkServerWith store "localhost" 8000
-    >
-    >   ...
-    .
-    Note that, as with any program utilising EKG, in order to collect Haskell GC
-    statistics, you must either run the program with:
-    .
-    > +RTS -T -RTS
-    .
-    or compile it with:
-    .
-    > -with-rtsopts=-T
-    .
-
 flag prof
   manual:               True
   default:              False
-  description:          Enable hooks for profiling the running application using Tracy
+  description:          Enable hooks for profiling the running application
 
 flag bounds-checks
   manual:               True
@@ -324,6 +287,7 @@ library
         , template-haskell
         , terminal-size                 >= 0.3
         , text                          >= 1.2
+        , text-format                   >= 0.3
         , transformers                  >= 0.3
         , unique
         , unordered-containers          >= 0.2
@@ -417,7 +381,7 @@ library
         Data.Array.Accelerate.Debug.Internal.Clock
         Data.Array.Accelerate.Debug.Internal.Flags
         Data.Array.Accelerate.Debug.Internal.Graph
-        Data.Array.Accelerate.Debug.Internal.Monitoring
+        Data.Array.Accelerate.Debug.Internal.Profile
         Data.Array.Accelerate.Debug.Internal.Stats
         Data.Array.Accelerate.Debug.Internal.Timed
         Data.Array.Accelerate.Debug.Internal.Trace
@@ -521,33 +485,28 @@ library
   hs-source-dirs:
         src
 
-  if flag(debug) || flag(ekg)
+  if flag(debug) || flag(prof)
     cc-options:
         -DACCELERATE_DEBUG
 
     cpp-options:
         -DACCELERATE_DEBUG
 
-  if flag(ekg)
-    cpp-options:
-        -DACCELERATE_MONITORING
-
-    build-depends:
-          async                         >= 2.0
-        , ekg                           >= 0.1
-        , ekg-core                      >= 0.1
-        , text                          >= 1.0
-
   if flag(prof)
+    cc-options:
+        -DACCELERATE_PROFILE
+
     cxx-options:
         -O3
         -Wall
         -march=native
         -std=c++11
+        -DACCELERATE_PROFILE
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
 
     cpp-options:
+        -DACCELERATE_PROFILE
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
 

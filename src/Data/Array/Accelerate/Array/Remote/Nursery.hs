@@ -20,7 +20,7 @@ module Data.Array.Accelerate.Array.Remote.Nursery (
 -- friends
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Debug.Internal.Flags                   as Debug
-import Data.Array.Accelerate.Debug.Internal.Monitoring              as Debug
+-- import Data.Array.Accelerate.Debug.Internal.Profile                 as Debug
 import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
 
 -- libraries
@@ -75,7 +75,7 @@ lookup !key (Nursery !ref !_) =
       Just r  ->
         case Seq.viewl r of
           v Seq.:< vs -> do
-            Debug.decreaseCurrentBytesNursery (fromIntegral key)
+            -- Debug.remote_memory_free_nursery v
             if Seq.null vs
               then return (Nothing, Just v)   -- delete this entry from the map
               else return (Just vs, Just v)   -- re-insert the tail
@@ -89,7 +89,7 @@ lookup !key (Nursery !ref !_) =
 insert :: Int -> ptr Word8 -> Nursery ptr -> IO ()
 insert !key !val (Nursery !ref _) =
   withMVar ref $ \nrs -> do
-    Debug.increaseCurrentBytesRemote (fromIntegral key)
+    -- Debug.remote_memory_alloc_nursery val key
     HT.mutate nrs key $ \case
       Nothing -> (Just (Seq.singleton val), ())
       Just vs -> (Just (vs Seq.|> val),     ())
@@ -103,8 +103,7 @@ cleanup delete !ref = do
   message "nursery cleanup"
   modifyMVar_ ref $ \nrs -> do
     HT.mapM_ (Seq.mapM delete . snd) nrs
-    Debug.setCurrentBytesNursery 0
-    nrs'   <- HT.new
+    nrs' <- HT.new
     return nrs'
 
 

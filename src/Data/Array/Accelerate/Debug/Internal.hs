@@ -17,7 +17,7 @@
 module Data.Array.Accelerate.Debug.Internal (
 
   debuggingIsEnabled,
-  monitoringIsEnabled,
+  profilingIsEnabled,
   boundsChecksAreEnabled,
   unsafeChecksAreEnabled,
   internalChecksAreEnabled,
@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Debug.Internal (
 
 import Data.Array.Accelerate.Debug.Internal.Flags                   as Debug
 import Data.Array.Accelerate.Debug.Internal.Graph                   as Debug
-import Data.Array.Accelerate.Debug.Internal.Monitoring              as Debug
+import Data.Array.Accelerate.Debug.Internal.Profile                 as Debug
 import Data.Array.Accelerate.Debug.Internal.Stats                   as Debug
 import Data.Array.Accelerate.Debug.Internal.Timed                   as Debug
 import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
@@ -43,12 +43,12 @@ debuggingIsEnabled = True
 debuggingIsEnabled = False
 #endif
 
-{-# INLINE monitoringIsEnabled #-}
-monitoringIsEnabled :: Bool
-#ifdef ACCELERATE_MONITORING
-monitoringIsEnabled = True
+{-# INLINE profilingIsEnabled #-}
+profilingIsEnabled :: Bool
+#ifdef ACCELERATE_PROFILE
+profilingIsEnabled = True
 #else
-monitoringIsEnabled = False
+profilingIsEnabled = False
 #endif
 
 {-# INLINE boundsChecksAreEnabled #-}

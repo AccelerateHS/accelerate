@@ -43,12 +43,12 @@ import Data.Array.Accelerate.Array.Remote.Class
 import Data.Array.Accelerate.Array.Remote.Table                     ( StableArray, makeWeakArrayData )
 import Data.Array.Accelerate.Array.Unique                           ( touchUniqueArray )
 import Data.Array.Accelerate.Error                                  ( internalError )
-import Data.Array.Accelerate.Representation.Elt
-import Data.Array.Accelerate.Representation.Type
+-- import Data.Array.Accelerate.Representation.Elt
+-- import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Remote.Table           as Basic
 import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
-import qualified Data.Array.Accelerate.Debug.Internal.Monitoring    as Debug
+-- import qualified Data.Array.Accelerate.Debug.Internal.Profile       as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import Control.Concurrent.MVar                                      ( MVar, newMVar, withMVar, takeMVar, putMVar, mkWeakMVar )
@@ -301,7 +301,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
         Just arr -> do
           message (build "evictLRU/evicting {}" (show sa))
           copyIfNecessary status n tp arr
-          liftIO $ Debug.didEvictBytes (remoteBytes tp n)
+          -- liftIO $ Debug.remote_memory_evict sa (remoteBytes tp n)
           liftIO $ Basic.freeStable @m mt sa
           liftIO $ HT.insert utbl sa (Used ts Evicted count tasks n tp weak_arr)
       return True
@@ -322,8 +322,8 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
             _  -> return prev
     eldest prev _ = return prev
 
-    remoteBytes :: SingleType e -> Int -> Int64
-    remoteBytes tp n = fromIntegral (bytesElt (TupRsingle (SingleScalarType tp))) * fromIntegral n
+    -- remoteBytes :: SingleType e -> Int -> Int
+    -- remoteBytes tp n = bytesElt (TupRsingle (SingleScalarType tp)) * n
 
     evictable :: Status -> Bool
     evictable Clean     = True

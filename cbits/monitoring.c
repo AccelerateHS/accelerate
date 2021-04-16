@@ -23,12 +23,6 @@
 /* These monitoring counters are globals which will be accessed from the
  * Haskell side.
  */
-int64_t DOUBLE_CACHE_ALIGNED __active_ns_llvm_native            = 0;
-int64_t DOUBLE_CACHE_ALIGNED __active_ns_llvm_ptx               = 0;
-
-int64_t DOUBLE_CACHE_ALIGNED __current_bytes_remote             = 0;
-int64_t DOUBLE_CACHE_ALIGNED __current_bytes_nursery            = 0;
-
 int64_t DOUBLE_CACHE_ALIGNED __total_bytes_allocated_local      = 0;
 int64_t DOUBLE_CACHE_ALIGNED __total_bytes_allocated_remote     = 0;
 int64_t DOUBLE_CACHE_ALIGNED __total_bytes_copied_to_remote     = 0;

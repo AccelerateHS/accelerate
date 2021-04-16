@@ -22,14 +22,14 @@ import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Debug.Internal.Trace
 
 import Control.Monad.Trans                              ( MonadIO )
+import Data.Text.Lazy.Builder
+import Data.Text.Format
 
 #if ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Clock
 
 import Control.Applicative
 import Control.Monad.Trans                              ( liftIO )
-import Data.Text.Lazy.Builder
-import Data.Text.Format
 import System.CPUTime
 import Prelude
 

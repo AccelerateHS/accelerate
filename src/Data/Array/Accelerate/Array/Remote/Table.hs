@@ -65,7 +65,7 @@ import Data.Array.Accelerate.Lifetime
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Remote.Nursery         as N
 import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
-import qualified Data.Array.Accelerate.Debug.Internal.Monitoring    as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Profile       as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import GHC.Stack
@@ -253,7 +253,7 @@ freeStable (MemoryTable !ref _ !nrs _) !sa =
       Just (RemoteArray !p !bytes _) -> do
         message (build "free/nursery: {} of {}" (show sa, showBytes bytes))
         N.insert bytes (castRemotePtr @m p) nrs
-        Debug.decreaseCurrentBytesRemote (fromIntegral bytes)
+        -- Debug.remote_memory_free (unsafeRemotePtrToPtr @m p)
 
     return (Nothing, ())
 
@@ -274,7 +274,7 @@ insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes | SingleArrayDict <- sin
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
   message $ build "insert: {}" (show key)
-  liftIO  $ Debug.increaseCurrentBytesRemote (fromIntegral bytes)
+  -- liftIO  $ Debug.remote_memory_alloc (unsafeRemotePtrToPtr @m ptr) bytes
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) bytes weak)
 
 
@@ -312,7 +312,7 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
   -- that finalizers are often significantly delayed, it is worth our while
   -- traversing the table and explicitly freeing any dead entires.
   --
-  Debug.didRemoteGC
+  Debug.emit_remote_gc
   performGC
   yield
   mr <- deRefWeak weak_ref
