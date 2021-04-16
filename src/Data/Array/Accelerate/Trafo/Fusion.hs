@@ -145,7 +145,7 @@ delayed
 delayed config (embedOpenAcc config -> Embed env cc)
   | BaseEnv <- env
   = simplify cc & \case
-      Left (Done v)                                           -> avarsIn Manifest v
+      Left (Done _ v)                                         -> avarsIn Manifest v
       Right d       -> d & \case
         Yield ann aR sh f                                     -> Delayed ann aR sh f (f `compose` fromIndex (arrayRshape aR) sh)
         Step  ann aR sh p f v
@@ -439,10 +439,10 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
       | Embed env cc <- x
       , pacc         <- compute cc
       = case avarsOut extractOpenAcc pacc of
-          Just vars -> Embed env $ Done vars
+          Just vars -> Embed env $ Done (extractAnn pacc) vars
           _
             | DeclareVars lhs _ value <- declareVars (arraysR pacc)
-              -> Embed (PushEnv env lhs $ OpenAcc pacc) $ Done $ value weakenId
+              -> Embed (PushEnv env lhs $ OpenAcc pacc) $ Done (extractAnn pacc) $ value weakenId
 
     cvtA :: HasCallStack => OpenAcc aenv' a -> OpenAcc aenv' a
     cvtA = computeAcc . embedAcc
@@ -574,14 +574,14 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
           -> (forall aenv'. Extend ArrayR OpenAcc aenv aenv' -> OpenAcc aenv' as -> PreOpenAcc OpenAcc aenv' bs)
           ->       OpenAcc aenv as
           -> Embed OpenAcc aenv bs
-    embed reprBs op (embedAcc -> Embed env cc)
+    embed reprBs op acc@(embedAcc -> Embed env cc)
       | Done{} <- cc
       , DeclareVars lhs _ value <- declareVars reprBs
-      = Embed (PushEnv BaseEnv lhs $ OpenAcc (op BaseEnv (computeAcc (Embed env cc)))) $ Done $ value weakenId
+      = Embed (PushEnv BaseEnv lhs $ OpenAcc (op BaseEnv (computeAcc (Embed env cc)))) $ Done (extractAnn acc) $ value weakenId
       | otherwise
       -- Next line is duplicated for both branches, as the type variable for the environment is instantiated differently
       , DeclareVars lhs _ value <- declareVars reprBs
-      = Embed (PushEnv env     lhs $ OpenAcc (op env     (OpenAcc (compute cc))))      $ Done $ value weakenId
+      = Embed (PushEnv env     lhs $ OpenAcc (op env     (OpenAcc (compute cc))))      $ Done (extractAnn acc) $ value weakenId
 
     embed2 :: HasCallStack
            => ArraysR cs
@@ -589,7 +589,7 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
            ->       OpenAcc aenv as
            ->       OpenAcc aenv bs
            -> Embed OpenAcc aenv cs
-    embed2 reprCs op (embedAcc -> Embed env1 cc1) a0
+    embed2 reprCs op acc@(embedAcc -> Embed env1 cc1) a0
       | Done{}          <- cc1
       , a1              <- computeAcc (Embed env1 cc1)
       = embed reprCs (\env0 -> op env0 (sinkA env0 a1)) a0
@@ -600,14 +600,14 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
           Done{}
             | DeclareVars lhs _ value <- declareVars reprCs
               -> Embed (PushEnv env1 lhs $ OpenAcc (op env1 (OpenAcc (compute cc1)) (computeAcc (Embed env0 cc0))))
-                       $ Done
+                       $ Done (extractAnn acc)
                        $ value weakenId
           _
             -- Next line is duplicated for both branches, as the type
             -- variable for the environment is instantiated differently
             | DeclareVars lhs _ value <- declareVars reprCs
               -> Embed (PushEnv env  lhs $ OpenAcc (op env  (OpenAcc (compute (sinkA env0 cc1))) (OpenAcc (compute cc0))))
-                       $ Done
+                       $ Done (extractAnn acc)
                        $ value weakenId
 
     -- trav1 :: (Arrays as, Arrays bs)
@@ -789,7 +789,14 @@ data Cunctation r aenv a where
   -- environment, ensuring that the array is manifest and making the term
   -- non-recursive in 'acc'.
   --
-  Done  :: ArrayVars    aenv arrs
+  -- TODO: It isn't possible to easily just extract this annotation from the
+  --       environment without having to store it inside of this constructor, is
+  --       it? It's probably still cleaner if we also store it here of course.
+  -- TODO: Also, we're mostly ignoring annotations coming from 'Done'
+  --       constructors. Is this correct?
+  --
+  Done  :: Ann
+        -> ArrayVars    aenv arrs
         -> Cunctation M aenv arrs
 
   -- TODO: For the delayed representation, can we just combine annotations as we
@@ -819,13 +826,13 @@ data Cunctation r aenv a where
         -> Cunctation D aenv (Array sh' b)
 
 instance HasArraysR (Cunctation r) where
-  arraysR (Done v)            = varsType v
+  arraysR (Done _ v)          = varsType v
   arraysR (Yield _ aR _ _)    = TupRsingle aR
   arraysR (Step _ aR _ _ _ _) = TupRsingle aR
 
 instance Sink (Cunctation r) where
   weaken k = \case
-    Done v                -> Done (weakenVars k v)
+    Done ann v            -> Done  ann (weakenVars k v)
     Step ann aR sh p f v  -> Step  ann aR (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
     Yield ann aR sh f     -> Yield ann aR (weaken k sh) (weaken k f)
 
@@ -834,15 +841,15 @@ simplify
     => Cunctation r aenv a
     -> Either (Cunctation M aenv a) (Cunctation D aenv a)
 simplify = \case
-  Done v
-    -> Left  $ Done v
+  Done ann v
+    -> Left  $ Done ann v
   Yield ann aR (simplifyExp -> sh) (simplifyFun -> f)
     -> Right $ Yield ann aR sh f
   Step ann aR (simplifyExp -> sh) (simplifyFun -> p) (simplifyFun -> f) v
     | Just Refl <- matchOpenExp sh (arrayShape v)
     , Just Refl <- isIdentity p
     , Just Refl <- isIdentity f
-    -> Left  $ (Done (TupRsingle v))
+    -> Left  $ (Done ann (TupRsingle v))
     | otherwise
     -> Right $ Step ann aR sh p f v
 
@@ -852,12 +859,12 @@ simplify = \case
 done :: HasCallStack => PreOpenAcc OpenAcc aenv a -> Embed OpenAcc aenv a
 done pacc
   | Just vars <- avarsOut extractOpenAcc pacc
-  = Embed BaseEnv (Done vars)
+  = Embed BaseEnv (Done (extractAnn pacc) vars)
   | DeclareVars lhs _ value <- declareVars (arraysR pacc)
-  = Embed (PushEnv BaseEnv lhs $ OpenAcc pacc) $ Done $ value weakenId
+  = Embed (PushEnv BaseEnv lhs $ OpenAcc pacc) $ Done (extractAnn pacc) $ value weakenId
 
 doneZeroIdx :: ArrayR (Array sh e) -> Cunctation M (aenv, Array sh e) (Array sh e)
-doneZeroIdx aR = Done (TupRsingle (Var aR ZeroIdx))
+doneZeroIdx aR = Done mkDummyAnn (TupRsingle (Var aR ZeroIdx))
 
 
 -- Recast a cunctation into a mapping from indices to elements
@@ -867,10 +874,9 @@ yield :: HasCallStack
       -> Cunctation D aenv (Array sh e)
 yield cc =
   case cc of
-    Yield{}                        -> cc
-    Step ann tR sh p f v           -> Yield ann tR sh (f `compose` indexArray v `compose` p)
-    -- FIXME: Extract the annotation from `v`, somehow
-    Done (TupRsingle v@(Var tR _)) -> Yield mkDummyAnn tR (arrayShape v) (indexArray v)
+    Yield{}                            -> cc
+    Step ann tR sh p f v               -> Yield ann tR sh (f `compose` indexArray v `compose` p)
+    Done ann (TupRsingle v@(Var tR _)) -> Yield ann tR (arrayShape v) (indexArray v)
 
 -- Recast a cunctation into a delayed representation
 --
@@ -882,12 +888,11 @@ delaying cc =
   case cc of
     Yield{} -> cc
     Step{}  -> cc
-    Done u
+    Done ann u
       | TupRsingle v  <- u
       , Var aR _      <- v
       , ArrayR shR tR <- aR
-      -- TODO: Pull the annotation from the array, somehow
-     -> Step mkDummyAnn aR (arrayShape v) (identity (shapeType shR)) (identity tR) v
+     -> Step ann aR (arrayShape v) (identity (shapeType shR)) (identity tR) v
 
 -- Get the shape of a delayed array
 --
@@ -964,8 +969,8 @@ computeAcc
 computeAcc (Embed      BaseEnv              cc) = OpenAcc (compute cc)
 computeAcc (Embed env@(PushEnv bot lhs top) cc) =
   simplify cc & \case
-    Left (Done v) -> bindA env (avarsIn OpenAcc v)
-    Right d       -> d & \case
+    Left (Done _ v) -> bindA env (avarsIn OpenAcc v)
+    Right d         -> d & \case
       Yield _ repr sh f
         -> bindA env (OpenAcc (Generate repr sh f))
 
@@ -1026,7 +1031,7 @@ compute
     => Cunctation r       aenv arrs
     -> PreOpenAcc OpenAcc aenv arrs
 compute cc = simplify cc & \case
-  Left (Done v) -> v & \case
+  Left (Done _ v) -> v & \case
     TupRunit                      -> Anil
     TupRsingle v@(Var ArrayR{} _) -> Avar v
     TupRpair v1 v2                -> avarsIn OpenAcc v1 `Apair` avarsIn OpenAcc v2
@@ -1084,7 +1089,8 @@ unzipD
     -> Fun                  aenv (a -> b)
     -> Embed OpenAcc        aenv (Array sh a)
     -> Maybe (Embed OpenAcc aenv (Array sh b))
-unzipD ann tR f (Embed env cc@(Done v))
+-- TODO: We can through out the annotation in @cc@, right?
+unzipD ann tR f (Embed env cc@(Done _ v))
   | Lam lhs (Body a) <- f
   , Just vars        <- extractExpVars a
   , ArrayR shR _     <- arrayR cc
@@ -1186,8 +1192,9 @@ reshapeD
     -> Embed OpenAcc aenv (Array sh e)
     -> Exp           aenv sl
     -> Embed OpenAcc aenv (Array sl e)
+-- TODO: Should we not be doing anything with the annotation in @cc@?
 reshapeD slr (Embed env cc) (sinkA env -> sl)
-  | Done v <- cc
+  | Done _ v <- cc
   = Embed (env `pushArrayEnv` OpenAcc (Reshape slr sl (avarsIn OpenAcc v))) $ doneZeroIdx repr
 
   | otherwise
@@ -1385,9 +1392,9 @@ aletD embedAcc elimAcc lhs (embedAcc -> Embed env1 cc1) acc0
   -- body, instead of adding to the environments and creating an indirection
   -- that must be later eliminated by shrinking.
   --
-  | LeftHandSideSingle _                  <- lhs
-  , Done (TupRsingle v1@(Var ArrayR{} _)) <- cc1
-  , Embed env0 cc0                        <- embedAcc $ rebuildA (subAtop (Avar v1) . sink1 env1) acc0
+  | LeftHandSideSingle _                    <- lhs
+  , Done _ (TupRsingle v1@(Var ArrayR{} _)) <- cc1
+  , Embed env0 cc0                          <- embedAcc $ rebuildA (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `append` env0) cc0
 
@@ -1456,7 +1463,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         -> OpenAcc (aenv', Array sh e) brrs
         -> Embed OpenAcc aenv brrs
     eliminate _ann env1 cc1 body
-      | Done v1                  <- cc1
+      | Done _ v1                <- cc1
       , TupRsingle v1'@(Var r _) <- v1  = elim r (arrayShape v1') (indexArray v1')
       | Step _  r sh1 p1 f1 v1   <- cc1 = elim r sh1 (f1 `compose` indexArray v1 `compose` p1)
       | Yield _ r sh1 f1         <- cc1 = elim r sh1 f1
