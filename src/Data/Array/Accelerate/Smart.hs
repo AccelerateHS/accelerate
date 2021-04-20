@@ -111,6 +111,7 @@ import Data.Primitive.Vec
 import Data.Kind
 import Data.Text.Lazy.Builder
 import Formatting
+import Lens.Micro                                                   ( (<&>) )
 
 import GHC.TypeLits
 
@@ -1226,33 +1227,21 @@ instance Coerce a (a, ()) where
 -- Annotations
 -- -----------
 
-instance HasAnnotations (Acc a) where
-  modifyAnn f (Acc (SmartAcc (Map ann t1 t2 f' acc))) =
-    Acc . SmartAcc $ Map (f ann) t1 t2 f' acc
-  modifyAnn f (Acc (SmartAcc (Fold ann tp f' e acc))) =
-    Acc . SmartAcc $ Fold (f ann) tp f' e acc
-  -- TODO: All other constructors as we add more annotations
-  modifyAnn _ e = e
+instance FieldAnn (Acc a) where
+  _ann k (Acc (SmartAcc pacc)) = Acc . SmartAcc <$> case pacc of
+    (Map ann t1 t2 f acc) -> k (Just ann) <&> \(Just ann') -> Map ann' t1 t2 f acc
+    (Fold ann tp f e acc) -> k (Just ann) <&> \(Just ann') -> Fold ann' tp f e acc
+    -- TODO: All other constructors as we add more annotations
+    _ -> pacc <$ k Nothing
 
-  getAnn (Acc (SmartAcc (Map ann _ _ _ _))) = Just ann
-  getAnn (Acc (SmartAcc (Fold ann _ _ _ _))) = Just ann
-  -- TODO: All other constructors as we add more annotations
-  getAnn _ = Nothing
-
-instance HasAnnotations (Exp a) where
-  modifyAnn f (Exp (SmartExp (Const ann t c))) = mkExp $ Const (f ann) t c
-  modifyAnn f (Exp (SmartExp (Nil ann))) = mkExp $ Nil (f ann)
-  modifyAnn f (Exp (SmartExp (Pair ann e1 e2))) = mkExp $ Pair (f ann) e1 e2
-  modifyAnn f (Exp (SmartExp (Prj ann idx e))) = mkExp $ Prj (f ann) idx e
-  -- TODO: All other constructors as we add more annotations
-  modifyAnn _ e = e
-
-  getAnn (Exp (SmartExp (Const ann _ _))) = Just ann
-  getAnn (Exp (SmartExp (Nil ann))) = Just ann
-  getAnn (Exp (SmartExp (Pair ann _ _))) = Just ann
-  getAnn (Exp (SmartExp (Prj ann _ _))) = Just ann
-  -- TODO: All other constructors as we add more annotations
-  getAnn _ = Nothing
+instance FieldAnn (Exp a) where
+  _ann k (Exp (SmartExp pexp)) = Exp . SmartExp <$> case pexp of
+    (Const ann t c)  -> k (Just ann) <&> \(Just ann') -> Const ann' t c
+    (Nil ann)        -> k (Just ann) <&> \(Just ann') -> Nil ann'
+    (Pair ann e1 e2) -> k (Just ann) <&> \(Just ann') -> Pair ann' e1 e2
+    (Prj ann idx e)  -> k (Just ann) <&> \(Just ann') -> Prj ann' idx e
+    -- TODO: All other constructors as we add more annotations
+    _ -> pexp <$ k Nothing
 
 
 -- Auxiliary functions

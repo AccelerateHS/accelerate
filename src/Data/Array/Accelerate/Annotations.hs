@@ -1,10 +1,13 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE ImplicitParams  #-}
-{-# LANGUAGE NamedFieldPuns  #-}
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ViewPatterns    #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE ImplicitParams       #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE NamedFieldPuns       #-}
+{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns         #-}
 
 -- | Annotations for Accelerate's abstract syntax trees.
 --
@@ -105,6 +108,7 @@ module Data.Array.Accelerate.Annotations
     , extractAnn
     , alwaysInline
     , unRollIters
+    , FieldAnn(..)
     , mkAnn
     , mkDummyAnn
     , withEmptyCallStack
@@ -128,6 +132,8 @@ import qualified GHC.ExecutionStack            as ES
 import           GHC.IO                         ( unsafePerformIO )
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(..) )
+import           Lens.Micro
+import           Lens.Micro.Extras              ( view )
 import           Language.Haskell.TH            ( Q
                                                 , TExp
                                                 )
@@ -183,13 +189,19 @@ unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
 
 -- * Internal types and functions
 
--- | Used for modifying an AST node's annotations.
+-- | Used for accessing annotation fields in ASTs. 'HasAnnotations' defines
+-- convenience functions for working with types that have such an annotation
+-- field and for functions that
 --
--- TODO: We could define 'modifyAnn' in terms of 'getAnn' and a 'putAnn', but I
---       don't think a 'putAnn' on its own is really useful anywhere.
--- TODO: This require some duplication between 'getAnn' and 'modifyAnn'. A lens
---       for accessing the annotation of course would get rid of this, but then
---       you'd have to use lenses.
+-- TODO: Think of a better name
+class FieldAnn a where
+    -- | A lens for accessing @a@'s annotation field, if it has one. By defining
+    -- this as a lens we can get rid of some duplication.
+    _ann :: Lens' a (Maybe Ann)
+
+-- | Used for modifying an AST node's annotations. Types with annotation fields
+-- should have an instance of 'FieldAnn' instead of implementing this class
+-- directly.
 class HasAnnotations a where
     -- | Modify the annotation stored in an AST node. This may not do anything
     -- when the AST node doesn't support annotations.
@@ -198,6 +210,22 @@ class HasAnnotations a where
     -- during some of the transformations when we may no longer have access to the
     -- original AST nodes.
     getAnn :: a -> Maybe Ann
+
+-- | Lenses make accessing these annotations for different ASTs much cleaner,
+-- but these speciality functions are much nicer to work with.
+instance {-# OVERLAPPING #-} FieldAnn a => HasAnnotations a where
+    modifyAnn f = over _ann $ \case
+      Just ann -> Just (f ann)
+      Nothing  -> Nothing
+    getAnn = view _ann
+
+-- | Being able to directly annotate functions makes using this annotation
+-- functionality much more ergonomic.
+instance {-# OVERLAPPING #-} HasAnnotations r => HasAnnotations (a -> r) where
+    modifyAnn f f' x = modifyAnn f (f' x)
+    -- You cannot get the annotation without evaluating the function first. This
+    -- is kind of an edge cases where getAnn doesn't make any sense.
+    getAnn _ = Nothing
 
 -- | Change the optimization flags for an AST node.
 withOptimizations :: HasAnnotations a => (Optimizations -> Optimizations) -> a -> a
@@ -208,14 +236,6 @@ withOptimizations f = modifyAnn $ \(Ann src opts) -> Ann src (f opts)
 extractAnn :: HasAnnotations a => a -> Ann
 extractAnn (getAnn -> Just ann) = ann
 extractAnn _                    = mkDummyAnn
-
--- | Being able to directly annotate functions makes using this annotation
--- functionality much more ergonomic.
-instance HasAnnotations r => HasAnnotations (a -> r) where
-    modifyAnn f f' x = modifyAnn f (f' x)
-    -- You cannot get the annotation without evaluating the function first. This
-    -- is kind of an edge cases where getAnn doesn't make any sense.
-    getAnn _ = Nothing
 
 -- | Create an empty annotation with call site information if available. This
 -- only works when all smart constructors have the 'HasCallStack' constraint.

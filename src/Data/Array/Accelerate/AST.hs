@@ -159,6 +159,7 @@ import Formatting
 import Language.Haskell.TH.Extra                                    ( CodeQ )
 import qualified Language.Haskell.TH.Extra                          as TH
 import qualified Language.Haskell.TH.Syntax                         as TH
+import Lens.Micro                                                   ( (<&>) )
 
 import GHC.TypeLits
 
@@ -960,34 +961,22 @@ primFunType = \case
 -- Annotations
 -- -----------
 
-instance HasAnnotations (OpenAcc aenv t) where
-  modifyAnn f (OpenAcc pacc) = OpenAcc (modifyAnn f pacc)
-  getAnn (OpenAcc pacc) = getAnn pacc
+instance FieldAnn (OpenAcc aenv t) where
+  _ann k (OpenAcc pacc) = OpenAcc <$> _ann k pacc
 
-instance HasAnnotations (PreOpenAcc acc aenv t) where
-  modifyAnn f (Map ann tp f' a) = Map (f ann) tp f' a
-  modifyAnn f (Fold ann f' z a) = Fold (f ann) f' z a
-  modifyAnn _ e = e
-
-  getAnn (Map ann _ _ _) = Just ann
-  getAnn (Fold ann _ _ _) = Just ann
+instance FieldAnn (PreOpenAcc acc aenv t) where
+  _ann k (Map ann tp f a) = k (Just ann) <&> \(Just ann') -> Map ann' tp f a
+  _ann k (Fold ann f z a) = k (Just ann) <&> \(Just ann') -> Fold ann' f z a
   -- TODO: All other constructors as we add more annotations
-  getAnn _ = Nothing
+  _ann k pacc = pacc <$ k Nothing
 
-instance HasAnnotations (OpenExp env aenv t) where
-  modifyAnn f (Let ann lhs bnd body) = Let (f ann) lhs bnd body
-  modifyAnn f (Pair ann e1 e2) = Pair (f ann) e1 e2
-  modifyAnn f (Nil ann) = Nil (f ann)
-  modifyAnn f (Const ann tp c) = Const (f ann) tp c
+instance FieldAnn (OpenExp env aenv t) where
+  _ann k (Let ann lhs bnd body) = k (Just ann) <&> \(Just ann') -> Let ann' lhs bnd body
+  _ann k (Pair ann e1 e2)       = k (Just ann) <&> \(Just ann') -> Pair ann' e1 e2
+  _ann k (Nil ann)              = k (Just ann) <&> \(Just ann') -> Nil ann'
+  _ann k (Const ann tp c)       = k (Just ann) <&> \(Just ann') -> Const ann' tp c
   -- TODO: All other constructors as we add more annotations
-  modifyAnn _ e = e
-
-  getAnn (Let ann _ _ _) = Just ann
-  getAnn (Pair ann _ _) = Just ann
-  getAnn (Nil ann) = Just ann
-  getAnn (Const ann _ _) = Just ann
-  -- TODO: All other constructors as we add more annotations
-  getAnn _ = Nothing
+  _ann k pexp = pexp <$ k Nothing
 
 
 -- Normal form data
