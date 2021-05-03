@@ -52,7 +52,6 @@ import Data.List                                        ( nub, partition )
 import Data.Maybe
 import Data.String
 import Data.Text.Prettyprint.Doc
-import System.IO.Unsafe                                 ( unsafePerformIO )
 import Prelude                                          hiding ( exp )
 import qualified Data.HashSet                           as Set
 import qualified Data.Sequence                          as Seq
@@ -121,11 +120,6 @@ mkTF this =
 -- Pretty Printing
 -- ===============
 --
--- The use of unsafePerformIO in the below is safe in the sense that we only
--- require IO to recover the stable names of terms. At worst, if we do not
--- recover the correct stable name for some reason, we will be left with
--- dandling edges in the graph.
---
 
 class PrettyGraph g where
   ppGraph :: Detail -> g -> Graph
@@ -147,13 +141,13 @@ simple _      = False
 {-# NOINLINE graphDelayedAcc #-}
 graphDelayedAcc :: HasCallStack => Detail -> DelayedAcc a -> Graph
 graphDelayedAcc detail acc =
-  unsafePerformIO $! evalDot (graphDelayedOpenAcc detail Aempty acc)
+  evalDot (graphDelayedOpenAcc detail Aempty acc)
 
 -- | Generate a dependency graph for an array function
 --
 {-# NOINLINE graphDelayedAfun #-}
 graphDelayedAfun :: HasCallStack => Detail -> DelayedAfun f -> Graph
-graphDelayedAfun detail afun = unsafePerformIO . evalDot $! do
+graphDelayedAfun detail afun = evalDot $! do
   l <- prettyDelayedAfun detail Aempty afun
   state $ \s ->
     case Seq.viewl (dotGraph s) of
@@ -178,7 +172,7 @@ graphDelayedOpenAcc
     -> Dot Graph
 graphDelayedOpenAcc detail aenv acc = do
   r <- prettyDelayedOpenAcc detail context0 aenv acc
-  i <- mkNodeId r
+  i <- genNodeId
   v <- mkNode r Nothing
   _ <- mkNode (PNode i (Leaf (Nothing,"result")) [(Vertex v Nothing, Nothing)]) Nothing
   mkGraph
@@ -193,7 +187,7 @@ prettyDelayedOpenAcc
     -> DelayedOpenAcc aenv arrs
     -> Dot PNode
 prettyDelayedOpenAcc _      _   _    Delayed{}            = internalError "expected manifest array"
-prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
+prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
   case pacc of
     Avar ix                 -> pnode (avar ix)
     Alet lhs bnd body       -> do
@@ -204,7 +198,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
       return body'
 
     Acond p t e             -> do
-      ident <- mkNodeId atop
+      ident <- genNodeId
       vt    <- lift t
       ve    <- lift e
       PDoc p' vs <- ppE p
@@ -217,7 +211,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
                                       <*> prettyDelayedOpenAcc detail ctx aenv acc
 
     Awhile p f x             -> do
-      ident <- mkNodeId atop
+      ident <- genNodeId
       x'    <- replant =<< prettyDelayedOpenAcc detail app aenv x
       p'    <- prettyDelayedAfun detail aenv p
       f'    <- prettyDelayedAfun detail aenv f
@@ -226,7 +220,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
           loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
-    a@(Apair a1 a2)          -> mkNodeId a >>= prettyDelayedApair detail aenv a1 a2
+    Apair a1 a2              -> genNodeId >>= prettyDelayedApair detail aenv a1 a2
 
     Anil                            -> "()"             .$ []
     Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (fromString msg) [], ppA as, ppA bs ]
@@ -272,7 +266,7 @@ prettyDelayedOpenAcc detail ctx aenv atop@(Manifest pacc) =
     pnode :: PDoc -> Dot PNode
     pnode (PDoc doc vs) = do
       let port = Nothing
-      ident <- mkNodeId atop
+      ident <- genNodeId
       return $ PNode ident (Leaf (port, doc)) (map (,port) vs)
 
     -- Free variables
@@ -415,9 +409,9 @@ prettyLambdaALeftHandSide
     -> ALeftHandSide repr aenv aenv'
     -> Dot (Aval aenv')
 prettyLambdaALeftHandSide aenv (LeftHandSideWildcard _) = return aenv
-prettyLambdaALeftHandSide aenv lhs@(LeftHandSideSingle _) = do
+prettyLambdaALeftHandSide aenv (LeftHandSideSingle _) = do
   a     <- mkLabel
-  ident <- mkNodeId lhs
+  ident <- genNodeId
   _     <- mkNode (PNode ident (Leaf (Nothing, pretty a)) []) Nothing
   return $ Apush aenv ident a
 prettyLambdaALeftHandSide aenv (LeftHandSidePair lhs1 lhs2) = do
@@ -466,7 +460,7 @@ replant pnode@(PNode ident tree _) =
   case tree of
     Leaf (Nothing, _) -> return pnode
     _                 -> do
-      vacuous <- mkNodeId pnode
+      vacuous <- genNodeId
       a       <- mkLabel
       _       <- mkNode pnode (Just a)
       return   $ PNode vacuous (Leaf (Nothing, pretty a)) [(Vertex ident Nothing, Nothing)]
