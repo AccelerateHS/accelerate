@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
+## [next]
+### Added
+  * Added debugging functions in module `Data.Array.Accelerate.Debug.Trace` ([#485](https://github.com/AccelerateHS/accelerate/pull/485))
+
+### Changed
+  * Removed dependency on lens ([#493](https://github.com/AccelerateHS/accelerate/pull/493))
+
+### Fixed
+  * Graphviz graph generation of `-ddump-dot` and `-ddump-simpl-dot` ([#384](https://github.com/AccelerateHS/accelerate/issues/384))
+
+### Contributors
+
+Special thanks to those who contributed patches as part of this release:
+
+  * Ivo Gabe de Wolff (@ivogabe)
+  * David van Balen (@dpvanbalen)
+  * Tom Smeding (@tomsmeding)
+  * Trevor L. McDonell (@tmcdonell)
+
+
 ## [1.3.0.0] - 2020-08-26
 ### Added
   * Instances of `Elt` are now derivable via `Generic` for simple (Haskell'98)
@@ -22,14 +42,14 @@ Policy (PVP)](https://pvp.haskell.org)
     if the delayed function is expensive, you may wish to explicitly `compute`
     the source array first, matching the old behaviour.
   * Removed `Slice` constraint from some indexing operations
-  * Improve fusion for `zipWith*` ([#453])
-  * The indexing function to `permute` now returns a `Maybe` type ([#87])
+  * Improve fusion for `zipWith*` ([#453](https://github.com/AccelerateHS/accelerate/pull/453))
+  * The indexing function to `permute` now returns a `Maybe` type ([#87](https://github.com/AccelerateHS/accelerate/issues/87))
 
   * (internal) Visible type applications are used instead of `Proxy` types
   * (internal) `EltR` is now a class-associated type of `Elt`
   * (internal) `GArrayData` has been simplified
   * (internal) SIMD representation has been improved and generalised
-  * (internal) Internal refactoring ([#449], [#455], [#457], [#460])
+  * (internal) Internal refactoring ([#449](https://github.com/AccelerateHS/accelerate/pull/449), [#455](https://github.com/AccelerateHS/accelerate/pull/455), [#457](https://github.com/AccelerateHS/accelerate/pull/457), [#460](https://github.com/AccelerateHS/accelerate/pull/460))
 
   * Probably many others I have forgotten about
 
@@ -95,7 +115,7 @@ Special thanks to those who contributed patches as part of this release:
 
 ## [1.1.0.0] - 2017-09-21
 ### Added
-  * Additional EKG monitoring hooks ([#340])
+  * Additional EKG monitoring hooks ([#340](https://github.com/AccelerateHS/accelerate/issues/340))
 
   * Operations from `RealFloat`
 
@@ -110,7 +130,7 @@ Special thanks to those who contributed patches as part of this release:
     to out-of-bounds indices.
 
 ### Fixed
-  * [#390]: Wrong number of arguments in printf
+  * [#390](https://github.com/AccelerateHS/accelerate/issues/390): Wrong number of arguments in printf
 
 
 ## [1.0.0.0] - 2017-03-31
@@ -186,6 +206,7 @@ Special thanks to those who contributed patches as part of this release:
   * Initial release of the CUDA backend
 
 
+[next]:             https://github.com/AccelerateHS/accelerate/compare/v1.3.0.0...HEAD
 [1.3.0.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.2.0.1...v1.3.0.0
 [1.2.0.1]:          https://github.com/AccelerateHS/accelerate/compare/v1.2.0.0...v1.2.0.1
 [1.2.0.0]:          https://github.com/AccelerateHS/accelerate/compare/v1.1.0.0...v1.2.0.0
@@ -201,13 +222,4 @@ Special thanks to those who contributed patches as part of this release:
 [0.10.0.0]:         https://github.com/AccelerateHS/accelerate/compare/0.9.0.0...0.10.0.0
 [0.9.0.0]:          https://github.com/AccelerateHS/accelerate/compare/0_8_1_0...0.9.0.0
 [0.7.1.0]:          https://github.com/AccelerateHS/accelerate/compare/0_6_0_0...0_7_1_0
-
-[#87]:              https://github.com/AccelerateHS/accelerate/issues/87
-[#340]:             https://github.com/AccelerateHS/accelerate/issues/340
-[#390]:             https://github.com/AccelerateHS/accelerate/issues/390
-[#453]:             https://github.com/AccelerateHS/accelerate/pull/453
-[#449]:             https://github.com/AccelerateHS/accelerate/pull/449
-[#455]:             https://github.com/AccelerateHS/accelerate/pull/455
-[#457]:             https://github.com/AccelerateHS/accelerate/pull/457
-[#460]:             https://github.com/AccelerateHS/accelerate/pull/460
 
