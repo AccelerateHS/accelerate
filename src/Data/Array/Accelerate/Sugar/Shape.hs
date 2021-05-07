@@ -313,7 +313,12 @@ instance Shape Z where
   sliceAnyIndex  = R.SliceNil
   sliceNoneIndex = R.SliceNil
 
-instance Shape sh => Shape (sh:.Int) where
+-- Note that the constraint 'i ~ Int' allows the compiler to infer that
+-- the right argument of ':.' should be an Int.
+-- The compiler can now infer that this instance is used, before knowing
+-- the type of 'i'.
+--
+instance (Shape sh, i ~ Int) => Shape (sh:.i) where
   shapeR         = R.ShapeRsnoc (shapeR @sh)
   sliceAnyIndex  = R.SliceAll   (sliceAnyIndex  @sh)
   sliceNoneIndex = R.SliceFixed (sliceNoneIndex @sh)
