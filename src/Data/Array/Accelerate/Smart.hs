@@ -185,9 +185,9 @@ import GHC.TypeLits
 --
 -- > mvm_ndp :: Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
 -- > mvm_ndp mat vec =
--- >   let Z :. rows :. cols  = unlift (shape mat)  :: Z :. Exp Int :. Exp Int
--- >   in  generate (index1 rows)
--- >                (\row -> the $ dotp vec (slice mat (lift (row :. All))))
+-- >   let I2 rows cols  = shape mat
+-- >   in  generate (I1 rows)
+-- >                (\row -> the $ dotp vec (slice mat (row ::. All_)))
 --
 -- Here, we use 'Data.Array.Accelerate.generate' to create a one-dimensional
 -- vector by applying at each index a function to 'Data.Array.Accelerate.slice'
@@ -215,8 +215,8 @@ import GHC.TypeLits
 --
 -- > mvm :: A.Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
 -- > mvm mat vec =
--- >   let Z :. rows :. cols = unlift (shape mat) :: Z :. Exp Int :. Exp Int
--- >       vec'              = A.replicate (lift (Z :. rows :. All)) vec
+-- >   let I2 rows cols = shape mat
+-- >       vec'              = A.replicate (rows ::. All_) vec
 -- >   in
 -- >   A.fold (+) 0 ( A.zipWith (*) mat vec' )
 --
