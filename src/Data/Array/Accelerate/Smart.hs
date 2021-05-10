@@ -216,7 +216,7 @@ import GHC.TypeLits
 -- > mvm :: A.Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
 -- > mvm mat vec =
 -- >   let I2 rows cols = shape mat
--- >       vec'              = A.replicate (rows ::. All_) vec
+-- >       vec'         = A.replicate (rows ::. All_) vec
 -- >   in
 -- >   A.fold (+) 0 ( A.zipWith (*) mat vec' )
 --
