@@ -2103,8 +2103,9 @@ dropOn dim n xs =
   let
       sh = shape xs
       m  = sh ^. dim
+      n' = max 0 n
   in
-  backpermute (sh & dim .~ max 0 (m - max 0 n)) (& dim +~ n) xs
+  backpermute (sh & dim .~ max 0 (m - n')) (& dim +~ n') xs
 
 -- Note: [embedding constants in take & drop]
 --
