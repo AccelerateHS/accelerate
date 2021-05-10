@@ -2104,7 +2104,7 @@ dropOn dim n xs =
       sh = shape xs
       m  = sh ^. dim
   in
-  backpermute (sh & dim .~ max 0 (m-n)) (& dim +~ n) xs
+  backpermute (sh & dim .~ max 0 (m - max 0 n)) (& dim +~ n) xs
 
 -- Note: [embedding constants in take & drop]
 --
