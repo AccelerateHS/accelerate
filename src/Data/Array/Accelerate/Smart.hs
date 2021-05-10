@@ -145,7 +145,7 @@ import GHC.TypeLits
 -- >       xs' = use xs
 -- >       ys' = use ys
 -- >   in
--- >   fold (+) 0 ( zipWith (*) xs' ys' )
+-- >   A.fold (+) 0 (A.zipWith (*) xs' ys')
 --
 -- The function @dotp@ consumes two one-dimensional arrays ('Vector's) of
 -- values, and produces a single ('Scalar') result as output. As the return type
@@ -177,7 +177,7 @@ import GHC.TypeLits
 -- as input (which is typically what we want):
 --
 -- > dotp :: Num a => Acc (Vector a) -> Acc (Vector a) -> Acc (Scalar a)
--- > dotp xs ys = fold (+) 0 ( zipWith (*) xs ys )
+-- > dotp xs ys = A.fold (+) 0 $ A.zipWith (*) xs ys
 --
 -- We might then be inclined to lift our dot-product program to the following
 -- (incorrect) matrix-vector product, by applying @dotp@ to each row of the
@@ -185,9 +185,9 @@ import GHC.TypeLits
 --
 -- > mvm_ndp :: Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
 -- > mvm_ndp mat vec =
--- >   let I2 rows cols  = shape mat
+-- >   let I2 rows cols = shape mat
 -- >   in  generate (I1 rows)
--- >                (\row -> the $ dotp vec (slice mat (row ::. All_)))
+-- >                (\(I1 row) -> the $ dotp vec (slice mat (I2 row All_)))
 --
 -- Here, we use 'Data.Array.Accelerate.generate' to create a one-dimensional
 -- vector by applying at each index a function to 'Data.Array.Accelerate.slice'
@@ -216,9 +216,9 @@ import GHC.TypeLits
 -- > mvm :: A.Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
 -- > mvm mat vec =
 -- >   let I2 rows cols = shape mat
--- >       vec'              = A.replicate (rows ::. All_) vec
+-- >       vec'         = A.replicate (I2 rows All_) vec
 -- >   in
--- >   A.fold (+) 0 ( A.zipWith (*) mat vec' )
+-- >   A.fold (+) 0 $ A.zipWith (*) mat vec'
 --
 -- Note that the intermediate, replicated array @vec'@ is never actually created
 -- in memory; it will be fused directly into the operation which consumes it. We
