@@ -54,7 +54,7 @@ mkLabel = state $ \s ->
 
 genNodeId :: Dot NodeId
 genNodeId = state $ \s ->
-  let n = freshLabel s
+  let n = freshID s
   in  ( NodeId n, s { freshID = n + 1 } )
 
 mkGraph :: Dot Graph
