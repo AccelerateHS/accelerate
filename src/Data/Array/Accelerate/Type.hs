@@ -71,6 +71,7 @@ import Data.Primitive.Vec
 import Data.Bits
 import Data.Int
 import Data.Primitive.Types
+import Data.Text.Buildable
 import Data.Type.Equality
 import Data.Word
 import Foreign.C.Types
@@ -78,6 +79,7 @@ import Foreign.Storable                                             ( Storable )
 import Language.Haskell.TH
 import Numeric.Half
 import Text.Printf
+import qualified Data.Text.Format                                   as F
 
 import GHC.Prim
 import GHC.TypeLits
@@ -183,6 +185,41 @@ instance Show (VectorType a) where
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
   show (VectorScalarType ty) = show ty
+
+instance Buildable (IntegralType a) where
+  build TypeInt    = "Int"
+  build TypeInt8   = "Int8"
+  build TypeInt16  = "Int16"
+  build TypeInt32  = "Int32"
+  build TypeInt64  = "Int64"
+  build TypeWord   = "Word"
+  build TypeWord8  = "Word8"
+  build TypeWord16 = "Word16"
+  build TypeWord32 = "Word32"
+  build TypeWord64 = "Word64"
+
+instance Buildable (FloatingType a) where
+  build TypeHalf   = "Half"
+  build TypeFloat  = "Float"
+  build TypeDouble = "Double"
+
+instance Buildable (NumType a) where
+  build (IntegralNumType ty) = build ty
+  build (FloatingNumType ty) = build ty
+
+instance Buildable (BoundedType a) where
+  build (IntegralBoundedType ty) = build ty
+
+instance Buildable (SingleType a) where
+  build (NumSingleType ty) = build ty
+
+instance Buildable (VectorType a) where
+  build (VectorType n ty) = F.build "<{} x {}>" (n, build ty)
+
+instance Buildable (ScalarType a) where
+  build (SingleScalarType ty) = build ty
+  build (VectorScalarType ty) = build ty
+
 
 -- | Querying Integral types
 --

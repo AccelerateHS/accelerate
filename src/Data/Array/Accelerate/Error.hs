@@ -1,5 +1,6 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Error
@@ -20,9 +21,10 @@ module Data.Array.Accelerate.Error (
 
 ) where
 
+import Data.Text.Format                                   ( Only(..), build )
+import Data.Text.Format.Extra
+import Data.Text.Lazy.Builder
 import Debug.Trace
-import Data.List                                          ( intercalate )
-import Text.Printf
 import Prelude                                            hiding ( error )
 
 import GHC.Stack
@@ -32,28 +34,26 @@ data Check = Bounds | Unsafe | Internal
 
 -- | Issue an internal error message
 --
-internalError :: HasCallStack => String -> a
+internalError :: HasCallStack => Builder -> a
 internalError = withFrozenCallStack $ error Internal
 
-boundsError :: HasCallStack => String -> a
+boundsError :: HasCallStack => Builder -> a
 boundsError = withFrozenCallStack $ error Bounds
 
-unsafeError :: HasCallStack => String -> a
+unsafeError :: HasCallStack => Builder -> a
 unsafeError = withFrozenCallStack $ error Unsafe
 
 
 -- | Throw an error if the condition evaluates to False, otherwise evaluate the
 -- result.
 --
---   $internalCheck :: String -> String -> Bool -> a -> a
---
-internalCheck :: HasCallStack => String -> Bool -> a -> a
+internalCheck :: HasCallStack => Builder -> Bool -> a -> a
 internalCheck = withFrozenCallStack $ check Internal
 
-boundsCheck :: HasCallStack => String -> Bool -> a -> a
+boundsCheck :: HasCallStack => Builder -> Bool -> a -> a
 boundsCheck = withFrozenCallStack $ check Bounds
 
-unsafeCheck :: HasCallStack => String -> Bool -> a -> a
+unsafeCheck :: HasCallStack => Builder -> Bool -> a -> a
 unsafeCheck = withFrozenCallStack $ check Unsafe
 
 
@@ -61,39 +61,37 @@ unsafeCheck = withFrozenCallStack $ check Unsafe
 --
 indexCheck :: HasCallStack => Int -> Int -> a -> a
 indexCheck i n =
-  boundsCheck (printf "index out of bounds: i=%d, n=%d" i n) (i >= 0 && i < n)
+  boundsCheck (build "index out of bounds: i={}, n={}" (i, n)) (i >= 0 && i < n)
 
 -- | Print a warning message if the condition evaluates to False.
 --
---   $internalWarning :: String -> String -> Bool -> a -> a
---
-internalWarning :: HasCallStack => String -> Bool -> a -> a
+internalWarning :: HasCallStack => Builder -> Bool -> a -> a
 internalWarning = withFrozenCallStack $ warning Internal
 
-boundsWarning :: HasCallStack => String -> Bool -> a -> a
+boundsWarning :: HasCallStack => Builder -> Bool -> a -> a
 boundsWarning = withFrozenCallStack $ warning Bounds
 
-unsafeWarning :: HasCallStack => String -> Bool -> a -> a
+unsafeWarning :: HasCallStack => Builder -> Bool -> a -> a
 unsafeWarning = withFrozenCallStack $ warning Unsafe
 
 
-error :: HasCallStack => Check -> String -> a
+error :: HasCallStack => Check -> Builder -> a
 error kind msg = errorWithoutStackTrace (format kind msg)
 
-check :: HasCallStack => Check -> String -> Bool -> a -> a
+check :: HasCallStack => Check -> Builder -> Bool -> a -> a
 check kind msg cond k =
   case not (doChecks kind) || cond of
     True  -> k
     False -> errorWithoutStackTrace (format kind msg)
 
-warning :: HasCallStack => Check -> String -> Bool -> a -> a
+warning :: HasCallStack => Check -> Builder -> Bool -> a -> a
 warning kind msg cond k =
   case not (doChecks kind) || cond of
     True  -> k
     False -> trace (format kind msg) k
 
-format :: HasCallStack => Check -> String -> String
-format kind msg = intercalate "\n" [ header, msg, ppCallStack callStack ]
+format :: HasCallStack => Check -> Builder -> String
+format kind msg = show $ intercalate "\n" [ header, msg, ppCallStack callStack ]
   where
     header
       = intercalate "\n"
@@ -104,7 +102,7 @@ format kind msg = intercalate "\n" [ header, msg, ppCallStack callStack ]
                       ,""]
           _        -> []
 
-ppCallStack :: CallStack -> String
+ppCallStack :: CallStack -> Builder
 ppCallStack = intercalate "\n" . ppLines
   where
     ppLines cs =
@@ -112,15 +110,15 @@ ppCallStack = intercalate "\n" . ppLines
         [] -> []
         st -> ""
             : "CallStack (from HasCallStack):"
-            : map (("  " ++) . ppCallSite) st
+            : map (("  " <>) . ppCallSite) st
 
-    ppCallSite (f, loc) = f ++ ": " ++ ppSrcLoc loc
+    ppCallSite (f, loc) = fromString f <> ": " <> ppSrcLoc loc
 
     ppSrcLoc SrcLoc{..} =
-      foldr (++) ""
-        [ srcLocModule, ":"
-        , show srcLocStartLine, ":"
-        , show srcLocStartCol
+      foldr (<>) ""
+        [ fromString srcLocModule, ":"
+        , build "{}" (Only srcLocStartLine), ":"
+        , build "{}" (Only srcLocStartCol)
         ]
 
 -- CPP malarky

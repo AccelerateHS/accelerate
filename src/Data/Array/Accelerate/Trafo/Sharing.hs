@@ -54,7 +54,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Debug.Internal.Flags                   as Debug
 import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Representation.Array                   ( Array, ArraysR, ArrayR(..), showArraysR )
+import Data.Array.Accelerate.Representation.Array                   ( Array, ArraysR, ArrayR(..), buildArraysR )
 import Data.Array.Accelerate.Representation.Shape                   hiding ( zip )
 import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Tag
@@ -77,19 +77,20 @@ import Control.Monad.Fix
 import Data.Function                                                ( on )
 import Data.Hashable
 import Data.Text.Format
+import Data.Text.Format.Extra
 import Data.Text.Lazy.Builder
 import Data.Text.Lazy.Builder.Int
-import Data.List                                                    ( elemIndex, findIndex, groupBy, intercalate, partition )
+import Data.List                                                    ( elemIndex, findIndex, groupBy, partition )
 import Data.Maybe
 import Data.Monoid                                                  ( Any(..) )
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName
-import Text.Printf
 import qualified Data.HashMap.Strict                                as Map
 import qualified Data.HashSet                                       as Set
 import qualified Data.HashTable.IO                                  as Hash
 import qualified Data.IntMap                                        as IntMap
-import Prelude
+import qualified Data.Text.Buildable                                as F
+import Prelude                                                      hiding ( unlines )
 
 
 -- Layouts
@@ -116,28 +117,26 @@ type ArrayLayout = Layout ArrayR
 -- case of failure.
 --
 prjIdx :: forall s t env env1. HasCallStack
-       => String
-       -> (forall t'. TupR s t' -> ShowS)
+       => Builder
+       -> (forall t'. TupR s t' -> Builder)
        -> (forall u v. TupR s u -> TupR s v -> Maybe (u :~: v))
        -> TupR s t
        -> Int
        -> Layout s env env1
        -> Vars s env t
-prjIdx context showTp matchTp tp = go
+prjIdx context buildTp matchTp tp = go
   where
     go :: forall env'. HasCallStack => Int -> Layout s env env' -> Vars s env t
     go _ EmptyLayout                = no "environment does not contain index"
     go 0 (PushLayout _ lhs vars)
       | Just Refl <- matchTp tp tp' = vars
-      | otherwise                   = no $ printf "couldn't match expected type `%s' with actual type `%s'"
-                                                  (showTp tp  "")
-                                                  (showTp tp' "")
+      | otherwise                   = no $ build "couldn't match expected type `{}' with actual type `{}'" (buildTp tp, buildTp tp')
       where
         tp' = lhsToTupR lhs
     go n (PushLayout l _ _)         = go (n-1) l
 
-    no :: HasCallStack => String -> a
-    no reason = internalError (printf "%s\nin the context: %s" reason context)
+    no :: HasCallStack => Builder -> a
+    no reason = internalError (reason <> "\nin the context: " <> context)
 
 -- Add an entry to a layout, incrementing all indices
 --
@@ -264,15 +263,15 @@ convertSharingAcc
 convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
   | Just i <- findIndex (matchStableAcc sa) aenv'
   = avarsIn AST.OpenAcc
-  $ prjIdx (ctxt ++ "; i = " ++ show i) showArraysR matchArraysR repr i alyt
+  $ prjIdx (build "{}; i = {}" (ctxt, i)) buildArraysR matchArraysR repr i alyt
   | null aenv'
   = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
   | otherwise
   = internalError err
   where
     aenv' = lams ++ aenv
-    ctxt = "shared 'Acc' tree with stable name " ++ show (hashStableNameHeight sa)
-    err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  aenv = " ++ show aenv'
+    ctxt  = build "shared 'Acc' tree with stable name {}" (Only (hashStableNameHeight sa))
+    err   = build "inconsistent valuation @ {};\n  aenv = [{}]" (ctxt, intercalate "," (map F.build aenv'))
 
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
   = case declareVars $ AST.arraysR bound of
@@ -320,7 +319,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
     case preAcc of
 
       Atag repr i
-        -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx ("de Bruijn conversion tag " ++ show i) showArraysR matchArraysR repr i alyt
+        -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (build "de Bruijn conversion tag {}" (Only i)) buildArraysR matchArraysR repr i alyt
            in  a
 
       Pipe reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
@@ -703,14 +702,14 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
     cvt :: HasCallStack => ScopedExp t' -> AST.OpenExp env aenv t'
     cvt (ScopedExp _ (VarSharing se tp))
-      | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) shows matchTypeR tp i lyt)
+      | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) F.build matchTypeR tp i lyt)
       | otherwise                                    = internalError msg
       where
-        ctx i = printf "shared 'Exp' tree with stable name %d; i=%d" (hashStableNameHeight se) i
+        ctx i = build "shared 'Exp' tree with stable name {}; i={}" (hashStableNameHeight se, i)
         msg   = unlines
           [ if null env'
-               then printf "cyclic definition of a value of type 'Exp' (sa=%d)" (hashStableNameHeight se)
-               else printf "inconsistent valuation at shared 'Exp' tree (sa=%d; env=%s)" (hashStableNameHeight se) (show env')
+               then build "cyclic definition of a value of type 'Exp' (sa={})" (Only (hashStableNameHeight se))
+               else build "inconsistent valuation at shared 'Exp' tree (sa={}; env=[{}])" (hashStableNameHeight se, intercalate "," (map F.build env'))
           , ""
           , "Note that this error usually arises due to the presence of nested data"
           , "parallelism; when a parallel computation attempts to initiate new parallel"
@@ -758,7 +757,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           AST.Let lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
-          Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " ++ show i) shows matchTypeR tp i lyt
+          Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) F.build matchTypeR tp i lyt
           Match _ e             -> cvt e  -- XXX: this should probably be an error
           Const tp v            -> AST.Const tp v
           Undef tp              -> AST.Undef tp
@@ -1033,7 +1032,10 @@ data StableASTName c where
   StableASTName :: StableName (c t) -> StableASTName c
 
 instance Show (StableASTName c) where
-  show (StableASTName sn) = show $ hashStableName sn
+  show (StableASTName sn) = show (hashStableName sn)
+
+instance F.Buildable (StableASTName c) where
+  build (StableASTName sn) = F.build (hashStableName sn)
 
 instance Eq (StableASTName c) where
   StableASTName sn1 == StableASTName sn2 = eqStableName sn1 sn2
@@ -1186,7 +1188,10 @@ data StableSharingAcc where
                    -> StableSharingAcc
 
 instance Show StableSharingAcc where
-  show (StableSharingAcc sn _) = show $ hashStableNameHeight sn
+  show (StableSharingAcc sn _) = show (hashStableNameHeight sn)
+
+instance F.Buildable StableSharingAcc where
+  build (StableSharingAcc sn _) = F.build (hashStableNameHeight sn)
 
 instance Eq StableSharingAcc where
   StableSharingAcc (StableNameHeight sn1 _) _ == StableSharingAcc (StableNameHeight sn2 _) _
@@ -1257,7 +1262,10 @@ data StableSharingExp where
   StableSharingExp :: StableExpName t -> SharingExp ScopedAcc ScopedExp t -> StableSharingExp
 
 instance Show StableSharingExp where
-  show (StableSharingExp sn _) = show $ hashStableNameHeight sn
+  show (StableSharingExp sn _) = show (hashStableNameHeight sn)
+
+instance F.Buildable StableSharingExp where
+  build (StableSharingExp sn _) = F.build (hashStableNameHeight sn)
 
 instance Eq StableSharingExp where
   StableSharingExp (StableNameHeight sn1 _) _ == StableSharingExp (StableNameHeight sn2 _) _ =
@@ -2096,10 +2104,17 @@ instance Hashable NodeName where
 instance Show NodeName where
   show (NodeName sn) = show (hashStableName sn)
 
+instance F.Buildable NodeName where
+  build (NodeName sn) = F.build (hashStableName sn)
+
 data NodeCount = AccNodeCount StableSharingAcc Int
                | ExpNodeCount StableSharingExp Int
                -- SeqNodeCount StableSharingSeq Int
                deriving Show
+
+instance F.Buildable NodeCount where
+  build (AccNodeCount n c) = build "AccNodeCount {} {}" (n, c)
+  build (ExpNodeCount n c) = build "ExpNodeCount {} {}" (n, c)
 
 -- Empty node counts
 --
@@ -2226,18 +2241,18 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
       = case filter hasTag sas of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [sa] -> sa                 -- tag has a unique occurrence
-          sas2 -> internalError ("Encountered duplicate 'ATag's\n  " ++ intercalate ", " (map showSA sas2))
+          sas2 -> internalError ("Encountered duplicate 'ATag's\n  " <> intercalate ", " (map showSA sas2))
       where
         hasTag (StableSharingAcc _ (AccSharing _ (Atag _ tag2))) = tag1 == tag2
         hasTag sa
-          = internalError ("Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa)
+          = internalError ("Encountered a node that is not a plain 'Atag'\n  " <> showSA sa)
 
         noStableSharing :: StableSharingAcc
         noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
 
-    showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++ show (showPreAccOp acc)
-    showSA (StableSharingAcc _ (AvarSharing sn _))   = "AvarSharing " ++ show (hashStableNameHeight sn)
-    showSA (StableSharingAcc _ (AletSharing sa _))   = "AletSharing " ++ show sa ++ "..."
+    showSA (StableSharingAcc _ (AccSharing  sn acc)) = F.build (hashStableNameHeight sn) <> ": " <> showPreAccOp acc
+    showSA (StableSharingAcc _ (AvarSharing sn _))   = "AvarSharing " <> F.build (hashStableNameHeight sn)
+    showSA (StableSharingAcc _ (AletSharing sa _))   = "AletSharing " <> F.build sa <> "..."
 
 -- Build an initial environment for the tag values given in the first argument for traversing a
 -- scalar expression.  The 'StableSharingExp's for all tags /actually used/ in the expressions are
@@ -2258,18 +2273,18 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
       = case filter hasTag ses of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [se] -> se                 -- tag has a unique occurrence
-          ses2 -> internalError ("Encountered a duplicate 'Tag'\n  " ++ intercalate ", " (map showSE ses2))
+          ses2 -> internalError ("Encountered a duplicate 'Tag'\n  " <> intercalate ", " (map showSE ses2))
       where
         hasTag (StableSharingExp _ (ExpSharing _ (Tag _ tag2))) = tag1 == tag2
         hasTag se
-          = internalError ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se)
+          = internalError ("Encountered a node that is not a plain 'Tag'\n  " <> showSE se)
 
         noStableSharing :: StableSharingExp
         noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
 
-    showSE (StableSharingExp _ (ExpSharing sn exp)) = show (hashStableNameHeight sn) ++ ": " ++ show (showPreExpOp exp)
-    showSE (StableSharingExp _ (VarSharing sn _ ))  = "VarSharing " ++ show (hashStableNameHeight sn)
-    showSE (StableSharingExp _ (LetSharing se _ ))  = "LetSharing " ++ show se ++ "..."
+    showSE (StableSharingExp _ (ExpSharing sn exp)) = F.build (hashStableNameHeight sn) <> ": " <> showPreExpOp exp
+    showSE (StableSharingExp _ (VarSharing sn _ ))  = "VarSharing " <> F.build (hashStableNameHeight sn)
+    showSE (StableSharingExp _ (LetSharing se _ ))  = "LetSharing " <> F.build se <> "..."
 
 -- Determine whether a 'NodeCount' is for an 'Atag' or 'Tag', which represent free variables.
 --
@@ -2306,7 +2321,7 @@ determineScopesAcc config fvs accOccMap rootAcc
     in
     if all isFreeVar counts
        then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
-       else internalError ("unbound shared subtrees" ++ show unboundTrees)
+       else internalError (build "unbound shared subtrees [{}]" (Only (intercalate "," (map F.build unboundTrees))))
 
 
 determineScopesSharingAcc
@@ -2708,7 +2723,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         :: HasCallStack
         => (SmartExp a -> UnscopedExp b)
         -> (SmartExp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = tracePure (build "LAMBDA {}" (show ssa)) (fromString (show counts)) (const (ScopedExp ssa body'), (counts',graph))
+    scopesFun1 f = tracePure (build "LAMBDA {}" ssa) ("[" <> intercalate "," (map F.build counts) <> "]") (const (ScopedExp ssa body'), (counts',graph))
       where
         body@(UnscopedExp fvs _)              = f undefined
         (ScopedExp [] body', (counts, graph)) = scopesExp body

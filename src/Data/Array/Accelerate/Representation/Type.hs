@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -18,6 +19,7 @@ module Data.Array.Accelerate.Representation.Type
 
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
+import Data.Text.Buildable
 
 import Language.Haskell.TH
 
@@ -43,7 +45,12 @@ data TupR s a where
 instance Show (TupR ScalarType a) where
   show TupRunit       = "()"
   show (TupRsingle t) = show t
-  show (TupRpair a b) = "(" ++ show a ++ "," ++ show b ++")"
+  show (TupRpair a b) = "(" ++ show a ++ "," ++ show b ++ ")"
+
+instance Buildable (TupR ScalarType a) where
+  build TupRunit       = "()"
+  build (TupRsingle t) = build t
+  build (TupRpair a b) = "(" <> build a <> "," <> build b <> ")"
 
 type TypeR = TupR ScalarType
 

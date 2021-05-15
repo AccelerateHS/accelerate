@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -30,6 +31,8 @@ import Language.Haskell.TH.Syntax
 import System.IO.Unsafe
 import Data.List                                                    ( intersperse )
 import Data.Maybe                                                   ( isJust )
+import Data.Text.Lazy.Builder                                       ( Builder )
+import Data.Text.Buildable                                          ( Buildable(..) )
 import Text.Show                                                    ( showListWith )
 import Prelude                                                      hiding ( (!!) )
 import qualified Data.Vector.Unboxed                                as U
@@ -63,18 +66,29 @@ data ArrayR a where
             }
          -> ArrayR (Array sh e)
 
+type ArraysR = TupR ArrayR
+
 instance Show (ArrayR a) where
   show (ArrayR shR eR) = "Array DIM" ++ show (rank shR) ++ " " ++ show eR
 
-type ArraysR = TupR ArrayR
+instance Buildable (ArrayR a) where
+  build (ArrayR shR eR) = "Array DIM" <> build (rank shR) <> " " <> build eR
 
 instance Show (TupR ArrayR e) where
   show TupRunit           = "()"
   show (TupRsingle aR)    = show aR
   show (TupRpair aR1 aR2) = "(" ++ show aR1 ++ "," ++ show aR2 ++ ")"
 
+instance Buildable (TupR ArrayR e) where
+  build TupRunit           = "()"
+  build (TupRsingle aR)    = build aR
+  build (TupRpair aR1 aR2) = "(" <> build aR1 <> "," <> build aR2 <> ")"
+
 showArraysR :: ArraysR a -> ShowS
 showArraysR = shows
+
+buildArraysR :: ArraysR a -> Builder
+buildArraysR = build
 
 arraysRarray :: ShapeR sh -> TypeR e -> ArraysR (Array sh e)
 arraysRarray shR eR = TupRsingle (ArrayR shR eR)

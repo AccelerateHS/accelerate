@@ -415,6 +415,7 @@ library
         Data.Array.Accelerate.Test.NoFib.Base
         Data.Array.Accelerate.Test.NoFib.Config
 
+        Data.Text.Format.Extra
         Language.Haskell.TH.Extra
 
   if flag(nofib)

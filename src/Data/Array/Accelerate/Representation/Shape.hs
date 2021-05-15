@@ -1,6 +1,7 @@
-{-# LANGUAGE GADTs           #-}
-{-# LANGUAGE TupleSections   #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TupleSections     #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Representation.Shape
