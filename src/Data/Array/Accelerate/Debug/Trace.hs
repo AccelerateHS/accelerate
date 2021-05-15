@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -32,6 +33,8 @@ import Data.Array.Accelerate.Sugar.Elt
 import qualified Data.Array.Accelerate.Representation.Array         as R
 import qualified Data.Array.Accelerate.Representation.Shape         as R
 
+import Data.Text
+
 
 -- $tracing
 --
@@ -50,7 +53,7 @@ import qualified Data.Array.Accelerate.Representation.Shape         as R
 -- | Outputs the trace message to the console before the 'Acc' computation
 -- proceeds with the result of the second argument.
 --
-atrace :: Arrays a => String -> Acc a -> Acc a
+atrace :: Arrays a => Text -> Acc a -> Acc a
 atrace message (Acc result)
   = Acc
   $ SmartAcc
@@ -61,7 +64,7 @@ atrace message (Acc result)
 -- the console, before the 'Acc' computation proceeds with the result of
 -- the third argument.
 --
-atraceArray :: forall a b. (Arrays a, Arrays b, Show a) => String -> Acc a -> Acc b -> Acc b
+atraceArray :: forall a b. (Arrays a, Arrays b, Show a) => Text -> Acc a -> Acc b -> Acc b
 atraceArray message (Acc inspect) (Acc result)
   = Acc
   $ SmartAcc
@@ -71,13 +74,13 @@ atraceArray message (Acc inspect) (Acc result)
 -- | Outputs the trace message and the array(s) to the console, before the
 -- 'Acc' computation proceeds with the result of that array.
 --
-atraceId :: (Arrays a, Show a) => String -> Acc a -> Acc a
+atraceId :: (Arrays a, Show a) => Text -> Acc a -> Acc a
 atraceId message value = atraceArray message value value
 
 -- | Outputs the trace message and a scalar value to the console, before
 -- the 'Acc' computation proceeds with the result of the third argument.
 --
-atraceExp :: forall e a. (Elt e, Show e, Arrays a) => String -> Exp e -> Acc a -> Acc a
+atraceExp :: forall e a. (Elt e, Show e, Arrays a) => Text -> Exp e -> Acc a -> Acc a
 atraceExp message value (Acc result) =
   let Acc inspect = unit value
    in Acc

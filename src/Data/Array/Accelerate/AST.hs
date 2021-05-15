@@ -152,11 +152,12 @@ import Data.Primitive.Vec
 import Control.DeepSeq
 import Data.Kind
 import Data.Maybe
+import Data.Text                                                    ( Text )
 import Data.Text.Format
 import Data.Text.Lazy.Builder
 import Data.Text.Lazy.Builder.Int
 import Language.Haskell.TH                                          ( Q, TExp )
-import qualified Language.Haskell.TH.Syntax as TH
+import qualified Language.Haskell.TH.Syntax                         as TH
 import Prelude
 
 import GHC.TypeLits
@@ -205,7 +206,7 @@ type PrimMaybe a = (TAG, ((), a))
 data Message a where
   Message :: (a -> String)                    -- embedded show
           -> Maybe (Q (TExp (a -> String)))   -- lifted version of show, for TH
-          -> String
+          -> Text
           -> Message a
 
 -- | Collective array computations parametrised over array variables
@@ -1255,7 +1256,7 @@ liftMessage aR (Message _ fmt msg) =
       fmtR (TupRsingle (ArrayR shR eR))     = [|| \as -> showArray (showsElt $$(liftTypeR eR)) (ArrayR $$(liftShapeR shR) $$(liftTypeR eR)) as ||]
       fmtR aR'                              = [|| \as -> showArrays $$(liftArraysR aR') as ||]
   in
-  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) ||]
+  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce (TH.lift msg)) ||]
 
 liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
 liftMaybe _ Nothing  = [|| Nothing ||]
