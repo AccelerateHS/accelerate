@@ -22,9 +22,15 @@
 -- Typed de Bruijn indices
 --
 
-module Data.Array.Accelerate.AST.Idx 
-  ( Idx, pattern ZeroIdx, pattern SuccIdx, idxToInt, rnfIdx, liftIdx, pattern NoIdxPossible, PairIdx(..) )
-  where
+module Data.Array.Accelerate.AST.Idx (
+
+  Idx, pattern ZeroIdx, pattern SuccIdx, pattern NoIdxPossible,
+  idxToInt,
+  rnfIdx, liftIdx,
+
+  PairIdx(..)
+
+) where
 
 import Language.Haskell.TH
 import Data.Type.Equality ((:~:)(Refl))
@@ -101,4 +107,3 @@ pattern NoIdxPossible a <- (\case{} -> a)
 data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a
   PairIdxRight :: PairIdx (a, b) b
-
