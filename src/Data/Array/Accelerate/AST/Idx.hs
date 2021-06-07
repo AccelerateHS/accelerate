@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE GADTs #-}
@@ -21,7 +22,8 @@
 -- Typed de Bruijn indices
 --
 
-module Data.Array.Accelerate.AST.Idx
+module Data.Array.Accelerate.AST.Idx 
+  ( Idx, pattern ZeroIdx, pattern SuccIdx, idxToInt, rnfIdx, liftIdx, pattern NoIdxPossible, PairIdx(..) )
   where
 
 import Language.Haskell.TH
@@ -45,6 +47,10 @@ idxToInt (SuccIdx idx) = 1 + idxToInt idx
 rnfIdx :: Idx env t -> ()
 rnfIdx ZeroIdx      = ()
 rnfIdx (SuccIdx ix) = rnfIdx ix
+
+liftIdx :: Idx env t -> Q (TExp (Idx env t))
+liftIdx ZeroIdx      = [|| ZeroIdx ||]
+liftIdx (SuccIdx ix) = [|| SuccIdx $$(liftIdx ix) ||]
 
 #else
 
@@ -70,6 +76,7 @@ pattern SuccIdx :: () => (envs ~ (env, s)) => Idx env t -> Idx envs t
 pattern SuccIdx idx <- (unSucc -> Just (idx, Refl))
   where
     SuccIdx (UnsafeIdxConstructor i) = UnsafeIdxConstructor (i+1)
+
 unSucc :: Idx envs t -> Maybe (Idx env t, envs :~: (env, s))
 unSucc (UnsafeIdxConstructor i)
   | i < 1     = Nothing
@@ -79,9 +86,10 @@ idxToInt :: Idx env t -> Int
 idxToInt = unsafeRunIdx
 
 rnfIdx :: Idx env t -> ()
-rnfIdx (UnsafeIdxConstructor i)
-  | i > 0     = ()
-  | otherwise = ()
+rnfIdx !_ = ()
+
+liftIdx :: Idx env t -> Q (TExp (Idx env t))
+liftIdx (UnsafeIdxConstructor i) = [|| UnsafeIdxConstructor i ||]
 
 #endif
 
@@ -94,7 +102,4 @@ data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a
   PairIdxRight :: PairIdx (a, b) b
 
-liftIdx :: Idx env t -> Q (TExp (Idx env t))
-liftIdx ZeroIdx      = [|| ZeroIdx ||]
-liftIdx (SuccIdx ix) = [|| SuccIdx $$(liftIdx ix) ||]
 
