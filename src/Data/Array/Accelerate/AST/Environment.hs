@@ -61,7 +61,7 @@ weakenSucc :: (env, t) :> env' -> env :> env'
 weakenSucc (Weaken f) = Weaken (f . SuccIdx)
 
 weakenEmpty :: () :> env'
-weakenEmpty = Weaken $ \case { }
+weakenEmpty = Weaken $ \(NoIdxPossible x) -> x
 
 sink :: forall env env' t. env :> env' -> (env, t) :> (env', t)
 sink (Weaken f) = Weaken g

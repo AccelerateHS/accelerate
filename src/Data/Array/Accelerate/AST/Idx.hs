@@ -1,5 +1,13 @@
-{-# LANGUAGE GADTs           #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST.Idx
@@ -17,18 +25,18 @@ module Data.Array.Accelerate.AST.Idx
   where
 
 import Language.Haskell.TH
+import Data.Type.Equality ((:~:)(Refl))
+import Unsafe.Coerce (unsafeCoerce)
 
--- De Bruijn variable index projecting a specific type from a type
+
+#ifdef ACCELERATE_INTERNAL_CHECKS
+
+-- | De Bruijn variable index projecting a specific type from a type
 -- environment.  Type environments are nested pairs (..((), t1), t2, ..., tn).
 --
 data Idx env t where
   ZeroIdx ::              Idx (env, t) t
   SuccIdx :: Idx env t -> Idx (env, s) t
-
-data PairIdx p a where
-  PairIdxLeft  :: PairIdx (a, b) a
-  PairIdxRight :: PairIdx (a, b) b
-
 
 idxToInt :: Idx env t -> Int
 idxToInt ZeroIdx       = 0
@@ -37,6 +45,54 @@ idxToInt (SuccIdx idx) = 1 + idxToInt idx
 rnfIdx :: Idx env t -> ()
 rnfIdx ZeroIdx      = ()
 rnfIdx (SuccIdx ix) = rnfIdx ix
+
+#else
+
+-- | De Bruijn variable index projecting a specific type from a type
+-- environment.  Type environments are nested pairs (..((), t1), t2, ..., tn).
+--
+-- Outside of this file, pretend that this is an ordinary GADT:
+-- data Idx env t where
+--   ZeroIdx ::              Idx (env, t) t
+--   SuccIdx :: Idx env t -> Idx (env, s) t
+-- 
+-- For performance, it uses an Int under the hood.
+newtype Idx env t = UnsafeIdxConstructor { unsafeRunIdx :: Int }
+
+{-# COMPLETE ZeroIdx, SuccIdx #-}
+
+pattern ZeroIdx :: forall env envt t. () => (envt ~ (env, t)) => Idx envt t
+pattern ZeroIdx <- (\x -> (idxToInt x, unsafeCoerce @(envt :~: envt) @(envt :~: (env, t)) Refl) -> (0, Refl))
+  where
+    ZeroIdx = UnsafeIdxConstructor 0
+
+pattern SuccIdx :: () => (envs ~ (env, s)) => Idx env t -> Idx envs t
+pattern SuccIdx idx <- (unSucc -> Just (idx, Refl))
+  where
+    SuccIdx (UnsafeIdxConstructor i) = UnsafeIdxConstructor (i+1)
+unSucc :: Idx envs t -> Maybe (Idx env t, envs :~: (env, s))
+unSucc (UnsafeIdxConstructor i)
+  | i < 1     = Nothing
+  | otherwise = Just (UnsafeIdxConstructor (i-1), unsafeCoerce Refl)
+
+idxToInt :: Idx env t -> Int
+idxToInt = unsafeRunIdx
+
+rnfIdx :: Idx env t -> ()
+rnfIdx (UnsafeIdxConstructor i)
+  | i > 0     = ()
+  | otherwise = ()
+
+#endif
+
+-- | Despite the 'complete' pragma above, GHC can't infer that there is no
+-- pattern possible if the environment is empty. This can be used instead.
+pattern NoIdxPossible :: forall env t a. (env ~ ()) => () => a -> Idx env t
+pattern NoIdxPossible a <- (\case{} -> a)
+
+data PairIdx p a where
+  PairIdxLeft  :: PairIdx (a, b) a
+  PairIdxRight :: PairIdx (a, b) b
 
 liftIdx :: Idx env t -> Q (TExp (Idx env t))
 liftIdx ZeroIdx      = [|| ZeroIdx ||]
