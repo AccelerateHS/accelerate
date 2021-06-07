@@ -24,7 +24,7 @@
 
 module Data.Array.Accelerate.AST.Idx (
 
-  Idx, pattern ZeroIdx, pattern SuccIdx, pattern NoIdxPossible,
+  Idx, pattern ZeroIdx, pattern SuccIdx, pattern VoidIdx,
   idxToInt,
   rnfIdx, liftIdx,
 
@@ -32,9 +32,12 @@ module Data.Array.Accelerate.AST.Idx (
 
 ) where
 
-import Language.Haskell.TH
+import Language.Haskell.TH ( Q, TExp )
+
+#ifndef ACCELERATE_INTERNAL_CHECKS
 import Data.Type.Equality ((:~:)(Refl))
 import Unsafe.Coerce (unsafeCoerce)
+#endif
 
 
 #ifdef ACCELERATE_INTERNAL_CHECKS
@@ -101,8 +104,8 @@ liftIdx (UnsafeIdxConstructor i) = [|| UnsafeIdxConstructor i ||]
 
 -- | Despite the 'complete' pragma above, GHC can't infer that there is no
 -- pattern possible if the environment is empty. This can be used instead.
-pattern NoIdxPossible :: forall env t a. (env ~ ()) => () => a -> Idx env t
-pattern NoIdxPossible a <- (\case{} -> a)
+pattern VoidIdx :: forall env t a. (env ~ ()) => () => a -> Idx env t
+pattern VoidIdx a <- (\case{} -> a)
 
 data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a
