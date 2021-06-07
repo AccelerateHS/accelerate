@@ -13,3 +13,5 @@
 .DS_Store
 *.lock
 /docs/_build
+*.hi
+*.o
