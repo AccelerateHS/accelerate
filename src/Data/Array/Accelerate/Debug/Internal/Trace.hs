@@ -1,6 +1,7 @@
-{-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns             #-}
+{-# LANGUAGE CPP                      #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE OverloadedStrings        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Internal.Trace
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -32,11 +33,20 @@ import Data.Text.Lazy.Builder.RealFloat
 
 #ifdef ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Clock
-import System.IO
+import System.IO                                                    hiding ( stderr )
 import System.IO.Unsafe
 import qualified Data.Text.IO                                       as T
 import qualified Data.Text.Lazy                                     as L
 import qualified Data.Text.Lazy.Builder                             as L
+
+import GHC.MVar
+import GHC.IO.Encoding
+import GHC.IO.Handle.Types
+import GHC.IO.Handle.Internals
+import qualified GHC.IO.FD                                          as FD
+#if defined(mingw32_HOST_OS)
+import Foreign.C.Types
+#endif
 #endif
 
 
@@ -116,7 +126,7 @@ putTraceMsg :: Builder -> IO ()
 #ifdef ACCELERATE_DEBUG
 putTraceMsg msg = do
   timestamp <- getProgramTime
-  T.hPutStr stderr'
+  T.hPutStr stderr
     . L.toStrict
     . L.toLazyText
     $ "[" <> left 8 ' ' (fixed 3 timestamp) <> "] " <> msg <> "\n"
@@ -125,9 +135,43 @@ putTraceMsg _   = return ()
 #endif
 
 #ifdef ACCELERATE_DEBUG
-stderr' :: Handle
-stderr' = unsafePerformIO $ do
-  hSetBuffering stderr LineBuffering
-  return stderr
+-- | A handle managing output to the Haskell program's standard output
+-- channnel.
+--
+-- In contrast to 'System.IO.stderr' this output handle is (line) buffered,
+-- which prevents garbled output when used my multiple threads. Stolen from
+-- 'GHC.IO.Handle.FD.stderr'.
+--
+{-# NOINLINE stderr #-}
+stderr :: Handle
+stderr = unsafePerformIO $ do
+  -- TODO: acquire lock
+  setBinaryMode FD.stderr
+  enc <- getLocaleEncoding
+  mkHandle FD.stderr "<stderr>" WriteHandle True -- this stderr IS buffered
+               (Just enc)
+               nativeNewlineMode -- translate newlines
+               (Just stdHandleFinalizer) Nothing
+
+stdHandleFinalizer :: FilePath -> MVar Handle__ -> IO ()
+stdHandleFinalizer fp m = do
+  h_ <- takeMVar m
+  flushWriteBuffer h_
+  case haType h_ of
+    ClosedHandle -> return ()
+    _            -> closeTextCodecs h_
+  putMVar m (ioe_finalizedHandle fp)
+
+-- We have to put the FDs into binary mode on Windows to avoid the newline
+-- translation that the CRT IO library does.
+setBinaryMode :: FD.FD -> IO ()
+#if defined(mingw32_HOST_OS)
+setBinaryMode fd = do _ <- setmode (FD.fdFD fd) True
+                      return ()
+
+foreign import ccall unsafe "__hscore_setmode" setmode :: CInt -> Bool -> IO CInt
+#else
+setBinaryMode _ = return ()
+#endif
 #endif
 
