@@ -34,6 +34,9 @@ import Data.Text.Lazy.Builder.RealFloat
 import Data.Array.Accelerate.Debug.Internal.Clock
 import System.IO
 import System.IO.Unsafe
+import qualified Data.Text.IO                                       as T
+import qualified Data.Text.Lazy                                     as L
+import qualified Data.Text.Lazy.Builder                             as L
 #endif
 
 
@@ -113,9 +116,18 @@ putTraceMsg :: Builder -> IO ()
 #ifdef ACCELERATE_DEBUG
 putTraceMsg msg = do
   timestamp <- getProgramTime
-  hprint stderr "[{}] {}\n" (left 8 ' ' (fixed 3 timestamp), msg)
-  hFlush stderr
+  T.hPutStr stderr'
+    . L.toStrict
+    . L.toLazyText
+    $ "[" <> left 8 ' ' (fixed 3 timestamp) <> "] " <> msg <> "\n"
 #else
 putTraceMsg _   = return ()
+#endif
+
+#ifdef ACCELERATE_DEBUG
+stderr' :: Handle
+stderr' = unsafePerformIO $ do
+  hSetBuffering stderr LineBuffering
+  return stderr
 #endif
 
