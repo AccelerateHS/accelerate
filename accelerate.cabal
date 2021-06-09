@@ -155,6 +155,7 @@ custom-setup
       base              >= 4.10
     , Cabal
     , cabal-doctest     >= 1.0
+    , directory         >= 1.0
 
 flag debug
   manual:               True
