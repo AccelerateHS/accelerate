@@ -6,7 +6,8 @@ resolver: lts-16.31
 packages:
 - .
 
-# extra-deps: []
+extra-deps:
+- text-format-0.3.2
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
