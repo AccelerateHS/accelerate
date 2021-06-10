@@ -21,7 +21,7 @@ import Prelude                                                      hiding ( unl
 -- | Insert the builder @b@ between the builders in @bs@ and concatenate
 -- the result.
 --
--- >>> intercalate "\n" ["Hello", "World", "!"]
+-- > intercalate "\n" ["Hello", "World", "!"]
 -- "Hello\nWorld\n!"
 --
 intercalate :: Builder -> [Builder] -> Builder
@@ -29,7 +29,7 @@ intercalate b bs = foldr (<>) mempty (intersperse b bs)
 
 -- | Join builders after appending a terminating newline to each
 --
--- >>> unlines ["Hello, "World", "!"]
+-- > unlines ["Hello, "World", "!"]
 -- "Hello\nWorld\n!\n"
 --
 unlines :: [Builder] -> Builder
