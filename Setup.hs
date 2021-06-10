@@ -2,11 +2,10 @@
 module Main where
 
 import Distribution.Extra.Doctest
+import Distribution.PackageDescription
 import Distribution.Simple
 import Distribution.Simple.Setup
 import Distribution.Simple.Utils
-import Distribution.Types.Flag
-import Distribution.Types.HookedBuildInfo
 import Distribution.Verbosity
 
 import Control.Monad
@@ -32,9 +31,18 @@ preConfHook args configFlags = do
         -- Nix (and apparently future versions of stack) automatically update
         -- submodules, so there is no need to do so again.
         return ()
-      else
+      else do
         -- Stack and cabal based builds require updating the submodules
-        rawSystemExit verbosity "git" ["submodule", "update", "--init", "--recursive"]
+        git <- doesDirectoryExist ".git"
+        if git
+           then rawSystemExit verbosity "git" ["submodule", "update", "--init", "--recursive"]
+           else do
+             -- XXX: This must be kept up to date with the git submodule revision
+             let archive = "v0.7.8.tar.gz"
+             createDirectoryIfMissing True "cbits/tracy"
+             rawSystemExit verbosity "curl" ["-LO", "https://github.com/wolfpld/tracy/archive/refs/tags/" ++ archive]
+             rawSystemExit verbosity "tar" ["-xzf", archive, "-C", "cbits/tracy", "--strip-components", "1"]
+             removeFile archive
 
   preConf simpleUserHooks args configFlags
 
