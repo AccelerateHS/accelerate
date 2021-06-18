@@ -22,7 +22,8 @@ module Data.Array.Accelerate.Error (
 ) where
 
 import Data.Text.Format                                   ( Only(..), build )
-import Data.Text.Format.Extra
+import Data.Text.Format.Extra                             ( intercalate )
+import Data.Text.Lazy                                     ( unpack )
 import Data.Text.Lazy.Builder
 import Debug.Trace
 import Prelude                                            hiding ( error )
@@ -91,7 +92,10 @@ warning kind msg cond k =
     False -> trace (format kind msg) k
 
 format :: HasCallStack => Check -> Builder -> String
-format kind msg = show $ intercalate "\n" [ header, msg, ppCallStack callStack ]
+format kind msg
+  = unpack
+  . toLazyText
+  $ intercalate "\n" [ header, msg, ppCallStack callStack ]
   where
     header
       = intercalate "\n"
