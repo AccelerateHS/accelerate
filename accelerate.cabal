@@ -329,6 +329,8 @@ library
         Data.Array.Accelerate.Data.Maybe
         Data.Array.Accelerate.Data.Monoid
         Data.Array.Accelerate.Data.Ratio
+        Data.Array.Accelerate.Debug.Assert
+        Data.Array.Accelerate.Debug.Error
         Data.Array.Accelerate.Debug.Trace
         Data.Array.Accelerate.Unsafe
 
