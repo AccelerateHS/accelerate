@@ -501,8 +501,8 @@ library
     cxx-options:
         -O3
         -Wall
-        -march=native
         -std=c++11
+        -march=native
         -DACCELERATE_PROFILE
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
@@ -513,9 +513,9 @@ library
         -DTRACY_NO_SAMPLING
 
     ghc-options:
-        -optcxx=-std=c++11
-        -optcxx=-Wall
         -optcxx=-O3
+        -optcxx=-Wall
+        -optcxx=-std=c++11
         -optcxx=-march=native
         -optcxx=-DTRACY_ENABLE
         -optcxx=-DTRACY_NO_SAMPLING
