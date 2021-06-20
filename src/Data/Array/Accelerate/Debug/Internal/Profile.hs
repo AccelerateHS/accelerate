@@ -31,8 +31,6 @@ module Data.Array.Accelerate.Debug.Internal.Profile (
 
 #ifdef ACCELERATE_DEBUG
 import Control.Monad
-#endif
-#ifdef ACCELERATE_PROFILE
 import qualified Data.Array.Accelerate.Debug.Internal.Tracy         as Tracy
 #endif
 
@@ -71,16 +69,11 @@ local_memory_free _    = return ()
 #else
 
 local_memory_alloc _p n = do
-#ifdef ACCELERATE_PROFILE
   Tracy.emit_memory_alloc _p (fromIntegral n) 0
-#endif
   void $ Atomic.add __total_bytes_allocated_local (fromIntegral n)
 
-local_memory_free _p = do
-#ifdef ACCELERATE_PROFILE
+local_memory_free _p =
   Tracy.emit_memory_free _p 0
-#endif
-  return ()
 #endif
 
 
@@ -98,16 +91,11 @@ remote_memory_free _ _    = return ()
 remote_memory_evict _ _ _ = return ()
 #else
 remote_memory_alloc _name _ptr bytes = do
-#ifdef ACCELERATE_PROFILE
   Tracy.emit_memory_alloc_named _ptr (fromIntegral bytes) 0 _name
-#endif
   void $ Atomic.add __total_bytes_allocated_remote (fromIntegral bytes)
 
 remote_memory_free _name _ptr = do
-#ifdef ACCELERATE_PROFILE
   Tracy.emit_memory_free_named _ptr 0 _name
-#endif
-  return ()
 
 remote_memory_evict name ptr bytes = do
   void $ Atomic.add __num_evictions 1
@@ -118,7 +106,7 @@ remote_memory_evict name ptr bytes = do
 
 remote_memory_alloc_nursery :: Ptr a -> Int -> IO ()
 remote_memory_free_nursery  :: Ptr a -> IO ()
-#ifndef ACCELERATE_PROFILE
+#ifndef ACCELERATE_DEBUG
 remote_memory_alloc_nursery _ _ = return ()
 remote_memory_free_nursery _    = return ()
 #else

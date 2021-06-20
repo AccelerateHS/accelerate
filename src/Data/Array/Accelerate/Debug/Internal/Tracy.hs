@@ -20,14 +20,14 @@ import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
 
-#ifdef ACCELERATE_PROFILE
+#ifdef ACCELERATE_DEBUG
 import Language.Haskell.TH.Syntax
 #endif
 
 type Zone   = Word64
 type SrcLoc = Word64
 
-#ifdef ACCELERATE_PROFILE
+#ifdef ACCELERATE_DEBUG
 
 foreign import ccall unsafe "___tracy_init_thread" init_thread :: IO ()
 foreign import ccall unsafe "___tracy_set_thread_name" set_thread_name :: CString -> IO ()

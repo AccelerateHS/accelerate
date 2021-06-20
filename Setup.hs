@@ -22,9 +22,9 @@ main =
 preConfHook :: Args -> ConfigFlags -> IO HookedBuildInfo
 preConfHook args configFlags = do
   let verbosity = fromFlagOrDefault normal $ configVerbosity configFlags
-      profiling = fromMaybe False $ lookupFlagAssignment (mkFlagName "prof") (configConfigurationsFlags configFlags)
+      debugging = fromMaybe False $ lookupFlagAssignment (mkFlagName "debug") (configConfigurationsFlags configFlags)
 
-  when profiling $ do
+  when debugging $ do
     yes <- doesFileExist "cbits/tracy/TracyClient.cpp"
     if yes
       then

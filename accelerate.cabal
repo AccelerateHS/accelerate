@@ -161,8 +161,9 @@ flag debug
   manual:               True
   default:              False
   description:
-    Enable debug tracing messages. The following options are read from the
-    environment variable @ACCELERATE_FLAGS@, and via the command-line as:
+    Enable kernel profiling and debug tracing messages. The following options
+    are read from the environment variable @ACCELERATE_FLAGS@, and via the
+    command-line as:
     .
       > ./program +ACC ... -ACC
     .
@@ -234,11 +235,6 @@ flag debug
     .
       * @dump-sched@: Print information related to execution scheduling.
     .
-
-flag prof
-  manual:               True
-  default:              False
-  description:          Enable hooks for profiling the running application
 
 flag bounds-checks
   manual:               True
@@ -487,28 +483,42 @@ library
   hs-source-dirs:
         src
 
-  if flag(debug) || flag(prof)
+  cc-options:
+        -O3
+        -Wall
+        -march=native
+
+  ghc-options:
+        -O2
+        -Wall
+        -Wcompat
+        -Wmissed-specialisations
+        -- -Wredundant-constraints
+        -freduction-depth=100
+        -fspec-constr-count=50
+        -funbox-strict-fields
+        -optc=-O3
+        -optc=-Wall
+        -optc=-march=native
+
+  ghc-prof-options:
+        -caf-all
+        -auto-all
+
+  if flag(debug)
     cc-options:
         -DACCELERATE_DEBUG
 
     cpp-options:
         -DACCELERATE_DEBUG
-
-  if flag(prof)
-    cc-options:
-        -DACCELERATE_PROFILE
+        -DTRACY_ENABLE
+        -DTRACY_NO_SAMPLING
 
     cxx-options:
         -O3
         -Wall
         -std=c++11
         -march=native
-        -DACCELERATE_PROFILE
-        -DTRACY_ENABLE
-        -DTRACY_NO_SAMPLING
-
-    cpp-options:
-        -DACCELERATE_PROFILE
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
 
@@ -538,28 +548,6 @@ library
   else
     cpp-options:        -DUNIX
     build-depends:      unix
-
-  cc-options:
-        -O3
-        -Wall
-        -march=native
-
-  ghc-options:
-        -O2
-        -Wall
-        -Wcompat
-        -Wmissed-specialisations
-        -- -Wredundant-constraints
-        -freduction-depth=100
-        -fspec-constr-count=50
-        -funbox-strict-fields
-        -optc=-O3
-        -optc=-Wall
-        -optc=-march=native
-
-  ghc-prof-options:
-        -caf-all
-        -auto-all
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the

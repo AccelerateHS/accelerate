@@ -56,7 +56,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
-#ifdef ACCELERATE_PROFILE
+#ifdef ACCELERATE_DEBUG
 import Data.Array.Accelerate.Lifetime
 #endif
 
@@ -293,7 +293,7 @@ allocateArray !size = internalCheck "size must be >= 0" (size >= 0) $ do
            traceIO dump_gc $ build "gc: allocated new host array (size={}, ptr={})" (bytes, unsafeForeignPtrToPtr ptr)
            local_memory_alloc (unsafeForeignPtrToPtr ptr) bytes
            return (castForeignPtr ptr)
-#ifdef ACCELERATE_PROFILE
+#ifdef ACCELERATE_DEBUG
   addFinalizer (uniqueArrayData arr) (local_memory_free (unsafeUniqueArrayPtr arr))
 #endif
   return arr

@@ -17,7 +17,6 @@
 module Data.Array.Accelerate.Debug.Internal (
 
   debuggingIsEnabled,
-  profilingIsEnabled,
   boundsChecksAreEnabled,
   unsafeChecksAreEnabled,
   internalChecksAreEnabled,
@@ -41,14 +40,6 @@ debuggingIsEnabled :: Bool
 debuggingIsEnabled = True
 #else
 debuggingIsEnabled = False
-#endif
-
-{-# INLINE profilingIsEnabled #-}
-profilingIsEnabled :: Bool
-#ifdef ACCELERATE_PROFILE
-profilingIsEnabled = True
-#else
-profilingIsEnabled = False
 #endif
 
 {-# INLINE boundsChecksAreEnabled #-}
