@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
@@ -107,6 +108,9 @@ import Data.Array.Accelerate.AST                                    ( Direction(
                                                                     , PrimConst(..), primConstType )
 import Data.Primitive.Vec
 
+import Data.Text.Format
+import Data.Text.Lazy.Builder
+import Data.Text.Lazy.Builder.Int
 import Data.Kind
 import Prelude
 
@@ -1305,9 +1309,9 @@ instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) wh
 -- Debugging
 -- ---------
 
-showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> String
-showPreAccOp (Atag _ i)            = "Atag " ++ show i
-showPreAccOp (Use aR a)            = "Use "  ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
+showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> Builder
+showPreAccOp (Atag _ i)            = build "Atag {}" (Only (decimal i))
+showPreAccOp (Use aR a)            = build "Use {}"  (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
 showPreAccOp Pipe{}                = "Pipe"
 showPreAccOp Acond{}               = "Acond"
 showPreAccOp Awhile{}              = "Awhile"
@@ -1322,41 +1326,41 @@ showPreAccOp Replicate{}           = "Replicate"
 showPreAccOp Slice{}               = "Slice"
 showPreAccOp Map{}                 = "Map"
 showPreAccOp ZipWith{}             = "ZipWith"
-showPreAccOp (Fold _ _ z _)        = "Fold" ++ maybe "1" (const "") z
-showPreAccOp (FoldSeg _ _ _ z _ _) = "Fold" ++ maybe "1" (const "") z ++ "Seg"
-showPreAccOp (Scan d _ _ z _)      = "Scan" ++ showsDirection d (maybe "1" (const "") z)
-showPreAccOp (Scan' d _ _ _ _)     = "Scan" ++ showsDirection d "'"
+showPreAccOp (Fold _ _ z _)        = "Fold" <> maybe "1" (const mempty) z
+showPreAccOp (FoldSeg _ _ _ z _ _) = "Fold" <> maybe "1" (const mempty) z <> "Seg"
+showPreAccOp (Scan d _ _ z _)      = "Scan" <> showDirection d <> (maybe "1" (const mempty) z)
+showPreAccOp (Scan' d _ _ _ _)     = "Scan" <> showDirection d <> (singleton '\'')
 showPreAccOp Permute{}             = "Permute"
 showPreAccOp Backpermute{}         = "Backpermute"
 showPreAccOp Stencil{}             = "Stencil"
 showPreAccOp Stencil2{}            = "Stencil2"
 showPreAccOp Aforeign{}            = "Aforeign"
 
-showsDirection :: Direction -> ShowS
-showsDirection LeftToRight = ('l':)
-showsDirection RightToLeft = ('r':)
+showDirection :: Direction -> Builder
+showDirection LeftToRight = singleton 'l'
+showDirection RightToLeft = singleton 'r'
 
-showPreExpOp :: PreSmartExp acc exp t -> String
-showPreExpOp (Tag _ i)          = "Tag" ++ show i
-showPreExpOp Match{}            = "Match"
-showPreExpOp (Const t c)        = "Const " ++ showElt (TupRsingle t) c
-showPreExpOp (Undef _)          = "Undef"
-showPreExpOp Nil{}              = "Nil"
-showPreExpOp Pair{}             = "Pair"
-showPreExpOp Prj{}              = "Prj"
-showPreExpOp VecPack{}          = "VecPack"
-showPreExpOp VecUnpack{}        = "VecUnpack"
-showPreExpOp ToIndex{}          = "ToIndex"
-showPreExpOp FromIndex{}        = "FromIndex"
-showPreExpOp Case{}             = "Case"
-showPreExpOp Cond{}             = "Cond"
-showPreExpOp While{}            = "While"
-showPreExpOp PrimConst{}        = "PrimConst"
-showPreExpOp PrimApp{}          = "PrimApp"
-showPreExpOp Index{}            = "Index"
-showPreExpOp LinearIndex{}      = "LinearIndex"
-showPreExpOp Shape{}            = "Shape"
-showPreExpOp ShapeSize{}        = "ShapeSize"
-showPreExpOp Foreign{}          = "Foreign"
-showPreExpOp Coerce{}           = "Coerce"
+showPreExpOp :: PreSmartExp acc exp t -> Builder
+showPreExpOp (Tag _ i)      = build "Tag {}" (Only (decimal i))
+showPreExpOp (Const t c)    = build "Const {}" (showElt (TupRsingle t) c)
+showPreExpOp Match{}        = "Match"
+showPreExpOp (Undef _)      = "Undef"
+showPreExpOp Nil{}          = "Nil"
+showPreExpOp Pair{}         = "Pair"
+showPreExpOp Prj{}          = "Prj"
+showPreExpOp VecPack{}      = "VecPack"
+showPreExpOp VecUnpack{}    = "VecUnpack"
+showPreExpOp ToIndex{}      = "ToIndex"
+showPreExpOp FromIndex{}    = "FromIndex"
+showPreExpOp Case{}         = "Case"
+showPreExpOp Cond{}         = "Cond"
+showPreExpOp While{}        = "While"
+showPreExpOp PrimConst{}    = "PrimConst"
+showPreExpOp PrimApp{}      = "PrimApp"
+showPreExpOp Index{}        = "Index"
+showPreExpOp LinearIndex{}  = "LinearIndex"
+showPreExpOp Shape{}        = "Shape"
+showPreExpOp ShapeSize{}    = "ShapeSize"
+showPreExpOp Foreign{}      = "Foreign"
+showPreExpOp Coerce{}       = "Coerce"
 

@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
@@ -39,6 +40,8 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.RealFrac
 
+import Data.Text.Lazy.Builder
+import Data.Semigroup
 import Text.Printf
 import Prelude                                                      ( (.), ($), String, error, undefined, unlines, otherwise )
 import qualified Prelude                                            as P
@@ -200,10 +203,10 @@ preludeError x
             ]
 
 
-ieee754 :: forall a b. HasCallStack => P.RealFloat a => String -> (Exp a -> b) -> Exp a -> b
+ieee754 :: forall a b. HasCallStack => P.RealFloat a => Builder -> (Exp a -> b) -> Exp a -> b
 ieee754 name f x
   | P.isIEEE (undefined::a) = f x
-  | otherwise               = internalError (printf "%s: Not implemented for non-IEEE floating point" name)
+  | otherwise               = internalError (name <> ": Not implemented for non-IEEE floating point")
 
 -- From: ghc/libraries/base/cbits/primFloat.c
 -- ------------------------------------------
@@ -384,7 +387,7 @@ ieee754_f64_decode2 i =
       high  = fromIntegral (i `unsafeShiftR` 32)
 
       iexp  = (fromIntegral ((high `unsafeShiftR` 20) .&. 0x7FF) + _DMINEXP)
-      sign = cond (fromIntegral i < (0 :: Exp Int64)) (-1) 1
+      sign  = cond (fromIntegral i < (0 :: Exp Int64)) (-1) 1
 
       high2 = high .&. (_DHIGHBIT - 1)
       iexp2 = iexp + 1

@@ -1,6 +1,8 @@
 {-# LANGUAGE BangPatterns         #-}
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE MagicHash            #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
@@ -50,13 +52,16 @@ module Data.Array.Accelerate.Array.Data (
 
 -- friends
 import Data.Array.Accelerate.Array.Unique
-import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
+#ifdef ACCELERATE_DEBUG
+import Data.Array.Accelerate.Lifetime
+#endif
 
 import Data.Array.Accelerate.Debug.Internal.Flags
-import Data.Array.Accelerate.Debug.Internal.Monitoring
+import Data.Array.Accelerate.Debug.Internal.Profile
 import Data.Array.Accelerate.Debug.Internal.Trace
 
 
@@ -67,16 +72,17 @@ import Control.Monad                                                ( (<=<) )
 import Data.Bits
 import Data.IORef
 import Data.Primitive                                               ( sizeOf# )
+import Data.Text.Format
 import Foreign.ForeignPtr
 import Foreign.Storable
 import Language.Haskell.TH                                          hiding ( Type )
 import System.IO.Unsafe
-import Text.Printf
 import Prelude                                                      hiding ( mapM )
 
-import GHC.Base
 import GHC.ForeignPtr
+import GHC.Prim
 import GHC.Ptr
+import GHC.Types
 
 
 -- | Immutable array representation
@@ -279,15 +285,18 @@ runArrayData st = unsafePerformIO $ do
 -- intermediate arrays that contain meaningful data only on the device.
 --
 allocateArray :: forall e. (HasCallStack, Storable e) => Int -> IO (UniqueArray e)
-allocateArray !size
-  = internalCheck "size must be >= 0" (size >= 0)
-  $ newUniqueArray <=< unsafeInterleaveIO $ do
-      let bytes = size * sizeOf (undefined :: e)
-      new <- readIORef __mallocForeignPtrBytes
-      ptr <- new bytes
-      traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" bytes (show ptr)
-      didAllocateBytesLocal (fromIntegral bytes)
-      return (castForeignPtr ptr)
+allocateArray !size = internalCheck "size must be >= 0" (size >= 0) $ do
+  arr <- newUniqueArray <=< unsafeInterleaveIO $ do
+           let bytes = size * sizeOf (undefined :: e)
+           new <- readIORef __mallocForeignPtrBytes
+           ptr <- new bytes
+           traceIO dump_gc $ build "gc: allocated new host array (size={}, ptr={})" (bytes, unsafeForeignPtrToPtr ptr)
+           local_memory_alloc (unsafeForeignPtrToPtr ptr) bytes
+           return (castForeignPtr ptr)
+#ifdef ACCELERATE_DEBUG
+  addFinalizer (uniqueArrayData arr) (local_memory_free (unsafeUniqueArrayPtr arr))
+#endif
+  return arr
 
 -- | Register the given function as the callback to use to allocate new array
 -- data on the host containing the specified number of bytes. The returned array
@@ -305,8 +314,8 @@ registerForeignPtrAllocator new = do
 __mallocForeignPtrBytes :: IORef (Int -> IO (ForeignPtr Word8))
 __mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocPlainForeignPtrBytesAligned
 
--- | Allocate the given number of bytes with 16-byte alignment. This is
--- essential for SIMD instructions.
+-- | Allocate the given number of bytes with 64-byte (cache line)
+-- alignment. This is essential for SIMD instructions.
 --
 -- Additionally, we return a plain ForeignPtr, which unlike a regular ForeignPtr
 -- created with 'mallocForeignPtr' carries no finalisers. It is an error to try
@@ -314,9 +323,9 @@ __mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocPlainForeignPtrBytes
 -- since in Accelerate finalisers are handled using Lifetime
 --
 mallocPlainForeignPtrBytesAligned :: Int -> IO (ForeignPtr a)
-mallocPlainForeignPtrBytesAligned (I# size) = IO $ \s ->
-  case newAlignedPinnedByteArray# size 64# s of
-    (# s', mbarr# #) -> (# s', ForeignPtr (byteArrayContents# (unsafeCoerce# mbarr#)) (PlainPtr mbarr#) #)
+mallocPlainForeignPtrBytesAligned (I# size#) = IO $ \s0 ->
+  case newAlignedPinnedByteArray# size# 64# s0 of
+    (# s1, mbarr# #) -> (# s1, ForeignPtr (byteArrayContents# (unsafeCoerce# mbarr#)) (PlainPtr mbarr#) #)
 
 
 liftArrayData :: Int -> TypeR e -> ArrayData e -> Q (TExp (ArrayData e))

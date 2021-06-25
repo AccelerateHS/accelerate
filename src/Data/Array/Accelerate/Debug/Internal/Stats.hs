@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP               #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
@@ -31,9 +32,10 @@ import Data.List                                          ( groupBy, sortBy )
 import Data.Map                                           ( Map )
 import Data.Ord                                           ( comparing )
 import Data.Text                                          ( Text )
+import Data.Text.Lazy.Builder
 import Data.Text.Prettyprint.Doc                          hiding ( annotate, Doc )
--- import Data.Text.Prettyprint.Doc.Render.Terminal
-import Data.Text.Prettyprint.Doc.Render.String
+import Data.Text.Prettyprint.Doc.Internal                 ( SimpleDocStream(..), textSpaces )
+import Data.Text.Prettyprint.Doc.Render.Util.Panic        ( panicUncaughtFail )
 import System.IO.Unsafe
 import qualified Data.Map                                 as Map
 import qualified Data.Text.Prettyprint.Doc                as Pretty
@@ -127,8 +129,18 @@ dumpSimplStats :: IO ()
 dumpSimplStats = do
   when dump_simpl_stats $ do
     stats <- simplCount
-    putTraceMsg (renderString (layoutPretty defaultLayoutOptions stats))
+    putTraceMsg (render (layoutPretty defaultLayoutOptions stats))
     resetSimplCount
+  where
+    -- stolen from Data.Text.Prettyprint.Doc.Render.Text.renderLazy
+    render = \case
+      SFail              -> panicUncaughtFail
+      SEmpty             -> mempty
+      SChar c rest       -> singleton c <> render rest
+      SText _l t rest    -> fromText t <> render rest
+      SLine i rest       -> singleton '\n' <> (fromText (textSpaces i) <> render rest)
+      SAnnPush _ann rest -> render rest
+      SAnnPop rest       -> render rest
 #else
 dumpSimplStats = return ()
 #endif

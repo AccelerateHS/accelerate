@@ -1,5 +1,6 @@
-{-# LANGUAGE CPP       #-}
-{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE MagicHash         #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Internal.Timed
 -- Copyright   : [2016..2020] The Accelerate Team
@@ -21,21 +22,22 @@ import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Debug.Internal.Trace
 
 import Control.Monad.Trans                              ( MonadIO )
-import Text.Printf
+import Data.Text.Lazy.Builder
+import Data.Text.Format
 
 #if ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Clock
 
 import Control.Applicative
 import Control.Monad.Trans                              ( liftIO )
-import Data.List                                        ( intercalate )
 import System.CPUTime
 import Prelude
 
-import GHC.Base
 import GHC.Int
 import GHC.Num
+import GHC.Prim
 import GHC.Stats
+import GHC.Types
 import GHC.Word
 #endif
 
@@ -45,7 +47,7 @@ import GHC.Word
 -- otherwise only timing information is shown.
 --
 {-# INLINEABLE timed #-}
-timed :: MonadIO m => Flag -> (Double -> Double -> String) -> m a -> m a
+timed :: MonadIO m => Flag -> (Double -> Double -> Builder) -> m a -> m a
 #ifdef ACCELERATE_DEBUG
 timed f fmt action = do
   enabled <- liftIO $ getFlag f
@@ -63,7 +65,7 @@ timed _ _ action = action
 
 #ifdef ACCELERATE_DEBUG
 {-# INLINEABLE timed_simpl #-}
-timed_simpl :: MonadIO m => (Double -> Double -> String) -> m a -> m a
+timed_simpl :: MonadIO m => (Double -> Double -> Builder) -> m a -> m a
 timed_simpl fmt action = do
   wall0 <- liftIO getMonotonicTime
   cpu0  <- liftIO getCPUTime
@@ -79,7 +81,7 @@ timed_simpl fmt action = do
 
 
 {-# INLINEABLE timed_gc #-}
-timed_gc :: MonadIO m => (Double -> Double -> String) -> m a -> m a
+timed_gc :: MonadIO m => (Double -> Double -> Builder) -> m a -> m a
 timed_gc fmt action = do
   rts0  <- liftIO getRTSStats
   res   <- action
@@ -99,20 +101,23 @@ timed_gc fmt action = do
       gcCPU       = i64 (gc_cpu_ns rts1 - gc_cpu_ns rts0) * 1.0E-9
       totalGCs    = gcs rts1 - gcs rts0
 
-  liftIO . putTraceMsg $ intercalate "\n"
+  liftIO
+    . putTraceMsg
+    $ foldr1 (\a b -> a <> singleton '\n' <> b)
     [ fmt totalWall totalCPU
-    , printf "    %s allocated on the heap" (showFFloatSIBase (Just 1) 1024 allocated "B")
-    , printf "    %s copied during GC (%d collections)" (showFFloatSIBase (Just 1) 1024 copied "B") totalGCs
-    , printf "    MUT: %s" (elapsed mutatorWall mutatorCPU)
-    , printf "    GC:  %s" (elapsed gcWall gcCPU)
+    , build "    {} allocated on the heap" (Only (showFFloatSIBase (Just 1) 1024 allocated "B"))
+    , build "    {} copied during GC ({} collections)" (showFFloatSIBase (Just 1) 1024 copied "B", totalGCs)
+    , build "    MUT: {}" (Only (elapsed mutatorWall mutatorCPU))
+    , build "    GC:  {}" (Only (elapsed gcWall gcCPU))
     ]
   --
   return res
 #endif
 
-elapsed :: Double -> Double -> String
+elapsed :: Double -> Double -> Builder
 elapsed wallTime cpuTime =
-  printf "%s (wall), %s (cpu)"
-    (showFFloatSIBase (Just 3) 1000 wallTime "s")
-    (showFFloatSIBase (Just 3) 1000 cpuTime  "s")
+  build "{} (wall), {} (cpu)"
+    ( showFFloatSIBase (Just 3) 1000 wallTime "s"
+    , showFFloatSIBase (Just 3) 1000 cpuTime "s"
+    )
 

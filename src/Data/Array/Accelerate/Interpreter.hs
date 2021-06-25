@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -75,10 +76,12 @@ import Control.Monad.ST
 import Data.Bits
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
-import Debug.Trace
+import Data.Text.Format
+import Data.Text.Lazy.Builder
+import System.IO
 import System.IO.Unsafe                                             ( unsafePerformIO )
-import Text.Printf                                                  ( printf )
 import Unsafe.Coerce
+import qualified Data.Text.IO                                       as T
 import Prelude                                                      hiding ( (!!), sum )
 
 
@@ -133,8 +136,8 @@ runN f = go
 -- Debugging
 -- ---------
 
-phase :: String -> (Double -> Double -> String) -> IO a -> IO a
-phase n fmt go = Debug.timed Debug.dump_phases (\wall cpu -> printf "phase %s: %s" n (fmt wall cpu)) go
+phase :: Builder -> (Double -> Double -> Builder) -> IO a -> IO a
+phase n fmt go = Debug.timed Debug.dump_phases (\wall cpu -> build "phase {}: {}" (n, fmt wall cpu)) go
 
 
 -- Delayed Arrays
@@ -870,9 +873,11 @@ evalBoundary bnd aenv =
 atraceOp :: Message as -> as -> IO ()
 atraceOp (Message show _ msg) as =
   let str = show as
-   in if null str
-         then traceIO msg
-         else traceIO $ printf "%s: %s" msg str
+   in do
+     if null str
+        then T.hPutStrLn stderr msg
+        else hprint stderr "{}: {}\n" (msg, str)
+     hFlush stderr
 
 
 -- Scalar expression evaluation

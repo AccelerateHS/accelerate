@@ -223,7 +223,7 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
     Apair a1 a2              -> genNodeId >>= prettyDelayedApair detail aenv a1 a2
 
     Anil                            -> "()"             .$ []
-    Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (fromString msg) [], ppA as, ppA bs ]
+    Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (pretty msg) [], ppA as, ppA bs ]
     Use repr arr                    -> "use"            .$ [ return $ PDoc (prettyArray repr arr) [] ]
     Unit _ e                        -> "unit"           .$ [ ppE e ]
     Generate _ sh f                 -> "generate"       .$ [ ppE sh, ppF f ]

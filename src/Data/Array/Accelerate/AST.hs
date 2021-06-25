@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -151,8 +152,12 @@ import Data.Primitive.Vec
 import Control.DeepSeq
 import Data.Kind
 import Data.Maybe
+import Data.Text                                                    ( Text )
+import Data.Text.Format
+import Data.Text.Lazy.Builder
+import Data.Text.Lazy.Builder.Int
 import Language.Haskell.TH                                          ( Q, TExp )
-import qualified Language.Haskell.TH.Syntax as TH
+import qualified Language.Haskell.TH.Syntax                         as TH
 import Prelude
 
 import GHC.TypeLits
@@ -201,7 +206,7 @@ type PrimMaybe a = (TAG, ((), a))
 data Message a where
   Message :: (a -> String)                    -- embedded show
           -> Maybe (Q (TExp (a -> String)))   -- lifted version of show, for TH
-          -> String
+          -> Text
           -> Message a
 
 -- | Collective array computations parametrised over array variables
@@ -1251,7 +1256,7 @@ liftMessage aR (Message _ fmt msg) =
       fmtR (TupRsingle (ArrayR shR eR))     = [|| \as -> showArray (showsElt $$(liftTypeR eR)) (ArrayR $$(liftShapeR shR) $$(liftTypeR eR)) as ||]
       fmtR aR'                              = [|| \as -> showArrays $$(liftArraysR aR') as ||]
   in
-  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce $ return $ TH.LitE $ TH.StringL msg) ||]
+  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce (TH.lift msg)) ||]
 
 liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
 liftMaybe _ Nothing  = [|| Nothing ||]
@@ -1391,10 +1396,10 @@ liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralTyp
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
 
 
-showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
+showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> Builder
 showPreAccOp Alet{}              = "Alet"
-showPreAccOp (Avar (Var _ ix))   = "Avar a" ++ show (idxToInt ix)
-showPreAccOp (Use aR a)          = "Use " ++ showArrayShort 5 (showsElt (arrayRtype aR)) aR a
+showPreAccOp (Avar (Var _ ix))   = build "Avar a{}" (Only (decimal (idxToInt ix)))
+showPreAccOp (Use aR a)          = build "Use {}" (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
 showPreAccOp Atrace{}            = "Atrace"
 showPreAccOp Apply{}             = "Apply"
 showPreAccOp Aforeign{}          = "Aforeign"
@@ -1410,23 +1415,23 @@ showPreAccOp Replicate{}         = "Replicate"
 showPreAccOp Slice{}             = "Slice"
 showPreAccOp Map{}               = "Map"
 showPreAccOp ZipWith{}           = "ZipWith"
-showPreAccOp (Fold _ z _)        = "Fold" ++ maybe "1" (const "") z
-showPreAccOp (FoldSeg _ _ z _ _) = "Fold" ++ maybe "1" (const "") z ++ "Seg"
-showPreAccOp (Scan d _ z _)      = "Scan" ++ showsDirection d (maybe "1" (const "") z)
-showPreAccOp (Scan' d _ _ _)     = "Scan" ++ showsDirection d "'"
+showPreAccOp (Fold _ z _)        = "Fold" <> maybe "1" (const mempty) z
+showPreAccOp (FoldSeg _ _ z _ _) = "Fold" <> maybe "1" (const mempty) z <> "Seg"
+showPreAccOp (Scan d _ z _)      = "Scan" <> showDirection d <> (maybe "1" (const mempty) z)
+showPreAccOp (Scan' d _ _ _)     = "Scan" <> showDirection d <> singleton '\''
 showPreAccOp Permute{}           = "Permute"
 showPreAccOp Backpermute{}       = "Backpermute"
 showPreAccOp Stencil{}           = "Stencil"
 showPreAccOp Stencil2{}          = "Stencil2"
 
-showsDirection :: Direction -> ShowS
-showsDirection LeftToRight = ('l':)
-showsDirection RightToLeft = ('r':)
+showDirection :: Direction -> Builder
+showDirection LeftToRight = singleton 'l'
+showDirection RightToLeft = singleton 'r'
 
-showExpOp :: forall aenv env t. OpenExp aenv env t -> String
+showExpOp :: forall aenv env t. OpenExp aenv env t -> Builder
 showExpOp Let{}             = "Let"
-showExpOp (Evar (Var _ ix)) = "Var x" ++ show (idxToInt ix)
-showExpOp (Const tp c)      = "Const " ++ showElt (TupRsingle tp) c
+showExpOp (Evar (Var _ ix)) = build "Var x{}" (Only (decimal (idxToInt ix)))
+showExpOp (Const tp c)      = build "Const {}" (showElt (TupRsingle tp) c)
 showExpOp Undef{}           = "Undef"
 showExpOp Foreign{}         = "Foreign"
 showExpOp Pair{}            = "Pair"

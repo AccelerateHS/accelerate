@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash                  #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternGuards              #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
@@ -47,12 +48,14 @@ import Data.Functor
 import Data.Hashable                                                ( hash, Hashable )
 import Data.Maybe                                                   ( isJust )
 import Data.Word
+import Data.Text.Format
+import Data.Text.Lazy.Builder                                       ( Builder )
 import Foreign.Storable                                             ( sizeOf )
 import System.Mem                                                   ( performGC )
 import System.Mem.Weak                                              ( Weak, deRefWeak )
-import Text.Printf
 import Prelude                                                      hiding ( lookup, id )
 import qualified Data.HashTable.IO                                  as HT
+import qualified Data.Text.Buildable                                as T
 
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Remote.Class
@@ -63,7 +66,7 @@ import Data.Array.Accelerate.Lifetime
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Remote.Nursery         as N
 import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
-import qualified Data.Array.Accelerate.Debug.Internal.Monitoring    as Debug
+import qualified Data.Array.Accelerate.Debug.Internal.Profile       as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import GHC.Stack
@@ -103,6 +106,9 @@ newtype StableArray = StableArray Unique
 instance Show StableArray where
   show (StableArray u) = show (hash u)
 
+instance T.Buildable StableArray where
+  build (StableArray u) = T.build (hash u)
+
 -- | Create a new memory table from host to remote arrays.
 --
 -- The function supplied should be the `free` for the remote pointers being
@@ -132,11 +138,11 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
     sa <- makeStableArray tp arr
     mw <- withMVar ref (`HT.lookup` sa)
     case mw of
-      Nothing                      -> trace ("lookup/not found: " ++ show sa) $ return Nothing
+      Nothing                  -> trace (build "lookup/not found: {}" (Only sa)) $ return Nothing
       Just (RemoteArray p _ w) -> do
         mv <- deRefWeak w
         case mv of
-          Just{}                   -> trace ("lookup/found: " ++ show sa) $ return (Just $ castRemotePtr @m p)
+          Just{} -> trace (build "lookup/found: {}" (Only sa)) $ return (Just $ castRemotePtr @m p)
 
           -- Note: [Weak pointer weirdness]
           --
@@ -151,7 +157,7 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
           -- above in the error message.
           --
           Nothing ->
-            makeStableArray tp arr >>= \x -> internalError $ "dead weak pair: " ++ show x
+            makeStableArray tp arr >>= \x -> internalError $ build "dead weak pair: {}" (Only x)
 
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This may not always use the `malloc` provided by the `RemoteMemory` instance.
@@ -181,7 +187,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
         multiple x f      = (x + (f-1)) `quot` f
         bytes             = chunk * multiple (n * sizeOf (undefined::(ScalarArrayDataR a))) chunk
     --
-    message $ printf "malloc %d bytes (%d x %d bytes, type=%s, pagesize=%d)" bytes n (sizeOf (undefined:: (ScalarArrayDataR a))) (show tp) chunk
+    message $ build "malloc {} bytes ({} x {} bytes, type={}, pagesize={})" (bytes, n, sizeOf (undefined :: (ScalarArrayDataR a)), tp, chunk)
     --
     mp <-
       fmap (castRemotePtr @m)
@@ -211,7 +217,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
         Nothing -> next
 
     {-# INLINE attempt #-}
-    attempt :: String -> m (Maybe x) -> m (Maybe x)
+    attempt :: Builder -> m (Maybe x) -> m (Maybe x)
     attempt msg this = do
       result <- this
       case result of
@@ -246,12 +252,12 @@ freeStable (MemoryTable !ref _ !nrs _) !sa =
   HT.mutateIO mt sa $ \mw -> do
     case mw of
       Nothing ->
-        message ("free/already-removed: " ++ show sa)
+        message (build "free/already-removed: {}" (Only sa))
 
       Just (RemoteArray !p !bytes _) -> do
-        message ("free/nursery: " ++ show sa ++ " of " ++ showBytes bytes)
+        message (build "free/nursery: {} of {}" (sa, showBytes bytes))
         N.insert bytes (castRemotePtr @m p) nrs
-        Debug.decreaseCurrentBytesRemote (fromIntegral bytes)
+        -- Debug.remote_memory_free (unsafeRemotePtrToPtr @m p)
 
     return (Nothing, ())
 
@@ -271,8 +277,8 @@ insert
 insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes | SingleArrayDict <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
-  message $ "insert: " ++ show key
-  liftIO  $ Debug.increaseCurrentBytesRemote (fromIntegral bytes)
+  message $ build "insert: {}" (Only key)
+  -- liftIO  $ Debug.remote_memory_alloc (unsafeRemotePtrToPtr @m ptr) bytes
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) bytes weak)
 
 
@@ -292,7 +298,7 @@ insertUnmanaged
 insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr | SingleArrayDict  <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ remoteFinalizer weak_ref key)
-  message $ "insertUnmanaged: " ++ show key
+  message $ build "insertUnmanaged: {}" (Only key)
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) 0 weak)
 
 
@@ -310,7 +316,7 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
   -- that finalizers are often significantly delayed, it is worth our while
   -- traversing the table and explicitly freeing any dead entires.
   --
-  Debug.didRemoteGC
+  Debug.emit_remote_gc
   performGC
   yield
   mr <- deRefWeak weak_ref
@@ -346,8 +352,8 @@ remoteFinalizer :: Weak (MT p) -> StableArray -> IO ()
 remoteFinalizer !weak_ref !key = do
   mr <- deRefWeak weak_ref
   case mr of
-    Nothing  -> message ("finalise/dead table: " ++ show key)
-    Just ref -> trace   ("finalise: "            ++ show key) $ withMVar ref (`HT.delete` key)
+    Nothing  -> message (build "finalise/dead table: {}" (Only key))
+    Just ref -> trace   (build "finalise: {}"            (Only key)) $ withMVar ref (`HT.delete` key)
 
 
 -- Miscellaneous
@@ -391,19 +397,19 @@ makeWeakArrayData !tp !ad !c !mf | SingleArrayDict <- singleArrayDict tp = do
 -- -----
 
 {-# INLINE showBytes #-}
-showBytes :: Integral n => n -> String
+showBytes :: Integral n => n -> Builder
 showBytes x = Debug.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
 
 {-# INLINE trace #-}
-trace :: MonadIO m => String -> m a -> m a
+trace :: MonadIO m => Builder -> m a -> m a
 trace msg next = message msg >> next
 
 {-# INLINE message #-}
-message :: MonadIO m => String -> m ()
-message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " ++ msg)
+message :: MonadIO m => Builder -> m ()
+message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " <> msg)
 
 {-# INLINE management #-}
-management :: (RemoteMemory m, MonadIO m) => String -> Nursery p -> m a -> m a
+management :: (RemoteMemory m, MonadIO m) => Builder -> Nursery p -> m a -> m a
 management msg nrs next = do
   yes <- liftIO $ Debug.getFlag Debug.dump_gc
   if yes
@@ -414,12 +420,12 @@ management msg nrs next = do
       r           <- next
       after       <- availableRemoteMem
       after_nrs   <- liftIO $ N.size nrs
-      message $ printf "%s (freed: %s, stashed: %s, remaining: %s of %s)"
-                  msg
-                  (showBytes (before - after))
-                  (showBytes (after_nrs - before_nrs))
-                  (showBytes after)
-                  (showBytes total)
+      message $ build "{} (freed: {}, stashed: {}, remaining: {} of {})"
+                  ( msg
+                  , showBytes (before - after)
+                  , showBytes (after_nrs - before_nrs)
+                  , showBytes after
+                  , showBytes total )
       --
       return r
     else
