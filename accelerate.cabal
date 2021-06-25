@@ -162,9 +162,13 @@ flag debug
   manual:               True
   default:              False
   description:
-    Enable kernel profiling and debug tracing messages. The following options
-    are read from the environment variable @ACCELERATE_FLAGS@, and via the
-    command-line as:
+    Enable kernel profiling and debug tracing messages.
+    .
+    The executables 'tracy' (GUI) and 'tracy-capture' (command line) will be
+    built to collect and view profiling data from supported backends.
+    .
+    Applications will read the following options from the environment variable
+    @ACCELERATE_FLAGS@, and via the command-line as:
     .
       > ./program +ACC ... -ACC
     .
