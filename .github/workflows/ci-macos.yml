@@ -67,8 +67,9 @@ jobs:
       - name: Build
         run: stack build $STACK_FLAGS --test --no-run-tests
 
-      - name: Test doctest
-        run: stack test accelerate:doctest $STACK_FLAGS
+      # currently broken with linker error -TLM 2021-06-25
+      # - name: Test doctest
+      #   run: stack test accelerate:doctest $STACK_FLAGS
 
       - name: Test nofib
         run: stack test accelerate:nofib-interpreter $STACK_FLAGS
