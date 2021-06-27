@@ -70,7 +70,7 @@ liftIdx (SuccIdx ix) = [|| SuccIdx $$(liftIdx ix) ||]
 -- data Idx env t where
 --   ZeroIdx ::              Idx (env, t) t
 --   SuccIdx :: Idx env t -> Idx (env, s) t
--- 
+--
 -- For performance, it uses an Int under the hood.
 newtype Idx env t = UnsafeIdxConstructor { unsafeRunIdx :: Int }
 
@@ -110,3 +110,4 @@ pattern VoidIdx a <- (\case{} -> a)
 data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a
   PairIdxRight :: PairIdx (a, b) b
+
