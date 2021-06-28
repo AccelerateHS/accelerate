@@ -622,6 +622,10 @@ executable tracy
       , freetype2
       , glfw3
 
+  if !os(windows) && !os(darwin)
+    pkgconfig-depends:
+        gtk+-3.0
+
   cpp-options:
         -DEXECUTABLE="tracy"
 
