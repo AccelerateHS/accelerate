@@ -18,5 +18,5 @@ import Data.Array.Accelerate.Error
 -- hasn't been something went wrong...
 --
 main :: IO ()
-main = internalError ("Unexpected error building applicaion '" <> EXECUTABLE <> "'")
+main = internalError ("Unexpected error building application '" <> EXECUTABLE <> "'")
 
