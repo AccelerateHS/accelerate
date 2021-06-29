@@ -165,10 +165,31 @@ flag debug
     Enable kernel profiling and debug tracing messages.
     .
     The executables 'tracy' (GUI) and 'tracy-capture' (command line) will be
-    built to collect and view profiling data from supported backends.
+    built to collect and view profiling data from supported backends. This
+    requires several external dependencies:
     .
-    Applications will read the following options from the environment variable
-    @ACCELERATE_FLAGS@, and via the command-line as:
+      * pkg-config
+    .
+      * capstone
+    .
+      * freetype2
+    .
+      * glfw3
+    .
+      * gtk3 (linux only)
+    .
+      * TBB (should be part of your compiler toolchain)
+    .
+    For example on Debian/Ubuntu you can install all of these via:
+    .
+      > sudo apt install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
+    .
+    Or on macOS via:
+    .
+      > brew install pkg-config capstone freetype glfw
+    .
+    With debugging enabled, applications will read the following options from
+    the environment variable @ACCELERATE_FLAGS@, and via the command-line as:
     .
       > ./program +ACC ... -ACC
     .
