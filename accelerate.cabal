@@ -296,6 +296,7 @@ library
         , directory                     >= 1.0
         , exceptions                    >= 0.6
         , filepath                      >= 1.0
+        , formatting                    >= 6.3
         , ghc-prim
         , half                          >= 0.3
         , hashable                      >= 1.1
@@ -310,7 +311,6 @@ library
         , template-haskell
         , terminal-size                 >= 0.3
         , text                          >= 1.2.4
-        , text-format                   >= 0.3
         , transformers                  >= 0.3
         , unique
         , unordered-containers          >= 0.2
@@ -438,7 +438,6 @@ library
         Data.Array.Accelerate.Test.NoFib.Base
         Data.Array.Accelerate.Test.NoFib.Config
 
-        Data.Text.Format.Extra
         Language.Haskell.TH.Extra
 
   if flag(nofib)

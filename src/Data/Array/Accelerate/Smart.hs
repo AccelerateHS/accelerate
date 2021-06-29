@@ -108,11 +108,9 @@ import Data.Array.Accelerate.AST                                    ( Direction(
                                                                     , PrimConst(..), primConstType )
 import Data.Primitive.Vec
 
-import Data.Text.Format
-import Data.Text.Lazy.Builder
-import Data.Text.Lazy.Builder.Int
 import Data.Kind
-import Prelude
+import Data.Text.Lazy.Builder
+import Formatting
 
 import GHC.TypeLits
 
@@ -1310,8 +1308,8 @@ instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) wh
 -- ---------
 
 showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> Builder
-showPreAccOp (Atag _ i)            = build "Atag {}" (Only (decimal i))
-showPreAccOp (Use aR a)            = build "Use {}"  (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
+showPreAccOp (Atag _ i)            = bformat ("Atag " % int) i
+showPreAccOp (Use aR a)            = bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
 showPreAccOp Pipe{}                = "Pipe"
 showPreAccOp Acond{}               = "Acond"
 showPreAccOp Awhile{}              = "Awhile"
@@ -1341,8 +1339,8 @@ showDirection LeftToRight = singleton 'l'
 showDirection RightToLeft = singleton 'r'
 
 showPreExpOp :: PreSmartExp acc exp t -> Builder
-showPreExpOp (Tag _ i)      = build "Tag {}" (Only (decimal i))
-showPreExpOp (Const t c)    = build "Const {}" (showElt (TupRsingle t) c)
+showPreExpOp (Tag _ i)      = bformat ("Tag " % int) i
+showPreExpOp (Const t c)    = bformat ("Const " % string) (showElt (TupRsingle t) c)
 showPreExpOp Match{}        = "Match"
 showPreExpOp (Undef _)      = "Undef"
 showPreExpOp Nil{}          = "Nil"

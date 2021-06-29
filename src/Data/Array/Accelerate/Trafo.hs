@@ -44,9 +44,10 @@ import qualified Data.Array.Accelerate.Trafo.Sharing                as Sharing
 -- import qualified Data.Array.Accelerate.Trafo.Vectorise              as Vectorise
 
 import Control.DeepSeq
+import Data.Text.Lazy.Builder
 
 #ifdef ACCELERATE_DEBUG
-import Data.Text.Format
+import Formatting
 import System.IO.Unsafe
 import Data.Array.Accelerate.Debug.Internal.Flags                   hiding ( when )
 import Data.Array.Accelerate.Debug.Internal.Timed
@@ -128,12 +129,12 @@ convertSeqWith Phase{..} s
 -- Execute a phase of the compiler and (possibly) print some timing/gc
 -- statistics.
 --
-phase :: NFData b => String -> (a -> b) -> a -> b
+phase :: NFData b => Builder -> (a -> b) -> a -> b
 #ifdef ACCELERATE_DEBUG
 phase n f x = unsafePerformIO $ do
   enabled <- getFlag dump_phases
   if enabled
-    then timed dump_phases (\wall cpu -> build "phase {}: {}" (n, elapsed wall cpu)) (return $!! f x)
+    then timed dump_phases (\wall cpu -> bformat ("phase " % builder % ": " % builder) n (elapsed wall cpu)) (return $!! f x)
     else return (f x)
 #else
 phase _ f = f

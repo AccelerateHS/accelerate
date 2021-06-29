@@ -32,7 +32,7 @@ import System.IO.Unsafe
 import Data.List                                                    ( intersperse )
 import Data.Maybe                                                   ( isJust )
 import Data.Text.Lazy.Builder                                       ( Builder )
-import Data.Text.Buildable                                          ( Buildable(..) )
+import Formatting.Buildable                                         ( Buildable(..) )
 import Text.Show                                                    ( showListWith )
 import Prelude                                                      hiding ( (!!) )
 import qualified Data.Vector.Unboxed                                as U

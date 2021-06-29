@@ -72,24 +72,22 @@ import qualified Data.Array.Accelerate.Representation.Stencil       as R
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 
 import Control.Applicative                                          hiding ( Const )
-import Lens.Micro                                                   ( over, mapped, _1, _2 )
 import Control.Monad.Fix
 import Data.Function                                                ( on )
 import Data.Hashable
-import Data.Text.Format
-import Data.Text.Format.Extra
-import Data.Text.Lazy.Builder
-import Data.Text.Lazy.Builder.Int
 import Data.List                                                    ( elemIndex, findIndex, groupBy, partition )
 import Data.Maybe
 import Data.Monoid                                                  ( Any(..) )
+import Data.Text.Lazy.Builder
+import Formatting
+import Lens.Micro                                                   ( over, mapped, _1, _2 )
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName
 import qualified Data.HashMap.Strict                                as Map
 import qualified Data.HashSet                                       as Set
 import qualified Data.HashTable.IO                                  as Hash
 import qualified Data.IntMap                                        as IntMap
-import qualified Data.Text.Buildable                                as F
+import qualified Formatting.Buildable                               as F
 import Prelude                                                      hiding ( unlines )
 
 
@@ -130,7 +128,7 @@ prjIdx context buildTp matchTp tp = go
     go _ EmptyLayout                = no "environment does not contain index"
     go 0 (PushLayout _ lhs vars)
       | Just Refl <- matchTp tp tp' = vars
-      | otherwise                   = no $ build "couldn't match expected type `{}' with actual type `{}'" (buildTp tp, buildTp tp')
+      | otherwise                   = no $ bformat ("couldn't match expected type `" % builder % "' with actual type `" % builder % "'") (buildTp tp) (buildTp tp')
       where
         tp' = lhsToTupR lhs
     go n (PushLayout l _ _)         = go (n-1) l
@@ -263,15 +261,15 @@ convertSharingAcc
 convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
   | Just i <- findIndex (matchStableAcc sa) aenv'
   = avarsIn AST.OpenAcc
-  $ prjIdx (build "{}; i = {}" (ctxt, i)) buildArraysR matchArraysR repr i alyt
+  $ prjIdx (bformat (builder % "; i = " % int) ctxt i) buildArraysR matchArraysR repr i alyt
   | null aenv'
   = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
   | otherwise
   = internalError err
   where
     aenv' = lams ++ aenv
-    ctxt  = build "shared 'Acc' tree with stable name {}" (Only (hashStableNameHeight sa))
-    err   = build "inconsistent valuation @ {};\n  aenv = [{}]" (ctxt, intercalate "," (map F.build aenv'))
+    ctxt  = bformat ("shared 'Acc' tree with stable name " % int) (hashStableNameHeight sa)
+    err   = bformat ("inconsistent valuation @ " % builder % ";\n  aenv = " % list build) ctxt aenv'
 
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
   = case declareVars $ AST.arraysR bound of
@@ -319,7 +317,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
     case preAcc of
 
       Atag repr i
-        -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (build "de Bruijn conversion tag {}" (Only i)) buildArraysR matchArraysR repr i alyt
+        -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (bformat ("de Bruijn conversion tag " % int) i) buildArraysR matchArraysR repr i alyt
            in  a
 
       Pipe reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
@@ -705,11 +703,11 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) F.build matchTypeR tp i lyt)
       | otherwise                                    = internalError msg
       where
-        ctx i = build "shared 'Exp' tree with stable name {}; i={}" (hashStableNameHeight se, i)
-        msg   = unlines
+        ctx i = bformat ("shared 'Exp' tree with stable name " % int % "; i=" % int) (hashStableNameHeight se) i
+        msg   = bformat (unlined @[] builder)
           [ if null env'
-               then build "cyclic definition of a value of type 'Exp' (sa={})" (Only (hashStableNameHeight se))
-               else build "inconsistent valuation at shared 'Exp' tree (sa={}; env=[{}])" (hashStableNameHeight se, intercalate "," (map F.build env'))
+               then bformat ("cyclic definition of a value of type 'Exp' (sa=" % int % ")") (hashStableNameHeight se)
+               else bformat ("inconsistent valuation at shared 'Exp' tree (sa=" % int % "; env=" % list build % ")") (hashStableNameHeight se) env'
           , ""
           , "Note that this error usually arises due to the presence of nested data"
           , "parallelism; when a parallel computation attempts to initiate new parallel"
@@ -1467,10 +1465,10 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
           heightIfRepeatedOccurrence <- enterOcc accOccMap (StableASTName sn) height
 
           traceLine (showPreAccOp pacc) $ do
-            let hash = decimal (hashStableName sn)
+            let hash = hashStableName sn
             case heightIfRepeatedOccurrence of
-              Just height -> build "REPEATED occurrence (sn = {}; height = {})" (hash, decimal height)
-              Nothing     -> build "first occurrence (sn = {})" (Only hash)
+              Just height -> bformat ("REPEATED occurrence (sn = " % int % "; height = " % int % ")") hash height
+              Nothing     -> bformat ("first occurrence (sn = " % int % ")") hash
 
           -- Reconstruct the computation in shared form.
           --
@@ -1817,10 +1815,10 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
           heightIfRepeatedOccurrence <- enterOcc expOccMap (StableASTName sn) height
 
           traceLine (showPreExpOp pexp) $ do
-            let hash = decimal (hashStableName sn)
+            let hash = hashStableName sn
             case heightIfRepeatedOccurrence of
-              Just height -> build "REPEATED occurrence (sn = {}; height = {})" (hash, decimal height)
-              Nothing     -> build "first occurrence (sn = {})" (Only hash)
+              Just height -> bformat ("REPEATED occurrence (sn = " % int % "; height = " % int % ")") hash height
+              Nothing     -> bformat ("first occurrence (sn = " % int % ")") hash
 
           -- Reconstruct the computation in shared form.
           --
@@ -2113,8 +2111,8 @@ data NodeCount = AccNodeCount StableSharingAcc Int
                deriving Show
 
 instance F.Buildable NodeCount where
-  build (AccNodeCount n c) = build "AccNodeCount {} {}" (n, c)
-  build (ExpNodeCount n c) = build "ExpNodeCount {} {}" (n, c)
+  build (AccNodeCount n c) = bformat ("AccNodeCount " % build % " " % int) n c
+  build (ExpNodeCount n c) = bformat ("ExpNodeCount " % build % " " % int) n c
 
 -- Empty node counts
 --
@@ -2241,7 +2239,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
       = case filter hasTag sas of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [sa] -> sa                 -- tag has a unique occurrence
-          sas2 -> internalError ("Encountered duplicate 'ATag's\n  " <> intercalate ", " (map showSA sas2))
+          sas2 -> internalError (bformat ("Encountered duplicate 'ATag's\n  " % commaSpaceSep (later showSA)) sas2)
       where
         hasTag (StableSharingAcc _ (AccSharing _ (Atag _ tag2))) = tag1 == tag2
         hasTag sa
@@ -2273,7 +2271,7 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
       = case filter hasTag ses of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [se] -> se                 -- tag has a unique occurrence
-          ses2 -> internalError ("Encountered a duplicate 'Tag'\n  " <> intercalate ", " (map showSE ses2))
+          ses2 -> internalError (bformat ("Encountered a duplicate 'Tag'\n  " % commaSpaceSep (later showSE)) ses2)
       where
         hasTag (StableSharingExp _ (ExpSharing _ (Tag _ tag2))) = tag1 == tag2
         hasTag se
@@ -2321,7 +2319,7 @@ determineScopesAcc config fvs accOccMap rootAcc
     in
     if all isFreeVar counts
        then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
-       else internalError (build "unbound shared subtrees [{}]" (Only (intercalate "," (map F.build unboundTrees))))
+       else internalError (bformat ("unbound shared subtrees " % list build) unboundTrees)
 
 
 determineScopesSharingAcc
@@ -2568,7 +2566,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
               -- trace support
             completed | null bindHere = ""
-                      | otherwise     = build "({} lets)" (Only (length bindHere))
+                      | otherwise     = bformat (parenthesised (int % " lets")) (length bindHere)
 
         -- Extract *leading* nodes that have a complete node count (i.e., their node count is equal
         -- to the number of occurrences of that node in the overall expression).
@@ -2723,7 +2721,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         :: HasCallStack
         => (SmartExp a -> UnscopedExp b)
         -> (SmartExp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = tracePure (build "LAMBDA {}" ssa) ("[" <> intercalate "," (map F.build counts) <> "]") (const (ScopedExp ssa body'), (counts',graph))
+    scopesFun1 f = tracePure (bformat ("LAMBDA " % build) ssa) (bformat (list build) counts) (const (ScopedExp ssa body'), (counts',graph))
       where
         body@(UnscopedExp fvs _)              = f undefined
         (ScopedExp [] body', (counts, graph)) = scopesExp body
@@ -2891,7 +2889,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
               -- trace support
             completed | null bindHere = ""
-                      | otherwise     = build "({} lets)" (Only (length bindHere))
+                      | otherwise     = bformat (parenthesised (int % " lets")) (length bindHere)
 
         -- Extract *leading* nodes that have a complete node count (i.e., their node count is equal
         -- to the number of occurrences of that node in the overall expression).

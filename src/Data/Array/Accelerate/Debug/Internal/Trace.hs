@@ -27,17 +27,14 @@ module Data.Array.Accelerate.Debug.Internal.Trace (
 
 import Data.Array.Accelerate.Debug.Internal.Flags
 
-import Data.Text.Format
+import Formatting
 import Data.Text.Lazy.Builder
-import Data.Text.Lazy.Builder.RealFloat
 
 #ifdef ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Clock
 import System.IO                                                    hiding ( stderr )
 import System.IO.Unsafe
 import qualified Data.Text.IO                                       as T
-import qualified Data.Text.Lazy                                     as L
-import qualified Data.Text.Lazy.Builder                             as L
 
 import GHC.MVar
 import GHC.IO.Encoding
@@ -64,7 +61,7 @@ import Foreign.C.Types
 {-# NOINLINE[0] showFFloatSIBase #-}
 {-# SPECIALISE showFFloatSIBase :: Maybe Int -> Double -> Double -> Builder -> Builder #-}
 showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> Builder -> Builder
-showFFloatSIBase mp !base !k !t
+showFFloatSIBase mp !b !k !t
   = case pow of
       4   -> with "T"
       3   -> with "G"
@@ -74,16 +71,11 @@ showFFloatSIBase mp !base !k !t
       -2  -> with "µ"
       -3  -> with "n"
       -4  -> with "p"
-      _   -> case mp of       -- no unit or unhandled SI prefix
-               Nothing -> realFloat k <> singleton ' '
-               Just p  -> prec p k    <> singleton ' '
+      _   -> bformat (maybe float fixed mp % " ") k -- no unit or unhandled SI prefix
   where
-    with unit   = kb <> singleton ' ' <> unit <> t
-    !k'         = k / (base ^^ pow)
-    !pow        = floor (logBase base k) :: Int
-    kb          = case mp of
-                    Nothing -> realFloat k'
-                    Just p  -> fixed p k'
+    with unit   = bformat (maybe float fixed mp % " " % builder % builder) k' unit t
+    !k'         = k / (b ^^ pow)
+    !pow        = floor (logBase b k) :: Int
 
 
 -- | The 'trace' function outputs the message given as its second argument when
@@ -126,10 +118,7 @@ putTraceMsg :: Builder -> IO ()
 #ifdef ACCELERATE_DEBUG
 putTraceMsg msg = do
   timestamp <- getProgramTime
-  T.hPutStr stderr
-    . L.toStrict
-    . L.toLazyText
-    $ "[" <> left 8 ' ' (fixed 3 timestamp) <> "] " <> msg <> "\n"
+  T.hPutStr stderr $ sformat (squared (rfixed 8 ' ' (fixed 3)) % " " % builder % "\n") timestamp msg
 #else
 putTraceMsg _   = return ()
 #endif

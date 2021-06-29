@@ -153,12 +153,10 @@ import Control.DeepSeq
 import Data.Kind
 import Data.Maybe
 import Data.Text                                                    ( Text )
-import Data.Text.Format
 import Data.Text.Lazy.Builder
-import Data.Text.Lazy.Builder.Int
+import Formatting
 import Language.Haskell.TH                                          ( Q, TExp )
 import qualified Language.Haskell.TH.Syntax                         as TH
-import Prelude
 
 import GHC.TypeLits
 
@@ -870,13 +868,13 @@ primFunType = \case
   PrimBOr t                 -> binary' $ integral t
   PrimBXor t                -> binary' $ integral t
   PrimBNot t                -> unary' $ integral t
-  PrimBShiftL t             -> (integral t `TupRpair` int, integral t)
-  PrimBShiftR t             -> (integral t `TupRpair` int, integral t)
-  PrimBRotateL t            -> (integral t `TupRpair` int, integral t)
-  PrimBRotateR t            -> (integral t `TupRpair` int, integral t)
-  PrimPopCount t            -> unary (integral t) int
-  PrimCountLeadingZeros t   -> unary (integral t) int
-  PrimCountTrailingZeros t  -> unary (integral t) int
+  PrimBShiftL t             -> (integral t `TupRpair` tint, integral t)
+  PrimBShiftR t             -> (integral t `TupRpair` tint, integral t)
+  PrimBRotateL t            -> (integral t `TupRpair` tint, integral t)
+  PrimBRotateR t            -> (integral t `TupRpair` tint, integral t)
+  PrimPopCount t            -> unary (integral t) tint
+  PrimCountLeadingZeros t   -> unary (integral t) tint
+  PrimCountTrailingZeros t  -> unary (integral t) tint
 
   -- Fractional, Floating
   PrimFDiv t                -> binary' $ floating t
@@ -907,8 +905,8 @@ primFunType = \case
 
   -- RealFloat
   PrimAtan2 t               -> binary' $ floating t
-  PrimIsNaN t               -> unary (floating t) bool
-  PrimIsInfinite t          -> unary (floating t) bool
+  PrimIsNaN t               -> unary (floating t) tbool
+  PrimIsInfinite t          -> unary (floating t) tbool
 
   -- Relational and equality
   PrimLt t                  -> compare' t
@@ -921,9 +919,9 @@ primFunType = \case
   PrimMin t                 -> binary' $ single t
 
   -- Logical
-  PrimLAnd                  -> binary' bool
-  PrimLOr                   -> binary' bool
-  PrimLNot                  -> unary' bool
+  PrimLAnd                  -> binary' tbool
+  PrimLOr                   -> binary' tbool
+  PrimLNot                  -> unary' tbool
 
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
@@ -934,15 +932,15 @@ primFunType = \case
     unary' a   = unary a a
     binary a b = (a `TupRpair` a, b)
     binary' a  = binary a a
-    compare' a = binary (single a) bool
+    compare' a = binary (single a) tbool
 
     single   = TupRsingle . SingleScalarType
     num      = TupRsingle . SingleScalarType . NumSingleType
     integral = num . IntegralNumType
     floating = num . FloatingNumType
 
-    bool     = TupRsingle scalarTypeWord8
-    int      = TupRsingle scalarTypeInt
+    tbool    = TupRsingle scalarTypeWord8
+    tint     = TupRsingle scalarTypeInt
 
 
 -- Normal form data
@@ -1398,8 +1396,8 @@ liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $
 
 showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> Builder
 showPreAccOp Alet{}              = "Alet"
-showPreAccOp (Avar (Var _ ix))   = build "Avar a{}" (Only (decimal (idxToInt ix)))
-showPreAccOp (Use aR a)          = build "Use {}" (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
+showPreAccOp (Avar (Var _ ix))   = bformat ("Avar a" % int) (idxToInt ix)
+showPreAccOp (Use aR a)          = bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
 showPreAccOp Atrace{}            = "Atrace"
 showPreAccOp Apply{}             = "Apply"
 showPreAccOp Aforeign{}          = "Aforeign"
@@ -1430,8 +1428,8 @@ showDirection RightToLeft = singleton 'r'
 
 showExpOp :: forall aenv env t. OpenExp aenv env t -> Builder
 showExpOp Let{}             = "Let"
-showExpOp (Evar (Var _ ix)) = build "Var x{}" (Only (decimal (idxToInt ix)))
-showExpOp (Const tp c)      = build "Const {}" (showElt (TupRsingle tp) c)
+showExpOp (Evar (Var _ ix)) = bformat ("Var x" % int) (idxToInt ix)
+showExpOp (Const tp c)      = bformat ("Const " % string) (showElt (TupRsingle tp) c)
 showExpOp Undef{}           = "Undef"
 showExpOp Foreign{}         = "Foreign"
 showExpOp Pair{}            = "Pair"

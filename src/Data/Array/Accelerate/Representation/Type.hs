@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Representation.Type
 
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
-import Data.Text.Buildable
+import Formatting.Buildable
 
 import Language.Haskell.TH
 

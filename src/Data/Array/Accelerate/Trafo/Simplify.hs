@@ -55,8 +55,8 @@ import Control.Applicative                                          hiding ( Con
 import Data.List                                                    ( partition )
 import Data.Maybe
 import Data.Monoid
-import Data.Text.Format
 import Data.Text.Lazy.Builder
+import Formatting
 import Lens.Micro                                                   hiding ( ix )
 import Prelude                                                      hiding ( exp, iterate )
 import qualified Data.Map.Strict                                    as Map
@@ -442,13 +442,13 @@ iterate summarise match shrink simplify = fix 1 . setup
       | otherwise       = v
 
     msg :: Int -> Builder -> f a -> Builder
-    msg i s x = build "simpl-iters/{}-8s [{}]: {}" (s, i, ppr x)
+    msg i s x = bformat ("simpl-iters/" % rpadded 9 ' ' builder % squared int % ": " % builder) s i (ppr x)
 
     ppr :: f a -> Builder
     ppr = stats . summarise
 
     stats (Stats a b c d e) =
-      build "terms = {}, types = {}, lets = {}, vars = {}, primops = {}" (a, b, c, d, e)
+      bformat ("terms = " % int % ", types = " % int % ", lets = " % int % ", vars = " % int % ", primops = " % int) a b c d e
 
 
 -- Debugging support

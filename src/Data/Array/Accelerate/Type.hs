@@ -71,15 +71,14 @@ import Data.Primitive.Vec
 import Data.Bits
 import Data.Int
 import Data.Primitive.Types
-import Data.Text.Buildable
 import Data.Type.Equality
 import Data.Word
 import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
+import Formatting.Buildable
 import Language.Haskell.TH
 import Numeric.Half
 import Text.Printf
-import qualified Data.Text.Format                                   as F
 
 import GHC.Prim
 import GHC.TypeLits
@@ -214,7 +213,7 @@ instance Buildable (SingleType a) where
   build (NumSingleType ty) = build ty
 
 instance Buildable (VectorType a) where
-  build (VectorType n ty) = F.build "<{} x {}>" (n, build ty)
+  build (VectorType n ty) = "<" <> build n <> " x " <> build ty <> ">"
 
 instance Buildable (ScalarType a) where
   build (SingleScalarType ty) = build ty

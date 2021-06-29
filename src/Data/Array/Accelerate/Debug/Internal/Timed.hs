@@ -23,7 +23,7 @@ import Data.Array.Accelerate.Debug.Internal.Trace
 
 import Control.Monad.Trans                              ( MonadIO )
 import Data.Text.Lazy.Builder
-import Data.Text.Format
+import Formatting
 
 #if ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Clock
@@ -103,21 +103,19 @@ timed_gc fmt action = do
 
   liftIO
     . putTraceMsg
-    $ foldr1 (\a b -> a <> singleton '\n' <> b)
-    [ fmt totalWall totalCPU
-    , build "    {} allocated on the heap" (Only (showFFloatSIBase (Just 1) 1024 allocated "B"))
-    , build "    {} copied during GC ({} collections)" (showFFloatSIBase (Just 1) 1024 copied "B", totalGCs)
-    , build "    MUT: {}" (Only (elapsed mutatorWall mutatorCPU))
-    , build "    GC:  {}" (Only (elapsed gcWall gcCPU))
-    ]
+    $ bformat (builder % "\n" % indentedLines 4 builder)
+        (fmt totalWall totalCPU)
+        [bformat (builder % " allocated on the heap") (showFFloatSIBase (Just 1) 1024 allocated "B")
+        ,bformat (builder % " copied during GC (" % int % " collections)") (showFFloatSIBase (Just 1) 1024 copied "B") totalGCs
+        ,bformat ("MUT: " % builder) (elapsed mutatorWall mutatorCPU)
+        ,bformat ("GC:  " % builder) (elapsed gcWall gcCPU)]
   --
   return res
 #endif
 
 elapsed :: Double -> Double -> Builder
 elapsed wallTime cpuTime =
-  build "{} (wall), {} (cpu)"
-    ( showFFloatSIBase (Just 3) 1000 wallTime "s"
-    , showFFloatSIBase (Just 3) 1000 cpuTime "s"
-    )
+  bformat (builder % " (wall), " % builder % " (cpu)")
+    (showFFloatSIBase (Just 3) 1000 wallTime "s")
+    (showFFloatSIBase (Just 3) 1000 cpuTime "s")
 

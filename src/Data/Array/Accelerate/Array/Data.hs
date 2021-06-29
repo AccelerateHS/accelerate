@@ -64,7 +64,6 @@ import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Debug.Internal.Profile
 import Data.Array.Accelerate.Debug.Internal.Trace
 
-
 -- standard libraries
 import Control.Applicative
 import Control.DeepSeq
@@ -72,9 +71,9 @@ import Control.Monad                                                ( (<=<) )
 import Data.Bits
 import Data.IORef
 import Data.Primitive                                               ( sizeOf# )
-import Data.Text.Format
 import Foreign.ForeignPtr
 import Foreign.Storable
+import Formatting                                                   hiding ( bytes )
 import Language.Haskell.TH                                          hiding ( Type )
 import System.IO.Unsafe
 import Prelude                                                      hiding ( mapM )
@@ -290,7 +289,7 @@ allocateArray !size = internalCheck "size must be >= 0" (size >= 0) $ do
            let bytes = size * sizeOf (undefined :: e)
            new <- readIORef __mallocForeignPtrBytes
            ptr <- new bytes
-           traceIO dump_gc $ build "gc: allocated new host array (size={}, ptr={})" (bytes, unsafeForeignPtrToPtr ptr)
+           traceIO dump_gc $ bformat ("gc: allocated new host array (size=" % int % ", ptr=" % build % ")") bytes (unsafeForeignPtrToPtr ptr)
            local_memory_alloc (unsafeForeignPtrToPtr ptr) bytes
            return (castForeignPtr ptr)
 #ifdef ACCELERATE_DEBUG
