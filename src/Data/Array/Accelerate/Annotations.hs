@@ -328,6 +328,10 @@ withEmptyOrFrozenCallStack dewit =
 --
 --       $ ghc --info | grep libdw
 --
+--       You can build a version of GHC with DWARF call stacks enabled using:
+--
+--       $ ghcup compile ghc -b INSTALLED_GHC_VERSION -v 9.2.0.20210422 -j $(nproc) -- --enable-dwarf-unwind
+--
 -- TODO: Test whether this actually uses the correct stack frame
 -- FIXME: This may still be incorrect for default implementations in prelude
 --        classes, since the default implementation doesn't use
