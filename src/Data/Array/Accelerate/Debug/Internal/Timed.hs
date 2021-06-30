@@ -102,20 +102,16 @@ timed_gc fmt action = do
       totalGCs    = gcs rts1 - gcs rts0
 
   liftIO
-    . putTraceMsg
-    $ bformat (builder % "\n" % indentedLines 4 builder)
+    $ dprint (builder % "\n" % indentedLines 4 builder)
         (fmt totalWall totalCPU)
-        [bformat (builder % " allocated on the heap") (showFFloatSIBase (Just 1) 1024 allocated "B")
-        ,bformat (builder % " copied during GC (" % int % " collections)") (showFFloatSIBase (Just 1) 1024 copied "B") totalGCs
-        ,bformat ("MUT: " % builder) (elapsed mutatorWall mutatorCPU)
-        ,bformat ("GC:  " % builder) (elapsed gcWall gcCPU)]
+        [bformat (formatSIBase (Just 1) 1024 % "B allocated on the heap") allocated
+        ,bformat (formatSIBase (Just 1) 1024 % "B copied during GC (" % int % " collections)") copied totalGCs
+        ,bformat ("MUT: " % elapsed) mutatorWall mutatorCPU
+        ,bformat ("GC:  " % elapsed) gcWall gcCPU]
   --
   return res
 #endif
 
-elapsed :: Double -> Double -> Builder
-elapsed wallTime cpuTime =
-  bformat (builder % " (wall), " % builder % " (cpu)")
-    (showFFloatSIBase (Just 3) 1000 wallTime "s")
-    (showFFloatSIBase (Just 3) 1000 cpuTime "s")
+elapsed :: Format r (Double -> Double -> r)
+elapsed = formatSIBase (Just 3) 1000 % "s (wall), " % formatSIBase (Just 3) 1000 % "s (cpu)"
 

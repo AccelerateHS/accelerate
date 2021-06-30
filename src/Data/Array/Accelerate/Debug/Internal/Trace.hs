@@ -19,8 +19,9 @@
 module Data.Array.Accelerate.Debug.Internal.Trace (
 
   showFFloatSIBase,
+  formatSIBase,
 
-  putTraceMsg,
+  putTraceMsg, dprint,
   trace, traceIO,
 
 ) where
@@ -58,24 +59,29 @@ import Foreign.C.Types
 -- is usually 1024, for example when measuring seconds versus bytes,
 -- respectively.
 --
-{-# NOINLINE[0] showFFloatSIBase #-}
-{-# SPECIALISE showFFloatSIBase :: Maybe Int -> Double -> Double -> Builder -> Builder #-}
+{-# INLINEABLE showFFloatSIBase #-}
 showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> Builder -> Builder
-showFFloatSIBase mp !b !k !t
-  = case pow of
-      4   -> with "T"
-      3   -> with "G"
-      2   -> with "M"
-      1   -> with "k"
-      -1  -> with "m"
-      -2  -> with "µ"
-      -3  -> with "n"
-      -4  -> with "p"
-      _   -> bformat (maybe float fixed mp % " ") k -- no unit or unhandled SI prefix
+showFFloatSIBase mp !b !k !t = bformat (formatSIBase mp b % builder) k t
+
+{-# INLINEABLE formatSIBase #-}
+formatSIBase :: RealFloat a => Maybe Int -> a -> Format r (a -> r)
+formatSIBase mp !b = later go
   where
-    with unit   = bformat (maybe float fixed mp % " " % builder % builder) k' unit t
-    !k'         = k / (b ^^ pow)
-    !pow        = floor (logBase b k) :: Int
+    go k =
+      let !pow = floor (logBase b k) :: Int
+          !k'  = k / (b ^^ pow)
+          unit = case pow of
+                   4 -> "T"
+                   3 -> "G"
+                   2 -> "M"
+                   1 -> "k"
+                   -1 -> "m"
+                   -2 -> "µ"
+                   -3 -> "n"
+                   -4 -> "p"
+                   _  -> ""
+      in
+      bformat (maybe float fixed mp % " " % builder) k' unit
 
 
 -- | The 'trace' function outputs the message given as its second argument when
@@ -116,12 +122,25 @@ traceIO _ _   = return ()
 {-# INLINE putTraceMsg #-}
 putTraceMsg :: Builder -> IO ()
 #ifdef ACCELERATE_DEBUG
-putTraceMsg msg = do
-  timestamp <- getProgramTime
-  T.hPutStr stderr $ sformat (squared (rfixed 8 ' ' (fixed 3)) % " " % builder % "\n") timestamp msg
+putTraceMsg msg = dprint builder msg
 #else
 putTraceMsg _   = return ()
 #endif
+
+
+-- | Run the formatter and print out the text to stderr prefixed with the
+-- current elapsed wall-clock time
+--
+{-# INLINE dprint #-}
+dprint :: Format (IO ()) a -> a
+dprint m =
+  runFormat m $ \_k -> do
+#ifdef ACCELERATE_DEBUG
+    timestamp <- getProgramTime
+    T.hPutStr stderr . sformat (squared (rfixed 8 ' ' (fixed 3)) % " " % builder % "\n") timestamp $ _k
+#endif
+    return ()
+
 
 #ifdef ACCELERATE_DEBUG
 -- | A handle managing output to the Haskell program's standard output

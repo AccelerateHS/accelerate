@@ -136,8 +136,8 @@ runN f = go
 -- Debugging
 -- ---------
 
-phase :: Builder -> (Double -> Double -> Builder) -> IO a -> IO a
-phase n fmt go = Debug.timed Debug.dump_phases (\wall cpu -> bformat ("phase " % builder % ": " % builder) n (fmt wall cpu)) go
+phase :: Builder -> Format Builder (Double -> Double -> Builder) -> IO a -> IO a
+phase n fmt go = Debug.timed Debug.dump_phases (\wall cpu -> bformat ("phase " % builder % ": " % fmt) n wall cpu) go
 
 
 -- Delayed Arrays
