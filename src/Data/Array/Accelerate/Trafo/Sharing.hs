@@ -45,7 +45,7 @@ module Data.Array.Accelerate.Trafo.Sharing (
 
 ) where
 
-import Data.Array.Accelerate.AST                                    hiding ( PreOpenAcc(..), OpenAcc(..), Acc, OpenExp(..), Exp, Boundary(..), HasArraysR(..), showPreAccOp )
+import Data.Array.Accelerate.AST                                    hiding ( PreOpenAcc(..), OpenAcc(..), Acc, OpenExp(..), Exp, Boundary(..), HasArraysR(..), formatPreAccOp )
 import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
@@ -1470,7 +1470,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
           sn                         <- makeStableAST acc
           heightIfRepeatedOccurrence <- enterOcc accOccMap (StableASTName sn) height
 
-          traceLine (showPreAccOp pacc) $ do
+          traceLine (bformat formatPreAccOp pacc) $ do
             let hash = hashStableName sn
             case heightIfRepeatedOccurrence of
               Just height -> bformat ("REPEATED occurrence (sn = " % int % "; height = " % int % ")") hash height
@@ -1820,7 +1820,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
           sn                         <- makeStableAST exp
           heightIfRepeatedOccurrence <- enterOcc expOccMap (StableASTName sn) height
 
-          traceLine (showPreExpOp pexp) $ do
+          traceLine (bformat formatPreExpOp pexp) $ do
             let hash = hashStableName sn
             case heightIfRepeatedOccurrence of
               Just height -> bformat ("REPEATED occurrence (sn = " % int % "; height = " % int % ")") hash height
@@ -2252,7 +2252,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
         noStableSharing :: StableSharingAcc
         noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
 
-    showSA (StableSharingAcc _ (AccSharing  sn acc)) = bformat (formatStableNameHeight % ": " % builder) sn  (showPreAccOp acc)
+    showSA (StableSharingAcc _ (AccSharing  sn acc)) = bformat (formatStableNameHeight % ": " % formatPreAccOp) sn acc
     showSA (StableSharingAcc _ (AvarSharing sn _))   = bformat ("AvarSharing " % formatStableNameHeight) sn
     showSA (StableSharingAcc _ (AletSharing sa _))   = bformat ("AletSharing " % formatStableSharingAcc % "...") sa
 
@@ -2284,7 +2284,7 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
         noStableSharing :: StableSharingExp
         noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
 
-    showSE (StableSharingExp _ (ExpSharing sn exp)) = bformat (formatStableNameHeight % ": " % builder) sn (showPreExpOp exp)
+    showSE (StableSharingExp _ (ExpSharing sn exp)) = bformat (formatStableNameHeight % ": " % formatPreExpOp) sn exp
     showSE (StableSharingExp _ (VarSharing sn _ ))  = bformat ("VarSharing " % formatStableNameHeight) sn
     showSE (StableSharingExp _ (LetSharing se _ ))  = bformat ("LetSharing " % formatStableSharingExp % "...") se
 

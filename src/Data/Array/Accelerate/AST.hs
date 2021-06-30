@@ -128,8 +128,8 @@ module Data.Array.Accelerate.AST (
   liftMessage,
 
   -- ** Miscellaneous
-  showPreAccOp,
-  showExpOp,
+  formatPreAccOp,
+  formatExpOp,
 
 ) where
 
@@ -1394,60 +1394,63 @@ liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralTyp
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
 
 
-showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> Builder
-showPreAccOp Alet{}              = "Alet"
-showPreAccOp (Avar (Var _ ix))   = bformat ("Avar a" % int) (idxToInt ix)
-showPreAccOp (Use aR a)          = bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
-showPreAccOp Atrace{}            = "Atrace"
-showPreAccOp Apply{}             = "Apply"
-showPreAccOp Aforeign{}          = "Aforeign"
-showPreAccOp Acond{}             = "Acond"
-showPreAccOp Awhile{}            = "Awhile"
-showPreAccOp Apair{}             = "Apair"
-showPreAccOp Anil                = "Anil"
-showPreAccOp Unit{}              = "Unit"
-showPreAccOp Generate{}          = "Generate"
-showPreAccOp Transform{}         = "Transform"
-showPreAccOp Reshape{}           = "Reshape"
-showPreAccOp Replicate{}         = "Replicate"
-showPreAccOp Slice{}             = "Slice"
-showPreAccOp Map{}               = "Map"
-showPreAccOp ZipWith{}           = "ZipWith"
-showPreAccOp (Fold _ z _)        = "Fold" <> maybe "1" (const mempty) z
-showPreAccOp (FoldSeg _ _ z _ _) = "Fold" <> maybe "1" (const mempty) z <> "Seg"
-showPreAccOp (Scan d _ z _)      = "Scan" <> showDirection d <> (maybe "1" (const mempty) z)
-showPreAccOp (Scan' d _ _ _)     = "Scan" <> showDirection d <> singleton '\''
-showPreAccOp Permute{}           = "Permute"
-showPreAccOp Backpermute{}       = "Backpermute"
-showPreAccOp Stencil{}           = "Stencil"
-showPreAccOp Stencil2{}          = "Stencil2"
+formatDirection :: Format r (Direction -> r)
+formatDirection = later $ \case
+  LeftToRight -> singleton 'l'
+  RightToLeft -> singleton 'r'
 
-showDirection :: Direction -> Builder
-showDirection LeftToRight = singleton 'l'
-showDirection RightToLeft = singleton 'r'
+formatPreAccOp :: Format r (PreOpenAcc acc aenv arrs -> r)
+formatPreAccOp = later $ \case
+  Alet{}            -> "Alet"
+  Avar (Var _ ix)   -> bformat ("Avar a" % int) (idxToInt ix)
+  Use aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
+  Atrace{}          -> "Atrace"
+  Apply{}           -> "Apply"
+  Aforeign{}        -> "Aforeign"
+  Acond{}           -> "Acond"
+  Awhile{}          -> "Awhile"
+  Apair{}           -> "Apair"
+  Anil              -> "Anil"
+  Unit{}            -> "Unit"
+  Generate{}        -> "Generate"
+  Transform{}       -> "Transform"
+  Reshape{}         -> "Reshape"
+  Replicate{}       -> "Replicate"
+  Slice{}           -> "Slice"
+  Map{}             -> "Map"
+  ZipWith{}         -> "ZipWith"
+  Fold _ z _        -> bformat ("Fold" % maybed "1" (fconst mempty)) z
+  FoldSeg _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
+  Scan d _ z _      -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
+  Scan' d _ _ _     -> bformat ("Scan" % formatDirection % "\'") d
+  Permute{}         -> "Permute"
+  Backpermute{}     -> "Backpermute"
+  Stencil{}         -> "Stencil"
+  Stencil2{}        -> "Stencil2"
 
-showExpOp :: forall aenv env t. OpenExp aenv env t -> Builder
-showExpOp Let{}             = "Let"
-showExpOp (Evar (Var _ ix)) = bformat ("Var x" % int) (idxToInt ix)
-showExpOp (Const tp c)      = bformat ("Const " % string) (showElt (TupRsingle tp) c)
-showExpOp Undef{}           = "Undef"
-showExpOp Foreign{}         = "Foreign"
-showExpOp Pair{}            = "Pair"
-showExpOp Nil{}             = "Nil"
-showExpOp VecPack{}         = "VecPack"
-showExpOp VecUnpack{}       = "VecUnpack"
-showExpOp IndexSlice{}      = "IndexSlice"
-showExpOp IndexFull{}       = "IndexFull"
-showExpOp ToIndex{}         = "ToIndex"
-showExpOp FromIndex{}       = "FromIndex"
-showExpOp Case{}            = "Case"
-showExpOp Cond{}            = "Cond"
-showExpOp While{}           = "While"
-showExpOp PrimConst{}       = "PrimConst"
-showExpOp PrimApp{}         = "PrimApp"
-showExpOp Index{}           = "Index"
-showExpOp LinearIndex{}     = "LinearIndex"
-showExpOp Shape{}           = "Shape"
-showExpOp ShapeSize{}       = "ShapeSize"
-showExpOp Coerce{}          = "Coerce"
+formatExpOp :: Format r (OpenExp aenv env t -> r)
+formatExpOp = later $ \case
+  Let{}           -> "Let"
+  Evar (Var _ ix) -> bformat ("Var x" % int) (idxToInt ix)
+  Const tp c      -> bformat ("Const " % string) (showElt (TupRsingle tp) c)
+  Undef{}         -> "Undef"
+  Foreign{}       -> "Foreign"
+  Pair{}          -> "Pair"
+  Nil{}           -> "Nil"
+  VecPack{}       -> "VecPack"
+  VecUnpack{}     -> "VecUnpack"
+  IndexSlice{}    -> "IndexSlice"
+  IndexFull{}     -> "IndexFull"
+  ToIndex{}       -> "ToIndex"
+  FromIndex{}     -> "FromIndex"
+  Case{}          -> "Case"
+  Cond{}          -> "Cond"
+  While{}         -> "While"
+  PrimConst{}     -> "PrimConst"
+  PrimApp{}       -> "PrimApp"
+  Index{}         -> "Index"
+  LinearIndex{}   -> "LinearIndex"
+  Shape{}         -> "Shape"
+  ShapeSize{}     -> "ShapeSize"
+  Coerce{}        -> "Coerce"
 
