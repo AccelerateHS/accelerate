@@ -4,6 +4,7 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
@@ -75,7 +76,7 @@ import Data.Type.Equality
 import Data.Word
 import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
-import Formatting.Buildable
+import Formatting
 import Language.Haskell.TH
 import Numeric.Half
 import Text.Printf
@@ -185,39 +186,46 @@ instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
   show (VectorScalarType ty) = show ty
 
-instance Buildable (IntegralType a) where
-  build TypeInt    = "Int"
-  build TypeInt8   = "Int8"
-  build TypeInt16  = "Int16"
-  build TypeInt32  = "Int32"
-  build TypeInt64  = "Int64"
-  build TypeWord   = "Word"
-  build TypeWord8  = "Word8"
-  build TypeWord16 = "Word16"
-  build TypeWord32 = "Word32"
-  build TypeWord64 = "Word64"
+formatIntegralType :: Format r (IntegralType a -> r)
+formatIntegralType = later $ \case
+  TypeInt    -> "Int"
+  TypeInt8   -> "Int8"
+  TypeInt16  -> "Int16"
+  TypeInt32  -> "Int32"
+  TypeInt64  -> "Int64"
+  TypeWord   -> "Word"
+  TypeWord8  -> "Word8"
+  TypeWord16 -> "Word16"
+  TypeWord32 -> "Word32"
+  TypeWord64 -> "Word64"
 
-instance Buildable (FloatingType a) where
-  build TypeHalf   = "Half"
-  build TypeFloat  = "Float"
-  build TypeDouble = "Double"
+formatFloatingType :: Format r (FloatingType a -> r)
+formatFloatingType = later $ \case
+  TypeHalf   -> "Half"
+  TypeFloat  -> "Float"
+  TypeDouble -> "Double"
 
-instance Buildable (NumType a) where
-  build (IntegralNumType ty) = build ty
-  build (FloatingNumType ty) = build ty
+formatNumType :: Format r (NumType a -> r)
+formatNumType = later $ \case
+  IntegralNumType ty -> bformat formatIntegralType ty
+  FloatingNumType ty -> bformat formatFloatingType ty
 
-instance Buildable (BoundedType a) where
-  build (IntegralBoundedType ty) = build ty
+formatBoundedType :: Format r (BoundedType a -> r)
+formatBoundedType = later $ \case
+  IntegralBoundedType ty -> bformat formatIntegralType ty
 
-instance Buildable (SingleType a) where
-  build (NumSingleType ty) = build ty
+formatSingleType :: Format r (SingleType a -> r)
+formatSingleType = later $ \case
+  NumSingleType ty -> bformat formatNumType ty
 
-instance Buildable (VectorType a) where
-  build (VectorType n ty) = "<" <> build n <> " x " <> build ty <> ">"
+formatVectorType :: Format r (VectorType a -> r)
+formatVectorType = later $ \case
+  VectorType n ty -> bformat (angled (int % " x " % formatSingleType)) n ty
 
-instance Buildable (ScalarType a) where
-  build (SingleScalarType ty) = build ty
-  build (VectorScalarType ty) = build ty
+formatScalarType :: Format r (ScalarType a -> r)
+formatScalarType = later $ \case
+  SingleScalarType ty -> bformat formatSingleType ty
+  VectorScalarType ty -> bformat formatVectorType ty
 
 
 -- | Querying Integral types

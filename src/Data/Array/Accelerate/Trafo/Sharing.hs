@@ -54,7 +54,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Debug.Internal.Flags                   as Debug
 import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Representation.Array                   ( Array, ArraysR, ArrayR(..), buildArraysR )
+import Data.Array.Accelerate.Representation.Array                   ( Array, ArraysR, ArrayR(..), formatArraysR )
 import Data.Array.Accelerate.Representation.Shape                   hiding ( zip )
 import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Tag
@@ -116,19 +116,19 @@ type ArrayLayout = Layout ArrayR
 --
 prjIdx :: forall s t env env1. HasCallStack
        => Builder
-       -> (forall t'. TupR s t' -> Builder)
+       -> (forall r t'. Format r (TupR s t' -> r))
        -> (forall u v. TupR s u -> TupR s v -> Maybe (u :~: v))
        -> TupR s t
        -> Int
        -> Layout s env env1
        -> Vars s env t
-prjIdx context buildTp matchTp tp = go
+prjIdx context formatTp matchTp tp = go
   where
     go :: forall env'. HasCallStack => Int -> Layout s env env' -> Vars s env t
     go _ EmptyLayout                = no "environment does not contain index"
     go 0 (PushLayout _ lhs vars)
       | Just Refl <- matchTp tp tp' = vars
-      | otherwise                   = no $ bformat ("couldn't match expected type `" % builder % "' with actual type `" % builder % "'") (buildTp tp) (buildTp tp')
+      | otherwise                   = no $ bformat ("couldn't match expected type `" % formatTp % "' with actual type `" % formatTp % "'") tp tp'
       where
         tp' = lhsToTupR lhs
     go n (PushLayout l _ _)         = go (n-1) l
@@ -261,15 +261,15 @@ convertSharingAcc
 convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
   | Just i <- findIndex (matchStableAcc sa) aenv'
   = avarsIn AST.OpenAcc
-  $ prjIdx (bformat (builder % "; i = " % int) ctxt i) buildArraysR matchArraysR repr i alyt
+  $ prjIdx (bformat (builder % "; i = " % int) ctxt i) formatArraysR matchArraysR repr i alyt
   | null aenv'
   = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
   | otherwise
   = internalError err
   where
     aenv' = lams ++ aenv
-    ctxt  = bformat ("shared 'Acc' tree with stable name " % int) (hashStableNameHeight sa)
-    err   = bformat ("inconsistent valuation @ " % builder % ";\n  aenv = " % list build) ctxt aenv'
+    ctxt  = bformat ("shared 'Acc' tree with stable name " % formatStableNameHeight) sa
+    err   = bformat ("inconsistent valuation @ " % builder % ";\n  aenv = " % list formatStableSharingAcc) ctxt aenv'
 
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
   = case declareVars $ AST.arraysR bound of
@@ -317,7 +317,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
     case preAcc of
 
       Atag repr i
-        -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (bformat ("de Bruijn conversion tag " % int) i) buildArraysR matchArraysR repr i alyt
+        -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (bformat ("de Bruijn conversion tag " % int) i) formatArraysR matchArraysR repr i alyt
            in  a
 
       Pipe reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
@@ -700,14 +700,14 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
 
     cvt :: HasCallStack => ScopedExp t' -> AST.OpenExp env aenv t'
     cvt (ScopedExp _ (VarSharing se tp))
-      | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) F.build matchTypeR tp i lyt)
+      | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) formatTypeR matchTypeR tp i lyt)
       | otherwise                                    = internalError msg
       where
-        ctx i = bformat ("shared 'Exp' tree with stable name " % int % "; i=" % int) (hashStableNameHeight se) i
+        ctx i = bformat ("shared 'Exp' tree with stable name " % formatStableNameHeight % "; i=" % int) se i
         msg   = bformat (unlined @[] builder)
           [ if null env'
-               then bformat ("cyclic definition of a value of type 'Exp' (sa=" % int % ")") (hashStableNameHeight se)
-               else bformat ("inconsistent valuation at shared 'Exp' tree (sa=" % int % "; env=" % list build % ")") (hashStableNameHeight se) env'
+               then bformat ("cyclic definition of a value of type 'Exp' (sa=" % formatStableNameHeight % ")") se
+               else bformat ("inconsistent valuation at shared 'Exp' tree (sa=" % formatStableNameHeight % "; env=" % list formatStableSharingExp % ")") se env'
           , ""
           , "Note that this error usually arises due to the presence of nested data"
           , "parallelism; when a parallel computation attempts to initiate new parallel"
@@ -755,7 +755,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           AST.Let lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
-          Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) F.build matchTypeR tp i lyt
+          Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
           Match _ e             -> cvt e  -- XXX: this should probably be an error
           Const tp v            -> AST.Const tp v
           Undef tp              -> AST.Undef tp
@@ -1032,9 +1032,6 @@ data StableASTName c where
 instance Show (StableASTName c) where
   show (StableASTName sn) = show (hashStableName sn)
 
-instance F.Buildable (StableASTName c) where
-  build (StableASTName sn) = F.build (hashStableName sn)
-
 instance Eq (StableASTName c) where
   StableASTName sn1 == StableASTName sn2 = eqStableName sn1 sn2
 
@@ -1043,6 +1040,9 @@ instance Hashable (StableASTName c) where
 
 makeStableAST :: c t -> IO (StableName (c t))
 makeStableAST e = e `seq` makeStableName e
+
+formatStableName :: Format r (StableName a -> r)
+formatStableName = later $ bformat int . hashStableName
 
 -- Stable name for an AST node including the height of the AST representing the array computation.
 --
@@ -1056,6 +1056,10 @@ StableNameHeight _ h1 `higherSNH` StableNameHeight _ h2 = h1 > h2
 
 hashStableNameHeight :: StableNameHeight t -> Int
 hashStableNameHeight (StableNameHeight sn _) = hashStableName sn
+
+formatStableNameHeight :: Format r (StableNameHeight t -> r)
+formatStableNameHeight = later $ \case
+  StableNameHeight sn _ -> bformat formatStableName sn
 
 -- Mutable occurrence map
 -- ----------------------
@@ -1188,12 +1192,13 @@ data StableSharingAcc where
 instance Show StableSharingAcc where
   show (StableSharingAcc sn _) = show (hashStableNameHeight sn)
 
-instance F.Buildable StableSharingAcc where
-  build (StableSharingAcc sn _) = F.build (hashStableNameHeight sn)
-
 instance Eq StableSharingAcc where
   StableSharingAcc (StableNameHeight sn1 _) _ == StableSharingAcc (StableNameHeight sn2 _) _
     = eqStableName sn1 sn2
+
+formatStableSharingAcc :: Format r (StableSharingAcc -> r)
+formatStableSharingAcc = later $ \case
+  StableSharingAcc sn _ -> bformat formatStableNameHeight sn
 
 higherSSA :: StableSharingAcc -> StableSharingAcc -> Bool
 StableSharingAcc sn1 _ `higherSSA` StableSharingAcc sn2 _ = sn1 `higherSNH` sn2
@@ -1262,12 +1267,13 @@ data StableSharingExp where
 instance Show StableSharingExp where
   show (StableSharingExp sn _) = show (hashStableNameHeight sn)
 
-instance F.Buildable StableSharingExp where
-  build (StableSharingExp sn _) = F.build (hashStableNameHeight sn)
-
 instance Eq StableSharingExp where
   StableSharingExp (StableNameHeight sn1 _) _ == StableSharingExp (StableNameHeight sn2 _) _ =
     eqStableName sn1 sn2
+
+formatStableSharingExp :: Format r (StableSharingExp -> r)
+formatStableSharingExp = later $ \case
+  StableSharingExp sn _ -> bformat formatStableNameHeight sn
 
 higherSSE :: StableSharingExp -> StableSharingExp -> Bool
 StableSharingExp sn1 _ `higherSSE` StableSharingExp sn2 _ = sn1 `higherSNH` sn2
@@ -2102,17 +2108,15 @@ instance Hashable NodeName where
 instance Show NodeName where
   show (NodeName sn) = show (hashStableName sn)
 
-instance F.Buildable NodeName where
-  build (NodeName sn) = F.build (hashStableName sn)
-
 data NodeCount = AccNodeCount StableSharingAcc Int
                | ExpNodeCount StableSharingExp Int
                -- SeqNodeCount StableSharingSeq Int
                deriving Show
 
-instance F.Buildable NodeCount where
-  build (AccNodeCount n c) = bformat ("AccNodeCount " % build % " " % int) n c
-  build (ExpNodeCount n c) = bformat ("ExpNodeCount " % build % " " % int) n c
+formatNodeCount :: Format r (NodeCount -> r)
+formatNodeCount = later $ \case
+  AccNodeCount n c -> bformat ("AccNodeCount " % formatStableSharingAcc % " " % int) n c
+  ExpNodeCount n c -> bformat ("ExpNodeCount " % formatStableSharingExp % " " % int) n c
 
 -- Empty node counts
 --
@@ -2248,9 +2252,9 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
         noStableSharing :: StableSharingAcc
         noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
 
-    showSA (StableSharingAcc _ (AccSharing  sn acc)) = F.build (hashStableNameHeight sn) <> ": " <> showPreAccOp acc
-    showSA (StableSharingAcc _ (AvarSharing sn _))   = "AvarSharing " <> F.build (hashStableNameHeight sn)
-    showSA (StableSharingAcc _ (AletSharing sa _))   = "AletSharing " <> F.build sa <> "..."
+    showSA (StableSharingAcc _ (AccSharing  sn acc)) = bformat (formatStableNameHeight % ": " % builder) sn  (showPreAccOp acc)
+    showSA (StableSharingAcc _ (AvarSharing sn _))   = bformat ("AvarSharing " % formatStableNameHeight) sn
+    showSA (StableSharingAcc _ (AletSharing sa _))   = bformat ("AletSharing " % formatStableSharingAcc % "...") sa
 
 -- Build an initial environment for the tag values given in the first argument for traversing a
 -- scalar expression.  The 'StableSharingExp's for all tags /actually used/ in the expressions are
@@ -2280,9 +2284,9 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
         noStableSharing :: StableSharingExp
         noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
 
-    showSE (StableSharingExp _ (ExpSharing sn exp)) = F.build (hashStableNameHeight sn) <> ": " <> showPreExpOp exp
-    showSE (StableSharingExp _ (VarSharing sn _ ))  = "VarSharing " <> F.build (hashStableNameHeight sn)
-    showSE (StableSharingExp _ (LetSharing se _ ))  = "LetSharing " <> F.build se <> "..."
+    showSE (StableSharingExp _ (ExpSharing sn exp)) = bformat (formatStableNameHeight % ": " % builder) sn (showPreExpOp exp)
+    showSE (StableSharingExp _ (VarSharing sn _ ))  = bformat ("VarSharing " % formatStableNameHeight) sn
+    showSE (StableSharingExp _ (LetSharing se _ ))  = bformat ("LetSharing " % formatStableSharingExp % "...") se
 
 -- Determine whether a 'NodeCount' is for an 'Atag' or 'Tag', which represent free variables.
 --
@@ -2319,7 +2323,7 @@ determineScopesAcc config fvs accOccMap rootAcc
     in
     if all isFreeVar counts
        then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
-       else internalError (bformat ("unbound shared subtrees " % list build) unboundTrees)
+       else internalError (bformat ("unbound shared subtrees " % list formatNodeCount) unboundTrees)
 
 
 determineScopesSharingAcc
@@ -2721,7 +2725,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         :: HasCallStack
         => (SmartExp a -> UnscopedExp b)
         -> (SmartExp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = tracePure (bformat ("LAMBDA " % build) ssa) (bformat (list build) counts) (const (ScopedExp ssa body'), (counts',graph))
+    scopesFun1 f = tracePure (bformat ("LAMBDA " % list formatStableSharingExp) ssa) (bformat (list formatNodeCount) counts) (const (ScopedExp ssa body'), (counts',graph))
       where
         body@(UnscopedExp fvs _)              = f undefined
         (ScopedExp [] body', (counts, graph)) = scopesExp body
