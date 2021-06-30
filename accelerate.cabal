@@ -296,7 +296,7 @@ library
         , directory                     >= 1.0
         , exceptions                    >= 0.6
         , filepath                      >= 1.0
-        , formatting                    >= 6.3
+        , formatting                    >= 7.0
         , ghc-prim
         , half                          >= 0.3
         , hashable                      >= 1.1
