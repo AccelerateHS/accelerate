@@ -343,21 +343,19 @@ withExecutionStackAsCallStack dewit =
         -- stack
         ?callStack = case ?callStack of
             x@(FreezeCallStack _) -> x
-            _ ->
-                freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
+            _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
     in  dewit
   where
     -- We don't want the two uppermost stack frames, since those will be in our
     -- own library code
     -- TODO: Is this correct? Should we drop only one stack frame?
     toCallStack :: Maybe [ES.Location] -> CallStack
-    toCallStack (Just (_ : _ : locs)) =
-        fromCallSiteList $ mapMaybe locToCallSite locs
-    toCallStack _ = emptyCallStack
+    toCallStack (Just (_ : _ : locs)) = fromCallSiteList $ mapMaybe locToCallSite locs
+    toCallStack _                     = emptyCallStack
 
     locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
-    locToCallSite (ES.Location obj fn (Just loc)) = Just
-        ( obj ++ ": " ++ fn
+    locToCallSite (ES.Location _ fn (Just loc)) = Just
+        ( fn
         , SrcLoc { srcLocPackage   = ""
                  , srcLocModule    = ""
                  , srcLocFile      = ES.sourceFile loc
