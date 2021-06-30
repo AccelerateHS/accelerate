@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -47,7 +48,9 @@ deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 deriving instance Generic (Ratio a)
 
 deriving instance Generic CallStack
+#if !MIN_VERSION_GLASGOW_HASKELL(9,0,0,0)
 deriving instance Generic SrcLoc
+#endif
 
 -- primitive
 --
