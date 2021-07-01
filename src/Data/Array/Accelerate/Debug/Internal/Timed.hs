@@ -117,5 +117,6 @@ timed_gc fmt action = do
 
 {-# INLINE elapsed #-}
 elapsed :: Format r (Double -> Double -> r)
-elapsed = formatSIBase (Just 3) 1000 % "s (wall), " % formatSIBase (Just 3) 1000 % "s (cpu)"
+elapsed = formatSIBase (Just 3) 1000 % "s (wall), "
+        % formatSIBase (Just 3) 1000 % "s (cpu)"
 
