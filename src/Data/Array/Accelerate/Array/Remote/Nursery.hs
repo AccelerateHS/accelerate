@@ -17,18 +17,15 @@ module Data.Array.Accelerate.Array.Remote.Nursery (
 
 ) where
 
--- friends
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Debug.Internal.Flags                   as Debug
--- import Data.Array.Accelerate.Debug.Internal.Profile                 as Debug
 import Data.Array.Accelerate.Debug.Internal.Trace                   as Debug
 
--- libraries
 import Control.Concurrent.MVar
 import Data.Int
 import Data.Sequence                                                ( Seq )
-import Data.Text.Lazy.Builder                                       ( Builder )
 import Data.Word
+import Formatting
 import System.Mem.Weak                                              ( Weak )
 import Prelude                                                      hiding ( lookup )
 import qualified Data.HashTable.IO                                  as HT
@@ -120,6 +117,6 @@ size (Nursery ref _)
 -- -----
 
 {-# INLINE message #-}
-message :: Builder -> IO ()
-message msg = Debug.traceIO Debug.dump_gc ("gc: " <> msg)
+message :: Format (IO ()) a -> a
+message fmt = Debug.traceM Debug.dump_gc ("gc: " % fmt)
 

@@ -21,15 +21,17 @@ module Data.Array.Accelerate.Debug.Internal.Trace (
   showFFloatSIBase,
   formatSIBase,
 
-  putTraceMsg, dprint,
-  trace, traceIO,
+  putTraceMsg,
+  trace, traceM,
 
 ) where
 
 import Data.Array.Accelerate.Debug.Internal.Flags
 
-import Formatting
+import Control.Monad.Trans
+import Data.Double.Conversion.Text
 import Data.Text.Lazy.Builder
+import Formatting
 
 #ifdef ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Clock
@@ -68,20 +70,27 @@ formatSIBase :: RealFloat a => Maybe Int -> a -> Format r (a -> r)
 formatSIBase mp !b = later go
   where
     go k =
-      let !pow = floor (logBase b k) :: Int
-          !k'  = k / (b ^^ pow)
-          unit = case pow of
-                   4 -> "T"
-                   3 -> "G"
-                   2 -> "M"
-                   1 -> "k"
-                   -1 -> "m"
-                   -2 -> "µ"
-                   -3 -> "n"
-                   -4 -> "p"
-                   _  -> ""
+      let !pow  = floor (logBase b k) :: Int
+          !k'   = k / (b ^^ pow)
+          !unit =
+            case pow of
+              4  -> Just "T"
+              3  -> Just "G"
+              2  -> Just "M"
+              1  -> Just "k"
+              -1 -> Just "m"
+              -2 -> Just "µ"
+              -3 -> Just "n"
+              -4 -> Just "p"
+              _  -> Nothing
       in
-      bformat (maybe float fixed mp % " " % builder) k' unit
+      case unit of
+        Nothing -> bformat (maybe float prec  mp % " ") k
+        Just t  -> bformat (maybe float fixed mp % " " % builder) k' t
+
+{-# INLINE prec #-}
+prec :: Real a => Int -> Format r (a -> r)
+prec digits = later (fromText . toPrecision digits . realToFrac)
 
 
 -- | The 'trace' function outputs the message given as its second argument when
@@ -92,7 +101,7 @@ trace :: Flag -> Builder -> a -> a
 #ifdef ACCELERATE_DEBUG
 {-# NOINLINE trace #-}
 trace f msg expr = unsafePerformIO $ do
-  traceIO f msg
+  traceM f builder msg
   return expr
 #else
 {-# INLINE trace #-}
@@ -100,41 +109,30 @@ trace _ _ expr = expr
 #endif
 
 
--- | The 'traceIO' function outputs the trace message together with a time stamp
--- from the IO monad. This sequences the output with respect to other IO
--- actions.
+-- | The 'traceM' function outputs the trace message together with a time
+-- stamp from the MonadIO monad. This sequences the output with respect to
+-- other IO actions.
 
 -- TLM: Perhaps we should automatically format the log messages. Namely:
 --        * prefix with a description of the mode (e.g. "gc: foo")
 --        * align multi-line messages
 --
-{-# INLINE traceIO #-}
-traceIO :: Flag -> Builder -> IO ()
+{-# INLINE traceM #-}
+traceM :: MonadIO m => Flag -> Format (m ()) a -> a
+traceM _f m =
+  runFormat m $ \_k -> do
 #ifdef ACCELERATE_DEBUG
-traceIO f msg = when f $ putTraceMsg msg
-#else
-traceIO _ _   = return ()
+    when _f $ putTraceMsg (now _k)
 #endif
+    return ()
 
 
 -- | Print a message prefixed with the current elapsed wall-clock time.
 --
 {-# INLINE putTraceMsg #-}
-putTraceMsg :: Builder -> IO ()
-#ifdef ACCELERATE_DEBUG
-putTraceMsg msg = dprint builder msg
-#else
-putTraceMsg _   = return ()
-#endif
-
-
--- | Run the formatter and print out the text to stderr prefixed with the
--- current elapsed wall-clock time
---
-{-# INLINE dprint #-}
-dprint :: Format (IO ()) a -> a
-dprint m =
-  runFormat m $ \_k -> do
+putTraceMsg :: MonadIO m => Format (m ()) a -> a
+putTraceMsg m =
+  runFormat m $ \_k -> liftIO $ do
 #ifdef ACCELERATE_DEBUG
     timestamp <- getProgramTime
     T.hPutStr stderr . sformat (squared (rfixed 8 ' ' (fixed 3)) % " " % builder % "\n") timestamp $ _k

@@ -134,7 +134,7 @@ phase :: NFData b => Builder -> (a -> b) -> a -> b
 phase n f x = unsafePerformIO $ do
   enabled <- getFlag dump_phases
   if enabled
-    then timed dump_phases (\wall cpu -> bformat ("phase " % builder % ": " % elapsed) n wall cpu) (return $!! f x)
+    then timed dump_phases (now ("phase " <> n <> ": ") % elapsed) (return $!! f x)
     else return (f x)
 #else
 phase _ f = f

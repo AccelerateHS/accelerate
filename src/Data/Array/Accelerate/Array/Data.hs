@@ -50,7 +50,6 @@ module Data.Array.Accelerate.Array.Data (
 
 ) where
 
--- friends
 import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Type
@@ -64,7 +63,6 @@ import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Debug.Internal.Profile
 import Data.Array.Accelerate.Debug.Internal.Trace
 
--- standard libraries
 import Control.Applicative
 import Control.DeepSeq
 import Control.Monad                                                ( (<=<) )
@@ -289,7 +287,7 @@ allocateArray !size = internalCheck "size must be >= 0" (size >= 0) $ do
            let bytes = size * sizeOf (undefined :: e)
            new <- readIORef __mallocForeignPtrBytes
            ptr <- new bytes
-           traceIO dump_gc $ bformat ("gc: allocated new host array (size=" % int % ", ptr=" % build % ")") bytes (unsafeForeignPtrToPtr ptr)
+           traceM dump_gc ("gc: allocated new host array (size=" % int % ", ptr=" % build % ")") bytes (unsafeForeignPtrToPtr ptr)
            local_memory_alloc (unsafeForeignPtrToPtr ptr) bytes
            return (castForeignPtr ptr)
 #ifdef ACCELERATE_DEBUG
@@ -306,7 +304,7 @@ registerForeignPtrAllocator
     :: (Int -> IO (ForeignPtr Word8))
     -> IO ()
 registerForeignPtrAllocator new = do
-  traceIO dump_gc "registering new array allocator"
+  traceM dump_gc "registering new array allocator"
   atomicWriteIORef __mallocForeignPtrBytes new
 
 {-# NOINLINE __mallocForeignPtrBytes #-}

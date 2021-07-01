@@ -189,12 +189,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
         multiple x f  = (x + (f-1)) `quot` f
         bs            = chunk * multiple (n * sizeOf (undefined::(ScalarArrayDataR a))) chunk
     --
-    message $ bformat ("malloc " % int % " bytes (" % int % " x " % int % " bytes, type=" % formatSingleType % ", pagesize=" % int % ")")
-                bs
-                n
-                (sizeOf (undefined :: (ScalarArrayDataR a)))
-                tp
-                chunk
+    message ("malloc " % int % " bytes (" % int % " x " % int % " bytes, type=" % formatSingleType % ", pagesize=" % int % ")") bs n (sizeOf (undefined :: (ScalarArrayDataR a))) tp chunk
     --
     mp <-
       fmap (castRemotePtr @m)
@@ -259,10 +254,10 @@ freeStable (MemoryTable !ref _ !nrs _) !sa =
   HT.mutateIO mt sa $ \mw -> do
     case mw of
       Nothing ->
-        message (bformat ("free/already-removed: " % formatStableArray) sa)
+        message ("free/already-removed: " % formatStableArray) sa
 
       Just (RemoteArray !p !n _) -> do
-        message (bformat ("free/nursery: " % formatStableArray % " of " % bytes') sa n)
+        message ("free/nursery: " % formatStableArray % " of " % bytes') sa n
         N.insert n (castRemotePtr @m p) nrs
         -- Debug.remote_memory_free (unsafeRemotePtrToPtr @m p)
 
@@ -284,7 +279,7 @@ insert
 insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !n | SingleArrayDict <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
-  message $ bformat ("insert: " % formatStableArray) key
+  message ("insert: " % formatStableArray) key
   -- liftIO  $ Debug.remote_memory_alloc (unsafeRemotePtrToPtr @m ptr) n
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) n weak)
 
@@ -305,7 +300,7 @@ insertUnmanaged
 insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr | SingleArrayDict  <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ remoteFinalizer weak_ref key)
-  message $ bformat ("insertUnmanaged: " % formatStableArray) key
+  message ("insertUnmanaged: " % formatStableArray) key
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) 0 weak)
 
 
@@ -359,8 +354,8 @@ remoteFinalizer :: Weak (MT p) -> StableArray -> IO ()
 remoteFinalizer !weak_ref !key = do
   mr <- deRefWeak weak_ref
   case mr of
-    Nothing  -> message (bformat ("finalise/dead table: " % formatStableArray) key)
-    Just ref -> trace   (bformat ("finalise: " % formatStableArray)            key) $ withMVar ref (`HT.delete` key)
+    Nothing  -> message        ("finalise/dead table: " % formatStableArray) key
+    Just ref -> trace (bformat ("finalise: "            % formatStableArray) key) $ withMVar ref (`HT.delete` key)
 
 
 -- Miscellaneous
@@ -409,11 +404,11 @@ bytes' = bytes (fixed @Double 2 % " ")
 
 {-# INLINE trace #-}
 trace :: MonadIO m => Builder -> m a -> m a
-trace msg next = message msg >> next
+trace msg next = message builder msg >> next
 
 {-# INLINE message #-}
-message :: MonadIO m => Builder -> m ()
-message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " <> msg)
+message :: MonadIO m => Format (m ()) a -> a
+message fmt = Debug.traceM Debug.dump_gc ("gc: " % fmt)
 
 {-# INLINE management #-}
 management :: (RemoteMemory m, MonadIO m) => Builder -> Nursery p -> m a -> m a
@@ -427,12 +422,7 @@ management msg nrs next = do
       r           <- next
       after       <- availableRemoteMem
       after_nrs   <- liftIO $ N.size nrs
-      message $ bformat (builder % parenthesised ("freed: " % bytes' % ", stashed: " % bytes' % ", remaining: " % bytes' % " of " % bytes'))
-                  msg
-                  (before - after)
-                  (after_nrs - before_nrs)
-                  after
-                  total
+      message (builder % parenthesised ("freed: " % bytes' % ", stashed: " % bytes' % ", remaining: " % bytes' % " of " % bytes')) msg (before - after) (after_nrs - before_nrs) after total
       --
       return r
     else

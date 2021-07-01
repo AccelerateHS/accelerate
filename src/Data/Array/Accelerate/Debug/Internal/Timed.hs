@@ -47,7 +47,7 @@ import GHC.Word
 -- otherwise only timing information is shown.
 --
 {-# INLINEABLE timed #-}
-timed :: MonadIO m => Flag -> (Double -> Double -> Builder) -> m a -> m a
+timed :: MonadIO m => Flag -> Format Builder (Double -> Double -> Builder) -> m a -> m a
 #ifdef ACCELERATE_DEBUG
 timed f fmt action = do
   enabled <- liftIO $ getFlag f
@@ -65,7 +65,7 @@ timed _ _ action = action
 
 #ifdef ACCELERATE_DEBUG
 {-# INLINEABLE timed_simpl #-}
-timed_simpl :: MonadIO m => (Double -> Double -> Builder) -> m a -> m a
+timed_simpl :: MonadIO m => Format Builder (Double -> Double -> Builder) -> m a -> m a
 timed_simpl fmt action = do
   wall0 <- liftIO getMonotonicTime
   cpu0  <- liftIO getCPUTime
@@ -76,12 +76,12 @@ timed_simpl fmt action = do
   let wallTime = wall1 - wall0
       cpuTime  = D# (doubleFromInteger (cpu1 - cpu0) *## 1E-12##)
   --
-  liftIO $ putTraceMsg (fmt wallTime cpuTime)
+  liftIO $ putTraceMsg builder (bformat fmt wallTime cpuTime) -- XXX
   return res
 
 
 {-# INLINEABLE timed_gc #-}
-timed_gc :: MonadIO m => (Double -> Double -> Builder) -> m a -> m a
+timed_gc :: MonadIO m => Format Builder (Double -> Double -> Builder) -> m a -> m a
 timed_gc fmt action = do
   rts0  <- liftIO getRTSStats
   res   <- action
@@ -101,17 +101,21 @@ timed_gc fmt action = do
       gcCPU       = i64 (gc_cpu_ns rts1 - gc_cpu_ns rts0) * 1.0E-9
       totalGCs    = gcs rts1 - gcs rts0
 
-  liftIO
-    $ dprint (builder % "\n" % indentedLines 4 builder)
-        (fmt totalWall totalCPU)
-        [bformat (formatSIBase (Just 1) 1024 % "B allocated on the heap") allocated
-        ,bformat (formatSIBase (Just 1) 1024 % "B copied during GC (" % int % " collections)") copied totalGCs
-        ,bformat ("MUT: " % elapsed) mutatorWall mutatorCPU
-        ,bformat ("GC:  " % elapsed) gcWall gcCPU]
-  --
+  liftIO $ putTraceMsg
+    (builder % "\n" % indented 4 (formatSIBase (Just 1) 1024 % "B allocated on the heap")
+             % "\n" % indented 4 (formatSIBase (Just 1) 1024 % "B copied during GC (" % int % " collections)")
+             % "\n" % indented 4 ("MUT: " % elapsed)
+             % "\n" % indented 4 ("GC:  " % elapsed))
+    (bformat fmt totalWall totalCPU)    -- XXX
+    allocated
+    copied totalGCs
+    mutatorWall mutatorCPU
+    gcWall gcCPU
+
   return res
 #endif
 
+{-# INLINE elapsed #-}
 elapsed :: Format r (Double -> Double -> r)
 elapsed = formatSIBase (Just 3) 1000 % "s (wall), " % formatSIBase (Just 3) 1000 % "s (cpu)"
 

@@ -294,6 +294,7 @@ library
         , cryptonite                    >= 0.21
         , deepseq                       >= 1.3
         , directory                     >= 1.0
+        , double-conversion             >= 2.0
         , exceptions                    >= 0.6
         , filepath                      >= 1.0
         , formatting                    >= 7.0

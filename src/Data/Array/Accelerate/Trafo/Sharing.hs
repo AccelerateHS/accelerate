@@ -3154,17 +3154,11 @@ recoverSharingSeq config seq
 -- ---------
 
 traceLine :: Builder -> Builder -> IO ()
-traceLine header msg
-  = Debug.traceIO Debug.dump_sharing
-  $ header <> ": " <> msg
+traceLine = Debug.traceM Debug.dump_sharing (builder % ": " % builder)
 
 traceChunk :: Builder -> Builder -> IO ()
-traceChunk header msg
-  = Debug.traceIO Debug.dump_sharing
-  $ header <> "\n      " <> msg
+traceChunk = Debug.traceM Debug.dump_sharing (builder % ":\n" % indented 4 builder)
 
 tracePure :: Builder -> Builder -> a -> a
-tracePure header msg
-  = Debug.trace Debug.dump_sharing
-  $ header <> ": " <> msg
+tracePure header msg = Debug.trace Debug.dump_sharing (bformat (builder % ": " % builder) header msg)
 

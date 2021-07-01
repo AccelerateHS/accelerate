@@ -43,12 +43,9 @@ import Data.Array.Accelerate.Array.Remote.Class
 import Data.Array.Accelerate.Array.Remote.Table                     ( StableArray, makeWeakArrayData, formatStableArray )
 import Data.Array.Accelerate.Array.Unique                           ( touchUniqueArray )
 import Data.Array.Accelerate.Error                                  ( internalError )
--- import Data.Array.Accelerate.Representation.Elt
--- import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Remote.Table           as Basic
 import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
--- import qualified Data.Array.Accelerate.Debug.Internal.Profile       as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Trace         as Debug
 
 import Control.Concurrent.MVar                                      ( MVar, newMVar, withMVar, takeMVar, putMVar, mkWeakMVar )
@@ -155,7 +152,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
     --
     case mu of
       Nothing -> do
-        message (bformat ("withRemote/array has never been malloc'd: " % formatStableArray) key)
+        message ("withRemote/array has never been malloc'd: " % formatStableArray) key
         return Nothing -- The array was never in the table
 
       Just u  -> do
@@ -164,7 +161,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
                 Just p          -> return p
                 Nothing
                   | isEvicted u -> copyBack utbl (incCount u)
-                  | otherwise   -> do message (bformat ("lost array " % formatStableArray) key)
+                  | otherwise   -> do message ("lost array " % formatStableArray) key
                                       internalError "non-evicted array has been lost"
         return (Just ptr)
   --
@@ -196,7 +193,7 @@ withRemote (MemoryTable !mt !ref _) !tp !arr run | SingleArrayDict <- singleArra
        -> RemotePtr m (ScalarArrayDataR a)
        -> m c
     go key ptr = do
-      message (bformat ("withRemote/using: " % formatStableArray) key)
+      message ("withRemote/using: " % formatStableArray) key
       (task, c) <- run ptr
       liftIO . withMVar ref  $ \utbl -> do
         HT.mutateIO utbl key $ \case
@@ -296,7 +293,7 @@ evictLRU !utbl !mt = trace "evictLRU/evicting-eldest-array" $ do
           message "evictLRU/Accelerate GC interrupted by GHC GC"
 
         Just arr -> do
-          message (bformat ("evictLRU/evicting " % formatStableArray) sa)
+          message ("evictLRU/evicting " % formatStableArray) sa
           copyIfNecessary status n tp arr
           -- liftIO $ Debug.remote_memory_evict sa (remoteBytes tp n)
           liftIO $ Basic.freeStable @m mt sa
@@ -444,9 +441,9 @@ takeMVar' m = liftIO (takeMVar m)
 
 {-# INLINE trace #-}
 trace :: MonadIO m => Builder -> m a -> m a
-trace msg next = message msg >> next
+trace msg next = message builder msg >> next
 
 {-# INLINE message #-}
-message :: MonadIO m => Builder -> m ()
-message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " <> msg)
+message :: MonadIO m => Format (m ()) a -> a
+message fmt = Debug.traceM Debug.dump_gc ("gc: " % fmt)
 
