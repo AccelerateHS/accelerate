@@ -52,19 +52,19 @@ jobs:
         run: stack --no-terminal setup --install-ghc
 
       - name: Build dependencies
-        run: stack --no-terminal build --flag accelerate:nofib --test --no-run-tests --only-dependencies
+        run: stack --no-terminal build --fast --flag accelerate:nofib --test --no-run-tests --only-dependencies
 
       - name: Build
-        run: stack --no-terminal build --flag accelerate:nofib --test --no-run-tests
+        run: stack --no-terminal build --fast --flag accelerate:nofib --test --no-run-tests
 
       # - name: Test doctest
-      #   run: stack --no-terminal test accelerate:doctest --flag accelerate:nofib
+      #   run: stack --no-terminal test accelerate:doctest --fast --flag accelerate:nofib
 
       - name: Test nofib
-        run: stack --no-terminal test accelerate:nofib-interpreter --flag accelerate:nofib
+        run: stack --no-terminal test accelerate:nofib-interpreter --fast --flag accelerate:nofib
 
       - name: Test haddock generation
-        run: stack --no-terminal haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" --flag accelerate:nofib
+        run: stack --no-terminal haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" --fast --flag accelerate:nofib
 
       - name: Save snapshot.pkgdb
         run: stack exec ghc-pkg -- --package-db=$(stack path --snapshot-pkg-db) list > snapshot.pkgdb
