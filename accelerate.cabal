@@ -637,6 +637,7 @@ executable tracy
   build-depends:
         base                            >= 4.10
       , accelerate
+      , formatting
 
   pkgconfig-depends:
         capstone
@@ -665,6 +666,7 @@ executable tracy-capture
   build-depends:
         base                            >= 4.10
       , accelerate
+      , formatting
 
   pkgconfig-depends:
         capstone

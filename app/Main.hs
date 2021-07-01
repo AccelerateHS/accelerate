@@ -12,11 +12,12 @@
 
 module Main where
 
+import Formatting
 import Data.Array.Accelerate.Error
 
 -- This should be replaced by the executable built via the Makefiles. If it
 -- hasn't been something went wrong...
 --
 main :: IO ()
-main = internalError ("Unexpected error building application '" <> EXECUTABLE <> "'")
+main = internalError ("Unexpected error building application " % squoted builder) EXECUTABLE
 
