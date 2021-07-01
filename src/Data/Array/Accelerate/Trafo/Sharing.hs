@@ -134,7 +134,7 @@ prjIdx context formatTp matchTp tp = go
     go n (PushLayout l _ _)         = go (n-1) l
 
     no :: HasCallStack => Builder -> a
-    no reason = internalError (reason <> "\nin the context: " <> context)
+    no reason = internalError (builder % "\nin the context: " % builder) reason context
 
 -- Add an entry to a layout, incrementing all indices
 --
@@ -265,7 +265,7 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
   | null aenv'
   = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
   | otherwise
-  = internalError err
+  = internalError builder err
   where
     aenv' = lams ++ aenv
     ctxt  = bformat ("shared 'Acc' tree with stable name " % formatStableNameHeight) sa
@@ -701,10 +701,10 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvt :: HasCallStack => ScopedExp t' -> AST.OpenExp env aenv t'
     cvt (ScopedExp _ (VarSharing se tp))
       | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) formatTypeR matchTypeR tp i lyt)
-      | otherwise                                    = internalError msg
+      | otherwise                                    = internalError (unlined @[] builder) msg
       where
         ctx i = bformat ("shared 'Exp' tree with stable name " % formatStableNameHeight % "; i=" % int) se i
-        msg   = bformat (unlined @[] builder)
+        msg   =
           [ if null env'
                then bformat ("cyclic definition of a value of type 'Exp' (sa=" % formatStableNameHeight % ")") se
                else bformat ("inconsistent valuation at shared 'Exp' tree (sa=" % formatStableNameHeight % "; env=" % list formatStableSharingExp % ")") se env'
@@ -2243,11 +2243,11 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
       = case filter hasTag sas of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [sa] -> sa                 -- tag has a unique occurrence
-          sas2 -> internalError (bformat ("Encountered duplicate 'ATag's\n  " % commaSpaceSep (later showSA)) sas2)
+          sas2 -> internalError ("Encountered duplicate 'ATag's\n  " % commaSpaceSep (later showSA)) sas2
       where
         hasTag (StableSharingAcc _ (AccSharing _ (Atag _ tag2))) = tag1 == tag2
         hasTag sa
-          = internalError ("Encountered a node that is not a plain 'Atag'\n  " <> showSA sa)
+          = internalError ("Encountered a node that is not a plain 'Atag'\n  " % builder) (showSA sa)
 
         noStableSharing :: StableSharingAcc
         noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
@@ -2275,11 +2275,11 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
       = case filter hasTag ses of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [se] -> se                 -- tag has a unique occurrence
-          ses2 -> internalError (bformat ("Encountered a duplicate 'Tag'\n  " % commaSpaceSep (later showSE)) ses2)
+          ses2 -> internalError ("Encountered a duplicate 'Tag'\n  " % commaSpaceSep (later showSE)) ses2
       where
         hasTag (StableSharingExp _ (ExpSharing _ (Tag _ tag2))) = tag1 == tag2
         hasTag se
-          = internalError ("Encountered a node that is not a plain 'Tag'\n  " <> showSE se)
+          = internalError ("Encountered a node that is not a plain 'Tag'\n  " % builder) (showSE se)
 
         noStableSharing :: StableSharingExp
         noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
@@ -2323,7 +2323,7 @@ determineScopesAcc config fvs accOccMap rootAcc
     in
     if all isFreeVar counts
        then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
-       else internalError (bformat ("unbound shared subtrees " % list formatNodeCount) unboundTrees)
+       else internalError ("unbound shared subtrees " % list formatNodeCount) unboundTrees
 
 
 determineScopesSharingAcc

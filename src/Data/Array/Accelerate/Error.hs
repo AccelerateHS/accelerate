@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Error (
 import Data.Text.Lazy.Builder
 import Debug.Trace
 import Formatting
-import Prelude                                            hiding ( error )
+import Prelude                                                      hiding ( error )
 
 import GHC.Stack
 
@@ -33,13 +33,13 @@ data Check = Bounds | Unsafe | Internal
 
 -- | Issue an internal error message
 --
-internalError :: HasCallStack => Builder -> a
+internalError :: HasCallStack => Format r a -> a
 internalError = withFrozenCallStack $ error Internal
 
-boundsError :: HasCallStack => Builder -> a
+boundsError :: HasCallStack => Format r a -> a
 boundsError = withFrozenCallStack $ error Bounds
 
-unsafeError :: HasCallStack => Builder -> a
+unsafeError :: HasCallStack => Format r a -> a
 unsafeError = withFrozenCallStack $ error Unsafe
 
 
@@ -74,8 +74,8 @@ unsafeWarning :: HasCallStack => Builder -> Bool -> a -> a
 unsafeWarning = withFrozenCallStack $ warning Unsafe
 
 
-error :: HasCallStack => Check -> Builder -> a
-error kind msg = errorWithoutStackTrace (decorated kind msg)
+error :: HasCallStack => Check -> Format r a -> a
+error kind fmt = runFormat fmt $ \msg -> errorWithoutStackTrace (decorated kind msg)
 
 check :: HasCallStack => Check -> Builder -> Bool -> a -> a
 check kind msg cond k =

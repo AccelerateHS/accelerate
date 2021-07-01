@@ -159,7 +159,7 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
           -- above in the error message.
           --
           Nothing ->
-            makeStableArray tp arr >>= \x -> internalError $ bformat ("dead weak pair: " % formatStableArray) x
+            makeStableArray tp arr >>= \x -> internalError ("dead weak pair: " % formatStableArray) x
 
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This may not always use the `malloc` provided by the `RemoteMemory` instance.
