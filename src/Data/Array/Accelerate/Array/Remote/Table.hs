@@ -4,6 +4,7 @@
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MagicHash                  #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternGuards              #-}
@@ -37,6 +38,7 @@ module Data.Array.Accelerate.Array.Remote.Table (
   -- Internals
   StableArray, makeStableArray,
   makeWeakArrayData,
+  formatStableArray,
 
 ) where
 
@@ -47,15 +49,14 @@ import Control.Monad.IO.Class                                       ( MonadIO, l
 import Data.Functor
 import Data.Hashable                                                ( hash, Hashable )
 import Data.Maybe                                                   ( isJust )
-import Data.Word
-import Data.Text.Format
 import Data.Text.Lazy.Builder                                       ( Builder )
+import Data.Word
 import Foreign.Storable                                             ( sizeOf )
+import Formatting
+import Prelude                                                      hiding ( lookup, id )
 import System.Mem                                                   ( performGC )
 import System.Mem.Weak                                              ( Weak, deRefWeak )
-import Prelude                                                      hiding ( lookup, id )
 import qualified Data.HashTable.IO                                  as HT
-import qualified Data.Text.Buildable                                as T
 
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Remote.Class
@@ -106,8 +107,9 @@ newtype StableArray = StableArray Unique
 instance Show StableArray where
   show (StableArray u) = show (hash u)
 
-instance T.Buildable StableArray where
-  build (StableArray u) = T.build (hash u)
+formatStableArray :: Format r (StableArray -> r)
+formatStableArray = later $ \case
+  StableArray u -> bformat int (hash u)
 
 -- | Create a new memory table from host to remote arrays.
 --
@@ -138,11 +140,11 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
     sa <- makeStableArray tp arr
     mw <- withMVar ref (`HT.lookup` sa)
     case mw of
-      Nothing                  -> trace (build "lookup/not found: {}" (Only sa)) $ return Nothing
+      Nothing                  -> trace (bformat ("lookup/not found: " % formatStableArray) sa) $ return Nothing
       Just (RemoteArray p _ w) -> do
         mv <- deRefWeak w
         case mv of
-          Just{} -> trace (build "lookup/found: {}" (Only sa)) $ return (Just $ castRemotePtr @m p)
+          Just{} -> trace (bformat ("lookup/found: " % formatStableArray) sa) $ return (Just $ castRemotePtr @m p)
 
           -- Note: [Weak pointer weirdness]
           --
@@ -157,7 +159,7 @@ lookup (MemoryTable !ref _ _ _) !tp !arr
           -- above in the error message.
           --
           Nothing ->
-            makeStableArray tp arr >>= \x -> internalError $ build "dead weak pair: {}" (Only x)
+            makeStableArray tp arr >>= \x -> internalError ("dead weak pair: " % formatStableArray) x
 
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This may not always use the `malloc` provided by the `RemoteMemory` instance.
@@ -184,28 +186,28 @@ malloc mt@(MemoryTable _ _ !nursery _) !tp !ad !n
     --
     chunk <- remoteAllocationSize
     let -- next highest multiple of f from x
-        multiple x f      = (x + (f-1)) `quot` f
-        bytes             = chunk * multiple (n * sizeOf (undefined::(ScalarArrayDataR a))) chunk
+        multiple x f  = (x + (f-1)) `quot` f
+        bs            = chunk * multiple (n * sizeOf (undefined::(ScalarArrayDataR a))) chunk
     --
-    message $ build "malloc {} bytes ({} x {} bytes, type={}, pagesize={})" (bytes, n, sizeOf (undefined :: (ScalarArrayDataR a)), tp, chunk)
+    message ("malloc " % int % " bytes (" % int % " x " % int % " bytes, type=" % formatSingleType % ", pagesize=" % int % ")") bs n (sizeOf (undefined :: (ScalarArrayDataR a))) tp chunk
     --
     mp <-
       fmap (castRemotePtr @m)
-      <$> attempt "malloc/nursery" (liftIO $ N.lookup bytes nursery)
+      <$> attempt "malloc/nursery" (liftIO $ N.lookup bs nursery)
           `orElse`
-          attempt "malloc/new" (mallocRemote bytes)
+          attempt "malloc/new" (mallocRemote bs)
           `orElse` do message "malloc/remote-malloc-failed (cleaning)"
                       clean mt
-                      liftIO $ N.lookup bytes nursery
+                      liftIO $ N.lookup bs nursery
           `orElse` do message "malloc/remote-malloc-failed (purging)"
                       purge mt
-                      mallocRemote bytes
+                      mallocRemote bs
           `orElse` do message "malloc/remote-malloc-failed (non-recoverable)"
                       return Nothing
     case mp of
       Nothing -> return Nothing
       Just p' -> do
-        insert mt tp ad p' bytes
+        insert mt tp ad p' bs
         return mp
   where
     {-# INLINE orElse #-}
@@ -252,11 +254,11 @@ freeStable (MemoryTable !ref _ !nrs _) !sa =
   HT.mutateIO mt sa $ \mw -> do
     case mw of
       Nothing ->
-        message (build "free/already-removed: {}" (Only sa))
+        message ("free/already-removed: " % formatStableArray) sa
 
-      Just (RemoteArray !p !bytes _) -> do
-        message (build "free/nursery: {} of {}" (sa, showBytes bytes))
-        N.insert bytes (castRemotePtr @m p) nrs
+      Just (RemoteArray !p !n _) -> do
+        message ("free/nursery: " % formatStableArray % " of " % bytes') sa n
+        N.insert n (castRemotePtr @m p) nrs
         -- Debug.remote_memory_free (unsafeRemotePtrToPtr @m p)
 
     return (Nothing, ())
@@ -274,12 +276,12 @@ insert
     -> RemotePtr m (ScalarArrayDataR a)
     -> Int
     -> m ()
-insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !bytes | SingleArrayDict <- singleArrayDict tp = do
+insert mt@(MemoryTable !ref _ _ _) !tp !arr !ptr !n | SingleArrayDict <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ freeStable @m mt key)
-  message $ build "insert: {}" (Only key)
-  -- liftIO  $ Debug.remote_memory_alloc (unsafeRemotePtrToPtr @m ptr) bytes
-  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) bytes weak)
+  message ("insert: " % formatStableArray) key
+  -- liftIO  $ Debug.remote_memory_alloc (unsafeRemotePtrToPtr @m ptr) n
+  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) n weak)
 
 
 -- | Record an association between a host-side array and a remote memory area
@@ -298,7 +300,7 @@ insertUnmanaged
 insertUnmanaged (MemoryTable !ref !weak_ref _ _) tp !arr !ptr | SingleArrayDict  <- singleArrayDict tp = do
   key  <- makeStableArray tp arr
   weak <- liftIO $ makeWeakArrayData tp arr () (Just $ remoteFinalizer weak_ref key)
-  message $ build "insertUnmanaged: {}" (Only key)
+  message ("insertUnmanaged: " % formatStableArray) key
   liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray (castRemotePtr @m ptr) 0 weak)
 
 
@@ -352,8 +354,8 @@ remoteFinalizer :: Weak (MT p) -> StableArray -> IO ()
 remoteFinalizer !weak_ref !key = do
   mr <- deRefWeak weak_ref
   case mr of
-    Nothing  -> message (build "finalise/dead table: {}" (Only key))
-    Just ref -> trace   (build "finalise: {}"            (Only key)) $ withMVar ref (`HT.delete` key)
+    Nothing  -> message        ("finalise/dead table: " % formatStableArray) key
+    Just ref -> trace (bformat ("finalise: "            % formatStableArray) key) $ withMVar ref (`HT.delete` key)
 
 
 -- Miscellaneous
@@ -396,17 +398,17 @@ makeWeakArrayData !tp !ad !c !mf | SingleArrayDict <- singleArrayDict tp = do
 -- Debug
 -- -----
 
-{-# INLINE showBytes #-}
-showBytes :: Integral n => n -> Builder
-showBytes x = Debug.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
+{-# INLINE bytes' #-}
+bytes' :: Integral n => Format r (n -> r)
+bytes' = bytes (fixed @Double 2 % " ")
 
 {-# INLINE trace #-}
 trace :: MonadIO m => Builder -> m a -> m a
-trace msg next = message msg >> next
+trace msg next = message builder msg >> next
 
 {-# INLINE message #-}
-message :: MonadIO m => Builder -> m ()
-message msg = liftIO $ Debug.traceIO Debug.dump_gc ("gc: " <> msg)
+message :: MonadIO m => Format (m ()) a -> a
+message fmt = Debug.traceM Debug.dump_gc ("gc: " % fmt)
 
 {-# INLINE management #-}
 management :: (RemoteMemory m, MonadIO m) => Builder -> Nursery p -> m a -> m a
@@ -420,12 +422,7 @@ management msg nrs next = do
       r           <- next
       after       <- availableRemoteMem
       after_nrs   <- liftIO $ N.size nrs
-      message $ build "{} (freed: {}, stashed: {}, remaining: {} of {})"
-                  ( msg
-                  , showBytes (before - after)
-                  , showBytes (after_nrs - before_nrs)
-                  , showBytes after
-                  , showBytes total )
+      message (builder % parenthesised ("freed: " % bytes' % ", stashed: " % bytes' % ", remaining: " % bytes' % " of " % bytes')) msg (before - after) (after_nrs - before_nrs) after total
       --
       return r
     else

@@ -51,6 +51,8 @@ preConfHook args config_flags = do
 
   preConf simpleUserHooks args config_flags
 
+-- TODO: only build the executables which are enabled
+--
 postBuildHook :: Args -> BuildFlags -> PackageDescription -> LocalBuildInfo -> IO ()
 postBuildHook args build_flags pkg_desc lbi = do
   let config_flags  = configFlags lbi
@@ -62,7 +64,7 @@ postBuildHook args build_flags pkg_desc lbi = do
 
   when debugging $ do
     case os of
-      Windows -> return ()  -- XXX: TODO
+      Windows -> return ()  -- XXX TODO: Windows users get the dummy executable that just throws an error
       _       ->
         forM_ targets $ \(hs_exe, c_dir, c_exe) -> do
           let c_builddir  = "cbits/tracy" </> c_dir </> "build/unix"

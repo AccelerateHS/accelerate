@@ -23,7 +23,8 @@ jobs:
           - "8.8"
           - "8.6"
     env:
-      STACK_FLAGS: "--flag accelerate:nofib"
+      STACK_FLAGS: "--fast --flag accelerate:nofib"
+      HADDOCK_FLAGS: "--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments=\"--no-print-missing-docs\""
 
     steps:
       - uses: actions/checkout@v2
@@ -65,7 +66,7 @@ jobs:
         run: stack build $STACK_FLAGS --test --no-run-tests --only-dependencies
 
       - name: Build
-        run: stack build $STACK_FLAGS --test --no-run-tests
+        run: stack build $STACK_FLAGS $HADDOCK_FLAGS --test --no-run-tests
 
       # currently broken with linker error -TLM 2021-06-25
       # - name: Test doctest
@@ -74,8 +75,8 @@ jobs:
       - name: Test nofib
         run: stack test accelerate:nofib-interpreter $STACK_FLAGS
 
-      - name: Test haddock generation
-        run: stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" $STACK_FLAGS
+      # - name: Test haddock generation
+      #   run: stack haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" $STACK_FLAGS
 
       - name: Save snapshot.pkgdb
         run: stack exec ghc-pkg -- --package-db=$(stack path --snapshot-pkg-db) list > snapshot.pkgdb

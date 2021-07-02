@@ -21,12 +21,10 @@ module Data.Array.Accelerate.Error (
 
 ) where
 
-import Data.Text.Format                                   ( Only(..), build )
-import Data.Text.Format.Extra                             ( intercalate )
-import Data.Text.Lazy                                     ( unpack )
 import Data.Text.Lazy.Builder
 import Debug.Trace
-import Prelude                                            hiding ( error )
+import Formatting
+import Prelude                                                      hiding ( error )
 
 import GHC.Stack
 
@@ -35,13 +33,13 @@ data Check = Bounds | Unsafe | Internal
 
 -- | Issue an internal error message
 --
-internalError :: HasCallStack => Builder -> a
+internalError :: HasCallStack => Format r a -> a
 internalError = withFrozenCallStack $ error Internal
 
-boundsError :: HasCallStack => Builder -> a
+boundsError :: HasCallStack => Format r a -> a
 boundsError = withFrozenCallStack $ error Bounds
 
-unsafeError :: HasCallStack => Builder -> a
+unsafeError :: HasCallStack => Format r a -> a
 unsafeError = withFrozenCallStack $ error Unsafe
 
 
@@ -62,7 +60,7 @@ unsafeCheck = withFrozenCallStack $ check Unsafe
 --
 indexCheck :: HasCallStack => Int -> Int -> a -> a
 indexCheck i n =
-  boundsCheck (build "index out of bounds: i={}, n={}" (i, n)) (i >= 0 && i < n)
+  boundsCheck (bformat ("index out of bounds: i=" % int % ", n=" % int) i n) (i >= 0 && i < n)
 
 -- | Print a warning message if the condition evaluates to False.
 --
@@ -76,54 +74,53 @@ unsafeWarning :: HasCallStack => Builder -> Bool -> a -> a
 unsafeWarning = withFrozenCallStack $ warning Unsafe
 
 
-error :: HasCallStack => Check -> Builder -> a
-error kind msg = errorWithoutStackTrace (format kind msg)
+error :: HasCallStack => Check -> Format r a -> a
+error kind fmt = runFormat fmt $ \msg -> errorWithoutStackTrace (decorated kind msg)
 
 check :: HasCallStack => Check -> Builder -> Bool -> a -> a
 check kind msg cond k =
   case not (doChecks kind) || cond of
     True  -> k
-    False -> errorWithoutStackTrace (format kind msg)
+    False -> errorWithoutStackTrace (decorated kind msg)
 
 warning :: HasCallStack => Check -> Builder -> Bool -> a -> a
 warning kind msg cond k =
   case not (doChecks kind) || cond of
     True  -> k
-    False -> trace (format kind msg) k
+    False -> trace (decorated kind msg) k
 
-format :: HasCallStack => Check -> Builder -> String
-format kind msg
-  = unpack
-  . toLazyText
-  $ intercalate "\n" [ header, msg, ppCallStack callStack ]
+decorated :: HasCallStack => Check -> Builder -> String
+decorated kind msg = formatToString (intercalated "\n" builder) [ header, msg, ppCallStack callStack ]
   where
-    header
-      = intercalate "\n"
-      $ case kind of
-          Internal -> [""
+    header =
+      case kind of
+        Internal -> bformat (intercalated "\n" builder)
+                      [""
                       ,"*** Internal error in package accelerate ***"
                       ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"
-                      ,""]
-          _        -> []
+                      ,""
+                      ]
+        _        -> mempty
 
 ppCallStack :: CallStack -> Builder
-ppCallStack = intercalate "\n" . ppLines
+ppCallStack = ppLines
   where
     ppLines cs =
       case getCallStack cs of
-        [] -> []
-        st -> ""
-            : "CallStack (from HasCallStack):"
-            : map (("  " <>) . ppCallSite) st
+        [] -> mempty
+        st -> bformat ("CallStack (from HasCallStack):\n" % indentedLines 2 (later ppCallSite)) st
 
-    ppCallSite (f, loc) = fromString f <> ": " <> ppSrcLoc loc
+    ppCallSite (fun, loc) =
+      bformat (string % ": " % build)
+        fun
+        (ppSrcLoc loc)
 
     ppSrcLoc SrcLoc{..} =
-      foldr (<>) ""
-        [ fromString srcLocModule, ":"
-        , build "{}" (Only srcLocStartLine), ":"
-        , build "{}" (Only srcLocStartCol)
-        ]
+      bformat (string % ":" % int % ":" % int)
+        srcLocModule
+        srcLocStartLine
+        srcLocStartCol
+
 
 -- CPP malarky
 -- -----------

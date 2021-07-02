@@ -41,7 +41,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.RealFrac
 
 import Data.Text.Lazy.Builder
-import Data.Semigroup
+import Formatting
 import Text.Printf
 import Prelude                                                      ( (.), ($), String, error, undefined, unlines, otherwise )
 import qualified Prelude                                            as P
@@ -206,7 +206,7 @@ preludeError x
 ieee754 :: forall a b. HasCallStack => P.RealFloat a => Builder -> (Exp a -> b) -> Exp a -> b
 ieee754 name f x
   | P.isIEEE (undefined::a) = f x
-  | otherwise               = internalError (name <> ": Not implemented for non-IEEE floating point")
+  | otherwise               = internalError (builder % ": Not implemented for non-IEEE floating point") name
 
 -- From: ghc/libraries/base/cbits/primFloat.c
 -- ------------------------------------------

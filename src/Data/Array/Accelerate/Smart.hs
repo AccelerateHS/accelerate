@@ -77,8 +77,8 @@ module Data.Array.Accelerate.Smart (
   unAcc, unAccFunction, mkExp, unExp, unExpFunction, unExpBinaryFunction, unPair, mkPairToTuple,
 
   -- ** Miscellaneous
-  showPreAccOp,
-  showPreExpOp,
+  formatPreAccOp,
+  formatPreExpOp,
 
 ) where
 
@@ -108,11 +108,9 @@ import Data.Array.Accelerate.AST                                    ( Direction(
                                                                     , PrimConst(..), primConstType )
 import Data.Primitive.Vec
 
-import Data.Text.Format
-import Data.Text.Lazy.Builder
-import Data.Text.Lazy.Builder.Int
 import Data.Kind
-import Prelude
+import Data.Text.Lazy.Builder
+import Formatting
 
 import GHC.TypeLits
 
@@ -1309,58 +1307,61 @@ instance (Arrays a, Arrays b, ApplyAcc t) => ApplyAcc ((Acc a -> Acc b) -> t) wh
 -- Debugging
 -- ---------
 
-showPreAccOp :: forall acc exp arrs. PreSmartAcc acc exp arrs -> Builder
-showPreAccOp (Atag _ i)            = build "Atag {}" (Only (decimal i))
-showPreAccOp (Use aR a)            = build "Use {}"  (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
-showPreAccOp Pipe{}                = "Pipe"
-showPreAccOp Acond{}               = "Acond"
-showPreAccOp Awhile{}              = "Awhile"
-showPreAccOp Apair{}               = "Apair"
-showPreAccOp Anil{}                = "Anil"
-showPreAccOp Aprj{}                = "Aprj"
-showPreAccOp Atrace{}              = "Atrace"
-showPreAccOp Unit{}                = "Unit"
-showPreAccOp Generate{}            = "Generate"
-showPreAccOp Reshape{}             = "Reshape"
-showPreAccOp Replicate{}           = "Replicate"
-showPreAccOp Slice{}               = "Slice"
-showPreAccOp Map{}                 = "Map"
-showPreAccOp ZipWith{}             = "ZipWith"
-showPreAccOp (Fold _ _ z _)        = "Fold" <> maybe "1" (const mempty) z
-showPreAccOp (FoldSeg _ _ _ z _ _) = "Fold" <> maybe "1" (const mempty) z <> "Seg"
-showPreAccOp (Scan d _ _ z _)      = "Scan" <> showDirection d <> (maybe "1" (const mempty) z)
-showPreAccOp (Scan' d _ _ _ _)     = "Scan" <> showDirection d <> (singleton '\'')
-showPreAccOp Permute{}             = "Permute"
-showPreAccOp Backpermute{}         = "Backpermute"
-showPreAccOp Stencil{}             = "Stencil"
-showPreAccOp Stencil2{}            = "Stencil2"
-showPreAccOp Aforeign{}            = "Aforeign"
+formatDirection :: Format r (Direction -> r)
+formatDirection = later $ \case
+  LeftToRight -> singleton 'l'
+  RightToLeft -> singleton 'r'
 
-showDirection :: Direction -> Builder
-showDirection LeftToRight = singleton 'l'
-showDirection RightToLeft = singleton 'r'
+formatPreAccOp :: Format r (PreSmartAcc acc exp arrs -> r)
+formatPreAccOp = later $ \case
+  Atag _ i            -> bformat ("Atag " % int) i
+  Use aR a            -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
+  Pipe{}              -> "Pipe"
+  Acond{}             -> "Acond"
+  Awhile{}            -> "Awhile"
+  Apair{}             -> "Apair"
+  Anil{}              -> "Anil"
+  Aprj{}              -> "Aprj"
+  Atrace{}            -> "Atrace"
+  Unit{}              -> "Unit"
+  Generate{}          -> "Generate"
+  Reshape{}           -> "Reshape"
+  Replicate{}         -> "Replicate"
+  Slice{}             -> "Slice"
+  Map{}               -> "Map"
+  ZipWith{}           -> "ZipWith"
+  Fold _ _ z _        -> bformat ("Fold" % maybed "1" (fconst mempty)) z
+  FoldSeg _ _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
+  Scan d _ _ z _      -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
+  Scan' d _ _ _ _     -> bformat ("Scan" % formatDirection % "\'") d
+  Permute{}           -> "Permute"
+  Backpermute{}       -> "Backpermute"
+  Stencil{}           -> "Stencil"
+  Stencil2{}          -> "Stencil2"
+  Aforeign{}          -> "Aforeign"
 
-showPreExpOp :: PreSmartExp acc exp t -> Builder
-showPreExpOp (Tag _ i)      = build "Tag {}" (Only (decimal i))
-showPreExpOp (Const t c)    = build "Const {}" (showElt (TupRsingle t) c)
-showPreExpOp Match{}        = "Match"
-showPreExpOp (Undef _)      = "Undef"
-showPreExpOp Nil{}          = "Nil"
-showPreExpOp Pair{}         = "Pair"
-showPreExpOp Prj{}          = "Prj"
-showPreExpOp VecPack{}      = "VecPack"
-showPreExpOp VecUnpack{}    = "VecUnpack"
-showPreExpOp ToIndex{}      = "ToIndex"
-showPreExpOp FromIndex{}    = "FromIndex"
-showPreExpOp Case{}         = "Case"
-showPreExpOp Cond{}         = "Cond"
-showPreExpOp While{}        = "While"
-showPreExpOp PrimConst{}    = "PrimConst"
-showPreExpOp PrimApp{}      = "PrimApp"
-showPreExpOp Index{}        = "Index"
-showPreExpOp LinearIndex{}  = "LinearIndex"
-showPreExpOp Shape{}        = "Shape"
-showPreExpOp ShapeSize{}    = "ShapeSize"
-showPreExpOp Foreign{}      = "Foreign"
-showPreExpOp Coerce{}       = "Coerce"
+formatPreExpOp :: Format r (PreSmartExp acc exp t -> r)
+formatPreExpOp = later $ \case
+  Tag _ i       -> bformat ("Tag " % int) i
+  Const t c     -> bformat ("Const " % string) (showElt (TupRsingle t) c)
+  Match{}       -> "Match"
+  Undef{}       -> "Undef"
+  Nil{}         -> "Nil"
+  Pair{}        -> "Pair"
+  Prj{}         -> "Prj"
+  VecPack{}     -> "VecPack"
+  VecUnpack{}   -> "VecUnpack"
+  ToIndex{}     -> "ToIndex"
+  FromIndex{}   -> "FromIndex"
+  Case{}        -> "Case"
+  Cond{}        -> "Cond"
+  While{}       -> "While"
+  PrimConst{}   -> "PrimConst"
+  PrimApp{}     -> "PrimApp"
+  Index{}       -> "Index"
+  LinearIndex{} -> "LinearIndex"
+  Shape{}       -> "Shape"
+  ShapeSize{}   -> "ShapeSize"
+  Foreign{}     -> "Foreign"
+  Coerce{}      -> "Coerce"
 

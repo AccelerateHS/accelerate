@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE TemplateHaskell   #-}
@@ -19,7 +20,7 @@ module Data.Array.Accelerate.Representation.Type
 
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
-import Data.Text.Buildable
+import Formatting
 
 import Language.Haskell.TH
 
@@ -47,10 +48,11 @@ instance Show (TupR ScalarType a) where
   show (TupRsingle t) = show t
   show (TupRpair a b) = "(" ++ show a ++ "," ++ show b ++ ")"
 
-instance Buildable (TupR ScalarType a) where
-  build TupRunit       = "()"
-  build (TupRsingle t) = build t
-  build (TupRpair a b) = "(" <> build a <> "," <> build b <> ")"
+formatTypeR :: Format r (TypeR a -> r)
+formatTypeR = later $ \case
+  TupRunit     -> "()"
+  TupRsingle t -> bformat formatScalarType t
+  TupRpair a b -> bformat (parenthesised (formatTypeR % "," % formatTypeR)) a b
 
 type TypeR = TupR ScalarType
 

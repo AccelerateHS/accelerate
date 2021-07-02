@@ -15,10 +15,8 @@
 module Data.Array.Accelerate.Array.Unique
   where
 
--- friends
 import Data.Array.Accelerate.Lifetime
 
--- library
 import Control.Applicative
 import Control.Concurrent.Unique
 import Control.DeepSeq

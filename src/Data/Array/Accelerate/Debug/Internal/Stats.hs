@@ -36,6 +36,7 @@ import Data.Text.Lazy.Builder
 import Data.Text.Prettyprint.Doc                          hiding ( annotate, Doc )
 import Data.Text.Prettyprint.Doc.Internal                 ( SimpleDocStream(..), textSpaces )
 import Data.Text.Prettyprint.Doc.Render.Util.Panic        ( panicUncaughtFail )
+import Formatting
 import System.IO.Unsafe
 import qualified Data.Map                                 as Map
 import qualified Data.Text.Prettyprint.Doc                as Pretty
@@ -129,7 +130,7 @@ dumpSimplStats :: IO ()
 dumpSimplStats = do
   when dump_simpl_stats $ do
     stats <- simplCount
-    putTraceMsg (render (layoutPretty defaultLayoutOptions stats))
+    putTraceMsg builder (render (layoutPretty defaultLayoutOptions stats))
     resetSimplCount
   where
     -- stolen from Data.Text.Prettyprint.Doc.Render.Text.renderLazy
