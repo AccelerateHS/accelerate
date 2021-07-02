@@ -108,7 +108,7 @@ ppCallStack = ppLines
     ppLines cs =
       case getCallStack cs of
         [] -> mempty
-        st -> bformat ("\nCallStack (from HasCallStack):\n" % indentedLines 2 (later ppCallSite)) st
+        st -> bformat ("CallStack (from HasCallStack):\n" % indentedLines 2 (later ppCallSite)) st
 
     ppCallSite (fun, loc) =
       bformat (string % ": " % build)
