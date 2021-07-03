@@ -30,8 +30,7 @@ import qualified Data.Array.Accelerate.Representation.Array         as R
 import Control.DeepSeq
 import Data.Kind
 import Data.Typeable
-import Language.Haskell.TH                                          hiding ( Type )
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Type )
 import System.IO.Unsafe
 
 import GHC.Exts                                                     ( IsList, IsString )

@@ -155,7 +155,8 @@ import Data.Maybe
 import Data.Text                                                    ( Text )
 import Data.Text.Lazy.Builder
 import Formatting
-import Language.Haskell.TH                                          ( Q, TExp )
+import Language.Haskell.TH.Extra                                    ( CodeQ )
+import qualified Language.Haskell.TH.Extra                          as TH
 import qualified Language.Haskell.TH.Syntax                         as TH
 
 import GHC.TypeLits
@@ -203,7 +204,7 @@ type PrimMaybe a = (TAG, ((), a))
 -- Trace messages
 data Message a where
   Message :: (a -> String)                    -- embedded show
-          -> Maybe (Q (TExp (a -> String)))   -- lifted version of show, for TH
+          -> Maybe (CodeQ (a -> String))      -- lifted version of show, for TH
           -> Text
           -> Message a
 
@@ -1171,9 +1172,9 @@ rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
 -- Template Haskell
 -- ================
 
-type LiftAcc acc = forall aenv a. acc aenv a -> Q (TExp (acc aenv a))
+type LiftAcc acc = forall aenv a. acc aenv a -> CodeQ (acc aenv a)
 
-liftPreOpenAfun :: LiftAcc acc -> PreOpenAfun acc aenv t -> Q (TExp (PreOpenAfun acc aenv t))
+liftPreOpenAfun :: LiftAcc acc -> PreOpenAfun acc aenv t -> CodeQ (PreOpenAfun acc aenv t)
 liftPreOpenAfun liftA (Alam lhs f) = [|| Alam $$(liftALeftHandSide lhs) $$(liftPreOpenAfun liftA f) ||]
 liftPreOpenAfun liftA (Abody b)    = [|| Abody $$(liftA b) ||]
 
@@ -1182,19 +1183,19 @@ liftPreOpenAcc
        HasArraysR acc
     => LiftAcc acc
     -> PreOpenAcc acc aenv a
-    -> Q (TExp (PreOpenAcc acc aenv a))
+    -> CodeQ (PreOpenAcc acc aenv a)
 liftPreOpenAcc liftA pacc =
   let
-      liftE :: OpenExp env aenv t -> Q (TExp (OpenExp env aenv t))
+      liftE :: OpenExp env aenv t -> CodeQ (OpenExp env aenv t)
       liftE = liftOpenExp
 
-      liftF :: OpenFun env aenv t -> Q (TExp (OpenFun env aenv t))
+      liftF :: OpenFun env aenv t -> CodeQ (OpenFun env aenv t)
       liftF = liftOpenFun
 
-      liftAF :: PreOpenAfun acc aenv f -> Q (TExp (PreOpenAfun acc aenv f))
+      liftAF :: PreOpenAfun acc aenv f -> CodeQ (PreOpenAfun acc aenv f)
       liftAF = liftPreOpenAfun liftA
 
-      liftB :: ArrayR (Array sh e) -> Boundary aenv (Array sh e) -> Q (TExp (Boundary aenv (Array sh e)))
+      liftB :: ArrayR (Array sh e) -> Boundary aenv (Array sh e) -> CodeQ (Boundary aenv (Array sh e))
       liftB = liftBoundary
   in
   case pacc of
@@ -1233,53 +1234,53 @@ liftPreOpenAcc liftA pacc =
        in [|| Stencil2 $$(liftStencilR sr1) $$(liftStencilR sr2) $$(liftTypeR tp) $$(liftF f) $$(liftB repr1 b1) $$(liftA a1) $$(liftB repr2 b2) $$(liftA a2) ||]
 
 
-liftALeftHandSide :: ALeftHandSide arrs aenv aenv' -> Q (TExp (ALeftHandSide arrs aenv aenv'))
+liftALeftHandSide :: ALeftHandSide arrs aenv aenv' -> CodeQ (ALeftHandSide arrs aenv aenv')
 liftALeftHandSide = liftLeftHandSide liftArrayR
 
-liftArrayVar :: ArrayVar aenv a -> Q (TExp (ArrayVar aenv a))
+liftArrayVar :: ArrayVar aenv a -> CodeQ (ArrayVar aenv a)
 liftArrayVar = liftVar liftArrayR
 
-liftDirection :: Direction -> Q (TExp Direction)
+liftDirection :: Direction -> CodeQ Direction
 liftDirection LeftToRight = [|| LeftToRight ||]
 liftDirection RightToLeft = [|| RightToLeft ||]
 
-liftMessage :: ArraysR a -> Message a -> Q (TExp (Message a))
+liftMessage :: ArraysR a -> Message a -> CodeQ (Message a)
 liftMessage aR (Message _ fmt msg) =
   let
       -- We (ironically?) can't lift TExp, so nested occurrences must fall
       -- back to displaying in representation format
-      fmtR :: ArraysR arrs' -> Q (TExp (arrs' -> String))
+      fmtR :: ArraysR arrs' -> CodeQ (arrs' -> String)
       fmtR TupRunit                         = [|| \() -> "()" ||]
       fmtR (TupRsingle (ArrayR ShapeRz eR)) = [|| \as -> showElt $$(liftTypeR eR) $ linearIndexArray $$(liftTypeR eR) as 0 ||]
       fmtR (TupRsingle (ArrayR shR eR))     = [|| \as -> showArray (showsElt $$(liftTypeR eR)) (ArrayR $$(liftShapeR shR) $$(liftTypeR eR)) as ||]
       fmtR aR'                              = [|| \as -> showArrays $$(liftArraysR aR') as ||]
   in
-  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeTExpCoerce (TH.lift msg)) ||]
+  [|| Message $$(fromMaybe (fmtR aR) fmt) Nothing $$(TH.unsafeCodeCoerce (TH.lift msg)) ||]
 
-liftMaybe :: (a -> Q (TExp a)) -> Maybe a -> Q (TExp (Maybe a))
+liftMaybe :: (a -> CodeQ a) -> Maybe a -> CodeQ (Maybe a)
 liftMaybe _ Nothing  = [|| Nothing ||]
 liftMaybe f (Just x) = [|| Just $$(f x) ||]
 
-liftList :: (a -> Q (TExp a)) -> [a] -> Q (TExp [a])
+liftList :: (a -> CodeQ a) -> [a] -> CodeQ [a]
 liftList _ []     = [|| [] ||]
 liftList f (x:xs) = [|| $$(f x) : $$(liftList f xs) ||]
 
 liftOpenFun
     :: OpenFun env aenv t
-    -> Q (TExp (OpenFun env aenv t))
+    -> CodeQ (OpenFun env aenv t)
 liftOpenFun (Lam lhs f)  = [|| Lam $$(liftELeftHandSide lhs) $$(liftOpenFun f) ||]
 liftOpenFun (Body b)     = [|| Body $$(liftOpenExp b) ||]
 
 liftOpenExp
     :: forall env aenv t.
        OpenExp env aenv t
-    -> Q (TExp (OpenExp env aenv t))
+    -> CodeQ (OpenExp env aenv t)
 liftOpenExp pexp =
   let
-      liftE :: OpenExp env aenv e -> Q (TExp (OpenExp env aenv e))
+      liftE :: OpenExp env aenv e -> CodeQ (OpenExp env aenv e)
       liftE = liftOpenExp
 
-      liftF :: OpenFun env aenv f -> Q (TExp (OpenFun env aenv f))
+      liftF :: OpenFun env aenv f -> CodeQ (OpenFun env aenv f)
       liftF = liftOpenFun
   in
   case pexp of
@@ -1307,29 +1308,29 @@ liftOpenExp pexp =
     ShapeSize shr ix          -> [|| ShapeSize $$(liftShapeR shr) $$(liftE ix) ||]
     Coerce t1 t2 e            -> [|| Coerce $$(liftScalarType t1) $$(liftScalarType t2) $$(liftE e) ||]
 
-liftELeftHandSide :: ELeftHandSide t env env' -> Q (TExp (ELeftHandSide t env env'))
+liftELeftHandSide :: ELeftHandSide t env env' -> CodeQ (ELeftHandSide t env env')
 liftELeftHandSide = liftLeftHandSide liftScalarType
 
-liftExpVar :: ExpVar env t -> Q (TExp (ExpVar env t))
+liftExpVar :: ExpVar env t -> CodeQ (ExpVar env t)
 liftExpVar = liftVar liftScalarType
 
 liftBoundary
     :: forall aenv sh e.
        ArrayR (Array sh e)
     -> Boundary aenv (Array sh e)
-    -> Q (TExp (Boundary aenv (Array sh e)))
+    -> CodeQ (Boundary aenv (Array sh e))
 liftBoundary _             Clamp        = [|| Clamp ||]
 liftBoundary _             Mirror       = [|| Mirror ||]
 liftBoundary _             Wrap         = [|| Wrap ||]
 liftBoundary (ArrayR _ tp) (Constant v) = [|| Constant $$(liftElt tp v) ||]
 liftBoundary _             (Function f) = [|| Function $$(liftOpenFun f) ||]
 
-liftPrimConst :: PrimConst c -> Q (TExp (PrimConst c))
+liftPrimConst :: PrimConst c -> CodeQ (PrimConst c)
 liftPrimConst (PrimMinBound t) = [|| PrimMinBound $$(liftBoundedType t) ||]
 liftPrimConst (PrimMaxBound t) = [|| PrimMaxBound $$(liftBoundedType t) ||]
 liftPrimConst (PrimPi t)       = [|| PrimPi $$(liftFloatingType t) ||]
 
-liftPrimFun :: PrimFun f -> Q (TExp (PrimFun f))
+liftPrimFun :: PrimFun f -> CodeQ (PrimFun f)
 liftPrimFun (PrimAdd t)                = [|| PrimAdd $$(liftNumType t) ||]
 liftPrimFun (PrimSub t)                = [|| PrimSub $$(liftNumType t) ||]
 liftPrimFun (PrimMul t)                = [|| PrimMul $$(liftNumType t) ||]

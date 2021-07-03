@@ -28,11 +28,10 @@ import Control.Monad
 import Data.Bits
 import Data.Char
 import Data.List                                                    ( (\\), foldl' )
-import Language.Haskell.TH                                          hiding ( Exp, Match, match, tupP, tupE )
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Exp, Match, match )
 import Numeric
 import Text.Printf
-import qualified Language.Haskell.TH                                as TH
+import qualified Language.Haskell.TH.Extra                          as TH
 
 import GHC.Stack
 
@@ -75,10 +74,10 @@ mkDec dec =
     NewtypeD _ nm tv _ c  _ -> mkNewtypeD nm tv c
     _                       -> fail "mkPatterns: expected the name of a newtype or datatype"
 
-mkNewtypeD :: Name -> [TyVarBndr] -> Con -> DecsQ
+mkNewtypeD :: Name -> [TyVarBndr ()] -> Con -> DecsQ
 mkNewtypeD tn tvs c = mkDataD tn tvs [c]
 
-mkDataD :: Name -> [TyVarBndr] -> [Con] -> DecsQ
+mkDataD :: Name -> [TyVarBndr ()] -> [Con] -> DecsQ
 mkDataD tn tvs cs = do
   (pats, decs) <- unzip <$> go cs
   comp         <- pragCompleteD pats Nothing
@@ -123,7 +122,7 @@ mkDataD tn tvs cs = do
       map bitsToTag (l ++ r)
 
 
-mkConP :: Name -> [TyVarBndr] -> Con -> Q (Name, [Dec])
+mkConP :: Name -> [TyVarBndr ()] -> Con -> Q (Name, [Dec])
 mkConP tn' tvs' con' = do
   checkExts [ PatternSynonyms ]
   case con' of
@@ -145,7 +144,7 @@ mkConP tn' tvs' con' = do
       where
         pat = rename cn
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -163,7 +162,7 @@ mkConP tn' tvs' con' = do
       where
         pat = rename cn
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -187,13 +186,13 @@ mkConP tn' tvs' con' = do
       where
         pat = mkName (':' : nameBase cn)
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
 
-mkConS :: Name -> [TyVarBndr] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
+mkConS :: Name -> [TyVarBndr ()] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
 mkConS tn' tvs' prev' next' tag' con' = do
   checkExts [GADTs, PatternSynonyms, ScopedTypeVariables, TypeApplications, ViewPatterns]
   case con' of
@@ -238,7 +237,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return r
       where
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -255,7 +254,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return r
       where
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -278,7 +277,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return r'
       where
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -290,9 +289,9 @@ mkConS tn' tvs' prev' next' tag' con' = do
       xs  <- replicateM (length fs) (newName "_x")
       let
         vs    = foldl' (\es e -> [| SmartExp ($es `Pair` $e) |]) [| SmartExp Nil |]
-              $  map (\t -> [| unExp (undef @ $(return t)) |] ) (concat (reverse fs0))
+              $  map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat (reverse fs0))
               ++ map varE xs
-              ++ map (\t -> [| unExp (undef @ $(return t)) |] ) (concat fs1)
+              ++ map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat fs1)
 
         tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
         body   = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
@@ -303,7 +302,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return (fun, r)
       where
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -332,7 +331,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return (fun, r)
       where
         sig = forallT
-                (map plainTV tvs)
+                (map (`plainInvisTV'` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 [t| Exp $(foldl' appT (conT tn) (map varT tvs)) -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
 

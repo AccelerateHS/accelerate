@@ -24,7 +24,7 @@ import Control.Monad.ST
 import Data.List                                                    ( intercalate )
 import Data.Primitive.ByteArray
 import Foreign.Storable
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 
 undefElt :: TypeR t -> t
@@ -153,7 +153,7 @@ showsElt = tuple
       = showString
       $ "<" ++ intercalate ", " ((\v -> single s v "") <$> listOfVec vec) ++ ">"
 
-liftElt :: TypeR t -> t -> Q (TExp t)
+liftElt :: TypeR t -> t -> CodeQ t
 liftElt TupRunit         ()    = [|| () ||]
 liftElt (TupRsingle t)   x     = [|| $$(liftScalar t x) ||]
 liftElt (TupRpair ta tb) (a,b) = [|| ($$(liftElt ta a), $$(liftElt tb b)) ||]

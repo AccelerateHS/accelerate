@@ -34,11 +34,15 @@ import System.CPUTime
 import Prelude
 
 import GHC.Int
-import GHC.Num
 import GHC.Prim
 import GHC.Stats
 import GHC.Types
 import GHC.Word
+#if MIN_VERSION_base(4,15,0)
+import GHC.Integer
+#else
+import GHC.Num
+#endif
 #endif
 
 

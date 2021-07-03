@@ -18,7 +18,7 @@ module Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.AST.Idx
 
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 
 data Var  s env t = Var (s t) (Idx env t)
@@ -36,9 +36,9 @@ rnfVar f (Var t idx) = f t `seq` rnfIdx idx
 rnfVars :: (forall b. s b -> ()) -> Vars s env t -> ()
 rnfVars f = rnfTupR (rnfVar f)
 
-liftVar :: (forall b. s b -> Q (TExp (s b))) -> Var s env t -> Q (TExp (Var s env t))
+liftVar :: (forall b. s b -> CodeQ (s b)) -> Var s env t -> CodeQ (Var s env t)
 liftVar f (Var s idx) = [|| Var $$(f s) $$(liftIdx idx) ||]
 
-liftVars :: (forall b. s b -> Q (TExp (s b))) -> Vars s env t -> Q (TExp (Vars s env t))
+liftVars :: (forall b. s b -> CodeQ (s b)) -> Vars s env t -> CodeQ (Vars s env t)
 liftVars f = liftTupR (liftVar f)
 

@@ -30,8 +30,7 @@ import Data.Array.Accelerate.Representation.Type
 import Data.List                                                    ( intersperse )
 import Data.Maybe                                                   ( isJust )
 import Formatting
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
+import Language.Haskell.TH.Extra
 import System.IO.Unsafe
 import Text.Show                                                    ( showListWith )
 import Prelude                                                      hiding ( (!!) )
@@ -309,21 +308,21 @@ rnfArraysR TupRunit           ()      = ()
 rnfArraysR (TupRsingle arrR)  arr     = rnfArray arrR arr
 rnfArraysR (TupRpair aR1 aR2) (a1,a2) = rnfArraysR aR1 a1 `seq` rnfArraysR aR2 a2
 
-liftArrayR :: ArrayR a -> Q (TExp (ArrayR a))
+liftArrayR :: ArrayR a -> CodeQ (ArrayR a)
 liftArrayR (ArrayR shR tR) = [|| ArrayR $$(liftShapeR shR) $$(liftTypeR tR) ||]
 
-liftArraysR :: ArraysR arrs -> Q (TExp (ArraysR arrs))
+liftArraysR :: ArraysR arrs -> CodeQ (ArraysR arrs)
 liftArraysR TupRunit          = [|| TupRunit ||]
 liftArraysR (TupRsingle repr) = [|| TupRsingle $$(liftArrayR repr) ||]
 liftArraysR (TupRpair a b)    = [|| TupRpair $$(liftArraysR a) $$(liftArraysR b) ||]
 
-liftArray :: forall sh e. ArrayR (Array sh e) -> Array sh e -> Q (TExp (Array sh e))
+liftArray :: forall sh e. ArrayR (Array sh e) -> Array sh e -> CodeQ (Array sh e)
 liftArray (ArrayR shR adR) (Array sh adata) =
   [|| Array $$(liftElt (shapeType shR) sh) $$(liftArrayData sz adR adata) ||] `at` [t| Array $(liftTypeQ (shapeType shR)) $(liftTypeQ adR) |]
   where
     sz :: Int
     sz = size shR sh
 
-    at :: Q (TExp t) -> Q Type -> Q (TExp t)
-    at e t = unsafeTExpCoerce $ sigE (unTypeQ e) t
+    at :: CodeQ t -> Q Type -> CodeQ t
+    at e t = unsafeCodeCoerce $ sigE (unTypeCode e) t
 

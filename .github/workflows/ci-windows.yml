@@ -19,6 +19,7 @@ jobs:
     strategy:
       matrix:
         ghc:
+          - "9.0"
           # - "8.10"  XXX: borked?
           - "8.8"
           - "8.6"

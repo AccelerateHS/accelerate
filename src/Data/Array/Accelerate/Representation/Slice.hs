@@ -20,7 +20,7 @@ module Data.Array.Accelerate.Representation.Slice
 
 import Data.Array.Accelerate.Representation.Shape
 
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 
 -- | Class of slice representations (which are nested pairs)
@@ -101,7 +101,7 @@ rnfSliceIndex SliceNil        = ()
 rnfSliceIndex (SliceAll sh)   = rnfSliceIndex sh
 rnfSliceIndex (SliceFixed sh) = rnfSliceIndex sh
 
-liftSliceIndex :: SliceIndex ix slice co sh -> Q (TExp (SliceIndex ix slice co sh))
+liftSliceIndex :: SliceIndex ix slice co sh -> CodeQ (SliceIndex ix slice co sh)
 liftSliceIndex SliceNil          = [|| SliceNil ||]
 liftSliceIndex (SliceAll rest)   = [|| SliceAll $$(liftSliceIndex rest) ||]
 liftSliceIndex (SliceFixed rest) = [|| SliceFixed $$(liftSliceIndex rest) ||]

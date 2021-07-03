@@ -355,7 +355,7 @@ instance RebuildableExp OpenFun where
 --
 
 class Sink f where
-  weaken :: env :> env' -> f env t -> f env' t
+  weaken :: env :> env' -> forall t. f env t -> f env' t
 
   -- TLM: We can't use this default instance because it doesn't lead to
   --      specialised code. Perhaps the INLINEABLE pragma is ignored: GHC bug?

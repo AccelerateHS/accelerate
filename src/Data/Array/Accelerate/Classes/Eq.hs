@@ -33,6 +33,7 @@ module Data.Array.Accelerate.Classes.Eq (
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.Bool
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
@@ -41,9 +42,8 @@ import Data.Array.Accelerate.Type
 import Data.Bool                                                    ( Bool(..) )
 import Data.Char                                                    ( Char )
 import Text.Printf
-import Prelude                                                      ( ($), String, Num(..), show, error, return, concat, map, zipWith, foldr1, mapM )
-import Language.Haskell.TH                                          hiding ( Exp )
-import Language.Haskell.TH.Extra
+import Prelude                                                      ( ($), String, Num(..), Ordering(..), show, error, return, concat, map, zipWith, foldr1, mapM )
+import Language.Haskell.TH.Extra                                    hiding ( Exp )
 import qualified Prelude                                            as P
 
 
@@ -119,14 +119,6 @@ instance Eq Z where
   _ == _ = True_
   _ /= _ = False_
 
-instance Eq sh => Eq (sh :. Int) where
-  x == y = indexHead x == indexHead y && indexTail x == indexTail y
-  x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
-
-instance Eq Bool where
-  x == y = mkCoerce x == (mkCoerce y :: Exp PrimBool)
-  x /= y = mkCoerce x /= (mkCoerce y :: Exp PrimBool)
-
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
 -- a useful error message.
@@ -138,77 +130,88 @@ instance P.Eq (Exp a) where
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
 
-$(runQ $ do
-    let
-        integralTypes :: [Name]
-        integralTypes =
-          [ ''Int
-          , ''Int8
-          , ''Int16
-          , ''Int32
-          , ''Int64
-          , ''Word
-          , ''Word8
-          , ''Word16
-          , ''Word32
-          , ''Word64
-          ]
+runQ $ do
+  let
+      integralTypes :: [Name]
+      integralTypes =
+        [ ''Int
+        , ''Int8
+        , ''Int16
+        , ''Int32
+        , ''Int64
+        , ''Word
+        , ''Word8
+        , ''Word16
+        , ''Word32
+        , ''Word64
+        ]
 
-        floatingTypes :: [Name]
-        floatingTypes =
-          [ ''Half
-          , ''Float
-          , ''Double
-          ]
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        ]
 
-        nonNumTypes :: [Name]
-        nonNumTypes =
-          [ ''Char
-          ]
+      nonNumTypes :: [Name]
+      nonNumTypes =
+        [ ''Char
+        ]
 
-        cTypes :: [Name]
-        cTypes =
-          [ ''CInt
-          , ''CUInt
-          , ''CLong
-          , ''CULong
-          , ''CLLong
-          , ''CULLong
-          , ''CShort
-          , ''CUShort
-          , ''CChar
-          , ''CUChar
-          , ''CSChar
-          , ''CFloat
-          , ''CDouble
-          ]
+      cTypes :: [Name]
+      cTypes =
+        [ ''CInt
+        , ''CUInt
+        , ''CLong
+        , ''CULong
+        , ''CLLong
+        , ''CULLong
+        , ''CShort
+        , ''CUShort
+        , ''CChar
+        , ''CUChar
+        , ''CSChar
+        , ''CFloat
+        , ''CDouble
+        ]
 
-        mkPrim :: Name -> Q [Dec]
-        mkPrim t =
-          [d| instance Eq $(conT t) where
-                (==) = mkEq
-                (/=) = mkNEq
-            |]
+      mkPrim :: Name -> Q [Dec]
+      mkPrim t =
+        [d| instance Eq $(conT t) where
+              (==) = mkEq
+              (/=) = mkNEq
+          |]
 
-        mkTup :: Int -> Q [Dec]
-        mkTup n =
-          let
-              xs      = [ mkName ('x':show i) | i <- [0 .. n-1] ]
-              ys      = [ mkName ('y':show i) | i <- [0 .. n-1] ]
-              cst     = tupT (map (\x -> [t| Eq $(varT x) |]) xs)
-              res     = tupT (map varT xs)
-              pat vs  = conP (mkName ('T':show n)) (map varP vs)
-          in
-          [d| instance ($cst) => Eq $res where
-                $(pat xs) == $(pat ys) = $(foldr1 (\vs v -> [| $vs && $v |]) (zipWith (\x y -> [| $x == $y |]) (map varE xs) (map varE ys)))
-                $(pat xs) /= $(pat ys) = $(foldr1 (\vs v -> [| $vs || $v |]) (zipWith (\x y -> [| $x /= $y |]) (map varE xs) (map varE ys)))
-            |]
+      mkTup :: Int -> Q [Dec]
+      mkTup n =
+        let
+            xs      = [ mkName ('x':show i) | i <- [0 .. n-1] ]
+            ys      = [ mkName ('y':show i) | i <- [0 .. n-1] ]
+            cst     = tupT (map (\x -> [t| Eq $(varT x) |]) xs)
+            res     = tupT (map varT xs)
+            pat vs  = conP (mkName ('T':show n)) (map varP vs)
+        in
+        [d| instance ($cst) => Eq $res where
+              $(pat xs) == $(pat ys) = $(foldr1 (\vs v -> [| $vs && $v |]) (zipWith (\x y -> [| $x == $y |]) (map varE xs) (map varE ys)))
+              $(pat xs) /= $(pat ys) = $(foldr1 (\vs v -> [| $vs || $v |]) (zipWith (\x y -> [| $x /= $y |]) (map varE xs) (map varE ys)))
+          |]
 
-    is <- mapM mkPrim integralTypes
-    fs <- mapM mkPrim floatingTypes
-    ns <- mapM mkPrim nonNumTypes
-    cs <- mapM mkPrim cTypes
-    ts <- mapM mkTup [2..16]
-    return $ concat (concat [is,fs,ns,cs,ts])
- )
+  is <- mapM mkPrim integralTypes
+  fs <- mapM mkPrim floatingTypes
+  ns <- mapM mkPrim nonNumTypes
+  cs <- mapM mkPrim cTypes
+  ts <- mapM mkTup [2..16]
+  return $ concat (concat [is,fs,ns,cs,ts])
+
+instance Eq sh => Eq (sh :. Int) where
+  x == y = indexHead x == indexHead y && indexTail x == indexTail y
+  x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
+
+instance Eq Bool where
+  x == y = mkCoerce x == (mkCoerce y :: Exp PrimBool)
+  x /= y = mkCoerce x /= (mkCoerce y :: Exp PrimBool)
+
+instance Eq Ordering where
+  x == y = mkCoerce x == (mkCoerce y :: Exp TAG)
+  x /= y = mkCoerce x /= (mkCoerce y :: Exp TAG)
 

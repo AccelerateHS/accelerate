@@ -40,8 +40,7 @@ import Control.Monad.ST
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Text.Prettyprint.Doc
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
+import Language.Haskell.TH.Extra
 
 import GHC.Base                                                     ( isTrue# )
 import GHC.Int
@@ -264,9 +263,9 @@ packVec16 a b c d e f g h i j k l m n o p = runST $ do
 -- to do this without copying, but I don't think the definition of ByteArray# is
 -- exported (or it is deeply magical).
 --
-liftVec :: Vec n a -> Q (TExp (Vec n a))
+liftVec :: Vec n a -> CodeQ (Vec n a)
 liftVec (Vec ba#)
-  = unsafeTExpCoerce
+  = unsafeCodeCoerce
     [| runST $ \s ->
          case newByteArray# $(liftInt# n#) s                                             of { (# s1, mba# #) ->
          case copyAddrToByteArray# $(litE (StringPrimL bytes)) mba# 0# $(liftInt# n#) s1 of { s2             ->

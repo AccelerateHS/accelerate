@@ -19,7 +19,7 @@ module Data.Array.Accelerate.AST.LeftHandSide
 
 import Data.Array.Accelerate.Representation.Type
 
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 
 data Exists f where
@@ -55,7 +55,7 @@ rnfLeftHandSide f (LeftHandSideWildcard r) = rnfTupR f r
 rnfLeftHandSide f (LeftHandSideSingle s)   = f s
 rnfLeftHandSide f (LeftHandSidePair as bs) = rnfLeftHandSide f as `seq` rnfLeftHandSide f bs
 
-liftLeftHandSide :: (forall u. s u -> Q (TExp (s u))) -> LeftHandSide s v env env' -> Q (TExp (LeftHandSide s v env env'))
+liftLeftHandSide :: (forall u. s u -> CodeQ (s u)) -> LeftHandSide s v env env' -> CodeQ (LeftHandSide s v env env')
 liftLeftHandSide f (LeftHandSideSingle s)   = [|| LeftHandSideSingle $$(f s) ||]
 liftLeftHandSide f (LeftHandSideWildcard r) = [|| LeftHandSideWildcard $$(liftTupR f r) ||]
 liftLeftHandSide f (LeftHandSidePair as bs) = [|| LeftHandSidePair $$(liftLeftHandSide f as) $$(liftLeftHandSide f bs) ||]

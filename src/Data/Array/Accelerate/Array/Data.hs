@@ -72,13 +72,12 @@ import Data.Primitive                                               ( sizeOf# )
 import Foreign.ForeignPtr
 import Foreign.Storable
 import Formatting                                                   hiding ( bytes )
-import Language.Haskell.TH                                          hiding ( Type )
-import System.IO.Unsafe
+import Language.Haskell.TH.Extra                                    hiding ( Type )
 import Prelude                                                      hiding ( mapM )
+import System.IO.Unsafe
 
+import GHC.Exts                                                     hiding ( build )
 import GHC.ForeignPtr
-import GHC.Prim
-import GHC.Ptr
 import GHC.Types
 
 
@@ -325,31 +324,31 @@ mallocPlainForeignPtrBytesAligned (I# size#) = IO $ \s0 ->
     (# s1, mbarr# #) -> (# s1, ForeignPtr (byteArrayContents# (unsafeCoerce# mbarr#)) (PlainPtr mbarr#) #)
 
 
-liftArrayData :: Int -> TypeR e -> ArrayData e -> Q (TExp (ArrayData e))
+liftArrayData :: Int -> TypeR e -> ArrayData e -> CodeQ (ArrayData e)
 liftArrayData n = tuple
   where
-    tuple :: TypeR e -> ArrayData e -> Q (TExp (ArrayData e))
+    tuple :: TypeR e -> ArrayData e -> CodeQ (ArrayData e)
     tuple TupRunit         ()       = [|| () ||]
     tuple (TupRpair t1 t2) (a1, a2) = [|| ($$(tuple t1 a1), $$(tuple t2 a2)) ||]
     tuple (TupRsingle s) adata      = scalar s adata
 
-    scalar :: ScalarType e -> ArrayData e -> Q (TExp (ArrayData e))
+    scalar :: ScalarType e -> ArrayData e -> CodeQ (ArrayData e)
     scalar (SingleScalarType t) = single t
     scalar (VectorScalarType t) = vector t
 
-    vector :: forall n e. VectorType (Vec n e) -> ArrayData (Vec n e) -> Q (TExp (ArrayData (Vec n e)))
+    vector :: forall n e. VectorType (Vec n e) -> ArrayData (Vec n e) -> CodeQ (ArrayData (Vec n e))
     vector (VectorType w t)
       | SingleArrayDict <- singleArrayDict t
       = liftArrayData (w * n) (TupRsingle (SingleScalarType t))
 
-    single :: SingleType e -> ArrayData e -> Q (TExp (ArrayData e))
+    single :: SingleType e -> ArrayData e -> CodeQ (ArrayData e)
     single (NumSingleType t) = num t
 
-    num :: NumType e -> ArrayData e -> Q (TExp (ArrayData e))
+    num :: NumType e -> ArrayData e -> CodeQ (ArrayData e)
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
 
-    integral :: IntegralType e -> ArrayData e -> Q (TExp (ArrayData e))
+    integral :: IntegralType e -> ArrayData e -> CodeQ (ArrayData e)
     integral TypeInt    = liftUniqueArray n
     integral TypeInt8   = liftUniqueArray n
     integral TypeInt16  = liftUniqueArray n
@@ -361,7 +360,7 @@ liftArrayData n = tuple
     integral TypeWord32 = liftUniqueArray n
     integral TypeWord64 = liftUniqueArray n
 
-    floating :: FloatingType e -> ArrayData e -> Q (TExp (ArrayData e))
+    floating :: FloatingType e -> ArrayData e -> CodeQ (ArrayData e)
     floating TypeHalf   = liftUniqueArray n
     floating TypeFloat  = liftUniqueArray n
     floating TypeDouble = liftUniqueArray n

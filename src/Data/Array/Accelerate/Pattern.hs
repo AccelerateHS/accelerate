@@ -49,8 +49,7 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
-import Language.Haskell.TH                                          hiding ( Exp, Match, tupP, tupE )
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Exp, Match )
 
 
 -- | A pattern synonym for working with (product) data types. You can declare
@@ -203,7 +202,7 @@ runQ $ do
               -- and an equality constraint on the representation type of `a` and the vector representation `vec`.
               context  = [t| (Elt $(varT v), VecElt $(varT a), EltR $(varT v) ~ $vec) |]
               --
-              vecR     = foldr appE [| VecRnil (singleType @ $(varT a)) |] (replicate n [| VecRsucc |])
+              vecR     = foldr appE ([| VecRnil |] `appE` (varE 'singleType `appTypeE` varT a)) (replicate n [| VecRsucc |])
               tR       = tupT (replicate n (varT a))
           --
           [d| instance $context => IsVector Exp $(varT v) $tup where

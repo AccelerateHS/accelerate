@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleInstances   #-}
@@ -77,7 +76,7 @@ import Data.Word
 import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
 import Formatting
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 import Numeric.Half
 import Text.Printf
 
@@ -354,21 +353,21 @@ rnfFloatingType TypeFloat  = ()
 rnfFloatingType TypeDouble = ()
 
 
-liftScalar :: ScalarType t -> t -> Q (TExp t)
+liftScalar :: ScalarType t -> t -> CodeQ t
 liftScalar (SingleScalarType t) = liftSingle t
 liftScalar (VectorScalarType t) = liftVector t
 
-liftSingle :: SingleType t -> t -> Q (TExp t)
+liftSingle :: SingleType t -> t -> CodeQ t
 liftSingle (NumSingleType t) = liftNum t
 
-liftVector :: VectorType t -> t -> Q (TExp t)
+liftVector :: VectorType t -> t -> CodeQ t
 liftVector VectorType{} = liftVec
 
-liftNum :: NumType t -> t -> Q (TExp t)
+liftNum :: NumType t -> t -> CodeQ t
 liftNum (IntegralNumType t) = liftIntegral t
 liftNum (FloatingNumType t) = liftFloating t
 
-liftIntegral :: IntegralType t -> t -> Q (TExp t)
+liftIntegral :: IntegralType t -> t -> CodeQ t
 liftIntegral TypeInt    x = [|| x ||]
 liftIntegral TypeInt8   x = [|| x ||]
 liftIntegral TypeInt16  x = [|| x ||]
@@ -380,30 +379,30 @@ liftIntegral TypeWord16 x = [|| x ||]
 liftIntegral TypeWord32 x = [|| x ||]
 liftIntegral TypeWord64 x = [|| x ||]
 
-liftFloating :: FloatingType t -> t -> Q (TExp t)
+liftFloating :: FloatingType t -> t -> CodeQ t
 liftFloating TypeHalf   x = [|| x ||]
 liftFloating TypeFloat  x = [|| x ||]
 liftFloating TypeDouble x = [|| x ||]
 
 
-liftScalarType :: ScalarType t -> Q (TExp (ScalarType t))
+liftScalarType :: ScalarType t -> CodeQ (ScalarType t)
 liftScalarType (SingleScalarType t) = [|| SingleScalarType $$(liftSingleType t) ||]
 liftScalarType (VectorScalarType t) = [|| VectorScalarType $$(liftVectorType t) ||]
 
-liftSingleType :: SingleType t -> Q (TExp (SingleType t))
+liftSingleType :: SingleType t -> CodeQ (SingleType t)
 liftSingleType (NumSingleType t) = [|| NumSingleType $$(liftNumType t) ||]
 
-liftVectorType :: VectorType t -> Q (TExp (VectorType t))
+liftVectorType :: VectorType t -> CodeQ (VectorType t)
 liftVectorType (VectorType n t) = [|| VectorType n $$(liftSingleType t) ||]
 
-liftNumType :: NumType t -> Q (TExp (NumType t))
+liftNumType :: NumType t -> CodeQ (NumType t)
 liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]
 liftNumType (FloatingNumType t) = [|| FloatingNumType $$(liftFloatingType t) ||]
 
-liftBoundedType :: BoundedType t -> Q (TExp (BoundedType t))
+liftBoundedType :: BoundedType t -> CodeQ (BoundedType t)
 liftBoundedType (IntegralBoundedType t) = [|| IntegralBoundedType $$(liftIntegralType t) ||]
 
-liftIntegralType :: IntegralType t -> Q (TExp (IntegralType t))
+liftIntegralType :: IntegralType t -> CodeQ (IntegralType t)
 liftIntegralType TypeInt    = [|| TypeInt ||]
 liftIntegralType TypeInt8   = [|| TypeInt8 ||]
 liftIntegralType TypeInt16  = [|| TypeInt16 ||]
@@ -415,7 +414,7 @@ liftIntegralType TypeWord16 = [|| TypeWord16 ||]
 liftIntegralType TypeWord32 = [|| TypeWord32 ||]
 liftIntegralType TypeWord64 = [|| TypeWord64 ||]
 
-liftFloatingType :: FloatingType t -> Q (TExp (FloatingType t))
+liftFloatingType :: FloatingType t -> CodeQ (FloatingType t)
 liftFloatingType TypeHalf   = [|| TypeHalf ||]
 liftFloatingType TypeFloat  = [|| TypeFloat ||]
 liftFloatingType TypeDouble = [|| TypeDouble ||]
@@ -439,7 +438,7 @@ type family BitSize a :: Nat
 -- to split this into a separate module.
 --
 
-$(runQ $ do
+runQ $ do
   let
       bits :: FiniteBits b => b -> Integer
       bits = toInteger . finiteBitSize
@@ -518,5 +517,4 @@ $(runQ $ do
   vs <- mapM (uncurry mkVector)   vectorTypes
   --
   return (concat is ++ concat fs ++ concat vs)
- )
 
