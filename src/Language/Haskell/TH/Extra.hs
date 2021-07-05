@@ -20,15 +20,16 @@ module Language.Haskell.TH.Extra (
 
 ) where
 
-import Language.Haskell.TH                                          hiding ( TyVarBndr, tupP, tupE )
-import qualified Language.Haskell.TH                                as TH
-
-#if !MIN_VERSION_template_haskell(2,17,0)
-import Language.Haskell.TH.Syntax                                   ( unTypeQ, unsafeTExpCoerce )
-import GHC.Exts                                                     ( RuntimeRep, TYPE )
+#if MIN_VERSION_template_haskell(2,17,0)
+import Language.Haskell.TH                                          hiding ( plainInvisTV, tupP, tupE )
 #else
-import Language.Haskell.TH                                          ( TyVarBndr )
+import Language.Haskell.TH                                          hiding ( TyVarBndr, tupP, tupE )
+import Language.Haskell.TH.Syntax                                   ( unTypeQ, unsafeTExpCoerce )
+#if MIN_VERSION_template_haskell(2,16,0)
+import GHC.Exts                                                     ( RuntimeRep, TYPE )
 #endif
+#endif
+import qualified Language.Haskell.TH                                as TH
 
 
 tupT :: [TypeQ] -> TypeQ
@@ -45,7 +46,17 @@ tupE :: [ExpQ] -> ExpQ
 tupE [t] = t
 tupE ts  = TH.tupE ts
 
-#if !MIN_VERSION_template_haskell(2,17,0)
+
+#if MIN_VERSION_template_haskell(2,17,0)
+
+tyVarBndrName :: TyVarBndr flag -> Name
+tyVarBndrName (PlainTV  n _)   = n
+tyVarBndrName (KindedTV n _ _) = n
+
+plainInvisTV :: Name -> Specificity -> TyVarBndr Specificity
+plainInvisTV = PlainTV
+
+#else
 
 type CodeQ a = Q (TExp a)
 
@@ -56,27 +67,26 @@ data Specificity = SpecifiedSpec | InferredSpec
 specifiedSpec :: Specificity
 specifiedSpec = SpecifiedSpec
 
-plainInvisTV' :: Name -> Specificity -> TyVarBndr Specificity
-plainInvisTV' n _ = PlainTV n
-
-unsafeCodeCoerce :: forall (r :: RuntimeRep) (a :: TYPE r). Q Exp -> Q (TExp a)
-unsafeCodeCoerce = unsafeTExpCoerce
-
-unTypeCode :: forall (r :: RuntimeRep) (a :: TYPE r). Q (TExp a) -> Q Exp
-unTypeCode = unTypeQ
-
 tyVarBndrName :: TyVarBndr flag -> Name
 tyVarBndrName (PlainTV  n)   = n
 tyVarBndrName (KindedTV n _) = n
 
+plainInvisTV :: Name -> Specificity -> TyVarBndr Specificity
+plainInvisTV n _ = PlainTV n
+
+#if MIN_VERSION_template_haskell(2,16,0)
+unsafeCodeCoerce :: forall (r :: RuntimeRep) (a :: TYPE r). Q Exp -> Q (TExp a)
 #else
+unsafeCodeCoerce :: Q Exp -> Q (TExp a)
+#endif
+unsafeCodeCoerce = unsafeTExpCoerce
 
-tyVarBndrName :: TyVarBndr flag -> Name
-tyVarBndrName (PlainTV  n _)   = n
-tyVarBndrName (KindedTV n _ _) = n
-
-plainInvisTV' :: Name -> Specificity -> TyVarBndr Specificity
-plainInvisTV' = PlainTV
+#if MIN_VERSION_template_haskell(2,16,0)
+unTypeCode :: forall (r :: RuntimeRep) (a :: TYPE r). Q (TExp a) -> Q Exp
+#else
+unTypeCode :: Q (TExp a) -> Q Exp
+#endif
+unTypeCode = unTypeQ
 
 #endif
 

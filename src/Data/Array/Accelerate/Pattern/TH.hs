@@ -144,7 +144,7 @@ mkConP tn' tvs' con' = do
       where
         pat = rename cn
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -162,7 +162,7 @@ mkConP tn' tvs' con' = do
       where
         pat = rename cn
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -186,7 +186,7 @@ mkConP tn' tvs' con' = do
       where
         pat = mkName (':' : nameBase cn)
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -237,7 +237,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return r
       where
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -254,7 +254,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return r
       where
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -277,7 +277,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return r'
       where
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -302,7 +302,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return (fun, r)
       where
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
@@ -331,7 +331,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       return (fun, r)
       where
         sig = forallT
-                (map (`plainInvisTV'` specifiedSpec) tvs)
+                (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 [t| Exp $(foldl' appT (conT tn) (map varT tvs)) -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
 
