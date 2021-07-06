@@ -20,14 +20,13 @@ import Data.Array.Accelerate.Lifetime
 import Control.Applicative
 import Control.Concurrent.Unique
 import Control.DeepSeq
+import Data.Word
 import Foreign.ForeignPtr
 import Foreign.ForeignPtr.Unsafe
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
-import Data.Word
+import Language.Haskell.TH.Extra
 import System.IO.Unsafe
 import Prelude
 
@@ -125,12 +124,12 @@ rnfUniqueArray (UniqueArray _ ad) = unsafeGetValue ad `seq` ()
 
 -- TODO: Make sure that the data is correctly aligned...
 --
-liftUniqueArray :: forall a. Storable a => Int -> UniqueArray a -> Q (TExp (UniqueArray a))
-liftUniqueArray sz ua = do
+liftUniqueArray :: forall a. Storable a => Int -> UniqueArray a -> CodeQ (UniqueArray a)
+liftUniqueArray sz ua = unsafeCodeCoerce $ do
   bytes <- runIO $ peekArray (sizeOf (undefined::a) * sz) (castPtr (unsafeUniqueArrayPtr ua) :: Ptr Word8)
-  [|| unsafePerformIO $ do
-       fp  <- newForeignPtr_ $$( unsafeTExpCoerce [| Ptr $(litE (StringPrimL bytes)) |] )
+  [| unsafePerformIO $ do
+       fp  <- newForeignPtr_ (Ptr $(litE (StringPrimL bytes)))
        ua' <- newUniqueArray (castForeignPtr fp)
        return ua'
-   ||]
+   |]
 

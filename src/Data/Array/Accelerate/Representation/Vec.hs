@@ -26,7 +26,7 @@ import Data.Primitive.Vec
 import Control.Monad.ST
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 import GHC.Base                                         ( Int(..), Int#, (-#) )
 import GHC.TypeNats
@@ -89,7 +89,7 @@ rnfVecR :: VecR n single tuple -> ()
 rnfVecR (VecRnil tp)   = rnfSingleType tp
 rnfVecR (VecRsucc vec) = rnfVecR vec
 
-liftVecR :: VecR n single tuple -> Q (TExp (VecR n single tuple))
+liftVecR :: VecR n single tuple -> CodeQ (VecR n single tuple)
 liftVecR (VecRnil tp)   = [|| VecRnil $$(liftSingleType tp) ||]
 liftVecR (VecRsucc vec) = [|| VecRsucc $$(liftVecR vec) ||]
 

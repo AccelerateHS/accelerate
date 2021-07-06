@@ -25,8 +25,7 @@ import Data.Array.Accelerate.Representation.Tag
 
 import Data.Bits
 import Data.Kind
-import Language.Haskell.TH                                          hiding ( Type )
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Type )
 
 import GHC.Generics
 

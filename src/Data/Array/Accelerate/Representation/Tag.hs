@@ -16,7 +16,7 @@ module Data.Array.Accelerate.Representation.Tag
 
 import Data.Array.Accelerate.Type
 
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 
 -- | The type of the runtime value used to distinguish constructor
@@ -59,7 +59,7 @@ rnfTag (TagRundef t)    = rnfScalarType t
 rnfTag (TagRtag v t)    = v `seq` rnfTag t
 rnfTag (TagRpair ta tb) = rnfTag ta `seq` rnfTag tb
 
-liftTag :: TagR a -> Q (TExp (TagR a))
+liftTag :: TagR a -> CodeQ (TagR a)
 liftTag TagRunit         = [|| TagRunit ||]
 liftTag (TagRsingle t)   = [|| TagRsingle $$(liftScalarType t) ||]
 liftTag (TagRundef t)    = [|| TagRundef $$(liftScalarType t) ||]

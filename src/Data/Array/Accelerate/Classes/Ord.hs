@@ -43,8 +43,7 @@ import Data.Array.Accelerate.Classes.Eq                             hiding ( (==
 import qualified Data.Array.Accelerate.Classes.Eq                   as A
 
 import Data.Char
-import Language.Haskell.TH                                          hiding ( Exp )
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Exp )
 import Prelude                                                      ( ($), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
 import Text.Printf
 import qualified Prelude                                            as P
@@ -102,30 +101,6 @@ instance Ord Z where
   min  _ _ = constant Z
   max  _ _ = constant Z
 
-instance Ord sh => Ord (sh :. Int) where
-  x <= y = indexHead x <= indexHead y && indexTail x <= indexTail y
-  x >= y = indexHead x >= indexHead y && indexTail x >= indexTail y
-  x < y  = indexHead x < indexHead y
-        && case matchTypeR (eltR @sh) (eltR @Z) of
-             Just Refl -> constant True
-             Nothing   -> indexTail x < indexTail y
-  x > y  = indexHead x > indexHead y
-        && case matchTypeR (eltR @sh) (eltR @Z) of
-             Just Refl -> constant True
-             Nothing   -> indexTail x > indexTail y
-
-instance Eq Ordering where
-  x == y = mkCoerce x A.== (mkCoerce y :: Exp TAG)
-  x /= y = mkCoerce x A./= (mkCoerce y :: Exp TAG)
-
-instance Ord Ordering where
-  x < y   = mkCoerce x < (mkCoerce y :: Exp TAG)
-  x > y   = mkCoerce x > (mkCoerce y :: Exp TAG)
-  x <= y  = mkCoerce x <= (mkCoerce y :: Exp TAG)
-  x >= y  = mkCoerce x >= (mkCoerce y :: Exp TAG)
-  min x y = mkCoerce $ min (mkCoerce x) (mkCoerce y :: Exp TAG)
-  max x y = mkCoerce $ max (mkCoerce x) (mkCoerce y :: Exp TAG)
-
 
 -- Instances of 'Prelude.Ord' (mostly) don't make sense with the standard
 -- signatures as the return type is fixed to 'Bool'. This instance is provided
@@ -153,103 +128,122 @@ preludeError x y
             , "hierarchy."
             ]
 
-$(runQ $ do
-    let
-        integralTypes :: [Name]
-        integralTypes =
-          [ ''Int
-          , ''Int8
-          , ''Int16
-          , ''Int32
-          , ''Int64
-          , ''Word
-          , ''Word8
-          , ''Word16
-          , ''Word32
-          , ''Word64
-          ]
+runQ $ do
+  let
+      integralTypes :: [Name]
+      integralTypes =
+        [ ''Int
+        , ''Int8
+        , ''Int16
+        , ''Int32
+        , ''Int64
+        , ''Word
+        , ''Word8
+        , ''Word16
+        , ''Word32
+        , ''Word64
+        ]
 
-        floatingTypes :: [Name]
-        floatingTypes =
-          [ ''Half
-          , ''Float
-          , ''Double
-          ]
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        ]
 
-        nonNumTypes :: [Name]
-        nonNumTypes =
-          [ ''Char
-          ]
+      nonNumTypes :: [Name]
+      nonNumTypes =
+        [ ''Char
+        ]
 
-        cTypes :: [Name]
-        cTypes =
-          [ ''CInt
-          , ''CUInt
-          , ''CLong
-          , ''CULong
-          , ''CLLong
-          , ''CULLong
-          , ''CShort
-          , ''CUShort
-          , ''CChar
-          , ''CUChar
-          , ''CSChar
-          , ''CFloat
-          , ''CDouble
-          ]
+      cTypes :: [Name]
+      cTypes =
+        [ ''CInt
+        , ''CUInt
+        , ''CLong
+        , ''CULong
+        , ''CLLong
+        , ''CULLong
+        , ''CShort
+        , ''CUShort
+        , ''CChar
+        , ''CUChar
+        , ''CSChar
+        , ''CFloat
+        , ''CDouble
+        ]
 
-        mkPrim :: Name -> Q [Dec]
-        mkPrim t =
-          [d| instance Ord $(conT t) where
-                (<)  = mkLt
-                (>)  = mkGt
-                (<=) = mkLtEq
-                (>=) = mkGtEq
-                min  = mkMin
-                max  = mkMax
-            |]
+      mkPrim :: Name -> Q [Dec]
+      mkPrim t =
+        [d| instance Ord $(conT t) where
+              (<)  = mkLt
+              (>)  = mkGt
+              (<=) = mkLtEq
+              (>=) = mkGtEq
+              min  = mkMin
+              max  = mkMax
+          |]
 
-        mkLt' :: [ExpQ] -> [ExpQ] -> ExpQ
-        mkLt' [x] [y]       = [| $x < $y |]
-        mkLt' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLt' xs ys) ) |]
-        mkLt' _      _      = error "mkLt'"
+      mkLt' :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkLt' [x] [y]       = [| $x < $y |]
+      mkLt' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLt' xs ys) ) |]
+      mkLt' _      _      = error "mkLt'"
 
-        mkGt' :: [ExpQ] -> [ExpQ] -> ExpQ
-        mkGt' [x]    [y]    = [| $x > $y |]
-        mkGt' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGt' xs ys) ) |]
-        mkGt' _      _      = error "mkGt'"
+      mkGt' :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkGt' [x]    [y]    = [| $x > $y |]
+      mkGt' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGt' xs ys) ) |]
+      mkGt' _      _      = error "mkGt'"
 
-        mkLtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
-        mkLtEq' [x] [y]       = [| $x < $y |]
-        mkLtEq' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLtEq' xs ys) ) |]
-        mkLtEq' _      _      = error "mkLtEq'"
+      mkLtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkLtEq' [x] [y]       = [| $x < $y |]
+      mkLtEq' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLtEq' xs ys) ) |]
+      mkLtEq' _      _      = error "mkLtEq'"
 
-        mkGtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
-        mkGtEq' [x]    [y]    = [| $x > $y |]
-        mkGtEq' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGtEq' xs ys) ) |]
-        mkGtEq' _      _      = error "mkGtEq'"
+      mkGtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkGtEq' [x]    [y]    = [| $x > $y |]
+      mkGtEq' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGtEq' xs ys) ) |]
+      mkGtEq' _      _      = error "mkGtEq'"
 
-        mkTup :: Int -> Q [Dec]
-        mkTup n =
-          let
-              xs      = [ mkName ('x':show i) | i <- [0 .. n-1] ]
-              ys      = [ mkName ('y':show i) | i <- [0 .. n-1] ]
-              cst     = tupT (map (\x -> [t| Ord $(varT x) |]) xs)
-              res     = tupT (map varT xs)
-              pat vs  = conP (mkName ('T':show n)) (map varP vs)
-          in
-          [d| instance $cst => Ord $res where
-                $(pat xs) <  $(pat ys) = $( mkLt' (map varE xs) (map varE ys) )
-                $(pat xs) >  $(pat ys) = $( mkGt' (map varE xs) (map varE ys) )
-                $(pat xs) >= $(pat ys) = $( mkGtEq' (map varE xs) (map varE ys) )
-                $(pat xs) <= $(pat ys) = $( mkLtEq' (map varE xs) (map varE ys) )
-            |]
+      mkTup :: Int -> Q [Dec]
+      mkTup n =
+        let
+            xs      = [ mkName ('x':show i) | i <- [0 .. n-1] ]
+            ys      = [ mkName ('y':show i) | i <- [0 .. n-1] ]
+            cst     = tupT (map (\x -> [t| Ord $(varT x) |]) xs)
+            res     = tupT (map varT xs)
+            pat vs  = conP (mkName ('T':show n)) (map varP vs)
+        in
+        [d| instance $cst => Ord $res where
+              $(pat xs) <  $(pat ys) = $( mkLt' (map varE xs) (map varE ys) )
+              $(pat xs) >  $(pat ys) = $( mkGt' (map varE xs) (map varE ys) )
+              $(pat xs) >= $(pat ys) = $( mkGtEq' (map varE xs) (map varE ys) )
+              $(pat xs) <= $(pat ys) = $( mkLtEq' (map varE xs) (map varE ys) )
+          |]
 
-    is <- mapM mkPrim integralTypes
-    fs <- mapM mkPrim floatingTypes
-    ns <- mapM mkPrim nonNumTypes
-    cs <- mapM mkPrim cTypes
-    ts <- mapM mkTup [2..16]
-    return $ concat (concat [is,fs,ns,cs,ts])
- )
+  is <- mapM mkPrim integralTypes
+  fs <- mapM mkPrim floatingTypes
+  ns <- mapM mkPrim nonNumTypes
+  cs <- mapM mkPrim cTypes
+  ts <- mapM mkTup [2..16]
+  return $ concat (concat [is,fs,ns,cs,ts])
+
+instance Ord sh => Ord (sh :. Int) where
+  x <= y = indexHead x <= indexHead y && indexTail x <= indexTail y
+  x >= y = indexHead x >= indexHead y && indexTail x >= indexTail y
+  x < y  = indexHead x < indexHead y
+        && case matchTypeR (eltR @sh) (eltR @Z) of
+             Just Refl -> constant True
+             Nothing   -> indexTail x < indexTail y
+  x > y  = indexHead x > indexHead y
+        && case matchTypeR (eltR @sh) (eltR @Z) of
+             Just Refl -> constant True
+             Nothing   -> indexTail x > indexTail y
+
+instance Ord Ordering where
+  x < y   = mkCoerce x < (mkCoerce y :: Exp TAG)
+  x > y   = mkCoerce x > (mkCoerce y :: Exp TAG)
+  x <= y  = mkCoerce x <= (mkCoerce y :: Exp TAG)
+  x >= y  = mkCoerce x >= (mkCoerce y :: Exp TAG)
+  min x y = mkCoerce $ min (mkCoerce x) (mkCoerce y :: Exp TAG)
+  max x y = mkCoerce $ max (mkCoerce x) (mkCoerce y :: Exp TAG)
 

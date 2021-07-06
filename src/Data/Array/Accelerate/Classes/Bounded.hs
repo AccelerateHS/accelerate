@@ -28,8 +28,7 @@ import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Prelude                                                      ( ($), (<$>), Num(..), Char, Bool, show, concat, map, mapM )
-import Language.Haskell.TH                                          hiding ( Exp )
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Exp )
 import qualified Prelude                                            as P
 
 

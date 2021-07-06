@@ -2437,7 +2437,7 @@ unindex3 (Z_ ::. k ::. j ::. i) = T3 k j i
 -- > the xs  ==  xs ! Z
 --
 the :: Elt e => Acc (Scalar e) -> Exp e
-the = (!index0)
+the = (! index0)
 
 -- | Test whether an array is empty.
 --

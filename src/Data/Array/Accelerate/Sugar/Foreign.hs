@@ -17,7 +17,7 @@ module Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Error
 
 import Data.Typeable
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 
 
 -- Class for backends to choose their own representation of foreign functions.
@@ -33,6 +33,6 @@ class Typeable asm => Foreign asm where
 
   -- Backends which want to support compile-time embedding must be able to lift
   -- the foreign function into Template Haskell
-  liftForeign :: HasCallStack => asm args -> Q (TExp (asm args))
+  liftForeign :: HasCallStack => asm args -> CodeQ (asm args)
   liftForeign _ = internalError "not supported by this backend"
 

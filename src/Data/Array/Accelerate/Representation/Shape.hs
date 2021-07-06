@@ -20,7 +20,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Representation.Type
 
-import Language.Haskell.TH
+import Language.Haskell.TH.Extra
 import Prelude                                                      hiding ( zip )
 
 import GHC.Base                                                     ( quotInt, remInt )
@@ -191,7 +191,7 @@ rnfShapeR :: ShapeR sh -> ()
 rnfShapeR ShapeRz          = ()
 rnfShapeR (ShapeRsnoc shr) = rnfShapeR shr
 
-liftShapeR :: ShapeR sh -> Q (TExp (ShapeR sh))
+liftShapeR :: ShapeR sh -> CodeQ (ShapeR sh)
 liftShapeR ShapeRz         = [|| ShapeRz ||]
 liftShapeR (ShapeRsnoc sh) = [|| ShapeRsnoc $$(liftShapeR sh) ||]
 

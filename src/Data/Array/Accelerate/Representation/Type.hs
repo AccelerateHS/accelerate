@@ -20,9 +20,9 @@ module Data.Array.Accelerate.Representation.Type
 
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
-import Formatting
 
-import Language.Haskell.TH
+import Formatting
+import Language.Haskell.TH.Extra
 
 
 -- | Both arrays (Acc) and expressions (Exp) are represented as nested
@@ -64,12 +64,12 @@ rnfTupR f (TupRpair a b) = rnfTupR f a `seq` rnfTupR f b
 rnfTypeR :: TypeR t -> ()
 rnfTypeR = rnfTupR rnfScalarType
 
-liftTupR :: (forall b. s b -> Q (TExp (s b))) -> TupR s a -> Q (TExp (TupR s a))
+liftTupR :: (forall b. s b -> CodeQ (s b)) -> TupR s a -> CodeQ (TupR s a)
 liftTupR _ TupRunit       = [|| TupRunit ||]
 liftTupR f (TupRsingle s) = [|| TupRsingle $$(f s) ||]
 liftTupR f (TupRpair a b) = [|| TupRpair $$(liftTupR f a) $$(liftTupR f b) ||]
 
-liftTypeR :: TypeR t -> Q (TExp (TypeR t))
+liftTypeR :: TypeR t -> CodeQ (TypeR t)
 liftTypeR TupRunit         = [|| TupRunit ||]
 liftTypeR (TupRsingle t)   = [|| TupRsingle $$(liftScalarType t) ||]
 liftTypeR (TupRpair ta tb) = [|| TupRpair $$(liftTypeR ta) $$(liftTypeR tb) ||]
