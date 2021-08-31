@@ -321,7 +321,8 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (bformat ("de Bruijn conversion tag " % int) i) formatArraysR matchArraysR repr i alyt
            in  a
 
-      Pipe reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
+      -- TODO: Add the annotation fields to the de Bruijn AST and pass them through
+      Pipe _ reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
         | DeclareVars lhs k value <- declareVars reprB ->
           let
             noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
@@ -332,41 +333,41 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (avarsIn AST.OpenAcc $ value weakenId)
           in AST.Alet lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
-      Aforeign repr ff afun acc
+      Aforeign _ repr ff afun acc
         -> AST.Aforeign repr ff (convertSmartAfun1 config (Smart.arraysR acc) afun) (cvtA acc)
 
-      Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
-      Awhile reprA pred iter init -> AST.Awhile (cvtAfun1 reprA pred) (cvtAfun1 reprA iter) (cvtA init)
-      Anil                        -> AST.Anil
-      Apair acc1 acc2             -> AST.Apair (cvtA acc1) (cvtA acc2)
-      Aprj ix a                   -> let AST.OpenAcc a' = cvtAprj ix a
-                                     in a'
-      Atrace msg acc1 acc2        -> AST.Atrace msg (cvtA acc1) (cvtA acc2)
-      Use repr array              -> AST.Use repr array
-      Unit tp e                   -> AST.Unit tp (cvtE e)
-      Generate repr@(ArrayR shr _) sh f
-                                  -> AST.Generate repr (cvtE sh) (cvtF1 (shapeType shr) f)
-      Reshape shr e acc           -> AST.Reshape shr (cvtE e) (cvtA acc)
-      Replicate si ix acc         -> AST.Replicate si (cvtE ix) (cvtA acc)
-      Slice si acc ix             -> AST.Slice si (cvtA acc) (cvtE ix)
-      Map ann t1 t2 f acc         -> AST.Map ann t2 (cvtF1 t1 f) (cvtA acc)
-      ZipWith t1 t2 t3 f acc1 acc2
-                                  -> AST.ZipWith t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
-      Fold ann tp f e acc         -> AST.Fold ann (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
-      FoldSeg i tp f e acc1 acc2  -> AST.FoldSeg i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
-      Scan  d tp f e acc          -> AST.Scan  d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
-      Scan' d tp f e acc          -> AST.Scan' d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)
-      Permute (ArrayR shr tp) f dftAcc perm acc
-                                  -> AST.Permute (cvtF2 tp tp f) (cvtA dftAcc) (cvtF1 (shapeType shr) perm) (cvtA acc)
-      Backpermute shr newDim perm acc
-                                  -> AST.Backpermute shr (cvtE newDim) (cvtF1 (shapeType shr) perm) (cvtA acc)
-      Stencil stencil tp f boundary acc
+      Acond _ b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
+      Awhile _ reprA pred iter init -> AST.Awhile (cvtAfun1 reprA pred) (cvtAfun1 reprA iter) (cvtA init)
+      Anil _                        -> AST.Anil
+      Apair _ acc1 acc2             -> AST.Apair (cvtA acc1) (cvtA acc2)
+      Aprj _ ix a                   -> let AST.OpenAcc a' = cvtAprj ix a
+                                       in a'
+      Atrace _ msg acc1 acc2        -> AST.Atrace msg (cvtA acc1) (cvtA acc2)
+      Use _ repr array              -> AST.Use repr array
+      Unit _ tp e                   -> AST.Unit tp (cvtE e)
+      Generate _ repr@(ArrayR shr _) sh f
+                                    -> AST.Generate repr (cvtE sh) (cvtF1 (shapeType shr) f)
+      Reshape _ shr e acc           -> AST.Reshape shr (cvtE e) (cvtA acc)
+      Replicate _ si ix acc         -> AST.Replicate si (cvtE ix) (cvtA acc)
+      Slice _ si acc ix             -> AST.Slice si (cvtA acc) (cvtE ix)
+      Map ann t1 t2 f acc           -> AST.Map ann t2 (cvtF1 t1 f) (cvtA acc)
+      ZipWith _ t1 t2 t3 f acc1 acc2
+                                    -> AST.ZipWith t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
+      Fold ann tp f e acc           -> AST.Fold ann (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      FoldSeg _ i tp f e acc1 acc2  -> AST.FoldSeg i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
+      Scan  _ d tp f e acc          -> AST.Scan  d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      Scan' _ d tp f e acc          -> AST.Scan' d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)
+      Permute _ (ArrayR shr tp) f dftAcc perm acc
+                                    -> AST.Permute (cvtF2 tp tp f) (cvtA dftAcc) (cvtF1 (shapeType shr) perm) (cvtA acc)
+      Backpermute _ shr newDim perm acc
+                                    -> AST.Backpermute shr (cvtE newDim) (cvtF1 (shapeType shr) perm) (cvtA acc)
+      Stencil _ stencil tp f boundary acc
         -> AST.Stencil stencil
                        tp
                        (convertSharingStencilFun1 config alyt aenv' stencil f)
                        (convertSharingBoundary config alyt aenv' (stencilShapeR stencil) boundary)
                        (cvtA acc)
-      Stencil2 stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
+      Stencil2 _ stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
         | shr <- stencilShapeR stencil1
         -> AST.Stencil2 stencil1
                         stencil2
@@ -1502,93 +1503,93 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                             return (UnscopedAcc [] (AccSharing (StableNameHeight sn height) acc), height)
 
           reconstruct $ case pacc of
-            Atag repr i                 -> return (Atag repr i, 0)           -- height is 0!
-            Pipe repr1 repr2 repr3 afun1 afun2 acc
-                                        -> do
+            Atag repr i                    -> return (Atag repr i, 0)           -- height is 0!
+            Pipe ann repr1 repr2 repr3 afun1 afun2 acc
+                                           -> do
                                              (afun1', h1) <- traverseAfun1 lvl repr1 afun1
                                              (afun2', h2) <- traverseAfun1 lvl repr2 afun2
                                              (acc', h3)   <- traverseAcc lvl acc
-                                             return (Pipe repr1 repr2 repr3 afun1' afun2' acc'
+                                             return (Pipe ann repr1 repr2 repr3 afun1' afun2' acc'
                                                     , h1 `max` h2 `max` h3 + 1)
-            Aforeign repr ff afun acc   -> travA (Aforeign repr ff afun) acc
-            Acond e acc1 acc2           -> do
+            Aforeign ann repr ff afun acc  -> travA (Aforeign ann repr ff afun) acc
+            Acond ann e acc1 acc2          -> do
                                              (e'   , h1) <- traverseExp lvl e
                                              (acc1', h2) <- traverseAcc lvl acc1
                                              (acc2', h3) <- traverseAcc lvl acc2
-                                             return (Acond e' acc1' acc2', h1 `max` h2 `max` h3 + 1)
-            Awhile repr pred iter init  -> do
+                                             return (Acond ann e' acc1' acc2', h1 `max` h2 `max` h3 + 1)
+            Awhile ann repr pred iter init -> do
                                              (pred', h1) <- traverseAfun1 lvl repr pred
                                              (iter', h2) <- traverseAfun1 lvl repr iter
                                              (init', h3) <- traverseAcc lvl init
-                                             return (Awhile repr pred' iter' init'
+                                             return (Awhile ann repr pred' iter' init'
                                                     , h1 `max` h2 `max` h3 + 1)
 
-            Anil                        -> return (Anil, 0)
-            Apair acc1 acc2             -> do
+            Anil ann                       -> return (Anil ann, 0)
+            Apair ann acc1 acc2            -> do
                                              (a', h1) <- traverseAcc lvl acc1
                                              (b', h2) <- traverseAcc lvl acc2
-                                             return (Apair a' b', h1 `max` h2 + 1)
-            Aprj ix a                   -> travA (Aprj ix) a
+                                             return (Apair ann a' b', h1 `max` h2 + 1)
+            Aprj ann ix a                  -> travA (Aprj ann ix) a
 
-            Atrace msg acc1 acc2        -> do
+            Atrace ann msg acc1 acc2       -> do
                                              (a', h1) <- traverseAcc lvl acc1
                                              (b', h2) <- traverseAcc lvl acc2
-                                             return (Atrace msg a' b', h1 `max` h2 + 1)
-            Use repr arr                -> return (Use repr arr, 1)
-            Unit tp e                   -> do
+                                             return (Atrace ann msg a' b', h1 `max` h2 + 1)
+            Use ann repr arr               -> return (Use ann repr arr, 1)
+            Unit ann tp e                  -> do
                                              (e', h) <- traverseExp lvl e
-                                             return (Unit tp e', h + 1)
-            Generate repr@(ArrayR shr _) e f
-                                        -> do
+                                             return (Unit ann tp e', h + 1)
+            Generate ann repr@(ArrayR shr _) e f
+                                           -> do
                                              (e', h1) <- traverseExp lvl e
                                              (f', h2) <- traverseFun1 lvl (shapeType shr) f
-                                             return (Generate repr e' f', h1 `max` h2 + 1)
-            Reshape shr e acc           -> travEA (Reshape shr) e acc
-            Replicate si e acc          -> travEA (Replicate si) e acc
-            Slice si acc e              -> travEA (flip $ Slice si) e acc
-            Map ann t1 t2 f acc         -> do
+                                             return (Generate ann repr e' f', h1 `max` h2 + 1)
+            Reshape ann shr e acc          -> travEA (Reshape ann shr) e acc
+            Replicate ann si e acc         -> travEA (Replicate ann si) e acc
+            Slice ann si acc e             -> travEA (flip $ Slice ann si) e acc
+            Map ann t1 t2 f acc            -> do
                                              (f'  , h1) <- traverseFun1 lvl t1 f
                                              (acc', h2) <- traverseAcc lvl acc
                                              return (Map ann t1 t2 f' acc', h1 `max` h2 + 1)
-            ZipWith t1 t2 t3 f acc1 acc2
-                                        -> travF2A2 (ZipWith t1 t2 t3) t1 t2 f acc1 acc2
-            Fold ann tp f e acc         -> travF2MEA (Fold ann tp) tp tp f e acc
-            FoldSeg i tp f e acc1 acc2  -> do
+            ZipWith ann t1 t2 t3 f acc1 acc2
+                                           -> travF2A2 (ZipWith ann t1 t2 t3) t1 t2 f acc1 acc2
+            Fold ann tp f e acc            -> travF2MEA (Fold ann tp) tp tp f e acc
+            FoldSeg ann i tp f e acc1 acc2 -> do
                                              (f'   , h1) <- traverseFun2 lvl tp tp f
                                              (e'   , h2) <- travME e
                                              (acc1', h3) <- traverseAcc lvl acc1
                                              (acc2', h4) <- traverseAcc lvl acc2
-                                             return (FoldSeg i tp f' e' acc1' acc2',
+                                             return (FoldSeg ann i tp f' e' acc1' acc2',
                                                      h1 `max` h2 `max` h3 `max` h4 + 1)
-            Scan  d tp f e acc          -> travF2MEA (Scan  d tp) tp tp f e acc
-            Scan' d tp f e acc          -> travF2EA (Scan' d tp) tp tp f e acc
-            Permute repr@(ArrayR shr tp) c acc1 p acc2
-                                        -> do
+            Scan  ann d tp f e acc         -> travF2MEA (Scan  ann d tp) tp tp f e acc
+            Scan' ann d tp f e acc         -> travF2EA  (Scan' ann d tp) tp tp f e acc
+            Permute ann repr@(ArrayR shr tp) c acc1 p acc2
+                                           -> do
                                              (c'   , h1) <- traverseFun2 lvl tp tp c
                                              (p'   , h2) <- traverseFun1 lvl (shapeType shr) p
                                              (acc1', h3) <- traverseAcc lvl acc1
                                              (acc2', h4) <- traverseAcc lvl acc2
-                                             return (Permute repr c' acc1' p' acc2',
+                                             return (Permute ann repr c' acc1' p' acc2',
                                                      h1 `max` h2 `max` h3 `max` h4 + 1)
-            Backpermute shr e p acc     -> do
+            Backpermute ann shr e p acc    -> do
                                              (e'  , h1) <- traverseExp lvl e
                                              (p'  , h2) <- traverseFun1 lvl (shapeType shr) p
                                              (acc', h3) <- traverseAcc lvl acc
-                                             return (Backpermute shr e' p' acc', h1 `max` h2 `max` h3 + 1)
-            Stencil s tp f bnd acc      -> do
+                                             return (Backpermute ann shr e' p' acc', h1 `max` h2 `max` h3 + 1)
+            Stencil ann s tp f bnd acc     -> do
                                              (f'  , h1) <- makeOccMapStencil1 config accOccMap s lvl f
                                              (bnd', h2) <- traverseBoundary lvl (stencilShapeR s) bnd
                                              (acc', h3) <- traverseAcc lvl acc
-                                             return (Stencil s tp f' bnd' acc', h1 `max` h2 `max` h3 + 1)
-            Stencil2 s1 s2 tp f bnd1 acc1
-                              bnd2 acc2 -> do
+                                             return (Stencil ann s tp f' bnd' acc', h1 `max` h2 `max` h3 + 1)
+            Stencil2 ann s1 s2 tp f bnd1 acc1
+                                    bnd2 acc2 -> do
                                              let shr = stencilShapeR s1
                                              (f'   , h1) <- makeOccMapStencil2 config accOccMap s1 s2 lvl f
                                              (bnd1', h2) <- traverseBoundary lvl shr bnd1
                                              (acc1', h3) <- traverseAcc lvl acc1
                                              (bnd2', h4) <- traverseBoundary lvl shr bnd2
                                              (acc2', h5) <- traverseAcc lvl acc2
-                                             return (Stencil2 s1 s2 tp f' bnd1' acc1' bnd2' acc2',
+                                             return (Stencil2 ann s1 s2 tp f' bnd1' acc1' bnd2' acc2',
                                                      h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
             -- Collect s                   -> do
             --                                  (s', h) <- traverseSeq lvl s
@@ -2355,104 +2356,104 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     scopesAcc (UnscopedAcc _ (AccSharing sn pacc))
       = case pacc of
           Atag tp i               -> reconstruct (Atag tp i) noNodeCounts
-          Pipe repr1 repr2 repr3 afun1 afun2 acc
+          Pipe ann repr1 repr2 repr3 afun1 afun2 acc
                                   -> let
                                        (afun1', accCount1) = scopesAfun1 afun1
                                        (afun2', accCount2) = scopesAfun1 afun2
                                        (acc', accCount3)   = scopesAcc acc
                                      in
-                                     reconstruct (Pipe repr1 repr2 repr3 afun1' afun2' acc')
+                                     reconstruct (Pipe ann repr1 repr2 repr3 afun1' afun2' acc')
                                                  (accCount1 +++ accCount2 +++ accCount3)
 
-          Aforeign r ff afun acc  -> let
+          Aforeign ann r ff afun acc -> let
                                        (acc', accCount) = scopesAcc acc
                                      in
-                                     reconstruct (Aforeign r ff afun acc') accCount
-          Acond e acc1 acc2       -> let
+                                     reconstruct (Aforeign ann r ff afun acc') accCount
+          Acond ann e acc1 acc2   -> let
                                        (e'   , accCount1) = scopesExp e
                                        (acc1', accCount2) = scopesAcc acc1
                                        (acc2', accCount3) = scopesAcc acc2
                                      in
-                                     reconstruct (Acond e' acc1' acc2')
+                                     reconstruct (Acond ann e' acc1' acc2')
                                                  (accCount1 +++ accCount2 +++ accCount3)
 
-          Awhile repr pred iter init
+          Awhile ann repr pred iter init
                                   -> let
                                        (pred', accCount1) = scopesAfun1 pred
                                        (iter', accCount2) = scopesAfun1 iter
                                        (init', accCount3) = scopesAcc init
                                      in
-                                     reconstruct (Awhile repr pred' iter' init')
+                                     reconstruct (Awhile ann repr pred' iter' init')
                                                  (accCount1 +++ accCount2 +++ accCount3)
 
-          Anil                    -> reconstruct Anil noNodeCounts
-          Apair a1 a2             -> let
+          Anil ann                -> reconstruct (Anil ann) noNodeCounts
+          Apair ann a1 a2         -> let
                                        (a1', accCount1) = scopesAcc a1
                                        (a2', accCount2) = scopesAcc a2
                                      in
-                                       reconstruct (Apair a1' a2') (accCount1 +++ accCount2)
-          Aprj ix a               -> travA (Aprj ix) a
+                                       reconstruct (Apair ann a1' a2') (accCount1 +++ accCount2)
+          Aprj ann ix a           -> travA (Aprj ann ix) a
 
-          Atrace msg a1 a2        -> let
+          Atrace ann msg a1 a2    -> let
                                        (a1', accCount1) = scopesAcc a1
                                        (a2', accCount2) = scopesAcc a2
                                      in
-                                       reconstruct (Atrace msg a1' a2') (accCount1 +++ accCount2)
-          Use repr arr            -> reconstruct (Use repr arr) noNodeCounts
-          Unit tp e               -> let
+                                       reconstruct (Atrace ann msg a1' a2') (accCount1 +++ accCount2)
+          Use ann repr arr        -> reconstruct (Use ann repr arr) noNodeCounts
+          Unit ann tp e           -> let
                                        (e', accCount) = scopesExp e
                                      in
-                                     reconstruct (Unit tp e') accCount
-          Generate repr sh f      -> let
+                                     reconstruct (Unit ann tp e') accCount
+          Generate ann repr sh f  -> let
                                        (sh', accCount1) = scopesExp sh
                                        (f' , accCount2) = scopesFun1 f
                                      in
-                                     reconstruct (Generate repr sh' f') (accCount1 +++ accCount2)
-          Reshape shr sh acc      -> travEA (Reshape shr) sh acc
-          Replicate si n acc      -> travEA (Replicate si) n acc
-          Slice si acc i          -> travEA (flip $ Slice si) i acc
+                                     reconstruct (Generate ann repr sh' f') (accCount1 +++ accCount2)
+          Reshape ann shr sh acc  -> travEA (Reshape ann shr) sh acc
+          Replicate ann si n acc  -> travEA (Replicate ann si) n acc
+          Slice ann si acc i      -> travEA (flip $ Slice ann si) i acc
           Map ann t1 t2 f acc     -> let
                                        (f'  , accCount1) = scopesFun1 f
                                        (acc', accCount2) = scopesAcc  acc
                                      in
                                      reconstruct (Map ann t1 t2 f' acc') (accCount1 +++ accCount2)
-          ZipWith t1 t2 t3 f acc1 acc2
-                                  -> travF2A2 (ZipWith t1 t2 t3) f acc1 acc2
+          ZipWith ann t1 t2 t3 f acc1 acc2
+                                  -> travF2A2 (ZipWith ann t1 t2 t3) f acc1 acc2
           Fold ann tp f z acc     -> travF2MEA (Fold ann tp) f z acc
-          FoldSeg i tp f z acc1 acc2 -> let
+          FoldSeg ann i tp f z acc1 acc2 -> let
                                        (f'   , accCount1)  = scopesFun2 f
                                        (z'   , accCount2)  = travME z
                                        (acc1', accCount3)  = scopesAcc  acc1
                                        (acc2', accCount4)  = scopesAcc  acc2
                                      in
-                                     reconstruct (FoldSeg i tp f' z' acc1' acc2')
+                                     reconstruct (FoldSeg ann i tp f' z' acc1' acc2')
                                        (accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
-          Scan d tp f z acc       -> travF2MEA (Scan d tp) f z acc
-          Scan' d tp f z acc      -> travF2EA (Scan' d tp) f z acc
-          Permute repr fc acc1 fp acc2
+          Scan ann d tp f z acc   -> travF2MEA (Scan  ann d tp) f z acc
+          Scan' ann d tp f z acc  -> travF2EA  (Scan' ann d tp) f z acc
+          Permute ann repr fc acc1 fp acc2
                                   -> let
                                        (fc'  , accCount1) = scopesFun2 fc
                                        (acc1', accCount2) = scopesAcc  acc1
                                        (fp'  , accCount3) = scopesFun1 fp
                                        (acc2', accCount4) = scopesAcc  acc2
                                      in
-                                     reconstruct (Permute repr fc' acc1' fp' acc2')
+                                     reconstruct (Permute ann repr fc' acc1' fp' acc2')
                                        (accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
-          Backpermute shr sh fp acc
+          Backpermute ann shr sh fp acc
                                   -> let
                                        (sh' , accCount1) = scopesExp  sh
                                        (fp' , accCount2) = scopesFun1 fp
                                        (acc', accCount3) = scopesAcc  acc
                                      in
-                                     reconstruct (Backpermute shr sh' fp' acc')
+                                     reconstruct (Backpermute ann shr sh' fp' acc')
                                        (accCount1 +++ accCount2 +++ accCount3)
-          Stencil sr tp st bnd acc      -> let
+          Stencil ann sr tp st bnd acc -> let
                                        (st' , accCount1) = scopesStencil1 acc st
                                        (bnd', accCount2) = scopesBoundary bnd
                                        (acc', accCount3) = scopesAcc acc
                                      in
-                                     reconstruct (Stencil sr tp st' bnd' acc') (accCount1 +++ accCount2 +++ accCount3)
-          Stencil2 s1 s2 tp st bnd1 acc1 bnd2 acc2
+                                     reconstruct (Stencil ann sr tp st' bnd' acc') (accCount1 +++ accCount2 +++ accCount3)
+          Stencil2 ann s1 s2 tp st bnd1 acc1 bnd2 acc2
                                   -> let
                                        (st'  , accCount1) = scopesStencil2 acc1 acc2 st
                                        (bnd1', accCount2) = scopesBoundary bnd1
@@ -2460,7 +2461,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                        (bnd2', accCount4) = scopesBoundary bnd2
                                        (acc2', accCount5) = scopesAcc acc2
                                      in
-                                     reconstruct (Stencil2 s1 s2 tp st' bnd1' acc1' bnd2' acc2')
+                                     reconstruct (Stencil2 ann s1 s2 tp st' bnd1' acc1' bnd2' acc2')
                                        (accCount1 +++ accCount2 +++ accCount3 +++ accCount4 +++ accCount5)
           -- Collect seq             -> let
           --                              (seq', accCount1) = scopesSeq seq

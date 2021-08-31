@@ -141,13 +141,13 @@ runQ $ do
                        : [t| ArraysR $(varT a) ~ $snoc |]
                        : map (\t -> [t| Arrays $(varT t)|]) xs
               --
-              get x 0 = [| Acc (SmartAcc (Aprj PairIdxRight $x)) |]
-              get x i = get  [| SmartAcc (Aprj PairIdxLeft $x) |] (i-1)
+              get x 0 = [| Acc (SmartAcc (Aprj mkAnn PairIdxRight $x)) |]
+              get x i = get  [| SmartAcc (Aprj mkAnn PairIdxLeft $x) |] (i-1)
           --
           _x <- newName "_x"
           [d| instance $context => IsPattern Acc $(varT a) $b where
                 builder $(tupP (map (\x -> [p| Acc $(varP x)|]) xs)) =
-                  Acc $(foldl (\vs v -> [| SmartAcc ($vs `Apair` $(varE v)) |]) [| SmartAcc Anil |] xs)
+                  Acc $(foldl (\vs v -> [| SmartAcc (Apair mkAnn $vs $(varE v)) |]) [| SmartAcc (Anil mkAnn) |] xs)
                 matcher (Acc $(varP _x)) =
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]

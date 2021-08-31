@@ -322,7 +322,8 @@ data PreSmartAcc acc exp as where
                 -> Level                        -- environment size at defining occurrence
                 -> PreSmartAcc acc exp as
 
-  Pipe          :: ArraysR as
+  Pipe          :: Ann
+                -> ArraysR as
                 -> ArraysR bs
                 -> ArraysR cs
                 -> (SmartAcc as -> acc bs)
@@ -331,62 +332,75 @@ data PreSmartAcc acc exp as where
                 -> PreSmartAcc acc exp cs
 
   Aforeign      :: Foreign asm
-                => ArraysR bs
+                => Ann
+                -> ArraysR bs
                 -> asm (as -> bs)
                 -> (SmartAcc as -> SmartAcc bs)
                 -> acc as
                 -> PreSmartAcc acc exp bs
 
-  Acond         :: exp PrimBool
+  Acond         :: Ann
+                -> exp PrimBool
                 -> acc as
                 -> acc as
                 -> PreSmartAcc acc exp as
 
-  Awhile        :: ArraysR arrs
+  Awhile        :: Ann
+                -> ArraysR arrs
                 -> (SmartAcc arrs -> acc (Scalar PrimBool))
                 -> (SmartAcc arrs -> acc arrs)
                 -> acc arrs
                 -> PreSmartAcc acc exp arrs
 
-  Anil          :: PreSmartAcc acc exp ()
+  Anil          :: Ann
+                -> PreSmartAcc acc exp ()
 
-  Apair         :: acc arrs1
+  Apair         :: Ann
+                -> acc arrs1
                 -> acc arrs2
                 -> PreSmartAcc acc exp (arrs1, arrs2)
 
-  Aprj          :: PairIdx (arrs1, arrs2) arrs
+  Aprj          :: Ann
+                -> PairIdx (arrs1, arrs2) arrs
                 -> acc (arrs1, arrs2)
                 -> PreSmartAcc acc exp arrs
 
-  Atrace        :: Message arrs1
+  Atrace        :: Ann
+                -> Message arrs1
                 -> acc arrs1
                 -> acc arrs2
                 -> PreSmartAcc acc exp arrs2
 
-  Use           :: ArrayR (Array sh e)
+  Use           :: Ann
+                -> ArrayR (Array sh e)
                 -> Array sh e
                 -> PreSmartAcc acc exp (Array sh e)
 
-  Unit          :: TypeR e
+  Unit          :: Ann
+                -> TypeR e
                 -> exp e
                 -> PreSmartAcc acc exp (Scalar e)
 
-  Generate      :: ArrayR (Array sh e)
+  Generate      :: Ann
+                -> ArrayR (Array sh e)
                 -> exp sh
                 -> (SmartExp sh -> exp e)
                 -> PreSmartAcc acc exp (Array sh e)
 
-  Reshape       :: ShapeR sh
+  Reshape       :: Ann
+                -> ShapeR sh
                 -> exp sh
                 -> acc (Array sh' e)
                 -> PreSmartAcc acc exp (Array sh e)
 
-  Replicate     :: SliceIndex slix sl co sh
+  Replicate     :: Ann
+                -> SliceIndex slix sl co sh
                 -> exp slix
                 -> acc                 (Array sl e)
                 -> PreSmartAcc acc exp (Array sh e)
 
-  Slice         :: SliceIndex slix sl co sh
+  Slice         :: Ann
+                -> SliceIndex slix sl co sh
                 -> acc                 (Array sh e)
                 -> exp slix
                 -> PreSmartAcc acc exp (Array sl e)
@@ -398,7 +412,8 @@ data PreSmartAcc acc exp as where
                 -> acc (Array sh e)
                 -> PreSmartAcc acc exp (Array sh e')
 
-  ZipWith       :: TypeR e1
+  ZipWith       :: Ann
+                -> TypeR e1
                 -> TypeR e2
                 -> TypeR e3
                 -> (SmartExp e1 -> SmartExp e2 -> exp e3)
@@ -413,7 +428,8 @@ data PreSmartAcc acc exp as where
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array sh e)
 
-  FoldSeg       :: IntegralType i
+  FoldSeg       :: Ann
+                -> IntegralType i
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> Maybe (exp e)
@@ -421,41 +437,47 @@ data PreSmartAcc acc exp as where
                 -> acc (Segments i)
                 -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Scan          :: Direction
+  Scan          :: Ann
+                -> Direction
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> Maybe (exp e)
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array (sh, Int) e)
 
-  Scan'         :: Direction
+  Scan'         :: Ann
+                -> Direction
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> exp e
                 -> acc (Array (sh, Int) e)
                 -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
 
-  Permute       :: ArrayR (Array sh e)
+  Permute       :: Ann
+                -> ArrayR (Array sh e)
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> acc (Array sh' e)
                 -> (SmartExp sh -> exp (PrimMaybe sh'))
                 -> acc (Array sh e)
                 -> PreSmartAcc acc exp (Array sh' e)
 
-  Backpermute   :: ShapeR sh'
+  Backpermute   :: Ann
+                -> ShapeR sh'
                 -> exp sh'
                 -> (SmartExp sh' -> exp sh)
                 -> acc (Array sh e)
                 -> PreSmartAcc acc exp (Array sh' e)
 
-  Stencil       :: R.StencilR sh a stencil
+  Stencil       :: Ann
+                -> R.StencilR sh a stencil
                 -> TypeR b
                 -> (SmartExp stencil -> exp b)
                 -> PreBoundary acc exp (Array sh a)
                 -> acc (Array sh a)
                 -> PreSmartAcc acc exp (Array sh b)
 
-  Stencil2      :: R.StencilR sh a stencil1
+  Stencil2      :: Ann
+                -> R.StencilR sh a stencil1
                 -> R.StencilR sh b stencil2
                 -> TypeR c
                 -> (SmartExp stencil1 -> SmartExp stencil2 -> exp c)
@@ -801,45 +823,46 @@ arrayR :: HasArraysR f => f (Array sh e) -> ArrayR (Array sh e)
 arrayR acc = case arraysR acc of
   TupRsingle repr -> repr
 
+-- TODO: Reformat
 instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
   arraysR = \case
     Atag repr _               -> repr
-    Pipe _ _ repr  _ _ _      -> repr
-    Aforeign repr _ _ _       -> repr
-    Acond _ a _               -> arraysR a
-    Awhile _ _ _ a            -> arraysR a
-    Anil                      -> TupRunit
-    Apair a1 a2               -> arraysR a1 `TupRpair` arraysR a2
-    Aprj idx a | TupRpair t1 t2 <- arraysR a
+    Pipe _ _ _ repr  _ _ _    -> repr
+    Aforeign _ repr _ _ _     -> repr
+    Acond _ _ a _             -> arraysR a
+    Awhile _ _ _ _ a          -> arraysR a
+    Anil _                    -> TupRunit
+    Apair _ a1 a2             -> arraysR a1 `TupRpair` arraysR a2
+    Aprj _ idx a | TupRpair t1 t2 <- arraysR a
                               -> case idx of
                                    PairIdxLeft  -> t1
                                    PairIdxRight -> t2
-    Aprj _ _                  -> error "Ejector seat? You're joking!"
-    Atrace _ _ a              -> arraysR a
-    Use repr _                -> TupRsingle repr
-    Unit tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
-    Generate repr _ _         -> TupRsingle repr
-    Reshape shr _ a           -> let ArrayR _ tp = arrayR a
+    Aprj _ _ _                -> error "Ejector seat? You're joking!"
+    Atrace _ _ _ a            -> arraysR a
+    Use _ repr _              -> TupRsingle repr
+    Unit _ tp _               -> TupRsingle $ ArrayR ShapeRz $ tp
+    Generate _ repr _ _       -> TupRsingle repr
+    Reshape _ shr _ a         -> let ArrayR _ tp = arrayR a
                                  in  TupRsingle $ ArrayR shr tp
-    Replicate si _ a          -> let ArrayR _ tp = arrayR a
+    Replicate _ si _ a        -> let ArrayR _ tp = arrayR a
                                  in  TupRsingle $ ArrayR (sliceDomainR si) tp
-    Slice si a _              -> let ArrayR _ tp = arrayR a
+    Slice _ si a _            -> let ArrayR _ tp = arrayR a
                                  in  TupRsingle $ ArrayR (sliceShapeR si) tp
     Map _ _ tp _ a            -> let ArrayR shr _ = arrayR a
                                  in  TupRsingle $ ArrayR shr tp
-    ZipWith _ _ tp _ a _      -> let ArrayR shr _ = arrayR a
+    ZipWith _ _ _ tp _ a _    -> let ArrayR shr _ = arrayR a
                                  in  TupRsingle $ ArrayR shr tp
     Fold _ _ _ _ a            -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
                                  in  TupRsingle (ArrayR shr tp)
-    FoldSeg _ _ _ _ a _       -> arraysR a
-    Scan _ _ _ _ a            -> arraysR a
-    Scan' _ _ _ _ a           -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
+    FoldSeg _ _ _ _ _ a _     -> arraysR a
+    Scan _ _ _ _ _ a          -> arraysR a
+    Scan' _ _ _ _ _ a         -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
                                  in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
-    Permute _ _ a _ _         -> arraysR a
-    Backpermute shr _ _ a     -> let ArrayR _ tp = arrayR a
+    Permute _ _ _ a _ _       -> arraysR a
+    Backpermute _ shr _ _ a   -> let ArrayR _ tp = arrayR a
                                  in  TupRsingle (ArrayR shr tp)
-    Stencil s tp _ _ _        -> TupRsingle $ ArrayR (stencilShapeR s) tp
-    Stencil2 s _ tp _ _ _ _ _ -> TupRsingle $ ArrayR (stencilShapeR s) tp
+    Stencil _ s tp _ _ _      -> TupRsingle $ ArrayR (stencilShapeR s) tp
+    Stencil2 _ s _ tp _ _ _ _ _ -> TupRsingle $ ArrayR (stencilShapeR s) tp
 
 
 class HasTypeR f where
@@ -1229,10 +1252,30 @@ instance Coerce a (a, ()) where
 
 instance FieldAnn (Acc a) where
   _ann k (Acc (SmartAcc pacc)) = Acc . SmartAcc <$> case pacc of
-    (Map ann t1 t2 f acc) -> k (Just ann) <&> \(Just ann') -> Map ann' t1 t2 f acc
-    (Fold ann tp f e acc) -> k (Just ann) <&> \(Just ann') -> Fold ann' tp f e acc
-    -- TODO: All other constructors as we add more annotations
-    _ -> pacc <$ k Nothing
+    (Pipe ann reprA reprB reprC afun1 afun2 acc)                -> k (Just ann) <&> \(Just ann') -> Pipe ann' reprA reprB reprC afun1 afun2 acc
+    (Aforeign ann repr ff afun acc)                             -> k (Just ann) <&> \(Just ann') -> Aforeign ann' repr ff afun acc
+    (Acond ann b acc1 acc2)                                     -> k (Just ann) <&> \(Just ann') -> Acond ann' b acc1 acc2
+    (Awhile ann reprA pred' iter' init')                        -> k (Just ann) <&> \(Just ann') -> Awhile ann' reprA pred' iter' init'
+    (Anil ann)                                                  -> k (Just ann) <&> \(Just ann') -> Anil ann'
+    (Apair ann acc1 acc2)                                       -> k (Just ann) <&> \(Just ann') -> Apair ann' acc1 acc2
+    (Aprj ann ix a)                                             -> k (Just ann) <&> \(Just ann') -> Aprj ann' ix a
+    (Use ann repr array)                                        -> k (Just ann) <&> \(Just ann') -> Use ann' repr array
+    (Unit ann tp e)                                             -> k (Just ann) <&> \(Just ann') -> Unit ann' tp e
+    (Generate ann repr sh f)                                    -> k (Just ann) <&> \(Just ann') -> Generate ann' repr sh f
+    (Reshape ann shr e acc)                                     -> k (Just ann) <&> \(Just ann') -> Reshape ann' shr e acc
+    (Replicate ann si ix acc)                                   -> k (Just ann) <&> \(Just ann') -> Replicate ann' si ix acc
+    (Slice ann si acc ix)                                       -> k (Just ann) <&> \(Just ann') -> Slice ann' si acc ix
+    (Map ann t1 t2 f acc)                                       -> k (Just ann) <&> \(Just ann') -> Map ann' t1 t2 f acc
+    (ZipWith ann t1 t2 t3 f acc1 acc2)                          -> k (Just ann) <&> \(Just ann') -> ZipWith ann' t1 t2 t3 f acc1 acc2
+    (Fold ann tp f e acc)                                       -> k (Just ann) <&> \(Just ann') -> Fold ann' tp f e acc
+    (FoldSeg ann i tp f e acc1 acc2)                            -> k (Just ann) <&> \(Just ann') -> FoldSeg ann' i tp f e acc1 acc2
+    (Scan ann d tp f e acc)                                     -> k (Just ann) <&> \(Just ann') -> Scan ann' d tp f e acc
+    (Scan' ann d tp f e acc)                                    -> k (Just ann) <&> \(Just ann') -> Scan' ann' d tp f e acc
+    (Permute ann repr f dftAcc perm acc)                        -> k (Just ann) <&> \(Just ann') -> Permute ann' repr f dftAcc perm acc
+    (Backpermute ann shr newDim perm acc)                       -> k (Just ann) <&> \(Just ann') -> Backpermute ann' shr newDim perm acc
+    (Stencil ann stencil tp f boundary acc)                     -> k (Just ann) <&> \(Just ann') -> Stencil ann' stencil tp f boundary acc
+    (Stencil2 ann stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2) -> k (Just ann) <&> \(Just ann') -> Stencil2 ann' stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
+    _                                                           -> pacc <$ k Nothing
 
 instance FieldAnn (Exp a) where
   _ann k (Exp (SmartExp pexp)) = Exp . SmartExp <$> case pexp of
@@ -1297,11 +1340,11 @@ unPair :: HasCallStack => SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj mkAnn PairIdxLeft e, SmartExp $ Prj mkAnn PairIdxRight e)
 
 mkPairToTuple :: HasCallStack => SmartAcc (a, b) -> SmartAcc (((), a), b)
-mkPairToTuple e = SmartAcc Anil `pair` a `pair` b
+mkPairToTuple e = SmartAcc (Anil mkAnn) `pair` a `pair` b
   where
-    a = SmartAcc $ Aprj PairIdxLeft e
-    b = SmartAcc $ Aprj PairIdxRight e
-    pair x y = SmartAcc $ Apair x y
+    a = SmartAcc $ Aprj mkAnn PairIdxLeft e
+    b = SmartAcc $ Aprj mkAnn PairIdxRight e
+    pair x y = SmartAcc $ Apair mkAnn x y
 
 class ApplyAcc a where
   type FromApplyAcc a
@@ -1340,10 +1383,11 @@ formatDirection = later $ \case
   LeftToRight -> singleton 'l'
   RightToLeft -> singleton 'r'
 
+-- TODO: Reformat
 formatPreAccOp :: Format r (PreSmartAcc acc exp arrs -> r)
 formatPreAccOp = later $ \case
   Atag _ i            -> bformat ("Atag " % int) i
-  Use aR a            -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
+  Use _ aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
   Pipe{}              -> "Pipe"
   Acond{}             -> "Acond"
   Awhile{}            -> "Awhile"
@@ -1359,9 +1403,9 @@ formatPreAccOp = later $ \case
   Map{}               -> "Map"
   ZipWith{}           -> "ZipWith"
   Fold _ _ _ z _      -> bformat ("Fold" % maybed "1" (fconst mempty)) z
-  FoldSeg _ _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
-  Scan d _ _ z _      -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
-  Scan' d _ _ _ _     -> bformat ("Scan" % formatDirection % "\'") d
+  FoldSeg _ _ _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
+  Scan _ d _ _ z _    -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
+  Scan' _ d _ _ _ _   -> bformat ("Scan" % formatDirection % "\'") d
   Permute{}           -> "Permute"
   Backpermute{}       -> "Backpermute"
   Stencil{}           -> "Stencil"

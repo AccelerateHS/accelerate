@@ -308,14 +308,14 @@ instance Unlift Exp () where
 
 instance Lift Acc () where
   type Plain () = ()
-  lift _ = Acc (SmartAcc Anil)
+  lift _ = Acc (SmartAcc (Anil mkAnn))
 
 instance Unlift Acc () where
   unlift _ = ()
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e
-  lift (Array arr) = withFrozenCallStack $ Acc $ SmartAcc $ Use (arrayR @sh @e) arr
+  lift (Array arr) = withFrozenCallStack $ Acc $ SmartAcc $ Use mkAnn (arrayR @sh @e) arr
 
 -- Lift and Unlift instances for tuples
 --
@@ -352,8 +352,8 @@ runQ $ do
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 
-        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj      |] [| Anil        |] [| Apair      |]
-        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj mkAnn |] [| (Nil mkAnn) |] [| Pair mkAnn |]
+        mkAccInstances = mkInstances (mkName "Acc") [t| Arrays |] [| SmartAcc |] [| Aprj mkAnn |] [| Anil mkAnn |] [| Apair mkAnn |]
+        mkExpInstances = mkInstances (mkName "Exp") [t| Elt    |] [| SmartExp |] [| Prj mkAnn  |] [| Nil mkAnn  |] [| Pair mkAnn  |]
     --
     as <- mapM mkAccInstances [2..16]
     es <- mapM mkExpInstances [2..16]

@@ -26,6 +26,7 @@ module Data.Array.Accelerate.Debug.Trace (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            as S
@@ -34,7 +35,6 @@ import qualified Data.Array.Accelerate.Representation.Array         as R
 import qualified Data.Array.Accelerate.Representation.Shape         as R
 
 import Data.Text
-import GHC.Stack
 
 
 -- $tracing
@@ -59,8 +59,8 @@ atrace message (Acc result)
   = withFrozenCallStack
   $ Acc
   $ SmartAcc
-  $ Atrace (Message (\_ -> "")
-           (Just [|| \_ -> "" ||]) message) (SmartAcc Anil :: SmartAcc ()) result
+  $ Atrace mkAnn (Message (\_ -> "")
+                 (Just [|| \_ -> "" ||]) message) (SmartAcc (Anil mkAnn) :: SmartAcc ()) result
 
 -- | Outputs the trace message and the array(s) from the second argument to
 -- the console, before the 'Acc' computation proceeds with the result of
@@ -71,8 +71,8 @@ atraceArray message (Acc inspect) (Acc result)
   = withFrozenCallStack
   $ Acc
   $ SmartAcc
-  $ Atrace (Message (show . toArr @a)
-           (Just [|| show . toArr @a ||]) message) inspect result
+  $ Atrace mkAnn (Message (show . toArr @a)
+                 (Just [|| show . toArr @a ||]) message) inspect result
 
 -- | Outputs the trace message and the array(s) to the console, before the
 -- 'Acc' computation proceeds with the result of that array.
@@ -88,6 +88,5 @@ atraceExp message value (Acc result) = withFrozenCallStack $
   let Acc inspect = unit value
    in Acc
     $ SmartAcc
-    $ Atrace (Message (\a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())))
-             (Just [|| \a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())) ||]) message) inspect result
-
+    $ Atrace mkAnn (Message (\a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())))
+                   (Just [|| \a -> show (toElt @e (R.indexArray (R.ArrayR R.dim0 (eltR @e)) a ())) ||]) message) inspect result
