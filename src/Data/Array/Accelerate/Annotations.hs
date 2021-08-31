@@ -11,7 +11,7 @@
 
 -- | Annotations for Accelerate's abstract syntax trees.
 --
--- TODO: Document what exactly we are annotations and how we do that once this
+-- TODO: Document what exactly we are annotating and how we do that once this
 --       has been fleshed out a little more.
 -- TODO: Add the same file header used in all other modules
 -- TODO: Reformat all of the changes from this branch to the usual Accelerate
@@ -33,7 +33,7 @@
 --
 --   * At the moment only a handful of 'PreSmartExp' and 'PreSmartAcc'
 --     constructors have annotation fields.
---   * Call stacks are frozen in all of the exposed front end functions and in
+--   * Call stacks are frozen in all of the exposed frontend functions and in
 --     the (generated) pattern synonyms. This allows us to capture them in
 --     'mkAnn' so they can be used later to map an AST back to the original
 --     source location. This does require the 'HasCallStack' constraint to be
@@ -163,6 +163,9 @@ data Ann = Ann
 -- having to do list or set lookups everywhere. Because of record wild cards we
 -- can still easily add additional annotations without having to modify all uses
 -- of this type.
+--
+-- TODO: After the source mapping is done, we should add the rest of the
+--       optimizations here and actually make them do something.
 data Optimizations = Optimizations
     { optAlwaysInline :: Bool
     , optUnrollIters  :: Maybe Int
@@ -181,6 +184,7 @@ alwaysInline :: HasAnnotations a => a -> a
 alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
 
 -- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
+--
 -- TODO: Should we add validation for these kinds of functions? (i.e. reject
 --       negative values for @n@)
 unRollIters :: HasAnnotations a => Int -> a -> a
