@@ -749,6 +749,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           , "submit an issue at the above URL."
           ]
 
+    -- TODO: Add the annotation fields to the de Bruijn AST and pass them through
     cvt (ScopedExp _ (LetSharing se@(StableSharingExp _ boundExp) bodyExp))
       | DeclareVars lhs k value <- declareVars $ typeR boundExp
       = let
@@ -763,25 +764,25 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
           Match _ e             -> cvt e  -- XXX: this should probably be an error
           Const ann tp v        -> AST.Const ann tp v
-          Undef tp              -> AST.Undef tp
+          Undef _ tp            -> AST.Undef tp
           Prj ann idx e         -> cvtPrj ann idx (cvt e)
           Nil ann               -> AST.Nil ann
           Pair ann e1 e2        -> AST.Pair ann (cvt e1) (cvt e2)
-          VecPack   vec e       -> AST.VecPack   vec (cvt e)
-          VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
-          ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
-          FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
-          Case e rhs            -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
-          Cond e1 e2 e3         -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
-          While tp p it i       -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
-          PrimConst c           -> AST.PrimConst c
-          PrimApp f e           -> cvtPrimFun f (cvt e)
-          Index _ a e           -> AST.Index (cvtAvar a) (cvt e)
-          LinearIndex _ a i     -> AST.LinearIndex (cvtAvar a) (cvt i)
-          Shape _ a             -> AST.Shape (cvtAvar a)
-          ShapeSize shr e       -> AST.ShapeSize shr (cvt e)
-          Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
-          Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
+          VecPack   _ vec e     -> AST.VecPack   vec (cvt e)
+          VecUnpack _ vec e     -> AST.VecUnpack vec (cvt e)
+          ToIndex   _ shr sh ix -> AST.ToIndex shr (cvt sh) (cvt ix)
+          FromIndex _ shr sh e  -> AST.FromIndex shr (cvt sh) (cvt e)
+          Case _ e rhs          -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
+          Cond _ e1 e2 e3       -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
+          While _ tp p it i     -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
+          PrimConst _ c         -> AST.PrimConst c
+          PrimApp _ f e         -> cvtPrimFun f (cvt e)
+          Index _ _ a e         -> AST.Index (cvtAvar a) (cvt e)
+          LinearIndex _ _ a i   -> AST.LinearIndex (cvtAvar a) (cvt i)
+          Shape _ _ a           -> AST.Shape (cvtAvar a)
+          ShapeSize _ shr e     -> AST.ShapeSize shr (cvt e)
+          Foreign _ repr ff f e -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
+          Coerce _ t1 t2 e      -> AST.Coerce t1 t2 (cvt e)
 
     -- TODO: We throw away any annotations on the projection here. We should
     --       probably merge them into @a@ and @b@.
@@ -1853,37 +1854,37 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                             return (UnscopedExp [] (ExpSharing (StableNameHeight sn height) exp), height)
 
           reconstruct $ case pexp of
-            Tag tp i            -> return (Tag tp i, 0)      -- height is 0!
-            Const ann tp c      -> return (Const ann tp c, 1)
-            Undef tp            -> return (Undef tp, 1)
-            Nil ann             -> return (Nil ann, 1)
-            Pair ann e1 e2      -> travE2 (Pair ann) e1 e2
-            Prj ann i e         -> travE1 (Prj ann i) e
-            VecPack   vec e     -> travE1 (VecPack   vec) e
-            VecUnpack vec e     -> travE1 (VecUnpack vec) e
-            ToIndex shr sh ix   -> travE2 (ToIndex shr) sh ix
-            FromIndex shr sh e  -> travE2 (FromIndex shr) sh e
-            Match t e           -> travE1 (Match t) e
-            Case e rhs          -> do
+            Tag tp i                -> return (Tag tp i, 0)      -- height is 0!
+            Const ann tp c          -> return (Const ann tp c, 1)
+            Undef ann tp            -> return (Undef ann tp, 1)
+            Nil ann                 -> return (Nil ann, 1)
+            Pair ann e1 e2          -> travE2 (Pair ann) e1 e2
+            Prj ann i e             -> travE1 (Prj ann i) e
+            VecPack   ann vec e     -> travE1 (VecPack   ann vec) e
+            VecUnpack ann vec e     -> travE1 (VecUnpack ann vec) e
+            ToIndex   ann shr sh ix -> travE2 (ToIndex   ann shr) sh ix
+            FromIndex ann shr sh e  -> travE2 (FromIndex ann shr) sh e
+            Match t e               -> travE1 (Match t) e
+            Case ann e rhs          -> do
                                      (e',   h1) <- travE lvl e
                                      (rhs', h2) <- unzip <$> sequence [ travE1 (t,) c | (t,c) <- rhs ]
-                                     return (Case e' rhs', h1 `max` maximum h2 + 1)
-            Cond e1 e2 e3       -> travE3 Cond e1 e2 e3
-            While t p iter init -> do
+                                     return (Case ann e' rhs', h1 `max` maximum h2 + 1)
+            Cond ann e1 e2 e3       -> travE3 (Cond ann) e1 e2 e3
+            While ann t p iter init -> do
                                      (p'   , h1) <- traverseFun1 lvl t p
                                      (iter', h2) <- traverseFun1 lvl t iter
                                      (init', h3) <- travE lvl init
-                                     return (While t p' iter' init', h1 `max` h2 `max` h3 + 1)
-            PrimConst c         -> return (PrimConst c, 1)
-            PrimApp p e         -> travE1 (PrimApp p) e
-            Index tp a e        -> travAE (Index tp) a e
-            LinearIndex tp a i  -> travAE (LinearIndex tp) a i
-            Shape shr a         -> travA (Shape shr) a
-            ShapeSize shr e     -> travE1 (ShapeSize shr) e
-            Foreign tp ff f e   -> do
+                                     return (While ann t p' iter' init', h1 `max` h2 `max` h3 + 1)
+            PrimConst ann c         -> return (PrimConst ann c, 1)
+            PrimApp ann p e         -> travE1 (PrimApp ann p) e
+            Index ann tp a e        -> travAE (Index ann tp) a e
+            LinearIndex ann tp a i  -> travAE (LinearIndex ann tp) a i
+            Shape ann shr a         -> travA (Shape ann shr) a
+            ShapeSize ann shr e     -> travE1 (ShapeSize ann shr) e
+            Foreign ann tp ff f e   -> do
                                       (e', h) <- travE lvl e
-                                      return  (Foreign tp ff f e', h+1)
-            Coerce t1 t2 e      -> travE1 (Coerce t1 t2) e
+                                      return  (Foreign ann tp ff f e', h+1)
+            Coerce ann t1 t2 e      -> travE1 (Coerce ann t1 t2) e
 
       where
         traverseAcc :: HasCallStack => Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
@@ -2759,33 +2760,33 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
     scopesExp (UnscopedExp _ (ExpSharing sn pexp))
       = case pexp of
-          Tag tp i              -> reconstruct (Tag tp i) noNodeCounts
-          Const ann tp c        -> reconstruct (Const ann tp c) noNodeCounts
-          Undef tp              -> reconstruct (Undef tp) noNodeCounts
-          Pair ann e1 e2        -> travE2 (Pair ann) e1 e2
-          Nil ann               -> reconstruct (Nil ann) noNodeCounts
-          Prj ann i e           -> travE1 (Prj ann i) e
-          VecPack   vec e       -> travE1 (VecPack   vec) e
-          VecUnpack vec e       -> travE1 (VecUnpack vec) e
-          ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
-          FromIndex shr sh e    -> travE2 (FromIndex shr) sh e
-          Match t e             -> travE1 (Match t) e
-          Case e rhs            -> let (e',   accCount1) = scopesExp e
-                                       (rhs', accCount2) = unzip [ ((t,c'), counts)| (t,c) <- rhs, let (c', counts) = scopesExp c ]
-                                    in reconstruct (Case e' rhs') (foldr (+++) accCount1 accCount2)
-          Cond e1 e2 e3         -> travE3 Cond e1 e2 e3
-          While tp p it i       -> let (p' , accCount1) = scopesFun1 p
-                                       (it', accCount2) = scopesFun1 it
-                                       (i' , accCount3) = scopesExp i
-                                    in reconstruct (While tp p' it' i') (accCount1 +++ accCount2 +++ accCount3)
-          PrimConst c           -> reconstruct (PrimConst c) noNodeCounts
-          PrimApp p e           -> travE1 (PrimApp p) e
-          Index tp a e          -> travAE (Index tp) a e
-          LinearIndex tp a e    -> travAE (LinearIndex tp) a e
-          Shape shr a           -> travA (Shape shr) a
-          ShapeSize shr e       -> travE1 (ShapeSize shr) e
-          Foreign tp ff f e     -> travE1 (Foreign tp ff f) e
-          Coerce t1 t2 e        -> travE1 (Coerce t1 t2) e
+          Tag tp i                -> reconstruct (Tag tp i) noNodeCounts
+          Const ann tp c          -> reconstruct (Const ann tp c) noNodeCounts
+          Undef ann tp            -> reconstruct (Undef ann tp) noNodeCounts
+          Pair ann e1 e2          -> travE2 (Pair ann) e1 e2
+          Nil ann                 -> reconstruct (Nil ann) noNodeCounts
+          Prj ann i e             -> travE1 (Prj ann i) e
+          VecPack   ann vec e     -> travE1 (VecPack   ann vec) e
+          VecUnpack ann vec e     -> travE1 (VecUnpack ann vec) e
+          ToIndex   ann shr sh ix -> travE2 (ToIndex   ann shr) sh ix
+          FromIndex ann shr sh e  -> travE2 (FromIndex ann shr) sh e
+          Match t e               -> travE1 (Match t) e
+          Case ann e rhs          -> let (e',   accCount1) = scopesExp e
+                                         (rhs', accCount2) = unzip [ ((t,c'), counts)| (t,c) <- rhs, let (c', counts) = scopesExp c ]
+                                     in  reconstruct (Case ann e' rhs') (foldr (+++) accCount1 accCount2)
+          Cond ann e1 e2 e3       -> travE3 (Cond ann) e1 e2 e3
+          While ann tp p it i     -> let (p' , accCount1) = scopesFun1 p
+                                         (it', accCount2) = scopesFun1 it
+                                         (i' , accCount3) = scopesExp i
+                                     in  reconstruct (While ann tp p' it' i') (accCount1 +++ accCount2 +++ accCount3)
+          PrimConst ann c         -> reconstruct (PrimConst ann c) noNodeCounts
+          PrimApp ann p e         -> travE1 (PrimApp ann p) e
+          Index ann tp a e        -> travAE (Index ann tp) a e
+          LinearIndex ann tp a e  -> travAE (LinearIndex ann tp) a e
+          Shape ann shr a         -> travA (Shape ann shr) a
+          ShapeSize ann shr e     -> travE1 (ShapeSize ann shr) e
+          Foreign ann tp ff f e   -> travE1 (Foreign ann tp ff f) e
+          Coerce ann t1 t2 e      -> travE1 (Coerce ann t1 t2) e
       where
         travE1 :: HasCallStack
                => (ScopedExp a -> PreSmartExp ScopedAcc ScopedExp t)

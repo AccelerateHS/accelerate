@@ -180,7 +180,7 @@ deconstructComplex :: forall a. (HasCallStack, Elt a) => Exp (Complex a) -> (Exp
 deconstructComplex c@(Exp c') =
   case complexR (eltR @a) of
     ComplexTup   -> let T2 r i = coerce c in (r, i)
-    ComplexVec t -> let T2 r i = Exp (SmartExp (VecUnpack (VecRsucc (VecRsucc (VecRnil t))) c'))
+    ComplexVec t -> let T2 r i = Exp (SmartExp (VecUnpack mkAnn (VecRsucc (VecRsucc (VecRnil t))) c'))
                      in (r, i)
 
 coerce :: EltR a ~ EltR b => Exp a -> Exp b

@@ -60,9 +60,9 @@ infixr 3 &&
   withFrozenCallStack
     $ mkExp
     $ Pair mkAnn
-        (SmartExp (Cond (SmartExp $ Prj mkAnn PairIdxLeft x)
-                        (SmartExp $ Prj mkAnn PairIdxLeft y)
-                        (SmartExp $ Const mkAnn scalarTypeWord8 0)))
+        (SmartExp (Cond mkAnn (SmartExp $ Prj mkAnn PairIdxLeft x)
+                              (SmartExp $ Prj mkAnn PairIdxLeft y)
+                              (SmartExp $ Const mkAnn scalarTypeWord8 0)))
         (SmartExp (Nil mkAnn))
 
 -- | Conjunction: True if both arguments are true. This is a strict version of
@@ -84,9 +84,9 @@ infixr 2 ||
   withFrozenCallStack
     $ mkExp
     $ Pair mkAnn
-        (SmartExp (Cond (SmartExp $ Prj mkAnn PairIdxLeft x)
-                  (SmartExp $ Const mkAnn scalarTypeWord8 1)
-                  (SmartExp $ Prj mkAnn PairIdxLeft y)))
+        (SmartExp (Cond mkAnn (SmartExp $ Prj mkAnn PairIdxLeft x)
+                              (SmartExp $ Const mkAnn scalarTypeWord8 1)
+                              (SmartExp $ Prj mkAnn PairIdxLeft y)))
         (SmartExp (Nil mkAnn))
 
 

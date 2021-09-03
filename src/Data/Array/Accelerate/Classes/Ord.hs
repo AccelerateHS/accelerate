@@ -83,7 +83,7 @@ class Eq a => Ord a where
 -- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
 --
 ifThenElse :: (HasCallStack, Elt a) => Exp Bool -> Exp a -> Exp a -> Exp a
-ifThenElse (Exp c) (Exp x) (Exp y) = withFrozenCallStack $ Exp $ SmartExp $ Cond (mkCoerce' c) x y
+ifThenElse (Exp c) (Exp x) (Exp y) = withFrozenCallStack $ Exp $ SmartExp $ Cond mkAnn (mkCoerce' c) x y
 
 instance Ord () where
   (<)     _ _ = withFrozenCallStack $ constant False

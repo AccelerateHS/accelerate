@@ -1216,7 +1216,7 @@ foreignExp
     -> (Exp x -> Exp y)
     -> Exp x
     -> Exp y
-foreignExp asm f (Exp x) = withFrozenCallStack $ mkExp $ Foreign (eltR @y) asm (unExpFunction f) x
+foreignExp asm f (Exp x) = withFrozenCallStack $ mkExp $ Foreign mkAnn (eltR @y) asm (unExpFunction f) x
 
 
 -- Composition of array computations
@@ -1281,12 +1281,12 @@ toIndex
     => Exp sh                     -- ^ extent of the array
     -> Exp sh                     -- ^ index to remap
     -> Exp Int
-toIndex (Exp sh) (Exp ix) = withFrozenCallStack $ mkExp $ ToIndex (shapeR @sh) sh ix
+toIndex (Exp sh) (Exp ix) = withFrozenCallStack $ mkExp $ ToIndex mkAnn (shapeR @sh) sh ix
 
 -- | Inverse of 'toIndex'
 --
 fromIndex :: forall sh. (HasCallStack, Shape sh) => Exp sh -> Exp Int -> Exp sh
-fromIndex (Exp sh) (Exp e) = withFrozenCallStack $ mkExp $ FromIndex (shapeR @sh) sh e
+fromIndex (Exp sh) (Exp e) = withFrozenCallStack $ mkExp $ FromIndex mkAnn (shapeR @sh) sh e
 
 -- | Intersection of two shapes
 --
@@ -1298,7 +1298,7 @@ intersect (Exp shx) (Exp shy) = withFrozenCallStack $ Exp $ intersect' (shapeR @
     intersect' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ Pair mkAnn (intersect' shR xs ys)
-                   (SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair mkAnn x y))
+                   (SmartExp (PrimApp mkAnn (PrimMin singleType) $ SmartExp $ Pair mkAnn x y))
 
 
 -- | Union of two shapes
@@ -1311,7 +1311,7 @@ union (Exp shx) (Exp shy) = withFrozenCallStack $ Exp $ union' (shapeR @sh) shx 
     union' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ Pair mkAnn (union' shR xs ys)
-                   (SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair mkAnn x y))
+                   (SmartExp (PrimApp mkAnn (PrimMax singleType) $ SmartExp $ Pair mkAnn x y))
 
 
 -- Flow-control
@@ -1327,7 +1327,7 @@ cond :: (HasCallStack, Elt t)
      -> Exp t                   -- ^ then-expression
      -> Exp t                   -- ^ else-expression
      -> Exp t
-cond (Exp c) (Exp x) (Exp y) = withFrozenCallStack $ mkExp $ Cond (mkCoerce' c) x y
+cond (Exp c) (Exp x) (Exp y) = withFrozenCallStack $ mkExp $ Cond mkAnn (mkCoerce' c) x y
 
 -- | While construct. Continue to apply the given function, starting with the
 -- initial value, until the test function evaluates to 'False'.
@@ -1338,7 +1338,7 @@ while :: forall e. (HasCallStack, Elt e)
       -> Exp e                  -- ^ initial value
       -> Exp e
 while c f (Exp e) =
-  withFrozenCallStack $ mkExp $ While @(EltR e) (eltR @e)
+  withFrozenCallStack $ mkExp $ While @(EltR e) mkAnn (eltR @e)
             (mkCoerce' . unExp . c . Exp)
             (unExp . f . Exp) e
 
@@ -1363,7 +1363,7 @@ while c f (Exp e) =
 --
 infixl 9 !
 (!) :: forall sh e. (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp sh -> Exp e
-Acc a ! Exp ix = withFrozenCallStack $ mkExp $ Index (eltR @e) a ix
+Acc a ! Exp ix = withFrozenCallStack $ mkExp $ Index mkAnn (eltR @e) a ix
 
 -- | Extract the value from an array at the specified linear index.
 -- Multidimensional arrays in Accelerate are stored in row-major order with
@@ -1383,12 +1383,12 @@ Acc a ! Exp ix = withFrozenCallStack $ mkExp $ Index (eltR @e) a ix
 --
 infixl 9 !!
 (!!) :: forall sh e. (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp Int -> Exp e
-Acc a !! Exp ix = withFrozenCallStack $ mkExp $ LinearIndex (eltR @e) a ix
+Acc a !! Exp ix = withFrozenCallStack $ mkExp $ LinearIndex mkAnn (eltR @e) a ix
 
 -- | Extract the shape (extent) of an array.
 --
 shape :: forall sh e. (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp sh
-shape = withFrozenCallStack $ mkExp . Shape (shapeR @sh) . unAcc
+shape = withFrozenCallStack $ mkExp . Shape mkAnn (shapeR @sh) . unAcc
 
 -- | The number of elements in the array
 --
@@ -1398,7 +1398,7 @@ size = withFrozenCallStack $ shapeSize . shape
 -- | The number of elements that would be held by an array of the given shape.
 --
 shapeSize :: forall sh. (HasCallStack, Shape sh) => Exp sh -> Exp Int
-shapeSize (Exp sh) = withFrozenCallStack $ mkExp $ ShapeSize (shapeR @sh) sh
+shapeSize (Exp sh) = withFrozenCallStack $ mkExp $ ShapeSize mkAnn (shapeR @sh) sh
 
 
 -- Numeric functions

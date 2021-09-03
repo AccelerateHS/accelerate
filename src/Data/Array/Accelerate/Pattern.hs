@@ -213,8 +213,8 @@ runQ $ do
           --
           [d| instance $context => IsVector Exp $(varT v) $tup where
                 vpack x = case builder x :: Exp $tR of
-                            Exp x' -> Exp (SmartExp (VecPack $vecR x'))
-                vunpack (Exp x) = matcher (Exp (SmartExp (VecUnpack $vecR x)) :: Exp $tR)
+                            Exp x' -> Exp (SmartExp (VecPack mkAnn $vecR x'))
+                vunpack (Exp x) = matcher (Exp (SmartExp (VecUnpack mkAnn $vecR x)) :: Exp $tR)
             |]
     --
     es <- mapM mkExpPattern [0..16]

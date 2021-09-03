@@ -509,8 +509,6 @@ newtype SmartExp t = SmartExp (PreSmartExp SmartAcc SmartExp t)
 
 -- | Scalar expressions to parametrise collective array operations, themselves parameterised over
 -- the type of collective array operations.
---
--- TODO: Add annotations to the rest of the constructors
 data PreSmartExp acc exp t where
   -- Needed for conversion to de Bruijn form
   Tag           :: TypeR t
@@ -542,77 +540,93 @@ data PreSmartExp acc exp t where
                 -> PreSmartExp acc exp t
 
   VecPack       :: KnownNat n
-                => VecR n s tup
+                => Ann
+                -> VecR n s tup
                 -> exp tup
                 -> PreSmartExp acc exp (Vec n s)
 
   VecUnpack     :: KnownNat n
-                => VecR n s tup
+                => Ann
+                -> VecR n s tup
                 -> exp (Vec n s)
                 -> PreSmartExp acc exp tup
 
-  ToIndex       :: ShapeR sh
+  ToIndex       :: Ann
+                -> ShapeR sh
                 -> exp sh
                 -> exp sh
                 -> PreSmartExp acc exp Int
 
-  FromIndex     :: ShapeR sh
+  FromIndex     :: Ann
+                -> ShapeR sh
                 -> exp sh
                 -> exp Int
                 -> PreSmartExp acc exp sh
 
-  Case          :: exp a
+  Case          :: Ann
+                -> exp a
                 -> [(TagR a, exp b)]
                 -> PreSmartExp acc exp b
 
-  Cond          :: exp PrimBool
+  Cond          :: Ann
+                -> exp PrimBool
                 -> exp t
                 -> exp t
                 -> PreSmartExp acc exp t
 
-  While         :: TypeR t
+  While         :: Ann
+                -> TypeR t
                 -> (SmartExp t -> exp PrimBool)
                 -> (SmartExp t -> exp t)
                 -> exp t
                 -> PreSmartExp acc exp t
 
-  PrimConst     :: PrimConst t
+  PrimConst     :: Ann
+                -> PrimConst t
                 -> PreSmartExp acc exp t
 
-  PrimApp       :: PrimFun (a -> r)
+  PrimApp       :: Ann
+                -> PrimFun (a -> r)
                 -> exp a
                 -> PreSmartExp acc exp r
 
-  Index         :: TypeR t
+  Index         :: Ann
+                -> TypeR t
                 -> acc (Array sh t)
                 -> exp sh
                 -> PreSmartExp acc exp t
 
-  LinearIndex   :: TypeR t
+  LinearIndex   :: Ann
+                -> TypeR t
                 -> acc (Array sh t)
                 -> exp Int
                 -> PreSmartExp acc exp t
 
-  Shape         :: ShapeR sh
+  Shape         :: Ann
+                -> ShapeR sh
                 -> acc (Array sh e)
                 -> PreSmartExp acc exp sh
 
-  ShapeSize     :: ShapeR sh
+  ShapeSize     :: Ann
+                -> ShapeR sh
                 -> exp sh
                 -> PreSmartExp acc exp Int
 
   Foreign       :: Foreign asm
-                => TypeR y
+                => Ann
+                -> TypeR y
                 -> asm (x -> y)
                 -> (SmartExp x -> SmartExp y) -- RCE: Using SmartExp instead of exp to aid in sharing recovery.
                 -> exp x
                 -> PreSmartExp acc exp y
 
-  Undef         :: ScalarType t
+  Undef         :: Ann
+                -> ScalarType t
                 -> PreSmartExp acc exp t
 
   Coerce        :: BitSizeEq a b
-                => ScalarType a
+                => Ann
+                -> ScalarType a
                 -> ScalarType b
                 -> exp a
                 -> PreSmartExp acc exp b
@@ -883,23 +897,23 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
                                          PairIdxLeft  -> t1
                                          PairIdxRight -> t2
     Prj _ _ _                       -> error "I never joke about my work"
-    VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
-    VecUnpack vecR _                -> vecRtuple vecR
-    ToIndex _ _ _                   -> TupRsingle scalarTypeInt
-    FromIndex shr _ _               -> shapeType shr
-    Case _ ((_,c):_)                -> typeR c
+    VecPack   _ vecR _              -> TupRsingle $ VectorScalarType $ vecRvector vecR
+    VecUnpack _ vecR _              -> vecRtuple vecR
+    ToIndex _ _ _ _                 -> TupRsingle scalarTypeInt
+    FromIndex _ shr _ _             -> shapeType shr
+    Case _ _ ((_,c):_)              -> typeR c
     Case{}                          -> internalError "encountered empty case"
-    Cond _ e _                      -> typeR e
-    While t _ _ _                   -> t
-    PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
-    PrimApp f _                     -> snd $ primFunType f
-    Index tp _ _                    -> tp
-    LinearIndex tp _ _              -> tp
-    Shape shr _                     -> shapeType shr
-    ShapeSize _ _                   -> TupRsingle scalarTypeInt
-    Foreign tp _ _ _                -> tp
-    Undef tp                        -> TupRsingle tp
-    Coerce _ tp _                   -> TupRsingle tp
+    Cond _ _ e _                    -> typeR e
+    While _ t _ _ _                 -> t
+    PrimConst _ c                   -> TupRsingle $ SingleScalarType $ primConstType c
+    PrimApp _ f _                   -> snd $ primFunType f
+    Index _ tp _ _                  -> tp
+    LinearIndex _ tp _ _            -> tp
+    Shape _ shr _                   -> shapeType shr
+    ShapeSize _ _ _                 -> TupRsingle scalarTypeInt
+    Foreign _ tp _ _ _              -> tp
+    Undef _ tp                      -> TupRsingle tp
+    Coerce _ _ tp _                 -> TupRsingle tp
 
 
 -- Smart constructors
@@ -949,12 +963,12 @@ constant = withFrozenCallStack $ Exp . go (eltR @e) . fromElt
 -- @since 1.2.0.0
 --
 undef :: forall e. (HasCallStack, Elt e) => Exp e
-undef = withFrozenCallStack $ Exp $ go $ eltR @e
-  where
-    go :: HasCallStack => TypeR t -> SmartExp t
-    go TupRunit         = SmartExp $ (Nil mkAnn)
-    go (TupRsingle t)   = SmartExp $ Undef t
-    go (TupRpair t1 t2) = SmartExp $ Pair mkAnn (go t1) (go t2)
+undef = withFrozenCallStack
+  $ let go :: HasCallStack => TypeR t -> SmartExp t
+        go TupRunit         = SmartExp $ Nil mkAnn
+        go (TupRsingle t)   = SmartExp $ Undef mkAnn t
+        go (TupRpair t1 t2) = SmartExp $ Pair mkAnn (go t1) (go t2)
+    in  Exp $ go $ eltR @e
 
 -- | Get the innermost dimension of a shape.
 --
@@ -979,13 +993,13 @@ indexTail (Exp x) = withFrozenCallStack $ mkExp $ Prj mkAnn PairIdxLeft x
 --
 
 mkMinBound :: (HasCallStack, Elt t, IsBounded (EltR t)) => Exp t
-mkMinBound = mkExp $ PrimConst (PrimMinBound boundedType)
+mkMinBound = mkExp $ PrimConst mkAnn (PrimMinBound boundedType)
 
 mkMaxBound :: (HasCallStack, Elt t, IsBounded (EltR t)) => Exp t
-mkMaxBound = mkExp $ PrimConst (PrimMaxBound boundedType)
+mkMaxBound = mkExp $ PrimConst mkAnn (PrimMaxBound boundedType)
 
 mkPi :: (HasCallStack, Elt r, IsFloating (EltR r)) => Exp r
-mkPi = mkExp $ PrimConst (PrimPi floatingType)
+mkPi = mkExp $ PrimConst mkAnn (PrimPi floatingType)
 
 
 -- Smart constructors for primitive applications
@@ -1074,7 +1088,7 @@ mkRem = mkPrimBinary $ PrimRem integralType
 
 mkQuotRem :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkQuotRem (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair mkAnn x y)
+  let pair = SmartExp $ PrimApp mkAnn (PrimQuotRem integralType) (SmartExp (Pair mkAnn x y))
   in  (mkExp $ Prj mkAnn PairIdxLeft pair, mkExp $ Prj mkAnn PairIdxRight pair)
 
 mkIDiv :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
@@ -1085,7 +1099,7 @@ mkMod = mkPrimBinary $ PrimMod integralType
 
 mkDivMod :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkDivMod (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair mkAnn x y)
+  let pair = SmartExp $ PrimApp mkAnn (PrimDivMod integralType) (SmartExp (Pair mkAnn x y))
   in  (mkExp $ Prj mkAnn PairIdxLeft pair, mkExp $ Prj mkAnn PairIdxRight pair)
 
 -- Operators from Bits and FiniteBits
@@ -1188,19 +1202,19 @@ mkMin = mkPrimBinary $ PrimMin singleType
 -- Logical operators
 
 mkLAnd :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
-mkLAnd (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp PrimLAnd (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
+mkLAnd (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp mkAnn PrimLAnd (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
   where
     x = SmartExp $ Prj mkAnn PairIdxLeft a
     y = SmartExp $ Prj mkAnn PairIdxLeft b
 
 mkLOr :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
-mkLOr (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp PrimLOr (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
+mkLOr (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp mkAnn PrimLOr (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
   where
     x = SmartExp $ Prj mkAnn PairIdxLeft a
     y = SmartExp $ Prj mkAnn PairIdxLeft b
 
 mkLNot :: HasCallStack => Exp Bool -> Exp Bool
-mkLNot (Exp a) = mkExp $ Pair mkAnn (SmartExp (PrimApp PrimLNot x)) (SmartExp (Nil mkAnn))
+mkLNot (Exp a) = mkExp $ Pair mkAnn (SmartExp (PrimApp mkAnn PrimLNot x)) (SmartExp (Nil mkAnn))
   where
     x = SmartExp $ Prj mkAnn PairIdxLeft a
 
@@ -1217,7 +1231,7 @@ mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 -- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
 -- make this version "safe"
 mkBitcast :: forall b a. (HasCallStack, Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
-mkBitcast (Exp a) = mkExp $ Coerce (scalarType @(EltR a)) (scalarType @(EltR b)) a
+mkBitcast (Exp a) = mkExp $ Coerce mkAnn (scalarType @(EltR a)) (scalarType @(EltR b)) a
 
 mkCoerce :: HasCallStack => Coerce (EltR a) (EltR b) => Exp a -> Exp b
 mkCoerce (Exp a) = withFrozenCallStack $ Exp $ mkCoerce' a
@@ -1226,7 +1240,7 @@ class Coerce a b where
   mkCoerce' :: HasCallStack => SmartExp a -> SmartExp b
 
 instance {-# OVERLAPS #-} (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b where
-  mkCoerce' = SmartExp . Coerce (scalarType @a) (scalarType @b)
+  mkCoerce' = SmartExp . Coerce mkAnn (scalarType @a) (scalarType @b)
 
 instance (Coerce a1 b1, Coerce a2 b2) => Coerce (a1, a2) (b1, b2) where
   mkCoerce' a = SmartExp $ Pair mkAnn (mkCoerce' $ SmartExp $ Prj mkAnn PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj mkAnn PairIdxRight a)
@@ -1279,12 +1293,27 @@ instance FieldAnn (Acc a) where
 
 instance FieldAnn (Exp a) where
   _ann k (Exp (SmartExp pexp)) = Exp . SmartExp <$> case pexp of
-    (Const ann t c)  -> k (Just ann) <&> \(Just ann') -> Const ann' t c
-    (Nil ann)        -> k (Just ann) <&> \(Just ann') -> Nil ann'
-    (Pair ann e1 e2) -> k (Just ann) <&> \(Just ann') -> Pair ann' e1 e2
-    (Prj ann idx e)  -> k (Just ann) <&> \(Just ann') -> Prj ann' idx e
-    -- TODO: All other constructors as we add more annotations
-    _ -> pexp <$ k Nothing
+    (Const ann tp v)          -> k (Just ann) <&> \(Just ann') -> Const ann' tp v
+    (Undef ann tp)            -> k (Just ann) <&> \(Just ann') -> Undef ann' tp
+    (Prj ann idx e)           -> k (Just ann) <&> \(Just ann') -> Prj ann' idx e
+    (Nil ann)                 -> k (Just ann) <&> \(Just ann') -> Nil ann'
+    (Pair ann e1 e2)          -> k (Just ann) <&> \(Just ann') -> Pair ann' e1 e2
+    (VecPack   ann vec e)     -> k (Just ann) <&> \(Just ann') -> VecPack   ann' vec e
+    (VecUnpack ann vec e)     -> k (Just ann) <&> \(Just ann') -> VecUnpack ann' vec e
+    (ToIndex   ann shr sh ix) -> k (Just ann) <&> \(Just ann') -> ToIndex   ann' shr sh ix
+    (FromIndex ann shr sh e)  -> k (Just ann) <&> \(Just ann') -> FromIndex ann' shr sh e
+    (Case ann e rhs)          -> k (Just ann) <&> \(Just ann') -> Case ann' e rhs
+    (Cond ann e1 e2 e3)       -> k (Just ann) <&> \(Just ann') -> Cond ann' e1 e2 e3
+    (While ann tp p it i)     -> k (Just ann) <&> \(Just ann') -> While ann' tp p it i
+    (PrimConst ann c)         -> k (Just ann) <&> \(Just ann') -> PrimConst ann' c
+    (PrimApp ann f e)         -> k (Just ann) <&> \(Just ann') -> PrimApp ann' f e
+    (Index ann tp a e)        -> k (Just ann) <&> \(Just ann') -> Index ann' tp a e
+    (LinearIndex ann tp a i)  -> k (Just ann) <&> \(Just ann') -> LinearIndex ann' tp a i
+    (Shape ann shr a)         -> k (Just ann) <&> \(Just ann') -> Shape ann' shr a
+    (ShapeSize ann shr e)     -> k (Just ann) <&> \(Just ann') -> ShapeSize ann' shr e
+    (Foreign ann repr ff f e) -> k (Just ann) <&> \(Just ann') -> Foreign ann' repr ff f e
+    (Coerce ann t1 t2 e)      -> k (Just ann) <&> \(Just ann') -> Coerce ann' t1 t2 e
+    _                         -> pexp <$ k Nothing
 
 
 -- Auxiliary functions
@@ -1325,10 +1354,10 @@ unExpBinaryFunction :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> Sma
 unExpBinaryFunction f a b = unExp $ f (Exp a) (Exp b)
 
 mkPrimUnary :: (HasCallStack, Elt a, Elt b) => PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
-mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
+mkPrimUnary prim (Exp a) = mkExp $ PrimApp mkAnn prim a
 
 mkPrimBinary :: (HasCallStack, Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
-mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair mkAnn a b)
+mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp mkAnn prim (SmartExp $ Pair mkAnn a b)
 
 mkPrimUnaryBool :: (HasCallStack, Elt a) => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
 mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary

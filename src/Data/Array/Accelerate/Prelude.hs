@@ -119,6 +119,7 @@ module Data.Array.Accelerate.Prelude (
 ) where
 
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
@@ -137,7 +138,6 @@ import Data.Array.Accelerate.Classes.Ord
 
 import Data.Array.Accelerate.Data.Bits
 
-import GHC.Stack
 import Lens.Micro                                                   ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
 import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
 
@@ -2308,7 +2308,7 @@ instance (Elt e, Matching r) => Matching (Exp e -> r) where
       -- product types.
       _ -> case rhs of
              [(_,r)] -> Exp r
-             _       -> Exp (SmartExp (Case p rhs))
+             _       -> Exp (SmartExp (Case mkAnn p rhs))
     where
       rhs = [ (tag, unExp (mkMatch (f x') xs))
             | tag <- tagsR @e
