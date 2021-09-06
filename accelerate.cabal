@@ -375,6 +375,7 @@ library
         Data.Array.Accelerate.Trafo.Fusion
         Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Trafo.Substitution
+        Data.Array.Accelerate.Trafo.Var
         Data.Array.Accelerate.Type
 
         -- For testing
@@ -429,7 +430,6 @@ library
         Data.Array.Accelerate.Trafo.LetSplit
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
-        Data.Array.Accelerate.Trafo.Var
         Data.Atomic
 
         -- Data.Array.Accelerate.Array.Lifted
