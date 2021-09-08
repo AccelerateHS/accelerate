@@ -212,16 +212,16 @@ prettyPreOpenAcc
     -> Adoc
 prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
   maybeWithAnn config pacc $ case pacc of
-    Avar (Var _ idx)  -> prj idx aenv
-    Alet{}            -> prettyAlet config ctx prettyAcc extractAcc aenv pacc
-    Apair{}           -> prettyAtuple config ctx prettyAcc extractAcc aenv pacc
-    Anil              -> "()"
-    Apply _ f a       -> apply
+    Avar _ (Var _ idx)               -> prj idx aenv
+    Alet{}                           -> prettyAlet config ctx prettyAcc extractAcc aenv pacc
+    Apair{}                          -> prettyAtuple config ctx prettyAcc extractAcc aenv pacc
+    Anil{}                           -> "()"
+    Apply _ _ f a                    -> apply
       where
         op    = Operator ">->" Infix L 1
         apply = sep [ ppAF f, group (sep [opName op, ppA a]) ]
 
-    Acond p t e       -> flatAlt multi single
+    Acond _ p t e                    -> flatAlt multi single
       where
         p' = ppE p
         t' = ppA t
@@ -235,29 +235,29 @@ prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
                       , hang shiftwidth (sep [ else_, e' ]) ]
 
 
-    Atrace (Message _ _ msg) as bs  -> ppN "atrace"      .$ [ fromString (show msg), ppA as, ppA bs ]
-    Aforeign _ ff _ a               -> ppN "aforeign"    .$ [ pretty (strForeign ff), ppA a ]
-    Awhile p f a                    -> ppN "awhile"      .$ [ ppAF p, ppAF f, ppA a ]
-    Use repr arr                    -> ppN "use"         .$ [ prettyArray repr arr ]
-    Unit _ e                        -> ppN "unit"        .$ [ ppE e ]
-    Reshape _ sh a                  -> ppN "reshape"     .$ [ ppE sh, ppA a ]
-    Generate _ sh f                 -> ppN "generate"    .$ [ ppE sh, ppF f ]
-    Transform _ sh p f a            -> ppN "transform"   .$ [ ppE sh, ppF p, ppF f, ppA a ]
-    Replicate _ ix a                -> ppN "replicate"   .$ [ ppE ix, ppA a ]
-    Slice _ a ix                    -> ppN "slice"       .$ [ ppE ix, ppA a ]
-    Map _ _ f a                     -> ppN "map"         .$ [ ppF f,  ppA a ]
-    ZipWith _ f a b                 -> ppN "zipWith"     .$ [ ppF f,  ppA a, ppA b ]
-    Fold _ f (Just z) a             -> ppN "fold"        .$ [ ppF f,  ppE z, ppA a ]
-    Fold _ f Nothing  a             -> ppN "fold1"       .$ [ ppF f,  ppA a ]
-    FoldSeg _ f (Just z) a s        -> ppN "foldSeg"     .$ [ ppF f,  ppE z, ppA a, ppA s ]
-    FoldSeg _ f Nothing  a s        -> ppN "fold1Seg"    .$ [ ppF f,  ppA a, ppA s ]
-    Scan d f (Just z) a             -> ppD "scan" d ""   .$ [ ppF f,  ppE z, ppA a ]
-    Scan d f Nothing  a             -> ppD "scan" d "1"  .$ [ ppF f,  ppA a ]
-    Scan' d f z a                   -> ppD "scan" d "'"  .$ [ ppF f,  ppE z, ppA a ]
-    Permute f d p s                 -> ppN "permute"     .$ [ ppF f,  ppA d, ppF p, ppA s ]
-    Backpermute _ sh f a            -> ppN "backpermute" .$ [ ppE sh, ppF f, ppA a ]
-    Stencil s _ f b a               -> ppN "stencil"     .$ [ ppF f,  ppB (stencilEltR s) b, ppA a ]
-    Stencil2 s1 s2 _ f b1 a1 b2 a2  -> ppN "stencil2"    .$ [ ppF f,  ppB (stencilEltR s1) b1, ppA a1, ppB (stencilEltR s2) b2, ppA a2 ]
+    Atrace _ (Message _ _ msg) as bs -> ppN "atrace"      .$ [ fromString (show msg), ppA as, ppA bs ]
+    Aforeign _ _ ff _ a              -> ppN "aforeign"    .$ [ pretty (strForeign ff), ppA a ]
+    Awhile _ p f a                   -> ppN "awhile"      .$ [ ppAF p, ppAF f, ppA a ]
+    Use _ repr arr                   -> ppN "use"         .$ [ prettyArray repr arr ]
+    Unit _ _ e                       -> ppN "unit"        .$ [ ppE e ]
+    Reshape _ _ sh a                 -> ppN "reshape"     .$ [ ppE sh, ppA a ]
+    Generate _ _ sh f                -> ppN "generate"    .$ [ ppE sh, ppF f ]
+    Transform _ _ sh p f a           -> ppN "transform"   .$ [ ppE sh, ppF p, ppF f, ppA a ]
+    Replicate _ _ ix a               -> ppN "replicate"   .$ [ ppE ix, ppA a ]
+    Slice _ _ a ix                   -> ppN "slice"       .$ [ ppE ix, ppA a ]
+    Map _ _ f a                      -> ppN "map"         .$ [ ppF f,  ppA a ]
+    ZipWith _ _ f a b                -> ppN "zipWith"     .$ [ ppF f,  ppA a, ppA b ]
+    Fold _ f (Just z) a              -> ppN "fold"        .$ [ ppF f,  ppE z, ppA a ]
+    Fold _ f Nothing  a              -> ppN "fold1"       .$ [ ppF f,  ppA a ]
+    FoldSeg _ _ f (Just z) a s       -> ppN "foldSeg"     .$ [ ppF f,  ppE z, ppA a, ppA s ]
+    FoldSeg _ _ f Nothing  a s       -> ppN "fold1Seg"    .$ [ ppF f,  ppA a, ppA s ]
+    Scan  _ d f (Just z) a           -> ppD "scan" d ""   .$ [ ppF f,  ppE z, ppA a ]
+    Scan  _ d f Nothing  a           -> ppD "scan" d "1"  .$ [ ppF f,  ppA a ]
+    Scan' _ d f z a                  -> ppD "scan" d "'"  .$ [ ppF f,  ppE z, ppA a ]
+    Permute _ f d p s                -> ppN "permute"     .$ [ ppF f,  ppA d, ppF p, ppA s ]
+    Backpermute _ _ sh f a           -> ppN "backpermute" .$ [ ppE sh, ppF f, ppA a ]
+    Stencil _ s _ f b a              -> ppN "stencil"     .$ [ ppF f,  ppB (stencilEltR s) b, ppA a ]
+    Stencil2 _ s1 s2 _ f b1 a1 b2 a2 -> ppN "stencil2"    .$ [ ppF f,  ppB (stencilEltR s1) b1, ppA a1, ppB (stencilEltR s2) b2, ppA a2 ]
   where
     infixr 0 .$
     f .$ xs
@@ -310,7 +310,7 @@ prettyAlet config ctx prettyAcc extractAcc aenv0
     collect :: Val aenv' -> PreOpenAcc acc aenv' a -> ([Adoc], Adoc)
     collect aenv =
       \case
-        Alet lhs a1 a2 ->
+        Alet _ lhs a1 a2 ->
           let (aenv', v)      = prettyALhs False aenv lhs
               a1'             = ppA aenv a1
               bnd | isAlet a1 = nest shiftwidth (vsep [v <+> equals, a1'])
@@ -355,13 +355,13 @@ prettyAtuple config ctx prettyAcc extractAcc aenv0 acc = case collect acc of
         _   -> align $ parensIf (ctxPrecedence ctx > 0) ("T" <> pretty (length tup) <+> align (sep tup))
   where
     ppPair :: PreOpenAcc acc aenv arrs' -> Adoc
-    ppPair (Apair a1 a2) =
+    ppPair (Apair _ a1 a2) =
       "(" <> ppPair (extractAcc a1) <> "," <+> prettyAcc config context0 aenv0 a2 <> ")"
     ppPair a             = prettyPreOpenAcc config context0 prettyAcc extractAcc aenv0 a
 
     collect :: PreOpenAcc acc aenv arrs' -> Maybe [Adoc]
-    collect Anil          = Just []
-    collect (Apair a1 a2)
+    collect Anil{}        = Just []
+    collect (Apair _ a1 a2)
       | Just tup <- collect $ extractAcc a1
                           = Just $ tup ++ [prettyAcc config app aenv0 a2]
     collect _             = Nothing

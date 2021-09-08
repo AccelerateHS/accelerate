@@ -64,6 +64,10 @@ import Control.Monad
 import Prelude                                                      hiding ( exp, seq )
 
 
+-- TODO: Like in @Var.h@, we completely ignore the existence of annotations at
+--       the moment
+
+
 -- NOTE: [Renaming and Substitution]
 --
 -- To do things like renaming and substitution, we need some operation on
@@ -246,7 +250,7 @@ subTop _ (Var tp (SuccIdx ix)) = Evar $ Var tp ix
 
 subAtop :: PreOpenAcc acc aenv t -> ArrayVar (aenv, t) (Array sh2 e2) -> PreOpenAcc acc aenv (Array sh2 e2)
 subAtop t (Var _    ZeroIdx      ) = t
-subAtop _ (Var repr (SuccIdx idx)) = Avar $ Var repr idx
+subAtop _ (Var repr (SuccIdx idx)) = Avar mkDummyAnn $ Var repr idx
 
 data Identity a = Identity { runIdentity :: a }
 
@@ -382,7 +386,7 @@ weakenVars k (TupRsingle v) = TupRsingle $ weaken k v
 weakenVars k (TupRpair v w) = TupRpair (weakenVars k v) (weakenVars k w)
 
 rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc env' (Array sh e)
-rebuildWeakenVar k (Var s idx) = Avar $ Var s $ k >:> idx
+rebuildWeakenVar k (Var s idx) = Avar mkDummyAnn $ Var s $ k >:> idx
 
 rebuildWeakenEvar :: env :> env' -> ExpVar env t -> OpenExp env' aenv t
 rebuildWeakenEvar k (Var s idx) = Evar $ Var s $ k >:> idx
@@ -605,11 +609,11 @@ class SyntacticAcc f where
 
 instance SyntacticAcc IdxA where
   avarIn                       = IA
-  accOut                       = Avar . unIA
+  accOut                       = Avar mkDummyAnn . unIA
   weakenAcc _ (IA (Var s idx)) = IA $ Var s $ SuccIdx idx
 
 instance SyntacticAcc PreOpenAcc where
-  avarIn        = Avar
+  avarIn        = Avar mkDummyAnn
   accOut        = id
   weakenAcc k   = runIdentity . rebuildPreOpenAcc k (Identity . weakenAcc k . IA)
 
@@ -633,7 +637,7 @@ reindexAvar v = ReindexAvar f where
 
   g :: fa acc aenv' (Array sh e) -> ArrayVar aenv' (Array sh e)
   g fa = case accOut fa of
-    Avar var' -> var'
+    Avar _ var' -> var'
     _ -> internalError "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."
 
 
@@ -676,34 +680,35 @@ rebuildPreOpenAcc
     -> f (PreOpenAcc acc aenv' t)
 rebuildPreOpenAcc k av acc =
   case acc of
-    Use repr a                -> pure $ Use repr a
-    Alet lhs a b              -> rebuildAlet k av lhs a b
-    Avar ix                   -> accOut          <$> av ix
-    Apair as bs               -> Apair           <$> k av as <*> k av bs
-    Anil                      -> pure Anil
-    Atrace msg as bs          -> Atrace msg      <$> k av as <*> k av bs
-    Apply repr f a            -> Apply repr      <$> rebuildAfun k av f <*> k av a
-    Acond p t e               -> Acond           <$> rebuildOpenExp (pure . IE) av' p <*> k av t <*> k av e
-    Awhile p f a              -> Awhile          <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
-    Unit tp e                 -> Unit tp         <$> rebuildOpenExp (pure . IE) av' e
-    Reshape shr e a           -> Reshape shr     <$> rebuildOpenExp (pure . IE) av' e <*> k av a
-    Generate repr e f         -> Generate repr   <$> rebuildOpenExp (pure . IE) av' e <*> rebuildFun (pure . IE) av' f
-    Transform repr sh ix f a  -> Transform repr  <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' ix <*> rebuildFun (pure . IE) av' f <*> k av a
-    Replicate sl slix a       -> Replicate sl    <$> rebuildOpenExp (pure . IE) av' slix <*> k av a
-    Slice sl a slix           -> Slice sl        <$> k av a <*> rebuildOpenExp (pure . IE) av' slix
-    Map ann tp f a            -> Map ann tp      <$> rebuildFun (pure . IE) av' f <*> k av a
-    ZipWith tp f a1 a2        -> ZipWith tp      <$> rebuildFun (pure . IE) av' f <*> k av a1 <*> k av a2
-    Fold ann f z a            -> Fold ann        <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a
-    FoldSeg itp f z a s       -> FoldSeg itp     <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a <*> k av s
-    Scan  d f z a             -> Scan  d         <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a
-    Scan' d f z a             -> Scan' d         <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
-    Permute f1 a1 f2 a2       -> Permute         <$> rebuildFun (pure . IE) av' f1 <*> k av a1 <*> rebuildFun (pure . IE) av' f2 <*> k av a2
-    Backpermute shr sh f a    -> Backpermute shr <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' f <*> k av a
-    Stencil sr tp f b a       -> Stencil sr tp   <$> rebuildFun (pure . IE) av' f <*> rebuildBoundary av' b  <*> k av a
-    Stencil2 s1 s2 tp f b1 a1 b2 a2
-                              -> Stencil2 s1 s2 tp <$> rebuildFun (pure . IE) av' f <*> rebuildBoundary av' b1 <*> k av a1 <*> rebuildBoundary av' b2 <*> k av a2
-    Aforeign repr ff afun as  -> Aforeign repr ff afun <$> k av as
-    -- Collect seq             -> Collect      <$> rebuildSeq k av seq
+    Use ann repr a               -> pure $ Use ann repr a
+    Alet ann lhs a b             -> rebuildAlet k av ann lhs a b
+    -- TODO: We throw away annotations here
+    Avar _ ix                    -> accOut                    <$> av ix
+    Apair ann as bs              -> Apair ann                 <$> k av as <*> k av bs
+    Anil ann                     -> pure $ Anil ann
+    Atrace ann msg as bs         -> Atrace ann msg            <$> k av as <*> k av bs
+    Apply ann repr f a           -> Apply ann repr            <$> rebuildAfun k av f <*> k av a
+    Acond ann p t e              -> Acond ann                 <$> rebuildOpenExp (pure . IE) av' p <*> k av t <*> k av e
+    Awhile ann p f a             -> Awhile ann                <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
+    Unit ann tp e                -> Unit ann tp               <$> rebuildOpenExp (pure . IE) av' e
+    Reshape ann shr e a          -> Reshape ann shr           <$> rebuildOpenExp (pure . IE) av' e <*> k av a
+    Generate ann repr e f        -> Generate ann repr         <$> rebuildOpenExp (pure . IE) av' e <*> rebuildFun (pure . IE) av' f
+    Transform ann repr sh ix f a -> Transform ann repr        <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' ix <*> rebuildFun (pure . IE) av' f <*> k av a
+    Replicate ann sl slix a      -> Replicate ann sl          <$> rebuildOpenExp (pure . IE) av' slix <*> k av a
+    Slice ann sl a slix          -> Slice ann sl              <$> k av a <*> rebuildOpenExp (pure . IE) av' slix
+    Map ann tp f a               -> Map ann tp                <$> rebuildFun (pure . IE) av' f <*> k av a
+    ZipWith ann tp f a1 a2       -> ZipWith ann tp            <$> rebuildFun (pure . IE) av' f <*> k av a1 <*> k av a2
+    Fold ann f z a               -> Fold ann                  <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a
+    FoldSeg ann itp f z a s      -> FoldSeg ann itp           <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a <*> k av s
+    Scan  ann d f z a            -> Scan  ann d               <$> rebuildFun (pure . IE) av' f <*> rebuildMaybeExp (pure . IE) av' z <*> k av a
+    Scan' ann d f z a            -> Scan' ann d               <$> rebuildFun (pure . IE) av' f <*> rebuildOpenExp (pure . IE) av' z <*> k av a
+    Permute ann f1 a1 f2 a2      -> Permute ann               <$> rebuildFun (pure . IE) av' f1 <*> k av a1 <*> rebuildFun (pure . IE) av' f2 <*> k av a2
+    Backpermute ann shr sh f a   -> Backpermute ann shr       <$> rebuildOpenExp (pure . IE) av' sh <*> rebuildFun (pure . IE) av' f <*> k av a
+    Stencil ann sr tp f b a      -> Stencil ann sr tp         <$> rebuildFun (pure . IE) av' f <*> rebuildBoundary av' b  <*> k av a
+    Stencil2 ann s1 s2 tp f b1 a1 b2 a2
+                                 -> Stencil2 ann s1 s2 tp     <$> rebuildFun (pure . IE) av' f <*> rebuildBoundary av' b1 <*> k av a1 <*> rebuildBoundary av' b2 <*> k av a2
+    Aforeign ann repr ff afun as -> Aforeign ann repr ff afun <$> k av as
+    -- Collect seq               -> Collect                   <$> rebuildSeq k av seq
   where
     av' = reindexAvar av
 
@@ -723,13 +728,14 @@ rebuildAlet
     :: forall f fa acc aenv1 aenv1' aenv2 bndArrs arrs. (HasCallStack, Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
     -> RebuildAvar f fa acc aenv1 aenv2
+    -> Ann
     -> ALeftHandSide bndArrs aenv1 aenv1'
     -> acc aenv1  bndArrs
     -> acc aenv1' arrs
     -> f (PreOpenAcc acc aenv2 arrs)
-rebuildAlet k av lhs1 bind1 body1
+rebuildAlet k av ann lhs1 bind1 body1
   | Exists lhs2 <- rebuildLHS lhs1
-  = Alet lhs2 <$> k av bind1 <*> k (shiftA' lhs1 lhs2 k av) body1
+  = Alet ann lhs2 <$> k av bind1 <*> k (shiftA' lhs1 lhs2 k av) body1
 
 {-# INLINEABLE rebuildLHS #-}
 rebuildLHS :: LeftHandSide s t aenv1 aenv1' -> Exists (LeftHandSide s t aenv2)

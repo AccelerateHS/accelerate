@@ -538,37 +538,37 @@ usesOfPreAcc withShape countAcc idx = count
 
     count :: PreOpenAcc acc aenv a -> Int
     count pacc = case pacc of
-      Avar var                   -> countAvar var
+      Avar _ var                   -> countAvar var
       --
-      Alet lhs bnd body          -> countA bnd + countAcc withShape (weakenWithLHS lhs >:> idx) body
-      Apair a1 a2                -> countA a1 + countA a2
-      Anil                       -> 0
-      Atrace _ a1 a2             -> countA a1 + countA a2
-      Apply _ f a                -> countAF f idx + countA a
-      Aforeign _ _ _ a           -> countA a
-      Acond p t e                -> countE p + countA t + countA e
+      Alet _ lhs bnd body          -> countA bnd + countAcc withShape (weakenWithLHS lhs >:> idx) body
+      Apair _ a1 a2                -> countA a1 + countA a2
+      Anil{}                       -> 0
+      Atrace _ _ a1 a2             -> countA a1 + countA a2
+      Apply _ _ f a                -> countAF f idx + countA a
+      Aforeign _ _ _ _ a           -> countA a
+      Acond _ p t e                -> countE p + countA t + countA e
       -- Body and condition of the while loop may be evaluated multiple times.
       -- We multiply the usage count, as a practical solution to this. As
       -- we will check whether the count is at most 1, we will thus never
       -- inline variables used in while loops.
-      Awhile c f a               -> 2 * countAF c idx + 2 * countAF f idx + countA a
-      Use _ _                    -> 0
-      Unit _ e                   -> countE e
-      Reshape _ e a              -> countE e  + countA a
-      Generate _ e f             -> countE e  + countF f
-      Transform _ sh ix f a      -> countE sh + countF ix + countF f  + countA a
-      Replicate _ sh a           -> countE sh + countA a
-      Slice _ a sl               -> countE sl + countA a
-      Map _ _ f a                -> countF f  + countA a
-      ZipWith _ f a1 a2          -> countF f  + countA a1 + countA a2
-      Fold _ f z a               -> countF f  + countME z + countA a
-      FoldSeg _ f z a s          -> countF f  + countME z + countA a  + countA s
-      Scan  _ f z a              -> countF f  + countME z + countA a
-      Scan' _ f z a              -> countF f  + countE z  + countA a
-      Permute f1 a1 f2 a2        -> countF f1 + countA a1 + countF f2 + countA a2
-      Backpermute _ sh f a       -> countE sh + countF f  + countA a
-      Stencil _ _ f _ a          -> countF f  + countA a
-      Stencil2 _ _ _ f _ a1 _ a2 -> countF f  + countA a1 + countA a2
+      Awhile _ c f a               -> 2 * countAF c idx + 2 * countAF f idx + countA a
+      Use _ _ _                    -> 0
+      Unit _ _ e                   -> countE e
+      Reshape _ _ e a              -> countE e  + countA a
+      Generate _ _ e f             -> countE e  + countF f
+      Transform _ _ sh ix f a      -> countE sh + countF ix + countF f  + countA a
+      Replicate _ _ sh a           -> countE sh + countA a
+      Slice _ _ a sl               -> countE sl + countA a
+      Map _ _ f a                  -> countF f  + countA a
+      ZipWith _ _ f a1 a2          -> countF f  + countA a1 + countA a2
+      Fold _ f z a                 -> countF f  + countME z + countA a
+      FoldSeg _ _ f z a s          -> countF f  + countME z + countA a  + countA s
+      Scan  _ _ f z a              -> countF f  + countME z + countA a
+      Scan' _ _ f z a              -> countF f  + countE z  + countA a
+      Permute _ f1 a1 f2 a2        -> countF f1 + countA a1 + countF f2 + countA a2
+      Backpermute _ _ sh f a       -> countE sh + countF f  + countA a
+      Stencil _ _ _ f _ a          -> countF f  + countA a
+      Stencil2 _ _ _ _ f _ a1 _ a2 -> countF f  + countA a1 + countA a2
       -- Collect s                 -> countS s
 
     countE :: OpenExp env aenv e -> Int

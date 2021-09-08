@@ -164,9 +164,6 @@ import Lens.Micro                                                   ( (<&>) )
 import GHC.TypeLits
 
 
--- TODO: Like in the smart AST, add missing annotations to the constructors
-
-
 -- Array expressions
 -- -----------------
 
@@ -237,30 +234,35 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Local non-recursive binding to represent sharing and demand
   -- explicitly. Note this is an eager binding!
   --
-  Alet        :: ALeftHandSide bndArrs aenv aenv'
+  Alet        :: Ann
+              -> ALeftHandSide bndArrs aenv aenv'
               -> acc            aenv  bndArrs         -- bound expression
               -> acc            aenv' bodyArrs        -- the bound expression scope
               -> PreOpenAcc acc aenv  bodyArrs
 
   -- Variable bound by a 'Let', represented by a de Bruijn index
   --
-  Avar        :: ArrayVar       aenv (Array sh e)
+  Avar        :: Ann
+              -> ArrayVar       aenv (Array sh e)
               -> PreOpenAcc acc aenv (Array sh e)
 
   -- Tuples of arrays
   --
-  Apair       :: acc            aenv as
+  Apair       :: Ann
+              -> acc            aenv as
               -> acc            aenv bs
               -> PreOpenAcc acc aenv (as, bs)
 
-  Anil        :: PreOpenAcc acc aenv ()
+  Anil        :: Ann
+              -> PreOpenAcc acc aenv ()
 
   -- Array-function application.
   --
   -- The array function is not closed at the core level because we need access
   -- to free variables introduced by 'run1' style evaluators. See Issue#95.
   --
-  Apply       :: ArraysR arrs2
+  Apply       :: Ann
+              -> ArraysR arrs2
               -> PreOpenAfun acc aenv (arrs1 -> arrs2)
               -> acc             aenv arrs1
               -> PreOpenAcc  acc aenv arrs2
@@ -270,7 +272,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- closed.
   --
   Aforeign    :: Foreign asm
-              => ArraysR bs
+              => Ann
+              -> ArraysR bs
               -> asm                   (as -> bs) -- The foreign function for a given backend
               -> PreAfun      acc      (as -> bs) -- Fallback implementation(s)
               -> acc              aenv as         -- Arguments to the function
@@ -278,19 +281,22 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
 
   -- If-then-else for array-level computations
   --
-  Acond       :: Exp            aenv PrimBool
+  Acond       :: Ann
+              -> Exp            aenv PrimBool
               -> acc            aenv arrs
               -> acc            aenv arrs
               -> PreOpenAcc acc aenv arrs
 
   -- Value-recursion for array-level computations
   --
-  Awhile      :: PreOpenAfun acc aenv (arrs -> Scalar PrimBool) -- continue iteration while true
+  Awhile      :: Ann
+              -> PreOpenAfun acc aenv (arrs -> Scalar PrimBool) -- continue iteration while true
               -> PreOpenAfun acc aenv (arrs -> arrs)            -- function to iterate
               -> acc             aenv arrs                      -- initial value
               -> PreOpenAcc  acc aenv arrs
 
-  Atrace      :: Message              arrs1
+  Atrace      :: Ann
+              -> Message              arrs1
               -> acc             aenv arrs1
               -> acc             aenv arrs2
               -> PreOpenAcc  acc aenv arrs2
@@ -298,13 +304,15 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Array inlet. Triggers (possibly) asynchronous host->device transfer if
   -- necessary.
   --
-  Use         :: ArrayR (Array sh e)
+  Use         :: Ann
+              -> ArrayR (Array sh e)
               -> Array sh e
               -> PreOpenAcc acc aenv (Array sh e)
 
   -- Capture a scalar (or a tuple of scalars) in a singleton array
   --
-  Unit        :: TypeR e
+  Unit        :: Ann
+              -> TypeR e
               -> Exp            aenv e
               -> PreOpenAcc acc aenv (Scalar e)
 
@@ -313,14 +321,16 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   --
   -- > dim == size dim'
   --
-  Reshape     :: ShapeR sh
+  Reshape     :: Ann
+              -> ShapeR sh
               -> Exp            aenv sh                         -- new shape
               -> acc            aenv (Array sh' e)              -- array to be reshaped
               -> PreOpenAcc acc aenv (Array sh e)
 
   -- Construct a new array by applying a function to each index.
   --
-  Generate    :: ArrayR (Array sh e)
+  Generate    :: Ann
+              -> ArrayR (Array sh e)
               -> Exp            aenv sh                         -- output shape
               -> Fun            aenv (sh -> e)                  -- representation function
               -> PreOpenAcc acc aenv (Array sh e)
@@ -328,7 +338,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Hybrid map/backpermute, where we separate the index and value
   -- transformations.
   --
-  Transform   :: ArrayR (Array sh' b)
+  Transform   :: Ann
+              -> ArrayR (Array sh' b)
               -> Exp            aenv sh'                        -- dimension of the result
               -> Fun            aenv (sh' -> sh)                -- index permutation function
               -> Fun            aenv (a   -> b)                 -- function to apply at each element
@@ -338,7 +349,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   --
-  Replicate   :: SliceIndex slix sl co sh                       -- slice type specification
+  Replicate   :: Ann
+              -> SliceIndex slix sl co sh                       -- slice type specification
               -> Exp            aenv slix                       -- slice value specification
               -> acc            aenv (Array sl e)               -- data to be replicated
               -> PreOpenAcc acc aenv (Array sh e)
@@ -346,7 +358,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Index a sub-array out of an array; i.e., the dimensions not indexed
   -- are returned whole
   --
-  Slice       :: SliceIndex slix sl co sh                       -- slice type specification
+  Slice       :: Ann
+              -> SliceIndex slix sl co sh                       -- slice type specification
               -> acc            aenv (Array sh e)               -- array to be indexed
               -> Exp            aenv slix                       -- slice value specification
               -> PreOpenAcc acc aenv (Array sl e)
@@ -363,7 +376,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- arrays. The length of the result is the length of the shorter of the
   -- two argument arrays.
   --
-  ZipWith     :: TypeR e3
+  ZipWith     :: Ann
+              -> TypeR e3
               -> Fun            aenv (e1 -> e2 -> e3)
               -> acc            aenv (Array sh e1)
               -> acc            aenv (Array sh e2)
@@ -381,7 +395,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Segmented fold along the innermost dimension of an array with a given
   -- /associative/ function
   --
-  FoldSeg     :: IntegralType i
+  FoldSeg     :: Ann
+              -> IntegralType i
               -> Fun            aenv (e -> e -> e)              -- combination function
               -> Maybe     (Exp aenv e)                         -- default value
               -> acc            aenv (Array (sh, Int) e)        -- folded array
@@ -393,7 +408,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- (which does not need to be the neutral of the associative operations)
   -- If no initial value is given, this is a scan1
   --
-  Scan        :: Direction
+  Scan        :: Ann
+              -> Direction
               -> Fun            aenv (e -> e -> e)              -- combination function
               -> Maybe     (Exp aenv e)                         -- initial value
               -> acc            aenv (Array (sh, Int) e)
@@ -403,7 +419,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- fold value and an array with the same length as the input array (the
   -- fold value would be the rightmost element in a Haskell-style scan)
   --
-  Scan'       :: Direction
+  Scan'       :: Ann
+              -> Direction
               -> Fun            aenv (e -> e -> e)              -- combination function
               -> Exp            aenv e                          -- initial value
               -> acc            aenv (Array (sh, Int) e)
@@ -429,7 +446,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   --      function is used to combine elements, which needs to be /associative/
   --      and /commutative/.
   --
-  Permute     :: Fun            aenv (e -> e -> e)              -- combination function
+  Permute     :: Ann
+              -> Fun            aenv (e -> e -> e)              -- combination function
               -> acc            aenv (Array sh' e)              -- default values
               -> Fun            aenv (sh -> PrimMaybe sh')      -- permutation function
               -> acc            aenv (Array sh e)               -- source array
@@ -438,7 +456,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Generalised multi-dimensional backwards permutation; the permutation can
   -- be between arrays of varying shape; the permutation function must be total
   --
-  Backpermute :: ShapeR sh'
+  Backpermute :: Ann
+              -> ShapeR sh'
               -> Exp            aenv sh'                        -- dimensions of the result
               -> Fun            aenv (sh' -> sh)                -- permutation function
               -> acc            aenv (Array sh e)               -- source array
@@ -447,7 +466,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   -- Map a stencil over an array.  In contrast to 'map', the domain of
   -- a stencil function is an entire /neighbourhood/ of each array element.
   --
-  Stencil     :: StencilR sh e stencil
+  Stencil     :: Ann
+              -> StencilR sh e stencil
               -> TypeR e'
               -> Fun             aenv (stencil -> e')           -- stencil function
               -> Boundary        aenv (Array sh e)              -- boundary condition
@@ -456,7 +476,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
 
   -- Map a binary stencil over an array.
   --
-  Stencil2    :: StencilR sh a stencil1
+  Stencil2    :: Ann
+              -> StencilR sh a stencil1
               -> StencilR sh b stencil2
               -> TypeR c
               -> Fun             aenv (stencil1 -> stencil2 -> c) -- stencil function
@@ -532,6 +553,7 @@ expVars (TupRpair v1 v2) = Pair mkDummyAnn (expVars v1) (expVars v2)
 -- surface types).
 --
 data OpenExp env aenv t where
+-- TODO: Like in the smart AST, add missing annotations to the constructors here
 
   -- Local binding of a scalar expression
   Let           :: Ann
@@ -781,43 +803,43 @@ arrayR a = case arraysR a of
   TupRsingle aR -> aR
 
 instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
-  arraysR (Alet _ _ body)             = arraysR body
-  arraysR (Avar (Var aR _))           = TupRsingle aR
-  arraysR (Apair as bs)               = TupRpair (arraysR as) (arraysR bs)
-  arraysR Anil                        = TupRunit
-  arraysR (Atrace _ _ bs)             = arraysR bs
-  arraysR (Apply aR _ _)              = aR
-  arraysR (Aforeign r _ _ _)          = r
-  arraysR (Acond _ a _)               = arraysR a
-  arraysR (Awhile _ (Alam lhs _) _)   = lhsToTupR lhs
-  arraysR Awhile{}                    = error "I want my, I want my MTV!"
-  arraysR (Use aR _)                  = TupRsingle aR
-  arraysR (Unit tR _)                 = arraysRarray ShapeRz tR
-  arraysR (Reshape sh _ a)            = let ArrayR _ tR = arrayR a
-                                         in arraysRarray sh tR
-  arraysR (Generate aR _ _)           = TupRsingle aR
-  arraysR (Transform aR _ _ _ _)      = TupRsingle aR
-  arraysR (Replicate slice _ a)       = let ArrayR _ tR = arrayR a
-                                         in arraysRarray (sliceDomainR slice) tR
-  arraysR (Slice slice a _)           = let ArrayR _ tR = arrayR a
-                                         in arraysRarray (sliceShapeR slice) tR
-  arraysR (Map _  tR _ a)             = let ArrayR sh _ = arrayR a
-                                         in arraysRarray sh tR
-  arraysR (ZipWith tR _ a _)          = let ArrayR sh _ = arrayR a
-                                         in arraysRarray sh tR
-  arraysR (Fold _ _ _ a)              = let ArrayR (ShapeRsnoc sh) tR = arrayR a
-                                         in arraysRarray sh tR
-  arraysR (FoldSeg _ _ _ a _)         = arraysR a
-  arraysR (Scan _ _ _ a)              = arraysR a
-  arraysR (Scan' _ _ _ a)             = let aR@(ArrayR (ShapeRsnoc sh) tR) = arrayR a
-                                         in TupRsingle aR `TupRpair` TupRsingle (ArrayR sh tR)
-  arraysR (Permute _ a _ _)           = arraysR a
-  arraysR (Backpermute sh _ _ a)      = let ArrayR _ tR = arrayR a
-                                         in arraysRarray sh tR
-  arraysR (Stencil _ tR _ _ a)        = let ArrayR sh _ = arrayR a
-                                         in arraysRarray sh tR
-  arraysR (Stencil2 _ _ tR _ _ a _ _) = let ArrayR sh _ = arrayR a
-                                         in arraysRarray sh tR
+  arraysR (Alet _ _ _ body)             = arraysR body
+  arraysR (Avar _ (Var aR _))           = TupRsingle aR
+  arraysR (Apair _ as bs)               = TupRpair (arraysR as) (arraysR bs)
+  arraysR Anil{}                        = TupRunit
+  arraysR (Atrace _ _ _ bs)             = arraysR bs
+  arraysR (Apply _ aR _ _)              = aR
+  arraysR (Aforeign _ r _ _ _)          = r
+  arraysR (Acond _ _ a _)               = arraysR a
+  arraysR (Awhile _ _ (Alam lhs _) _)   = lhsToTupR lhs
+  arraysR Awhile{}                      = error "I want my, I want my MTV!"
+  arraysR (Use _ aR _)                  = TupRsingle aR
+  arraysR (Unit _ tR _)                 = arraysRarray ShapeRz tR
+  arraysR (Reshape _ sh _ a)            = let ArrayR _ tR = arrayR a
+                                           in arraysRarray sh tR
+  arraysR (Generate _ aR _ _)           = TupRsingle aR
+  arraysR (Transform _ aR _ _ _ _)      = TupRsingle aR
+  arraysR (Replicate _ slice _ a)       = let ArrayR _ tR = arrayR a
+                                           in arraysRarray (sliceDomainR slice) tR
+  arraysR (Slice _ slice a _)           = let ArrayR _ tR = arrayR a
+                                           in arraysRarray (sliceShapeR slice) tR
+  arraysR (Map _  tR _ a)               = let ArrayR sh _ = arrayR a
+                                           in arraysRarray sh tR
+  arraysR (ZipWith _ tR _ a _)          = let ArrayR sh _ = arrayR a
+                                           in arraysRarray sh tR
+  arraysR (Fold _ _ _ a)                = let ArrayR (ShapeRsnoc sh) tR = arrayR a
+                                           in arraysRarray sh tR
+  arraysR (FoldSeg _ _ _ _ a _)         = arraysR a
+  arraysR (Scan  _ _ _ _ a)             = arraysR a
+  arraysR (Scan' _ _ _ _ a)             = let aR@(ArrayR (ShapeRsnoc sh) tR) = arrayR a
+                                           in TupRsingle aR `TupRpair` TupRsingle (ArrayR sh tR)
+  arraysR (Permute _ _ a _ _)           = arraysR a
+  arraysR (Backpermute _ sh _ _ a)      = let ArrayR _ tR = arrayR a
+                                           in arraysRarray sh tR
+  arraysR (Stencil _ _ tR _ _ a)        = let ArrayR sh _ = arrayR a
+                                           in arraysRarray sh tR
+  arraysR (Stencil2 _ _ _ tR _ _ a _ _) = let ArrayR sh _ = arrayR a
+                                           in arraysRarray sh tR
 
 expType :: HasCallStack => OpenExp aenv env t -> TypeR t
 expType = \case
@@ -965,10 +987,32 @@ instance FieldAnn (OpenAcc aenv t) where
   _ann k (OpenAcc pacc) = OpenAcc <$> _ann k pacc
 
 instance FieldAnn (PreOpenAcc acc aenv t) where
-  _ann k (Map ann tp f a) = k (Just ann) <&> \(Just ann') -> Map ann' tp f a
-  _ann k (Fold ann f z a) = k (Just ann) <&> \(Just ann') -> Fold ann' f z a
-  -- TODO: All other constructors as we add more annotations
-  _ann k pacc = pacc <$ k Nothing
+  _ann k (Alet ann lhs a b)                    = k (Just ann) <&> \(Just ann') -> Alet ann' lhs a b
+  _ann k (Avar ann ix)                         = k (Just ann) <&> \(Just ann') -> Avar ann' ix
+  _ann k (Apair ann as bs)                     = k (Just ann) <&> \(Just ann') -> Apair ann' as bs
+  _ann k (Anil ann)                            = k (Just ann) <&> \(Just ann') -> Anil ann'
+  _ann k (Apply ann repr f a)                  = k (Just ann) <&> \(Just ann') -> Apply ann' repr f a
+  _ann k (Aforeign ann repr ff afun as)        = k (Just ann) <&> \(Just ann') -> Aforeign ann' repr ff afun as
+  _ann k (Acond ann p t e)                     = k (Just ann) <&> \(Just ann') -> Acond ann' p t e
+  _ann k (Awhile ann p f a)                    = k (Just ann) <&> \(Just ann') -> Awhile ann' p f a
+  _ann k (Atrace ann msg as bs)                = k (Just ann) <&> \(Just ann') -> Atrace ann' msg as bs
+  _ann k (Use ann repr a)                      = k (Just ann) <&> \(Just ann') -> Use ann' repr a
+  _ann k (Unit ann tp e)                       = k (Just ann) <&> \(Just ann') -> Unit ann' tp e
+  _ann k (Reshape ann shr e a)                 = k (Just ann) <&> \(Just ann') -> Reshape ann' shr e a
+  _ann k (Generate ann repr e f)               = k (Just ann) <&> \(Just ann') -> Generate ann' repr e f
+  _ann k (Transform ann repr sh ix f a)        = k (Just ann) <&> \(Just ann') -> Transform ann' repr sh ix f a
+  _ann k (Replicate ann sl slix a)             = k (Just ann) <&> \(Just ann') -> Replicate ann' sl slix a
+  _ann k (Slice ann sl a slix)                 = k (Just ann) <&> \(Just ann') -> Slice ann' sl a slix
+  _ann k (Map ann tp f a)                      = k (Just ann) <&> \(Just ann') -> Map ann' tp f a
+  _ann k (ZipWith ann tp f a1 a2)              = k (Just ann) <&> \(Just ann') -> ZipWith ann' tp f a1 a2
+  _ann k (Fold ann f z a)                      = k (Just ann) <&> \(Just ann') -> Fold ann' f z a
+  _ann k (FoldSeg ann itp f z a s)             = k (Just ann) <&> \(Just ann') -> FoldSeg ann' itp f z a s
+  _ann k (Scan  ann d f z a)                   = k (Just ann) <&> \(Just ann') -> Scan  ann' d f z a
+  _ann k (Scan' ann d f z a)                   = k (Just ann) <&> \(Just ann') -> Scan' ann' d f z a
+  _ann k (Permute ann f1 a1 f2 a2)             = k (Just ann) <&> \(Just ann') -> Permute ann' f1 a1 f2 a2
+  _ann k (Backpermute ann shr sh f a)          = k (Just ann) <&> \(Just ann') -> Backpermute ann' shr sh f a
+  _ann k (Stencil ann sr tp f b a)             = k (Just ann) <&> \(Just ann') -> Stencil ann' sr tp f b a
+  _ann k (Stencil2 ann s1 s2 tp f b1 a1 b2 a2) = k (Just ann) <&> \(Just ann') -> Stencil2 ann' s1 s2 tp f b1 a1 b2 a2
 
 instance FieldAnn (OpenExp env aenv t) where
   _ann k (Let ann lhs bnd body) = k (Just ann) <&> \(Just ann') -> Let ann' lhs bnd body
@@ -1026,41 +1070,41 @@ rnfPreOpenAcc rnfA pacc =
       rnfM (Message f g msg) = f `seq` rnfMaybe (\x -> x `seq` ()) g `seq` rnf msg
   in
   case pacc of
-    Alet lhs bnd body         -> rnfALeftHandSide lhs `seq` rnfA bnd `seq` rnfA body
-    Avar var                  -> rnfArrayVar var
-    Apair as bs               -> rnfA as `seq` rnfA bs
-    Anil                      -> ()
-    Atrace msg as bs          -> rnfM msg `seq` rnfA as `seq` rnfA bs
-    Apply repr afun acc       -> rnfTupR rnfArrayR repr `seq` rnfAF afun `seq` rnfA acc
-    Aforeign repr asm afun a  -> rnfTupR rnfArrayR repr `seq` rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
-    Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
-    Awhile p f a              -> rnfAF p `seq` rnfAF f `seq` rnfA a
-    Use repr arr              -> rnfArray repr arr
-    Unit tp x                 -> rnfTypeR tp `seq` rnfE x
-    Reshape shr sh a          -> rnfShapeR shr `seq` rnfE sh `seq` rnfA a
-    Generate repr sh f        -> rnfArrayR repr `seq` rnfE sh `seq` rnfF f
-    Transform repr sh p f a   -> rnfArrayR repr `seq` rnfE sh `seq` rnfF p `seq` rnfF f `seq` rnfA a
-    Replicate slice sh a      -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
-    Slice slice a sh          -> rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
-    Map ann tp f a            -> rnfAnn ann `seq` rnfTypeR tp `seq` rnfF f `seq` rnfA a
-    ZipWith tp f a1 a2        -> rnfTypeR tp `seq` rnfF f `seq` rnfA a1 `seq` rnfA a2
-    Fold ann f z a            -> rnfAnn ann `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
-    FoldSeg i f z a s         -> rnfIntegralType i `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a `seq` rnfA s
-    Scan d f z a              -> d `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
-    Scan' d f z a             -> d `seq` rnfF f `seq` rnfE z `seq` rnfA a
-    Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
-    Backpermute shr sh f a    -> rnfShapeR shr `seq` rnfE sh `seq` rnfF f `seq` rnfA a
-    Stencil sr tp f b a       ->
+    Alet ann lhs bnd body        -> rnfAnn ann `seq` rnfALeftHandSide lhs `seq` rnfA bnd `seq` rnfA body
+    Avar ann var                 -> rnfAnn ann `seq` rnfArrayVar var
+    Apair ann as bs              -> rnfAnn ann `seq` rnfA as `seq` rnfA bs
+    Anil ann                     -> rnfAnn ann
+    Atrace ann msg as bs         -> rnfAnn ann `seq` rnfM msg `seq` rnfA as `seq` rnfA bs
+    Apply ann repr afun acc      -> rnfAnn ann `seq` rnfTupR rnfArrayR repr `seq` rnfAF afun `seq` rnfA acc
+    Aforeign ann repr asm afun a -> rnfAnn ann `seq` rnfTupR rnfArrayR repr `seq` rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
+    Acond ann p a1 a2            -> rnfAnn ann `seq` rnfE p `seq` rnfA a1 `seq` rnfA a2
+    Awhile ann p f a             -> rnfAnn ann `seq` rnfAF p `seq` rnfAF f `seq` rnfA a
+    Use ann repr arr             -> rnfAnn ann `seq` rnfArray repr arr
+    Unit ann tp x                -> rnfAnn ann `seq` rnfTypeR tp `seq` rnfE x
+    Reshape ann shr sh a         -> rnfAnn ann `seq` rnfShapeR shr `seq` rnfE sh `seq` rnfA a
+    Generate ann repr sh f       -> rnfAnn ann `seq` rnfArrayR repr `seq` rnfE sh `seq` rnfF f
+    Transform ann repr sh p f a  -> rnfAnn ann `seq` rnfArrayR repr `seq` rnfE sh `seq` rnfF p `seq` rnfF f `seq` rnfA a
+    Replicate ann slice sh a     -> rnfAnn ann `seq` rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
+    Slice ann slice a sh         -> rnfAnn ann `seq` rnfSliceIndex slice `seq` rnfE sh `seq` rnfA a
+    Map ann tp f a               -> rnfAnn ann `seq` rnfTypeR tp `seq` rnfF f `seq` rnfA a
+    ZipWith ann tp f a1 a2       -> rnfAnn ann `seq` rnfTypeR tp `seq` rnfF f `seq` rnfA a1 `seq` rnfA a2
+    Fold ann f z a               -> rnfAnn ann `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
+    FoldSeg ann i f z a s        -> rnfAnn ann `seq` rnfIntegralType i `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a `seq` rnfA s
+    Scan  ann d f z a            -> rnfAnn ann `seq` d `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
+    Scan' ann d f z a            -> rnfAnn ann `seq` d `seq` rnfF f `seq` rnfE z `seq` rnfA a
+    Permute ann f d p a          -> rnfAnn ann `seq` rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
+    Backpermute ann shr sh f a   -> rnfAnn ann `seq` rnfShapeR shr `seq` rnfE sh `seq` rnfF f `seq` rnfA a
+    Stencil ann sr tp f b a      ->
       let
         TupRsingle (ArrayR shr _) = arraysR a
         repr                      = ArrayR shr $ stencilEltR sr
-      in rnfStencilR sr `seq` rnfTupR rnfScalarType tp `seq` rnfF f `seq` rnfB repr b  `seq` rnfA a
-    Stencil2 sr1 sr2 tp f b1 a1 b2 a2 ->
+      in rnfAnn ann `seq` rnfStencilR sr `seq` rnfTupR rnfScalarType tp `seq` rnfF f `seq` rnfB repr b  `seq` rnfA a
+    Stencil2 ann sr1 sr2 tp f b1 a1 b2 a2 ->
       let
         TupRsingle (ArrayR shr _) = arraysR a1
         repr1 = ArrayR shr $ stencilEltR sr1
         repr2 = ArrayR shr $ stencilEltR sr2
-      in rnfStencilR sr1 `seq` rnfStencilR sr2 `seq` rnfTupR rnfScalarType tp `seq` rnfF f `seq` rnfB repr1 b1 `seq` rnfB repr2 b2 `seq` rnfA a1 `seq` rnfA a2
+      in rnfAnn ann `seq` rnfStencilR sr1 `seq` rnfStencilR sr2 `seq` rnfTupR rnfScalarType tp `seq` rnfF f `seq` rnfB repr1 b1 `seq` rnfB repr2 b2 `seq` rnfA a1 `seq` rnfA a2
 
 rnfArrayVar :: ArrayVar aenv a -> ()
 rnfArrayVar = rnfVar rnfArrayR
@@ -1234,39 +1278,39 @@ liftPreOpenAcc liftA pacc =
       liftB = liftBoundary
   in
   case pacc of
-    Alet lhs bnd body         -> [|| Alet $$(liftALeftHandSide lhs) $$(liftA bnd) $$(liftA body) ||]
-    Avar var                  -> [|| Avar $$(liftArrayVar var) ||]
-    Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
-    Anil                      -> [|| Anil ||]
-    Atrace msg as bs          -> [|| Atrace $$(liftMessage (arraysR as) msg) $$(liftA as) $$(liftA bs) ||]
-    Apply repr f a            -> [|| Apply $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
-    Aforeign repr asm f a     -> [|| Aforeign $$(liftArraysR repr) $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
-    Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
-    Awhile p f a              -> [|| Awhile $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
-    Use repr a                -> [|| Use $$(liftArrayR repr) $$(liftArray repr a) ||]
-    Unit tp e                 -> [|| Unit $$(liftTypeR tp) $$(liftE e) ||]
-    Reshape shr sh a          -> [|| Reshape $$(liftShapeR shr) $$(liftE sh) $$(liftA a) ||]
-    Generate repr sh f        -> [|| Generate $$(liftArrayR repr) $$(liftE sh) $$(liftF f) ||]
-    Transform repr sh p f a   -> [|| Transform $$(liftArrayR repr) $$(liftE sh) $$(liftF p) $$(liftF f) $$(liftA a) ||]
-    Replicate slix sl a       -> [|| Replicate $$(liftSliceIndex slix) $$(liftE sl) $$(liftA a) ||]
-    Slice slix a sh           -> [|| Slice $$(liftSliceIndex slix) $$(liftA a) $$(liftE sh) ||]
-    Map ann tp f a            -> [|| Map $$(liftAnn ann) $$(liftTypeR tp) $$(liftF f) $$(liftA a) ||]
-    ZipWith tp f a b          -> [|| ZipWith $$(liftTypeR tp) $$(liftF f) $$(liftA a) $$(liftA b) ||]
-    Fold ann f z a            -> [|| Fold $$(liftAnn ann) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
-    FoldSeg i f z a s         -> [|| FoldSeg $$(liftIntegralType i) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) $$(liftA s) ||]
-    Scan d f z a              -> [|| Scan  $$(liftDirection d) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
-    Scan' d f z a             -> [|| Scan' $$(liftDirection d) $$(liftF f) $$(liftE z) $$(liftA a) ||]
-    Permute f d p a           -> [|| Permute $$(liftF f) $$(liftA d) $$(liftF p) $$(liftA a) ||]
-    Backpermute shr sh p a    -> [|| Backpermute $$(liftShapeR shr) $$(liftE sh) $$(liftF p) $$(liftA a) ||]
-    Stencil sr tp f b a       ->
+    Alet ann lhs bnd body                 -> [|| Alet $$(liftAnn ann) $$(liftALeftHandSide lhs) $$(liftA bnd) $$(liftA body) ||]
+    Avar ann var                          -> [|| Avar $$(liftAnn ann) $$(liftArrayVar var) ||]
+    Apair ann as bs                       -> [|| Apair $$(liftAnn ann) $$(liftA as) $$(liftA bs) ||]
+    Anil ann                              -> [|| Anil $$(liftAnn ann) ||]
+    Atrace ann msg as bs                  -> [|| Atrace $$(liftAnn ann) $$(liftMessage (arraysR as) msg) $$(liftA as) $$(liftA bs) ||]
+    Apply ann repr f a                    -> [|| Apply $$(liftAnn ann) $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
+    Aforeign ann repr asm f a             -> [|| Aforeign $$(liftAnn ann) $$(liftArraysR repr) $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
+    Acond ann p t e                       -> [|| Acond $$(liftAnn ann) $$(liftE p) $$(liftA t) $$(liftA e) ||]
+    Awhile ann p f a                      -> [|| Awhile $$(liftAnn ann) $$(liftAF p) $$(liftAF f) $$(liftA a) ||]
+    Use ann repr a                        -> [|| Use $$(liftAnn ann) $$(liftArrayR repr) $$(liftArray repr a) ||]
+    Unit ann tp e                         -> [|| Unit $$(liftAnn ann) $$(liftTypeR tp) $$(liftE e) ||]
+    Reshape ann shr sh a                  -> [|| Reshape $$(liftAnn ann) $$(liftShapeR shr) $$(liftE sh) $$(liftA a) ||]
+    Generate ann repr sh f                -> [|| Generate $$(liftAnn ann) $$(liftArrayR repr) $$(liftE sh) $$(liftF f) ||]
+    Transform ann repr sh p f a           -> [|| Transform $$(liftAnn ann) $$(liftArrayR repr) $$(liftE sh) $$(liftF p) $$(liftF f) $$(liftA a) ||]
+    Replicate ann slix sl a               -> [|| Replicate $$(liftAnn ann) $$(liftSliceIndex slix) $$(liftE sl) $$(liftA a) ||]
+    Slice ann slix a sh                   -> [|| Slice $$(liftAnn ann) $$(liftSliceIndex slix) $$(liftA a) $$(liftE sh) ||]
+    Map ann tp f a                        -> [|| Map $$(liftAnn ann) $$(liftTypeR tp) $$(liftF f) $$(liftA a) ||]
+    ZipWith ann tp f a b                  -> [|| ZipWith $$(liftAnn ann) $$(liftTypeR tp) $$(liftF f) $$(liftA a) $$(liftA b) ||]
+    Fold ann f z a                        -> [|| Fold $$(liftAnn ann) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
+    FoldSeg ann i f z a s                 -> [|| FoldSeg $$(liftAnn ann) $$(liftIntegralType i) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) $$(liftA s) ||]
+    Scan  ann d f z a                     -> [|| Scan $$(liftAnn ann)  $$(liftDirection d) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
+    Scan' ann d f z a                     -> [|| Scan' $$(liftAnn ann) $$(liftDirection d) $$(liftF f) $$(liftE z) $$(liftA a) ||]
+    Permute ann f d p a                   -> [|| Permute $$(liftAnn ann) $$(liftF f) $$(liftA d) $$(liftF p) $$(liftA a) ||]
+    Backpermute ann shr sh p a            -> [|| Backpermute $$(liftAnn ann) $$(liftShapeR shr) $$(liftE sh) $$(liftF p) $$(liftA a) ||]
+    Stencil ann sr tp f b a               ->
       let TupRsingle (ArrayR shr _) = arraysR a
           repr = ArrayR shr $ stencilEltR sr
-       in [|| Stencil $$(liftStencilR sr) $$(liftTypeR tp) $$(liftF f) $$(liftB repr b) $$(liftA a) ||]
-    Stencil2 sr1 sr2 tp f b1 a1 b2 a2 ->
+       in [|| Stencil $$(liftAnn ann) $$(liftStencilR sr) $$(liftTypeR tp) $$(liftF f) $$(liftB repr b) $$(liftA a) ||]
+    Stencil2 ann sr1 sr2 tp f b1 a1 b2 a2 ->
       let TupRsingle (ArrayR shr _) = arraysR a1
           repr1 = ArrayR shr $ stencilEltR sr1
           repr2 = ArrayR shr $ stencilEltR sr2
-       in [|| Stencil2 $$(liftStencilR sr1) $$(liftStencilR sr2) $$(liftTypeR tp) $$(liftF f) $$(liftB repr1 b1) $$(liftA a1) $$(liftB repr2 b2) $$(liftA a2) ||]
+       in [|| Stencil2 $$(liftAnn ann) $$(liftStencilR sr1) $$(liftStencilR sr2) $$(liftTypeR tp) $$(liftF f) $$(liftB repr1 b1) $$(liftA a1) $$(liftB repr2 b2) $$(liftA a2) ||]
 
 
 liftALeftHandSide :: ALeftHandSide arrs aenv aenv' -> CodeQ (ALeftHandSide arrs aenv aenv')
@@ -1435,34 +1479,35 @@ formatDirection = later $ \case
   LeftToRight -> singleton 'l'
   RightToLeft -> singleton 'r'
 
+-- TODO: Should we print anything from the annotations here?
 formatPreAccOp :: Format r (PreOpenAcc acc aenv arrs -> r)
 formatPreAccOp = later $ \case
-  Alet{}            -> "Alet"
-  Avar (Var _ ix)   -> bformat ("Avar a" % int) (idxToInt ix)
-  Use aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
-  Atrace{}          -> "Atrace"
-  Apply{}           -> "Apply"
-  Aforeign{}        -> "Aforeign"
-  Acond{}           -> "Acond"
-  Awhile{}          -> "Awhile"
-  Apair{}           -> "Apair"
-  Anil              -> "Anil"
-  Unit{}            -> "Unit"
-  Generate{}        -> "Generate"
-  Transform{}       -> "Transform"
-  Reshape{}         -> "Reshape"
-  Replicate{}       -> "Replicate"
-  Slice{}           -> "Slice"
-  Map{}             -> "Map"
-  ZipWith{}         -> "ZipWith"
-  Fold _ _ z _      -> bformat ("Fold" % maybed "1" (fconst mempty)) z
-  FoldSeg _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
-  Scan d _ z _      -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
-  Scan' d _ _ _     -> bformat ("Scan" % formatDirection % "\'") d
-  Permute{}         -> "Permute"
-  Backpermute{}     -> "Backpermute"
-  Stencil{}         -> "Stencil"
-  Stencil2{}        -> "Stencil2"
+  Alet{}              -> "Alet"
+  Avar _ (Var _ ix)   -> bformat ("Avar a" % int) (idxToInt ix)
+  Use _ aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
+  Atrace{}            -> "Atrace"
+  Apply{}             -> "Apply"
+  Aforeign{}          -> "Aforeign"
+  Acond{}             -> "Acond"
+  Awhile{}            -> "Awhile"
+  Apair{}             -> "Apair"
+  Anil{}              -> "Anil"
+  Unit{}              -> "Unit"
+  Generate{}          -> "Generate"
+  Transform{}         -> "Transform"
+  Reshape{}           -> "Reshape"
+  Replicate{}         -> "Replicate"
+  Slice{}             -> "Slice"
+  Map{}               -> "Map"
+  ZipWith{}           -> "ZipWith"
+  Fold _ _ z _        -> bformat ("Fold" % maybed "1" (fconst mempty)) z
+  FoldSeg _ _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
+  Scan  _ d _ z _     -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
+  Scan' _ d _ _ _     -> bformat ("Scan" % formatDirection % "\'") d
+  Permute{}           -> "Permute"
+  Backpermute{}       -> "Backpermute"
+  Stencil{}           -> "Stencil"
+  Stencil2{}          -> "Stencil2"
 
 -- TODO: Show annotations
 formatExpOp :: Format r (OpenExp aenv env t -> r)

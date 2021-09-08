@@ -207,21 +207,21 @@ evalOpenAcc (AST.Manifest pacc) aenv =
       dir RightToLeft _ r = r
   in
   case pacc of
-    Avar (Var repr ix)            -> (TupRsingle repr, prj ix aenv)
-    Alet lhs acc1 acc2            -> evalOpenAcc acc2 $ aenv `push` (lhs, snd $ manifest acc1)
-    Apair acc1 acc2               -> let (r1, a1) = manifest acc1
-                                         (r2, a2) = manifest acc2
-                                     in
-                                     (TupRpair r1 r2, (a1, a2))
-    Anil                          -> (TupRunit, ())
-    Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd $ manifest as)
-    Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
-    Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
-    Acond p acc1 acc2
-      | toBool (evalE p)          -> manifest acc1
-      | otherwise                 -> manifest acc2
+    Avar _ (Var repr ix)           -> (TupRsingle repr, prj ix aenv)
+    Alet _ lhs acc1 acc2           -> evalOpenAcc acc2 $ aenv `push` (lhs, snd $ manifest acc1)
+    Apair _ acc1 acc2              -> let (r1, a1) = manifest acc1
+                                          (r2, a2) = manifest acc2
+                                      in
+                                      (TupRpair r1 r2, (a1, a2))
+    Anil{}                         -> (TupRunit, ())
+    Atrace _ msg as bs             -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd $ manifest as)
+    Apply _ repr afun acc          -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
+    Aforeign _ repr _ afun acc     -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
+    Acond _ p acc1 acc2
+      | toBool (evalE p)           -> manifest acc1
+      | otherwise                  -> manifest acc2
 
-    Awhile cond body acc          -> (repr, go initial)
+    Awhile _ cond body acc         -> (repr, go initial)
       where
         (repr, initial) = manifest acc
         p               = evalOpenAfun cond aenv
@@ -230,35 +230,35 @@ evalOpenAcc (AST.Manifest pacc) aenv =
           | toBool (linearIndexArray (Sugar.eltR @Word8) (p x) 0) = go (f x)
           | otherwise                                             = x
 
-    Use repr arr                  -> (TupRsingle repr, arr)
-    Unit tp e                     -> unitOp tp (evalE e)
-    -- Collect s                     -> evalSeq defaultSeqConfig s aenv
+    Use _ repr arr                 -> (TupRsingle repr, arr)
+    Unit _ tp e                    -> unitOp tp (evalE e)
+    -- Collect s                   -> evalSeq defaultSeqConfig s aenv
 
     -- Producers
     -- ---------
-    Map _ tp f acc                -> mapOp tp (evalF f) (delayed acc)
-    Generate repr sh f            -> generateOp repr (evalE sh) (evalF f)
-    Transform repr sh p f acc     -> transformOp repr (evalE sh) (evalF p) (evalF f) (delayed acc)
-    Backpermute shr sh p acc      -> backpermuteOp shr (evalE sh) (evalF p) (delayed acc)
-    Reshape shr sh acc            -> reshapeOp shr (evalE sh) (manifest acc)
+    Map _ tp f acc                 -> mapOp tp (evalF f) (delayed acc)
+    Generate _ repr sh f           -> generateOp repr (evalE sh) (evalF f)
+    Transform _ repr sh p f acc    -> transformOp repr (evalE sh) (evalF p) (evalF f) (delayed acc)
+    Backpermute _ shr sh p acc     -> backpermuteOp shr (evalE sh) (evalF p) (delayed acc)
+    Reshape _ shr sh acc           -> reshapeOp shr (evalE sh) (manifest acc)
 
-    ZipWith tp f acc1 acc2        -> zipWithOp tp (evalF f) (delayed acc1) (delayed acc2)
-    Replicate slice slix acc      -> replicateOp slice (evalE slix) (manifest acc)
-    Slice slice acc slix          -> sliceOp slice (manifest acc) (evalE slix)
+    ZipWith _ tp f acc1 acc2       -> zipWithOp tp (evalF f) (delayed acc1) (delayed acc2)
+    Replicate _ slice slix acc     -> replicateOp slice (evalE slix) (manifest acc)
+    Slice _ slice acc slix         -> sliceOp slice (manifest acc) (evalE slix)
 
     -- Consumers
     -- ---------
-    Fold _ f (Just z) acc         -> foldOp (evalF f) (evalE z) (delayed acc)
-    Fold _ f Nothing  acc         -> fold1Op (evalF f) (delayed acc)
-    FoldSeg i f (Just z) acc seg  -> foldSegOp i (evalF f) (evalE z) (delayed acc) (delayed seg)
-    FoldSeg i f Nothing acc seg   -> fold1SegOp i (evalF f) (delayed acc) (delayed seg)
-    Scan  d f (Just z) acc        -> dir d scanlOp  scanrOp  (evalF f) (evalE z) (delayed acc)
-    Scan  d f Nothing  acc        -> dir d scanl1Op scanr1Op (evalF f)           (delayed acc)
-    Scan' d f z acc               -> dir d scanl'Op scanr'Op (evalF f) (evalE z) (delayed acc)
-    Permute f def p acc           -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
-    Stencil s tp sten b acc       -> stencilOp s tp (evalF sten) (evalB b) (delayed acc)
-    Stencil2 s1 s2 tp sten b1 a1 b2 a2
-                                  -> stencil2Op s1 s2 tp (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
+    Fold _ f (Just z) acc          -> foldOp (evalF f) (evalE z) (delayed acc)
+    Fold _ f Nothing  acc          -> fold1Op (evalF f) (delayed acc)
+    FoldSeg _ i f (Just z) acc seg -> foldSegOp i (evalF f) (evalE z) (delayed acc) (delayed seg)
+    FoldSeg _ i f Nothing acc seg  -> fold1SegOp i (evalF f) (delayed acc) (delayed seg)
+    Scan  _ d f (Just z) acc       -> dir d scanlOp  scanrOp  (evalF f) (evalE z) (delayed acc)
+    Scan  _ d f Nothing  acc       -> dir d scanl1Op scanr1Op (evalF f)           (delayed acc)
+    Scan' _ d f z acc              -> dir d scanl'Op scanr'Op (evalF f) (evalE z) (delayed acc)
+    Permute _ f def p acc          -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
+    Stencil _ s tp sten b acc      -> stencilOp s tp (evalF sten) (evalB b) (delayed acc)
+    Stencil2 _ s1 s2 tp sten b1 a1 b2 a2
+                                   -> stencil2Op s1 s2 tp (evalF sten) (evalB b1) (delayed a1) (evalB b2) (delayed a2)
 
 
 -- Array primitives

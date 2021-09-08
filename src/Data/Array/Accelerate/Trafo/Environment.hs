@@ -130,12 +130,14 @@ append x (PushEnv e lhs a) = PushEnv (append x e) lhs a
 -- Bring into scope all of the array terms in the Extend environment list. This
 -- converts a term in the inner environment (aenv') into the outer (aenv).
 --
+-- FIXME: Also take the source mapping into account here.
+--
 bind :: (forall env t. PreOpenAcc acc env t -> acc env t)
      -> Extend ArrayR  acc aenv aenv'
      -> PreOpenAcc acc      aenv' a
      -> PreOpenAcc acc aenv       a
 bind _      BaseEnv           = id
-bind inject (PushEnv g lhs a) = bind inject g . Alet lhs a . inject
+bind inject (PushEnv g lhs a) = bind inject g . Alet mkDummyAnn lhs a . inject
 
 -- Sink a term from one array environment into another, where additional
 -- bindings have come into scope according to the witness and no old things have

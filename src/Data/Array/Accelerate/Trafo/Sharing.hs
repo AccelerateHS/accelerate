@@ -272,13 +272,15 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
     ctxt  = bformat ("shared 'Acc' tree with stable name " % formatStableNameHeight) sa
     err   = bformat ("inconsistent valuation @ " % builder % ";\n  aenv = " % list formatStableSharingAcc) ctxt aenv'
 
+-- TODO: Like everywhere else, variables/let-bindings should contain the
+--       relevant source information.
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
   = case declareVars $ AST.arraysR bound of
       DeclareVars lhs k value ->
         let
           alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
         in
-          AST.OpenAcc $ AST.Alet
+          AST.OpenAcc $ AST.Alet mkDummyAnn
             lhs
             bound
             (convertSharingAcc config alyt' (sa:aenv') bodyAcc)
@@ -305,15 +307,18 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtAfun1 :: ArraysR a -> (SmartAcc a -> ScopedAcc b) -> AST.OpenAfun aenv (a -> b)
         cvtAfun1 = convertSharingAfun1 config alyt aenv'
 
-        cvtAprj :: forall a b c. PairIdx (a, b) c -> ScopedAcc (a, b) -> AST.OpenAcc aenv c
-        cvtAprj ix a = cvtAprj' ix $ cvtA a
+        cvtAprj :: forall a b c. Ann -> PairIdx (a, b) c -> ScopedAcc (a, b) -> AST.OpenAcc aenv c
+        cvtAprj ann ix a = cvtAprj' ann ix $ cvtA a
 
-        cvtAprj' :: forall a b c aenv1. PairIdx (a, b) c -> AST.OpenAcc aenv1 (a, b) -> AST.OpenAcc aenv1 c
-        cvtAprj' PairIdxLeft  (AST.OpenAcc (AST.Apair a _)) = a
-        cvtAprj' PairIdxRight (AST.OpenAcc (AST.Apair _ b)) = b
-        cvtAprj' ix a = case declareVars $ AST.arraysR a of
+        -- TODO: Should we combine the pair's annotations like this for the
+        --       simple projections? Probably not, but let's figure this out
+        --       later.
+        cvtAprj' :: forall a b c aenv1. Ann -> PairIdx (a, b) c -> AST.OpenAcc aenv1 (a, b) -> AST.OpenAcc aenv1 c
+        cvtAprj' ann PairIdxLeft  (AST.OpenAcc (AST.Apair _ a _)) = modifyAnn (<> ann) a
+        cvtAprj' ann PairIdxRight (AST.OpenAcc (AST.Apair _ _ b)) = modifyAnn (<> ann) b
+        cvtAprj' ann ix a = case declareVars $ AST.arraysR a of
           DeclareVars lhs _ value ->
-            AST.OpenAcc $ AST.Alet lhs a $ cvtAprj' ix $ avarsIn AST.OpenAcc $ value weakenId
+            AST.OpenAcc $ AST.Alet ann lhs a $ cvtAprj' ann ix $ avarsIn AST.OpenAcc $ value weakenId
     in
     case preAcc of
 
@@ -321,55 +326,59 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (bformat ("de Bruijn conversion tag " % int) i) formatArraysR matchArraysR repr i alyt
            in  a
 
-      -- TODO: Add the annotation fields to the de Bruijn AST and pass them through
-      Pipe _ reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
+      -- TODO: Check how the annotation fields are threaded through to the de
+      --       Bruijn AST for the non-trivial constructors. The current
+      --       implementation is just there to make the type checker happy.
+      Pipe ann reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
         | DeclareVars lhs k value <- declareVars reprB ->
           let
             noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
-            boundAcc = AST.Apply reprB (cvtAfun1 reprA afun1) (cvtA acc)
+            boundAcc = AST.Apply ann reprB (cvtAfun1 reprA afun1) (cvtA acc)
             alyt'   = PushLayout (incLayout k alyt) lhs (value weakenId)
-            bodyAcc = AST.Apply reprC
+            bodyAcc = AST.Apply ann reprC
                         (convertSharingAfun1 config alyt' (noStableSharing : aenv') reprB afun2)
                         (avarsIn AST.OpenAcc $ value weakenId)
-          in AST.Alet lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
+          in AST.Alet ann lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
-      Aforeign _ repr ff afun acc
-        -> AST.Aforeign repr ff (convertSmartAfun1 config (Smart.arraysR acc) afun) (cvtA acc)
+      Aforeign ann repr ff afun acc
+        -> AST.Aforeign ann repr ff (convertSmartAfun1 config (Smart.arraysR acc) afun) (cvtA acc)
 
-      Acond _ b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
-      Awhile _ reprA pred iter init -> AST.Awhile (cvtAfun1 reprA pred) (cvtAfun1 reprA iter) (cvtA init)
-      Anil _                        -> AST.Anil
-      Apair _ acc1 acc2             -> AST.Apair (cvtA acc1) (cvtA acc2)
-      Aprj _ ix a                   -> let AST.OpenAcc a' = cvtAprj ix a
-                                       in a'
-      Atrace _ msg acc1 acc2        -> AST.Atrace msg (cvtA acc1) (cvtA acc2)
-      Use _ repr array              -> AST.Use repr array
-      Unit _ tp e                   -> AST.Unit tp (cvtE e)
-      Generate _ repr@(ArrayR shr _) sh f
-                                    -> AST.Generate repr (cvtE sh) (cvtF1 (shapeType shr) f)
-      Reshape _ shr e acc           -> AST.Reshape shr (cvtE e) (cvtA acc)
-      Replicate _ si ix acc         -> AST.Replicate si (cvtE ix) (cvtA acc)
-      Slice _ si acc ix             -> AST.Slice si (cvtA acc) (cvtE ix)
-      Map ann t1 t2 f acc           -> AST.Map ann t2 (cvtF1 t1 f) (cvtA acc)
-      ZipWith _ t1 t2 t3 f acc1 acc2
-                                    -> AST.ZipWith t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
-      Fold ann tp f e acc           -> AST.Fold ann (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
-      FoldSeg _ i tp f e acc1 acc2  -> AST.FoldSeg i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
-      Scan  _ d tp f e acc          -> AST.Scan  d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
-      Scan' _ d tp f e acc          -> AST.Scan' d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)
-      Permute _ (ArrayR shr tp) f dftAcc perm acc
-                                    -> AST.Permute (cvtF2 tp tp f) (cvtA dftAcc) (cvtF1 (shapeType shr) perm) (cvtA acc)
-      Backpermute _ shr newDim perm acc
-                                    -> AST.Backpermute shr (cvtE newDim) (cvtF1 (shapeType shr) perm) (cvtA acc)
-      Stencil _ stencil tp f boundary acc
-        -> AST.Stencil stencil
+      Acond ann b acc1 acc2           -> AST.Acond ann (cvtE b) (cvtA acc1) (cvtA acc2)
+      Awhile ann reprA pred iter init -> AST.Awhile ann (cvtAfun1 reprA pred) (cvtAfun1 reprA iter) (cvtA init)
+      Anil ann                        -> AST.Anil ann
+      Apair ann acc1 acc2             -> AST.Apair ann (cvtA acc1) (cvtA acc2)
+      Aprj ann ix a                   -> let AST.OpenAcc a' = cvtAprj ann ix a
+                                          in a'
+      Atrace ann msg acc1 acc2        -> AST.Atrace ann msg (cvtA acc1) (cvtA acc2)
+      Use ann repr array              -> AST.Use ann repr array
+      Unit ann tp e                   -> AST.Unit ann tp (cvtE e)
+      Generate ann repr@(ArrayR shr _) sh f
+                                      -> AST.Generate ann repr (cvtE sh) (cvtF1 (shapeType shr) f)
+      Reshape ann shr e acc           -> AST.Reshape ann shr (cvtE e) (cvtA acc)
+      Replicate ann si ix acc         -> AST.Replicate ann si (cvtE ix) (cvtA acc)
+      Slice ann si acc ix             -> AST.Slice ann si (cvtA acc) (cvtE ix)
+      Map ann t1 t2 f acc             -> AST.Map ann t2 (cvtF1 t1 f) (cvtA acc)
+      ZipWith ann t1 t2 t3 f acc1 acc2
+                                      -> AST.ZipWith ann t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
+      Fold ann tp f e acc             -> AST.Fold ann (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      FoldSeg ann i tp f e acc1 acc2  -> AST.FoldSeg ann i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
+      Scan  ann d tp f e acc          -> AST.Scan  ann d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
+      Scan' ann d tp f e acc          -> AST.Scan' ann d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)
+      Permute ann (ArrayR shr tp) f dftAcc perm acc
+                                      -> AST.Permute ann (cvtF2 tp tp f) (cvtA dftAcc) (cvtF1 (shapeType shr) perm) (cvtA acc)
+      Backpermute ann shr newDim perm acc
+                                    -> AST.Backpermute ann shr (cvtE newDim) (cvtF1 (shapeType shr) perm) (cvtA acc)
+      Stencil ann stencil tp f boundary acc
+        -> AST.Stencil ann
+                       stencil
                        tp
                        (convertSharingStencilFun1 config alyt aenv' stencil f)
                        (convertSharingBoundary config alyt aenv' (stencilShapeR stencil) boundary)
                        (cvtA acc)
-      Stencil2 _ stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
+      Stencil2 ann stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
         | shr <- stencilShapeR stencil1
-        -> AST.Stencil2 stencil1
+        -> AST.Stencil2 ann
+                        stencil1
                         stencil2
                         tp
                         (convertSharingStencilFun2 config alyt aenv' stencil1 stencil2 f)
@@ -798,10 +807,12 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtA :: HasCallStack => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
 
+    -- TODO: Like in @Var.hs@ and @Substitution.hs@ we throw away nay
+    --       annotations this point.
     cvtAvar :: HasCallStack => ScopedAcc a -> AST.ArrayVar aenv a
     cvtAvar a = case cvtA a of
-      AST.OpenAcc (AST.Avar var) -> var
-      _                          -> internalError "Expected array computation in expression to be floated out"
+      AST.OpenAcc (AST.Avar _ var) -> var
+      _                            -> internalError "Expected array computation in expression to be floated out"
 
     cvtFun1 :: HasCallStack => TypeR a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
     cvtFun1 tp f

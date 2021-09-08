@@ -28,6 +28,7 @@ module Data.Array.Accelerate.Pretty.Graphviz (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
@@ -194,15 +195,15 @@ prettyDelayedOpenAcc
 prettyDelayedOpenAcc _      _      _   _    Delayed{}            = internalError "expected manifest array"
 prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
   case pacc of
-    Avar ix                 -> pnode (avar ix)
-    Alet lhs bnd body       -> do
+    Avar _ ix                        -> pnode (avar ix)
+    Alet _ lhs bnd body              -> do
       bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc config detail context0 aenv bnd
       (aenv1, a) <- prettyLetALeftHandSide ident aenv lhs
       _ <- mkNode bnd' (Just a)
       body' <- prettyDelayedOpenAcc config detail context0 aenv1 body
       return body'
 
-    Acond p t e             -> do
+    Acond _ p t e                    -> do
       ident <- genNodeId
       vt    <- lift t
       ve    <- lift e
@@ -212,10 +213,10 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return $ PNode ident doc deps
 
-    Apply _ afun acc         -> apply <$> prettyDelayedAfun    config detail     aenv afun
-                                      <*> prettyDelayedOpenAcc config detail ctx aenv acc
+    Apply _ _ afun acc               -> apply <$> prettyDelayedAfun    config detail     aenv afun
+                                              <*> prettyDelayedOpenAcc config detail ctx aenv acc
 
-    Awhile p f x             -> do
+    Awhile _ p f x                   -> do
       ident <- genNodeId
       x'    <- replant =<< prettyDelayedOpenAcc config detail app aenv x
       p'    <- prettyDelayedAfun config detail aenv p
@@ -225,31 +226,31 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
           loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
       return $ PNode ident (Leaf (Nothing,loop)) fvs
 
-    Apair a1 a2              -> genNodeId >>= prettyDelayedApair config detail aenv a1 a2
+    Apair _ a1 a2                    -> genNodeId >>= prettyDelayedApair config detail aenv a1 a2
 
-    Anil                            -> "()"             .$ []
-    Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (pretty msg) [], ppA as, ppA bs ]
-    Use repr arr                    -> "use"            .$ [ return $ PDoc (prettyArray repr arr) [] ]
-    Unit _ e                        -> "unit"           .$ [ ppE e ]
-    Generate _ sh f                 -> "generate"       .$ [ ppE sh, ppF f ]
-    Transform _ sh ix f xs          -> "transform"      .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
-    Reshape _ sh xs                 -> "reshape"        .$ [ ppE sh, ppA xs ]
-    Replicate _ty ix xs             -> "replicate"      .$ [ ppE ix, ppA xs ]
-    Slice _ty xs ix                 -> "slice"          .$ [ ppA xs, ppE ix ]
-    Map _ _ f xs                    -> "map"            .$ [ ppF f, ppA xs ]
-    ZipWith _ f xs ys               -> "zipWith"        .$ [ ppF f, ppA xs, ppA ys ]
-    Fold _ f (Just z) a             -> "fold"           .$ [ ppF f,  ppE z, ppA a ]
-    Fold _ f Nothing  a             -> "fold1"          .$ [ ppF f,  ppA a ]
-    FoldSeg _ f (Just z) a s        -> "foldSeg"        .$ [ ppF f,  ppE z, ppA a, ppA s ]
-    FoldSeg _ f Nothing  a s        -> "fold1Seg"       .$ [ ppF f,  ppA a, ppA s ]
-    Scan d f (Just z) a             -> ppD "scan" d ""  .$ [ ppF f,  ppE z, ppA a ]
-    Scan d f Nothing  a             -> ppD "scan" d "1" .$ [ ppF f,  ppA a ]
-    Scan' d f z a                   -> ppD "scan" d "'" .$ [ ppF f,  ppE z, ppA a ]
-    Permute f dfts p xs             -> "permute"        .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
-    Backpermute _ sh p xs           -> "backpermute"    .$ [ ppE sh, ppF p, ppA xs ]
-    Stencil s _ sten bndy xs        -> "stencil"        .$ [ ppF sten, ppB (stencilEltR s) bndy, ppA xs ]
-    Stencil2 s1 s2 _ s b1 a1 b2 a2  -> "stencil2"       .$ [ ppF s, ppB (stencilEltR s1) b1, ppA a1, ppB (stencilEltR s2) b2, ppA a2 ]
-    Aforeign _ ff _afun xs          -> "aforeign"       .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
+    Anil{}                           -> "()"             .$ []
+    Atrace _ (Message _ _ msg) as bs -> "atrace"         .$ [ return $ PDoc (pretty msg) [], ppA as, ppA bs ]
+    Use _ repr arr                   -> "use"            .$ [ return $ PDoc (prettyArray repr arr) [] ]
+    Unit _ _ e                       -> "unit"           .$ [ ppE e ]
+    Generate _ _ sh f                -> "generate"       .$ [ ppE sh, ppF f ]
+    Transform _ _ sh ix f xs         -> "transform"      .$ [ ppE sh, ppF ix, ppF f, ppA xs ]
+    Reshape _ _ sh xs                -> "reshape"        .$ [ ppE sh, ppA xs ]
+    Replicate _ _ty ix xs            -> "replicate"      .$ [ ppE ix, ppA xs ]
+    Slice _ _ty xs ix                -> "slice"          .$ [ ppA xs, ppE ix ]
+    Map _ _ f xs                     -> "map"            .$ [ ppF f, ppA xs ]
+    ZipWith _ _ f xs ys              -> "zipWith"        .$ [ ppF f, ppA xs, ppA ys ]
+    Fold _ f (Just z) a              -> "fold"           .$ [ ppF f,  ppE z, ppA a ]
+    Fold _ f Nothing  a              -> "fold1"          .$ [ ppF f,  ppA a ]
+    FoldSeg _ _ f (Just z) a s       -> "foldSeg"        .$ [ ppF f,  ppE z, ppA a, ppA s ]
+    FoldSeg _ _ f Nothing  a s       -> "fold1Seg"       .$ [ ppF f,  ppA a, ppA s ]
+    Scan  _ d f (Just z) a           -> ppD "scan" d ""  .$ [ ppF f,  ppE z, ppA a ]
+    Scan  _ d f Nothing  a           -> ppD "scan" d "1" .$ [ ppF f,  ppA a ]
+    Scan' _ d f z a                  -> ppD "scan" d "'" .$ [ ppF f,  ppE z, ppA a ]
+    Permute _ f dfts p xs            -> "permute"        .$ [ ppF f, ppA dfts, ppF p, ppA xs ]
+    Backpermute _ _ sh p xs          -> "backpermute"    .$ [ ppE sh, ppF p, ppA xs ]
+    Stencil _ s _ sten bndy xs       -> "stencil"        .$ [ ppF sten, ppB (stencilEltR s) bndy, ppA xs ]
+    Stencil2 _ s1 s2 _ s b1 a1 b2 a2 -> "stencil2"       .$ [ ppF s, ppB (stencilEltR s1) b1, ppA a1, ppB (stencilEltR s2) b2, ppA a2 ]
+    Aforeign _ _ ff _afun xs         -> "aforeign"       .$ [ return (PDoc (pretty (strForeign ff)) []), {- ppAf afun, -} ppA xs ]
     -- Collect{}               -> error "Collect"
 
   where
@@ -292,7 +293,7 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
     aenv' = avalToVal aenv
 
     ppA :: HasCallStack => DelayedOpenAcc aenv a -> Dot PDoc
-    ppA (Manifest (Avar ix)) = return (avar ix)
+    ppA (Manifest (Avar _ ix)) = return (avar ix)
     ppA acc@Manifest{}       = do
       -- Lift out and draw as a separate node. This can occur with the manifest
       -- array arguments to permute (defaults array) and stencil[2].
@@ -304,7 +305,7 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
       | Shape a    <- sh                   -- identical shape
       , Just b     <- isIdentityIndexing f -- function is `\ix -> b ! ix`
       , Just Refl  <- matchVar a b         -- function thus is `\ix -> a ! ix`
-      = ppA $ Manifest $ Avar a
+      = ppA $ Manifest $ Avar mkDummyAnn a
     ppA (Delayed _ _ sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
@@ -330,9 +331,9 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
     ppD f RightToLeft k = fromString (f <> "r" <> k)
 
     lift :: HasCallStack => DelayedOpenAcc aenv a -> Dot Vertex
-    lift Delayed{}                    = internalError "expected manifest array"
-    lift (Manifest (Avar (Var _ ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
-    lift acc                          = do
+    lift Delayed{}                      = internalError "expected manifest array"
+    lift (Manifest (Avar _ (Var _ ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
+    lift acc                            = do
       acc'  <- prettyDelayedOpenAcc config detail context0 aenv acc
       ident <- mkNode acc' Nothing
       return $ Vertex ident Nothing

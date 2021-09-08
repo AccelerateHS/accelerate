@@ -16,6 +16,7 @@
 module Data.Array.Accelerate.Trafo.Var
   where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Idx
@@ -45,11 +46,14 @@ declareVars (TupRpair r1 r2)
 type InjectAcc  acc = forall env t. PreOpenAcc acc env t -> acc env t
 type ExtractAcc acc = forall env t. acc env t -> Maybe (PreOpenAcc acc env t)
 
+-- TODO: Where should we get the annotations (for source mapping) belonging to
+--       the referenced variables from?
 avarIn :: InjectAcc acc
        -> ArrayVar aenv a
        -> acc aenv a
-avarIn inject v@(Var ArrayR{} _) = inject (Avar v)
+avarIn inject v@(Var ArrayR{} _) = inject (Avar mkDummyAnn v)
 
+-- TODO: Same as the above
 avarsIn :: forall acc aenv arrs.
            InjectAcc acc
         -> ArrayVars aenv arrs
@@ -57,18 +61,18 @@ avarsIn :: forall acc aenv arrs.
 avarsIn inject = go
   where
     go :: ArrayVars aenv t -> acc aenv t
-    go TupRunit       = inject Anil
+    go TupRunit       = inject (Anil mkDummyAnn)
     go (TupRsingle v) = avarIn inject v
-    go (TupRpair a b) = inject (go a `Apair` go b)
+    go (TupRpair a b) = inject (Apair mkDummyAnn (go a) (go b))
 
 avarsOut
     :: ExtractAcc acc
     -> PreOpenAcc acc aenv a
     -> Maybe (ArrayVars aenv a)
 avarsOut extract = \case
-  Anil   -> Just $ TupRunit
-  Avar v -> Just $ TupRsingle v
-  Apair al ar
+  Anil _   -> Just $ TupRunit
+  Avar _ v -> Just $ TupRsingle v
+  Apair _ al ar
     | Just pl <- extract al
     , Just pr <- extract ar
     , Just as <- avarsOut extract pl

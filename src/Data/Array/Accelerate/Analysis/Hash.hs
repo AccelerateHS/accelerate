@@ -62,8 +62,8 @@ import Prelude                                                      hiding ( exp
 -- Hashing
 -- -------
 
--- TODO: We don't include the annotations in the hashes at this point. We should
---       probably include at least the optimization flags.
+-- TODO: We currently don't take annotations into account when generating these
+--       hashes. We should at least include the optimization flags here.
 
 type Hash = Digest SHA3_256
 
@@ -168,34 +168,34 @@ encodePreOpenAcc options encodeAcc pacc =
         | otherwise       = encodeTypeR $ expType e
   in
   case pacc of
-    Alet lhs bnd body               -> intHost $(hashQ "Alet")        <> encodeLeftHandSide encodeArrayType lhs <> travA bnd <> travA body
-    Avar (Var repr v)               -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
-    Apair a1 a2                     -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
-    Anil                            -> intHost $(hashQ "Anil")
-    Atrace (Message _ _ msg) as bs  -> intHost $(hashQ "Atrace")      <> intHost (Hashable.hash msg) <> travA as <> travA bs
-    Apply _ f a                     -> intHost $(hashQ "Apply")       <> travAF f <> travA a
-    Aforeign _ _ f a                -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
-    Use repr a                      -> intHost $(hashQ "Use")         <> encodeArrayType repr <> deep (encodeArray a)
-    Awhile p f a                    -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
-    Unit _ e                        -> intHost $(hashQ "Unit")        <> travE e
-    Generate _ e f                  -> intHost $(hashQ "Generate")    <> deepE e <> travF f
+    Alet _ lhs bnd body              -> intHost $(hashQ "Alet")        <> encodeLeftHandSide encodeArrayType lhs <> travA bnd <> travA body
+    Avar _ (Var repr v)              -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
+    Apair _ a1 a2                    -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
+    Anil _                           -> intHost $(hashQ "Anil")
+    Atrace _ (Message _ _ msg) as bs -> intHost $(hashQ "Atrace")      <> intHost (Hashable.hash msg) <> travA as <> travA bs
+    Apply _ _ f a                    -> intHost $(hashQ "Apply")       <> travAF f <> travA a
+    Aforeign _ _ _ f a               -> intHost $(hashQ "Aforeign")    <> travAF f <> travA a
+    Use _ repr a                     -> intHost $(hashQ "Use")         <> encodeArrayType repr <> deep (encodeArray a)
+    Awhile _ p f a                   -> intHost $(hashQ "Awhile")      <> travAF f <> travAF p <> travA a
+    Unit _ _ e                       -> intHost $(hashQ "Unit")        <> travE e
+    Generate _ _ e f                 -> intHost $(hashQ "Generate")    <> deepE e <> travF f
     -- We don't need to encode the type of 'e' when perfect is False, as 'e' is an expression of type Bool.
     -- We thus use `deep (travE e)` instead of `deepE e`.
-    Acond e a1 a2                   -> intHost $(hashQ "Acond")       <> deep (travE e) <> travA a1 <> travA a2
-    Reshape _ sh a                  -> intHost $(hashQ "Reshape")     <> deepE sh <> travA a
-    Backpermute _ sh f a            -> intHost $(hashQ "Backpermute") <> deepE sh <> travF f  <> travA a
-    Transform _ sh f1 f2 a          -> intHost $(hashQ "Transform")   <> deepE sh <> travF f1 <> travF f2 <> travA a
-    Replicate spec ix a             -> intHost $(hashQ "Replicate")   <> deepE ix <> travA a  <> encodeSliceIndex spec
-    Slice spec a ix                 -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
-    Map _ _ f a                     -> intHost $(hashQ "Map")         <> travF f  <> travA a
-    ZipWith _ f a1 a2               -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
-    Fold _ f e a                    -> intHost $(hashQ "Fold")        <> travF f  <> encodeMaybe travE e  <> travA a
-    FoldSeg _ f e a s               -> intHost $(hashQ "FoldSeg")     <> travF f  <> encodeMaybe travE e  <> travA a <> travA s
-    Scan  d f e a                   -> intHost $(hashQ "Scan")        <> travD d  <> travF f  <> encodeMaybe travE e <> travA a
-    Scan' d f e a                   -> intHost $(hashQ "Scan'")       <> travD d  <> travF f  <>             travE e <> travA a
-    Permute f1 a1 f2 a2             -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
-    Stencil s _ f b a               -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilEltR s) b   <> travA a
-    Stencil2 s1 s2 _ f b1 a1 b2 a2  -> intHost $(hashQ "Stencil2")    <> travF f  <> encodeBoundary (stencilEltR s1) b1 <> travA a1 <> encodeBoundary (stencilEltR s2) b2 <> travA a2
+    Acond _ e a1 a2                  -> intHost $(hashQ "Acond")       <> deep (travE e) <> travA a1 <> travA a2
+    Reshape _ _ sh a                 -> intHost $(hashQ "Reshape")     <> deepE sh <> travA a
+    Backpermute _ _ sh f a           -> intHost $(hashQ "Backpermute") <> deepE sh <> travF f  <> travA a
+    Transform _ _ sh f1 f2 a         -> intHost $(hashQ "Transform")   <> deepE sh <> travF f1 <> travF f2 <> travA a
+    Replicate _ spec ix a            -> intHost $(hashQ "Replicate")   <> deepE ix <> travA a  <> encodeSliceIndex spec
+    Slice _ spec a ix                -> intHost $(hashQ "Slice")       <> deepE ix <> travA a  <> encodeSliceIndex spec
+    Map _ _ f a                      -> intHost $(hashQ "Map")         <> travF f  <> travA a
+    ZipWith _ _ f a1 a2              -> intHost $(hashQ "ZipWith")     <> travF f  <> travA a1 <> travA a2
+    Fold _ f e a                     -> intHost $(hashQ "Fold")        <> travF f  <> encodeMaybe travE e  <> travA a
+    FoldSeg _ _ f e a s              -> intHost $(hashQ "FoldSeg")     <> travF f  <> encodeMaybe travE e  <> travA a <> travA s
+    Scan  _ d f e a                  -> intHost $(hashQ "Scan")        <> travD d  <> travF f  <> encodeMaybe travE e <> travA a
+    Scan' _ d f e a                  -> intHost $(hashQ "Scan'")       <> travD d  <> travF f  <>             travE e <> travA a
+    Permute _ f1 a1 f2 a2            -> intHost $(hashQ "Permute")     <> travF f1 <> travA a1 <> travF f2 <> travA a2
+    Stencil _ s _ f b a              -> intHost $(hashQ "Stencil")     <> travF f  <> encodeBoundary (stencilEltR s) b   <> travA a
+    Stencil2 _ s1 s2 _ f b1 a1 b2 a2 -> intHost $(hashQ "Stencil2")    <> travF f  <> encodeBoundary (stencilEltR s1) b1 <> travA a1 <> encodeBoundary (stencilEltR s2) b2 <> travA a2
 
 {--
 {-# INLINEABLE encodePreOpenSeq #-}

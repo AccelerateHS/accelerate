@@ -84,29 +84,29 @@ matchPreOpenAcc matchAcc = match
     matchExp = matchOpenExp
 
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :~: t)
-    match (Alet lhs1 x1 a1) (Alet lhs2 x2 a2)
+    match (Alet _ lhs1 x1 a1) (Alet _ lhs2 x2 a2)
       | Just Refl <- matchALeftHandSide lhs1 lhs2
       , Just Refl <- matchAcc x1 x2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Avar v1) (Avar v2)
+    match (Avar _ v1) (Avar _ v2)
       = matchVar v1 v2
 
-    match (Apair a1 a2) (Apair b1 b2)
+    match (Apair _ a1 a2) (Apair _ b1 b2)
       | Just Refl <- matchAcc a1 b1
       , Just Refl <- matchAcc a2 b2
       = Just Refl
 
-    match Anil Anil
+    match Anil{} Anil{}
       = Just Refl
 
-    match (Apply _ f1 a1) (Apply _ f2 a2)
+    match (Apply _ _ f1 a1) (Apply _ _ f2 a2)
       | Just Refl <- matchPreOpenAfun matchAcc f1 f2
       , Just Refl <- matchAcc                  a1 a2
       = Just Refl
 
-    match (Aforeign _ ff1 f1 a1) (Aforeign _ ff2 f2 a2)
+    match (Aforeign _ _ ff1 f1 a1) (Aforeign _ _ ff2 f2 a2)
       | Just Refl <- matchAcc a1 a2
       , unsafePerformIO $ do
           sn1 <- makeStableName ff1
@@ -115,51 +115,51 @@ matchPreOpenAcc matchAcc = match
       , Just Refl <- matchPreOpenAfun matchAcc f1 f2
       = Just Refl
 
-    match (Acond p1 t1 e1) (Acond p2 t2 e2)
+    match (Acond _ p1 t1 e1) (Acond _ p2 t2 e2)
       | Just Refl <- matchExp p1 p2
       , Just Refl <- matchAcc t1 t2
       , Just Refl <- matchAcc e1 e2
       = Just Refl
 
-    match (Awhile p1 f1 a1) (Awhile p2 f2 a2)
+    match (Awhile _ p1 f1 a1) (Awhile _ p2 f2 a2)
       | Just Refl <- matchAcc a1 a2
       , Just Refl <- matchPreOpenAfun matchAcc p1 p2
       , Just Refl <- matchPreOpenAfun matchAcc f1 f2
       = Just Refl
 
-    match (Use repr1 a1) (Use repr2 a2)
+    match (Use _ repr1 a1) (Use _ repr2 a2)
       | Just Refl <- matchArray repr1 repr2 a1 a2
       = Just Refl
 
-    match (Unit t1 e1) (Unit t2 e2)
+    match (Unit _ t1 e1) (Unit _ t2 e2)
       | Just Refl <- matchTypeR t1 t2
       , Just Refl <- matchExp e1 e2
       = Just Refl
 
-    match (Reshape _ sh1 a1) (Reshape _ sh2 a2)
+    match (Reshape _ _ sh1 a1) (Reshape _ _ sh2 a2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Generate _ sh1 f1) (Generate _ sh2 f2)
+    match (Generate _ _ sh1 f1) (Generate _ _ sh2 f2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun f1  f2
       = Just Refl
 
-    match (Transform _ sh1 ix1 f1 a1) (Transform _ sh2 ix2 f2 a2)
+    match (Transform _ _ sh1 ix1 f1 a1) (Transform _ _ sh2 ix2 f2 a2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun ix1 ix2
       , Just Refl <- matchFun f1  f2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Replicate si1 ix1 a1) (Replicate si2 ix2 a2)
+    match (Replicate _ si1 ix1 a1) (Replicate _ si2 ix2 a2)
       | Just Refl <- matchSliceIndex si1 si2
       , Just Refl <- matchExp ix1 ix2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Slice si1 a1 ix1) (Slice si2 a2 ix2)
+    match (Slice _ si1 a1 ix1) (Slice _ si2 a2 ix2)
       | Just Refl <- matchSliceIndex si1 si2
       , Just Refl <- matchAcc a1  a2
       , Just Refl <- matchExp ix1 ix2
@@ -170,7 +170,7 @@ matchPreOpenAcc matchAcc = match
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (ZipWith _ f1 a1 b1) (ZipWith _ f2 a2 b2)
+    match (ZipWith _ _ f1 a1 b1) (ZipWith _ _ f2 a2 b2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc b1 b2
@@ -182,47 +182,47 @@ matchPreOpenAcc matchAcc = match
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (FoldSeg _ f1 z1 a1 s1) (FoldSeg _ f2 z2 a2 s2)
+    match (FoldSeg _ _ f1 z1 a1 s1) (FoldSeg _ _ f2 z2 a2 s2)
       | Just Refl <- matchFun f1 f2
       , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc s1 s2
       = Just Refl
 
-    match (Scan d1 f1 z1 a1) (Scan d2 f2 z2 a2)
+    match (Scan _ d1 f1 z1 a1) (Scan _ d2 f2 z2 a2)
       | d1 == d2
       , Just Refl <- matchFun f1 f2
       , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Scan' d1 f1 z1 a1) (Scan' d2 f2 z2 a2)
+    match (Scan' _ d1 f1 z1 a1) (Scan' _ d2 f2 z2 a2)
       | d1 == d2
       , Just Refl <- matchFun f1 f2
       , Just Refl <- matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Permute f1 d1 p1 a1) (Permute f2 d2 p2 a2)
+    match (Permute _ f1 d1 p1 a1) (Permute _ f2 d2 p2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc d1 d2
       , Just Refl <- matchFun p1 p2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Backpermute _ sh1 ix1 a1) (Backpermute _ sh2 ix2 a2)
+    match (Backpermute _ _ sh1 ix1 a1) (Backpermute _ _ sh2 ix2 a2)
       | Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun ix1 ix2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Stencil s1 _ f1 b1 a1) (Stencil _ _ f2 b2 a2)
+    match (Stencil _ s1 _ f1 b1 a1) (Stencil _ _ _ f2 b2 a2)
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       , matchBoundary (stencilEltR s1) b1 b2
       = Just Refl
 
-    match (Stencil2 s1 s2 _ f1 b1  a1  b2  a2) (Stencil2 _ _ _ f2 b1' a1' b2' a2')
+    match (Stencil2 _ s1 s2 _ f1 b1  a1  b2  a2) (Stencil2 _ _ _ _ f2 b1' a1' b2' a2')
       | Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a1'
       , Just Refl <- matchAcc a2 a2'
