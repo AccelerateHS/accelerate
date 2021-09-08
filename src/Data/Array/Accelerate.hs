@@ -394,7 +394,7 @@ module Data.Array.Accelerate (
   -- TODO: What would be a logical place to expose these in this huge list of
   --       functions and type classes?
   HasAnnotations(),
-  alwaysInline, unRollIters,
+  alwaysInline, unrollIters,
 
   -- ---------------------------------------------------------------------------
   -- * Foreign Function Interface (FFI)

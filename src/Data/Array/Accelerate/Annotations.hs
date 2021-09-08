@@ -107,7 +107,7 @@ module Data.Array.Accelerate.Annotations
     , withOptimizations
     , extractAnn
     , alwaysInline
-    , unRollIters
+    , unrollIters
     , FieldAnn(..)
     , mkAnn
     , mkDummyAnn
@@ -187,8 +187,8 @@ alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
 --
 -- TODO: Should we add validation for these kinds of functions? (i.e. reject
 --       negative values for @n@)
-unRollIters :: HasAnnotations a => Int -> a -> a
-unRollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
+unrollIters :: HasAnnotations a => Int -> a -> a
+unrollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
 
 
 -- * Internal types and functions
