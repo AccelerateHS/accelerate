@@ -302,9 +302,9 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
       ident <- mkNode acc' (Just v)
       return $ PDoc (pretty v) [Vertex ident Nothing]
     ppA (Delayed _ _ sh f _)
-      | Shape a    <- sh                   -- identical shape
-      , Just b     <- isIdentityIndexing f -- function is `\ix -> b ! ix`
-      , Just Refl  <- matchVar a b         -- function thus is `\ix -> a ! ix`
+      | Shape _ a <- sh                   -- identical shape
+      , Just b    <- isIdentityIndexing f -- function is `\ix -> b ! ix`
+      , Just Refl <- matchVar a b         -- function thus is `\ix -> a ! ix`
       = ppA $ Manifest $ Avar mkDummyAnn a
     ppA (Delayed _ _ sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
@@ -517,30 +517,29 @@ fvOpenExp env aenv = fv
     fvF = fvOpenFun env aenv
 
     fv :: OpenExp env aenv e -> [Vertex]
-    fv (Shape acc)              = if cfgIncludeShape then fvAvar aenv acc else []
-    fv (Index acc i)            = concat [ fvAvar aenv acc, fv i ]
-    fv (LinearIndex acc i)      = concat [ fvAvar aenv acc, fv i ]
+    fv (Shape _ acc)            = if cfgIncludeShape then fvAvar aenv acc else []
+    fv (Index _ acc i)          = concat [ fvAvar aenv acc, fv i ]
+    fv (LinearIndex _ acc i)    = concat [ fvAvar aenv acc, fv i ]
     --
     fv (Let _ lhs e1 e2)        = concat [ fv e1, fvOpenExp env' aenv e2 ]
       where
-        (env', _) = prettyELhs False env lhs
+        (env', _)               = prettyELhs False env lhs
     fv Evar{}                   = []
     fv Undef{}                  = []
     fv Const{}                  = []
     fv PrimConst{}              = []
-    fv (PrimApp _ x)            = fv x
+    fv (PrimApp _ _ x)          = fv x
     fv (Pair _ e1 e2)           = concat [ fv e1, fv e2]
     fv (Nil _)                  = []
-    fv (VecPack   _ e)          = fv e
-    fv (VecUnpack _ e)          = fv e
-    fv (IndexSlice _ slix sh)   = concat [ fv slix, fv sh ]
-    fv (IndexFull _ slix sh)    = concat [ fv slix, fv sh ]
-    fv (ToIndex _ sh ix)        = concat [ fv sh, fv ix ]
-    fv (FromIndex _ sh ix)      = concat [ fv sh, fv ix ]
-    fv (ShapeSize _ sh)         = fv sh
+    fv (VecPack   _ _ e)        = fv e
+    fv (VecUnpack _ _ e)        = fv e
+    fv (IndexSlice _ _ slix sh) = concat [ fv slix, fv sh ]
+    fv (IndexFull _ _ slix sh)  = concat [ fv slix, fv sh ]
+    fv (ToIndex _ _ sh ix)      = concat [ fv sh, fv ix ]
+    fv (FromIndex _ _ sh ix)    = concat [ fv sh, fv ix ]
+    fv (ShapeSize _ _ sh)       = fv sh
     fv Foreign{}                = []
-    fv (Case e rhs def)         = concat [ fv e, concat [ fv c | (_,c) <- rhs ], maybe [] fv def ]
-    fv (Cond p t e)             = concat [ fv p, fv t, fv e ]
-    fv (While p f x)            = concat [ fvF p, fvF f, fv x ]
-    fv (Coerce _ _ e)           = fv e
-
+    fv (Case _ e rhs def)       = concat [ fv e, concat [ fv c | (_,c) <- rhs ], maybe [] fv def ]
+    fv (Cond _ p t e)           = concat [ fv p, fv t, fv e ]
+    fv (While _ p f x)          = concat [ fvF p, fvF f, fv x ]
+    fv (Coerce _ _ _ e)         = fv e

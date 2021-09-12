@@ -541,7 +541,7 @@ type ExpVars env   = Vars ScalarType env
 --        to the final converted AST?
 expVars :: ExpVars env t -> OpenExp env aenv t
 expVars TupRunit         = Nil mkDummyAnn
-expVars (TupRsingle var) = Evar var
+expVars (TupRsingle var) = Evar mkDummyAnn var
 expVars (TupRpair v1 v2) = Pair mkDummyAnn (expVars v1) (expVars v2)
 
 
@@ -553,8 +553,6 @@ expVars (TupRpair v1 v2) = Pair mkDummyAnn (expVars v1) (expVars v2)
 -- surface types).
 --
 data OpenExp env aenv t where
--- TODO: Like in the smart AST, add missing annotations to the constructors here
-
   -- Local binding of a scalar expression
   Let           :: Ann
                 -> ELeftHandSide bnd_t env env'
@@ -563,12 +561,14 @@ data OpenExp env aenv t where
                 -> OpenExp env  aenv body_t
 
   -- Variable index, ranging only over tuples or scalars
-  Evar          :: ExpVar env t
+  Evar          :: Ann
+                -> ExpVar env t
                 -> OpenExp env aenv t
 
   -- Apply a backend-specific foreign function
   Foreign       :: Foreign asm
-                => TypeR y
+                => Ann
+                -> TypeR y
                 -> asm    (x -> y)    -- foreign function
                 -> Fun () (x -> y)    -- alternate implementation (for other backends)
                 -> OpenExp env aenv x
@@ -585,51 +585,59 @@ data OpenExp env aenv t where
 
   -- SIMD vectors
   VecPack       :: KnownNat n
-                => VecR n s tup
+                => Ann -> VecR n s tup
                 -> OpenExp env aenv tup
                 -> OpenExp env aenv (Vec n s)
 
   VecUnpack     :: KnownNat n
-                => VecR n s tup
+                => Ann
+                -> VecR n s tup
                 -> OpenExp env aenv (Vec n s)
                 -> OpenExp env aenv tup
 
   -- Array indices & shapes
-  IndexSlice    :: SliceIndex slix sl co sh
+  IndexSlice    :: Ann
+                -> SliceIndex slix sl co sh
                 -> OpenExp env aenv slix
                 -> OpenExp env aenv sh
                 -> OpenExp env aenv sl
 
-  IndexFull     :: SliceIndex slix sl co sh
+  IndexFull     :: Ann
+                -> SliceIndex slix sl co sh
                 -> OpenExp env aenv slix
                 -> OpenExp env aenv sl
                 -> OpenExp env aenv sh
 
   -- Shape and index conversion
-  ToIndex       :: ShapeR sh
+  ToIndex       :: Ann
+                -> ShapeR sh
                 -> OpenExp env aenv sh           -- shape of the array
                 -> OpenExp env aenv sh           -- index into the array
                 -> OpenExp env aenv Int
 
-  FromIndex     :: ShapeR sh
+  FromIndex     :: Ann
+                -> ShapeR sh
                 -> OpenExp env aenv sh           -- shape of the array
                 -> OpenExp env aenv Int          -- index into linear representation
                 -> OpenExp env aenv sh
 
   -- Case statement
-  Case          :: OpenExp env aenv TAG
+  Case          :: Ann
+                -> OpenExp env aenv TAG
                 -> [(TAG, OpenExp env aenv b)]      -- list of equations
                 -> Maybe (OpenExp env aenv b)       -- default case
                 -> OpenExp env aenv b
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
-  Cond          :: OpenExp env aenv PrimBool
+  Cond          :: Ann
+                -> OpenExp env aenv PrimBool
                 -> OpenExp env aenv t
                 -> OpenExp env aenv t
                 -> OpenExp env aenv t
 
   -- Value recursion
-  While         :: OpenFun env aenv (a -> PrimBool) -- continue while true
+  While         :: Ann
+                -> OpenFun env aenv (a -> PrimBool) -- continue while true
                 -> OpenFun env aenv (a -> a)        -- function to iterate
                 -> OpenExp env aenv a               -- initial value
                 -> OpenExp env aenv a
@@ -640,42 +648,50 @@ data OpenExp env aenv t where
                 -> t
                 -> OpenExp env aenv t
 
-  PrimConst     :: PrimConst t
+  PrimConst     :: Ann
+                -> PrimConst t
                 -> OpenExp env aenv t
 
   -- Primitive scalar operations
-  PrimApp       :: PrimFun (a -> r)
+  PrimApp       :: Ann
+                -> PrimFun (a -> r)
                 -> OpenExp env aenv a
                 -> OpenExp env aenv r
 
   -- Project a single scalar from an array.
   -- The array expression can not contain any free scalar variables.
-  Index         :: ArrayVar    aenv (Array dim t)
+  Index         :: Ann
+                -> ArrayVar    aenv (Array dim t)
                 -> OpenExp env aenv dim
                 -> OpenExp env aenv t
 
-  LinearIndex   :: ArrayVar    aenv (Array dim t)
+  LinearIndex   :: Ann
+                -> ArrayVar    aenv (Array dim t)
                 -> OpenExp env aenv Int
                 -> OpenExp env aenv t
 
   -- Array shape.
   -- The array expression can not contain any free scalar variables.
-  Shape         :: ArrayVar    aenv (Array dim e)
+  Shape         :: Ann
+                -> ArrayVar    aenv (Array dim e)
                 -> OpenExp env aenv dim
 
   -- Number of elements of an array given its shape
-  ShapeSize     :: ShapeR dim
+  ShapeSize     :: Ann
+                -> ShapeR dim
                 -> OpenExp env aenv dim
                 -> OpenExp env aenv Int
 
   -- Unsafe operations (may fail or result in undefined behaviour)
   -- An unspecified bit pattern
-  Undef         :: ScalarType t
+  Undef         :: Ann
+                -> ScalarType t
                 -> OpenExp env aenv t
 
   -- Reinterpret the bits of a value as a different type
   Coerce        :: BitSizeEq a b
-                => ScalarType a
+                => Ann
+                -> ScalarType a
                 -> ScalarType b
                 -> OpenExp env aenv a
                 -> OpenExp env aenv b
@@ -844,31 +860,31 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
 expType :: HasCallStack => OpenExp aenv env t -> TypeR t
 expType = \case
   Let _ _ _ body               -> expType body
-  Evar (Var tR _)              -> TupRsingle tR
-  Foreign tR _ _ _             -> tR
+  Evar _ (Var tR _)            -> TupRsingle tR
+  Foreign _ tR _ _ _           -> tR
   Pair _ e1 e2                 -> TupRpair (expType e1) (expType e2)
   Nil _                        -> TupRunit
-  VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
-  VecUnpack vecR _             -> vecRtuple vecR
-  IndexSlice si _ _            -> shapeType $ sliceShapeR si
-  IndexFull  si _ _            -> shapeType $ sliceDomainR si
+  VecPack   _ vecR _           -> TupRsingle $ VectorScalarType $ vecRvector vecR
+  VecUnpack _ vecR _           -> vecRtuple vecR
+  IndexSlice _ si _ _          -> shapeType $ sliceShapeR si
+  IndexFull  _ si _ _          -> shapeType $ sliceDomainR si
   ToIndex{}                    -> TupRsingle scalarTypeInt
-  FromIndex shr _ _            -> shapeType shr
-  Case _ ((_,e):_) _           -> expType e
-  Case _ [] (Just e)           -> expType e
+  FromIndex _ shr _ _          -> shapeType shr
+  Case _ _ ((_,e):_) _         -> expType e
+  Case _ _ [] (Just e)         -> expType e
   Case{}                       -> internalError "empty case encountered"
-  Cond _ e _                   -> expType e
-  While _ (Lam lhs _) _        -> lhsToTupR lhs
+  Cond _ _ e _                 -> expType e
+  While _ _ (Lam lhs _) _      -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
   Const _ tR _                 -> TupRsingle tR
-  PrimConst c                  -> TupRsingle $ SingleScalarType $ primConstType c
-  PrimApp f _                  -> snd $ primFunType f
-  Index (Var repr _) _         -> arrayRtype repr
-  LinearIndex (Var repr _) _   -> arrayRtype repr
-  Shape (Var repr _)           -> shapeType $ arrayRshape repr
+  PrimConst _ c                -> TupRsingle $ SingleScalarType $ primConstType c
+  PrimApp _ f _                -> snd $ primFunType f
+  Index _ (Var repr _) _       -> arrayRtype repr
+  LinearIndex _ (Var repr _) _ -> arrayRtype repr
+  Shape _ (Var repr _)         -> shapeType $ arrayRshape repr
   ShapeSize{}                  -> TupRsingle scalarTypeInt
-  Undef tR                     -> TupRsingle tR
-  Coerce _ tR _                -> TupRsingle tR
+  Undef _ tR                   -> TupRsingle tR
+  Coerce _ _ tR _              -> TupRsingle tR
 
 primConstType :: PrimConst a -> SingleType a
 primConstType = \case
@@ -1015,12 +1031,29 @@ instance FieldAnn (PreOpenAcc acc aenv t) where
   _ann k (Stencil2 ann s1 s2 tp f b1 a1 b2 a2) = k (Just ann) <&> \(Just ann') -> Stencil2 ann' s1 s2 tp f b1 a1 b2 a2
 
 instance FieldAnn (OpenExp env aenv t) where
-  _ann k (Let ann lhs bnd body) = k (Just ann) <&> \(Just ann') -> Let ann' lhs bnd body
-  _ann k (Pair ann e1 e2)       = k (Just ann) <&> \(Just ann') -> Pair ann' e1 e2
-  _ann k (Nil ann)              = k (Just ann) <&> \(Just ann') -> Nil ann'
-  _ann k (Const ann tp c)       = k (Just ann) <&> \(Just ann') -> Const ann' tp c
-  -- TODO: All other constructors as we add more annotations
-  _ann k pexp = pexp <$ k Nothing
+  _ann k (Let ann lhs bnd body)         = k (Just ann) <&> \(Just ann') -> Let ann' lhs bnd body
+  _ann k (Evar ann v)                   = k (Just ann) <&> \(Just ann') -> Evar ann' v
+  _ann k (Foreign ann tp asm f x)       = k (Just ann) <&> \(Just ann') -> Foreign ann' tp asm f x
+  _ann k (Const ann tp c)               = k (Just ann) <&> \(Just ann') -> Const ann' tp c
+  _ann k (Undef ann tp)                 = k (Just ann) <&> \(Just ann') -> Undef ann' tp
+  _ann k (Pair ann a b)                 = k (Just ann) <&> \(Just ann') -> Pair ann' a b
+  _ann k (Nil ann)                      = k (Just ann) <&> \(Just ann') -> Nil ann'
+  _ann k (VecPack   ann vecr e)         = k (Just ann) <&> \(Just ann') -> VecPack   ann' vecr e
+  _ann k (VecUnpack ann vecr e)         = k (Just ann) <&> \(Just ann') -> VecUnpack ann' vecr e
+  _ann k (IndexSlice ann slice slix sh) = k (Just ann) <&> \(Just ann') -> IndexSlice ann' slice slix sh
+  _ann k (IndexFull ann slice slix sl)  = k (Just ann) <&> \(Just ann') -> IndexFull ann' slice slix sl
+  _ann k (ToIndex ann shr sh ix)        = k (Just ann) <&> \(Just ann') -> ToIndex ann' shr sh ix
+  _ann k (FromIndex ann shr sh ix)      = k (Just ann) <&> \(Just ann') -> FromIndex ann' shr sh ix
+  _ann k (Case ann e rhs def)           = k (Just ann) <&> \(Just ann') -> Case ann' e rhs def
+  _ann k (Cond ann p e1 e2)             = k (Just ann) <&> \(Just ann') -> Cond ann' p e1 e2
+  _ann k (While ann p f x)              = k (Just ann) <&> \(Just ann') -> While ann' p f x
+  _ann k (PrimConst ann c)              = k (Just ann) <&> \(Just ann') -> PrimConst ann' c
+  _ann k (PrimApp ann f x)              = k (Just ann) <&> \(Just ann') -> PrimApp ann' f x
+  _ann k (Index ann a ix)               = k (Just ann) <&> \(Just ann') -> Index ann' a ix
+  _ann k (LinearIndex ann a ix)         = k (Just ann) <&> \(Just ann') -> LinearIndex ann' a ix
+  _ann k (Shape ann a)                  = k (Just ann) <&> \(Just ann') -> Shape ann' a
+  _ann k (ShapeSize ann shr sh)         = k (Just ann) <&> \(Just ann') -> ShapeSize ann' shr sh
+  _ann k (Coerce ann t1 t2 e)           = k (Just ann) <&> \(Just ann') -> Coerce ann' t1 t2 e
 
 
 -- Normal form data
@@ -1143,29 +1176,29 @@ rnfOpenExp topExp =
       rnfE = rnfOpenExp
   in
   case topExp of
-    Let ann lhs bnd body      -> rnfAnn ann `seq` rnfELeftHandSide lhs `seq` rnfE bnd `seq` rnfE body
-    Evar v                    -> rnfExpVar v
-    Foreign tp asm f x        -> rnfTypeR tp `seq` rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
-    Const ann tp c            -> rnfAnn ann `seq` c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
-    Undef tp                  -> rnfScalarType tp
-    Pair ann a b              -> rnfAnn ann `seq` rnfE a `seq` rnfE b
-    Nil ann                   -> rnfAnn ann
-    VecPack   vecr e          -> rnfVecR vecr `seq` rnfE e
-    VecUnpack vecr e          -> rnfVecR vecr `seq` rnfE e
-    IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
-    IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
-    ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
-    FromIndex shr sh ix       -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
-    Case e rhs def            -> rnfE e `seq` rnfList (\(t,c) -> t `seq` rnfE c) rhs `seq` rnfMaybe rnfE def
-    Cond p e1 e2              -> rnfE p `seq` rnfE e1 `seq` rnfE e2
-    While p f x               -> rnfF p `seq` rnfF f `seq` rnfE x
-    PrimConst c               -> rnfPrimConst c
-    PrimApp f x               -> rnfPrimFun f `seq` rnfE x
-    Index a ix                -> rnfArrayVar a `seq` rnfE ix
-    LinearIndex a ix          -> rnfArrayVar a `seq` rnfE ix
-    Shape a                   -> rnfArrayVar a
-    ShapeSize shr sh          -> rnfShapeR shr `seq` rnfE sh
-    Coerce t1 t2 e            -> rnfScalarType t1 `seq` rnfScalarType t2 `seq` rnfE e
+    Let ann lhs bnd body         -> rnfAnn ann `seq` rnfELeftHandSide lhs `seq` rnfE bnd `seq` rnfE body
+    Evar ann v                   -> rnfAnn ann `seq` rnfExpVar v
+    Foreign ann tp asm f x       -> rnfAnn ann `seq` rnfTypeR tp `seq` rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
+    Const ann tp c               -> rnfAnn ann `seq` c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
+    Undef ann tp                 -> rnfAnn ann `seq` rnfScalarType tp
+    Pair ann a b                 -> rnfAnn ann `seq` rnfE a `seq` rnfE b
+    Nil ann                      -> rnfAnn ann
+    VecPack   ann vecr e         -> rnfAnn ann `seq` rnfVecR vecr `seq` rnfE e
+    VecUnpack ann vecr e         -> rnfAnn ann `seq` rnfVecR vecr `seq` rnfE e
+    IndexSlice ann slice slix sh -> rnfAnn ann `seq` rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
+    IndexFull ann slice slix sl  -> rnfAnn ann `seq` rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
+    ToIndex ann shr sh ix        -> rnfAnn ann `seq` rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
+    FromIndex ann shr sh ix      -> rnfAnn ann `seq` rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
+    Case ann e rhs def           -> rnfAnn ann `seq` rnfE e `seq` rnfList (\(t,c) -> t `seq` rnfE c) rhs `seq` rnfMaybe rnfE def
+    Cond ann p e1 e2             -> rnfAnn ann `seq` rnfE p `seq` rnfE e1 `seq` rnfE e2
+    While ann p f x              -> rnfAnn ann `seq` rnfF p `seq` rnfF f `seq` rnfE x
+    PrimConst ann c              -> rnfAnn ann `seq` rnfPrimConst c
+    PrimApp ann f x              -> rnfAnn ann `seq` rnfPrimFun f `seq` rnfE x
+    Index ann a ix               -> rnfAnn ann `seq` rnfArrayVar a `seq` rnfE ix
+    LinearIndex ann a ix         -> rnfAnn ann `seq` rnfArrayVar a `seq` rnfE ix
+    Shape ann a                  -> rnfAnn ann `seq` rnfArrayVar a
+    ShapeSize ann shr sh         -> rnfAnn ann `seq` rnfShapeR shr `seq` rnfE sh
+    Coerce ann t1 t2 e           -> rnfAnn ann `seq` rnfScalarType t1 `seq` rnfScalarType t2 `seq` rnfE e
 
 rnfExpVar :: ExpVar env t -> ()
 rnfExpVar = rnfVar rnfScalarType
@@ -1363,29 +1396,29 @@ liftOpenExp pexp =
       liftF = liftOpenFun
   in
   case pexp of
-    Let ann lhs bnd body      -> [|| Let $$(liftAnn ann) $$(liftELeftHandSide lhs) $$(liftOpenExp bnd) $$(liftOpenExp body) ||]
-    Evar var                  -> [|| Evar $$(liftExpVar var) ||]
-    Foreign repr asm f x      -> [|| Foreign $$(liftTypeR repr) $$(liftForeign asm) $$(liftOpenFun f) $$(liftE x) ||]
-    Const ann tp c            -> [|| Const $$(liftAnn ann) $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]
-    Undef tp                  -> [|| Undef $$(liftScalarType tp) ||]
-    Pair ann a b              -> [|| Pair $$(liftAnn ann) $$(liftE a) $$(liftE b) ||]
-    Nil ann                   -> [|| Nil $$(liftAnn ann) ||]
-    VecPack   vecr e          -> [|| VecPack   $$(liftVecR vecr) $$(liftE e) ||]
-    VecUnpack vecr e          -> [|| VecUnpack $$(liftVecR vecr) $$(liftE e) ||]
-    IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
-    IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
-    ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
-    FromIndex shr sh ix       -> [|| FromIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
-    Case p rhs def            -> [|| Case $$(liftE p) $$(liftList (\(t,c) -> [|| (t, $$(liftE c)) ||]) rhs) $$(liftMaybe liftE def) ||]
-    Cond p t e                -> [|| Cond $$(liftE p) $$(liftE t) $$(liftE e) ||]
-    While p f x               -> [|| While $$(liftF p) $$(liftF f) $$(liftE x) ||]
-    PrimConst t               -> [|| PrimConst $$(liftPrimConst t) ||]
-    PrimApp f x               -> [|| PrimApp $$(liftPrimFun f) $$(liftE x) ||]
-    Index a ix                -> [|| Index $$(liftArrayVar a) $$(liftE ix) ||]
-    LinearIndex a ix          -> [|| LinearIndex $$(liftArrayVar a) $$(liftE ix) ||]
-    Shape a                   -> [|| Shape $$(liftArrayVar a) ||]
-    ShapeSize shr ix          -> [|| ShapeSize $$(liftShapeR shr) $$(liftE ix) ||]
-    Coerce t1 t2 e            -> [|| Coerce $$(liftScalarType t1) $$(liftScalarType t2) $$(liftE e) ||]
+    Let ann lhs bnd body         -> [|| Let $$(liftAnn ann) $$(liftELeftHandSide lhs) $$(liftOpenExp bnd) $$(liftOpenExp body) ||]
+    Evar ann var                 -> [|| Evar $$(liftAnn ann) $$(liftExpVar var) ||]
+    Foreign ann repr asm f x     -> [|| Foreign $$(liftAnn ann) $$(liftTypeR repr) $$(liftForeign asm) $$(liftOpenFun f) $$(liftE x) ||]
+    Const ann tp c               -> [|| Const $$(liftAnn ann) $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]
+    Undef ann tp                 -> [|| Undef $$(liftAnn ann) $$(liftScalarType tp) ||]
+    Pair ann a b                 -> [|| Pair $$(liftAnn ann) $$(liftE a) $$(liftE b) ||]
+    Nil ann                      -> [|| Nil $$(liftAnn ann) ||]
+    VecPack   ann vecr e         -> [|| VecPack   $$(liftAnn ann) $$(liftVecR vecr) $$(liftE e) ||]
+    VecUnpack ann vecr e         -> [|| VecUnpack $$(liftAnn ann) $$(liftVecR vecr) $$(liftE e) ||]
+    IndexSlice ann slice slix sh -> [|| IndexSlice $$(liftAnn ann) $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
+    IndexFull ann slice slix sl  -> [|| IndexFull $$(liftAnn ann) $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
+    ToIndex ann shr sh ix        -> [|| ToIndex $$(liftAnn ann) $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
+    FromIndex ann shr sh ix      -> [|| FromIndex $$(liftAnn ann) $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
+    Case ann p rhs def           -> [|| Case $$(liftAnn ann) $$(liftE p) $$(liftList (\(t,c) -> [|| (t, $$(liftE c)) ||]) rhs) $$(liftMaybe liftE def) ||]
+    Cond ann p t e               -> [|| Cond $$(liftAnn ann) $$(liftE p) $$(liftE t) $$(liftE e) ||]
+    While ann p f x              -> [|| While $$(liftAnn ann) $$(liftF p) $$(liftF f) $$(liftE x) ||]
+    PrimConst ann t              -> [|| PrimConst $$(liftAnn ann) $$(liftPrimConst t) ||]
+    PrimApp ann f x              -> [|| PrimApp $$(liftAnn ann) $$(liftPrimFun f) $$(liftE x) ||]
+    Index ann a ix               -> [|| Index $$(liftAnn ann) $$(liftArrayVar a) $$(liftE ix) ||]
+    LinearIndex ann a ix         -> [|| LinearIndex $$(liftAnn ann) $$(liftArrayVar a) $$(liftE ix) ||]
+    Shape ann a                  -> [|| Shape $$(liftAnn ann) $$(liftArrayVar a) ||]
+    ShapeSize ann shr ix         -> [|| ShapeSize $$(liftAnn ann) $$(liftShapeR shr) $$(liftE ix) ||]
+    Coerce ann t1 t2 e           -> [|| Coerce $$(liftAnn ann) $$(liftScalarType t1) $$(liftScalarType t2) $$(liftE e) ||]
 
 liftELeftHandSide :: ELeftHandSide t env env' -> CodeQ (ELeftHandSide t env env')
 liftELeftHandSide = liftLeftHandSide liftScalarType
@@ -1512,27 +1545,27 @@ formatPreAccOp = later $ \case
 -- TODO: Show annotations
 formatExpOp :: Format r (OpenExp aenv env t -> r)
 formatExpOp = later $ \case
-  Let{}           -> "Let"
-  Evar (Var _ ix) -> bformat ("Var x" % int) (idxToInt ix)
-  Const _ tp c    -> bformat ("Const " % string) (showElt (TupRsingle tp) c)
-  Undef{}         -> "Undef"
-  Foreign{}       -> "Foreign"
-  Pair{}          -> "Pair"
-  Nil{}           -> "Nil"
-  VecPack{}       -> "VecPack"
-  VecUnpack{}     -> "VecUnpack"
-  IndexSlice{}    -> "IndexSlice"
-  IndexFull{}     -> "IndexFull"
-  ToIndex{}       -> "ToIndex"
-  FromIndex{}     -> "FromIndex"
-  Case{}          -> "Case"
-  Cond{}          -> "Cond"
-  While{}         -> "While"
-  PrimConst{}     -> "PrimConst"
-  PrimApp{}       -> "PrimApp"
-  Index{}         -> "Index"
-  LinearIndex{}   -> "LinearIndex"
-  Shape{}         -> "Shape"
-  ShapeSize{}     -> "ShapeSize"
-  Coerce{}        -> "Coerce"
+  Let{}             -> "Let"
+  Evar _ (Var _ ix) -> bformat ("Var x" % int) (idxToInt ix)
+  Const _ tp c      -> bformat ("Const " % string) (showElt (TupRsingle tp) c)
+  Undef{}           -> "Undef"
+  Foreign{}         -> "Foreign"
+  Pair{}            -> "Pair"
+  Nil{}             -> "Nil"
+  VecPack{}         -> "VecPack"
+  VecUnpack{}       -> "VecUnpack"
+  IndexSlice{}      -> "IndexSlice"
+  IndexFull{}       -> "IndexFull"
+  ToIndex{}         -> "ToIndex"
+  FromIndex{}       -> "FromIndex"
+  Case{}            -> "Case"
+  Cond{}            -> "Cond"
+  While{}           -> "While"
+  PrimConst{}       -> "PrimConst"
+  PrimApp{}         -> "PrimApp"
+  Index{}           -> "Index"
+  LinearIndex{}     -> "LinearIndex"
+  Shape{}           -> "Shape"
+  ShapeSize{}       -> "ShapeSize"
+  Coerce{}          -> "Coerce"
 

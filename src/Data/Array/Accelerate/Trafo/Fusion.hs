@@ -145,13 +145,15 @@ delayed
 delayed config (embedOpenAcc config -> Embed env cc)
   | BaseEnv <- env
   = simplify cc & \case
-      Left (Done _ v)                                         -> avarsIn Manifest v
-      Right d       -> d & \case
-        Yield ann aR sh f                                     -> Delayed ann aR sh f (f `compose` fromIndex (arrayRshape aR) sh)
+      -- TODO: I'm pretty sure we don't need to do anything special and can just
+      --       throw away the annotation field here
+      Left (Done _ v)                                             -> avarsIn Manifest v
+      Right d                                                     -> d & \case
+        Yield ann aR sh f                                         -> Delayed ann aR sh f                              (f `compose` fromIndex ann (arrayRshape aR) sh)
         Step  ann aR sh p f v
-          | Just Refl <- matchOpenExp sh (arrayShape v)
-          , Just Refl <- isIdentity p                         -> Delayed ann aR sh (f `compose` indexArray v) (f `compose` linearIndex v)
-          | f'        <- f `compose` indexArray v `compose` p -> Delayed ann aR sh f' (f' `compose` fromIndex (arrayRshape aR) sh)
+          | Just Refl <- matchOpenExp sh (arrayShape ann v)
+          , Just Refl <- isIdentity p                             -> Delayed ann aR sh (f `compose` indexArray ann v) (f `compose` linearIndex ann v)
+          | f'        <- f `compose` indexArray ann v `compose` p -> Delayed ann aR sh f'                             (f' `compose` fromIndex ann (arrayRshape aR) sh)
   --
   | otherwise
   = manifest config (computeAcc (Embed env cc))
@@ -850,7 +852,7 @@ simplify = \case
   Yield ann aR (simplifyExp -> sh) (simplifyFun -> f)
     -> Right $ Yield ann aR sh f
   Step ann aR (simplifyExp -> sh) (simplifyFun -> p) (simplifyFun -> f) v
-    | Just Refl <- matchOpenExp sh (arrayShape v)
+    | Just Refl <- matchOpenExp sh (arrayShape ann v)
     , Just Refl <- isIdentity p
     , Just Refl <- isIdentity f
     -> Left  $ (Done ann (TupRsingle v))
@@ -867,8 +869,8 @@ done pacc
   | DeclareVars lhs _ value <- declareVars (arraysR pacc)
   = Embed (PushEnv BaseEnv lhs $ OpenAcc pacc) $ Done (extractAnn pacc) $ value weakenId
 
-doneZeroIdx :: ArrayR (Array sh e) -> Cunctation M (aenv, Array sh e) (Array sh e)
-doneZeroIdx aR = Done mkDummyAnn (TupRsingle (Var aR ZeroIdx))
+doneZeroIdx :: Ann -> ArrayR (Array sh e) -> Cunctation M (aenv, Array sh e) (Array sh e)
+doneZeroIdx ann aR = Done ann (TupRsingle (Var aR ZeroIdx))
 
 
 -- Recast a cunctation into a mapping from indices to elements
@@ -879,8 +881,8 @@ yield :: HasCallStack
 yield cc =
   case cc of
     Yield{}                            -> cc
-    Step ann tR sh p f v               -> Yield ann tR sh (f `compose` indexArray v `compose` p)
-    Done ann (TupRsingle v@(Var tR _)) -> Yield ann tR (arrayShape v) (indexArray v)
+    Step ann tR sh p f v               -> Yield ann tR sh (f `compose` indexArray ann v `compose` p)
+    Done ann (TupRsingle v@(Var tR _)) -> Yield ann tR (arrayShape ann v) (indexArray ann v)
 
 -- Recast a cunctation into a delayed representation
 --
@@ -896,7 +898,7 @@ delaying cc =
       | TupRsingle v  <- u
       , Var aR _      <- v
       , ArrayR shR tR <- aR
-     -> Step ann aR (arrayShape v) (identity (shapeType shR)) (identity tR) v
+     -> Step ann aR (arrayShape ann v) (identity (shapeType shR)) (identity tR) v
 
 -- Get the shape of a delayed array
 --
@@ -979,7 +981,7 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
         -> bindA env (OpenAcc (Generate ann repr sh f))
 
       Step ann repr sh p f v@(Var _ ix)
-        | Just Refl <- matchOpenExp sh (arrayShape v)
+        | Just Refl <- matchOpenExp sh (arrayShape ann v)
         , Just Refl <- isIdentity p
         -> case ix of
              ZeroIdx
@@ -1042,7 +1044,7 @@ compute cc = simplify cc & \case
   Right d -> d & \case
     Yield ann aR sh f             -> Generate ann aR sh f
     Step ann (ArrayR shR tR) sh p f v
-      | Just Refl <- matchOpenExp sh (arrayShape v)
+      | Just Refl <- matchOpenExp sh (arrayShape ann v)
       , Just Refl <- isIdentity p -> Map ann tR f (avarIn OpenAcc v)
       | Just Refl <- isIdentity f -> Backpermute ann shR sh p (avarIn OpenAcc v)
       | otherwise                 -> Transform ann (ArrayR shR tR) sh p f (avarIn OpenAcc v)
@@ -1100,7 +1102,7 @@ unzipD ann tR f (Embed env cc@(Done _ v))
   , Just vars        <- extractExpVars a
   , ArrayR shR _     <- arrayR cc
   , f'               <- Lam lhs $ Body $ expVars vars
-  = Just $ Embed (env `pushArrayEnv` OpenAcc (Map ann tR f' $ avarsIn OpenAcc v)) $ doneZeroIdx $ ArrayR shR tR
+  = Just $ Embed (env `pushArrayEnv` OpenAcc (Map ann tR f' $ avarsIn OpenAcc v)) $ doneZeroIdx ann $ ArrayR shR tR
 unzipD _ _ _ _
   = Nothing
 
@@ -1167,7 +1169,7 @@ replicateD
     -> Cunctation D aenv (Array sh e)
 replicateD ann sliceIndex slix cc
   = Stats.ruleFired "replicateD"
-  $ backpermuteD ann (sliceDomainR sliceIndex) (IndexFull sliceIndex slix (shape cc)) (extend sliceIndex slix) cc
+  $ backpermuteD ann (sliceDomainR sliceIndex) (IndexFull ann sliceIndex slix (shape cc)) (extend ann sliceIndex slix) cc
 
 
 -- Dimensional slice as a backwards permutation
@@ -1181,7 +1183,7 @@ sliceD
     -> Cunctation D aenv (Array sl e)
 sliceD ann sliceIndex slix cc
   = Stats.ruleFired "sliceD"
-  $ backpermuteD ann (sliceShapeR sliceIndex) (IndexSlice sliceIndex slix (shape cc)) (restrict sliceIndex slix) cc
+  $ backpermuteD ann (sliceShapeR sliceIndex) (IndexSlice ann sliceIndex slix (shape cc)) (restrict ann sliceIndex slix) cc
 
 
 -- Reshape an array
@@ -1205,11 +1207,11 @@ reshapeD
     -> Embed OpenAcc aenv (Array sl e)
 reshapeD ann slr (Embed env cc) (sinkA env -> sl)
   | Done _ v <- cc
-  = Embed (env `pushArrayEnv` OpenAcc (Reshape ann slr sl (avarsIn OpenAcc v))) $ doneZeroIdx repr
+  = Embed (env `pushArrayEnv` OpenAcc (Reshape ann slr sl (avarsIn OpenAcc v))) $ doneZeroIdx ann repr
 
   | otherwise
   = Stats.ruleFired "reshapeD"
-  $ Embed env (backpermuteD ann slr sl (reindex (arrayRshape $ arrayR cc) (shape cc) slr sl) cc)
+  $ Embed env (backpermuteD ann slr sl (reindex ann (arrayRshape $ arrayR cc) (shape cc) slr sl) cc)
 
   where
     ArrayR _ tR = arrayR cc
@@ -1236,7 +1238,7 @@ zipWithD a1 tR f cc1 cc0
   , Just Refl                           <- matchVar v1 v0
   , Just Refl                           <- matchOpenFun p1 p0
   = Stats.ruleFired "zipWithD/step"
-  $ Step (a1 <> a2 <> a3) (ArrayR shR tR) (intersect shR sh1 sh0) p0 (combine f f1 f0) v0
+  $ Step (a1 <> a2 <> a3) (ArrayR shR tR) (intersect (a1 <> a2 <> a3) shR sh1 sh0) p0 (combine f f1 f0) v0
 
   -- Otherwise transform both delayed terms into (index -> value) mappings and
   -- combine the two indexing functions that way.
@@ -1244,7 +1246,7 @@ zipWithD a1 tR f cc1 cc0
   | Yield a2 (ArrayR shR _) sh1 f1 <- yield cc1
   , Yield a3 _              sh0 f0 <- yield cc0
   = Stats.ruleFired "zipWithD"
-  $ Yield (a1 <> a2 <> a3) (ArrayR shR tR) (intersect shR sh1 sh0) (combine f f1 f0)
+  $ Yield (a1 <> a2 <> a3) (ArrayR shR tR) (intersect (a1 <> a2 <> a3) shR sh1 sh0) (combine f f1 f0)
 
   | otherwise
   = error "work is stressing me out, I should take a break"
@@ -1465,9 +1467,8 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
     -- extra type variables, and ensures we don't do extra work manipulating the
     -- body when not necessary (which can lead to a complexity blowup).
     --
-    -- FIXME: We throw away this @_ann@ from the lhs and also the annotations
-    --        from the cunctations. Should we somehow be stuffing them into
-    --        @cc0'@?
+    -- FIXME: Should we somehow be stuffing `ann` into @cc0'@? (initially it
+    --        wasn't used at all, now use it for array shapes and indexing)
     --
     eliminate
         :: forall r aenv aenv' sh e brrs. HasCallStack
@@ -1476,10 +1477,10 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         -> Cunctation r aenv' (Array sh e)
         -> OpenAcc (aenv', Array sh e) brrs
         -> Embed OpenAcc aenv brrs
-    eliminate _ann env1 cc1 body
+    eliminate ann env1 cc1 body
       | Done _ v1                <- cc1
-      , TupRsingle v1'@(Var r _) <- v1  = elim r (arrayShape v1') (indexArray v1')
-      | Step _  r sh1 p1 f1 v1   <- cc1 = elim r sh1 (f1 `compose` indexArray v1 `compose` p1)
+      , TupRsingle v1'@(Var r _) <- v1  = elim r (arrayShape ann v1') (indexArray ann v1')
+      | Step _  r sh1 p1 f1 v1   <- cc1 = elim r sh1 (f1 `compose` indexArray ann v1 `compose` p1)
       | Yield _ r sh1 f1         <- cc1 = elim r sh1 f1
       where
         bnd :: PreOpenAcc OpenAcc aenv' (Array sh e)
@@ -1513,52 +1514,52 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
              -> OpenExp env aenv t
     replaceE sh' f' avar@(Var (ArrayR shR _) _) exp =
       case exp of
-        Let ann lhs x y                 -> let k = weakenWithLHS lhs
-                                           in  Let ann lhs (cvtE x) (replaceE (weakenE k sh') (weakenE k f') avar y)
-        Evar var                        -> Evar var
-        Foreign tR ff f e               -> Foreign tR ff f (cvtE e)
-        Const ann tR c                  -> Const ann tR c
-        Undef tR                        -> Undef tR
-        Nil ann                         -> Nil ann
-        Pair ann e1 e2                  -> Pair ann (cvtE e1) (cvtE e2)
-        VecPack vR e                    -> VecPack vR (cvtE e)
-        VecUnpack vR e                  -> VecUnpack vR (cvtE e)
-        IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
-        IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
-        ToIndex shR' sh ix              -> ToIndex shR' (cvtE sh) (cvtE ix)
-        FromIndex shR' sh i             -> FromIndex shR' (cvtE sh) (cvtE i)
-        Case e rhs def                  -> Case (cvtE e) (over (mapped . _2) cvtE rhs) (fmap cvtE def)
-        Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
-        PrimConst c                     -> PrimConst c
-        PrimApp g x                     -> PrimApp g (cvtE x)
-        ShapeSize shR' sh               -> ShapeSize shR' (cvtE sh)
-        While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
-        Coerce t1 t2 e                  -> Coerce t1 t2 (cvtE e)
+        Let ann lhs x y                  -> let k = weakenWithLHS lhs
+                                            in  Let ann lhs (cvtE x) (replaceE (weakenE k sh') (weakenE k f') avar y)
+        Evar ann var                     -> Evar ann var
+        Foreign ann tR ff f e            -> Foreign ann tR ff f (cvtE e)
+        Const ann tR c                   -> Const ann tR c
+        Undef ann tR                     -> Undef ann tR
+        Nil ann                          -> Nil ann
+        Pair ann e1 e2                   -> Pair ann (cvtE e1) (cvtE e2)
+        VecPack ann vR e                 -> VecPack ann vR (cvtE e)
+        VecUnpack ann vR e               -> VecUnpack ann vR (cvtE e)
+        IndexSlice ann x ix sh           -> IndexSlice ann x (cvtE ix) (cvtE sh)
+        IndexFull ann x ix sl            -> IndexFull ann x (cvtE ix) (cvtE sl)
+        ToIndex ann shR' sh ix           -> ToIndex ann shR' (cvtE sh) (cvtE ix)
+        FromIndex ann shR' sh i          -> FromIndex ann shR' (cvtE sh) (cvtE i)
+        Case ann e rhs def               -> Case ann (cvtE e) (over (mapped . _2) cvtE rhs) (fmap cvtE def)
+        Cond ann p t e                   -> Cond ann (cvtE p) (cvtE t) (cvtE e)
+        PrimConst ann c                  -> PrimConst ann c
+        PrimApp ann g x                  -> PrimApp ann g (cvtE x)
+        ShapeSize ann shR' sh            -> ShapeSize ann shR' (cvtE sh)
+        While ann p f x                  -> While ann (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
+        Coerce ann t1 t2 e               -> Coerce ann t1 t2 (cvtE e)
 
-        Shape a
-          | Just Refl <- matchVar a avar -> Stats.substitution "replaceE/shape" sh'
+        Shape ann a
+          | Just Refl <- matchVar a avar -> Stats.substitution "replaceE/shape" $ modifyAnn (<> ann) sh'
           | otherwise                    -> exp
 
         -- TODO: Propagate the proper annotations for these constructors (and
         --       likely others) once we add them
-        Index a sh
+        Index ann a sh
           | Just Refl        <- matchVar a avar
-          , Lam lhs (Body b) <- f'      -> Stats.substitution "replaceE/!" . cvtE $ Let mkDummyAnn lhs sh b
-          | otherwise                   -> Index a (cvtE sh)
+          , Lam lhs (Body b) <- f'       -> Stats.substitution "replaceE/!" . cvtE $ Let ann lhs sh b
+          | otherwise                    -> Index ann a (cvtE sh)
 
-        LinearIndex a i
+        LinearIndex ann a i
           | Just Refl        <- matchVar a avar
           , Lam lhs (Body b) <- f'
-                                        -> Stats.substitution "replaceE/!!" . cvtE
-                                         $ Let mkDummyAnn
-                                               lhs
-                                               (Let mkDummyAnn
-                                                    (LeftHandSideSingle scalarTypeInt) i
-                                                    $ FromIndex shR (weakenE (weakenSucc' weakenId) sh')
-                                                    $ Evar
-                                                    $ Var scalarTypeInt ZeroIdx)
-                                               b
-          | otherwise                   -> LinearIndex a (cvtE i)
+                                         -> Stats.substitution "replaceE/!!" . cvtE
+                                          $ Let ann
+                                                lhs
+                                                (Let ann
+                                                     (LeftHandSideSingle scalarTypeInt) i
+                                                     $ FromIndex ann shR (weakenE (weakenSucc' weakenId) sh')
+                                                     $ Evar ann
+                                                     $ Var scalarTypeInt ZeroIdx)
+                                                b
+          | otherwise                    -> LinearIndex ann a (cvtE i)
 
       where
         cvtE :: OpenExp env aenv s -> OpenExp env aenv s
@@ -1728,85 +1729,84 @@ identity t
   | DeclareVars lhs _ value <- declareVars t
   = Lam lhs $ Body $ expVars $ value weakenId
 
-toIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
-toIndex shR sh
+toIndex :: Ann -> ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
+toIndex ann shR sh
   | DeclareVars lhs k value <- declareVars $ shapeType shR
-  = Lam lhs $ Body $ ToIndex shR (weakenE k sh) $ expVars $ value weakenId
+  = Lam lhs $ Body $ ToIndex ann shR (weakenE k sh) $ expVars $ value weakenId
 
-fromIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
-fromIndex shR sh
+fromIndex :: Ann -> ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
+fromIndex ann shR sh
   = Lam (LeftHandSideSingle scalarTypeInt)
   $ Body
-  $ FromIndex shR (weakenE (weakenSucc' weakenId) sh)
-  $ Evar
+  $ FromIndex ann shR (weakenE (weakenSucc' weakenId) sh)
+  $ Evar ann
   $ Var scalarTypeInt ZeroIdx
 
-intersect :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
-intersect = mkShapeBinary f
+intersect :: Ann -> ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
+intersect ann = mkShapeBinary f
   where
-    f a b = PrimApp (PrimMin singleType) $ Pair mkDummyAnn a b
+    f :: OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int
+    f a b = PrimApp ann (PrimMin singleType) $ Pair ann a b
 
 -- union :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 -- union = mkShapeBinary f
 --   where
 --     f a b = PrimApp (PrimMax singleType) $ Pair a b
 
--- TODO: Since the annotations here are likely not going to be important, we're
---       just using 'mkDummyAnn' everywhere for now. For correctness sake we
---       should just extract the annotations from both expressions and mappend
---       them.
+-- TODO: The annotation usage here may be incorrect
 mkShapeBinary
     :: (forall env'. OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int)
     -> ShapeR sh
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
-mkShapeBinary _ ShapeRz (Nil a1) (Nil a2) = Nil (a1 <> a2)
--- This pattern shouldn't be matched, but it could happen when we get malformed shapes
-mkShapeBinary _ ShapeRz _ _ = Nil mkDummyAnn
+mkShapeBinary _ ShapeRz a b = Nil (extractAnn a <> extractAnn b)
 mkShapeBinary f (ShapeRsnoc shR) (Pair a1 as a) (Pair a2 bs b) = Pair (a1 <> a2) (mkShapeBinary f shR as bs) (f a b)
-mkShapeBinary f shR (Let _ lhs bnd a) b = Let mkDummyAnn lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
-mkShapeBinary f shR a (Let _ lhs bnd b) = Let mkDummyAnn lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b
-mkShapeBinary f shR a b@Pair{} -- `a` is not Pair
+mkShapeBinary f shR (Let ann lhs bnd a) b = Let (ann <> extractAnn b) lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
+mkShapeBinary f shR a (Let ann lhs bnd b) = Let (extractAnn a <> ann) lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b
+mkShapeBinary f shR a b@(Pair ann _ _) -- `a` is not Pair
   | DeclareVars lhs k value <- declareVars $ shapeType shR
-  = Let mkDummyAnn lhs a $ mkShapeBinary f shR (expVars $ value weakenId) (weakenE k b)
+  = Let (extractAnn a <> ann) lhs a $ mkShapeBinary f shR (expVars $ value weakenId) (weakenE k b)
 mkShapeBinary f shR a b -- `b` is not a Pair
   | DeclareVars lhs k value <- declareVars $ shapeType shR
-  = Let mkDummyAnn lhs b $ mkShapeBinary f shR (weakenE k a) (expVars $ value weakenId)
+  = Let (extractAnn a <> extractAnn b) lhs b $ mkShapeBinary f shR (weakenE k a) (expVars $ value weakenId)
 
-reindex :: ShapeR sh'
+reindex :: Ann
+        -> ShapeR sh'
         -> OpenExp env aenv sh'
         -> ShapeR sh
         -> OpenExp env aenv sh
         -> OpenFun env aenv (sh -> sh')
-reindex shR' sh' shR sh
+reindex ann shR' sh' shR sh
   | Just Refl <- matchOpenExp sh sh' = identity (shapeType shR')
-  | otherwise                        = fromIndex shR' sh' `compose` toIndex shR sh
+  | otherwise                        = fromIndex ann shR' sh' `compose` toIndex ann shR sh
 
-extend :: SliceIndex slix sl co sh
+extend :: Ann
+       -> SliceIndex slix sl co sh
        -> Exp aenv slix
        -> Fun aenv (sh -> sl)
-extend sliceIndex slix
+extend ann sliceIndex slix
   | DeclareVars lhs k value <- declareVars $ shapeType $ sliceDomainR sliceIndex
-  = Lam lhs $ Body $ IndexSlice sliceIndex (weakenE k slix) $ expVars $ value weakenId
+  = Lam lhs $ Body $ IndexSlice ann sliceIndex (weakenE k slix) $ expVars $ value weakenId
 
-restrict :: SliceIndex slix sl co sh
+restrict :: Ann
+         -> SliceIndex slix sl co sh
          -> Exp aenv slix
          -> Fun aenv (sl -> sh)
-restrict sliceIndex slix
+restrict ann sliceIndex slix
   | DeclareVars lhs k value <- declareVars $ shapeType $ sliceShapeR sliceIndex
-  = Lam lhs $ Body $ IndexFull sliceIndex (weakenE k slix) $ expVars $ value weakenId
+  = Lam lhs $ Body $ IndexFull ann sliceIndex (weakenE k slix) $ expVars $ value weakenId
 
-arrayShape :: ArrayVar aenv (Array sh e) -> Exp aenv sh
-arrayShape = simplifyExp . Shape
+arrayShape :: Ann -> ArrayVar aenv (Array sh e) -> Exp aenv sh
+arrayShape ann = simplifyExp . Shape ann
 
-indexArray :: ArrayVar aenv (Array sh e) -> Fun aenv (sh -> e)
-indexArray v@(Var (ArrayR shR _) _)
+indexArray :: Ann -> ArrayVar aenv (Array sh e) -> Fun aenv (sh -> e)
+indexArray ann v@(Var (ArrayR shR _) _)
   | DeclareVars lhs _ value <- declareVars $ shapeType shR
-  = Lam lhs $ Body $ Index v $ expVars $ value weakenId
+  = Lam lhs $ Body $ Index ann v $ expVars $ value weakenId
 
-linearIndex :: ArrayVar aenv (Array sh e) -> Fun aenv (Int -> e)
-linearIndex v = Lam (LeftHandSideSingle scalarTypeInt) $ Body $ LinearIndex v $ Evar $ Var scalarTypeInt ZeroIdx
+linearIndex :: Ann -> ArrayVar aenv (Array sh e) -> Fun aenv (Int -> e)
+linearIndex ann v = Lam (LeftHandSideSingle scalarTypeInt) $ Body $ LinearIndex ann v $ Evar ann $ Var scalarTypeInt ZeroIdx
 
 
 extractOpenAcc :: ExtractAcc OpenAcc

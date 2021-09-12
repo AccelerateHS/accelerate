@@ -70,8 +70,8 @@ propagate env = cvtE
     cvtE :: OpenExp env aenv e -> Maybe e
     cvtE exp = case exp of
       Const _ _ c                               -> Just c
-      PrimConst c                               -> Just (evalPrimConst c)
-      Evar (Var _  ix)
+      PrimConst _ c                             -> Just (evalPrimConst c)
+      Evar _ (Var _  ix)
         | e             <- prjExp ix env
         , Nothing       <- matchOpenExp exp e   -> cvtE e
       Nil _                                     -> Just ()
@@ -84,17 +84,18 @@ propagate env = cvtE
 evalPrimApp
     :: forall env aenv a r.
        Gamma env env aenv
+    -> Ann
     -> PrimFun (a -> r)
     -> OpenExp env aenv a
     -> (Any, OpenExp env aenv r)
-evalPrimApp env f x
+evalPrimApp env ann f x
   -- First attempt to move constant values towards the left
-  | Just r      <- commutes f x env     = evalPrimApp env f r
+  | Just r      <- commutes f x env     = evalPrimApp env ann f r
 --  | Just r      <- associates f x       = r
 
   -- Now attempt to evaluate any expressions
   | otherwise
-  = maybe (Any False, PrimApp f x) (Any True,)
+  = maybe (Any False, PrimApp ann f x) (\x' -> (Any True, modifyAnn (<> ann) x'))
   $ case f of
       PrimAdd ty                -> evalAdd ty x env
       PrimSub ty                -> evalSub ty x env
@@ -351,7 +352,7 @@ evalSub' ty t@(untup2 -> Just (x,y)) env
   | Nothing     <- propagate env x
   , Just b      <- propagate env y
   = Stats.ruleFired "-y+x"
-  $ Just . snd $ evalPrimApp env (PrimAdd ty) (Pair combinedAnn (Const combinedAnn tp (-b)) x)
+  $ Just . snd $ evalPrimApp env mkDummyAnn  (PrimAdd ty) (Pair combinedAnn (Const combinedAnn tp (-b)) x)
   -- (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
   | Just Refl   <- matchOpenExp x y
@@ -384,7 +385,7 @@ evalMul' ty arg env
   = eval2 (NumSingleType ty) (*) arg env
 
 evalNeg :: NumType a -> a :-> a
-evalNeg _                    x _   | PrimApp PrimNeg{} x' <- x       = Stats.ruleFired "negate/negate" $ Just x'
+evalNeg _                    x _   | PrimApp ann PrimNeg{} x' <- x   = Stats.ruleFired "negate/negate" . Just $ modifyAnn (<> ann) x'
 evalNeg (IntegralNumType ty) x env | IntegralDict <- integralDict ty = eval1 (NumSingleType $ IntegralNumType ty) negate x env
 evalNeg (FloatingNumType ty) x env | FloatingDict <- floatingDict ty = eval1 (NumSingleType $ FloatingNumType ty) negate x env
 
@@ -705,8 +706,8 @@ evalLOr _ _
   = Nothing
 
 evalLNot :: PrimBool :-> PrimBool
-evalLNot x _   | PrimApp PrimLNot x' <- x = Stats.ruleFired "not/not" $ Just x'
-evalLNot x env                            = bool1 (not . toBool) x env
+evalLNot x _   | PrimApp ann PrimLNot x' <- x = Stats.ruleFired "not/not" . Just $ modifyAnn (<> ann) x'
+evalLNot x env                                = bool1 (not . toBool) x env
 
 evalFromIntegral :: IntegralType a -> NumType b -> a :-> b
 evalFromIntegral ta (IntegralNumType tb)

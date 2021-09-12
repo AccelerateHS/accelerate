@@ -317,29 +317,29 @@ encodeOpenExp exp =
       travF = encodeOpenFun
   in
   case exp of
-    Let _ lhs bnd body          -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
-    Evar (Var tp ix)            -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
-    Nil _                       -> intHost $(hashQ "Nil")
-    Pair _ e1 e2                -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
-    VecPack   _ e               -> intHost $(hashQ "VecPack")     <> travE e
-    VecUnpack _ e               -> intHost $(hashQ "VecUnpack")   <> travE e
-    Const _ tp c                -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
-    Undef tp                    -> intHost $(hashQ "Undef")       <> encodeScalarType tp
-    IndexSlice spec ix sh       -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec
-    IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
-    ToIndex _ sh i              -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
-    FromIndex _ sh i            -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
-    Case e rhs def              -> intHost $(hashQ "Case")        <> travE e  <> mconcat [ word8 t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
-    Cond c t e                  -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
-    While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
-    PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
-    PrimConst c                 -> intHost $(hashQ "PrimConst")   <> encodePrimConst c
-    Index a ix                  -> intHost $(hashQ "Index")       <> encodeArrayVar a <> travE ix
-    LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> encodeArrayVar a <> travE ix
-    Shape a                     -> intHost $(hashQ "Shape")       <> encodeArrayVar a
-    ShapeSize _ sh              -> intHost $(hashQ "ShapeSize")   <> travE sh
-    Foreign _ _ f e             -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
-    Coerce _ tp e               -> intHost $(hashQ "Coerce")      <> encodeScalarType tp <> travE e
+    Let _ lhs bnd body      -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
+    Evar _ (Var tp ix)      -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
+    Nil _                   -> intHost $(hashQ "Nil")
+    Pair _ e1 e2            -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
+    VecPack   _ _ e         -> intHost $(hashQ "VecPack")     <> travE e
+    VecUnpack _ _ e         -> intHost $(hashQ "VecUnpack")   <> travE e
+    Const _ tp c            -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
+    Undef _ tp              -> intHost $(hashQ "Undef")       <> encodeScalarType tp
+    IndexSlice _ spec ix sh -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec
+    IndexFull  _ spec ix sl -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
+    ToIndex _ _ sh i        -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
+    FromIndex _ _ sh i      -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
+    Case _ e rhs def        -> intHost $(hashQ "Case")        <> travE e  <> mconcat [ word8 t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
+    Cond _ c t e            -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
+    While _ p f x           -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
+    PrimApp _ f x           -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
+    PrimConst _ c           -> intHost $(hashQ "PrimConst")   <> encodePrimConst c
+    Index _ a ix            -> intHost $(hashQ "Index")       <> encodeArrayVar a <> travE ix
+    LinearIndex _ a ix      -> intHost $(hashQ "LinearIndex") <> encodeArrayVar a <> travE ix
+    Shape _ a               -> intHost $(hashQ "Shape")       <> encodeArrayVar a
+    ShapeSize _ _ sh        -> intHost $(hashQ "ShapeSize")   <> travE sh
+    Foreign _ _ _ f e       -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
+    Coerce _ _ tp e         -> intHost $(hashQ "Coerce")      <> encodeScalarType tp <> travE e
 
 encodeArrayVar :: ArrayVar aenv a -> Builder
 encodeArrayVar (Var repr v) = encodeArrayType repr <> encodeIdx v

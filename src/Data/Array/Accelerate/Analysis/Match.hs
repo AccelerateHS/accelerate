@@ -446,10 +446,10 @@ matchOpenExp (Let _ lhs1 x1 e1) (Let _ lhs2 x2 e2)
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
 
-matchOpenExp (Evar v1) (Evar v2)
+matchOpenExp (Evar _ v1) (Evar _ v2)
   = matchVar v1 v2
 
-matchOpenExp (Foreign _ ff1 f1 e1) (Foreign _ ff2 f2 e2)
+matchOpenExp (Foreign _ _ ff1 f1 e1) (Foreign _ _ ff2 f2 e2)
   | Just Refl <- matchOpenExp e1 e2
   , unsafePerformIO $ do
       sn1 <- makeStableName ff1
@@ -463,9 +463,9 @@ matchOpenExp (Const _ t1 c1) (Const _ t2 c2)
   , matchConst (TupRsingle t1) c1 c2
   = Just Refl
 
-matchOpenExp (Undef t1) (Undef t2) = matchScalarType t1 t2
+matchOpenExp (Undef _ t1) (Undef _ t2) = matchScalarType t1 t2
 
-matchOpenExp (Coerce _ t1 e1) (Coerce _ t2 e2)
+matchOpenExp (Coerce _ _ t1 e1) (Coerce _ _ t2 e2)
   | Just Refl <- matchScalarType t1 t2
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
@@ -478,44 +478,44 @@ matchOpenExp (Pair _ a1 b1) (Pair _ a2 b2)
 matchOpenExp (Nil _) (Nil _)
   = Just Refl
 
-matchOpenExp (IndexSlice sliceIndex1 ix1 sh1) (IndexSlice sliceIndex2 ix2 sh2)
+matchOpenExp (IndexSlice _ sliceIndex1 ix1 sh1) (IndexSlice _ sliceIndex2 ix2 sh2)
   | Just Refl <- matchOpenExp ix1 ix2
   , Just Refl <- matchOpenExp sh1 sh2
   , Just Refl <- matchSliceIndex sliceIndex1 sliceIndex2
   = Just Refl
 
-matchOpenExp (IndexFull sliceIndex1 ix1 sl1) (IndexFull sliceIndex2 ix2 sl2)
+matchOpenExp (IndexFull _ sliceIndex1 ix1 sl1) (IndexFull _ sliceIndex2 ix2 sl2)
   | Just Refl <- matchOpenExp ix1 ix2
   , Just Refl <- matchOpenExp sl1 sl2
   , Just Refl <- matchSliceIndex sliceIndex1 sliceIndex2
   = Just Refl
 
-matchOpenExp (ToIndex _ sh1 i1) (ToIndex _ sh2 i2)
+matchOpenExp (ToIndex _ _ sh1 i1) (ToIndex _ _ sh2 i2)
   | Just Refl <- matchOpenExp sh1 sh2
   , Just Refl <- matchOpenExp i1  i2
   = Just Refl
 
-matchOpenExp (FromIndex _ sh1 i1) (FromIndex _ sh2 i2)
+matchOpenExp (FromIndex _ _ sh1 i1) (FromIndex _ _ sh2 i2)
   | Just Refl <- matchOpenExp i1  i2
   , Just Refl <- matchOpenExp sh1 sh2
   = Just Refl
 
-matchOpenExp (Cond p1 t1 e1) (Cond p2 t2 e2)
+matchOpenExp (Cond _ p1 t1 e1) (Cond _ p2 t2 e2)
   | Just Refl <- matchOpenExp p1 p2
   , Just Refl <- matchOpenExp t1 t2
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
 
-matchOpenExp (While p1 f1 x1) (While p2 f2 x2)
+matchOpenExp (While _ p1 f1 x1) (While _ p2 f2 x2)
   | Just Refl <- matchOpenExp x1 x2
   , Just Refl <- matchOpenFun p1 p2
   , Just Refl <- matchOpenFun f1 f2
   = Just Refl
 
-matchOpenExp (PrimConst c1) (PrimConst c2)
+matchOpenExp (PrimConst _ c1) (PrimConst _ c2)
   = matchPrimConst c1 c2
 
-matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
+matchOpenExp (PrimApp _ f1 x1) (PrimApp _ f2 x2)
   | Just x1'  <- commutes f1 x1
   , Just x2'  <- commutes f2 x2
   , Just Refl <- matchOpenExp x1' x2'
@@ -526,21 +526,21 @@ matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   , Just Refl <- matchPrimFun f1 f2
   = Just Refl
 
-matchOpenExp (Index a1 x1) (Index a2 x2)
+matchOpenExp (Index _ a1 x1) (Index _ a2 x2)
   | Just Refl <- matchVar a1 a2
   , Just Refl <- matchOpenExp x1 x2
   = Just Refl
 
-matchOpenExp (LinearIndex a1 x1) (LinearIndex a2 x2)
+matchOpenExp (LinearIndex _ a1 x1) (LinearIndex _ a2 x2)
   | Just Refl <- matchVar a1 a2
   , Just Refl <- matchOpenExp x1 x2
   = Just Refl
 
-matchOpenExp (Shape a1) (Shape a2)
+matchOpenExp (Shape _ a1) (Shape _ a2)
   | Just Refl <- matchVar a1 a2
   = Just Refl
 
-matchOpenExp (ShapeSize _ sh1) (ShapeSize _ sh2)
+matchOpenExp (ShapeSize _ _ sh1) (ShapeSize _ _ sh2)
   | Just Refl <- matchOpenExp sh1 sh2
   = Just Refl
 

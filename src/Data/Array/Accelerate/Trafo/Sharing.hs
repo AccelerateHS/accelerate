@@ -770,28 +770,28 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           AST.Let mkDummyAnn lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
-          Tag tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
-          Match _ e             -> cvt e  -- XXX: this should probably be an error
-          Const ann tp v        -> AST.Const ann tp v
-          Undef _ tp            -> AST.Undef tp
-          Prj ann idx e         -> cvtPrj ann idx (cvt e)
-          Nil ann               -> AST.Nil ann
-          Pair ann e1 e2        -> AST.Pair ann (cvt e1) (cvt e2)
-          VecPack   _ vec e     -> AST.VecPack   vec (cvt e)
-          VecUnpack _ vec e     -> AST.VecUnpack vec (cvt e)
-          ToIndex   _ shr sh ix -> AST.ToIndex shr (cvt sh) (cvt ix)
-          FromIndex _ shr sh e  -> AST.FromIndex shr (cvt sh) (cvt e)
-          Case _ e rhs          -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
-          Cond _ e1 e2 e3       -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
-          While _ tp p it i     -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
-          PrimConst _ c         -> AST.PrimConst c
-          PrimApp _ f e         -> cvtPrimFun f (cvt e)
-          Index _ _ a e         -> AST.Index (cvtAvar a) (cvt e)
-          LinearIndex _ _ a i   -> AST.LinearIndex (cvtAvar a) (cvt i)
-          Shape _ _ a           -> AST.Shape (cvtAvar a)
-          ShapeSize _ shr e     -> AST.ShapeSize shr (cvt e)
-          Foreign _ repr ff f e -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
-          Coerce _ t1 t2 e      -> AST.Coerce t1 t2 (cvt e)
+          Tag tp i                -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
+          Match _ e               -> cvt e  -- XXX: this should probably be an error
+          Const ann tp v          -> AST.Const ann tp v
+          Undef ann tp            -> AST.Undef ann tp
+          Prj ann idx e           -> cvtPrj ann idx (cvt e)
+          Nil ann                 -> AST.Nil ann
+          Pair ann e1 e2          -> AST.Pair ann (cvt e1) (cvt e2)
+          VecPack   ann vec e     -> AST.VecPack   ann vec (cvt e)
+          VecUnpack ann vec e     -> AST.VecUnpack ann vec (cvt e)
+          ToIndex   ann shr sh ix -> AST.ToIndex ann shr (cvt sh) (cvt ix)
+          FromIndex ann shr sh e  -> AST.FromIndex ann shr (cvt sh) (cvt e)
+          Case ann e rhs          -> cvtCase ann (cvt e) (over (mapped . _2) cvt rhs)
+          Cond ann e1 e2 e3       -> AST.Cond ann (cvt e1) (cvt e2) (cvt e3)
+          While ann tp p it i     -> AST.While ann (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
+          PrimConst ann c         -> AST.PrimConst ann c
+          PrimApp ann f e         -> cvtPrimFun ann f (cvt e)
+          Index ann _ a e         -> AST.Index ann (cvtAvar a) (cvt e)
+          LinearIndex ann _ a i   -> AST.LinearIndex ann (cvtAvar a) (cvt i)
+          Shape ann _ a           -> AST.Shape ann (cvtAvar a)
+          ShapeSize ann shr e     -> AST.ShapeSize ann shr (cvt e)
+          Foreign ann repr ff f e -> AST.Foreign ann repr ff (convertSmartFun config (typeR e) f) (cvt e)
+          Coerce ann t1 t2 e      -> AST.Coerce ann t1 t2 (cvt e)
 
     -- TODO: We throw away any annotations on the projection here. We should
     --       probably merge them into @a@ and @b@.
@@ -826,22 +826,20 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     -- Push primitive function applications down through let bindings so that
     -- they are adjacent to their arguments. It looks a bit nicer this way.
     --
-    cvtPrimFun :: HasCallStack => AST.PrimFun (a -> r) -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' r
-    cvtPrimFun f e = case e of
-      AST.Let ann lhs bnd body -> AST.Let ann lhs bnd (cvtPrimFun f body)
-      x                        -> AST.PrimApp f x
+    cvtPrimFun :: HasCallStack => Ann -> AST.PrimFun (a -> r) -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' r
+    cvtPrimFun ann f e = case e of
+      AST.Let ann' lhs bnd body -> AST.Let ann' lhs bnd (cvtPrimFun ann f body)
+      x                         -> AST.PrimApp ann f x
 
     -- Convert the flat list of equations into nested case statement
     -- directly on the tag variables.
     --
-    cvtCase :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
-    cvtCase s es
+    cvtCase :: HasCallStack => Ann -> AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
+    cvtCase ann s es
       | AST.Pair{} <- s
       = nested s es
       | DeclareVars lhs _ value <- declareVars (AST.expType s)
-      -- TODO: Should we reuse the annotation from @s@ instead? Or mconcat all
-      --       annotations in this level?
-      = AST.Let mkDummyAnn lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
+      = AST.Let ann lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
       where
         nested :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
         nested _ [(_,r)] = r
@@ -851,11 +849,10 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
               e      = prjT (fst (head rs)) s
               rhs    = map (nested s . map (over _1 ignore)) groups
           in
-          AST.Case e (zip tags rhs) Nothing
+          AST.Case ann e (zip tags rhs) Nothing
 
         -- Extract the variable representing this particular tag from the
         -- scrutinee. This is safe because we let-bind the argument first.
-        -- TODO: Should we just throw away the annotations from the pair here?
         prjT :: TagR a -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' TAG
         prjT = fromJust $$ go
           where

@@ -523,23 +523,23 @@ prettyOpenExp
     -> Adoc
 prettyOpenExp config ctx env aenv exp =
   maybeWithAnn config exp $ case exp of
-    Evar (Var _ idx)      -> prj idx env
-    Let{}                 -> prettyLet config ctx env aenv exp
-    PrimApp f x
-      | Pair _ a b <- x   -> ppF2 op  (ppE a) (ppE b)
-      | otherwise         -> ppF1 op' (ppE x)
+    Evar _ (Var _ idx)     -> prj idx env
+    Let{}                  -> prettyLet config ctx env aenv exp
+    PrimApp _ f x
+      | Pair _ a b <- x    -> ppF2 op  (ppE a) (ppE b)
+      | otherwise          -> ppF1 op' (ppE x)
       where
         op  = primOperator f
         op' = isInfix op ? (Operator (parens (opName op)) App L 10, op)
     --
-    PrimConst c           -> prettyPrimConst c
-    Const _ tp c          -> prettyConst (TupRsingle tp) c
-    Pair{}                -> prettyTuple config ctx env aenv exp
-    Nil _                 -> "()"
-    VecPack   _ e         -> ppF1 "pack"   (ppE e)
-    VecUnpack _ e         -> ppF1 "unpack" (ppE e)
-    Case x xs d           -> prettyCase config env aenv x xs d
-    Cond p t e            -> flatAlt multi single
+    PrimConst _ c          -> prettyPrimConst c
+    Const _ tp c           -> prettyConst (TupRsingle tp) c
+    Pair{}                 -> prettyTuple config ctx env aenv exp
+    Nil _                  -> "()"
+    VecPack   _ _ e        -> ppF1 "pack"   (ppE e)
+    VecUnpack _ _ e        -> ppF1 "unpack" (ppE e)
+    Case _ x xs d          -> prettyCase config env aenv x xs d
+    Cond _ p t e           -> flatAlt multi single
       where
         p' = ppE p context0
         t' = ppE t context0
@@ -552,18 +552,18 @@ prettyOpenExp config ctx env aenv exp =
                       , hang shiftwidth (sep [ then_, t' ])
                       , hang shiftwidth (sep [ else_, e' ]) ]
     --
-    IndexSlice _ slix sh  -> ppF2 "indexSlice"  (ppE slix) (ppE sh)
-    IndexFull _ slix sl   -> ppF2 "indexFull"   (ppE slix) (ppE sl)
-    ToIndex _ sh ix       -> ppF2 "toIndex"     (ppE sh) (ppE ix)
-    FromIndex _ sh ix     -> ppF2 "fromIndex"   (ppE sh) (ppE ix)
-    While p f x           -> ppF3 "while"       (ppF p) (ppF f) (ppE x)
-    Foreign _ ff _ e      -> ppF2 "foreign"     (\_ -> pretty (strForeign ff)) (ppE e)
-    Shape arr             -> ppF1 "shape"       (ppA arr)
-    ShapeSize _ sh        -> ppF1 "shapeSize"   (ppE sh)
-    Index arr ix          -> ppF2 (Operator (pretty '!') Infix L 9) (ppA arr) (ppE ix)
-    LinearIndex arr ix    -> ppF2 (Operator "!!"         Infix L 9) (ppA arr) (ppE ix)
-    Coerce _ tp x         -> ppF1 (Operator (withTypeRep tp "coerce") App L 10) (ppE x)
-    Undef tp              -> withTypeRep tp "undef"
+    IndexSlice _ _ slix sh -> ppF2 "indexSlice"  (ppE slix) (ppE sh)
+    IndexFull _ _ slix sl  -> ppF2 "indexFull"   (ppE slix) (ppE sl)
+    ToIndex _ _ sh ix      -> ppF2 "toIndex"     (ppE sh) (ppE ix)
+    FromIndex _ _ sh ix    -> ppF2 "fromIndex"   (ppE sh) (ppE ix)
+    While _ p f x          -> ppF3 "while"       (ppF p) (ppF f) (ppE x)
+    Foreign _ _ ff _ e     -> ppF2 "foreign"     (\_ -> pretty (strForeign ff)) (ppE e)
+    Shape _ arr            -> ppF1 "shape"       (ppA arr)
+    ShapeSize _ _ sh       -> ppF1 "shapeSize"   (ppE sh)
+    Index _ arr ix         -> ppF2 (Operator (pretty '!') Infix L 9) (ppA arr) (ppE ix)
+    LinearIndex _ arr ix   -> ppF2 (Operator "!!"         Infix L 9) (ppA arr) (ppE ix)
+    Coerce _ _ tp x        -> ppF1 (Operator (withTypeRep tp "coerce") App L 10) (ppE x)
+    Undef _ tp             -> withTypeRep tp "undef"
 
   where
     ppE :: OpenExp env aenv e -> Context -> Adoc

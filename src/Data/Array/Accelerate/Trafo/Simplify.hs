@@ -216,35 +216,35 @@ simplifyOpenExp env = first getAny . cvtE
   where
     cvtE :: OpenExp env aenv t -> (Any, OpenExp env aenv t)
     cvtE exp = case exp of
-      Let ann lhs bnd body -> (u <> v, exp')
+      Let ann lhs bnd body    -> (u <> v, exp')
         where
           (u, bnd') = cvtE bnd
           (v, exp') = cvtLet ann env lhs bnd' (\env' -> cvtE' env' body)
-      Evar var                  -> pure $ Evar var
-      Const ann tp c            -> pure $ Const ann tp c
-      Undef tp                  -> pure $ Undef tp
-      Nil ann                   -> pure $ Nil ann
-      Pair ann e1 e2            -> Pair ann <$> cvtE e1 <*> cvtE e2
-      VecPack   vec e           -> VecPack   vec <$> cvtE e
-      VecUnpack vec e           -> VecUnpack vec <$> cvtE e
-      IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
-      IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
-      ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
-      FromIndex shr sh ix       -> fromIndex shr (cvtE sh) (cvtE ix)
-      Case e rhs def            -> caseof (cvtE e) (sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]) (cvtMaybeE def)
-      Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
-      PrimConst c               -> pure $ PrimConst c
-      PrimApp f x               -> (u<>v, fx)
+      Evar ann var            -> pure $ Evar ann var
+      Const ann tp c          -> pure $ Const ann tp c
+      Undef ann tp            -> pure $ Undef ann tp
+      Nil ann                 -> pure $ Nil ann
+      Pair ann e1 e2          -> Pair ann <$> cvtE e1 <*> cvtE e2
+      VecPack   ann vec e     -> VecPack   ann vec <$> cvtE e
+      VecUnpack ann vec e     -> VecUnpack ann vec <$> cvtE e
+      IndexSlice ann x ix sh  -> IndexSlice ann x <$> cvtE ix <*> cvtE sh
+      IndexFull ann x ix sl   -> IndexFull ann x <$> cvtE ix <*> cvtE sl
+      ToIndex ann shr sh ix   -> toIndex ann shr (cvtE sh) (cvtE ix)
+      FromIndex ann shr sh ix -> fromIndex ann shr (cvtE sh) (cvtE ix)
+      Case ann e rhs def      -> caseof ann (cvtE e) (sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]) (cvtMaybeE def)
+      Cond ann p t e          -> cond ann (cvtE p) (cvtE t) (cvtE e)
+      PrimConst ann c         -> pure $ PrimConst ann c
+      PrimApp ann f x         -> (u<>v, fx)
         where
           (u, x') = cvtE x
-          (v, fx) = evalPrimApp env f x'
-      Index a sh                -> Index a <$> cvtE sh
-      LinearIndex a i           -> LinearIndex a <$> cvtE i
-      Shape a                   -> shape a
-      ShapeSize shr sh          -> shapeSize shr (cvtE sh)
-      Foreign tp ff f e         -> Foreign tp ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
-      While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
-      Coerce t1 t2 e            -> Coerce t1 t2 <$> cvtE e
+          (v, fx) = evalPrimApp env ann f x'
+      Index ann a sh          -> Index ann a <$> cvtE sh
+      LinearIndex ann a i     -> LinearIndex ann a <$> cvtE i
+      Shape ann a             -> shape ann a
+      ShapeSize ann shr sh    -> shapeSize ann shr (cvtE sh)
+      Foreign ann tp ff f e   -> Foreign ann tp ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
+      While ann p f x         -> While ann <$> cvtF env p <*> cvtF env f <*> cvtE x
+      Coerce ann t1 t2 e      -> Coerce ann t1 t2 <$> cvtE e
 
     cvtE' :: Gamma env' env' aenv -> OpenExp env' aenv e' -> (Any, OpenExp env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
@@ -274,39 +274,41 @@ simplifyOpenExp env = first getAny . cvtE
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
     --
-    cond :: (Any, OpenExp env aenv PrimBool)
+    cond :: Ann
+         -> (Any, OpenExp env aenv PrimBool)
          -> (Any, OpenExp env aenv t)
          -> (Any, OpenExp env aenv t)
          -> (Any, OpenExp env aenv t)
-    cond p@(_,p') t@(_,t') e@(_,e')
-      | Const _ _ 1 <- p'               = Stats.knownBranch "True"      (yes t')
-      | Const _ _ 0 <- p'               = Stats.knownBranch "False"     (yes e')
-      | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
-      | otherwise                       = Cond <$> p <*> t <*> e
+    cond ann p@(_,p') t@(_,t') e@(_,e')
+      | Const _ _ 1 <- p'               = Stats.knownBranch "True"      . yes $ modifyAnn (<> ann) t'
+      | Const _ _ 0 <- p'               = Stats.knownBranch "False"     . yes $ modifyAnn (<> ann) e'
+      | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" . yes $ modifyAnn (<> ann) e'
+      | otherwise                       = Cond ann <$> p <*> t <*> e
 
-    caseof :: (Any, OpenExp env aenv TAG)
+    caseof :: Ann
+           -> (Any, OpenExp env aenv TAG)
            -> (Any, [(TAG, OpenExp env aenv b)])
            -> (Any, Maybe (OpenExp env aenv b))
            -> (Any, OpenExp env aenv b)
-    caseof x@(_,x') xs@(_,xs') md@(_,md')
+    caseof ann x@(_,x') xs@(_,xs') md@(_,md')
       | Const _ _ t <- x'
-      = Stats.caseElim "known" (yes (fromJust $ lookup t xs'))
+      = Stats.caseElim "known" . yes $ modifyAnn (<> ann) (fromJust $ lookup t xs')
       | Just d      <- md'
       , []          <- xs'
-      = Stats.caseElim "redundant" (yes d)
+      = Stats.caseElim "redundant" . yes $ modifyAnn (<> ann) d
       | Just d      <- md'
       , [(_,(_,u))] <- us
       , Just Refl   <- matchOpenExp d u
-      = Stats.caseDefault "merge" $ yes (Case x' (map snd vs) (Just u))
+      = Stats.caseDefault "merge" $ yes (Case ann x' (map snd vs) (Just u))
       | Nothing     <- md'
       , []          <- vs
       , [(_,(_,u))] <- us
-      = Stats.caseElim "overlap" (yes u)
+      = Stats.caseElim "overlap" . yes $ modifyAnn (<> ann) u
       | Nothing     <- md'
       , [(_,(_,u))] <- us
-      = Stats.caseDefault "introduction" $ yes (Case x' (map snd vs) (Just u))
+      = Stats.caseDefault "introduction" $ yes (Case ann x' (map snd vs) (Just u))
       | otherwise
-      = Case <$> x <*> xs <*> md
+      = Case ann <$> x <*> xs <*> md
       where
         (us,vs) = partition (\(n,_) -> n > 1)
                 $ Map.elems
@@ -320,34 +322,36 @@ simplifyOpenExp env = first getAny . cvtE
 
     -- Shape manipulations
     --
-    shape :: ArrayVar aenv (Array sh t) -> (Any, OpenExp env aenv sh)
-    shape (Var (ArrayR ShapeRz _) _)
-      = Stats.ruleFired "shape/Z" $ yes (Nil mkDummyAnn)
-    shape a
-      = pure $ Shape a
+    shape :: Ann -> ArrayVar aenv (Array sh t) -> (Any, OpenExp env aenv sh)
+    shape ann (Var (ArrayR ShapeRz _) _)
+      = Stats.ruleFired "shape/Z" $ yes (Nil ann)
+    shape ann a
+      = pure $ Shape ann a
 
-    shapeSize :: ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int)
-    shapeSize shr (_, sh)
-      | Just (c, ann) <- extractConstTuple sh
-      = Stats.ruleFired "shapeSize/const" $ yes (Const ann scalarTypeInt (product (shapeToList shr c)))
-    shapeSize shr sh
-      = ShapeSize shr <$> sh
+    shapeSize :: Ann -> ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int)
+    shapeSize ann shr (_, sh)
+      | Just (c, ann') <- extractConstTuple sh
+      = Stats.ruleFired "shapeSize/const" $ yes (Const (ann <> ann') scalarTypeInt (product (shapeToList shr c)))
+    shapeSize ann shr sh
+      = ShapeSize ann shr <$> sh
 
-    toIndex :: ShapeR sh
+    toIndex :: Ann
+            -> ShapeR sh
             -> (Any, OpenExp env aenv sh)
             -> (Any, OpenExp env aenv sh)
             -> (Any, OpenExp env aenv Int)
-    toIndex _ (_,sh) (_,FromIndex _ sh' ix)
-      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
-    toIndex shr sh ix                    = ToIndex shr <$> sh <*> ix
+    toIndex ann _ (_,sh) (_,FromIndex ann' _ sh' ix)
+      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "toIndex/fromIndex" . yes $ modifyAnn (<> ann <> ann') ix
+    toIndex ann shr sh ix                = ToIndex ann shr <$> sh <*> ix
 
-    fromIndex :: ShapeR sh
+    fromIndex :: Ann
+              -> ShapeR sh
               -> (Any, OpenExp env aenv sh)
               -> (Any, OpenExp env aenv Int)
               -> (Any, OpenExp env aenv sh)
-    fromIndex _ (_,sh) (_,ToIndex _ sh' ix)
-      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
-    fromIndex shr sh ix                  = FromIndex shr <$> sh <*> ix
+    fromIndex ann _ (_,sh) (_,ToIndex ann' _ sh' ix)
+      | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "fromIndex/toIndex" . yes $ modifyAnn (<> ann <> ann') ix
+    fromIndex ann shr sh ix              = FromIndex ann shr <$> sh <*> ix
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
@@ -374,7 +378,7 @@ simplifyOpenFun env (Lam lhs f) = Lam lhs <$> simplifyOpenFun env' f
 
 lhsExpr :: ELeftHandSide t env env' -> Gamma env env aenv -> Gamma env' env' aenv
 lhsExpr (LeftHandSideWildcard _) env = env
-lhsExpr (LeftHandSideSingle  tp) env = incExp env `pushExp` Evar (Var tp ZeroIdx)
+lhsExpr (LeftHandSideSingle  tp) env = incExp env `pushExp` Evar mkDummyAnn (Var tp ZeroIdx)
 lhsExpr (LeftHandSidePair l1 l2) env = lhsExpr l2 $ lhsExpr l1 env
 
 -- Simplify closed expressions and functions. The process is applied
@@ -542,29 +546,29 @@ summariseOpenExp = (terms +~ 1) . goE
     goE :: OpenExp env aenv t -> Stats
     goE exp =
       case exp of
-        Let _ _ bnd body      -> travE bnd +++ travE body & binders +~ 1
-        Evar{}                -> zero & vars +~ 1
-        Foreign _ _ _ x       -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
-        Const{}               -> zero
-        Undef _               -> zero
-        Nil{}                 -> zero & terms +~ 1
-        Pair _ e1 e2          -> travE e1 +++ travE e2 & terms +~ 1
-        VecPack   _ e         -> travE e
-        VecUnpack _ e         -> travE e
-        IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
-        IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
-        ToIndex _ sh ix       -> travE sh +++ travE ix
-        FromIndex _ sh ix     -> travE sh +++ travE ix
-        Case e rhs def        -> travE e +++ mconcat [ travE c | (_,c) <- rhs ] +++ maybe zero travE def
-        Cond p t e            -> travE p +++ travE t +++ travE e
-        While p f x           -> travF p +++ travF f +++ travE x
-        PrimConst c           -> travC c
-        Index a ix            -> travA a +++ travE ix
-        LinearIndex a ix      -> travA a +++ travE ix
-        Shape a               -> travA a
-        ShapeSize _ sh        -> travE sh
-        PrimApp f x           -> travPrimFun f +++ travE x
-        Coerce _ _ e          -> travE e
+        Let _ _ bnd body       -> travE bnd +++ travE body & binders +~ 1
+        Evar{}                 -> zero & vars +~ 1
+        Foreign _ _ _ _ x      -> travE x & terms +~ 1   -- +1 for asm, ignore fallback impls.
+        Const{}                -> zero
+        Undef _ _              -> zero
+        Nil{}                  -> zero & terms +~ 1
+        Pair _ e1 e2           -> travE e1 +++ travE e2 & terms +~ 1
+        VecPack   _ _ e        -> travE e
+        VecUnpack _ _ e        -> travE e
+        IndexSlice _ _ slix sh -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
+        IndexFull _ _ slix sl  -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
+        ToIndex _ _ sh ix      -> travE sh +++ travE ix
+        FromIndex _ _ sh ix    -> travE sh +++ travE ix
+        Case _ e rhs def       -> travE e +++ mconcat [ travE c | (_,c) <- rhs ] +++ maybe zero travE def
+        Cond _ p t e           -> travE p +++ travE t +++ travE e
+        While _ p f x          -> travF p +++ travF f +++ travE x
+        PrimConst _ c          -> travC c
+        Index _ a ix           -> travA a +++ travE ix
+        LinearIndex _ a ix     -> travA a +++ travE ix
+        Shape _ a              -> travA a
+        ShapeSize _ _ sh       -> travE sh
+        PrimApp _ f x          -> travPrimFun f +++ travE x
+        Coerce _ _ _ e         -> travE e
 
     travPrimFun :: PrimFun f -> Stats
     travPrimFun = (ops +~ 1) . goF

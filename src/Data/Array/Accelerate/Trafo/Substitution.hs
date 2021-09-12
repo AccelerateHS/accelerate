@@ -120,9 +120,9 @@ isIdentity _ = Nothing
 -- Detects whether the function is of the form \ix -> a ! ix
 isIdentityIndexing :: OpenFun env aenv (a -> b) -> Maybe (ArrayVar aenv (Array a b))
 isIdentityIndexing (Lam lhs (Body body))
-  | Index avar ix <- body
-  , Just vars     <- extractExpVars ix
-  , Just Refl     <- bindingIsTrivial lhs vars
+  | Index _ avar ix <- body
+  , Just vars       <- extractExpVars ix
+  , Just Refl       <- bindingIsTrivial lhs vars
   = Just avar
 isIdentityIndexing _ = Nothing
 
@@ -154,29 +154,29 @@ inlineVars lhsBound expr bound
     substitute k1 k2 vars topExp = case topExp of
       Let ann lhs e1 e2
         | Exists lhs' <- rebuildLHS lhs
-                          -> Let ann lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
-      Evar (Var t ix)     -> Evar . Var t <$> k1 ix
-      Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
-      Pair ann e1 e2      -> Pair ann <$> travE e1 <*> travE e2
-      Nil ann             -> Just (Nil ann)
-      VecPack   vec e1    -> VecPack   vec <$> travE e1
-      VecUnpack vec e1    -> VecUnpack vec <$> travE e1
-      IndexSlice si e1 e2 -> IndexSlice si <$> travE e1 <*> travE e2
-      IndexFull  si e1 e2 -> IndexFull  si <$> travE e1 <*> travE e2
-      ToIndex   shr e1 e2 -> ToIndex   shr <$> travE e1 <*> travE e2
-      FromIndex shr e1 e2 -> FromIndex shr <$> travE e1 <*> travE e2
-      Case e1 rhs def     -> Case <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
-      Cond e1 e2 e3       -> Cond <$> travE e1 <*> travE e2 <*> travE e3
-      While f1 f2 e1      -> While <$> travF f1 <*> travF f2 <*> travE e1
-      Const ann t c       -> Just $ Const ann t c
-      PrimConst c         -> Just $ PrimConst c
-      PrimApp p e1        -> PrimApp p <$> travE e1
-      Index a e1          -> Index a <$> travE e1
-      LinearIndex a e1    -> LinearIndex a <$> travE e1
-      Shape a             -> Just $ Shape a
-      ShapeSize shr e1    -> ShapeSize shr <$> travE e1
-      Undef t             -> Just $ Undef t
-      Coerce t1 t2 e1     -> Coerce t1 t2 <$> travE e1
+                              -> Let ann lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
+      Evar ann (Var t ix)     -> Evar ann . Var t <$> k1 ix
+      Foreign ann tp asm f e1 -> Foreign ann tp asm f <$> travE e1
+      Pair ann e1 e2          -> Pair ann <$> travE e1 <*> travE e2
+      Nil ann                 -> Just (Nil ann)
+      VecPack   ann vec e1    -> VecPack   ann vec <$> travE e1
+      VecUnpack ann vec e1    -> VecUnpack ann vec <$> travE e1
+      IndexSlice ann si e1 e2 -> IndexSlice ann si <$> travE e1 <*> travE e2
+      IndexFull  ann si e1 e2 -> IndexFull  ann si <$> travE e1 <*> travE e2
+      ToIndex   ann shr e1 e2 -> ToIndex   ann shr <$> travE e1 <*> travE e2
+      FromIndex ann shr e1 e2 -> FromIndex ann shr <$> travE e1 <*> travE e2
+      Case ann e1 rhs def     -> Case ann <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
+      Cond ann e1 e2 e3       -> Cond ann <$> travE e1 <*> travE e2 <*> travE e3
+      While ann f1 f2 e1      -> While ann <$> travF f1 <*> travF f2 <*> travE e1
+      Const ann t c           -> Just $ Const ann t c
+      PrimConst ann c         -> Just $ PrimConst ann c
+      PrimApp ann p e1        -> PrimApp ann p <$> travE e1
+      Index ann a e1          -> Index ann a <$> travE e1
+      LinearIndex ann a e1    -> LinearIndex ann a <$> travE e1
+      Shape ann a             -> Just $ Shape ann a
+      ShapeSize ann shr e1    -> ShapeSize ann shr <$> travE e1
+      Undef ann t             -> Just $ Undef ann t
+      Coerce ann t1 t2 e1     -> Coerce ann t1 t2 <$> travE e1
 
       where
         travE :: OpenExp env1 aenv s -> Maybe (OpenExp env2 aenv s)
@@ -244,9 +244,11 @@ compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
 compose _
   _ = error "compose: impossible evaluation"
 
+-- TODO: Like everywhere else, figure out how to thread the annotations through
+--       this. We may need to somehow shoehorn them into 'Var'.
 subTop :: OpenExp env aenv s -> ExpVar (env, s) t -> OpenExp env aenv t
 subTop s (Var _  ZeroIdx     ) = s
-subTop _ (Var tp (SuccIdx ix)) = Evar $ Var tp ix
+subTop _ (Var tp (SuccIdx ix)) = Evar mkDummyAnn $ Var tp ix
 
 subAtop :: PreOpenAcc acc aenv t -> ArrayVar (aenv, t) (Array sh2 e2) -> PreOpenAcc acc aenv (Array sh2 e2)
 subAtop t (Var _    ZeroIdx      ) = t
@@ -389,7 +391,7 @@ rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc e
 rebuildWeakenVar k (Var s idx) = Avar mkDummyAnn $ Var s $ k >:> idx
 
 rebuildWeakenEvar :: env :> env' -> ExpVar env t -> OpenExp env' aenv t
-rebuildWeakenEvar k (Var s idx) = Evar $ Var s $ k >:> idx
+rebuildWeakenEvar k (Var s idx) = Evar mkDummyAnn $ Var s $ k >:> idx
 
 instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
   {-# INLINEABLE weaken #-}
@@ -401,11 +403,11 @@ instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
 
 instance Sink (OpenExp env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . runIdentity . rebuildOpenExp (Identity . Evar) (ReindexAvar (Identity . weaken k))
+  weaken k = Stats.substitution "weaken" . runIdentity . rebuildOpenExp (Identity . Evar mkDummyAnn) (ReindexAvar (Identity . weaken k))
 
 instance Sink (OpenFun env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . runIdentity . rebuildFun (Identity . Evar) (ReindexAvar (Identity . weaken k))
+  weaken k = Stats.substitution "weaken" . runIdentity . rebuildFun (Identity . Evar mkDummyAnn) (ReindexAvar (Identity . weaken k))
 
 instance Sink Boundary where
   {-# INLINEABLE weaken #-}
@@ -492,6 +494,10 @@ strengthenAfter _ _ _ = error "Substitution.strengthenAfter: left hand sides do 
 -- The scalar environment
 -- ------------------
 
+-- TODO: Like on the array level, we currently completely throw out any
+--       annotations at this point. Check all uses of 'Evar' and 'mkDummyAnn''
+--       after implementing that to make sure we didn't miss anything.
+
 -- SEE: [Renaming and Substitution]
 -- SEE: [Weakening]
 --
@@ -504,11 +510,11 @@ newtype IdxE env aenv t = IE { unIE :: ExpVar env t }
 
 instance SyntacticExp IdxE where
   varIn          = IE
-  expOut         = Evar . unIE
+  expOut         = Evar mkDummyAnn . unIE
   weakenExp (IE (Var tp ix)) = IE $ Var tp $ SuccIdx ix
 
 instance SyntacticExp OpenExp where
-  varIn          = Evar
+  varIn          = Evar mkDummyAnn
   expOut         = id
   weakenExp      = runIdentity . rebuildOpenExp (Identity . weakenExp . IE) (ReindexAvar Identity)
 
@@ -551,31 +557,32 @@ rebuildOpenExp
     -> f (OpenExp env' aenv' t)
 rebuildOpenExp v av@(ReindexAvar reindex) exp =
   case exp of
-    Const ann t c       -> pure $ Const ann t c
-    PrimConst c         -> pure $ PrimConst c
-    Undef t             -> pure $ Undef t
-    Evar var            -> expOut          <$> v var
+    Const ann t c           -> pure $ Const ann t c
+    PrimConst ann c         -> pure $ PrimConst ann c
+    Undef ann t             -> pure $ Undef ann t
+    -- FIXME: We're throwing away annotations here
+    Evar _ var              -> expOut              <$> v var
     Let ann lhs a b
       | Exists lhs' <- rebuildLHS lhs
-                        -> Let ann lhs'    <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
-    Pair ann e1 e2      -> Pair ann        <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
-    Nil ann             -> pure (Nil ann)
-    VecPack   vec e     -> VecPack   vec   <$> rebuildOpenExp v av e
-    VecUnpack vec e     -> VecUnpack vec   <$> rebuildOpenExp v av e
-    IndexSlice x ix sh  -> IndexSlice x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
-    IndexFull x ix sl   -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
-    ToIndex shr sh ix   -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
-    FromIndex shr sh ix -> FromIndex shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
-    Case e rhs def      -> Case            <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ] <*> rebuildMaybeExp v av def
-    Cond p t e          -> Cond            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t  <*> rebuildOpenExp v av e
-    While p f x         -> While           <$> rebuildFun v av p      <*> rebuildFun v av f      <*> rebuildOpenExp v av x
-    PrimApp f x         -> PrimApp f       <$> rebuildOpenExp v av x
-    Index a sh          -> Index           <$> reindex a              <*> rebuildOpenExp v av sh
-    LinearIndex a i     -> LinearIndex     <$> reindex a              <*> rebuildOpenExp v av i
-    Shape a             -> Shape           <$> reindex a
-    ShapeSize shr sh    -> ShapeSize shr   <$> rebuildOpenExp v av sh
-    Foreign tp ff f e   -> Foreign tp ff f <$> rebuildOpenExp v av e
-    Coerce t1 t2 e      -> Coerce t1 t2    <$> rebuildOpenExp v av e
+                            -> Let ann lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
+    Pair ann e1 e2          -> Pair ann            <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
+    Nil ann                 -> pure (Nil ann)
+    VecPack   ann vec e     -> VecPack   ann vec   <$> rebuildOpenExp v av e
+    VecUnpack ann vec e     -> VecUnpack ann vec   <$> rebuildOpenExp v av e
+    IndexSlice ann x ix sh  -> IndexSlice ann x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
+    IndexFull ann x ix sl   -> IndexFull ann x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
+    ToIndex ann shr sh ix   -> ToIndex ann shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    FromIndex ann shr sh ix -> FromIndex ann shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    Case ann e rhs def      -> Case ann            <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ] <*> rebuildMaybeExp v av def
+    Cond ann p t e          -> Cond ann            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t <*> rebuildOpenExp v av e
+    While ann p f x         -> While ann           <$> rebuildFun v av p      <*> rebuildFun v av f     <*> rebuildOpenExp v av x
+    PrimApp ann f x         -> PrimApp ann f       <$> rebuildOpenExp v av x
+    Index ann a sh          -> Index ann           <$> reindex a              <*> rebuildOpenExp v av sh
+    LinearIndex ann a i     -> LinearIndex ann     <$> reindex a              <*> rebuildOpenExp v av i
+    Shape ann a             -> Shape ann           <$> reindex a
+    ShapeSize ann shr sh    -> ShapeSize ann shr   <$> rebuildOpenExp v av sh
+    Foreign ann tp ff f e   -> Foreign ann tp ff f <$> rebuildOpenExp v av e
+    Coerce ann t1 t2 e      -> Coerce ann t1 t2    <$> rebuildOpenExp v av e
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun
@@ -809,5 +816,5 @@ rebuildC k v c =
 extractExpVars :: OpenExp env aenv a -> Maybe (ExpVars env a)
 extractExpVars (Nil  _)       = Just TupRunit
 extractExpVars (Pair _ e1 e2) = TupRpair <$> extractExpVars e1 <*> extractExpVars e2
-extractExpVars (Evar v)       = Just $ TupRsingle v
+extractExpVars (Evar _ v)     = Just $ TupRsingle v
 extractExpVars _              = Nothing

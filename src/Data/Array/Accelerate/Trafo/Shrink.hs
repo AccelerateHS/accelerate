@@ -107,7 +107,7 @@ matchEVarsRange (VarsRange (Exists first) _ (Just rt)) expr = isJust $ go (idxTo
   where
     go :: Int -> RangeTuple -> OpenExp env aenv t -> Maybe Int
     go i RTNil (Nil _) = Just i
-    go i RTSingle (Evar (Var _ ix))
+    go i RTSingle (Evar _ (Var _ ix))
       | checkIdx i ix = Just (i + 1)
     go i (RTPair t1 t2) (Pair _ e1 e2)
       | Just i' <- go i t2 e2 = go i' t1 e1
@@ -240,14 +240,14 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     lIMIT = 1
 
     cheap :: OpenExp env aenv t -> Bool
-    cheap (Evar _)       = True
-    cheap (Pair _ e1 e2) = cheap e1 && cheap e2
-    cheap (Nil _)        = True
-    cheap Const{}        = True
-    cheap PrimConst{}    = True
-    cheap Undef{}        = True
-    cheap (Coerce _ _ e) = cheap e
-    cheap _              = False
+    cheap (Evar _ _)       = True
+    cheap (Pair _ e1 e2)   = cheap e1 && cheap e2
+    cheap (Nil _)          = True
+    cheap Const{}          = True
+    cheap PrimConst{}      = True
+    cheap Undef{}          = True
+    cheap (Coerce _ _ _ e) = cheap e
+    cheap _                = False
 
     shrinkE :: HasCallStack => OpenExp env aenv t -> (Any, OpenExp env aenv t)
     shrinkE exp = case exp of
@@ -286,28 +286,28 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
             Finite 0 -> "dead exp"
             _        -> "inline exp"   -- forced inlining when lIMIT > 1
       --
-      Evar v                    -> pure (Evar v)
-      Const ann t c             -> pure (Const ann t c)
-      Undef t                   -> pure (Undef t)
-      Nil ann                   -> pure (Nil ann)
-      Pair ann x y              -> Pair ann <$> shrinkE x <*> shrinkE y
-      VecPack   vec e           -> VecPack   vec <$> shrinkE e
-      VecUnpack vec e           -> VecUnpack vec <$> shrinkE e
-      IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
-      IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
-      ToIndex shr sh ix         -> ToIndex shr <$> shrinkE sh <*> shrinkE ix
-      FromIndex shr sh i        -> FromIndex shr <$> shrinkE sh <*> shrinkE i
-      Case e rhs def            -> Case <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ] <*> shrinkMaybeE def
-      Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
-      While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
-      PrimConst c               -> pure (PrimConst c)
-      PrimApp f x               -> PrimApp f <$> shrinkE x
-      Index a sh                -> Index a <$> shrinkE sh
-      LinearIndex a i           -> LinearIndex a <$> shrinkE i
-      Shape a                   -> pure (Shape a)
-      ShapeSize shr sh          -> ShapeSize shr <$> shrinkE sh
-      Foreign repr ff f e       -> Foreign repr ff <$> shrinkF f <*> shrinkE e
-      Coerce t1 t2 e            -> Coerce t1 t2 <$> shrinkE e
+      Evar ann v              -> pure (Evar ann v)
+      Const ann t c           -> pure (Const ann t c)
+      Undef ann t             -> pure (Undef ann t)
+      Nil ann                 -> pure (Nil ann)
+      Pair ann x y            -> Pair ann <$> shrinkE x <*> shrinkE y
+      VecPack   ann vec e     -> VecPack   ann vec <$> shrinkE e
+      VecUnpack ann vec e     -> VecUnpack ann vec <$> shrinkE e
+      IndexSlice ann x ix sh  -> IndexSlice ann x <$> shrinkE ix <*> shrinkE sh
+      IndexFull ann x ix sl   -> IndexFull ann x <$> shrinkE ix <*> shrinkE sl
+      ToIndex ann shr sh ix   -> ToIndex ann shr <$> shrinkE sh <*> shrinkE ix
+      FromIndex ann shr sh i  -> FromIndex ann shr <$> shrinkE sh <*> shrinkE i
+      Case ann e rhs def      -> Case ann <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ] <*> shrinkMaybeE def
+      Cond ann p t e          -> Cond ann <$> shrinkE p <*> shrinkE t <*> shrinkE e
+      While ann p f x         -> While ann <$> shrinkF p <*> shrinkF f <*> shrinkE x
+      PrimConst ann c         -> pure (PrimConst ann c)
+      PrimApp ann f x         -> PrimApp ann f <$> shrinkE x
+      Index ann a sh          -> Index ann a <$> shrinkE sh
+      LinearIndex ann a i     -> LinearIndex ann a <$> shrinkE i
+      Shape ann a             -> pure (Shape ann a)
+      ShapeSize ann shr sh    -> ShapeSize ann shr <$> shrinkE sh
+      Foreign ann repr ff f e -> Foreign ann repr ff <$> shrinkF f <*> shrinkE e
+      Coerce ann t1 t2 e      -> Coerce ann t1 t2 <$> shrinkE e
 
     shrinkF :: HasCallStack => OpenFun env aenv t -> (Any, OpenFun env aenv t)
     shrinkF = first Any . shrinkFun
@@ -483,32 +483,32 @@ usesOfExp range = countE
     countE :: OpenExp env aenv e -> Count
     countE exp | matchEVarsRange range exp = Finite 1
     countE exp = case exp of
-      Evar v -> case varInRange range v of
-        Just cs                 -> Impossible cs
-        Nothing                 -> Finite 0
+      Evar _ v -> case varInRange range v of
+        Just cs            -> Impossible cs
+        Nothing            -> Finite 0
       --
-      Let _ lhs bnd body        -> countE bnd <> usesOfExp (weakenVarsRange lhs range) body
-      Const _ _ _               -> Finite 0
-      Undef _                   -> Finite 0
-      Nil _                     -> Finite 0
-      Pair _ e1 e2              -> countE e1 <> countE e2
-      VecPack   _ e             -> countE e
-      VecUnpack _ e             -> countE e
-      IndexSlice _ ix sh        -> countE ix <> countE sh
-      IndexFull _ ix sl         -> countE ix <> countE sl
-      FromIndex _ sh i          -> countE sh <> countE i
-      ToIndex _ sh e            -> countE sh <> countE e
-      Case e rhs def            -> countE e  <> mconcat [ countE c | (_,c) <- rhs ] <> maybe (Finite 0) countE def
-      Cond p t e                -> countE p  <> countE t <> countE e
-      While p f x               -> countE x  <> loopCount (usesOfFun range p) <> loopCount (usesOfFun range f)
-      PrimConst _               -> Finite 0
-      PrimApp _ x               -> countE x
-      Index _ sh                -> countE sh
-      LinearIndex _ i           -> countE i
-      Shape _                   -> Finite 0
-      ShapeSize _ sh            -> countE sh
-      Foreign _ _ _ e           -> countE e
-      Coerce _ _ e              -> countE e
+      Let _ lhs bnd body   -> countE bnd <> usesOfExp (weakenVarsRange lhs range) body
+      Const _ _ _          -> Finite 0
+      Undef _ _            -> Finite 0
+      Nil _                -> Finite 0
+      Pair _ e1 e2         -> countE e1 <> countE e2
+      VecPack   _ _ e      -> countE e
+      VecUnpack _ _ e      -> countE e
+      IndexSlice _ _ ix sh -> countE ix <> countE sh
+      IndexFull _ _ ix sl  -> countE ix <> countE sl
+      FromIndex _ _ sh i   -> countE sh <> countE i
+      ToIndex _ _ sh e     -> countE sh <> countE e
+      Case _ e rhs def     -> countE e  <> mconcat [ countE c | (_,c) <- rhs ] <> maybe (Finite 0) countE def
+      Cond _ p t e         -> countE p  <> countE t <> countE e
+      While _ p f x        -> countE x  <> loopCount (usesOfFun range p) <> loopCount (usesOfFun range f)
+      PrimConst _ _        -> Finite 0
+      PrimApp _ _ x        -> countE x
+      Index _ _ sh         -> countE sh
+      LinearIndex _ _ i    -> countE i
+      Shape _ _            -> Finite 0
+      ShapeSize _ _ sh     -> countE sh
+      Foreign _ _ _ _ e    -> countE e
+      Coerce _ _ _ e       -> countE e
 
 usesOfFun :: VarsRange env -> OpenFun env aenv f -> Count
 usesOfFun range (Lam lhs f) = usesOfFun (weakenVarsRange lhs range) f
@@ -573,31 +573,31 @@ usesOfPreAcc withShape countAcc idx = count
 
     countE :: OpenExp env aenv e -> Int
     countE exp = case exp of
-      Let _ _ bnd body           -> countE bnd + countE body
-      Evar _                     -> 0
-      Const _ _ _                -> 0
-      Undef _                    -> 0
-      Nil _                      -> 0
-      Pair _ x y                 -> countE x + countE y
-      VecPack   _ e              -> countE e
-      VecUnpack _ e              -> countE e
-      IndexSlice _ ix sh         -> countE ix + countE sh
-      IndexFull _ ix sl          -> countE ix + countE sl
-      ToIndex _ sh ix            -> countE sh + countE ix
-      FromIndex _ sh i           -> countE sh + countE i
-      Case e rhs def             -> countE e  + sum [ countE c | (_,c) <- rhs ] + maybe 0 countE def
-      Cond p t e                 -> countE p  + countE t + countE e
-      While p f x                -> countF p  + countF f + countE x
-      PrimConst _                -> 0
-      PrimApp _ x                -> countE x
-      Index a sh                 -> countAvar a + countE sh
-      LinearIndex a i            -> countAvar a + countE i
-      ShapeSize _ sh             -> countE sh
-      Shape a
-        | withShape              -> countAvar a
-        | otherwise              -> 0
-      Foreign _ _ _ e            -> countE e
-      Coerce _ _ e               -> countE e
+      Let _ _ bnd body     -> countE bnd + countE body
+      Evar _ _             -> 0
+      Const _ _ _          -> 0
+      Undef _ _            -> 0
+      Nil _                -> 0
+      Pair _ x y           -> countE x + countE y
+      VecPack   _ _ e      -> countE e
+      VecUnpack _ _ e      -> countE e
+      IndexSlice _ _ ix sh -> countE ix + countE sh
+      IndexFull _ _ ix sl  -> countE ix + countE sl
+      ToIndex _ _ sh ix    -> countE sh + countE ix
+      FromIndex _ _ sh i   -> countE sh + countE i
+      Case _ e rhs def     -> countE e  + sum [ countE c | (_,c) <- rhs ] + maybe 0 countE def
+      Cond _ p t e         -> countE p  + countE t + countE e
+      While _ p f x        -> countF p  + countF f + countE x
+      PrimConst _ _        -> 0
+      PrimApp _ _ x        -> countE x
+      Index _ a sh         -> countAvar a + countE sh
+      LinearIndex _ a i    -> countAvar a + countE i
+      ShapeSize _ _ sh     -> countE sh
+      Shape _ a
+        | withShape        -> countAvar a
+        | otherwise        -> 0
+      Foreign _ _ _ _ e    -> countE e
+      Coerce _ _ _ e       -> countE e
 
     countME :: Maybe (OpenExp env aenv e) -> Int
     countME = maybe 0 countE

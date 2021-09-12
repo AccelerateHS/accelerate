@@ -929,21 +929,21 @@ evalOpenExp pexp env aenv =
       evalA (Var repr ix) = (TupRsingle repr, prj ix aenv)
   in
   case pexp of
-    Let _ lhs exp1 exp2         -> let !v1  = evalE exp1
-                                       env' = env `push` (lhs, v1)
-                                   in  evalOpenExp exp2 env' aenv
-    Evar (Var _ ix)             -> prj ix env
-    Const _ _ c                 -> c
-    Undef tp                    -> undefElt (TupRsingle tp)
-    PrimConst c                 -> evalPrimConst c
-    PrimApp f x                 -> evalPrim f (evalE x)
-    Nil _                       -> ()
-    Pair _ e1 e2                -> let !x1 = evalE e1
-                                       !x2 = evalE e2
-                                   in  (x1, x2)
-    VecPack   vecR e            -> pack   vecR $! evalE e
-    VecUnpack vecR e            -> unpack vecR $! evalE e
-    IndexSlice slice slix sh    -> restrict slice (evalE slix)
+    Let _ lhs exp1 exp2           -> let !v1  = evalE exp1
+                                         env' = env `push` (lhs, v1)
+                                     in  evalOpenExp exp2 env' aenv
+    Evar _ (Var _ ix)             -> prj ix env
+    Const _ _ c                   -> c
+    Undef _ tp                    -> undefElt (TupRsingle tp)
+    PrimConst _ c                 -> evalPrimConst c
+    PrimApp _ f x                 -> evalPrim f (evalE x)
+    Nil _                         -> ()
+    Pair _ e1 e2                  -> let !x1 = evalE e1
+                                         !x2 = evalE e2
+                                     in  (x1, x2)
+    VecPack   _ vecR e            -> pack   vecR $! evalE e
+    VecUnpack _ vecR e            -> unpack vecR $! evalE e
+    IndexSlice _ slice slix sh    -> restrict slice (evalE slix)
                                                   (evalE sh)
       where
         restrict :: SliceIndex slix sl co sh -> slix -> sh -> sl
@@ -954,7 +954,7 @@ evalOpenExp pexp env aenv =
         restrict (SliceFixed sliceIdx) (slx, _i)  (sl, _sz) =
           restrict sliceIdx slx sl
 
-    IndexFull slice slix sh     -> extend slice (evalE slix)
+    IndexFull _ slice slix sh     -> extend slice (evalE slix)
                                                 (evalE sh)
       where
         extend :: SliceIndex slix sl co sh -> slix -> sl -> sh
@@ -966,9 +966,9 @@ evalOpenExp pexp env aenv =
           let sh' = extend sliceIdx slx sl
           in  (sh', sz)
 
-    ToIndex shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
-    FromIndex shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
-    Case e rhs def              -> evalE (caseof (evalE e) rhs)
+    ToIndex _ shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
+    FromIndex _ shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
+    Case _ e rhs def              -> evalE (caseof (evalE e) rhs)
       where
         caseof :: TAG -> [(TAG, OpenExp env aenv t)] -> OpenExp env aenv t
         caseof tag = go
@@ -980,11 +980,11 @@ evalOpenExp pexp env aenv =
               | Just d <- def = d
               | otherwise     = internalError "unmatched case"
 
-    Cond c t e
-      | toBool (evalE c)        -> evalE t
-      | otherwise               -> evalE e
+    Cond _ c t e
+      | toBool (evalE c)          -> evalE t
+      | otherwise                 -> evalE e
 
-    While cond body seed        -> go (evalE seed)
+    While _ cond body seed        -> go (evalE seed)
       where
         f       = evalF body
         p       = evalF cond
@@ -992,15 +992,15 @@ evalOpenExp pexp env aenv =
           | toBool (p x) = go (f x)
           | otherwise    = x
 
-    Index acc ix                -> let (TupRsingle repr, a) = evalA acc
-                                   in (repr, a) ! evalE ix
-    LinearIndex acc i           -> let (TupRsingle repr, a) = evalA acc
-                                       ix   = fromIndex (arrayRshape repr) (shape a) (evalE i)
-                                   in (repr, a) ! ix
-    Shape acc                   -> shape $ snd $ evalA acc
-    ShapeSize shr sh            -> size shr (evalE sh)
-    Foreign _ _ f e             -> evalOpenFun f Empty Empty $ evalE e
-    Coerce t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
+    Index _ acc ix                -> let (TupRsingle repr, a) = evalA acc
+                                     in  (repr, a) ! evalE ix
+    LinearIndex _ acc i           -> let (TupRsingle repr, a) = evalA acc
+                                         ix   = fromIndex (arrayRshape repr) (shape a) (evalE i)
+                                     in  (repr, a) ! ix
+    Shape _ acc                   -> shape $ snd $ evalA acc
+    ShapeSize _ shr sh            -> size shr (evalE sh)
+    Foreign _ _ _ f e             -> evalOpenFun f Empty Empty $ evalE e
+    Coerce _ t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
 
 
 -- Coercions
