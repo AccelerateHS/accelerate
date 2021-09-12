@@ -211,7 +211,7 @@ prettyPreOpenAcc
     -> PreOpenAcc acc aenv arrs
     -> Adoc
 prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
-  maybeWithAnn config pacc $ case pacc of
+  maybeWithAnn config False pacc $ case pacc of
     Avar _ (Var _ idx)               -> prj idx aenv
     Alet{}                           -> prettyAlet config ctx prettyAcc extractAcc aenv pacc
     Apair{}                          -> prettyAtuple config ctx prettyAcc extractAcc aenv pacc
@@ -466,17 +466,20 @@ prettyAnn' config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) 
           then Just $ align (encloseSep "{ " " }" ", " enabledOpts)
           else Nothing
 
--- | If the argument has a annotation, append that annotation to the pretty
+-- | If the argument has an annotation, append that annotation to the pretty
 -- printer output.
 --
--- TODO: There seem to be missing parentheses around nodes now, and 'align'
---       doesn't do quite the right thing here.
-maybeWithAnn :: HasAnnotations a => PrettyConfig acc -> a -> Adoc -> Adoc
-maybeWithAnn config x doc | confAnnotationVerbosity config > Quiet
-                          , Just ann <- getAnn x
-                          , Just pAnn <- prettyAnn' config ann =
-    sep [doc, align $ brackets pAnn]
-maybeWithAnn _ _ doc = doc
+-- TODO: Doing it this way results in a ton of clutter, and it can be difficult
+--       to read so this is more of a temporary solution. To help with ambiguity
+--       we'll just always add parentheses around scalar-level expressions for
+--       now. 'align' also doesn't always place the annotation where you'd
+--       expect it to be.
+maybeWithAnn :: HasAnnotations a => PrettyConfig acc -> Bool -> a -> Adoc -> Adoc
+maybeWithAnn config withParens x doc
+  | confAnnotationVerbosity config > Quiet
+  , Just ann <- getAnn x
+  , Just pAnn <- prettyAnn' config ann = parensIf withParens $ sep [doc, align $ brackets pAnn]
+  | otherwise                          = doc
 
 
 -- Scalar expressions
@@ -522,7 +525,7 @@ prettyOpenExp
     -> OpenExp env aenv t
     -> Adoc
 prettyOpenExp config ctx env aenv exp =
-  maybeWithAnn config exp $ case exp of
+  maybeWithAnn config True exp $ case exp of
     Evar _ (Var _ idx)     -> prj idx env
     Let{}                  -> prettyLet config ctx env aenv exp
     PrimApp _ f x
