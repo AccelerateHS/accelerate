@@ -76,12 +76,12 @@ newtype Idx env t = UnsafeIdxConstructor { unsafeRunIdx :: Int }
 
 {-# COMPLETE ZeroIdx, SuccIdx #-}
 
-pattern ZeroIdx :: forall env envt t. () => (envt ~ (env, t)) => Idx envt t
-pattern ZeroIdx <- (\x -> (idxToInt x, unsafeCoerce @(envt :~: envt) @(envt :~: (env, t)) Refl) -> (0, Refl))
+pattern ZeroIdx :: forall envt t. () => forall env. (envt ~ (env, t)) => Idx envt t
+pattern ZeroIdx <- (\x -> (idxToInt x, unsafeCoerce @_ @(envt :~: (_, t)) Refl) -> (0, Refl))
   where
     ZeroIdx = UnsafeIdxConstructor 0
 
-pattern SuccIdx :: () => (envs ~ (env, s)) => Idx env t -> Idx envs t
+pattern SuccIdx :: forall envs t. () => forall s env. (envs ~ (env, s)) => Idx env t -> Idx envs t
 pattern SuccIdx idx <- (unSucc -> Just (idx, Refl))
   where
     SuccIdx (UnsafeIdxConstructor i) = UnsafeIdxConstructor (i+1)
