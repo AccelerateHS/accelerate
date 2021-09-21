@@ -6,7 +6,6 @@
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -77,7 +76,7 @@ newtype Idx env t = UnsafeIdxConstructor { unsafeRunIdx :: Int }
 {-# COMPLETE ZeroIdx, SuccIdx #-}
 
 pattern ZeroIdx :: forall envt t. () => forall env. (envt ~ (env, t)) => Idx envt t
-pattern ZeroIdx <- (\x -> (idxToInt x, unsafeCoerce @_ @(envt :~: (_, t)) Refl) -> (0, Refl))
+pattern ZeroIdx <- (\x -> (idxToInt x, unsafeCoerce Refl) -> (0, Refl :: envt :~: (env, t)))
   where
     ZeroIdx = UnsafeIdxConstructor 0
 
