@@ -11,23 +11,78 @@
 
 -- | Annotations for Accelerate's abstract syntax trees.
 --
+-- * TODOs
+--
 -- TODO: Document what exactly we are annotating and how we do that once this
 --       has been fleshed out a little more.
 -- TODO: Add the same file header used in all other modules
 -- TODO: Reformat all of the changes from this branch to the usual Accelerate
 --       style. There's no style guide or formatter config anywhere, so I just
 --       run most things through Brittany to keep me sane.
+-- TODO: Document the process around freezing call stacks
+-- TODO: Figure out the let/var conversion in sharing recovery
+-- TODO: Take another look at fusion, optimization propagation doesn't have to
+--       be perfect yet but I'm sure there are also issues elsewhere
+-- TODO: See if we can clean up the pretty printer a bit, and also add the
+--       information to the graphviz export (there's already a todo for that)
+-- TODO: Expose the pretty printer verbosity option somehow
+-- TODO: Tests! Tests? Can we test this, and how? We can probably at least fake
+--       call stacks, generate random ASTs with smart constructors, and check
+--       `getAnn`.
 --
--- * Implementation status
---
--- There are more todos sprinkled around the code. Use the following mystical
--- one-liner to find them:
+-- There are a bunch more todos sprinkled around the code. Use the following
+-- mystical one-liner to find them:
 --
 -- @
 -- git diff -U0 master...feature/annotations | grep '^+.*\(TODO\|HACK\|FIXME\)' | cut -c2- | git grep -nFf- feature/annotations
 -- @
 --
--- TODO: Tests!
+-- * Annotations
+--
+-- The general idea is that almost all AST data type constructors have been
+-- extended with an 'Ann' field, which stores annotation data for the AST node.
+-- Presently, we use this to store both source mapping information and flags
+-- that can be used by the optimizer. These annotations are populated in the
+-- smart constructors using the 'mkAnn' function, so they end up being
+-- completely transparent to the user.
+--
+-- ** Capturing call stacks
+--
+-- 'mkAnn' will try to capture source information in the form of GHC Call
+-- Stacks. This ends up being a breaking change to any library building on
+-- Accelerate. In short, the changes that need to be made are as follows:
+--
+--   1. All smart constructors or library functions that are exposed to the
+--      user, as well as all auxiliary functions that either directly or
+--      indirectly end up calling 'mkAnn', need to be annotated with the
+--      'HasCallStack' constraint.
+--   2. Top-level smart constructors or library functions that are exported from
+--      a module need to freeze the call stack at the entry point. See below for
+--      more details on how to do this correctly.
+--   3. When translating between different AST types (such as the internal De
+--      Bruijn AST to a backend-specific AST), the annotations need to be
+--      propgated to that new AST nodes. If needed, multiple annotations can be
+--      merged with the '(<>)' operator.
+--
+-- If either (1) or (2) is omitted, then 'mkAnn' will throw an assertion
+-- failure. These steps are required in order to access the source location in
+-- the user's code where the toplevel library function was called from.
+--
+-- ** Freezing call stacks
+--
+-- A function builds a compile-time call stack with information about its caller
+-- when it is annotated with the 'HasCallStack' constraint. The call stack can
+-- be frozen with the 'withFrozenCallStack' function, which causes its argument
+-- to be evaluated in a way that prevents it from accumulating additional stack
+-- frames in its call stack. GHC Call Stacks are implemented using implicit
+-- parameters. This means that the location in the source code a variable was
+-- defined in - and this was the point where I realized we can cut a lot of
+-- complexity by using our own implicit parameter for the source mapping.
+--
+-- TODO: Mention pattern synonyms
+-- TODO: Mention RTS call stacks
+--
+-- TODO: See what we still need from the below comments, get rid of the rest
 --
 -- ** Annotations in the smart AST
 --
