@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams   #-}
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
@@ -673,47 +674,47 @@ class Stencil sh e stencil where
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e)
     = EltR (e, e, e)
-  stencilR = withFrozenCallStack $ StencilRunit3 @(EltR e) $ eltR @e
-  stencilPrj s = withFrozenCallStack (Exp $ prj2 s,
-                                      Exp $ prj1 s,
-                                      Exp $ prj0 s)
+  stencilR = sourceMap $ StencilRunit3 @(EltR e) $ eltR @e
+  stencilPrj s = sourceMap (Exp $ prj2 s,
+                            Exp $ prj1 s,
+                            Exp $ prj0 s)
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
     = EltR (e, e, e, e, e)
-  stencilR = withFrozenCallStack $ StencilRunit5 $ eltR @e
-  stencilPrj s = withFrozenCallStack (Exp $ prj4 s,
-                                      Exp $ prj3 s,
-                                      Exp $ prj2 s,
-                                      Exp $ prj1 s,
-                                      Exp $ prj0 s)
+  stencilR = sourceMap $ StencilRunit5 $ eltR @e
+  stencilPrj s = sourceMap (Exp $ prj4 s,
+                            Exp $ prj3 s,
+                            Exp $ prj2 s,
+                            Exp $ prj1 s,
+                            Exp $ prj0 s)
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
     = EltR (e, e, e, e, e, e, e)
-  stencilR = withFrozenCallStack $ StencilRunit7 $ eltR @e
-  stencilPrj s = withFrozenCallStack (Exp $ prj6 s,
-                                      Exp $ prj5 s,
-                                      Exp $ prj4 s,
-                                      Exp $ prj3 s,
-                                      Exp $ prj2 s,
-                                      Exp $ prj1 s,
-                                      Exp $ prj0 s)
+  stencilR = sourceMap $ StencilRunit7 $ eltR @e
+  stencilPrj s = sourceMap (Exp $ prj6 s,
+                            Exp $ prj5 s,
+                            Exp $ prj4 s,
+                            Exp $ prj3 s,
+                            Exp $ prj2 s,
+                            Exp $ prj1 s,
+                            Exp $ prj0 s)
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
   where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
     = EltR (e, e, e, e, e, e, e, e, e)
-  stencilR = withFrozenCallStack $ StencilRunit9 $ eltR @e
-  stencilPrj s = withFrozenCallStack (Exp $ prj8 s,
-                                      Exp $ prj7 s,
-                                      Exp $ prj6 s,
-                                      Exp $ prj5 s,
-                                      Exp $ prj4 s,
-                                      Exp $ prj3 s,
-                                      Exp $ prj2 s,
-                                      Exp $ prj1 s,
-                                      Exp $ prj0 s)
+  stencilR = sourceMap $ StencilRunit9 $ eltR @e
+  stencilPrj s = sourceMap (Exp $ prj8 s,
+                            Exp $ prj7 s,
+                            Exp $ prj6 s,
+                            Exp $ prj5 s,
+                            Exp $ prj4 s,
+                            Exp $ prj3 s,
+                            Exp $ prj2 s,
+                            Exp $ prj1 s,
+                            Exp $ prj0 s)
 
 -- DIM(n+1)
 instance (Stencil (sh:.Int) a row2,
@@ -721,10 +722,10 @@ instance (Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row2, row1, row0) where
   type StencilR (sh:.Int:.Int) (row2, row1, row0)
     = Tup3 (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
-  stencilR = withFrozenCallStack $ StencilRtup3 (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
-  stencilPrj s = withFrozenCallStack (stencilPrj @(sh:.Int) @a $ prj2 s,
-                                      stencilPrj @(sh:.Int) @a $ prj1 s,
-                                      stencilPrj @(sh:.Int) @a $ prj0 s)
+  stencilR = sourceMap $ StencilRtup3 (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = sourceMap (stencilPrj @(sh:.Int) @a $ prj2 s,
+                            stencilPrj @(sh:.Int) @a $ prj1 s,
+                            stencilPrj @(sh:.Int) @a $ prj0 s)
 
 instance (Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row3,
@@ -734,13 +735,13 @@ instance (Stencil (sh:.Int) a row4,
   type StencilR (sh:.Int:.Int) (row4, row3, row2, row1, row0)
     = Tup5 (StencilR (sh:.Int) row4) (StencilR (sh:.Int) row3) (StencilR (sh:.Int) row2)
        (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
-  stencilR = withFrozenCallStack $ StencilRtup5 (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
-                                                (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
-  stencilPrj s = withFrozenCallStack (stencilPrj @(sh:.Int) @a $ prj4 s,
-                                      stencilPrj @(sh:.Int) @a $ prj3 s,
-                                      stencilPrj @(sh:.Int) @a $ prj2 s,
-                                      stencilPrj @(sh:.Int) @a $ prj1 s,
-                                      stencilPrj @(sh:.Int) @a $ prj0 s)
+  stencilR = sourceMap $ StencilRtup5 (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
+                                      (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = sourceMap (stencilPrj @(sh:.Int) @a $ prj4 s,
+                            stencilPrj @(sh:.Int) @a $ prj3 s,
+                            stencilPrj @(sh:.Int) @a $ prj2 s,
+                            stencilPrj @(sh:.Int) @a $ prj1 s,
+                            stencilPrj @(sh:.Int) @a $ prj0 s)
 
 instance (Stencil (sh:.Int) a row6,
           Stencil (sh:.Int) a row5,
@@ -754,16 +755,16 @@ instance (Stencil (sh:.Int) a row6,
     = Tup7 (StencilR (sh:.Int) row6) (StencilR (sh:.Int) row5) (StencilR (sh:.Int) row4)
        (StencilR (sh:.Int) row3) (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1)
        (StencilR (sh:.Int) row0)
-  stencilR = withFrozenCallStack $ StencilRtup7 (stencilR @(sh:.Int) @a @row6)
-                                                (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
-                                                (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
-  stencilPrj s = withFrozenCallStack (stencilPrj @(sh:.Int) @a $ prj6 s,
-                                      stencilPrj @(sh:.Int) @a $ prj5 s,
-                                      stencilPrj @(sh:.Int) @a $ prj4 s,
-                                      stencilPrj @(sh:.Int) @a $ prj3 s,
-                                      stencilPrj @(sh:.Int) @a $ prj2 s,
-                                      stencilPrj @(sh:.Int) @a $ prj1 s,
-                                      stencilPrj @(sh:.Int) @a $ prj0 s)
+  stencilR = sourceMap $ StencilRtup7 (stencilR @(sh:.Int) @a @row6)
+                                      (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
+                                      (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = sourceMap (stencilPrj @(sh:.Int) @a $ prj6 s,
+                            stencilPrj @(sh:.Int) @a $ prj5 s,
+                            stencilPrj @(sh:.Int) @a $ prj4 s,
+                            stencilPrj @(sh:.Int) @a $ prj3 s,
+                            stencilPrj @(sh:.Int) @a $ prj2 s,
+                            stencilPrj @(sh:.Int) @a $ prj1 s,
+                            stencilPrj @(sh:.Int) @a $ prj0 s)
 
 instance (Stencil (sh:.Int) a row8,
           Stencil (sh:.Int) a row7,
@@ -779,49 +780,49 @@ instance (Stencil (sh:.Int) a row8,
     = Tup9 (StencilR (sh:.Int) row8) (StencilR (sh:.Int) row7) (StencilR (sh:.Int) row6)
        (StencilR (sh:.Int) row5) (StencilR (sh:.Int) row4) (StencilR (sh:.Int) row3)
        (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
-  stencilR = withFrozenCallStack $ StencilRtup9
-                  (stencilR @(sh:.Int) @a @row8) (stencilR @(sh:.Int) @a @row7) (stencilR @(sh:.Int) @a @row6)
-                  (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
-                  (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
-  stencilPrj s = withFrozenCallStack (stencilPrj @(sh:.Int) @a $ prj8 s,
-                                      stencilPrj @(sh:.Int) @a $ prj7 s,
-                                      stencilPrj @(sh:.Int) @a $ prj6 s,
-                                      stencilPrj @(sh:.Int) @a $ prj5 s,
-                                      stencilPrj @(sh:.Int) @a $ prj4 s,
-                                      stencilPrj @(sh:.Int) @a $ prj3 s,
-                                      stencilPrj @(sh:.Int) @a $ prj2 s,
-                                      stencilPrj @(sh:.Int) @a $ prj1 s,
-                                      stencilPrj @(sh:.Int) @a $ prj0 s)
+  stencilR = sourceMap $ StencilRtup9
+                         (stencilR @(sh:.Int) @a @row8) (stencilR @(sh:.Int) @a @row7) (stencilR @(sh:.Int) @a @row6)
+                         (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
+                         (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+  stencilPrj s = sourceMap (stencilPrj @(sh:.Int) @a $ prj8 s,
+                            stencilPrj @(sh:.Int) @a $ prj7 s,
+                            stencilPrj @(sh:.Int) @a $ prj6 s,
+                            stencilPrj @(sh:.Int) @a $ prj5 s,
+                            stencilPrj @(sh:.Int) @a $ prj4 s,
+                            stencilPrj @(sh:.Int) @a $ prj3 s,
+                            stencilPrj @(sh:.Int) @a $ prj2 s,
+                            stencilPrj @(sh:.Int) @a $ prj1 s,
+                            stencilPrj @(sh:.Int) @a $ prj0 s)
 
-prjTail :: HasCallStack => SmartExp (t, a) -> SmartExp t
-prjTail = withFrozenCallStack $ SmartExp . Prj mkAnn PairIdxLeft
+prjTail :: SourceMapped => SmartExp (t, a) -> SmartExp t
+prjTail = SmartExp . Prj mkAnn PairIdxLeft
 
-prj0 :: HasCallStack => SmartExp (t, a) -> SmartExp a
-prj0 = withFrozenCallStack $ SmartExp . Prj mkAnn PairIdxRight
+prj0 :: SourceMapped => SmartExp (t, a) -> SmartExp a
+prj0 = SmartExp . Prj mkAnn PairIdxRight
 
-prj1 :: HasCallStack => SmartExp ((t, a), s0) -> SmartExp a
-prj1 = withFrozenCallStack $ prj0 . prjTail
+prj1 :: SourceMapped => SmartExp ((t, a), s0) -> SmartExp a
+prj1 = prj0 . prjTail
 
-prj2 :: HasCallStack => SmartExp (((t, a), s1), s0) -> SmartExp a
-prj2 = withFrozenCallStack $ prj1 . prjTail
+prj2 :: SourceMapped => SmartExp (((t, a), s1), s0) -> SmartExp a
+prj2 = prj1 . prjTail
 
-prj3 :: HasCallStack => SmartExp ((((t, a), s2), s1), s0) -> SmartExp a
-prj3 = withFrozenCallStack $ prj2 . prjTail
+prj3 :: SourceMapped => SmartExp ((((t, a), s2), s1), s0) -> SmartExp a
+prj3 = prj2 . prjTail
 
-prj4 :: HasCallStack => SmartExp (((((t, a), s3), s2), s1), s0) -> SmartExp a
-prj4 = withFrozenCallStack $ prj3 . prjTail
+prj4 :: SourceMapped => SmartExp (((((t, a), s3), s2), s1), s0) -> SmartExp a
+prj4 = prj3 . prjTail
 
-prj5 :: HasCallStack => SmartExp ((((((t, a), s4), s3), s2), s1), s0) -> SmartExp a
-prj5 = withFrozenCallStack $ prj4 . prjTail
+prj5 :: SourceMapped => SmartExp ((((((t, a), s4), s3), s2), s1), s0) -> SmartExp a
+prj5 = prj4 . prjTail
 
-prj6 :: HasCallStack => SmartExp (((((((t, a), s5), s4), s3), s2), s1), s0) -> SmartExp a
-prj6 = withFrozenCallStack $ prj5 . prjTail
+prj6 :: SourceMapped => SmartExp (((((((t, a), s5), s4), s3), s2), s1), s0) -> SmartExp a
+prj6 = prj5 . prjTail
 
-prj7 :: HasCallStack => SmartExp ((((((((t, a), s6), s5), s4), s3), s2), s1), s0) -> SmartExp a
-prj7 = withFrozenCallStack $ prj6 . prjTail
+prj7 :: SourceMapped => SmartExp ((((((((t, a), s6), s5), s4), s3), s2), s1), s0) -> SmartExp a
+prj7 = prj6 . prjTail
 
-prj8 :: HasCallStack => SmartExp (((((((((t, a), s7), s6), s5), s4), s3), s2), s1), s0) -> SmartExp a
-prj8 = withFrozenCallStack $ prj7 . prjTail
+prj8 :: SourceMapped => SmartExp (((((((((t, a), s7), s6), s5), s4), s3), s2), s1), s0) -> SmartExp a
+prj8 = prj7 . prjTail
 
 
 -- Extracting type information
@@ -932,9 +933,9 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
 -- change without the need to generate fresh code.
 --
 constant :: forall e. (HasCallStack, Elt e) => e -> Exp e
-constant = withFrozenCallStack $ Exp . go (eltR @e) . fromElt
+constant = sourceMap $ Exp . go (eltR @e) . fromElt
   where
-    go :: HasCallStack => TypeR t -> t -> SmartExp t
+    go :: SourceMapped => TypeR t -> t -> SmartExp t
     go TupRunit         ()       = SmartExp $ (Nil mkAnn)
     go (TupRsingle tp)  c        = SmartExp $ Const mkAnn tp c
     go (TupRpair t1 t2) (c1, c2) = SmartExp $ Pair mkAnn (go t1 c1) (go t2 c2)
@@ -963,12 +964,12 @@ constant = withFrozenCallStack $ Exp . go (eltR @e) . fromElt
 -- @since 1.2.0.0
 --
 undef :: forall e. (HasCallStack, Elt e) => Exp e
-undef = withFrozenCallStack
-  $ let go :: HasCallStack => TypeR t -> SmartExp t
-        go TupRunit         = SmartExp $ Nil mkAnn
-        go (TupRsingle t)   = SmartExp $ Undef mkAnn t
-        go (TupRpair t1 t2) = SmartExp $ Pair mkAnn (go t1) (go t2)
-    in  Exp $ go $ eltR @e
+undef = sourceMap $ Exp . go $ eltR @e
+  where
+    go :: SourceMapped => TypeR t -> SmartExp t
+    go TupRunit         = SmartExp $ Nil mkAnn
+    go (TupRsingle t)   = SmartExp $ Undef mkAnn t
+    go (TupRpair t1 t2) = SmartExp $ Pair mkAnn (go t1) (go t2)
 
 -- | Get the innermost dimension of a shape.
 --
@@ -981,24 +982,24 @@ undef = withFrozenCallStack
 -- innermost nested loop.
 --
 indexHead :: (HasCallStack, Elt sh, Elt a) => Exp (sh :. a) -> Exp a
-indexHead (Exp x) = withFrozenCallStack $ mkExp $ Prj mkAnn PairIdxRight x
+indexHead (Exp x) = sourceMap $ mkExp $ Prj mkAnn PairIdxRight x
 
 -- | Get all but the innermost element of a shape
 --
 indexTail :: (HasCallStack, Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
-indexTail (Exp x) = withFrozenCallStack $ mkExp $ Prj mkAnn PairIdxLeft x
+indexTail (Exp x) = sourceMap $ mkExp $ Prj mkAnn PairIdxLeft x
 
 
 -- Smart constructor for constants
 --
 
-mkMinBound :: (HasCallStack, Elt t, IsBounded (EltR t)) => Exp t
+mkMinBound :: (SourceMapped, Elt t, IsBounded (EltR t)) => Exp t
 mkMinBound = mkExp $ PrimConst mkAnn (PrimMinBound boundedType)
 
-mkMaxBound :: (HasCallStack, Elt t, IsBounded (EltR t)) => Exp t
+mkMaxBound :: (SourceMapped, Elt t, IsBounded (EltR t)) => Exp t
 mkMaxBound = mkExp $ PrimConst mkAnn (PrimMaxBound boundedType)
 
-mkPi :: (HasCallStack, Elt r, IsFloating (EltR r)) => Exp r
+mkPi :: (SourceMapped, Elt r, IsFloating (EltR r)) => Exp r
 mkPi = mkExp $ PrimConst mkAnn (PrimPi floatingType)
 
 
@@ -1007,237 +1008,237 @@ mkPi = mkExp $ PrimConst mkAnn (PrimPi floatingType)
 
 -- Operators from Floating
 
-mkSin :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSin :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkSin = mkPrimUnary $ PrimSin floatingType
 
-mkCos :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkCos :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkCos = mkPrimUnary $ PrimCos floatingType
 
-mkTan :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkTan :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkTan = mkPrimUnary $ PrimTan floatingType
 
-mkAsin :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAsin :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkAsin = mkPrimUnary $ PrimAsin floatingType
 
-mkAcos :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAcos :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkAcos = mkPrimUnary $ PrimAcos floatingType
 
-mkAtan :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAtan :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkAtan = mkPrimUnary $ PrimAtan floatingType
 
-mkSinh :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSinh :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkSinh = mkPrimUnary $ PrimSinh floatingType
 
-mkCosh :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkCosh :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkCosh = mkPrimUnary $ PrimCosh floatingType
 
-mkTanh :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkTanh :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkTanh = mkPrimUnary $ PrimTanh floatingType
 
-mkAsinh :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAsinh :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkAsinh = mkPrimUnary $ PrimAsinh floatingType
 
-mkAcosh :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAcosh :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkAcosh = mkPrimUnary $ PrimAcosh floatingType
 
-mkAtanh :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAtanh :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkAtanh = mkPrimUnary $ PrimAtanh floatingType
 
-mkExpFloating :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkExpFloating :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkExpFloating = mkPrimUnary $ PrimExpFloating floatingType
 
-mkSqrt :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSqrt :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkSqrt = mkPrimUnary $ PrimSqrt floatingType
 
-mkLog :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkLog :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkLog = mkPrimUnary $ PrimLog floatingType
 
-mkFPow :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkFPow :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
 mkFPow = mkPrimBinary $ PrimFPow floatingType
 
-mkLogBase :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkLogBase :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
 mkLogBase = mkPrimBinary $ PrimLogBase floatingType
 
 -- Operators from Num
 
-mkAdd :: (HasCallStack, Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkAdd :: (SourceMapped, Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
 mkAdd = mkPrimBinary $ PrimAdd numType
 
-mkSub :: (HasCallStack, Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkSub :: (SourceMapped, Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
 mkSub = mkPrimBinary $ PrimSub numType
 
-mkMul :: (HasCallStack, Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkMul :: (SourceMapped, Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
 mkMul = mkPrimBinary $ PrimMul numType
 
-mkNeg :: (HasCallStack, Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkNeg :: (SourceMapped, Elt t, IsNum (EltR t)) => Exp t -> Exp t
 mkNeg = mkPrimUnary $ PrimNeg numType
 
-mkAbs :: (HasCallStack, Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkAbs :: (SourceMapped, Elt t, IsNum (EltR t)) => Exp t -> Exp t
 mkAbs = mkPrimUnary $ PrimAbs numType
 
-mkSig :: (HasCallStack, Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkSig :: (SourceMapped, Elt t, IsNum (EltR t)) => Exp t -> Exp t
 mkSig = mkPrimUnary $ PrimSig numType
 
 -- Operators from Integral
 
-mkQuot :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkQuot :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkQuot = mkPrimBinary $ PrimQuot integralType
 
-mkRem :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkRem :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkRem = mkPrimBinary $ PrimRem integralType
 
-mkQuotRem :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
+mkQuotRem :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkQuotRem (Exp x) (Exp y) =
   let pair = SmartExp $ PrimApp mkAnn (PrimQuotRem integralType) (SmartExp (Pair mkAnn x y))
   in  (mkExp $ Prj mkAnn PairIdxLeft pair, mkExp $ Prj mkAnn PairIdxRight pair)
 
-mkIDiv :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkIDiv :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkIDiv = mkPrimBinary $ PrimIDiv integralType
 
-mkMod :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkMod :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkMod = mkPrimBinary $ PrimMod integralType
 
-mkDivMod :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
+mkDivMod :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
 mkDivMod (Exp x) (Exp y) =
   let pair = SmartExp $ PrimApp mkAnn (PrimDivMod integralType) (SmartExp (Pair mkAnn x y))
   in  (mkExp $ Prj mkAnn PairIdxLeft pair, mkExp $ Prj mkAnn PairIdxRight pair)
 
 -- Operators from Bits and FiniteBits
 
-mkBAnd :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBAnd :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkBAnd = mkPrimBinary $ PrimBAnd integralType
 
-mkBOr :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBOr :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkBOr = mkPrimBinary $ PrimBOr integralType
 
-mkBXor :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBXor :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
 mkBXor = mkPrimBinary $ PrimBXor integralType
 
-mkBNot :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
+mkBNot :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
 mkBNot = mkPrimUnary $ PrimBNot integralType
 
-mkBShiftL :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBShiftL :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 mkBShiftL = mkPrimBinary $ PrimBShiftL integralType
 
-mkBShiftR :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBShiftR :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 mkBShiftR = mkPrimBinary $ PrimBShiftR integralType
 
-mkBRotateL :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBRotateL :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 mkBRotateL = mkPrimBinary $ PrimBRotateL integralType
 
-mkBRotateR :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
+mkBRotateR :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
 mkBRotateR = mkPrimBinary $ PrimBRotateR integralType
 
-mkPopCount :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
+mkPopCount :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
 mkPopCount = mkPrimUnary $ PrimPopCount integralType
 
-mkCountLeadingZeros :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
+mkCountLeadingZeros :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
 mkCountLeadingZeros = mkPrimUnary $ PrimCountLeadingZeros integralType
 
-mkCountTrailingZeros :: (HasCallStack, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
+mkCountTrailingZeros :: (SourceMapped, Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
 mkCountTrailingZeros = mkPrimUnary $ PrimCountTrailingZeros integralType
 
 
 -- Operators from Fractional
 
-mkFDiv :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkFDiv :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
 mkFDiv = mkPrimBinary $ PrimFDiv floatingType
 
-mkRecip :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkRecip :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t
 mkRecip = mkPrimUnary $ PrimRecip floatingType
 
 -- Operators from RealFrac
 
-mkTruncate :: (HasCallStack, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkTruncate :: (SourceMapped, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkTruncate = mkPrimUnary $ PrimTruncate floatingType integralType
 
-mkRound :: (HasCallStack, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkRound :: (SourceMapped, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkRound = mkPrimUnary $ PrimRound floatingType integralType
 
-mkFloor :: (HasCallStack, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkFloor :: (SourceMapped, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkFloor = mkPrimUnary $ PrimFloor floatingType integralType
 
-mkCeiling :: (HasCallStack, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkCeiling :: (SourceMapped, Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkCeiling = mkPrimUnary $ PrimCeiling floatingType integralType
 
 -- Operators from RealFloat
 
-mkAtan2 :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkAtan2 :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
 mkAtan2 = mkPrimBinary $ PrimAtan2 floatingType
 
-mkIsNaN :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
+mkIsNaN :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
 mkIsNaN = mkPrimUnaryBool $ PrimIsNaN floatingType
 
-mkIsInfinite :: (HasCallStack, Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
+mkIsInfinite :: (SourceMapped, Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
 mkIsInfinite = mkPrimUnaryBool $ PrimIsInfinite floatingType
 
 -- FIXME: add missing operations from Floating, RealFrac & RealFloat
 
 -- Relational and equality operators
 
-mkLt :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkLt :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
 mkLt = mkPrimBinaryBool $ PrimLt singleType
 
-mkGt :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkGt :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
 mkGt = mkPrimBinaryBool $ PrimGt singleType
 
-mkLtEq :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkLtEq :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
 mkLtEq = mkPrimBinaryBool $ PrimLtEq singleType
 
-mkGtEq :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkGtEq :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
 mkGtEq = mkPrimBinaryBool $ PrimGtEq singleType
 
-mkEq :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkEq :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
 mkEq = mkPrimBinaryBool $ PrimEq singleType
 
-mkNEq :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
+mkNEq :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
 mkNEq = mkPrimBinaryBool $ PrimNEq singleType
 
-mkMax :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
+mkMax :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
 mkMax = mkPrimBinary $ PrimMax singleType
 
-mkMin :: (HasCallStack, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
+mkMin :: (SourceMapped, Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
 mkMin = mkPrimBinary $ PrimMin singleType
 
 -- Logical operators
 
-mkLAnd :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
+mkLAnd :: SourceMapped  => Exp Bool -> Exp Bool -> Exp Bool
 mkLAnd (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp mkAnn PrimLAnd (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
   where
     x = SmartExp $ Prj mkAnn PairIdxLeft a
     y = SmartExp $ Prj mkAnn PairIdxLeft b
 
-mkLOr :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
+mkLOr :: SourceMapped => Exp Bool -> Exp Bool -> Exp Bool
 mkLOr (Exp a) (Exp b) = mkExp $ Pair mkAnn (SmartExp (PrimApp mkAnn PrimLOr (SmartExp $ Pair mkAnn x y))) (SmartExp (Nil mkAnn))
   where
     x = SmartExp $ Prj mkAnn PairIdxLeft a
     y = SmartExp $ Prj mkAnn PairIdxLeft b
 
-mkLNot :: HasCallStack => Exp Bool -> Exp Bool
+mkLNot :: SourceMapped => Exp Bool -> Exp Bool
 mkLNot (Exp a) = mkExp $ Pair mkAnn (SmartExp (PrimApp mkAnn PrimLNot x)) (SmartExp (Nil mkAnn))
   where
     x = SmartExp $ Prj mkAnn PairIdxLeft a
 
 -- Numeric conversions
 
-mkFromIntegral :: (HasCallStack, Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
+mkFromIntegral :: (SourceMapped, Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
 mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 
-mkToFloating :: (HasCallStack, Elt a, Elt b, IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
+mkToFloating :: (SourceMapped, Elt a, Elt b, IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
 mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 
 -- Other conversions
 
 -- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
 -- make this version "safe"
-mkBitcast :: forall b a. (HasCallStack, Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
+mkBitcast :: forall b a. (SourceMapped, Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
 mkBitcast (Exp a) = mkExp $ Coerce mkAnn (scalarType @(EltR a)) (scalarType @(EltR b)) a
 
-mkCoerce :: HasCallStack => Coerce (EltR a) (EltR b) => Exp a -> Exp b
-mkCoerce (Exp a) = withFrozenCallStack $ Exp $ mkCoerce' a
+mkCoerce :: (SourceMapped, Coerce (EltR a) (EltR b)) => Exp a -> Exp b
+mkCoerce (Exp a) = sourceMap $ Exp $ mkCoerce' a
 
 class Coerce a b where
-  mkCoerce' :: HasCallStack => SmartExp a -> SmartExp b
+  mkCoerce' :: SourceMapped => SmartExp a -> SmartExp b
 
 instance {-# OVERLAPS #-} (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b where
   mkCoerce' = SmartExp . Coerce mkAnn (scalarType @a) (scalarType @b)
@@ -1353,22 +1354,22 @@ unExpFunction f = unExp . f . Exp
 unExpBinaryFunction :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> SmartExp (EltR a) -> SmartExp (EltR b) -> SmartExp (EltR c)
 unExpBinaryFunction f a b = unExp $ f (Exp a) (Exp b)
 
-mkPrimUnary :: (HasCallStack, Elt a, Elt b) => PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
+mkPrimUnary :: (SourceMapped, Elt a, Elt b) => PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
 mkPrimUnary prim (Exp a) = mkExp $ PrimApp mkAnn prim a
 
-mkPrimBinary :: (HasCallStack, Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
+mkPrimBinary :: (SourceMapped, Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp mkAnn prim (SmartExp $ Pair mkAnn a b)
 
-mkPrimUnaryBool :: (HasCallStack, Elt a) => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
+mkPrimUnaryBool :: (SourceMapped, Elt a) => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
 mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary
 
-mkPrimBinaryBool :: (HasCallStack, Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
+mkPrimBinaryBool :: (SourceMapped, Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
 mkPrimBinaryBool = mkCoerce @PrimBool $$$ mkPrimBinary
 
-unPair :: HasCallStack => SmartExp (a, b) -> (SmartExp a, SmartExp b)
+unPair :: SourceMapped => SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj mkAnn PairIdxLeft e, SmartExp $ Prj mkAnn PairIdxRight e)
 
-mkPairToTuple :: HasCallStack => SmartAcc (a, b) -> SmartAcc (((), a), b)
+mkPairToTuple :: SourceMapped => SmartAcc (a, b) -> SmartAcc (((), a), b)
 mkPairToTuple e = SmartAcc (Anil mkAnn) `pair` a `pair` b
   where
     a = SmartAcc $ Aprj mkAnn PairIdxLeft e

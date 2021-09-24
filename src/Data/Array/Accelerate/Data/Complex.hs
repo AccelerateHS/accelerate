@@ -72,8 +72,8 @@ import qualified Prelude                                            as P
 
 infix 6 ::+
 pattern (::+) :: (HasCallStack, Elt a) => Exp a -> Exp a -> Exp (Complex a)
-pattern r ::+ i <- (withEmptyOrFrozenCallStack deconstructComplex -> (r, i))
-  where (::+) = withEmptyOrFrozenCallStack constructComplex
+pattern r ::+ i <- (sourceMapPattern deconstructComplex -> (r, i))
+  where (::+) = sourceMapPattern constructComplex
 {-# COMPLETE (::+) #-}
 
 
@@ -170,13 +170,13 @@ complexR = tuple
     floating TypeDouble = ComplexVec singleType
 
 
-constructComplex :: forall a. (HasCallStack, Elt a) => Exp a -> Exp a -> Exp (Complex a)
+constructComplex :: forall a. (SourceMapped, Elt a) => Exp a -> Exp a -> Exp (Complex a)
 constructComplex r i =
   case complexR (eltR @a) of
     ComplexTup   -> coerce $ T2 r i
     ComplexVec _ -> V2 (coerce @a @(EltR a) r) (coerce @a @(EltR a) i)
 
-deconstructComplex :: forall a. (HasCallStack, Elt a) => Exp (Complex a) -> (Exp a, Exp a)
+deconstructComplex :: forall a. (SourceMapped, Elt a) => Exp (Complex a) -> (Exp a, Exp a)
 deconstructComplex c@(Exp c') =
   case complexR (eltR @a) of
     ComplexTup   -> let T2 r i = coerce c in (r, i)
@@ -188,32 +188,32 @@ coerce (Exp e) = Exp e
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
-  lift (r :+ i) = withFrozenCallStack $ lift r ::+ lift i
+  lift (r :+ i) = sourceMap $ lift r ::+ lift i
 
 instance Elt a => Unlift Exp (Complex (Exp a)) where
-  unlift = withFrozenCallStack $ \(r ::+ i) -> r :+ i
+  unlift = sourceMap $ \(r ::+ i) -> r :+ i
 
 
 instance Eq a => Eq (Complex a) where
-  (==) = withFrozenCallStack $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 == r2 && c1 == c2
-  (/=) = withFrozenCallStack $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 /= r2 || c1 /= c2
+  (==) = sourceMap $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 == r2 && c1 == c2
+  (/=) = sourceMap $ \(r1 ::+ c1) (r2 ::+ c2) -> r1 /= r2 || c1 /= c2
 
 instance RealFloat a => P.Num (Exp (Complex a)) where
-  (+)    = withExecutionStackAsCallStack $ lift2 ((+)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  (-)    = withExecutionStackAsCallStack $ lift2 ((-)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  (*)    = withExecutionStackAsCallStack $ lift2 ((*)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
-  negate = withExecutionStackAsCallStack $ lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
-  signum = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
+  (+)    = sourceMapRuntime $ lift2 ((+)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  (-)    = sourceMapRuntime $ lift2 ((-)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  (*)    = sourceMapRuntime $ lift2 ((*)    :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
+  negate = sourceMapRuntime $ lift1 (negate :: Complex (Exp a) -> Complex (Exp a))
+  signum = sourceMapRuntime $ \z@(x ::+ y) ->
     if z == 0
        then z
        else let r = magnitude z
              in x/r ::+ y/r
-  abs z         = withExecutionStackAsCallStack $ magnitude z ::+ 0
-  fromInteger n = withExecutionStackAsCallStack $ fromInteger n ::+ 0
+  abs z         = sourceMapRuntime $ magnitude z ::+ 0
+  fromInteger n = sourceMapRuntime $ fromInteger n ::+ 0
 
 instance RealFloat a => P.Fractional (Exp (Complex a)) where
-  fromRational x  = withExecutionStackAsCallStack $ fromRational x ::+ 0
-  z / z' = withFrozenCallStack
+  fromRational x  = sourceMapRuntime $ fromRational x ::+ 0
+  z / z' = sourceMapRuntime
     $ let x  :+ y   = unlift z
           x' :+ y'  = unlift z'
           --
@@ -221,29 +221,29 @@ instance RealFloat a => P.Fractional (Exp (Complex a)) where
           y'' = scaleFloat k y'
           k   = - max (exponent x') (exponent y')
           d   = x'*x'' + y'*y''
-      in  (x*x''+y*y'') / d ::+ (y*x''-x*y'') / d
+       in (x*x''+y*y'') / d ::+ (y*x''-x*y'') / d
 
 instance RealFloat a => P.Floating (Exp (Complex a)) where
-  pi    = withExecutionStackAsCallStack $ pi ::+ 0
-  exp   = withExecutionStackAsCallStack $ \(x ::+ y) ->
+  pi    = sourceMapRuntime $ pi ::+ 0
+  exp   = sourceMapRuntime $ \(x ::+ y) ->
     let expx = exp x
     in  expx * cos y ::+ expx * sin y
-  log z = withExecutionStackAsCallStack $ log (magnitude z) ::+ phase z
-  sqrt  = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
+  log z = sourceMapRuntime $ log (magnitude z) ::+ phase z
+  sqrt  = sourceMapRuntime $ \z@(x ::+ y) ->
     let T2 u v = x < 0 ? (T2 v' u', T2 u' v')
         v'     = abs y / (u'*2)
         u'     = sqrt ((magnitude z + abs x) / 2)
-    in  if z == 0
+     in if z == 0
           then 0
           else u ::+ (y < 0 ? (-v, v))
 
-  x ** y = withEmptyOrFrozenCallStack
+  x ** y = sourceMapRuntime
     $ let r     ::+ i  = x
           exp_r ::+ _  = y
           --
           inf = 1 / 0
           nan = 0 / 0
-      in  if y == 0 then 1 else
+       in if y == 0 then 1 else
             if x == 0 then if exp_r > 0 then 0 else
                           if exp_r < 0 then inf ::+ 0
                                         else nan ::+ nan
@@ -253,59 +253,59 @@ instance RealFloat a => P.Floating (Exp (Complex a)) where
                                               else nan ::+ nan
                             else exp (log x * y)
 
-  sin = withExecutionStackAsCallStack $ \(x ::+ y) ->
+  sin = sourceMapRuntime $ \(x ::+ y) ->
     sin x * cosh y ::+ cos x * sinh y
-  cos = withExecutionStackAsCallStack $ \(x ::+ y) ->
+  cos = sourceMapRuntime $ \(x ::+ y) ->
     cos x * cosh y ::+ (- sin x * sinh y)
-  tan = withExecutionStackAsCallStack $ \(x ::+ y) ->
+  tan = sourceMapRuntime $ \(x ::+ y) ->
     let sinx  = sin x
         cosx  = cos x
         sinhy = sinh y
         coshy = cosh y
-    in  (sinx*coshy ::+ cosx*sinhy) / (cosx*coshy ::+ (-sinx*sinhy))
+     in (sinx*coshy ::+ cosx*sinhy) / (cosx*coshy ::+ (-sinx*sinhy))
 
-  sinh = withExecutionStackAsCallStack $ \(x ::+ y) ->
+  sinh = sourceMapRuntime $ \(x ::+ y) ->
     cos y * sinh x ::+ sin  y * cosh x
-  cosh = withExecutionStackAsCallStack $ \(x ::+ y) ->
+  cosh = sourceMapRuntime $ \(x ::+ y) ->
     cos y * cosh x ::+ sin y * sinh x
-  tanh = withExecutionStackAsCallStack $ \(x ::+ y) ->
+  tanh = sourceMapRuntime $ \(x ::+ y) ->
     let siny  = sin y
         cosy  = cos y
         sinhx = sinh x
         coshx = cosh x
-    in  (cosy*sinhx ::+ siny*coshx) / (cosy*coshx ::+ siny*sinhx)
+     in (cosy*sinhx ::+ siny*coshx) / (cosy*coshx ::+ siny*sinhx)
 
-  asin = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
+  asin = sourceMapRuntime $ \z@(x ::+ y) ->
     let x' ::+ y' = log (((-y) ::+ x) + sqrt (1 - z*z))
-    in  y' ::+ (-x')
+     in y' ::+ (-x')
 
-  acos z = withExecutionStackAsCallStack
+  acos z = sourceMapRuntime
     $ let x'' ::+ y''  = log (z + ((-y') ::+ x'))
           x'  ::+ y'   = sqrt (1 - z*z)
-      in   y'' ::+ (-x'')
+       in y'' ::+ (-x'')
 
-  atan = withExecutionStackAsCallStack $ \z@(x ::+ y) ->
+  atan = sourceMapRuntime $ \z@(x ::+ y) ->
     let x' ::+ y' = log (((1-y) ::+ x) / sqrt (1+z*z))
-    in  y' ::+ (-x')
+     in y' ::+ (-x')
 
-  asinh z = withExecutionStackAsCallStack $ log (z + sqrt (1+z*z))
-  acosh z = withExecutionStackAsCallStack $ log (z + (z+1) * sqrt ((z-1)/(z+1)))
-  atanh z = withExecutionStackAsCallStack $ 0.5 * log ((1.0+z) / (1.0-z))
+  asinh z = sourceMapRuntime $ log (z + sqrt (1+z*z))
+  acosh z = sourceMapRuntime $ log (z + (z+1) * sqrt ((z-1)/(z+1)))
+  atanh z = sourceMapRuntime $ 0.5 * log ((1.0+z) / (1.0-z))
 
 
 instance (FromIntegral a b, Num b, Elt (Complex b)) => FromIntegral a (Complex b) where
-  fromIntegral x = withFrozenCallStack $ fromIntegral x ::+ 0
+  fromIntegral x = sourceMap $ fromIntegral x ::+ 0
 
 -- | @since 1.2.0.0
 --
 instance Functor Complex where
-  fmap f = withFrozenCallStack $ \(r ::+ i) -> f r ::+ f i
+  fmap f = sourceMap $ \(r ::+ i) -> f r ::+ f i
 
 
 -- | The non-negative magnitude of a complex number
 --
 magnitude :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp a
-magnitude = withFrozenCallStack $ \(r ::+ i) ->
+magnitude = sourceMap $ \(r ::+ i) ->
     let k  = max (exponent r) (exponent i)
         mk = -k
         sqr z = z * z
@@ -317,13 +317,13 @@ magnitude = withFrozenCallStack $ \(r ::+ i) ->
 -- @since 1.3.0.0
 --
 magnitude' :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp a
-magnitude' = withFrozenCallStack $ \(r ::+ i) -> sqrt (r*r + i*i)
+magnitude' = sourceMap $ \(r ::+ i) -> sqrt (r*r + i*i)
 
 -- | The phase of a complex number, in the range @(-'pi', 'pi']@. If the
 -- magnitude is zero, then so is the phase.
 --
 phase :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp a
-phase = withFrozenCallStack $ \z@(r ::+ i) ->
+phase = sourceMap $ \z@(r ::+ i) ->
     if z == 0
       then 0
       else atan2 i r
@@ -333,32 +333,32 @@ phase = withFrozenCallStack $ \z@(r ::+ i) ->
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
 polar :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp (a,a)
-polar z = withFrozenCallStack $ T2 (magnitude z) (phase z)
+polar z = sourceMap $ T2 (magnitude z) (phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
 mkPolar :: forall a. (HasCallStack, Floating a) => Exp a -> Exp a -> Exp (Complex a)
-mkPolar = withFrozenCallStack $ lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
+mkPolar = sourceMap $ lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
 cis :: forall a. (HasCallStack, Floating a) => Exp a -> Exp (Complex a)
-cis = withFrozenCallStack $ lift1 (C.cis :: Exp a -> Complex (Exp a))
+cis = sourceMap $ lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
 --
 real :: (HasCallStack, Elt a) => Exp (Complex a) -> Exp a
-real = withFrozenCallStack $ \(r ::+ _) -> r
+real = sourceMap $ \(r ::+ _) -> r
 
 -- | Return the imaginary part of a complex number
 --
 imag :: (HasCallStack, Elt a) => Exp (Complex a) -> Exp a
-imag = withFrozenCallStack $ \(_ ::+ i) -> i
+imag = sourceMap $ \(_ ::+ i) -> i
 
 -- | Return the complex conjugate of a complex number, defined as
 --
 -- > conjugate(Z) = X - iY
 --
 conjugate :: (HasCallStack, Num a) => Exp (Complex a) -> Exp (Complex a)
-conjugate z = withFrozenCallStack $ real z ::+ (- imag z)
+conjugate z = sourceMap $ real z ::+ (- imag z)

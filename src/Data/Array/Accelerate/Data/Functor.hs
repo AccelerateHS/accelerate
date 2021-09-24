@@ -50,7 +50,7 @@ class Functor f where
   --
   infixl 4 <$
   (<$) :: (HasCallStack, Elt a, Elt b, Elt (f a), Elt (f b)) => Exp a -> Exp (f b) -> Exp (f a)
-  (<$) = withFrozenCallStack $ fmap . const
+  (<$) = sourceMap $ fmap . const
 
 
 -- | An infix synonym for 'fmap'
@@ -66,30 +66,30 @@ class Functor f where
 --
 infixl 4 <$>
 (<$>) :: (HasCallStack, Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => (Exp a -> Exp b) -> Exp (f a) -> Exp (f b)
-(<$>) = withFrozenCallStack fmap
+(<$>) = sourceMap fmap
 
 
 -- | A flipped version of '(<$)'.
 --
 infixl 4 $>
 ($>) :: (HasCallStack, Functor f, Elt a, Elt b, Elt (f a), Elt (f b)) => Exp (f a) -> Exp b -> Exp (f b)
-($>) = withFrozenCallStack $ flip (<$)
+($>) = sourceMap $ flip (<$)
 
 
 -- | @'void' value@ discards or ignores the result of evaluation.
 --
 void :: (HasCallStack, Functor f, Elt a, Elt (f a), Elt (f ())) => Exp (f a) -> Exp (f ())
-void x = withFrozenCallStack $ constant () <$ x
+void x = sourceMap $ constant () <$ x
 
 
 instance Functor Sum where
-  fmap f = withFrozenCallStack $ lift1 (fmap f)
+  fmap f = sourceMap $ lift1 (fmap f)
 
 instance Functor Product where
-  fmap f = withFrozenCallStack $ lift1 (fmap f)
+  fmap f = sourceMap $ lift1 (fmap f)
 
 instance Functor Min where
-  fmap f = withFrozenCallStack $ lift1 (fmap f)
+  fmap f = sourceMap $ lift1 (fmap f)
 
 instance Functor Max where
-  fmap f = withFrozenCallStack $ lift1 (fmap f)
+  fmap f = sourceMap $ lift1 (fmap f)

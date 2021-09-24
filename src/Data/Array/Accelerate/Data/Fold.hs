@@ -80,12 +80,13 @@ data Fold i o where
 -- | Apply a 'Fold' to an array.
 --
 runFold
-    :: (Shape sh, Elt i, Elt o)
+    :: (HasCallStack, Shape sh, Elt i, Elt o)
     => Fold (Exp i) (Exp o)
     -> Acc (Array (sh:.Int) i)
     -> Acc (Array sh o)
 runFold (Fold tally summarise) is
-  = A.map summarise
+  = sourceMap
+  $ A.map summarise
   $ A.fold mappend mempty
   $ A.map tally is
 
@@ -117,46 +118,46 @@ runFold (Fold tally summarise) is
 -- --------------------
 
 instance P.Functor (Fold i) where
-  fmap k (Fold tally summarise) = withExecutionStackAsCallStack $ Fold tally (k . summarise)
+  fmap k (Fold tally summarise) = sourceMapRuntime $ Fold tally (k . summarise)
 
 instance P.Applicative (Fold i) where
-  pure o                    = withExecutionStackAsCallStack $ Fold (\_ -> constant ()) (\_ -> o)
-  Fold tF sF <*> Fold tX sX = withExecutionStackAsCallStack
+  pure o                    = sourceMapRuntime $ Fold (\_ -> constant ()) (\_ -> o)
+  Fold tF sF <*> Fold tX sX = sourceMapRuntime
     $ let tally i     = lift (tF i, tX i)
           summarise t = let (mF, mX) = unlift t
                         in sF mF (sX mX)
-      in  Fold tally summarise
+       in Fold tally summarise
 
 instance A.Num b => P.Num (Fold a (Exp b)) where
-  (+)           = withExecutionStackAsCallStack $ liftA2 (+)
-  (-)           = withExecutionStackAsCallStack $ liftA2 (-)
-  (*)           = withExecutionStackAsCallStack $ liftA2 (*)
-  negate        = withExecutionStackAsCallStack $ fmap negate
-  abs           = withExecutionStackAsCallStack $ fmap abs
-  signum        = withExecutionStackAsCallStack $ fmap signum
-  fromInteger n = withExecutionStackAsCallStack $ pure (A.fromInteger n)
+  (+)           = sourceMapRuntime $ liftA2 (+)
+  (-)           = sourceMapRuntime $ liftA2 (-)
+  (*)           = sourceMapRuntime $ liftA2 (*)
+  negate        = sourceMapRuntime $ fmap negate
+  abs           = sourceMapRuntime $ fmap abs
+  signum        = sourceMapRuntime $ fmap signum
+  fromInteger n = sourceMapRuntime $ pure (A.fromInteger n)
 
 instance A.Fractional b => P.Fractional (Fold a (Exp b)) where
-  (/)            = withExecutionStackAsCallStack $ liftA2 (/)
-  recip          = withExecutionStackAsCallStack $ fmap recip
-  fromRational n = withExecutionStackAsCallStack $ pure (A.fromRational n)
+  (/)            = sourceMapRuntime $ liftA2 (/)
+  recip          = sourceMapRuntime $ fmap recip
+  fromRational n = sourceMapRuntime $ pure (A.fromRational n)
 
 instance A.Floating b => P.Floating (Fold a (Exp b)) where
-  pi      = withExecutionStackAsCallStack $ pure pi
-  sin     = withExecutionStackAsCallStack $ fmap sin
-  cos     = withExecutionStackAsCallStack $ fmap cos
-  tan     = withExecutionStackAsCallStack $ fmap tan
-  asin    = withExecutionStackAsCallStack $ fmap asin
-  acos    = withExecutionStackAsCallStack $ fmap acos
-  atan    = withExecutionStackAsCallStack $ fmap atan
-  sinh    = withExecutionStackAsCallStack $ fmap sinh
-  cosh    = withExecutionStackAsCallStack $ fmap cosh
-  tanh    = withExecutionStackAsCallStack $ fmap tanh
-  asinh   = withExecutionStackAsCallStack $ fmap asinh
-  acosh   = withExecutionStackAsCallStack $ fmap acosh
-  atanh   = withExecutionStackAsCallStack $ fmap atanh
-  exp     = withExecutionStackAsCallStack $ fmap exp
-  sqrt    = withExecutionStackAsCallStack $ fmap sqrt
-  log     = withExecutionStackAsCallStack $ fmap log
-  (**)    = withExecutionStackAsCallStack $ liftA2 (**)
-  logBase = withExecutionStackAsCallStack $ liftA2 logBase
+  pi      = sourceMapRuntime $ pure pi
+  sin     = sourceMapRuntime $ fmap sin
+  cos     = sourceMapRuntime $ fmap cos
+  tan     = sourceMapRuntime $ fmap tan
+  asin    = sourceMapRuntime $ fmap asin
+  acos    = sourceMapRuntime $ fmap acos
+  atan    = sourceMapRuntime $ fmap atan
+  sinh    = sourceMapRuntime $ fmap sinh
+  cosh    = sourceMapRuntime $ fmap cosh
+  tanh    = sourceMapRuntime $ fmap tanh
+  asinh   = sourceMapRuntime $ fmap asinh
+  acosh   = sourceMapRuntime $ fmap acosh
+  atanh   = sourceMapRuntime $ fmap atanh
+  exp     = sourceMapRuntime $ fmap exp
+  sqrt    = sourceMapRuntime $ fmap sqrt
+  log     = sourceMapRuntime $ fmap log
+  (**)    = sourceMapRuntime $ liftA2 (**)
+  logBase = sourceMapRuntime $ liftA2 logBase

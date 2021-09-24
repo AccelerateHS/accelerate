@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP                  #-}
+{-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE ImplicitParams       #-}
 {-# LANGUAGE LambdaCase           #-}
@@ -79,6 +80,9 @@
 -- defined in - and this was the point where I realized we can cut a lot of
 -- complexity by using our own implicit parameter for the source mapping.
 --
+-- FIXME: Continue updating the module documentation where I left off, I got
+--        kind of sidetracked by the implicit parameters at this point
+--
 -- TODO: Mention pattern synonyms
 -- TODO: Mention RTS call stacks
 --
@@ -156,31 +160,32 @@
 --      ignore these things like we do now, or should be printing warnings? I
 --      don't think Accelerate has any other non-fatal compiler diagnostics.
 module Data.Array.Accelerate.Annotations
-    ( Ann(..)
+    ( -- * Annotations
+      Ann(..)
     , Optimizations(..)
     , HasAnnotations(..)
     , withOptimizations
     , extractAnn
     , alwaysInline
     , unrollIters
+      -- * Source mapping
+    , SourceMapped
+    , sourceMap
+    , sourceMapRuntime
+    , sourceMapPattern
+      -- * Internals
     , FieldAnn(..)
     , mkAnn
     , mkDummyAnn
-    , withEmptyCallStack
-    , withEmptyOrFrozenCallStack
-    , withExecutionStackAsCallStack
-      -- Re-exported for convenience
-    , HasCallStack
-    , withFrozenCallStack
-      -- Internals
     , rnfAnn
     , liftAnn
+      -- * Re-exported for convenience
+    , HasCallStack
     ) where
 
 import           Data.Array.Accelerate.Orphans  ( )
 
 import           Control.DeepSeq                ( rnf )
-import           Control.Exception              ( assert )
 import qualified Data.HashSet                  as S
 import           Data.Maybe                     ( mapMaybe )
 import qualified GHC.ExecutionStack            as ES
@@ -194,13 +199,16 @@ import           Language.Haskell.TH            ( Q
                                                 )
 
 
--- | This annotation type would store source information if available and any
--- additional annotation types added by the programmer.
+-- | This annotation type stores any auxiliary data attached to an AST node.
+-- This includes source mapping information if available, as well as any local
+-- optimization flags.
 --
 -- The locations field contains a call stack pointing to the location in the
 -- user's code where the AST node was created. During the transformation
 -- pipeline multiple AST nodes may be merged, in which case 'locations' can
 -- contain multiple (but likely adjacent) call stacks.
+--
+-- See 'SourceMapped', 'sourceMap', and 'mkAnn' for more information.
 --
 -- TODO: The set of optimizations is now the same for 'Exp' and 'Acc'. Should we
 --       have separate sets of 'Optimizations' flags? Ideally we would only
@@ -244,6 +252,176 @@ alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
 --       negative values for @n@)
 unrollIters :: HasAnnotations a => Int -> a -> a
 unrollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
+
+
+-- * Source mapping
+
+-- | This indicates that a function requires source mapping.
+--
+-- Every function that directly or indirectly ends up creating source mapping
+-- annotations through 'mkAnn' needs to either be annotated with this
+-- constraint, or if it's a top-level library function then it needs to evaluate
+-- anything requiring source mapping through 'sourceMap'. This uses the type
+-- checker to reduce the likelihood of making a mistake by enforcing call stacks
+-- in all functions that either directly or indirectly need them. See the module
+-- description for more information.
+type SourceMapped = (?requiresSourceMapping :: ReadTheDocs, HasCallStack)
+
+-- | A tag type that exists only to enforce the source mapping constraint
+-- through the type checker.
+data ReadTheDocs = TakenCareOf
+
+-- | Evaluate the provided form with source mapping enabled. See the module
+-- documentation for a more in-depth explanation on how to use this. The
+-- function calling this should be a top-level library function or smart
+-- constructor that has annotated with the 'HasCallStack' constraint. This will
+-- cause the call stack at that function (which thus includes that function's
+-- caller) to be used within the 'SourceMapped' context of the form.
+--
+-- /NOTE:/
+--
+-- This abstraction exists to prevent mistakes, as 'mkAnn' and any function
+-- calling it need to either be 'SourceMapped', or they need to evaluate things
+-- through this 'sourceMap' function. However, there are still two ways to make
+-- a mistake here:
+--
+--   1. Since we want to know the location in the user's source code a library
+--      function was called from, 'sourceMap' should only ever be called from
+--      top-level functions that are exposed directly to the user. Every other
+--      place should simply propagate the 'SourceMapped' constraint.
+--   2. This mechanism cannot prevent against mistakes when calling a smart
+--      constructor or library function from another smart constructor or
+--      library function. When this happens and the first function doesn't call
+--      the second smart constructor through 'sourceMapped', then the source
+--      mapping annotation will contain the location of that first function
+--      rather that of its caller.
+sourceMap :: HasCallStack => (SourceMapped => a) -> a
+sourceMap dewit =
+    let ?requiresSourceMapping = TakenCareOf
+        -- Same definition as in 'withFrozenCallStack'
+        ?callStack             = freezeCallStack (popCallStack callStack)
+    in
+    if isEmptyStack ?callStack
+        then printError
+        else dewit
+  where
+    -- This error will be printed using the old call stack, which should include
+    -- the caller of this function if the call stack has not yet been frozen.
+    printError = error
+      $  "Functions calling 'sourceMap' need to be annotated with 'HasCallStack'. "
+      <> "If that's not possible, then you should use 'sourceMapRuntime' instead."
+
+-- | Performs the same duty as 'sourceMap', but for top-level functions that do
+-- not have the 'HasCallStack' constraint. If it is possible to add that
+-- constraint, then 'sourceMap' should be used instead as these run time call
+-- stacks are not guaranteed to be available. In practice, this is only used as
+-- a fallback for prelude type class implementations.
+--
+-- This will transform the RTS Execution Stack into a frozen GHC Call Stack so
+-- it can interact with our other call stack-based machinery. If an execution
+-- stack frame is not available, then the computation will be evaluated with an
+-- empty call stack instead.
+--
+-- /NOTE:/
+--
+-- Execution stacks __only__ works when GHC has been built with libdw:
+--
+-- > ghc --info | grep libdw
+--
+-- You can build a version of GHC with DWARF call stacks enabled using:
+--
+-- > ghcup compile ghc -b INSTALLED_GHC_VERSION -v 9.2.0.20210422 -j $(nproc) -- --enable-dwarf-unwind
+--
+-- TODO: Test whether this actually uses the correct stack frame
+-- FIXME: This will need some more work. The main issues are that the stack
+--        contains a lot of frames at the top and the bottom that would need to
+--        be stripped, and that tail call optimization interferes with these
+--        execution stacks.
+sourceMapRuntime :: HasCallStack => (SourceMapped => a) -> a
+sourceMapRuntime dewit =
+    let ?requiresSourceMapping = TakenCareOf
+        -- Only create a frozen call stack if we do not already have a valid
+        -- frozen call stack
+        ?callStack = case ?callStack of
+            x@(FreezeCallStack _) -> x
+            _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
+     in dewit
+  where
+    -- We don't want the two uppermost stack frames, since those will be in our
+    -- own library code
+    -- TODO: Is this correct? Should we drop only one stack frame?
+    toCallStack :: Maybe [ES.Location] -> CallStack
+    toCallStack (Just (_ : _ : locs)) = fromCallSiteList $ mapMaybe locToCallSite locs
+    toCallStack _                     = emptyCallStack
+
+    locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
+    locToCallSite (ES.Location _ fn (Just loc)) = Just
+        ( fn
+        , SrcLoc { srcLocPackage   = ""
+                 , srcLocModule    = ""
+                 , srcLocFile      = ES.sourceFile loc
+                 , srcLocStartLine = ES.sourceLine loc
+                 , srcLocStartCol  = ES.sourceColumn loc
+                 , srcLocEndLine   = ES.sourceLine loc
+                 , srcLocEndCol    = ES.sourceColumn loc
+                 }
+        )
+    locToCallSite (ES.Location _ _ Nothing) = Nothing
+
+-- | Workaround for pattern synonyms and call stacks not working as expected in
+-- GHC versions 9.0.x and below. Performs the same duty as 'sourceMap'. On the
+-- unsupported GHC versions, this will freeze an empty call stack if the current
+-- call stack isn't already frozen. Otherwise we would capture the wrong call
+-- stacks.
+--
+-- /HACK:/
+--
+-- Call stacks didn't play nicely with pattern synonyms in GHC version before
+-- 9.2, so to prevent incorrect source annotations we'll prevent them from being
+-- generated completely.
+--
+-- https://gitlab.haskell.org/ghc/ghc/-/issues/19289
+--
+-- TODO: Since 'Pattern' isn't meant to be used directly, should we strip off
+--       two layers of call stack? Check how call stacks interact with pattern
+--       synonyms in GHC 9.2.0.
+sourceMapPattern :: HasCallStack => (SourceMapped => a) -> a
+sourceMapPattern dewit =
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+  let ?requiresSourceMapping = TakenCareOf
+      ?callStack =
+        -- Same definition as in 'withFrozenCallStack'
+        case freezeCallStack (popCallStack callStack) of
+          stack | isEmptyStack stack -> printError
+          stack                      -> stack
+     in dewit
+  where
+    -- This error will be printed using the old call stack, which should include
+    -- the caller of this function if the call stack has not yet been frozen.
+    -- We'll obviously on do this on GHC 9.2 and up.
+    printError = error
+      $  "Functions calling 'sourceMapPattern' need to be annotated with "
+      <> "'HasCallStack'. If that's not possible, then you should use "
+      <> "'sourceMapRuntime' instead."
+#else
+  let ?requiresSourceMapping = TakenCareOf
+      ?callStack =
+        -- Only freeze an empty call stack of the call stack isn't already
+        -- frozen, i.e. when it is used internally within Accelerate's front end
+        -- standard library
+        case ?callStack of
+          x@(FreezeCallStack _) -> x
+          _                     -> freezeCallStack emptyCallStack
+     in dewit
+#endif
+
+-- | We'll throw an error when 'sourceMap' or 'sourceMapPattern' gets called
+-- from a function that hasn't been annotated with 'HasCallStack'. Frozen empty
+-- call stacks are okay, because that indicates that we've already taken care of
+-- it (in either 'sourceMapRuntime' or 'sourceMapPattern').
+isEmptyStack :: CallStack -> Bool
+isEmptyStack EmptyCallStack = True
+isEmptyStack _              = False
 
 
 -- * Internal types and functions
@@ -300,22 +478,16 @@ extractAnn _                    = mkDummyAnn
 -- only works when all smart constructors have the 'HasCallStack' constraint.
 -- This function __must__ be called with 'withFrozenCallStack'.
 --
+-- TODO: Update the documentation after the SourceMapped change. Also consider
+--       removing the assertion.
+--
 -- TODO: When Accelerate has a logger, this assertion should be replaced by a
 --       warning. If the call stacks are not frozen, then we'll just treat it as
 --       an empty call stack. When running the test suite this should still
 --       count as a hard error though.
-mkAnn :: HasCallStack => Ann
-mkAnn = assert callStackIsFrozen
-    $ Ann (maybeCallStack callStack) defaultOptimizations
+mkAnn :: SourceMapped => Ann
+mkAnn = Ann (maybeCallStack callStack) defaultOptimizations
   where
-    -- To prevent incorrect usage of this API, we assert that the call stacks
-    -- are frozen before this function is called. In most simple use cases we
-    -- could also have looked at the second entry in the call stack but that
-    -- would be very error prone when recursion starts getting involved.
-    callStackIsFrozen = case callStack of
-        (FreezeCallStack _) -> True
-        _                   -> False
-
     -- If we encounter a frozen empty call stack, then this means that the
     -- caller of 'getAnn' explicitly stated that there is no source information
     -- available. We can get nested frozen call stacks when top level functions
@@ -323,108 +495,25 @@ mkAnn = assert callStackIsFrozen
     -- frozen call stack parts until we get something useful.
     maybeCallStack (FreezeCallStack EmptyCallStack           ) = S.empty
     maybeCallStack (FreezeCallStack stack@(FreezeCallStack _)) = maybeCallStack stack
-    maybeCallStack (FreezeCallStack stack                    ) = S.singleton stack
-    maybeCallStack _ = error
-      $  "This is unreachable because of the assertion above! But when replace "
-      ++ "that assertion with a warning, we can print our warning here."
+    maybeCallStack (FreezeCallStack stack)                     = S.singleton stack
+    -- This would only be reachable when bypassing the `SourceMapped` constraint
+    -- with a bottom value, since the @sourceMapped*@ always freeze the call
+    -- stack
+    maybeCallStack _ = error "Nice try, but no cigar"
 
     defaultOptimizations =
         Optimizations { optAlwaysInline = False, optUnrollIters = Nothing }
 
 -- | Create a new 'Ann' without any source information.
 --
--- TODO: Ever everything has been implemented, check whether the uses of this
+-- TODO: Once everything has been implemented, check whether the uses of this
 --       are justified and if we're not throwing away any existing annotations
 --       when reconstructing ASTs
 mkDummyAnn :: Ann
-mkDummyAnn = withEmptyCallStack mkAnn
+mkDummyAnn = let ?requiresSourceMapping = TakenCareOf
+                 ?callStack             = freezeCallStack emptyCallStack
+             in  mkAnn
 
--- | Compute the argument (which can be either a term or a function) without
--- collecting call stacks. This can be useful when dealing with situations where
--- we might want to collect call stacks but can't, so we don't end up capturing
--- some unrelated call stacks instead.
-withEmptyCallStack :: (HasCallStack => a) -> a
-withEmptyCallStack dewit =
-    let ?callStack = freezeCallStack emptyCallStack in dewit
-
--- | Workaround for pattern synonyms and call stacks not working as expected in
--- GHC versions 9.0.x and below. See the issue linked below. On this versions we
--- will freeze an empty call stack instead of the call stack wasn't already
--- frozen. This function is implemented in the same way as the regular
--- 'withFrozenCallStack'.
---
--- HACK: Call stacks didn't play nicely with pattern synonyms in GHC version
---       before 9.2, so to prevent incorrect source annotations we'll prevent
---       them from being generated completely.
---
---       https://gitlab.haskell.org/ghc/ghc/-/issues/19289
--- TODO: Since 'Pattern' isn't meant to be used directly, should we strip off
---       two layers of call stack?
-withEmptyOrFrozenCallStack :: HasCallStack => (HasCallStack => a) -> a
-withEmptyOrFrozenCallStack dewit =
-  let ?callStack =
-#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
-        -- Same definition as in 'withFrozenCallStack'
-        freezeCallStack (popCallStack callStack)
-#else
-        -- Only freeze an empty call stack of the call stack isn't already
-        -- frozen, i.e. when it is used internally within Accelerate's front end
-        -- standard library
-        case ?callStack of
-          x@(FreezeCallStack _) -> x
-          _                     -> freezeCallStack emptyCallStack
-#endif
-  in  dewit
-
--- | Evaluate a computation after transforming the RTS execution stack into a
--- frozen GHC call stack so it can interact with our other call stack based
--- machinery. This is necessary when implementing prelude and other external
--- type classes since those will not contain the 'HasCallStack' constraint. If
--- an execution stack frame is not available, then the computation will be
--- evaluated with an empty call stack instead.
---
--- NOTE: Execution stacks __only__ works when GHC has been built with libdw:
---
---       $ ghc --info | grep libdw
---
---       You can build a version of GHC with DWARF call stacks enabled using:
---
---       $ ghcup compile ghc -b INSTALLED_GHC_VERSION -v 9.2.0.20210422 -j $(nproc) -- --enable-dwarf-unwind
---
--- TODO: Test whether this actually uses the correct stack frame
--- FIXME: This may still be incorrect for default implementations in prelude
---        classes, since the default implementation doesn't use
---        'withExecutionStackAsCallStack'
-withExecutionStackAsCallStack :: HasCallStack => (HasCallStack => a) -> a
-withExecutionStackAsCallStack dewit =
-    let
-        -- Only create a frozen call stack if we do not already have a frozen call
-        -- stack
-        ?callStack = case ?callStack of
-            x@(FreezeCallStack _) -> x
-            _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
-    in  dewit
-  where
-    -- We don't want the two uppermost stack frames, since those will be in our
-    -- own library code
-    -- TODO: Is this correct? Should we drop only one stack frame?
-    toCallStack :: Maybe [ES.Location] -> CallStack
-    toCallStack (Just (_ : _ : locs)) = fromCallSiteList $ mapMaybe locToCallSite locs
-    toCallStack _                     = emptyCallStack
-
-    locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
-    locToCallSite (ES.Location _ fn (Just loc)) = Just
-        ( fn
-        , SrcLoc { srcLocPackage   = ""
-                 , srcLocModule    = ""
-                 , srcLocFile      = ES.sourceFile loc
-                 , srcLocStartLine = ES.sourceLine loc
-                 , srcLocStartCol  = ES.sourceColumn loc
-                 , srcLocEndLine   = ES.sourceLine loc
-                 , srcLocEndCol    = ES.sourceColumn loc
-                 }
-        )
-    locToCallSite (ES.Location _ _ Nothing) = Nothing
 
 instance Semigroup Ann where
     (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)

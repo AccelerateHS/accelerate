@@ -22,10 +22,9 @@ module Data.Array.Accelerate.Unsafe (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
-
-import GHC.Stack
 
 
 -- | The function 'coerce' allows you to convert a value between any two types
@@ -50,4 +49,4 @@ import GHC.Stack
 -- @since 1.2.0.0
 --
 coerce :: (HasCallStack, Coerce (EltR a) (EltR b)) => Exp a -> Exp b
-coerce = withFrozenCallStack mkCoerce
+coerce = sourceMap mkCoerce

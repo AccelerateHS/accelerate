@@ -45,164 +45,164 @@ type Integral a = (Enum a, Ord a, Num a, P.Integral (Exp a))
 
 
 instance P.Integral (Exp Int) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Int8) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Int16) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Int32) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Int64) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Word) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Word8) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Word16) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Word32) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp Word64) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CInt) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CUInt) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CLong) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CULong) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CLLong) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CULLong) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CShort) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 
 instance P.Integral (Exp CUShort) where
-  quot      = withExecutionStackAsCallStack mkQuot
-  rem       = withExecutionStackAsCallStack mkRem
-  div       = withExecutionStackAsCallStack mkIDiv
-  mod       = withExecutionStackAsCallStack mkMod
-  quotRem   = withExecutionStackAsCallStack mkQuotRem
-  divMod    = withExecutionStackAsCallStack mkDivMod
+  quot      = sourceMapRuntime mkQuot
+  rem       = sourceMapRuntime mkRem
+  div       = sourceMapRuntime mkIDiv
+  mod       = sourceMapRuntime mkMod
+  quotRem   = sourceMapRuntime mkQuotRem
+  divMod    = sourceMapRuntime mkDivMod
   toInteger = error "Prelude.toInteger not supported for Accelerate types"
 

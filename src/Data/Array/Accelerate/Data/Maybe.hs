@@ -60,12 +60,12 @@ import Prelude                                                      ( ($), (.) )
 -- | Returns 'True' if the argument is 'Nothing'
 --
 isNothing :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp Bool
-isNothing = withFrozenCallStack $ not . isJust
+isNothing = sourceMap $ not . isJust
 
 -- | Returns 'True' if the argument is of the form @Just _@
 --
 isJust :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp Bool
-isJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj mkAnn PairIdxLeft x) (SmartExp (Nil mkAnn))
+isJust (Exp x) = sourceMap $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ Prj mkAnn PairIdxLeft x) (SmartExp (Nil mkAnn))
   -- TLM: This is a sneaky hack because we know that the tag bits for Just
   -- and True are identical.
 
@@ -74,7 +74,7 @@ isJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Pair mkAnn (SmartExp $ P
 -- the value contained in the 'Maybe'.
 --
 fromMaybe :: (HasCallStack, Elt a) => Exp a -> Exp (Maybe a) -> Exp a
-fromMaybe d = withFrozenCallStack $ match \case
+fromMaybe d = sourceMap $ match \case
   Nothing_ -> d
   Just_ x  -> x
 
@@ -83,7 +83,7 @@ fromMaybe d = withFrozenCallStack $ match \case
 -- instead.
 --
 fromJust :: (HasCallStack, Elt a) => Exp (Maybe a) -> Exp a
-fromJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Prj mkAnn PairIdxRight $ SmartExp $ Prj mkAnn PairIdxRight x
+fromJust (Exp x) = sourceMap $ Exp $ SmartExp $ Prj mkAnn PairIdxRight $ SmartExp $ Prj mkAnn PairIdxRight x
 
 -- | The 'maybe' function takes a default value, a function, and a 'Maybe'
 -- value. If the 'Maybe' value is nothing, the default value is returned;
@@ -91,7 +91,7 @@ fromJust (Exp x) = withFrozenCallStack $ Exp $ SmartExp $ Prj mkAnn PairIdxRight
 -- the result
 --
 maybe :: (HasCallStack, Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
-maybe d f = withFrozenCallStack $ match \case
+maybe d f = sourceMap $ match \case
   Nothing_ -> d
   Just_ x  -> f x
 
@@ -101,47 +101,47 @@ maybe d f = withFrozenCallStack $ match \case
 justs :: (HasCallStack, Shape sh, Slice sh, Elt a)
       => Acc (Array (sh:.Int) (Maybe a))
       -> Acc (Vector a, Array sh Int)
-justs xs = withFrozenCallStack $ compact (map isJust xs) (map fromJust xs)
+justs xs = sourceMap $ compact (map isJust xs) (map fromJust xs)
 
 
 instance Functor Maybe where
-  fmap f = withFrozenCallStack $ match \case
+  fmap f = sourceMap $ match \case
     Nothing_ -> Nothing_
     Just_ x  -> Just_ (f x)
 
 instance Monad Maybe where
-  return   = withFrozenCallStack Just_
-  mx >>= f = withFrozenCallStack $ mx & match \case
+  return   = sourceMap Just_
+  mx >>= f = sourceMap $ mx & match \case
     Nothing_ -> Nothing_
     Just_ x  -> f x
 
 instance Eq a => Eq (Maybe a) where
-  (==) = withFrozenCallStack $ match go
+  (==) = sourceMap $ match go
     where
-      go :: HasCallStack => Exp (Maybe a) -> Exp (Maybe a) -> Exp Bool
+      go :: SourceMapped => Exp (Maybe a) -> Exp (Maybe a) -> Exp Bool
       go Nothing_  Nothing_  = True_
       go (Just_ x) (Just_ y) = x == y
       go _         _         = False_
 
 instance Ord a => Ord (Maybe a) where
-  compare = withFrozenCallStack $ match go
+  compare = sourceMap $ match go
     where
-      go :: HasCallStack => Exp (Maybe a) -> Exp (Maybe a) -> Exp Ordering
+      go :: SourceMapped => Exp (Maybe a) -> Exp (Maybe a) -> Exp Ordering
       go (Just_ x) (Just_ y)  = compare x y
       go Nothing_  Nothing_   = EQ_
       go Nothing_  Just_{}    = LT_
       go Just_{}   Nothing_{} = GT_
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
-  mempty = withExecutionStackAsCallStack Nothing_
+  mempty = sourceMapRuntime Nothing_
 
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
-  ma <> mb = withExecutionStackAsCallStack
+  ma <> mb = sourceMapRuntime
            $ cond (isNothing ma) mb
            $ cond (isNothing mb) mb
            $ lift (Just (fromJust ma <> fromJust mb))
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  lift Nothing  = withFrozenCallStack Nothing_
-  lift (Just a) = withFrozenCallStack $ Just_ (lift a)
+  lift Nothing  = sourceMap Nothing_
+  lift (Just a) = sourceMap $ Just_ (lift a)

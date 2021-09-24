@@ -168,7 +168,7 @@ import Prelude                                                      ( (.), ($), 
 --     (Z :. 2 :. 0,8.0), (Z :. 2 :. 1,9.0), (Z :. 2 :. 2,10.0), (Z :. 2 :. 3,11.0)]
 --
 indexed :: (HasCallStack, Shape sh, Elt a) => Acc (Array sh a) -> Acc (Array sh (sh, a))
-indexed = withFrozenCallStack $ imap T2
+indexed = sourceMap $ imap T2
 
 -- | Apply a function to every element of an array and its index
 --
@@ -176,18 +176,18 @@ imap :: (HasCallStack, Shape sh, Elt a, Elt b)
      => (Exp sh -> Exp a -> Exp b)
      -> Acc (Array sh a)
      -> Acc (Array sh b)
-imap f xs = withFrozenCallStack $ zipWith f (generate (shape xs) id) xs
+imap f xs = sourceMap $ zipWith f (generate (shape xs) id) xs
 
 -- | Used to define the zipWith functions on more than two arrays
 --
 zipWithInduction
-    :: (HasCallStack, Shape sh, Elt a, Elt b)
+    :: (SourceMapped, Shape sh, Elt a, Elt b)
     => ((Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
     -> (Exp a -> Exp b -> rest)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> result
-zipWithInduction prev f as bs = withFrozenCallStack $ prev (\(T2 a b) -> f a b) (zip as bs)
+zipWithInduction prev f as bs = prev (\(T2 a b) -> f a b) (zip as bs)
 
 
 -- | Zip three arrays with the given function, analogous to 'zipWith'.
@@ -199,7 +199,7 @@ zipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-zipWith3 = withFrozenCallStack $ zipWithInduction zipWith
+zipWith3 = sourceMap $ zipWithInduction zipWith
 
 -- | Zip four arrays with the given function, analogous to 'zipWith'.
 --
@@ -211,7 +211,7 @@ zipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-zipWith4 = withFrozenCallStack $ zipWithInduction zipWith3
+zipWith4 = sourceMap $ zipWithInduction zipWith3
 
 -- | Zip five arrays with the given function, analogous to 'zipWith'.
 --
@@ -224,7 +224,7 @@ zipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-zipWith5 = withFrozenCallStack $ zipWithInduction zipWith4
+zipWith5 = sourceMap $ zipWithInduction zipWith4
 
 -- | Zip six arrays with the given function, analogous to 'zipWith'.
 --
@@ -238,7 +238,7 @@ zipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-zipWith6 = withFrozenCallStack $ zipWithInduction zipWith5
+zipWith6 = sourceMap $ zipWithInduction zipWith5
 
 -- | Zip seven arrays with the given function, analogous to 'zipWith'.
 --
@@ -253,7 +253,7 @@ zipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-zipWith7 = withFrozenCallStack $ zipWithInduction zipWith6
+zipWith7 = sourceMap $ zipWithInduction zipWith6
 
 -- | Zip eight arrays with the given function, analogous to 'zipWith'.
 --
@@ -269,7 +269,7 @@ zipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-zipWith8 = withFrozenCallStack $ zipWithInduction zipWith7
+zipWith8 = sourceMap $ zipWithInduction zipWith7
 
 -- | Zip nine arrays with the given function, analogous to 'zipWith'.
 --
@@ -286,19 +286,19 @@ zipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-zipWith9 = withFrozenCallStack $ zipWithInduction zipWith8
+zipWith9 = sourceMap $ zipWithInduction zipWith8
 
 
 -- | Used to define the izipWith functions on two or more arrays
 --
 izipWithInduction
-    :: (HasCallStack, Shape sh, Elt a, Elt b)
+    :: (SourceMapped, Shape sh, Elt a, Elt b)
     => ((Exp sh -> Exp (a,b) -> rest) -> Acc (Array sh (a,b)) -> result) -- The zipWith function operating on one fewer array
     -> (Exp sh -> Exp a -> Exp b -> rest)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> result
-izipWithInduction prev f as bs = withFrozenCallStack $ prev (\ix (T2 a b) -> f ix a b) (zip as bs)
+izipWithInduction prev f as bs = prev (\ix (T2 a b) -> f ix a b) (zip as bs)
 
 
 -- | Zip two arrays with a function that also takes the element index
@@ -309,7 +309,7 @@ izipWith
     -> Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh c)
-izipWith = withFrozenCallStack $ izipWithInduction imap
+izipWith = sourceMap $ izipWithInduction imap
 
 -- | Zip three arrays with a function that also takes the element index,
 -- analogous to 'izipWith'.
@@ -321,7 +321,7 @@ izipWith3
     -> Acc (Array sh b)
     -> Acc (Array sh c)
     -> Acc (Array sh d)
-izipWith3 = withFrozenCallStack $ izipWithInduction izipWith
+izipWith3 = sourceMap $ izipWithInduction izipWith
 
 -- | Zip four arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -334,7 +334,7 @@ izipWith4
     -> Acc (Array sh c)
     -> Acc (Array sh d)
     -> Acc (Array sh e)
-izipWith4 = withFrozenCallStack $ izipWithInduction izipWith3
+izipWith4 = sourceMap $ izipWithInduction izipWith3
 
 -- | Zip five arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -348,7 +348,7 @@ izipWith5
     -> Acc (Array sh d)
     -> Acc (Array sh e)
     -> Acc (Array sh f)
-izipWith5 = withFrozenCallStack $ izipWithInduction izipWith4
+izipWith5 = sourceMap $ izipWithInduction izipWith4
 
 -- | Zip six arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -363,7 +363,7 @@ izipWith6
     -> Acc (Array sh e)
     -> Acc (Array sh f)
     -> Acc (Array sh g)
-izipWith6 = withFrozenCallStack $ izipWithInduction izipWith5
+izipWith6 = sourceMap $ izipWithInduction izipWith5
 
 -- | Zip seven arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -379,7 +379,7 @@ izipWith7
     -> Acc (Array sh f)
     -> Acc (Array sh g)
     -> Acc (Array sh h)
-izipWith7 = withFrozenCallStack $ izipWithInduction izipWith6
+izipWith7 = sourceMap $ izipWithInduction izipWith6
 
 -- | Zip eight arrays with the given function that also takes the element
 -- index, analogous to 'zipWith'.
@@ -396,7 +396,7 @@ izipWith8
     -> Acc (Array sh g)
     -> Acc (Array sh h)
     -> Acc (Array sh i)
-izipWith8 = withFrozenCallStack $ izipWithInduction izipWith7
+izipWith8 = sourceMap $ izipWithInduction izipWith7
 
 -- | Zip nine arrays with the given function that also takes the element index,
 -- analogous to 'zipWith'.
@@ -414,7 +414,7 @@ izipWith9
     -> Acc (Array sh h)
     -> Acc (Array sh i)
     -> Acc (Array sh j)
-izipWith9 = withFrozenCallStack $ izipWithInduction izipWith8
+izipWith9 = sourceMap $ izipWithInduction izipWith8
 
 
 -- | Combine the elements of two arrays pairwise. The shape of the result is the
@@ -434,7 +434,7 @@ zip :: (HasCallStack, Shape sh, Elt a, Elt b)
     => Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh (a, b))
-zip = withFrozenCallStack $ zipWith T2
+zip = sourceMap $ zipWith T2
 
 -- | Take three arrays and return an array of triples, analogous to zip.
 --
@@ -443,7 +443,7 @@ zip3 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c)
      -> Acc (Array sh b)
      -> Acc (Array sh c)
      -> Acc (Array sh (a, b, c))
-zip3 = withFrozenCallStack $ zipWith3 T3
+zip3 = sourceMap $ zipWith3 T3
 
 -- | Take four arrays and return an array of quadruples, analogous to zip.
 --
@@ -453,7 +453,7 @@ zip4 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d)
      -> Acc (Array sh c)
      -> Acc (Array sh d)
      -> Acc (Array sh (a, b, c, d))
-zip4 = withFrozenCallStack $ zipWith4 T4
+zip4 = sourceMap $ zipWith4 T4
 
 -- | Take five arrays and return an array of five-tuples, analogous to zip.
 --
@@ -464,7 +464,7 @@ zip5 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
      -> Acc (Array sh d)
      -> Acc (Array sh e)
      -> Acc (Array sh (a, b, c, d, e))
-zip5 = withFrozenCallStack $ zipWith5 T5
+zip5 = sourceMap $ zipWith5 T5
 
 -- | Take six arrays and return an array of six-tuples, analogous to zip.
 --
@@ -476,7 +476,7 @@ zip6 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
      -> Acc (Array sh e)
      -> Acc (Array sh f)
      -> Acc (Array sh (a, b, c, d, e, f))
-zip6 = withFrozenCallStack $ zipWith6 T6
+zip6 = sourceMap $ zipWith6 T6
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -489,7 +489,7 @@ zip7 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g
      -> Acc (Array sh f)
      -> Acc (Array sh g)
      -> Acc (Array sh (a, b, c, d, e, f, g))
-zip7 = withFrozenCallStack $ zipWith7 T7
+zip7 = sourceMap $ zipWith7 T7
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -503,7 +503,7 @@ zip8 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g
      -> Acc (Array sh g)
      -> Acc (Array sh h)
      -> Acc (Array sh (a, b, c, d, e, f, g, h))
-zip8 = withFrozenCallStack $ zipWith8 T8
+zip8 = sourceMap $ zipWith8 T8
 
 -- | Take seven arrays and return an array of seven-tuples, analogous to zip.
 --
@@ -518,7 +518,7 @@ zip9 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g
      -> Acc (Array sh h)
      -> Acc (Array sh i)
      -> Acc (Array sh (a, b, c, d, e, f, g, h, i))
-zip9 = withFrozenCallStack $ zipWith9 T9
+zip9 = sourceMap $ zipWith9 T9
 
 
 -- | The converse of 'zip', but the shape of the two results is identical to the
@@ -529,18 +529,18 @@ zip9 = withFrozenCallStack $ zipWith9 T9
 unzip :: (HasCallStack, Shape sh, Elt a, Elt b)
       => Acc (Array sh (a, b))
       -> (Acc (Array sh a), Acc (Array sh b))
-unzip arr = withFrozenCallStack $ (map fst arr, map snd arr)
+unzip arr = sourceMap $ (map fst arr, map snd arr)
 
 -- | Take an array of triples and return three arrays, analogous to 'unzip'.
 --
 unzip3 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c)
        => Acc (Array sh (a, b, c))
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
-unzip3 xs = withFrozenCallStack
+unzip3 xs = sourceMap
   $ let get1 (T3 a _ _) = a
         get2 (T3 _ b _) = b
         get3 (T3 _ _ c) = c
-    in (map get1 xs, map get2 xs, map get3 xs)
+    in  (map get1 xs, map get2 xs, map get3 xs)
 
 
 -- | Take an array of quadruples and return four arrays, analogous to 'unzip'.
@@ -548,7 +548,7 @@ unzip3 xs = withFrozenCallStack
 unzip4 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d)
        => Acc (Array sh (a, b, c, d))
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
-unzip4 xs = withFrozenCallStack
+unzip4 xs = sourceMap
   $ let get1 (T4 a _ _ _) = a
         get2 (T4 _ b _ _) = b
         get3 (T4 _ _ c _) = c
@@ -560,7 +560,7 @@ unzip4 xs = withFrozenCallStack
 unzip5 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
        => Acc (Array sh (a, b, c, d, e))
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d), Acc (Array sh e))
-unzip5 xs = withFrozenCallStack
+unzip5 xs = sourceMap
   $ let get1 (T5 a _ _ _ _) = a
         get2 (T5 _ b _ _ _) = b
         get3 (T5 _ _ c _ _) = c
@@ -574,7 +574,7 @@ unzip6 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
        => Acc (Array sh (a, b, c, d, e, f))
        -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
           , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f))
-unzip6 xs = withFrozenCallStack
+unzip6 xs = sourceMap
   $ let get1 (T6 a _ _ _ _ _) = a
         get2 (T6 _ b _ _ _ _) = b
         get3 (T6 _ _ c _ _ _) = c
@@ -585,22 +585,22 @@ unzip6 xs = withFrozenCallStack
 
 -- | Take an array of 7-tuples and return seven arrays, analogous to 'unzip'.
 --
-unzip7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+unzip7 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
        => Acc (Array sh (a, b, c, d, e, f, g))
        -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
           , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f)
           , Acc (Array sh g))
-unzip7 xs = ( map get1 xs, map get2 xs, map get3 xs
-            , map get4 xs, map get5 xs, map get6 xs
-            , map get7 xs )
-  where
-    get1 (T7 a _ _ _ _ _ _) = a
-    get2 (T7 _ b _ _ _ _ _) = b
-    get3 (T7 _ _ c _ _ _ _) = c
-    get4 (T7 _ _ _ d _ _ _) = d
-    get5 (T7 _ _ _ _ e _ _) = e
-    get6 (T7 _ _ _ _ _ f _) = f
-    get7 (T7 _ _ _ _ _ _ g) = g
+unzip7 xs = sourceMap
+  $ let get1 (T7 a _ _ _ _ _ _) = a
+        get2 (T7 _ b _ _ _ _ _) = b
+        get3 (T7 _ _ c _ _ _ _) = c
+        get4 (T7 _ _ _ d _ _ _) = d
+        get5 (T7 _ _ _ _ e _ _) = e
+        get6 (T7 _ _ _ _ _ f _) = f
+        get7 (T7 _ _ _ _ _ _ g) = g
+    in  ( map get1 xs, map get2 xs, map get3 xs
+        , map get4 xs, map get5 xs, map get6 xs
+        , map get7 xs )
 
 -- | Take an array of 8-tuples and return eight arrays, analogous to 'unzip'.
 --
@@ -609,7 +609,7 @@ unzip8 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt
        -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
           , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f)
           , Acc (Array sh g), Acc (Array sh h) )
-unzip8 xs = withFrozenCallStack
+unzip8 xs = sourceMap
   $ let get1 (T8 a _ _ _ _ _ _ _) = a
         get2 (T8 _ b _ _ _ _ _ _) = b
         get3 (T8 _ _ c _ _ _ _ _) = c
@@ -629,7 +629,7 @@ unzip9 :: (HasCallStack, Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt
        -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
           , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f)
           , Acc (Array sh g), Acc (Array sh h), Acc (Array sh i))
-unzip9 xs = withFrozenCallStack
+unzip9 xs = sourceMap
   $ let get1 (T9 a _ _ _ _ _ _ _ _) = a
         get2 (T9 _ b _ _ _ _ _ _ _) = b
         get3 (T9 _ _ c _ _ _ _ _ _) = c
@@ -665,7 +665,7 @@ foldAll
     -> Exp a
     -> Acc (Array sh a)
     -> Acc (Scalar a)
-foldAll f e arr = withFrozenCallStack $ fold f e (flatten arr)
+foldAll f e arr = sourceMap $ fold f e (flatten arr)
 
 -- | Variant of 'foldAll' that requires the reduced array to be non-empty and
 -- does not need a default value. The first argument must be an /associative/
@@ -676,7 +676,7 @@ fold1All
     => (Exp a -> Exp a -> Exp a)
     -> Acc (Array sh a)
     -> Acc (Scalar a)
-fold1All f arr = withFrozenCallStack $ fold1 f (flatten arr)
+fold1All f arr = sourceMap $ fold1 f (flatten arr)
 
 
 -- | Segmented reduction along the innermost dimension of an array. The segment
@@ -712,9 +712,9 @@ foldSeg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
-foldSeg f z arr seg = withFrozenCallStack $ foldSeg' f z arr (scanl plus zero seg)
+foldSeg f z arr seg = sourceMap $ foldSeg' f z arr (scanl plus zero seg)
   where
-    plus :: HasCallStack => Exp i -> Exp i -> Exp i
+    plus :: SourceMapped => Exp i -> Exp i -> Exp i
     (plus, zero) =
       case integralType @i of
         TypeInt{}    -> ((+), 0)
@@ -739,9 +739,9 @@ fold1Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
-fold1Seg f arr seg = withFrozenCallStack $ fold1Seg' f arr (scanl plus zero seg)
+fold1Seg f arr seg = sourceMap $ fold1Seg' f arr (scanl plus zero seg)
   where
-    plus :: HasCallStack => Exp i -> Exp i -> Exp i
+    plus :: SourceMapped => Exp i -> Exp i -> Exp i
     zero :: Exp i
     (plus, zero) =
       case integralType @(EltR i) of
@@ -780,7 +780,7 @@ all :: (HasCallStack, Shape sh, Elt e)
     => (Exp e -> Exp Bool)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Array sh Bool)
-all f = withFrozenCallStack $ and . map f
+all f = sourceMap $ and . map f
 
 -- | Check if any element along the innermost dimension satisfies the predicate.
 --
@@ -799,21 +799,21 @@ any :: (HasCallStack, Shape sh, Elt e)
     => (Exp e -> Exp Bool)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Array sh Bool)
-any f = withFrozenCallStack $ or . map f
+any f = sourceMap $ or . map f
 
 -- | Check if all elements along the innermost dimension are 'True'.
 --
 and :: (HasCallStack, Shape sh)
     => Acc (Array (sh:.Int) Bool)
     -> Acc (Array sh Bool)
-and = withFrozenCallStack $ fold (&&) True_
+and = sourceMap $ fold (&&) True_
 
 -- | Check if any element along the innermost dimension is 'True'.
 --
 or :: (HasCallStack, Shape sh)
    => Acc (Array (sh:.Int) Bool)
    -> Acc (Array sh Bool)
-or = withFrozenCallStack $ fold (||) False_
+or = sourceMap $ fold (||) False_
 
 -- | Compute the sum of elements along the innermost dimension of the array. To
 -- find the sum of the entire array, 'flatten' it first.
@@ -825,7 +825,7 @@ or = withFrozenCallStack $ fold (||) False_
 sum :: (HasCallStack, Shape sh, Num e)
     => Acc (Array (sh:.Int) e)
     -> Acc (Array sh e)
-sum = withFrozenCallStack $ fold (+) 0
+sum = sourceMap $ fold (+) 0
 
 -- | Compute the product of the elements along the innermost dimension of the
 -- array. To find the product of the entire array, 'flatten' it first.
@@ -838,7 +838,7 @@ product
     :: (HasCallStack, Shape sh, Num e)
     => Acc (Array (sh:.Int) e)
     -> Acc (Array sh e)
-product = withFrozenCallStack $ fold (*) 1
+product = sourceMap $ fold (*) 1
 
 -- | Yield the minimum element along the innermost dimension of the array. To
 -- find find the minimum element of the entire array, 'flatten' it first.
@@ -859,7 +859,7 @@ minimum
     :: (HasCallStack, Shape sh, Ord e)
     => Acc (Array (sh:.Int) e)
     -> Acc (Array sh e)
-minimum = withFrozenCallStack $ fold1 min
+minimum = sourceMap $ fold1 min
 
 -- | Yield the maximum element along the innermost dimension of the array. To
 -- find the maximum element of the entire array, 'flatten' it first.
@@ -880,7 +880,7 @@ maximum
     :: (HasCallStack, Shape sh, Ord e)
     => Acc (Array (sh:.Int) e)
     -> Acc (Array sh e)
-maximum = withFrozenCallStack $ fold1 max
+maximum = sourceMap $ fold1 max
 
 
 -- Composite scans
@@ -901,7 +901,7 @@ prescanl
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Array (sh:.Int) a)
-prescanl f e = withFrozenCallStack $ afst . scanl' f e
+prescanl f e = sourceMap $ afst . scanl' f e
 
 -- | Left-to-right post-scan, a variant of 'scanl1' with an initial value. As
 -- with 'scanl1', the array must not be empty. Denotationally, we have:
@@ -918,7 +918,7 @@ postscanl
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Array (sh:.Int) a)
-postscanl f e = withFrozenCallStack $ map (e `f`) . scanl1 f
+postscanl f e = sourceMap $ map (e `f`) . scanl1 f
 
 -- | Right-to-left pre-scan (aka exclusive scan). As for 'scan', the first
 -- argument must be an /associative/ function. Denotationally, we have:
@@ -931,7 +931,7 @@ prescanr
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Array (sh:.Int) a)
-prescanr f e = withFrozenCallStack $ afst . scanr' f e
+prescanr f e = sourceMap $ afst . scanr' f e
 
 -- | Right-to-left postscan, a variant of 'scanr1' with an initial value.
 -- Denotationally, we have:
@@ -944,7 +944,7 @@ postscanr
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Array (sh:.Int) a)
-postscanr f e = withFrozenCallStack $ map (`f` e) . scanr1 f
+postscanr f e = sourceMap $ map (`f` e) . scanr1 f
 
 
 -- Segmented scans
@@ -982,7 +982,7 @@ scanlSeg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
-scanlSeg f z arr seg = withFrozenCallStack
+scanlSeg f z arr seg = sourceMap
   $ let -- Segmented exclusive scan is implemented by first injecting the seed
         -- element at the head of each segment, and then performing a segmented
         -- inclusive scan.
@@ -1055,7 +1055,7 @@ scanl'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanl'Seg f z arr seg = withFrozenCallStack
+scanl'Seg f z arr seg = sourceMap
   $ let -- Segmented scan' is implemented by deconstructing a segmented exclusive
         -- scan, to separate the final value and scan body.
         --
@@ -1141,7 +1141,7 @@ scanl1Seg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 scanl1Seg f arr seg
-  = withFrozenCallStack
+  = sourceMap
   $ map snd . scanl1 (segmentedL f)
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkHeadFlags seg)) arr
 
@@ -1155,7 +1155,7 @@ prescanlSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 prescanlSeg f e vec seg
-  = withFrozenCallStack
+  = sourceMap
   $ afst
   $ scanl'Seg f e vec seg
 
@@ -1169,7 +1169,7 @@ postscanlSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 postscanlSeg f e vec seg
-  = withFrozenCallStack
+  = sourceMap
   $ map (f e)
   $ scanl1Seg f vec seg
 
@@ -1205,7 +1205,7 @@ scanrSeg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
-scanrSeg f z arr seg = withFrozenCallStack
+scanrSeg f z arr seg = sourceMap
   $ let sh ::. sz    = shape arr
 
         -- Using technique described for 'scanlSeg', where we intersperse the array
@@ -1264,7 +1264,7 @@ scanr'Seg
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
-scanr'Seg f z arr seg = withFrozenCallStack
+scanr'Seg f z arr seg = sourceMap
   $ let -- Using technique described for scanl'Seg
         --
         arr'        = scanrSeg f z arr seg
@@ -1320,7 +1320,7 @@ scanr1Seg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 scanr1Seg f arr seg
-  = withFrozenCallStack
+  = sourceMap
   $ map snd . scanr1 (segmentedR f)
   $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkTailFlags seg)) arr
 
@@ -1335,7 +1335,7 @@ prescanrSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 prescanrSeg f e vec seg
-  = withFrozenCallStack
+  = sourceMap
   $ afst
   $ scanr'Seg f e vec seg
 
@@ -1349,7 +1349,7 @@ postscanrSeg
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) e)
 postscanrSeg f e vec seg
-  = withFrozenCallStack
+  = sourceMap
   $ map (f e)
   $ scanr1Seg f vec seg
 
@@ -1365,45 +1365,49 @@ postscanrSeg f e vec seg
 -- data is used by exclusive segmented scan.
 --
 mkHeadFlags
-    :: (HasCallStack, Integral i, FromIntegral i Int)
+    :: (SourceMapped, Integral i, FromIntegral i Int)
     => Acc (Segments i)
     -> Acc (Segments i)
-mkHeadFlags seg = withFrozenCallStack
-  $ let T2 offset len = scanl' (+) 0 seg
-        zeros         = fill (index1' $ the len + 1) 0
-        ones          = fill (index1  $ size offset) 1
-    in init $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
+mkHeadFlags seg
+  = init
+  $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
+  where
+    T2 offset len = scanl' (+) 0 seg
+    zeros         = fill (index1' $ the len + 1) 0
+    ones          = fill (index1  $ size offset) 1
 
 -- | Compute tail flags vector from segment vector for right-scans. That
 -- is, the flag is placed at the last place in each segment.
 --
 mkTailFlags
-    :: (HasCallStack, Integral i, FromIntegral i Int)
+    :: (SourceMapped, Integral i, FromIntegral i Int)
     => Acc (Segments i)
     -> Acc (Segments i)
-mkTailFlags seg = withFrozenCallStack
-  $ let T2 offset len = scanr' (+) 0 seg
-        zeros         = fill (index1' $ the len + 1) 0
-        ones          = fill (index1  $ size offset) 1
-    in  init $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
+mkTailFlags seg
+  = init
+  $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
+  where
+    T2 offset len = scanr' (+) 0 seg
+    zeros         = fill (index1' $ the len + 1) 0
+    ones          = fill (index1  $ size offset) 1
 
 -- | Construct a segmented version of a function from a non-segmented
 -- version. The segmented apply operates on a head-flag value tuple, and
 -- follows the procedure of Sengupta et. al.
 --
 segmentedL
-    :: (HasCallStack, Elt e, Num i, Bits i)
+    :: (SourceMapped, Elt e, Num i, Bits i)
     => (Exp e -> Exp e -> Exp e)
     -> (Exp (i, e) -> Exp (i, e) -> Exp (i, e))
-segmentedL f = withFrozenCallStack $ \(T2 aF aV) (T2 bF bV) ->
+segmentedL f (T2 aF aV) (T2 bF bV) =
   T2 (aF .|. bF)
      (bF /= 0 ? (bV, f aV bV))
 
 segmentedR
-    :: (HasCallStack, Elt e, Num i, Bits i)
+    :: (SourceMapped, Elt e, Num i, Bits i)
     => (Exp e -> Exp e -> Exp e)
     -> (Exp (i, e) -> Exp (i, e) -> Exp (i, e))
-segmentedR f y x = withFrozenCallStack $ segmentedL (flip f) x y
+segmentedR f y x = segmentedL (flip f) x y
 
 -- | Index construction and destruction generalised to integral types.
 --
@@ -1416,8 +1420,8 @@ segmentedR f y x = withFrozenCallStack $ segmentedL (flip f) x y
 -- back to concrete Int. However, don't put these generalised forms into the
 -- base library, because it results in too many ambiguity errors.
 --
-index1' ::  (HasCallStack, Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
-index1' i = withFrozenCallStack $ lift (Z :. fromIntegral i)
+index1' ::  (SourceMapped, Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
+index1' i = lift (Z :. fromIntegral i)
 
 
 -- Reshaping of arrays
@@ -1431,7 +1435,7 @@ flatten a
   | Just Refl <- matchShapeType @sh @DIM1
   = a
 flatten a
-  = withFrozenCallStack $ reshape (I1 (size a)) a
+  = sourceMap $ reshape (I1 (size a)) a
 
 
 -- Enumeration and filling
@@ -1443,7 +1447,7 @@ flatten a
 -- Vector (Z :. 10) [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
 --
 fill :: (HasCallStack, Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
-fill sh c = withFrozenCallStack $ generate sh (const c)
+fill sh c = sourceMap $ generate sh (const c)
 
 -- | Create an array of the given shape containing the values @x@, @x+1@, etc.
 -- (in row-major order).
@@ -1461,7 +1465,7 @@ enumFromN
     => Exp sh
     -> Exp e
     -> Acc (Array sh e)
-enumFromN sh x = withFrozenCallStack $ enumFromStepN sh x 1
+enumFromN sh x = sourceMap $ enumFromStepN sh x 1
 
 -- | Create an array of the given shape containing the values @x@, @x+y@,
 -- @x+y+y@ etc. (in row-major order).
@@ -1481,7 +1485,7 @@ enumFromStepN
     -> Exp e              -- ^ y: step
     -> Acc (Array sh e)
 enumFromStepN sh x y
-  = withFrozenCallStack
+  = sourceMap
   $ reshape sh
   $ generate (I1 (shapeSize sh))
              (\ix -> (fromIntegral (unindex1 ix :: Exp Int) * y) + x)
@@ -1528,7 +1532,7 @@ infixr 5 ++
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-(++) = withFrozenCallStack $ concatOn _1
+(++) = sourceMap $ concatOn _1
 
 
 -- | Generalised version of '(++)' where the argument 'Lens'' specifies which
@@ -1591,19 +1595,17 @@ concatOn
     -> Acc (Array sh e)
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-concatOn dim xs ys = withFrozenCallStack $
-  let
-      shx   = shape xs
-      shy   = shape ys
-      m     = shx ^. dim
-      n     = shy ^. dim
-      shx'  = shx & dim .~ m+n
-      shy'  = shy & dim .~ m+n
-  in
-  generate (shx' `intersect` shy')
-           (\ix -> let i = ix ^. dim in
-                   if  i < m then xs ! ix
-                             else ys ! (ix & dim -~ m))
+concatOn dim xs ys = sourceMap
+  $ let shx  = shape xs
+        shy  = shape ys
+        m    = shx ^. dim
+        n    = shy ^. dim
+        shx' = shx & dim .~ m+n
+        shy' = shy & dim .~ m+n
+    in  generate (shx' `intersect` shy')
+                 (\ix -> let i = ix ^. dim in
+                         if  i < m then xs ! ix
+                                   else ys ! (ix & dim -~ m))
 
 -- TLM: If we have something like (concat . split) then the source array will
 --      have two use sites, but is actually safe (and better) to inline.
@@ -1638,7 +1640,7 @@ filter :: (HasCallStack, Shape sh, Elt e)
        => (Exp e -> Exp Bool)
        -> Acc (Array (sh:.Int) e)
        -> Acc (Vector e, Array sh Int)
-filter p arr = withFrozenCallStack $ compact (map p arr) arr
+filter p arr = sourceMap $ compact (map p arr) arr
 {-# NOINLINE filter #-}
 {-# RULES
   "ACC filter/filter" forall f g arr.
@@ -1657,9 +1659,8 @@ compact keep arr
   -- Optimise 1-dimensional arrays, where we can avoid additional computations
   -- for the offset indices.
   | Just Refl <- matchShapeType @sh @Z
-  = withFrozenCallStack $
-    let
-        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+  = sourceMap
+  $ let T2 target len   = scanl' (+) 0 (map boolToInt keep)
         prj ix          = if keep!ix
                              then Just_ (I1 (target!ix))
                              else Nothing_
@@ -1674,9 +1675,8 @@ compact keep arr
        else T2 result len
 
 compact keep arr
-  = withFrozenCallStack $
-    let
-        sz              = indexTail (shape arr)
+  = sourceMap
+  $ let sz              = indexTail (shape arr)
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
@@ -1705,7 +1705,7 @@ gather
     => Acc (Array sh Int)         -- ^ index of source at each index to gather
     -> Acc (Vector e)             -- ^ source values
     -> Acc (Array sh e)
-gather indices input = withFrozenCallStack $ map (input !!) indices
+gather indices input = sourceMap $ map (input !!) indices
   -- TLM NOTES:
   --  * (!!) has potential for later optimisation
   --  * We needn't fix the source array to Vector, but this matches the
@@ -1733,7 +1733,7 @@ gatherIf
     -> Acc (Vector b)             -- ^ default values
     -> Acc (Vector b)             -- ^ source values
     -> Acc (Vector b)
-gatherIf from maskV pred defaults input = withFrozenCallStack
+gatherIf from maskV pred defaults input = sourceMap
   $ let zf p g      = p ? (unlift g)
         gatheredV   = zip (gather from input) defaults
         pf          = map pred maskV
@@ -1760,7 +1760,7 @@ scatter
     -> Acc (Vector e)             -- ^ default values
     -> Acc (Vector e)             -- ^ source values
     -> Acc (Vector e)
-scatter to defaults input = withFrozenCallStack
+scatter to defaults input = sourceMap
   $ let pf ix   = Just_ (I1 (to ! ix))
         input'  = backpermute (shape to `intersect` shape input) id input
     in  permute const defaults pf input'
@@ -1787,7 +1787,7 @@ scatterIf
     -> Acc (Vector b)             -- ^ default values
     -> Acc (Vector b)             -- ^ source values
     -> Acc (Vector b)
-scatterIf to maskV pred defaults input = withFrozenCallStack
+scatterIf to maskV pred defaults input = sourceMap
   $ let input'  = backpermute (shape to `intersect` shape input) id input
         pf ix   = if pred (maskV ! ix)
                     then Just_ (I1 (to ! ix))
@@ -1801,12 +1801,12 @@ scatterIf to maskV pred defaults input = withFrozenCallStack
 -- | Reverse the elements of a vector.
 --
 reverse :: (HasCallStack, Elt e) => Acc (Vector e) -> Acc (Vector e)
-reverse = withFrozenCallStack $ reverseOn _1
+reverse = sourceMap $ reverseOn _1
 
 -- | Transpose the rows and columns of a matrix.
 --
 transpose :: (HasCallStack, Elt e) => Acc (Array DIM2 e) -> Acc (Array DIM2 e)
-transpose = withFrozenCallStack $ transposeOn _1 _2
+transpose = sourceMap $ transposeOn _1 _2
 
 
 -- | Generalised version of 'reverse' where the argument 'Lens'' specifies which
@@ -1846,7 +1846,7 @@ reverseOn
     => Lens' (Exp sh) (Exp Int)
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-reverseOn dim xs = withFrozenCallStack $
+reverseOn dim xs = sourceMap $
   let
       sh = shape xs
       n  = sh ^. dim
@@ -1901,7 +1901,7 @@ transposeOn
     -> Lens' (Exp sh) (Exp Int)
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-transposeOn dim1 dim2 xs = withFrozenCallStack $
+transposeOn dim1 dim2 xs = sourceMap $
   let
       swap ix = ix & dim2 .~ ix ^. dim1
                    & dim1 .~ ix ^. dim2
@@ -1936,7 +1936,7 @@ take :: (HasCallStack, Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-take = withFrozenCallStack $ takeOn _1
+take = sourceMap $ takeOn _1
 
 
 -- | Yield all but the first @n@ elements along the innermost dimension of the
@@ -1963,7 +1963,7 @@ drop :: (HasCallStack, Shape sh, Elt e)
      => Exp Int
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-drop = withFrozenCallStack $ dropOn _1
+drop = sourceMap $ dropOn _1
 
 
 -- | Yield all but the elements in the last index of the innermost dimension.
@@ -1988,7 +1988,7 @@ drop = withFrozenCallStack $ dropOn _1
 init :: (HasCallStack, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-init = withFrozenCallStack $ initOn _1
+init = sourceMap $ initOn _1
 
 
 -- | Yield all but the first element along the innermost dimension of an array.
@@ -2014,7 +2014,7 @@ init = withFrozenCallStack $ initOn _1
 tail :: (HasCallStack, Shape sh, Elt e)
      => Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-tail = withFrozenCallStack $ tailOn _1
+tail = sourceMap $ tailOn _1
 
 
 -- | Yield a slit (slice) of the innermost indices of an array. Denotationally,
@@ -2027,7 +2027,7 @@ slit :: (HasCallStack, Shape sh, Elt e)
      -> Exp Int                     -- ^ length
      -> Acc (Array (sh :. Int) e)
      -> Acc (Array (sh :. Int) e)
-slit = withFrozenCallStack $ slitOn _1
+slit = sourceMap $ slitOn _1
 
 
 -- | Generalised version of 'init' where the argument 'Lens'' specifies which
@@ -2042,12 +2042,10 @@ initOn
     => Lens' (Exp sh) (Exp Int)
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-initOn dim xs = withFrozenCallStack $
-  let
-      sh  = shape xs
-      sh' = over dim (\i -> 0 `max` (i-1)) sh
-  in
-  backpermute sh' id xs
+initOn dim xs = sourceMap
+  $ let sh  = shape xs
+        sh' = over dim (\i -> 0 `max` (i-1)) sh
+    in  backpermute sh' id xs
 
 
 -- | Generalised version of 'tail' where the argument 'Lens'' specifies which
@@ -2062,12 +2060,10 @@ tailOn
     => Lens' (Exp sh) (Exp Int)
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-tailOn dim xs = withFrozenCallStack $
-  let
-      sh  = shape xs
-      sh' = over dim (\i -> 0 `max` (i-1)) sh
-  in
-  backpermute sh' (& dim +~ 1) xs
+tailOn dim xs = sourceMap
+  $ let sh  = shape xs
+        sh' = over dim (\i -> 0 `max` (i-1)) sh
+    in  backpermute sh' (& dim +~ 1) xs
 
 
 -- | Generalised version of 'take' where the argument 'Lens'' specifies which
@@ -2083,12 +2079,10 @@ takeOn
     -> Exp Int
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-takeOn dim n xs = withFrozenCallStack $
-  let
-      sh = shape xs
-      m  = sh ^. dim
-  in
-  backpermute (sh & dim .~ min m n) id xs
+takeOn dim n xs = sourceMap
+  $ let sh = shape xs
+        m  = sh ^. dim
+    in  backpermute (sh & dim .~ min m n) id xs
 
 
 -- | Generalised version of 'drop' where the argument 'Lens'' specifies which
@@ -2104,13 +2098,11 @@ dropOn
     -> Exp Int
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-dropOn dim n xs = withFrozenCallStack $
-  let
-      sh = shape xs
-      m  = sh ^. dim
-      n' = max 0 n
-  in
-  backpermute (sh & dim .~ max 0 (m - n')) (& dim +~ n') xs
+dropOn dim n xs = sourceMap
+  $ let sh = shape xs
+        m  = sh ^. dim
+        n' = max 0 n
+    in  backpermute (sh & dim .~ max 0 (m - n')) (& dim +~ n') xs
 
 -- Note: [embedding constants in take & drop]
 --
@@ -2137,7 +2129,7 @@ slitOn
     -> Exp Int                      -- ^ length
     -> Acc (Array sh e)
     -> Acc (Array sh e)
-slitOn dim i n = withFrozenCallStack $ takeOn dim n . dropOn dim i
+slitOn dim i n = sourceMap $ takeOn dim n . dropOn dim i
 
 
 -- Controlling execution
@@ -2177,7 +2169,7 @@ slitOn dim i n = withFrozenCallStack $ takeOn dim n . dropOn dim i
 -- overall runtime.
 --
 compute :: (HasCallStack, Arrays a) => Acc a -> Acc a
-compute = withFrozenCallStack $ id >-> id
+compute = sourceMap $ id >-> id
 
 
 -- Flow control
@@ -2191,7 +2183,7 @@ compute = withFrozenCallStack $ id >-> id
 --
 infix 0 ?|
 (?|) :: (HasCallStack, Arrays a) => Exp Bool -> (Acc a, Acc a) -> Acc a
-c ?| (t, e) = withFrozenCallStack $ acond c t e
+c ?| (t, e) = sourceMap $ acond c t e
 
 -- | An infix version of 'cond'. If the predicate evaluates to 'True', the first
 -- component of the tuple is returned, else the second.
@@ -2201,7 +2193,7 @@ c ?| (t, e) = withFrozenCallStack $ acond c t e
 --
 infix 0 ?
 (?) :: (HasCallStack, Elt t) => Exp Bool -> (Exp t, Exp t) -> Exp t
-c ? (t, e) = withFrozenCallStack $ cond c t e
+c ? (t, e) = sourceMap $ cond c t e
 
 -- | For use with @-XRebindableSyntax@, this class provides 'ifThenElse'
 -- for host and embedded scalar and array types.
@@ -2210,16 +2202,16 @@ class IfThenElse bool a where
   ifThenElse :: HasCallStack => bool -> a -> a -> a
 
 instance IfThenElse Bool a where
-  ifThenElse p t e = withFrozenCallStack $
-    case p of
-      True  -> t
-      False -> e
+  ifThenElse p t e = sourceMap
+    $ case p of
+        True  -> t
+        False -> e
 
 instance Elt a => IfThenElse (Exp Bool) (Exp a) where
-  ifThenElse = withFrozenCallStack cond
+  ifThenElse = sourceMap cond
 
 instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
-  ifThenElse = withFrozenCallStack acond
+  ifThenElse = sourceMap acond
 
 
 -- | The 'match' operation is the core operation which enables embedded
@@ -2271,7 +2263,7 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 -- @since 1.3.0.0
 --
 match :: (HasCallStack, Matching f) => f -> f
-match f = withFrozenCallStack $ mkFun (mkMatch f) id
+match f = sourceMap $ mkFun (mkMatch f) id
 
 data Args f where
   (:->)  :: Exp a -> Args b -> Args (Exp a -> b)
@@ -2279,8 +2271,8 @@ data Args f where
 
 class Matching a where
   type ResultT a
-  mkMatch :: HasCallStack => a -> Args a -> Exp (ResultT a)
-  mkFun   :: HasCallStack
+  mkMatch :: SourceMapped => a -> Args a -> Exp (ResultT a)
+  mkFun   :: SourceMapped
           => (Args f -> Exp (ResultT a))
           -> (Args a -> Args f)
           -> a
@@ -2326,9 +2318,9 @@ iterate
     -> (Exp a -> Exp a)
     -> Exp a
     -> Exp a
-iterate n f z = withFrozenCallStack
+iterate n f z = sourceMap
   $ let step (T2 i acc) = T2 (i+1) (f acc)
-     in snd $ while (\v -> fst v < n) step (T2 0 z)
+    in  snd $ while (\v -> fst v < n) step (T2 0 z)
 
 
 -- Scalar bulk operations
@@ -2343,10 +2335,10 @@ sfoldl :: (HasCallStack, Shape sh, Elt a, Elt b)
        -> Exp sh
        -> Acc (Array (sh :. Int) b)
        -> Exp a
-sfoldl f z ix xs = withFrozenCallStack
+sfoldl f z ix xs = sourceMap
   $ let n               = indexHead (shape xs)
         step (T2 i acc) = T2 (i+1) (acc `f` (xs ! (ix ::. i)))
-     in snd $ while (\v -> fst v < n) step (T2 0 z)
+    in  snd $ while (\v -> fst v < n) step (T2 0 z)
 
 
 -- Tuples
@@ -2355,31 +2347,31 @@ sfoldl f z ix xs = withFrozenCallStack
 -- |Extract the first component of a scalar pair.
 --
 fst :: (HasCallStack, Elt a, Elt b) => Exp (a, b) -> Exp a
-fst = withFrozenCallStack $ \(T2 a _) -> a
+fst = sourceMap $ \(T2 a _) -> a
 
 -- |Extract the first component of an array pair.
 {-# NOINLINE[1] afst #-}
 afst :: (HasCallStack, Arrays a, Arrays b) => Acc (a, b) -> Acc a
-afst = withFrozenCallStack $ \(T2 a _) -> a
+afst = sourceMap $ \(T2 a _) -> a
 
 -- |Extract the second component of a scalar pair.
 --
 snd :: (HasCallStack, Elt a, Elt b) => Exp (a, b) -> Exp b
-snd = withFrozenCallStack $ \(T2 _ b) -> b
+snd = sourceMap $ \(T2 _ b) -> b
 
 -- | Extract the second component of an array pair
 asnd :: (HasCallStack, Arrays a, Arrays b) => Acc (a, b) -> Acc b
-asnd = withFrozenCallStack $ \(T2 _ b) -> b
+asnd = sourceMap $ \(T2 _ b) -> b
 
 -- |Converts an uncurried function to a curried function.
 --
 curry :: (HasCallStack, Lift f (f a, f b)) => (f (Plain (f a), Plain (f b)) -> f c) -> f a -> f b -> f c
-curry f x y = withFrozenCallStack $ f (lift (x, y))
+curry f x y = sourceMap $ f (lift (x, y))
 
 -- |Converts a curried function to a function on pairs.
 --
 uncurry :: (HasCallStack, Unlift f (f a, f b)) => (f a -> f b -> f c) -> f (Plain (f a), Plain (f b)) -> f c
-uncurry f t = withFrozenCallStack $ let (x, y) = unlift t in f x y
+uncurry f t = sourceMap $ let (x, y) = unlift t in f x y
 
 
 -- Shapes and indices
@@ -2388,17 +2380,17 @@ uncurry f t = withFrozenCallStack $ let (x, y) = unlift t in f x y
 -- | The one index for a rank-0 array.
 --
 index0 :: HasCallStack => Exp Z
-index0 = withFrozenCallStack $ lift Z
+index0 = sourceMap $ lift Z
 
 -- | Turn an 'Int' expression into a rank-1 indexing expression.
 --
 index1 :: (HasCallStack, Elt i) => Exp i -> Exp (Z :. i)
-index1 i = withFrozenCallStack $ lift (Z :. i)
+index1 i = sourceMap $ lift (Z :. i)
 
 -- | Turn a rank-1 indexing expression into an 'Int' expression.
 --
 unindex1 :: (HasCallStack, Elt i) => Exp (Z :. i) -> Exp i
-unindex1 ix = withFrozenCallStack $ let Z :. i = unlift ix in i
+unindex1 ix = sourceMap $ let Z :. i = unlift ix in i
 
 -- | Creates a rank-2 index from two Exp Int`s
 --
@@ -2407,7 +2399,7 @@ index2
     => Exp i
     -> Exp i
     -> Exp (Z :. i :. i)
-index2 i j = withFrozenCallStack $ lift (Z :. i :. j)
+index2 i j = sourceMap $ lift (Z :. i :. j)
 
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
@@ -2415,7 +2407,7 @@ unindex2
     :: (HasCallStack, Elt i)
     => Exp (Z :. i :. i)
     -> Exp (i, i)
-unindex2 = withFrozenCallStack $ \(Z_ ::. i ::. j) -> T2 i j
+unindex2 = sourceMap $ \(Z_ ::. i ::. j) -> T2 i j
 
 -- | Create a rank-3 index from three Exp Int`s
 --
@@ -2425,14 +2417,14 @@ index3
     -> Exp i
     -> Exp i
     -> Exp (Z :. i :. i :. i)
-index3 k j i = withFrozenCallStack $ Z_ ::. k ::. j ::. i
+index3 k j i = sourceMap $ Z_ ::. k ::. j ::. i
 
 -- | Destruct a rank-3 index into an Exp tuple of Int`s
 unindex3
     :: (HasCallStack, Elt i)
     => Exp (Z :. i :. i :. i)
     -> Exp (i, i, i)
-unindex3 = withFrozenCallStack $ \(Z_ ::. k ::. j ::. i) -> T3 k j i
+unindex3 = sourceMap $ \(Z_ ::. k ::. j ::. i) -> T3 k j i
 
 
 -- Array operations with a scalar result
@@ -2443,17 +2435,17 @@ unindex3 = withFrozenCallStack $ \(Z_ ::. k ::. j ::. i) -> T3 k j i
 -- > the xs  ==  xs ! Z
 --
 the :: (HasCallStack, Elt e) => Acc (Scalar e) -> Exp e
-the = withFrozenCallStack (! index0)
+the = sourceMap (! index0)
 
 -- | Test whether an array is empty.
 --
 null :: (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp Bool
-null arr = withFrozenCallStack $ size arr == 0
+null arr = sourceMap $ size arr == 0
 
 -- | Get the length of a vector.
 --
 length :: (HasCallStack, Elt e) => Acc (Vector e) -> Exp Int
-length = withFrozenCallStack $ unindex1 . shape
+length = sourceMap $ unindex1 . shape
 
 
 -- Operations to facilitate irregular data parallelism
@@ -2524,43 +2516,42 @@ expand :: (HasCallStack, Elt a, Elt b)
        -> (Exp a -> Exp Int -> Exp b)
        -> Acc (Vector a)
        -> Acc (Vector b)
-expand f g xs = withFrozenCallStack $
-  let
-      szs           = map f xs
-      T2 offset len = scanl' (+) 0 szs
-      m             = the len
-  in
-  if length xs == 0 || m == 0
-     then use $ fromList (Z:.0) []
-     else
-      let
-          n          = m + 1
-          put ix     = Just_ (I1 (offset ! ix))
+expand f g xs = sourceMap
+  $ let szs           = map f xs
+        T2 offset len = scanl' (+) 0 szs
+        m             = the len
+    in
+    if length xs == 0 || m == 0
+      then use $ fromList (Z:.0) []
+      else
+        let
+            n          = m + 1
+            put ix     = Just_ (I1 (offset ! ix))
 
-          head_flags :: Acc (Vector Int)
-          head_flags = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
+            head_flags :: Acc (Vector Int)
+            head_flags = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
 
-          idxs       = map (subtract 1)
-                     $ map snd
-                     $ scanl1 (segmentedL (+))
-                     $ zip head_flags
-                     $ fill (I1 m) 1
+            idxs       = map (subtract 1)
+                       $ map snd
+                       $ scanl1 (segmentedL (+))
+                       $ zip head_flags
+                       $ fill (I1 m) 1
 
-          iotas      = map snd
-                     $ scanl1 (segmentedL const)
-                     $ zip head_flags
-                     $ permute const
-                               (fill (I1 n) undef)
-                               -- If any of the elements expand to zero new
-                               -- elements then this would result in multiple
-                               -- writes to the same index since the offsets are
-                               -- also the same, which is undefined behaviour
-                               (\ix -> if szs ! ix > 0
-                                         then put ix
-                                         else Nothing_)
-                     $ enumFromN (shape xs) 0
-      in
-      zipWith g (gather iotas xs) idxs
+            iotas      = map snd
+                       $ scanl1 (segmentedL const)
+                       $ zip head_flags
+                       $ permute const
+                                 (fill (I1 n) undef)
+                                 -- If any of the elements expand to zero new
+                                 -- elements then this would result in multiple
+                                 -- writes to the same index since the offsets are
+                                 -- also the same, which is undefined behaviour
+                                 (\ix -> if szs ! ix > 0
+                                           then put ix
+                                           else Nothing_)
+                       $ enumFromN (shape xs) 0
+        in
+        zipWith g (gather iotas xs) idxs
 
 
 {--
@@ -2611,8 +2602,8 @@ generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
 -- Utilities
 -- ---------
 
-emptyArray :: (HasCallStack, Shape sh, Elt e) => Acc (Array sh e)
-emptyArray = withFrozenCallStack $ fill (constant empty) undef
+emptyArray :: (SourceMapped, Shape sh, Elt e) => Acc (Array sh e)
+emptyArray = fill (constant empty) undef
 
 
 -- Lenses
@@ -2621,17 +2612,17 @@ emptyArray = withFrozenCallStack $ fill (constant empty) undef
 -- Imported from `lens-accelerate` (which provides more general Field instances)
 --
 _1 :: forall sh. (HasCallStack, Elt sh) => Lens' (Exp (sh:.Int)) (Exp Int)
-_1 = withFrozenCallStack $
+_1 = sourceMap $
      lens (\ix   -> let _  :. x = unlift ix :: Exp sh :. Exp Int in x)
           (\ix x -> let sh :. _ = unlift ix :: Exp sh :. Exp Int in lift (sh :. x))
 
 _2 :: forall sh. (HasCallStack, Elt sh) => Lens' (Exp (sh:.Int:.Int)) (Exp Int)
-_2 = withFrozenCallStack $
+_2 = sourceMap $
      lens (\ix   -> let _  :. y :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int in y)
           (\ix y -> let sh :. _ :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int in lift (sh :. y :. x))
 
 _3 :: forall sh. (HasCallStack, Elt sh) => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
-_3 = withFrozenCallStack $
+_3 = sourceMap $
      lens (\ix   -> let _  :. z :. _ :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in z)
           (\ix z -> let sh :. _ :. y :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in lift (sh :. z :. y :. x))
 

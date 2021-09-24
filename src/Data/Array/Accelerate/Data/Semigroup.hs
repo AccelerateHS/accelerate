@@ -61,43 +61,43 @@ instance Elt a => Elt (Min a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Min a) where
   type Plain (Min a) = Min (Plain a)
-  lift (Min a)       = withFrozenCallStack $ Min_ (lift a)
+  lift (Min a)       = sourceMap $ Min_ (lift a)
 
 instance Elt a => Unlift Exp (Min (Exp a)) where
-  unlift = withFrozenCallStack $ \(Min_ a) -> Min a
+  unlift = sourceMap $ \(Min_ a) -> Min a
 
 instance Bounded a => P.Bounded (Exp (Min a)) where
-  minBound = withExecutionStackAsCallStack $ lift $ Min (minBound :: Exp a)
-  maxBound = withExecutionStackAsCallStack $ lift $ Min (maxBound :: Exp a)
+  minBound = sourceMapRuntime $ lift $ Min (minBound :: Exp a)
+  maxBound = sourceMapRuntime $ lift $ Min (maxBound :: Exp a)
 
 instance Num a => P.Num (Exp (Min a)) where
-  (+)           = withExecutionStackAsCallStack $ lift2 ((+) :: Min (Exp a) -> Min (Exp a) -> Min (Exp a))
-  (-)           = withExecutionStackAsCallStack $ lift2 ((-) :: Min (Exp a) -> Min (Exp a) -> Min (Exp a))
-  (*)           = withExecutionStackAsCallStack $ lift2 ((*) :: Min (Exp a) -> Min (Exp a) -> Min (Exp a))
-  negate        = withExecutionStackAsCallStack $ lift1 (negate :: Min (Exp a) -> Min (Exp a))
-  signum        = withExecutionStackAsCallStack $ lift1 (signum :: Min (Exp a) -> Min (Exp a))
-  abs           = withExecutionStackAsCallStack $ lift1 (signum :: Min (Exp a) -> Min (Exp a))
-  fromInteger x = withExecutionStackAsCallStack $ lift (P.fromInteger x :: Min (Exp a))
+  (+)           = sourceMapRuntime $ lift2 ((+) :: Min (Exp a) -> Min (Exp a) -> Min (Exp a))
+  (-)           = sourceMapRuntime $ lift2 ((-) :: Min (Exp a) -> Min (Exp a) -> Min (Exp a))
+  (*)           = sourceMapRuntime $ lift2 ((*) :: Min (Exp a) -> Min (Exp a) -> Min (Exp a))
+  negate        = sourceMapRuntime $ lift1 (negate :: Min (Exp a) -> Min (Exp a))
+  signum        = sourceMapRuntime $ lift1 (signum :: Min (Exp a) -> Min (Exp a))
+  abs           = sourceMapRuntime $ lift1 (signum :: Min (Exp a) -> Min (Exp a))
+  fromInteger x = sourceMapRuntime $ lift (P.fromInteger x :: Min (Exp a))
 
 instance Eq a => Eq (Min a) where
-  (==) = withFrozenCallStack $ lift2 ((==) `on` getMin)
-  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getMin)
+  (==) = sourceMap $ lift2 ((==) `on` getMin)
+  (/=) = sourceMap $ lift2 ((/=) `on` getMin)
 
 instance Ord a => Ord (Min a) where
-  (<)     = withFrozenCallStack $ lift2 ((<) `on` getMin)
-  (>)     = withFrozenCallStack $ lift2 ((>) `on` getMin)
-  (<=)    = withFrozenCallStack $ lift2 ((<=) `on` getMin)
-  (>=)    = withFrozenCallStack $ lift2 ((>=) `on` getMin)
-  min x y = withFrozenCallStack $ lift . Min $ lift2 (min `on` getMin) x y
-  max x y = withFrozenCallStack $ lift . Min $ lift2 (max `on` getMin) x y
+  (<)     = sourceMap $ lift2 ((<) `on` getMin)
+  (>)     = sourceMap $ lift2 ((>) `on` getMin)
+  (<=)    = sourceMap $ lift2 ((<=) `on` getMin)
+  (>=)    = sourceMap $ lift2 ((>=) `on` getMin)
+  min x y = sourceMap $ lift . Min $ lift2 (min `on` getMin) x y
+  max x y = sourceMap $ lift . Min $ lift2 (max `on` getMin) x y
 
 instance Ord a => Semigroup (Exp (Min a)) where
-  x <> y  = withExecutionStackAsCallStack $ lift . Min $ lift2 (min `on` getMin) x y
-  stimes  = withExecutionStackAsCallStack $ stimesIdempotent
+  x <> y  = sourceMapRuntime $ lift . Min $ lift2 (min `on` getMin) x y
+  stimes  = sourceMapRuntime $ stimesIdempotent
 
 instance (Ord a, Bounded a) => Monoid (Exp (Min a)) where
-  mempty  = withExecutionStackAsCallStack maxBound
-  mappend = withExecutionStackAsCallStack (<>)
+  mempty  = sourceMapRuntime maxBound
+  mappend = sourceMapRuntime (<>)
 
 
 pattern Max_ :: Elt a => Exp a -> Exp (Max a)
@@ -108,69 +108,69 @@ instance Elt a => Elt (Max a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Max a) where
   type Plain (Max a) = Max (Plain a)
-  lift (Max a)       = withFrozenCallStack $ Max_ (lift a)
+  lift (Max a)       = sourceMap $ Max_ (lift a)
 
 instance Elt a => Unlift Exp (Max (Exp a)) where
-  unlift = withFrozenCallStack $ \(Max_ a) -> Max a
+  unlift = sourceMap $ \(Max_ a) -> Max a
 
 instance Bounded a => P.Bounded (Exp (Max a)) where
-  minBound = withExecutionStackAsCallStack $ Max_ minBound
-  maxBound = withExecutionStackAsCallStack $ Max_ maxBound
+  minBound = sourceMapRuntime $ Max_ minBound
+  maxBound = sourceMapRuntime $ Max_ maxBound
 
 instance Num a => P.Num (Exp (Max a)) where
-  (+)           = withExecutionStackAsCallStack $ lift2 ((+) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
-  (-)           = withExecutionStackAsCallStack $ lift2 ((-) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
-  (*)           = withExecutionStackAsCallStack $ lift2 ((*) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
-  negate        = withExecutionStackAsCallStack $ lift1 (negate :: Max (Exp a) -> Max (Exp a))
-  signum        = withExecutionStackAsCallStack $ lift1 (signum :: Max (Exp a) -> Max (Exp a))
-  abs           = withExecutionStackAsCallStack $ lift1 (signum :: Max (Exp a) -> Max (Exp a))
-  fromInteger x = withExecutionStackAsCallStack $ lift (P.fromInteger x :: Max (Exp a))
+  (+)           = sourceMapRuntime $ lift2 ((+) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
+  (-)           = sourceMapRuntime $ lift2 ((-) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
+  (*)           = sourceMapRuntime $ lift2 ((*) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
+  negate        = sourceMapRuntime $ lift1 (negate :: Max (Exp a) -> Max (Exp a))
+  signum        = sourceMapRuntime $ lift1 (signum :: Max (Exp a) -> Max (Exp a))
+  abs           = sourceMapRuntime $ lift1 (signum :: Max (Exp a) -> Max (Exp a))
+  fromInteger x = sourceMapRuntime $ lift (P.fromInteger x :: Max (Exp a))
 
 instance Eq a => Eq (Max a) where
-  (==) = withFrozenCallStack $ lift2 ((==) `on` getMax)
-  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getMax)
+  (==) = sourceMap $ lift2 ((==) `on` getMax)
+  (/=) = sourceMap $ lift2 ((/=) `on` getMax)
 
 instance Ord a => Ord (Max a) where
-  (<)     = withFrozenCallStack $ lift2 ((<) `on` getMax)
-  (>)     = withFrozenCallStack $ lift2 ((>) `on` getMax)
-  (<=)    = withFrozenCallStack $ lift2 ((<=) `on` getMax)
-  (>=)    = withFrozenCallStack $ lift2 ((>=) `on` getMax)
-  min x y = withFrozenCallStack $ Max_ $ lift2 (min `on` getMax) x y
-  max x y = withFrozenCallStack $ Max_ $ lift2 (max `on` getMax) x y
+  (<)     = sourceMap $ lift2 ((<) `on` getMax)
+  (>)     = sourceMap $ lift2 ((>) `on` getMax)
+  (<=)    = sourceMap $ lift2 ((<=) `on` getMax)
+  (>=)    = sourceMap $ lift2 ((>=) `on` getMax)
+  min x y = sourceMap $ Max_ $ lift2 (min `on` getMax) x y
+  max x y = sourceMap $ Max_ $ lift2 (max `on` getMax) x y
 
 instance Ord a => Semigroup (Exp (Max a)) where
-  x <> y  = withExecutionStackAsCallStack $ Max_ $ lift2 (max `on` getMax) x y
-  stimes  = withExecutionStackAsCallStack $ stimesIdempotent
+  x <> y  = sourceMapRuntime $ Max_ $ lift2 (max `on` getMax) x y
+  stimes  = sourceMapRuntime $ stimesIdempotent
 
 instance (Ord a, Bounded a) => Monoid (Exp (Max a)) where
-  mempty  = withExecutionStackAsCallStack $ minBound
-  mappend = withExecutionStackAsCallStack $ (<>)
+  mempty  = sourceMapRuntime $ minBound
+  mappend = sourceMapRuntime $ (<>)
 
 
 -- Instances for unit and tuples
 -- -----------------------------
 
 instance Semigroup (Exp ()) where
-  _ <> _     = withExecutionStackAsCallStack $ constant ()
-  sconcat _  = withExecutionStackAsCallStack $ constant ()
-  stimes _ _ = withExecutionStackAsCallStack $ constant ()
+  _ <> _     = sourceMapRuntime $ constant ()
+  sconcat _  = sourceMapRuntime $ constant ()
+  stimes _ _ = sourceMapRuntime $ constant ()
 
 instance (Elt a, Elt b, Semigroup (Exp a), Semigroup (Exp b)) => Semigroup (Exp (a,b)) where
-  (<>)     = withExecutionStackAsCallStack $ lift2 ((<>) :: (Exp a, Exp b) -> (Exp a, Exp b) -> (Exp a, Exp b))
-  stimes n = withExecutionStackAsCallStack $ \(unlift -> (a,b) :: (Exp a, Exp b)) ->
+  (<>)     = sourceMapRuntime $ lift2 ((<>) :: (Exp a, Exp b) -> (Exp a, Exp b) -> (Exp a, Exp b))
+  stimes n = sourceMapRuntime $ \(unlift -> (a,b) :: (Exp a, Exp b)) ->
     lift (stimes n a, stimes n b)
 
 instance (Elt a, Elt b, Elt c, Semigroup (Exp a), Semigroup (Exp b), Semigroup (Exp c)) => Semigroup (Exp (a,b,c)) where
-  (<>)     = withExecutionStackAsCallStack $ lift2 ((<>) :: (Exp a, Exp b, Exp c) -> (Exp a, Exp b, Exp c) -> (Exp a, Exp b, Exp c))
-  stimes n = withExecutionStackAsCallStack $ \(unlift -> (a,b,c) :: (Exp a, Exp b, Exp c)) ->
+  (<>)     = sourceMapRuntime $ lift2 ((<>) :: (Exp a, Exp b, Exp c) -> (Exp a, Exp b, Exp c) -> (Exp a, Exp b, Exp c))
+  stimes n = sourceMapRuntime $ \(unlift -> (a,b,c) :: (Exp a, Exp b, Exp c)) ->
     lift (stimes n a, stimes n b, stimes n c)
 
 instance (Elt a, Elt b, Elt c, Elt d, Semigroup (Exp a), Semigroup (Exp b), Semigroup (Exp c), Semigroup (Exp d)) => Semigroup (Exp (a,b,c,d)) where
-  (<>)     = withExecutionStackAsCallStack $ lift2 ((<>) :: (Exp a, Exp b, Exp c, Exp d) -> (Exp a, Exp b, Exp c, Exp d) -> (Exp a, Exp b, Exp c, Exp d))
-  stimes n = withExecutionStackAsCallStack $ \(unlift -> (a,b,c,d) :: (Exp a, Exp b, Exp c, Exp d)) ->
+  (<>)     = sourceMapRuntime $ lift2 ((<>) :: (Exp a, Exp b, Exp c, Exp d) -> (Exp a, Exp b, Exp c, Exp d) -> (Exp a, Exp b, Exp c, Exp d))
+  stimes n = sourceMapRuntime $ \(unlift -> (a,b,c,d) :: (Exp a, Exp b, Exp c, Exp d)) ->
     lift (stimes n a, stimes n b, stimes n c, stimes n d)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Semigroup (Exp a), Semigroup (Exp b), Semigroup (Exp c), Semigroup (Exp d), Semigroup (Exp e)) => Semigroup (Exp (a,b,c,d,e)) where
-  (<>)     = withExecutionStackAsCallStack $ lift2 ((<>) :: (Exp a, Exp b, Exp c, Exp d, Exp e) -> (Exp a, Exp b, Exp c, Exp d, Exp e) -> (Exp a, Exp b, Exp c, Exp d, Exp e))
-  stimes n = withExecutionStackAsCallStack $ \(unlift -> (a,b,c,d,e) :: (Exp a, Exp b, Exp c, Exp d, Exp e)) ->
+  (<>)     = sourceMapRuntime $ lift2 ((<>) :: (Exp a, Exp b, Exp c, Exp d, Exp e) -> (Exp a, Exp b, Exp c, Exp d, Exp e) -> (Exp a, Exp b, Exp c, Exp d, Exp e))
+  stimes n = sourceMapRuntime $ \(unlift -> (a,b,c,d,e) :: (Exp a, Exp b, Exp c, Exp d, Exp e)) ->
     lift (stimes n a, stimes n b, stimes n c, stimes n d, stimes n e)

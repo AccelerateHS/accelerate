@@ -16,7 +16,7 @@ module Data.Array.Accelerate.Pattern.TH (
   mkPatterns,
 
   -- Re-exported, used inside of the sum pattern synonyms
-  withEmptyOrFrozenCallStack,
+  sourceMapPattern,
 
 ) where
 
@@ -233,14 +233,14 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (prefixPatSyn xs)
-                         (explBidir [clause [] (normalB (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE build))) []])
-                         (parensP $ viewP (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE match)) [p| Just $(tupP (map varP xs)) |])
+                         (explBidir [clause [] (normalB (appE (varE (mkName "sourceMapPattern")) (varE build))) []])
+                         (parensP $ viewP (appE (varE (mkName "sourceMapPattern")) (varE match)) [p| Just $(tupP (map varP xs)) |])
                      ]
       return r
       where
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt $ [t| HasCallStack |] : ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt $ [t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs)
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
@@ -250,8 +250,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (recordPatSyn xs)
-                         (explBidir [clause [] (normalB (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE build))) []])
-                         (parensP $ viewP (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE match)) [p| Just $(tupP (map varP xs)) |])
+                         (explBidir [clause [] (normalB (appE (varE (mkName "sourceMapPattern")) (varE build))) []])
+                         (parensP $ viewP (appE (varE (mkName "sourceMapPattern")) (varE match)) [p| Just $(tupP (map varP xs)) |])
                      ]
       return r
       where
@@ -270,8 +270,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (infixPatSyn _a _b)
-                         (explBidir [clause [] (normalB (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE build))) []])
-                         (parensP $ viewP (appE (varE (mkName "withEmptyOrFrozenCallStack")) (varE match)) [p| Just $(tupP [varP _a, varP _b]) |])
+                         (explBidir [clause [] (normalB (appE (varE (mkName "sourceMapPattern")) (varE build))) []])
+                         (parensP $ viewP (appE (varE (mkName "sourceMapPattern")) (varE match)) [p| Just $(tupP [varP _a, varP _b]) |])
                      ]
       r' <- case mf of
               Nothing -> return r
@@ -305,7 +305,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       where
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt $ [t| HasCallStack |] : (map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt $ [t| SourceMapped |] : (map (\t -> [t| Elt $(varT t) |]) tvs))
                 (foldr (\t ts -> [t| $t -> $ts |])
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
@@ -334,7 +334,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       where
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
-                (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
+                (cxt ([t| SourceMapped |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 [t| Exp $(foldl' appT (conT tn) (map varT tvs)) -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
 
         matchP us = [p| TagRtag $(litP (IntegerL (toInteger tag))) $pat |]

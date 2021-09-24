@@ -39,7 +39,7 @@ module Data.Array.Accelerate.Pattern (
   pattern V2, pattern V3, pattern V4, pattern V8, pattern V16,
 
   -- Used internally in other pattern synonyms
-  withEmptyOrFrozenCallStack,
+  sourceMapPattern,
 
 ) where
 
@@ -62,21 +62,21 @@ import Language.Haskell.TH.Extra                                    hiding ( Exp
 -- your own pattern synonyms based off of this.
 --
 pattern Pattern :: forall b a context. (HasCallStack, IsPattern context a b) => b -> context a
-pattern Pattern vars <- (withEmptyOrFrozenCallStack (matcher @context) -> vars)
-  where Pattern = withEmptyOrFrozenCallStack (builder @context)
+pattern Pattern vars <- (sourceMapPattern (matcher @context) -> vars)
+  where Pattern = sourceMapPattern (builder @context)
 
 class IsPattern context a b where
-  builder :: HasCallStack => b -> context a
-  matcher :: HasCallStack => context a -> b
+  builder :: SourceMapped => b -> context a
+  matcher :: SourceMapped => context a -> b
 
 
 pattern Vector :: forall b a context. IsVector context a b => b -> context a
-pattern Vector vars <- (withEmptyOrFrozenCallStack (vunpack @context) -> vars)
-  where Vector = withEmptyOrFrozenCallStack (vpack @context)
+pattern Vector vars <- (sourceMapPattern (vunpack @context) -> vars)
+  where Vector = sourceMapPattern (vpack @context)
 
 class IsVector context a b where
-  vpack   :: HasCallStack => b -> context a
-  vunpack :: HasCallStack => context a -> b
+  vpack   :: SourceMapped => b -> context a
+  vunpack :: SourceMapped => context a -> b
 
 -- | Pattern synonyms for indices, which may be more convenient to use than
 -- 'Data.Array.Accelerate.Lift.lift' and
@@ -97,13 +97,13 @@ pattern a `Ix` b = a ::. b
 {-# COMPLETE Ix #-}
 
 pattern All_ :: Exp All
-pattern All_ <- (withEmptyOrFrozenCallStack (const True) -> True)
-  where All_ = withEmptyOrFrozenCallStack $ constant All
+pattern All_ <- (sourceMapPattern (const True) -> True)
+  where All_ = sourceMapPattern $ constant All
 {-# COMPLETE All_ #-}
 
 pattern Any_ :: (Shape sh, Elt (Any sh)) => Exp (Any sh)
-pattern Any_ <- (withEmptyOrFrozenCallStack (const True) -> True)
-  where Any_ = withEmptyOrFrozenCallStack $ constant Any
+pattern Any_ <- (sourceMapPattern (const True) -> True)
+  where Any_ = sourceMapPattern $ constant Any
 {-# COMPLETE Any_ #-}
 
 -- IsPattern instances for Shape nil and cons

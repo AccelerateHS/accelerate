@@ -164,18 +164,18 @@ import Prelude                                                      ( ($), (.), 
 -- >>> let tup  = use (vec, mat)  :: Acc (Vector Int, Matrix Int)
 --
 use :: forall arrays. (HasCallStack, Arrays arrays) => arrays -> Acc arrays
-use = withFrozenCallStack
-  $ let use' :: HasCallStack => R.ArraysR a -> a -> SmartAcc a
-        use' TupRunit                   ()       = SmartAcc $ Anil mkAnn
-        use' (TupRsingle repr@ArrayR{}) a        = SmartAcc $ Use mkAnn repr a
-        use' (TupRpair r1 r2)           (a1, a2) = SmartAcc $ Apair mkAnn (use' r1 a1) (use' r2 a2)
-     in Acc . use' (arraysR @arrays) . fromArr
+use = sourceMap $ Acc . use' (arraysR @arrays) . fromArr
+  where
+    use' :: SourceMapped => R.ArraysR a -> a -> SmartAcc a
+    use' TupRunit                   ()       = SmartAcc $ Anil mkAnn
+    use' (TupRsingle repr@ArrayR{}) a        = SmartAcc $ Use mkAnn repr a
+    use' (TupRpair r1 r2)           (a1, a2) = SmartAcc $ Apair mkAnn (use' r1 a1) (use' r2 a2)
 
 -- | Construct a singleton (one element) array from a scalar value (or tuple of
 -- scalar values).
 --
 unit :: forall e. (HasCallStack, Elt e) => Exp e -> Acc (Scalar e)
-unit (Exp e) = withFrozenCallStack $ Acc $ SmartAcc $ Unit mkAnn (eltR @e) e
+unit (Exp e) = sourceMap $ Acc $ SmartAcc $ Unit mkAnn (eltR @e) e
 
 -- | Replicate an array across one or more dimensions as specified by the
 -- /generalised/ array index provided as the first argument.
@@ -264,7 +264,7 @@ replicate
     => Exp slix
     -> Acc (Array (SliceShape slix) e)
     -> Acc (Array (FullShape  slix) e)
-replicate = withFrozenCallStack (Acc $$ applyAcc (Replicate mkAnn $ sliceIndex @slix))
+replicate = sourceMap (Acc $$ applyAcc (Replicate mkAnn $ sliceIndex @slix))
 
 -- | Construct a new array by applying a function to each index.
 --
@@ -301,7 +301,7 @@ generate
     => Exp sh
     -> (Exp sh -> Exp a)
     -> Acc (Array sh a)
-generate = withFrozenCallStack (Acc $$ applyAcc (Generate mkAnn $ arrayR @sh @a))
+generate = sourceMap (Acc $$ applyAcc (Generate mkAnn $ arrayR @sh @a))
 
 -- Shape manipulation
 -- ------------------
@@ -321,7 +321,7 @@ reshape
     => Exp sh
     -> Acc (Array sh' e)
     -> Acc (Array sh e)
-reshape = withFrozenCallStack (Acc $$ applyAcc (Reshape mkAnn $ shapeR @sh))
+reshape = sourceMap (Acc $$ applyAcc (Reshape mkAnn $ shapeR @sh))
 
 -- Extraction of sub-arrays
 -- ------------------------
@@ -396,7 +396,7 @@ slice :: forall slix e.
       => Acc (Array (FullShape slix) e)
       -> Exp slix
       -> Acc (Array (SliceShape slix) e)
-slice = withFrozenCallStack (Acc $$ applyAcc (Slice mkAnn $ sliceIndex @slix))
+slice = sourceMap (Acc $$ applyAcc (Slice mkAnn $ sliceIndex @slix))
 
 -- Map-like functions
 -- ------------------
@@ -417,7 +417,7 @@ map :: forall sh a b.
     => (Exp a -> Exp b)
     -> Acc (Array sh a)
     -> Acc (Array sh b)
-map = withFrozenCallStack $ Acc $$ applyAcc (Map mkAnn (eltR @a) (eltR @b))
+map = sourceMap $ Acc $$ applyAcc (Map mkAnn (eltR @a) (eltR @b))
 
 -- | Apply the given binary function element-wise to the two arrays. The extent
 -- of the resulting array is the intersection of the extents of the two source
@@ -451,7 +451,7 @@ zipWith :: forall sh a b c.
         -> Acc (Array sh a)
         -> Acc (Array sh b)
         -> Acc (Array sh c)
-zipWith = withFrozenCallStack (Acc $$$ applyAcc (ZipWith mkAnn (eltR @a) (eltR @b) (eltR @c)))
+zipWith = sourceMap (Acc $$$ applyAcc (ZipWith mkAnn (eltR @a) (eltR @b) (eltR @c)))
 
 -- Reductions
 -- ----------
@@ -522,7 +522,7 @@ fold :: forall sh a.
      -> Exp a
      -> Acc (Array (sh:.Int) a)
      -> Acc (Array sh a)
-fold f (Exp x) = withFrozenCallStack $ Acc . applyAcc (Fold mkAnn (eltR @a) (unExpBinaryFunction f) (Just x))
+fold f (Exp x) = sourceMap $ Acc . applyAcc (Fold mkAnn (eltR @a) (unExpBinaryFunction f) (Just x))
 
 -- | Variant of 'fold' that requires the innermost dimension of the array to be
 -- non-empty and doesn't need an default value.
@@ -539,7 +539,7 @@ fold1 :: forall sh a.
       => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array sh a)
-fold1 f = withFrozenCallStack $ Acc . applyAcc (Fold mkAnn (eltR @a) (unExpBinaryFunction f) Nothing)
+fold1 f = sourceMap $ Acc . applyAcc (Fold mkAnn (eltR @a) (unExpBinaryFunction f) Nothing)
 
 -- | Segmented reduction along the innermost dimension of an array. The
 -- segment descriptor specifies the starting index (offset) along the
@@ -562,7 +562,7 @@ foldSeg'
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-foldSeg' f (Exp x) = withFrozenCallStack (Acc $$ applyAcc (FoldSeg mkAnn (integralType @i) (eltR @a) (unExpBinaryFunction f) (Just x)))
+foldSeg' f (Exp x) = sourceMap (Acc $$ applyAcc (FoldSeg mkAnn (integralType @i) (eltR @a) (unExpBinaryFunction f) (Just x)))
 
 -- | Variant of 'foldSeg'' that requires /all/ segments of the reduced
 -- array to be non-empty, and doesn't need a default value. The segment
@@ -578,7 +578,7 @@ fold1Seg'
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-fold1Seg' f = withFrozenCallStack (Acc $$ applyAcc (FoldSeg mkAnn (integralType @i) (eltR @a) (unExpBinaryFunction f) Nothing))
+fold1Seg' f = sourceMap (Acc $$ applyAcc (FoldSeg mkAnn (integralType @i) (eltR @a) (unExpBinaryFunction f) Nothing))
 
 -- Scan functions
 -- --------------
@@ -606,7 +606,7 @@ scanl :: forall sh a.
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanl f (Exp x) (Acc a) = withFrozenCallStack $ Acc $ SmartAcc $ Scan mkAnn LeftToRight (eltR @a) (unExpBinaryFunction f) (Just x) a
+scanl f (Exp x) (Acc a) = sourceMap $ Acc $ SmartAcc $ Scan mkAnn LeftToRight (eltR @a) (unExpBinaryFunction f) (Just x) a
 
 -- | Variant of 'scanl', where the last element (final reduction result) along
 -- each dimension is returned separately. Denotationally we have:
@@ -640,7 +640,7 @@ scanl' :: forall sh a.
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanl' = withFrozenCallStack (Acc . mkPairToTuple $$$ applyAcc (Scan' mkAnn LeftToRight $ eltR @a))
+scanl' = sourceMap (Acc . mkPairToTuple $$$ applyAcc (Scan' mkAnn LeftToRight $ eltR @a))
 
 -- | Data.List style left-to-right scan along the innermost dimension without an
 -- initial value (aka inclusive scan). The innermost dimension of the array must
@@ -659,7 +659,7 @@ scanl1 :: forall sh a.
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanl1 f (Acc a) = withFrozenCallStack $ Acc $ SmartAcc $ Scan mkAnn LeftToRight (eltR @a) (unExpBinaryFunction f) Nothing a
+scanl1 f (Acc a) = sourceMap $ Acc $ SmartAcc $ Scan mkAnn LeftToRight (eltR @a) (unExpBinaryFunction f) Nothing a
 
 -- | Right-to-left variant of 'scanl'.
 --
@@ -669,7 +669,7 @@ scanr :: forall sh a.
       -> Exp a
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array (sh:.Int) a)
-scanr f (Exp x) (Acc a) = withFrozenCallStack $ Acc $ SmartAcc $ Scan mkAnn RightToLeft (eltR @a) (unExpBinaryFunction f) (Just x) a
+scanr f (Exp x) (Acc a) = sourceMap $ Acc $ SmartAcc $ Scan mkAnn RightToLeft (eltR @a) (unExpBinaryFunction f) (Just x) a
 
 -- | Right-to-left variant of 'scanl''.
 --
@@ -679,7 +679,7 @@ scanr' :: forall sh a.
        -> Exp a
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a, Array sh a)
-scanr' = withFrozenCallStack (Acc . mkPairToTuple $$$ applyAcc (Scan' mkAnn RightToLeft $ eltR @a))
+scanr' = sourceMap (Acc . mkPairToTuple $$$ applyAcc (Scan' mkAnn RightToLeft $ eltR @a))
 
 -- | Right-to-left variant of 'scanl1'.
 --
@@ -688,7 +688,7 @@ scanr1 :: forall sh a.
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Array (sh:.Int) a)
        -> Acc (Array (sh:.Int) a)
-scanr1 f (Acc a) = withFrozenCallStack $ Acc $ SmartAcc $ Scan mkAnn RightToLeft (eltR @a) (unExpBinaryFunction f) Nothing a
+scanr1 f (Acc a) = sourceMap $ Acc $ SmartAcc $ Scan mkAnn RightToLeft (eltR @a) (unExpBinaryFunction f) Nothing a
 
 -- Permutations
 -- ------------
@@ -792,7 +792,7 @@ permute
     -> (Exp sh -> Exp (Maybe sh'))      -- ^ index permutation function
     -> Acc (Array sh  a)                -- ^ array of source values to be permuted
     -> Acc (Array sh' a)
-permute = withFrozenCallStack (Acc $$$$ applyAcc (Permute mkAnn $ arrayR @sh @a))
+permute = sourceMap (Acc $$$$ applyAcc (Permute mkAnn $ arrayR @sh @a))
 
 -- | Generalised backward permutation operation (array gather).
 --
@@ -843,7 +843,7 @@ backpermute
     -> (Exp sh' -> Exp sh)              -- ^ index permutation function
     -> Acc (Array sh  a)                -- ^ source array
     -> Acc (Array sh' a)
-backpermute = withFrozenCallStack (Acc $$$ applyAcc (Backpermute mkAnn $ shapeR @sh'))
+backpermute = sourceMap (Acc $$$ applyAcc (Backpermute mkAnn $ shapeR @sh'))
 
 -- Stencil operations
 -- ------------------
@@ -957,7 +957,7 @@ stencil
     -> Acc (Array sh a)                       -- ^ source array
     -> Acc (Array sh b)                       -- ^ destination array
 stencil f (Boundary b) (Acc a)
-  = withFrozenCallStack $ Acc $ SmartAcc $ Stencil mkAnn
+  = sourceMap $ Acc $ SmartAcc $ Stencil mkAnn
       (stencilR @sh @a @stencil)
       (eltR @b)
       (unExp . f . stencilPrj @sh @a @stencil)
@@ -978,7 +978,7 @@ stencil2
     -> Acc (Array sh b)                       -- ^ source array #2
     -> Acc (Array sh c)                       -- ^ destination array
 stencil2 f (Boundary b1) (Acc a1) (Boundary b2) (Acc a2)
-  = withFrozenCallStack $ Acc $ SmartAcc $ Stencil2 mkAnn
+  = sourceMap $ Acc $ SmartAcc $ Stencil2 mkAnn
       (stencilR @sh @a @stencil1)
       (stencilR @sh @b @stencil2)
       (eltR @c)
@@ -1063,7 +1063,7 @@ function
     :: forall sh e. (HasCallStack, Shape sh, Elt e)
     => (Exp sh -> Exp e)
     -> Boundary (Array sh e)
-function f = withFrozenCallStack $ Boundary $ Function (f')
+function f = sourceMap $ Boundary $ Function (f')
   where
     f' :: HasCallStack => SmartExp (EltR sh) -> SmartExp (EltR e)
     f' = unExp . f . Exp
@@ -1198,7 +1198,7 @@ foreignAcc
     -> (Acc as -> Acc bs)
     -> Acc as
     -> Acc bs
-foreignAcc asm f (Acc as) = withFrozenCallStack $ Acc $ SmartAcc $ Aforeign mkAnn (arraysR @bs) asm (unAccFunction f) as
+foreignAcc asm f (Acc as) = sourceMap $ Acc $ SmartAcc $ Aforeign mkAnn (arraysR @bs) asm (unAccFunction f) as
 
 -- | Call a foreign scalar expression.
 --
@@ -1216,7 +1216,7 @@ foreignExp
     -> (Exp x -> Exp y)
     -> Exp x
     -> Exp y
-foreignExp asm f (Exp x) = withFrozenCallStack $ mkExp $ Foreign mkAnn (eltR @y) asm (unExpFunction f) x
+foreignExp asm f (Exp x) = sourceMap $ mkExp $ Foreign mkAnn (eltR @y) asm (unExpFunction f) x
 
 
 -- Composition of array computations
@@ -1236,7 +1236,7 @@ foreignExp asm f (Exp x) = withFrozenCallStack $ mkExp $ Foreign mkAnn (eltR @y)
 --
 infixl 1 >->
 (>->) :: forall a b c. (HasCallStack, Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
-(>->) = withFrozenCallStack (Acc $$$ applyAcc $ Pipe mkAnn (arraysR @a) (arraysR @b) (arraysR @c))
+(>->) = sourceMap (Acc $$$ applyAcc $ Pipe mkAnn (arraysR @a) (arraysR @b) (arraysR @c))
 
 
 -- Flow control constructs
@@ -1252,7 +1252,7 @@ acond :: (HasCallStack, Arrays a)
       -> Acc a                  -- ^ then-array
       -> Acc a                  -- ^ else-array
       -> Acc a
-acond (Exp p) = withFrozenCallStack (Acc $$ applyAcc $ Acond mkAnn (mkCoerce' p))
+acond (Exp p) = sourceMap (Acc $$ applyAcc $ Acond mkAnn (mkCoerce' p))
 
 -- | An array-level 'while' construct. Continue to apply the given function,
 -- starting with the initial value, until the test function evaluates to
@@ -1263,10 +1263,10 @@ awhile :: forall a. (HasCallStack, Arrays a)
        -> (Acc a -> Acc a)                -- ^ function to apply
        -> Acc a                           -- ^ initial value
        -> Acc a
-awhile f = withFrozenCallStack (Acc $$ applyAcc $ Awhile mkAnn (arraysR @a) (unAccFunction g))
+awhile f = sourceMap (Acc $$ applyAcc $ Awhile mkAnn (arraysR @a) (unAccFunction g))
   where
     -- FIXME: This should be a no-op!
-    g :: HasCallStack => Acc a -> Acc (Scalar PrimBool)
+    g :: SourceMapped => Acc a -> Acc (Scalar PrimBool)
     g = map mkCoerce . f
 
 
@@ -1281,19 +1281,19 @@ toIndex
     => Exp sh                     -- ^ extent of the array
     -> Exp sh                     -- ^ index to remap
     -> Exp Int
-toIndex (Exp sh) (Exp ix) = withFrozenCallStack $ mkExp $ ToIndex mkAnn (shapeR @sh) sh ix
+toIndex (Exp sh) (Exp ix) = sourceMap $ mkExp $ ToIndex mkAnn (shapeR @sh) sh ix
 
 -- | Inverse of 'toIndex'
 --
 fromIndex :: forall sh. (HasCallStack, Shape sh) => Exp sh -> Exp Int -> Exp sh
-fromIndex (Exp sh) (Exp e) = withFrozenCallStack $ mkExp $ FromIndex mkAnn (shapeR @sh) sh e
+fromIndex (Exp sh) (Exp e) = sourceMap $ mkExp $ FromIndex mkAnn (shapeR @sh) sh e
 
 -- | Intersection of two shapes
 --
 intersect :: forall sh . (HasCallStack, Shape sh) => Exp sh -> Exp sh -> Exp sh
-intersect (Exp shx) (Exp shy) = withFrozenCallStack $ Exp $ intersect' (shapeR @sh) shx shy
+intersect (Exp shx) (Exp shy) = sourceMap $ Exp $ intersect' (shapeR @sh) shx shy
   where
-    intersect' :: HasCallStack => ShapeR t -> SmartExp t -> SmartExp t -> SmartExp t
+    intersect' :: SourceMapped => ShapeR t -> SmartExp t -> SmartExp t -> SmartExp t
     intersect' ShapeRz _ _ = SmartExp (Nil mkAnn)
     intersect' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
@@ -1304,9 +1304,9 @@ intersect (Exp shx) (Exp shy) = withFrozenCallStack $ Exp $ intersect' (shapeR @
 -- | Union of two shapes
 --
 union :: forall sh. (HasCallStack, Shape sh) => Exp sh -> Exp sh -> Exp sh
-union (Exp shx) (Exp shy) = withFrozenCallStack $ Exp $ union' (shapeR @sh) shx shy
+union (Exp shx) (Exp shy) = sourceMap $ Exp $ union' (shapeR @sh) shx shy
   where
-    union' :: HasCallStack => ShapeR t -> SmartExp t -> SmartExp t -> SmartExp t
+    union' :: SourceMapped => ShapeR t -> SmartExp t -> SmartExp t -> SmartExp t
     union' ShapeRz _ _ = SmartExp (Nil mkAnn)
     union' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
@@ -1327,7 +1327,7 @@ cond :: (HasCallStack, Elt t)
      -> Exp t                   -- ^ then-expression
      -> Exp t                   -- ^ else-expression
      -> Exp t
-cond (Exp c) (Exp x) (Exp y) = withFrozenCallStack $ mkExp $ Cond mkAnn (mkCoerce' c) x y
+cond (Exp c) (Exp x) (Exp y) = sourceMap $ mkExp $ Cond mkAnn (mkCoerce' c) x y
 
 -- | While construct. Continue to apply the given function, starting with the
 -- initial value, until the test function evaluates to 'False'.
@@ -1338,7 +1338,7 @@ while :: forall e. (HasCallStack, Elt e)
       -> Exp e                  -- ^ initial value
       -> Exp e
 while c f (Exp e) =
-  withFrozenCallStack $ mkExp $ While @(EltR e) mkAnn (eltR @e)
+  sourceMap $ mkExp $ While @(EltR e) mkAnn (eltR @e)
             (mkCoerce' . unExp . c . Exp)
             (unExp . f . Exp) e
 
@@ -1363,7 +1363,7 @@ while c f (Exp e) =
 --
 infixl 9 !
 (!) :: forall sh e. (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp sh -> Exp e
-Acc a ! Exp ix = withFrozenCallStack $ mkExp $ Index mkAnn (eltR @e) a ix
+Acc a ! Exp ix = sourceMap $ mkExp $ Index mkAnn (eltR @e) a ix
 
 -- | Extract the value from an array at the specified linear index.
 -- Multidimensional arrays in Accelerate are stored in row-major order with
@@ -1383,22 +1383,22 @@ Acc a ! Exp ix = withFrozenCallStack $ mkExp $ Index mkAnn (eltR @e) a ix
 --
 infixl 9 !!
 (!!) :: forall sh e. (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp Int -> Exp e
-Acc a !! Exp ix = withFrozenCallStack $ mkExp $ LinearIndex mkAnn (eltR @e) a ix
+Acc a !! Exp ix = sourceMap $ mkExp $ LinearIndex mkAnn (eltR @e) a ix
 
 -- | Extract the shape (extent) of an array.
 --
 shape :: forall sh e. (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp sh
-shape = withFrozenCallStack $ mkExp . Shape mkAnn (shapeR @sh) . unAcc
+shape = sourceMap $ mkExp . Shape mkAnn (shapeR @sh) . unAcc
 
 -- | The number of elements in the array
 --
 size :: (HasCallStack, Shape sh, Elt e) => Acc (Array sh e) -> Exp Int
-size = withFrozenCallStack $ shapeSize . shape
+size = sourceMap $ shapeSize . shape
 
 -- | The number of elements that would be held by an array of the given shape.
 --
 shapeSize :: forall sh. (HasCallStack, Shape sh) => Exp sh -> Exp Int
-shapeSize (Exp sh) = withFrozenCallStack $ mkExp $ ShapeSize mkAnn (shapeR @sh) sh
+shapeSize (Exp sh) = sourceMap $ mkExp $ ShapeSize mkAnn (shapeR @sh) sh
 
 
 -- Numeric functions
@@ -1407,17 +1407,17 @@ shapeSize (Exp sh) = withFrozenCallStack $ mkExp $ ShapeSize mkAnn (shapeR @sh) 
 -- | 'subtract' is the same as @'flip' ('-')@.
 --
 subtract :: (HasCallStack, Num a) => Exp a -> Exp a -> Exp a
-subtract x y = withFrozenCallStack $ y - x
+subtract x y = sourceMap $ y - x
 
 -- | Determine if a number is even
 --
 even :: (HasCallStack, Integral a) => Exp a -> Exp Bool
-even n = withFrozenCallStack $ n `rem` 2 == 0
+even n = sourceMap $ n `rem` 2 == 0
 
 -- | Determine if a number is odd
 --
 odd :: (HasCallStack, Integral a) => Exp a -> Exp Bool
-odd n = withFrozenCallStack $ n `rem` 2 /= 0
+odd n = sourceMap $ n `rem` 2 /= 0
 
 -- | @'gcd' x y@ is the non-negative factor of both @x@ and @y@ of which every
 -- common factor of both @x@ and @y@ is also a factor; for example:
@@ -1431,9 +1431,9 @@ odd n = withFrozenCallStack $ n `rem` 2 /= 0
 -- preordering.
 --
 gcd :: (HasCallStack, Integral a) => Exp a -> Exp a -> Exp a
-gcd x y = withFrozenCallStack $ gcd' (abs x) (abs y)
+gcd x y = sourceMap $ gcd' (abs x) (abs y)
   where
-    gcd' :: HasCallStack => Integral a => Exp a -> Exp a -> Exp a
+    gcd' :: (SourceMapped, Integral a) => Exp a -> Exp a -> Exp a
     gcd' u v =
       let T2 r _ = while (\(T2 _ b) -> b /= 0)
                          (\(T2 a b) -> T2 b (a `rem` b))
@@ -1445,7 +1445,7 @@ gcd x y = withFrozenCallStack $ gcd' (abs x) (abs y)
 --
 lcm :: (HasCallStack, Integral a) => Exp a -> Exp a -> Exp a
 lcm x y
-  = withFrozenCallStack
+  = sourceMap
   $ cond (x == 0 || y == 0) 0
   $ abs ((x `quot` (gcd x y)) * y)
 
@@ -1454,9 +1454,9 @@ lcm x y
 --
 infixr 8 ^
 (^) :: forall a b. (HasCallStack, Num a, Integral b) => Exp a -> Exp b -> Exp a
-x0 ^ y0 = withFrozenCallStack $ cond (y0 <= 0) 1 (f x0 y0)
+x0 ^ y0 = sourceMap $ cond (y0 <= 0) 1 (f x0 y0)
   where
-    f :: HasCallStack => Exp a -> Exp b -> Exp a
+    f :: SourceMapped => Exp a -> Exp b -> Exp a
     f x y =
       let T2 x' y' = while (\(T2 _ v) -> even v)
                            (\(T2 u v) -> T2 (u * u) (v `quot` 2))
@@ -1464,7 +1464,7 @@ x0 ^ y0 = withFrozenCallStack $ cond (y0 <= 0) 1 (f x0 y0)
       in
       cond (y' == 1) x' (g (x'*x') ((y'-1) `quot` 2) x')
 
-    g :: HasCallStack => Exp a -> Exp b -> Exp a -> Exp a
+    g :: SourceMapped => Exp a -> Exp b -> Exp a -> Exp a
     g x y z =
       let T3 x' _ z' = while (\(T3 _ v _) -> v /= 1)
                              (\(T3 u v w) ->
@@ -1479,7 +1479,7 @@ x0 ^ y0 = withFrozenCallStack $ cond (y0 <= 0) 1 (f x0 y0)
 infixr 8 ^^
 (^^) :: (HasCallStack, Fractional a, Integral b) => Exp a -> Exp b -> Exp a
 x ^^ n
-  = withFrozenCallStack $ cond (n >= 0)
+  = sourceMap $ cond (n >= 0)
   {- then -} (x ^ n)
   {- else -} (recip (x ^ (negate n)))
 
@@ -1490,18 +1490,18 @@ x ^^ n
 -- |Convert a character to an 'Int'.
 --
 ord :: HasCallStack => Exp Char -> Exp Int
-ord = withFrozenCallStack mkFromIntegral
+ord = sourceMap mkFromIntegral
 
 -- |Convert an 'Int' into a character.
 --
 chr :: HasCallStack => Exp Int -> Exp Char
-chr = withFrozenCallStack mkFromIntegral
+chr = sourceMap mkFromIntegral
 
 -- |Convert a Boolean value to an 'Int', where 'False' turns into '0' and 'True'
 -- into '1'.
 --
 boolToInt :: HasCallStack => Exp Bool -> Exp Int
-boolToInt = withFrozenCallStack $ mkFromIntegral . mkCoerce @_ @Word8
+boolToInt = sourceMap $ mkFromIntegral . mkCoerce @_ @Word8
 
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.
@@ -1510,4 +1510,4 @@ bitcast
     :: (HasCallStack, Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b))
     => Exp a
     -> Exp b
-bitcast = withFrozenCallStack mkBitcast
+bitcast = sourceMap mkBitcast

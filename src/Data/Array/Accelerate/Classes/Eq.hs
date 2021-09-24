@@ -57,7 +57,7 @@ infix 4 /=
 infixr 3 &&
 (&&) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 (&&) (Exp x) (Exp y) =
-  withFrozenCallStack
+  sourceMap
     $ mkExp
     $ Pair mkAnn
         (SmartExp (Cond mkAnn (SmartExp $ Prj mkAnn PairIdxLeft x)
@@ -72,7 +72,7 @@ infixr 3 &&
 --
 infixr 3 &&!
 (&&!) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
-(&&!) = withFrozenCallStack mkLAnd
+(&&!) = sourceMap mkLAnd
 
 -- | Disjunction: True if either argument is true. This is a short-circuit
 -- operator, so the second argument will be evaluated only if the first is
@@ -81,7 +81,7 @@ infixr 3 &&!
 infixr 2 ||
 (||) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
 (||) (Exp x) (Exp y) =
-  withFrozenCallStack
+  sourceMap
     $ mkExp
     $ Pair mkAnn
         (SmartExp (Cond mkAnn (SmartExp $ Prj mkAnn PairIdxLeft x)
@@ -97,12 +97,12 @@ infixr 2 ||
 --
 infixr 2 ||!
 (||!) :: HasCallStack => Exp Bool -> Exp Bool -> Exp Bool
-(||!) = withFrozenCallStack mkLOr
+(||!) = sourceMap mkLOr
 
 -- | Logical negation
 --
 not :: HasCallStack => Exp Bool -> Exp Bool
-not = withFrozenCallStack mkLNot
+not = sourceMap mkLNot
 
 
 -- | The 'Eq' class defines equality '==' and inequality '/=' for scalar
@@ -114,16 +114,16 @@ class Elt a => Eq a where
   (==) :: HasCallStack => Exp a -> Exp a -> Exp Bool
   (/=) :: HasCallStack => Exp a -> Exp a -> Exp Bool
   {-# MINIMAL (==) | (/=) #-}
-  x == y = withFrozenCallStack $ mkLNot (x /= y)
-  x /= y = withFrozenCallStack $ mkLNot (x == y)
+  x == y = sourceMap $ mkLNot (x /= y)
+  x /= y = sourceMap $ mkLNot (x == y)
 
 instance Eq () where
-  _ == _ = withFrozenCallStack True_
-  _ /= _ = withFrozenCallStack False_
+  _ == _ = sourceMap True_
+  _ /= _ = sourceMap False_
 
 instance Eq Z where
-  _ == _ = withFrozenCallStack True_
-  _ /= _ = withFrozenCallStack False_
+  _ == _ = sourceMap True_
+  _ /= _ = sourceMap False_
 
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
@@ -184,8 +184,8 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim t =
         [d| instance Eq $(conT t) where
-              (==) = withFrozenCallStack mkEq
-              (/=) = withFrozenCallStack mkNEq
+              (==) = sourceMap mkEq
+              (/=) = sourceMap mkNEq
           |]
 
       mkTup :: Int -> Q [Dec]
@@ -198,8 +198,8 @@ runQ $ do
             pat vs  = conP (mkName ('T':show n)) (map varP vs)
         in
         [d| instance ($cst) => Eq $res where
-              $(pat xs) == $(pat ys) = withFrozenCallStack $ $(foldr1 (\vs v -> [| $vs && $v |]) (zipWith (\x y -> [| $x == $y |]) (map varE xs) (map varE ys)))
-              $(pat xs) /= $(pat ys) = withFrozenCallStack $ $(foldr1 (\vs v -> [| $vs || $v |]) (zipWith (\x y -> [| $x /= $y |]) (map varE xs) (map varE ys)))
+              $(pat xs) == $(pat ys) = sourceMap $ $(foldr1 (\vs v -> [| $vs && $v |]) (zipWith (\x y -> [| $x == $y |]) (map varE xs) (map varE ys)))
+              $(pat xs) /= $(pat ys) = sourceMap $ $(foldr1 (\vs v -> [| $vs || $v |]) (zipWith (\x y -> [| $x /= $y |]) (map varE xs) (map varE ys)))
           |]
 
   is <- mapM mkPrim integralTypes
@@ -210,13 +210,13 @@ runQ $ do
   return $ concat (concat [is,fs,ns,cs,ts])
 
 instance Eq sh => Eq (sh :. Int) where
-  x == y = withFrozenCallStack $ indexHead x == indexHead y && indexTail x == indexTail y
-  x /= y = withFrozenCallStack $ indexHead x /= indexHead y || indexTail x /= indexTail y
+  x == y = sourceMap $ indexHead x == indexHead y && indexTail x == indexTail y
+  x /= y = sourceMap $ indexHead x /= indexHead y || indexTail x /= indexTail y
 
 instance Eq Bool where
-  x == y = withFrozenCallStack $ mkCoerce x == (mkCoerce y :: Exp PrimBool)
-  x /= y = withFrozenCallStack $ mkCoerce x /= (mkCoerce y :: Exp PrimBool)
+  x == y = sourceMap $ mkCoerce x == (mkCoerce y :: Exp PrimBool)
+  x /= y = sourceMap $ mkCoerce x /= (mkCoerce y :: Exp PrimBool)
 
 instance Eq Ordering where
-  x == y = withFrozenCallStack $ mkCoerce x == (mkCoerce y :: Exp TAG)
-  x /= y = withFrozenCallStack $ mkCoerce x /= (mkCoerce y :: Exp TAG)
+  x == y = sourceMap $ mkCoerce x == (mkCoerce y :: Exp TAG)
+  x /= y = sourceMap $ mkCoerce x /= (mkCoerce y :: Exp TAG)

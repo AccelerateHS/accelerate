@@ -65,7 +65,7 @@ pattern (:%) { numerator, denominator } = Pattern (numerator, denominator)
 -- a ratio by dividing both numerator and denominator by their greatest common
 -- divisor.
 --
-reduce :: (HasCallStack, Integral a) => Exp a -> Exp a -> Exp (Ratio a)
+reduce :: (SourceMapped, Integral a) => Exp a -> Exp a -> Exp (Ratio a)
 reduce x y =
   if y == 0
     then infinity
@@ -76,59 +76,59 @@ reduce x y =
 --
 infixl 7 %
 (%) :: (HasCallStack, Integral a) => Exp a -> Exp a -> Exp (Ratio a)
-x % y = withFrozenCallStack $ reduce (x * signum y) (abs y)
+x % y = sourceMap $ reduce (x * signum y) (abs y)
 
 infinity :: (HasCallStack, Integral a) => Exp (Ratio a)
-infinity = withFrozenCallStack $ 1 :% 0
+infinity = sourceMap $ 1 :% 0
 
 
 -- Instances
 -- ---------
 
 instance Integral a => Eq (Ratio a) where
-  (==) = withFrozenCallStack $ \(x :% y) (z :% w) -> x == z && y == w
-  (/=) = withFrozenCallStack $ \(x :% y) (z :% w) -> x /= z || y /= w
+  (==) = sourceMap $ \(x :% y) (z :% w) -> x == z && y == w
+  (/=) = sourceMap $ \(x :% y) (z :% w) -> x /= z || y /= w
 
 instance Integral a => Ord (Ratio a)  where
-  (<=) = withFrozenCallStack $ \(x :% y) (z :% w) -> x * w <= z * y
-  (<)  = withFrozenCallStack $ \(x :% y) (z :% w) -> x * w <  z * y
+  (<=) = sourceMap $ \(x :% y) (z :% w) -> x * w <= z * y
+  (<)  = sourceMap $ \(x :% y) (z :% w) -> x * w <  z * y
 
 instance Integral a => P.Num (Exp (Ratio a)) where
-  (+)           = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> reduce (x*w + z*y) (y*w)
-  (-)           = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> reduce (x*w - z*y) (y*w)
-  (*)           = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> reduce (x * z) (y * w)
-  negate        = withExecutionStackAsCallStack $ \(x:%y) -> (-x) :% y
-  abs           = withExecutionStackAsCallStack $ \(x:%y) -> abs x :% y
-  signum        = withExecutionStackAsCallStack $ \(x:%_) -> signum x :% 1
-  fromInteger x = withExecutionStackAsCallStack $ fromInteger x :% 1
+  (+)           = sourceMapRuntime $ \(x :% y) (z :% w) -> reduce (x*w + z*y) (y*w)
+  (-)           = sourceMapRuntime $ \(x :% y) (z :% w) -> reduce (x*w - z*y) (y*w)
+  (*)           = sourceMapRuntime $ \(x :% y) (z :% w) -> reduce (x * z) (y * w)
+  negate        = sourceMapRuntime $ \(x:%y) -> (-x) :% y
+  abs           = sourceMapRuntime $ \(x:%y) -> abs x :% y
+  signum        = sourceMapRuntime $ \(x:%_) -> signum x :% 1
+  fromInteger x = sourceMapRuntime $ fromInteger x :% 1
 
 instance Integral a => P.Fractional (Exp (Ratio a))  where
-  (/)   = withExecutionStackAsCallStack $ \(x :% y) (z :% w) -> (x*w) % (y*z)
-  recip = withExecutionStackAsCallStack $ \(x :% y) ->
+  (/)   = sourceMapRuntime $ \(x :% y) (z :% w) -> (x*w) % (y*z)
+  recip = sourceMapRuntime $ \(x :% y) ->
     if x == 0 then infinity else
     if x <  0 then negate y :% negate x
               else y :% x
-  fromRational r = withExecutionStackAsCallStack $ fromInteger (P.numerator r) % fromInteger (P.denominator r)
+  fromRational r = sourceMapRuntime $ fromInteger (P.numerator r) % fromInteger (P.denominator r)
 
 instance (Integral a, FromIntegral a Int64) => RealFrac (Ratio a) where
-  properFraction = withFrozenCallStack $ \(x :% y) ->
+  properFraction = sourceMap $ \(x :% y) ->
     let (q,r) = quotRem x y
-    in  (fromIntegral (fromIntegral q :: Exp Int64), r :% y)
+     in (fromIntegral (fromIntegral q :: Exp Int64), r :% y)
 
 
 instance (Integral a, ToFloating a b) => ToFloating (Ratio a) b where
-  toFloating = withFrozenCallStack $ \(x :% y) ->
+  toFloating = sourceMap $ \(x :% y) ->
     let x' :% y' = reduce x y
-    in  toFloating x' / toFloating y'
+     in toFloating x' / toFloating y'
 
 instance (FromIntegral a b, Integral b) => FromIntegral a (Ratio b) where
-  fromIntegral x = withFrozenCallStack $ fromIntegral x :% 1
+  fromIntegral x = sourceMap $ fromIntegral x :% 1
 
 instance Integral a => P.Enum (Exp (Ratio a))  where
-  succ x   = withExecutionStackAsCallStack $ x + 1
-  pred x   = withExecutionStackAsCallStack $ x - 1
-  toEnum   = withExecutionStackAsCallStack $ preludeError "Enum" "toEnum"
-  fromEnum = withExecutionStackAsCallStack $ preludeError "Enum" "fromEnum"
+  succ x   = sourceMapRuntime $ x + 1
+  pred x   = sourceMapRuntime $ x - 1
+  toEnum   = sourceMapRuntime $ preludeError "Enum" "toEnum"
+  fromEnum = sourceMapRuntime $ preludeError "Enum" "fromEnum"
 
 
 preludeError :: String -> String -> a

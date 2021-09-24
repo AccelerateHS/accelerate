@@ -45,30 +45,30 @@ class (Num a, Ord a) => Rational a where
   --
   toRational :: (HasCallStack, FromIntegral Int64 b, Integral b) => Exp a -> Exp (Ratio b)
 
-instance Rational Int    where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Int8   where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Int16  where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Int32  where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Int64  where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Word   where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Word8  where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Word16 where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Word32 where toRational = withExecutionStackAsCallStack integralToRational
-instance Rational Word64 where toRational = withExecutionStackAsCallStack integralToRational
+instance Rational Int    where toRational = sourceMapRuntime integralToRational
+instance Rational Int8   where toRational = sourceMapRuntime integralToRational
+instance Rational Int16  where toRational = sourceMapRuntime integralToRational
+instance Rational Int32  where toRational = sourceMapRuntime integralToRational
+instance Rational Int64  where toRational = sourceMapRuntime integralToRational
+instance Rational Word   where toRational = sourceMapRuntime integralToRational
+instance Rational Word8  where toRational = sourceMapRuntime integralToRational
+instance Rational Word16 where toRational = sourceMapRuntime integralToRational
+instance Rational Word32 where toRational = sourceMapRuntime integralToRational
+instance Rational Word64 where toRational = sourceMapRuntime integralToRational
 
-instance Rational Half   where toRational = withExecutionStackAsCallStack floatingToRational
-instance Rational Float  where toRational = withExecutionStackAsCallStack floatingToRational
-instance Rational Double where toRational = withExecutionStackAsCallStack floatingToRational
+instance Rational Half   where toRational = sourceMapRuntime floatingToRational
+instance Rational Float  where toRational = sourceMapRuntime floatingToRational
+instance Rational Double where toRational = sourceMapRuntime floatingToRational
 
 
 integralToRational
-    :: (HasCallStack, Integral a, Integral b, FromIntegral a Int64, FromIntegral Int64 b)
+    :: (SourceMapped, Integral a, Integral b, FromIntegral a Int64, FromIntegral Int64 b)
     => Exp a
     -> Exp (Ratio b)
 integralToRational x = fromIntegral (fromIntegral x :: Exp Int64) :% 1
 
 floatingToRational
-    :: (HasCallStack, RealFloat a, Integral b, FromIntegral Int64 b)
+    :: (SourceMapped, RealFloat a, Integral b, FromIntegral Int64 b)
     => Exp a
     -> Exp (Ratio b)
 floatingToRational x = fromIntegral u :% fromIntegral v
@@ -82,7 +82,7 @@ floatingToRational x = fromIntegral u :% fromIntegral v
 -- Stolen from GHC.Float.ConversionUtils
 -- Double mantissa have 53 bits, which fits in an Int64
 --
-elimZeros :: HasCallStack => Exp Int64 -> Exp Int -> (Exp Int64, Exp Int)
+elimZeros :: SourceMapped => Exp Int64 -> Exp Int -> (Exp Int64, Exp Int)
 elimZeros x y = (u, v)
   where
     T3 _ u v = while (\(T3 p _ _) -> p) elim (T3 moar x y)

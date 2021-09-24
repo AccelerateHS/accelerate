@@ -56,7 +56,7 @@ import Data.Text
 --
 atrace :: (HasCallStack, Arrays a) => Text -> Acc a -> Acc a
 atrace message (Acc result)
-  = withFrozenCallStack
+  = sourceMap
   $ Acc
   $ SmartAcc
   $ Atrace mkAnn (Message (\_ -> "")
@@ -68,7 +68,7 @@ atrace message (Acc result)
 --
 atraceArray :: forall a b. (HasCallStack, Arrays a, Arrays b, Show a) => Text -> Acc a -> Acc b -> Acc b
 atraceArray message (Acc inspect) (Acc result)
-  = withFrozenCallStack
+  = sourceMap
   $ Acc
   $ SmartAcc
   $ Atrace mkAnn (Message (show . toArr @a)
@@ -78,13 +78,13 @@ atraceArray message (Acc inspect) (Acc result)
 -- 'Acc' computation proceeds with the result of that array.
 --
 atraceId :: (HasCallStack, Arrays a, Show a) => Text -> Acc a -> Acc a
-atraceId message value = withFrozenCallStack $ atraceArray message value value
+atraceId message value = sourceMap $ atraceArray message value value
 
 -- | Outputs the trace message and a scalar value to the console, before
 -- the 'Acc' computation proceeds with the result of the third argument.
 --
 atraceExp :: forall e a. (HasCallStack, Elt e, Show e, Arrays a) => Text -> Exp e -> Acc a -> Acc a
-atraceExp message value (Acc result) = withFrozenCallStack $
+atraceExp message value (Acc result) = sourceMap $
   let Acc inspect = unit value
    in Acc
     $ SmartAcc

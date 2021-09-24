@@ -47,26 +47,26 @@ type Fractional a = (Num a, P.Fractional (Exp a))
 
 
 instance P.Fractional (Exp Half) where
-  (/)          = withExecutionStackAsCallStack mkFDiv
-  recip        = withExecutionStackAsCallStack mkRecip
-  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
+  (/)          = sourceMapRuntime mkFDiv
+  recip        = sourceMapRuntime mkRecip
+  fromRational = sourceMapRuntime $ constant . P.fromRational
 
 instance P.Fractional (Exp Float) where
-  (/)          = withExecutionStackAsCallStack mkFDiv
-  recip        = withExecutionStackAsCallStack mkRecip
-  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
+  (/)          = sourceMapRuntime mkFDiv
+  recip        = sourceMapRuntime mkRecip
+  fromRational = sourceMapRuntime $ constant . P.fromRational
 
 instance P.Fractional (Exp Double) where
-  (/)          = withExecutionStackAsCallStack mkFDiv
-  recip        = withExecutionStackAsCallStack mkRecip
-  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
+  (/)          = sourceMapRuntime mkFDiv
+  recip        = sourceMapRuntime mkRecip
+  fromRational = sourceMapRuntime $ constant . P.fromRational
 
 instance P.Fractional (Exp CFloat) where
-  (/)          = withExecutionStackAsCallStack mkFDiv
-  recip        = withExecutionStackAsCallStack mkRecip
-  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
+  (/)          = sourceMapRuntime mkFDiv
+  recip        = sourceMapRuntime mkRecip
+  fromRational = sourceMapRuntime $ constant . P.fromRational
 
 instance P.Fractional (Exp CDouble) where
-  (/)          = withExecutionStackAsCallStack mkFDiv
-  recip        = withExecutionStackAsCallStack mkRecip
-  fromRational = withExecutionStackAsCallStack $ constant . P.fromRational
+  (/)          = sourceMapRuntime mkFDiv
+  recip        = sourceMapRuntime mkRecip
+  fromRational = sourceMapRuntime $ constant . P.fromRational

@@ -69,208 +69,208 @@ type Num a = (Elt a, P.Num (Exp a))
 
 
 instance P.Num (Exp Int) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Int8) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Int16) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Int32) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Int64) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Word) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Word8) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Word16) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Word32) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Word64) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CInt) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CUInt) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CLong) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CULong) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CLLong) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CULLong) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CShort) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CUShort) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Half) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Float) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp Double) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CFloat) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger
 
 instance P.Num (Exp CDouble) where
-  (+)         = withExecutionStackAsCallStack mkAdd
-  (-)         = withExecutionStackAsCallStack mkSub
-  (*)         = withExecutionStackAsCallStack mkMul
-  negate      = withExecutionStackAsCallStack mkNeg
-  abs         = withExecutionStackAsCallStack mkAbs
-  signum      = withExecutionStackAsCallStack mkSig
-  fromInteger = withExecutionStackAsCallStack $ constant . P.fromInteger
+  (+)         = sourceMapRuntime mkAdd
+  (-)         = sourceMapRuntime mkSub
+  (*)         = sourceMapRuntime mkMul
+  negate      = sourceMapRuntime mkNeg
+  abs         = sourceMapRuntime mkAbs
+  signum      = sourceMapRuntime mkSig
+  fromInteger = sourceMapRuntime $ constant . P.fromInteger

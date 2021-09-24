@@ -36,147 +36,147 @@ type Enum a = P.Enum (Exp a)
 
 
 instance P.Enum (Exp Int) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Int8) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Int16) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Int32) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Int64) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Word) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Word8) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Word16) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Word32) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Word64) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CInt) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CUInt) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CLong) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CULong) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CLLong) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CULLong) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CShort) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CUShort) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Half) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Float) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp Double) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CFloat) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
 instance P.Enum (Exp CDouble) where
-  succ      = withExecutionStackAsCallStack defaultSucc
-  pred      = withExecutionStackAsCallStack defaultPred
-  toEnum    = withExecutionStackAsCallStack defaultToEnum
-  fromEnum  = withExecutionStackAsCallStack defaultFromEnum
+  succ      = sourceMapRuntime defaultSucc
+  pred      = sourceMapRuntime defaultPred
+  toEnum    = sourceMapRuntime defaultToEnum
+  fromEnum  = sourceMapRuntime defaultFromEnum
 
-defaultSucc :: (HasCallStack, Num a) => Exp a -> Exp a
+defaultSucc :: (SourceMapped, Num a) => Exp a -> Exp a
 defaultSucc x = x + 1
 
-defaultPred :: (HasCallStack, Num a) => Exp a -> Exp a
+defaultPred :: (SourceMapped, Num a) => Exp a -> Exp a
 defaultPred x = x - 1
 
 defaultToEnum :: Int -> a

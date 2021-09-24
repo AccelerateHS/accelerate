@@ -67,43 +67,43 @@ instance Elt a => Elt (Sum a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Sum a) where
   type Plain (Sum a) = Sum (Plain a)
-  lift (Sum a)       = withFrozenCallStack $ Sum_ (lift a)
+  lift (Sum a)       = sourceMap $ Sum_ (lift a)
 
 instance Elt a => Unlift Exp (Sum (Exp a)) where
-  unlift = withFrozenCallStack $ \(Sum_ a) -> Sum a
+  unlift = sourceMap $ \(Sum_ a) -> Sum a
 
 instance Bounded a => P.Bounded (Exp (Sum a)) where
-  minBound = withExecutionStackAsCallStack $ Sum_ minBound
-  maxBound = withExecutionStackAsCallStack $ Sum_ maxBound
+  minBound = sourceMapRuntime $ Sum_ minBound
+  maxBound = sourceMapRuntime $ Sum_ maxBound
 
 instance Num a => P.Num (Exp (Sum a)) where
-  (+)             = withExecutionStackAsCallStack $ lift2 ((+) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
-  (-)             = withExecutionStackAsCallStack $ lift2 ((-) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
-  (*)             = withExecutionStackAsCallStack $ lift2 ((*) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
-  negate          = withExecutionStackAsCallStack $ lift1 (negate :: Sum (Exp a) -> Sum (Exp a))
-  signum          = withExecutionStackAsCallStack $ lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
-  abs             = withExecutionStackAsCallStack $ lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
-  fromInteger x   = withExecutionStackAsCallStack $ lift (P.fromInteger x :: Sum (Exp a))
+  (+)             = sourceMapRuntime $ lift2 ((+) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
+  (-)             = sourceMapRuntime $ lift2 ((-) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
+  (*)             = sourceMapRuntime $ lift2 ((*) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
+  negate          = sourceMapRuntime $ lift1 (negate :: Sum (Exp a) -> Sum (Exp a))
+  signum          = sourceMapRuntime $ lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
+  abs             = sourceMapRuntime $ lift1 (signum :: Sum (Exp a) -> Sum (Exp a))
+  fromInteger x   = sourceMapRuntime $ lift (P.fromInteger x :: Sum (Exp a))
 
 instance Eq a => Eq (Sum a) where
-  (==) = withFrozenCallStack $ lift2 ((==) `on` getSum)
-  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getSum)
+  (==) = sourceMap $ lift2 ((==) `on` getSum)
+  (/=) = sourceMap $ lift2 ((/=) `on` getSum)
 
 instance Ord a => Ord (Sum a) where
-  (<)     = withFrozenCallStack $ lift2 ((<) `on` getSum)
-  (>)     = withFrozenCallStack $ lift2 ((>) `on` getSum)
-  (<=)    = withFrozenCallStack $ lift2 ((<=) `on` getSum)
-  (>=)    = withFrozenCallStack $ lift2 ((>=) `on` getSum)
-  min x y = withFrozenCallStack $ Sum_ $ lift2 (min `on` getSum) x y
-  max x y = withFrozenCallStack $ Sum_ $ lift2 (max `on` getSum) x y
+  (<)     = sourceMap $ lift2 ((<) `on` getSum)
+  (>)     = sourceMap $ lift2 ((>) `on` getSum)
+  (<=)    = sourceMap $ lift2 ((<=) `on` getSum)
+  (>=)    = sourceMap $ lift2 ((>=) `on` getSum)
+  min x y = sourceMap $ Sum_ $ lift2 (min `on` getSum) x y
+  max x y = sourceMap $ Sum_ $ lift2 (max `on` getSum) x y
 
 instance Num a => Monoid (Exp (Sum a)) where
-  mempty = withExecutionStackAsCallStack 0
+  mempty = sourceMapRuntime 0
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
-  (<>)     = withExecutionStackAsCallStack (+)
-  stimes n = withExecutionStackAsCallStack $ \(Sum_ x) -> Sum_ $ P.fromIntegral n * x
+  (<>)     = sourceMapRuntime (+)
+  stimes n = sourceMapRuntime $ \(Sum_ x) -> Sum_ $ P.fromIntegral n * x
 
 
 -- Product: Monoid under multiplication
@@ -117,60 +117,59 @@ instance Elt a => Elt (Product a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   type Plain (Product a) = Product (Plain a)
-  lift (Product a)       = withFrozenCallStack $ Product_ (lift a)
+  lift (Product a)       = sourceMap $ Product_ (lift a)
 
 instance Elt a => Unlift Exp (Product (Exp a)) where
-  unlift = withFrozenCallStack $ \(Product_ a) -> Product a
+  unlift = sourceMap $ \(Product_ a) -> Product a
 
 instance Bounded a => P.Bounded (Exp (Product a)) where
-  minBound = withExecutionStackAsCallStack $ Product_ minBound
-  maxBound = withExecutionStackAsCallStack $ Product_ maxBound
+  minBound = sourceMapRuntime $ Product_ minBound
+  maxBound = sourceMapRuntime $ Product_ maxBound
 
 instance Num a => P.Num (Exp (Product a)) where
-  (+)             = withExecutionStackAsCallStack $ lift2 ((+) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
-  (-)             = withExecutionStackAsCallStack $ lift2 ((-) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
-  (*)             = withExecutionStackAsCallStack $ lift2 ((*) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
-  negate          = withExecutionStackAsCallStack $ lift1 (negate :: Product (Exp a) -> Product (Exp a))
-  signum          = withExecutionStackAsCallStack $ lift1 (signum :: Product (Exp a) -> Product (Exp a))
-  abs             = withExecutionStackAsCallStack $ lift1 (signum :: Product (Exp a) -> Product (Exp a))
-  fromInteger x   = withExecutionStackAsCallStack $ lift (P.fromInteger x :: Product (Exp a))
+  (+)             = sourceMapRuntime $ lift2 ((+) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
+  (-)             = sourceMapRuntime $ lift2 ((-) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
+  (*)             = sourceMapRuntime $ lift2 ((*) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
+  negate          = sourceMapRuntime $ lift1 (negate :: Product (Exp a) -> Product (Exp a))
+  signum          = sourceMapRuntime $ lift1 (signum :: Product (Exp a) -> Product (Exp a))
+  abs             = sourceMapRuntime $ lift1 (signum :: Product (Exp a) -> Product (Exp a))
+  fromInteger x   = sourceMapRuntime $ lift (P.fromInteger x :: Product (Exp a))
 
 instance Eq a => Eq (Product a) where
-  (==) = withFrozenCallStack $ lift2 ((==) `on` getProduct)
-  (/=) = withFrozenCallStack $ lift2 ((/=) `on` getProduct)
+  (==) = sourceMap $ lift2 ((==) `on` getProduct)
+  (/=) = sourceMap $ lift2 ((/=) `on` getProduct)
 
 instance Ord a => Ord (Product a) where
-  (<)     = withFrozenCallStack $ lift2 ((<) `on` getProduct)
-  (>)     = withFrozenCallStack $ lift2 ((>) `on` getProduct)
-  (<=)    = withFrozenCallStack $ lift2 ((<=) `on` getProduct)
-  (>=)    = withFrozenCallStack $ lift2 ((>=) `on` getProduct)
-  min x y = withFrozenCallStack $ Product_ $ lift2 (min `on` getProduct) x y
-  max x y = withFrozenCallStack $ Product_ $ lift2 (max `on` getProduct) x y
+  (<)     = sourceMap $ lift2 ((<) `on` getProduct)
+  (>)     = sourceMap $ lift2 ((>) `on` getProduct)
+  (<=)    = sourceMap $ lift2 ((<=) `on` getProduct)
+  (>=)    = sourceMap $ lift2 ((>=) `on` getProduct)
+  min x y = sourceMap $ Product_ $ lift2 (min `on` getProduct) x y
+  max x y = sourceMap $ Product_ $ lift2 (max `on` getProduct) x y
 
 instance Num a => Monoid (Exp (Product a)) where
-  -- TODO: Does this work?
-  mempty = withExecutionStackAsCallStack 1
+  mempty = sourceMapRuntime 1
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
-  (<>)     = withFrozenCallStack (*)
-  stimes n = withFrozenCallStack $ \(Product_ x) -> Product_ $ x ^ (P.fromIntegral n :: Exp Int)
+  (<>)     = sourceMap (*)
+  stimes n = sourceMap $ \(Product_ x) -> Product_ $ x ^ (P.fromIntegral n :: Exp Int)
 
 
 -- Instances for unit and tuples
 -- -----------------------------
 
 instance Monoid (Exp ()) where
-  mempty = withExecutionStackAsCallStack $ constant ()
+  mempty = sourceMapRuntime $ constant ()
 
 instance (Elt a, Elt b, Monoid (Exp a), Monoid (Exp b)) => Monoid (Exp (a,b)) where
-  mempty = withExecutionStackAsCallStack $ T2 mempty mempty
+  mempty = sourceMapRuntime $ T2 mempty mempty
 
 instance (Elt a, Elt b, Elt c, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c)) => Monoid (Exp (a,b,c)) where
-  mempty = withExecutionStackAsCallStack $ T3 mempty mempty mempty
+  mempty = sourceMapRuntime $ T3 mempty mempty mempty
 
 instance (Elt a, Elt b, Elt c, Elt d, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d)) => Monoid (Exp (a,b,c,d)) where
-  mempty = withExecutionStackAsCallStack $ T4 mempty mempty mempty mempty
+  mempty = sourceMapRuntime $ T4 mempty mempty mempty mempty
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d), Monoid (Exp e)) => Monoid (Exp (a,b,c,d,e)) where
-  mempty = withExecutionStackAsCallStack $ T5 mempty mempty mempty mempty mempty
+  mempty = sourceMapRuntime $ T5 mempty mempty mempty mempty mempty

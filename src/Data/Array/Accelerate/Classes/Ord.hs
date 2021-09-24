@@ -67,15 +67,15 @@ class Eq a => Ord a where
   max     :: HasCallStack => Exp a -> Exp a -> Exp a
   compare :: HasCallStack => Exp a -> Exp a -> Exp Ordering
 
-  x <  y = withFrozenCallStack $ if compare x y A.== constant LT then constant True  else constant False
-  x <= y = withFrozenCallStack $ if compare x y A.== constant GT then constant False else constant True
-  x >  y = withFrozenCallStack $ if compare x y A.== constant GT then constant True  else constant False
-  x >= y = withFrozenCallStack $ if compare x y A.== constant LT then constant False else constant True
+  x <  y = sourceMap $ if compare x y A.== constant LT then constant True  else constant False
+  x <= y = sourceMap $ if compare x y A.== constant GT then constant False else constant True
+  x >  y = sourceMap $ if compare x y A.== constant GT then constant True  else constant False
+  x >= y = sourceMap $ if compare x y A.== constant LT then constant False else constant True
 
-  min x y = withFrozenCallStack $ if x <= y then x else y
-  max x y = withFrozenCallStack $ if x <= y then y else x
+  min x y = sourceMap $ if x <= y then x else y
+  max x y = sourceMap $ if x <= y then y else x
 
-  compare x y = withFrozenCallStack
+  compare x y = sourceMap
     $ if x A.== y then constant EQ else
       if x   <= y then constant LT
                   else constant GT
@@ -83,24 +83,24 @@ class Eq a => Ord a where
 -- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
 --
 ifThenElse :: (HasCallStack, Elt a) => Exp Bool -> Exp a -> Exp a -> Exp a
-ifThenElse (Exp c) (Exp x) (Exp y) = withFrozenCallStack $ Exp $ SmartExp $ Cond mkAnn (mkCoerce' c) x y
+ifThenElse (Exp c) (Exp x) (Exp y) = sourceMap $ Exp $ SmartExp $ Cond mkAnn (mkCoerce' c) x y
 
 instance Ord () where
-  (<)     _ _ = withFrozenCallStack $ constant False
-  (>)     _ _ = withFrozenCallStack $ constant False
-  (>=)    _ _ = withFrozenCallStack $ constant True
-  (<=)    _ _ = withFrozenCallStack $ constant True
-  min     _ _ = withFrozenCallStack $ constant ()
-  max     _ _ = withFrozenCallStack $ constant ()
-  compare _ _ = withFrozenCallStack $ constant EQ
+  (<)     _ _ = sourceMap $ constant False
+  (>)     _ _ = sourceMap $ constant False
+  (>=)    _ _ = sourceMap $ constant True
+  (<=)    _ _ = sourceMap $ constant True
+  min     _ _ = sourceMap $ constant ()
+  max     _ _ = sourceMap $ constant ()
+  compare _ _ = sourceMap $ constant EQ
 
 instance Ord Z where
-  (<)  _ _ = withFrozenCallStack $ constant False
-  (>)  _ _ = withFrozenCallStack $ constant False
-  (<=) _ _ = withFrozenCallStack $ constant True
-  (>=) _ _ = withFrozenCallStack $ constant True
-  min  _ _ = withFrozenCallStack $ constant Z
-  max  _ _ = withFrozenCallStack $ constant Z
+  (<)  _ _ = sourceMap $ constant False
+  (>)  _ _ = sourceMap $ constant False
+  (<=) _ _ = sourceMap $ constant True
+  (>=) _ _ = sourceMap $ constant True
+  min  _ _ = sourceMap $ constant Z
+  max  _ _ = sourceMap $ constant Z
 
 
 -- Instances of 'Prelude.Ord' (mostly) don't make sense with the standard
@@ -116,8 +116,8 @@ instance Ord a => P.Ord (Exp a) where
   (<=)    = preludeError "Ord.(<=)" "(<=)"
   (>)     = preludeError "Ord.(>)"  "(>)"
   (>=)    = preludeError "Ord.(>=)" "(>=)"
-  min     = withExecutionStackAsCallStack min
-  max     = withExecutionStackAsCallStack max
+  min     = sourceMapRuntime min
+  max     = sourceMapRuntime max
 
 preludeError :: String -> String -> a
 preludeError x y
@@ -177,12 +177,12 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim t =
         [d| instance Ord $(conT t) where
-              (<)  = withFrozenCallStack mkLt
-              (>)  = withFrozenCallStack mkGt
-              (<=) = withFrozenCallStack mkLtEq
-              (>=) = withFrozenCallStack mkGtEq
-              min  = withFrozenCallStack mkMin
-              max  = withFrozenCallStack mkMax
+              (<)  = sourceMap mkLt
+              (>)  = sourceMap mkGt
+              (<=) = sourceMap mkLtEq
+              (>=) = sourceMap mkGtEq
+              min  = sourceMap mkMin
+              max  = sourceMap mkMax
           |]
 
       mkLt' :: [ExpQ] -> [ExpQ] -> ExpQ
@@ -215,10 +215,10 @@ runQ $ do
             pat vs  = conP (mkName ('T':show n)) (map varP vs)
         in
         [d| instance $cst => Ord $res where
-              $(pat xs) <  $(pat ys) = withFrozenCallStack $ $( mkLt' (map varE xs) (map varE ys) )
-              $(pat xs) >  $(pat ys) = withFrozenCallStack $ $( mkGt' (map varE xs) (map varE ys) )
-              $(pat xs) >= $(pat ys) = withFrozenCallStack $ $( mkGtEq' (map varE xs) (map varE ys) )
-              $(pat xs) <= $(pat ys) = withFrozenCallStack $ $( mkLtEq' (map varE xs) (map varE ys) )
+              $(pat xs) <  $(pat ys) = sourceMap $ $( mkLt' (map varE xs) (map varE ys) )
+              $(pat xs) >  $(pat ys) = sourceMap $ $( mkGt' (map varE xs) (map varE ys) )
+              $(pat xs) >= $(pat ys) = sourceMap $ $( mkGtEq' (map varE xs) (map varE ys) )
+              $(pat xs) <= $(pat ys) = sourceMap $ $( mkLtEq' (map varE xs) (map varE ys) )
           |]
 
   is <- mapM mkPrim integralTypes
@@ -229,21 +229,21 @@ runQ $ do
   return $ concat (concat [is,fs,ns,cs,ts])
 
 instance Ord sh => Ord (sh :. Int) where
-  x <= y = withFrozenCallStack $ indexHead x <= indexHead y && indexTail x <= indexTail y
-  x >= y = withFrozenCallStack $ indexHead x >= indexHead y && indexTail x >= indexTail y
-  x < y  = withFrozenCallStack $ indexHead x < indexHead y
+  x <= y = sourceMap $ indexHead x <= indexHead y && indexTail x <= indexTail y
+  x >= y = sourceMap $ indexHead x >= indexHead y && indexTail x >= indexTail y
+  x < y  = sourceMap $ indexHead x < indexHead y
         && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x < indexTail y
-  x > y  = withFrozenCallStack $ indexHead x > indexHead y
+  x > y  = sourceMap $ indexHead x > indexHead y
         && case matchTypeR (eltR @sh) (eltR @Z) of
              Just Refl -> constant True
              Nothing   -> indexTail x > indexTail y
 
 instance Ord Ordering where
-  x < y   = withFrozenCallStack $ mkCoerce x < (mkCoerce y :: Exp TAG)
-  x > y   = withFrozenCallStack $ mkCoerce x > (mkCoerce y :: Exp TAG)
-  x <= y  = withFrozenCallStack $ mkCoerce x <= (mkCoerce y :: Exp TAG)
-  x >= y  = withFrozenCallStack $ mkCoerce x >= (mkCoerce y :: Exp TAG)
-  min x y = withFrozenCallStack $ mkCoerce $ min (mkCoerce x) (mkCoerce y :: Exp TAG)
-  max x y = withFrozenCallStack $ mkCoerce $ max (mkCoerce x) (mkCoerce y :: Exp TAG)
+  x < y   = sourceMap $ mkCoerce x < (mkCoerce y :: Exp TAG)
+  x > y   = sourceMap $ mkCoerce x > (mkCoerce y :: Exp TAG)
+  x <= y  = sourceMap $ mkCoerce x <= (mkCoerce y :: Exp TAG)
+  x >= y  = sourceMap $ mkCoerce x >= (mkCoerce y :: Exp TAG)
+  min x y = sourceMap $ mkCoerce $ min (mkCoerce x) (mkCoerce y :: Exp TAG)
+  max x y = sourceMap $ mkCoerce $ max (mkCoerce x) (mkCoerce y :: Exp TAG)

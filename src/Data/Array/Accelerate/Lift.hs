@@ -52,7 +52,7 @@ lift1 :: (HasCallStack, Unlift Exp a, Lift Exp b)
       => (a -> b)
       -> Exp (Plain a)
       -> Exp (Plain b)
-lift1 f = withFrozenCallStack $ lift . f . unlift
+lift1 f = sourceMap $ lift . f . unlift
 
 -- | Lift a binary function into 'Exp'.
 --
@@ -61,7 +61,7 @@ lift2 :: (HasCallStack, Unlift Exp a, Unlift Exp b, Lift Exp c)
       -> Exp (Plain a)
       -> Exp (Plain b)
       -> Exp (Plain c)
-lift2 f x y = withFrozenCallStack $ lift $ f (unlift x) (unlift y)
+lift2 f x y = sourceMap $ lift $ f (unlift x) (unlift y)
 
 -- | Lift a ternary function into 'Exp'.
 --
@@ -71,22 +71,22 @@ lift3 :: (HasCallStack, Unlift Exp a, Unlift Exp b, Unlift Exp c, Lift Exp d)
       -> Exp (Plain b)
       -> Exp (Plain c)
       -> Exp (Plain d)
-lift3 f x y z = withFrozenCallStack $ lift $ f (unlift x) (unlift y) (unlift z)
+lift3 f x y z = sourceMap $ lift $ f (unlift x) (unlift y) (unlift z)
 
 -- | Lift a unary function to a computation over rank-1 indices.
 --
 ilift1 :: HasCallStack => (Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1
-ilift1 f = withFrozenCallStack $ lift1 (\(Z:.i) -> Z :. f i)
+ilift1 f = sourceMap $ lift1 (\(Z:.i) -> Z :. f i)
 
 -- | Lift a binary function to a computation over rank-1 indices.
 --
 ilift2 :: HasCallStack => (Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
-ilift2 f = withFrozenCallStack $ lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
+ilift2 f = sourceMap $ lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
 
 -- | Lift a ternary function to a computation over rank-1 indices.
 --
 ilift3 :: HasCallStack => (Exp Int -> Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
-ilift3 f = withFrozenCallStack $ lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
+ilift3 f = sourceMap $ lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
 
 
 -- | The class of types @e@ which can be lifted into @c@.
@@ -124,17 +124,17 @@ class Lift c e => Unlift c e where
 
 instance Lift Exp (Exp e) where
   type Plain (Exp e) = e
-  lift = withFrozenCallStack id
+  lift = sourceMap id
 
 instance Unlift Exp (Exp e) where
-  unlift = withFrozenCallStack id
+  unlift = sourceMap id
 
 instance Lift Acc (Acc a) where
   type Plain (Acc a) = a
-  lift = withFrozenCallStack id
+  lift = sourceMap id
 
 instance Unlift Acc (Acc a) where
-  unlift = withFrozenCallStack id
+  unlift = sourceMap id
 
 -- instance Lift Seq (Seq a) where
 --   type Plain (Seq a) = a
@@ -149,173 +149,173 @@ instance Unlift Acc (Acc a) where
 
 instance Lift Exp Z where
   type Plain Z = Z
-  lift _ = withFrozenCallStack Z_
+  lift _ = sourceMap Z_
 
 instance Unlift Exp Z where
   unlift _ = Z
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
-  lift = withFrozenCallStack $ \(ix :. i) -> lift ix ::. lift i
+  lift = sourceMap $ \(ix :. i) -> lift ix ::. lift i
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
-  lift = withFrozenCallStack $ \(ix :. i) -> lift ix ::. constant i
+  lift = sourceMap $ \(ix :. i) -> lift ix ::. constant i
 
 instance (Elt e, Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
-  lift = withFrozenCallStack $ \(ix :. i) -> lift ix ::. i
+  lift = sourceMap $ \(ix :. i) -> lift ix ::. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
-  unlift = withFrozenCallStack $ \(ix ::. i) -> unlift ix :. i
+  unlift = sourceMap $ \(ix ::. i) -> unlift ix :. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt ix) => Unlift Exp (Exp ix :. Exp e) where
-  unlift = withFrozenCallStack $ \(ix ::. i) -> ix :. i
+  unlift = sourceMap $ \(ix ::. i) -> ix :. i
 
 instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
   type Plain (Any sh) = Any sh
-  lift Any = withFrozenCallStack $ constant Any
+  lift Any = sourceMap $ constant Any
 
 -- Instances for numeric types
 -- ---------------------------
 
 {-# INLINE expConst #-}
-expConst :: forall e. (HasCallStack, Elt e) => IsScalar (EltR e) => e -> Exp e
-expConst = withFrozenCallStack $ Exp . SmartExp . Const mkAnn (scalarType @(EltR e)) . fromElt
+expConst :: forall e. (SourceMapped, Elt e, IsScalar (EltR e)) => e -> Exp e
+expConst = Exp . SmartExp . Const mkAnn (scalarType @(EltR e)) . fromElt
 
 instance Lift Exp Int where
   type Plain Int = Int
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Int8 where
   type Plain Int8 = Int8
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Int16 where
   type Plain Int16 = Int16
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Int32 where
   type Plain Int32 = Int32
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Int64 where
   type Plain Int64 = Int64
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Word where
   type Plain Word = Word
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Word8 where
   type Plain Word8 = Word8
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Word16 where
   type Plain Word16 = Word16
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Word32 where
   type Plain Word32 = Word32
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Word64 where
   type Plain Word64 = Word64
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CShort where
   type Plain CShort = CShort
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CUShort where
   type Plain CUShort = CUShort
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CInt where
   type Plain CInt = CInt
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CUInt where
   type Plain CUInt = CUInt
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CLong where
   type Plain CLong = CLong
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CULong where
   type Plain CULong = CULong
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CLLong where
   type Plain CLLong = CLLong
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CULLong where
   type Plain CULLong = CULLong
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Half where
   type Plain Half = Half
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Float where
   type Plain Float = Float
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Double where
   type Plain Double = Double
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CFloat where
   type Plain CFloat = CFloat
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CDouble where
   type Plain CDouble = CDouble
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift True  = withFrozenCallStack $ Exp . SmartExp $ Pair mkAnn (SmartExp (Const mkAnn scalarType 1)) (SmartExp (Nil mkAnn))
-  lift False = withFrozenCallStack $ Exp . SmartExp $ Pair mkAnn (SmartExp (Const mkAnn scalarType 0)) (SmartExp (Nil mkAnn))
+  lift True  = sourceMap $ Exp . SmartExp $ Pair mkAnn (SmartExp (Const mkAnn scalarType 1)) (SmartExp (Nil mkAnn))
+  lift False = sourceMap $ Exp . SmartExp $ Pair mkAnn (SmartExp (Const mkAnn scalarType 0)) (SmartExp (Nil mkAnn))
 
 instance Lift Exp Char where
   type Plain Char = Char
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CChar where
   type Plain CChar = CChar
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CSChar where
   type Plain CSChar = CSChar
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 instance Lift Exp CUChar where
   type Plain CUChar = CUChar
-  lift = withFrozenCallStack expConst
+  lift = sourceMap expConst
 
 -- Instances for tuples
 -- --------------------
 
 instance Lift Exp () where
   type Plain () = ()
-  lift _ = withFrozenCallStack $ Exp (SmartExp (Nil mkAnn))
+  lift _ = sourceMap $ Exp (SmartExp (Nil mkAnn))
 
 instance Unlift Exp () where
   unlift _ = ()
 
 instance Lift Acc () where
   type Plain () = ()
-  lift _ = Acc (SmartAcc (Anil mkAnn))
+  lift _ = sourceMap $ Acc (SmartAcc (Anil mkAnn))
 
 instance Unlift Acc () where
   unlift _ = ()
 
 instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
   type Plain (Array sh e) = Array sh e
-  lift (Array arr) = withFrozenCallStack $ Acc $ SmartAcc $ Use mkAnn (arrayR @sh @e) arr
+  lift (Array arr) = sourceMap $ Acc $ SmartAcc $ Use mkAnn (arrayR @sh @e) arr
 
 -- Lift and Unlift instances for tuples
 --
@@ -340,7 +340,7 @@ runQ $ do
           [d| instance ($ctx1, $ctx2) => Lift $(conT con) $res1 where
                 type Plain $res1 = $plain
                 lift $(tupP (map varP xs)) =
-                  withFrozenCallStack $
+                  sourceMap $
                   $(conE con)
                   $(foldl (\vs v -> do _v <- newName "_v"
                                        [| let $(conP con [varP _v]) = lift $(varE v)
@@ -348,7 +348,7 @@ runQ $ do
 
               instance $ctx3 => Unlift $(conT con) $res2 where
                 unlift $(conP con [varP _x]) =
-                  withFrozenCallStack $
+                  sourceMap $
                   $(tupE (map (get (varE _x)) [(n-1), (n-2) .. 0]))
             |]
 

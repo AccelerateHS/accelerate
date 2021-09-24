@@ -68,7 +68,7 @@ $(runQ $ do
         thToFloating a b =
           let
               ty  = AppT (AppT (ConT (mkName "ToFloating")) (ConT a)) (ConT b)
-              dec = ValD (VarP (mkName "toFloating")) (NormalB (AppE (VarE (mkName "withFrozenCallStack")) (VarE (mkName f)))) []
+              dec = ValD (VarP (mkName "toFloating")) (NormalB (AppE (VarE (mkName "sourceMap")) (VarE (mkName f)))) []
               f | a == b    = "id"
                 | otherwise = "mkToFloating"
           in
