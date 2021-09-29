@@ -72,8 +72,8 @@ import qualified Prelude                                            as P
 
 infix 6 ::+
 pattern (::+) :: (HasCallStack, Elt a) => Exp a -> Exp a -> Exp (Complex a)
-pattern r ::+ i <- (sourceMapPattern deconstructComplex -> (r, i))
-  where (::+) = sourceMapPattern constructComplex
+pattern r ::+ i <- (sourceMapPattern 0 deconstructComplex -> (r, i))
+  where (::+) = sourceMapPattern 0 constructComplex
 {-# COMPLETE (::+) #-}
 
 

@@ -233,8 +233,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (prefixPatSyn xs)
-                         (explBidir [clause [] (normalB (appE (varE (mkName "sourceMapPattern")) (varE build))) []])
-                         (parensP $ viewP (appE (varE (mkName "sourceMapPattern")) (varE match)) [p| Just $(tupP (map varP xs)) |])
+                         (explBidir [clause [] (normalB (varE (mkName "sourceMapPattern") `appE` litE (integerL 0) `appE` varE build)) []])
+                         (parensP $ viewP (varE (mkName "sourceMapPattern") `appE` litE (integerL 0) `appE` varE match) [p| Just $(tupP (map varP xs)) |])
                      ]
       return r
       where
@@ -250,8 +250,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (recordPatSyn xs)
-                         (explBidir [clause [] (normalB (appE (varE (mkName "sourceMapPattern")) (varE build))) []])
-                         (parensP $ viewP (appE (varE (mkName "sourceMapPattern")) (varE match)) [p| Just $(tupP (map varP xs)) |])
+                         (explBidir [clause [] (normalB (varE (mkName "sourceMapPattern") `appE` litE (integerL 0) `appE` varE build)) []])
+                         (parensP $ viewP (varE (mkName "sourceMapPattern") `appE` litE (integerL 0) `appE` varE match) [p| Just $(tupP (map varP xs)) |])
                      ]
       return r
       where
@@ -270,8 +270,8 @@ mkConS tn' tvs' prev' next' tag' con' = do
       r  <- sequence [ patSynSigD pat sig
                      , patSynD    pat
                          (infixPatSyn _a _b)
-                         (explBidir [clause [] (normalB (appE (varE (mkName "sourceMapPattern")) (varE build))) []])
-                         (parensP $ viewP (appE (varE (mkName "sourceMapPattern")) (varE match)) [p| Just $(tupP [varP _a, varP _b]) |])
+                         (explBidir [clause [] (normalB (varE (mkName "sourceMapPattern") `appE` litE (integerL 0) `appE` varE build)) []])
+                         (parensP $ viewP (varE (mkName "sourceMapPattern") `appE` litE (integerL 0) `appE` varE match) [p| Just $(tupP [varP _a, varP _b]) |])
                      ]
       r' <- case mf of
               Nothing -> return r

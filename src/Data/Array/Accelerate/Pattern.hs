@@ -62,8 +62,8 @@ import Language.Haskell.TH.Extra                                    hiding ( Exp
 -- your own pattern synonyms based off of this.
 --
 pattern Pattern :: forall b a context. (HasCallStack, IsPattern context a b) => b -> context a
-pattern Pattern vars <- (sourceMapPattern (matcher @context) -> vars)
-  where Pattern = sourceMapPattern (builder @context)
+pattern Pattern vars <- (sourceMapPattern 1 (matcher @context) -> vars)
+  where Pattern = sourceMapPattern 1 (builder @context)
 
 class IsPattern context a b where
   builder :: SourceMapped => b -> context a
@@ -71,8 +71,8 @@ class IsPattern context a b where
 
 
 pattern Vector :: forall b a context. IsVector context a b => b -> context a
-pattern Vector vars <- (sourceMapPattern (vunpack @context) -> vars)
-  where Vector = sourceMapPattern (vpack @context)
+pattern Vector vars <- (sourceMapPattern 1 (vunpack @context) -> vars)
+  where Vector = sourceMapPattern 1 (vpack @context)
 
 class IsVector context a b where
   vpack   :: SourceMapped => b -> context a
@@ -97,13 +97,13 @@ pattern a `Ix` b = a ::. b
 {-# COMPLETE Ix #-}
 
 pattern All_ :: Exp All
-pattern All_ <- (sourceMapPattern (const True) -> True)
-  where All_ = sourceMapPattern $ constant All
+pattern All_ <- (sourceMapPattern 0 (const True) -> True)
+  where All_ = sourceMapPattern 0 $ constant All
 {-# COMPLETE All_ #-}
 
 pattern Any_ :: (Shape sh, Elt (Any sh)) => Exp (Any sh)
-pattern Any_ <- (sourceMapPattern (const True) -> True)
-  where Any_ = sourceMapPattern $ constant Any
+pattern Any_ <- (sourceMapPattern 0 (const True) -> True)
+  where Any_ = sourceMapPattern 0 $ constant Any
 {-# COMPLETE Any_ #-}
 
 -- IsPattern instances for Shape nil and cons

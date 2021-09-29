@@ -377,6 +377,15 @@ sourceMapRuntime dewit =
 -- call stack isn't already frozen. Otherwise we would capture the wrong call
 -- stacks.
 --
+-- /NOTE:/
+--
+-- The pattern and the expression parts of a bidirectional pattern synonym both
+-- count as a function call. If a pattern synonym is meant to be used directly,
+-- then the @nestingDepth@ parameter should be set to 0. If the pattern synonym
+-- is meant to be aliased using a simply-bidirectional pattern synonym (e.g. the
+-- @Pattern@ and @Vector@ pattern synonyms), then the nesting depth should be
+-- set to 1.
+--
 -- /HACK:/
 --
 -- Call stacks didn't play nicely with pattern synonyms in GHC version before
@@ -384,22 +393,15 @@ sourceMapRuntime dewit =
 -- generated completely.
 --
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/19289
---
--- TODO: Since 'Pattern' isn't meant to be used directly, should we strip off
---       two layers of call stack? Check how call stacks interact with pattern
---       synonyms in GHC 9.2.0.
--- TODO: Also check whether the index pattern synonyms like @I2@ and @I3@ work
---       properly.
-sourceMapPattern :: HasCallStack => (SourceMapped => a) -> a
-sourceMapPattern dewit =
+sourceMapPattern :: HasCallStack => Int -> (SourceMapped => a) -> a
+sourceMapPattern _nestingDepth dewit =
 #if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
-  let ?requiresSourceMapping = TakenCareOf
-      ?callStack =
-        -- Same definition as in 'withFrozenCallStack'
-        case freezeCallStack (popCallStack callStack) of
-          stack | isEmptyStack stack -> printError
-          stack                      -> stack
-  in  dewit
+    let ?requiresSourceMapping = TakenCareOf
+        ?callStack = freezeCallStack (iterate popCallStack callStack !! (_nestingDepth + 1))
+    in
+    if isEmptyStack ?callStack
+        then printError
+        else dewit
   where
     -- This error will be printed using the old call stack, which should include
     -- the caller of this function if the call stack has not yet been frozen.
