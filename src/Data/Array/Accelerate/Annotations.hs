@@ -14,8 +14,6 @@
 --
 -- * TODOs
 --
--- TODO: Document what exactly we are annotating and how we do that once this
---       has been fleshed out a little more.
 -- TODO: Add the same file header used in all other modules
 -- TODO: Reformat all of the changes from this branch to the usual Accelerate
 --       style. There's no style guide or formatter config anywhere, so I just
@@ -24,12 +22,21 @@
 -- TODO: Figure out the let/var conversion in sharing recovery
 -- TODO: Take another look at fusion, optimization propagation doesn't have to
 --       be perfect yet but I'm sure there are also issues elsewhere
+-- TODO: Annotations are completely ignored in 'Match' and 'Hash' at the moment.
+--       We should probably at least consider the optimizations of not the
+--       entire annotation.
 -- TODO: See if we can clean up the pretty printer a bit, and also add the
 --       information to the graphviz export (there's already a todo for that)
 -- TODO: Expose the pretty printer verbosity option somehow
 -- TODO: Tests! Tests? Can we test this, and how? We can probably at least fake
 --       call stacks, generate random ASTs with smart constructors, and check
 --       `getAnn`.
+-- TODO: Document the optimization flags and expose them through the main
+--       Accelerate module, once they actually do something
+-- XXX: Right now it would be possible to specify some nonsensible flags, like
+--      setting loop unrolling for a constant value. Should we just silently
+--      ignore these things like we do now, or should be printing warnings? I
+--      don't think Accelerate has any other non-fatal compiler diagnostics.
 --
 -- There are a bunch more todos sprinkled around the code. Use the following
 -- mystical one-liner to find them:
@@ -38,127 +45,120 @@
 -- git diff -U0 master...feature/annotations | grep '^+.*\(TODO\|HACK\|FIXME\)' | cut -c2- | git grep -nFf- feature/annotations
 -- @
 --
--- * Annotations
+-- __Annotations__
 --
 -- The general idea is that almost all AST data type constructors have been
--- extended with an 'Ann' field, which stores annotation data for the AST node.
--- Presently, we use this to store both source mapping information and flags
--- that can be used by the optimizer. These annotations are populated in the
--- smart constructors using the 'mkAnn' function, so they end up being
--- completely transparent to the user.
+-- extended with an 'Ann' field, storing annotation data for the AST node. At
+-- the moment we use this to store both source mapping information and flags
+-- that can be used by the optimizer. These annotations are automatically
+-- populated in the smart constructors using the 'mkAnn' function, so they end
+-- up being completely transparent to the user.
 --
--- ** Capturing call stacks
+-- /Source mapping/
 --
 -- 'mkAnn' will try to capture source information in the form of GHC Call
 -- Stacks. This ends up being a breaking change to any library building on
 -- Accelerate. In short, the changes that need to be made are as follows:
 --
---   1. All smart constructors or library functions that are exposed to the
---      user, as well as all auxiliary functions that either directly or
---      indirectly end up calling 'mkAnn', need to be annotated with the
---      'HasCallStack' constraint.
---   2. Top-level smart constructors or library functions that are exported from
---      a module need to freeze the call stack at the entry point. See below for
---      more details on how to do this correctly.
---   3. When translating between different AST types (such as the internal De
---      Bruijn AST to a backend-specific AST), the annotations need to be
+--   1. All top-level smart constructors or library functions that are exposed
+--      directly to the user need to be annotated with the 'HasCallStack'
+--      constraint. That way those functions can know where the function was
+--      called from.
+--   2. These top-level functions then need to enable source mapping by
+--      evaluating their contents using either the 'sourceMap',
+--      'sourceMapRuntime' or 'sourceMapPattern' functions. Calling 'sourceMap'
+--      or 'sourceMapPattern' when the function does not have the 'HasCallStack'
+--      constraint will result in a run-time error. See below for more
+--      information on how to use these functions correctly and which one to
+--      use.
+--   3. Any auxiliary function that directly or indirectly calls 'mkAnn' needs
+--      to be annotated with the 'SourceMapped' constraint. This is enforced by
+--      the type checker, so you will get a GHC compiler error when you forget
+--      to do this. 'SourceMapped' functions can only be evaluated through one
+--      of the 'sourceMap' functions mentioned above.
+--   4. When translating between different AST types (such as the internal De
+--      Bruijn AST and a backend-specific AST), the annotations need to be
 --      propgated to that new AST nodes. If needed, multiple annotations can be
---      merged with the '(<>)' operator.
+--      merged using the '(<>)' operator.
 --
--- If either (1) or (2) is omitted, then 'mkAnn' will throw an assertion
--- failure. These steps are required in order to access the source location in
--- the user's code where the toplevel library function was called from.
+-- These steps are necessary to be able to access the source location in the
+-- user's code where the top-level library function was called from. There is
+-- some degree of safety built into this mechanism, but there are still some
+-- ways to do it wrong that you should be aware of. The 'SourceMapped'
+-- constraint and the accompanying 'sourceMap' function enforce that every
+-- function in the chain from a smart constructor a call to 'mkAnn' contains the
+-- correct call stack pointing to the caller's source code. However, this
+-- mechanism cannot protect you from mistakes when calling top-level smart
+-- constructors or library functions directly from other top-level smart
+-- constructors or library functions. In that case, forgetting either step (2)
+-- or both steps (1) and (2) will not print any errors, but will instead cause
+-- the source mapping annotation to contain the wrong source location.
 --
--- ** Freezing call stacks
+-- /'sourceMap' and friends/
 --
--- A function builds a compile-time call stack with information about its caller
--- when it is annotated with the 'HasCallStack' constraint. The call stack can
--- be frozen with the 'withFrozenCallStack' function, which causes its argument
--- to be evaluated in a way that prevents it from accumulating additional stack
--- frames in its call stack. GHC Call Stacks are implemented using implicit
--- parameters. This means that the location in the source code a variable was
--- defined in - and this was the point where I realized we can cut a lot of
--- complexity by using our own implicit parameter for the source mapping.
+-- The idea is that top-level functions are annotated with 'HasCallStack' so the
+-- call stack contains information about where those functions were called from.
+-- 'sourceMap' then freezes this call stack information, and allows
+-- 'SourceMapped' functions to access it. This system uses /implicit
+-- parameters/. That means that the location in the source code where a term is
+-- defined determines whether it inherits this 'SourceMapped' context. For
+-- auxiliary functions, the only change that needs to be made is to add the
+-- 'SourceMapped' constraint, but top-level functions may need to be
+-- restructured a bit:
 --
--- FIXME: Continue updating the module documentation where I left off, I got
---        kind of sidetracked by the implicit parameters at this point
+--   - The entire function body needs to be wrapped in either 'sourceMap',
+--     'sourceMapRuntime', or 'sourceMapPattern'. 'sourceMap' should always be
+--     used unless it is not possible to add the 'HasCallStack' constraint (such
+--     as when implementing third party type classes), or when manually creating
+--     bidirectional pattern synonyms. In those cases 'sourceMapRuntime' and
+--     'sourceMapPattern' should be used instead. To evaluate the function's
+--     body through these functions these functions, you just need to make sure
+--     the function definition starts with @sourceMap $@, or just 'sourceMap' if
+--     the function previously only consisted of a single term.
+--   - Any /terms/ defined in a where-clause need to be moved to a let-binding
+--     that is evaluated under 'sourceMap'. Otherwise they will not inherit the
+--     source mapping information.
+--   - Any /functions/ defined in the where-clause either need to be explicitly
+--     annotated with the 'SourceMapped' constraint, or they can also be moved
+--     to a let-binding.
+--   - If the top-level constructor uses a pattern synonym to deconstruct one of
+--     its arguments, then this needs to be moved to a lambda inside of
+--     'sourceMap'. This is needed because these pattern synonyms use a view
+--     pattern function behind the scenes, and this function would otherwise be
+--     evaluated outside of the 'SourceMapped' context.
 --
--- TODO: Mention pattern synonyms
--- TODO: Mention RTS call stacks
+-- As an example, the following functions:
 --
--- TODO: See what we still need from the below comments, get rid of the rest
+-- > magnitude :: RealFloat a => Exp (Complex a) -> Exp a
+-- > magnitude (r ::+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
+-- >   where
+-- >     k     = max (exponent r) (exponent i)
+-- >     mk    = -k
+-- >     sqr z = z * z
+-- >
+-- > boolToInt :: Exp Bool -> Exp Int
+-- > boolToInt = mkFromIntegral . mkCoerce @_ @Word8
+-- >
+-- > mkFromIntegral :: (Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
+-- > mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
+-- >
+-- > -- ...and the rest of 'mkPrimUnary', 'mkCoerce', etc.
 --
--- ** Annotations in the smart AST
+-- Would have to be rewritten as follows:
 --
---   * At the moment only a handful of 'PreSmartExp' and 'PreSmartAcc'
---     constructors have annotation fields.
---   * Call stacks are frozen in all of the exposed frontend functions and in
---     the (generated) pattern synonyms. This allows us to capture them in
---     'mkAnn' so they can be used later to map an AST back to the original
---     source location. This does require the 'HasCallStack' constraint to be
---     added to every function that either directly or indirectly calls 'mkAnn'.
+-- > magnitude :: (HasCallStack, RealFloat a) => Exp (Complex a) -> Exp a
+-- > magnitude = sourceMap $ \(r ::+ i) ->
+-- >     let k  = max (exponent r) (exponent i)
+-- >         mk = -k
+-- >         sqr z = z * z
+-- >     in  scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
+-- >
+-- > boolToInt :: HasCallStack => Exp Bool -> Exp Int
+-- > boolToInt = sourceMap $ mkFromIntegral . mkCoerce @_ @Word8
+-- >
+-- > mkFromIntegral :: (SourceMapped, Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
+-- > mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 --
--- TODO: Pattern synonyms using 'Pattern' should probably pop another layer of
---       call stacks since those are never used directly (there's another TODO
---       for this). Also check if this works for index pattern synonyms like I2
---       and I3.
--- TODO: Instead of relying on 'HasCallStack', since we already freeze the call
---       stacks at the top level we can also use our own implicit parameter.
---       This would at least alleviate the need to litter every frontend
---       function with 'HasCallStack'.
---
--- ** Annotations in the de Bruijn AST
---
---   * The internal AST also contains fields in the constructors that correspond
---     to the annotated constructors of the smart AST.
---   * Annotations are propagated through the entire transformation pipeline.
---     When the smart AST gets transformed into the internal AST during sharing
---     recovery the annotations passed through as is.
---   * When AST nodes get combined into a new node, for instance during the
---     simplification and constant folding processes, the new node's annotation
---     is created by joining the annotations of all involved nodes.
---
---     TODO: Elaborate in this
---
--- TODO: Annotations are completely ignored in 'Match' and 'Hash' at the moment.
---       We should probably at least consider the optimizations of not the
---       entire annotation.
---
--- ** Annotations in the delayed representation
---
---   * In the fusion process some of the original nodes will disappear as they
---     are replaced with cunctations and eventually end up as delayed array
---     computations.
---   * During this process we will preserve the annotations of the delayed and
---     fused AST nodes in the constructors of those cunctations an delayed
---     arrays.
---
--- TODO: Figure out what to do with conflicting optimization flags in the fusion
---       process. If we fuse an unrolled map into a fold, should:
---
---       a) The resulting fold be unrolled as well? To make things easier this
---          is the current behaviour.
---       b) The optimization flag be ignored (with a warning for the user)?
---       c) We throw a hard error and tell the user to fix this themselves?
--- TODO: Code gen changes
---
--- ** Annotating ASTs
---
--- AST nodes will automatically contain source mapping information because of
--- the use of smart constructors. The user can specify optimization flags for an
--- AST node by using the optimization functions exposed from
--- @Data.Array.Accelerate@.
---
--- The annotation type stores source mapping information in a set so we can
--- easily merge and transform AST nodes in the optimization process while still
--- preserving information about the node's origins.
---
--- TODO: Rewrite the above, this was written a while back and it's now both
---       missing bits and also repeating other information
--- XXX: Right now it would be possible to specify some nonsensible flags, like
---      setting loop unrolling for a constant value. Should we just silently
---      ignore these things like we do now, or should be printing warnings? I
---      don't think Accelerate has any other non-fatal compiler diagnostics.
 module Data.Array.Accelerate.Annotations
     ( -- * Annotations
       Ann(..)
@@ -278,6 +278,9 @@ data ReadTheDocs = TakenCareOf
 -- cause the call stack at that function (which thus includes that function's
 -- caller) to be used within the 'SourceMapped' context of the form.
 --
+-- Nested 'sourceMap' calls will keep the source mapping information from the
+-- outermost call in tact.
+--
 -- /NOTE:/
 --
 -- This abstraction exists to prevent mistakes, as 'mkAnn' and any function
@@ -345,7 +348,7 @@ sourceMapRuntime dewit =
         ?callStack = case ?callStack of
             x@(FreezeCallStack _) -> x
             _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
-     in dewit
+    in  dewit
   where
     -- We don't want the two uppermost stack frames, since those will be in our
     -- own library code
@@ -385,6 +388,8 @@ sourceMapRuntime dewit =
 -- TODO: Since 'Pattern' isn't meant to be used directly, should we strip off
 --       two layers of call stack? Check how call stacks interact with pattern
 --       synonyms in GHC 9.2.0.
+-- TODO: Also check whether the index pattern synonyms like @I2@ and @I3@ work
+--       properly.
 sourceMapPattern :: HasCallStack => (SourceMapped => a) -> a
 sourceMapPattern dewit =
 #if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
@@ -394,7 +399,7 @@ sourceMapPattern dewit =
         case freezeCallStack (popCallStack callStack) of
           stack | isEmptyStack stack -> printError
           stack                      -> stack
-     in dewit
+  in  dewit
   where
     -- This error will be printed using the old call stack, which should include
     -- the caller of this function if the call stack has not yet been frozen.
@@ -412,7 +417,7 @@ sourceMapPattern dewit =
         case ?callStack of
           x@(FreezeCallStack _) -> x
           _                     -> freezeCallStack emptyCallStack
-     in dewit
+  in  dewit
 #endif
 
 -- | We'll throw an error when 'sourceMap' or 'sourceMapPattern' gets called
@@ -474,17 +479,9 @@ extractAnn :: HasAnnotations a => a -> Ann
 extractAnn (getAnn -> Just ann) = ann
 extractAnn _                    = mkDummyAnn
 
--- | Create an empty annotation with call site information if available. This
--- only works when all smart constructors have the 'HasCallStack' constraint.
--- This function __must__ be called with 'withFrozenCallStack'.
---
--- TODO: Update the documentation after the SourceMapped change. Also consider
---       removing the assertion.
---
--- TODO: When Accelerate has a logger, this assertion should be replaced by a
---       warning. If the call stacks are not frozen, then we'll just treat it as
---       an empty call stack. When running the test suite this should still
---       count as a hard error though.
+-- | Create a new annotation, capturing any available source mapping information
+-- from the current 'SourceMapped' context. Check the module's documentation for
+-- more information.
 mkAnn :: SourceMapped => Ann
 mkAnn = Ann (maybeCallStack callStack) defaultOptimizations
   where
