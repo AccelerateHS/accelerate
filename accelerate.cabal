@@ -373,6 +373,7 @@ library
         Data.Array.Accelerate.Trafo.Config
         Data.Array.Accelerate.Trafo.Delayed
         Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.LetSplit
         Data.Array.Accelerate.Trafo.Sharing
         Data.Array.Accelerate.Trafo.Substitution
         Data.Array.Accelerate.Trafo.Var
@@ -427,7 +428,6 @@ library
         Data.Array.Accelerate.Pretty.Print
         Data.Array.Accelerate.Trafo.Algebra
         Data.Array.Accelerate.Trafo.Environment
-        Data.Array.Accelerate.Trafo.LetSplit
         Data.Array.Accelerate.Trafo.Shrink
         Data.Array.Accelerate.Trafo.Simplify
         Data.Atomic
