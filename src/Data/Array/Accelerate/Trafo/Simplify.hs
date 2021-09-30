@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
@@ -13,6 +14,7 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
 -- Copyright   : [2012..2020] The Accelerate Team
@@ -24,6 +26,9 @@
 --
 
 module Data.Array.Accelerate.Trafo.Simplify (
+
+  simplifyAfun,
+  simplifyAcc,
 
   simplifyFun,
   simplifyExp
@@ -60,6 +65,53 @@ import Formatting
 import Lens.Micro                                                   hiding ( ix )
 import Prelude                                                      hiding ( exp, iterate )
 import qualified Data.Map.Strict                                    as Map
+
+
+-- Array simplification
+-- ====================
+
+simplifyAcc :: Acc a -> Acc a
+simplifyAcc = simplifyOpenAcc
+
+simplifyAfun :: Afun f -> Afun f
+simplifyAfun = simplifyOpenAfun
+
+
+simplifyOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
+simplifyOpenAcc (OpenAcc pacc) = OpenAcc (simplifyPreOpenAcc pacc)
+
+simplifyOpenAfun :: PreOpenAfun OpenAcc aenv f -> PreOpenAfun OpenAcc aenv f
+simplifyOpenAfun (Alam lhs f) = Alam lhs (simplifyOpenAfun f)
+simplifyOpenAfun (Abody a)    = Abody (simplifyOpenAcc a)
+
+simplifyPreOpenAcc :: PreOpenAcc OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
+simplifyPreOpenAcc = \case
+  Alet lhs bnd body               -> Alet lhs (simplifyOpenAcc bnd) (simplifyOpenAcc body)
+  Avar var                        -> Avar var
+  Apair a1 a2                     -> Apair (simplifyOpenAcc a1) (simplifyOpenAcc a2)
+  Anil                            -> Anil
+  Atrace msg as bs                -> Atrace msg (simplifyOpenAcc as) (simplifyOpenAcc bs)
+  Apply repr f a                  -> Apply repr (simplifyOpenAfun f) (simplifyOpenAcc a)
+  Aforeign repr asm f a           -> Aforeign repr asm (simplifyOpenAfun f) (simplifyOpenAcc a)
+  Acond e a1 a2                   -> Acond (simplifyExp e) (simplifyOpenAcc a1) (simplifyOpenAcc a2)
+  Awhile c f a                    -> Awhile (simplifyOpenAfun c) (simplifyOpenAfun f) (simplifyOpenAcc a)
+  Use repr arr                    -> Use repr arr
+  Unit eR e                       -> Unit eR (simplifyExp e)
+  Reshape shr e a                 -> Reshape shr (simplifyExp e) (simplifyOpenAcc a)
+  Generate repr e f               -> Generate repr (simplifyExp e) (simplifyFun f)
+  Transform repr sh f g a         -> Transform repr (simplifyExp sh) (simplifyFun f) (simplifyFun g) (simplifyOpenAcc a)
+  Replicate slix sl a             -> Replicate slix (simplifyExp sl) (simplifyOpenAcc a)
+  Slice slix a sl                 -> Slice slix (simplifyOpenAcc a) (simplifyExp sl)
+  Map eR f a                      -> Map eR (simplifyFun f) (simplifyOpenAcc a)
+  ZipWith eR f a1 a2              -> ZipWith eR (simplifyFun f) (simplifyOpenAcc a1) (simplifyOpenAcc a2)
+  Fold f e a                      -> Fold (simplifyFun f) (fmap simplifyExp e) (simplifyOpenAcc a)
+  FoldSeg iR f e a s              -> FoldSeg iR (simplifyFun f) (fmap simplifyExp e) (simplifyOpenAcc a) (simplifyOpenAcc s)
+  Scan d f e a                    -> Scan d (simplifyFun f) (fmap simplifyExp e) (simplifyOpenAcc a)
+  Scan' d f e a                   -> Scan' d (simplifyFun f) (simplifyExp e) (simplifyOpenAcc a)
+  Permute f a1 g a2               -> Permute (simplifyFun f) (simplifyOpenAcc a1) (simplifyFun g) (simplifyOpenAcc a2)
+  Backpermute shr sh f a          -> Backpermute shr (simplifyExp sh) (simplifyFun f) (simplifyOpenAcc a)
+  Stencil s eR f b a              -> Stencil s eR (simplifyFun f) b (simplifyOpenAcc a)
+  Stencil2 s1 s2 eR f b1 a1 b2 a2 -> Stencil2 s1 s2 eR (simplifyFun f) b1 (simplifyOpenAcc a1) b2 (simplifyOpenAcc a2)
 
 
 -- Scalar optimisations
