@@ -1265,8 +1265,11 @@ instance Coerce a (a, ()) where
 -- Annotations
 -- -----------
 
-instance FieldAnn (Acc a) where
+instance FieldAnn (Acc arrs) where
   _ann k (Acc (SmartAcc pacc)) = Acc . SmartAcc <$> _ann k pacc
+
+instance FieldAnn (SmartAcc arrs) where
+  _ann k (SmartAcc pacc) = SmartAcc <$> _ann k pacc
 
 instance FieldAnn (PreSmartAcc acc exp arrs) where
   _ann k (Pipe ann reprA reprB reprC afun1 afun2 acc)                = k (Just ann) <&> \(Just ann') -> Pipe ann' reprA reprB reprC afun1 afun2 acc
@@ -1294,8 +1297,11 @@ instance FieldAnn (PreSmartAcc acc exp arrs) where
   _ann k (Stencil2 ann stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2) = k (Just ann) <&> \(Just ann') -> Stencil2 ann' stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
   _ann k pacc                                                        = pacc <$ k Nothing
 
-instance FieldAnn (Exp a) where
+instance FieldAnn (Exp t) where
   _ann k (Exp (SmartExp pexp)) = Exp . SmartExp <$> _ann k pexp
+
+instance FieldAnn (SmartExp t) where
+  _ann k (SmartExp pexp) = SmartExp <$> _ann k pexp
 
 instance FieldAnn (PreSmartExp acc exp t) where
   _ann k (Const ann tp v)          = k (Just ann) <&> \(Just ann') -> Const ann' tp v
