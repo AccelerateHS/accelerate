@@ -318,8 +318,10 @@ type Level = Int
 --
 -- TODO: Add annotations to most of the constructors
 data PreSmartAcc acc exp as where
-    -- Needed for conversion to de Bruijn form
-  Atag          :: ArraysR as
+  -- Needed for conversion to de Bruijn form. The annotation only serves as
+  -- temporary storage during the conversion.
+  Atag          :: Ann
+                -> ArraysR as
                 -> Level                        -- environment size at defining occurrence
                 -> PreSmartAcc acc exp as
 
@@ -511,8 +513,10 @@ newtype SmartExp t = SmartExp (PreSmartExp SmartAcc SmartExp t)
 -- | Scalar expressions to parametrise collective array operations, themselves parameterised over
 -- the type of collective array operations.
 data PreSmartExp acc exp t where
-  -- Needed for conversion to de Bruijn form
-  Tag           :: TypeR t
+  -- Needed for conversion to de Bruijn form. The annotation only serves as
+  -- temporary storage during the conversion.
+  Tag           :: Ann
+                -> TypeR t
                 -> Level                        -- environment size at defining occurrence
                 -> PreSmartExp acc exp t
 
@@ -838,45 +842,44 @@ arrayR :: HasArraysR f => f (Array sh e) -> ArrayR (Array sh e)
 arrayR acc = case arraysR acc of
   TupRsingle repr -> repr
 
--- TODO: Reformat
 instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
   arraysR = \case
-    Atag repr _               -> repr
-    Pipe _ _ _ repr  _ _ _    -> repr
-    Aforeign _ repr _ _ _     -> repr
-    Acond _ _ a _             -> arraysR a
-    Awhile _ _ _ _ a          -> arraysR a
-    Anil _                    -> TupRunit
-    Apair _ a1 a2             -> arraysR a1 `TupRpair` arraysR a2
-    Aprj _ idx a | TupRpair t1 t2 <- arraysR a
-                              -> case idx of
-                                   PairIdxLeft  -> t1
-                                   PairIdxRight -> t2
-    Aprj _ _ _                -> error "Ejector seat? You're joking!"
-    Atrace _ _ _ a            -> arraysR a
-    Use _ repr _              -> TupRsingle repr
-    Unit _ tp _               -> TupRsingle $ ArrayR ShapeRz $ tp
-    Generate _ repr _ _       -> TupRsingle repr
-    Reshape _ shr _ a         -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle $ ArrayR shr tp
-    Replicate _ si _ a        -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle $ ArrayR (sliceDomainR si) tp
-    Slice _ si a _            -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle $ ArrayR (sliceShapeR si) tp
-    Map _ _ tp _ a            -> let ArrayR shr _ = arrayR a
-                                 in  TupRsingle $ ArrayR shr tp
-    ZipWith _ _ _ tp _ a _    -> let ArrayR shr _ = arrayR a
-                                 in  TupRsingle $ ArrayR shr tp
-    Fold _ _ _ _ a            -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
-                                 in  TupRsingle (ArrayR shr tp)
-    FoldSeg _ _ _ _ _ a _     -> arraysR a
-    Scan _ _ _ _ _ a          -> arraysR a
-    Scan' _ _ _ _ _ a         -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
-                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
-    Permute _ _ _ a _ _       -> arraysR a
-    Backpermute _ shr _ _ a   -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle (ArrayR shr tp)
-    Stencil _ s tp _ _ _      -> TupRsingle $ ArrayR (stencilShapeR s) tp
+    Atag _ repr _               -> repr
+    Pipe _ _ _ repr  _ _ _      -> repr
+    Aforeign _ repr _ _ _       -> repr
+    Acond _ _ a _               -> arraysR a
+    Awhile _ _ _ _ a            -> arraysR a
+    Anil _                      -> TupRunit
+    Apair _ a1 a2               -> arraysR a1 `TupRpair` arraysR a2
+    Aprj _ idx a | TupRpair t1   t2 <- arraysR a
+                                -> case idx of
+                                     PairIdxLeft  -> t1
+                                     PairIdxRight -> t2
+    Aprj _ _ _                  -> error "Ejector seat? You're joking!"
+    Atrace _ _ _ a              -> arraysR a
+    Use _ repr _                -> TupRsingle repr
+    Unit _ tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
+    Generate _ repr _ _         -> TupRsingle repr
+    Reshape _ shr _ a           -> let ArrayR _ tp = arrayR a
+                                   in  TupRsingle $ ArrayR shr tp
+    Replicate _ si _ a          -> let ArrayR _ tp = arrayR a
+                                   in  TupRsingle $ ArrayR (sliceDomainR si) tp
+    Slice _ si a _              -> let ArrayR _ tp = arrayR a
+                                   in  TupRsingle $ ArrayR (sliceShapeR si) tp
+    Map _ _ tp _ a              -> let ArrayR shr _ = arrayR a
+                                   in  TupRsingle $ ArrayR shr tp
+    ZipWith _ _ _ tp _ a _      -> let ArrayR shr _ = arrayR a
+                                   in  TupRsingle $ ArrayR shr tp
+    Fold _ _ _ _ a              -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
+                                   in  TupRsingle (ArrayR shr tp)
+    FoldSeg _ _ _ _ _ a _       -> arraysR a
+    Scan _ _ _ _ _ a            -> arraysR a
+    Scan' _ _ _ _ _ a           -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
+                                   in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
+    Permute _ _ _ a _ _         -> arraysR a
+    Backpermute _ shr _ _ a     -> let ArrayR _ tp = arrayR a
+                                   in  TupRsingle (ArrayR shr tp)
+    Stencil _ s tp _ _ _        -> TupRsingle $ ArrayR (stencilShapeR s) tp
     Stencil2 _ s _ tp _ _ _ _ _ -> TupRsingle $ ArrayR (stencilShapeR s) tp
 
 
@@ -888,7 +891,7 @@ instance HasTypeR SmartExp where
 
 instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
   typeR = \case
-    Tag tp _                        -> tp
+    Tag _ tp _                      -> tp
     Match _ e                       -> typeR e
     Const _ tp _                    -> TupRsingle tp
     Nil _                           -> TupRunit
@@ -1272,6 +1275,7 @@ instance FieldAnn (SmartAcc arrs) where
   _ann k (SmartAcc pacc) = SmartAcc <$> _ann k pacc
 
 instance FieldAnn (PreSmartAcc acc exp arrs) where
+  _ann k (Atag ann repr i)                                           = k (Just ann) <&> \(Just ann') -> Atag ann' repr i
   _ann k (Pipe ann reprA reprB reprC afun1 afun2 acc)                = k (Just ann) <&> \(Just ann') -> Pipe ann' reprA reprB reprC afun1 afun2 acc
   _ann k (Aforeign ann repr ff afun acc)                             = k (Just ann) <&> \(Just ann') -> Aforeign ann' repr ff afun acc
   _ann k (Acond ann b acc1 acc2)                                     = k (Just ann) <&> \(Just ann') -> Acond ann' b acc1 acc2
@@ -1304,6 +1308,7 @@ instance FieldAnn (SmartExp t) where
   _ann k (SmartExp pexp) = SmartExp <$> _ann k pexp
 
 instance FieldAnn (PreSmartExp acc exp t) where
+  _ann k (Tag ann tp i)            = k (Just ann) <&> \(Just ann') -> Tag ann' tp i
   _ann k (Const ann tp v)          = k (Just ann) <&> \(Just ann') -> Const ann' tp v
   _ann k (Undef ann tp)            = k (Just ann) <&> \(Just ann') -> Undef ann' tp
   _ann k (Prj ann idx e)           = k (Just ann) <&> \(Just ann') -> Prj ann' idx e
@@ -1426,7 +1431,7 @@ formatDirection = later $ \case
 -- TODO: Reformat
 formatPreAccOp :: Format r (PreSmartAcc acc exp arrs -> r)
 formatPreAccOp = later $ \case
-  Atag _ i            -> bformat ("Atag " % int) i
+  Atag _ _ i          -> bformat ("Atag " % int) i
   Use _ aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
   Pipe{}              -> "Pipe"
   Acond{}             -> "Acond"
@@ -1455,7 +1460,7 @@ formatPreAccOp = later $ \case
 -- TODO: Show annotations
 formatPreExpOp :: Format r (PreSmartExp acc exp t -> r)
 formatPreExpOp = later $ \case
-  Tag _ i       -> bformat ("Tag " % int) i
+  Tag _ _ i     -> bformat ("Tag " % int) i
   Const _ t c   -> bformat ("Const " % string) (showElt (TupRsingle t) c)
   Match{}       -> "Match"
   Undef{}       -> "Undef"
