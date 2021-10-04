@@ -1266,55 +1266,59 @@ instance Coerce a (a, ()) where
 -- -----------
 
 instance FieldAnn (Acc a) where
-  _ann k (Acc (SmartAcc pacc)) = Acc . SmartAcc <$> case pacc of
-    (Pipe ann reprA reprB reprC afun1 afun2 acc)                -> k (Just ann) <&> \(Just ann') -> Pipe ann' reprA reprB reprC afun1 afun2 acc
-    (Aforeign ann repr ff afun acc)                             -> k (Just ann) <&> \(Just ann') -> Aforeign ann' repr ff afun acc
-    (Acond ann b acc1 acc2)                                     -> k (Just ann) <&> \(Just ann') -> Acond ann' b acc1 acc2
-    (Awhile ann reprA pred' iter' init')                        -> k (Just ann) <&> \(Just ann') -> Awhile ann' reprA pred' iter' init'
-    (Anil ann)                                                  -> k (Just ann) <&> \(Just ann') -> Anil ann'
-    (Apair ann acc1 acc2)                                       -> k (Just ann) <&> \(Just ann') -> Apair ann' acc1 acc2
-    (Aprj ann ix a)                                             -> k (Just ann) <&> \(Just ann') -> Aprj ann' ix a
-    (Use ann repr array)                                        -> k (Just ann) <&> \(Just ann') -> Use ann' repr array
-    (Unit ann tp e)                                             -> k (Just ann) <&> \(Just ann') -> Unit ann' tp e
-    (Generate ann repr sh f)                                    -> k (Just ann) <&> \(Just ann') -> Generate ann' repr sh f
-    (Reshape ann shr e acc)                                     -> k (Just ann) <&> \(Just ann') -> Reshape ann' shr e acc
-    (Replicate ann si ix acc)                                   -> k (Just ann) <&> \(Just ann') -> Replicate ann' si ix acc
-    (Slice ann si acc ix)                                       -> k (Just ann) <&> \(Just ann') -> Slice ann' si acc ix
-    (Map ann t1 t2 f acc)                                       -> k (Just ann) <&> \(Just ann') -> Map ann' t1 t2 f acc
-    (ZipWith ann t1 t2 t3 f acc1 acc2)                          -> k (Just ann) <&> \(Just ann') -> ZipWith ann' t1 t2 t3 f acc1 acc2
-    (Fold ann tp f e acc)                                       -> k (Just ann) <&> \(Just ann') -> Fold ann' tp f e acc
-    (FoldSeg ann i tp f e acc1 acc2)                            -> k (Just ann) <&> \(Just ann') -> FoldSeg ann' i tp f e acc1 acc2
-    (Scan ann d tp f e acc)                                     -> k (Just ann) <&> \(Just ann') -> Scan ann' d tp f e acc
-    (Scan' ann d tp f e acc)                                    -> k (Just ann) <&> \(Just ann') -> Scan' ann' d tp f e acc
-    (Permute ann repr f dftAcc perm acc)                        -> k (Just ann) <&> \(Just ann') -> Permute ann' repr f dftAcc perm acc
-    (Backpermute ann shr newDim perm acc)                       -> k (Just ann) <&> \(Just ann') -> Backpermute ann' shr newDim perm acc
-    (Stencil ann stencil tp f boundary acc)                     -> k (Just ann) <&> \(Just ann') -> Stencil ann' stencil tp f boundary acc
-    (Stencil2 ann stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2) -> k (Just ann) <&> \(Just ann') -> Stencil2 ann' stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
-    _                                                           -> pacc <$ k Nothing
+  _ann k (Acc (SmartAcc pacc)) = Acc . SmartAcc <$> _ann k pacc
+
+instance FieldAnn (PreSmartAcc acc exp arrs) where
+  _ann k (Pipe ann reprA reprB reprC afun1 afun2 acc)                = k (Just ann) <&> \(Just ann') -> Pipe ann' reprA reprB reprC afun1 afun2 acc
+  _ann k (Aforeign ann repr ff afun acc)                             = k (Just ann) <&> \(Just ann') -> Aforeign ann' repr ff afun acc
+  _ann k (Acond ann b acc1 acc2)                                     = k (Just ann) <&> \(Just ann') -> Acond ann' b acc1 acc2
+  _ann k (Awhile ann reprA pred' iter' init')                        = k (Just ann) <&> \(Just ann') -> Awhile ann' reprA pred' iter' init'
+  _ann k (Anil ann)                                                  = k (Just ann) <&> \(Just ann') -> Anil ann'
+  _ann k (Apair ann acc1 acc2)                                       = k (Just ann) <&> \(Just ann') -> Apair ann' acc1 acc2
+  _ann k (Aprj ann ix a)                                             = k (Just ann) <&> \(Just ann') -> Aprj ann' ix a
+  _ann k (Use ann repr array)                                        = k (Just ann) <&> \(Just ann') -> Use ann' repr array
+  _ann k (Unit ann tp e)                                             = k (Just ann) <&> \(Just ann') -> Unit ann' tp e
+  _ann k (Generate ann repr sh f)                                    = k (Just ann) <&> \(Just ann') -> Generate ann' repr sh f
+  _ann k (Reshape ann shr e acc)                                     = k (Just ann) <&> \(Just ann') -> Reshape ann' shr e acc
+  _ann k (Replicate ann si ix acc)                                   = k (Just ann) <&> \(Just ann') -> Replicate ann' si ix acc
+  _ann k (Slice ann si acc ix)                                       = k (Just ann) <&> \(Just ann') -> Slice ann' si acc ix
+  _ann k (Map ann t1 t2 f acc)                                       = k (Just ann) <&> \(Just ann') -> Map ann' t1 t2 f acc
+  _ann k (ZipWith ann t1 t2 t3 f acc1 acc2)                          = k (Just ann) <&> \(Just ann') -> ZipWith ann' t1 t2 t3 f acc1 acc2
+  _ann k (Fold ann tp f e acc)                                       = k (Just ann) <&> \(Just ann') -> Fold ann' tp f e acc
+  _ann k (FoldSeg ann i tp f e acc1 acc2)                            = k (Just ann) <&> \(Just ann') -> FoldSeg ann' i tp f e acc1 acc2
+  _ann k (Scan ann d tp f e acc)                                     = k (Just ann) <&> \(Just ann') -> Scan ann' d tp f e acc
+  _ann k (Scan' ann d tp f e acc)                                    = k (Just ann) <&> \(Just ann') -> Scan' ann' d tp f e acc
+  _ann k (Permute ann repr f dftAcc perm acc)                        = k (Just ann) <&> \(Just ann') -> Permute ann' repr f dftAcc perm acc
+  _ann k (Backpermute ann shr newDim perm acc)                       = k (Just ann) <&> \(Just ann') -> Backpermute ann' shr newDim perm acc
+  _ann k (Stencil ann stencil tp f boundary acc)                     = k (Just ann) <&> \(Just ann') -> Stencil ann' stencil tp f boundary acc
+  _ann k (Stencil2 ann stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2) = k (Just ann) <&> \(Just ann') -> Stencil2 ann' stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
+  _ann k pacc                                                        = pacc <$ k Nothing
 
 instance FieldAnn (Exp a) where
-  _ann k (Exp (SmartExp pexp)) = Exp . SmartExp <$> case pexp of
-    (Const ann tp v)          -> k (Just ann) <&> \(Just ann') -> Const ann' tp v
-    (Undef ann tp)            -> k (Just ann) <&> \(Just ann') -> Undef ann' tp
-    (Prj ann idx e)           -> k (Just ann) <&> \(Just ann') -> Prj ann' idx e
-    (Nil ann)                 -> k (Just ann) <&> \(Just ann') -> Nil ann'
-    (Pair ann e1 e2)          -> k (Just ann) <&> \(Just ann') -> Pair ann' e1 e2
-    (VecPack   ann vec e)     -> k (Just ann) <&> \(Just ann') -> VecPack   ann' vec e
-    (VecUnpack ann vec e)     -> k (Just ann) <&> \(Just ann') -> VecUnpack ann' vec e
-    (ToIndex   ann shr sh ix) -> k (Just ann) <&> \(Just ann') -> ToIndex   ann' shr sh ix
-    (FromIndex ann shr sh e)  -> k (Just ann) <&> \(Just ann') -> FromIndex ann' shr sh e
-    (Case ann e rhs)          -> k (Just ann) <&> \(Just ann') -> Case ann' e rhs
-    (Cond ann e1 e2 e3)       -> k (Just ann) <&> \(Just ann') -> Cond ann' e1 e2 e3
-    (While ann tp p it i)     -> k (Just ann) <&> \(Just ann') -> While ann' tp p it i
-    (PrimConst ann c)         -> k (Just ann) <&> \(Just ann') -> PrimConst ann' c
-    (PrimApp ann f e)         -> k (Just ann) <&> \(Just ann') -> PrimApp ann' f e
-    (Index ann tp a e)        -> k (Just ann) <&> \(Just ann') -> Index ann' tp a e
-    (LinearIndex ann tp a i)  -> k (Just ann) <&> \(Just ann') -> LinearIndex ann' tp a i
-    (Shape ann shr a)         -> k (Just ann) <&> \(Just ann') -> Shape ann' shr a
-    (ShapeSize ann shr e)     -> k (Just ann) <&> \(Just ann') -> ShapeSize ann' shr e
-    (Foreign ann repr ff f e) -> k (Just ann) <&> \(Just ann') -> Foreign ann' repr ff f e
-    (Coerce ann t1 t2 e)      -> k (Just ann) <&> \(Just ann') -> Coerce ann' t1 t2 e
-    _                         -> pexp <$ k Nothing
+  _ann k (Exp (SmartExp pexp)) = Exp . SmartExp <$> _ann k pexp
+
+instance FieldAnn (PreSmartExp acc exp t) where
+  _ann k (Const ann tp v)          = k (Just ann) <&> \(Just ann') -> Const ann' tp v
+  _ann k (Undef ann tp)            = k (Just ann) <&> \(Just ann') -> Undef ann' tp
+  _ann k (Prj ann idx e)           = k (Just ann) <&> \(Just ann') -> Prj ann' idx e
+  _ann k (Nil ann)                 = k (Just ann) <&> \(Just ann') -> Nil ann'
+  _ann k (Pair ann e1 e2)          = k (Just ann) <&> \(Just ann') -> Pair ann' e1 e2
+  _ann k (VecPack   ann vec e)     = k (Just ann) <&> \(Just ann') -> VecPack   ann' vec e
+  _ann k (VecUnpack ann vec e)     = k (Just ann) <&> \(Just ann') -> VecUnpack ann' vec e
+  _ann k (ToIndex   ann shr sh ix) = k (Just ann) <&> \(Just ann') -> ToIndex   ann' shr sh ix
+  _ann k (FromIndex ann shr sh e)  = k (Just ann) <&> \(Just ann') -> FromIndex ann' shr sh e
+  _ann k (Case ann e rhs)          = k (Just ann) <&> \(Just ann') -> Case ann' e rhs
+  _ann k (Cond ann e1 e2 e3)       = k (Just ann) <&> \(Just ann') -> Cond ann' e1 e2 e3
+  _ann k (While ann tp p it i)     = k (Just ann) <&> \(Just ann') -> While ann' tp p it i
+  _ann k (PrimConst ann c)         = k (Just ann) <&> \(Just ann') -> PrimConst ann' c
+  _ann k (PrimApp ann f e)         = k (Just ann) <&> \(Just ann') -> PrimApp ann' f e
+  _ann k (Index ann tp a e)        = k (Just ann) <&> \(Just ann') -> Index ann' tp a e
+  _ann k (LinearIndex ann tp a i)  = k (Just ann) <&> \(Just ann') -> LinearIndex ann' tp a i
+  _ann k (Shape ann shr a)         = k (Just ann) <&> \(Just ann') -> Shape ann' shr a
+  _ann k (ShapeSize ann shr e)     = k (Just ann) <&> \(Just ann') -> ShapeSize ann' shr e
+  _ann k (Foreign ann repr ff f e) = k (Just ann) <&> \(Just ann') -> Foreign ann' repr ff f e
+  _ann k (Coerce ann t1 t2 e)      = k (Just ann) <&> \(Just ann') -> Coerce ann' t1 t2 e
+  _ann k pexp                      = pexp <$ k Nothing
 
 
 -- Auxiliary functions
