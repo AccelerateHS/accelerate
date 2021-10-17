@@ -207,7 +207,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
       dir RightToLeft _ r = r
   in
   case pacc of
-    Avar _ (Var repr ix)           -> (TupRsingle repr, prj ix aenv)
+    Avar (Var _ repr ix)           -> (TupRsingle repr, prj ix aenv)
     Alet _ lhs acc1 acc2           -> evalOpenAcc acc2 $ aenv `push` (lhs, snd $ manifest acc1)
     Apair _ acc1 acc2              -> let (r1, a1) = manifest acc1
                                           (r2, a2) = manifest acc2
@@ -926,13 +926,13 @@ evalOpenExp pexp env aenv =
       evalF f = evalOpenFun f env aenv
 
       evalA :: ArrayVar aenv a -> WithReprs a
-      evalA (Var repr ix) = (TupRsingle repr, prj ix aenv)
+      evalA (Var _ repr ix) = (TupRsingle repr, prj ix aenv)
   in
   case pexp of
     Let _ lhs exp1 exp2           -> let !v1  = evalE exp1
                                          env' = env `push` (lhs, v1)
                                      in  evalOpenExp exp2 env' aenv
-    Evar _ (Var _ ix)             -> prj ix env
+    Evar (Var _ _ ix)             -> prj ix env
     Const _ _ c                   -> c
     Undef _ tp                    -> undefElt (TupRsingle tp)
     PrimConst _ c                 -> evalPrimConst c

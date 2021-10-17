@@ -220,7 +220,7 @@ simplifyOpenExp env = first getAny . cvtE
         where
           (u, bnd') = cvtE bnd
           (v, exp') = cvtLet ann env lhs bnd' (\env' -> cvtE' env' body)
-      Evar ann var            -> pure $ Evar ann var
+      Evar var                -> pure $ Evar var
       Const ann tp c          -> pure $ Const ann tp c
       Undef ann tp            -> pure $ Undef ann tp
       Nil ann                 -> pure $ Nil ann
@@ -263,9 +263,9 @@ simplifyOpenExp env = first getAny . cvtE
            -> OpenExp env' aenv bnd
            -> (Gamma env'' env'' aenv -> (Any, OpenExp env'' aenv t))
            -> (Any, OpenExp env' aenv t)
-    cvtLet ann env' lhs@(LeftHandSideSingle _) bnd            body = Let ann lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
-    cvtLet _   env' (LeftHandSideWildcard _)   _              body = body env'                                 -- Binding not used, remove let binding
-    cvtLet ann env' (LeftHandSidePair l1 l2)   (Pair _ e1 e2) body                                             -- Split binding to multiple bindings
+    cvtLet ann env' lhs@(LeftHandSideSingle _ _) bnd            body = Let ann lhs bnd <$> body (incExp $ env' `pushExp` bnd) -- Single variable on the LHS, add binding to the environment
+    cvtLet _   env' (LeftHandSideWildcard _)     _              body = body env'                                 -- Binding not used, remove let binding
+    cvtLet ann env' (LeftHandSidePair l1 l2)     (Pair _ e1 e2) body                                             -- Split binding to multiple bindings
       = first (const $ Any True)
       $ cvtLet ann env' l1 e1
       $ \env'' -> cvtLet ann env'' l2 (weakenE (weakenWithLHS l1) e2) body
@@ -323,7 +323,7 @@ simplifyOpenExp env = first getAny . cvtE
     -- Shape manipulations
     --
     shape :: Ann -> ArrayVar aenv (Array sh t) -> (Any, OpenExp env aenv sh)
-    shape ann (Var (ArrayR ShapeRz _) _)
+    shape ann (Var _ (ArrayR ShapeRz _) _)
       = Stats.ruleFired "shape/Z" $ yes (Nil ann)
     shape ann a
       = pure $ Shape ann a
@@ -377,9 +377,9 @@ simplifyOpenFun env (Lam lhs f) = Lam lhs <$> simplifyOpenFun env' f
     env' = lhsExpr lhs env
 
 lhsExpr :: ELeftHandSide t env env' -> Gamma env env aenv -> Gamma env' env' aenv
-lhsExpr (LeftHandSideWildcard _) env = env
-lhsExpr (LeftHandSideSingle  tp) env = incExp env `pushExp` Evar mkDummyAnn (Var tp ZeroIdx)
-lhsExpr (LeftHandSidePair l1 l2) env = lhsExpr l2 $ lhsExpr l1 env
+lhsExpr (LeftHandSideWildcard _)    env = env
+lhsExpr (LeftHandSideSingle ann tp) env = incExp env `pushExp` Evar (Var ann tp ZeroIdx)
+lhsExpr (LeftHandSidePair l1 l2)    env = lhsExpr l2 $ lhsExpr l1 env
 
 -- Simplify closed expressions and functions. The process is applied
 -- repeatedly until no more changes are made.

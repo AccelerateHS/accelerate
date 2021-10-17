@@ -17,6 +17,7 @@
 module Data.Array.Accelerate.AST.LeftHandSide
   where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.Representation.Type
 
 import Language.Haskell.TH.Extra
@@ -27,7 +28,8 @@ data Exists f where
 
 data LeftHandSide s v env env' where
   LeftHandSideSingle
-    :: s v
+    :: Ann -- Used when creating Vars
+    -> s v
     -> LeftHandSide s v env (env, v)
 
   LeftHandSideWildcard
@@ -46,17 +48,16 @@ pattern LeftHandSideUnit
 pattern LeftHandSideUnit = LeftHandSideWildcard TupRunit
 
 lhsToTupR :: LeftHandSide s v env env' -> TupR s v
-lhsToTupR (LeftHandSideSingle s)   = TupRsingle s
+lhsToTupR (LeftHandSideSingle _ s) = TupRsingle s
 lhsToTupR (LeftHandSideWildcard r) = r
 lhsToTupR (LeftHandSidePair as bs) = TupRpair (lhsToTupR as) (lhsToTupR bs)
 
 rnfLeftHandSide :: (forall b. s b -> ()) -> LeftHandSide s v env env' -> ()
-rnfLeftHandSide f (LeftHandSideWildcard r) = rnfTupR f r
-rnfLeftHandSide f (LeftHandSideSingle s)   = f s
-rnfLeftHandSide f (LeftHandSidePair as bs) = rnfLeftHandSide f as `seq` rnfLeftHandSide f bs
+rnfLeftHandSide f (LeftHandSideWildcard r)   = rnfTupR f r
+rnfLeftHandSide f (LeftHandSideSingle ann s) = rnfAnn ann `seq` f s
+rnfLeftHandSide f (LeftHandSidePair as bs)   = rnfLeftHandSide f as `seq` rnfLeftHandSide f bs
 
 liftLeftHandSide :: (forall u. s u -> CodeQ (s u)) -> LeftHandSide s v env env' -> CodeQ (LeftHandSide s v env env')
-liftLeftHandSide f (LeftHandSideSingle s)   = [|| LeftHandSideSingle $$(f s) ||]
-liftLeftHandSide f (LeftHandSideWildcard r) = [|| LeftHandSideWildcard $$(liftTupR f r) ||]
-liftLeftHandSide f (LeftHandSidePair as bs) = [|| LeftHandSidePair $$(liftLeftHandSide f as) $$(liftLeftHandSide f bs) ||]
-
+liftLeftHandSide f (LeftHandSideSingle ann s) = [|| LeftHandSideSingle $$(liftAnn ann) $$(f s) ||]
+liftLeftHandSide f (LeftHandSideWildcard r)   = [|| LeftHandSideWildcard $$(liftTupR f r) ||]
+liftLeftHandSide f (LeftHandSidePair as bs)   = [|| LeftHandSidePair $$(liftLeftHandSide f as) $$(liftLeftHandSide f bs) ||]

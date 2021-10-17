@@ -37,7 +37,7 @@ convertPreOpenAcc = \case
   -- FIXME: We're completely ignoring source mapping information post-sharing
   --        recovery at the moment
   Alet _ lhs bnd body                 -> convertLHS lhs (convertAcc bnd) (convertAcc body)
-  Avar ann var                        -> Avar ann var
+  Avar var                            -> Avar var
   Apair ann a1 a2                     -> Apair ann (convertAcc a1) (convertAcc a2)
   Anil ann                            -> Anil ann
   Atrace ann msg as bs                -> Atrace ann msg (convertAcc as) (convertAcc bs)

@@ -71,7 +71,7 @@ propagate env = cvtE
     cvtE exp = case exp of
       Const _ _ c                               -> Just c
       PrimConst _ c                             -> Just (evalPrimConst c)
-      Evar _ (Var _  ix)
+      Evar (Var _ _ ix)
         | e             <- prjExp ix env
         , Nothing       <- matchOpenExp exp e   -> cvtE e
       Nil _                                     -> Just ()

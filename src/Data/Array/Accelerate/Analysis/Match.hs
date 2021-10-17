@@ -90,7 +90,7 @@ matchPreOpenAcc matchAcc = match
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Avar _ v1) (Avar _ v2)
+    match (Avar v1) (Avar v2)
       = matchVar v1 v2
 
     match (Apair _ a1 a2) (Apair _ b1 b2)
@@ -275,7 +275,8 @@ matchLeftHandSide
 matchLeftHandSide f (LeftHandSideWildcard repr1) (LeftHandSideWildcard repr2)
   | Just Refl <- matchTupR f repr1 repr2
   = Just Refl
-matchLeftHandSide f (LeftHandSideSingle x) (LeftHandSideSingle y)
+-- TODO: Don't forget this one when adding matching based on annotations
+matchLeftHandSide f (LeftHandSideSingle _ x) (LeftHandSideSingle _ y)
   | Just Refl <- f x y
   = Just Refl
 matchLeftHandSide f (LeftHandSidePair a1 a2) (LeftHandSidePair b1 b2)
@@ -446,7 +447,7 @@ matchOpenExp (Let _ lhs1 x1 e1) (Let _ lhs2 x2 e2)
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
 
-matchOpenExp (Evar _ v1) (Evar _ v2)
+matchOpenExp (Evar v1) (Evar v2)
   = matchVar v1 v2
 
 matchOpenExp (Foreign _ _ ff1 f1 e1) (Foreign _ _ ff2 f2 e2)
@@ -593,9 +594,10 @@ matchIdx ZeroIdx     ZeroIdx     = Just Refl
 matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
 matchIdx _           _           = Nothing
 
+-- TODO: Consider annotations here
 {-# INLINEABLE matchVar #-}
 matchVar :: Var s env t1 -> Var s env t2 -> Maybe (t1 :~: t2)
-matchVar (Var _ v1) (Var _ v2) = matchIdx v1 v2
+matchVar (Var _ _ v1) (Var _ _ v2) = matchIdx v1 v2
 
 {-# INLINEABLE matchVars #-}
 matchVars :: Vars s env t1 -> Vars s env t2 -> Maybe (t1 :~: t2)

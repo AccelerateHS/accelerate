@@ -18,8 +18,6 @@
 -- TODO: Reformat all of the changes from this branch to the usual Accelerate
 --       style. There's no style guide or formatter config anywhere, so I just
 --       run most things through Brittany to keep me sane.
--- TODO: Document the process around freezing call stacks
--- TODO: Figure out the let/var conversion in sharing recovery
 -- TODO: Take another look at fusion, optimization propagation doesn't have to
 --       be perfect yet but I'm sure there are also issues elsewhere
 -- TODO: Annotations are completely ignored in 'Match' and 'Hash' at the moment.

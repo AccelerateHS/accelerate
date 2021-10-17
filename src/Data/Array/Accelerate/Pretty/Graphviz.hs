@@ -195,7 +195,7 @@ prettyDelayedOpenAcc
 prettyDelayedOpenAcc _      _      _   _    Delayed{}            = internalError "expected manifest array"
 prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
   case pacc of
-    Avar _ ix                        -> pnode (avar ix)
+    Avar ix                          -> pnode (avar ix)
     Alet _ lhs bnd body              -> do
       bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc config detail context0 aenv bnd
       (aenv1, a) <- prettyLetALeftHandSide ident aenv lhs
@@ -286,14 +286,14 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
     -- Pretty-printing
     --
     avar :: ArrayVar aenv t -> PDoc
-    avar (Var _ ix) = let (ident, v) = aprj ix aenv
-                      in  PDoc (pretty v) [Vertex ident Nothing]
+    avar (Var _ _ ix) = let (ident, v) = aprj ix aenv
+                        in  PDoc (pretty v) [Vertex ident Nothing]
 
     aenv' :: Val aenv
     aenv' = avalToVal aenv
 
     ppA :: HasCallStack => DelayedOpenAcc aenv a -> Dot PDoc
-    ppA (Manifest (Avar _ ix)) = return (avar ix)
+    ppA (Manifest (Avar ix)) = return (avar ix)
     ppA acc@Manifest{}       = do
       -- Lift out and draw as a separate node. This can occur with the manifest
       -- array arguments to permute (defaults array) and stencil[2].
@@ -305,7 +305,7 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
       | Shape _ a <- sh                   -- identical shape
       , Just b    <- isIdentityIndexing f -- function is `\ix -> b ! ix`
       , Just Refl <- matchVar a b         -- function thus is `\ix -> a ! ix`
-      = ppA $ Manifest $ Avar mkDummyAnn a
+      = ppA $ Manifest $ Avar a
     ppA (Delayed _ _ sh f _) = do
       PDoc d v <- "Delayed" `fmt` [ ppE sh, ppF f ]
       return    $ PDoc (parens d) v
@@ -332,7 +332,7 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
 
     lift :: HasCallStack => DelayedOpenAcc aenv a -> Dot Vertex
     lift Delayed{}                      = internalError "expected manifest array"
-    lift (Manifest (Avar _ (Var _ ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
+    lift (Manifest (Avar (Var _ _ ix))) = return $ Vertex (fst (aprj ix aenv)) Nothing
     lift acc                            = do
       acc'  <- prettyDelayedOpenAcc config detail context0 aenv acc
       ident <- mkNode acc' Nothing
@@ -402,7 +402,7 @@ prettyLetALeftHandSide _     aenv (LeftHandSideWildcard repr) = return (aenv, do
     doc = case repr of
       TupRunit -> "()"
       _        -> "_"
-prettyLetALeftHandSide ident aenv (LeftHandSideSingle _) = do
+prettyLetALeftHandSide ident aenv (LeftHandSideSingle _ _) = do
   a <- mkLabel
   return (Apush aenv ident a, a)
 prettyLetALeftHandSide ident aenv (LeftHandSidePair lhs1 lhs2) = do
@@ -416,7 +416,7 @@ prettyLambdaALeftHandSide
     -> ALeftHandSide repr aenv aenv'
     -> Dot (Aval aenv')
 prettyLambdaALeftHandSide aenv (LeftHandSideWildcard _) = return aenv
-prettyLambdaALeftHandSide aenv (LeftHandSideSingle _) = do
+prettyLambdaALeftHandSide aenv (LeftHandSideSingle _ _) = do
   a     <- mkLabel
   ident <- genNodeId
   _     <- mkNode (PNode ident (Leaf (Nothing, pretty a)) []) Nothing
@@ -492,7 +492,7 @@ replant pnode@(PNode ident tree _) =
 --
 
 fvAvar :: Aval aenv -> ArrayVar aenv a -> [Vertex]
-fvAvar env (Var _ ix) = [ Vertex (fst $ aprj ix env) Nothing ]
+fvAvar env (Var _ _ ix) = [ Vertex (fst $ aprj ix env) Nothing ]
 
 fvOpenFun
     :: forall env aenv fun.

@@ -200,14 +200,17 @@ instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
 
   afunctionRepr = AfunctionReprLam $ afunctionRepr @r
   convertOpenAfun config alyt f
-    | repr <- Sugar.arraysR @a
-    , DeclareVars lhs k value <- declareVars repr
+    | repr                    <- Sugar.arraysR @a
+    -- TODO: Can we get some information about this binding site? This would now
+    --       result in empty annotations, which is probably the best we can do
+    --       atm. Maybe we can just give them an index (@sizeLayout alyt@). We
+    --       do the same thing in a couple of other places.
+    , a                       <- SmartAcc $ Atag mkDummyAnn repr $ sizeLayout alyt
+    , DeclareVars lhs k value <- declareVars (annR a repr) repr
     = let
-        -- TODO: We should give this some kind of identifiable name instead
-        a     = Acc $ SmartAcc $ Atag mkDummyAnn repr $ sizeLayout alyt
         alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
       in
-        Alam lhs $ convertOpenAfun config alyt' $ f a
+        Alam lhs $ convertOpenAfun config alyt' $ f (Acc a)
 
 instance Arrays b => Afunction (Acc b) where
   type AfunctionR      (Acc b) = b
@@ -223,9 +226,9 @@ convertSmartAfun1
     -> (SmartAcc a -> SmartAcc b)
     -> AST.Afun (a -> b)
 convertSmartAfun1 config ann repr f
-  | DeclareVars lhs _ value <- declareVars repr
+  | a                       <- SmartAcc $ Atag ann repr 0
+  , DeclareVars lhs _ value <- declareVars (annR a repr) repr
   = let
-      a     = SmartAcc $ Atag ann repr 0
       alyt' = PushLayout EmptyLayout lhs (value weakenId)
     in
       Alam lhs $ Abody $ convertOpenAcc config alyt' $ f a
@@ -274,10 +277,8 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
     ctxt  = bformat ("shared 'Acc' tree with stable name " % formatStableNameHeight) sa
     err   = bformat ("inconsistent valuation @ " % builder % ";\n  aenv = " % list formatStableSharingAcc) ctxt aenv'
 
--- TODO: Like everywhere else, variables/let-bindings should contain the
---       relevant source information.
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
-  = case declareVars $ AST.arraysR bound of
+  = case declareVars (annR bound repr) repr of
       DeclareVars lhs k value ->
         let
           alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
@@ -289,6 +290,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharin
   where
     aenv' = lams ++ aenv
     bound = convertSharingAcc config alyt aenv' (ScopedAcc [] boundAcc)
+    repr  = AST.arraysR bound
 
 convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
   = AST.OpenAcc
@@ -300,13 +302,13 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtE :: ScopedExp t -> AST.Exp aenv t
         cvtE = convertSharingExp config EmptyLayout alyt [] aenv'
 
-        cvtF1 :: TypeR a -> (SmartExp a -> ScopedExp b) -> AST.Fun aenv (a -> b)
+        cvtF1 :: Ann -> TypeR a -> (SmartExp a -> ScopedExp b) -> AST.Fun aenv (a -> b)
         cvtF1 = convertSharingFun1 config alyt aenv'
 
-        cvtF2 :: TypeR a -> TypeR b -> (SmartExp a -> SmartExp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
+        cvtF2 :: Ann -> TypeR a -> Ann -> TypeR b -> (SmartExp a -> SmartExp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
         cvtF2 = convertSharingFun2 config alyt aenv'
 
-        cvtAfun1 :: ArraysR a -> (SmartAcc a -> ScopedAcc b) -> AST.OpenAfun aenv (a -> b)
+        cvtAfun1 :: Ann -> ArraysR a -> (SmartAcc a -> ScopedAcc b) -> AST.OpenAfun aenv (a -> b)
         cvtAfun1 = convertSharingAfun1 config alyt aenv'
 
         cvtAprj :: forall a b c. Ann -> PairIdx (a, b) c -> ScopedAcc (a, b) -> AST.OpenAcc aenv c
@@ -318,12 +320,14 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtAprj' :: forall a b c aenv1. Ann -> PairIdx (a, b) c -> AST.OpenAcc aenv1 (a, b) -> AST.OpenAcc aenv1 c
         cvtAprj' ann PairIdxLeft  (AST.OpenAcc (AST.Apair _ a _)) = modifyAnn (<> ann) a
         cvtAprj' ann PairIdxRight (AST.OpenAcc (AST.Apair _ _ b)) = modifyAnn (<> ann) b
-        cvtAprj' ann ix a = case declareVars $ AST.arraysR a of
-          DeclareVars lhs _ value ->
-            AST.OpenAcc $ AST.Alet ann lhs a $ cvtAprj' ann ix $ avarsIn AST.OpenAcc $ value weakenId
+        cvtAprj' ann ix a
+          | repr <- AST.arraysR a
+          , DeclareVars lhs _ value <- declareVars (annR a repr) repr
+          = AST.OpenAcc $ AST.Alet ann lhs a $ cvtAprj' ann ix $ avarsIn AST.OpenAcc $ value weakenId
     in
     case preAcc of
 
+      -- TODO: Some comment as in @Tag ... -> expVars ...@
       Atag _ repr i
         -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (bformat ("de Bruijn conversion tag " % int) i) formatArraysR matchArraysR repr i alyt
            in  a
@@ -332,13 +336,14 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       --       Bruijn AST for the non-trivial constructors. The current
       --       implementation is just there to make the type checker happy.
       Pipe ann reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
-        | DeclareVars lhs k value <- declareVars reprB ->
+        | b                       <- SmartAcc $ Atag ann reprB 0
+        , DeclareVars lhs k value <- declareVars (annR b reprB) reprB ->
           let
             noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
-            boundAcc = AST.Apply ann reprB (cvtAfun1 reprA afun1) (cvtA acc)
+            boundAcc = AST.Apply ann reprB (cvtAfun1 ann reprA afun1) (cvtA acc)
             alyt'   = PushLayout (incLayout k alyt) lhs (value weakenId)
             bodyAcc = AST.Apply ann reprC
-                        (convertSharingAfun1 config alyt' (noStableSharing : aenv') reprB afun2)
+                        (convertSharingAfun1 config alyt' (noStableSharing : aenv') ann reprB afun2)
                         (avarsIn AST.OpenAcc $ value weakenId)
           in AST.Alet ann lhs (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
@@ -346,7 +351,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> AST.Aforeign ann repr ff (convertSmartAfun1 config ann (Smart.arraysR acc) afun) (cvtA acc)
 
       Acond ann b acc1 acc2           -> AST.Acond ann (cvtE b) (cvtA acc1) (cvtA acc2)
-      Awhile ann reprA pred iter init -> AST.Awhile ann (cvtAfun1 reprA pred) (cvtAfun1 reprA iter) (cvtA init)
+      Awhile ann reprA pred iter init -> AST.Awhile ann (cvtAfun1 ann reprA pred) (cvtAfun1 ann reprA iter) (cvtA init)
       Anil ann                        -> AST.Anil ann
       Apair ann acc1 acc2             -> AST.Apair ann (cvtA acc1) (cvtA acc2)
       Aprj ann ix a                   -> let AST.OpenAcc a' = cvtAprj ann ix a
@@ -355,27 +360,27 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Use ann repr array              -> AST.Use ann repr array
       Unit ann tp e                   -> AST.Unit ann tp (cvtE e)
       Generate ann repr@(ArrayR shr _) sh f
-                                      -> AST.Generate ann repr (cvtE sh) (cvtF1 (shapeType shr) f)
+                                      -> AST.Generate ann repr (cvtE sh) (cvtF1 ann (shapeType shr) f)
       Reshape ann shr e acc           -> AST.Reshape ann shr (cvtE e) (cvtA acc)
       Replicate ann si ix acc         -> AST.Replicate ann si (cvtE ix) (cvtA acc)
       Slice ann si acc ix             -> AST.Slice ann si (cvtA acc) (cvtE ix)
-      Map ann t1 t2 f acc             -> AST.Map ann t2 (cvtF1 t1 f) (cvtA acc)
+      Map ann t1 t2 f acc             -> AST.Map ann t2 (cvtF1 ann t1 f) (cvtA acc)
       ZipWith ann t1 t2 t3 f acc1 acc2
-                                      -> AST.ZipWith ann t3 (cvtF2 t1 t2 f) (cvtA acc1) (cvtA acc2)
-      Fold ann tp f e acc             -> AST.Fold ann (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
-      FoldSeg ann i tp f e acc1 acc2  -> AST.FoldSeg ann i (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
-      Scan  ann d tp f e acc          -> AST.Scan  ann d (cvtF2 tp tp f) (cvtE <$> e) (cvtA acc)
-      Scan' ann d tp f e acc          -> AST.Scan' ann d (cvtF2 tp tp f) (cvtE e)     (cvtA acc)
+                                      -> AST.ZipWith ann t3 (cvtF2 ann t1 ann t2 f) (cvtA acc1) (cvtA acc2)
+      Fold ann tp f e acc             -> AST.Fold ann (cvtF2 ann tp ann tp f) (cvtE <$> e) (cvtA acc)
+      FoldSeg ann i tp f e acc1 acc2  -> AST.FoldSeg ann i (cvtF2 ann tp ann tp f) (cvtE <$> e) (cvtA acc1) (cvtA acc2)
+      Scan  ann d tp f e acc          -> AST.Scan  ann d (cvtF2 ann tp ann tp f) (cvtE <$> e) (cvtA acc)
+      Scan' ann d tp f e acc          -> AST.Scan' ann d (cvtF2 ann tp ann tp f) (cvtE e)     (cvtA acc)
       Permute ann (ArrayR shr tp) f dftAcc perm acc
-                                      -> AST.Permute ann (cvtF2 tp tp f) (cvtA dftAcc) (cvtF1 (shapeType shr) perm) (cvtA acc)
+                                      -> AST.Permute ann (cvtF2 ann tp ann tp f) (cvtA dftAcc) (cvtF1 ann (shapeType shr) perm) (cvtA acc)
       Backpermute ann shr newDim perm acc
-                                    -> AST.Backpermute ann shr (cvtE newDim) (cvtF1 (shapeType shr) perm) (cvtA acc)
+                                    -> AST.Backpermute ann shr (cvtE newDim) (cvtF1 ann (shapeType shr) perm) (cvtA acc)
       Stencil ann stencil tp f boundary acc
         -> AST.Stencil ann
                        stencil
                        tp
-                       (convertSharingStencilFun1 config alyt aenv' stencil f)
-                       (convertSharingBoundary config alyt aenv' (stencilShapeR stencil) boundary)
+                       (convertSharingStencilFun1 config alyt aenv' ann stencil f)
+                       (convertSharingBoundary config alyt aenv' ann (stencilShapeR stencil) boundary)
                        (cvtA acc)
       Stencil2 ann stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2
         | shr <- stencilShapeR stencil1
@@ -383,10 +388,10 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         stencil1
                         stencil2
                         tp
-                        (convertSharingStencilFun2 config alyt aenv' stencil1 stencil2 f)
-                        (convertSharingBoundary config alyt aenv' shr bndy1)
+                        (convertSharingStencilFun2 config alyt aenv' ann stencil1 ann stencil2 f)
+                        (convertSharingBoundary config alyt aenv' ann shr bndy1)
                         (cvtA acc1)
-                        (convertSharingBoundary config alyt aenv' shr bndy2)
+                        (convertSharingBoundary config alyt aenv' ann shr bndy2)
                         (cvtA acc2)
       -- Collect seq -> AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
 
@@ -543,11 +548,12 @@ convertSharingAfun1
     => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]
+    -> Ann
     -> ArraysR a
     -> (SmartAcc a -> ScopedAcc b)
     -> OpenAfun aenv (a -> b)
-convertSharingAfun1 config alyt aenv reprA f
-  | DeclareVars lhs k value <- declareVars reprA
+convertSharingAfun1 config alyt aenv ann reprA f
+  | DeclareVars lhs k value <- declareVars (annRfromTup ann reprA) reprA
   = let
       alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
       body = f undefined
@@ -561,10 +567,11 @@ convertSharingBoundary
     => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]
+    -> Ann
     -> ShapeR sh
     -> PreBoundary ScopedAcc ScopedExp (Array sh e)
     -> AST.Boundary aenv (Array sh e)
-convertSharingBoundary config alyt aenv shr = cvt
+convertSharingBoundary config alyt aenv ann shr = cvt
   where
     cvt :: PreBoundary ScopedAcc ScopedExp (Array sh e) -> AST.Boundary aenv (Array sh e)
     cvt bndy =
@@ -573,7 +580,7 @@ convertSharingBoundary config alyt aenv shr = cvt
         Mirror      -> AST.Mirror
         Wrap        -> AST.Wrap
         Constant v  -> AST.Constant v
-        Function f  -> AST.Function $ convertSharingFun1 config alyt aenv (shapeType shr) f
+        Function f  -> AST.Function $ convertSharingFun1 config alyt aenv ann (shapeType shr) f
 
 
 -- mkToSeq :: forall slsix slix e aenv senv. (Division slsix, DivisionSlice slsix ~ slix, Elt e, Elt slix, Slice slix)
@@ -626,14 +633,15 @@ instance (Elt a, Function r) => Function (Exp a -> r) where
 
   functionRepr = FunctionReprLam $ functionRepr @r
   convertOpenFun config lyt f
-    | tp <- eltR @a
-    , DeclareVars lhs k value <- declareVars tp
+    | tp                      <- eltR @a
+    -- TODO: We should be able to get some information about this binding site.
+    --       Otherwise, assign some unique ID.
+    , e                       <- SmartExp $ Tag mkDummyAnn tp $ sizeLayout lyt
+    , DeclareVars lhs k value <- declareVars (annR e tp) tp
     = let
-        -- TODO: Same as above, assign the argument some unique ID
-        e    = Exp $ SmartExp $ Tag mkDummyAnn tp $ sizeLayout lyt
         lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
       in
-        Lam lhs $ convertOpenFun config lyt' $ f e
+        Lam lhs $ convertOpenFun config lyt' $ f (Exp e)
 
 instance Elt b => Function (Exp b) where
   type FunctionR (Exp b) = b
@@ -645,14 +653,14 @@ instance Elt b => Function (Exp b) where
 convertSmartFun
     :: HasCallStack
     => Config
+    -> Ann
     -> TypeR a
     -> (SmartExp a -> SmartExp b)
     -> AST.Fun () (a -> b)
-convertSmartFun config tp f
-  | DeclareVars lhs _ value <- declareVars tp
+convertSmartFun config ann tp f
+  | e                       <- SmartExp $ Tag ann tp 0
+  , DeclareVars lhs _ value <- declareVars (annR e tp) tp
   = let
-      -- TODO: Ditto
-      e    = SmartExp $ Tag mkDummyAnn tp 0
       lyt' = PushLayout EmptyLayout lhs (value weakenId)
     in
       Lam lhs $ Body $ convertOpenExp config lyt' $ f e
@@ -762,20 +770,19 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           , "submit an issue at the above URL."
           ]
 
-    -- TODO: Add the annotation fields to the de Bruijn AST and pass them through
     cvt (ScopedExp _ (LetSharing se@(StableSharingExp _ boundExp) bodyExp))
-      | DeclareVars lhs k value <- declareVars $ typeR boundExp
+      | repr <- typeR boundExp
+      , DeclareVars lhs k value <- declareVars (annR converted repr) repr
       = let
           lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
         in
-          -- FIXME: We don't have any annotation to reuse here, right? And
-          --        semi-related, this let binding should not exist when
-          --        @boundExp@ has been annotated with 'alwaysInline'.
-          AST.Let mkDummyAnn lhs (cvt (ScopedExp [] boundExp)) (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
+          AST.Let (extractAnn converted) lhs converted (convertSharingExp config lyt' alyt (se:env') aenv bodyExp)
+      where
+        converted = cvt (ScopedExp [] boundExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
-          -- TODO: When converting Tag or Atag to Evar and Avar we should also
-          --       propagate the annotations
+          -- TODO: Check if the annotations in the 'Pair' and 'Nil' constructors
+          --       are significant. If they are, take them from the tag.
           Tag _ tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
           Match _ e               -> cvt e  -- XXX: this should probably be an error
           Const ann tp v          -> AST.Const ann tp v
@@ -789,14 +796,14 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           FromIndex ann shr sh e  -> AST.FromIndex ann shr (cvt sh) (cvt e)
           Case ann e rhs          -> cvtCase ann (cvt e) (over (mapped . _2) cvt rhs)
           Cond ann e1 e2 e3       -> AST.Cond ann (cvt e1) (cvt e2) (cvt e3)
-          While ann tp p it i     -> AST.While ann (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
+          While ann tp p it i     -> AST.While ann (cvtFun1 ann tp p) (cvtFun1 ann tp it) (cvt i)
           PrimConst ann c         -> AST.PrimConst ann c
           PrimApp ann f e         -> cvtPrimFun ann f (cvt e)
           Index ann _ a e         -> AST.Index ann (cvtAvar a) (cvt e)
           LinearIndex ann _ a i   -> AST.LinearIndex ann (cvtAvar a) (cvt i)
           Shape ann _ a           -> AST.Shape ann (cvtAvar a)
           ShapeSize ann shr e     -> AST.ShapeSize ann shr (cvt e)
-          Foreign ann repr ff f e -> AST.Foreign ann repr ff (convertSmartFun config (typeR e) f) (cvt e)
+          Foreign ann repr ff f e -> AST.Foreign ann repr ff (convertSmartFun config ann (typeR e) f) (cvt e)
           Coerce ann t1 t2 e      -> AST.Coerce ann t1 t2 (cvt e)
 
     -- TODO: We throw away any annotations on the projection here. We should
@@ -805,24 +812,21 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtPrj _ PairIdxLeft  (AST.Pair _ a _) = a
     cvtPrj _ PairIdxRight (AST.Pair _ _ b) = b
     cvtPrj ann ix a
-      | DeclareVars lhs _ value <- declareVars $ AST.expType a
-      -- FIXME: Recursively passing the same @ann@ is probably not correct. This
-      --        should be the annotation of @a@.
-      = AST.Let ann lhs a (cvtPrj ann ix (expVars (value weakenId)))
+      | repr <- AST.expType a
+      , DeclareVars lhs _ value <- declareVars (annR a repr) repr
+      = AST.Let ann lhs a (cvtPrj (extractAnn a) ix (expVars (value weakenId)))
 
     cvtA :: HasCallStack => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
 
-    -- TODO: Like in @Var.hs@ and @Substitution.hs@ we throw away nay
-    --       annotations this point.
     cvtAvar :: HasCallStack => ScopedAcc a -> AST.ArrayVar aenv a
     cvtAvar a = case cvtA a of
-      AST.OpenAcc (AST.Avar _ var) -> var
-      _                            -> internalError "Expected array computation in expression to be floated out"
+      AST.OpenAcc (AST.Avar var) -> var
+      _                          -> internalError "Expected array computation in expression to be floated out"
 
-    cvtFun1 :: HasCallStack => TypeR a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
-    cvtFun1 tp f
-      | DeclareVars lhs k value <- declareVars tp
+    cvtFun1 :: HasCallStack => Ann -> TypeR a -> (SmartExp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
+    cvtFun1 ann tp f
+      | DeclareVars lhs k value <- declareVars (annR (SmartExp $ Tag ann tp 0) tp) tp
       = let
           lyt' = PushLayout (incLayout k lyt) lhs (value weakenId)
           body = f undefined
@@ -844,7 +848,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtCase ann s es
       | AST.Pair{} <- s
       = nested s es
-      | DeclareVars lhs _ value <- declareVars (AST.expType s)
+      | repr <- AST.expType s
+      , DeclareVars lhs _ value <- declareVars (annR s repr) repr
       = AST.Let ann lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
       where
         nested :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
@@ -927,13 +932,17 @@ convertSharingFun1
     => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]       -- currently bound array sharing-variables
+    -> Ann
     -> TypeR a
     -> (SmartExp a -> ScopedExp b)
     -> AST.Fun aenv (a -> b)
-convertSharingFun1 config alyt aenv tp f
-  | DeclareVars lhs _ value <- declareVars tp
+convertSharingFun1 config alyt aenv ann tp f
+  -- TODO: Same as earlier, at this point there are some situations where we
+  --       don't know anything about the function's arguments, and then there
+  --       are some situations where it would map directly to an AST node.
+  | a <- SmartExp (Tag ann tp 0) -- the 'tag' was already embedded in Phase 1
+  , DeclareVars lhs _ value <- declareVars (annR a tp) tp
   = let
-      a               = SmartExp undefined             -- the 'tag' was already embedded in Phase 1
       lyt             = PushLayout EmptyLayout lhs (value weakenId)
       openF           = convertSharingExp config lyt alyt [] aenv (f a)
     in
@@ -946,16 +955,18 @@ convertSharingFun2
     => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]       -- currently bound array sharing-variables
+    -> Ann
     -> TypeR a
+    -> Ann
     -> TypeR b
     -> (SmartExp a -> SmartExp b -> ScopedExp c)
     -> AST.Fun aenv (a -> b -> c)
-convertSharingFun2 config alyt aenv ta tb f
-  | DeclareVars lhs1 _  value1 <- declareVars ta
-  , DeclareVars lhs2 k2 value2 <- declareVars tb
+convertSharingFun2 config alyt aenv a1 ta a2 tb f
+  | a                          <- SmartExp (Tag a1 ta 0)
+  , DeclareVars lhs1 _  value1 <- declareVars (annR a ta) ta
+  , b                          <- SmartExp (Tag a2 tb 0)
+  , DeclareVars lhs2 k2 value2 <- declareVars (annR b tb) tb
   = let
-      a               = SmartExp undefined
-      b               = SmartExp undefined
       lyt1            = PushLayout EmptyLayout lhs1 (value1 k2)
       lyt2            = PushLayout lyt1        lhs2 (value2 weakenId)
       openF           = convertSharingExp config lyt2 alyt [] aenv (f a b)
@@ -969,11 +980,12 @@ convertSharingStencilFun1
     => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]               -- currently bound array sharing-variables
+    -> Ann
     -> R.StencilR sh a stencil
     -> (SmartExp stencil -> ScopedExp b)
     -> AST.Fun aenv (stencil -> b)
-convertSharingStencilFun1 config alyt aenv sR1 stencil =
-  convertSharingFun1 config alyt aenv (R.stencilR sR1) stencil
+convertSharingStencilFun1 config alyt aenv ann sR1 stencil =
+  convertSharingFun1 config alyt aenv ann (R.stencilR sR1) stencil
 
 -- | Convert a binary stencil function
 --
@@ -982,12 +994,14 @@ convertSharingStencilFun2
     => Config
     -> ArrayLayout aenv aenv
     -> [StableSharingAcc]               -- currently bound array sharing-variables
+    -> Ann
     -> R.StencilR sh a stencil1
+    -> Ann
     -> R.StencilR sh b stencil2
     -> (SmartExp stencil1 -> SmartExp stencil2 -> ScopedExp c)
     -> AST.Fun aenv (stencil1 -> stencil2 -> c)
-convertSharingStencilFun2 config alyt aenv sR1 sR2 stencil =
-  convertSharingFun2 config alyt aenv (R.stencilR sR1) (R.stencilR sR2) stencil
+convertSharingStencilFun2 config alyt aenv a1 sR1 a2 sR2 stencil =
+  convertSharingFun2 config alyt aenv a1 (R.stencilR sR1) a2 (R.stencilR sR2) stencil
 
 
 -- Sharing recovery
@@ -1522,7 +1536,11 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                     _ -> do (acc, height) <- newAcc
                             return (UnscopedAcc [] (AccSharing (StableNameHeight sn height) acc), height)
 
-          -- TODO: Check if the annotations we pass to the function conversions are correct
+          -- TODO: Check if the annotations we pass to the function conversions
+          --       are correct. For these and similar situations we may also
+          --       need some combinator that only leaves in the source mapping
+          --       information from the annotation, but in most situations that
+          --       shouldn't matter.
           reconstruct $ case pacc of
             Atag ann repr i                -> return (Atag ann repr i, 0)           -- height is 0!
             Pipe ann repr1 repr2 repr3 afun1 afun2 acc

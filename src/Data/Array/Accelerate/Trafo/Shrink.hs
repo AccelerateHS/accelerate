@@ -80,7 +80,7 @@ lhsVarsRange lhs = case rightIx lhs of
   where
     rightIx :: LeftHandSide s v env env' -> Either (env :~: env') (Exists (Idx env'))
     rightIx (LeftHandSideWildcard _) = Left Refl
-    rightIx (LeftHandSideSingle _)   = Right $ Exists ZeroIdx
+    rightIx (LeftHandSideSingle _ _) = Right $ Exists ZeroIdx
     rightIx (LeftHandSidePair l1 l2) = case rightIx l2 of
       Right ix  -> Right ix
       Left Refl -> rightIx l1
@@ -88,7 +88,7 @@ lhsVarsRange lhs = case rightIx lhs of
     go :: LeftHandSide s v env env' -> (Int, Maybe (RangeTuple))
     go (LeftHandSideWildcard TupRunit)   = (0,       Just RTNil)
     go (LeftHandSideWildcard _)          = (0,       Nothing)
-    go (LeftHandSideSingle _)            = (1,       Just RTSingle)
+    go (LeftHandSideSingle _ _)          = (1,       Just RTSingle)
     go (LeftHandSidePair l1 l2)          = (n1 + n2, RTPair <$> t1 <*> t2)
       where
         (n1, t1) = go l1
@@ -99,7 +99,7 @@ weakenVarsRange lhs (VarsRange ix n t) = VarsRange (go lhs ix) n t
   where
     go :: LeftHandSide s v env env' -> Exists (Idx env) -> Exists (Idx env')
     go (LeftHandSideWildcard _) ix'          = ix'
-    go (LeftHandSideSingle _)   (Exists ix') = Exists (SuccIdx ix')
+    go (LeftHandSideSingle _ _) (Exists ix') = Exists (SuccIdx ix')
     go (LeftHandSidePair l1 l2) ix'          = go l2 $ go l1 ix'
 
 matchEVarsRange :: VarsRange env -> OpenExp env aenv t -> Bool
@@ -107,7 +107,7 @@ matchEVarsRange (VarsRange (Exists first) _ (Just rt)) expr = isJust $ go (idxTo
   where
     go :: Int -> RangeTuple -> OpenExp env aenv t -> Maybe Int
     go i RTNil (Nil _) = Just i
-    go i RTSingle (Evar _ (Var _ ix))
+    go i RTSingle (Evar (Var _ _ ix))
       | checkIdx i ix = Just (i + 1)
     go i (RTPair t1 t2) (Pair _ e1 e2)
       | Just i' <- go i t2 e2 = go i' t1 e1
@@ -120,7 +120,7 @@ matchEVarsRange (VarsRange (Exists first) _ (Just rt)) expr = isJust $ go (idxTo
 matchEVarsRange _ _ = False
 
 varInRange :: VarsRange env -> Var s env t -> Maybe Usages
-varInRange (VarsRange (Exists rangeIx) n _) (Var _ varIx) = case go rangeIx varIx of
+varInRange (VarsRange (Exists rangeIx) n _) (Var _ _ varIx) = case go rangeIx varIx of
     Nothing -> Nothing
     Just j  -> Just $ replicate j False ++ [True] ++ replicate (n - j - 1) False
   where
@@ -180,9 +180,9 @@ shrinkLhs (Impossible usages) lhs = case go usages lhs of
     _                 -> internalError "Mismatch in length of usages array and LHS"
   where
     go :: HasCallStack => Usages -> LeftHandSide s t env1 env2 -> (Bool, Usages, Exists (LeftHandSide s t env1))
-    go us           (LeftHandSideWildcard tp) = (False, us, Exists $ LeftHandSideWildcard tp)
-    go (True  : us) (LeftHandSideSingle tp)   = (False, us, Exists $ LeftHandSideSingle tp)
-    go (False : us) (LeftHandSideSingle tp)   = (True , us, Exists $ LeftHandSideWildcard $ TupRsingle tp)
+    go us           (LeftHandSideWildcard tp)   = (False, us, Exists $ LeftHandSideWildcard tp)
+    go (True  : us) (LeftHandSideSingle ann tp) = (False, us, Exists $ LeftHandSideSingle ann tp)
+    go (False : us) (LeftHandSideSingle _   tp) = (True , us, Exists $ LeftHandSideWildcard $ TupRsingle tp)
     go us           (LeftHandSidePair l1 l2)
       | (c2, us' , Exists l2') <- go us  l2
       , (c1, us'', Exists l1') <- go us' l1
@@ -208,11 +208,11 @@ strengthenShrunkLHS
     -> env1 :?> env1'
     -> env2 :?> env2'
 strengthenShrunkLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
-strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
+strengthenShrunkLHS (LeftHandSideSingle _ _) (LeftHandSideSingle _ _) k = \ix -> case ix of
   ZeroIdx     -> Just ZeroIdx
   SuccIdx ix' -> SuccIdx <$> k ix'
 strengthenShrunkLHS (LeftHandSidePair lA hA) (LeftHandSidePair lB hB) k = strengthenShrunkLHS hA hB $ strengthenShrunkLHS lA lB k
-strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideWildcard _) k = \ix -> case ix of
+strengthenShrunkLHS (LeftHandSideSingle _ _) (LeftHandSideWildcard _) k = \ix -> case ix of
   ZeroIdx     -> Nothing
   SuccIdx ix' -> k ix'
 strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard t) k = strengthenShrunkLHS h (LeftHandSideWildcard t2) $ strengthenShrunkLHS l (LeftHandSideWildcard t1) k
@@ -240,7 +240,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     lIMIT = 1
 
     cheap :: OpenExp env aenv t -> Bool
-    cheap (Evar _ _)       = True
+    cheap (Evar _)         = True
     cheap (Pair _ e1 e2)   = cheap e1 && cheap e2
     cheap (Nil _)          = True
     cheap Const{}          = True
@@ -251,7 +251,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
 
     shrinkE :: HasCallStack => OpenExp env aenv t -> (Any, OpenExp env aenv t)
     shrinkE exp = case exp of
-      Let _ (LeftHandSideSingle _) bnd@Evar{} body -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
+      Let _ (LeftHandSideSingle _ _) bnd@Evar{} body -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
       Let ann lhs bnd body
         | shouldInline -> case inlineVars lhs (snd body') (snd bnd') of
             Just inlined -> Stats.betaReduce msg . yes $ shrinkE inlined
@@ -286,7 +286,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
             Finite 0 -> "dead exp"
             _        -> "inline exp"   -- forced inlining when lIMIT > 1
       --
-      Evar ann v              -> pure (Evar ann v)
+      Evar v                  -> pure (Evar v)
       Const ann t c           -> pure (Const ann t c)
       Undef ann t             -> pure (Undef ann t)
       Nil ann                 -> pure (Nil ann)
@@ -483,7 +483,7 @@ usesOfExp range = countE
     countE :: OpenExp env aenv e -> Count
     countE exp | matchEVarsRange range exp = Finite 1
     countE exp = case exp of
-      Evar _ v -> case varInRange range v of
+      Evar v -> case varInRange range v of
         Just cs            -> Impossible cs
         Nothing            -> Finite 0
       --
@@ -538,7 +538,7 @@ usesOfPreAcc withShape countAcc idx = count
 
     count :: PreOpenAcc acc aenv a -> Int
     count pacc = case pacc of
-      Avar _ var                   -> countAvar var
+      Avar var                     -> countAvar var
       --
       Alet _ lhs bnd body          -> countA bnd + countAcc withShape (weakenWithLHS lhs >:> idx) body
       Apair _ a1 a2                -> countA a1 + countA a2
@@ -574,7 +574,7 @@ usesOfPreAcc withShape countAcc idx = count
     countE :: OpenExp env aenv e -> Int
     countE exp = case exp of
       Let _ _ bnd body     -> countE bnd + countE body
-      Evar _ _             -> 0
+      Evar _               -> 0
       Const _ _ _          -> 0
       Undef _ _            -> 0
       Nil _                -> 0
@@ -606,7 +606,7 @@ usesOfPreAcc withShape countAcc idx = count
     countA = countAcc withShape idx
 
     countAvar :: ArrayVar aenv a -> Int
-    countAvar (Var _ this) = countIdx this
+    countAvar (Var _ _ this) = countIdx this
 
     countAF :: PreOpenAfun acc aenv' f
             -> Idx aenv' s

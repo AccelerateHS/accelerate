@@ -242,8 +242,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
 
   -- Variable bound by a 'Let', represented by a de Bruijn index
   --
-  Avar        :: Ann
-              -> ArrayVar       aenv (Array sh e)
+  Avar        :: -- 'ArrayVar' already contains an 'Ann' field
+                 ArrayVar       aenv (Array sh e)
               -> PreOpenAcc acc aenv (Array sh e)
 
   -- Tuples of arrays
@@ -536,12 +536,12 @@ type ELeftHandSide = LeftHandSide ScalarType
 type ExpVar        = Var ScalarType
 type ExpVars env   = Vars ScalarType env
 
--- FIXME: What should we be using here for the annotation? Is this pair only
---        used temporarily as part of the transformations or does this make it
---        to the final converted AST?
+-- TODO: Are the annotations in the 'Pair' and 'Nil' nodes significant here?
+--       Probably not, but if they are, we can take them from the 'Tag'
+--       constructor. Same goes for 'avarsIn'.
 expVars :: ExpVars env t -> OpenExp env aenv t
 expVars TupRunit         = Nil mkDummyAnn
-expVars (TupRsingle var) = Evar mkDummyAnn var
+expVars (TupRsingle var) = Evar var
 expVars (TupRpair v1 v2) = Pair mkDummyAnn (expVars v1) (expVars v2)
 
 
@@ -561,8 +561,8 @@ data OpenExp env aenv t where
                 -> OpenExp env  aenv body_t
 
   -- Variable index, ranging only over tuples or scalars
-  Evar          :: Ann
-                -> ExpVar env t
+  Evar          :: -- 'ExpVar' already contains an 'Ann' field
+                   ExpVar env t
                 -> OpenExp env aenv t
 
   -- Apply a backend-specific foreign function
@@ -820,7 +820,7 @@ arrayR a = case arraysR a of
 
 instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
   arraysR (Alet _ _ _ body)             = arraysR body
-  arraysR (Avar _ (Var aR _))           = TupRsingle aR
+  arraysR (Avar (Var _ aR _))           = TupRsingle aR
   arraysR (Apair _ as bs)               = TupRpair (arraysR as) (arraysR bs)
   arraysR Anil{}                        = TupRunit
   arraysR (Atrace _ _ _ bs)             = arraysR bs
@@ -859,32 +859,32 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
 
 expType :: HasCallStack => OpenExp aenv env t -> TypeR t
 expType = \case
-  Let _ _ _ body               -> expType body
-  Evar _ (Var tR _)            -> TupRsingle tR
-  Foreign _ tR _ _ _           -> tR
-  Pair _ e1 e2                 -> TupRpair (expType e1) (expType e2)
-  Nil _                        -> TupRunit
-  VecPack   _ vecR _           -> TupRsingle $ VectorScalarType $ vecRvector vecR
-  VecUnpack _ vecR _           -> vecRtuple vecR
-  IndexSlice _ si _ _          -> shapeType $ sliceShapeR si
-  IndexFull  _ si _ _          -> shapeType $ sliceDomainR si
-  ToIndex{}                    -> TupRsingle scalarTypeInt
-  FromIndex _ shr _ _          -> shapeType shr
-  Case _ _ ((_,e):_) _         -> expType e
-  Case _ _ [] (Just e)         -> expType e
-  Case{}                       -> internalError "empty case encountered"
-  Cond _ _ e _                 -> expType e
-  While _ _ (Lam lhs _) _      -> lhsToTupR lhs
-  While{}                      -> error "What's the matter, you're running in the shadows"
-  Const _ tR _                 -> TupRsingle tR
-  PrimConst _ c                -> TupRsingle $ SingleScalarType $ primConstType c
-  PrimApp _ f _                -> snd $ primFunType f
-  Index _ (Var repr _) _       -> arrayRtype repr
-  LinearIndex _ (Var repr _) _ -> arrayRtype repr
-  Shape _ (Var repr _)         -> shapeType $ arrayRshape repr
-  ShapeSize{}                  -> TupRsingle scalarTypeInt
-  Undef _ tR                   -> TupRsingle tR
-  Coerce _ _ tR _              -> TupRsingle tR
+  Let _ _ _ body                 -> expType body
+  Evar (Var _ tR _)              -> TupRsingle tR
+  Foreign _ tR _ _ _             -> tR
+  Pair _ e1 e2                   -> TupRpair (expType e1) (expType e2)
+  Nil _                          -> TupRunit
+  VecPack   _ vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
+  VecUnpack _ vecR _             -> vecRtuple vecR
+  IndexSlice _ si _ _            -> shapeType $ sliceShapeR si
+  IndexFull  _ si _ _            -> shapeType $ sliceDomainR si
+  ToIndex{}                      -> TupRsingle scalarTypeInt
+  FromIndex _ shr _ _            -> shapeType shr
+  Case _ _ ((_,e):_) _           -> expType e
+  Case _ _ [] (Just e)           -> expType e
+  Case{}                         -> internalError "empty case encountered"
+  Cond _ _ e _                   -> expType e
+  While _ _ (Lam lhs _) _        -> lhsToTupR lhs
+  While{}                        -> error "What's the matter, you're running in the shadows"
+  Const _ tR _                   -> TupRsingle tR
+  PrimConst _ c                  -> TupRsingle $ SingleScalarType $ primConstType c
+  PrimApp _ f _                  -> snd $ primFunType f
+  Index _ (Var _ repr _) _       -> arrayRtype repr
+  LinearIndex _ (Var _ repr _) _ -> arrayRtype repr
+  Shape _ (Var _ repr _)         -> shapeType $ arrayRshape repr
+  ShapeSize{}                    -> TupRsingle scalarTypeInt
+  Undef _ tR                     -> TupRsingle tR
+  Coerce _ _ tR _                -> TupRsingle tR
 
 primConstType :: PrimConst a -> SingleType a
 primConstType = \case
@@ -1004,7 +1004,7 @@ instance FieldAnn (OpenAcc aenv t) where
 
 instance FieldAnn (PreOpenAcc acc aenv t) where
   _ann k (Alet ann lhs a b)                    = k (Just ann) <&> \(Just ann') -> Alet ann' lhs a b
-  _ann k (Avar ann ix)                         = k (Just ann) <&> \(Just ann') -> Avar ann' ix
+  _ann k (Avar (Var ann repr ix))              = k (Just ann) <&> \(Just ann') -> Avar (Var ann' repr ix)
   _ann k (Apair ann as bs)                     = k (Just ann) <&> \(Just ann') -> Apair ann' as bs
   _ann k (Anil ann)                            = k (Just ann) <&> \(Just ann') -> Anil ann'
   _ann k (Apply ann repr f a)                  = k (Just ann) <&> \(Just ann') -> Apply ann' repr f a
@@ -1032,7 +1032,7 @@ instance FieldAnn (PreOpenAcc acc aenv t) where
 
 instance FieldAnn (OpenExp env aenv t) where
   _ann k (Let ann lhs bnd body)         = k (Just ann) <&> \(Just ann') -> Let ann' lhs bnd body
-  _ann k (Evar ann v)                   = k (Just ann) <&> \(Just ann') -> Evar ann' v
+  _ann k (Evar (Var ann tp ix))         = k (Just ann) <&> \(Just ann') -> Evar (Var ann' tp ix)
   _ann k (Foreign ann tp asm f x)       = k (Just ann) <&> \(Just ann') -> Foreign ann' tp asm f x
   _ann k (Const ann tp c)               = k (Just ann) <&> \(Just ann') -> Const ann' tp c
   _ann k (Undef ann tp)                 = k (Just ann) <&> \(Just ann') -> Undef ann' tp
@@ -1104,7 +1104,7 @@ rnfPreOpenAcc rnfA pacc =
   in
   case pacc of
     Alet ann lhs bnd body        -> rnfAnn ann `seq` rnfALeftHandSide lhs `seq` rnfA bnd `seq` rnfA body
-    Avar ann var                 -> rnfAnn ann `seq` rnfArrayVar var
+    Avar var                     -> rnfArrayVar var
     Apair ann as bs              -> rnfAnn ann `seq` rnfA as `seq` rnfA bs
     Anil ann                     -> rnfAnn ann
     Atrace ann msg as bs         -> rnfAnn ann `seq` rnfM msg `seq` rnfA as `seq` rnfA bs
@@ -1177,7 +1177,7 @@ rnfOpenExp topExp =
   in
   case topExp of
     Let ann lhs bnd body         -> rnfAnn ann `seq` rnfELeftHandSide lhs `seq` rnfE bnd `seq` rnfE body
-    Evar ann v                   -> rnfAnn ann `seq` rnfExpVar v
+    Evar v                       -> rnfExpVar v
     Foreign ann tp asm f x       -> rnfAnn ann `seq` rnfTypeR tp `seq` rnf (strForeign asm) `seq` rnfF f `seq` rnfE x
     Const ann tp c               -> rnfAnn ann `seq` c `seq` rnfScalarType tp -- scalars should have (nf == whnf)
     Undef ann tp                 -> rnfAnn ann `seq` rnfScalarType tp
@@ -1312,7 +1312,7 @@ liftPreOpenAcc liftA pacc =
   in
   case pacc of
     Alet ann lhs bnd body                 -> [|| Alet $$(liftAnn ann) $$(liftALeftHandSide lhs) $$(liftA bnd) $$(liftA body) ||]
-    Avar ann var                          -> [|| Avar $$(liftAnn ann) $$(liftArrayVar var) ||]
+    Avar var                              -> [|| Avar $$(liftArrayVar var) ||]
     Apair ann as bs                       -> [|| Apair $$(liftAnn ann) $$(liftA as) $$(liftA bs) ||]
     Anil ann                              -> [|| Anil $$(liftAnn ann) ||]
     Atrace ann msg as bs                  -> [|| Atrace $$(liftAnn ann) $$(liftMessage (arraysR as) msg) $$(liftA as) $$(liftA bs) ||]
@@ -1397,7 +1397,7 @@ liftOpenExp pexp =
   in
   case pexp of
     Let ann lhs bnd body         -> [|| Let $$(liftAnn ann) $$(liftELeftHandSide lhs) $$(liftOpenExp bnd) $$(liftOpenExp body) ||]
-    Evar ann var                 -> [|| Evar $$(liftAnn ann) $$(liftExpVar var) ||]
+    Evar var                     -> [|| Evar $$(liftExpVar var) ||]
     Foreign ann repr asm f x     -> [|| Foreign $$(liftAnn ann) $$(liftTypeR repr) $$(liftForeign asm) $$(liftOpenFun f) $$(liftE x) ||]
     Const ann tp c               -> [|| Const $$(liftAnn ann) $$(liftScalarType tp) $$(liftElt (TupRsingle tp) c) ||]
     Undef ann tp                 -> [|| Undef $$(liftAnn ann) $$(liftScalarType tp) ||]
@@ -1516,7 +1516,7 @@ formatDirection = later $ \case
 formatPreAccOp :: Format r (PreOpenAcc acc aenv arrs -> r)
 formatPreAccOp = later $ \case
   Alet{}              -> "Alet"
-  Avar _ (Var _ ix)   -> bformat ("Avar a" % int) (idxToInt ix)
+  Avar (Var _ _ ix)   -> bformat ("Avar a" % int) (idxToInt ix)
   Use _ aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
   Atrace{}            -> "Atrace"
   Apply{}             -> "Apply"
@@ -1546,7 +1546,7 @@ formatPreAccOp = later $ \case
 formatExpOp :: Format r (OpenExp aenv env t -> r)
 formatExpOp = later $ \case
   Let{}             -> "Let"
-  Evar _ (Var _ ix) -> bformat ("Var x" % int) (idxToInt ix)
+  Evar (Var _ _ ix) -> bformat ("Var x" % int) (idxToInt ix)
   Const _ tp c      -> bformat ("Const " % string) (showElt (TupRsingle tp) c)
   Undef{}           -> "Undef"
   Foreign{}         -> "Foreign"

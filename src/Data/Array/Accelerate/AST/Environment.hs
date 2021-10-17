@@ -34,7 +34,7 @@ data Val env where
 --
 push :: Val env -> (LeftHandSide s t env env', t) -> Val env'
 push env (LeftHandSideWildcard _, _     ) = env
-push env (LeftHandSideSingle _  , a     ) = env `Push` a
+push env (LeftHandSideSingle _ _, a     ) = env `Push` a
 push env (LeftHandSidePair l1 l2, (a, b)) = push env (l1, a) `push` (l2, b)
 
 -- Projection of a value from a valuation using a de Bruijn index
@@ -77,7 +77,7 @@ infixr 9 .>
 
 sinkWithLHS :: HasCallStack => LeftHandSide s t env1 env1' -> LeftHandSide s t env2 env2' -> env1 :> env2 -> env1' :> env2'
 sinkWithLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
-sinkWithLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = sink k
+sinkWithLHS (LeftHandSideSingle _ _) (LeftHandSideSingle _ _) k = sink k
 sinkWithLHS (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k = sinkWithLHS b1 b2 $ sinkWithLHS a1 a2 k
 sinkWithLHS _ _ _ = internalError "left hand sides do not match"
 
@@ -86,6 +86,6 @@ weakenWithLHS = go weakenId
   where
     go :: env2 :> env' -> LeftHandSide s arrs env1 env2 -> env1 :> env'
     go k (LeftHandSideWildcard _) = k
-    go k (LeftHandSideSingle _)   = weakenSucc k
+    go k (LeftHandSideSingle _ _) = weakenSucc k
     go k (LeftHandSidePair l1 l2) = go (go k l2) l1
 

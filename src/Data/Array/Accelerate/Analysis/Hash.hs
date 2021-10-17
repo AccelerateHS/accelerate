@@ -169,7 +169,7 @@ encodePreOpenAcc options encodeAcc pacc =
   in
   case pacc of
     Alet _ lhs bnd body              -> intHost $(hashQ "Alet")        <> encodeLeftHandSide encodeArrayType lhs <> travA bnd <> travA body
-    Avar _ (Var repr v)              -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
+    Avar (Var _ repr v)              -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
     Apair _ a1 a2                    -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
     Anil _                           -> intHost $(hashQ "Anil")
     Atrace _ (Message _ _ msg) as bs -> intHost $(hashQ "Atrace")      <> intHost (Hashable.hash msg) <> travA as <> travA bs
@@ -254,10 +254,11 @@ encodeTupR _ TupRunit         = intHost $(hashQ "TupRunit")
 encodeTupR f (TupRpair r1 r2) = intHost $(hashQ "TupRpair")   <> encodeTupR f r1 <> encodeTupR f r2
 encodeTupR f (TupRsingle s)   = intHost $(hashQ "TupRsingle") <> f s
 
+-- TODO: Don't forget this function when adding annotations to the hashes
 encodeLeftHandSide :: (forall b. s b -> Builder) -> LeftHandSide s a env env' -> Builder
 encodeLeftHandSide f (LeftHandSideWildcard r) = intHost $(hashQ "LeftHandSideWildcard") <> encodeTupR f r
 encodeLeftHandSide f (LeftHandSidePair r1 r2) = intHost $(hashQ "LeftHandSidePair")     <> encodeLeftHandSide f r1 <> encodeLeftHandSide f r2
-encodeLeftHandSide f (LeftHandSideSingle s)   = intHost $(hashQ "LeftHandSideArray")    <> f s
+encodeLeftHandSide f (LeftHandSideSingle _ s) = intHost $(hashQ "LeftHandSideArray")    <> f s
 
 encodeArrayType :: ArrayR a -> Builder
 encodeArrayType (ArrayR shr tp) = encodeShapeR shr <> encodeTypeR tp
@@ -318,7 +319,7 @@ encodeOpenExp exp =
   in
   case exp of
     Let _ lhs bnd body      -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
-    Evar _ (Var tp ix)      -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
+    Evar (Var _ tp ix)      -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
     Nil _                   -> intHost $(hashQ "Nil")
     Pair _ e1 e2            -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
     VecPack   _ _ e         -> intHost $(hashQ "VecPack")     <> travE e
@@ -341,8 +342,9 @@ encodeOpenExp exp =
     Foreign _ _ _ f e       -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
     Coerce _ _ tp e         -> intHost $(hashQ "Coerce")      <> encodeScalarType tp <> travE e
 
+-- TODO: And also don't forget this one
 encodeArrayVar :: ArrayVar aenv a -> Builder
-encodeArrayVar (Var repr v) = encodeArrayType repr <> encodeIdx v
+encodeArrayVar (Var _ repr v) = encodeArrayType repr <> encodeIdx v
 
 {-# INLINEABLE encodeOpenFun #-}
 encodeOpenFun

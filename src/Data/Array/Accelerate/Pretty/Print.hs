@@ -212,7 +212,7 @@ prettyPreOpenAcc
     -> Adoc
 prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
   maybeWithAnn config False pacc $ case pacc of
-    Avar _ (Var _ idx)               -> prj idx aenv
+    Avar (Var _ _ idx)               -> prj idx aenv
     Alet{}                           -> prettyAlet config ctx prettyAcc extractAcc aenv pacc
     Apair{}                          -> prettyAtuple config ctx prettyAcc extractAcc aenv pacc
     Anil{}                           -> "()"
@@ -373,6 +373,10 @@ prettyALhs requiresParens = prettyLhs requiresParens 'a'
 prettyELhs :: Bool -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
 prettyELhs requiresParens = prettyLhs requiresParens 'x'
 
+-- TODO: We never print the annotations stored in the 'LeftHandSideSingle's.
+--       Doing so would probably make everything more difficult to read, but we
+--       do print the annotations on the use site of the bindings, which might
+--       be a bit inconsistent.
 prettyLhs :: forall s env env' arrs. Bool -> Char -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
 prettyLhs requiresParens x env0 lhs = case collect lhs of
   Nothing          -> ppPair lhs
@@ -516,6 +520,9 @@ prettyOpenFun config env0 aenv = next (pretty '\\') env0
       let (env', lhs') = prettyELhs True env lhs
       in  next (vs <> lhs' <> space) env' lam
 
+-- TODO: On the default verbosity level we probably don't need to show all
+--       expression-level source information. We may want to still display this
+--       information in a couple of situations, like when indexing arrays.
 prettyOpenExp
     :: forall acc env aenv t.
        PrettyConfig acc
@@ -526,7 +533,7 @@ prettyOpenExp
     -> Adoc
 prettyOpenExp config ctx env aenv exp =
   maybeWithAnn config True exp $ case exp of
-    Evar _ (Var _ idx)     -> prj idx env
+    Evar (Var _ _ idx)     -> prj idx env
     Let{}                  -> prettyLet config ctx env aenv exp
     PrimApp _ f x
       | Pair _ a b <- x    -> ppF2 op  (ppE a) (ppE b)
@@ -607,7 +614,7 @@ prettyArrayVar
        Val aenv
     -> ArrayVar aenv a
     -> Adoc
-prettyArrayVar aenv (Var _ idx) = prj idx aenv
+prettyArrayVar aenv (Var _ _ idx) = prj idx aenv
 
 prettyLet
     :: forall acc env aenv t.

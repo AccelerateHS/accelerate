@@ -100,7 +100,7 @@ lhsFullVars = fmap snd . go weakenId
   where
     go :: forall env env' b. (env' :> env2) -> LeftHandSide s b env env' -> Maybe (env :> env2, Vars s env2 b)
     go k (LeftHandSideWildcard TupRunit) = Just (k, TupRunit)
-    go k (LeftHandSideSingle s) = Just $ (weakenSucc $ k, TupRsingle $ Var s $ k >:> ZeroIdx)
+    go k (LeftHandSideSingle ann s) = Just $ (weakenSucc $ k, TupRsingle $ Var ann s $ k >:> ZeroIdx)
     go k (LeftHandSidePair l1 l2)
       | Just (k',  v2) <- go k  l2
       , Just (k'', v1) <- go k' l1 = Just (k'', TupRpair v1 v2)
@@ -155,7 +155,7 @@ inlineVars lhsBound expr bound
       Let ann lhs e1 e2
         | Exists lhs' <- rebuildLHS lhs
                               -> Let ann lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
-      Evar ann (Var t ix)     -> Evar ann . Var t <$> k1 ix
+      Evar (Var ann t ix)     -> Evar . Var ann t <$> k1 ix
       Foreign ann tp asm f e1 -> Foreign ann tp asm f <$> travE e1
       Pair ann e1 e2          -> Pair ann <$> travE e1 <*> travE e2
       Nil ann                 -> Just (Nil ann)
@@ -247,12 +247,12 @@ compose _
 -- TODO: Like everywhere else, figure out how to thread the annotations through
 --       this. We may need to somehow shoehorn them into 'Var'.
 subTop :: OpenExp env aenv s -> ExpVar (env, s) t -> OpenExp env aenv t
-subTop s (Var _  ZeroIdx     ) = s
-subTop _ (Var tp (SuccIdx ix)) = Evar mkDummyAnn $ Var tp ix
+subTop s (Var _   _  ZeroIdx     ) = s
+subTop _ (Var ann tp (SuccIdx ix)) = Evar $ Var ann tp ix
 
 subAtop :: PreOpenAcc acc aenv t -> ArrayVar (aenv, t) (Array sh2 e2) -> PreOpenAcc acc aenv (Array sh2 e2)
-subAtop t (Var _    ZeroIdx      ) = t
-subAtop _ (Var repr (SuccIdx idx)) = Avar mkDummyAnn $ Var repr idx
+subAtop t (Var _   _    ZeroIdx      ) = t
+subAtop _ (Var ann repr (SuccIdx idx)) = Avar $ Var ann repr idx
 
 data Identity a = Identity { runIdentity :: a }
 
@@ -380,7 +380,7 @@ instance Sink Idx where
 
 instance Sink (Var s) where
   {-# INLINEABLE weaken #-}
-  weaken k (Var s ix) = Var s (k >:> ix)
+  weaken k (Var ann s ix) = Var ann s (k >:> ix)
 
 weakenVars :: env :> env' -> Vars s env t -> Vars s env' t
 weakenVars _  TupRunit      = TupRunit
@@ -388,10 +388,10 @@ weakenVars k (TupRsingle v) = TupRsingle $ weaken k v
 weakenVars k (TupRpair v w) = TupRpair (weakenVars k v) (weakenVars k w)
 
 rebuildWeakenVar :: env :> env' -> ArrayVar env (Array sh e) -> PreOpenAcc acc env' (Array sh e)
-rebuildWeakenVar k (Var s idx) = Avar mkDummyAnn $ Var s $ k >:> idx
+rebuildWeakenVar k (Var ann s idx) = Avar $ Var ann s $ k >:> idx
 
 rebuildWeakenEvar :: env :> env' -> ExpVar env t -> OpenExp env' aenv t
-rebuildWeakenEvar k (Var s idx) = Evar mkDummyAnn $ Var s $ k >:> idx
+rebuildWeakenEvar k (Var ann s idx) = Evar $ Var ann s $ k >:> idx
 
 instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
   {-# INLINEABLE weaken #-}
@@ -403,11 +403,11 @@ instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
 
 instance Sink (OpenExp env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . runIdentity . rebuildOpenExp (Identity . Evar mkDummyAnn) (ReindexAvar (Identity . weaken k))
+  weaken k = Stats.substitution "weaken" . runIdentity . rebuildOpenExp (Identity . Evar) (ReindexAvar (Identity . weaken k))
 
 instance Sink (OpenFun env) where
   {-# INLINEABLE weaken #-}
-  weaken k = Stats.substitution "weaken" . runIdentity . rebuildFun (Identity . Evar mkDummyAnn) (ReindexAvar (Identity . weaken k))
+  weaken k = Stats.substitution "weaken" . runIdentity . rebuildFun (Identity . Evar) (ReindexAvar (Identity . weaken k))
 
 instance Sink Boundary where
   {-# INLINEABLE weaken #-}
@@ -466,22 +466,22 @@ type env :?> env' = forall t'. Idx env t' -> Maybe (Idx env' t')
 
 {-# INLINEABLE strengthen #-}
 strengthen :: forall f env env' t. Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
-strengthen k x = Stats.substitution "strengthen" $ rebuildPartial @f @Maybe @IdxA (\(Var s ix) -> fmap (IA . Var s) $ k ix) x
+strengthen k x = Stats.substitution "strengthen" $ rebuildPartial @f @Maybe @IdxA (\(Var ann s ix) -> fmap (IA . Var ann s) $ k ix) x
 
 {-# INLINEABLE strengthenE #-}
 strengthenE :: forall f env env' aenv t. RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
-strengthenE k x = Stats.substitution "strengthenE" $ rebuildPartialE @f @Maybe @IdxE (\(Var tp ix) -> fmap (IE . Var tp) $ k ix) x
+strengthenE k x = Stats.substitution "strengthenE" $ rebuildPartialE @f @Maybe @IdxE (\(Var ann tp ix) -> fmap (IE . Var ann tp) $ k ix) x
 
 strengthenWithLHS :: LeftHandSide s t env1 env2 -> env2 :?> env1
 strengthenWithLHS (LeftHandSideWildcard _) = Just
-strengthenWithLHS (LeftHandSideSingle _)   = \ix -> case ix of
+strengthenWithLHS (LeftHandSideSingle _ _) = \ix -> case ix of
   ZeroIdx   -> Nothing
   SuccIdx i -> Just i
 strengthenWithLHS (LeftHandSidePair l1 l2) = strengthenWithLHS l2 >=> strengthenWithLHS l1
 
 strengthenAfter :: LeftHandSide s t env1 env2 -> LeftHandSide s t env1' env2' -> env1 :?> env1' -> env2 :?> env2'
 strengthenAfter (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
-strengthenAfter (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
+strengthenAfter (LeftHandSideSingle _ _) (LeftHandSideSingle _ _) k = \ix -> case ix of
   ZeroIdx   -> Just ZeroIdx
   SuccIdx i -> SuccIdx <$> k i
 strengthenAfter (LeftHandSidePair l1 l2) (LeftHandSidePair l1' l2') k =
@@ -510,11 +510,11 @@ newtype IdxE env aenv t = IE { unIE :: ExpVar env t }
 
 instance SyntacticExp IdxE where
   varIn          = IE
-  expOut         = Evar mkDummyAnn . unIE
-  weakenExp (IE (Var tp ix)) = IE $ Var tp $ SuccIdx ix
+  expOut         = Evar . unIE
+  weakenExp (IE (Var ann tp ix)) = IE $ Var ann tp $ SuccIdx ix
 
 instance SyntacticExp OpenExp where
-  varIn          = Evar mkDummyAnn
+  varIn          = Evar
   expOut         = id
   weakenExp      = runIdentity . rebuildOpenExp (Identity . weakenExp . IE) (ReindexAvar Identity)
 
@@ -523,8 +523,8 @@ shiftE
     :: (Applicative f, SyntacticExp fe)
     => RebuildEvar f fe env      env'      aenv
     -> RebuildEvar f fe (env, s) (env', s) aenv
-shiftE _ (Var tp ZeroIdx)      = pure $ varIn (Var tp ZeroIdx)
-shiftE v (Var tp (SuccIdx ix)) = weakenExp <$> v (Var tp ix)
+shiftE _ (Var ann tp ZeroIdx)      = pure $ varIn (Var ann tp ZeroIdx)
+shiftE v (Var ann tp (SuccIdx ix)) = weakenExp <$> v (Var ann tp ix)
 
 {-# INLINEABLE shiftE' #-}
 shiftE'
@@ -534,7 +534,7 @@ shiftE'
     -> RebuildEvar f fa env1  env2  aenv
     -> RebuildEvar f fa env1' env2' aenv
 shiftE' (LeftHandSideWildcard _) (LeftHandSideWildcard _) v = v
-shiftE' (LeftHandSideSingle _)   (LeftHandSideSingle _)   v = shiftE v
+shiftE' (LeftHandSideSingle _ _) (LeftHandSideSingle _ _) v = shiftE v
 shiftE' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) v = shiftE' b1 b2 $ shiftE' a1 a2 v
 shiftE' _ _ _ = error "Substitution: left hand sides do not match"
 
@@ -560,8 +560,7 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
     Const ann t c           -> pure $ Const ann t c
     PrimConst ann c         -> pure $ PrimConst ann c
     Undef ann t             -> pure $ Undef ann t
-    -- FIXME: We're throwing away annotations here
-    Evar _ var              -> expOut              <$> v var
+    Evar var                -> expOut              <$> v var
     Let ann lhs a b
       | Exists lhs' <- rebuildLHS lhs
                             -> Let ann lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
@@ -615,12 +614,12 @@ class SyntacticAcc f where
   weakenAcc     :: RebuildAcc acc -> f acc aenv (Array sh e) -> f acc (aenv, s) (Array sh e)
 
 instance SyntacticAcc IdxA where
-  avarIn                       = IA
-  accOut                       = Avar mkDummyAnn . unIA
-  weakenAcc _ (IA (Var s idx)) = IA $ Var s $ SuccIdx idx
+  avarIn                           = IA
+  accOut                           = Avar . unIA
+  weakenAcc _ (IA (Var ann s idx)) = IA $ Var ann s $ SuccIdx idx
 
 instance SyntacticAcc PreOpenAcc where
-  avarIn        = Avar mkDummyAnn
+  avarIn        = Avar
   accOut        = id
   weakenAcc k   = runIdentity . rebuildPreOpenAcc k (Identity . weakenAcc k . IA)
 
@@ -644,7 +643,7 @@ reindexAvar v = ReindexAvar f where
 
   g :: fa acc aenv' (Array sh e) -> ArrayVar aenv' (Array sh e)
   g fa = case accOut fa of
-    Avar _ var' -> var'
+    Avar var' -> var'
     _ -> internalError "An Avar which was used in an Exp was mapped to an array term other than Avar. This mapping is invalid as an Exp can only contain array variables."
 
 
@@ -655,8 +654,8 @@ shiftA
     -> RebuildAvar f fa acc aenv aenv'
     -> ArrayVar  (aenv,  s) (Array sh e)
     -> f (fa acc (aenv', s) (Array sh e))
-shiftA _ _ (Var s ZeroIdx)      = pure $ avarIn $ Var s ZeroIdx
-shiftA k v (Var s (SuccIdx ix)) = weakenAcc k <$> v (Var s ix)
+shiftA _ _ (Var ann s ZeroIdx)      = pure $ avarIn $ Var ann s ZeroIdx
+shiftA k v (Var ann s (SuccIdx ix)) = weakenAcc k <$> v (Var ann s ix)
 
 shiftA'
     :: (HasCallStack, Applicative f, SyntacticAcc fa)
@@ -666,7 +665,7 @@ shiftA'
     -> RebuildAvar f fa acc aenv1  aenv2
     -> RebuildAvar f fa acc aenv1' aenv2'
 shiftA' (LeftHandSideWildcard _) (LeftHandSideWildcard _) _ v = v
-shiftA' (LeftHandSideSingle _)   (LeftHandSideSingle _)   k v = shiftA k v
+shiftA' (LeftHandSideSingle _ _) (LeftHandSideSingle _ _) k v = shiftA k v
 shiftA' (LeftHandSidePair a1 b1) (LeftHandSidePair a2 b2) k v = shiftA' b1 b2 k $ shiftA' a1 a2 k v
 shiftA' _ _ _ _ = internalError "left hand sides do not match"
 
@@ -689,8 +688,7 @@ rebuildPreOpenAcc k av acc =
   case acc of
     Use ann repr a               -> pure $ Use ann repr a
     Alet ann lhs a b             -> rebuildAlet k av ann lhs a b
-    -- TODO: We throw away annotations here
-    Avar _ ix                    -> accOut                    <$> av ix
+    Avar ix                      -> accOut                    <$> av ix
     Apair ann as bs              -> Apair ann                 <$> k av as <*> k av bs
     Anil ann                     -> pure $ Anil ann
     Atrace ann msg as bs         -> Atrace ann msg            <$> k av as <*> k av bs
@@ -746,8 +744,8 @@ rebuildAlet k av ann lhs1 bind1 body1
 
 {-# INLINEABLE rebuildLHS #-}
 rebuildLHS :: LeftHandSide s t aenv1 aenv1' -> Exists (LeftHandSide s t aenv2)
-rebuildLHS (LeftHandSideWildcard r) = Exists $ LeftHandSideWildcard r
-rebuildLHS (LeftHandSideSingle s)   = Exists $ LeftHandSideSingle s
+rebuildLHS (LeftHandSideWildcard r)   = Exists $ LeftHandSideWildcard r
+rebuildLHS (LeftHandSideSingle ann s) = Exists $ LeftHandSideSingle ann s
 rebuildLHS (LeftHandSidePair as bs)
   | Exists as' <- rebuildLHS as
   , Exists bs' <- rebuildLHS bs
@@ -816,5 +814,5 @@ rebuildC k v c =
 extractExpVars :: OpenExp env aenv a -> Maybe (ExpVars env a)
 extractExpVars (Nil  _)       = Just TupRunit
 extractExpVars (Pair _ e1 e2) = TupRpair <$> extractExpVars e1 <*> extractExpVars e2
-extractExpVars (Evar _ v)     = Just $ TupRsingle v
+extractExpVars (Evar v)       = Just $ TupRsingle v
 extractExpVars _              = Nothing

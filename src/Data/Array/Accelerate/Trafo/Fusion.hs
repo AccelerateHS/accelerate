@@ -172,7 +172,7 @@ manifest config (OpenAcc pacc) =
   Manifest $ case pacc of
     -- Non-fusible terms
     -- -----------------
-    Avar ann ix                 -> Avar ann ix
+    Avar ix                     -> Avar ix
     Use ann aR a                -> Use ann aR a
     Unit ann t e                -> Unit ann t e
     -- FIXME: We currently throw away all source annotations during sharing recovery
@@ -381,7 +381,7 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     -- Collect s                   -> collectD s
 
     -- Array injection
-    Avar ann v                     -> done $ Avar ann v
+    Avar v                         -> done $ Avar v
     Use ann aR a                   -> done $ Use ann aR a
     Unit ann t e                   -> done $ Unit ann t (cvtE e)
 
@@ -447,7 +447,7 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
       = case avarsOut extractOpenAcc pacc of
           Just vars -> Embed env $ Done (extractAnn pacc) vars
           _
-            | DeclareVars lhs _ value <- declareVars (arraysR pacc)
+            | DeclareVars lhs _ value <- declareVars (annR (OpenAcc pacc) $ arraysR pacc) (arraysR pacc)
               -> Embed (PushEnv env lhs $ OpenAcc pacc) $ Done (extractAnn pacc) $ value weakenId
 
     cvtA :: HasCallStack => OpenAcc aenv' a -> OpenAcc aenv' a
@@ -582,12 +582,14 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
           -> Embed OpenAcc aenv bs
     embed reprBs op acc@(embedAcc -> Embed env cc)
       | Done{} <- cc
-      , DeclareVars lhs _ value <- declareVars reprBs
-      = Embed (PushEnv BaseEnv lhs $ OpenAcc (op BaseEnv (computeAcc (Embed env cc)))) $ Done (extractAnn acc) $ value weakenId
+      , result <- OpenAcc $ op BaseEnv (computeAcc (Embed env cc))
+      , DeclareVars lhs _ value <- declareVars (annR result reprBs) reprBs
+      = Embed (PushEnv BaseEnv lhs result) $ Done (extractAnn acc) $ value weakenId
       | otherwise
+      , result <- OpenAcc $ op env     (OpenAcc (compute cc))
       -- Next line is duplicated for both branches, as the type variable for the environment is instantiated differently
-      , DeclareVars lhs _ value <- declareVars reprBs
-      = Embed (PushEnv env     lhs $ OpenAcc (op env     (OpenAcc (compute cc))))      $ Done (extractAnn acc) $ value weakenId
+      , DeclareVars lhs _ value <- declareVars (annR result reprBs) reprBs
+      = Embed (PushEnv env     lhs result) $ Done (extractAnn acc) $ value weakenId
 
     embed2 :: HasCallStack
            => ArraysR cs
@@ -604,15 +606,17 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
       , env             <- env1 `append` env0
       = case cc0 of
           Done{}
-            | DeclareVars lhs _ value <- declareVars reprCs
-              -> Embed (PushEnv env1 lhs $ OpenAcc (op env1 (OpenAcc (compute cc1)) (computeAcc (Embed env0 cc0))))
+            | result <- OpenAcc $ op env1 (OpenAcc (compute cc1)) (computeAcc (Embed env0 cc0))
+            , DeclareVars lhs _ value <- declareVars (annR result reprCs) reprCs
+              -> Embed (PushEnv env1 lhs result)
                        $ Done (extractAnn acc)
                        $ value weakenId
           _
             -- Next line is duplicated for both branches, as the type
             -- variable for the environment is instantiated differently
-            | DeclareVars lhs _ value <- declareVars reprCs
-              -> Embed (PushEnv env  lhs $ OpenAcc (op env  (OpenAcc (compute (sinkA env0 cc1))) (OpenAcc (compute cc0))))
+            | result <- OpenAcc $ op env  (OpenAcc (compute (sinkA env0 cc1))) (OpenAcc (compute cc0))
+            , DeclareVars lhs _ value <- declareVars (annR result reprCs) reprCs
+              -> Embed (PushEnv env  lhs result)
                        $ Done (extractAnn acc)
                        $ value weakenId
 
@@ -866,11 +870,11 @@ done :: HasCallStack => PreOpenAcc OpenAcc aenv a -> Embed OpenAcc aenv a
 done pacc
   | Just vars <- avarsOut extractOpenAcc pacc
   = Embed BaseEnv (Done (extractAnn pacc) vars)
-  | DeclareVars lhs _ value <- declareVars (arraysR pacc)
+  | DeclareVars lhs _ value <- declareVars (annR (OpenAcc pacc) $ arraysR pacc) (arraysR pacc)
   = Embed (PushEnv BaseEnv lhs $ OpenAcc pacc) $ Done (extractAnn pacc) $ value weakenId
 
 doneZeroIdx :: Ann -> ArrayR (Array sh e) -> Cunctation M (aenv, Array sh e) (Array sh e)
-doneZeroIdx ann aR = Done ann (TupRsingle (Var aR ZeroIdx))
+doneZeroIdx ann aR = Done ann (TupRsingle (Var ann aR ZeroIdx))
 
 
 -- Recast a cunctation into a mapping from indices to elements
@@ -880,9 +884,9 @@ yield :: HasCallStack
       -> Cunctation D aenv (Array sh e)
 yield cc =
   case cc of
-    Yield{}                            -> cc
-    Step ann tR sh p f v               -> Yield ann tR sh (f `compose` indexArray ann v `compose` p)
-    Done ann (TupRsingle v@(Var tR _)) -> Yield ann tR (arrayShape ann v) (indexArray ann v)
+    Yield{}                              -> cc
+    Step ann tR sh p f v                 -> Yield ann tR sh (f `compose` indexArray ann v `compose` p)
+    Done ann (TupRsingle v@(Var _ tR _)) -> Yield ann tR (arrayShape ann v) (indexArray ann v)
 
 -- Recast a cunctation into a delayed representation
 --
@@ -896,9 +900,9 @@ delaying cc =
     Step{}  -> cc
     Done ann u
       | TupRsingle v  <- u
-      , Var aR _      <- v
+      , Var _ aR _    <- v
       , ArrayR shR tR <- aR
-     -> Step ann aR (arrayShape ann v) (identity (shapeType shR)) (identity tR) v
+     -> Step ann aR (arrayShape ann v) (identity ann (shapeType shR)) (identity ann tR) v
 
 -- Get the shape of a delayed array
 --
@@ -980,12 +984,12 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
       Yield ann repr sh f
         -> bindA env (OpenAcc (Generate ann repr sh f))
 
-      Step ann repr sh p f v@(Var _ ix)
+      Step ann repr sh p f v@(Var _ _ ix)
         | Just Refl <- matchOpenExp sh (arrayShape ann v)
         , Just Refl <- isIdentity p
         -> case ix of
              ZeroIdx
-               | LeftHandSideSingle ArrayR{} <- lhs
+               | LeftHandSideSingle _ ArrayR{} <- lhs
                , Just (OpenAccFun g) <- strengthen noTop (OpenAccFun f)
                     -> bindA bot (OpenAcc (Map ann (arrayRtype repr) g top))
              _      -> bindA env (OpenAcc (Map ann (arrayRtype repr) f (avarIn OpenAcc v)))
@@ -993,7 +997,7 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
         | Just Refl <- isIdentity f
         -> case ix of
              ZeroIdx
-               | LeftHandSideSingle ArrayR{} <- lhs
+               | LeftHandSideSingle _ ArrayR{} <- lhs
                , Just (OpenAccFun q)  <- strengthen noTop (OpenAccFun p)
                , Just (OpenAccExp sz) <- strengthen noTop (OpenAccExp sh)
                     -> bindA bot (OpenAcc (Backpermute ann (arrayRshape repr) sz q top))
@@ -1002,7 +1006,7 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
         | otherwise
         -> case ix of
              ZeroIdx
-               | LeftHandSideSingle ArrayR{} <- lhs
+               | LeftHandSideSingle _ ArrayR{} <- lhs
                , Just (OpenAccFun g)  <- strengthen noTop (OpenAccFun f)
                , Just (OpenAccFun q)  <- strengthen noTop (OpenAccFun p)
                , Just (OpenAccExp sz) <- strengthen noTop (OpenAccExp sh)
@@ -1038,9 +1042,9 @@ compute
     -> PreOpenAcc OpenAcc aenv arrs
 compute cc = simplify cc & \case
   Left (Done ann v) -> v & \case
-    TupRunit                      -> Anil ann
-    TupRsingle v@(Var ArrayR{} _) -> Avar ann v
-    TupRpair v1 v2                -> Apair ann (avarsIn OpenAcc v1) (avarsIn OpenAcc v2)
+    TupRunit                               -> Anil ann
+    TupRsingle (Var ann' repr@ArrayR{} ix) -> Avar $ Var (ann <> ann') repr ix -- TODO: Should we merge this `ann`?
+    TupRpair v1 v2                         -> Apair ann (avarsIn OpenAcc v1) (avarsIn OpenAcc v2)
   Right d -> d & \case
     Yield ann aR sh f             -> Generate ann aR sh f
     Step ann (ArrayR shR tR) sh p f v
@@ -1295,15 +1299,15 @@ combineLHS
 combineLHS = go weakenId weakenId
   where
     go :: env1 :> env -> env2 :> env -> LeftHandSide s t env1 env1' -> LeftHandSide s t env2 env2' -> CombinedLHS s t env1' env2' env
-    go k1 k2 (LeftHandSideWildcard tR) (LeftHandSideWildcard _) = CombinedLHS (LeftHandSideWildcard tR)    k1        k2
-    go k1 k2 (LeftHandSideSingle tR)   (LeftHandSideSingle _)   = CombinedLHS (LeftHandSideSingle tR)      (sink k1) (sink k2)
+    go k1 k2 (LeftHandSideWildcard tR)  (LeftHandSideWildcard _)  = CombinedLHS (LeftHandSideWildcard tR)          k1        k2
+    go k1 k2 (LeftHandSideSingle a1 tR) (LeftHandSideSingle a2 _) = CombinedLHS (LeftHandSideSingle (a1 <> a2) tR) (sink k1) (sink k2)
     go k1 k2 (LeftHandSidePair l1 h1)  (LeftHandSidePair l2 h2)
       | CombinedLHS l k1'  k2'  <- go k1  k2  l1 l2
-      , CombinedLHS h k1'' k2'' <- go k1' k2' h1 h2             = CombinedLHS (LeftHandSidePair l h)       k1''      k2''
+      , CombinedLHS h k1'' k2'' <- go k1' k2' h1 h2               = CombinedLHS (LeftHandSidePair l h)             k1''      k2''
     go k1 k2 (LeftHandSideWildcard _)  lhs
-      | Exists lhs' <- rebuildLHS lhs                           = CombinedLHS lhs'        (weakenWithLHS lhs' .> k1) (sinkWithLHS lhs lhs' k2)
+      | Exists lhs' <- rebuildLHS lhs                             = CombinedLHS lhs'        (weakenWithLHS lhs' .> k1) (sinkWithLHS lhs lhs' k2)
     go k1 k2 lhs                       (LeftHandSideWildcard _)
-      | Exists lhs' <- rebuildLHS lhs                           = CombinedLHS lhs'        (sinkWithLHS lhs lhs' k1)  (weakenWithLHS lhs' .> k2)
+      | Exists lhs' <- rebuildLHS lhs                             = CombinedLHS lhs'        (sinkWithLHS lhs lhs' k1)  (weakenWithLHS lhs' .> k2)
     go _ _ _ _
       = internalError "unexpected LHS combination"
 
@@ -1408,9 +1412,9 @@ aletD embedAcc elimAcc lhs (embedAcc -> Embed env1 cc1) acc0
   -- body, instead of adding to the environments and creating an indirection
   -- that must be later eliminated by shrinking.
   --
-  | LeftHandSideSingle _                    <- lhs
-  , Done _ (TupRsingle v1@(Var ArrayR{} _)) <- cc1
-  , Embed env0 cc0                          <- embedAcc $ rebuildA (subAtop (Avar mkDummyAnn v1) . sink1 env1) acc0
+  | LeftHandSideSingle _ _                     <- lhs
+  , Done _ (TupRsingle v1@(Var  _ ArrayR{} _)) <- cc1
+  , Embed env0 cc0                             <- embedAcc $ rebuildA (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `append` env0) cc0
 
@@ -1427,7 +1431,7 @@ aletD' :: forall aenv aenv' arrs brrs. HasCallStack
        -> Embed OpenAcc aenv  arrs
        -> Embed OpenAcc aenv' brrs
        -> Embed OpenAcc aenv  brrs
-aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed env0 cc0)
+aletD' embedAcc elimAcc (LeftHandSideSingle _ ArrayR{}) (Embed env1 cc1) (Embed env0 cc0)
 
   -- let-binding
   -- -----------
@@ -1478,10 +1482,10 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         -> OpenAcc (aenv', Array sh e) brrs
         -> Embed OpenAcc aenv brrs
     eliminate ann env1 cc1 body
-      | Done _ v1                <- cc1
-      , TupRsingle v1'@(Var r _) <- v1  = elim r (arrayShape ann v1') (indexArray ann v1')
-      | Step _  r sh1 p1 f1 v1   <- cc1 = elim r sh1 (f1 `compose` indexArray ann v1 `compose` p1)
-      | Yield _ r sh1 f1         <- cc1 = elim r sh1 f1
+      | Done _ v1                  <- cc1
+      , TupRsingle v1'@(Var _ r _) <- v1  = elim r (arrayShape ann v1') (indexArray ann v1')
+      | Step _  r sh1 p1 f1 v1     <- cc1 = elim r sh1 (f1 `compose` indexArray ann v1 `compose` p1)
+      | Yield _ r sh1 f1           <- cc1 = elim r sh1 f1
       where
         bnd :: PreOpenAcc OpenAcc aenv' (Array sh e)
         bnd = compute cc1
@@ -1494,7 +1498,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         elim r sh1 f1
           | sh1'              <- weaken (weakenSucc' weakenId) sh1
           , f1'               <- weaken (weakenSucc' weakenId) f1
-          , Embed env0' cc0'  <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA sh1' f1' $ Var r ZeroIdx) body
+          , Embed env0' cc0'  <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA sh1' f1' $ Var ann r ZeroIdx) body
           = Embed (env1 `append` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
@@ -1512,11 +1516,11 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
              -> ArrayVar aenv (Array sh e)
              -> OpenExp env aenv t
              -> OpenExp env aenv t
-    replaceE sh' f' avar@(Var (ArrayR shR _) _) exp =
+    replaceE sh' f' avar@(Var _ (ArrayR shR _) _) exp =
       case exp of
         Let ann lhs x y                  -> let k = weakenWithLHS lhs
                                             in  Let ann lhs (cvtE x) (replaceE (weakenE k sh') (weakenE k f') avar y)
-        Evar ann var                     -> Evar ann var
+        Evar var                         -> Evar var
         Foreign ann tR ff f e            -> Foreign ann tR ff f (cvtE e)
         Const ann tR c                   -> Const ann tR c
         Undef ann tR                     -> Undef ann tR
@@ -1554,10 +1558,10 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
                                           $ Let ann
                                                 lhs
                                                 (Let ann
-                                                     (LeftHandSideSingle scalarTypeInt) i
+                                                     (LeftHandSideSingle ann scalarTypeInt) i
                                                      $ FromIndex ann shR (weakenE (weakenSucc' weakenId) sh')
-                                                     $ Evar ann
-                                                     $ Var scalarTypeInt ZeroIdx)
+                                                     $ Evar
+                                                     $ Var ann scalarTypeInt ZeroIdx)
                                                 b
           | otherwise                    -> LinearIndex ann a (cvtE i)
 
@@ -1585,9 +1589,9 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
              -> PreOpenAcc OpenAcc aenv a
     replaceA sh' f' avar pacc =
       case pacc of
-        Avar ann v
-          | Just Refl <- matchVar v avar -> Avar ann avar
-          | otherwise                    -> Avar ann v
+        Avar v
+          | Just Refl <- matchVar v avar -> Avar avar
+          | otherwise                    -> Avar v
 
         Alet ann lhs bnd (body :: OpenAcc aenv1 a) ->
           let w :: aenv :> aenv1
@@ -1724,23 +1728,24 @@ acondD ann matchAcc embedAcc p t e
 -- Scalar expressions
 -- ------------------
 
-identity :: TypeR a -> OpenFun env aenv (a -> a)
-identity t
-  | DeclareVars lhs _ value <- declareVars t
+identity :: Ann -> TypeR a -> OpenFun env aenv (a -> a)
+identity ann t
+  | DeclareVars lhs _ value <- declareVars (annRfromTup ann t) t
   = Lam lhs $ Body $ expVars $ value weakenId
 
 toIndex :: Ann -> ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
 toIndex ann shR sh
-  | DeclareVars lhs k value <- declareVars $ shapeType shR
+  | repr <- shapeType shR
+  , DeclareVars lhs k value <- declareVars (annR sh repr) repr
   = Lam lhs $ Body $ ToIndex ann shR (weakenE k sh) $ expVars $ value weakenId
 
 fromIndex :: Ann -> ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
 fromIndex ann shR sh
-  = Lam (LeftHandSideSingle scalarTypeInt)
+  = Lam (LeftHandSideSingle ann scalarTypeInt)
   $ Body
   $ FromIndex ann shR (weakenE (weakenSucc' weakenId) sh)
-  $ Evar ann
-  $ Var scalarTypeInt ZeroIdx
+  $ Evar
+  $ Var ann scalarTypeInt ZeroIdx
 
 intersect :: Ann -> ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 intersect ann = mkShapeBinary f
@@ -1753,7 +1758,8 @@ intersect ann = mkShapeBinary f
 --   where
 --     f a b = PrimApp (PrimMax singleType) $ Pair a b
 
--- TODO: The annotation usage here may be incorrect
+-- TODO: The annotation usage here may be incorrect. Correction, it's definitely
+--       not correct, we should look at this once the rest compiles.
 mkShapeBinary
     :: (forall env'. OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int)
     -> ShapeR sh
@@ -1765,10 +1771,12 @@ mkShapeBinary f (ShapeRsnoc shR) (Pair a1 as a) (Pair a2 bs b) = Pair (a1 <> a2)
 mkShapeBinary f shR (Let ann lhs bnd a) b = Let (ann <> extractAnn b) lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
 mkShapeBinary f shR a (Let ann lhs bnd b) = Let (extractAnn a <> ann) lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b
 mkShapeBinary f shR a b@(Pair ann _ _) -- `a` is not Pair
-  | DeclareVars lhs k value <- declareVars $ shapeType shR
+  | repr <- shapeType shR
+  , DeclareVars lhs k value <- declareVars (annRfromTup (extractAnn a <> ann) repr) repr
   = Let (extractAnn a <> ann) lhs a $ mkShapeBinary f shR (expVars $ value weakenId) (weakenE k b)
 mkShapeBinary f shR a b -- `b` is not a Pair
-  | DeclareVars lhs k value <- declareVars $ shapeType shR
+  | repr <- shapeType shR
+  , DeclareVars lhs k value <- declareVars (annRfromTup (extractAnn a <> extractAnn b) repr) repr
   = Let (extractAnn a <> extractAnn b) lhs b $ mkShapeBinary f shR (weakenE k a) (expVars $ value weakenId)
 
 reindex :: Ann
@@ -1778,7 +1786,7 @@ reindex :: Ann
         -> OpenExp env aenv sh
         -> OpenFun env aenv (sh -> sh')
 reindex ann shR' sh' shR sh
-  | Just Refl <- matchOpenExp sh sh' = identity (shapeType shR')
+  | Just Refl <- matchOpenExp sh sh' = identity ann (shapeType shR')
   | otherwise                        = fromIndex ann shR' sh' `compose` toIndex ann shR sh
 
 extend :: Ann
@@ -1786,7 +1794,8 @@ extend :: Ann
        -> Exp aenv slix
        -> Fun aenv (sh -> sl)
 extend ann sliceIndex slix
-  | DeclareVars lhs k value <- declareVars $ shapeType $ sliceDomainR sliceIndex
+  | repr <- shapeType $ sliceDomainR sliceIndex
+  , DeclareVars lhs k value <- declareVars (annRfromTup ann repr) repr
   = Lam lhs $ Body $ IndexSlice ann sliceIndex (weakenE k slix) $ expVars $ value weakenId
 
 restrict :: Ann
@@ -1794,19 +1803,21 @@ restrict :: Ann
          -> Exp aenv slix
          -> Fun aenv (sl -> sh)
 restrict ann sliceIndex slix
-  | DeclareVars lhs k value <- declareVars $ shapeType $ sliceShapeR sliceIndex
+  | repr <- shapeType $ sliceShapeR sliceIndex
+  , DeclareVars lhs k value <- declareVars (annRfromTup ann repr) repr
   = Lam lhs $ Body $ IndexFull ann sliceIndex (weakenE k slix) $ expVars $ value weakenId
 
 arrayShape :: Ann -> ArrayVar aenv (Array sh e) -> Exp aenv sh
 arrayShape ann = simplifyExp . Shape ann
 
 indexArray :: Ann -> ArrayVar aenv (Array sh e) -> Fun aenv (sh -> e)
-indexArray ann v@(Var (ArrayR shR _) _)
-  | DeclareVars lhs _ value <- declareVars $ shapeType shR
+indexArray ann v@(Var _ (ArrayR shR _) _)
+  | repr <- shapeType shR
+  , DeclareVars lhs _ value <- declareVars (annRfromTup ann repr) repr
   = Lam lhs $ Body $ Index ann v $ expVars $ value weakenId
 
 linearIndex :: Ann -> ArrayVar aenv (Array sh e) -> Fun aenv (Int -> e)
-linearIndex ann v = Lam (LeftHandSideSingle scalarTypeInt) $ Body $ LinearIndex ann v $ Evar ann $ Var scalarTypeInt ZeroIdx
+linearIndex ann v = Lam (LeftHandSideSingle ann scalarTypeInt) $ Body $ LinearIndex ann v $ Evar $ Var ann scalarTypeInt ZeroIdx
 
 
 extractOpenAcc :: ExtractAcc OpenAcc

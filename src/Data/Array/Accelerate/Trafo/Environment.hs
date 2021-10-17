@@ -114,11 +114,11 @@ data Extend s f env env' where
           -> Extend s f env env''
 
 pushArrayEnv
-    :: HasArraysR acc
+    :: (HasArraysR acc, HasAnnotations (acc aenv' (Array sh e)))
     => Extend ArrayR acc aenv aenv'
     -> acc aenv' (Array sh e)
     -> Extend ArrayR acc aenv (aenv', Array sh e)
-pushArrayEnv env a = PushEnv env (LeftHandSideSingle $ arrayR a) a
+pushArrayEnv env a = PushEnv env (LeftHandSideSingle (extractAnn a) $ arrayR a) a
 
 
 -- Append two environment witnesses
@@ -130,14 +130,13 @@ append x (PushEnv e lhs a) = PushEnv (append x e) lhs a
 -- Bring into scope all of the array terms in the Extend environment list. This
 -- converts a term in the inner environment (aenv') into the outer (aenv).
 --
--- FIXME: Also take the source mapping into account here.
---
 bind :: (forall env t. PreOpenAcc acc env t -> acc env t)
      -> Extend ArrayR  acc aenv aenv'
      -> PreOpenAcc acc      aenv' a
      -> PreOpenAcc acc aenv       a
-bind _      BaseEnv           = id
-bind inject (PushEnv g lhs a) = bind inject g . Alet mkDummyAnn lhs a . inject
+bind _      BaseEnv                                      = id
+bind inject (PushEnv g lhs@(LeftHandSideSingle ann _) a) = bind inject g . Alet ann        lhs a . inject
+bind inject (PushEnv g lhs                            a) = bind inject g . Alet mkDummyAnn lhs a . inject
 
 -- Sink a term from one array environment into another, where additional
 -- bindings have come into scope according to the witness and no old things have
@@ -151,7 +150,7 @@ sink1 env = weaken $ sink $ sinkWeaken env
 
 sinkWeaken :: Extend s acc env env' -> env :> env'
 sinkWeaken (PushEnv e (LeftHandSideWildcard _) _) = sinkWeaken e
-sinkWeaken (PushEnv e (LeftHandSideSingle _)   _) = weakenSucc' $ sinkWeaken e
+sinkWeaken (PushEnv e (LeftHandSideSingle _ _) _) = weakenSucc' $ sinkWeaken e
 sinkWeaken (PushEnv e (LeftHandSidePair l1 l2) _) = sinkWeaken (PushEnv (PushEnv e l1 undefined) l2 undefined)
 sinkWeaken BaseEnv = Stats.substitution "sink" weakenId
 
