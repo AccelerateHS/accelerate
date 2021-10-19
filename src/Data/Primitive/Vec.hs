@@ -10,6 +10,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE UnboxedTuples       #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Primitive.Vec
@@ -31,12 +32,16 @@ module Data.Primitive.Vec (
   Vec8, pattern Vec8,
   Vec16, pattern Vec16,
 
+  mkVec,
+
   listOfVec,
   liftVec,
 
 ) where
 
+import Data.Proxy
 import Control.Monad.ST
+import Control.Monad.Reader
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Text.Prettyprint.Doc
@@ -82,6 +87,14 @@ import GHC.Word
 -- which redundant for our use case (derivable from type level information).
 --
 data Vec (n :: Nat) a = Vec ByteArray#
+
+mkVec :: forall n a. (KnownNat n, Prim a) => [a] -> Vec n a
+mkVec vs = runST $ do
+  let n :: Int = fromIntegral $ natVal $ Proxy @n
+  mba <- newByteArray (n * sizeOf (undefined :: a))
+  zipWithM_ (writeByteArray mba) [0..n] vs
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
 
 type role Vec nominal representational
 
@@ -258,6 +271,7 @@ packVec16 a b c d e f g h i j k l m n o p = runST $ do
   writeByteArray mba 15 p
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
+
 
 -- O(n) at runtime to copy from the Addr# to the ByteArray#. We should be able
 -- to do this without copying, but I don't think the definition of ByteArray# is

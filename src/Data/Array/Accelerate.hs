@@ -310,6 +310,7 @@ module Data.Array.Accelerate (
 
   -- ** SIMD vectors
   Vec, VecElt,
+  mkVec,
 
   -- ** Type classes
   -- *** Basic type classes
@@ -317,6 +318,7 @@ module Data.Array.Accelerate (
   Ord(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
+  Vectoring(..),
   -- Functor(..), (<$>), ($>), void,
   -- Monad(..),
 
@@ -445,6 +447,7 @@ import Data.Array.Accelerate.Classes.Rational
 import Data.Array.Accelerate.Classes.RealFloat
 import Data.Array.Accelerate.Classes.RealFrac
 import Data.Array.Accelerate.Classes.ToFloating
+import Data.Array.Accelerate.Classes.Vector
 import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language

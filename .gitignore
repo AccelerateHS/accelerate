@@ -15,3 +15,5 @@
 /docs/_build
 *.hi
 *.o
+
+hie.yaml

@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE PolyKinds             #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Smart
@@ -71,6 +72,9 @@ module Data.Array.Accelerate.Smart (
   -- ** Smart constructors for type coercion functions
   mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
+  -- ** Smart constructors for vector operations
+  mkVectorIndex,
+
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
   ApplyAcc(..),
@@ -83,6 +87,7 @@ module Data.Array.Accelerate.Smart (
 ) where
 
 
+import Data.Proxy
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
@@ -95,6 +100,7 @@ import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays )
 import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Sugar.Shape                            ( (:.)(..) )
 import Data.Array.Accelerate.Type
@@ -1171,6 +1177,12 @@ mkLNot :: Exp Bool -> Exp Bool
 mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
   where
     x = SmartExp $ Prj PairIdxLeft a
+
+-- Operators from Vec
+mkVectorIndex :: forall n a. (KnownNat n, Elt a, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a
+mkVectorIndex = let n :: Int
+                    n = fromIntegral $ natVal $ Proxy @n
+                in mkPrimBinary $ PrimVectorIndex @n (VectorType n singleType) integralType
 
 -- Numeric conversions
 

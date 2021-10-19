@@ -748,6 +748,9 @@ data PrimFun sig where
   PrimLOr  :: PrimFun ((PrimBool, PrimBool) -> PrimBool)
   PrimLNot :: PrimFun (PrimBool             -> PrimBool)
 
+  -- local array operators
+  PrimVectorIndex :: KnownNat n => VectorType (Vec n a) -> IntegralType i -> PrimFun ((Vec n a, i) -> a)
+
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
   PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
@@ -924,6 +927,12 @@ primFunType = \case
   PrimLOr                   -> binary' tbool
   PrimLNot                  -> unary' tbool
 
+-- Local Vector operations
+  PrimVectorIndex v'@(VectorType _ a) i' -> 
+            let v = singleVector v' 
+                i = integral i' 
+                in (v `TupRpair` i, single a)
+
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
   PrimToFloating   a b      -> unary (num a) (floating b)
@@ -936,6 +945,7 @@ primFunType = \case
     compare' a = binary (single a) tbool
 
     single   = TupRsingle . SingleScalarType
+    singleVector = TupRsingle . VectorScalarType
     num      = TupRsingle . SingleScalarType . NumSingleType
     integral = num . IntegralNumType
     floating = num . FloatingNumType
@@ -1165,6 +1175,7 @@ rnfPrimFun (PrimMin t)                = rnfSingleType t
 rnfPrimFun PrimLAnd                   = ()
 rnfPrimFun PrimLOr                    = ()
 rnfPrimFun PrimLNot                   = ()
+rnfPrimFun (PrimVectorIndex v i)      = rnfVectorType v `seq` rnfIntegralType i
 rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
 rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
 
@@ -1391,6 +1402,7 @@ liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftSingleType t) ||]
 liftPrimFun PrimLAnd                   = [|| PrimLAnd ||]
 liftPrimFun PrimLOr                    = [|| PrimLOr ||]
 liftPrimFun PrimLNot                   = [|| PrimLNot ||]
+liftPrimFun (PrimVectorIndex v i)      = [||PrimVectorIndex $$(liftVectorType v) $$(liftIntegralType i) ||]
 liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
 
