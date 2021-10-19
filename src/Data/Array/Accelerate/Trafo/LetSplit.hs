@@ -34,9 +34,7 @@ convertAcc (OpenAcc pacc) = OpenAcc (convertPreOpenAcc pacc)
 
 convertPreOpenAcc :: PreOpenAcc OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
 convertPreOpenAcc = \case
-  -- FIXME: We're completely ignoring source mapping information post-sharing
-  --        recovery at the moment
-  Alet _ lhs bnd body                 -> convertLHS lhs (convertAcc bnd) (convertAcc body)
+  Alet ann lhs bnd body               -> convertLHS ann lhs (convertAcc bnd) (convertAcc body)
   Avar var                            -> Avar var
   Apair ann a1 a2                     -> Apair ann (convertAcc a1) (convertAcc a2)
   Anil ann                            -> Anil ann
@@ -63,17 +61,17 @@ convertPreOpenAcc = \case
   Stencil ann s tp f b a              -> Stencil ann s tp f b (convertAcc a)
   Stencil2 ann s1 s2 tp f b1 a1 b2 a2 -> Stencil2 ann s1 s2 tp f b1 (convertAcc a1) b2 (convertAcc a2)
 
--- TODO: Propagate source mapping annotations during sharing recovery
 convertLHS
-    :: ALeftHandSide bnd aenv aenv'
+    :: Ann
+    -> ALeftHandSide bnd aenv aenv'
     -> OpenAcc aenv bnd
     -> OpenAcc aenv' a
     -> PreOpenAcc OpenAcc aenv a
-convertLHS lhs bnd@(OpenAcc pbnd) a@(OpenAcc pa) =
+convertLHS ann lhs bnd@(OpenAcc pbnd) a@(OpenAcc pa) =
   case lhs of
     LeftHandSideWildcard{} -> pa
-    LeftHandSideSingle{}   -> Alet mkDummyAnn lhs bnd a
+    LeftHandSideSingle{}   -> Alet ann lhs bnd a
     LeftHandSidePair l1 l2 ->
       case pbnd of
-        Apair _ b1 b2 -> convertLHS l1 b1 (OpenAcc (convertLHS l2 (weaken (weakenWithLHS l1) b2) a))
-        _             -> Alet mkDummyAnn lhs bnd a
+        Apair _ b1 b2 -> convertLHS ann l1 b1 (OpenAcc (convertLHS ann l2 (weaken (weakenWithLHS l1) b2) a))
+        _             -> Alet ann lhs bnd a
