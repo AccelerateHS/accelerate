@@ -438,11 +438,8 @@ prettyAnn' config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) 
     -- functions so the name isn't very important, but the source location will
     -- be in user code. (if we did everything right with freezing call stacks)
     -- TODO: If an AST node has multiple source locations, then we'll have to
-    --       merge adjacent locations into one. If there are then still
-    --       multiple locations, perhaps show up to two locations and after
-    --       that just only show the first with @(+ <num_remaining>)@ to
-    --       indicate that the node has multiple source locations.
-    (stack : _) | verbosity >= Normal ->
+    --       merge adjacent locations into one
+    (stack : rest) | verbosity >= Normal ->
       let ((_fn, loc) : _) = getCallStack stack
           prettyBegin = srcLocFile loc
             <> ":"
@@ -452,11 +449,16 @@ prettyAnn' config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) 
           prettyEnd = show (srcLocEndLine loc)
             <> ":"
             <> show (srcLocEndCol loc)
+          -- TODO: Should we always show how many other disjoint source
+          --       locations a node has, or should we only show this in verbose
+          --       mode?
+          nRest = length rest
+          prettyRest = if nRest > 0 then " (+" <> show nRest <> ")" else ""
       in  Just . pretty $ if verbosity >= Verbose
-            then prettyBegin <> "-" <> prettyEnd
+            then prettyBegin <> "-" <> prettyEnd <> prettyRest
             else prettyBegin
-    _ | verbosity >= Verbose -> Just "<unknown>"
-    _                        -> Nothing
+    [] | verbosity >= Verbose -> Just "<unknown>"
+    _                         -> Nothing
 
   -- We'll print the enabled optimizations like a Haskell record. If no
   -- optimization flags are enabled, then we won't print anything to avoid
