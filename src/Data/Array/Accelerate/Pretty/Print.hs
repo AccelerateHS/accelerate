@@ -444,12 +444,17 @@ prettyAnn' config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) 
     --       indicate that the node has multiple source locations.
     (stack : _) | verbosity >= Normal ->
       let ((_fn, loc) : _) = getCallStack stack
-      in  Just . pretty
-            $  srcLocFile loc
+          prettyBegin = srcLocFile loc
             <> ":"
             <> show (srcLocStartLine loc)
             <> ":"
             <> show (srcLocStartCol loc)
+          prettyEnd = show (srcLocEndLine loc)
+            <> ":"
+            <> show (srcLocEndCol loc)
+      in  Just . pretty $ if verbosity >= Verbose
+            then prettyBegin <> "-" <> prettyEnd
+            else prettyBegin
     _ | verbosity >= Verbose -> Just "<unknown>"
     _                        -> Nothing
 
