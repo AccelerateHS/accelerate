@@ -1,8 +1,10 @@
-{-# LANGUAGE ConstraintKinds   #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MonoLocalBinds    #-}
-{-# LANGUAGE FunctionalDependencies    #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE AllowAmbiguousTypes    #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE MonoLocalBinds         #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE GADTs    #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -16,16 +18,21 @@
 --
 module Data.Array.Accelerate.Classes.Vector where
 
+import Data.Kind
 import GHC.TypeLits
-import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Smart
 import Data.Primitive.Vec
 
-class Vectoring a b c | a -> b where
-    indexAt :: a -> c -> b
+class Vectoring vector a | vector -> a where
+    type IndexType vector :: Type 
+    vecIndex :: vector -> IndexType vector -> a
+    vecEmpty :: vector
 
-instance (VecElt a, KnownNat n) => Vectoring (Exp (Vec n a)) (Exp a) (Exp Int) where
-    indexAt = mkVectorIndex
+
+instance (VecElt a, KnownNat n) => Vectoring (Exp (Vec n a)) (Exp a) where
+    type IndexType (Exp (Vec n a)) = Exp Int
+    vecIndex = mkVectorIndex
+    vecEmpty = mkVectorCreate
     
 

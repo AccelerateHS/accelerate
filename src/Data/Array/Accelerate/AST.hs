@@ -655,6 +655,9 @@ data PrimConst ty where
   -- constant from Floating
   PrimPi        :: FloatingType a -> PrimConst a
 
+  -- constant for empty Vec
+  PrimVectorCreate :: KnownNat n => VectorType (Vec n a) -> PrimConst (Vec n a)
+
 
 -- |Primitive scalar operations
 --
@@ -828,7 +831,7 @@ expType = \case
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
   Const tR _                   -> TupRsingle tR
-  PrimConst c                  -> TupRsingle $ SingleScalarType $ primConstType c
+  PrimConst c                  -> TupRsingle $ primConstType c
   PrimApp f _                  -> snd $ primFunType f
   Index (Var repr _) _         -> arrayRtype repr
   LinearIndex (Var repr _) _   -> arrayRtype repr
@@ -837,17 +840,21 @@ expType = \case
   Undef tR                     -> TupRsingle tR
   Coerce _ tR _                -> TupRsingle tR
 
-primConstType :: PrimConst a -> SingleType a
+primConstType :: PrimConst a -> ScalarType a
 primConstType = \case
   PrimMinBound t -> bounded t
   PrimMaxBound t -> bounded t
   PrimPi       t -> floating t
+  PrimVectorCreate t -> vector t
   where
-    bounded :: BoundedType a -> SingleType a
-    bounded (IntegralBoundedType t) = NumSingleType $ IntegralNumType t
+    bounded :: BoundedType a -> ScalarType a
+    bounded (IntegralBoundedType t) = SingleScalarType $ NumSingleType $ IntegralNumType t
 
-    floating :: FloatingType t -> SingleType t
-    floating = NumSingleType . FloatingNumType
+    floating :: FloatingType t -> ScalarType t
+    floating = SingleScalarType . NumSingleType . FloatingNumType
+
+    vector :: forall n a. (KnownNat n) => VectorType (Vec n a) -> ScalarType (Vec n a)
+    vector = VectorScalarType
 
 primFunType :: PrimFun (a -> b) -> (TypeR a, TypeR b)
 primFunType = \case
@@ -1110,9 +1117,10 @@ rnfConst (TupRsingle t)    !_    = rnfScalarType t  -- scalars should have (nf =
 rnfConst (TupRpair ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
 
 rnfPrimConst :: PrimConst c -> ()
-rnfPrimConst (PrimMinBound t) = rnfBoundedType t
-rnfPrimConst (PrimMaxBound t) = rnfBoundedType t
-rnfPrimConst (PrimPi t)       = rnfFloatingType t
+rnfPrimConst (PrimMinBound t)     = rnfBoundedType t
+rnfPrimConst (PrimMaxBound t)     = rnfBoundedType t
+rnfPrimConst (PrimPi t)           = rnfFloatingType t
+rnfPrimConst (PrimVectorCreate t) = rnfVectorType t
 
 rnfPrimFun :: PrimFun f -> ()
 rnfPrimFun (PrimAdd t)                = rnfNumType t
@@ -1337,9 +1345,10 @@ liftBoundary (ArrayR _ tp) (Constant v) = [|| Constant $$(liftElt tp v) ||]
 liftBoundary _             (Function f) = [|| Function $$(liftOpenFun f) ||]
 
 liftPrimConst :: PrimConst c -> CodeQ (PrimConst c)
-liftPrimConst (PrimMinBound t) = [|| PrimMinBound $$(liftBoundedType t) ||]
-liftPrimConst (PrimMaxBound t) = [|| PrimMaxBound $$(liftBoundedType t) ||]
-liftPrimConst (PrimPi t)       = [|| PrimPi $$(liftFloatingType t) ||]
+liftPrimConst (PrimMinBound t)          = [|| PrimMinBound $$(liftBoundedType t) ||]
+liftPrimConst (PrimMaxBound t)          = [|| PrimMaxBound $$(liftBoundedType t) ||]
+liftPrimConst (PrimPi t)                = [|| PrimPi $$(liftFloatingType t) ||]
+liftPrimConst (PrimVectorCreate t)      = [|| PrimVectorCreate $$(liftVectorType t) ||]
 
 liftPrimFun :: PrimFun f -> CodeQ (PrimFun f)
 liftPrimFun (PrimAdd t)                = [|| PrimAdd $$(liftNumType t) ||]
@@ -1402,7 +1411,7 @@ liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftSingleType t) ||]
 liftPrimFun PrimLAnd                   = [|| PrimLAnd ||]
 liftPrimFun PrimLOr                    = [|| PrimLOr ||]
 liftPrimFun PrimLNot                   = [|| PrimLNot ||]
-liftPrimFun (PrimVectorIndex v i)      = [||PrimVectorIndex $$(liftVectorType v) $$(liftIntegralType i) ||]
+liftPrimFun (PrimVectorIndex v i)      = [|| PrimVectorIndex $$(liftVectorType v) $$(liftIntegralType i) ||]
 liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
 

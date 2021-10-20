@@ -73,6 +73,7 @@ module Data.Array.Accelerate.Smart (
   mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
   -- ** Smart constructors for vector operations
+  mkVectorCreate,
   mkVectorIndex,
 
   -- ** Auxiliary functions
@@ -865,7 +866,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     Case{}                          -> internalError "encountered empty case"
     Cond _ e _                      -> typeR e
     While t _ _ _                   -> t
-    PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
+    PrimConst c                     -> TupRsingle $ primConstType c
     PrimApp f _                     -> snd $ primFunType f
     Index tp _ _                    -> tp
     LinearIndex tp _ _              -> tp
@@ -1179,6 +1180,11 @@ mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
     x = SmartExp $ Prj PairIdxLeft a
 
 -- Operators from Vec
+mkVectorCreate :: forall n a. (KnownNat n, Elt a, VecElt a) => Exp (Vec n a)
+mkVectorCreate = let n :: Int
+                     n = fromIntegral $ natVal $ Proxy @n
+                 in mkExp $ PrimConst $ PrimVectorCreate $ VectorType n singleType
+
 mkVectorIndex :: forall n a. (KnownNat n, Elt a, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a
 mkVectorIndex = let n :: Int
                     n = fromIntegral $ natVal $ Proxy @n

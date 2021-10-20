@@ -32,8 +32,6 @@ module Data.Primitive.Vec (
   Vec8, pattern Vec8,
   Vec16, pattern Vec16,
 
-  mkVec,
-
   listOfVec,
   liftVec,
 

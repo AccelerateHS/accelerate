@@ -310,7 +310,7 @@ module Data.Array.Accelerate (
 
   -- ** SIMD vectors
   Vec, VecElt,
-  mkVec,
+  Vectoring(..),
 
   -- ** Type classes
   -- *** Basic type classes
@@ -318,7 +318,7 @@ module Data.Array.Accelerate (
   Ord(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
-  Vectoring(..),
+
   -- Functor(..), (<$>), ($>), void,
   -- Monad(..),
 
