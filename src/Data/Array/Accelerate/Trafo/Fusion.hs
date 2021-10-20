@@ -145,8 +145,6 @@ delayed
 delayed config (embedOpenAcc config -> Embed env cc)
   | BaseEnv <- env
   = simplify cc & \case
-      -- TODO: I'm pretty sure we don't need to do anything special and can just
-      --       throw away the annotation field here
       Left (Done _ v)                                             -> avarsIn Manifest v
       Right d                                                     -> d & \case
         Yield ann aR sh f                                         -> Delayed ann aR sh f                              (f `compose` fromIndex ann (arrayRshape aR) sh)
@@ -175,8 +173,7 @@ manifest config (OpenAcc pacc) =
     Avar ix                     -> Avar ix
     Use ann aR a                -> Use ann aR a
     Unit ann t e                -> Unit ann t e
-    -- FIXME: We currently throw away all source annotations during sharing recovery
-    Alet _ lhs bnd body         -> alet lhs (manifest config bnd) (manifest config body)
+    Alet ann lhs bnd body       -> alet ann lhs (manifest config bnd) (manifest config body)
     Acond ann p t e             -> Acond ann p (manifest config t) (manifest config e)
     Awhile ann p f a            -> Awhile ann (cvtAF p) (cvtAF f) (manifest config a)
     Apair ann a1 a2             -> Apair ann (manifest config a1) (manifest config a2)
@@ -225,18 +222,19 @@ manifest config (OpenAcc pacc) =
       -- conversion to the internal embeddable representation.
       --
       alet :: HasCallStack
-           => ALeftHandSide a aenv aenv'
+           => Ann
+           -> ALeftHandSide a aenv aenv'
            -> DelayedOpenAcc aenv a
            -> DelayedOpenAcc aenv' b
            -> PreOpenAcc DelayedOpenAcc aenv b
-      alet lhs bnd body
+      alet ann lhs bnd body
         | Just bodyVars  <- extractDelayedArrayVars body
         , Just Refl      <- bindingIsTrivial lhs bodyVars
         , Manifest x     <- bnd
-        = x
+        = modifyAnn (<> ann) x
         --
         | otherwise
-        = Alet mkDummyAnn lhs bnd body
+        = Alet ann lhs bnd body
 
       -- Eliminate redundant application to an identity function. This
       -- arises in the use of pipe to avoid fusion and force its argument
@@ -368,7 +366,9 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     -- want to fuse past array let bindings, as this would imply work
     -- duplication. SEE: [Sharing vs. Fusion]
     --
-    -- FIXME: We currently throw away all source annotations during sharing recovery
+    -- FIXME: The annotation about the let binding site is thrown away here. Is
+    --        there some way we can still use this? Do we lose any information
+    --        this way?
     --
     Alet _ lhs bnd body            -> aletD embedAcc elimAcc lhs bnd body
     Anil ann                       -> done $ Anil ann
@@ -422,9 +422,6 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     -- implemented below. This will place producers adjacent to the consumer
     -- node, so that the producer can be directly embedded into the consumer
     -- during the code generation phase.
-    --
-    -- TODO: Should we add the annotation field directly to @Embed@? How do we
-    --       end up combining the annotations of a map fused into a fold?
     --
     Fold ann f z a                 -> embed  aR (into2M (Fold ann)             (cvtF f) (cvtE <$> z)) a
     FoldSeg ann i f z a s          -> embed2 aR (into2M (FoldSeg ann i)        (cvtF f) (cvtE <$> z)) a s
@@ -766,9 +763,6 @@ data ExtendProducer acc aenv senv arrs where
 -- of the fusion algorithm for an AST of N terms becomes O(r^n), where r is the
 -- number of different rules we have for combining terms.
 --
--- TODO: Think of how we should embed the annotations into delayed array
---       computations. Right now all 'Ann' arguments are just ignored.
---
 data Embed acc aenv a where
   Embed :: Extend ArrayR acc aenv aenv'
         -> Cunctation r           aenv' a
@@ -792,6 +786,9 @@ data M
 -- element at each index, and fusing successive producers by combining these
 -- scalar functions.
 --
+-- TODO: For the delayed representation, can we just combine annotations as we
+--       go? How does this interact with things like loop unrolling?
+--
 data Cunctation r aenv a where
 
   -- The base case is just a real (manifest) array term. No fusion happens here.
@@ -799,18 +796,13 @@ data Cunctation r aenv a where
   -- environment, ensuring that the array is manifest and making the term
   -- non-recursive in 'acc'.
   --
-  -- TODO: It isn't possible to easily just extract this annotation from the
-  --       environment without having to store it inside of this constructor, is
-  --       it? It's probably still cleaner if we also store it here of course.
-  -- TODO: Also, we're mostly ignoring annotations coming from 'Done'
-  --       constructors. Is this correct?
+  -- TODO: In a lot of situations we throw away this annotation when fusing
+  --       manifest arrays into other operations. Double check that this is
+  --       correct.
   --
   Done  :: Ann
         -> ArrayVars    aenv arrs
         -> Cunctation M aenv arrs
-
-  -- TODO: For the delayed representation, can we just combine annotations as we
-  --       go? How does this interact with things like loop unrolling?
 
   -- We can represent an array by its shape and a function to compute an element
   -- at each index.
@@ -979,10 +971,10 @@ computeAcc
 computeAcc (Embed      BaseEnv              cc) = OpenAcc (compute cc)
 computeAcc (Embed env@(PushEnv bot lhs top) cc) =
   simplify cc & \case
-    Left (Done _ v) -> bindA env (avarsIn OpenAcc v)
-    Right d         -> d & \case
+    Left (Done ann v) -> bindA env ann (avarsIn OpenAcc v)
+    Right d           -> d & \case
       Yield ann repr sh f
-        -> bindA env (OpenAcc (Generate ann repr sh f))
+        -> bindA env ann (OpenAcc (Generate ann repr sh f))
 
       Step ann repr sh p f v@(Var _ _ ix)
         | Just Refl <- matchOpenExp sh (arrayShape ann v)
@@ -991,8 +983,8 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
              ZeroIdx
                | LeftHandSideSingle _ ArrayR{} <- lhs
                , Just (OpenAccFun g) <- strengthen noTop (OpenAccFun f)
-                    -> bindA bot (OpenAcc (Map ann (arrayRtype repr) g top))
-             _      -> bindA env (OpenAcc (Map ann (arrayRtype repr) f (avarIn OpenAcc v)))
+                    -> bindA bot ann (OpenAcc (Map ann (arrayRtype repr) g top))
+             _      -> bindA env ann (OpenAcc (Map ann (arrayRtype repr) f (avarIn OpenAcc v)))
 
         | Just Refl <- isIdentity f
         -> case ix of
@@ -1000,8 +992,8 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
                | LeftHandSideSingle _ ArrayR{} <- lhs
                , Just (OpenAccFun q)  <- strengthen noTop (OpenAccFun p)
                , Just (OpenAccExp sz) <- strengthen noTop (OpenAccExp sh)
-                    -> bindA bot (OpenAcc (Backpermute ann (arrayRshape repr) sz q top))
-             _      -> bindA env (OpenAcc (Backpermute ann (arrayRshape repr) sh p (avarIn OpenAcc v)))
+                    -> bindA bot ann (OpenAcc (Backpermute ann (arrayRshape repr) sz q top))
+             _      -> bindA env ann (OpenAcc (Backpermute ann (arrayRshape repr) sh p (avarIn OpenAcc v)))
 
         | otherwise
         -> case ix of
@@ -1010,22 +1002,25 @@ computeAcc (Embed env@(PushEnv bot lhs top) cc) =
                , Just (OpenAccFun g)  <- strengthen noTop (OpenAccFun f)
                , Just (OpenAccFun q)  <- strengthen noTop (OpenAccFun p)
                , Just (OpenAccExp sz) <- strengthen noTop (OpenAccExp sh)
-                    -> bindA bot (OpenAcc (Transform ann repr sz q g top))
-             _      -> bindA env (OpenAcc (Transform ann repr sh p f (avarIn OpenAcc v)))
+                    -> bindA bot ann (OpenAcc (Transform ann repr sz q g top))
+             _      -> bindA env ann (OpenAcc (Transform ann repr sh p f (avarIn OpenAcc v)))
 
   where
+    -- TODO: This annotation comes from the cunctation, that's probably not
+    --       correct
     bindA :: HasCallStack
           => Extend ArrayR OpenAcc aenv aenv'
+          -> Ann
           -> OpenAcc aenv' a
           -> OpenAcc aenv  a
-    bindA BaseEnv             b = b
-    bindA (PushEnv env lhs a) b
+    bindA BaseEnv             _   b = b
+    bindA (PushEnv env lhs a) ann b
       -- If the freshly bound value is directly, returned, we don't have to bind it in a
       -- let. We can do this if the left hand side does not contain wildcards (other than
       -- wildcards for unit / nil) and if the value contains the same variables.
       | Just vars <- extractOpenArrayVars b
-      , Just Refl <- bindingIsTrivial lhs vars = bindA env a
-      | otherwise                              = bindA env (OpenAcc (Alet mkDummyAnn lhs a b))
+      , Just Refl <- bindingIsTrivial lhs vars = bindA env ann a
+      | otherwise                              = bindA env ann (OpenAcc (Alet ann lhs a b))
 
     noTop :: (aenv, a) :?> aenv
     noTop ZeroIdx      = Nothing
@@ -1043,7 +1038,8 @@ compute
 compute cc = simplify cc & \case
   Left (Done ann v) -> v & \case
     TupRunit                               -> Anil ann
-    TupRsingle (Var ann' repr@ArrayR{} ix) -> Avar $ Var (ann <> ann') repr ix -- TODO: Should we merge this `ann`?
+    -- TODO: Is @ann'@ ever not the same as @ann@?
+    TupRsingle (Var ann' repr@ArrayR{} ix) -> Avar $ Var ann' repr ix
     TupRpair v1 v2                         -> Apair ann (avarsIn OpenAcc v1) (avarsIn OpenAcc v2)
   Right d -> d & \case
     Yield ann aR sh f             -> Generate ann aR sh f
@@ -1054,8 +1050,8 @@ compute cc = simplify cc & \case
       | otherwise                 -> Transform ann (ArrayR shR tR) sh p f (avarIn OpenAcc v)
 
 
--- TODO: For all of these transformations, make sure we pull the annotations
---       from the correct places
+-- TODO: For all of these transformations, quadruple check that we pull the
+--       annotations from the correct places
 
 
 -- Representation of a generator as a delayed array
@@ -1100,7 +1096,6 @@ unzipD
     -> Fun                  aenv (a -> b)
     -> Embed OpenAcc        aenv (Array sh a)
     -> Maybe (Embed OpenAcc aenv (Array sh b))
--- TODO: We can through out the annotation in @cc@, right?
 unzipD ann tR f (Embed env cc@(Done _ v))
   | Lam lhs (Body a) <- f
   , Just vars        <- extractExpVars a
@@ -1200,8 +1195,6 @@ sliceD ann sliceIndex slix cc
 -- TLM: there was a runtime check to ensure the old and new shapes contained the
 --      same number of elements: this has been lost for the delayed cases!
 --
--- TODO: Should we not be doing anything with the annotation in @cc@?
---
 reshapeD
     :: HasCallStack
     => Ann
@@ -1267,17 +1260,15 @@ zipWithD a1 tR f cc1 cc0
       -- combine them as done in `combineLHS`. As this will probably not occur often and requires
       -- additional weakening, we do a quick check whether the left hand sides are equal.
       --
-      -- TODO: Should we extract annotations from the functions here?
-      --
       = case matchELeftHandSide lhs1 lhs2 of
           Just Refl
             | Lam lhsA (Lam lhsB (Body c')) <- weakenE (weakenWithLHS lhs1) c
-              -> Lam lhs1 $ Body $ Let mkDummyAnn lhsA ixa'  $ Let mkDummyAnn lhsB (weakenE (weakenWithLHS lhsA)       ixb') c'
+              -> Lam lhs1 $ Body $ Let a1 lhsA ixa'  $ Let a1 lhsB (weakenE (weakenWithLHS lhsA)       ixb') c'
           Nothing
             | CombinedLHS lhs k1 k2         <- combineLHS lhs1 lhs2
             , Lam lhsA (Lam lhsB (Body c')) <- weakenE (weakenWithLHS lhs) c
             , ixa''                         <- weakenE k1 ixa'
-              -> Lam lhs  $ Body $ Let mkDummyAnn lhsA ixa'' $ Let mkDummyAnn lhsB (weakenE (weakenWithLHS lhsA .> k2) ixb') c'
+              -> Lam lhs  $ Body $ Let a1 lhsA ixa'' $ Let a1 lhsB (weakenE (weakenWithLHS lhsA .> k2) ixb') c'
           _
               -> error "how's your break?"
       --
@@ -1393,9 +1384,6 @@ combineLHS = go weakenId weakenId
 --     in <bound term>
 --   in <body term>
 --
--- TODO: When fixing the annotations here, go through all uses of 'mkDummyAnn'
---       to make sure we don't forget anything
---
 aletD :: HasCallStack
       => EmbedAcc OpenAcc
       -> ElimAcc  OpenAcc
@@ -1455,8 +1443,8 @@ aletD' embedAcc elimAcc (LeftHandSideSingle _ ArrayR{}) (Embed env1 cc1) (Embed 
   | acc0'   <- sink1 env1 acc0
   = Stats.ruleFired "aletD/eliminate"
   $ case delaying cc1 of
-      Step  ann _ _ _ _ _ -> eliminate ann env1 cc1 acc0'
-      Yield ann _ _ _     -> eliminate ann env1 cc1 acc0'
+      Step{}  -> eliminate env1 cc1 acc0'
+      Yield{} -> eliminate env1 cc1 acc0'
 
   where
     acc0 :: OpenAcc aenv' brrs
@@ -1471,31 +1459,28 @@ aletD' embedAcc elimAcc (LeftHandSideSingle _ ArrayR{}) (Embed env1 cc1) (Embed 
     -- extra type variables, and ensures we don't do extra work manipulating the
     -- body when not necessary (which can lead to a complexity blowup).
     --
-    -- FIXME: Should we somehow be stuffing `ann` into @cc0'@? (initially it
-    --        wasn't used at all, now use it for array shapes and indexing)
-    --
     eliminate
         :: forall r aenv aenv' sh e brrs. HasCallStack
-        => Ann
-        -> Extend ArrayR OpenAcc aenv aenv'
+        => Extend ArrayR OpenAcc aenv aenv'
         -> Cunctation r aenv' (Array sh e)
         -> OpenAcc (aenv', Array sh e) brrs
         -> Embed OpenAcc aenv brrs
-    eliminate ann env1 cc1 body
-      | Done _ v1                  <- cc1
-      , TupRsingle v1'@(Var _ r _) <- v1  = elim r (arrayShape ann v1') (indexArray ann v1')
-      | Step _  r sh1 p1 f1 v1     <- cc1 = elim r sh1 (f1 `compose` indexArray ann v1 `compose` p1)
-      | Yield _ r sh1 f1           <- cc1 = elim r sh1 f1
+    eliminate env1 cc1 body
+      | Done  ann v1               <- cc1
+      , TupRsingle v1'@(Var _ r _) <- v1  = elim ann r (arrayShape ann v1') (indexArray ann v1')
+      | Step  ann r sh1 p1 f1 v1   <- cc1 = elim ann r sh1 (f1 `compose` indexArray ann v1 `compose` p1)
+      | Yield ann r sh1 f1         <- cc1 = elim ann r sh1 f1
       where
         bnd :: PreOpenAcc OpenAcc aenv' (Array sh e)
         bnd = compute cc1
 
         elim :: HasCallStack
-             => ArrayR (Array sh e)
+             => Ann
+             -> ArrayR (Array sh e)
              -> Exp aenv' sh
              -> Fun aenv' (sh -> e)
              -> Embed OpenAcc aenv brrs
-        elim r sh1 f1
+        elim ann r sh1 f1
           | sh1'              <- weaken (weakenSucc' weakenId) sh1
           , f1'               <- weaken (weakenSucc' weakenId) f1
           , Embed env0' cc0'  <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA sh1' f1' $ Var ann r ZeroIdx) body
@@ -1544,8 +1529,6 @@ aletD' embedAcc elimAcc (LeftHandSideSingle _ ArrayR{}) (Embed env1 cc1) (Embed 
           | Just Refl <- matchVar a avar -> Stats.substitution "replaceE/shape" $ modifyAnn (<> ann) sh'
           | otherwise                    -> exp
 
-        -- TODO: Propagate the proper annotations for these constructors (and
-        --       likely others) once we add them
         Index ann a sh
           | Just Refl        <- matchVar a avar
           , Lam lhs (Body b) <- f'       -> Stats.substitution "replaceE/!" . cvtE $ Let ann lhs sh b
@@ -1717,10 +1700,9 @@ acondD :: HasCallStack
        ->          OpenAcc aenv arrs
        -> Embed    OpenAcc aenv arrs
 acondD ann matchAcc embedAcc p t e
-  -- TODO: Fold in @ann@
-  | Const _ _ 1 <- p            = Stats.knownBranch "True"      $ embedAcc t
-  | Const _ _ 0 <- p            = Stats.knownBranch "False"     $ embedAcc e
-  | Just Refl   <- matchAcc t e = Stats.knownBranch "redundant" $ embedAcc e
+  | Const _ _ 1 <- p            = Stats.knownBranch "True"      . embedAcc $ modifyAnn (<> ann) t
+  | Const _ _ 0 <- p            = Stats.knownBranch "False"     . embedAcc $ modifyAnn (<> ann) e
+  | Just Refl   <- matchAcc t e = Stats.knownBranch "redundant" $ embedAcc $ modifyAnn (<> ann) e
   | otherwise                   = done $ Acond ann p (computeAcc (embedAcc t))
                                                      (computeAcc (embedAcc e))
 
@@ -1748,7 +1730,7 @@ fromIndex ann shR sh
   $ Var ann scalarTypeInt ZeroIdx
 
 intersect :: Ann -> ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
-intersect ann = mkShapeBinary f
+intersect ann = mkShapeBinary f ann
   where
     f :: OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int
     f a b = PrimApp ann (PrimMin singleType) $ Pair ann a b
@@ -1758,26 +1740,25 @@ intersect ann = mkShapeBinary f
 --   where
 --     f a b = PrimApp (PrimMax singleType) $ Pair a b
 
--- TODO: The annotation usage here may be incorrect. Correction, it's definitely
---       not correct, we should look at this once the rest compiles.
 mkShapeBinary
     :: (forall env'. OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int)
+    -> Ann
     -> ShapeR sh
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
-mkShapeBinary _ ShapeRz a b = Nil (extractAnn a <> extractAnn b)
-mkShapeBinary f (ShapeRsnoc shR) (Pair a1 as a) (Pair a2 bs b) = Pair (a1 <> a2) (mkShapeBinary f shR as bs) (f a b)
-mkShapeBinary f shR (Let ann lhs bnd a) b = Let (ann <> extractAnn b) lhs bnd $ mkShapeBinary f shR a (weakenE (weakenWithLHS lhs) b)
-mkShapeBinary f shR a (Let ann lhs bnd b) = Let (extractAnn a <> ann) lhs bnd $ mkShapeBinary f shR (weakenE (weakenWithLHS lhs) a) b
-mkShapeBinary f shR a b@(Pair ann _ _) -- `a` is not Pair
+mkShapeBinary _ ann ShapeRz _ _ = Nil ann
+mkShapeBinary f ann (ShapeRsnoc shR) (Pair a1 as a) (Pair a2 bs b) = Pair (a1 <> a2) (mkShapeBinary f ann shR as bs) (f a b)
+mkShapeBinary f ann shR (Let ann' lhs bnd a) b = Let ann' lhs bnd $ mkShapeBinary f ann shR a (weakenE (weakenWithLHS lhs) b)
+mkShapeBinary f ann shR a (Let ann' lhs bnd b) = Let ann' lhs bnd $ mkShapeBinary f ann shR (weakenE (weakenWithLHS lhs) a) b
+mkShapeBinary f ann shR a b@Pair{} -- `a` is not Pair
   | repr <- shapeType shR
-  , DeclareVars lhs k value <- declareVars (annRfromTup (extractAnn a <> ann) repr) repr
-  = Let (extractAnn a <> ann) lhs a $ mkShapeBinary f shR (expVars $ value weakenId) (weakenE k b)
-mkShapeBinary f shR a b -- `b` is not a Pair
+  , DeclareVars lhs k value <- declareVars (annRfromTup ann repr) repr
+  = Let ann lhs a $ mkShapeBinary f ann shR (expVars $ value weakenId) (weakenE k b)
+mkShapeBinary f ann shR a b -- `b` is not a Pair
   | repr <- shapeType shR
-  , DeclareVars lhs k value <- declareVars (annRfromTup (extractAnn a <> extractAnn b) repr) repr
-  = Let (extractAnn a <> extractAnn b) lhs b $ mkShapeBinary f shR (weakenE k a) (expVars $ value weakenId)
+  , DeclareVars lhs k value <- declareVars (annRfromTup ann repr) repr
+  = Let ann lhs b $ mkShapeBinary f ann shR (weakenE k a) (expVars $ value weakenId)
 
 reindex :: Ann
         -> ShapeR sh'
