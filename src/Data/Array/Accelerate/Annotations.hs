@@ -171,6 +171,7 @@ module Data.Array.Accelerate.Annotations
     , sourceMap
     , sourceMapRuntime
     , sourceMapPattern
+    , mergeLocs
       -- * Internals
     , FieldAnn(..)
     , mkAnn
@@ -185,16 +186,18 @@ import           Data.Array.Accelerate.Orphans  ( )
 
 import           Control.DeepSeq                ( rnf )
 import qualified Data.HashSet                  as S
+import           Data.List                      ( sortBy )
 import           Data.Maybe                     ( mapMaybe )
+import           Data.Ord                       ( comparing )
 import qualified GHC.ExecutionStack            as ES
 import           GHC.IO                         ( unsafePerformIO )
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(..) )
-import           Lens.Micro
-import           Lens.Micro.Extras              ( view )
 import           Language.Haskell.TH            ( Q
                                                 , TExp
                                                 )
+import           Lens.Micro
+import           Lens.Micro.Extras              ( view )
 
 
 -- | This annotation type stores any auxiliary data attached to an AST node.
@@ -215,7 +218,9 @@ import           Language.Haskell.TH            ( Q
 --       involve adding another type index to 'Exp' that's not going to be a
 --       feasible approach.
 data Ann = Ann
-    { locations     :: S.HashSet CallStack
+    { -- | When displaying these to the user, use 'mergeLocs' instead of
+      -- 'fromCallSiteList' so nearby source locations are merged.
+      locations     :: S.HashSet CallStack
     , optimizations :: Optimizations
     }
 
@@ -409,15 +414,15 @@ sourceMapPattern _nestingDepth dewit =
       <> "'HasCallStack'. If that's not possible, then you should use "
       <> "'sourceMapRuntime' instead."
 #else
-  let ?requiresSourceMapping = TakenCareOf
-      ?callStack =
-        -- Only freeze an empty call stack of the call stack isn't already
-        -- frozen, i.e. when it is used internally within Accelerate's front end
-        -- standard library
-        case ?callStack of
-          x@(FreezeCallStack _) -> x
-          _                     -> freezeCallStack emptyCallStack
-  in  dewit
+    let ?requiresSourceMapping = TakenCareOf
+        ?callStack =
+          -- Only freeze an empty call stack of the call stack isn't already
+          -- frozen, i.e. when it is used internally within Accelerate's front end
+          -- standard library
+          case ?callStack of
+            x@(FreezeCallStack _) -> x
+            _                     -> freezeCallStack emptyCallStack
+    in  dewit
 #endif
 
 -- | We'll throw an error when 'sourceMap' or 'sourceMapPattern' gets called
@@ -511,6 +516,51 @@ mkDummyAnn = let ?requiresSourceMapping = TakenCareOf
                  ?callStack             = freezeCallStack emptyCallStack
              in  mkAnn
 
+-- | Merge adjacent source locations stored in an annotation, returning a list
+-- of source locations ordered by filename, line number, and column. This is a
+-- list of call stacks in the same format as `getCallStack`. When the source
+-- location set is disjoint, the resulting list will contain multiple entries.
+--
+-- TODO: Right now we use a simple heuristic and consider regions on the same
+--       line or on adjacent lines to be adjacent. This will definitely need
+--       some tweaking.
+mergeLocs :: S.HashSet CallStack -> [[(String, SrcLoc)]]
+mergeLocs
+    = mergeAdjacent
+    . sortBy cmpLoc
+    . S.foldl' (\acc (getCallStack -> stack) -> stack : acc) []
+  where
+    -- We need the locations sorted by the file they're in, and their place in
+    -- that file so we can then merge adjacent regions
+    cmpLoc :: [(String, SrcLoc)] -> [(String, SrcLoc)] -> Ordering
+    cmpLoc ((_, locA):_) ((_, locB):_)
+      = (comparing srcLocFile <> comparing srcLocStartLine <> comparing srcLocStartCol) locA locB
+      -- These call stacks should never be empty, but the exhaustiveness checker
+      -- obviously doesn't know that
+    cmpLoc ((_, _):_)    []            = LT
+    cmpLoc []            ((_, _):_)    = GT
+    cmpLoc []            []            = EQ
+
+    -- TODO: We only look at and modify the topmost stack frame. This won't
+    --       cause weird inconsistencies, righty?
+    mergeAdjacent :: [[(String, SrcLoc)]] -> [[(String, SrcLoc)]]
+    mergeAdjacent (x@((fnX, locX):restX):y@((fnY, locY):_):cs)
+      | srcLocFile locX == srcLocFile locY
+      -- Since the list is already sorted, we know that if region X's end is
+      -- after region Y's start, then the regions overlap. We'll also allow
+      -- consider a region Y that starts on the line after region X to be
+      -- adjacent.
+      , srcLocEndLine locX - srcLocStartLine locY >= -1
+        -- TODO: Merging these function names this way can grow out of hand very
+        --       quickly. On the other hand, just taking @fnX@ and not doing
+        --       anything else kind of hides the fact that regions have been
+        --       merged.
+      = ((fnX <> ", " <> fnY, locX { srcLocEndLine = srcLocEndLine locY
+                                   , srcLocEndCol  = srcLocEndCol locY }) : restX)
+                      : mergeAdjacent cs
+      | otherwise = x : mergeAdjacent (y:cs)
+    mergeAdjacent cs = cs
+
 
 instance Semigroup Ann where
     (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)
@@ -532,7 +582,7 @@ instance Semigroup Optimizations where
             _                  -> Nothing
 
 -- * Internal
---
+
 -- ** Normal form data
 --
 -- Used as part of 'rnfPreOpenAcc'.
