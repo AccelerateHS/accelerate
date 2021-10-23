@@ -145,13 +145,22 @@ delayed
 delayed config (embedOpenAcc config -> Embed env cc)
   | BaseEnv <- env
   = simplify cc & \case
-      Left (Done _ v)                                             -> avarsIn Manifest v
-      Right d                                                     -> d & \case
-        Yield ann aR sh f                                         -> Delayed ann aR sh f                              (f `compose` fromIndex ann (arrayRshape aR) sh)
+      Left (Done _ v)                                       -> avarsIn Manifest v
+      Right d                                               -> d & \case
+        Yield ann aR sh f                                   -> Delayed ann aR sh f                           (compose ann f $ fromIndex ann (arrayRshape aR) sh)
         Step  ann aR sh p f v
           | Just Refl <- matchOpenExp sh (arrayShape ann v)
-          , Just Refl <- isIdentity p                             -> Delayed ann aR sh (f `compose` indexArray ann v) (f `compose` linearIndex ann v)
-          | f'        <- f `compose` indexArray ann v `compose` p -> Delayed ann aR sh f'                             (f' `compose` fromIndex ann (arrayRshape aR) sh)
+          , Just Refl <- isIdentity p                       -> Delayed ann aR sh (f `comp` indexArray ann v) (f  `comp` linearIndex ann v)
+          | f'        <- f `comp` indexArray ann v `comp` p -> Delayed ann aR sh f'                          (f' `comp` fromIndex ann (arrayRshape aR) sh)
+          where
+            -- TODO: These bindings cause a lot of clutter, but chaining
+            --       function composition without infix functions is also pretty
+            --       messy, and Haskell doesn't support infix expressions yet.
+            --       Is there a better alternative that doesn't involve losing
+            --       the annotation in the composition's let binding?
+            infixr `comp`
+            comp :: OpenFun env aenv (b -> c) -> OpenFun env aenv (a -> b) -> OpenFun env aenv (a -> c)
+            comp = compose ann
   --
   | otherwise
   = manifest config (computeAcc (Embed env cc))
@@ -877,7 +886,7 @@ yield :: HasCallStack
 yield cc =
   case cc of
     Yield{}                              -> cc
-    Step ann tR sh p f v                 -> Yield ann tR sh (f `compose` indexArray ann v `compose` p)
+    Step ann tR sh p f v                 -> Yield ann tR sh (compose ann f $ compose ann (indexArray ann v) p)
     Done ann (TupRsingle v@(Var _ tR _)) -> Yield ann tR (arrayShape ann v) (indexArray ann v)
 
 -- Recast a cunctation into a delayed representation
@@ -1077,13 +1086,13 @@ mapD :: HasCallStack
      -> Fun           aenv (a -> b)
      -> Embed OpenAcc aenv (Array sh a)
      -> Embed OpenAcc aenv (Array sh b)
-mapD a1 tR f (unzipD a1 tR f -> Just a) = a
-mapD a1 tR f (Embed env cc)
+mapD ann tR f (unzipD ann tR f -> Just a) = a
+mapD ann tR f (Embed env cc)
   = Stats.ruleFired "mapD"
   $ Embed env (go (delaying cc))
   where
-    go (Step  a2 (ArrayR shR _) sh ix g v) = Step  (a1 <> a2) (ArrayR shR tR) sh ix (sinkA env f `compose` g) v
-    go (Yield a2 (ArrayR shR _) sh g)      = Yield (a1 <> a2) (ArrayR shR tR) sh    (sinkA env f `compose` g)
+    go (Step  ann' (ArrayR shR _) sh ix g v) = Step  (ann <> ann') (ArrayR shR tR) sh ix (compose (ann <> ann') (sinkA env f) g) v
+    go (Yield ann' (ArrayR shR _) sh g)      = Yield (ann <> ann') (ArrayR shR tR) sh    (compose (ann <> ann') (sinkA env f) g)
 
 
 -- If we are unzipping a manifest array then force the term to be computed;
@@ -1118,8 +1127,8 @@ backpermuteD
     -> Cunctation D aenv (Array sh' e)
 backpermuteD ann shR' sh' p = Stats.ruleFired "backpermuteD" . go . delaying
   where
-    go (Step  ann' (ArrayR _ tR) _ q f v) = Step  (ann <> ann') (ArrayR shR' tR) sh' (q `compose` p) f v
-    go (Yield ann' (ArrayR _ tR) _ g)     = Yield (ann <> ann') (ArrayR shR' tR) sh' (g `compose` p)
+    go (Step  ann' (ArrayR _ tR) _ q f v) = Step  (ann <> ann') (ArrayR shR' tR) sh' (compose (ann <> ann') q p) f v
+    go (Yield ann' (ArrayR _ tR) _ g)     = Yield (ann <> ann') (ArrayR shR' tR) sh' (compose (ann <> ann') g p)
 
 
 -- Transform as a combined map and backwards permutation
@@ -1468,7 +1477,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle _ ArrayR{}) (Embed env1 cc1) (Embed 
     eliminate env1 cc1 body
       | Done  ann v1               <- cc1
       , TupRsingle v1'@(Var _ r _) <- v1  = elim ann r (arrayShape ann v1') (indexArray ann v1')
-      | Step  ann r sh1 p1 f1 v1   <- cc1 = elim ann r sh1 (f1 `compose` indexArray ann v1 `compose` p1)
+      | Step  ann r sh1 p1 f1 v1   <- cc1 = elim ann r sh1 (compose ann f1 $ compose ann (indexArray ann v1) p1)
       | Yield ann r sh1 f1         <- cc1 = elim ann r sh1 f1
       where
         bnd :: PreOpenAcc OpenAcc aenv' (Array sh e)
@@ -1768,7 +1777,7 @@ reindex :: Ann
         -> OpenFun env aenv (sh -> sh')
 reindex ann shR' sh' shR sh
   | Just Refl <- matchOpenExp sh sh' = identity ann (shapeType shR')
-  | otherwise                        = fromIndex ann shR' sh' `compose` toIndex ann shR sh
+  | otherwise                        = compose ann (fromIndex ann shR' sh') (toIndex ann shR sh)
 
 extend :: Ann
        -> SliceIndex slix sl co sh

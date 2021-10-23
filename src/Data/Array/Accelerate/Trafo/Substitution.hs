@@ -223,10 +223,11 @@ substitute :: LeftHandSide b env envb
 -- | Composition of unary functions.
 --
 compose :: HasCallStack
-        => OpenFun env aenv (b -> c)
+        => Ann
+        -> OpenFun env aenv (b -> c)
         -> OpenFun env aenv (a -> b)
         -> OpenFun env aenv (a -> c)
-compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
+compose ann f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
   | Stats.substitution "compose" False = undefined
   | Just Refl <- isIdentity f = g -- don't rebind an identity function
   | Just Refl <- isIdentity g = f
@@ -234,11 +235,10 @@ compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
   | Exists lhsB' <- rebuildLHS lhsB
   = Lam lhsA
   $ Body
-  $ Let mkDummyAnn lhsB' b
+  $ Let ann lhsB' b
   $ weakenE (sinkWithLHS lhsB lhsB' $ weakenWithLHS lhsA) c
   -- = Stats.substitution "compose" . Lam lhs2 . Body $ substitute' f g
-compose _
-  _ = error "compose: impossible evaluation"
+compose _ _ _ = error "compose: impossible evaluation"
 
 subTop :: OpenExp env aenv s -> ExpVar (env, s) t -> OpenExp env aenv t
 subTop s (Var _   _  ZeroIdx     ) = s
