@@ -256,7 +256,6 @@ simplifyOpenExp env = first getAny . cvtE
     cvtMaybeE Nothing  = pure Nothing
     cvtMaybeE (Just e) = Just <$> cvtE e
 
-    -- TODO: Is passing around the same annotation correct?
     cvtLet :: Ann
            -> Gamma env' env' aenv
            -> ELeftHandSide bnd env' env''

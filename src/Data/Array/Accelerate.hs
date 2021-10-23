@@ -388,11 +388,7 @@ module Data.Array.Accelerate (
   -- *** Conversions
   ord, chr, boolToInt, bitcast,
 
-  -- ---------------------------------------------------------------------------
-  -- * Annotations
-  --
-  -- TODO: What would be a logical place to expose these in this huge list of
-  --       functions and type classes?
+  -- ** Annotations
   HasAnnotations(),
   alwaysInline, unrollIters,
 

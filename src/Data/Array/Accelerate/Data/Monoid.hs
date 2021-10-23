@@ -57,8 +57,6 @@ import qualified Prelude                                            as P
 -- Sum: Monoid under addition
 -- --------------------------
 
--- TODO: How does call stack freezing work here? Same for the other pattern
---       synonyms here.
 pattern Sum_ :: (HasCallStack, Elt a) => Exp a -> Exp (Sum a)
 pattern Sum_ x = Pattern x
 {-# COMPLETE Sum_ #-}

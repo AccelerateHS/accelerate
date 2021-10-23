@@ -63,7 +63,8 @@ import Prelude                                                      hiding ( exp
 -- -------
 
 -- TODO: We currently don't take annotations into account when generating these
---       hashes. We should at least include the optimization flags here.
+--       hashes. Same thing for matching. Should we only look at optimizations,
+--       or should we also take the source location into account?
 
 type Hash = Digest SHA3_256
 

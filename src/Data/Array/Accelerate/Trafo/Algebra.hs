@@ -47,14 +47,15 @@ import Prelude                                                      hiding ( exp
 import qualified Prelude                                            as P
 
 
--- TODO: Evaluate the correctness of our annotation propagation.  Honestly, I'm
---       not sure whether when optimizing @x + y@ with @y = 0@ to just @x@ we
---       should return just @x@, or whether we should integrate the annotation
---       (and thus source location) of the whole addition into the returned @x@.
+-- TODO: Evaluate the correctness of our annotation propagation. I'm not quite
+--       sure whether when optimizing @x + y@ where @y = 0@ to just @x@ we
+--       should return just @x@, or if we should incorporate the annotation (and
+--       thus source location) of the whole addition into the returned @x@.
 -- TODO: In line with the above, does it make more sense to directly take the
 --       annotation from the pair (which would match up with the source location
 --       of the primitive operation) or should we combine that pair with the
---       annotation of both of the elements?
+--       annotation of both of the elements? - If it's a pair of variables, the
+--       pair itself may not have any source location at all.
 
 
 -- Propagate constant expressions, which are either constant valued expressions

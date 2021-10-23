@@ -53,9 +53,6 @@ data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a
                         -> DelayedOpenAcc aenv a
 
-  -- TODO: The current idea is to merge annotations from any AST constructors we
-  --       convert to the delayed representation. Does this make sense wrt
-  --       things like loop unrolling?
   Delayed               ::
     { annD              :: Ann
     , reprD             :: ArrayR (Array sh e)
@@ -86,8 +83,8 @@ instance NFData (DelayedOpenAfun aenv t) where
 instance NFData (DelayedOpenAcc aenv t) where
   rnf = rnfDelayedOpenAcc
 
--- TODO: Like elsewhere, we should probably consider optimization flags in the
---       hashes
+-- TODO: Like mentioned in the Hash module, we should probably incorporate
+--       optimization flags and source locations in the hashes
 encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
 encodeDelayedOpenAcc options acc =
   let
@@ -108,8 +105,8 @@ encodeDelayedOpenAcc options acc =
     Manifest pacc      -> intHost $(hashQ ("Manifest" :: String)) <> deepA pacc
     Delayed _ _ sh f g -> intHost $(hashQ ("Delayed"  :: String)) <> travE sh <> travF f <> travF g
 
--- TODO: Like everywhere else, we should probably consider at least the
---       optimization flags when matching ASTs.
+-- TODO: Like mentioned in the Match module, we may need to consider
+--       optimization flags when matching these delayed representation.
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
 matchDelayedOpenAcc (Manifest pacc1) (Manifest pacc2)
   = matchPreOpenAcc matchDelayedOpenAcc pacc1 pacc2

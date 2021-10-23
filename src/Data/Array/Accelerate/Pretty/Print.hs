@@ -374,8 +374,8 @@ prettyELhs requiresParens = prettyLhs requiresParens 'x'
 
 -- TODO: We never print the annotations stored in the 'LeftHandSideSingle's.
 --       Doing so would probably make everything more difficult to read, but we
---       do print the annotations on the use site of the bindings, which might
---       be a bit inconsistent.
+--       do print the annotations on the use site of the bindings which might be
+--       a bit inconsistent.
 prettyLhs :: forall s env env' arrs. Bool -> Char -> Val env -> LeftHandSide s arrs env env' -> (Val env', Adoc)
 prettyLhs requiresParens x env0 lhs = case collect lhs of
   Nothing          -> ppPair lhs

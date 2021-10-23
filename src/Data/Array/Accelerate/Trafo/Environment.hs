@@ -157,9 +157,12 @@ sinkWeaken BaseEnv = Stats.substitution "sink" weakenId
 -- Wrapper around OpenExp, with the order of type arguments env and aenv flipped
 newtype OpenExp' aenv env e = OpenExp' (OpenExp env aenv e)
 
-bindExps :: Extend ScalarType (OpenExp' aenv) env env'
+-- TODO: I think this function is no longer used, unless it's used in some
+--       non-core Accelerate library. Its usages there would need to be
+--       modified.
+bindExps :: Ann
+         -> Extend ScalarType (OpenExp' aenv) env env'
          -> OpenExp env' aenv e
          -> OpenExp env  aenv e
-bindExps BaseEnv = id
--- TODO: This function is never used. We should use the annotation from the expression, but ¯\_(ツ)_/¯
-bindExps (PushEnv g lhs (OpenExp' b)) = bindExps g . Let mkDummyAnn lhs b
+bindExps _   BaseEnv = id
+bindExps ann (PushEnv g lhs (OpenExp' b)) = bindExps ann g . Let ann lhs b

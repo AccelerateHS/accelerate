@@ -64,10 +64,6 @@ import Control.Monad
 import Prelude                                                      hiding ( exp, seq )
 
 
--- TODO: Like in @Var.h@, we completely ignore the existence of annotations at
---       the moment
-
-
 -- NOTE: [Renaming and Substitution]
 --
 -- To do things like renaming and substitution, we need some operation on
@@ -244,8 +240,6 @@ compose f@(Lam lhsB (Body c)) g@(Lam lhsA (Body b))
 compose _
   _ = error "compose: impossible evaluation"
 
--- TODO: Like everywhere else, figure out how to thread the annotations through
---       this. We may need to somehow shoehorn them into 'Var'.
 subTop :: OpenExp env aenv s -> ExpVar (env, s) t -> OpenExp env aenv t
 subTop s (Var _   _  ZeroIdx     ) = s
 subTop _ (Var ann tp (SuccIdx ix)) = Evar $ Var ann tp ix
@@ -493,10 +487,6 @@ strengthenAfter _ _ _ = error "Substitution.strengthenAfter: left hand sides do 
 
 -- The scalar environment
 -- ------------------
-
--- TODO: Like on the array level, we currently completely throw out any
---       annotations at this point. Check all uses of 'Evar' and 'mkDummyAnn''
---       after implementing that to make sure we didn't miss anything.
 
 -- SEE: [Renaming and Substitution]
 -- SEE: [Weakening]

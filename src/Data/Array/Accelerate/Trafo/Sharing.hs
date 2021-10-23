@@ -203,8 +203,8 @@ instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
     | repr                    <- Sugar.arraysR @a
     -- TODO: Can we get some information about this binding site? This would now
     --       result in empty annotations, which is probably the best we can do
-    --       atm. Maybe we can just give them an index (@sizeLayout alyt@). We
-    --       do the same thing in a couple of other places.
+    --       atm. Maybe we can just give them a unique index (@sizeLayout alyt@)
+    --       instead. We do the same thing in a couple of other places.
     , a                       <- SmartAcc $ Atag mkDummyAnn repr $ sizeLayout alyt
     , DeclareVars lhs k value <- declareVars (annR a repr) repr
     = let
@@ -314,12 +314,12 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtAprj :: forall a b c. Ann -> PairIdx (a, b) c -> ScopedAcc (a, b) -> AST.OpenAcc aenv c
         cvtAprj ann ix a = cvtAprj' ann ix $ cvtA a
 
-        -- TODO: Should we combine the pair's annotations like this for the
-        --       simple projections? Probably not, but let's figure this out
-        --       later.
+        -- TODO: Should we combine the pair's annotations like this when
+        --       resolving simple projections? Probably not, but let's figure
+        --       this out later.
         cvtAprj' :: forall a b c aenv1. Ann -> PairIdx (a, b) c -> AST.OpenAcc aenv1 (a, b) -> AST.OpenAcc aenv1 c
-        cvtAprj' ann PairIdxLeft  (AST.OpenAcc (AST.Apair _ a _)) = modifyAnn (<> ann) a
-        cvtAprj' ann PairIdxRight (AST.OpenAcc (AST.Apair _ _ b)) = modifyAnn (<> ann) b
+        cvtAprj' _   PairIdxLeft  (AST.OpenAcc (AST.Apair _ a _)) = a
+        cvtAprj' _   PairIdxRight (AST.OpenAcc (AST.Apair _ _ b)) = b
         cvtAprj' ann ix a
           | repr <- AST.arraysR a
           , DeclareVars lhs _ value <- declareVars (annR a repr) repr
@@ -332,12 +332,8 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> let AST.OpenAcc a = avarsIn AST.OpenAcc $ prjIdx (bformat ("de Bruijn conversion tag " % int) i) formatArraysR matchArraysR repr i alyt
            in  a
 
-      -- TODO: Check how the annotation fields are threaded through to the de
-      --       Bruijn AST for the non-trivial constructors. The current
-      --       implementation is just there to make the type checker happy.
       Pipe ann reprA reprB reprC (afun1 :: SmartAcc as -> ScopedAcc bs) (afun2 :: SmartAcc bs -> ScopedAcc cs) acc
-        | b                       <- SmartAcc $ Atag ann reprB 0
-        , DeclareVars lhs k value <- declareVars (annR b reprB) reprB ->
+        | DeclareVars lhs k value <- declareVars (annRfromTup ann reprB) reprB ->
           let
             noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
             boundAcc = AST.Apply ann reprB (cvtAfun1 ann reprA afun1) (cvtA acc)
@@ -781,8 +777,9 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         converted = cvt (ScopedExp [] boundExp)
     cvt (ScopedExp _ (ExpSharing _ pexp))
       = case pexp of
-          -- TODO: Check if the annotations in the 'Pair' and 'Nil' constructors
-          --       are significant. If they are, take them from the tag.
+          -- TODO: Check if the annotations in the 'Pair' and 'Nil' nodes used
+          --       to store the variables are significant. If they are, take
+          --       them from the tag.
           Tag _ tp i              -> expVars $ prjIdx ("de Bruijn conversion tag " <> F.build i) formatTypeR matchTypeR tp i lyt
           Match _ e               -> cvt e  -- XXX: this should probably be an error
           Const ann tp v          -> AST.Const ann tp v
@@ -806,11 +803,10 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Foreign ann repr ff f e -> AST.Foreign ann repr ff (convertSmartFun config ann (typeR e) f) (cvt e)
           Coerce ann t1 t2 e      -> AST.Coerce ann t1 t2 (cvt e)
 
-    -- TODO: We throw away any annotations on the projection here. We should
-    --       probably merge them into @a@ and @b@.
+    -- TODO: Same comment as on @cvtAprj'@
     cvtPrj :: forall a b c env1 aenv1. Ann -> PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
-    cvtPrj _ PairIdxLeft  (AST.Pair _ a _) = a
-    cvtPrj _ PairIdxRight (AST.Pair _ _ b) = b
+    cvtPrj _   PairIdxLeft  (AST.Pair _ a _) = a
+    cvtPrj _   PairIdxRight (AST.Pair _ _ b) = b
     cvtPrj ann ix a
       | repr <- AST.expType a
       , DeclareVars lhs _ value <- declareVars (annR a repr) repr
@@ -937,12 +933,9 @@ convertSharingFun1
     -> (SmartExp a -> ScopedExp b)
     -> AST.Fun aenv (a -> b)
 convertSharingFun1 config alyt aenv ann tp f
-  -- TODO: Same as earlier, at this point there are some situations where we
-  --       don't know anything about the function's arguments, and then there
-  --       are some situations where it would map directly to an AST node.
-  | a <- SmartExp (Tag ann tp 0) -- the 'tag' was already embedded in Phase 1
-  , DeclareVars lhs _ value <- declareVars (annR a tp) tp
+  | DeclareVars lhs _ value <- declareVars (annRfromTup ann tp) tp
   = let
+      a               = SmartExp undefined             -- the 'tag' was already embedded in Phase 1
       lyt             = PushLayout EmptyLayout lhs (value weakenId)
       openF           = convertSharingExp config lyt alyt [] aenv (f a)
     in

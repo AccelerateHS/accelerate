@@ -29,8 +29,6 @@
 -- TODO: Tests! Tests? Can we test this, and how? We can probably at least fake
 --       call stacks, generate random ASTs with smart constructors, and check
 --       `getAnn`.
--- TODO: Document the optimization flags and expose them through the main
---       Accelerate module, once they actually do something
 -- XXX: Right now it would be possible to specify some nonsensible flags, like
 --      setting loop unrolling for a constant value. Should we just silently
 --      ignore these things like we do now, or should be printing warnings? I
@@ -231,7 +229,8 @@ data Ann = Ann
 -- of this type.
 --
 -- TODO: After the source mapping is done, we should add the rest of the
---       optimizations here and actually make them do something.
+--       optimizations here and actually make them do something. Currently
+--       they're just placeholders.
 data Optimizations = Optimizations
     { optAlwaysInline :: Bool
     , optUnrollIters  :: Maybe Int

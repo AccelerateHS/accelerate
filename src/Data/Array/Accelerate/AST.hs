@@ -1542,7 +1542,7 @@ formatPreAccOp = later $ \case
   Stencil{}           -> "Stencil"
   Stencil2{}          -> "Stencil2"
 
--- TODO: Show annotations
+-- TODO: Same as with 'formatPreAccOp'
 formatExpOp :: Format r (OpenExp aenv env t -> r)
 formatExpOp = later $ \case
   Let{}             -> "Let"

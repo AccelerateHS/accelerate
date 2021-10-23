@@ -316,7 +316,6 @@ type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
--- TODO: Add annotations to most of the constructors
 data PreSmartAcc acc exp as where
   -- Needed for conversion to de Bruijn form. The annotation only serves as
   -- temporary storage during the conversion.
@@ -1437,27 +1436,27 @@ formatPreAccOp = later $ \case
   Acond{}             -> "Acond"
   Awhile{}            -> "Awhile"
   Apair{}             -> "Apair"
-  Anil{}              -> "Anil"
-  Aprj{}              -> "Aprj"
-  Atrace{}            -> "Atrace"
-  Unit{}              -> "Unit"
-  Generate{}          -> "Generate"
-  Reshape{}           -> "Reshape"
-  Replicate{}         -> "Replicate"
-  Slice{}             -> "Slice"
-  Map{}               -> "Map"
-  ZipWith{}           -> "ZipWith"
-  Fold _ _ _ z _      -> bformat ("Fold" % maybed "1" (fconst mempty)) z
+  Anil{}                -> "Anil"
+  Aprj{}                -> "Aprj"
+  Atrace{}              -> "Atrace"
+  Unit{}                -> "Unit"
+  Generate{}            -> "Generate"
+  Reshape{}             -> "Reshape"
+  Replicate{}           -> "Replicate"
+  Slice{}               -> "Slice"
+  Map{}                 -> "Map"
+  ZipWith{}             -> "ZipWith"
+  Fold _ _ _ z _        -> bformat ("Fold" % maybed "1" (fconst mempty)) z
   FoldSeg _ _ _ _ z _ _ -> bformat ("Fold" % maybed "1" (fconst mempty) % "Seg") z
-  Scan _ d _ _ z _    -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
-  Scan' _ d _ _ _ _   -> bformat ("Scan" % formatDirection % "\'") d
-  Permute{}           -> "Permute"
-  Backpermute{}       -> "Backpermute"
-  Stencil{}           -> "Stencil"
-  Stencil2{}          -> "Stencil2"
-  Aforeign{}          -> "Aforeign"
+  Scan _ d _ _ z _      -> bformat ("Scan" % formatDirection % maybed "1" (fconst mempty)) d z
+  Scan' _ d _ _ _ _     -> bformat ("Scan" % formatDirection % "\'") d
+  Permute{}             -> "Permute"
+  Backpermute{}         -> "Backpermute"
+  Stencil{}             -> "Stencil"
+  Stencil2{}            -> "Stencil2"
+  Aforeign{}            -> "Aforeign"
 
--- TODO: Show annotations
+-- TODO: Maybe show annotations, there are similar TODOs for the internal AST
 formatPreExpOp :: Format r (PreSmartExp acc exp t -> r)
 formatPreExpOp = later $ \case
   Tag _ _ i     -> bformat ("Tag " % int) i
