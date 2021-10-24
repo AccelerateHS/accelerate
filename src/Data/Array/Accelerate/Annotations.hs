@@ -188,9 +188,7 @@ import           Data.List                      ( sortBy )
 import           Data.Ord                       ( comparing )
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(..) )
-import           Language.Haskell.TH            ( Q
-                                                , TExp
-                                                )
+import           Language.Haskell.TH.Extra      ( CodeQ )
 import           Lens.Micro
 import           Lens.Micro.Extras              ( view )
 
@@ -593,27 +591,27 @@ rnfOptimizations Optimizations { optAlwaysInline, optUnrollIters } =
 --
 -- Used as part of 'liftOpenExp' when quoting an AST.
 
-liftAnn :: Ann -> Q (TExp Ann)
+liftAnn :: Ann -> CodeQ Ann
 liftAnn (Ann src opts) =
     [|| Ann $$(liftCallStacks src) $$(liftOptimizations opts) ||]
 
-liftOptimizations :: Optimizations -> Q (TExp Optimizations)
+liftOptimizations :: Optimizations -> CodeQ Optimizations
 liftOptimizations Optimizations { .. } = [|| Optimizations { .. } ||]
 
-liftCallStacks :: S.HashSet CallStack -> Q (TExp (S.HashSet CallStack))
+liftCallStacks :: S.HashSet CallStack -> CodeQ (S.HashSet CallStack)
 liftCallStacks stacks = [|| S.fromList $$(liftStacks $ S.toList stacks) ||]
   where
     -- TODO: Is there some combinator for this transformation?
-    liftStacks :: [CallStack] -> Q (TExp [CallStack])
+    liftStacks :: [CallStack] -> CodeQ [CallStack]
     liftStacks (x : xs) = [|| $$(liftCallStack x) : $$(liftStacks xs) ||]
     liftStacks []       = [|| [] ||]
 
-liftCallStack :: CallStack -> Q (TExp CallStack)
+liftCallStack :: CallStack -> CodeQ CallStack
 liftCallStack EmptyCallStack = [|| EmptyCallStack ||]
 liftCallStack (PushCallStack fn loc stack) =
     [|| PushCallStack fn $$(liftSrcLoc loc) $$(liftCallStack stack) ||]
 liftCallStack (FreezeCallStack stack) =
     [|| FreezeCallStack $$(liftCallStack stack) ||]
 
-liftSrcLoc :: SrcLoc -> Q (TExp SrcLoc)
+liftSrcLoc :: SrcLoc -> CodeQ SrcLoc
 liftSrcLoc SrcLoc {..} = [|| SrcLoc { .. } ||]
