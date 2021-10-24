@@ -185,10 +185,7 @@ import           Data.Array.Accelerate.Orphans  ( )
 import           Control.DeepSeq                ( rnf )
 import qualified Data.HashSet                  as S
 import           Data.List                      ( sortBy )
-import           Data.Maybe                     ( mapMaybe )
 import           Data.Ord                       ( comparing )
-import qualified GHC.ExecutionStack            as ES
-import           GHC.IO                         ( unsafePerformIO )
 import           GHC.Stack
 import           GHC.Stack.Types                ( CallStack(..) )
 import           Language.Haskell.TH            ( Q
@@ -336,12 +333,6 @@ sourceMap dewit =
 -- You can build a version of GHC with DWARF call stacks enabled using:
 --
 -- > ghcup compile ghc -b INSTALLED_GHC_VERSION -v 9.2.0.20210422 -j $(nproc) -- --enable-dwarf-unwind
---
--- TODO: Test whether this actually uses the correct stack frame
--- FIXME: This will need some more work. The main issues are that the stack
---        contains a lot of frames at the top and the bottom that would need to
---        be stripped, and that tail call optimization interferes with these
---        execution stacks.
 sourceMapRuntime :: HasCallStack => (SourceMapped => a) -> a
 sourceMapRuntime dewit =
     let ?requiresSourceMapping = TakenCareOf
@@ -349,29 +340,34 @@ sourceMapRuntime dewit =
         -- frozen call stack
         ?callStack = case ?callStack of
             x@(FreezeCallStack _) -> x
-            _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
+            _                     -> freezeCallStack emptyCallStack
+            -- FIXME: This will need some more work. The main issues are that
+            --        the stack contains a lot of frames at the top and the
+            --        bottom that would need to be stripped, and that tail call
+            --        optimization interferes with these execution stacks.
+            -- _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
     in  dewit
-  where
-    -- We don't want the two uppermost stack frames, since those will be in our
-    -- own library code
-    -- TODO: Is this correct? Should we drop only one stack frame?
-    toCallStack :: Maybe [ES.Location] -> CallStack
-    toCallStack (Just (_ : _ : locs)) = fromCallSiteList $ mapMaybe locToCallSite locs
-    toCallStack _                     = emptyCallStack
+  -- where
+  --   -- We don't want the two uppermost stack frames, since those will be in our
+  --   -- own library code
+  --   -- TODO: Is this correct? Should we drop only one stack frame?
+  --   toCallStack :: Maybe [ES.Location] -> CallStack
+  --   toCallStack (Just (_ : _ : locs)) = fromCallSiteList $ mapMaybe locToCallSite locs
+  --   toCallStack _                     = emptyCallStack
 
-    locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
-    locToCallSite (ES.Location _ fn (Just loc)) = Just
-        ( fn
-        , SrcLoc { srcLocPackage   = ""
-                 , srcLocModule    = ""
-                 , srcLocFile      = ES.sourceFile loc
-                 , srcLocStartLine = ES.sourceLine loc
-                 , srcLocStartCol  = ES.sourceColumn loc
-                 , srcLocEndLine   = ES.sourceLine loc
-                 , srcLocEndCol    = ES.sourceColumn loc
-                 }
-        )
-    locToCallSite (ES.Location _ _ Nothing) = Nothing
+  --   locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
+  --   locToCallSite (ES.Location _ fn (Just loc)) = Just
+  --       ( fn
+  --       , SrcLoc { srcLocPackage   = ""
+  --                , srcLocModule    = ""
+  --                , srcLocFile      = ES.sourceFile loc
+  --                , srcLocStartLine = ES.sourceLine loc
+  --                , srcLocStartCol  = ES.sourceColumn loc
+  --                , srcLocEndLine   = ES.sourceLine loc
+  --                , srcLocEndCol    = ES.sourceColumn loc
+  --                }
+  --       )
+  --   locToCallSite (ES.Location _ _ Nothing) = Nothing
 
 -- | Workaround for pattern synonyms and call stacks not working as expected in
 -- GHC versions 9.0.x and below. Performs the same duty as 'sourceMap'. On the
