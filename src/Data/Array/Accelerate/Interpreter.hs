@@ -69,6 +69,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Elt                    as Sugar
 import qualified Data.Array.Accelerate.Trafo.Delayed                as AST
 
+import GHC.TypeLits
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
@@ -1082,6 +1083,7 @@ evalPrimConst :: PrimConst a -> a
 evalPrimConst (PrimMinBound ty) = evalMinBound ty
 evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
 evalPrimConst (PrimPi       ty) = evalPi ty
+evalPrimConst (PrimVectorCreate ty) = evalVectorCreate ty
 
 evalPrim :: PrimFun (a -> r) -> (a -> r)
 evalPrim (PrimAdd                ty) = evalAdd ty
@@ -1144,6 +1146,7 @@ evalPrim (PrimMin                ty) = evalMin ty
 evalPrim PrimLAnd                    = evalLAnd
 evalPrim PrimLOr                     = evalLOr
 evalPrim PrimLNot                    = evalLNot
+evalPrim (PrimVectorIndex v i)       = evalVectorIndex v i
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
 
@@ -1167,6 +1170,9 @@ evalLOr (x, y) = fromBool (toBool x || toBool y)
 
 evalLNot :: PrimBool -> PrimBool
 evalLNot = fromBool . not . toBool
+
+evalVectorIndex :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> (Vec n a, i) -> a
+evalVectorIndex (VectorType n _) ti (v, i) | IntegralDict <- integralDict ti = vecIndex v (fromIntegral i)
 
 evalFromIntegral :: IntegralType a -> NumType b -> a -> b
 evalFromIntegral ta (IntegralNumType tb)
@@ -1212,6 +1218,9 @@ evalMaxBound (IntegralBoundedType ty)
 
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi
+
+evalVectorCreate :: (KnownNat n, Prim a) => VectorType (Vec n a) -> Vec n a
+evalVectorCreate (VectorType n _) = vecEmpty
 
 evalSin :: FloatingType a -> (a -> a)
 evalSin ty | FloatingDict <- floatingDict ty = sin

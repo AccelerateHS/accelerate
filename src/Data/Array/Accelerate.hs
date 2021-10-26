@@ -311,6 +311,8 @@ module Data.Array.Accelerate (
   -- ** SIMD vectors
   Vec, VecElt,
   Vectoring(..),
+  vecOfList,
+  listOfVec,
 
   -- ** Type classes
   -- *** Basic type classes

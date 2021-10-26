@@ -24,12 +24,6 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Smart
 import Data.Primitive.Vec
 
-class Vectoring vector a | vector -> a where
-    type IndexType vector :: Type 
-    vecIndex :: vector -> IndexType vector -> a
-    vecEmpty :: vector
-
-
 instance (VecElt a, KnownNat n) => Vectoring (Exp (Vec n a)) (Exp a) where
     type IndexType (Exp (Vec n a)) = Exp Int
     vecIndex = mkVectorIndex

@@ -5,12 +5,16 @@
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE RoleAnnotations     #-}
+{-# LANGUAGE RoleAnnotations     #-} 
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE UnboxedTuples       #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE MultiParamTypeClasses        #-}
+{-# LANGUAGE FunctionalDependencies        #-}
+{-# LANGUAGE FlexibleInstances        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Primitive.Vec
@@ -33,10 +37,13 @@ module Data.Primitive.Vec (
   Vec16, pattern Vec16,
 
   listOfVec,
+  vecOfList,
   liftVec,
 
+  Vectoring(..)
 ) where
 
+import Data.Kind
 import Data.Proxy
 import Control.Monad.ST
 import Control.Monad.Reader
@@ -86,13 +93,24 @@ import GHC.Word
 --
 data Vec (n :: Nat) a = Vec ByteArray#
 
-mkVec :: forall n a. (KnownNat n, Prim a) => [a] -> Vec n a
-mkVec vs = runST $ do
+class Vectoring vector a | vector -> a where
+    type IndexType vector :: Data.Kind.Type
+    vecIndex :: vector -> IndexType vector -> a
+    vecEmpty :: vector
+
+instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
+    type IndexType (Vec n a) = Int
+    vecIndex (Vec ba#) (I# i#) = indexByteArray# ba# i#
+    vecEmpty = mkVec
+
+
+mkVec :: forall n a. (KnownNat n, Prim a) => Vec n a
+mkVec = runST $ do
   let n :: Int = fromIntegral $ natVal $ Proxy @n
   mba <- newByteArray (n * sizeOf (undefined :: a))
-  zipWithM_ (writeByteArray mba) [0..n] vs
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
+
 
 type role Vec nominal representational
 
@@ -103,6 +121,14 @@ instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
       vec = show
           . group . encloseSep (flatAlt "< " "<") (flatAlt " >" ">") ", "
           . map viaShow
+
+vecOfList :: forall n a. (KnownNat n, Prim a) => [a] -> Vec n a
+vecOfList vs = runST $ do
+  let n :: Int = fromIntegral $ natVal $ Proxy @n
+  mba <- newByteArray (n * sizeOf (undefined :: a))
+  zipWithM_ (writeByteArray mba) [0..n] vs
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
 
 listOfVec :: forall a n. (Prim a, KnownNat n) => Vec n a -> [a]
 listOfVec (Vec ba#) = go 0#

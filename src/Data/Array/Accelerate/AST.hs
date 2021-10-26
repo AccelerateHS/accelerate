@@ -149,6 +149,7 @@ import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
+import Data.Primitive.Types
 import Control.DeepSeq
 import Data.Kind
 import Data.Maybe
@@ -656,7 +657,7 @@ data PrimConst ty where
   PrimPi        :: FloatingType a -> PrimConst a
 
   -- constant for empty Vec
-  PrimVectorCreate :: KnownNat n => VectorType (Vec n a) -> PrimConst (Vec n a)
+  PrimVectorCreate :: (KnownNat n, Prim a) => VectorType (Vec n a) -> PrimConst (Vec n a)
 
 
 -- |Primitive scalar operations
@@ -752,7 +753,7 @@ data PrimFun sig where
   PrimLNot :: PrimFun (PrimBool             -> PrimBool)
 
   -- local array operators
-  PrimVectorIndex :: KnownNat n => VectorType (Vec n a) -> IntegralType i -> PrimFun ((Vec n a, i) -> a)
+  PrimVectorIndex :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> PrimFun ((Vec n a, i) -> a)
 
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
