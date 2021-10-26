@@ -795,8 +795,11 @@ data M
 -- element at each index, and fusing successive producers by combining these
 -- scalar functions.
 --
--- TODO: For the delayed representation, can we just combine annotations as we
---       go? How does this interact with things like loop unrolling?
+-- TODO: Right now we combine all annotations as we go under a join. We may want
+--       to prevent array computations with different optimization flags from
+--       fusing together. In that case we could print a warning when the thing
+--       we a re fusing into an existing operation doesn't have the same
+--       optimizations applied to it and ignore those.
 --
 data Cunctation r aenv a where
 
