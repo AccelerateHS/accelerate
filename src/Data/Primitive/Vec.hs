@@ -100,7 +100,10 @@ class Vectoring vector a | vector -> a where
 
 instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
     type IndexType (Vec n a) = Int
-    vecIndex (Vec ba#) (I# i#) = indexByteArray# ba# i#
+    vecIndex (Vec ba#) i@(I# iu#) = let
+        n :: Int
+        n = fromIntegral $ natVal $ Proxy @n
+        in if i >= 0 && i < n then indexByteArray# ba# iu# else error ("index " <> show i <> " out of range in Vec of size " <> show n)
     vecEmpty = mkVec
 
 
