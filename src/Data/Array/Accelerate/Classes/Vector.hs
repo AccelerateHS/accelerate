@@ -27,6 +27,6 @@ import Data.Primitive.Vec
 instance (VecElt a, KnownNat n) => Vectoring (Exp (Vec n a)) (Exp a) where
     type IndexType (Exp (Vec n a)) = Exp Int
     vecIndex = mkVectorIndex
-    vecEmpty = mkVectorCreate
+    vecEmpty = undef
     
 
