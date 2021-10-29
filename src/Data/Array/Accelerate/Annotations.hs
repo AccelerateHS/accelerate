@@ -480,6 +480,12 @@ extractAnn _                    = mkDummyAnn
 -- | Create a new annotation, capturing any available source mapping information
 -- from the current 'SourceMapped' context. Check the module's documentation for
 -- more information.
+  --
+--- XXX: Inlining on -O1 and higher causes the result of this function to be
+---      shared even if any of the 'SourceMapped' implicit parameters are
+---      different, at least on GHC 8.10.4. This would result in every
+---      invocation of this function returning the same (incorrect)) value.
+{-# NOINLINE mkAnn #-}
 mkAnn :: SourceMapped => Ann
 mkAnn = Ann (maybeCallStack callStack) defaultOptimizations
   where
