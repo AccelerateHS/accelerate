@@ -53,6 +53,7 @@ import Data.List                                        ( nub, partition )
 import Data.Maybe
 import Data.String
 import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Text            as Text
 import Prelude                                          hiding ( exp )
 import qualified Data.HashSet                           as Set
 import qualified Data.Sequence                          as Seq
@@ -198,7 +199,7 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
     Avar ix                          -> pnode (avar ix)
     Alet _ lhs bnd body              -> do
       bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc config detail context0 aenv bnd
-      (aenv1, a) <- prettyLetALeftHandSide ident aenv lhs
+      (aenv1, a) <- prettyLetALeftHandSide config ident aenv lhs
       _ <- mkNode bnd' (Just a)
       body' <- prettyDelayedOpenAcc config detail context0 aenv1 body
       return body'
@@ -294,12 +295,12 @@ prettyDelayedOpenAcc config detail ctx aenv (Manifest pacc) =
 
     ppA :: HasCallStack => DelayedOpenAcc aenv a -> Dot PDoc
     ppA (Manifest (Avar ix)) = return (avar ix)
-    ppA acc@Manifest{}       = do
+    ppA acc@(Manifest (getAnn -> ann)) = do
       -- Lift out and draw as a separate node. This can occur with the manifest
       -- array arguments to permute (defaults array) and stencil[2].
       acc'  <- prettyDelayedOpenAcc config detail app aenv acc
       v     <- mkLabel
-      ident <- mkNode acc' (Just v)
+      ident <- mkNode acc' $ Just $ maybeWithAnn config (fromMaybe mkDummyAnn ann) v
       return $ PDoc (pretty v) [Vertex ident Nothing]
     ppA (Delayed _ _ sh f _)
       | Shape _ a <- sh                   -- identical shape
@@ -384,7 +385,7 @@ prettyDelayedAfun config detail aenv afun = do
     go :: Aval aenv' -> DelayedOpenAfun aenv' a' -> Dot Graph
     go aenv' (Abody b) = graphDelayedOpenAcc config detail aenv' b
     go aenv' (Alam lhs f) = do
-      aenv'' <- prettyLambdaALeftHandSide aenv' lhs
+      aenv'' <- prettyLambdaALeftHandSide config aenv' lhs
       go aenv'' f
 
     collect :: Aval aenv' -> HashSet NodeId
@@ -392,38 +393,40 @@ prettyDelayedAfun config detail aenv afun = do
     collect (Apush a i _) = Set.insert i (collect a)
 
 prettyLetALeftHandSide
-    :: forall repr aenv aenv'. HasCallStack
-    => NodeId
+    :: forall acc repr aenv aenv'. HasCallStack
+    => PrettyConfig acc
+    -> NodeId
     -> Aval aenv
     -> ALeftHandSide repr aenv aenv'
     -> Dot (Aval aenv', Label)
-prettyLetALeftHandSide _     aenv (LeftHandSideWildcard repr) = return (aenv, doc)
+prettyLetALeftHandSide _      _     aenv (LeftHandSideWildcard repr) = return (aenv, doc)
   where
     doc = case repr of
       TupRunit -> "()"
       _        -> "_"
-prettyLetALeftHandSide ident aenv (LeftHandSideSingle _ _) = do
+prettyLetALeftHandSide config ident aenv (LeftHandSideSingle ann _) = do
   a <- mkLabel
-  return (Apush aenv ident a, a)
-prettyLetALeftHandSide ident aenv (LeftHandSidePair lhs1 lhs2) = do
-  (aenv1, d1) <- prettyLetALeftHandSide ident aenv  lhs1
-  (aenv2, d2) <- prettyLetALeftHandSide ident aenv1 lhs2
+  return (Apush aenv ident a, maybeWithAnn config ann a)
+prettyLetALeftHandSide config ident aenv (LeftHandSidePair lhs1 lhs2) = do
+  (aenv1, d1) <- prettyLetALeftHandSide config ident aenv  lhs1
+  (aenv2, d2) <- prettyLetALeftHandSide config ident aenv1 lhs2
   return (aenv2, "(" <> d1 <> ", " <> d2 <> ")")
 
 prettyLambdaALeftHandSide
-    :: forall repr aenv aenv'. HasCallStack
-    => Aval aenv
+    :: forall acc repr aenv aenv'. HasCallStack
+    => PrettyConfig acc
+    -> Aval aenv
     -> ALeftHandSide repr aenv aenv'
     -> Dot (Aval aenv')
-prettyLambdaALeftHandSide aenv (LeftHandSideWildcard _) = return aenv
-prettyLambdaALeftHandSide aenv (LeftHandSideSingle _ _) = do
+prettyLambdaALeftHandSide _      aenv (LeftHandSideWildcard _) = return aenv
+prettyLambdaALeftHandSide config aenv (LeftHandSideSingle ann _) = do
   a     <- mkLabel
   ident <- genNodeId
-  _     <- mkNode (PNode ident (Leaf (Nothing, pretty a)) []) Nothing
+  _     <- mkNode (PNode ident (Leaf (Nothing, pretty $ maybeWithAnn config ann a)) []) Nothing
   return $ Apush aenv ident a
-prettyLambdaALeftHandSide aenv (LeftHandSidePair lhs1 lhs2) = do
-  aenv1 <- prettyLambdaALeftHandSide aenv lhs1
-  prettyLambdaALeftHandSide aenv1 lhs2
+prettyLambdaALeftHandSide config aenv (LeftHandSidePair lhs1 lhs2) = do
+  aenv1 <- prettyLambdaALeftHandSide config aenv lhs1
+  prettyLambdaALeftHandSide config aenv1 lhs2
 
 -- Display array tuples. This is a little tricky...
 --
@@ -458,6 +461,19 @@ prettyDelayedApair config detail aenv a1 a2 ident = do
     --
     forest :: [Tree (Maybe Port, Adoc)] -> Tree (Maybe Port, Adoc)
     forest leaves = Leaf (Nothing, tupled [ align d | Leaf (Nothing,d) <- leaves ])
+
+-- | Append a pretty printed annotation after the label, depending on the
+-- verbosity setting.
+--
+-- TODO: This is even cruder than the annotation pretty printing in the normal
+--       pretty printer. Once everything works we should figure out where to go
+--       from there.
+maybeWithAnn :: PrettyConfig acc -> Ann -> Label -> Label
+maybeWithAnn config ann label
+  | confAnnotationVerbosity config > Quiet
+  , Just pAnn <- prettyAnn' config ann = Text.renderStrict . layoutCompact
+                                       $ sep [pretty label, align $ brackets pAnn]
+  | otherwise                          = label
 
 
 -- Lift out anything that isn't a Leaf node and output it to the graph

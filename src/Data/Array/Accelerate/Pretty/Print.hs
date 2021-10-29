@@ -32,9 +32,11 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyELhs,
   prettyALhs,
   prettyAnn,
+  prettyAnn',
 
   -- ** Configuration
   PrettyConfig(..),
+  AnnotationVerbosity(..),
   configPlain,
   configVerbose,
   defaultConfig,
