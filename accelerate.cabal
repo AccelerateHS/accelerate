@@ -147,10 +147,46 @@ extra-source-files:
     cbits/tracy/client/*.h
     cbits/tracy/client/*.hpp
     cbits/tracy/client/*.cpp
-    -- Used by the Tracy's client
+    -- These are used to build Tracy's client tools in Setup.hs
+    cbits/tracy/capture/build/unix/Makefile
+    cbits/tracy/capture/build/unix/*.mk
+    cbits/tracy/profiler/build/unix/Makefile
+    cbits/tracy/profiler/build/unix/*.mk
+    cbits/tracy/common/*.mk
+    -- The Makefiles fetch the source files from these Visual Studio project
+    -- files
+    cbits/tracy/capture/build/win32/capture.vcxproj
+    cbits/tracy/capture/build/win32/capture.vcxproj.filters
+    cbits/tracy/profiler/build/win32/Tracy.vcxproj
+    cbits/tracy/profiler/build/win32/Tracy.vcxproj.filters
+    -- Used by the Tracy's client tools
+    cbits/tracy/capture/src/*.cpp
+    cbits/tracy/imgui/*.h
+    cbits/tracy/imgui/*.cpp
+    cbits/tracy/imgui/misc/freetype/*.h
+    cbits/tracy/imgui/misc/freetype/*.cpp
     cbits/tracy/libbacktrace/*.h
     cbits/tracy/libbacktrace/*.hpp
     cbits/tracy/libbacktrace/*.cpp
+    cbits/tracy/nfd/*.h
+    cbits/tracy/nfd/*.c
+    cbits/tracy/profiler/src/*.h
+    cbits/tracy/profiler/src/*.hpp
+    cbits/tracy/profiler/src/*.cpp
+    cbits/tracy/profiler/libs/gl3w/GL/*.h
+    cbits/tracy/profiler/libs/gl3w/GL/*.c
+    cbits/tracy/server/*.h
+    cbits/tracy/server/*.hpp
+    cbits/tracy/server/*.cpp
+    cbits/tracy/zstd/*.h
+    cbits/tracy/zstd/common/*.h
+    cbits/tracy/zstd/common/*.c
+    cbits/tracy/zstd/compress/*.h
+    cbits/tracy/zstd/compress/*.c
+    cbits/tracy/zstd/decompress/*.h
+    cbits/tracy/zstd/decompress/*.c
+    cbits/tracy/zstd/dictBuilder/*.h
+    cbits/tracy/zstd/dictBuilder/*.c
 
 extra-doc-files:
     images/*.png
