@@ -137,6 +137,7 @@ extra-source-files:
     CHANGELOG.md
     cbits/*.c
     cbits/*.h
+    -- These are referenced directly using the FFI
     cbits/tracy/*.h
     cbits/tracy/*.hpp
     cbits/tracy/*.cpp
@@ -146,6 +147,10 @@ extra-source-files:
     cbits/tracy/client/*.h
     cbits/tracy/client/*.hpp
     cbits/tracy/client/*.cpp
+    -- Used by the Tracy's client
+    cbits/tracy/libbacktrace/*.h
+    cbits/tracy/libbacktrace/*.hpp
+    cbits/tracy/libbacktrace/*.cpp
 
 extra-doc-files:
     images/*.png
