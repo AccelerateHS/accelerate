@@ -1,5 +1,6 @@
 /.ghci
 /dist/
+/dist-newstyle/
 /accelerate-examples/dist
 /accelerate-buildbot/dist
 /accelerate-cuda/dist/
