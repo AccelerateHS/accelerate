@@ -15,6 +15,7 @@
 {-# LANGUAGE MultiParamTypeClasses        #-}
 {-# LANGUAGE FunctionalDependencies        #-}
 {-# LANGUAGE FlexibleInstances        #-}
+{-# LANGUAGE TupleSections #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Primitive.Vec
@@ -96,6 +97,7 @@ data Vec (n :: Nat) a = Vec ByteArray#
 class Vectoring vector a | vector -> a where
     type IndexType vector :: Data.Kind.Type
     vecIndex :: vector -> IndexType vector -> a
+    vecWrite :: vector -> IndexType vector -> a -> vector
     vecEmpty :: vector
 
 instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
@@ -104,6 +106,14 @@ instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
         n :: Int
         n = fromIntegral $ natVal $ Proxy @n
         in if i >= 0 && i < n then indexByteArray# ba# iu# else error ("index " <> show i <> " out of range in Vec of size " <> show n)
+    vecWrite vec@(Vec ba#) i@(I# iu#) v = runST $ do
+        let n :: Int
+            n = fromIntegral $ natVal $ Proxy @n
+        mba <- newByteArray (n * sizeOf (undefined :: a))
+        let new_vs = zipWith (\i' v' -> if i' == i then v else v') [0..n] (listOfVec vec)
+        zipWithM_ (writeByteArray mba) [0..n] new_vs
+        ByteArray nba# <- unsafeFreezeByteArray mba
+        return $! Vec nba#
     vecEmpty = mkVec
 
 

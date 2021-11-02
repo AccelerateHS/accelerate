@@ -75,6 +75,7 @@ module Data.Array.Accelerate.Smart (
   -- ** Smart constructors for vector operations
   mkVectorCreate,
   mkVectorIndex,
+  mkVectorWrite,
 
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
@@ -1190,6 +1191,11 @@ mkVectorIndex = let n :: Int
                     n = fromIntegral $ natVal $ Proxy @n
                 in mkPrimBinary $ PrimVectorIndex @n (VectorType n singleType) integralType
 
+mkVectorWrite :: forall n a. (KnownNat n, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a -> Exp (Vec n a)
+mkVectorWrite = let n :: Int
+                    n = fromIntegral $ natVal $ Proxy @n
+                in mkPrimTernary $ PrimVectorWrite @n (VectorType n singleType) integralType
+
 -- Numeric conversions
 
 mkFromIntegral :: (Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
@@ -1276,6 +1282,9 @@ mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
 
 mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
+
+mkPrimTernary :: (Elt a, Elt b, Elt c, Elt d) => PrimFun ((EltR a, (EltR b, EltR c)) -> EltR d) -> Exp a -> Exp b -> Exp c -> Exp d
+mkPrimTernary prim (Exp a) (Exp b) (Exp c) = mkExp $ PrimApp prim (SmartExp $ Pair a (SmartExp (Pair b c)))
 
 mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
 mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary

@@ -1147,6 +1147,7 @@ evalPrim PrimLAnd                    = evalLAnd
 evalPrim PrimLOr                     = evalLOr
 evalPrim PrimLNot                    = evalLNot
 evalPrim (PrimVectorIndex v i)       = evalVectorIndex v i
+evalPrim (PrimVectorWrite v i)       = evalVectorWrite v i
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
 
@@ -1173,6 +1174,9 @@ evalLNot = fromBool . not . toBool
 
 evalVectorIndex :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> (Vec n a, i) -> a
 evalVectorIndex (VectorType n _) ti (v, i) | IntegralDict <- integralDict ti = vecIndex v (fromIntegral i)
+
+evalVectorWrite :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> (Vec n a, (i, a)) -> Vec n a
+evalVectorWrite (VectorType n _) ti (v, (i, a)) | IntegralDict <- integralDict ti = vecWrite v (fromIntegral i) a
 
 evalFromIntegral :: IntegralType a -> NumType b -> a -> b
 evalFromIntegral ta (IntegralNumType tb)
