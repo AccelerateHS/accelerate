@@ -9,6 +9,7 @@
 /accelerate-cuda/cubits/accelerate_cuda_shape.h
 /accelerate-io/dist/
 /.stack-work
+/cabal.project.local*
 /stack.yaml
 /stack.yaml.lock
 .DS_Store
