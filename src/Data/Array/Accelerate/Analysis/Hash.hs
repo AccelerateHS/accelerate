@@ -1,6 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -35,6 +36,7 @@ module Data.Array.Accelerate.Analysis.Hash (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
@@ -48,11 +50,12 @@ import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
-import Crypto.Hash
+import Crypto.Hash                                                  hiding ( hash )
 import qualified Data.Hashable as Hashable
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
 import Data.ByteString.Short.Internal                               ( ShortByteString(..) )
+import Data.Hashable                                                ( hash )
 import Data.Monoid
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName                                        ( hashStableName, makeStableName )
@@ -61,10 +64,6 @@ import Prelude                                                      hiding ( exp
 
 -- Hashing
 -- -------
-
--- TODO: We currently don't take annotations into account when generating these
---       hashes. Same thing for matching. Should we only look at optimizations,
---       or should we also take the source location into account?
 
 type Hash = Digest SHA3_256
 
@@ -168,7 +167,7 @@ encodePreOpenAcc options encodeAcc pacc =
         | perfect options = travE e
         | otherwise       = encodeTypeR $ expType e
   in
-  case pacc of
+  maybe mempty encodeAnn (getAnn pacc) <> case pacc of
     Alet _ lhs bnd body              -> intHost $(hashQ "Alet")        <> encodeLeftHandSide encodeArrayType lhs <> travA bnd <> travA body
     Avar (Var _ repr v)              -> intHost $(hashQ "Avar")        <> encodeArrayType repr <> deep (encodeIdx v)
     Apair _ a1 a2                    -> intHost $(hashQ "Apair")       <> travA a1 <> travA a2
@@ -255,11 +254,10 @@ encodeTupR _ TupRunit         = intHost $(hashQ "TupRunit")
 encodeTupR f (TupRpair r1 r2) = intHost $(hashQ "TupRpair")   <> encodeTupR f r1 <> encodeTupR f r2
 encodeTupR f (TupRsingle s)   = intHost $(hashQ "TupRsingle") <> f s
 
--- TODO: Don't forget this function when adding annotations to the hashes
 encodeLeftHandSide :: (forall b. s b -> Builder) -> LeftHandSide s a env env' -> Builder
-encodeLeftHandSide f (LeftHandSideWildcard r) = intHost $(hashQ "LeftHandSideWildcard") <> encodeTupR f r
-encodeLeftHandSide f (LeftHandSidePair r1 r2) = intHost $(hashQ "LeftHandSidePair")     <> encodeLeftHandSide f r1 <> encodeLeftHandSide f r2
-encodeLeftHandSide f (LeftHandSideSingle _ s) = intHost $(hashQ "LeftHandSideArray")    <> f s
+encodeLeftHandSide f (LeftHandSideWildcard r)   = intHost $(hashQ "LeftHandSideWildcard") <> encodeTupR f r
+encodeLeftHandSide f (LeftHandSidePair r1 r2)   = intHost $(hashQ "LeftHandSidePair")     <> encodeLeftHandSide f r1 <> encodeLeftHandSide f r2
+encodeLeftHandSide f (LeftHandSideSingle ann s) = intHost $(hashQ "LeftHandSideArray")    <> f s                     <> encodeAnn ann
 
 encodeArrayType :: ArrayR a -> Builder
 encodeArrayType (ArrayR shr tp) = encodeShapeR shr <> encodeTypeR tp
@@ -318,7 +316,7 @@ encodeOpenExp exp =
       travF :: OpenFun env' aenv' f -> Builder
       travF = encodeOpenFun
   in
-  case exp of
+  maybe mempty encodeAnn (getAnn exp) <> case exp of
     Let _ lhs bnd body      -> intHost $(hashQ "Let")         <> encodeLeftHandSide encodeScalarType lhs <> travE bnd <> travE body
     Evar (Var _ tp ix)      -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
     Nil _                   -> intHost $(hashQ "Nil")
@@ -343,9 +341,8 @@ encodeOpenExp exp =
     Foreign _ _ _ f e       -> intHost $(hashQ "Foreign")     <> travF f  <> travE e
     Coerce _ _ tp e         -> intHost $(hashQ "Coerce")      <> encodeScalarType tp <> travE e
 
--- TODO: And also don't forget this one
 encodeArrayVar :: ArrayVar aenv a -> Builder
-encodeArrayVar (Var _ repr v) = encodeArrayType repr <> encodeIdx v
+encodeArrayVar (Var ann repr v) = encodeAnn ann <> encodeArrayType repr <> encodeIdx v
 
 {-# INLINEABLE encodeOpenFun #-}
 encodeOpenFun
@@ -467,6 +464,14 @@ encodeTypeR (TupRsingle t) = intHost $(hashQ "TupRsingle") <> encodeScalarType t
 encodeTypeR (TupRpair a b) = intHost $(hashQ "TupRpair")   <> encodeTypeR a <> intHost (depthTypeR a)
                                                            <> encodeTypeR b <> intHost (depthTypeR b)
 
+encodeAnn :: Ann -> Builder
+encodeAnn (Ann locs opts) = intHost (hash locs) <> encodeOptimizations opts
+
+encodeOptimizations :: Optimizations -> Builder
+encodeOptimizations Optimizations { optAlwaysInline, optUnrollIters } =
+  encodeBool optAlwaysInline <> encodeMaybe intHost optUnrollIters
+
+
 depthTypeR :: TypeR t -> Int
 depthTypeR TupRunit       = 0
 depthTypeR TupRsingle{}   = 1
@@ -505,6 +510,10 @@ encodeFloatingType :: FloatingType t -> Builder
 encodeFloatingType TypeHalf{}   = intHost $(hashQ "Half")
 encodeFloatingType TypeFloat{}  = intHost $(hashQ "Float")
 encodeFloatingType TypeDouble{} = intHost $(hashQ "Double")
+
+encodeBool :: Bool -> Builder
+encodeBool True  = intHost $(hashQ "True")
+encodeBool False = intHost $(hashQ "False")
 
 encodeMaybe :: (a -> Builder) -> Maybe a -> Builder
 encodeMaybe _ Nothing  = intHost $(hashQ "Nothing")
