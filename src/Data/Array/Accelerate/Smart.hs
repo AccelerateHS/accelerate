@@ -73,7 +73,6 @@ module Data.Array.Accelerate.Smart (
   mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
   -- ** Smart constructors for vector operations
-  mkVectorCreate,
   mkVectorIndex,
   mkVectorWrite,
 
@@ -1181,11 +1180,6 @@ mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
     x = SmartExp $ Prj PairIdxLeft a
 
 -- Operators from Vec
-mkVectorCreate :: forall n a. (KnownNat n, Elt a, VecElt a) => Exp (Vec n a)
-mkVectorCreate = let n :: Int
-                     n = fromIntegral $ natVal $ Proxy @n
-                 in mkExp $ PrimConst $ PrimVectorCreate $ VectorType n singleType
-
 mkVectorIndex :: forall n a. (KnownNat n, Elt a, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a
 mkVectorIndex = let n :: Int
                     n = fromIntegral $ natVal $ Proxy @n

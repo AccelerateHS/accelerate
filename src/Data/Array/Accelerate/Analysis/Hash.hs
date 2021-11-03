@@ -389,7 +389,6 @@ encodePrimConst :: PrimConst c -> Builder
 encodePrimConst (PrimMinBound t)  = intHost $(hashQ "PrimMinBound") <> encodeBoundedType t
 encodePrimConst (PrimMaxBound t)  = intHost $(hashQ "PrimMaxBound") <> encodeBoundedType t
 encodePrimConst (PrimPi t)        = intHost $(hashQ "PrimPi")       <> encodeFloatingType t
-encodePrimConst (PrimVectorCreate t) = intHost $(hashQ "PrimVectorCreate") <> encodeVectorType t
 
 encodePrimFun :: PrimFun f -> Builder
 encodePrimFun (PrimAdd a)                = intHost $(hashQ "PrimAdd")                <> encodeNumType a

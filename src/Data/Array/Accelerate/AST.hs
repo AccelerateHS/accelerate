@@ -656,10 +656,6 @@ data PrimConst ty where
   -- constant from Floating
   PrimPi        :: FloatingType a -> PrimConst a
 
-  -- constant for empty Vec
-  PrimVectorCreate :: (KnownNat n, Prim a) => VectorType (Vec n a) -> PrimConst (Vec n a)
-
-
 -- |Primitive scalar operations
 --
 data PrimFun sig where
@@ -847,7 +843,6 @@ primConstType = \case
   PrimMinBound t -> bounded t
   PrimMaxBound t -> bounded t
   PrimPi       t -> floating t
-  PrimVectorCreate t -> vector t
   where
     bounded :: BoundedType a -> ScalarType a
     bounded (IntegralBoundedType t) = SingleScalarType $ NumSingleType $ IntegralNumType t
@@ -1122,7 +1117,6 @@ rnfPrimConst :: PrimConst c -> ()
 rnfPrimConst (PrimMinBound t)     = rnfBoundedType t
 rnfPrimConst (PrimMaxBound t)     = rnfBoundedType t
 rnfPrimConst (PrimPi t)           = rnfFloatingType t
-rnfPrimConst (PrimVectorCreate t) = rnfVectorType t
 
 rnfPrimFun :: PrimFun f -> ()
 rnfPrimFun (PrimAdd t)                = rnfNumType t
@@ -1350,7 +1344,6 @@ liftPrimConst :: PrimConst c -> CodeQ (PrimConst c)
 liftPrimConst (PrimMinBound t)          = [|| PrimMinBound $$(liftBoundedType t) ||]
 liftPrimConst (PrimMaxBound t)          = [|| PrimMaxBound $$(liftBoundedType t) ||]
 liftPrimConst (PrimPi t)                = [|| PrimPi $$(liftFloatingType t) ||]
-liftPrimConst (PrimVectorCreate t)      = [|| PrimVectorCreate $$(liftVectorType t) ||]
 
 liftPrimFun :: PrimFun f -> CodeQ (PrimFun f)
 liftPrimFun (PrimAdd t)                = [|| PrimAdd $$(liftNumType t) ||]
