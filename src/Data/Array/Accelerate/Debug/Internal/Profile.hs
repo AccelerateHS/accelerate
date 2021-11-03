@@ -144,6 +144,12 @@ emit_remote_gc = void $ Atomic.add __num_remote_gcs 1
 -- Monitoring variables
 -- --------------------
 
+-- FIXME: HLS requires stubs because it does not process the
+--        'addForeignFilePath' calls when evaluating Template Haskell
+--
+--        https://github.com/haskell/haskell-language-server/issues/365
+#ifndef __GHCIDE__
+
 foreign import ccall "&__total_bytes_allocated_local"     __total_bytes_allocated_local     :: Atomic -- bytes allocated in the local (CPU) memory space
 foreign import ccall "&__total_bytes_allocated_remote"    __total_bytes_allocated_remote    :: Atomic -- bytes allocated in the remote memory space (if it is separate, e.g. GPU)
 foreign import ccall "&__total_bytes_copied_to_remote"    __total_bytes_copied_to_remote    :: Atomic -- bytes copied to the remote memory space
@@ -151,6 +157,31 @@ foreign import ccall "&__total_bytes_copied_from_remote"  __total_bytes_copied_f
 foreign import ccall "&__total_bytes_evicted_from_remote" __total_bytes_evicted_from_remote :: Atomic -- total bytes copied from the remote due to evictions
 foreign import ccall "&__num_remote_gcs"                  __num_remote_gcs                  :: Atomic -- number of times the remote memory space was forcibly garbage collected
 foreign import ccall "&__num_evictions"                   __num_evictions                   :: Atomic -- number of LRU eviction events
+
+#else
+
+__total_bytes_allocated_local :: Atomic
+__total_bytes_allocated_local = undefined
+
+__total_bytes_allocated_remote :: Atomic
+__total_bytes_allocated_remote = undefined
+
+__total_bytes_copied_to_remote :: Atomic
+__total_bytes_copied_to_remote = undefined
+
+__total_bytes_copied_from_remote :: Atomic
+__total_bytes_copied_from_remote = undefined
+
+__total_bytes_evicted_from_remote :: Atomic
+__total_bytes_evicted_from_remote = undefined
+
+__num_remote_gcs :: Atomic
+__num_remote_gcs = undefined
+
+__num_evictions :: Atomic
+__num_evictions = undefined
+
+#endif
 
 -- SEE: [linking to .c files]
 --
