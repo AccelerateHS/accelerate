@@ -937,6 +937,11 @@ primFunType = \case
                 i = integral i' 
                 in (v `TupRpair` i, single a)
 
+  PrimVectorWrite v'@(VectorType _ a) i' ->
+            let v = singleVector v'
+                i = integral i'
+                in (v `TupRpair` (i `TupRpair` single a), v)
+
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
   PrimToFloating   a b      -> unary (num a) (floating b)
