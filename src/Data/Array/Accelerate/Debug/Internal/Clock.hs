@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# OPTIONS_GHC -fobject-code #-}
@@ -16,12 +17,27 @@ module Data.Array.Accelerate.Debug.Internal.Clock
 
 import Language.Haskell.TH.Syntax
 
+-- FIXME: HLS requires stubs because it does not process the
+--        'addForeignFilePath' calls when evaluating Template Haskell
+--
+--        https://github.com/haskell/haskell-language-server/issues/365
+#ifndef __GHCIDE__
+
 foreign import ccall unsafe "clock_gettime_monotonic_seconds" getMonotonicTime :: IO Double
 foreign import ccall unsafe "clock_gettime_elapsed_seconds"   getProgramTime   :: IO Double
+
+#else
+
+getMonotonicTime :: IO Double
+getMonotonicTime = undefined
+
+getProgramTime :: IO Double
+getProgramTime = undefined
+
+#endif
 
 -- SEE: [linking to .c files]
 --
 runQ $ do
   addForeignFilePath LangC "cbits/clock.c"
   return []
-
