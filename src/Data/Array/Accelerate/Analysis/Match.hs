@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Match
@@ -35,6 +36,7 @@ module Data.Array.Accelerate.Analysis.Match (
 
 ) where
 
+import Data.Array.Accelerate.Annotations
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
@@ -56,9 +58,6 @@ import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
 import Prelude                                          hiding ( exp )
 
-
--- TODO: Should we match annotations? If we do, then we should probably only
---       compare the optimization flags.
 
 -- The type of matching array computations
 --
@@ -84,8 +83,9 @@ matchPreOpenAcc matchAcc = match
     matchExp = matchOpenExp
 
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :~: t)
-    match (Alet _ lhs1 x1 a1) (Alet _ lhs2 x2 a2)
-      | Just Refl <- matchALeftHandSide lhs1 lhs2
+    match (Alet ann lhs1 x1 a1) (Alet ann' lhs2 x2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchALeftHandSide lhs1 lhs2
       , Just Refl <- matchAcc x1 x2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
@@ -93,21 +93,25 @@ matchPreOpenAcc matchAcc = match
     match (Avar v1) (Avar v2)
       = matchVar v1 v2
 
-    match (Apair _ a1 a2) (Apair _ b1 b2)
-      | Just Refl <- matchAcc a1 b1
+    match (Apair ann a1 a2) (Apair ann' b1 b2)
+      | matchAnn ann ann'
+      , Just Refl <- matchAcc a1 b1
       , Just Refl <- matchAcc a2 b2
       = Just Refl
 
-    match Anil{} Anil{}
+    match (Anil ann) (Anil ann')
+      | matchAnn ann ann'
       = Just Refl
 
-    match (Apply _ _ f1 a1) (Apply _ _ f2 a2)
-      | Just Refl <- matchPreOpenAfun matchAcc f1 f2
+    match (Apply ann _ f1 a1) (Apply ann' _ f2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchPreOpenAfun matchAcc f1 f2
       , Just Refl <- matchAcc                  a1 a2
       = Just Refl
 
-    match (Aforeign _ _ ff1 f1 a1) (Aforeign _ _ ff2 f2 a2)
-      | Just Refl <- matchAcc a1 a2
+    match (Aforeign ann _ ff1 f1 a1) (Aforeign ann' _ ff2 f2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchAcc a1 a2
       , unsafePerformIO $ do
           sn1 <- makeStableName ff1
           sn2 <- makeStableName ff2
@@ -115,115 +119,134 @@ matchPreOpenAcc matchAcc = match
       , Just Refl <- matchPreOpenAfun matchAcc f1 f2
       = Just Refl
 
-    match (Acond _ p1 t1 e1) (Acond _ p2 t2 e2)
-      | Just Refl <- matchExp p1 p2
+    match (Acond ann p1 t1 e1) (Acond ann' p2 t2 e2)
+      | matchAnn ann ann'
+      , Just Refl <- matchExp p1 p2
       , Just Refl <- matchAcc t1 t2
       , Just Refl <- matchAcc e1 e2
       = Just Refl
 
-    match (Awhile _ p1 f1 a1) (Awhile _ p2 f2 a2)
-      | Just Refl <- matchAcc a1 a2
+    match (Awhile ann p1 f1 a1) (Awhile ann' p2 f2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchPreOpenAfun matchAcc p1 p2
       , Just Refl <- matchPreOpenAfun matchAcc f1 f2
       = Just Refl
 
-    match (Use _ repr1 a1) (Use _ repr2 a2)
-      | Just Refl <- matchArray repr1 repr2 a1 a2
+    match (Use ann repr1 a1) (Use ann' repr2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchArray repr1 repr2 a1 a2
       = Just Refl
 
-    match (Unit _ t1 e1) (Unit _ t2 e2)
-      | Just Refl <- matchTypeR t1 t2
+    match (Unit ann t1 e1) (Unit ann' t2 e2)
+      | matchAnn ann ann'
+      , Just Refl <- matchTypeR t1 t2
       , Just Refl <- matchExp e1 e2
       = Just Refl
 
-    match (Reshape _ _ sh1 a1) (Reshape _ _ sh2 a2)
-      | Just Refl <- matchExp sh1 sh2
+    match (Reshape ann _ sh1 a1) (Reshape ann' _ sh2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Generate _ _ sh1 f1) (Generate _ _ sh2 f2)
-      | Just Refl <- matchExp sh1 sh2
+    match (Generate ann _ sh1 f1) (Generate ann' _ sh2 f2)
+      | matchAnn ann ann'
+      , Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun f1  f2
       = Just Refl
 
-    match (Transform _ _ sh1 ix1 f1 a1) (Transform _ _ sh2 ix2 f2 a2)
-      | Just Refl <- matchExp sh1 sh2
+    match (Transform ann _ sh1 ix1 f1 a1) (Transform ann' _ sh2 ix2 f2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun ix1 ix2
       , Just Refl <- matchFun f1  f2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Replicate _ si1 ix1 a1) (Replicate _ si2 ix2 a2)
-      | Just Refl <- matchSliceIndex si1 si2
+    match (Replicate ann si1 ix1 a1) (Replicate ann' si2 ix2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchSliceIndex si1 si2
       , Just Refl <- matchExp ix1 ix2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Slice _ si1 a1 ix1) (Slice _ si2 a2 ix2)
-      | Just Refl <- matchSliceIndex si1 si2
+    match (Slice ann si1 a1 ix1) (Slice ann' si2 a2 ix2)
+      | matchAnn ann ann'
+      , Just Refl <- matchSliceIndex si1 si2
       , Just Refl <- matchAcc a1  a2
       , Just Refl <- matchExp ix1 ix2
       = Just Refl
 
-    match (Map _ _ f1 a1) (Map _ _ f2 a2)
-      | Just Refl <- matchFun f1 f2
+    match (Map ann _ f1 a1) (Map ann' _ f2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (ZipWith _ _ f1 a1 b1) (ZipWith _ _ f2 a2 b2)
-      | Just Refl <- matchFun f1 f2
+    match (ZipWith ann _ f1 a1 b1) (ZipWith ann' _ f2 a2 b2)
+      | matchAnn ann ann'
+      , Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc b1 b2
       = Just Refl
 
-    match (Fold _ f1 z1 a1) (Fold _ f2 z2 a2)
-      | Just Refl <- matchFun f1 f2
+    match (Fold ann f1 z1 a1) (Fold ann' f2 z2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchFun f1 f2
       , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (FoldSeg _ _ f1 z1 a1 s1) (FoldSeg _ _ f2 z2 a2 s2)
-      | Just Refl <- matchFun f1 f2
+    match (FoldSeg ann _ f1 z1 a1 s1) (FoldSeg ann' _ f2 z2 a2 s2)
+      | matchAnn ann ann'
+      , Just Refl <- matchFun f1 f2
       , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       , Just Refl <- matchAcc s1 s2
       = Just Refl
 
-    match (Scan _ d1 f1 z1 a1) (Scan _ d2 f2 z2 a2)
-      | d1 == d2
+    match (Scan ann d1 f1 z1 a1) (Scan ann' d2 f2 z2 a2)
+      | matchAnn ann ann'
+      , d1 == d2
       , Just Refl <- matchFun f1 f2
       , matchMaybe matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Scan' _ d1 f1 z1 a1) (Scan' _ d2 f2 z2 a2)
-      | d1 == d2
+    match (Scan' ann d1 f1 z1 a1) (Scan' ann' d2 f2 z2 a2)
+      | matchAnn ann ann'
+      , d1 == d2
       , Just Refl <- matchFun f1 f2
       , Just Refl <- matchExp z1 z2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Permute _ f1 d1 p1 a1) (Permute _ f2 d2 p2 a2)
-      | Just Refl <- matchFun f1 f2
+    match (Permute ann f1 d1 p1 a1) (Permute ann' f2 d2 p2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc d1 d2
       , Just Refl <- matchFun p1 p2
       , Just Refl <- matchAcc a1 a2
       = Just Refl
 
-    match (Backpermute _ _ sh1 ix1 a1) (Backpermute _ _ sh2 ix2 a2)
-      | Just Refl <- matchExp sh1 sh2
+    match (Backpermute ann _ sh1 ix1 a1) (Backpermute ann' _ sh2 ix2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchExp sh1 sh2
       , Just Refl <- matchFun ix1 ix2
       , Just Refl <- matchAcc a1  a2
       = Just Refl
 
-    match (Stencil _ s1 _ f1 b1 a1) (Stencil _ _ _ f2 b2 a2)
-      | Just Refl <- matchFun f1 f2
+    match (Stencil ann s1 _ f1 b1 a1) (Stencil ann' _ _ f2 b2 a2)
+      | matchAnn ann ann'
+      , Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a2
       , matchBoundary (stencilEltR s1) b1 b2
       = Just Refl
 
-    match (Stencil2 _ s1 s2 _ f1 b1  a1  b2  a2) (Stencil2 _ _ _ _ f2 b1' a1' b2' a2')
-      | Just Refl <- matchFun f1 f2
+    match (Stencil2 ann s1 s2 _ f1 b1  a1  b2  a2) (Stencil2 ann' _ _ _ f2 b1' a1' b2' a2')
+      | matchAnn ann ann'
+      , Just Refl <- matchFun f1 f2
       , Just Refl <- matchAcc a1 a1'
       , Just Refl <- matchAcc a2 a2'
       , matchBoundary (stencilEltR s1) b1 b1'
@@ -275,9 +298,9 @@ matchLeftHandSide
 matchLeftHandSide f (LeftHandSideWildcard repr1) (LeftHandSideWildcard repr2)
   | Just Refl <- matchTupR f repr1 repr2
   = Just Refl
--- TODO: Don't forget this one when adding matching based on annotations
-matchLeftHandSide f (LeftHandSideSingle _ x) (LeftHandSideSingle _ y)
-  | Just Refl <- f x y
+matchLeftHandSide f (LeftHandSideSingle a1 x) (LeftHandSideSingle a2 y)
+  | matchAnn a1 a2
+  , Just Refl <- f x y
   = Just Refl
 matchLeftHandSide f (LeftHandSidePair a1 a2) (LeftHandSidePair b1 b2)
   | Just Refl <- matchLeftHandSide f a1 b1
@@ -441,8 +464,9 @@ matchOpenExp
     -> OpenExp env aenv t
     -> Maybe (s :~: t)
 
-matchOpenExp (Let _ lhs1 x1 e1) (Let _ lhs2 x2 e2)
-  | Just Refl <- matchELeftHandSide lhs1 lhs2
+matchOpenExp (Let ann lhs1 x1 e1) (Let ann' lhs2 x2 e2)
+  | matchAnn ann ann'
+  , Just Refl <- matchELeftHandSide lhs1 lhs2
   , Just Refl <- matchOpenExp x1 x2
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
@@ -450,8 +474,9 @@ matchOpenExp (Let _ lhs1 x1 e1) (Let _ lhs2 x2 e2)
 matchOpenExp (Evar v1) (Evar v2)
   = matchVar v1 v2
 
-matchOpenExp (Foreign _ _ ff1 f1 e1) (Foreign _ _ ff2 f2 e2)
-  | Just Refl <- matchOpenExp e1 e2
+matchOpenExp (Foreign ann _ ff1 f1 e1) (Foreign ann' _ ff2 f2 e2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp e1 e2
   , unsafePerformIO $ do
       sn1 <- makeStableName ff1
       sn2 <- makeStableName ff2
@@ -459,90 +484,109 @@ matchOpenExp (Foreign _ _ ff1 f1 e1) (Foreign _ _ ff2 f2 e2)
   , Just Refl <- matchOpenFun f1 f2
   = Just Refl
 
-matchOpenExp (Const _ t1 c1) (Const _ t2 c2)
-  | Just Refl <- matchScalarType t1 t2
+matchOpenExp (Const ann t1 c1) (Const ann' t2 c2)
+  | matchAnn ann ann'
+  , Just Refl <- matchScalarType t1 t2
   , matchConst (TupRsingle t1) c1 c2
   = Just Refl
 
-matchOpenExp (Undef _ t1) (Undef _ t2) = matchScalarType t1 t2
+matchOpenExp (Undef ann t1) (Undef ann' t2)
+  | matchAnn ann ann'
+  = matchScalarType t1 t2
 
-matchOpenExp (Coerce _ _ t1 e1) (Coerce _ _ t2 e2)
-  | Just Refl <- matchScalarType t1 t2
+matchOpenExp (Coerce ann _ t1 e1) (Coerce ann' _ t2 e2)
+  | matchAnn ann ann'
+  , Just Refl <- matchScalarType t1 t2
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
 
-matchOpenExp (Pair _ a1 b1) (Pair _ a2 b2)
-  | Just Refl <- matchOpenExp a1 a2
+matchOpenExp (Pair ann a1 b1) (Pair ann' a2 b2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp a1 a2
   , Just Refl <- matchOpenExp b1 b2
   = Just Refl
 
-matchOpenExp (Nil _) (Nil _)
+matchOpenExp (Nil ann) (Nil ann')
+  | matchAnn ann ann'
   = Just Refl
 
-matchOpenExp (IndexSlice _ sliceIndex1 ix1 sh1) (IndexSlice _ sliceIndex2 ix2 sh2)
-  | Just Refl <- matchOpenExp ix1 ix2
+matchOpenExp (IndexSlice ann sliceIndex1 ix1 sh1) (IndexSlice ann' sliceIndex2 ix2 sh2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp ix1 ix2
   , Just Refl <- matchOpenExp sh1 sh2
   , Just Refl <- matchSliceIndex sliceIndex1 sliceIndex2
   = Just Refl
 
-matchOpenExp (IndexFull _ sliceIndex1 ix1 sl1) (IndexFull _ sliceIndex2 ix2 sl2)
-  | Just Refl <- matchOpenExp ix1 ix2
+matchOpenExp (IndexFull ann sliceIndex1 ix1 sl1) (IndexFull ann' sliceIndex2 ix2 sl2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp ix1 ix2
   , Just Refl <- matchOpenExp sl1 sl2
   , Just Refl <- matchSliceIndex sliceIndex1 sliceIndex2
   = Just Refl
 
-matchOpenExp (ToIndex _ _ sh1 i1) (ToIndex _ _ sh2 i2)
-  | Just Refl <- matchOpenExp sh1 sh2
+matchOpenExp (ToIndex ann _ sh1 i1) (ToIndex ann' _ sh2 i2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp sh1 sh2
   , Just Refl <- matchOpenExp i1  i2
   = Just Refl
 
-matchOpenExp (FromIndex _ _ sh1 i1) (FromIndex _ _ sh2 i2)
-  | Just Refl <- matchOpenExp i1  i2
+matchOpenExp (FromIndex ann _ sh1 i1) (FromIndex ann' _ sh2 i2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp i1  i2
   , Just Refl <- matchOpenExp sh1 sh2
   = Just Refl
 
-matchOpenExp (Cond _ p1 t1 e1) (Cond _ p2 t2 e2)
-  | Just Refl <- matchOpenExp p1 p2
+matchOpenExp (Cond ann p1 t1 e1) (Cond ann' p2 t2 e2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp p1 p2
   , Just Refl <- matchOpenExp t1 t2
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl
 
-matchOpenExp (While _ p1 f1 x1) (While _ p2 f2 x2)
-  | Just Refl <- matchOpenExp x1 x2
+matchOpenExp (While ann p1 f1 x1) (While ann' p2 f2 x2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp x1 x2
   , Just Refl <- matchOpenFun p1 p2
   , Just Refl <- matchOpenFun f1 f2
   = Just Refl
 
-matchOpenExp (PrimConst _ c1) (PrimConst _ c2)
+matchOpenExp (PrimConst ann c1) (PrimConst ann' c2)
+  | matchAnn ann ann'
   = matchPrimConst c1 c2
 
-matchOpenExp (PrimApp _ f1 x1) (PrimApp _ f2 x2)
-  | Just x1'  <- commutes f1 x1
+matchOpenExp (PrimApp ann f1 x1) (PrimApp ann' f2 x2)
+  | matchAnn ann ann'
+  , Just x1'  <- commutes f1 x1
   , Just x2'  <- commutes f2 x2
   , Just Refl <- matchOpenExp x1' x2'
   , Just Refl <- matchPrimFun f1  f2
   = Just Refl
 
-  | Just Refl <- matchOpenExp x1 x2
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp x1 x2
   , Just Refl <- matchPrimFun f1 f2
   = Just Refl
 
-matchOpenExp (Index _ a1 x1) (Index _ a2 x2)
-  | Just Refl <- matchVar a1 a2
+matchOpenExp (Index ann a1 x1) (Index ann' a2 x2)
+  | matchAnn ann ann'
+  , Just Refl <- matchVar a1 a2
   , Just Refl <- matchOpenExp x1 x2
   = Just Refl
 
-matchOpenExp (LinearIndex _ a1 x1) (LinearIndex _ a2 x2)
-  | Just Refl <- matchVar a1 a2
+matchOpenExp (LinearIndex ann a1 x1) (LinearIndex ann' a2 x2)
+  | matchAnn ann ann'
+  , Just Refl <- matchVar a1 a2
   , Just Refl <- matchOpenExp x1 x2
   = Just Refl
 
-matchOpenExp (Shape _ a1) (Shape _ a2)
-  | Just Refl <- matchVar a1 a2
+matchOpenExp (Shape ann a1) (Shape ann' a2)
+  | matchAnn ann ann'
+  , Just Refl <- matchVar a1 a2
   = Just Refl
 
-matchOpenExp (ShapeSize _ _ sh1) (ShapeSize _ _ sh2)
-  | Just Refl <- matchOpenExp sh1 sh2
+matchOpenExp (ShapeSize ann _ sh1) (ShapeSize ann' _ sh2)
+  | matchAnn ann ann'
+  , Just Refl <- matchOpenExp sh1 sh2
   = Just Refl
 
 matchOpenExp _ _
@@ -594,10 +638,11 @@ matchIdx ZeroIdx     ZeroIdx     = Just Refl
 matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
 matchIdx _           _           = Nothing
 
--- TODO: Consider annotations here
 {-# INLINEABLE matchVar #-}
 matchVar :: Var s env t1 -> Var s env t2 -> Maybe (t1 :~: t2)
-matchVar (Var _ _ v1) (Var _ _ v2) = matchIdx v1 v2
+matchVar (Var a1 _ v1) (Var a2 _ v2)
+  | matchAnn a1 a2 = matchIdx v1 v2
+  | otherwise      = Nothing
 
 {-# INLINEABLE matchVars #-}
 matchVars :: Vars s env t1 -> Vars s env t2 -> Maybe (t1 :~: t2)
@@ -886,6 +931,22 @@ matchFloatingType TypeFloat  TypeFloat  = Just Refl
 matchFloatingType TypeDouble TypeDouble = Just Refl
 matchFloatingType _            _            = Nothing
 
+-- Match annotations
+--
+-- Here we don't care about the source locations as two AST nodes can be
+-- equivalent even if they come from different sources, but we do need to make
+-- sure the optimization flags are the same.
+--
+matchAnn :: Ann -> Ann -> Bool
+matchAnn (Ann _ opts1) (Ann _ opts2) = matchOptimizations opts1 opts2
+
+matchOptimizations :: Optimizations -> Optimizations -> Bool
+matchOptimizations opts1 opts2
+  | optAlwaysInline opts1 == optAlwaysInline opts2
+  , optUnrollIters  opts1 == optUnrollIters  opts2
+  = True
+  | otherwise
+  = False
 
 -- Auxiliary
 -- ---------
