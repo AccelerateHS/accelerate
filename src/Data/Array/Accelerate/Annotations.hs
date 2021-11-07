@@ -523,6 +523,15 @@ mkDummyAnn = let ?requiresSourceMapping = TakenCareOf
 -- TODO: Right now we use a simple heuristic and consider regions on the same
 --       line or on adjacent lines to be adjacent. This will definitely need
 --       some tweaking.
+--
+-- TODO: We should also have a function specifically for merging this set of
+--       locations into a single location. This would basically return the
+--       result of this function's head's head, with the other top level
+--       function names (the 'String's) appended to the name so they don't get
+--       lost. This would be useful for the Tracy output where we use these
+--       function names, but where we cannot show multiple locations. Right now
+--       this is done ad-hoc for the Tracy implementation but it's probably
+--       useful in other places as well.
 mergeLocs :: S.HashSet CallStack -> [[(String, SrcLoc)]]
 mergeLocs
     = mergeAdjacent
