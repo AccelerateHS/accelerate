@@ -236,6 +236,17 @@ data Optimizations = Optimizations
 --
 -- These are exposed to the user so they can annotate AST nodes.
 
+-- | Add context to a scalar expression or an array operation. This will insert
+-- the current call stack into the expression and all of its subtrees along with
+-- the provided context string.
+--
+-- TODO: Implement this function, this would be very useful in situations where
+--       there's no finer grained information. This needs to work on the entire
+--       tree, so we'll need to extend 'HasAnnotations'.
+-- TODO: Alternative names: label? describe? addContext? Some short descriptive
+--       name that wouldn't clash with other functions.
+-- context :: (HasCallStack, HasAnnotations a) => String -> a -> a
+
 -- | Instruct the compiler to always inline this expression and to not perform
 -- any sharing recovery. This will allow inexpensive calculations whose values
 -- are used in multiple places to be fused, potentially increasing performance

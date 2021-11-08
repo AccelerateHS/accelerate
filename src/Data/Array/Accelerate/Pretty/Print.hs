@@ -421,6 +421,9 @@ prettyAnn config ann = fromMaybe emptyDoc (prettyAnn' config ann)
 -- annotation to the pretty printer.
 --
 -- TODO: Make this, well, prettier
+-- TODO: We may also want to show the information added by `context`, although
+--       cluttering up the pretty printer output too much likely also won't do
+--       us any good.
 prettyAnn' :: PrettyConfig acc -> Ann -> Maybe Adoc
 prettyAnn' config (Ann locs (Optimizations { optAlwaysInline, optUnrollIters })) =
   case catMaybes [prettyLoc, prettyOpts] of
