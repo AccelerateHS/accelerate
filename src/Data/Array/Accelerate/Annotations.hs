@@ -17,7 +17,7 @@
 -- TODO: Add the same file header used in all other modules
 -- TODO: Reformat all of the changes from this branch to the usual Accelerate
 --       style. There's no style guide or formatter config anywhere, so I just
---       run most things through Brittany to keep me sane.
+--       run most things through a formatter to keep me sane.
 -- TODO: Take another look at fusion, optimization propagation doesn't have to
 --       be perfect yet but I'm sure there are also issues elsewhere
 -- TODO: Annotations are completely ignored in 'Match' and 'Hash' at the moment.
@@ -155,45 +155,47 @@
 -- > mkFromIntegral :: (SourceMapped, Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
 -- > mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 --
-module Data.Array.Accelerate.Annotations
-    ( -- * Annotations
-      Ann(..)
-    , Optimizations(..)
-    , HasAnnotations(..)
-    , TraverseAnnotations(..)
-    , context
-    , alwaysInline
-    , unrollIters
-      -- * Source mapping
-    , SourceMapped
-    , sourceMap
-    , sourceMapRuntime
-    , sourceMapPattern
-    , mergeLocs
-      -- * Internals
-    , FieldAnn(..)
-    , withOptimizations
-    , extractAnn
-    , mkAnn
-    , mkDummyAnn
-    , rnfAnn
-    , liftAnn
-      -- * Re-exported for convenience
-    , HasCallStack
-    ) where
+module Data.Array.Accelerate.Annotations (
+  -- * Annotations
+  Ann (..),
+  Optimizations (..),
+  HasAnnotations (..),
+  TraverseAnnotations (..),
+  context,
+  alwaysInline,
+  unrollIters,
 
-import           Data.Array.Accelerate.Orphans  ( )
+  -- * Source mapping
+  SourceMapped,
+  sourceMap,
+  sourceMapRuntime,
+  sourceMapPattern,
+  mergeLocs,
 
-import           Control.DeepSeq                ( rnf )
-import qualified Data.HashSet                  as S
-import           Data.List                      ( sortBy )
-import           Data.Ord                       ( comparing )
-import           GHC.Stack
-import           GHC.Stack.Types                ( CallStack(..) )
-import           Language.Haskell.TH.Extra      ( CodeQ )
-import           Lens.Micro
-import           Lens.Micro.Extras              ( view )
+  -- * Internals
+  FieldAnn (..),
+  withOptimizations,
+  extractAnn,
+  mkAnn,
+  mkDummyAnn,
+  rnfAnn,
+  liftAnn,
 
+  -- * Re-exported for convenience
+  HasCallStack,
+) where
+
+import Data.Array.Accelerate.Orphans ()
+
+import Control.DeepSeq (rnf)
+import qualified Data.HashSet as S
+import Data.List (sortBy)
+import Data.Ord (comparing)
+import GHC.Stack
+import GHC.Stack.Types (CallStack (..))
+import Language.Haskell.TH.Extra (CodeQ)
+import Lens.Micro
+import Lens.Micro.Extras (view)
 
 -- | This annotation type stores any auxiliary data attached to an AST node.
 -- This includes source mapping information if available, as well as any local
@@ -213,11 +215,11 @@ import           Lens.Micro.Extras              ( view )
 --       involve adding another type index to 'Exp' that's not going to be a
 --       feasible approach.
 data Ann = Ann
-    { -- | When displaying these to the user, use 'mergeLocs' instead of
-      -- 'fromCallSiteList' so nearby source locations are merged.
-      locations     :: S.HashSet CallStack
-    , optimizations :: Optimizations
-    }
+  { -- | When displaying these to the user, use 'mergeLocs' instead of
+    -- 'fromCallSiteList' so nearby source locations are merged.
+    locations :: S.HashSet CallStack
+  , optimizations :: Optimizations
+  }
 
 -- | Some example annotations. These do not actually do anything yet. Having
 -- these as a record makes it possible to easily pattern match on them without
@@ -229,9 +231,9 @@ data Ann = Ann
 --       optimizations here and actually make them do something. Currently
 --       they're just placeholders.
 data Optimizations = Optimizations
-    { optAlwaysInline :: Bool
-    , optUnrollIters  :: Maybe Int
-    }
+  { optAlwaysInline :: Bool
+  , optUnrollIters :: Maybe Int
+  }
 
 
 -- * Annotation functions
@@ -310,11 +312,10 @@ data ReadTheDocs = TakenCareOf
 --      rather that of its caller.
 sourceMap :: HasCallStack => (SourceMapped => a) -> a
 sourceMap dewit =
-    let ?requiresSourceMapping = TakenCareOf
-        -- Same definition as in 'withFrozenCallStack'
-        ?callStack             = freezeCallStack (popCallStack callStack)
-    in
-    if isEmptyStack ?callStack
+  let ?requiresSourceMapping = TakenCareOf
+      -- Same definition as in 'withFrozenCallStack'
+      ?callStack = freezeCallStack (popCallStack callStack)
+   in if isEmptyStack ?callStack
         then printError
         else dewit
   where
@@ -346,39 +347,42 @@ sourceMap dewit =
 -- > ghcup compile ghc -b INSTALLED_GHC_VERSION -v 9.2.0.20210422 -j $(nproc) -- --enable-dwarf-unwind
 sourceMapRuntime :: HasCallStack => (SourceMapped => a) -> a
 sourceMapRuntime dewit =
-    let ?requiresSourceMapping = TakenCareOf
-        -- Only create a frozen call stack if we do not already have a valid
-        -- frozen call stack
-        ?callStack = case ?callStack of
-            x@(FreezeCallStack _) -> x
-            _                     -> freezeCallStack emptyCallStack
-            -- FIXME: This will need some more work. The main issues are that
-            --        the stack contains a lot of frames at the top and the
-            --        bottom that would need to be stripped, and that tail call
-            --        optimization interferes with these execution stacks.
-            -- _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
-    in  dewit
-  -- where
-  --   -- We don't want the two uppermost stack frames, since those will be in our
-  --   -- own library code
-  --   -- TODO: Is this correct? Should we drop only one stack frame?
-  --   toCallStack :: Maybe [ES.Location] -> CallStack
-  --   toCallStack (Just (_ : _ : locs)) = fromCallSiteList $ mapMaybe locToCallSite locs
-  --   toCallStack _                     = emptyCallStack
+  let ?requiresSourceMapping = TakenCareOf
+      -- Only create a frozen call stack if we do not already have a valid
+      -- frozen call stack
+      ?callStack =
+        case ?callStack of
+          x@(FreezeCallStack _) -> x
+          _ -> freezeCallStack emptyCallStack
+          -- FIXME: This will need some more work. The main issues are that the
+          --        stack contains a lot of frames at the top and the bottom
+          --        that would need to be stripped, and that tail call
+          --        optimization interferes with these execution stacks.
+          -- _ -> freezeCallStack . toCallStack $ unsafePerformIO ES.getStackTrace
+   in dewit
+ --  where
+ --    -- We don't want the two uppermost stack frames, since those will be in our
+ --    -- own library code
+ --    -- TODO: Is this correct? Should we drop only one stack frame?
+ --    toCallStack :: Maybe [ES.Location] -> CallStack
+ --    toCallStack (Just (_ : _ : locs)) = fromCallSiteList $ mapMaybe locToCallSite locs
+ --    toCallStack _ = emptyCallStack
 
-  --   locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
-  --   locToCallSite (ES.Location _ fn (Just loc)) = Just
-  --       ( fn
-  --       , SrcLoc { srcLocPackage   = ""
-  --                , srcLocModule    = ""
-  --                , srcLocFile      = ES.sourceFile loc
-  --                , srcLocStartLine = ES.sourceLine loc
-  --                , srcLocStartCol  = ES.sourceColumn loc
-  --                , srcLocEndLine   = ES.sourceLine loc
-  --                , srcLocEndCol    = ES.sourceColumn loc
-  --                }
-  --       )
-  --   locToCallSite (ES.Location _ _ Nothing) = Nothing
+ --    locToCallSite :: ES.Location -> Maybe (String, SrcLoc)
+ --    locToCallSite (ES.Location _ fn (Just loc)) =
+ --      Just
+ --        ( fn
+ --        , SrcLoc
+ --            { srcLocPackage = ""
+ --            , srcLocModule = ""
+ --            , srcLocFile = ES.sourceFile loc
+ --            , srcLocStartLine = ES.sourceLine loc
+ --            , srcLocStartCol = ES.sourceColumn loc
+ --            , srcLocEndLine = ES.sourceLine loc
+ --            , srcLocEndCol = ES.sourceColumn loc
+ --            }
+ --        )
+ --    locToCallSite (ES.Location _ _ Nothing) = Nothing
 
 -- | Workaround for pattern synonyms and call stacks not working as expected in
 -- GHC versions 9.0.x and below. Performs the same duty as 'sourceMap'. On the
@@ -405,10 +409,9 @@ sourceMapRuntime dewit =
 sourceMapPattern :: HasCallStack => Int -> (SourceMapped => a) -> a
 sourceMapPattern _nestingDepth dewit =
 #if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
-    let ?requiresSourceMapping = TakenCareOf
-        ?callStack = freezeCallStack (iterate popCallStack callStack !! (_nestingDepth + 1))
-    in
-    if isEmptyStack ?callStack
+  let ?requiresSourceMapping = TakenCareOf
+      ?callStack = freezeCallStack (iterate popCallStack callStack !! (_nestingDepth + 1))
+   in if isEmptyStack ?callStack
         then printError
         else dewit
   where
@@ -420,15 +423,14 @@ sourceMapPattern _nestingDepth dewit =
       <> "'HasCallStack'. If that's not possible, then you should use "
       <> "'sourceMapRuntime' instead."
 #else
-    let ?requiresSourceMapping = TakenCareOf
-        ?callStack =
-          -- Only freeze an empty call stack of the call stack isn't already
-          -- frozen, i.e. when it is used internally within Accelerate's front end
-          -- standard library
-          case ?callStack of
-            x@(FreezeCallStack _) -> x
-            _                     -> freezeCallStack emptyCallStack
-    in  dewit
+  let ?requiresSourceMapping = TakenCareOf
+      -- Only freeze an empty call stack of the call stack isn't already
+      -- frozen, i.e. when it is used internally within Accelerate's front end
+      -- standard library
+      ?callStack = case ?callStack of
+        x@(FreezeCallStack _) -> x
+        _                     -> freezeCallStack emptyCallStack
+   in dewit
 #endif
 
 -- | We'll throw an error when 'sourceMap' or 'sourceMapPattern' gets called
@@ -446,54 +448,54 @@ isEmptyStack _              = False
 -- convenience functions for working with types that have such an annotation
 -- field and for functions that
 class FieldAnn s where
-    -- | A lens for accessing @a@'s annotation field, if it has one. By defining
-    -- this as a lens we can get rid of some duplication.
-    _ann :: Lens' s (Maybe Ann)
+  -- | A lens for accessing @a@'s annotation field, if it has one. By defining
+  -- this as a lens we can get rid of some duplication.
+  _ann :: Lens' s (Maybe Ann)
 
 -- | Used for modifying an AST node's annotations. Types with annotation fields
 -- should have an instance of 'FieldAnn' instead of implementing this class
 -- directly.
 class HasAnnotations a where
-    -- | Modify the annotation stored in an AST node. This may not do anything
-    -- when the AST node doesn't support annotations.
-    modifyAnn :: (Ann -> Ann) -> a -> a
-    -- | Extract the annotation from an AST node, if it has one. This is used
-    -- during some of the transformations when we may no longer have access to the
-    -- original AST nodes.
-    getAnn :: a -> Maybe Ann
+  -- | Modify the annotation stored in an AST node. This may not do anything
+  -- when the AST node doesn't support annotations.
+  modifyAnn :: (Ann -> Ann) -> a -> a
+  -- | Extract the annotation from an AST node, if it has one. This is used
+  -- during some of the transformations when we may no longer have access to the
+  -- original AST nodes.
+  getAnn :: a -> Maybe Ann
 
 -- | AST types that allow modifying every annotation stored in their subtrees.
 -- Because this can only be implemented for concrete types, this is separate
 -- from 'HasAnnotations'.
 class TraverseAnnotations a where
-    -- | A traversal over all annotations in @a@ and all of its subtrees that
-    -- modifies all of those annotations. This is essentially a limited, modify
-    -- only version of 'Traversal' a Ann' because it's not possible to traverse
-    -- functions (in the higher order smart AST) with lenses.
-    --
-    -- Even though this is not a traversal as the term is normally used in
-    -- Haskell, naming this 'modifyAnns' would make it easy to accidentally use
-    -- the wrong function.
-    traverseAnns :: (Ann -> Ann) -> a -> a
+  -- | A traversal over all annotations in @a@ and all of its subtrees that
+  -- modifies all of those annotations. This is essentially a limited, modify
+  -- only version of 'Traversal' a Ann' because it's not possible to traverse
+  -- functions (in the higher order smart AST) with lenses.
+  --
+  -- Even though this is not a traversal as the term is normally used in
+  -- Haskell, naming this 'modifyAnns' would make it easy to accidentally use
+  -- the wrong function.
+  traverseAnns :: (Ann -> Ann) -> a -> a
 
 -- | Lenses make accessing these annotations for different ASTs much cleaner,
 -- but these speciality functions are much nicer to work with.
 instance {-# OVERLAPPING #-} FieldAnn a => HasAnnotations a where
-    modifyAnn f = over _ann $ \case
-      Just ann -> Just (f ann)
-      Nothing  -> Nothing
-    getAnn = view _ann
+  modifyAnn f = over _ann $ \case
+    Just ann -> Just (f ann)
+    Nothing  -> Nothing
+  getAnn = view _ann
 
 -- | Being able to directly annotate functions makes using this annotation
 -- functionality much more ergonomic.
 instance {-# OVERLAPPING #-} HasAnnotations r => HasAnnotations (a -> r) where
-    modifyAnn f f' x = modifyAnn f (f' x)
-    -- You cannot get the annotation without evaluating the function first. This
-    -- is kind of an edge cases where getAnn doesn't make any sense.
-    getAnn _ = Nothing
+  modifyAnn f f' x = modifyAnn f (f' x)
+  -- You cannot get the annotation without evaluating the function first. This
+  -- is kind of an edge cases where getAnn doesn't make any sense.
+  getAnn _ = Nothing
 
 instance TraverseAnnotations r => TraverseAnnotations (a -> r) where
-    traverseAnns f f' x = traverseAnns f (f' x)
+  traverseAnns f f' x = traverseAnns f (f' x)
 
 -- | Change the optimization flags for an AST node.
 withOptimizations :: HasAnnotations a => (Optimizations -> Optimizations) -> a -> a
@@ -539,9 +541,10 @@ mkAnn = Ann (maybeCallStack callStack) defaultOptimizations
 --       are justified and if we're not throwing away any existing annotations
 --       when reconstructing ASTs
 mkDummyAnn :: Ann
-mkDummyAnn = let ?requiresSourceMapping = TakenCareOf
-                 ?callStack             = freezeCallStack emptyCallStack
-             in  mkAnn
+mkDummyAnn =
+  let ?requiresSourceMapping = TakenCareOf
+      ?callStack = freezeCallStack emptyCallStack
+   in mkAnn
 
 -- | Merge adjacent source locations stored in an annotation, returning a list
 -- of source locations ordered by filename, line number, and column. This is a
@@ -561,26 +564,26 @@ mkDummyAnn = let ?requiresSourceMapping = TakenCareOf
 --       this is done ad-hoc for the Tracy implementation but it's probably
 --       useful in other places as well.
 mergeLocs :: S.HashSet CallStack -> [[(String, SrcLoc)]]
-mergeLocs
-    = mergeAdjacent
+mergeLocs =
+  mergeAdjacent
     . sortBy cmpLoc
     . S.foldl' (\acc (getCallStack -> stack) -> stack : acc) []
   where
     -- We need the locations sorted by the file they're in, and their place in
     -- that file so we can then merge adjacent regions
     cmpLoc :: [(String, SrcLoc)] -> [(String, SrcLoc)] -> Ordering
-    cmpLoc ((_, locA):_) ((_, locB):_)
-      = (comparing srcLocFile <> comparing srcLocStartLine <> comparing srcLocStartCol) locA locB
-      -- These call stacks should never be empty, but the exhaustiveness checker
-      -- obviously doesn't know that
-    cmpLoc ((_, _):_)    []            = LT
-    cmpLoc []            ((_, _):_)    = GT
-    cmpLoc []            []            = EQ
+    cmpLoc ((_, locA) : _) ((_, locB) : _) =
+      (comparing srcLocFile <> comparing srcLocStartLine <> comparing srcLocStartCol) locA locB
+    -- These call stacks should never be empty, but the exhaustiveness checker
+    -- obviously doesn't know that
+    cmpLoc ((_, _) : _)    []              = LT
+    cmpLoc []              ((_, _) : _)    = GT
+    cmpLoc []              []              = EQ
 
     -- TODO: We only look at and modify the topmost stack frame. This won't
     --       cause weird inconsistencies, righty?
     mergeAdjacent :: [[(String, SrcLoc)]] -> [[(String, SrcLoc)]]
-    mergeAdjacent (x@((fnX, locX):restX):y@((fnY, locY):_):cs)
+    mergeAdjacent (x@((fnX, locX) : restX) : y@((fnY, locY) : _) : cs)
       | srcLocFile locX == srcLocFile locY
       -- Since the list is already sorted, we know that if region X's end is
       -- after region Y's start, then the regions overlap. We'll also allow
@@ -599,23 +602,23 @@ mergeLocs
 
 
 instance Semigroup Ann where
-    (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)
+  (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)
 
 instance Monoid Ann where
-    mempty = mkDummyAnn
+  mempty = mkDummyAnn
 
 instance Semigroup Optimizations where
-    a <> b = Optimizations
-        { optAlwaysInline = optAlwaysInline a || optAlwaysInline b
-        , optUnrollIters  = (max `maybeOn` optUnrollIters) a b
-        }
-      where
-        -- 'on' from 'Data.Function' but for comparing 'Maybe' values.
-        maybeOn f on' x y = case (on' x, on' y) of
-            (Just x', Just y') -> Just $ f x' y'
-            (Just x', _      ) -> Just x'
-            (_      , Just y') -> Just y'
-            _                  -> Nothing
+  a <> b = Optimizations
+      { optAlwaysInline = optAlwaysInline a || optAlwaysInline b
+      , optUnrollIters  = (max `maybeOn` optUnrollIters) a b
+      }
+    where
+      -- 'on' from 'Data.Function' but for comparing 'Maybe' values.
+      maybeOn f on' x y = case (on' x, on' y) of
+          (Just x', Just y') -> Just $ f x' y'
+          (Just x', _      ) -> Just x'
+          (_      , Just y') -> Just y'
+          _                  -> Nothing
 
 -- * Internal
 
@@ -628,7 +631,7 @@ rnfAnn (Ann src opts) = rnf src `seq` rnfOptimizations opts
 
 rnfOptimizations :: Optimizations -> ()
 rnfOptimizations Optimizations { optAlwaysInline, optUnrollIters } =
-    optAlwaysInline `seq` rnf optUnrollIters
+  optAlwaysInline `seq` rnf optUnrollIters
 
 -- ** Quotation
 --
@@ -636,7 +639,7 @@ rnfOptimizations Optimizations { optAlwaysInline, optUnrollIters } =
 
 liftAnn :: Ann -> CodeQ Ann
 liftAnn (Ann src opts) =
-    [|| Ann $$(liftCallStacks src) $$(liftOptimizations opts) ||]
+  [|| Ann $$(liftCallStacks src) $$(liftOptimizations opts) ||]
 
 liftOptimizations :: Optimizations -> CodeQ Optimizations
 liftOptimizations Optimizations { .. } = [|| Optimizations { .. } ||]
