@@ -43,7 +43,7 @@ module Data.Array.Accelerate.Pattern (
 
 ) where
 
-import Data.Array.Accelerate.Annotations
+import Data.Array.Accelerate.Annotations                            hiding ( context )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Vec

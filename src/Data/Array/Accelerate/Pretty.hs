@@ -34,7 +34,7 @@ module Data.Array.Accelerate.Pretty (
 
 ) where
 
-import Data.Array.Accelerate.Annotations
+import Data.Array.Accelerate.Annotations                            hiding ( context )
 import Data.Array.Accelerate.AST                                    hiding ( Acc, Exp )
 #ifdef ACCELERATE_DEBUG
 import Data.Array.Accelerate.Debug.Internal.Flags
