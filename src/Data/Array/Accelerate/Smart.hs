@@ -1334,7 +1334,7 @@ instance TraverseAnnotations (Acc arrs) where
   traverseAnns k (Acc acc) = Acc (traverseAnns k acc)
 
 instance TraverseAnnotations (SmartAcc arrs) where
-  traverseAnns k (SmartAcc (Atag ann repr i))                                           = SmartAcc $ Atag (k ann) repr i
+  -- Don't touch the tags, that breaks sharing recovery in amusing ways
   traverseAnns k (SmartAcc (Pipe ann reprA reprB reprC afun1 afun2 acc))                = SmartAcc $ Pipe (k ann) reprA reprB reprC (traverseAnns k afun1) (traverseAnns k afun2) (traverseAnns k acc)
   traverseAnns k (SmartAcc (Aforeign ann repr ff afun acc))                             = SmartAcc $ Aforeign (k ann) repr ff (traverseAnns k afun) (traverseAnns k acc)
   traverseAnns k (SmartAcc (Acond ann b acc1 acc2))                                     = SmartAcc $ Acond (k ann) (traverseAnns k b) (traverseAnns k acc1) (traverseAnns k acc2)
@@ -1364,7 +1364,7 @@ instance TraverseAnnotations (Exp t) where
   traverseAnns k (Exp e) = Exp (traverseAnns k e)
 
 instance TraverseAnnotations (SmartExp t) where
-  traverseAnns k (SmartExp (Tag ann tp i))            = SmartExp $ Tag (k ann) tp i
+  -- Don't touch the tags, that breaks sharing recovery in amusing ways
   traverseAnns k (SmartExp (Match t e))               = SmartExp $ Match t (traverseAnns k e)
   traverseAnns k (SmartExp (Const ann tp v))          = SmartExp $ Const (k ann) tp v
   traverseAnns k (SmartExp (Undef ann tp))            = SmartExp $ Undef (k ann) tp
@@ -1386,6 +1386,7 @@ instance TraverseAnnotations (SmartExp t) where
   traverseAnns k (SmartExp (ShapeSize ann shr e))     = SmartExp $ ShapeSize (k ann) shr (traverseAnns k e)
   traverseAnns k (SmartExp (Foreign ann repr ff f e)) = SmartExp $ Foreign (k ann) repr ff (traverseAnns k f) (traverseAnns k e)
   traverseAnns k (SmartExp (Coerce ann t1 t2 e))      = SmartExp $ Coerce (k ann) t1 t2 (traverseAnns k e)
+  traverseAnns _ e                                    = e
 
 instance TraverseAnnotations (PreBoundary SmartAcc SmartExp t) where
   traverseAnns k (Function f) = Function (traverseAnns k f)
