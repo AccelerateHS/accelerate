@@ -465,7 +465,7 @@ encodeTypeR (TupRpair a b) = intHost $(hashQ "TupRpair")   <> encodeTypeR a <> i
                                                            <> encodeTypeR b <> intHost (depthTypeR b)
 
 encodeAnn :: Ann -> Builder
-encodeAnn (Ann locs opts) = intHost (hash locs) <> encodeOptimizations opts
+encodeAnn (Ann src opts) = intHost (hash src) <> encodeOptimizations opts
 
 encodeOptimizations :: Optimizations -> Builder
 encodeOptimizations Optimizations { optAlwaysInline, optUnrollIters } =

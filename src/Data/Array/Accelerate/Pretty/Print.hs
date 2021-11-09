@@ -425,7 +425,7 @@ prettyAnn config ann = fromMaybe emptyDoc (prettyAnn' config ann)
 --       cluttering up the pretty printer output too much likely also won't do
 --       us any good.
 prettyAnn' :: PrettyConfig acc -> Ann -> Maybe Adoc
-prettyAnn' config (Ann locs (Optimizations { optAlwaysInline, optUnrollIters })) =
+prettyAnn' config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) =
   case catMaybes [prettyLoc, prettyOpts] of
     [] -> Nothing
     xs -> Just $ annotate Annotation (hsep xs)
@@ -436,7 +436,7 @@ prettyAnn' config (Ann locs (Optimizations { optAlwaysInline, optUnrollIters }))
   -- information, only print known source information, or also signal to the
   -- programmer that source information is missing.
   prettyLoc :: Maybe Adoc
-  prettyLoc = case mergeLocs locs of
+  prettyLoc = case mergeLocs src of
     -- We'll only show the 'SrcLoc' belonging to the topmost entry of the call
     -- stack. This topmost function will be one of the Accelerate frontend
     -- functions so the name isn't very important, but the source location will
