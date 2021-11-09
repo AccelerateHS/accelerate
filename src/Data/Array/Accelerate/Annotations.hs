@@ -160,6 +160,7 @@ module Data.Array.Accelerate.Annotations
       Ann(..)
     , Optimizations(..)
     , HasAnnotations(..)
+    , TraverseAnnotations(..)
     , withOptimizations
     , extractAnn
     , alwaysInline
@@ -245,7 +246,7 @@ data Optimizations = Optimizations
 --       tree, so we'll need to extend 'HasAnnotations'.
 -- TODO: Alternative names: label? describe? addContext? Some short descriptive
 --       name that wouldn't clash with other functions.
--- context :: (HasCallStack, HasAnnotations a) => String -> a -> a
+-- context :: (HasCallStack, TraverseAnnotations a) => String -> a -> a
 
 -- | Instruct the compiler to always inline this expression and to not perform
 -- any sharing recovery. This will allow inexpensive calculations whose values
@@ -443,12 +444,10 @@ isEmptyStack _              = False
 -- | Used for accessing annotation fields in ASTs. 'HasAnnotations' defines
 -- convenience functions for working with types that have such an annotation
 -- field and for functions that
---
--- TODO: Think of a better name
-class FieldAnn a where
+class FieldAnn s where
     -- | A lens for accessing @a@'s annotation field, if it has one. By defining
     -- this as a lens we can get rid of some duplication.
-    _ann :: Lens' a (Maybe Ann)
+    _ann :: Lens' s (Maybe Ann)
 
 -- | Used for modifying an AST node's annotations. Types with annotation fields
 -- should have an instance of 'FieldAnn' instead of implementing this class
@@ -461,6 +460,20 @@ class HasAnnotations a where
     -- during some of the transformations when we may no longer have access to the
     -- original AST nodes.
     getAnn :: a -> Maybe Ann
+
+-- | AST types that allow modifying every annotation stored in their subtrees.
+-- Because this can only be implemented for concrete types, this is separate
+-- from 'HasAnnotations'.
+class TraverseAnnotations a where
+    -- | A traversal over all annotations in @a@ and all of its subtrees that
+    -- modifies all of those annotations. This is essentially a limited, modify
+    -- only version of 'Traversal' a Ann' because it's not possible to traverse
+    -- functions (in the higher order smart AST) with lenses.
+    --
+    -- Even though this is not a traversal as the term is normally used in
+    -- Haskell, naming this 'modifyAnns' would make it easy to accidentally use
+    -- the wrong function.
+    traverseAnns :: (Ann -> Ann) -> a -> a
 
 -- | Lenses make accessing these annotations for different ASTs much cleaner,
 -- but these speciality functions are much nicer to work with.
@@ -477,6 +490,9 @@ instance {-# OVERLAPPING #-} HasAnnotations r => HasAnnotations (a -> r) where
     -- You cannot get the annotation without evaluating the function first. This
     -- is kind of an edge cases where getAnn doesn't make any sense.
     getAnn _ = Nothing
+
+instance TraverseAnnotations r => TraverseAnnotations (a -> r) where
+    traverseAnns f f' x = traverseAnns f (f' x)
 
 -- | Change the optimization flags for an AST node.
 withOptimizations :: HasAnnotations a => (Optimizations -> Optimizations) -> a -> a

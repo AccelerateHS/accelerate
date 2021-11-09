@@ -1330,6 +1330,67 @@ instance FieldAnn (PreSmartExp acc exp t) where
   _ann k (Coerce ann t1 t2 e)      = k (Just ann) <&> \(Just ann') -> Coerce ann' t1 t2 e
   _ann k pexp                      = pexp <$ k Nothing
 
+instance TraverseAnnotations (Acc arrs) where
+  traverseAnns k (Acc acc) = Acc (traverseAnns k acc)
+
+instance TraverseAnnotations (SmartAcc arrs) where
+  traverseAnns k (SmartAcc (Atag ann repr i))                                           = SmartAcc $ Atag (k ann) repr i
+  traverseAnns k (SmartAcc (Pipe ann reprA reprB reprC afun1 afun2 acc))                = SmartAcc $ Pipe (k ann) reprA reprB reprC (traverseAnns k afun1) (traverseAnns k afun2) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Aforeign ann repr ff afun acc))                             = SmartAcc $ Aforeign (k ann) repr ff (traverseAnns k afun) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Acond ann b acc1 acc2))                                     = SmartAcc $ Acond (k ann) (traverseAnns k b) (traverseAnns k acc1) (traverseAnns k acc2)
+  traverseAnns k (SmartAcc (Awhile ann reprA pred' iter' init'))                        = SmartAcc $ Awhile (k ann) reprA (traverseAnns k pred') (traverseAnns k iter') (traverseAnns k init')
+  traverseAnns k (SmartAcc (Anil ann))                                                  = SmartAcc $ Anil (k ann)
+  traverseAnns k (SmartAcc (Apair ann acc1 acc2))                                       = SmartAcc $ Apair (k ann) (traverseAnns k acc1) (traverseAnns k acc2)
+  traverseAnns k (SmartAcc (Aprj ann ix a))                                             = SmartAcc $ Aprj (k ann) ix (traverseAnns k a)
+  traverseAnns k (SmartAcc (Use ann repr array))                                        = SmartAcc $ Use (k ann) repr array
+  traverseAnns k (SmartAcc (Unit ann tp e))                                             = SmartAcc $ Unit (k ann) tp (traverseAnns k e)
+  traverseAnns k (SmartAcc (Generate ann repr sh f))                                    = SmartAcc $ Generate (k ann) repr (traverseAnns k sh) (traverseAnns k f)
+  traverseAnns k (SmartAcc (Reshape ann shr e acc))                                     = SmartAcc $ Reshape (k ann) shr (traverseAnns k e) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Replicate ann si ix acc))                                   = SmartAcc $ Replicate (k ann) si (traverseAnns k ix) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Slice ann si acc ix))                                       = SmartAcc $ Slice (k ann) si (traverseAnns k acc) (traverseAnns k ix)
+  traverseAnns k (SmartAcc (Map ann t1 t2 f acc))                                       = SmartAcc $ Map (k ann) t1 t2 (traverseAnns k f) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (ZipWith ann t1 t2 t3 f acc1 acc2))                          = SmartAcc $ ZipWith (k ann) t1 t2 t3 (traverseAnns k f) (traverseAnns k acc1) (traverseAnns k acc2)
+  traverseAnns k (SmartAcc (Fold ann tp f e acc))                                       = SmartAcc $ Fold (k ann) tp (traverseAnns k f) (traverseAnns k <$> e) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (FoldSeg ann i tp f e acc1 acc2))                            = SmartAcc $ FoldSeg (k ann) i tp (traverseAnns k f) (traverseAnns k <$> e) (traverseAnns k acc1) (traverseAnns k acc2)
+  traverseAnns k (SmartAcc (Scan ann d tp f e acc))                                     = SmartAcc $ Scan (k ann) d tp (traverseAnns k f) (traverseAnns k <$> e) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Scan' ann d tp f e acc))                                    = SmartAcc $ Scan' (k ann) d tp (traverseAnns k f) (traverseAnns k e) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Permute ann repr f dftAcc perm acc))                        = SmartAcc $ Permute (k ann) repr (traverseAnns k f) (traverseAnns k dftAcc) (traverseAnns k perm) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Backpermute ann shr newDim perm acc))                       = SmartAcc $ Backpermute (k ann) shr (traverseAnns k newDim) (traverseAnns k perm) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Stencil ann stencil tp f boundary acc))                     = SmartAcc $ Stencil (k ann) stencil tp (traverseAnns k f) (traverseAnns k boundary) (traverseAnns k acc)
+  traverseAnns k (SmartAcc (Stencil2 ann stencil1 stencil2 tp f bndy1 acc1 bndy2 acc2)) = SmartAcc $ Stencil2 (k ann) stencil1 stencil2 tp (traverseAnns k f) (traverseAnns k bndy1) (traverseAnns k acc1) (traverseAnns k bndy2) (traverseAnns k acc2)
+  traverseAnns _ acc                                                                    = acc
+
+instance TraverseAnnotations (Exp t) where
+  traverseAnns k (Exp e) = Exp (traverseAnns k e)
+
+instance TraverseAnnotations (SmartExp t) where
+  traverseAnns k (SmartExp (Tag ann tp i))            = SmartExp $ Tag (k ann) tp i
+  traverseAnns k (SmartExp (Match t e))               = SmartExp $ Match t (traverseAnns k e)
+  traverseAnns k (SmartExp (Const ann tp v))          = SmartExp $ Const (k ann) tp v
+  traverseAnns k (SmartExp (Undef ann tp))            = SmartExp $ Undef (k ann) tp
+  traverseAnns k (SmartExp (Prj ann idx e))           = SmartExp $ Prj (k ann) idx (traverseAnns k e)
+  traverseAnns k (SmartExp (Nil ann))                 = SmartExp $ Nil (k ann)
+  traverseAnns k (SmartExp (Pair ann e1 e2))          = SmartExp $ Pair (k ann) (traverseAnns k e1) (traverseAnns k e2)
+  traverseAnns k (SmartExp (VecPack   ann vec e))     = SmartExp $ VecPack   (k ann) vec (traverseAnns k e)
+  traverseAnns k (SmartExp (VecUnpack ann vec e))     = SmartExp $ VecUnpack (k ann) vec (traverseAnns k e)
+  traverseAnns k (SmartExp (ToIndex   ann shr sh ix)) = SmartExp $ ToIndex   (k ann) shr (traverseAnns k sh) (traverseAnns k ix)
+  traverseAnns k (SmartExp (FromIndex ann shr sh e))  = SmartExp $ FromIndex (k ann) shr (traverseAnns k sh) (traverseAnns k e)
+  traverseAnns k (SmartExp (Case ann e rhs))          = SmartExp $ Case (k ann) (traverseAnns k e) (map (\(t, r) -> (t, traverseAnns k r)) rhs)
+  traverseAnns k (SmartExp (Cond ann e1 e2 e3))       = SmartExp $ Cond (k ann) (traverseAnns k e1) (traverseAnns k e2) (traverseAnns k e3)
+  traverseAnns k (SmartExp (While ann tp p it i))     = SmartExp $ While (k ann) tp (traverseAnns k p) (traverseAnns k it) (traverseAnns k i)
+  traverseAnns k (SmartExp (PrimConst ann c))         = SmartExp $ PrimConst (k ann) c
+  traverseAnns k (SmartExp (PrimApp ann f e))         = SmartExp $ PrimApp (k ann) f (traverseAnns k e)
+  traverseAnns k (SmartExp (Index ann tp a e))        = SmartExp $ Index (k ann) tp (traverseAnns k a) (traverseAnns k e)
+  traverseAnns k (SmartExp (LinearIndex ann tp a i))  = SmartExp $ LinearIndex (k ann) tp (traverseAnns k a) (traverseAnns k i)
+  traverseAnns k (SmartExp (Shape ann shr a))         = SmartExp $ Shape (k ann) shr (traverseAnns k a)
+  traverseAnns k (SmartExp (ShapeSize ann shr e))     = SmartExp $ ShapeSize (k ann) shr (traverseAnns k e)
+  traverseAnns k (SmartExp (Foreign ann repr ff f e)) = SmartExp $ Foreign (k ann) repr ff (traverseAnns k f) (traverseAnns k e)
+  traverseAnns k (SmartExp (Coerce ann t1 t2 e))      = SmartExp $ Coerce (k ann) t1 t2 (traverseAnns k e)
+
+instance TraverseAnnotations (PreBoundary SmartAcc SmartExp t) where
+  traverseAnns k (Function f) = Function (traverseAnns k f)
+  traverseAnns _ b            = b
+
 
 -- Auxiliary functions
 -- --------------------

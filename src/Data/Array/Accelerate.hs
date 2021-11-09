@@ -390,6 +390,7 @@ module Data.Array.Accelerate (
 
   -- ** Annotations
   HasAnnotations(),
+  TraverseAnnotations(),
   alwaysInline, unrollIters,
 
   -- ---------------------------------------------------------------------------
