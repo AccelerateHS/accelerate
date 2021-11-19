@@ -20,14 +20,18 @@ import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
 
-#ifdef ACCELERATE_DEBUG
+#if defined(ACCELERATE_DEBUG) && !defined(__GHCIDE__)
 import Language.Haskell.TH.Syntax
 #endif
 
 type Zone   = Word64
 type SrcLoc = Word64
 
-#ifdef ACCELERATE_DEBUG
+-- FIXME: HLS requires stubs because it does not process the
+--        'addForeignFilePath' calls when evaluating Template Haskell
+--
+--        https://github.com/haskell/haskell-language-server/issues/365
+#if defined(ACCELERATE_DEBUG) && !defined(__GHCIDE__)
 
 foreign import ccall unsafe "___tracy_init_thread" init_thread :: IO ()
 foreign import ccall unsafe "___tracy_set_thread_name" set_thread_name :: CString -> IO ()
