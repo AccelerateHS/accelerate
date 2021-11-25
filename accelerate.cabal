@@ -595,6 +595,17 @@ library
         -optcxx=-DTRACY_ENABLE
         -optcxx=-DTRACY_NO_SAMPLING
 
+    -- Accelerate's backends may use dynamic linking to load compiled kernels
+    -- that directly call Tracy's functions. In that case these symbols need to
+    -- be available in the global namespace. @-rdynamic@ implies
+    -- @-Wl,--export-dynamic@, which adds every symbol to the dynamic symbol
+    -- table. There's also a @--export-dynamic-symbol=glob@ and a
+    -- @--export-dynamic-symbol-list=file@ but these seem to be less portable
+    -- between compilers.
+    if !os(windows)
+      ld-options:
+        -rdynamic
+
   if flag(bounds-checks)
     cpp-options:
         -DACCELERATE_BOUNDS_CHECKS
