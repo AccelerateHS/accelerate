@@ -117,7 +117,7 @@ import Data.Array.Accelerate.Classes.Fractional
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
-
+import GHC.Tuple
 import Prelude                                                      ( ($), (.), Maybe(..), Char )
 
 
@@ -851,16 +851,16 @@ backpermute = Acc $$$ applyAcc (Backpermute $ shapeR @sh')
 --
 
 -- DIM1 stencil type
-type Stencil1 a = (Exp a)
+type Stencil1 a = Solo (Exp a)
 type Stencil3 a = (Exp a, Exp a, Exp a)
 type Stencil5 a = (Exp a, Exp a, Exp a, Exp a, Exp a)
 type Stencil7 a = (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)
 type Stencil9 a = (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)
 
 -- DIM2 stencil type
-type Stencil1x1 a = (Stencil1 a)
-type Stencil3x1 a = (Stencil3 a)
-type Stencil5x1 a = (Stencil5 a)
+type Stencil1x1 a = Solo (Stencil1 a)
+type Stencil3x1 a = Solo (Stencil3 a)
+type Stencil5x1 a = Solo (Stencil5 a)
 type Stencil1x3 a = (Stencil1 a, Stencil1 a, Stencil1 a)
 type Stencil3x3 a = (Stencil3 a, Stencil3 a, Stencil3 a)
 type Stencil5x3 a = (Stencil5 a, Stencil5 a, Stencil5 a)

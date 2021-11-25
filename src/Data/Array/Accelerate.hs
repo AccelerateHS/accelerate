@@ -285,6 +285,7 @@ module Data.Array.Accelerate (
   clamp, mirror, wrap, function,
 
   -- *** Common stencil patterns
+  Solo(..),
   Stencil1, Stencil3, Stencil5, Stencil7, Stencil9,
   Stencil1x1, Stencil1x3, Stencil1x5, 
   Stencil3x1, Stencil3x3, Stencil3x5, 
@@ -433,7 +434,7 @@ module Data.Array.Accelerate (
   CChar, CSChar, CUChar,
 
 ) where
-
+import GHC.Tuple ( Solo(..) )
 import Data.Array.Accelerate.Classes.Bounded
 import Data.Array.Accelerate.Classes.Enum
 import Data.Array.Accelerate.Classes.Eq

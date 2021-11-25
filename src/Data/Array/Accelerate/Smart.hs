@@ -113,6 +113,7 @@ import Data.Text.Lazy.Builder
 import Formatting
 
 import GHC.TypeLits
+import GHC.Tuple
 
 
 -- Array computations
@@ -625,10 +626,10 @@ class Stencil sh e stencil where
   stencilPrj :: SmartExp (StencilR sh stencil) -> stencil
 
 -- DIM1
-instance Elt e => Stencil Sugar.DIM1 e (Exp e) where
-  type StencilR Sugar.DIM1 (Exp e) = ((), EltR e)
+instance Elt e => Stencil Sugar.DIM1 e (Solo (Exp e)) where
+  type StencilR Sugar.DIM1 (Solo (Exp e)) = ((), EltR e)
   stencilR = StencilRunit1 @(EltR e) $ eltR @e
-  stencilPrj s = Exp $ prj0 s
+  stencilPrj s = Solo (Exp $ prj0 s)
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e)
@@ -676,6 +677,11 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e
                   Exp $ prj0 s)
 
 -- DIM(n+1)
+instance Stencil (sh:.Int) a row => Stencil (sh:.Int:.Int) a (Solo row) where
+  type StencilR (sh:.Int:.Int) (Solo row) = Tup1 (StencilR (sh:.Int) row)
+  stencilR = StencilRtup1 (stencilR @(sh:.Int) @a @row)
+  stencilPrj s = Solo (stencilPrj @(sh:.Int) @a $ prj0 s)
+
 instance (Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row2, row1, row0) where
