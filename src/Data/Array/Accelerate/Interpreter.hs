@@ -678,6 +678,14 @@ stencilAccess stencil = goR (stencilShapeR stencil) stencil
     -- dimension is Z.
     --
     goR :: ShapeR sh -> StencilR sh e stencil -> (sh -> e) -> sh -> stencil
+    goR _ (StencilRunit1 _) rf ix =
+      let
+          (z, i) = ix
+          rf' d  = rf (z, i+d)
+      in
+      ( ()
+      , rf'   0 )
+
     goR _ (StencilRunit3 _) rf ix =
       let
           (z, i) = ix
@@ -732,6 +740,13 @@ stencilAccess stencil = goR (stencilShapeR stencil) stencil
     -- when we recurse on the stencil structure we must manipulate the
     -- _left-most_ index component.
     --
+    goR (ShapeRsnoc shr) (StencilRtup1 s1) rf ix =
+      let (i, ix') = uncons shr ix
+          rf' d ds = rf (cons shr (i+d) ds)
+      in
+      ( ()
+      , goR shr s1 (rf'   0)  ix')
+      
     goR (ShapeRsnoc shr) (StencilRtup3 s1 s2 s3) rf ix =
       let (i, ix') = uncons shr ix
           rf' d ds = rf (cons shr (i+d) ds)

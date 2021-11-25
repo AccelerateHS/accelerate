@@ -625,6 +625,11 @@ class Stencil sh e stencil where
   stencilPrj :: SmartExp (StencilR sh stencil) -> stencil
 
 -- DIM1
+instance Elt e => Stencil Sugar.DIM1 e (Exp e) where
+  type StencilR Sugar.DIM1 (Exp e) = ((), EltR e)
+  stencilR = StencilRunit1 @(EltR e) $ eltR @e
+  stencilPrj s = Exp $ prj0 s
+
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e)
     = EltR (e, e, e)

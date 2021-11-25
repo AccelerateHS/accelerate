@@ -123,5 +123,5 @@ runQ $
          in
          tySynD (mkName ("Tup" ++ show n)) (map plainTV xs) rhs
   in
-  mapM mkT [2..16]
+  mapM mkT [0..16]
 

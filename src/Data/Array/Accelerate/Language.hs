@@ -97,7 +97,7 @@ module Data.Array.Accelerate.Language (
   -- * Conversions
   ord, chr, boolToInt, bitcast,
 
-) where
+Stencil1,Stencil1x3,Stencil1x5,Stencil1x1,Stencil3x1,Stencil5x1) where
 
 import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Pattern
@@ -851,14 +851,20 @@ backpermute = Acc $$$ applyAcc (Backpermute $ shapeR @sh')
 --
 
 -- DIM1 stencil type
+type Stencil1 a = (Exp a)
 type Stencil3 a = (Exp a, Exp a, Exp a)
 type Stencil5 a = (Exp a, Exp a, Exp a, Exp a, Exp a)
 type Stencil7 a = (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)
 type Stencil9 a = (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)
 
 -- DIM2 stencil type
+type Stencil1x1 a = (Stencil1 a)
+type Stencil3x1 a = (Stencil3 a)
+type Stencil5x1 a = (Stencil5 a)
+type Stencil1x3 a = (Stencil1 a, Stencil1 a, Stencil1 a)
 type Stencil3x3 a = (Stencil3 a, Stencil3 a, Stencil3 a)
 type Stencil5x3 a = (Stencil5 a, Stencil5 a, Stencil5 a)
+type Stencil1x5 a = (Stencil1 a, Stencil1 a, Stencil1 a, Stencil1 a, Stencil1 a)
 type Stencil3x5 a = (Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a)
 type Stencil5x5 a = (Stencil5 a, Stencil5 a, Stencil5 a, Stencil5 a, Stencil5 a)
 
@@ -908,15 +914,13 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 -- <https://en.wikipedia.org/wiki/Gaussian_blur Gaussian blur> as a separable
 -- 2-pass operation.
 --
--- > type Stencil5x1 a = (Stencil3 a, Stencil5 a, Stencil3 a)
--- > type Stencil1x5 a = (Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a)
 -- >
 -- > convolve5x1 :: Num a => [Exp a] -> Stencil5x1 a -> Exp a
--- > convolve5x1 kernel (_, (a,b,c,d,e), _)
+-- > convolve5x1 kernel (a,b,c,d,e)
 -- >   = Prelude.sum $ Prelude.zipWith (*) kernel [a,b,c,d,e]
 -- >
 -- > convolve1x5 :: Num a => [Exp a] -> Stencil1x5 a -> Exp a
--- > convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
+-- > convolve1x5 kernel (a,b,c,d,e)
 -- >   = Prelude.sum $ Prelude.zipWith (*) kernel [a,b,c,d,e]
 -- >
 -- > gaussian = [0.06136,0.24477,0.38774,0.24477,0.06136]

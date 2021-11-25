@@ -285,11 +285,13 @@ module Data.Array.Accelerate (
   clamp, mirror, wrap, function,
 
   -- *** Common stencil patterns
-  Stencil3, Stencil5, Stencil7, Stencil9,
-  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
-  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
-  Stencil3x5x5, Stencil5x5x5,
-
+  Stencil1, Stencil3, Stencil5, Stencil7, Stencil9,
+  Stencil1x1, Stencil1x3, Stencil1x5, 
+  Stencil3x1, Stencil3x3, Stencil3x5, 
+  Stencil5x1, Stencil5x3, Stencil5x5,
+  Stencil3x3x3, Stencil3x5x3, Stencil3x3x5, Stencil3x5x5,
+  Stencil5x3x3, Stencil5x5x3, Stencil5x3x5, Stencil5x5x5,
+  
   -- -- ** Sequence operations
   -- collect,
 
