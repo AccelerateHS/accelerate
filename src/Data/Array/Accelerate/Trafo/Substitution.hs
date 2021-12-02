@@ -149,29 +149,31 @@ inlineVars lhsBound expr bound
     substitute k1 k2 vars topExp = case topExp of
       Let lhs e1 e2
         | Exists lhs' <- rebuildLHS lhs
-                          -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
-      Evar (Var t ix)     -> Evar . Var t <$> k1 ix
-      Foreign tp asm f e1 -> Foreign tp asm f <$> travE e1
-      Pair e1 e2          -> Pair <$> travE e1 <*> travE e2
-      Nil                 -> Just Nil
-      VecPack   vec e1    -> VecPack   vec <$> travE e1
-      VecUnpack vec e1    -> VecUnpack vec <$> travE e1
-      IndexSlice si e1 e2 -> IndexSlice si <$> travE e1 <*> travE e2
-      IndexFull  si e1 e2 -> IndexFull  si <$> travE e1 <*> travE e2
-      ToIndex   shr e1 e2 -> ToIndex   shr <$> travE e1 <*> travE e2
-      FromIndex shr e1 e2 -> FromIndex shr <$> travE e1 <*> travE e2
-      Case e1 rhs def     -> Case <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
-      Cond e1 e2 e3       -> Cond <$> travE e1 <*> travE e2 <*> travE e3
-      While f1 f2 e1      -> While <$> travF f1 <*> travF f2 <*> travE e1
-      Const t c           -> Just $ Const t c
-      PrimConst c         -> Just $ PrimConst c
-      PrimApp p e1        -> PrimApp p <$> travE e1
-      Index a e1          -> Index a <$> travE e1
-      LinearIndex a e1    -> LinearIndex a <$> travE e1
-      Shape a             -> Just $ Shape a
-      ShapeSize shr e1    -> ShapeSize shr <$> travE e1
-      Undef t             -> Just $ Undef t
-      Coerce t1 t2 e1     -> Coerce t1 t2 <$> travE e1
+                            -> Let lhs' <$> travE e1 <*> substitute (strengthenAfter lhs lhs' k1) (weakenWithLHS lhs' .> k2) (weakenWithLHS lhs `weakenVars` vars) e2
+      Evar (Var t ix)       -> Evar . Var t <$> k1 ix
+      Foreign tp asm f e1   -> Foreign tp asm f <$> travE e1
+      Pair e1 e2            -> Pair <$> travE e1 <*> travE e2
+      Nil                   -> Just Nil
+      VecPack   vec e1      -> VecPack   vec <$> travE e1
+      VecUnpack vec e1      -> VecUnpack vec <$> travE e1
+      VecIndex vt it v i    -> VecIndex vt it <$> travE v <*> travE i
+      VecWrite vt it v i e  -> VecWrite vt it <$> travE v <*> travE i <*> travE e
+      IndexSlice si e1 e2   -> IndexSlice si <$> travE e1 <*> travE e2
+      IndexFull  si e1 e2   -> IndexFull  si <$> travE e1 <*> travE e2
+      ToIndex   shr e1 e2   -> ToIndex   shr <$> travE e1 <*> travE e2
+      FromIndex shr e1 e2   -> FromIndex shr <$> travE e1 <*> travE e2
+      Case e1 rhs def       -> Case <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
+      Cond e1 e2 e3         -> Cond <$> travE e1 <*> travE e2 <*> travE e3
+      While f1 f2 e1        -> While <$> travF f1 <*> travF f2 <*> travE e1
+      Const t c             -> Just $ Const t c
+      PrimConst c           -> Just $ PrimConst c
+      PrimApp p e1          -> PrimApp p <$> travE e1
+      Index a e1            -> Index a <$> travE e1
+      LinearIndex a e1      -> LinearIndex a <$> travE e1
+      Shape a               -> Just $ Shape a
+      ShapeSize shr e1      -> ShapeSize shr <$> travE e1
+      Undef t               -> Just $ Undef t
+      Coerce t1 t2 e1       -> Coerce t1 t2 <$> travE e1
 
       where
         travE :: OpenExp env1 aenv s -> Maybe (OpenExp env2 aenv s)
@@ -546,31 +548,33 @@ rebuildOpenExp
     -> f (OpenExp env' aenv' t)
 rebuildOpenExp v av@(ReindexAvar reindex) exp =
   case exp of
-    Const t c           -> pure $ Const t c
-    PrimConst c         -> pure $ PrimConst c
-    Undef t             -> pure $ Undef t
-    Evar var            -> expOut          <$> v var
+    Const t c             -> pure $ Const t c
+    PrimConst c           -> pure $ PrimConst c
+    Undef t               -> pure $ Undef t
+    Evar var              -> expOut          <$> v var
     Let lhs a b
       | Exists lhs' <- rebuildLHS lhs
-                        -> Let lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
-    Pair e1 e2          -> Pair            <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
-    Nil                 -> pure Nil
-    VecPack   vec e     -> VecPack   vec   <$> rebuildOpenExp v av e
-    VecUnpack vec e     -> VecUnpack vec   <$> rebuildOpenExp v av e
-    IndexSlice x ix sh  -> IndexSlice x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
-    IndexFull x ix sl   -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
-    ToIndex shr sh ix   -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
-    FromIndex shr sh ix -> FromIndex shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
-    Case e rhs def      -> Case            <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ] <*> rebuildMaybeExp v av def
-    Cond p t e          -> Cond            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t  <*> rebuildOpenExp v av e
-    While p f x         -> While           <$> rebuildFun v av p      <*> rebuildFun v av f      <*> rebuildOpenExp v av x
-    PrimApp f x         -> PrimApp f       <$> rebuildOpenExp v av x
-    Index a sh          -> Index           <$> reindex a              <*> rebuildOpenExp v av sh
-    LinearIndex a i     -> LinearIndex     <$> reindex a              <*> rebuildOpenExp v av i
-    Shape a             -> Shape           <$> reindex a
-    ShapeSize shr sh    -> ShapeSize shr   <$> rebuildOpenExp v av sh
-    Foreign tp ff f e   -> Foreign tp ff f <$> rebuildOpenExp v av e
-    Coerce t1 t2 e      -> Coerce t1 t2    <$> rebuildOpenExp v av e
+                          -> Let lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
+    Pair e1 e2            -> Pair            <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
+    Nil                   -> pure Nil
+    VecPack   vec e       -> VecPack   vec   <$> rebuildOpenExp v av e
+    VecUnpack vec e       -> VecUnpack vec   <$> rebuildOpenExp v av e
+    VecIndex vt it v' i   -> VecIndex vt it  <$> rebuildOpenExp v av v' <*> rebuildOpenExp v av i
+    VecWrite vt it v' i e -> VecWrite vt it  <$> rebuildOpenExp v av v' <*> rebuildOpenExp v av i <*> rebuildOpenExp v av e
+    IndexSlice x ix sh    -> IndexSlice x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
+    IndexFull x ix sl     -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
+    ToIndex shr sh ix     -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    FromIndex shr sh ix   -> FromIndex shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
+    Case e rhs def        -> Case            <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ] <*> rebuildMaybeExp v av def
+    Cond p t e            -> Cond            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t  <*> rebuildOpenExp v av e
+    While p f x           -> While           <$> rebuildFun v av p      <*> rebuildFun v av f      <*> rebuildOpenExp v av x
+    PrimApp f x           -> PrimApp f       <$> rebuildOpenExp v av x
+    Index a sh            -> Index           <$> reindex a              <*> rebuildOpenExp v av sh
+    LinearIndex a i       -> LinearIndex     <$> reindex a              <*> rebuildOpenExp v av i
+    Shape a               -> Shape           <$> reindex a
+    ShapeSize shr sh      -> ShapeSize shr   <$> rebuildOpenExp v av sh
+    Foreign tp ff f e     -> Foreign tp ff f <$> rebuildOpenExp v av e
+    Coerce t1 t2 e        -> Coerce t1 t2    <$> rebuildOpenExp v av e
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun

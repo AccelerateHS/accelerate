@@ -320,6 +320,8 @@ encodeOpenExp exp =
     Pair e1 e2                  -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
     VecPack   _ e               -> intHost $(hashQ "VecPack")     <> travE e
     VecUnpack _ e               -> intHost $(hashQ "VecUnpack")   <> travE e
+    VecIndex _ _ v i            -> intHost $(hashQ "VecIndex")    <> travE v <> travE i
+    VecWrite _ _ v i e          -> intHost $(hashQ "VecWrite")    <> travE v <> travE i <> travE e
     Const tp c                  -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
     Undef tp                    -> intHost $(hashQ "Undef")       <> encodeScalarType tp
     IndexSlice spec ix sh       -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec
@@ -448,8 +450,6 @@ encodePrimFun (PrimEq a)                 = intHost $(hashQ "PrimEq")            
 encodePrimFun (PrimNEq a)                = intHost $(hashQ "PrimNEq")                <> encodeSingleType a
 encodePrimFun (PrimMax a)                = intHost $(hashQ "PrimMax")                <> encodeSingleType a
 encodePrimFun (PrimMin a)                = intHost $(hashQ "PrimMin")                <> encodeSingleType a
-encodePrimFun (PrimVectorIndex (VectorType _ a) b) = intHost $(hashQ "PrimVectorIndex") <> encodeSingleType a <> encodeNumType (IntegralNumType b)
-encodePrimFun (PrimVectorWrite (VectorType _ a) b) = intHost $(hashQ "PrimVectorWrite") <> encodeSingleType a <> encodeNumType (IntegralNumType b)
 encodePrimFun (PrimFromIntegral a b)     = intHost $(hashQ "PrimFromIntegral")       <> encodeIntegralType a <> encodeNumType b
 encodePrimFun (PrimToFloating a b)       = intHost $(hashQ "PrimToFloating")         <> encodeNumType a      <> encodeFloatingType b
 encodePrimFun PrimLAnd                   = intHost $(hashQ "PrimLAnd")

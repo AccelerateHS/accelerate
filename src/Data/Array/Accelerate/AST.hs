@@ -9,6 +9,8 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
@@ -149,7 +151,6 @@ import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
-import Data.Primitive.Types
 import Control.DeepSeq
 import Data.Kind
 import Data.Maybe
@@ -560,6 +561,21 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv (Vec n s)
                 -> OpenExp env aenv tup
 
+  VecIndex      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> OpenExp env aenv (Vec n s)
+                -> OpenExp env aenv i
+                -> OpenExp env aenv s
+
+  VecWrite      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> OpenExp env aenv (Vec n s)
+                -> OpenExp env aenv i
+                -> OpenExp env aenv s
+                -> OpenExp env aenv (Vec n s)
+
   -- Array indices & shapes
   IndexSlice    :: SliceIndex slix sl co sh
                 -> OpenExp env aenv slix
@@ -748,10 +764,6 @@ data PrimFun sig where
   PrimLOr  :: PrimFun ((PrimBool, PrimBool) -> PrimBool)
   PrimLNot :: PrimFun (PrimBool             -> PrimBool)
 
-  -- local array operators
-  PrimVectorIndex :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> PrimFun ((Vec n a, i) -> a)
-  PrimVectorWrite :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> PrimFun ((Vec n a, (i, a)) -> Vec n a)
-
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
   PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
@@ -818,6 +830,8 @@ expType = \case
   Nil                          -> TupRunit
   VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
   VecUnpack vecR _             -> vecRtuple vecR
+  VecIndex vecT _ _ _          -> let (VectorType _ s) = vecT in TupRsingle $ SingleScalarType s
+  VecWrite vecT _ _ _ _        -> TupRsingle $ VectorScalarType vecT
   IndexSlice si _ _            -> shapeType $ sliceShapeR si
   IndexFull  si _ _            -> shapeType $ sliceDomainR si
   ToIndex{}                    -> TupRsingle scalarTypeInt
@@ -849,9 +863,6 @@ primConstType = \case
 
     floating :: FloatingType t -> ScalarType t
     floating = SingleScalarType . NumSingleType . FloatingNumType
-
-    vector :: forall n a. (KnownNat n) => VectorType (Vec n a) -> ScalarType (Vec n a)
-    vector = VectorScalarType
 
 primFunType :: PrimFun (a -> b) -> (TypeR a, TypeR b)
 primFunType = \case
@@ -931,17 +942,6 @@ primFunType = \case
   PrimLOr                   -> binary' tbool
   PrimLNot                  -> unary' tbool
 
--- Local Vector operations
-  PrimVectorIndex v'@(VectorType _ a) i' -> 
-            let v = singleVector v' 
-                i = integral i' 
-                in (v `TupRpair` i, single a)
-
-  PrimVectorWrite v'@(VectorType _ a) i' ->
-            let v = singleVector v'
-                i = integral i'
-                in (v `TupRpair` (i `TupRpair` single a), v)
-
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
   PrimToFloating   a b      -> unary (num a) (floating b)
@@ -954,7 +954,6 @@ primFunType = \case
     compare' a = binary (single a) tbool
 
     single   = TupRsingle . SingleScalarType
-    singleVector = TupRsingle . VectorScalarType
     num      = TupRsingle . SingleScalarType . NumSingleType
     integral = num . IntegralNumType
     floating = num . FloatingNumType
@@ -1092,6 +1091,8 @@ rnfOpenExp topExp =
     Nil                       -> ()
     VecPack   vecr e          -> rnfVecR vecr `seq` rnfE e
     VecUnpack vecr e          -> rnfVecR vecr `seq` rnfE e
+    VecIndex vt it v i        -> rnfVectorType vt `seq` rnfIntegralType it `seq` rnfE v `seq` rnfE i
+    VecWrite vt it v i e      -> rnfVectorType vt `seq` rnfIntegralType it `seq` rnfE v `seq` rnfE i `seq` rnfE e
     IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
@@ -1184,7 +1185,6 @@ rnfPrimFun (PrimMin t)                = rnfSingleType t
 rnfPrimFun PrimLAnd                   = ()
 rnfPrimFun PrimLOr                    = ()
 rnfPrimFun PrimLNot                   = ()
-rnfPrimFun (PrimVectorIndex v i)      = rnfVectorType v `seq` rnfIntegralType i
 rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
 rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
 
@@ -1313,6 +1313,8 @@ liftOpenExp pexp =
     Nil                       -> [|| Nil ||]
     VecPack   vecr e          -> [|| VecPack   $$(liftVecR vecr) $$(liftE e) ||]
     VecUnpack vecr e          -> [|| VecUnpack $$(liftVecR vecr) $$(liftE e) ||]
+    VecIndex vt it v i        -> [|| VecIndex $$(liftVectorType vt) $$(liftIntegralType it) $$(liftE v) $$(liftE i) ||]
+    VecWrite vt it v i e      -> [|| VecWrite $$(liftVectorType vt) $$(liftIntegralType it) $$(liftE v) $$(liftE i) $$(liftE e) ||] 
     IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
@@ -1411,7 +1413,6 @@ liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftSingleType t) ||]
 liftPrimFun PrimLAnd                   = [|| PrimLAnd ||]
 liftPrimFun PrimLOr                    = [|| PrimLOr ||]
 liftPrimFun PrimLNot                   = [|| PrimLNot ||]
-liftPrimFun (PrimVectorIndex v i)      = [|| PrimVectorIndex $$(liftVectorType v) $$(liftIntegralType i) ||]
 liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
 
@@ -1461,6 +1462,8 @@ formatExpOp = later $ \case
   Nil{}           -> "Nil"
   VecPack{}       -> "VecPack"
   VecUnpack{}     -> "VecUnpack"
+  VecIndex{}      -> "VecIndex"
+  VecWrite{}      -> "VecWrite"
   IndexSlice{}    -> "IndexSlice"
   IndexFull{}     -> "IndexFull"
   ToIndex{}       -> "ToIndex"

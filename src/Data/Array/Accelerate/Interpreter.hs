@@ -1145,8 +1145,6 @@ evalPrim (PrimMin                ty) = evalMin ty
 evalPrim PrimLAnd                    = evalLAnd
 evalPrim PrimLOr                     = evalLOr
 evalPrim PrimLNot                    = evalLNot
-evalPrim (PrimVectorIndex v i)       = evalVectorIndex v i
-evalPrim (PrimVectorWrite v i)       = evalVectorWrite v i
 evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
 evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
 

@@ -144,8 +144,6 @@ evalPrimApp env f x
       PrimNEq ty                -> evalNEq ty x env
       PrimMax ty                -> evalMax ty x env
       PrimMin ty                -> evalMin ty x env
-      PrimVectorIndex _ _       -> Nothing
-      PrimVectorWrite _ _       -> Nothing
       PrimLAnd                  -> evalLAnd x env
       PrimLOr                   -> evalLOr x env
       PrimLNot                  -> evalLNot x env

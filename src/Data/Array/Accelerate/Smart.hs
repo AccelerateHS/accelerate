@@ -527,6 +527,21 @@ data PreSmartExp acc exp t where
                 -> exp (Vec n s)
                 -> PreSmartExp acc exp tup
 
+  VecIndex      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> exp (Vec n s)
+                -> exp i
+                -> PreSmartExp acc exp s
+
+  VecWrite      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> exp (Vec n s)
+                -> exp i
+                -> exp s
+                -> PreSmartExp acc exp (Vec n s)
+
   ToIndex       :: ShapeR sh
                 -> exp sh
                 -> exp sh
@@ -860,6 +875,8 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     Prj _ _                         -> error "I never joke about my work"
     VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
     VecUnpack vecR _                -> vecRtuple vecR
+    VecIndex vecT _ _ _             -> let (VectorType _ s) = vecT in TupRsingle $ SingleScalarType s
+    VecWrite vecT _ _ _ _           -> TupRsingle $ VectorScalarType vecT
     ToIndex _ _ _                   -> TupRsingle scalarTypeInt
     FromIndex shr _ _               -> shapeType shr
     Case _ ((_,c):_)                -> typeR c
@@ -1179,16 +1196,15 @@ mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
   where
     x = SmartExp $ Prj PairIdxLeft a
 
--- Operators from Vec
+
+inferNat :: forall n. KnownNat n => Int
+inferNat = fromInteger $ natVal (Proxy @n)
+
 mkVectorIndex :: forall n a. (KnownNat n, Elt a, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a
-mkVectorIndex = let n :: Int
-                    n = fromIntegral $ natVal $ Proxy @n
-                in mkPrimBinary $ PrimVectorIndex @n (VectorType n singleType) integralType
+mkVectorIndex (Exp v) (Exp i) = mkExp $ VecIndex (VectorType (inferNat @n) singleType) integralType v i
 
 mkVectorWrite :: forall n a. (KnownNat n, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a -> Exp (Vec n a)
-mkVectorWrite = let n :: Int
-                    n = fromIntegral $ natVal $ Proxy @n
-                in mkPrimTernary $ PrimVectorWrite @n (VectorType n singleType) integralType
+mkVectorWrite (Exp v) (Exp i) (Exp el) = mkExp $ VecWrite (VectorType (inferNat @n) singleType) integralType v i el
 
 -- Numeric conversions
 

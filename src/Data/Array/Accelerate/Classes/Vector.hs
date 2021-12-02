@@ -5,6 +5,8 @@
 {-# LANGUAGE MonoLocalBinds         #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE GADTs    #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -18,11 +20,12 @@
 --
 module Data.Array.Accelerate.Classes.Vector where
 
-import Data.Kind
 import GHC.TypeLits
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Smart
 import Data.Primitive.Vec
+
+
 
 instance (VecElt a, KnownNat n) => Vectoring (Exp (Vec n a)) (Exp a) where
     type IndexType (Exp (Vec n a)) = Exp Int
