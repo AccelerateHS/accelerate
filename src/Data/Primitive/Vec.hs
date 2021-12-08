@@ -110,8 +110,8 @@ instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
         let n :: Int
             n = fromIntegral $ natVal $ Proxy @n
         mba <- newByteArray (n * sizeOf (undefined :: a))
-        let new_vs = zipWith (\i' v' -> if i' == i then v else v') [0..n] (listOfVec vec)
-        zipWithM_ (writeByteArray mba) [0..n] new_vs
+        let new_vs = zipWith (\i' v' -> if i' == i then v else v') [0..n-1] (listOfVec vec)
+        zipWithM_ (writeByteArray mba) [0..n-1] new_vs
         ByteArray nba# <- unsafeFreezeByteArray mba
         return $! Vec nba#
     vecEmpty = mkVec
@@ -139,7 +139,7 @@ vecOfList :: forall n a. (KnownNat n, Prim a) => [a] -> Vec n a
 vecOfList vs = runST $ do
   let n :: Int = fromIntegral $ natVal $ Proxy @n
   mba <- newByteArray (n * sizeOf (undefined :: a))
-  zipWithM_ (writeByteArray mba) [0..n] vs
+  zipWithM_ (writeByteArray mba) [0..n-1] vs
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
 
