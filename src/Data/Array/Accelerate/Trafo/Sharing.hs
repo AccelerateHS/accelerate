@@ -59,7 +59,7 @@ import Data.Array.Accelerate.Representation.Shape                   hiding ( zip
 import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
-import Data.Array.Accelerate.Smart                                  as Smart hiding ( StencilR )
+import Data.Array.Accelerate.Smart                                  as Smart
 import Data.Array.Accelerate.Sugar.Array                            hiding ( Array, ArraysR, (!!) )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Trafo.Config
