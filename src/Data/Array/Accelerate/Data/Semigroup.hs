@@ -9,8 +9,8 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ViewPatterns          #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -Wno-noncanonical-monoid-instances #-}
+{-# OPTIONS_GHC -fno-warn-orphans                  #-}
 #if __GLASGOW_HASKELL__ >= 806
 {-# LANGUAGE UndecidableInstances  #-}
 #endif

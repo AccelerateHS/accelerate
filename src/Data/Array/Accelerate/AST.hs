@@ -585,7 +585,8 @@ data OpenExp env aenv t where
 
   -- SIMD vectors
   VecPack       :: KnownNat n
-                => Ann -> VecR n s tup
+                => Ann
+                -> VecR n s tup
                 -> OpenExp env aenv tup
                 -> OpenExp env aenv (Vec n s)
 
