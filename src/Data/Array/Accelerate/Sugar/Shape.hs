@@ -229,14 +229,24 @@ listToShape' = fmap toElt . R.listToShape' (shapeR @sh)
 showShape :: Shape sh => sh -> String
 showShape = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList
 
--- | Project the shape of a slice from the full shape.
+-- | Project the shape of a slice from the full shape
 --
 sliceShape
-    :: forall slix co sl dim. (Shape sl, Shape dim)
+    :: (Shape sl, Shape dim)
     => R.SliceIndex slix (EltR sl) co (EltR dim)
     -> dim
     -> sl
-sliceShape slix = toElt . R.sliceShape slix . fromElt
+sliceShape slx = toElt . R.sliceShape slx . fromElt
+
+-- | Project the full shape from a slice
+--
+sliceDomain
+    :: (Elt slix, Shape sl, Shape dim)
+    => R.SliceIndex (EltR slix) (EltR sl) co (EltR dim)
+    -> slix
+    -> sl
+    -> dim
+sliceDomain slx slix sl = toElt $ R.sliceDomain slx (fromElt slix) (fromElt sl)
 
 -- | Enumerate all slices within a given bound. The innermost dimension
 -- changes most rapidly.

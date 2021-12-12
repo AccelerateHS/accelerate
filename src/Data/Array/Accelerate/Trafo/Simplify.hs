@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
@@ -13,6 +14,7 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
 -- Copyright   : [2012..2020] The Accelerate Team
@@ -24,6 +26,9 @@
 --
 
 module Data.Array.Accelerate.Trafo.Simplify (
+
+  simplifyAfun,
+  simplifyAcc,
 
   simplifyFun,
   simplifyExp
@@ -61,6 +66,53 @@ import Formatting
 import Lens.Micro                                                   hiding ( ix )
 import Prelude                                                      hiding ( exp, iterate )
 import qualified Data.Map.Strict                                    as Map
+
+
+-- Array simplification
+-- ====================
+
+simplifyAcc :: Acc a -> Acc a
+simplifyAcc = simplifyOpenAcc
+
+simplifyAfun :: Afun f -> Afun f
+simplifyAfun = simplifyOpenAfun
+
+
+simplifyOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
+simplifyOpenAcc (OpenAcc pacc) = OpenAcc (simplifyPreOpenAcc pacc)
+
+simplifyOpenAfun :: PreOpenAfun OpenAcc aenv f -> PreOpenAfun OpenAcc aenv f
+simplifyOpenAfun (Alam lhs f) = Alam lhs (simplifyOpenAfun f)
+simplifyOpenAfun (Abody a)    = Abody (simplifyOpenAcc a)
+
+simplifyPreOpenAcc :: PreOpenAcc OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
+simplifyPreOpenAcc = \case
+  Alet ann lhs bnd body               -> Alet ann lhs (simplifyOpenAcc bnd) (simplifyOpenAcc body)
+  Avar var                            -> Avar var
+  Apair ann a1 a2                     -> Apair ann (simplifyOpenAcc a1) (simplifyOpenAcc a2)
+  Anil ann                            -> Anil ann
+  Atrace ann msg as bs                -> Atrace ann msg (simplifyOpenAcc as) (simplifyOpenAcc bs)
+  Apply ann repr f a                  -> Apply ann repr (simplifyOpenAfun f) (simplifyOpenAcc a)
+  Aforeign ann repr asm f a           -> Aforeign ann repr asm (simplifyOpenAfun f) (simplifyOpenAcc a)
+  Acond ann e a1 a2                   -> Acond ann (simplifyExp e) (simplifyOpenAcc a1) (simplifyOpenAcc a2)
+  Awhile ann c f a                    -> Awhile ann (simplifyOpenAfun c) (simplifyOpenAfun f) (simplifyOpenAcc a)
+  Use ann repr arr                    -> Use ann repr arr
+  Unit ann eR e                       -> Unit ann eR (simplifyExp e)
+  Reshape ann shr e a                 -> Reshape ann shr (simplifyExp e) (simplifyOpenAcc a)
+  Generate ann repr e f               -> Generate ann repr (simplifyExp e) (simplifyFun f)
+  Transform ann repr sh f g a         -> Transform ann repr (simplifyExp sh) (simplifyFun f) (simplifyFun g) (simplifyOpenAcc a)
+  Replicate ann slix sl a             -> Replicate ann slix (simplifyExp sl) (simplifyOpenAcc a)
+  Slice ann slix a sl                 -> Slice ann slix (simplifyOpenAcc a) (simplifyExp sl)
+  Map ann eR f a                      -> Map ann eR (simplifyFun f) (simplifyOpenAcc a)
+  ZipWith ann eR f a1 a2              -> ZipWith ann eR (simplifyFun f) (simplifyOpenAcc a1) (simplifyOpenAcc a2)
+  Fold ann f e a                      -> Fold ann (simplifyFun f) (fmap simplifyExp e) (simplifyOpenAcc a)
+  FoldSeg ann iR f e a s              -> FoldSeg ann iR (simplifyFun f) (fmap simplifyExp e) (simplifyOpenAcc a) (simplifyOpenAcc s)
+  Scan ann d f e a                    -> Scan ann d (simplifyFun f) (fmap simplifyExp e) (simplifyOpenAcc a)
+  Scan' ann d f e a                   -> Scan' ann d (simplifyFun f) (simplifyExp e) (simplifyOpenAcc a)
+  Permute ann f a1 g a2               -> Permute ann (simplifyFun f) (simplifyOpenAcc a1) (simplifyFun g) (simplifyOpenAcc a2)
+  Backpermute ann shr sh f a          -> Backpermute ann shr (simplifyExp sh) (simplifyFun f) (simplifyOpenAcc a)
+  Stencil ann s eR f b a              -> Stencil ann s eR (simplifyFun f) b (simplifyOpenAcc a)
+  Stencil2 ann s1 s2 eR f b1 a1 b2 a2 -> Stencil2 ann s1 s2 eR (simplifyFun f) b1 (simplifyOpenAcc a1) b2 (simplifyOpenAcc a2)
 
 
 -- Scalar optimisations

@@ -560,7 +560,7 @@ data OpenExp env aenv t where
                 -> OpenExp env' aenv body_t
                 -> OpenExp env  aenv body_t
 
-  -- Variable index, ranging only over tuples or scalars
+  -- Variable index, ranging _only_ over scalars
   Evar          :: -- 'ExpVar' already contains an 'Ann' field
                    ExpVar env t
                 -> OpenExp env aenv t

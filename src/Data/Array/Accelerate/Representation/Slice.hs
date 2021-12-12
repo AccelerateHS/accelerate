@@ -64,13 +64,17 @@ instance Show (SliceIndex ix slice coSlice sliceDim) where
 
 -- | Project the shape of a slice from the full shape.
 --
-sliceShape :: forall slix co sl dim.
-              SliceIndex slix sl co dim
-           -> dim
-           -> sl
-sliceShape SliceNil        ()      = ()
-sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
-sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
+sliceShape :: SliceIndex slix sl co dim -> dim -> sl
+sliceShape SliceNil          ()      = ()
+sliceShape (SliceAll   slix) (sh, n) = (sliceShape slix sh, n)
+sliceShape (SliceFixed slix) (sh, _) = sliceShape slix sh
+
+-- | Project the full shape of the slice
+--
+sliceDomain :: SliceIndex slix sl co dim -> slix -> sl -> dim
+sliceDomain SliceNil          ()        ()       = ()
+sliceDomain (SliceAll slix)   (slx, ()) (sl, sz) = (sliceDomain slix slx sl, sz)
+sliceDomain (SliceFixed slix) (slx, sz) sl       = (sliceDomain slix slx sl, sz)
 
 sliceShapeR :: SliceIndex slix sl co dim -> ShapeR sl
 sliceShapeR SliceNil        = ShapeRz
