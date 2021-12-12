@@ -10,36 +10,24 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
 
--- | Annotations for Accelerate's abstract syntax trees.
+-- |
+-- Module      : Data.Array.Accelerate.Annotations
+-- Copyright   : [2021] The Accelerate Team
+-- License     : BSD3
 --
--- * TODOs
+-- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
--- TODO: Add the same file header used in all other modules
--- TODO: Reformat all of the changes from this branch to the usual Accelerate
---       style. There's no style guide or formatter config anywhere, so I just
---       run most things through a formatter to keep me sane.
+-- __Remaining TODOs__
+--
 -- TODO: Take another look at fusion, optimization propagation doesn't have to
 --       be perfect yet but I'm sure there are also issues elsewhere
--- TODO: Annotations are completely ignored in 'Match' and 'Hash' at the moment.
---       We should probably at least consider the optimizations of not the
---       entire annotation.
--- TODO: See if we can clean up the pretty printer a bit, and also add the
---       information to the graphviz export (there's already a todo for that)
--- TODO: Expose the pretty printer verbosity option somehow
+-- TODO: Expose the pretty printer verbosity option instead of having a binary
+--       flag to choose between normal and verbose mode
 -- TODO: Tests! Tests? Can we test this, and how? We can probably at least fake
 --       call stacks, generate random ASTs with smart constructors, and check
 --       `getAnn`.
--- XXX: Right now it would be possible to specify some nonsensible flags, like
---      setting loop unrolling for a constant value. Should we just silently
---      ignore these things like we do now, or should be printing warnings? I
---      don't think Accelerate has any other non-fatal compiler diagnostics.
---
--- There are a bunch more todos sprinkled around the code. Use the following
--- mystical one-liner to find them:
---
--- @
--- git diff -U0 master...feature/annotations | grep '^+.*\(TODO\|HACK\|FIXME\)' | cut -c2- | git grep -nFf- feature/annotations
--- @
 --
 -- __Annotations__
 --
@@ -156,31 +144,26 @@
 -- > mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 --
 module Data.Array.Accelerate.Annotations (
-  -- * Annotations
-  Ann (..),
-  Optimizations (..),
-  HasAnnotations (..),
-  TraverseAnnotations (..),
-  context,
-  alwaysInline,
-  unrollIters,
+  -- * Annotations and decorators
+  Ann(..), Optimizations(..),
+  HasAnnotations(..), TraverseAnnotations(..),
+
+  -- ** Decorators
+  -- | These are exposed to the user to be able to decorate AST nodes with
+  -- optimization flags and other annotations.
+  context, alwaysInline, unrollIters,
 
   -- * Source mapping
   SourceMapped,
-  sourceMap,
-  sourceMapRuntime,
-  sourceMapPattern,
-  mergeLocs,
-  mergeLocsSingle,
+  sourceMap, sourceMapRuntime, sourceMapPattern,
+  mergeLocs, mergeLocsSingle,
 
   -- * Internals
-  FieldAnn (..),
+  FieldAnn(..),
   withOptimizations,
   extractAnn,
-  mkAnn,
-  mkDummyAnn,
-  rnfAnn,
-  liftAnn,
+  mkAnn, mkDummyAnn,
+  rnfAnn, liftAnn,
 
   -- * Re-exported for convenience
   HasCallStack,
@@ -198,6 +181,8 @@ import Language.Haskell.TH.Extra (CodeQ)
 import Lens.Micro
 import Lens.Micro.Extras (view)
 
+-- * Annotations and decorators
+
 -- | This annotation type stores any auxiliary data attached to an AST node.
 -- This includes source mapping information if available, as well as any local
 -- optimization flags.
@@ -208,17 +193,17 @@ import Lens.Micro.Extras (view)
 -- contain multiple (but likely adjacent) call stacks.
 --
 -- See 'SourceMapped', 'sourceMap', and 'mkAnn' for more information.
---
--- TODO: The set of optimizations is now the same for 'Exp' and 'Acc'. Should we
---       have separate sets of 'Optimizations' flags? Ideally we would only
---       allow adding optimization flags for constructs that make sense (e.g.
---       allow unrolling @awhile@, but not @acond@), but since this would
---       involve adding another type index to 'Exp' that's not going to be a
---       feasible approach.
+
+-- NOTE: The set of optimizations is now the same for 'Exp' and 'Acc'. In the
+--       future we may want to parameterize this with separate sets of
+--       optimization flags for the AST types based on what makes sense for
+--       those ASTs, or even go one step further and restrict the operators to
+--       operations that actually make sense (e.g. allow unrolling @awhile@, but
+--       not @acond@).
 data Ann = Ann
-  { -- | When displaying these to the user, use 'mergeLocs' instead of
+  { -- When displaying these to the user, use 'mergeLocs' instead of
     -- 'fromCallSiteList' so nearby source locations are merged.
-    locations :: S.HashSet CallStack
+    locations     :: S.HashSet CallStack
   , optimizations :: Optimizations
   }
 
@@ -233,17 +218,33 @@ data Ann = Ann
 --       they're just placeholders.
 data Optimizations = Optimizations
   { optAlwaysInline :: Bool
-  , optUnrollIters :: Maybe Int
+  , optUnrollIters  :: Maybe Int
   }
 
+instance Semigroup Ann where
+  (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)
 
--- * Annotation functions
---
--- These are exposed to the user so they can annotate AST nodes.
+instance Monoid Ann where
+  mempty = mkDummyAnn
+
+instance Semigroup Optimizations where
+  a <> b = Optimizations
+      { optAlwaysInline = optAlwaysInline a || optAlwaysInline b
+      , optUnrollIters  = (max `maybeOn` optUnrollIters) a b
+      }
+    where
+      -- 'on' from 'Data.Function' but for comparing 'Maybe' values.
+      maybeOn f on' x y = case (on' x, on' y) of
+          (Just x', Just y') -> Just $ f x' y'
+          (Just x', _      ) -> Just x'
+          (_      , Just y') -> Just y'
+          _                  -> Nothing
+
+-- ** Decorators
 
 -- | Add context to a scalar expression or an array operation. This will insert
--- the current call stack into the expression and all of its subtrees along with
--- the provided context string.
+-- information about the current call stack into the expression and all of its
+-- subtrees along with the user provided context string.
 context :: (HasCallStack, TraverseAnnotations a) => String -> a -> a
 context label = traverseAnns (\(Ann src opts) -> Ann (S.insert (modifyStack callStack) src) opts)
   where
@@ -253,14 +254,14 @@ context label = traverseAnns (\(Ann src opts) -> Ann (S.insert (modifyStack call
     modifyStack stack                               = stack
 
 -- | Instruct the compiler to always inline this expression and to not perform
--- any sharing recovery. This will allow inexpensive calculations whose values
--- are used in multiple places to be fused, potentially increasing performance
--- since the values don't have to be written to memory anymore.
+-- any sharing recovery. This allows inexpensive calculations that are used in
+-- multiple places to be fused, potentially increasing performance since these
+-- values don't have to be written to memory first anymore.
 alwaysInline :: HasAnnotations a => a -> a
 alwaysInline = withOptimizations $ \opts -> opts { optAlwaysInline = True }
 
 -- | Instruct the compiler to unroll a loop in chunks of @n@ iterations.
---
+
 -- TODO: Should we add validation for these kinds of functions? (i.e. reject
 --       negative values for @n@)
 unrollIters :: HasAnnotations a => Int -> a -> a
@@ -281,7 +282,8 @@ unrollIters n = withOptimizations $ \opts -> opts { optUnrollIters = Just n }
 type SourceMapped = (?requiresSourceMapping :: ReadTheDocs, HasCallStack)
 
 -- | A tag type that exists only to enforce the source mapping constraint
--- through the type checker.
+-- through the type checker. Check the comments in 'SourceMapped' and at the top
+-- of this module.
 data ReadTheDocs = TakenCareOf
 
 -- | Evaluate the provided form with source mapping enabled. See the module
@@ -447,13 +449,16 @@ isEmptyStack _              = False
 
 -- | Used for accessing annotation fields in ASTs. 'HasAnnotations' defines
 -- convenience functions for working with types that have such an annotation
--- field and for functions that
+-- field and for functions that return those types.
 class FieldAnn s where
   -- | A lens for accessing @a@'s annotation field, if it has one. By defining
   -- this as a lens we can get rid of some duplication.
   _ann :: Lens' s (Maybe Ann)
 
--- | Used for modifying an AST node's annotations. Types with annotation fields
+-- | AST types that contain annotations so they can be modified and retrieved.
+-- This can also be used directly on functions.
+
+-- Used for modifying an AST node's annotations. Types with annotation fields
 -- should have an instance of 'FieldAnn' instead of implementing this class
 -- directly.
 class HasAnnotations a where
@@ -479,16 +484,15 @@ class TraverseAnnotations a where
   -- the wrong function.
   traverseAnns :: (Ann -> Ann) -> a -> a
 
--- | Lenses make accessing these annotations for different ASTs much cleaner,
--- but these speciality functions are much nicer to work with.
+-- | Both 'Acc' and 'Exp' types contain annotation fields.
 instance {-# OVERLAPPING #-} FieldAnn a => HasAnnotations a where
   modifyAnn f = over _ann $ \case
     Just ann -> Just (f ann)
     Nothing  -> Nothing
   getAnn = view _ann
 
--- | Being able to directly annotate functions makes using this annotation
--- functionality much more ergonomic.
+-- | Functions on Accelerate data types can also be decorated to make composing
+-- annotations more ergonomic.
 instance {-# OVERLAPPING #-} HasAnnotations r => HasAnnotations (a -> r) where
   modifyAnn f f' x = modifyAnn f (f' x)
   -- You cannot get the annotation without evaluating the function first. This
@@ -511,11 +515,11 @@ extractAnn _                    = mkDummyAnn
 -- | Create a new annotation, capturing any available source mapping information
 -- from the current 'SourceMapped' context. Check the module's documentation for
 -- more information.
-  --
---- XXX: Inlining on -O1 and higher causes the result of this function to be
----      shared even if any of the 'SourceMapped' implicit parameters are
----      different, at least on GHC 8.10.4. This would result in every
----      invocation of this function returning the same (incorrect)) value.
+
+-- XXX: Inlining on -O1 and higher causes the result of this function to be
+--      shared even if any of the 'SourceMapped' implicit parameters are
+--      different, at least on GHC 8.10.4. This would result in every
+--      invocation of this function returning the same (incorrect)) value.
 {-# NOINLINE mkAnn #-}
 mkAnn :: SourceMapped => Ann
 mkAnn = Ann (maybeCallStack callStack) defaultOptimizations
@@ -537,10 +541,6 @@ mkAnn = Ann (maybeCallStack callStack) defaultOptimizations
         Optimizations { optAlwaysInline = False, optUnrollIters = Nothing }
 
 -- | Create a new 'Ann' without any source information.
---
--- TODO: Once everything has been implemented, check whether the uses of this
---       are justified and if we're not throwing away any existing annotations
---       when reconstructing ASTs
 mkDummyAnn :: Ann
 mkDummyAnn =
   let ?requiresSourceMapping = TakenCareOf
@@ -551,7 +551,7 @@ mkDummyAnn =
 -- of source locations ordered by filename, line number, and column. This is a
 -- list of call stacks in the same format as `getCallStack`. When the source
 -- location set is disjoint, the resulting list will contain multiple entries.
---
+
 -- TODO: Right now we use a simple heuristic and consider regions on the same
 --       line or on adjacent lines to be adjacent. This will definitely need
 --       some tweaking.
@@ -606,26 +606,7 @@ mergeLocsSingle locs
   = Nothing
 
 
-instance Semigroup Ann where
-  (Ann src1 opts1) <> (Ann src2 opts2) = Ann (src1 <> src2) (opts1 <> opts2)
-
-instance Monoid Ann where
-  mempty = mkDummyAnn
-
-instance Semigroup Optimizations where
-  a <> b = Optimizations
-      { optAlwaysInline = optAlwaysInline a || optAlwaysInline b
-      , optUnrollIters  = (max `maybeOn` optUnrollIters) a b
-      }
-    where
-      -- 'on' from 'Data.Function' but for comparing 'Maybe' values.
-      maybeOn f on' x y = case (on' x, on' y) of
-          (Just x', Just y') -> Just $ f x' y'
-          (Just x', _      ) -> Just x'
-          (_      , Just y') -> Just y'
-          _                  -> Nothing
-
--- * Internal
+-- * Internals
 
 -- ** Normal form data
 --
@@ -652,7 +633,6 @@ liftOptimizations Optimizations { .. } = [|| Optimizations { .. } ||]
 liftCallStacks :: S.HashSet CallStack -> CodeQ (S.HashSet CallStack)
 liftCallStacks stacks = [|| S.fromList $$(liftStacks $ S.toList stacks) ||]
   where
-    -- TODO: Is there some combinator for this transformation?
     liftStacks :: [CallStack] -> CodeQ [CallStack]
     liftStacks (x : xs) = [|| $$(liftCallStack x) : $$(liftStacks xs) ||]
     liftStacks []       = [|| [] ||]

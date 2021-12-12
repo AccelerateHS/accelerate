@@ -353,7 +353,7 @@ evalSub' ty t@(untup2 -> Just (x,y)) env
   | Nothing     <- propagate env x
   , Just b      <- propagate env y
   = Stats.ruleFired "-y+x"
-  $ Just . snd $ evalPrimApp env mkDummyAnn  (PrimAdd ty) (Pair combinedAnn (Const combinedAnn tp (-b)) x)
+  $ Just . snd $ evalPrimApp env mkDummyAnn (PrimAdd ty) (Pair combinedAnn (Const combinedAnn tp (-b)) x)
   -- (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
   | Just Refl   <- matchOpenExp x y

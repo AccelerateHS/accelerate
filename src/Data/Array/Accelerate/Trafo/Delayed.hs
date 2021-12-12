@@ -83,8 +83,6 @@ instance NFData (DelayedOpenAfun aenv t) where
 instance NFData (DelayedOpenAcc aenv t) where
   rnf = rnfDelayedOpenAcc
 
--- TODO: Like mentioned in the Hash module, we should probably incorporate
---       optimization flags and source locations in the hashes
 encodeDelayedOpenAcc :: EncodeAcc DelayedOpenAcc
 encodeDelayedOpenAcc options acc =
   let
@@ -105,8 +103,6 @@ encodeDelayedOpenAcc options acc =
     Manifest pacc      -> intHost $(hashQ ("Manifest" :: String)) <> deepA pacc
     Delayed _ _ sh f g -> intHost $(hashQ ("Delayed"  :: String)) <> travE sh <> travF f <> travF g
 
--- TODO: Like mentioned in the Match module, we may need to consider
---       optimization flags when matching these delayed representation.
 matchDelayedOpenAcc :: MatchAcc DelayedOpenAcc
 matchDelayedOpenAcc (Manifest pacc1) (Manifest pacc2)
   = matchPreOpenAcc matchDelayedOpenAcc pacc1 pacc2

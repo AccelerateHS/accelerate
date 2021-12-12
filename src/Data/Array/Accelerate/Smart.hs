@@ -1489,15 +1489,14 @@ formatDirection = later $ \case
   LeftToRight -> singleton 'l'
   RightToLeft -> singleton 'r'
 
--- TODO: Reformat
 formatPreAccOp :: Format r (PreSmartAcc acc exp arrs -> r)
 formatPreAccOp = later $ \case
-  Atag _ _ i          -> bformat ("Atag " % int) i
-  Use _ aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
-  Pipe{}              -> "Pipe"
-  Acond{}             -> "Acond"
-  Awhile{}            -> "Awhile"
-  Apair{}             -> "Apair"
+  Atag _ _ i            -> bformat ("Atag " % int) i
+  Use _ aR a            -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
+  Pipe{}                -> "Pipe"
+  Acond{}               -> "Acond"
+  Awhile{}              -> "Awhile"
+  Apair{}               -> "Apair"
   Anil{}                -> "Anil"
   Aprj{}                -> "Aprj"
   Atrace{}              -> "Atrace"

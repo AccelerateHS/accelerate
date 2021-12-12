@@ -138,9 +138,6 @@ simple :: Detail -> Bool
 simple Simple = True
 simple _      = False
 
--- TODO: Should we incorporate data from annotations in the graph? Is there a
---       way to do this without everything becoming too cluttered?
-
 -- | Generate a dependency graph for the given computation
 --
 {-# NOINLINE graphDelayedAcc #-}
