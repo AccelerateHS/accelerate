@@ -490,8 +490,10 @@ maybeWithAnn :: HasAnnotations a => PrettyConfig acc -> Bool -> a -> Adoc -> Ado
 maybeWithAnn config withParens x doc
   | confAnnotationVerbosity config > Quiet
   , Just ann <- getAnn x
-  , Just pAnn <- prettyAnn' config ann = parensIf withParens $ sep [doc, align $ brackets pAnn]
-  | otherwise                          = doc
+  , Just pAnn <- prettyAnn' config ann
+  = parensIf withParens $ sep [doc, align . annotate Annotation $ comment pAnn]
+  | otherwise
+  = doc
 
 
 -- Scalar expressions
@@ -913,6 +915,12 @@ False ? (_,f) = f
 parensIf :: Bool -> Doc ann -> Doc ann
 parensIf True  = group . parens . align
 parensIf False = id
+
+-- | Format something as if it were enclosed in Haskell block comments. Useful
+-- for adding additional information while still mostly keeping the ability to
+-- convert the pretty printed AST back to Haskell code.
+comment :: Doc ann -> Doc ann
+comment = enclose "{- " " -}"
 
 
 -- Debugging
