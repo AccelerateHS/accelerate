@@ -483,15 +483,15 @@ prettyAnn' config (Ann src (Optimizations { optAlwaysInline, optUnrollIters })) 
 --
 -- TODO: Doing it this way results in a ton of clutter, and it can be difficult
 --       to read so this is more of a temporary solution. To help with ambiguity
---       we'll just always add parentheses around scalar-level expressions for
---       now. 'align' also doesn't always place the annotation where you'd
---       expect it to be.
+--       we'll just always add parentheses around certain scalar-level
+--       expressions before the annotation. 'align' also doesn't always place
+--       the annotation where you'd expect it to be.
 maybeWithAnn :: HasAnnotations a => PrettyConfig acc -> Bool -> a -> Adoc -> Adoc
 maybeWithAnn config withParens x doc
   | confAnnotationVerbosity config > Quiet
   , Just ann <- getAnn x
   , Just pAnn <- prettyAnn' config ann
-  = parensIf withParens $ sep [doc, align . annotate Annotation $ comment pAnn]
+  = sep [parensIf withParens doc, align . annotate Annotation $ comment pAnn]
   | otherwise
   = doc
 
@@ -542,7 +542,7 @@ prettyOpenExp
     -> OpenExp env aenv t
     -> Adoc
 prettyOpenExp config ctx env aenv exp =
-  maybeWithAnn config True exp $ case exp of
+  maybeWithAnn config needsAnnParens exp $ case exp of
     Evar (Var _ _ idx)     -> prj idx env
     Let{}                  -> prettyLet config ctx env aenv exp
     PrimApp _ f x
@@ -618,6 +618,14 @@ prettyOpenExp config ctx env aenv exp =
 
     withTypeRep :: ScalarType t -> Adoc -> Adoc
     withTypeRep t op = op <+> "@" <> pretty (show t)
+
+    -- Add parentheses around the expression before printing the annotation when
+    -- it could be ambiguous otherwise. For instance, without parentheses adding
+    -- two expression variables would be formatted at @x0 {- a0 -} + x1 {- a1
+    -- -} {- a2 -}@.
+    needsAnnParens = case exp of
+      PrimApp{} -> True
+      _         -> False
 
 prettyArrayVar
     :: forall aenv a.
