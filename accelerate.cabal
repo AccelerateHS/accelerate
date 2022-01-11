@@ -554,6 +554,11 @@ library
         -O3
         -Wall
 
+  cxx-options:
+        -O3
+        -Wall
+        -std=c++11
+
   ghc-options:
         -O2
         -Wall
@@ -565,6 +570,9 @@ library
         -funbox-strict-fields
         -optc=-O3
         -optc=-Wall
+        -optcxx=-O3
+        -optcxx=-Wall
+        -optcxx=-std=c++11
 
   ghc-prof-options:
         -caf-all
@@ -580,16 +588,10 @@ library
         -DTRACY_NO_SAMPLING
 
     cxx-options:
-        -O3
-        -Wall
-        -std=c++11
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
 
     ghc-options:
-        -optcxx=-O3
-        -optcxx=-Wall
-        -optcxx=-std=c++11
         -optcxx=-DTRACY_ENABLE
         -optcxx=-DTRACY_NO_SAMPLING
 
@@ -606,20 +608,25 @@ library
         -DACCELERATE_INTERNAL_CHECKS
 
   if os(windows)
-    cpp-options:        -DWIN32
-    build-depends:      Win32
+    cpp-options:
+        -DWIN32
+    build-depends:
+        Win32
   else
-    cpp-options:        -DUNIX
-    build-depends:      unix
+    cpp-options:
+        -DUNIX
+    build-depends:
+        unix
 
   -- https://stackoverflow.com/questions/65966969/why-does-march-native-not-work-on-apple-m1
   if !(os(darwin) && arch(aarch64))
-    cc-options:         -march=native
-    ghc-options:        -optc=-march=native
-
-    if flag(debug)
-      cxx-options:      -march=native
-      ghc-options:      -optcxx=-march=native
+    cc-options:
+        -march=native
+    cxx-options:
+        -march=native
+    ghc-options:
+        -optc=-march=native
+        -optcxx=-march=native
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
