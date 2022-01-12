@@ -570,6 +570,9 @@ library
         -funbox-strict-fields
         -optc=-O3
         -optc=-Wall
+
+  if impl(ghc >= 8.10)
+    ghc-options:
         -optcxx=-O3
         -optcxx=-Wall
         -optcxx=-std=c++11
@@ -591,7 +594,8 @@ library
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
 
-    ghc-options:
+    if impl(ghc >= 8.10)
+      ghc-options:
         -optcxx=-DTRACY_ENABLE
         -optcxx=-DTRACY_NO_SAMPLING
 
@@ -637,6 +641,8 @@ library
         -march=native
     ghc-options:
         -optc=-march=native
+    if impl(ghc >= 8.10)
+      ghc-options:
         -optcxx=-march=native
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
