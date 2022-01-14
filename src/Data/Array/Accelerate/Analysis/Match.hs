@@ -579,9 +579,13 @@ matchOpenExp (LinearIndex ann a1 x1) (LinearIndex ann' a2 x2)
   , Just Refl <- matchOpenExp x1 x2
   = Just Refl
 
-matchOpenExp (Shape ann a1) (Shape ann' a2)
-  | matchAnn ann ann'
-  , Just Refl <- matchVar a1 a2
+-- NOTE: Matching array shapes should not take the annotations into account.
+--       There will not be any relevant optimization flags here, and matching
+--       shapes is done fairly frequently as part of the transformation
+--       pipeline. In those cases we also wouldn't want to differentiate between
+--       different two identical shapes with different optimization flags.
+matchOpenExp (Shape _ a1) (Shape _ a2)
+  | Just Refl <- matchVar a1 a2
   = Just Refl
 
 matchOpenExp (ShapeSize ann _ sh1) (ShapeSize ann' _ sh2)
