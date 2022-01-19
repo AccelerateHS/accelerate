@@ -187,8 +187,7 @@ defaultFromEnum = preludeError "fromEnum"
 preludeError :: String -> a
 preludeError x
   = error
-  $ unlines [ printf "Prelude.%s is not supported for Accelerate types" x
-            , ""
+  $ unlines [ printf "Prelude.%s is not supported for Accelerate types" x , ""
             , "These Prelude.Enum instances are present only to fulfil superclass"
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]

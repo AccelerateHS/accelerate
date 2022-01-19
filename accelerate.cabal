@@ -446,6 +446,7 @@ library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
+        Data.Array.Accelerate.Classes.Vector
         Data.Array.Accelerate.Debug.Internal.Clock
         Data.Array.Accelerate.Debug.Internal.Flags
         Data.Array.Accelerate.Debug.Internal.Graph

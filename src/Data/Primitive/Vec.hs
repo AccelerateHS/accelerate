@@ -1,15 +1,21 @@
-{-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE MagicHash           #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE RoleAnnotations     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE UnboxedTuples       #-}
-{-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE BangPatterns           #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE MagicHash              #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE PatternSynonyms        #-}
+{-# LANGUAGE RoleAnnotations        #-} 
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE UnboxedTuples          #-}
+{-# LANGUAGE ViewPatterns           #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TupleSections          #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Primitive.Vec
@@ -32,11 +38,16 @@ module Data.Primitive.Vec (
   Vec16, pattern Vec16,
 
   listOfVec,
+  vecOfList,
   liftVec,
 
+  Vectoring(..)
 ) where
 
+import Data.Kind
+import Data.Proxy
 import Control.Monad.ST
+import Control.Monad.Reader
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Text.Prettyprint.Doc
@@ -83,6 +94,36 @@ import GHC.Word
 --
 data Vec (n :: Nat) a = Vec ByteArray#
 
+class Vectoring vector a | vector -> a where
+    type IndexType vector :: Data.Kind.Type
+    vecIndex :: vector -> IndexType vector -> a
+    vecWrite :: vector -> IndexType vector -> a -> vector
+    vecEmpty :: vector
+
+instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
+    type IndexType (Vec n a) = Int
+    vecIndex (Vec ba#) i@(I# iu#) = let
+        n :: Int
+        n = fromIntegral $ natVal $ Proxy @n
+        in if i >= 0 && i < n then indexByteArray# ba# iu# else error ("index " <> show i <> " out of range in Vec of size " <> show n)
+    vecWrite vec@(Vec ba#) i@(I# iu#) v = runST $ do
+        let n :: Int
+            n = fromIntegral $ natVal $ Proxy @n
+        mba <- unsafeThawByteArray (ByteArray ba#)
+        writeByteArray mba i v
+        ByteArray nba# <- unsafeFreezeByteArray mba
+        return $! Vec nba#
+    vecEmpty = mkVec
+
+
+mkVec :: forall n a. (KnownNat n, Prim a) => Vec n a
+mkVec = runST $ do
+  let n :: Int = fromIntegral $ natVal $ Proxy @n
+  mba <- newByteArray (n * sizeOf (undefined :: a))
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
+
+
 type role Vec nominal representational
 
 instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
@@ -92,6 +133,14 @@ instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
       vec = show
           . group . encloseSep (flatAlt "< " "<") (flatAlt " >" ">") ", "
           . map viaShow
+
+vecOfList :: forall n a. (KnownNat n, Prim a) => [a] -> Vec n a
+vecOfList vs = runST $ do
+  let n :: Int = fromIntegral $ natVal $ Proxy @n
+  mba <- newByteArray (n * sizeOf (undefined :: a))
+  zipWithM_ (writeByteArray mba) [0..n-1] vs
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
 
 listOfVec :: forall a n. (Prim a, KnownNat n) => Vec n a -> [a]
 listOfVec (Vec ba#) = go 0#
@@ -258,6 +307,7 @@ packVec16 a b c d e f g h i j k l m n o p = runST $ do
   writeByteArray mba 15 p
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
+
 
 -- O(n) at runtime to copy from the Addr# to the ByteArray#. We should be able
 -- to do this without copying, but I don't think the definition of ByteArray# is

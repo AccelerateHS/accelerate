@@ -278,6 +278,8 @@ simplifyOpenExp env = first getAny . cvtE
       Pair e1 e2                -> Pair <$> cvtE e1 <*> cvtE e2
       VecPack   vec e           -> VecPack   vec <$> cvtE e
       VecUnpack vec e           -> VecUnpack vec <$> cvtE e
+      VecIndex vt it v i        -> VecIndex vt it <$> cvtE v <*> cvtE i
+      VecWrite vt it v i e      -> VecWrite vt it <$> cvtE v <*> cvtE i <*> cvtE e
       IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
@@ -600,6 +602,8 @@ summariseOpenExp = (terms +~ 1) . goE
         Pair e1 e2            -> travE e1 +++ travE e2 & terms +~ 1
         VecPack   _ e         -> travE e
         VecUnpack _ e         -> travE e
+        VecIndex _ _ v i      -> travE v +++ travE i
+        VecWrite _ _ v i e    -> travE v +++ travE i +++ travE e
         IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
         IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
         ToIndex _ sh ix       -> travE sh +++ travE ix

@@ -41,12 +41,16 @@ data VecR (n :: Nat) single tuple where
   VecRnil  :: SingleType s -> VecR 0       s ()
   VecRsucc :: VecR n s t   -> VecR (n + 1) s (t, s)
 
+
 vecRvector :: KnownNat n => VecR n s tuple -> VectorType (Vec n s)
 vecRvector = uncurry VectorType . go
   where
     go :: VecR n s tuple -> (Int, SingleType s)
     go (VecRnil tp)                       = (0,     tp)
     go (VecRsucc vec) | (n, tp) <- go vec = (n + 1, tp)
+
+vecRSingle :: KnownNat n => VecR n s tuple -> SingleType s
+vecRSingle vecr = let (VectorType _ s) = vecRvector vecr in s
 
 vecRtuple :: VecR n s tuple -> TypeR tuple
 vecRtuple = snd . go

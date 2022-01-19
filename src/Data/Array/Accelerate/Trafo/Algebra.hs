@@ -33,12 +33,14 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Pretty.Print                           ( primOperator, isInfix, opName )
 import Data.Array.Accelerate.Trafo.Environment
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Classes.Vector
 
 import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
 
 import Data.Bits
 import Data.Monoid
 import Data.Text                                                    ( Text )
+import Data.Primitive.Vec
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Text
 import GHC.Float                                                    ( float2Double, double2Float )
