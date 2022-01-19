@@ -109,9 +109,8 @@ instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
     vecWrite vec@(Vec ba#) i@(I# iu#) v = runST $ do
         let n :: Int
             n = fromIntegral $ natVal $ Proxy @n
-        mba <- newByteArray (n * sizeOf (undefined :: a))
-        let new_vs = zipWith (\i' v' -> if i' == i then v else v') [0..n-1] (listOfVec vec)
-        zipWithM_ (writeByteArray mba) [0..n-1] new_vs
+        mba <- unsafeThawByteArray (ByteArray ba#)
+        writeByteArray mba i v
         ByteArray nba# <- unsafeFreezeByteArray mba
         return $! Vec nba#
     vecEmpty = mkVec
