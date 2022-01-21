@@ -592,12 +592,13 @@ mergeLocs =
         --       quickly. On the other hand, just taking @fnX@ and not doing
         --       anything else kind of hides the fact that regions have been
         --       merged.
-      = ((fnX <> ", " <> fnY, locX { srcLocStartLine = startLine
+      = mergeAdjacent
+      $ ((fnX <> ", " <> fnY, locX { srcLocStartLine = startLine
                                    , srcLocStartCol  = startCol
                                    , srcLocEndLine   = endLine
                                    , srcLocEndCol    = endCol }) : restX)
-                      : mergeAdjacent cs
-      | otherwise = x : mergeAdjacent (y:cs)
+                      : cs
+      | otherwise = x : mergeAdjacent (y : cs)
     mergeAdjacent cs = cs
 
 -- | Merge a set of source locations as described in 'mergeLocs', and return the
