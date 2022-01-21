@@ -581,13 +581,21 @@ mergeLocs =
       -- after region Y's start, then the regions overlap. We'll also allow
       -- consider a region Y that starts on the line after region X to be
       -- adjacent.
-      , srcLocEndLine locX - srcLocStartLine locY >= -1
+      , srcLocEndLine locX + 1 >= srcLocStartLine locY
+      , (startLine, startCol) <- min
+          (srcLocStartLine locX, srcLocStartCol locX)
+          (srcLocStartLine locY, srcLocStartCol locY)
+      , (endLine, endCol) <- max
+          (srcLocEndLine locX, srcLocEndCol locX)
+          (srcLocEndLine locY, srcLocEndCol locY)
         -- TODO: Merging these function names this way can grow out of hand very
         --       quickly. On the other hand, just taking @fnX@ and not doing
         --       anything else kind of hides the fact that regions have been
         --       merged.
-      = ((fnX <> ", " <> fnY, locX { srcLocEndLine = srcLocEndLine locY
-                                   , srcLocEndCol  = srcLocEndCol locY }) : restX)
+      = ((fnX <> ", " <> fnY, locX { srcLocStartLine = startLine
+                                   , srcLocStartCol  = startCol
+                                   , srcLocEndLine   = endLine
+                                   , srcLocEndCol    = endCol }) : restX)
                       : mergeAdjacent cs
       | otherwise = x : mergeAdjacent (y:cs)
     mergeAdjacent cs = cs
