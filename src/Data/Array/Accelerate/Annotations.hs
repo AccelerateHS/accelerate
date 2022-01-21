@@ -25,9 +25,6 @@
 --       be perfect yet but I'm sure there are also issues elsewhere
 -- TODO: Expose the pretty printer verbosity option instead of having a binary
 --       flag to choose between normal and verbose mode
--- TODO: Tests! Tests? Can we test this, and how? We can probably at least fake
---       call stacks, generate random ASTs with smart constructors, and check
---       `getAnn`.
 --
 -- __Annotations__
 --
