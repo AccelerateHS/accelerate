@@ -71,6 +71,9 @@ jobs:
       - name: Test doctest
         run: stack test accelerate:doctest $STACK_FLAGS
 
+      - name: Test accelerate
+        run: stack test accelerate:test $STACK_FLAGS
+
       - name: Test nofib
         run: stack test accelerate:nofib-interpreter $STACK_FLAGS
 
