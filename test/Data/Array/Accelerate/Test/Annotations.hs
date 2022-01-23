@@ -38,7 +38,7 @@ mergeLocsTests =
       -- independent of that order
     , testCase "permutations"
         $ assertBool "call stack insertion order in the hash set should not matter"
-        $ length (nub . map (mergeLocs . S.fromList) . permutations $ allLocs) == 1
+        $ length (nub . map (mergeLocs . S.fromList) . permutations $ mergeableLocs) == 1
       -- This test is quite a chonky one, but it catches a lot of edge cases
     , testGroup "merging" $
         let mergableCandidates = nub . filter (not . null) . concatMap subsequences . permutations $ mergeableLocs
@@ -82,7 +82,7 @@ mergeLocsTests =
     -- The locations that can be merged with @baseLoc@
     mergeableLocNames = [containedLocName, overlappingLocName, adjacentStartLocName, adjacentEndLocName]
     mergeableLocs = [containedLoc, overlappingLoc, adjacentStartLoc, adjacentEndLoc]
-    allLocs = mergeableLocs ++ [baseLoc, otherFileLoc, disjointStartLoc, disjointEndLoc, otherFileLoc]
+    _allLocs = mergeableLocs ++ [baseLoc, otherFileLoc, disjointStartLoc, disjointEndLoc, otherFileLoc]
 
     baseLocName = "base"
     baseLoc = fromCallSiteList [(baseLocName, mkLoc (10, 0) (15, 20)), ("aux1", mkLoc (100, 0) (100, 15))]
