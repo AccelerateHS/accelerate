@@ -37,6 +37,7 @@ import Data.Array.Accelerate.Debug.Internal.Stats                   as Stats
 import Control.DeepSeq
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
+import Lens.Micro                                                   ( (<&>) )
 
 
 type DelayedAcc      = DelayedOpenAcc ()
@@ -76,6 +77,11 @@ instance Rebuildable DelayedOpenAcc where
 
 instance Sink DelayedOpenAcc where
   weaken k = Stats.substitution "weaken" . rebuildA (rebuildWeakenVar k)
+
+-- Used only as part of the tests
+instance FieldAnn (DelayedOpenAcc aenv t) where
+  _ann k (Manifest a)  = Manifest      <$> _ann k a
+  _ann k d@Delayed{..} = k (Just annD) <&> \(Just ann') -> d { annD = ann' }
 
 instance NFData (DelayedOpenAfun aenv t) where
   rnf = rnfPreOpenAfun rnfDelayedOpenAcc
