@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- |
 -- Module      : Data.Array.Accelerate.Test.Annotations
 -- Copyright   : [2022] The Accelerate Team
@@ -16,15 +18,18 @@ import GHC.Stack
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import qualified Data.Array.Accelerate as A
+import qualified Data.Array.Accelerate.Trafo as A
 import Data.Array.Accelerate.Annotations
 
 
--- TODO: Test basic fusion properties using the context combinator
 tests :: TestTree
 tests =
   testGroup
     "annotations"
-    [ mergeLocsTests ]
+    [ mergeLocsTests
+    , fusionTests
+    ]
 
 
 mergeLocsTests :: TestTree
@@ -119,3 +124,29 @@ mergeLocsTests =
     mkLocFile :: String -> ((Int, Int)) -> ((Int, Int)) -> SrcLoc
     mkLocFile filename (startLine, startCol) (endLine, endCol) =
       SrcLoc "package" "Module" filename startLine startCol endLine endCol
+
+fusionTests :: TestTree
+fusionTests =
+  testGroup
+    "fusion"
+    [ testCase "fused map sourcelocs" $ do
+        let expectedStart = __LINE__ + 1
+            ys            = A.map (* 2)     (A.use xs)
+            ys'           = A.map (+ 2)     ys
+            ys''          = A.map (`div` 2) ys'
+            expectedEnd   = __LINE__ - 1
+            expectedFile  = __FILE__
+
+            Just ann      = getAnn (A.convertAcc ys'')
+            locs          = mergeLocs (locations ann)
+
+        assertEqual "there should be only one location" 1 (length locs)
+        let [((fn, loc) : _)] = locs
+        assertEqual "the merged function name should be correct" "map, use, map, map" fn
+        assertEqual "srcLocFile loc == expectedFile" expectedFile (srcLocFile loc)
+        assertEqual "srcLocStartLine loc == expectedStart" expectedStart (srcLocStartLine loc)
+        assertEqual "srcLocEndLine loc == expectedEnd" expectedEnd (srcLocEndLine loc)
+    ]
+  where
+    xs :: A.Vector Int
+    xs = A.fromList (A.Z A.:. 10) [1..]
