@@ -490,7 +490,7 @@ zip7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
      -> Acc (Array sh (a, b, c, d, e, f, g))
 zip7 = zipWith7 T7
 
--- | Take seven arrays and return an array of seven-tuples, analogous to zip.
+-- | Take eight arrays and return an array of eight-tuples, analogous to zip.
 --
 zip8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
      => Acc (Array sh a)
@@ -504,7 +504,7 @@ zip8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
      -> Acc (Array sh (a, b, c, d, e, f, g, h))
 zip8 = zipWith8 T8
 
--- | Take seven arrays and return an array of seven-tuples, analogous to zip.
+-- | Take nine arrays and return an array of nine-tuples, analogous to zip.
 --
 zip9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
      => Acc (Array sh a)
