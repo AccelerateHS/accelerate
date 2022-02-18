@@ -553,7 +553,11 @@ library
   cc-options:
         -O3
         -Wall
-        -march=native
+
+  cxx-options:
+        -O3
+        -Wall
+        -std=c++11
 
   ghc-options:
         -O2
@@ -566,7 +570,12 @@ library
         -funbox-strict-fields
         -optc=-O3
         -optc=-Wall
-        -optc=-march=native
+
+  if impl(ghc >= 8.10)
+    ghc-options:
+        -optcxx=-O3
+        -optcxx=-Wall
+        -optcxx=-std=c++11
 
   ghc-prof-options:
         -caf-all
@@ -582,20 +591,24 @@ library
         -DTRACY_NO_SAMPLING
 
     cxx-options:
-        -O3
-        -Wall
-        -std=c++11
-        -march=native
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
 
-    ghc-options:
-        -optcxx=-O3
-        -optcxx=-Wall
-        -optcxx=-std=c++11
-        -optcxx=-march=native
+    if impl(ghc >= 8.10)
+      ghc-options:
         -optcxx=-DTRACY_ENABLE
         -optcxx=-DTRACY_NO_SAMPLING
+
+    -- Accelerate's backends may use dynamic linking to load compiled kernels
+    -- that directly call Tracy's functions. In that case these symbols need to
+    -- be available in the global namespace. @-rdynamic@ implies
+    -- @-Wl,--export-dynamic@, which adds every symbol to the dynamic symbol
+    -- table. There's also a @--export-dynamic-symbol=glob@ and a
+    -- @--export-dynamic-symbol-list=file@ but these seem to be less portable
+    -- between compilers.
+    if !os(windows)
+      ld-options:
+        -rdynamic
 
   if flag(bounds-checks)
     cpp-options:
@@ -610,11 +623,27 @@ library
         -DACCELERATE_INTERNAL_CHECKS
 
   if os(windows)
-    cpp-options:        -DWIN32
-    build-depends:      Win32
+    cpp-options:
+        -DWIN32
+    build-depends:
+        Win32
   else
-    cpp-options:        -DUNIX
-    build-depends:      unix
+    cpp-options:
+        -DUNIX
+    build-depends:
+        unix
+
+  -- https://stackoverflow.com/questions/65966969/why-does-march-native-not-work-on-apple-m1
+  if !(os(darwin) && arch(aarch64))
+    cc-options:
+        -march=native
+    cxx-options:
+        -march=native
+    ghc-options:
+        -optc=-march=native
+    if impl(ghc >= 8.10)
+      ghc-options:
+        -optcxx=-march=native
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
@@ -628,6 +657,7 @@ test-suite doctest
   default-language:     Haskell2010
   hs-source-dirs:       test/doctest
   main-is:              Main.hs
+  other-modules:        Build_doctests
   autogen-modules:      Build_doctests
 
   build-depends:
