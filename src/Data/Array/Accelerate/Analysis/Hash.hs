@@ -47,9 +47,8 @@ import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
+import Crypto.Hash.XKCP
 
-import Crypto.Hash
-import qualified Data.Hashable as Hashable
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
 import Data.ByteString.Short.Internal                               ( ShortByteString(..) )
@@ -57,12 +56,13 @@ import Data.Monoid
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName                                        ( hashStableName, makeStableName )
 import Prelude                                                      hiding ( exp )
+import qualified Data.Hashable                                      as Hashable
 
 
 -- Hashing
 -- -------
 
-type Hash = Digest SHA3_256
+type Hash = SHA3_256
 
 data HashOptions = HashOptions
   { perfect :: Bool
