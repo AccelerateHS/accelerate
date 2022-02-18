@@ -50,10 +50,8 @@ newtype Atomic = Atomic ( Ptr Int64 )
 --   write a v
 --   return a
 
--- FIXME: HLS requires stubs because it does not process the
---        'addForeignFilePath' calls when evaluating Template Haskell
+-- SEE: [HLS and GHC IDE]
 --
---        https://github.com/haskell/haskell-language-server/issues/365
 #ifndef __GHCIDE__
 
 -- | Get the current value.

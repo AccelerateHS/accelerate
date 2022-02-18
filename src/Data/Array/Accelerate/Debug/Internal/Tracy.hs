@@ -27,10 +27,8 @@ import Language.Haskell.TH.Syntax
 type Zone   = Word64
 type SrcLoc = Word64
 
--- FIXME: HLS requires stubs because it does not process the
---        'addForeignFilePath' calls when evaluating Template Haskell
+-- SEE: [HLS and GHC IDE]
 --
---        https://github.com/haskell/haskell-language-server/issues/365
 #if defined(ACCELERATE_DEBUG) && !defined(__GHCIDE__)
 
 foreign import ccall unsafe "___tracy_init_thread" init_thread :: IO ()
