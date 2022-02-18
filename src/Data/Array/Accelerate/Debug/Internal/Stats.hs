@@ -33,13 +33,13 @@ import Data.Map                                           ( Map )
 import Data.Ord                                           ( comparing )
 import Data.Text                                          ( Text )
 import Data.Text.Lazy.Builder
-import Data.Text.Prettyprint.Doc                          hiding ( annotate, Doc )
-import Data.Text.Prettyprint.Doc.Internal                 ( SimpleDocStream(..), textSpaces )
-import Data.Text.Prettyprint.Doc.Render.Util.Panic        ( panicUncaughtFail )
 import Formatting
+import Prettyprinter                                      hiding ( annotate, Doc )
+import Prettyprinter.Internal                             ( SimpleDocStream(..), textSpaces )
+import Prettyprinter.Render.Util.Panic                    ( panicUncaughtFail )
 import System.IO.Unsafe
 import qualified Data.Map                                 as Map
-import qualified Data.Text.Prettyprint.Doc                as Pretty
+import qualified Prettyprinter                            as Pretty
 
 
 -- Recording statistics

@@ -39,11 +39,12 @@ import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
 import Data.Bits
 import Data.Monoid
 import Data.Text                                                    ( Text )
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.Text
-import GHC.Float                                                    ( float2Double, double2Float )
+import Prettyprinter
+import Prettyprinter.Render.Text
 import Prelude                                                      hiding ( exp )
 import qualified Prelude                                            as P
+
+import GHC.Float                                                    ( float2Double, double2Float )
 
 
 -- Propagate constant expressions, which are either constant valued expressions

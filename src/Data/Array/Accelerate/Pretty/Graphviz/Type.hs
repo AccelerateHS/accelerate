@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Pretty.Graphviz.Type
 import Data.Hashable
 import Data.Maybe
 import Data.Text                                          ( Text )
-import Data.Text.Prettyprint.Doc
+import Prettyprinter
 import Text.Printf
 import qualified Data.Text                                as Text
 

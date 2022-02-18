@@ -46,9 +46,9 @@ import Data.Array.Accelerate.Trafo
 import Data.Array.Accelerate.Trafo.Delayed
 
 import Data.Maybe
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.String
-import Data.Text.Prettyprint.Doc.Render.Terminal
+import Prettyprinter
+import Prettyprinter.Render.String
+import Prettyprinter.Render.Terminal
 import System.Environment
 import System.IO
 import System.IO.Unsafe

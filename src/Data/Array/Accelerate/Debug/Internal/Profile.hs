@@ -144,10 +144,8 @@ emit_remote_gc = void $ Atomic.add __num_remote_gcs 1
 -- Monitoring variables
 -- --------------------
 
--- FIXME: HLS requires stubs because it does not process the
---        'addForeignFilePath' calls when evaluating Template Haskell
+-- SEE: [HLS and GHC IDE]
 --
---        https://github.com/haskell/haskell-language-server/issues/365
 #ifndef __GHCIDE__
 
 foreign import ccall "&__total_bytes_allocated_local"     __total_bytes_allocated_local     :: Atomic -- bytes allocated in the local (CPU) memory space
