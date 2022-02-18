@@ -37,8 +37,8 @@ import qualified Data.ByteString.Lazy                               as L
 import qualified Data.ByteString.Lazy.Internal                      as L
 import qualified Data.ByteString.Unsafe                             as B
 
-import GHC.Base
 import GHC.Exts
+import GHC.Base
 import GHC.Word
 
 

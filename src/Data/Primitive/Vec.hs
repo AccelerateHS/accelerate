@@ -39,8 +39,8 @@ module Data.Primitive.Vec (
 import Control.Monad.ST
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
-import Data.Text.Prettyprint.Doc
 import Language.Haskell.TH.Extra
+import Prettyprinter
 
 import GHC.Base                                                     ( isTrue# )
 import GHC.Int
