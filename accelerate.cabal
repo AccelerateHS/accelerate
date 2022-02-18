@@ -346,7 +346,7 @@ library
         , hedgehog                      >= 0.5
         , microlens                     >= 0.4
         , mtl                           >= 2.0
-        , prettyprinter                 >= 1.6.1
+        , prettyprinter                 >= 1.7
         , prettyprinter-ansi-terminal   >= 1.0
         , primitive                     >= 0.6.4
         , tasty                         >= 0.11

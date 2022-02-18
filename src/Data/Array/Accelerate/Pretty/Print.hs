@@ -72,8 +72,8 @@ import qualified Data.Array.Accelerate.Trafo.Delayed                as Delayed
 
 import Data.Char
 import Data.String
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.Terminal
+import Prettyprinter
+import Prettyprinter.Render.Terminal
 import Prelude                                                      hiding ( exp )
 
 
