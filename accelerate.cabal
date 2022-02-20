@@ -628,13 +628,9 @@ library
         -DACCELERATE_INTERNAL_CHECKS
 
   if os(windows)
-    cpp-options:
-        -DWIN32
     build-depends:
         Win32
   else
-    cpp-options:
-        -DUNIX
     build-depends:
         unix
 

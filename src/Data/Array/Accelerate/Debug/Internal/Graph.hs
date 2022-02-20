@@ -28,12 +28,10 @@ import System.FilePath                                              ( (</>) )
 import System.IO                                                    ( Handle, openTempFile, hPutStrLn, hPrint, hClose, stderr )
 import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
 
-#if   defined(UNIX)
-import System.Posix.Process                                         ( getProcessID )
-#elif defined(WIN32)
+#if defined(mingw32_HOST_OS)
 import System.Win32.Process                                         ( ProcessId )
 #else
-#error "I don't know what operating system I am"
+import System.Posix.Process                                         ( getProcessID )
 #endif
 #endif
 
@@ -66,7 +64,7 @@ withTemporaryFile template go = do
   createDirectoryIfMissing True dir
   bracket (openTempFile dir template) (hClose . snd) (uncurry go)
 
-#ifdef WIN32
+#if defined(mingw32_HOST_OS)
 getProcessID :: IO ProcessId
 getProcessID = return 0xaaaa
 #endif
