@@ -628,6 +628,9 @@ library
         -DACCELERATE_INTERNAL_CHECKS
 
   if os(windows)
+    cc-options:
+        -- https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
+        -fno-asynchronous-unwind-tables
     build-depends:
         Win32
   else
