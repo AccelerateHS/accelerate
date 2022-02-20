@@ -38,7 +38,9 @@ import GHC.Prim
 import GHC.Stats
 import GHC.Types
 import GHC.Word
-#if MIN_VERSION_base(4,15,0)
+#if   MIN_VERSION_base(4,16,0)
+import GHC.Float
+#elif MIN_VERSION_base(4,15,0)
 import GHC.Integer
 #else
 import GHC.Num
@@ -78,7 +80,11 @@ timed_simpl fmt action = do
   cpu1  <- liftIO getCPUTime
   --
   let wallTime = wall1 - wall0
+#if MIN_VERSION_base(4,16,0)
+      cpuTime  = D# (integerToDouble# (cpu1 - cpu0) *## 1E-12##)
+#else
       cpuTime  = D# (doubleFromInteger (cpu1 - cpu0) *## 1E-12##)
+#endif
   --
   liftIO $ putTraceMsg builder (bformat fmt wallTime cpuTime) -- XXX
   return res
