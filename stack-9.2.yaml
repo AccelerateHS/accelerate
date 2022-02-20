@@ -8,7 +8,9 @@ resolver: nightly-2022-02-19
 packages:
 - .
 
-# extra-deps: []
+extra-deps:
+- base-compat-0.12.1
+- doctest-0.20.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
