@@ -681,6 +681,10 @@ test-suite doctest
         -freduction-depth=100
         -fspec-constr-count=50
 
+  if os(windows)
+    ghc-options:
+        -fexternal-interpreter
+
 
 test-suite nofib-interpreter
   type:                 exitcode-stdio-1.0
@@ -702,6 +706,10 @@ test-suite nofib-interpreter
         -rtsopts
         -with-rtsopts=-A128M
         -with-rtsopts=-n4M
+
+  if os(windows)
+    ghc-options:
+        -fexternal-interpreter
 
 
 executable tracy
