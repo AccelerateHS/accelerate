@@ -19,9 +19,9 @@ jobs:
     strategy:
       matrix:
         ghc:
-          # - "9.2"
-          # - "9.0"   XXX: ghc install fails
-          # - "8.10"  XXX: borked?
+          - "9.2"
+          - "9.0"
+          - "8.10"
           - "8.8"
           - "8.6"
 
