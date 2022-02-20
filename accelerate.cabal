@@ -633,6 +633,7 @@ library
         -fno-asynchronous-unwind-tables
     ghc-options:
         -optc=-fno-asynchronous-unwind-tables
+        -fexternal-interpreter
     build-depends:
         Win32
   else
