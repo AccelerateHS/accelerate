@@ -17,6 +17,7 @@ jobs:
   build:
     runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
         ghc:
           - "9.2"
