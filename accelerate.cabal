@@ -361,6 +361,8 @@ library
         , unique
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
+        , posable                       >= 0.9.0.0
+        , ghc-typelits-knownnat         >= 0.7.6
 
   exposed-modules:
         -- The core language and reference implementation
@@ -400,6 +402,7 @@ library
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Representation.Array
+        Data.Array.Accelerate.Representation.POS
         Data.Array.Accelerate.Representation.Elt
         Data.Array.Accelerate.Representation.Shape
         Data.Array.Accelerate.Representation.Slice

@@ -7,7 +7,9 @@ resolver: nightly-2022-02-16
 packages:
 - .
 
-# extra-deps: []
+extra-deps:
+- ../sizeof
+
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

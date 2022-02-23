@@ -2,6 +2,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Representation.Shape
@@ -19,6 +27,8 @@ module Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.POS
+import Data.Type.POSable.Representation
 
 import Language.Haskell.TH.Extra
 import Prelude                                                      hiding ( zip )
@@ -195,3 +205,32 @@ liftShapeR :: ShapeR sh -> CodeQ (ShapeR sh)
 liftShapeR ShapeRz         = [|| ShapeRz ||]
 liftShapeR (ShapeRsnoc sh) = [|| ShapeRsnoc $$(liftShapeR sh) ||]
 
+
+instance POSable (ShapeR ()) where
+  type Choices (ShapeR ()) = 1
+  choices x = 0
+
+  emptyChoices = 0
+
+  fromPOSable cs fs = ShapeRz
+
+  type Fields (ShapeR ()) = '[]
+
+  fields ShapeRz = Nil
+
+  emptyFields = PTNil
+
+
+instance (POSable (ShapeR sh)) => POSable (ShapeR (sh, Int)) where
+  type Choices (ShapeR (sh, Int)) = 1
+  choices x = 0
+
+  emptyChoices = 0
+
+  fromPOSable 0 (Cons x xs) = ShapeRsnoc (fromPOSable 0 xs)
+
+  type Fields (ShapeR (sh, Int)) = '[] ': Fields (ShapeR sh)
+
+  fields (ShapeRsnoc sh) = Cons Undef (fields sh)
+
+  emptyFields = PTCons STZero (emptyFields @(ShapeR sh))
