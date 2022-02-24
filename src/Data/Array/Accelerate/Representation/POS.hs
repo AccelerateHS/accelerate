@@ -26,7 +26,9 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Representation.POS (POSable(..), POS, POST, mkPOS, fromPOS)
+module Data.Array.Accelerate.Representation.POS (
+  POSable(..), POS, POST, mkPOS, mkPOST, fromPOS, Product(..), Sum(..),
+  GroundType, Finite)
   where
 
 import Data.Array.Accelerate.Type
@@ -101,7 +103,10 @@ runQ $ do
       mkSimple name =
         let t = conT name
         in
-        [d| instance POSable $t where
+        [d|
+            instance GroundType $t
+
+            instance POSable $t where
               type Choices $t = 1
               choices _ = 0
 

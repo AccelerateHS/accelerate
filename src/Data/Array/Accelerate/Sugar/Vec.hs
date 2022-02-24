@@ -2,8 +2,15 @@
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE NoStarIsType #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- |
 -- Module      : Data.Array.Accelerate.Sugar.Vec
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -20,20 +27,34 @@ module Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.POS
 import Data.Array.Accelerate.Type
 import Data.Primitive.Types
 import Data.Primitive.Vec
+import Data.Kind
 
 import GHC.TypeLits
 import GHC.Prim
 
 
-type VecElt a = (Elt a, Prim a, IsSingle a, EltR a ~ a)
+type VecElt a = (Elt a, Prim a, IsSingle a)
 
-instance (KnownNat n, VecElt a) => Elt (Vec n a) where
-  type EltR (Vec n a) = Vec n a
-  eltR    = TupRsingle (VectorScalarType (VectorType (fromIntegral (natVal' (proxy# :: Proxy# n))) singleType))
-  tagsR   = [TagRsingle (VectorScalarType (VectorType (fromIntegral (natVal' (proxy# :: Proxy# n))) singleType))]
-  toElt   = id
-  fromElt = id
+instance GroundType (Vec n a)
 
+instance (KnownNat n, VecElt a) => POSable (Vec n a) where
+    type Choices (Vec n a) = 1
+
+    choices _ = 0
+
+    emptyChoices = 0
+
+    fromPOSable 0 (Cons (Pick x) Nil) = x
+
+    type Fields (Vec n a) = '[ '[Vec n a]]
+    fields x = Cons (Pick x) Nil
+
+    emptyFields = undefined
+
+
+-- Elt instance automatically derived from POSable instance
+instance (KnownNat n, VecElt a) => (Elt (Vec n a))
