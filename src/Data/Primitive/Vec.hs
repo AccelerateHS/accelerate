@@ -267,7 +267,7 @@ replicateVecN :: forall a n . (KnownNat n, Prim a) => a -> Vec n a
 replicateVecN x = runST $ do
   let n = fromInteger $ natVal (Proxy :: Proxy n)
   mba <- newByteArray (n * sizeOf x)
-  mapM_ (\n' -> writeByteArray mba n x) [0..n]
+  mapM_ (\n' -> writeByteArray mba n' x) [0..n]
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
 
