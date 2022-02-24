@@ -28,7 +28,7 @@
 
 module Data.Array.Accelerate.Representation.POS (
   POSable(..), POS, POST, mkPOS, mkPOST, fromPOS, Product(..), Sum(..),
-  GroundType, Finite)
+  GroundType, Finite, ProductType(..), SumType(..))
   where
 
 import Data.Array.Accelerate.Type

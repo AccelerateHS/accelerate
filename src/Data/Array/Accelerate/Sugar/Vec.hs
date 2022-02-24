@@ -41,7 +41,7 @@ type VecElt a = (Elt a, Prim a, IsSingle a)
 
 instance GroundType (Vec n a)
 
-instance (KnownNat n, VecElt a) => POSable (Vec n a) where
+instance (KnownNat n, VecElt a, Num a) => POSable (Vec n a) where
     type Choices (Vec n a) = 1
 
     choices _ = 0
@@ -53,8 +53,8 @@ instance (KnownNat n, VecElt a) => POSable (Vec n a) where
     type Fields (Vec n a) = '[ '[Vec n a]]
     fields x = Cons (Pick x) Nil
 
-    emptyFields = undefined
+    emptyFields = PTCons (STSucc (replicateVecN 0) STZero) PTNil
 
 
 -- Elt instance automatically derived from POSable instance
-instance (KnownNat n, VecElt a) => (Elt (Vec n a))
+instance (KnownNat n, VecElt a, Num a) => (Elt (Vec n a))

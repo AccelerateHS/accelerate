@@ -10,6 +10,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE UnboxedTuples       #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Primitive.Vec
@@ -34,6 +35,8 @@ module Data.Primitive.Vec (
   listOfVec,
   liftVec,
 
+  replicateVecN,
+
 ) where
 
 import Control.Monad.ST
@@ -48,6 +51,7 @@ import GHC.Prim
 import GHC.TypeLits
 import GHC.Word
 
+import Data.Proxy
 
 -- Note: [Representing SIMD vector types]
 --
@@ -256,6 +260,14 @@ packVec16 a b c d e f g h i j k l m n o p = runST $ do
   writeByteArray mba 13 n
   writeByteArray mba 14 o
   writeByteArray mba 15 p
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
+
+replicateVecN :: forall a n . (KnownNat n, Prim a) => a -> Vec n a
+replicateVecN x = runST $ do
+  let n = fromInteger $ natVal (Proxy :: Proxy n)
+  mba <- newByteArray (n * sizeOf x)
+  mapM_ (\n' -> writeByteArray mba n x) [0..n]
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
 
