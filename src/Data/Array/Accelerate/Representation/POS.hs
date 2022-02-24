@@ -43,6 +43,7 @@ import GHC.TypeLits
 
 import Data.Type.POSable.POSable
 import Data.Type.POSable.Representation
+import Data.Type.POSable.Instances
 
 type POS a = (Finite (Choices a), Product (Fields a))
 
@@ -141,9 +142,9 @@ runQ $ do
   --
   ss <- mapM mkSimple (integralTypes ++ floatingTypes)
   ns <- mapM mkNewtype newtypes
-  ts <- mapM mkTuple [2..16]
+  -- ts <- mapM mkTuple [2..16]
   -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
-  return (concat ss ++ concat ns ++ ts)
+  return (concat ss ++ concat ns)
 
 
 type family Snoc2List x = xs | xs -> x where

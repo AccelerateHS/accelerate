@@ -208,11 +208,11 @@ liftShapeR (ShapeRsnoc sh) = [|| ShapeRsnoc $$(liftShapeR sh) ||]
 
 instance POSable (ShapeR ()) where
   type Choices (ShapeR ()) = 1
-  choices x = 0
+  choices _ = 0
 
   emptyChoices = 0
 
-  fromPOSable cs fs = ShapeRz
+  fromPOSable _ _ = ShapeRz
 
   type Fields (ShapeR ()) = '[]
 
@@ -223,11 +223,11 @@ instance POSable (ShapeR ()) where
 
 instance (POSable (ShapeR sh)) => POSable (ShapeR (sh, Int)) where
   type Choices (ShapeR (sh, Int)) = 1
-  choices x = 0
+  choices _ = 0
 
   emptyChoices = 0
 
-  fromPOSable 0 (Cons x xs) = ShapeRsnoc (fromPOSable 0 xs)
+  fromPOSable 0 (Cons _ xs) = ShapeRsnoc (fromPOSable 0 xs)
 
   type Fields (ShapeR (sh, Int)) = '[] ': Fields (ShapeR sh)
 
