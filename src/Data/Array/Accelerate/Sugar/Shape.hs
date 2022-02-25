@@ -43,6 +43,7 @@ import GHC.Generics
 class Elt' a where
   type EltR a
 
+  eltR :: TypeR (EltR a)
   fromElt :: a -> EltR a
   toElt :: EltR a -> a
 

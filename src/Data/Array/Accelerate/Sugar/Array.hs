@@ -22,13 +22,15 @@
 module Data.Array.Accelerate.Sugar.Array
   where
 
-import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Representation.Type
 import qualified Data.Array.Accelerate.Representation.Array         as R
 
 import Control.DeepSeq
 import Data.Kind
+import Data.Char
+import Data.Word
 import Data.Typeable
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 import System.IO.Unsafe
@@ -40,6 +42,12 @@ import qualified GHC.Exts                                           as GHC
 -- $setup
 -- >>> :seti -XOverloadedLists
 
+instance Elt' Char where
+  type EltR Char = Word32
+  eltR    = TupRsingle scalarType
+  -- tagsR   = [TagRsingle scalarType]
+  toElt   = chr . fromIntegral
+  fromElt = fromIntegral . ord
 
 type Scalar = Array DIM0    -- ^ Scalar arrays hold a single element
 type Vector = Array DIM1    -- ^ Vectors are one-dimensional arrays
@@ -95,14 +103,14 @@ type Segments = Vector
 newtype Array sh e = Array (R.Array (EltR sh) (EltR e))
   deriving Typeable
 
-instance (Shape sh, Elt e, Eq sh, Eq e) => Eq (Array sh e) where
+instance (Shape sh, Elt' e, Eq sh, Eq e) => Eq (Array sh e) where
   arr1 == arr2 = shape arr1 == shape arr2 && toList arr1 == toList arr2
   arr1 /= arr2 = shape arr1 /= shape arr2 || toList arr1 /= toList arr2
 
-instance (Shape sh, Elt e, Show e) => Show (Array sh e) where
+instance (Shape sh, Elt' e, Show e) => Show (Array sh e) where
   show (Array arr) = R.showArray (shows . toElt @e) (arrayR @sh @e) arr
 
-instance Elt e => IsList (Vector e) where
+instance Elt' e => IsList (Vector e) where
   type Item (Vector e) = e
   toList      = toList
   fromListN n = fromList (Z:.n)
@@ -111,7 +119,7 @@ instance Elt e => IsList (Vector e) where
 instance IsString (Vector Char) where
   fromString s = fromList (Z :. length s) s
 
-instance (Shape sh, Elt e) => NFData (Array sh e) where
+instance (Shape sh, Elt' e) => NFData (Array sh e) where
   rnf (Array arr) = R.rnfArray (arrayR @sh @e) arr
 
 -- Note: [Embedded class constraints on Array]
@@ -146,26 +154,26 @@ reshape sh (Array arr) = Array $ R.reshape (shapeR @sh) (fromElt sh) (shapeR @sh
 -- | Return the value of an array at the given multidimensional index
 --
 infixl 9 !
-(!) :: forall sh e. (Shape sh, Elt e) => Array sh e -> sh -> e
+(!) :: forall sh e. (Shape sh, Elt' e) => Array sh e -> sh -> e
 (!) (Array arr) ix = toElt $ R.indexArray (arrayR @sh @e) arr (fromElt ix)
 
 -- | Return the value of an array at given the linear (row-major) index
 --
 infixl 9 !!
-(!!) :: forall sh e. Elt e => Array sh e -> Int -> e
+(!!) :: forall sh e. Elt' e => Array sh e -> Int -> e
 (!!) (Array arr) i = toElt $ R.linearIndexArray (eltR @e) arr i
 
 -- | Create an array from its representation function, applied at each
 -- index of the array
 --
-fromFunction :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
+fromFunction :: (Shape sh, Elt' e) => sh -> (sh -> e) -> Array sh e
 fromFunction sh f = unsafePerformIO $! fromFunctionM sh (return . f)
 
 -- | Create an array using a monadic function applied at each index
 --
 -- @since 1.2.0.0
 --
-fromFunctionM :: forall sh e. (Shape sh, Elt e) => sh -> (sh -> IO e) -> IO (Array sh e)
+fromFunctionM :: forall sh e. (Shape sh, Elt' e) => sh -> (sh -> IO e) -> IO (Array sh e)
 fromFunctionM sh f = Array <$> R.fromFunctionM (arrayR @sh @e) (fromElt sh) f'
   where
     f' x = do
@@ -174,12 +182,12 @@ fromFunctionM sh f = Array <$> R.fromFunctionM (arrayR @sh @e) (fromElt sh) f'
 
 -- | Create a vector from the concatenation of the given list of vectors
 --
-concatVectors :: forall e. Elt e => [Vector e] -> Vector e
+concatVectors :: forall e. Elt' e => [Vector e] -> Vector e
 concatVectors = toArr . R.concatVectors (eltR @e) . map fromArr
 
 -- | Creates a new, uninitialized Accelerate array
 --
-allocateArray :: forall sh e. (Shape sh, Elt e) => sh -> IO (Array sh e)
+allocateArray :: forall sh e. (Shape sh, Elt' e) => sh -> IO (Array sh e)
 allocateArray sh = Array <$> R.allocateArray (arrayR @sh @e) (fromElt sh)
 
 -- | Convert elements of a list into an Accelerate 'Array'
@@ -212,12 +220,12 @@ allocateArray sh = Array <$> R.allocateArray (arrayR @sh @e) (fromElt sh)
 -- and then traversing it a second time to collect the elements into the array,
 -- thus forcing the spine of the list to be manifest on the heap.
 --
-fromList :: forall sh e. (Shape sh, Elt e) => sh -> [e] -> Array sh e
+fromList :: forall sh e. (Shape sh, Elt' e) => sh -> [e] -> Array sh e
 fromList sh xs = toArr $ R.fromList (arrayR @sh @e) (fromElt sh) $ map fromElt xs
 
 -- | Convert an accelerated 'Array' to a list in row-major order
 --
-toList :: forall sh e. (Shape sh, Elt e) => Array sh e -> [e]
+toList :: forall sh e. (Shape sh, Elt' e) => Array sh e -> [e]
 toList = map toElt . R.toList (arrayR @sh @e) . fromArr
 
 
@@ -255,7 +263,7 @@ class Arrays a where
     => a -> ArraysR a
   fromArr = (`gfromArr` ()) . from
 
-arrayR :: forall sh e. (Shape sh, Elt e) => R.ArrayR (R.Array (EltR sh) (EltR e))
+arrayR :: forall sh e. (Shape sh, Elt' e) => R.ArrayR (R.Array (EltR sh) (EltR e))
 arrayR = R.ArrayR (shapeR @sh) (eltR @e)
 
 class GArrays f where
@@ -299,7 +307,7 @@ instance Arrays () where
   fromArr = id
   toArr   = id
 
-instance (Shape sh, Elt e) => Arrays (Array sh e) where
+instance (Shape sh, Elt' e) => Arrays (Array sh e) where
   type ArraysR (Array sh e) = R.Array (EltR sh) (EltR e)
   arraysR = R.arraysRarray (shapeR @sh) (eltR @e)
   fromArr (Array arr) = arr
