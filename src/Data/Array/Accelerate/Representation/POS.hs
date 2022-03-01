@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE PolyKinds            #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
@@ -51,6 +52,14 @@ import Numeric.Half
 import Foreign.C.Types
 
 type POS a = (Finite (Choices a), Product (Fields a))
+
+type family EltR (cs :: Nat) (fs :: f (g a)) :: Type where
+  EltR 1 x = FlattenProduct x
+  EltR n x = (Finite n, FlattenProduct x)
+
+type family FlattenProduct (xss :: f (g a)) :: Type where
+  FlattenProduct '[] = ()
+  FlattenProduct (x ': xs) = (Sum x, FlattenProduct xs)
 
 mkPOS :: (POSable a) => a -> POS a
 mkPOS x = (choices x, fields x)
