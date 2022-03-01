@@ -31,7 +31,7 @@ module Data.Array.Accelerate.Representation.POS (
   GroundType, Finite, ProductType(..), SumType(..))
   where
 
-import Data.Array.Accelerate.Type
+-- import Data.Array.Accelerate.Type
 
 import Data.Bits
 import Data.Char
@@ -44,6 +44,11 @@ import GHC.TypeLits
 import Data.Type.POSable.POSable
 import Data.Type.POSable.Representation
 import Data.Type.POSable.Instances
+
+import Data.Int
+import Data.Word
+import Numeric.Half
+import Foreign.C.Types
 
 type POS a = (Finite (Choices a), Product (Fields a))
 
