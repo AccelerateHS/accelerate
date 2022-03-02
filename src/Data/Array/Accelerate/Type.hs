@@ -94,15 +94,15 @@ import GHC.TypeLits
 import Unsafe.Coerce
 
 
-type family EltR (cs :: Nat) fs :: Type where
-  EltR 1 x = FlattenProduct x
-  EltR n x = (Finite n, FlattenProduct x)
+type family POStoEltR (cs :: Nat) fs :: Type where
+  POStoEltR 1 x = FlattenProduct x
+  POStoEltR n x = (Finite n, FlattenProduct x)
 
-type family FlattenProduct (xss :: f (g a)) :: Type where
+type family FlattenProduct (xss :: f (g a)) = (r :: Type) | r -> f where
   FlattenProduct '[] = ()
   FlattenProduct (x ': xs) = (ScalarType (FlattenSum x), FlattenProduct xs)
 
-type family FlattenSum (xss :: f a) :: Type where
+type family FlattenSum (xss :: f a) = (r :: Type) | r -> f where
   FlattenSum '[] = ()
   FlattenSum (x ': xs) = (x, FlattenSum xs)
 
@@ -110,7 +110,11 @@ flattenProduct :: Product a -> FlattenProduct a
 flattenProduct Nil = ()
 flattenProduct (Cons x xs) = (SumScalarType x, flattenProduct xs)
 
-mkEltR :: forall a . (POSable a) => a -> EltR (Choices a) (Fields a)
+-- unFlattenProduct :: FlattenProduct a -> Product a
+-- unFlattenProduct () = Nil
+-- unFlattenProduct (SumScalarType x, xs) = Cons x (unFlattenProduct xs)
+
+mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)
 mkEltR x = case natVal cs of
              -- This distinction is hard to express in a type-correct way,
              -- hence the unsafeCoerce
@@ -119,6 +123,14 @@ mkEltR x = case natVal cs of
   where
     cs = choices x
     fs = flattenProduct (fields x)
+
+
+fromEltR :: forall a . (POSable a) => POStoEltR (Choices a) (Fields a) -> a
+fromEltR x = fromPOSable cs fs
+  where
+    (cs, fs) = case natVal (emptyChoices @a) of
+      1 -> (0, unsafeCoerce x)
+      _ -> unsafeCoerce x
 
 -- Scalar types
 -- ------------

@@ -20,6 +20,7 @@ module Data.Array.Accelerate.Representation.Type
 
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
+import Data.Array.Accelerate.Representation.POS
 
 import Formatting
 import Language.Haskell.TH.Extra
@@ -43,9 +44,9 @@ data TupR s a where
   TupRsingle :: s a                  -> TupR s a
   TupRpair   :: TupR s a -> TupR s b -> TupR s (a, b)
 
-productToTupR :: Product a -> TypeR (FlattenProduct a)
-productToTupR Nil = TupRunit
-productToTupR (Cons x xs) = TupRpair x (productToTupR xs)
+-- productToTupR :: Product a -> TypeR (FlattenProduct a)
+-- productToTupR Nil = TupRunit
+-- productToTupR (Cons x xs) = TupRpair x (productToTupR xs)
 
 instance Show (TupR ScalarType a) where
   show TupRunit       = "()"

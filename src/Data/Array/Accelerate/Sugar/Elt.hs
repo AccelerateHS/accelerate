@@ -82,21 +82,23 @@ class Elt a where
   -- from the surface type into the internal representation type consisting
   -- only of simple primitive types, unit '()', and pair '(,)'.
   --
+  type EltR a :: Type
+  type EltR a = POStoEltR (Choices a) (Fields a)
 
   --
-  -- eltR    :: EltRT a
-  -- tagsR   :: [TagR (EltR a)]
-  fromElt :: a -> POS a
-  toElt   :: POS a -> a
+  eltR    :: TypeR (EltR a)
+  tagsR   :: [TagR (EltR a)]
+  fromElt :: a -> EltR a
+  toElt   :: EltR a -> a
 
   -- default eltR :: (POSable a) => EltRT a
   -- eltR = mkPOST @a
 
-  default fromElt :: (POSable a) => a -> POS a
-  fromElt a = mkPOS a
+  default fromElt :: (POSable a, POStoEltR (Choices a) (Fields a) ~ EltR a) => a -> EltR a
+  fromElt a = mkEltR a
 
-  default toElt :: (POSable a) => POS a -> a
-  toElt a = fromPOS a
+  default toElt :: (POSable a,  POStoEltR (Choices a) (Fields a) ~ EltR a) => EltR a -> a
+  toElt a = fromEltR a
 
 
 untag :: TypeR t -> TagR t
