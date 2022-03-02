@@ -51,15 +51,31 @@ import Data.Word
 import Numeric.Half
 import Foreign.C.Types
 
+-- import Data.Array.Accelerate.Representation.Type
+
 type POS a = (Finite (Choices a), Product (Fields a))
 
-type family EltR (cs :: Nat) (fs :: f (g a)) :: Type where
+type family EltR (cs :: Nat) (fs :: f (g a)) = (r :: Type) where
   EltR 1 x = FlattenProduct x
   EltR n x = (Finite n, FlattenProduct x)
 
 type family FlattenProduct (xss :: f (g a)) :: Type where
   FlattenProduct '[] = ()
-  FlattenProduct (x ': xs) = (Sum x, FlattenProduct xs)
+  FlattenProduct (x ': xs) = (FlattenSum x, FlattenProduct xs)
+
+type family FlattenSum (xss :: f a) :: Type where
+  FlattenSum '[] = ()
+  FlattenSum (x ': xs) = (x, FlattenSum xs)
+
+mkEltR :: (POSable a) => a -> EltR (Choices a) (Fields a)
+mkEltR x = undefined
+  where
+    cs = choices x
+    fs = fields x
+
+-- productToTupR :: Product a -> TypeR (FlattenProduct a)
+-- productToTupR Nil = TupRunit
+-- productToTupR (Cons x xs) = TupRpair x (productToTupR xs)
 
 mkPOS :: (POSable a) => a -> POS a
 mkPOS x = (choices x, fields x)

@@ -43,6 +43,10 @@ data TupR s a where
   TupRsingle :: s a                  -> TupR s a
   TupRpair   :: TupR s a -> TupR s b -> TupR s (a, b)
 
+productToTupR :: Product a -> TypeR (FlattenProduct a)
+productToTupR Nil = TupRunit
+productToTupR (Cons x xs) = TupRpair x (productToTupR xs)
+
 instance Show (TupR ScalarType a) where
   show TupRunit       = "()"
   show (TupRsingle t) = show t

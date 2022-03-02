@@ -1,19 +1,25 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE RoleAnnotations     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE AllowAmbiguousTypes  #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DefaultSignatures    #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE TypeApplications     #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Type
@@ -66,6 +72,7 @@ module Data.Array.Accelerate.Type (
 ) where
 
 import Data.Array.Accelerate.Orphans () -- Prim Half
+import Data.Array.Accelerate.Representation.POS
 import Data.Primitive.Vec
 
 import Data.Bits
@@ -73,16 +80,45 @@ import Data.Int
 import Data.Primitive.Types
 import Data.Type.Equality
 import Data.Word
+import Data.Kind
 import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
 import Formatting
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra hiding (Type)
 import Numeric.Half
 import Text.Printf
 
 import GHC.Prim
 import GHC.TypeLits
 
+import Unsafe.Coerce
+
+
+type family EltR (cs :: Nat) fs :: Type where
+  EltR 1 x = FlattenProduct x
+  EltR n x = (Finite n, FlattenProduct x)
+
+type family FlattenProduct (xss :: f (g a)) :: Type where
+  FlattenProduct '[] = ()
+  FlattenProduct (x ': xs) = (ScalarType (FlattenSum x), FlattenProduct xs)
+
+type family FlattenSum (xss :: f a) :: Type where
+  FlattenSum '[] = ()
+  FlattenSum (x ': xs) = (x, FlattenSum xs)
+
+flattenProduct :: Product a -> FlattenProduct a
+flattenProduct Nil = ()
+flattenProduct (Cons x xs) = (SumScalarType x, flattenProduct xs)
+
+mkEltR :: forall a . (POSable a) => a -> EltR (Choices a) (Fields a)
+mkEltR x = case natVal cs of
+             -- This distinction is hard to express in a type-correct way,
+             -- hence the unsafeCoerce
+             1 -> unsafeCoerce fs
+             _ -> unsafeCoerce (cs, fs)
+  where
+    cs = choices x
+    fs = flattenProduct (fields x)
 
 -- Scalar types
 -- ------------
@@ -142,6 +178,7 @@ data BoundedType a where
 -- | All scalar element types implement Eq & Ord
 --
 data ScalarType a where
+  SumScalarType    :: Sum a                -> ScalarType (FlattenSum a)
   SingleScalarType :: SingleType a         -> ScalarType a
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
 
