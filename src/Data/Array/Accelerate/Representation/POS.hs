@@ -29,7 +29,7 @@
 
 module Data.Array.Accelerate.Representation.POS (
   POSable(..), POS, POST, mkPOS, mkPOST, fromPOS, Product(..), Sum(..),
-  GroundType, Finite, ProductType(..), SumType(..))
+  GroundType, Finite, ProductType(..), SumType(..), POSable.Generic)
   where
 
 -- import Data.Array.Accelerate.Type
@@ -42,7 +42,7 @@ import Language.Haskell.TH.Extra                                    hiding ( Typ
 import GHC.Generics
 import GHC.TypeLits
 
-import Data.Type.POSable.POSable
+import Data.Type.POSable.POSable as POSable
 import Data.Type.POSable.Representation
 import Data.Type.POSable.Instances
 
@@ -55,27 +55,28 @@ import Foreign.C.Types
 
 type POS a = (Finite (Choices a), Product (Fields a))
 
-type family EltR (cs :: Nat) (fs :: f (g a)) = (r :: Type) where
-  EltR 1 x = FlattenProduct x
-  EltR n x = (Finite n, FlattenProduct x)
+-- type family EltR (cs :: Nat) (fs :: f (g a)) = (r :: Type) where
+--   EltR 1 x = FlattenProduct x
+--   EltR n x = (Finite n, FlattenProduct x)
 
-type family FlattenProduct (xss :: f (g a)) :: Type where
-  FlattenProduct '[] = ()
-  FlattenProduct (x ': xs) = (FlattenSum x, FlattenProduct xs)
+-- type family FlattenProduct (xss :: f (g a)) :: Type where
+--   FlattenProduct '[] = ()
+--   FlattenProduct '[ '[x]] = x
+--   FlattenProduct (x ': xs) = (FlattenSum x, FlattenProduct xs)
 
-type family FlattenSum (xss :: f a) :: Type where
-  FlattenSum '[] = ()
-  FlattenSum (x ': xs) = (x, FlattenSum xs)
+-- type family FlattenSum (xss :: f a) :: Type where
+--   FlattenSum '[] = ()
+--   FlattenSum (x ': xs) = (x, FlattenSum xs)
 
-mkEltR :: (POSable a) => a -> EltR (Choices a) (Fields a)
-mkEltR x = undefined
-  where
-    cs = choices x
-    fs = fields x
+-- mkEltR :: (POSable a) => a -> EltR (Choices a) (Fields a)
+-- mkEltR x = undefined
+--   where
+--     cs = choices x
+--     fs = fields x
 
--- productToTupR :: Product a -> TypeR (FlattenProduct a)
--- productToTupR Nil = TupRunit
--- productToTupR (Cons x xs) = TupRpair x (productToTupR xs)
+-- -- productToTupR :: Product a -> TypeR (FlattenProduct a)
+-- -- productToTupR Nil = TupRunit
+-- -- productToTupR (Cons x xs) = TupRpair x (productToTupR xs)
 
 mkPOS :: (POSable a) => a -> POS a
 mkPOS x = (choices x, fields x)

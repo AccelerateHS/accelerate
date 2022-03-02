@@ -132,6 +132,9 @@ fromEltR x = fromPOSable cs fs
       1 -> (0, unsafeCoerce x)
       _ -> unsafeCoerce x
 
+
+type SingletonType x = (ScalarType (Int, ()), ())
+
 -- Scalar types
 -- ------------
 

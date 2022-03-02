@@ -30,40 +30,16 @@
 module Data.Array.Accelerate.Sugar.Shape
   where
 
--- import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.POS                     as POS
 import qualified Data.Array.Accelerate.Representation.Shape         as R
 import qualified Data.Array.Accelerate.Representation.Slice         as R
 
 import Data.Kind
-import GHC.Generics
+import GHC.Generics as GHC
 
-
-class Elt' a where
-  type EltR a
-
-  eltR :: TypeR (EltR a)
-  fromElt :: a -> EltR a
-  toElt :: EltR a -> a
-
-instance Elt' Int where
-  type EltR Int = Int
-
-  fromElt = id
-  toElt = id
-
-instance Elt' Z where
-  type EltR Z = ()
-
-  fromElt Z = ()
-  toElt () = Z
-
-instance Elt' All where
-  type EltR All = ()
-
-  fromElt All = ()
-  toElt () = All
 
 -- Shorthand for common shape types
 --
@@ -81,14 +57,14 @@ type DIM9 = DIM8 :. Int
 -- | Rank-0 index
 --
 data Z = Z
-  deriving (Show, Eq)
+  deriving (Show, Eq, GHC.Generic, POS.Generic, POSable, Elt)
 
 -- | Increase an index rank by one dimension. The ':.' operator is used to
 -- construct both values and types.
 --
 infixl 3 :.
 data tail :. head = !tail :. !head
-  deriving (Eq, Generic)  -- Not deriving Elt' or Show
+  deriving (Eq, GHC.Generic)  -- Not deriving Elt or Show
 
 -- We don't we use a derived Show instance for (:.) because this will insert
 -- parenthesis to demonstrate which order the operator is applied, i.e.:
@@ -122,7 +98,7 @@ instance (Show sh, Show sz) => Show (sh :. sz) where
 -- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data All = All
-  deriving (Show, Eq)
+  deriving (Show, Eq, GHC.Generic, POS.Generic, POSable, Elt)
 
 -- | Marker for arbitrary dimensions in 'Data.Array.Accelerate.Language.slice'
 -- and 'Data.Array.Accelerate.Language.replicate' descriptors.
@@ -134,7 +110,7 @@ data All = All
 -- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data Any sh = Any
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, GHC.Generic)
 
 -- | Marker for splitting along an entire dimension in division descriptors.
 --
@@ -151,7 +127,7 @@ data Split = Split
 -- For example, in the following definition, 'Divide' matches against any shape
 -- and flattens everything but the innermost dimension.
 --
--- > vectors :: (Shape sh, Elt' e) => Acc (Array (sh:.Int) e) -> Seq [Vector e]
+-- > vectors :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Vector e]
 -- > vectors = toSeq (Divide :. All)
 --
 data Divide sh = Divide
@@ -266,7 +242,7 @@ sliceShape slx = toElt . R.sliceShape slx . fromElt
 -- | Project the full shape from a slice
 --
 sliceDomain
-    :: (Elt' slix, Shape sl, Shape dim)
+    :: (Elt slix, Shape sl, Shape dim)
     => R.SliceIndex (EltR slix) (EltR sl) co (EltR dim)
     -> slix
     -> sl
@@ -283,7 +259,7 @@ sliceDomain slx slix sl = toElt $ R.sliceDomain slx (fromElt slix) (fromElt sl)
 -- > in
 -- > enumSlices slix sh :: [ Z :. Int :. Int :. All ]
 --
-enumSlices :: forall slix co sl dim. (Elt' slix, Elt' dim)
+enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            => R.SliceIndex (EltR slix) sl co (EltR dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
@@ -291,7 +267,7 @@ enumSlices slix = map toElt . R.enumSlices slix . fromElt
 
 -- | Shapes and indices of multi-dimensional arrays
 --
-class (Elt' sh, Elt' (Any sh), FullShape sh ~ sh, CoSliceShape sh ~ sh, SliceShape sh ~ Z)
+class (Elt sh, Elt (Any sh), FullShape sh ~ sh, CoSliceShape sh ~ sh, SliceShape sh ~ Z)
        => Shape sh where
 
   -- | Reified type witness for shapes
@@ -307,7 +283,7 @@ class (Elt' sh, Elt' (Any sh), FullShape sh ~ sh, CoSliceShape sh ~ sh, SliceSha
 -- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
 -- indices to slices, co-slices, and slice dimensions
 --
-class (Elt' sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl))
+class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl))
        => Slice sl where
   type SliceShape   sl :: Type    -- the projected slice
   type CoSliceShape sl :: Type    -- the complement of the slice
@@ -328,29 +304,26 @@ class (Slice (DivisionSlice sl)) => Division sl where
                               (EltR (CoSliceShape slix))
                               (EltR (FullShape    slix))
 
-instance (Elt' t, Elt' h) => Elt' (t :. h) where
+instance (Elt t, Elt h) => Elt (t :. h) where
   type EltR (t :. h) = (EltR t, EltR h)
-  -- eltR           = TupRpair (eltR @t) (eltR @h)
-  -- tagsR          = [TagRpair t h | t <- tagsR @t, h <- tagsR @h]
+  eltR           = TupRpair (eltR @t) (eltR @h)
+  tagsR          = [TagRpair t h | t <- tagsR @t, h <- tagsR @h]
   fromElt (t:.h) = (fromElt t, fromElt h)
   toElt (t, h)   = toElt t :. toElt h
 
-instance Elt' (Any Z) where
-  type EltR (Any Z) = ()
-
-  fromElt Any = ()
-  toElt   ()  = Any
-
-instance Shape sh => Elt' (Any (sh :. Int)) where
+instance POS.Generic (Any Z)
+instance POSable (Any Z)
+instance Elt (Any Z)
+instance Shape sh => Elt (Any (sh :. Int)) where
   type EltR (Any (sh :. Int)) = (EltR (Any sh), ())
-  -- eltR      = TupRpair (eltR @(Any sh)) TupRunit
-  -- tagsR     = [TagRpair t TagRunit | t <- tagsR @(Any sh)]
+  eltR      = TupRpair (eltR @(Any sh)) TupRunit
+  tagsR     = [TagRpair t TagRunit | t <- tagsR @(Any sh)]
   fromElt _ = (fromElt (Any :: Any sh), ())
   toElt _   = Any
 
 instance Shape Z where
   shapeR         = R.ShapeRz
-  sliceAnyIndex  = R.SliceNil
+  -- sliceAnyIndex  = R.SliceNil
   sliceNoneIndex = R.SliceNil
 
 -- Note that the constraint 'i ~ Int' allows the compiler to infer that
