@@ -132,9 +132,6 @@ fromEltR x = fromPOSable cs fs
       1 -> (0, unsafeCoerce x)
       _ -> unsafeCoerce x
 
-
-type SingletonType x = (ScalarType (Int, ()), ())
-
 -- Scalar types
 -- ------------
 
@@ -171,6 +168,10 @@ data IntegralType a where
   TypeWord16  :: IntegralType Word16
   TypeWord32  :: IntegralType Word32
   TypeWord64  :: IntegralType Word64
+  TypeSingletonType :: IntegralType (SingletonType a)
+
+
+type SingletonType x = (ScalarType (Int, ()), ())
 
 -- | Floating-point types supported in array computations.
 --

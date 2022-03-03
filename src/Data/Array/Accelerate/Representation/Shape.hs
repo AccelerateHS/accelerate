@@ -27,6 +27,7 @@ module Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Representation.POS
 import Data.Type.POSable.Representation
 
@@ -50,21 +51,21 @@ showShape shr = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList sh
 -- Synonyms for common shape types
 --
 type DIM0 = ()
-type DIM1 = ((), Int)
-type DIM2 = (((), Int), Int)
-type DIM3 = ((((), Int), Int), Int)
+type DIM1 = ((), SingletonType Int)
+type DIM2 = (((), SingletonType Int), SingletonType Int)
+type DIM3 = ((((), SingletonType Int), SingletonType Int), SingletonType Int)
 
 dim0 :: ShapeR DIM0
 dim0 = ShapeRz
 
--- dim1 :: ShapeR DIM1
--- dim1 = ShapeRsnoc dim0
+dim1 :: ShapeR DIM1
+dim1 = ShapeRsnoc dim0
 
--- dim2 :: ShapeR DIM2
--- dim2 = ShapeRsnoc dim1
+dim2 :: ShapeR DIM2
+dim2 = ShapeRsnoc dim1
 
--- dim3 :: ShapeR DIM3
--- dim3 = ShapeRsnoc dim2
+dim3 :: ShapeR DIM3
+dim3 = ShapeRsnoc dim2
 
 -- | Number of dimensions of a /shape/ or /index/ (>= 0)
 --
@@ -74,17 +75,17 @@ rank (ShapeRsnoc shr) = rank shr + 1
 
 -- | Total number of elements in an array of the given shape
 --
-size :: ShapeR sh -> sh -> Int
+size :: ShapeR sh -> sh -> SingletonType Int
 size ShapeRz () = 1
--- size (ShapeRsnoc shr) (sh, sz)
---   | sz <= 0   = 0
---   | otherwise = size shr sh * sz
+size (ShapeRsnoc shr) (sh, sz)
+  -- | toElt sz <= 0   = 0 -- TODO fix Ord instance
+  | otherwise = size shr sh * sz
 
 -- | The empty shape
 --
 empty :: ShapeR sh -> sh
 empty ShapeRz          = ()
--- empty (ShapeRsnoc shr) = (empty shr, 0)
+empty (ShapeRsnoc shr) = (empty shr, 0)
 
 -- | Yield the intersection of two shapes
 --
@@ -96,13 +97,13 @@ intersect = zip min
 union :: ShapeR sh -> sh -> sh -> sh
 union = zip max
 
-zip :: (Int -> Int -> Int) -> ShapeR sh -> sh -> sh -> sh
+zip :: (SingletonType Int -> SingletonType Int -> SingletonType Int) -> ShapeR sh -> sh -> sh -> sh
 zip _ ShapeRz          ()      ()      = ()
--- zip f (ShapeRsnoc shr) (as, a) (bs, b) = (zip f shr as bs, f a b)
+zip f (ShapeRsnoc shr) (as, a) (bs, b) = (zip f shr as bs, f a b)
 
 eq :: ShapeR sh -> sh -> sh -> Bool
 eq ShapeRz          ()      ()        = True
--- eq (ShapeRsnoc shr) (sh, i) (sh', i') = i == i' && eq shr sh sh'
+eq (ShapeRsnoc shr) (sh, i) (sh', i') = i == i' && eq shr sh sh'
 
 
 -- | Map a multi-dimensional index into one in a linear, row-major
@@ -111,23 +112,29 @@ eq ShapeRz          ()      ()        = True
 --
 toIndex :: HasCallStack => ShapeR sh -> sh -> sh -> Int
 toIndex ShapeRz () () = 0
--- toIndex (ShapeRsnoc shr) (sh, sz) (ix, i)
---   = indexCheck i sz
---   $ toIndex shr sh ix * sz + i
+toIndex (ShapeRsnoc shr) (sh, sz) (ix, i)
+  = indexCheck (toElt i) (toElt sz)
+  $ toIndex shr sh ix * toElt sz + toElt i
 
 -- | Inverse of 'toIndex'
 --
-fromIndex :: HasCallStack => ShapeR sh -> sh -> Int -> sh
+fromIndex :: HasCallStack => ShapeR sh -> sh -> SingletonType Int -> sh
 fromIndex ShapeRz () _ = ()
--- fromIndex (ShapeRsnoc shr) (sh, sz) i
---   = (fromIndex shr sh (i `quotInt` sz), r)
+fromIndex (ShapeRsnoc shr) (sh, sz) i
+  = (fromIndex shr sh (i `liftQuotInt` sz), r)
   -- If we assume that the index is in range, there is no point in computing
   -- the remainder for the highest dimension since i < sz must hold.
-  --
+  
   where
-    -- r = case shr of -- Check if rank of shr is 0
-      -- ShapeRz -> indexCheck i sz i
-      -- _       -> i `remInt` sz
+    r = case shr of -- Check if rank of shr is 0
+      ShapeRz -> indexCheck (toElt i) (toElt sz) i
+      _       -> i `liftRemInt` sz
+
+liftQuotInt :: SingletonType Int -> SingletonType Int -> SingletonType Int
+liftQuotInt = liftSingNumBinary quotInt
+
+liftRemInt :: SingletonType Int -> SingletonType Int -> SingletonType Int
+liftRemInt = liftSingNumBinary remInt
 
 -- | Iterate through the entire shape, applying the function in the second
 -- argument; third argument combines results and fourth is an initial value
@@ -136,20 +143,20 @@ fromIndex ShapeRz () _ = ()
 --
 iter :: ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a -> a
 iter ShapeRz          ()       f _ _ = f ()
--- iter (ShapeRsnoc shr) (sh, sz) f c z = iter shr sh (\ix -> iter' (ix,0) z) c z
---   where
---     iter' (ix,i) r | i >= sz   = r
---                    | otherwise = iter' (ix,i+1) (r `c` f (ix,i))
+iter (ShapeRsnoc shr) (sh, sz) f c z = iter shr sh (\ix -> iter' (ix,0) z) c z
+  where
+    iter' (ix,i) r | i >= sz   = r
+                   | otherwise = iter' (ix,i+1) (r `c` f (ix,i))
 
 -- | Variant of 'iter' without an initial value
 --
 iter1 :: HasCallStack => ShapeR sh -> sh -> (sh -> a) -> (a -> a -> a) -> a
 iter1 ShapeRz          ()       f _ = f ()
--- iter1 (ShapeRsnoc _  ) (_,  0)  _ _ = boundsError "empty iteration space"
--- iter1 (ShapeRsnoc shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
---   where
---     iter1' (ix,i) | i == sz-1 = f (ix,i)
---                   | otherwise = f (ix,i) `c` iter1' (ix,i+1)
+iter1 (ShapeRsnoc _  ) (_,  0)  _ _ = boundsError "empty iteration space"
+iter1 (ShapeRsnoc shr) (sh, sz) f c = iter1 shr sh (\ix -> iter1' (ix,0)) c
+  where
+    iter1' (ix,i) | i == sz-1 = f (ix,i)
+                  | otherwise = f (ix,i) `c` iter1' (ix,i+1)
 
 -- Operations to facilitate conversion with IArray
 
@@ -157,23 +164,23 @@ iter1 ShapeRz          ()       f _ = f ()
 --
 rangeToShape :: ShapeR sh -> (sh, sh) -> sh
 rangeToShape ShapeRz          ((), ())                 = ()
--- rangeToShape (ShapeRsnoc shr) ((sh1, sz1), (sh2, sz2)) = (rangeToShape shr (sh1, sh2), sz2 - sz1 + 1)
+rangeToShape (ShapeRsnoc shr) ((sh1, sz1), (sh2, sz2)) = (rangeToShape shr (sh1, sh2), sz2 - sz1 + 1)
 
 -- | Converse of 'rangeToShape'
 --
 shapeToRange :: ShapeR sh -> sh -> (sh, sh)
 shapeToRange ShapeRz          ()       = ((), ())
--- shapeToRange (ShapeRsnoc shr) (sh, sz) = let (low, high) = shapeToRange shr sh in ((low, 0), (high, sz - 1))
+shapeToRange (ShapeRsnoc shr) (sh, sz) = let (low, high) = shapeToRange shr sh in ((low, 0), (high, sz - 1))
 
 -- | Convert a shape or index into its list of dimensions
 --
-shapeToList :: ShapeR sh -> sh -> [Int]
+shapeToList :: ShapeR sh -> sh -> [SingletonType Int]
 shapeToList ShapeRz          ()      = []
--- shapeToList (ShapeRsnoc shr) (sh,sz) = sz : shapeToList shr sh
+shapeToList (ShapeRsnoc shr) (sh,sz) = sz : shapeToList shr sh
 
 -- | Convert a list of dimensions into a shape
 --
-listToShape :: HasCallStack => ShapeR sh -> [Int] -> sh
+listToShape :: HasCallStack => ShapeR sh -> [SingletonType Int] -> sh
 listToShape shr ds =
   case listToShape' shr ds of
     Just sh -> sh
@@ -181,17 +188,17 @@ listToShape shr ds =
 
 -- | Attempt to convert a list of dimensions into a shape
 --
-listToShape' :: ShapeR sh -> [Int] -> Maybe sh
+listToShape' :: ShapeR sh -> [SingletonType Int] -> Maybe sh
 listToShape' ShapeRz          []     = Just ()
--- listToShape' (ShapeRsnoc shr) (x:xs) = (, x) <$> listToShape' shr xs
+listToShape' (ShapeRsnoc shr) (x:xs) = (, x) <$> listToShape' shr xs
 listToShape' _                _      = Nothing
 
 shapeType :: ShapeR sh -> TypeR sh
 shapeType ShapeRz          = TupRunit
--- shapeType (ShapeRsnoc shr) =
---   shapeType shr
---   `TupRpair`
---   TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt)))
+shapeType (ShapeRsnoc shr) =
+  shapeType shr
+  `TupRpair`
+  TupRsingle (SingleScalarType (NumSingleType (IntegralNumType (TypeSingletonType @Int))))
 
 rnfShape :: ShapeR sh -> sh -> ()
 rnfShape ShapeRz          ()      = ()

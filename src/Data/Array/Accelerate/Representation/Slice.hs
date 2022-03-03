@@ -102,27 +102,6 @@ enumSlices SliceNil        ()       = [()]
 enumSlices (SliceAll   sl) (sh, _)  = [ (sh', ()) | sh' <- enumSlices sl sh]
 enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh, i <- [0..n-1]]
 
--- These functions and the Num, Enum instance make sure we can use the range
--- syntax used above. We might have to provide these instances for all
--- SingletonTypes maybe?
-liftSingNumBinary :: (Elt a, EltR a ~ SingletonType a) => (a -> a -> a) -> SingletonType a -> SingletonType a -> SingletonType a
-liftSingNumBinary f x y = fromElt $ f (toElt x) (toElt y)
-
-liftSingNumUnary :: (Elt a, EltR a ~ SingletonType a) => (a -> a) -> SingletonType a -> SingletonType a
-liftSingNumUnary f x = fromElt $ f (toElt x)
-
-instance Num (SingletonType Int) where
-  (+) = liftSingNumBinary @Int (+)
-  (*) = liftSingNumBinary @Int (*)
-  (-) = liftSingNumBinary @Int (-)
-  abs = liftSingNumUnary @Int abs
-  signum = liftSingNumUnary @Int abs
-  fromInteger = fromElt . fromInteger @Int
-
-instance Enum (SingletonType Int) where
-  toEnum = fromElt
-  fromEnum = toElt
-
 rnfSliceIndex :: SliceIndex ix slice co sh -> ()
 rnfSliceIndex SliceNil        = ()
 rnfSliceIndex (SliceAll sh)   = rnfSliceIndex sh

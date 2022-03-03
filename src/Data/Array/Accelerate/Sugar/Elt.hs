@@ -22,7 +22,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Sugar.Elt ( Elt(..) )
+module Data.Array.Accelerate.Sugar.Elt ( Elt(..), SingletonType, liftSingNumBinary, liftSingNumUnary )
   where
 
 import Data.Array.Accelerate.Representation.Elt
@@ -99,7 +99,6 @@ class Elt a where
 
   default toElt :: (POSable a,  POStoEltR (Choices a) (Fields a) ~ EltR a) => EltR a -> a
   toElt a = fromEltR a
-
 
 untag :: TypeR t -> TagR t
 untag TupRunit         = TagRunit
@@ -234,3 +233,32 @@ runQ $ do
   -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
   return (concat ss)
 
+
+
+
+-- These functions and the Num, Enum instance make sure we can use the range
+-- syntax and other Num stuff. We might have to provide these instances for all
+-- SingletonTypes maybe?
+liftSingNumBinary :: (Elt a, EltR a ~ SingletonType a) => (a -> a -> a) -> SingletonType a -> SingletonType a -> SingletonType a
+liftSingNumBinary f x y = fromElt $ f (toElt x) (toElt y)
+
+liftSingNumUnary :: (Elt a, EltR a ~ SingletonType a) => (a -> a) -> SingletonType a -> SingletonType a
+liftSingNumUnary f x = fromElt $ f (toElt x)
+
+instance Num (SingletonType Int) where
+  (+) = liftSingNumBinary @Int (+)
+  (*) = liftSingNumBinary @Int (*)
+  (-) = liftSingNumBinary @Int (-)
+  abs = liftSingNumUnary @Int abs
+  signum = liftSingNumUnary @Int abs
+  fromInteger = fromElt . fromInteger @Int
+
+instance Enum (SingletonType Int) where
+  toEnum = fromElt
+  fromEnum = toElt
+
+instance {-# OVERLAPPING #-} Eq (SingletonType Int) where
+  (==) x y = toElt @Int x == toElt @Int y
+  
+instance {-# OVERLAPPING #-} Ord (SingletonType Int) where
+  compare x y = compare (toElt @Int x) (toElt @Int y)
