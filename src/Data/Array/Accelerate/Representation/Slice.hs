@@ -19,6 +19,7 @@ module Data.Array.Accelerate.Representation.Slice
   where
 
 import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH.Extra
@@ -39,16 +40,16 @@ instance Slice () where
   sliceIndex = SliceNil
 
 instance Slice sl => Slice (sl, ()) where
-  type SliceShape   (sl, ()) = (SliceShape  sl, Int)
+  type SliceShape   (sl, ()) = (SliceShape  sl, SingletonType Int)
   type CoSliceShape (sl, ()) = CoSliceShape sl
-  type FullShape    (sl, ()) = (FullShape   sl, Int)
-  -- sliceIndex = SliceAll (sliceIndex @sl)
+  type FullShape    (sl, ()) = (FullShape   sl, SingletonType Int)
+  sliceIndex = SliceAll (sliceIndex @sl)
 
-instance Slice sl => Slice (sl, Int) where
-  type SliceShape   (sl, Int) = SliceShape sl
-  type CoSliceShape (sl, Int) = (CoSliceShape sl, Int)
-  type FullShape    (sl, Int) = (FullShape    sl, Int)
-  -- sliceIndex = SliceFixed (sliceIndex @sl)
+instance Slice sl => Slice (sl, SingletonType Int) where
+  type SliceShape   (sl, SingletonType Int) = SliceShape sl
+  type CoSliceShape (sl, SingletonType Int) = (CoSliceShape sl, SingletonType Int)
+  type FullShape    (sl, SingletonType Int) = (FullShape    sl, SingletonType Int)
+  sliceIndex = SliceFixed (sliceIndex @sl)
 
 -- |Generalised array index, which may index only in a subset of the dimensions
 -- of a shape.
@@ -75,17 +76,17 @@ sliceShape (SliceFixed slix) (sh, _) = sliceShape slix sh
 sliceDomain :: SliceIndex slix sl co dim -> slix -> sl -> dim
 sliceDomain SliceNil          ()        ()       = ()
 sliceDomain (SliceAll slix)   (slx, ()) (sl, sz) = (sliceDomain slix slx sl, sz)
--- sliceDomain (SliceFixed slix) (slx, sz) sl       = (sliceDomain slix slx sl, sz)
+sliceDomain (SliceFixed slix) (slx, sz) sl       = (sliceDomain slix slx sl, sz)
 
 sliceShapeR :: SliceIndex slix sl co dim -> ShapeR sl
 sliceShapeR SliceNil        = ShapeRz
--- sliceShapeR (SliceAll sl)   = ShapeRsnoc $ sliceShapeR sl
+sliceShapeR (SliceAll sl)   = ShapeRsnoc $ sliceShapeR sl
 sliceShapeR (SliceFixed sl) = sliceShapeR sl
 
 sliceDomainR :: SliceIndex slix sl co dim -> ShapeR dim
 sliceDomainR SliceNil        = ShapeRz
--- sliceDomainR (SliceAll sl)   = ShapeRsnoc $ sliceDomainR sl
--- sliceDomainR (SliceFixed sl) = ShapeRsnoc $ sliceDomainR sl
+sliceDomainR (SliceAll sl)   = ShapeRsnoc $ sliceDomainR sl
+sliceDomainR (SliceFixed sl) = ShapeRsnoc $ sliceDomainR sl
 
 -- | Enumerate all slices within a given bound. The innermost dimension changes
 -- most rapidly.
@@ -99,7 +100,28 @@ enumSlices
     -> [slix]
 enumSlices SliceNil        ()       = [()]
 enumSlices (SliceAll   sl) (sh, _)  = [ (sh', ()) | sh' <- enumSlices sl sh]
--- enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh, i <- [0..n-1]]
+enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh, i <- [0..n-1]]
+
+-- These functions and the Num, Enum instance make sure we can use the range
+-- syntax used above. We might have to provide these instances for all
+-- SingletonTypes maybe?
+liftSingNumBinary :: (Elt a, EltR a ~ SingletonType a) => (a -> a -> a) -> SingletonType a -> SingletonType a -> SingletonType a
+liftSingNumBinary f x y = fromElt $ f (toElt x) (toElt y)
+
+liftSingNumUnary :: (Elt a, EltR a ~ SingletonType a) => (a -> a) -> SingletonType a -> SingletonType a
+liftSingNumUnary f x = fromElt $ f (toElt x)
+
+instance Num (SingletonType Int) where
+  (+) = liftSingNumBinary @Int (+)
+  (*) = liftSingNumBinary @Int (*)
+  (-) = liftSingNumBinary @Int (-)
+  abs = liftSingNumUnary @Int abs
+  signum = liftSingNumUnary @Int abs
+  fromInteger = fromElt . fromInteger @Int
+
+instance Enum (SingletonType Int) where
+  toEnum = fromElt
+  fromEnum = toElt
 
 rnfSliceIndex :: SliceIndex ix slice co sh -> ()
 rnfSliceIndex SliceNil        = ()
