@@ -78,7 +78,7 @@ rank (ShapeRsnoc shr) = rank shr + 1
 size :: ShapeR sh -> sh -> SingletonType Int
 size ShapeRz () = 1
 size (ShapeRsnoc shr) (sh, sz)
-  -- | toElt sz <= 0   = 0 -- TODO fix Ord instance
+  | sz <= 0   = 0
   | otherwise = size shr sh * sz
 
 -- | The empty shape
