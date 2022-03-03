@@ -141,7 +141,7 @@ rank = R.rank (shapeR @sh)
 
 -- | Total number of elements in an array of the given /shape/
 --
-size :: forall sh. Shape sh => sh -> Int
+size :: forall sh. Shape sh => sh -> SingletonType Int
 size = R.size (shapeR @sh) . fromElt
 
 -- | The empty /shape/
@@ -172,7 +172,7 @@ toIndex sh ix = R.toIndex (shapeR @sh) (fromElt sh) (fromElt ix)
 --
 fromIndex :: forall sh. Shape sh
           => sh     -- ^ Total shape (extent) of the array
-          -> Int    -- ^ The argument index
+          -> SingletonType Int    -- ^ The argument index
           -> sh     -- ^ Corresponding multi-dimensional index
 fromIndex sh = toElt . R.fromIndex (shapeR @sh) (fromElt sh)
 
@@ -210,19 +210,19 @@ shapeToRange ix =
 
 -- | Convert a shape to a list of dimensions
 --
-shapeToList :: forall sh. Shape sh => sh -> [Int]
+shapeToList :: forall sh. Shape sh => sh -> [SingletonType Int]
 shapeToList = R.shapeToList (shapeR @sh) . fromElt
 
 -- | Convert a list of dimensions into a shape. If the list does not
 -- contain exactly the number of elements as specified by the type of the
 -- shape: error.
 --
-listToShape :: forall sh. Shape sh => [Int] -> sh
+listToShape :: forall sh. Shape sh => [SingletonType Int] -> sh
 listToShape = toElt . R.listToShape (shapeR @sh)
 
 -- | Attempt to convert a list of dimensions into a shape
 --
-listToShape' :: forall sh. Shape sh => [Int] -> Maybe sh
+listToShape' :: forall sh. Shape sh => [SingletonType Int] -> Maybe sh
 listToShape' = fmap toElt . R.listToShape' (shapeR @sh)
 
 -- | Nicely format a shape as a string
