@@ -134,11 +134,18 @@ untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 -- Instances for basic types are generated at the end of this module.
 --
 
-instance (POSable ()) => Elt ()
-instance (POSable Bool) => Elt Bool
-instance (POSable Ordering) => Elt Ordering
+instance Elt ()
+instance Elt Bool
+instance Elt Ordering
 instance (POSable (Maybe a), Elt a) => Elt (Maybe a)
 instance (POSable (Either a b), Elt a, Elt b) => Elt (Either a b)
+
+instance Elt Char where
+  type EltR Char = Word32
+  eltR    = TupRsingle scalarType
+  tagsR   = [TagRsingle scalarType]
+  toElt   = chr . fromIntegral
+  fromElt = fromIntegral . ord
 
 -- Anything that has a POS instance has a default Elt instance
 -- TODO: build instances for the sections of newtypes
