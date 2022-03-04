@@ -169,6 +169,7 @@ data IntegralType a where
   TypeWord32  :: IntegralType Word32
   TypeWord64  :: IntegralType Word64
   TypeSingletonType :: IntegralType (SingletonType a)
+  TypeTAG     :: IntegralType (Finite n)
 
 
 type SingletonType x = (ScalarType (Int, ()), ())
@@ -195,6 +196,7 @@ data BoundedType a where
 --
 data ScalarType a where
   SumScalarType    :: Sum a                -> ScalarType (FlattenSum a)
+  TagScalarType    :: Finite n             -> ScalarType (Finite n)
   SingleScalarType :: SingleType a         -> ScalarType a
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
 

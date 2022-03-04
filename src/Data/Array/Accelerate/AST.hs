@@ -9,6 +9,8 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE DataKinds             #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
@@ -146,6 +148,7 @@ import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Foreign
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
@@ -198,9 +201,8 @@ type ArrayVar       = Var ArrayR
 type ArrayVars aenv = Vars ArrayR aenv
 
 -- Bool is not a primitive type
-type PrimBool    = TAG
-type PrimMaybe a = (TAG, ((), a))
-
+type PrimBool    = EltR Bool
+type PrimMaybe a = EltR (Maybe a)
 -- Trace messages
 data Message a where
   Message :: (a -> String)                    -- embedded show
@@ -681,13 +683,13 @@ data PrimFun sig where
   PrimBOr                :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBXor               :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBNot               :: IntegralType a -> PrimFun (a        -> a)
-  PrimBShiftL            :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBShiftR            :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateL           :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateR           :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimPopCount           :: IntegralType a -> PrimFun (a -> Int)
-  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> Int)
-  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> Int)
+  PrimBShiftL            :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
+  PrimBShiftR            :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
+  PrimBRotateL           :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
+  PrimBRotateR           :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
+  PrimPopCount           :: IntegralType a -> PrimFun (a -> SingletonType Int)
+  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> SingletonType Int)
+  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> SingletonType Int)
 
   -- operators from Fractional and Floating
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
@@ -940,8 +942,11 @@ primFunType = \case
     integral = num . IntegralNumType
     floating = num . FloatingNumType
 
-    tbool    = TupRsingle scalarTypeWord8
-    tint     = TupRsingle scalarTypeInt
+    tbool :: TypeR PrimBool
+    tbool    = TupRpair (TupRsingle (TagScalarType @2 0)) TupRunit
+
+    tint :: TypeR (SingletonType Int)
+    tint     = TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeSingletonType)))
 
 
 -- Normal form data

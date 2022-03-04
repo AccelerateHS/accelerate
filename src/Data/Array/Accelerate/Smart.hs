@@ -1156,21 +1156,13 @@ mkMin = mkPrimBinary $ PrimMin singleType
 -- Logical operators
 
 mkLAnd :: Exp Bool -> Exp Bool -> Exp Bool
-mkLAnd (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLAnd (SmartExp $ Pair x y)) `Pair` SmartExp Nil
-  where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+mkLAnd (Exp a) (Exp b) = mkExp $ PrimApp PrimLAnd (SmartExp $ Pair a b)
 
 mkLOr :: Exp Bool -> Exp Bool -> Exp Bool
-mkLOr (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLOr (SmartExp $ Pair x y)) `Pair` SmartExp Nil
-  where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+mkLOr (Exp a) (Exp b) = mkExp $ PrimApp PrimLOr (SmartExp $ Pair a b)
 
 mkLNot :: Exp Bool -> Exp Bool
-mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
-  where
-    x = SmartExp $ Prj PairIdxLeft a
+mkLNot (Exp a) = mkExp $ PrimApp PrimLNot a
 
 -- Numeric conversions
 
@@ -1260,10 +1252,10 @@ mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) ->
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
 
 mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
-mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary
+mkPrimUnaryBool = mkCoerce @Bool $$ mkPrimUnary
 
 mkPrimBinaryBool :: (Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
-mkPrimBinaryBool = mkCoerce @PrimBool $$$ mkPrimBinary
+mkPrimBinaryBool = mkCoerce @Bool $$$ mkPrimBinary
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)
