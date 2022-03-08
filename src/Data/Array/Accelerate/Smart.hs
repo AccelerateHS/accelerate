@@ -1252,10 +1252,10 @@ mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) ->
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
 
 mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
-mkPrimUnaryBool = mkCoerce @Bool $$ mkPrimUnary
+mkPrimUnaryBool = mkPrimUnary
 
 mkPrimBinaryBool :: (Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
-mkPrimBinaryBool = mkCoerce @Bool $$$ mkPrimBinary
+mkPrimBinaryBool = mkPrimBinary
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)
