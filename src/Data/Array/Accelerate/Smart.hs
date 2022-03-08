@@ -627,7 +627,7 @@ class Stencil sh e stencil where
 -- DIM1
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e)
-    = EltR (e, e, e)
+    = ((((), EltR e), EltR e), EltR e)
   stencilR = StencilRunit3 @(EltR e) $ eltR @e
   stencilPrj s = (Exp $ prj2 s,
                   Exp $ prj1 s,
@@ -635,7 +635,7 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e)
+    = ((((((), EltR e), EltR e), EltR e), EltR e), EltR e)
   stencilR = StencilRunit5 $ eltR @e
   stencilPrj s = (Exp $ prj4 s,
                   Exp $ prj3 s,
@@ -645,7 +645,7 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e, e, e)
+    = ((((((((), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e)
   stencilR = StencilRunit7 $ eltR @e
   stencilPrj s = (Exp $ prj6 s,
                   Exp $ prj5 s,
@@ -658,7 +658,7 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
   where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e, e, e, e, e)
+    = ((((((((((), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e)
   stencilR = StencilRunit9 $ eltR @e
   stencilPrj s = (Exp $ prj8 s,
                   Exp $ prj7 s,
