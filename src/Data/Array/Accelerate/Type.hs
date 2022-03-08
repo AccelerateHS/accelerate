@@ -95,10 +95,11 @@ import Unsafe.Coerce
 
 
 type family POStoEltR (cs :: Nat) fs :: Type where
-  POStoEltR 1 x = FlattenProduct x
-  POStoEltR n x = (Finite n, FlattenProduct x)
+  POStoEltR 1 '[ '[x]] = x -- singletontypes
+  POStoEltR 1 x = FlattenProduct x -- tagless types (could / should be represented without Sums in the Product)
+  POStoEltR n x = (Finite n, FlattenProduct x) -- all other types
 
-type family FlattenProduct (xss :: f (g a)) = (r :: Type) | r -> f where
+type family FlattenProduct (xss :: f (g a)) = (r :: Type) where
   FlattenProduct '[] = ()
   FlattenProduct (x ': xs) = (ScalarType (FlattenSum x), FlattenProduct xs)
 
@@ -117,8 +118,10 @@ flattenProduct (Cons x xs) = (SumScalarType x, flattenProduct xs)
 mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)
 mkEltR x = case natVal cs of
              -- This distinction is hard to express in a type-correct way,
-             -- hence the unsafeCoerce
-             1 -> unsafeCoerce fs
+             -- hence the unsafeCoerce's
+             1 -> case emptyFields @a of
+                    PTCons (STSucc _ STZero) PTNil | Cons (Pick f) Nil <- fields x -> unsafeCoerce f
+                    _ -> unsafeCoerce fs
              _ -> unsafeCoerce (cs, fs)
   where
     cs = choices x
@@ -126,11 +129,11 @@ mkEltR x = case natVal cs of
 
 
 fromEltR :: forall a . (POSable a) => POStoEltR (Choices a) (Fields a) -> a
-fromEltR x = fromPOSable cs fs
-  where
-    (cs, fs) = case natVal (emptyChoices @a) of
-      1 -> (0, unsafeCoerce x)
-      _ -> unsafeCoerce x
+fromEltR x = case natVal (emptyChoices @a) of
+              1 -> case emptyFields @a of
+                PTCons (STSucc _ STZero) PTNil -> unsafeCoerce x
+                _ -> fromPOSable 0 (unsafeCoerce x)
+              _ -> uncurry fromPOSable (unsafeCoerce x)
 
 -- Scalar types
 -- ------------
@@ -180,6 +183,7 @@ data FloatingType a where
   TypeHalf    :: FloatingType Half
   TypeFloat   :: FloatingType Float
   TypeDouble  :: FloatingType Double
+  TypeFloatingSingletonType :: FloatingType (SingletonType a)
 
 -- | Numeric element types implement Num & Real
 --
