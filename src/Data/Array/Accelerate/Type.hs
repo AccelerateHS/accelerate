@@ -171,11 +171,7 @@ data IntegralType a where
   TypeWord16  :: IntegralType Word16
   TypeWord32  :: IntegralType Word32
   TypeWord64  :: IntegralType Word64
-  TypeSingletonType :: IntegralType (SingletonType a)
   TypeTAG     :: IntegralType (Finite n)
-
-
-type SingletonType x = (ScalarType (Int, ()), ())
 
 -- | Floating-point types supported in array computations.
 --
@@ -183,7 +179,6 @@ data FloatingType a where
   TypeHalf    :: FloatingType Half
   TypeFloat   :: FloatingType Float
   TypeDouble  :: FloatingType Double
-  TypeFloatingSingletonType :: FloatingType (SingletonType a)
 
 -- | Numeric element types implement Num & Real
 --

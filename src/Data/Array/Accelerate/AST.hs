@@ -683,13 +683,13 @@ data PrimFun sig where
   PrimBOr                :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBXor               :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBNot               :: IntegralType a -> PrimFun (a        -> a)
-  PrimBShiftL            :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
-  PrimBShiftR            :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
-  PrimBRotateL           :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
-  PrimBRotateR           :: IntegralType a -> PrimFun ((a, SingletonType Int) -> a)
-  PrimPopCount           :: IntegralType a -> PrimFun (a -> SingletonType Int)
-  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> SingletonType Int)
-  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> SingletonType Int)
+  PrimBShiftL            :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBShiftR            :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateL           :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateR           :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimPopCount           :: IntegralType a -> PrimFun (a -> Int)
+  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> Int)
+  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> Int)
 
   -- operators from Fractional and Floating
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
@@ -945,8 +945,8 @@ primFunType = \case
     tbool :: TypeR PrimBool
     tbool    = TupRpair (TupRsingle (TagScalarType @2 0)) TupRunit
 
-    tint :: TypeR (SingletonType Int)
-    tint     = TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeSingletonType)))
+    tint :: TypeR Int
+    tint     = TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt)))
 
 
 -- Normal form data

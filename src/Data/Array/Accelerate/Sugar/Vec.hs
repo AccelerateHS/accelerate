@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE NoStarIsType #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
@@ -37,24 +38,43 @@ import GHC.TypeLits
 import GHC.Prim
 
 
-type VecElt a = (Elt a, Prim a, IsSingle a)
+type VecElt a = (Elt a, Prim a, IsSingle a, GroundType a, Num a)
 
-instance GroundType (Vec n a)
-
-instance (KnownNat n, VecElt a, Num a) => POSable (Vec n a) where
-    type Choices (Vec n a) = 1
+instance VecElt a => POSable (Vec2 a) where
+    type Choices (Vec2 a) = 1
 
     choices _ = 0
 
     emptyChoices = 0
 
-    fromPOSable 0 (Cons (Pick x) Nil) = x
+    fromPOSable 0 (Cons (Pick a) (Cons (Pick b) Nil)) = Vec2 a b
 
-    type Fields (Vec n a) = '[ '[Vec n a]]
-    fields x = Cons (Pick x) Nil
+    type Fields (Vec2 a) = '[ '[a], '[a]]
+    fields (Vec2 a b) = Cons (Pick a) (Cons (Pick b) Nil)
 
-    emptyFields = PTCons (STSucc (replicateVecN 0) STZero) PTNil
+    emptyFields = PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) PTNil)
 
 
 -- Elt instance automatically derived from POSable instance
-instance (KnownNat n, VecElt a, Num a) => (Elt (Vec n a))
+instance VecElt a => Elt (Vec2 a)
+
+
+instance VecElt a => POSable (Vec4 a) where
+    type Choices (Vec4 a) = 1
+
+    choices _ = 0
+
+    emptyChoices = 0
+
+    fromPOSable 0 ( Cons (Pick a) (Cons (Pick b) (Cons (Pick c) (Cons (Pick d) Nil)))) = Vec4 a b c d
+
+    type Fields (Vec4 a) = '[ '[a], '[a], '[a], '[a]]
+    fields (Vec4 a b c d) = Cons (Pick a) (Cons (Pick b) (Cons (Pick c) (Cons (Pick d) Nil)))
+
+    emptyFields = PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) PTNil)))
+
+
+-- Elt instance automatically derived from POSable instance
+instance VecElt a => Elt (Vec4 a)
+
+-- TODO: instances for 8 and 16, probably with some TH
