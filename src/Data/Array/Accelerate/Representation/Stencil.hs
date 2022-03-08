@@ -1,6 +1,5 @@
 {-# LANGUAGE GADTs           #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Representation.Stencil
@@ -26,9 +25,6 @@ module Data.Array.Accelerate.Representation.Stencil (
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Type
-import Data.Array.Accelerate.Representation.Elt
-import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH.Extra
 
@@ -44,14 +40,14 @@ data StencilR sh e pat where
   StencilRtup3  :: StencilR sh e pat1
                 -> StencilR sh e pat2
                 -> StencilR sh e pat3
-                -> StencilR (sh, SingletonType Int) e (Tup3 pat1 pat2 pat3)
+                -> StencilR (sh, Int) e (Tup3 pat1 pat2 pat3)
 
   StencilRtup5  :: StencilR sh e pat1
                 -> StencilR sh e pat2
                 -> StencilR sh e pat3
                 -> StencilR sh e pat4
                 -> StencilR sh e pat5
-                -> StencilR (sh, SingletonType Int) e (Tup5 pat1 pat2 pat3 pat4 pat5)
+                -> StencilR (sh, Int) e (Tup5 pat1 pat2 pat3 pat4 pat5)
 
   StencilRtup7  :: StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -60,7 +56,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat5
                 -> StencilR sh e pat6
                 -> StencilR sh e pat7
-                -> StencilR (sh, SingletonType Int) e (Tup7 pat1 pat2 pat3 pat4 pat5 pat6 pat7)
+                -> StencilR (sh, Int) e (Tup7 pat1 pat2 pat3 pat4 pat5 pat6 pat7)
 
   StencilRtup9  :: StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -71,7 +67,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat7
                 -> StencilR sh e pat8
                 -> StencilR sh e pat9
-                -> StencilR (sh, SingletonType Int) e (Tup9 pat1 pat2 pat3 pat4 pat5 pat6 pat7 pat8 pat9)
+                -> StencilR (sh, Int) e (Tup9 pat1 pat2 pat3 pat4 pat5 pat6 pat7 pat8 pat9)
 
 stencilEltR :: StencilR sh e pat -> TypeR e
 stencilEltR (StencilRunit3 t) = t
@@ -115,19 +111,19 @@ stencilHalo = go'
     go' StencilRunit7{} = (dim1, ((), 3))
     go' StencilRunit9{} = (dim1, ((), 4))
     --
-    go' (StencilRtup3 a b c            ) = (ShapeRsnoc shR, cons shR (fromElt @Int 1) $ foldl1 (union shR) [a', go b, go c])
+    go' (StencilRtup3 a b c            ) = (ShapeRsnoc shR, cons shR 1 $ foldl1 (union shR) [a', go b, go c])
       where (shR, a') = go' a
-    go' (StencilRtup5 a b c d e        ) = (ShapeRsnoc shR, cons shR (fromElt @Int 2) $ foldl1 (union shR) [a', go b, go c, go d, go e])
+    go' (StencilRtup5 a b c d e        ) = (ShapeRsnoc shR, cons shR 2 $ foldl1 (union shR) [a', go b, go c, go d, go e])
       where (shR, a') = go' a
-    go' (StencilRtup7 a b c d e f g    ) = (ShapeRsnoc shR, cons shR (fromElt @Int 3) $ foldl1 (union shR) [a', go b, go c, go d, go e, go f, go g])
+    go' (StencilRtup7 a b c d e f g    ) = (ShapeRsnoc shR, cons shR 3 $ foldl1 (union shR) [a', go b, go c, go d, go e, go f, go g])
       where (shR, a') = go' a
-    go' (StencilRtup9 a b c d e f g h i) = (ShapeRsnoc shR, cons shR (fromElt @Int 4) $ foldl1 (union shR) [a', go b, go c, go d, go e, go f, go g, go h, go i])
+    go' (StencilRtup9 a b c d e f g h i) = (ShapeRsnoc shR, cons shR 4 $ foldl1 (union shR) [a', go b, go c, go d, go e, go f, go g, go h, go i])
       where (shR, a') = go' a
 
     go :: StencilR sh e stencil -> sh
     go = snd . go'
 
-    cons :: ShapeR sh -> SingletonType Int -> sh -> (sh, SingletonType Int)
+    cons :: ShapeR sh -> Int -> sh -> (sh, Int)
     cons ShapeRz          ix ()       = ((), ix)
     cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
 
