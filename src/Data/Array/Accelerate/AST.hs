@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -7,6 +8,7 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -559,6 +561,21 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv (Vec n s)
                 -> OpenExp env aenv tup
 
+  VecIndex      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> OpenExp env aenv (Vec n s)
+                -> OpenExp env aenv i
+                -> OpenExp env aenv s
+
+  VecWrite      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> OpenExp env aenv (Vec n s)
+                -> OpenExp env aenv i
+                -> OpenExp env aenv s
+                -> OpenExp env aenv (Vec n s)
+
   -- Array indices & shapes
   IndexSlice    :: SliceIndex slix sl co sh
                 -> OpenExp env aenv slix
@@ -654,7 +671,6 @@ data PrimConst ty where
 
   -- constant from Floating
   PrimPi        :: FloatingType a -> PrimConst a
-
 
 -- |Primitive scalar operations
 --
@@ -814,6 +830,8 @@ expType = \case
   Nil                          -> TupRunit
   VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
   VecUnpack vecR _             -> vecRtuple vecR
+  VecIndex vecT _ _ _          -> let (VectorType _ s) = vecT in TupRsingle $ SingleScalarType s
+  VecWrite vecT _ _ _ _        -> TupRsingle $ VectorScalarType vecT
   IndexSlice si _ _            -> shapeType $ sliceShapeR si
   IndexFull  si _ _            -> shapeType $ sliceDomainR si
   ToIndex{}                    -> TupRsingle scalarTypeInt
@@ -825,7 +843,7 @@ expType = \case
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
   Const tR _                   -> TupRsingle tR
-  PrimConst c                  -> TupRsingle $ SingleScalarType $ primConstType c
+  PrimConst c                  -> TupRsingle $ primConstType c
   PrimApp f _                  -> snd $ primFunType f
   Index (Var repr _) _         -> arrayRtype repr
   LinearIndex (Var repr _) _   -> arrayRtype repr
@@ -834,17 +852,17 @@ expType = \case
   Undef tR                     -> TupRsingle tR
   Coerce _ tR _                -> TupRsingle tR
 
-primConstType :: PrimConst a -> SingleType a
+primConstType :: PrimConst a -> ScalarType a
 primConstType = \case
   PrimMinBound t -> bounded t
   PrimMaxBound t -> bounded t
   PrimPi       t -> floating t
   where
-    bounded :: BoundedType a -> SingleType a
-    bounded (IntegralBoundedType t) = NumSingleType $ IntegralNumType t
+    bounded :: BoundedType a -> ScalarType a
+    bounded (IntegralBoundedType t) = SingleScalarType $ NumSingleType $ IntegralNumType t
 
-    floating :: FloatingType t -> SingleType t
-    floating = NumSingleType . FloatingNumType
+    floating :: FloatingType t -> ScalarType t
+    floating = SingleScalarType . NumSingleType . FloatingNumType
 
 primFunType :: PrimFun (a -> b) -> (TypeR a, TypeR b)
 primFunType = \case
@@ -1073,6 +1091,8 @@ rnfOpenExp topExp =
     Nil                       -> ()
     VecPack   vecr e          -> rnfVecR vecr `seq` rnfE e
     VecUnpack vecr e          -> rnfVecR vecr `seq` rnfE e
+    VecIndex vt it v i        -> rnfVectorType vt `seq` rnfIntegralType it `seq` rnfE v `seq` rnfE i
+    VecWrite vt it v i e      -> rnfVectorType vt `seq` rnfIntegralType it `seq` rnfE v `seq` rnfE i `seq` rnfE e
     IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
@@ -1100,9 +1120,9 @@ rnfConst (TupRsingle t)    !_    = rnfScalarType t  -- scalars should have (nf =
 rnfConst (TupRpair ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
 
 rnfPrimConst :: PrimConst c -> ()
-rnfPrimConst (PrimMinBound t) = rnfBoundedType t
-rnfPrimConst (PrimMaxBound t) = rnfBoundedType t
-rnfPrimConst (PrimPi t)       = rnfFloatingType t
+rnfPrimConst (PrimMinBound t)     = rnfBoundedType t
+rnfPrimConst (PrimMaxBound t)     = rnfBoundedType t
+rnfPrimConst (PrimPi t)           = rnfFloatingType t
 
 rnfPrimFun :: PrimFun f -> ()
 rnfPrimFun (PrimAdd t)                = rnfNumType t
@@ -1293,6 +1313,8 @@ liftOpenExp pexp =
     Nil                       -> [|| Nil ||]
     VecPack   vecr e          -> [|| VecPack   $$(liftVecR vecr) $$(liftE e) ||]
     VecUnpack vecr e          -> [|| VecUnpack $$(liftVecR vecr) $$(liftE e) ||]
+    VecIndex vt it v i        -> [|| VecIndex $$(liftVectorType vt) $$(liftIntegralType it) $$(liftE v) $$(liftE i) ||]
+    VecWrite vt it v i e      -> [|| VecWrite $$(liftVectorType vt) $$(liftIntegralType it) $$(liftE v) $$(liftE i) $$(liftE e) ||] 
     IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
@@ -1326,9 +1348,9 @@ liftBoundary (ArrayR _ tp) (Constant v) = [|| Constant $$(liftElt tp v) ||]
 liftBoundary _             (Function f) = [|| Function $$(liftOpenFun f) ||]
 
 liftPrimConst :: PrimConst c -> CodeQ (PrimConst c)
-liftPrimConst (PrimMinBound t) = [|| PrimMinBound $$(liftBoundedType t) ||]
-liftPrimConst (PrimMaxBound t) = [|| PrimMaxBound $$(liftBoundedType t) ||]
-liftPrimConst (PrimPi t)       = [|| PrimPi $$(liftFloatingType t) ||]
+liftPrimConst (PrimMinBound t)          = [|| PrimMinBound $$(liftBoundedType t) ||]
+liftPrimConst (PrimMaxBound t)          = [|| PrimMaxBound $$(liftBoundedType t) ||]
+liftPrimConst (PrimPi t)                = [|| PrimPi $$(liftFloatingType t) ||]
 
 liftPrimFun :: PrimFun f -> CodeQ (PrimFun f)
 liftPrimFun (PrimAdd t)                = [|| PrimAdd $$(liftNumType t) ||]
@@ -1440,6 +1462,8 @@ formatExpOp = later $ \case
   Nil{}           -> "Nil"
   VecPack{}       -> "VecPack"
   VecUnpack{}     -> "VecUnpack"
+  VecIndex{}      -> "VecIndex"
+  VecWrite{}      -> "VecWrite"
   IndexSlice{}    -> "IndexSlice"
   IndexFull{}     -> "IndexFull"
   ToIndex{}       -> "ToIndex"

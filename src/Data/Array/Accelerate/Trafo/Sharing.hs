@@ -760,6 +760,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Pair e1 e2            -> AST.Pair (cvt e1) (cvt e2)
           VecPack   vec e       -> AST.VecPack   vec (cvt e)
           VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
+          VecIndex vt it v i    -> AST.VecIndex vt it (cvt v) (cvt i)
+          VecWrite vt it v i e  -> AST.VecWrite vt it (cvt v) (cvt i) (cvt e)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
           FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
           Case e rhs            -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
@@ -1837,37 +1839,39 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                             return (UnscopedExp [] (ExpSharing (StableNameHeight sn height) exp), height)
 
           reconstruct $ case pexp of
-            Tag tp i            -> return (Tag tp i, 0)      -- height is 0!
-            Const tp c          -> return (Const tp c, 1)
-            Undef tp            -> return (Undef tp, 1)
-            Nil                 -> return (Nil, 1)
-            Pair e1 e2          -> travE2 Pair e1 e2
-            Prj i e             -> travE1 (Prj i) e
-            VecPack   vec e     -> travE1 (VecPack   vec) e
-            VecUnpack vec e     -> travE1 (VecUnpack vec) e
-            ToIndex shr sh ix   -> travE2 (ToIndex shr) sh ix
-            FromIndex shr sh e  -> travE2 (FromIndex shr) sh e
-            Match t e           -> travE1 (Match t) e
-            Case e rhs          -> do
-                                     (e',   h1) <- travE lvl e
-                                     (rhs', h2) <- unzip <$> sequence [ travE1 (t,) c | (t,c) <- rhs ]
-                                     return (Case e' rhs', h1 `max` maximum h2 + 1)
-            Cond e1 e2 e3       -> travE3 Cond e1 e2 e3
-            While t p iter init -> do
-                                     (p'   , h1) <- traverseFun1 lvl t p
-                                     (iter', h2) <- traverseFun1 lvl t iter
-                                     (init', h3) <- travE lvl init
-                                     return (While t p' iter' init', h1 `max` h2 `max` h3 + 1)
-            PrimConst c         -> return (PrimConst c, 1)
-            PrimApp p e         -> travE1 (PrimApp p) e
-            Index tp a e        -> travAE (Index tp) a e
-            LinearIndex tp a i  -> travAE (LinearIndex tp) a i
-            Shape shr a         -> travA (Shape shr) a
-            ShapeSize shr e     -> travE1 (ShapeSize shr) e
-            Foreign tp ff f e   -> do
-                                      (e', h) <- travE lvl e
-                                      return  (Foreign tp ff f e', h+1)
-            Coerce t1 t2 e      -> travE1 (Coerce t1 t2) e
+            Tag tp i               -> return (Tag tp i, 0)      -- height is 0!
+            Const tp c             -> return (Const tp c, 1)
+            Undef tp               -> return (Undef tp, 1)
+            Nil                    -> return (Nil, 1)
+            Pair e1 e2             -> travE2 Pair e1 e2
+            Prj i e                -> travE1 (Prj i) e
+            VecPack   vec e        -> travE1 (VecPack   vec) e
+            VecUnpack vec e        -> travE1 (VecUnpack vec) e
+            VecIndex vt ti v i     -> travE2 (VecIndex vt ti) v i
+            VecWrite vt ti v i e   -> travE3 (VecWrite vt ti) v i e
+            ToIndex shr sh ix      -> travE2 (ToIndex shr) sh ix
+            FromIndex shr sh e     -> travE2 (FromIndex shr) sh e
+            Match t e              -> travE1 (Match t) e
+            Case e rhs             -> do
+                                        (e',   h1) <- travE lvl e
+                                        (rhs', h2) <- unzip <$> sequence [ travE1 (t,) c | (t,c) <- rhs ]
+                                        return (Case e' rhs', h1 `max` maximum h2 + 1)
+            Cond e1 e2 e3          -> travE3 Cond e1 e2 e3
+            While t p iter init    -> do
+                                        (p'   , h1) <- traverseFun1 lvl t p
+                                        (iter', h2) <- traverseFun1 lvl t iter
+                                        (init', h3) <- travE lvl init
+                                        return (While t p' iter' init', h1 `max` h2 `max` h3 + 1)
+            PrimConst c            -> return (PrimConst c, 1)
+            PrimApp p e            -> travE1 (PrimApp p) e
+            Index tp a e           -> travAE (Index tp) a e
+            LinearIndex tp a i     -> travAE (LinearIndex tp) a i
+            Shape shr a            -> travA (Shape shr) a
+            ShapeSize shr e        -> travE1 (ShapeSize shr) e
+            Foreign tp ff f e      -> do
+                                         (e', h) <- travE lvl e
+                                         return  (Foreign tp ff f e', h+1)
+            Coerce t1 t2 e         -> travE1 (Coerce t1 t2) e
 
       where
         traverseAcc :: HasCallStack => Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
@@ -2751,6 +2755,8 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Prj i e               -> travE1 (Prj i) e
           VecPack   vec e       -> travE1 (VecPack   vec) e
           VecUnpack vec e       -> travE1 (VecUnpack vec) e
+          VecIndex vt it v i    -> travE2 (VecIndex vt it) v i
+          VecWrite vt it v i e  -> travE3 (VecWrite vt it) v i e
           ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
           FromIndex shr sh e    -> travE2 (FromIndex shr) sh e
           Match t e             -> travE1 (Match t) e

@@ -1,5 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE CPP                   #-}
+
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE PolyKinds             #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Smart
@@ -71,6 +72,10 @@ module Data.Array.Accelerate.Smart (
   -- ** Smart constructors for type coercion functions
   mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
 
+  -- ** Smart constructors for vector operations
+  mkVectorIndex,
+  mkVectorWrite,
+
   -- ** Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
   ApplyAcc(..),
@@ -83,6 +88,7 @@ module Data.Array.Accelerate.Smart (
 ) where
 
 
+import Data.Proxy
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
@@ -95,6 +101,7 @@ import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays )
 import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Sugar.Shape                            ( (:.)(..) )
 import Data.Array.Accelerate.Type
@@ -520,6 +527,21 @@ data PreSmartExp acc exp t where
                 -> exp (Vec n s)
                 -> PreSmartExp acc exp tup
 
+  VecIndex      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> exp (Vec n s)
+                -> exp i
+                -> PreSmartExp acc exp s
+
+  VecWrite      :: (KnownNat n, v ~ Vec n s)
+                => VectorType v
+                -> IntegralType i
+                -> exp (Vec n s)
+                -> exp i
+                -> exp s
+                -> PreSmartExp acc exp (Vec n s)
+
   ToIndex       :: ShapeR sh
                 -> exp sh
                 -> exp sh
@@ -853,13 +875,15 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     Prj _ _                         -> error "I never joke about my work"
     VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
     VecUnpack vecR _                -> vecRtuple vecR
+    VecIndex vecT _ _ _             -> let (VectorType _ s) = vecT in TupRsingle $ SingleScalarType s
+    VecWrite vecT _ _ _ _           -> TupRsingle $ VectorScalarType vecT
     ToIndex _ _ _                   -> TupRsingle scalarTypeInt
     FromIndex shr _ _               -> shapeType shr
     Case _ ((_,c):_)                -> typeR c
     Case{}                          -> internalError "encountered empty case"
     Cond _ e _                      -> typeR e
     While t _ _ _                   -> t
-    PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
+    PrimConst c                     -> TupRsingle $ primConstType c
     PrimApp f _                     -> snd $ primFunType f
     Index tp _ _                    -> tp
     LinearIndex tp _ _              -> tp
@@ -1172,6 +1196,16 @@ mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
   where
     x = SmartExp $ Prj PairIdxLeft a
 
+
+inferNat :: forall n. KnownNat n => Int
+inferNat = fromInteger $ natVal (Proxy @n)
+
+mkVectorIndex :: forall n a. (KnownNat n, Elt a, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a
+mkVectorIndex (Exp v) (Exp i) = mkExp $ VecIndex (VectorType (inferNat @n) singleType) integralType v i
+
+mkVectorWrite :: forall n a. (KnownNat n, VecElt a) => Exp (Vec n a) -> Exp Int -> Exp a -> Exp (Vec n a)
+mkVectorWrite (Exp v) (Exp i) (Exp el) = mkExp $ VecWrite (VectorType (inferNat @n) singleType) integralType v i el
+
 -- Numeric conversions
 
 mkFromIntegral :: (Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
@@ -1258,6 +1292,9 @@ mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
 
 mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
+
+mkPrimTernary :: (Elt a, Elt b, Elt c, Elt d) => PrimFun ((EltR a, (EltR b, EltR c)) -> EltR d) -> Exp a -> Exp b -> Exp c -> Exp d
+mkPrimTernary prim (Exp a) (Exp b) (Exp c) = mkExp $ PrimApp prim (SmartExp $ Pair a (SmartExp (Pair b c)))
 
 mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
 mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary

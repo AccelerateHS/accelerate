@@ -69,6 +69,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Elt                    as Sugar
 import qualified Data.Array.Accelerate.Trafo.Delayed                as AST
 
+import GHC.TypeLits
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
@@ -1168,6 +1169,12 @@ evalLOr (x, y) = fromBool (toBool x || toBool y)
 evalLNot :: PrimBool -> PrimBool
 evalLNot = fromBool . not . toBool
 
+evalVectorIndex :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> (Vec n a, i) -> a
+evalVectorIndex (VectorType n _) ti (v, i) | IntegralDict <- integralDict ti = vecIndex v (fromIntegral i)
+
+evalVectorWrite :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> (Vec n a, (i, a)) -> Vec n a
+evalVectorWrite (VectorType n _) ti (v, (i, a)) | IntegralDict <- integralDict ti = vecWrite v (fromIntegral i) a
+
 evalFromIntegral :: IntegralType a -> NumType b -> a -> b
 evalFromIntegral ta (IntegralNumType tb)
   | IntegralDict <- integralDict ta
@@ -1212,6 +1219,9 @@ evalMaxBound (IntegralBoundedType ty)
 
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi
+
+evalVectorCreate :: (KnownNat n, Prim a) => VectorType (Vec n a) -> Vec n a
+evalVectorCreate (VectorType n _) = vecEmpty
 
 evalSin :: FloatingType a -> (a -> a)
 evalSin ty | FloatingDict <- floatingDict ty = sin
