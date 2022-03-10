@@ -293,7 +293,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
               ++ map varE xs
               ++ map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat fs1)
 
-        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
+        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeTAG))) $(litE (IntegerL (toInteger tag))))) $vs |]
         body   = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
 
       r <- sequence [ sigD fun sig

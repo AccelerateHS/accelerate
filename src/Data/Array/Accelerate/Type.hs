@@ -101,11 +101,11 @@ type family POStoEltR (cs :: Nat) fs :: Type where
 
 type family FlattenProduct (xss :: f (g a)) = (r :: Type) where
   FlattenProduct '[] = ()
-  FlattenProduct (x ': xs) = (ScalarType (FlattenSum x), FlattenProduct xs)
+  FlattenProduct (x ': xs) = (ScalarType (Sum x), FlattenProduct xs)
 
-type family FlattenSum (xss :: f a) = (r :: Type) | r -> f where
-  FlattenSum '[] = ()
-  FlattenSum (x ': xs) = (x, FlattenSum xs)
+type family FlattenProductType (xss :: f (g a)) = (r :: Type) where
+  FlattenProductType '[] = ()
+  FlattenProductType (x ': xs) = (SumType x, FlattenProductType xs)
 
 flattenProduct :: Product a -> FlattenProduct a
 flattenProduct Nil = ()
@@ -194,9 +194,11 @@ data BoundedType a where
 -- | All scalar element types implement Eq & Ord
 --
 data ScalarType a where
-  SumScalarType    :: Sum a                -> ScalarType (FlattenSum a)
+  SumScalarType    :: Sum a                -> ScalarType (Sum a)
+  SumScalarTypeR   :: SumType a            -> ScalarType (SumType a)
   TagScalarType    :: Finite n             -> ScalarType (Finite n)
   SingleScalarType :: SingleType a         -> ScalarType a
+  SingletonScalarType :: ScalarType a
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
 
 data SingleType a where

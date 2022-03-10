@@ -29,7 +29,8 @@
 
 module Data.Array.Accelerate.Representation.POS (
   POSable(..), POS, POST, mkPOS, mkPOST, fromPOS, Product(..), Sum(..),
-  GroundType, Finite, ProductType(..), SumType(..), POSable.Generic, type (++))
+  GroundType(..), Finite, ProductType(..), SumType(..), POSable.Generic, type (++),
+  mkPOSableGroundType)
   where
 
 -- import Data.Array.Accelerate.Type
@@ -45,6 +46,7 @@ import GHC.TypeLits
 import Data.Type.POSable.POSable as POSable
 import Data.Type.POSable.Representation
 import Data.Type.POSable.Instances
+import Data.Type.POSable.TH
 
 import Data.Int
 import Data.Word
@@ -88,94 +90,6 @@ type POST a = (Finite (Choices a), ProductType (Fields a))
 
 mkPOST :: forall a . (POSable a) => POST a
 mkPOST = (0, emptyFields @a)
-
-runQ $ do
-  let
-      -- XXX: we might want to do the digItOut trick used by FromIntegral?
-      --
-      integralTypes :: [Name]
-      integralTypes =
-        [ ''Int
-        , ''Int8
-        , ''Int16
-        , ''Int32
-        , ''Int64
-        , ''Word
-        , ''Word8
-        , ''Word16
-        , ''Word32
-        , ''Word64
-        ]
-
-      floatingTypes :: [Name]
-      floatingTypes =
-        [ ''Half
-        , ''Float
-        , ''Double
-        ]
-
-      newtypes :: [Name]
-      newtypes =
-        [ ''CShort
-        , ''CUShort
-        , ''CInt
-        , ''CUInt
-        , ''CLong
-        , ''CULong
-        , ''CLLong
-        , ''CULLong
-        , ''CFloat
-        , ''CDouble
-        , ''CChar
-        , ''CSChar
-        , ''CUChar
-        ]
-
-      mkSimple :: Name -> Q [Dec]
-      mkSimple name =
-        let t = conT name
-        in
-        [d|
-            instance GroundType $t
-
-            instance POSable $t where
-              type Choices $t = 1
-              choices _ = 0
-
-              type Fields $t = '[ '[$t]]
-              fields x = Cons (Pick x) Nil
-
-              fromPOSable 0 (Cons (Pick x) Nil) = x
-              fromPOSable _ _                   = error "index out of range"
-
-              emptyFields = PTCons (STSucc 0 STZero) PTNil
-          |]
-
-      mkTuple :: Int -> Q Dec
-      mkTuple n =
-        let
-            xs  = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-            ts  = map varT xs
-            res = tupT ts
-            ctx = mapM (appT [t| POSable |]) ts
-        in
-        instanceD ctx [t| POSable $res |] []
-
-      mkNewtype :: Name -> Q [Dec]
-      mkNewtype name = do
-        r    <- reify name
-        base <- case r of
-                  TyConI (NewtypeD _ _ _ _ (NormalC _ [(_, ConT b)]) _) -> return b
-                  _                                                     -> error "unexpected case generating newtype Elt instance"
-        --
-        [d| instance POSable $(conT name)
-          |]
-  --
-  ss <- mapM mkSimple (integralTypes ++ floatingTypes)
-  ns <- mapM mkNewtype newtypes
-  -- ts <- mapM mkTuple [2..16]
-  -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
-  return (concat ss ++ concat ns)
 
 
 type family Snoc2List x = xs | xs -> x where
