@@ -29,7 +29,6 @@ import Data.Word
 import Foreign.C.Types
 import Foreign.Ptr
 import Language.Haskell.TH.Syntax
-import Numeric
 import System.IO.Unsafe
 
 import qualified Data.ByteString                                    as S
@@ -40,6 +39,7 @@ import qualified Data.ByteString.Unsafe                             as B
 import GHC.Exts
 import GHC.Base
 import GHC.Word
+import GHC.Show
 
 
 -- | SHA3 (256 bits) cryptographic hash digest
@@ -51,7 +51,14 @@ instance Show SHA3_256 where
     let go !i# =
           case i# <# 32# of
             0# -> []
-            _  -> showHex (W8# (indexWord8Array# ba# i#)) (go (i# +# 1#))
+            _  -> let w8# = indexWord8Array# ba# i#
+                      w#  = word8ToWord# w8#
+                      n#  = quotWord# w# 16##
+                      d#  = remWord# w# 16##
+                      x   = intToDigit (I# (word2Int# n#))
+                      y   = intToDigit (I# (word2Int# d#))
+                  in
+                  x : y : go (i# +# 1#)
     in
     go 0#
 
@@ -74,6 +81,11 @@ instance Ord SHA3_256 where
     in
     go 0#
 
+#if !MIN_VERSION_base(4,16,0)
+{-# INLINE word8ToWord# #-}
+word8ToWord# :: Word# -> Word#
+word8ToWord# w# = w#
+#endif
 
 -- | Hash a strict 'S.ByteString' into a digest
 --
