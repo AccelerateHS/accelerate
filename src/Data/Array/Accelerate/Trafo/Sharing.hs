@@ -201,11 +201,10 @@ instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
   convertOpenAfun config alyt f
     | repr <- Sugar.arraysR @a
     , DeclareVars lhs k value <- declareVars repr
-    = let
-        a     = Acc $ SmartAcc $ Atag repr $ sizeLayout alyt
-        alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
+    = let a     = Acc $ SmartAcc $ Atag repr $ sizeLayout alyt
+          alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
       in
-        Alam lhs $ convertOpenAfun config alyt' $ f a
+      Alam lhs $ convertOpenAfun config alyt' $ f a
 
 instance Arrays b => Afunction (Acc b) where
   type AfunctionR      (Acc b) = b
@@ -221,11 +220,10 @@ convertSmartAfun1
     -> AST.Afun (a -> b)
 convertSmartAfun1 config repr f
   | DeclareVars lhs _ value <- declareVars repr
-  = let
-      a     = SmartAcc $ Atag repr 0
-      alyt' = PushLayout EmptyLayout lhs (value weakenId)
+  = let a     = SmartAcc $ Atag repr 0
+        alyt' = PushLayout EmptyLayout lhs (value weakenId)
     in
-      Alam lhs $ Abody $ convertOpenAcc config alyt' $ f a
+    Alam lhs $ Abody $ convertOpenAcc config alyt' $ f a
 
 -- | Convert an open array expression to de Bruijn form while also incorporating sharing
 -- information.
@@ -274,13 +272,11 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
   = case declareVars $ AST.arraysR bound of
       DeclareVars lhs k value ->
-        let
-          alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
-        in
-          AST.OpenAcc $ AST.Alet
-            lhs
-            bound
-            (convertSharingAcc config alyt' (sa:aenv') bodyAcc)
+        let alyt' = PushLayout (incLayout k alyt) lhs (value weakenId)
+         in AST.OpenAcc $ AST.Alet
+              lhs
+              bound
+              (convertSharingAcc config alyt' (sa:aenv') bodyAcc)
   where
     aenv' = lams ++ aenv
     bound = convertSharingAcc config alyt aenv' (ScopedAcc [] boundAcc)
