@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE DefaultSignatures    #-}
 {-# LANGUAGE FlexibleContexts     #-}
@@ -12,6 +11,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# OPTIONS_HADDOCK hide #-}
+{-# OPTIONS_GHC -ddump-splices #-}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 -- This is needed to derive POSable for tuples of size more then 4
@@ -31,17 +31,10 @@ module Data.Array.Accelerate.Sugar.POS
 
 -- import Data.Array.Accelerate.Type
 
-import Data.Bits
-import Data.Char
-import Data.Kind
 import Language.Haskell.TH.Extra                                    hiding ( Type )
-
-import GHC.Generics
-import GHC.TypeLits
 
 import Data.Type.POSable.POSable as POSable
 import Data.Type.POSable.Representation
-import Data.Type.POSable.Instances
 import Data.Type.POSable.TH
 
 import Data.Int
@@ -50,6 +43,7 @@ import Numeric.Half
 import Foreign.C.Types
 
 import Data.Array.Accelerate.Type
+
 
 runQ $ do
     let
@@ -93,17 +87,16 @@ runQ $ do
           , ''CUChar
           ]
   
-        mkSimple :: Name -> Name -> Q [Dec]
-        mkSimple typ name =
+        mkSimple :: Name -> Name -> Name -> Q [Dec]
+        mkSimple typ val name =
           let t = conT name
-              tt = conT typ
-              tr = pure $ ConE $ mkName ("Type" ++ nameBase name)
+              tr = pure $ AppE (ConE val) (ConE $ mkName ("Type" ++ nameBase name))
           in
           [d|
               instance GroundType $t where
-                type TypeRep $t = $tt $t
+                type TypeRep $t = ScalarType $t
   
-                mkTypeRep = $tr
+                mkTypeRep = SingleScalarType (NumSingleType $tr)
             |]
   
         mkTuple :: Int -> Q Dec
@@ -125,8 +118,8 @@ runQ $ do
           --
           mkPOSableGroundType name
     --
-    si <- mapM (mkSimple ''IntegralType) integralTypes
-    sf <- mapM (mkSimple ''FloatingType) floatingTypes
+    si <- mapM (mkSimple ''IntegralType 'IntegralNumType) integralTypes
+    sf <- mapM (mkSimple ''FloatingType 'FloatingNumType) floatingTypes
     ns <- mapM mkPOSableGroundType (floatingTypes ++ integralTypes)
     -- ns <- mapM mkNewtype newtypes
     -- ts <- mapM mkTuple [2..16]

@@ -1,9 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE NoStarIsType #-}
@@ -26,16 +24,10 @@ module Data.Array.Accelerate.Sugar.Vec
   where
 
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Representation.Tag
-import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.POS
 import Data.Array.Accelerate.Type
 import Data.Primitive.Types
 import Data.Primitive.Vec
-import Data.Kind
-
-import GHC.TypeLits
-import GHC.Prim
 
 
 type VecElt a = (Elt a, Prim a, IsSingle a, GroundType a, Num a)
@@ -52,7 +44,7 @@ instance VecElt a => POSable (Vec2 a) where
     type Fields (Vec2 a) = '[ '[a], '[a]]
     fields (Vec2 a b) = Cons (Pick a) (Cons (Pick b) Nil)
 
-    emptyFields = PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) PTNil)
+    emptyFields = PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) PTNil)
 
 
 -- Elt instance automatically derived from POSable instance
@@ -71,7 +63,7 @@ instance VecElt a => POSable (Vec4 a) where
     type Fields (Vec4 a) = '[ '[a], '[a], '[a], '[a]]
     fields (Vec4 a b c d) = Cons (Pick a) (Cons (Pick b) (Cons (Pick c) (Cons (Pick d) Nil)))
 
-    emptyFields = PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) (PTCons (STSucc 0 STZero) PTNil)))
+    emptyFields = PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) PTNil)))
 
 
 -- Elt instance automatically derived from POSable instance

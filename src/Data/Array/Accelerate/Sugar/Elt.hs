@@ -29,6 +29,7 @@ import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.POS
+import Data.Array.Accelerate.Sugar.POS
 import Data.Array.Accelerate.Type
 
 import Data.Bits
@@ -38,7 +39,9 @@ import Data.Word
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 
 import GHC.Generics
-
+import GHC.TypeLits
+import Unsafe.Coerce
+import Data.Type.Equality
 
 -- | The 'Elt' class characterises the allowable array element types, and
 -- hence the types which can appear in scalar Accelerate expressions of
@@ -91,14 +94,43 @@ class Elt a where
   fromElt :: a -> EltR a
   toElt   :: EltR a -> a
 
-  -- default eltR :: (POSable a) => EltRT a
-  -- eltR = mkPOST @a
+  default eltR :: (POSable a, POStoEltR (Choices a) (Fields a) ~ EltR a) => TypeR (EltR a)
+  eltR = mkEltRT @a
 
   default fromElt :: (POSable a, POStoEltR (Choices a) (Fields a) ~ EltR a) => a -> EltR a
-  fromElt a = mkEltR a
+  fromElt = mkEltR
 
   default toElt :: (POSable a,  POStoEltR (Choices a) (Fields a) ~ EltR a) => EltR a -> a
-  toElt a = fromEltR a
+  toElt = fromEltR
+
+flattenProductType :: ProductType a -> TypeR (FlattenProductType a)
+flattenProductType PTNil = TupRunit
+flattenProductType (PTCons x xs) = TupRpair (TupRsingle (SumScalarTypeR x)) (flattenProductType xs)
+
+mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))
+mkEltRT = case natVal cs of
+            -- This distinction is hard to express in a type-correct way,
+            -- hence the unsafeCoerce's
+            1 -> case emptyFields @a of
+                  PTCons (STSucc x STZero) PTNil -> TupRsingle (typeRep2scalarT (unsafeCoerce x))
+                  x -> unsafeCoerce $ flattenProductType x
+            _ -> unsafeCoerce $ TupRpair (TupRsingle (TagScalarType cs)) (flattenProductType (emptyFields @a))
+  where
+    cs = emptyChoices @a
+
+    -- This means we should NEVER add a GroundType x for which TypeRep x !~ ScalarType x,
+    -- because that will lead to nasty bugs.
+    -- We should never expose GroundType to Accelerate users (which wouldn't make
+    -- much sense anyhow, why would a user add a machine type?), and also try
+    -- to limit the visibility of GroundType within Accelerate itself.
+    -- We cannot enforce this however without inlining the POSable library and replacing
+    -- the definition of TypeRep.
+    typeRep2scalarT :: forall x . TypeRep x -> ScalarType x
+    typeRep2scalarT a
+      | Refl :: (TypeRep x :~: ScalarType x) <- unsafeCoerce Refl
+      = a
+
+
 
 untag :: TypeR t -> TagR t
 untag TupRunit         = TagRunit
