@@ -76,6 +76,7 @@ import Data.Array.Accelerate.Representation.POS
 import Data.Primitive.Vec
 
 import Data.Bits
+import Data.Proxy
 import Data.Int
 import Data.Primitive.Types
 import Data.Type.Equality
@@ -96,7 +97,7 @@ import Unsafe.Coerce
 
 type family POStoEltR (cs :: Nat) fs :: Type where
   POStoEltR 1 '[ '[x]] = x -- singletontypes
-  POStoEltR 1 x = FlattenProduct x -- tagless types (could / should be represented without Sums in the Product)
+  POStoEltR 1 x = FlattenProduct x -- tagless types
   POStoEltR n x = (Finite n, FlattenProduct x) -- all other types
 
 type family FlattenProduct (xss :: f (g a)) = (r :: Type) where
@@ -111,29 +112,44 @@ flattenProduct :: Product a -> FlattenProduct a
 flattenProduct Nil = ()
 flattenProduct (Cons x xs) = (SumScalarType x, flattenProduct xs)
 
--- unFlattenProduct :: FlattenProduct a -> Product a
--- unFlattenProduct () = Nil
--- unFlattenProduct (SumScalarType x, xs) = Cons x (unFlattenProduct xs)
 
+-- This might typecheck without unsafeCoerce by using cmpNat, but that requires a very new version of base
 mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)
-mkEltR x = case natVal cs of
-             -- This distinction is hard to express in a type-correct way,
-             -- hence the unsafeCoerce's
-             1 -> case emptyFields @a of
-                    PTCons (STSucc _ STZero) PTNil | Cons (Pick f) Nil <- fields x -> unsafeCoerce f
-                    _ -> unsafeCoerce fs
-             _ -> unsafeCoerce (cs, fs)
+mkEltR x = case sameNat cs (Proxy :: Proxy 1) of
+             Just Refl -> case emptyFields @a of
+                    -- Lots of cases because GHC does not understand inequality
+                    -- First up: singleton type
+                    PTCons (STSucc _ STZero) PTNil | Cons (Pick f) Nil <- fields x -> f
+                    -- Singleton type, but we don't get an actual value out of
+                    -- the call to `fields` (Should never occur).
+                    PTCons (STSucc _ STZero) PTNil -> error "Value does not match representation"
+                    -- unit type
+                    PTNil -> fs
+                    -- weird type with no value in the first field (thus having
+                    -- no constructors)
+                    PTCons STZero _ -> fs
+                    -- weird type with a sum in the first field (weird because
+                    -- we already have `Choices a ~ 1` in scope)
+                    PTCons (STSucc _ (STSucc _ _)) _ -> fs
+                    -- type with two or more fields
+                    PTCons _ (PTCons _ _) -> fs
+             -- unsafeCoerce because we cannot prove to the compiler that
+             -- `Choices a !~ 1` (and thus the 3th branch of the POStoEltR
+             -- type family holds)
+             Nothing -> unsafeCoerce (cs, fs)
   where
     cs = choices x
     fs = flattenProduct (fields x)
 
 
+-- TODO: this might not be correct
+-- This might typecheck with cmpNat, but that requires a very new version of base
 fromEltR :: forall a . (POSable a) => POStoEltR (Choices a) (Fields a) -> a
-fromEltR x = case natVal (emptyChoices @a) of
-              1 -> case emptyFields @a of
+fromEltR x = case sameNat (emptyChoices @a) (Proxy :: Proxy 1) of
+              Just Refl -> case emptyFields @a of
                 PTCons (STSucc _ STZero) PTNil -> unsafeCoerce x
                 _ -> fromPOSable 0 (unsafeCoerce x)
-              _ -> uncurry fromPOSable (unsafeCoerce x)
+              Nothing -> uncurry fromPOSable (unsafeCoerce x)
 
 -- Scalar types
 -- ------------
@@ -240,6 +256,7 @@ instance Show (VectorType a) where
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
   show (VectorScalarType ty) = show ty
+  -- TODO add all constructors
 
 formatIntegralType :: Format r (IntegralType a -> r)
 formatIntegralType = later $ \case
