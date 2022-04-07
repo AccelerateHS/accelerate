@@ -95,23 +95,41 @@ import GHC.TypeLits
 import Unsafe.Coerce
 
 
+-- | The type of the runtime value used to distinguish constructor
+-- alternatives in a sum type.
+--
+type TAG = Word8
+
+
 type family POStoEltR (cs :: Nat) fs :: Type where
   POStoEltR 1 '[ '[x]] = x -- singletontypes
   POStoEltR 1 x = FlattenProduct x -- tagless types
-  POStoEltR n x = (Finite n, FlattenProduct x) -- all other types
+  POStoEltR n x = (TAG, FlattenProduct x) -- all other types
 
-type family FlattenProduct (xss :: f (g a)) = (r :: Type) where
+type family FlattenProduct (xss :: [[a]]) :: Type where
   FlattenProduct '[] = ()
-  FlattenProduct (x ': xs) = (ScalarType (Sum x), FlattenProduct xs)
+  FlattenProduct (x ': xs) = (SumScalar (FlattenSum x), FlattenProduct xs)
 
-type family FlattenProductType (xss :: f (g a)) = (r :: Type) where
+type family FlattenSum (xs :: [a]) :: Type where
+  FlattenSum '[] = ()
+  FlattenSum (x ': xs) = (x, FlattenSum xs)
+
+type family FlattenProductType (xss :: [[a]]) :: Type where
   FlattenProductType '[] = ()
-  FlattenProductType (x ': xs) = (SumType x, FlattenProductType xs)
+  FlattenProductType (x ': xs) = (SumScalarType (FlattenSumType x), FlattenProductType xs)
+
+type family FlattenSumType (xs :: [a]) :: Type where
+  FlattenSumType '[] = ()
+  FlattenSumType (x ': xs) = (x, FlattenSumType xs)
+
 
 flattenProduct :: Product a -> FlattenProduct a
 flattenProduct Nil = ()
-flattenProduct (Cons x xs) = (SumScalarType x, flattenProduct xs)
+flattenProduct (Cons x xs) = (flattenSum x, flattenProduct xs)
 
+flattenSum :: Sum a -> SumScalar (FlattenSum a)
+flattenSum (Pick x) = PickScalar x
+flattenSum (Skip xs) = SkipScalar (flattenSum xs)
 
 -- This might typecheck without unsafeCoerce by using cmpNat, but that requires a very new version of base
 mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)
@@ -187,7 +205,7 @@ data IntegralType a where
   TypeWord16  :: IntegralType Word16
   TypeWord32  :: IntegralType Word32
   TypeWord64  :: IntegralType Word64
-  TypeTAG     :: IntegralType (Finite n)
+  TypeTAG     :: IntegralType TAG
 
 -- | Floating-point types supported in array computations.
 --
@@ -210,12 +228,17 @@ data BoundedType a where
 -- | All scalar element types implement Eq & Ord
 --
 data ScalarType a where
-  SumScalarType    :: Sum a                -> ScalarType (Sum a)
-  SumScalarTypeR   :: SumType a            -> ScalarType (SumType a)
-  TagScalarType    :: Finite n             -> ScalarType (Finite n)
   SingleScalarType :: SingleType a         -> ScalarType a
-  SingletonScalarType :: ScalarType a
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
+  SumScalarType :: SumScalarType a -> ScalarType a
+
+data SumScalar x where
+  PickScalar  :: a -> SumScalar (a, b)
+  SkipScalar  :: SumScalar b -> SumScalar (a, b)
+
+data SumScalarType a where
+  SuccScalarType  :: ScalarType a -> ScalarType (SumScalar b) -> SumScalarType (SumScalar (a, b))
+  ZeroScalarType  :: SumScalarType (SumScalar ())
 
 data SingleType a where
   NumSingleType :: NumType a -> SingleType a

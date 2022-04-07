@@ -11,7 +11,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Representation.Tag
+module Data.Array.Accelerate.Representation.Tag (TAG, TagR(..), rnfTag, liftTag)
   where
 
 import Data.Array.Accelerate.Type
@@ -19,10 +19,6 @@ import Data.Array.Accelerate.Type
 import Language.Haskell.TH.Extra
 
 
--- | The type of the runtime value used to distinguish constructor
--- alternatives in a sum type.
---
-type TAG = Word8
 
 -- | This structure both witnesses the layout of our representation types
 -- (as TupR does) and represents a complete path of pattern matching

@@ -30,7 +30,7 @@ import Data.Primitive.Types
 import Data.Primitive.Vec
 
 
-type VecElt a = (Elt a, Prim a, IsSingle a, GroundType a, Num a)
+type VecElt a = (Elt a, Prim a, IsSingle a, Ground a, Num a)
 
 instance VecElt a => POSable (Vec2 a) where
     type Choices (Vec2 a) = 1
@@ -44,7 +44,7 @@ instance VecElt a => POSable (Vec2 a) where
     type Fields (Vec2 a) = '[ '[a], '[a]]
     fields (Vec2 a b) = Cons (Pick a) (Cons (Pick b) Nil)
 
-    emptyFields = PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) PTNil)
+    emptyFields = PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) PTNil)
 
     type OuterChoices (Vec2 a) = 1
     outerChoice _ = 0
@@ -65,7 +65,7 @@ instance VecElt a => POSable (Vec4 a) where
     type Fields (Vec4 a) = '[ '[a], '[a], '[a], '[a]]
     fields (Vec4 a b c d) = Cons (Pick a) (Cons (Pick b) (Cons (Pick c) (Cons (Pick d) Nil)))
 
-    emptyFields = PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) (PTCons (STSucc (mkTypeRep @a) STZero) PTNil)))
+    emptyFields = PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) PTNil)))
 
     type OuterChoices (Vec4 a) = 1
     outerChoice _ = 0

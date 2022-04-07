@@ -90,13 +90,11 @@ runQ $ do
         mkSimple :: Name -> Name -> Name -> Q [Dec]
         mkSimple typ val name =
           let t = conT name
-              tr = pure $ AppE (ConE val) (ConE $ mkName ("Type" ++ nameBase name))
+              -- tr = pure $ AppE (ConE val) (ConE $ mkName ("Type" ++ nameBase name))
           in
           [d|
-              instance GroundType $t where
-                type TypeRep $t = ScalarType $t
-  
-                mkTypeRep = SingleScalarType (NumSingleType $tr)
+              instance Ground $t where
+                mkGround = 0
             |]
   
         mkTuple :: Int -> Q Dec
@@ -116,11 +114,11 @@ runQ $ do
                     TyConI (NewtypeD _ _ _ _ (NormalC _ [(_, ConT b)]) _) -> return b
                     _                                                     -> error "unexpected case generating newtype Elt instance"
           --
-          mkPOSableGroundType name
+          mkPOSableGround name
     --
     si <- mapM (mkSimple ''IntegralType 'IntegralNumType) integralTypes
     sf <- mapM (mkSimple ''FloatingType 'FloatingNumType) floatingTypes
-    ns <- mapM mkPOSableGroundType (floatingTypes ++ integralTypes)
+    ns <- mapM mkPOSableGround (floatingTypes ++ integralTypes)
     -- ns <- mapM mkNewtype newtypes
     -- ts <- mapM mkTuple [2..16]
     -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]

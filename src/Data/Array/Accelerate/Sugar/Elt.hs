@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds      #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -ddump-splices #-}
 -- |
@@ -25,23 +26,21 @@
 module Data.Array.Accelerate.Sugar.Elt ( Elt(..) )
   where
 
-import Data.Array.Accelerate.Representation.Elt
-import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.POS
-import Data.Array.Accelerate.Sugar.POS
+import Data.Array.Accelerate.Representation.Tag
+import Data.Array.Accelerate.Sugar.POS ()
 import Data.Array.Accelerate.Type
 
-import Data.Bits
 import Data.Char
 import Data.Kind
-import Data.Word
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 
-import GHC.Generics
 import GHC.TypeLits
 import Unsafe.Coerce
 import Data.Type.Equality
+import Data.Proxy
+import Data.Typeable
 
 -- | The 'Elt' class characterises the allowable array element types, and
 -- hence the types which can appear in scalar Accelerate expressions of
@@ -103,33 +102,68 @@ class Elt a where
   default toElt :: (POSable a,  POStoEltR (Choices a) (Fields a) ~ EltR a) => EltR a -> a
   toElt = fromEltR
 
-flattenProductType :: ProductType a -> TypeR (FlattenProductType a)
+flattenProductType :: ProductType a -> TypeR (FlattenProduct a)
 flattenProductType PTNil = TupRunit
-flattenProductType (PTCons x xs) = TupRpair (TupRsingle (SumScalarTypeR x)) (flattenProductType xs)
+flattenProductType (PTCons x xs) = TupRpair (TupRsingle (flattenSumType x)) (flattenProductType xs)
+
+flattenSumType :: SumType a -> ScalarType (SumScalar (FlattenSum a))
+flattenSumType STZero = SumScalarType ZeroScalarType
+flattenSumType (STSucc (x :: x) xs)
+  = SumScalarType (SuccScalarType (mkScalarType x) (flattenSumType xs))
+
+-- This is an unsafe conversion, and should be kept strictly in sync with the
+-- set of types that implement Ground
+mkScalarType :: forall a . (Typeable a, Ground a) => a -> ScalarType a
+mkScalarType _
+  | Just Refl <- eqT @a @Int
+   = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int8
+   = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int16
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int32
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int64
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word
+    = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word8
+    = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word16
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word32
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word64
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Half
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Float
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Double
+  = scalarType @a
 
 mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))
-mkEltRT = case natVal cs of
+mkEltRT = case sameNat cs (Proxy :: Proxy 1) of
             -- This distinction is hard to express in a type-correct way,
             -- hence the unsafeCoerce's
-            1 -> case emptyFields @a of
-                  PTCons (STSucc x STZero) PTNil -> TupRsingle (typeRep2scalarT (unsafeCoerce x))
+            Just Refl -> case emptyFields @a of
+                  PTCons (STSucc x STZero) PTNil -> TupRsingle (mkScalarType x)
                   x -> unsafeCoerce $ flattenProductType x
-            _ -> unsafeCoerce $ TupRpair (TupRsingle (TagScalarType cs)) (flattenProductType (emptyFields @a))
+            Nothing -> unsafeCoerce $ TupRpair (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))) (flattenProductType (emptyFields @a))
   where
     cs = emptyChoices @a
-
-    -- This means we should NEVER add a GroundType x for which TypeRep x !~ ScalarType x,
-    -- because that will lead to nasty bugs.
-    -- We should never expose GroundType to Accelerate users (which wouldn't make
-    -- much sense anyhow, why would a user add a machine type?), and also try
-    -- to limit the visibility of GroundType within Accelerate itself.
-    -- We cannot enforce this however without inlining the POSable library and replacing
-    -- the definition of TypeRep.
-    typeRep2scalarT :: forall x . TypeRep x -> ScalarType x
-    typeRep2scalarT a
-      | Refl :: (TypeRep x :~: ScalarType x) <- unsafeCoerce Refl
-      = a
-
 
 
 untag :: TypeR t -> TagR t
