@@ -628,3 +628,19 @@ instance IsSingle Undef where
 
 instance IsScalar Undef where
   scalarType = SingleScalarType singleType
+
+instance IsScalar (SumScalar ()) where
+  scalarType = SumScalarType ZeroScalarType
+
+instance (IsScalar a, IsSumScalar b) => IsScalar (SumScalar (a, b)) where
+  scalarType = SumScalarType $ SuccScalarType (scalarType @a) (SumScalarType 
+                (sumScalarType @b))
+
+class IsSumScalar a where
+  sumScalarType :: SumScalarType (SumScalar a)
+
+instance IsSumScalar () where
+  sumScalarType = ZeroScalarType
+
+instance (IsScalar a, IsSumScalar b) => IsSumScalar (a, b) where
+  sumScalarType = SuccScalarType (scalarType @a) (SumScalarType (sumScalarType @b))
