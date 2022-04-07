@@ -232,9 +232,22 @@ instance Matchable (Maybe Int) where
       case sameNat n (Proxy :: Proxy 1) of
         Just Refl ->
           case e of
-            SmartExp (Match (TagRtag 1 _) x) -> undefined
-              -- -> Just (Exp (SmartExp (Match (TagRsingle (scalarType @Int))
-              --     (Prj PairIdxLeft x))) :* SOP.Nil)
+            SmartExp (Match (TagRtag 1 _) x)
+              -> Just
+                  (Exp
+                    (SmartExp
+                      (PrjUnion
+                        UnionIdxLeft
+                        (SmartExp
+                          (PrjUnion
+                            UnionIdxRight
+                            (SmartExp
+                              (Prj
+                                PairIdxLeft
+                                (SmartExp (Prj PairIdxRight x))
+                              ))
+                          ))
+                      )) :* SOP.Nil)
             SmartExp Match {} -> Nothing
 
             _ -> error "Embedded pattern synonym used outside 'match' context."

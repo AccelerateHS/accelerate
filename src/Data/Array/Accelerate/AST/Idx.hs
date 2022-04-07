@@ -27,11 +27,13 @@ module Data.Array.Accelerate.AST.Idx (
   idxToInt,
   rnfIdx, liftIdx,
 
-  PairIdx(..)
+  PairIdx(..),
+  UnionIdx(..)
 
 ) where
 
 import Language.Haskell.TH.Extra
+import Data.Array.Accelerate.Type
 
 #ifndef ACCELERATE_INTERNAL_CHECKS
 import Data.Type.Equality ((:~:)(Refl))
@@ -112,3 +114,8 @@ data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a
   PairIdxRight :: PairIdx (a, b) b
 
+data UnionIdx p a where
+  UnionIdxLeft  :: UnionIdx (a, b) a
+  UnionIdxRight :: UnionIdx (a, b) (SumScalar b)
+  
+  
