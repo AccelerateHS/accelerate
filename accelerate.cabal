@@ -363,6 +363,7 @@ library
         , vector                        >= 0.10
         , posable                       >= 0.9.0.0
         , ghc-typelits-knownnat         >= 0.7.6
+        , generics-sop                  >= 0.5.1.1
 
   exposed-modules:
         -- The core language and reference implementation
@@ -466,6 +467,7 @@ library
         Data.Array.Accelerate.Lift
         Data.Array.Accelerate.Orphans
         Data.Array.Accelerate.Pattern
+        Data.Array.Accelerate.Pattern.Matchable
         Data.Array.Accelerate.Pattern.Bool
         Data.Array.Accelerate.Pattern.Either
         Data.Array.Accelerate.Pattern.Maybe

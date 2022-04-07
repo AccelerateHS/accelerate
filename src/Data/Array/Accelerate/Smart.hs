@@ -93,6 +93,7 @@ import Data.Array.Accelerate.Representation.Stencil                 hiding ( Ste
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
+import Data.Array.Accelerate.Representation.POS hiding (Nil, Undef)
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Foreign
@@ -509,6 +510,9 @@ data PreSmartExp acc exp t where
   Prj           :: PairIdx (t1, t2) t
                 -> exp (t1, t2)
                 -> PreSmartExp acc exp t
+
+  Union         :: Either (exp t1) (exp (SumScalar t2))
+                -> PreSmartExp acc exp (SumScalar (t1, t2))
 
   VecPack       :: KnownNat n
                 => VecR n s tup
