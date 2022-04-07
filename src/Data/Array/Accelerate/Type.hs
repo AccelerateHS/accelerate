@@ -242,6 +242,7 @@ data SumScalarType a where
 
 data SingleType a where
   NumSingleType :: NumType a -> SingleType a
+  UndefSingleType :: SingleType Undef
 
 data VectorType a where
   VectorType :: KnownNat n => {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
@@ -257,6 +258,7 @@ instance Show (IntegralType a) where
   show TypeWord16 = "Word16"
   show TypeWord32 = "Word32"
   show TypeWord64 = "Word64"
+  show TypeTAG    = "TAG"
 
 instance Show (FloatingType a) where
   show TypeHalf   = "Half"
@@ -272,6 +274,7 @@ instance Show (BoundedType a) where
 
 instance Show (SingleType a) where
   show (NumSingleType ty) = show ty
+  show UndefSingleType  = "Undef"
 
 instance Show (VectorType a) where
   show (VectorType n ty) = printf "<%d x %s>" n (show ty)
@@ -279,7 +282,12 @@ instance Show (VectorType a) where
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
   show (VectorScalarType ty) = show ty
-  -- TODO add all constructors
+  show (SumScalarType    ty) = show ty
+
+instance Show (SumScalarType a) where
+  show ZeroScalarType = ""
+  show (SuccScalarType x (SumScalarType (ZeroScalarType))) = show x
+  show (SuccScalarType x xs) = show x ++ " ＋ " ++ show xs
 
 formatIntegralType :: Format r (IntegralType a -> r)
 formatIntegralType = later $ \case
@@ -614,3 +622,9 @@ runQ $ do
   --
   return (concat is ++ concat fs ++ concat vs)
 
+
+instance IsSingle Undef where
+  singleType = UndefSingleType
+
+instance IsScalar Undef where
+  scalarType = SingleScalarType singleType

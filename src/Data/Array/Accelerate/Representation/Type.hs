@@ -51,7 +51,7 @@ data TupR s a where
 instance Show (TupR ScalarType a) where
   show TupRunit       = "()"
   show (TupRsingle t) = show t
-  show (TupRpair a b) = "(" ++ show a ++ "," ++ show b ++ ")"
+  show (TupRpair a b) = show a ++ " ✕ " ++ show b
 
 formatTypeR :: Format r (TypeR a -> r)
 formatTypeR = later $ \case

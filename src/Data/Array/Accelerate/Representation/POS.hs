@@ -17,7 +17,7 @@
 module Data.Array.Accelerate.Representation.POS (
   POSable(..), Product(..), Sum(..),
   Ground(..), Finite, ProductType(..), SumType(..), POSable.Generic, type (++),
-  mkPOSableGround)
+  mkPOSableGround, Undef(..))
   where
 
 

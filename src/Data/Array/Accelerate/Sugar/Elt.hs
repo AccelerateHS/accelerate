@@ -153,6 +153,10 @@ mkScalarType _
 mkScalarType _
   | Just Refl <- eqT @a @Double
   = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Undef
+  = scalarType @a
+
 
 mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))
 mkEltRT = case sameNat cs (Proxy :: Proxy 1) of
