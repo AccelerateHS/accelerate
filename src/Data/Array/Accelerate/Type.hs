@@ -301,6 +301,7 @@ formatIntegralType = later $ \case
   TypeWord16 -> "Word16"
   TypeWord32 -> "Word32"
   TypeWord64 -> "Word64"
+  TypeTAG    -> "TAG"
 
 formatFloatingType :: Format r (FloatingType a -> r)
 formatFloatingType = later $ \case
@@ -373,6 +374,7 @@ integralDict TypeWord8  = IntegralDict
 integralDict TypeWord16 = IntegralDict
 integralDict TypeWord32 = IntegralDict
 integralDict TypeWord64 = IntegralDict
+integralDict TypeTAG    = IntegralDict
 
 floatingDict :: FloatingType a -> FloatingDict a
 floatingDict TypeHalf   = FloatingDict
@@ -633,7 +635,7 @@ instance IsScalar (SumScalar ()) where
   scalarType = SumScalarType ZeroScalarType
 
 instance (IsScalar a, IsSumScalar b) => IsScalar (SumScalar (a, b)) where
-  scalarType = SumScalarType $ SuccScalarType (scalarType @a) (SumScalarType 
+  scalarType = SumScalarType $ SuccScalarType (scalarType @a) (SumScalarType
                 (sumScalarType @b))
 
 class IsSumScalar a where

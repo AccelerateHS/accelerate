@@ -49,7 +49,7 @@ class Matchable a where
     ) => Proxy n
     -> NP Exp (Index (SOPCode a) n)
     -> Exp a
-  
+
   build n _ = case sameNat (emptyChoices @a) (Proxy :: Proxy 1) of
     -- no tag
     Just Refl -> undefined
@@ -139,8 +139,8 @@ type family MapChoices (xs :: [Type]) :: [Nat] where
 type family Concat (xss :: [[x]]) :: [x] where
   Concat '[] = '[]
   Concat (xs ': xss) = xs ++ Concat xss
-  
-  
+
+
 
 instance Matchable Bool where
   type Choices' Bool = 2
@@ -151,9 +151,9 @@ instance Matchable Bool where
     Just Refl ->
       case e of
         SmartExp (Match (TagRtag 0 TagRunit) _x) -> Just SOP.Nil
-      
+
         SmartExp Match {} -> Nothing
-        
+
         _ -> error "Embedded pattern synonym used outside 'match' context."
     Nothing ->
       case sameNat n (Proxy :: Proxy 1) of
@@ -169,7 +169,7 @@ instance Matchable Bool where
           error "Impossible type encountered"
 
 makeTag :: TAG -> SmartExp TAG
-makeTag x = undefined -- SmartExp (Const (TupRsingle (tagType x)))
+makeTag x = SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeTAG))) x)
 
 tagType :: TupR ScalarType TAG
 tagType = TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))
@@ -187,10 +187,9 @@ instance Matchable (Maybe Int) where
             (SmartExp (
               Pair
                 (SmartExp (
-                  (Const
+                  Const
                     (scalarType @(SumScalar (Undef, (Int, ()))))
                     (PickScalar POS.Undef)
-                  )
                 ))
                 (SmartExp Smart.Nil)
             ))
@@ -219,14 +218,14 @@ instance Matchable (Maybe Int) where
         )
       Nothing -> error "Impossible type encountered"
 
-  match n exp@(Exp e) = case sameNat n (Proxy :: Proxy 0) of
+  match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
       case e of
         SmartExp (Match (TagRtag 0 (TagRpair _ TagRunit)) _x)
           -> Just SOP.Nil
-      
+
         SmartExp Match {} -> Nothing
-        
+
         _ -> error "Embedded pattern synonym used outside 'match' context."
     Nothing -> -- matchJust
       case sameNat n (Proxy :: Proxy 1) of
@@ -234,23 +233,114 @@ instance Matchable (Maybe Int) where
           case e of
             SmartExp (Match (TagRtag 1 _) x)
               -> Just
-                  (Exp
-                    (SmartExp
-                      (PrjUnion
-                        UnionIdxLeft
-                        (SmartExp
-                          (PrjUnion
-                            UnionIdxRight
-                            (SmartExp
-                              (Prj
-                                PairIdxLeft
-                                (SmartExp (Prj PairIdxRight x))
-                              ))
-                          ))
-                      )) :* SOP.Nil)
+                  (mkExp
+                    (PrjUnion
+                      UnionIdxLeft
+                      (SmartExp
+                        (PrjUnion
+                          UnionIdxRight
+                          (SmartExp
+                            (Prj
+                              PairIdxLeft
+                              (SmartExp (Prj PairIdxRight x))
+                            ))
+                        ))
+                    ) :* SOP.Nil)
             SmartExp Match {} -> Nothing
 
             _ -> error "Embedded pattern synonym used outside 'match' context."
 
         Nothing ->
           error "Impossible type encountered"
+
+instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) where
+  type Choices' (Either a b) = OuterChoices (Either a b)
+
+  build n x
+    | Refl :: (EltR (Either a b) :~: (TAG, FlattenProduct (Fields (Either a b)))) <- unsafeCoerce Refl -- this should be easily provable, I'm just lazy
+    = case sameNat n (Proxy :: Proxy 0) of
+      Just Refl
+        -> Exp (
+            SmartExp (
+              Pair
+                (unExp $ buildTAG x)
+                _
+              )
+            )
+      where
+        tag = undefined --foldl 1 (*) (mapChoices x)
+        test = natVal (Proxy :: Proxy (Choices a))
+  --   Nothing -> case sameNat n (Proxy :: Proxy 1) of
+  --     Just Refl | (Exp x' :* SOP.Nil) <- x -> Exp (
+  --         SmartExp (
+  --           Pair
+  --             (makeTag 1)
+  --             (SmartExp (
+  --               Pair
+  --                 (SmartExp
+  --                   (Union
+  --                     (Right (
+  --                       SmartExp
+  --                         (Union
+  --                           (Left x')
+  --                         )
+  --                     ))
+  --                   )
+  --                 )
+  --                 (SmartExp Smart.Nil)
+  --             ))
+  --         )
+  --       )
+  --     Nothing -> error "Impossible type encountered"
+
+  -- match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
+  --   Just Refl ->
+  --     case e of
+  --       SmartExp (Match (TagRtag 0 (TagRpair _ TagRunit)) _x)
+  --         -> Just SOP.Nil
+
+  --       SmartExp Match {} -> Nothing
+
+  --       _ -> error "Embedded pattern synonym used outside 'match' context."
+  --   Nothing -> -- matchJust
+  --     case sameNat n (Proxy :: Proxy 1) of
+  --       Just Refl ->
+  --         case e of
+  --           SmartExp (Match (TagRtag 1 _) x)
+  --             -> Just
+  --                 (Exp
+  --                   (SmartExp
+  --                     (PrjUnion
+  --                       UnionIdxLeft
+  --                       (SmartExp
+  --                         (PrjUnion
+  --                           UnionIdxRight
+  --                           (SmartExp
+  --                             (Prj
+  --                               PairIdxLeft
+  --                               (SmartExp (Prj PairIdxRight x))
+  --                             ))
+  --                         ))
+  --                     )) :* SOP.Nil)
+  --           SmartExp Match {} -> Nothing
+
+  --           _ -> error "Embedded pattern synonym used outside 'match' context."
+
+  --       Nothing ->
+  --         error "Impossible type encountered"
+
+-- like combineProducts, but lifted to the AST
+buildTAG :: (All POSable xs) => NP Exp xs -> Exp TAG
+buildTAG SOP.Nil = Exp $ makeTag 0
+buildTAG (x :* xs) = combineProduct x (buildTAG xs)
+
+-- like Finite.combineProduct, but lifted to the AST
+-- basically `tag x + tag y * natVal x`
+combineProduct :: forall x. (POSable x) => Exp x -> Exp TAG -> Exp TAG
+combineProduct x y = case sameNat (Proxy :: Proxy (Choices x)) (Proxy :: Proxy 1) of
+  -- untagged type: `tag x = 0`, `natVal x = 1`
+  Just Refl -> y
+  -- tagged type
+  Nothing
+    | Refl :: (EltR x :~: (TAG, FlattenProduct (Fields x))) <- unsafeCoerce Refl
+    -> mkAdd (mkExp $ Prj PairIdxLeft (unExp x)) (mkMul y (constant (fromInteger $ natVal (Proxy :: Proxy (Choices x)))))
