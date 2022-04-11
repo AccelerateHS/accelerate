@@ -32,11 +32,14 @@ import Language.Haskell.TH.Extra
 -- | GADT reifying the 'Stencil' class
 --
 data StencilR sh e pat where
+  StencilRunit1 :: TypeR e -> StencilR DIM1 e (Tup1 e)
   StencilRunit3 :: TypeR e -> StencilR DIM1 e (Tup3 e e e)
   StencilRunit5 :: TypeR e -> StencilR DIM1 e (Tup5 e e e e e)
   StencilRunit7 :: TypeR e -> StencilR DIM1 e (Tup7 e e e e e e e)
   StencilRunit9 :: TypeR e -> StencilR DIM1 e (Tup9 e e e e e e e e e)
 
+  StencilRtup1  :: StencilR sh e pat1
+                -> StencilR (sh, Int) e (Tup1 pat1)
   StencilRtup3  :: StencilR sh e pat1
                 -> StencilR sh e pat2
                 -> StencilR sh e pat3
@@ -70,30 +73,36 @@ data StencilR sh e pat where
                 -> StencilR (sh, Int) e (Tup9 pat1 pat2 pat3 pat4 pat5 pat6 pat7 pat8 pat9)
 
 stencilEltR :: StencilR sh e pat -> TypeR e
+stencilEltR (StencilRunit1 t) = t
 stencilEltR (StencilRunit3 t) = t
 stencilEltR (StencilRunit5 t) = t
 stencilEltR (StencilRunit7 t) = t
 stencilEltR (StencilRunit9 t) = t
+stencilEltR (StencilRtup1 sR) = stencilEltR sR
 stencilEltR (StencilRtup3 sR _ _) = stencilEltR sR
 stencilEltR (StencilRtup5 sR _ _ _ _) = stencilEltR sR
 stencilEltR (StencilRtup7 sR _ _ _ _ _ _) = stencilEltR sR
 stencilEltR (StencilRtup9 sR _ _ _ _ _ _ _ _) = stencilEltR sR
 
 stencilShapeR :: StencilR sh e pat -> ShapeR sh
+stencilShapeR (StencilRunit1 _) = ShapeRsnoc ShapeRz
 stencilShapeR (StencilRunit3 _) = ShapeRsnoc ShapeRz
 stencilShapeR (StencilRunit5 _) = ShapeRsnoc ShapeRz
 stencilShapeR (StencilRunit7 _) = ShapeRsnoc ShapeRz
 stencilShapeR (StencilRunit9 _) = ShapeRsnoc ShapeRz
+stencilShapeR (StencilRtup1 sR) = ShapeRsnoc $ stencilShapeR sR
 stencilShapeR (StencilRtup3 sR _ _) = ShapeRsnoc $ stencilShapeR sR
 stencilShapeR (StencilRtup5 sR _ _ _ _) = ShapeRsnoc $ stencilShapeR sR
 stencilShapeR (StencilRtup7 sR _ _ _ _ _ _) = ShapeRsnoc $ stencilShapeR sR
 stencilShapeR (StencilRtup9 sR _ _ _ _ _ _ _ _) = ShapeRsnoc $ stencilShapeR sR
 
 stencilR :: StencilR sh e pat -> TypeR pat
+stencilR (StencilRunit1 t) = tupR1 t
 stencilR (StencilRunit3 t) = tupR3 t t t
 stencilR (StencilRunit5 t) = tupR5 t t t t t
 stencilR (StencilRunit7 t) = tupR7 t t t t t t t
 stencilR (StencilRunit9 t) = tupR9 t t t t t t t t t
+stencilR (StencilRtup1 s1) = tupR1 (stencilR s1)
 stencilR (StencilRtup3 s1 s2 s3) = tupR3 (stencilR s1) (stencilR s2) (stencilR s3)
 stencilR (StencilRtup5 s1 s2 s3 s4 s5) = tupR5 (stencilR s1) (stencilR s2) (stencilR s3) (stencilR s4) (stencilR s5)
 stencilR (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) = tupR7 (stencilR s1) (stencilR s2) (stencilR s3) (stencilR s4) (stencilR s5) (stencilR s6) (stencilR s7)
@@ -106,11 +115,14 @@ stencilHalo :: StencilR sh e stencil -> (ShapeR sh, sh)
 stencilHalo = go'
   where
     go' :: StencilR sh e stencil -> (ShapeR sh, sh)
+    go' StencilRunit1{} = (dim1, ((), 0))
     go' StencilRunit3{} = (dim1, ((), 1))
     go' StencilRunit5{} = (dim1, ((), 2))
     go' StencilRunit7{} = (dim1, ((), 3))
     go' StencilRunit9{} = (dim1, ((), 4))
     --
+    go' (StencilRtup1 a                ) = (ShapeRsnoc shR, cons shR 1 $ foldl1 (union shR) [a'])
+      where (shR, a') = go' a
     go' (StencilRtup3 a b c            ) = (ShapeRsnoc shR, cons shR 1 $ foldl1 (union shR) [a', go b, go c])
       where (shR, a') = go' a
     go' (StencilRtup5 a b c d e        ) = (ShapeRsnoc shR, cons shR 2 $ foldl1 (union shR) [a', go b, go c, go d, go e])
@@ -127,6 +139,9 @@ stencilHalo = go'
     cons ShapeRz          ix ()       = ((), ix)
     cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
 
+tupR1 :: TupR s t1 -> TupR s (Tup1 t1)
+tupR1 t1 = TupRunit `TupRpair` t1
+
 tupR3 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s (Tup3 t1 t2 t3)
 tupR3 t1 t2 t3 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3
 
@@ -140,20 +155,24 @@ tupR9 :: TupR s t1 -> TupR s t2 -> TupR s t3 -> TupR s t4 -> TupR s t5 -> TupR s
 tupR9 t1 t2 t3 t4 t5 t6 t7 t8 t9 = TupRunit `TupRpair` t1 `TupRpair` t2 `TupRpair` t3 `TupRpair` t4 `TupRpair` t5 `TupRpair` t6 `TupRpair` t7 `TupRpair` t8 `TupRpair` t9
 
 rnfStencilR :: StencilR sh e pat -> ()
+rnfStencilR (StencilRunit1 t) = rnfTypeR t
 rnfStencilR (StencilRunit3 t) = rnfTypeR t
 rnfStencilR (StencilRunit5 t) = rnfTypeR t
 rnfStencilR (StencilRunit7 t) = rnfTypeR t
 rnfStencilR (StencilRunit9 t) = rnfTypeR t
+rnfStencilR (StencilRtup1 s1) = rnfStencilR s1
 rnfStencilR (StencilRtup3 s1 s2 s3) = rnfStencilR s1 `seq` rnfStencilR s2 `seq` rnfStencilR s3
 rnfStencilR (StencilRtup5 s1 s2 s3 s4 s5) = rnfStencilR s1 `seq` rnfStencilR s2 `seq` rnfStencilR s3 `seq` rnfStencilR s4 `seq` rnfStencilR s5
 rnfStencilR (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) = rnfStencilR s1 `seq` rnfStencilR s2 `seq` rnfStencilR s3 `seq` rnfStencilR s4 `seq` rnfStencilR s5 `seq` rnfStencilR s6 `seq` rnfStencilR s7
 rnfStencilR (StencilRtup9 s1 s2 s3 s4 s5 s6 s7 s8 s9) = rnfStencilR s1 `seq` rnfStencilR s2 `seq` rnfStencilR s3 `seq` rnfStencilR s4 `seq` rnfStencilR s5 `seq` rnfStencilR s6 `seq` rnfStencilR s7 `seq` rnfStencilR s8 `seq` rnfStencilR s9
 
 liftStencilR :: StencilR sh e pat -> CodeQ (StencilR sh e pat)
+liftStencilR (StencilRunit1 tp) = [|| StencilRunit1 $$(liftTypeR tp) ||]
 liftStencilR (StencilRunit3 tp) = [|| StencilRunit3 $$(liftTypeR tp) ||]
 liftStencilR (StencilRunit5 tp) = [|| StencilRunit5 $$(liftTypeR tp) ||]
 liftStencilR (StencilRunit7 tp) = [|| StencilRunit7 $$(liftTypeR tp) ||]
 liftStencilR (StencilRunit9 tp) = [|| StencilRunit9 $$(liftTypeR tp) ||]
+liftStencilR (StencilRtup1 s1) = [|| StencilRtup1 $$(liftStencilR s1) ||]
 liftStencilR (StencilRtup3 s1 s2 s3) = [|| StencilRtup3 $$(liftStencilR s1) $$(liftStencilR s2) $$(liftStencilR s3) ||]
 liftStencilR (StencilRtup5 s1 s2 s3 s4 s5) = [|| StencilRtup5 $$(liftStencilR s1) $$(liftStencilR s2) $$(liftStencilR s3) $$(liftStencilR s4) $$(liftStencilR s5) ||]
 liftStencilR (StencilRtup7 s1 s2 s3 s4 s5 s6 s7) = [|| StencilRtup7 $$(liftStencilR s1) $$(liftStencilR s2) $$(liftStencilR s3) $$(liftStencilR s4) $$(liftStencilR s5) $$(liftStencilR s6) $$(liftStencilR s7) ||]

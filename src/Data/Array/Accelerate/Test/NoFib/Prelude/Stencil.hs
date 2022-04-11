@@ -32,6 +32,7 @@ import Data.Array.Accelerate.Sugar.Elt                              as S
 import Data.Array.Accelerate.Sugar.Array                            as S
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
@@ -75,7 +76,8 @@ test_stencil runN =
         testDim1 :: TestTree
         testDim1 =
           testGroup "DIM1"
-            [ testProperty "stencil3"     $ test_stencil3 runN e
+            [ testProperty "stencil1"     $ test_stencil1 runN e
+            , testProperty "stencil3"     $ test_stencil3 runN e
             , testProperty "stencil5"     $ test_stencil5 runN e
             , testProperty "stencil7"     $ test_stencil7 runN e
             , testProperty "stencil9"     $ test_stencil9 runN e
@@ -84,7 +86,9 @@ test_stencil runN =
         testDim2 :: TestTree
         testDim2 =
           testGroup "DIM2"
-            [ testProperty "stencil3x3"   $ test_stencil3x3 runN e
+            [ testProperty "stencil1x3"   $ test_stencil1x3 runN e
+            , testProperty "stencil3x1"   $ test_stencil3x1 runN e
+            , testProperty "stencil3x3"   $ test_stencil3x3 runN e
             , testProperty "stencil5x5"   $ test_stencil5x5 runN e
             , testProperty "stencil7x7"   $ test_stencil7x7 runN e
             , testProperty "stencil9x9"   $ test_stencil9x9 runN e
@@ -96,6 +100,25 @@ test_stencil runN =
             [ testProperty "stencil3x3x3" $ test_stencil3x3x3 runN e
             ]
 
+
+test_stencil1
+    :: (P.Num e, A.Num e, Similar e, Show e)
+    => RunN
+    -> Gen e
+    -> Property
+test_stencil1 runN e =
+  property $ do
+    sh        <- forAll ((Z :.) P.<$> Gen.int (Range.linear 2 256))
+    xs        <- forAll (array sh e)
+    b         <- forAll (boundary e)
+    P3 _ a r  <- forAll pattern3
+    let !go = case b of
+                Clamp      -> runN (A.stencil a A.clamp)
+                Wrap       -> runN (A.stencil a A.wrap)
+                Mirror     -> runN (A.stencil a A.mirror)
+                Constant x -> runN (A.stencil a (A.function (\_ -> constant x)))
+    --
+    go xs ~~~ stencil3Ref r b xs
 
 test_stencil3
     :: (P.Num e, A.Num e, Similar e, Show e)
@@ -172,6 +195,52 @@ test_stencil9 runN e =
                 Constant x -> runN (A.stencil a (A.function (\_ -> constant x)))
     --
     go xs ~~~ stencil9Ref r b xs
+
+
+test_stencil1x3
+    :: (P.Num e, A.Num e, Similar e, Show e)
+    => RunN
+    -> Gen e
+    -> Property
+test_stencil1x3 runN e =
+  property $ do
+    sy <- forAll (Gen.int (Range.linear 2 96))
+    sx <- forAll (Gen.int (Range.linear 2 96))
+    let sh = Z :. sy :. sx
+    xs          <- forAll (array sh e)
+    b           <- forAll (boundary e)
+    P1x3 _ a r  <- forAll pattern1x3
+    let !go = case b of
+                Clamp      -> runN (A.stencil a A.clamp)
+                Wrap       -> runN (A.stencil a A.wrap)
+                Mirror     -> runN (A.stencil a A.mirror)
+                Constant x -> runN (A.stencil a (A.function (\_ -> constant x)))
+    --
+    go xs ~~~ stencil1x3Ref r b xs
+
+
+
+test_stencil3x1
+    :: (P.Num e, A.Num e, Similar e, Show e)
+    => RunN
+    -> Gen e
+    -> Property
+test_stencil3x1 runN e =
+  property $ do
+    sy <- forAll (Gen.int (Range.linear 2 96))
+    sx <- forAll (Gen.int (Range.linear 2 96))
+    let sh = Z :. sy :. sx
+    xs          <- forAll (array sh e)
+    b           <- forAll (boundary e)
+    P3x1 _ a r  <- forAll pattern3x1
+    let !go = case b of
+                Clamp      -> runN (A.stencil a A.clamp)
+                Wrap       -> runN (A.stencil a A.wrap)
+                Mirror     -> runN (A.stencil a A.mirror)
+                Constant x -> runN (A.stencil a (A.function (\_ -> constant x)))
+    --
+    go xs ~~~ stencil3x1Ref r b xs
+
 
 
 test_stencil3x3
@@ -280,12 +349,14 @@ test_stencil3x3x3 runN e =
     --
     go xs ~~~ stencil3x3x3Ref r b xs
 
-
+type Stencil1Ref a = Unary a
 type Stencil3Ref a = (a,a,a)
 type Stencil5Ref a = (a,a,a,a,a)
 type Stencil7Ref a = (a,a,a,a,a,a,a)
 type Stencil9Ref a = (a,a,a,a,a,a,a,a,a)
 
+type Stencil3x1Ref a = Unary (Stencil3Ref a)
+type Stencil1x3Ref a = Stencil3Ref (Unary a)
 type Stencil3x3Ref a = (Stencil3Ref a, Stencil3Ref a, Stencil3Ref a)
 type Stencil5x5Ref a = (Stencil5Ref a, Stencil5Ref a, Stencil5Ref a, Stencil5Ref a, Stencil5Ref a)
 type Stencil7x7Ref a = (Stencil7Ref a, Stencil7Ref a, Stencil7Ref a, Stencil7Ref a, Stencil7Ref a, Stencil7Ref a, Stencil7Ref a)
@@ -313,11 +384,14 @@ boundary e =
     , pure Mirror
     ]
 
+data Pattern1 a = P1 [Int] (Stencil1 a -> Exp a) (Stencil1Ref a -> a)
 data Pattern3 a = P3 [Int] (Stencil3 a -> Exp a) (Stencil3Ref a -> a)
 data Pattern5 a = P5 [Int] (Stencil5 a -> Exp a) (Stencil5Ref a -> a)
 data Pattern7 a = P7 [Int] (Stencil7 a -> Exp a) (Stencil7Ref a -> a)
 data Pattern9 a = P9 [Int] (Stencil9 a -> Exp a) (Stencil9Ref a -> a)
 
+data Pattern1x3 a = P1x3 [[Int]] (Stencil1x3 a -> Exp a) (Stencil1x3Ref a -> a)
+data Pattern3x1 a = P3x1 [[Int]] (Stencil3x1 a -> Exp a) (Stencil3x1Ref a -> a)
 data Pattern3x3 a = P3x3 [[Int]] (Stencil3x3 a -> Exp a) (Stencil3x3Ref a -> a)
 data Pattern5x5 a = P5x5 [[Int]] (Stencil5x5 a -> Exp a) (Stencil5x5Ref a -> a)
 data Pattern7x7 a = P7x7 [[Int]] (Stencil7x7 a -> Exp a) (Stencil7x7Ref a -> a)
@@ -325,11 +399,14 @@ data Pattern9x9 a = P9x9 [[Int]] (Stencil9x9 a -> Exp a) (Stencil9x9Ref a -> a)
 
 data Pattern3x3x3 a = P3x3x3 [[[Int]]] (Stencil3x3x3 a -> Exp a) (Stencil3x3x3Ref a -> a)
 
+instance Show (Pattern1 a) where show (P1 ix _ _) = show ix
 instance Show (Pattern3 a) where show (P3 ix _ _) = show ix
 instance Show (Pattern5 a) where show (P5 ix _ _) = show ix
 instance Show (Pattern7 a) where show (P7 ix _ _) = show ix
 instance Show (Pattern9 a) where show (P9 ix _ _) = show ix
 
+instance Show (Pattern1x3 a) where show (P1x3 ix _ _) = show ix
+instance Show (Pattern3x1 a) where show (P3x1 ix _ _) = show ix
 instance Show (Pattern3x3 a) where show (P3x3 ix _ _) = show ix
 instance Show (Pattern5x5 a) where show (P5x5 ix _ _) = show ix
 instance Show (Pattern7x7 a) where show (P7x7 ix _ _) = show ix
@@ -337,6 +414,13 @@ instance Show (Pattern9x9 a) where show (P9x9 ix _ _) = show ix
 
 instance Show (Pattern3x3x3 a) where show (P3x3x3 ix _ _) = show ix
 
+
+pattern1 :: (P.Num a, A.Num a) => Gen (Pattern1 a)
+pattern1 = do
+  i <- Gen.subsequence [0]
+  pure $
+    P1 i (\(Unary x0) -> P.sum (P.map ([x0] P.!!) i))
+         (\(Unary x0) -> P.sum (P.map ([x0] P.!!) i))
 
 pattern3 :: (P.Num a, A.Num a) => Gen (Pattern3 a)
 pattern3 = do
@@ -365,6 +449,24 @@ pattern9 = do
   pure $
     P9 i (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum (P.map ([x0,x1,x2,x3,x4,x5,x6,x7,x8] P.!!) i))
          (\(x0,x1,x2,x3,x4,x5,x6,x7,x8) -> P.sum (P.map ([x0,x1,x2,x3,x4,x5,x6,x7,x8] P.!!) i))
+
+pattern1x3 :: (P.Num a, A.Num a) => Gen (Pattern1x3 a)
+pattern1x3 = do
+  P1 i0 a0 r0 <- pattern1
+  P1 i1 a1 r1 <- pattern1
+  P1 i2 a2 r2 <- pattern1
+  pure $
+    P1x3 [i0,i1,i2]
+         (\(x0,x1,x2) -> P.sum [a0 x0, a1 x1, a2 x2])
+         (\(x0,x1,x2) -> P.sum [r0 x0, r1 x1, r2 x2])
+
+pattern3x1 :: (P.Num a, A.Num a) => Gen (Pattern3x1 a)
+pattern3x1 = do
+  P3 i0 a0 r0 <- pattern3
+  pure $
+    P3x1 [i0]
+         (\(Unary x0) -> P.sum [a0 x0])
+         (\(Unary x0) -> P.sum [r0 x0])
 
 pattern3x3 :: (P.Num a, A.Num a) => Gen (Pattern3x3 a)
 pattern3x3 = do
@@ -429,6 +531,20 @@ pattern3x3x3 = do
            (\(x0,x1,x2) -> P.sum [r0 x0, r1 x1, r2 x2])
 
 
+
+stencil1Ref
+    :: Elt a
+    => (Stencil1Ref a -> a)
+    -> SimpleBoundary a
+    -> Vector a
+    -> Vector a
+stencil1Ref st bnd arr =
+  let sh = S.shape arr
+  in
+  fromFunction sh
+    (\ix@(Z:.n) -> let x = arr S.! ix
+                   in
+                   st (Unary x))
 
 stencil3Ref
     :: Elt a
@@ -514,6 +630,43 @@ stencil9Ref st bnd arr =
             x8 = get (Z:.i+4)
         in
         st (x0,x1,x2,x3,x4,x5,x6,x7,x8))
+
+stencil1x3Ref
+    :: Elt a
+    => (Stencil1x3Ref a -> a)
+    -> SimpleBoundary a
+    -> Matrix a
+    -> Matrix a
+stencil1x3Ref st bnd arr =
+  let sh = S.shape arr
+  in
+  fromFunction sh
+    (\(Z:.j:.i) ->
+        let get it  = either id (arr S.!) (bound bnd sh it)
+            --
+            x0 = get (Z :. j-1 :. i)
+            x1 = get (Z :. j   :. i)
+            x2 = get (Z :. j+1 :. i)
+        in
+        st (Unary x0, Unary x1, Unary x2))
+
+
+stencil3x1Ref
+    :: Elt a
+    => (Stencil3x1Ref a -> a)
+    -> SimpleBoundary a
+    -> Matrix a
+    -> Matrix a
+stencil3x1Ref st bnd arr =
+  let sh = S.shape arr
+  in
+  fromFunction sh
+    (\(Z:.j:.i) ->
+        let get it  = either id (arr S.!) (bound bnd sh it)
+            --
+            x = ( get (Z :. j   :. i-1), get (Z :. j   :. i), get (Z :. j   :. i+1) )
+        in
+        st (Unary x))
 
 stencil3x3Ref
     :: Elt a

@@ -26,6 +26,7 @@
 module Data.Array.Accelerate.Pattern (
 
   pattern Pattern,
+  pattern T1,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
@@ -36,6 +37,7 @@ module Data.Array.Accelerate.Pattern (
 
   pattern V2, pattern V3, pattern V4, pattern V8, pattern V16,
 
+  Unary (..)
 ) where
 
 import Data.Array.Accelerate.AST.Idx
@@ -293,3 +295,19 @@ runQ $ do
     vs <- mapM mkV [2,3,4,8,16]
     return $ concat (ts ++ is ++ vs)
 
+newtype Unary a = Unary {runUnary :: a}
+instance Elt a => Elt (Unary a) where
+  type EltR (Unary a) = EltR a
+  eltR = eltR @a
+  tagsR = tagsR @a
+  fromElt = fromElt . runUnary
+  toElt = Unary . toElt
+
+pattern T1 :: Elt a => Exp a -> Exp (Unary a)
+pattern T1 a = Pattern (Unary a)
+{-# COMPLETE T1 #-}
+
+
+instance Elt a => IsPattern Exp (Unary a) (Unary (Exp a)) where
+  builder (Unary (Exp a)) = Exp a
+  matcher (Exp t) = Unary $ Exp t

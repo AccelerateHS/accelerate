@@ -285,11 +285,14 @@ module Data.Array.Accelerate (
   clamp, mirror, wrap, function,
 
   -- *** Common stencil patterns
-  Stencil3, Stencil5, Stencil7, Stencil9,
-  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
-  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
-  Stencil3x5x5, Stencil5x5x5,
-
+  Unary(..),
+  Stencil1, Stencil3, Stencil5, Stencil7, Stencil9,
+  Stencil1x1, Stencil1x3, Stencil1x5, 
+  Stencil3x1, Stencil3x3, Stencil3x5, 
+  Stencil5x1, Stencil5x3, Stencil5x5,
+  Stencil3x3x3, Stencil3x5x3, Stencil3x3x5, Stencil3x5x5,
+  Stencil5x3x3, Stencil5x5x3, Stencil5x3x5, Stencil5x5x5,
+  
   -- -- ** Sequence operations
   -- collect,
 
@@ -344,6 +347,7 @@ module Data.Array.Accelerate (
   -- $pattern_synonyms
   --
   pattern Pattern,
+  pattern T1,
   pattern T2,  pattern T3,  pattern T4,  pattern T5,  pattern T6,
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
@@ -431,7 +435,6 @@ module Data.Array.Accelerate (
   CChar, CSChar, CUChar,
 
 ) where
-
 import Data.Array.Accelerate.Classes.Bounded
 import Data.Array.Accelerate.Classes.Enum
 import Data.Array.Accelerate.Classes.Eq
