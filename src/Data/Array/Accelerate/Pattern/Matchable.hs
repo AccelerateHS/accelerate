@@ -10,6 +10,9 @@
 {-# LANGUAGE PolyKinds            #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 
 module Data.Array.Accelerate.Pattern.Matchable where
@@ -77,12 +80,12 @@ buildTag (((Exp x) :: (Exp x)) :* (xs :: xs)) = case sameNat (emptyChoices @x) (
 -- flattenProduct Nil = ()
 -- flattenProduct (Cons x xs) = (SumScalarType x, flattenProduct xs)
 
-buildFields :: forall n a . (POSable a, Elt a) => Proxy n -> NP SmartExp (Index (SOPCode a) n) -> SmartExp (FlattenProduct (Fields a))
-buildFields _ a = case emptyFields @a of
-  PTNil -> case constant () of { Exp se -> se }
-  PTCons st pt -> case a of
-    -- SOP.Nil -> SmartExp (Pair (someFunction st) undefined)
-    (x :* xs) -> SmartExp (Pair undefined undefined)
+-- buildFields :: forall n a . (POSable a, Elt a) => Proxy n -> NP SmartExp (Index (SOPCode a) n) -> SmartExp (FlattenProduct (Fields a))
+-- buildFields _ a = case emptyFields @a of
+--   PTNil -> case constant () of { Exp se -> se }
+--   PTCons st pt -> case a of
+--     -- SOP.Nil -> SmartExp (Pair (someFunction st) undefined)
+--     (x :* xs) -> SmartExp (Pair undefined undefined)
 
 buildFields' :: Proxy n -> ProductType (Fields a) -> NP SmartExp (Index (SOPCode a) n) -> SmartExp (FlattenProduct (Fields a))
 buildFields' _ PTNil         _         = SmartExp Smart.Nil
@@ -140,7 +143,32 @@ type family Concat (xss :: [[x]]) :: [x] where
   Concat '[] = '[]
   Concat (xs ': xss) = xs ++ Concat xss
 
+-- idem
+type family MapFields (xs :: [Type]) :: [[[Type]]] where
+  MapFields '[] = '[]
+  MapFields (x ': xs) = Fields x ': MapFields xs
+  
+type family MapFlattenProduct (xs :: [[[Type]]]) :: [Type] where
+  MapFlattenProduct '[] = '[]
+  MapFlattenProduct (x ': xs) = FlattenProduct x ': MapFlattenProduct xs
 
+type family ConcatT (xss :: [x]) :: x where
+  ConcatT '[] = ()
+  ConcatT (x ': xs) = (x, ConcatT xs)
+
+-- type family RealConcatT (xss :: [[Type]]) :: Type where
+--   ConcatT '[] = ()
+--   ConcatT ('[] ': xs) = RealConcatT xs
+--   ConcatT ((x ': xs) ': ys) = (x, RealConcatT xs ys)
+  
+type family ConcatAST (x :: Type) (y :: Type) :: Type where
+  ConcatAST xs () = xs
+  ConcatAST () ys = ys
+  ConcatAST (x, xs) ys = (x, ConcatAST xs ys)
+
+type family ConcatASTs (xs :: [Type]) :: Type where
+  ConcatASTs '[] = ()
+  ConcatASTs (x ': xs) = ConcatAST x (ConcatASTs xs)
 
 instance Matchable Bool where
   type Choices' Bool = 2
@@ -253,7 +281,7 @@ instance Matchable (Maybe Int) where
         Nothing ->
           error "Impossible type encountered"
 
-instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) where
+instance (POSable (Either a b), POSable a, POSable b, Elt a) => Matchable (Either a b) where
   type Choices' (Either a b) = OuterChoices (Either a b)
 
   build n x
@@ -264,7 +292,7 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
             SmartExp (
               Pair
                 (unExp $ buildTAG x)
-                _
+                undefined --(understandConcatPlease @a @b (mergeLeft @a @b (getSingleElem x)))
               )
             )
       where
@@ -328,6 +356,167 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
 
   --       Nothing ->
   --         error "Impossible type encountered"
+
+-- weirdConvert :: forall x . Elt x => TypeR (EltR x)
+-- weirdConvert = eltR @x
+
+-- getSingleElem :: NP Exp '[a] -> Exp a
+-- getSingleElem (x :* SOP.Nil) = x
+
+-- understandConcatPlease :: SmartExp (FlattenProduct (Merge (Fields a) (Fields b))) -> SmartExp (FlattenProduct (Merge (Fields a ++ '[]) (Fields b ++ '[])))
+-- understandConcatPlease = unsafeCoerce
+
+-- mergeLeft :: forall a b . (POSable a, Elt a) => Exp a -> SmartExp (FlattenProduct (Merge (Fields a) (Fields b)))
+-- mergeLeft (Exp a) = case buildFields1 @a a of
+--   a' -> case weirdConvert2 @a (eltR @a) of
+--     a3 -> undefined
+
+-- mergeLeft' :: forall a b . TypeR (EltR a -> ProductType b -> SmartExp (FlattenProduct a) -> SmartExp (Merge' (FlattenProduct a) (FlattenProduct b))
+-- mergeLeft' PTNil PTNil a = a
+-- mergeLeft' PTNil (PTCons gb (gbs :: (ProductType (Fields b')))) a = SmartExp $ Pair (fromSumType gb) (mergeLeft' @a @b' PTNil gbs a)
+
+
+-- buildFields :: (All POSable xs) => NP SmartExp xs -> SmartExp (ConcatT (MapFlattenProduct (MapFields xs)))
+-- buildFields SOP.Nil = ()
+-- buildFields (x :* xs) = SmartExp $ Pair
+--   where
+--     fieldsx = buildFields1 x
+
+merge :: forall a b . TypeR a -> TypeR b -> SmartExp a -> SmartExp b -> SmartExp (Merge' a b)
+merge TupRunit TupRunit          a b = unExp $ constant ()
+merge TupRunit (TupRpair (TupRsingle (SumScalarType x)) gbs) a b
+  = SmartExp $ Pair
+      (mergeSumUndefLeft x (SmartExp $ Prj PairIdxLeft b))
+      (merge TupRunit gbs a (SmartExp $ Prj PairIdxRight b))
+merge (TupRpair (TupRsingle (SumScalarType x)) gas) TupRunit a b
+  = SmartExp $ Pair
+      (mergeSumUndefRight x (SmartExp $ Prj PairIdxLeft a))
+      (merge gas TupRunit (SmartExp $ Prj PairIdxRight a) b)
+merge (TupRpair (TupRsingle (SumScalarType ga)) gas) (TupRpair (TupRsingle (SumScalarType gb)) gbs) a b
+  = SmartExp $ Pair
+      (undefined) -- mergeSum
+      (merge gas gbs (SmartExp $ Prj PairIdxRight a) (SmartExp $ Prj PairIdxRight b))
+
+
+mergeSumUndefRight :: SumScalarType x -> SmartExp (SumScalar x) -> SmartExp (SumScalar (Concat' x (Undef, ())))
+mergeSumUndefRight ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
+mergeSumUndefRight (SuccScalarType x xs) a = SmartExp $ Union (Left (SmartExp $ PrjUnion UnionIdxLeft a))
+
+mergeSumUndefLeft :: SumScalarType x -> SmartExp (SumScalar x) -> SmartExp (SumScalar (Undef, x))
+mergeSumUndefLeft ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
+mergeSumUndefLeft (SuccScalarType x xs) a = SmartExp $ Union (Right a)
+
+-- mergeSum :: SumScalar
+
+class AllSumScalar (xs :: Type) where
+
+instance AllSumScalar () where
+
+instance (x' ~ SumScalar x, IsSumScalar x', AllSumScalar xs) => AllSumScalar (x, xs) where
+
+class All' (c :: k -> Constraint) (xs :: Type) where
+
+instance All' c () where
+
+instance (c x, All' c xs) => All' c (x, xs) where
+      
+
+
+-- ZipWith Concat
+-- like POSable.Merge, but lifted to tuple lists
+type family Merge' (a :: Type) (b :: Type) = (r :: Type) where
+  Merge' () () = ()
+  Merge' () (SumScalar b, bs) = (SumScalar (Undef, b), Merge' () bs)
+  Merge' (SumScalar a, as) () = (SumScalar (Concat' a (Undef, ())), Merge' as ())
+  Merge' (SumScalar a, as) (SumScalar b, bs) = (SumScalar (Concat' a b), Merge' as bs)
+
+type family Concat' (a :: Type) (b :: Type) = (r :: Type) where
+  Concat' () ys = ys
+  Concat' (x, xs) ys = (x, Concat' xs ys)
+
+fromSumType :: SumType x -> SmartExp (SumScalar (Undef, FlattenSum x))
+fromSumType x = SmartExp (Union (Left (SmartExp (Const (SingleScalarType UndefSingleType) POS.Undef))))
+
+buildFields1 :: forall x . (POSable x) => SmartExp (EltR x) -> SmartExp (FlattenProduct (Fields x))
+buildFields1 x = case eltRType @x of
+  SingletonType -> SmartExp $ Pair (SmartExp $ Union (Left x)) (SmartExp Smart.Nil)
+  TaglessType -> x
+  TaggedType -> SmartExp $ Prj PairIdxRight x
+
+weirdConvert2 :: forall x . (Elt x, POSable x) => TypeR (EltR x) -> TypeR (FlattenProduct (Fields x))
+weirdConvert2 x = case eltRType @x of
+  SingletonType -> case x of
+    TupRsingle x' -> TupRpair (TupRsingle (SumScalarType (SuccScalarType x' ZeroScalarType))) TupRunit
+  TaglessType -> x
+  TaggedType -> case x of
+    TupRpair _ x' -> x'
+
+-- guidedAppend :: forall x y . TypeR (FlattenProduct (Fields x)) -> SmartExp (FlattenProduct (Fields x)) -> SmartExp (FlattenProduct (Fields y)) -> SmartExp (FlattenProduct (Fields x ++ Fields y))
+-- guidedAppend  TupRunit        x y | Refl :: (FlattenProduct (Fields y) :~: FlattenProduct (Fields x ++ Fields y)) <- unsafeCoerce Refl = y
+-- guidedAppend (TupRsingle g)   x y = SmartExp (Pair x y)
+-- guidedAppend (TupRpair g1 g2) x y = undefined
+
+buildFields2 :: forall x y . (POSable x) => SmartExp (EltR x) -> SmartExp (FlattenProduct (Fields y)) -> SmartExp (FlattenProduct (Fields x ++ Fields y))
+buildFields2 x y = case eltRType @x of
+  SingletonType -> SmartExp $ Pair (SmartExp $ Union (Left x)) y
+  TaglessType -> buildFields3 @x @y x y
+  TaggedType -> buildFields3 @x @y (SmartExp $ Prj PairIdxRight x) y
+
+
+buildFields3 :: forall x y . (POSable x) => SmartExp (FlattenProduct (Fields x)) -> SmartExp (FlattenProduct (Fields y)) -> SmartExp (FlattenProduct (Fields x ++ Fields y))
+buildFields3 = buildFields4 @x @y (emptyFields @x)
+
+buildFields4 :: forall x y . ProductType (Fields x) -> SmartExp (FlattenProduct (Fields x)) -> SmartExp (FlattenProduct (Fields y)) -> SmartExp (FlattenProduct (Fields x ++ Fields y))
+buildFields4 PTNil x y = y
+buildFields4 (PTCons g gs) x y = undefined
+  where
+    x' :: SmartExp (SumScalar (FlattenSum (Head (Fields x))))
+    x' = SmartExp $ Prj PairIdxLeft x
+    xs' :: SmartExp (FlattenProduct (Tail (Fields x)))
+    xs' = SmartExp $ Prj PairIdxRight x
+    f :: SmartExp (FlattenProduct (Fields x ++ Fields y))
+    f = SmartExp (Pair x' xy)
+    xy :: SmartExp (FlattenProduct (Tail (Fields x) ++ Fields y))
+    xy = undefined
+
+type family Head (xs :: [x]) :: x where
+  Head (x ': xs) = x
+
+type family Tail (xs :: [x]) :: [x] where
+  Tail (x ': xs) = xs
+-- concatFields :: forall x y. (POSable x) => SmartExp (FlattenProduct (Fields x)) -> SmartExp (FlattenProduct (Fields y)) -> SmartExp (FlattenProduct (Fields x ++ Fields y))
+-- concatFields x y = case emptyFields @x of
+--   PTNil
+--     -> y
+--   (PTCons x' (xs' :: (ProductType xs)))
+--     -> SmartExp $ Pair (SmartExp $ Prj PairIdxLeft x) (f @xs @y (SmartExp $ Prj PairIdxRight x) y)
+--   where
+--     -- rec' :: SmartExp (FlattenProduct )
+--     -- rec' x y = concatFields (SmartExp $ Prj PairIdxRight x) y
+--     f :: SmartExp (FlattenProduct ys) -> SmartExp (FlattenProduct (Fields z)) -> SmartExp (FlattenProduct (ys ++ Fields z))
+--     f xs y' = undefined
+  
+-- concatFields' :: forall xs ys . SmartExp (FlattenProduct xs) -> SmartExp (FlattenProduct ys) -> SmartExp (FlattenProduct (xs ++ ys))
+-- concatFields' = undefined
+
+-- convertASTtoNP :: forall x . POSable x => SmartExp (FlattenProduct (Fields x)) -> NP SmartExp (MapFlattenSum (Fields x))
+-- convertASTtoNP = convertASTtoNP' @(Fields x) (emptyFields @x)
+
+-- convertASTtoNP' :: ProductType x -> SmartExp (FlattenProduct x) -> NP SmartExp (MapFlattenSum x)
+-- convertASTtoNP' PTNil _         = SOP.Nil
+-- convertASTtoNP' (PTCons _ xs) y = SmartExp (Prj PairIdxLeft y) :* convertASTtoNP' xs (SmartExp $ Prj PairIdxRight y)
+
+-- nPtoAST :: NP SmartExp xs -> SmartExp (ConcatASTs xs)
+-- nPtoAST SOP.Nil = SmartExp Smart.Nil
+-- nPtoAST (x :* xs) = SmartExp $ Pair x (nPtoAST xs)
+
+-- concatAST :: forall x y . (Elt x) => SmartExp x -> SmartExp y -> SmartExp (ConcatAST x y)
+-- concatAST x y | TupRunit <- eltR @x = y
+-- concatAST x y | (TupRpair _ _) <- eltR @x = SmartExp $ Pair (SmartExp $ Prj PairIdxLeft x) (concatAST (SmartExp (Prj PairIdxRight x)) y)
+
+type family MapFlattenSum (x :: [[Type]]) :: [Type] where
+  MapFlattenSum '[] = '[]
+  MapFlattenSum (x ': xs) = SumScalar (FlattenSum x) ': MapFlattenSum xs
 
 -- like combineProducts, but lifted to the AST
 buildTAG :: (All POSable xs) => NP Exp xs -> Exp TAG
