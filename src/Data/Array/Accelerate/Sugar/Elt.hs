@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE GADTs                #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -ddump-splices #-}
 -- |
@@ -23,7 +24,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Sugar.Elt ( Elt(..) )
+module Data.Array.Accelerate.Sugar.Elt ( Elt(..), eltRType, EltRType(..) )
   where
 
 import Data.Array.Accelerate.Representation.Type
@@ -102,14 +103,36 @@ class Elt a where
   default toElt :: (POSable a,  POStoEltR (Choices a) (Fields a) ~ EltR a) => EltR a -> a
   toElt = fromEltR
 
+-- function to bring the contraints in scope that are needed to work with EltR,
+-- without needing to inspect how POS2EltR works
+data EltRType x where
+  SingletonType :: (EltR x ~ x, Fields x ~ '[ '[x]]) => EltRType x
+  TaglessType   :: (EltR x ~ FlattenProduct (Fields x)) => EltRType x
+  TaggedType    :: (EltR x ~ (TAG, FlattenProduct (Fields x))) => EltRType x
+
+eltRType :: forall x . POSable x => EltRType x
+eltRType = case sameNat (Proxy :: Proxy (Choices x)) (Proxy :: Proxy 1) of
+  Just Refl -> case emptyFields @x of
+    PTCons (STSucc _ STZero) PTNil
+      | Refl :: (EltR x :~: x) <- unsafeCoerce Refl
+      , Refl :: (Fields x :~: '[ '[x]]) <- unsafeCoerce Refl
+      -> SingletonType
+    _
+      | Refl :: (EltR x :~: FlattenProduct (Fields x)) <- unsafeCoerce Refl
+      -> TaglessType
+  Nothing
+    | Refl :: (EltR x :~: (TAG, FlattenProduct (Fields x))) <- unsafeCoerce Refl
+    -> TaggedType
+
+
 flattenProductType :: ProductType a -> TypeR (FlattenProduct a)
 flattenProductType PTNil = TupRunit
 flattenProductType (PTCons x xs) = TupRpair (TupRsingle (flattenSumType x)) (flattenProductType xs)
 
 flattenSumType :: SumType a -> ScalarType (SumScalar (FlattenSum a))
 flattenSumType STZero = SumScalarType ZeroScalarType
-flattenSumType (STSucc (x :: x) xs)
-  = SumScalarType (SuccScalarType (mkScalarType x) (flattenSumType xs))
+flattenSumType (STSucc x xs) = case flattenSumType xs of
+  SumScalarType xs' -> SumScalarType (SuccScalarType (mkScalarType x) xs')
 
 -- This is an unsafe conversion, and should be kept strictly in sync with the
 -- set of types that implement Ground
@@ -310,6 +333,7 @@ runQ $ do
   -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
   return (concat ss)
 
+instance Elt Undef
 
 -- TODO: bring this back into TH
 instance (POSable a, POSable b) => Elt (a, b)
