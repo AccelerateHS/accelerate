@@ -106,7 +106,7 @@ type family POStoEltR (cs :: Nat) fs :: Type where
   POStoEltR 1 x = FlattenProduct x -- tagless types
   POStoEltR n x = (TAG, FlattenProduct x) -- all other types
 
-type family FlattenProduct (xss :: [[a]]) :: Type where
+type family FlattenProduct (xss :: f [a]) = (r :: Type) | r -> f where
   FlattenProduct '[] = ()
   FlattenProduct (x ': xs) = (SumScalar (FlattenSum x), FlattenProduct xs)
 
@@ -230,15 +230,18 @@ data BoundedType a where
 data ScalarType a where
   SingleScalarType :: SingleType a         -> ScalarType a
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
-  SumScalarType :: SumScalarType a -> ScalarType a
+  SumScalarType :: SumScalarType a -> ScalarType (SumScalar a)
+
+class IsSumScalar a where
+  sumScalarType :: SumScalarType a
 
 data SumScalar x where
   PickScalar  :: a -> SumScalar (a, b)
   SkipScalar  :: SumScalar b -> SumScalar (a, b)
 
 data SumScalarType a where
-  SuccScalarType  :: ScalarType a -> ScalarType (SumScalar b) -> SumScalarType (SumScalar (a, b))
-  ZeroScalarType  :: SumScalarType (SumScalar ())
+  SuccScalarType  :: ScalarType a -> SumScalarType b -> SumScalarType (a, b)
+  ZeroScalarType  :: SumScalarType ()
 
 data SingleType a where
   NumSingleType :: NumType a -> SingleType a
@@ -286,7 +289,7 @@ instance Show (ScalarType a) where
 
 instance Show (SumScalarType a) where
   show ZeroScalarType = ""
-  show (SuccScalarType x (SumScalarType (ZeroScalarType))) = show x
+  show (SuccScalarType x (ZeroScalarType)) = show x
   show (SuccScalarType x xs) = show x ++ " ＋ " ++ show xs
 
 formatIntegralType :: Format r (IntegralType a -> r)
@@ -631,18 +634,11 @@ instance IsSingle Undef where
 instance IsScalar Undef where
   scalarType = SingleScalarType singleType
 
-instance IsScalar (SumScalar ()) where
-  scalarType = SumScalarType ZeroScalarType
-
-instance (IsScalar a, IsSumScalar b) => IsScalar (SumScalar (a, b)) where
-  scalarType = SumScalarType $ SuccScalarType (scalarType @a) (SumScalarType
-                (sumScalarType @b))
-
-class IsSumScalar a where
-  sumScalarType :: SumScalarType (SumScalar a)
+instance (IsSumScalar a) => IsScalar (SumScalar a) where
+  scalarType = SumScalarType (sumScalarType @a)
 
 instance IsSumScalar () where
   sumScalarType = ZeroScalarType
 
 instance (IsScalar a, IsSumScalar b) => IsSumScalar (a, b) where
-  sumScalarType = SuccScalarType (scalarType @a) (SumScalarType (sumScalarType @b))
+  sumScalarType = SuccScalarType (scalarType @a) (sumScalarType @b)
