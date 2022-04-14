@@ -232,12 +232,10 @@ instance Matchable (Maybe Int) where
                 Pair
                   (SmartExp
                     (Union
-                      (Right (
-                        SmartExp
-                         (Union
-                            (Left x')
-                         )
-                      ))
+                      scalarTypeUndefLeft
+                      (SmartExp
+                        (LiftUnion x')
+                      )
                     )
                   )
                   (SmartExp Smart.Nil)
@@ -260,26 +258,19 @@ instance Matchable (Maybe Int) where
         Just Refl ->
           case e of
             SmartExp (Match (TagRtag 1 _) x)
-              -> Just
-                  (mkExp
-                    (PrjUnion
-                      UnionIdxLeft
-                      (SmartExp
-                        (PrjUnion
-                          UnionIdxRight
-                          (SmartExp
-                            (Prj
-                              PairIdxLeft
-                              (SmartExp (Prj PairIdxRight x))
-                            ))
-                        ))
-                    ) :* SOP.Nil)
+              -> Just (
+                  (mkExp $ PrjUnion $ SmartExp $ Union (unConcatSumScalarType (SumScalarType $ SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (SmartExp $ Prj PairIdxLeft (SmartExp $ Prj PairIdxRight x)))
+                  :* SOP.Nil)
             SmartExp Match {} -> Nothing
 
             _ -> error "Embedded pattern synonym used outside 'match' context."
 
         Nothing ->
           error "Impossible type encountered"
+
+unConcatSumScalarType :: ScalarType (SumScalar a) -> ScalarType (SumScalar (Concat' a b)) -> ScalarType (SumScalar b)
+unConcatSumScalarType (SumScalarType ZeroScalarType) xs = xs
+unConcatSumScalarType (SumScalarType (SuccScalarType a as)) (SumScalarType (SuccScalarType x xs)) = unConcatSumScalarType (SumScalarType as) (SumScalarType xs)
 
 instance (POSable (Either a b), POSable a, POSable b, Elt a) => Matchable (Either a b) where
   type Choices' (Either a b) = OuterChoices (Either a b)
@@ -382,6 +373,33 @@ instance (POSable (Either a b), POSable a, POSable b, Elt a) => Matchable (Eithe
 --   where
 --     fieldsx = buildFields1 x
 
+-- mergeLeft :: forall a b . TypeR a -> TypeR b -> SmartExp a -> SmartExp (Merge' a b)
+-- mergeLeft TupRunit TupRunit          a = unExp $ constant ()
+-- mergeLeft TupRunit (TupRpair (TupRsingle (SumScalarType x)) gbs) a
+--   = SmartExp $ Pair
+--       (makeUndefLeft x)
+--       (mergeLeft TupRunit gbs a)
+-- mergeLeft (TupRpair (TupRsingle (SumScalarType x)) gas) TupRunit a
+--   = SmartExp $ Pair
+--       (mergeSumUndefRight x (SmartExp $ Prj PairIdxLeft a))
+--       (mergeLeft gas TupRunit (SmartExp $ Prj PairIdxRight a))
+-- mergeLeft (TupRpair (TupRsingle (SumScalarType ga)) gas) (TupRpair (TupRsingle (SumScalarType gb)) gbs) a
+--   = SmartExp $ Pair
+--       (SmartExp $ Union _ (SmartExp $ Prj PairIdxLeft a))
+--       (mergeLeft gas gbs (SmartExp $ Prj PairIdxRight a))
+
+makeUndefLeft :: SumScalarType x -> SmartExp (SumScalar (Undef, x))
+makeUndefLeft x = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) x)) (PickScalar POS.Undef)
+
+mergeSumLeft :: forall a b . SumScalarType a -> SumScalarType b -> SmartExp (SumScalar a) -> SmartExp (SumScalar (Concat' a b))
+mergeSumLeft ls rs x = SmartExp $ Union (const $ scalarSumConcat ls rs) x
+
+scalarSumConcat:: SumScalarType xs -> SumScalarType ys -> ScalarType (SumScalar (Concat' xs ys))
+scalarSumConcat ZeroScalarType rs = SumScalarType rs
+scalarSumConcat (SuccScalarType l ls) rs = SumScalarType $ SuccScalarType l ls'
+  where
+    SumScalarType ls' = scalarSumConcat ls rs
+
 merge :: forall a b . TypeR a -> TypeR b -> SmartExp a -> SmartExp b -> SmartExp (Merge' a b)
 merge TupRunit TupRunit          a b = unExp $ constant ()
 merge TupRunit (TupRpair (TupRsingle (SumScalarType x)) gbs) a b
@@ -400,11 +418,21 @@ merge (TupRpair (TupRsingle (SumScalarType ga)) gas) (TupRpair (TupRsingle (SumS
 
 mergeSumUndefRight :: SumScalarType x -> SmartExp (SumScalar x) -> SmartExp (SumScalar (Concat' x (Undef, ())))
 mergeSumUndefRight ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
-mergeSumUndefRight (SuccScalarType x xs) a = SmartExp $ Union (Left (SmartExp $ PrjUnion UnionIdxLeft a))
+mergeSumUndefRight (SuccScalarType x xs) a = SmartExp $ Union scalarTypeUndefRight a
 
 mergeSumUndefLeft :: SumScalarType x -> SmartExp (SumScalar x) -> SmartExp (SumScalar (Undef, x))
 mergeSumUndefLeft ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
-mergeSumUndefLeft (SuccScalarType x xs) a = SmartExp $ Union (Right a)
+mergeSumUndefLeft (SuccScalarType x xs) a = SmartExp $ Union scalarTypeUndefLeft a
+
+scalarTypeUndefLeft :: ScalarType (SumScalar a) -> ScalarType (SumScalar (Undef, a))
+scalarTypeUndefLeft (SumScalarType x) = SumScalarType (SuccScalarType (scalarType @Undef) x)
+
+scalarTypeUndefRight :: ScalarType (SumScalar a) -> ScalarType (SumScalar (Concat' a (Undef, ())))
+scalarTypeUndefRight (SumScalarType ZeroScalarType) = SumScalarType (SuccScalarType (scalarType @Undef) ZeroScalarType)
+scalarTypeUndefRight (SumScalarType (SuccScalarType x xs))
+  = SumScalarType (SuccScalarType x xs')
+  where
+    (SumScalarType xs') = scalarTypeUndefRight (SumScalarType xs)
 
 -- mergeSum :: SumScalar
 
@@ -434,12 +462,12 @@ type family Concat' (a :: Type) (b :: Type) = (r :: Type) where
   Concat' () ys = ys
   Concat' (x, xs) ys = (x, Concat' xs ys)
 
-fromSumType :: SumType x -> SmartExp (SumScalar (Undef, FlattenSum x))
-fromSumType x = SmartExp (Union (Left (SmartExp (Const (SingleScalarType UndefSingleType) POS.Undef))))
+-- fromSumType :: SumType x -> SmartExp (SumScalar (Undef, FlattenSum x))
+-- fromSumType x = SmartExp $ Union (_) $ SmartExp (LiftUnion (SmartExp (Const (SingleScalarType UndefSingleType) POS.Undef)))
 
 buildFields1 :: forall x . (POSable x) => SmartExp (EltR x) -> SmartExp (FlattenProduct (Fields x))
 buildFields1 x = case eltRType @x of
-  SingletonType -> SmartExp $ Pair (SmartExp $ Union (Left x)) (SmartExp Smart.Nil)
+  SingletonType -> SmartExp $ Pair (SmartExp $ LiftUnion x) (SmartExp Smart.Nil)
   TaglessType -> x
   TaggedType -> SmartExp $ Prj PairIdxRight x
 
@@ -458,7 +486,7 @@ weirdConvert2 x = case eltRType @x of
 
 buildFields2 :: forall x y . (POSable x) => SmartExp (EltR x) -> SmartExp (FlattenProduct (Fields y)) -> SmartExp (FlattenProduct (Fields x ++ Fields y))
 buildFields2 x y = case eltRType @x of
-  SingletonType -> SmartExp $ Pair (SmartExp $ Union (Left x)) y
+  SingletonType -> SmartExp $ Pair (SmartExp $ LiftUnion x) y
   TaglessType -> buildFields3 @x @y x y
   TaggedType -> buildFields3 @x @y (SmartExp $ Prj PairIdxRight x) y
 

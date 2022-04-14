@@ -511,12 +511,15 @@ data PreSmartExp acc exp t where
                 -> exp (t1, t2)
                 -> PreSmartExp acc exp t
 
-  Union         :: Either (exp t1) (exp (SumScalar t2))
-                -> PreSmartExp acc exp (SumScalar (t1, t2))
+  LiftUnion     :: exp t1
+                -> PreSmartExp acc exp (SumScalar (t1, ()))
 
-  PrjUnion      :: UnionIdx (t1, t2) t
-                -> exp (SumScalar (t1, t2))
-                -> PreSmartExp acc exp t
+  Union         :: (ScalarType (SumScalar t1) -> ScalarType (SumScalar t2))
+                -> exp (SumScalar t1)
+                -> PreSmartExp acc exp (SumScalar t2)
+
+  PrjUnion      :: exp (SumScalar (t1, ()))
+                -> PreSmartExp acc exp t1
 
   VecPack       :: KnownNat n
                 => VecR n s tup
