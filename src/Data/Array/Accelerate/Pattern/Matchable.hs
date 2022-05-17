@@ -178,7 +178,7 @@ instance Matchable Bool where
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
       case e of
-        SmartExp (Match (TagRtag 0 TagRunit) _x) -> Just SOP.Nil
+        SmartExp (Match (0,1) _x) -> Just SOP.Nil
 
         SmartExp Match {} -> Nothing
 
@@ -187,7 +187,7 @@ instance Matchable Bool where
       case sameNat n (Proxy :: Proxy 1) of
         Just Refl ->
           case e of
-            SmartExp (Match (TagRtag 1 TagRunit) _x) -> Just SOP.Nil
+            SmartExp (Match (1,2) _x) -> Just SOP.Nil
 
             SmartExp Match {} -> Nothing
 
@@ -247,7 +247,7 @@ instance Matchable (Maybe Int) where
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
       case e of
-        SmartExp (Match (TagRtag 0 (TagRpair _ TagRunit)) _x)
+        SmartExp (Match (0,1) _x)
           -> Just SOP.Nil
 
         SmartExp Match {} -> Nothing
@@ -257,7 +257,7 @@ instance Matchable (Maybe Int) where
       case sameNat n (Proxy :: Proxy 1) of
         Just Refl ->
           case e of
-            SmartExp (Match (TagRtag 1 _) x)
+            SmartExp (Match (1,2) x)
               -> Just (
                   (mkExp $ PrjUnion $ SmartExp $ Union (unConcatSumScalarType (SumScalarType $ SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (SmartExp $ Prj PairIdxLeft (SmartExp $ Prj PairIdxRight x)))
                   :* SOP.Nil)
@@ -283,7 +283,7 @@ instance (POSable (Either a b), POSable a, POSable b, Elt a) => Matchable (Eithe
             SmartExp (
               Pair
                 (unExp $ buildTAG x)
-                undefined --(understandConcatPlease @a @b (mergeLeft @a @b (getSingleElem x)))
+                (mergeLeft _ _ _)
               )
             )
       where
@@ -373,26 +373,30 @@ instance (POSable (Either a b), POSable a, POSable b, Elt a) => Matchable (Eithe
 --   where
 --     fieldsx = buildFields1 x
 
--- mergeLeft :: forall a b . TypeR a -> TypeR b -> SmartExp a -> SmartExp (Merge' a b)
--- mergeLeft TupRunit TupRunit          a = unExp $ constant ()
--- mergeLeft TupRunit (TupRpair (TupRsingle (SumScalarType x)) gbs) a
---   = SmartExp $ Pair
---       (makeUndefLeft x)
---       (mergeLeft TupRunit gbs a)
--- mergeLeft (TupRpair (TupRsingle (SumScalarType x)) gas) TupRunit a
---   = SmartExp $ Pair
---       (mergeSumUndefRight x (SmartExp $ Prj PairIdxLeft a))
---       (mergeLeft gas TupRunit (SmartExp $ Prj PairIdxRight a))
--- mergeLeft (TupRpair (TupRsingle (SumScalarType ga)) gas) (TupRpair (TupRsingle (SumScalarType gb)) gbs) a
---   = SmartExp $ Pair
---       (SmartExp $ Union _ (SmartExp $ Prj PairIdxLeft a))
---       (mergeLeft gas gbs (SmartExp $ Prj PairIdxRight a))
+mergeLeft :: forall a b . TypeR a -> TypeR b -> SmartExp a -> SmartExp (Merge' a b)
+mergeLeft TupRunit TupRunit          a = unExp $ constant ()
+mergeLeft TupRunit (TupRpair (TupRsingle (SumScalarType x)) gbs) a
+  = SmartExp $ Pair
+      (makeUndefLeft x)
+      (mergeLeft TupRunit gbs a)
+mergeLeft (TupRpair (TupRsingle (SumScalarType x)) gas) TupRunit a
+  = SmartExp $ Pair
+      (mergeSumUndefRight x (SmartExp $ Prj PairIdxLeft a))
+      (mergeLeft gas TupRunit (SmartExp $ Prj PairIdxRight a))
+mergeLeft (TupRpair (TupRsingle (SumScalarType (ga :: (SumScalarType ga)))) gas) (TupRpair (TupRsingle (SumScalarType (gb :: (SumScalarType gb)))) gbs) a
+  = SmartExp $ Pair
+      (SmartExp $ Union (\y -> scalarSumConcat' @ga @gb y (SumScalarType gb)) (SmartExp $ Prj PairIdxLeft a)) -- (scalarSumConcat' @ga @gb (SumScalarType ga))
+      (mergeLeft gas gbs (SmartExp $ Prj PairIdxRight a))
 
 makeUndefLeft :: SumScalarType x -> SmartExp (SumScalar (Undef, x))
 makeUndefLeft x = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) x)) (PickScalar POS.Undef)
 
 mergeSumLeft :: forall a b . SumScalarType a -> SumScalarType b -> SmartExp (SumScalar a) -> SmartExp (SumScalar (Concat' a b))
 mergeSumLeft ls rs x = SmartExp $ Union (const $ scalarSumConcat ls rs) x
+
+
+scalarSumConcat':: ScalarType (SumScalar xs) -> ScalarType (SumScalar ys) -> ScalarType (SumScalar (Concat' xs ys))
+scalarSumConcat' (SumScalarType ls) (SumScalarType rs) = scalarSumConcat ls rs
 
 scalarSumConcat:: SumScalarType xs -> SumScalarType ys -> ScalarType (SumScalar (Concat' xs ys))
 scalarSumConcat ZeroScalarType rs = SumScalarType rs
