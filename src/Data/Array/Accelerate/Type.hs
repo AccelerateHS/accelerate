@@ -240,7 +240,7 @@ data SumScalar x where
   SkipScalar  :: SumScalar b -> SumScalar (a, b)
 
 data SumScalarType a where
-  SuccScalarType  :: ScalarType a -> SumScalarType b -> SumScalarType (a, b)
+  SuccScalarType  :: SingleType a -> SumScalarType b -> SumScalarType (a, b)
   ZeroScalarType  :: SumScalarType ()
 
 data SingleType a where
@@ -640,5 +640,5 @@ instance (IsSumScalar a) => IsScalar (SumScalar a) where
 instance IsSumScalar () where
   sumScalarType = ZeroScalarType
 
-instance (IsScalar a, IsSumScalar b) => IsSumScalar (a, b) where
-  sumScalarType = SuccScalarType (scalarType @a) (sumScalarType @b)
+instance (IsSingle a, IsSumScalar b) => IsSumScalar (a, b) where
+  sumScalarType = SuccScalarType (singleType @a) (sumScalarType @b)

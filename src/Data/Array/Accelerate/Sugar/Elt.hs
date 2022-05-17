@@ -132,7 +132,7 @@ flattenProductType (PTCons x xs) = TupRpair (TupRsingle (flattenSumType x)) (fla
 flattenSumType :: SumType a -> ScalarType (SumScalar (FlattenSum a))
 flattenSumType STZero = SumScalarType ZeroScalarType
 flattenSumType (STSucc x xs) = case flattenSumType xs of
-  SumScalarType xs' -> SumScalarType (SuccScalarType (mkScalarType x) xs')
+  SumScalarType xs' -> SumScalarType (SuccScalarType (mkSingleType x) xs')
 
 -- This is an unsafe conversion, and should be kept strictly in sync with the
 -- set of types that implement Ground
@@ -179,6 +179,53 @@ mkScalarType _
 mkScalarType _
   | Just Refl <- eqT @a @Undef
   = scalarType @a
+
+
+-- This is an unsafe conversion, and should be kept strictly in sync with the
+-- set of types that implement Ground
+mkSingleType :: forall a . (Typeable a, Ground a) => a -> SingleType a
+mkSingleType _
+  | Just Refl <- eqT @a @Int
+   = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int8
+   = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int16
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int32
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int64
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word
+    = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word8
+    = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word16
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word32
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word64
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Half
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Float
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Double
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Undef
+  = singleType @a
 
 
 mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))

@@ -259,7 +259,7 @@ instance Matchable (Maybe Int) where
           case e of
             SmartExp (Match (1,2) x)
               -> Just (
-                  (mkExp $ PrjUnion $ SmartExp $ Union (unConcatSumScalarType (SumScalarType $ SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (SmartExp $ Prj PairIdxLeft (SmartExp $ Prj PairIdxRight x)))
+                  (mkExp $ PrjUnion $ SmartExp $ Union (unConcatSumScalarType (SumScalarType $ SuccScalarType (UndefSingleType) ZeroScalarType)) (SmartExp $ Prj PairIdxLeft (SmartExp $ Prj PairIdxRight x)))
                   :* SOP.Nil)
             SmartExp Match {} -> Nothing
 
@@ -389,7 +389,7 @@ mergeLeft (TupRpair (TupRsingle (SumScalarType (ga :: (SumScalarType ga)))) gas)
       (mergeLeft gas gbs (SmartExp $ Prj PairIdxRight a))
 
 makeUndefLeft :: SumScalarType x -> SmartExp (SumScalar (Undef, x))
-makeUndefLeft x = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) x)) (PickScalar POS.Undef)
+makeUndefLeft x = SmartExp $ Const (SumScalarType (SuccScalarType (UndefSingleType) x)) (PickScalar POS.Undef)
 
 mergeSumLeft :: forall a b . SumScalarType a -> SumScalarType b -> SmartExp (SumScalar a) -> SmartExp (SumScalar (Concat' a b))
 mergeSumLeft ls rs x = SmartExp $ Union (const $ scalarSumConcat ls rs) x
@@ -421,18 +421,18 @@ merge (TupRpair (TupRsingle (SumScalarType ga)) gas) (TupRpair (TupRsingle (SumS
 
 
 mergeSumUndefRight :: SumScalarType x -> SmartExp (SumScalar x) -> SmartExp (SumScalar (Concat' x (Undef, ())))
-mergeSumUndefRight ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
+mergeSumUndefRight ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
 mergeSumUndefRight (SuccScalarType x xs) a = SmartExp $ Union scalarTypeUndefRight a
 
 mergeSumUndefLeft :: SumScalarType x -> SmartExp (SumScalar x) -> SmartExp (SumScalar (Undef, x))
-mergeSumUndefLeft ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (SingleScalarType UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
+mergeSumUndefLeft ZeroScalarType a = SmartExp $ Const (SumScalarType (SuccScalarType (UndefSingleType) ZeroScalarType)) (PickScalar POS.Undef)
 mergeSumUndefLeft (SuccScalarType x xs) a = SmartExp $ Union scalarTypeUndefLeft a
 
 scalarTypeUndefLeft :: ScalarType (SumScalar a) -> ScalarType (SumScalar (Undef, a))
-scalarTypeUndefLeft (SumScalarType x) = SumScalarType (SuccScalarType (scalarType @Undef) x)
+scalarTypeUndefLeft (SumScalarType x) = SumScalarType (SuccScalarType (singleType @Undef) x)
 
 scalarTypeUndefRight :: ScalarType (SumScalar a) -> ScalarType (SumScalar (Concat' a (Undef, ())))
-scalarTypeUndefRight (SumScalarType ZeroScalarType) = SumScalarType (SuccScalarType (scalarType @Undef) ZeroScalarType)
+scalarTypeUndefRight (SumScalarType ZeroScalarType) = SumScalarType (SuccScalarType (singleType @Undef) ZeroScalarType)
 scalarTypeUndefRight (SumScalarType (SuccScalarType x xs))
   = SumScalarType (SuccScalarType x xs')
   where
@@ -475,13 +475,13 @@ buildFields1 x = case eltRType @x of
   TaglessType -> x
   TaggedType -> SmartExp $ Prj PairIdxRight x
 
-weirdConvert2 :: forall x . (Elt x, POSable x) => TypeR (EltR x) -> TypeR (FlattenProduct (Fields x))
-weirdConvert2 x = case eltRType @x of
-  SingletonType -> case x of
-    TupRsingle x' -> TupRpair (TupRsingle (SumScalarType (SuccScalarType x' ZeroScalarType))) TupRunit
-  TaglessType -> x
-  TaggedType -> case x of
-    TupRpair _ x' -> x'
+-- weirdConvert2 :: forall x . (Elt x, POSable x) => TypeR (EltR x) -> TypeR (FlattenProduct (Fields x))
+-- weirdConvert2 x = case eltRType @x of
+--   SingletonType -> case x of
+--     TupRsingle x' -> TupRpair (TupRsingle (SumScalarType (SuccScalarType x' ZeroScalarType))) TupRunit
+--   TaglessType -> x
+--   TaggedType -> case x of
+--     TupRpair _ x' -> x'
 
 -- guidedAppend :: forall x y . TypeR (FlattenProduct (Fields x)) -> SmartExp (FlattenProduct (Fields x)) -> SmartExp (FlattenProduct (Fields y)) -> SmartExp (FlattenProduct (Fields x ++ Fields y))
 -- guidedAppend  TupRunit        x y | Refl :: (FlattenProduct (Fields y) :~: FlattenProduct (Fields x ++ Fields y)) <- unsafeCoerce Refl = y
