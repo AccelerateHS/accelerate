@@ -108,7 +108,7 @@ type family POStoEltR (cs :: Nat) fs :: Type where
 
 type family FlattenProduct (xss :: f [a]) = (r :: Type) | r -> f where
   FlattenProduct '[] = ()
-  FlattenProduct (x ': xs) = (SumScalar (FlattenSum x), FlattenProduct xs)
+  FlattenProduct (x ': xs) = (UnionScalar (FlattenSum x), FlattenProduct xs)
 
 type family FlattenSum (xs :: [a]) :: Type where
   FlattenSum '[] = ()
@@ -116,7 +116,7 @@ type family FlattenSum (xs :: [a]) :: Type where
 
 type family FlattenProductType (xss :: [[a]]) :: Type where
   FlattenProductType '[] = ()
-  FlattenProductType (x ': xs) = (SumScalarType (FlattenSumType x), FlattenProductType xs)
+  FlattenProductType (x ': xs) = (UnionScalarType (FlattenSumType x), FlattenProductType xs)
 
 type family FlattenSumType (xs :: [a]) :: Type where
   FlattenSumType '[] = ()
@@ -127,7 +127,7 @@ flattenProduct :: Product a -> FlattenProduct a
 flattenProduct Nil = ()
 flattenProduct (Cons x xs) = (flattenSum x, flattenProduct xs)
 
-flattenSum :: Sum a -> SumScalar (FlattenSum a)
+flattenSum :: Sum a -> UnionScalar (FlattenSum a)
 flattenSum (Pick x) = PickScalar x
 flattenSum (Skip xs) = SkipScalar (flattenSum xs)
 
@@ -230,18 +230,18 @@ data BoundedType a where
 data ScalarType a where
   SingleScalarType :: SingleType a         -> ScalarType a
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
-  SumScalarType :: SumScalarType a -> ScalarType (SumScalar a)
+  UnionScalarType :: UnionScalarType a -> ScalarType (UnionScalar a)
 
-class IsSumScalar a where
-  sumScalarType :: SumScalarType a
+class IsUnionScalar a where
+  unionScalarType :: UnionScalarType a
 
-data SumScalar x where
-  PickScalar  :: a -> SumScalar (a, b)
-  SkipScalar  :: SumScalar b -> SumScalar (a, b)
+data UnionScalar x where
+  PickScalar  :: a -> UnionScalar (a, b)
+  SkipScalar  :: UnionScalar b -> UnionScalar (a, b)
 
-data SumScalarType a where
-  SuccScalarType  :: SingleType a -> SumScalarType b -> SumScalarType (a, b)
-  ZeroScalarType  :: SumScalarType ()
+data UnionScalarType a where
+  SuccScalarType  :: SingleType a -> UnionScalarType b -> UnionScalarType (a, b)
+  ZeroScalarType  :: UnionScalarType ()
 
 data SingleType a where
   NumSingleType :: NumType a -> SingleType a
@@ -285,9 +285,9 @@ instance Show (VectorType a) where
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
   show (VectorScalarType ty) = show ty
-  show (SumScalarType    ty) = show ty
+  show (UnionScalarType    ty) = show ty
 
-instance Show (SumScalarType a) where
+instance Show (UnionScalarType a) where
   show ZeroScalarType = ""
   show (SuccScalarType x (ZeroScalarType)) = show x
   show (SuccScalarType x xs) = show x ++ " ＋ " ++ show xs
@@ -634,11 +634,11 @@ instance IsSingle Undef where
 instance IsScalar Undef where
   scalarType = SingleScalarType singleType
 
-instance (IsSumScalar a) => IsScalar (SumScalar a) where
-  scalarType = SumScalarType (sumScalarType @a)
+instance (IsUnionScalar a) => IsScalar (UnionScalar a) where
+  scalarType = UnionScalarType (unionScalarType @a)
 
-instance IsSumScalar () where
-  sumScalarType = ZeroScalarType
+instance IsUnionScalar () where
+  unionScalarType = ZeroScalarType
 
-instance (IsSingle a, IsSumScalar b) => IsSumScalar (a, b) where
-  sumScalarType = SuccScalarType (singleType @a) (sumScalarType @b)
+instance (IsSingle a, IsUnionScalar b) => IsUnionScalar (a, b) where
+  unionScalarType = SuccScalarType (singleType @a) (unionScalarType @b)

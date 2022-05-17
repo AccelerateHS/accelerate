@@ -129,10 +129,10 @@ flattenProductType :: ProductType a -> TypeR (FlattenProduct a)
 flattenProductType PTNil = TupRunit
 flattenProductType (PTCons x xs) = TupRpair (TupRsingle (flattenSumType x)) (flattenProductType xs)
 
-flattenSumType :: SumType a -> ScalarType (SumScalar (FlattenSum a))
-flattenSumType STZero = SumScalarType ZeroScalarType
+flattenSumType :: SumType a -> ScalarType (UnionScalar (FlattenSum a))
+flattenSumType STZero = UnionScalarType ZeroScalarType
 flattenSumType (STSucc x xs) = case flattenSumType xs of
-  SumScalarType xs' -> SumScalarType (SuccScalarType (mkSingleType x) xs')
+  UnionScalarType xs' -> UnionScalarType (SuccScalarType (mkSingleType x) xs')
 
 -- This is an unsafe conversion, and should be kept strictly in sync with the
 -- set of types that implement Ground

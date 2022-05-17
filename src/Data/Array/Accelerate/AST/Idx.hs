@@ -27,8 +27,7 @@ module Data.Array.Accelerate.AST.Idx (
   idxToInt,
   rnfIdx, liftIdx,
 
-  PairIdx(..),
-  UnionIdx(..)
+  PairIdx(..)
 
 ) where
 
@@ -113,9 +112,3 @@ pattern VoidIdx a <- (\case{} -> a)
 data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a
   PairIdxRight :: PairIdx (a, b) b
-
-data UnionIdx p a where
-  UnionIdxLeft  :: UnionIdx (a, b) a
-  UnionIdxRight :: UnionIdx (a, b) (SumScalar b)
-  
-  

@@ -512,13 +512,13 @@ data PreSmartExp acc exp t where
                 -> PreSmartExp acc exp t
 
   LiftUnion     :: exp t1
-                -> PreSmartExp acc exp (SumScalar (t1, ()))
+                -> PreSmartExp acc exp (UnionScalar (t1, ()))
 
-  Union         :: (ScalarType (SumScalar t1) -> ScalarType (SumScalar t2))
-                -> exp (SumScalar t1)
-                -> PreSmartExp acc exp (SumScalar t2)
+  Union         :: (ScalarType (UnionScalar t1) -> ScalarType (UnionScalar t2))
+                -> exp (UnionScalar t1)
+                -> PreSmartExp acc exp (UnionScalar t2)
 
-  PrjUnion      :: exp (SumScalar (t1, ()))
+  PrjUnion      :: exp (UnionScalar (t1, ()))
                 -> PreSmartExp acc exp t1
 
   VecPack       :: KnownNat n
