@@ -12,6 +12,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE GADTs                #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -ddump-splices #-}
 -- |
@@ -80,13 +81,16 @@ import Data.Typeable
 -- See the function 'Data.Array.Accelerate.match' for details on how to use
 -- sum types in embedded code.
 --
-class Elt a where
+class (KnownNat (EltChoices a)) => Elt a where
   -- | Type representation mapping, which explains how to convert a type
   -- from the surface type into the internal representation type consisting
   -- only of simple primitive types, unit '()', and pair '(,)'.
   --
   type EltR a :: Type
   type EltR a = POStoEltR (Choices a) (Fields a)
+
+  type EltChoices a :: Nat
+  type EltChoices a = Choices a
 
   --
   eltR    :: TypeR (EltR a)
@@ -282,6 +286,7 @@ instance (POSable (Either a b), Elt a, Elt b) => Elt (Either a b)
 
 instance Elt Char where
   type EltR Char = Word32
+  type EltChoices Char = 1
   eltR    = TupRsingle scalarType
   tagsR   = [TagRsingle scalarType]
   toElt   = chr . fromIntegral

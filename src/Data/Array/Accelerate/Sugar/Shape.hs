@@ -8,6 +8,8 @@
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Sugar.Shape
@@ -39,6 +41,7 @@ import qualified Data.Array.Accelerate.Representation.Slice         as R
 
 import Data.Kind
 import GHC.Generics as GHC
+import GHC.TypeLits (type (+))
 
 
 -- Shorthand for common shape types
@@ -306,6 +309,7 @@ class (Slice (DivisionSlice sl)) => Division sl where
 
 instance (Elt t, Elt h) => Elt (t :. h) where
   type EltR (t :. h) = (EltR t, EltR h)
+  type EltChoices (t :. h) = 1
   eltR           = TupRpair (eltR @t) (eltR @h)
   tagsR          = [TagRpair t h | t <- tagsR @t, h <- tagsR @h]
   fromElt (t:.h) = (fromElt t, fromElt h)
@@ -314,8 +318,10 @@ instance (Elt t, Elt h) => Elt (t :. h) where
 instance POS.Generic (Any Z)
 instance POSable (Any Z)
 instance Elt (Any Z)
+
 instance Shape sh => Elt (Any (sh :. Int)) where
   type EltR (Any (sh :. Int)) = (EltR (Any sh), ())
+  type EltChoices (Any (sh :. Int)) = 1
   eltR      = TupRpair (eltR @(Any sh)) TupRunit
   tagsR     = [TagRpair t TagRunit | t <- tagsR @(Any sh)]
   fromElt _ = (fromElt (Any :: Any sh), ())
