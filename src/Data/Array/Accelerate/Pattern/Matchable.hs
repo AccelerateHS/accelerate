@@ -24,7 +24,7 @@ import Data.Proxy
 import Data.Kind
 import           Generics.SOP as SOP
 import Data.Type.Equality
-import Data.Array.Accelerate.Representation.POS as POS (Undef(..))
+import Data.Array.Accelerate.Representation.POS as POS
 import Data.Array.Accelerate.Representation.Tag
 import Unsafe.Coerce
 import qualified Data.Array.Accelerate.AST as AST
@@ -45,13 +45,13 @@ class Matchable a where
   build ::
     ( KnownNat n
     ) => Proxy n
-    -> NP Exp (Index (SOPCode a) n)
+    -> NP Exp (SOPCode a !! n)
     -> Exp a
   default build ::
     ( KnownNat n
     , Elt a
     ) => Proxy n
-    -> NP Exp (Index (SOPCode a) n)
+    -> NP Exp (SOPCode a !! n)
     -> Exp a
 
   build n _ = case sameNat (Proxy :: Proxy (EltChoices a)) (Proxy :: Proxy 1) of
@@ -63,7 +63,7 @@ class Matchable a where
   match :: ( KnownNat n
     ) => Proxy n
     -> Exp a
-    -> Maybe (NP Exp (Index (SOPCode a) n))
+    -> Maybe (NP Exp (SOPCode a !! n))
 
 buildTag :: SOP.All Elt xs => NP Exp xs -> Exp TAG
 buildTag SOP.Nil = constant 0 -- exp of 0 :: Finite 1
@@ -79,9 +79,11 @@ buildTag (((Exp x) :: (Exp x)) :* (xs :: xs)) = case sameNat (Proxy :: Proxy (El
 
 
 
-type family Index (xs :: [[Type]]) (y :: Nat) :: [Type] where
-  Index (x ': xs) 0 = x
-  Index (x ': xs) n = Index xs (n - 1)
+type family (!!) (xs :: [[Type]]) (y :: Nat) :: [Type] where
+  (x ': xs) !! 0 = x
+  (x ': xs) !! n = xs !! (n - 1)
+
+infixl 9 !!
 
 type family ListToCons (xs :: [Type]) :: Type where
   ListToCons '[] = ()
@@ -229,93 +231,26 @@ unConcatSumScalarType (UnionScalarType (SuccScalarType a as)) (UnionScalarType (
 
 
 
-instance (Elt (Either a b), Elt a, Elt b, Elt a) => Matchable (Either a b) where
+instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) where
   -- type Choices' (Either a b) = OuterChoices (Either a b)
 
-  build n x
-    | Refl :: (EltR (Either a b) :~: (TAG, y)) <- unsafeCoerce Refl -- this should be provable, I'm just lazy
+  build n fs
+    -- | Refl :: (EltR (Either a b) :~: (TAG, y)) <- unsafeCoerce Refl -- this should be provable, I'm just lazy
     = case sameNat n (Proxy :: Proxy 0) of
-      Just Refl
-        -> Exp (
-            SmartExp (
-              Pair
-                (unExp $ buildTAG x)
-                _
-              )
-            )
-      where
-        tag = undefined --foldl 1 (*) (mapChoices x)
-        test = natVal (Proxy :: Proxy (EltChoices a))
-  --   Nothing -> case sameNat n (Proxy :: Proxy 1) of
-  --     Just Refl | (Exp x' :* SOP.Nil) <- x -> Exp (
-  --         SmartExp (
-  --           Pair
-  --             (makeTag 1)
-  --             (SmartExp (
-  --               Pair
-  --                 (SmartExp
-  --                   (Union
-  --                     (Right (
-  --                       SmartExp
-  --                         (Union
-  --                           (Left x')
-  --                         )
-  --                     ))
-  --                   )
-  --                 )
-  --                 (SmartExp Smart.Nil)
-  --             ))
-  --         )
-  --       )
-  --     Nothing -> error "Impossible type encountered"
+      Just Refl ->
+        case emptyFields @(Either a b) of
+        x
+          | Refl :: POStoEltR (Choices a + Choices b) (Merge (Fields a ++ '[]) (Fields b ++ '[])) :~: (TAG, FlattenProduct (Merge (Fields a) (Fields b))) <- unsafeCoerce Refl
+          ->
+          Exp (SmartExp (Pair (unExp $ buildTAG fs) undefined))
+      Nothing ->
+        case emptyFields @(Either a b) of
+          PTNil -> undefined
+          (PTCons x xs) -> undefined
 
-  -- match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
-  --   Just Refl ->
-  --     case e of
-  --       SmartExp (Match (TagRtag 0 (TagRpair _ TagRunit)) _x)
-  --         -> Just SOP.Nil
-
-  --       SmartExp Match {} -> Nothing
-
-  --       _ -> error "Embedded pattern synonym used outside 'match' context."
-  --   Nothing -> -- matchJust
-  --     case sameNat n (Proxy :: Proxy 1) of
-  --       Just Refl ->
-  --         case e of
-  --           SmartExp (Match (TagRtag 1 _) x)
-  --             -> Just
-  --                 (Exp
-  --                   (SmartExp
-  --                     (PrjUnion
-  --                       UnionIdxLeft
-  --                       (SmartExp
-  --                         (PrjUnion
-  --                           UnionIdxRight
-  --                           (SmartExp
-  --                             (Prj
-  --                               PairIdxLeft
-  --                               (SmartExp (Prj PairIdxRight x))
-  --                             ))
-  --                         ))
-  --                     )) :* SOP.Nil)
-  --           SmartExp Match {} -> Nothing
-
-  --           _ -> error "Embedded pattern synonym used outside 'match' context."
-
-  --       Nothing ->
-  --         error "Impossible type encountered"
-
--- weirdConvert :: forall x . Elt x => TypeR (EltR x)
--- weirdConvert = eltR @x
-
--- getSingleElem :: NP Exp '[a] -> Exp a
--- getSingleElem (x :* SOP.Nil) = x
-
--- buildFields :: (All Elt xs) => NP SmartExp xs -> SmartExp (ConcatT (MapFlattenProduct (MapFields xs)))
--- buildFields SOP.Nil = ()
--- buildFields (x :* xs) = SmartExp $ Pair
---   where
---     fieldsx = buildFields1 x
+-- convert :: forall a b . NP Exp a -> SmartExp (FlattenProduct (Merge a b))
+-- convert SOP.Nil = SmartExp (Pair _ _)
+-- convert (x :* xs) = undefined
 
 mergeLeft :: forall a b . TypeR a -> TypeR b -> SmartExp a -> SmartExp (Merge' a b)
 mergeLeft TupRunit TupRunit          a = unExp $ constant ()
@@ -422,17 +357,17 @@ type family MapFlattenSum (x :: [[Type]]) :: [Type] where
   MapFlattenSum (x ': xs) = UnionScalar (FlattenSum x) ': MapFlattenSum xs
 
 -- like combineProducts, but lifted to the AST
-buildTAG :: (All Elt xs) => NP Exp xs -> Exp TAG
+buildTAG :: (All POSable xs) => NP Exp xs -> Exp TAG
 buildTAG SOP.Nil = Exp $ makeTag 0
 buildTAG (x :* xs) = combineProduct x (buildTAG xs)
 
 -- like Finite.combineProduct, but lifted to the AST
 -- basically `tag x + tag y * natVal x`
-combineProduct :: forall x. (Elt x) => Exp x -> Exp TAG -> Exp TAG
-combineProduct x y = case sameNat (Proxy :: Proxy (EltChoices x)) (Proxy :: Proxy 1) of
+combineProduct :: forall x. (POSable x) => Exp x -> Exp TAG -> Exp TAG
+combineProduct x y = case sameNat (emptyChoices @x) (Proxy :: Proxy 1) of
   -- untagged type: `tag x = 0`, `natVal x = 1`
   Just Refl -> y
   -- tagged type
   Nothing
     | Refl :: (EltR x :~: (TAG, y)) <- unsafeCoerce Refl
-    -> mkAdd (mkExp $ Prj PairIdxLeft (unExp x)) (mkMul y (constant (fromInteger $ natVal (Proxy :: Proxy (EltChoices x)))))
+    -> mkAdd (mkExp $ Prj PairIdxLeft (unExp x)) (mkMul y (constant (fromInteger $ natVal (emptyChoices @x))))
