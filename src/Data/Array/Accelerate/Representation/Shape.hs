@@ -220,9 +220,6 @@ instance POSable (ShapeR ()) where
 
   emptyFields = PTNil
 
-  type OuterChoices (ShapeR ()) = 1
-  outerChoice _ = 0
-
 
 instance (POSable (ShapeR sh)) => POSable (ShapeR (sh, Int)) where
   type Choices (ShapeR (sh, Int)) = 1
@@ -237,8 +234,5 @@ instance (POSable (ShapeR sh)) => POSable (ShapeR (sh, Int)) where
   fields (ShapeRsnoc sh) = Cons (Pick Undef) (fields sh)
 
   emptyFields = PTCons (STSucc Undef STZero) (emptyFields @(ShapeR sh))
-
-  type OuterChoices (ShapeR (sh, Int)) = 1
-  outerChoice _ = 0
 
 
