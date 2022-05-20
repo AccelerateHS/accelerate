@@ -65,9 +65,9 @@ class Matchable a where
     -> Exp a
     -> Maybe (NP Exp (SOPCode a !! n))
 
-buildTag :: SOP.All Elt xs => NP Exp xs -> Exp TAG
+buildTag :: SOP.All POSable xs => NP Exp xs -> Exp TAG
 buildTag SOP.Nil = constant 0 -- exp of 0 :: Finite 1
-buildTag (((Exp x) :: (Exp x)) :* (xs :: xs)) = case sameNat (Proxy :: Proxy (EltChoices x)) (Proxy :: Proxy 1) of
+buildTag (((Exp x) :: (Exp x)) :* (xs :: xs)) = case sameNat (emptyChoices @x) (Proxy :: Proxy 1) of
   -- x doesn't contain a tag, skip
   Just Refl
     -> buildTag xs
@@ -235,18 +235,31 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
   -- type Choices' (Either a b) = OuterChoices (Either a b)
 
   build n fs
-    -- | Refl :: (EltR (Either a b) :~: (TAG, y)) <- unsafeCoerce Refl -- this should be provable, I'm just lazy
+    | Refl :: (EltR (Either a b) :~: (TAG, FlattenProduct (Fields (Either a b)))) <- unsafeCoerce Refl -- this should be provable, I'm just lazy
     = case sameNat n (Proxy :: Proxy 0) of
-      Just Refl ->
-        case emptyFields @(Either a b) of
-        x
-          | Refl :: POStoEltR (Choices a + Choices b) (Merge (Fields a ++ '[]) (Fields b ++ '[])) :~: (TAG, FlattenProduct (Merge (Fields a) (Fields b))) <- unsafeCoerce Refl
-          ->
-          Exp (SmartExp (Pair (unExp $ buildTAG fs) undefined))
+      Just Refl -> case emptyFields @a of
+        PTNil ->  Exp (SmartExp (Pair (unExp $ buildTAG fs) (undefPairs @(Fields b) (emptyFields @b))))
+        PTCons st pt -> Exp (SmartExp (Pair (unExp $ buildTAG fs) undefined))
       Nothing ->
-        case emptyFields @(Either a b) of
-          PTNil -> undefined
-          (PTCons x xs) -> undefined
+        case sameNat n (Proxy :: Proxy 1) of
+          Just Refl -> case emptyFields @a of
+            PTNil -> case fs of
+              x :* SOP.Nil -> case eltRType @b of  -- disambiguate between tagless and tagged b's
+                SingletonType -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (SmartExp (Pair (SmartExp (Union undefined (SmartExp (LiftUnion (unExp x))))) (SmartExp Smart.Nil)))))
+                TaglessType -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (mergePairs @(Fields b) (emptyFields @b) (unExp x))))
+                TaggedType -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (mergePairs @(Fields b) (emptyFields @b) (SmartExp (Prj PairIdxRight (unExp x))))))
+            (PTCons x xs) -> Exp (SmartExp (Pair (unExp $ buildTAG fs) undefined))
+          Nothing -> error "Index out of bounds"
+
+undefPairs :: forall xs . ProductType xs -> SmartExp (FlattenProduct (Merge '[] (xs ++ '[])))
+undefPairs PTNil = SmartExp Smart.Nil
+undefPairs (PTCons x xs) = SmartExp (Pair (SmartExp (Union undefined (SmartExp (LiftUnion (unExp $ constant POS.Undef))))) (undefPairs xs))
+
+mergePairs :: forall xs . ProductType xs -> SmartExp (FlattenProduct xs) -> SmartExp (FlattenProduct (Merge '[] (xs ++ '[])))
+mergePairs PTNil _ = SmartExp Smart.Nil
+mergePairs (PTCons x xs) y = SmartExp (Pair (SmartExp (Union undefined (SmartExp (Prj PairIdxLeft y)))) (mergePairs xs (SmartExp (Prj PairIdxRight y))))
+
+--
 
 -- convert :: forall a b . NP Exp a -> SmartExp (FlattenProduct (Merge a b))
 -- convert SOP.Nil = SmartExp (Pair _ _)
