@@ -181,13 +181,21 @@ instance Matchable (Maybe Int) where
           error "Impossible type encountered"
 
 
-instance Matchable (Maybe a) where
-  build n x = case sameNat n (Proxy :: Proxy 0) of
+instance (POSable a) => Matchable (Maybe a) where
+  build n fs = case sameNat n (Proxy :: Proxy 0) of
+    -- Produce a Nothing
     Just Refl ->
-      Exp undefined
+      case sameNat (Proxy @(Choices a)) (Proxy @0) of
+        -- a has 0 valid choices (which means we cannot create a Just of this type)
+        -- we ignore the implementation for now, because this is not really useful
+        Just Refl -> undefined
+        -- a has at least 1 choice.
+        -- this means that it always has a tag
+        Nothing
+          | Refl :: (EltR (Maybe a) :~: (TAG, FlattenProduct (Fields (Maybe a)))) <- unsafeCoerce Refl
+          -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (makeLeft @() @a (SmartExp Smart.Nil))))
     Nothing -> case sameNat n (Proxy :: Proxy 1) of
-      Just Refl | (Exp x' :* SOP.Nil) <- x -> Exp undefined
-      Nothing -> error "Impossible type encountered"
+      x -> undefined
 
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
@@ -210,6 +218,15 @@ instance Matchable (Maybe a) where
 
         Nothing ->
           error "Impossible type encountered"
+
+makeLeft :: forall a b . (POSable a, POSable b) => SmartExp (FlattenProduct (Fields a)) -> SmartExp (FlattenProduct (Merge (Fields a ++ '[]) (Fields b ++ '[])))
+makeLeft x = makeLeft' x (emptyFields @a) (emptyFields @b)
+
+makeLeft' :: forall a b . SmartExp (FlattenProduct a) -> ProductType a -> ProductType b -> SmartExp (FlattenProduct (Merge (a ++ '[]) (b ++ '[])))
+makeLeft' _ PTNil PTNil = SmartExp Smart.Nil
+makeLeft' x PTNil (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (SmartExp (LiftUnion (SmartExp (Const (SingleScalarType UndefSingleType) POS.Undef)))))) (makeLeft' x PTNil rs))
+makeLeft' x (PTCons _ ls) PTNil = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeLeft' (SmartExp $ Prj PairIdxRight x) ls PTNil))
+makeLeft' x (PTCons _ ls) (PTCons r rs) = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeLeft' (SmartExp $ Prj PairIdxRight x) ls rs))
 
 instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) where
   -- type Choices' (Either a b) = OuterChoices (Either a b)
