@@ -21,7 +21,7 @@ module Data.Array.Accelerate.Representation.POS (
   where
 
 
-import Data.Type.POSable.POSable as POSable
-import Data.Type.POSable.Representation
-import Data.Type.POSable.Instances ()
-import Data.Type.POSable.TH
+import Generics.POSable.POSable as POSable
+import Generics.POSable.Representation
+import Generics.POSable.Instances ()
+import Generics.POSable.TH

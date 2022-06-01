@@ -33,9 +33,9 @@ module Data.Array.Accelerate.Sugar.POS
 
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 
-import Data.Type.POSable.POSable as POSable
-import Data.Type.POSable.Representation
-import Data.Type.POSable.TH
+import Generics.POSable.POSable as POSable
+import Generics.POSable.Representation
+import Generics.POSable.TH
 
 import Data.Int
 import Data.Word

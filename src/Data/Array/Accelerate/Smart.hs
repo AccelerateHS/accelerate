@@ -514,8 +514,7 @@ data PreSmartExp acc exp t where
   LiftUnion     :: exp t1
                 -> PreSmartExp acc exp (UnionScalar (t1, ()))
 
-  Union         :: (ScalarType (UnionScalar t1) -> ScalarType (UnionScalar t2))
-                -> exp (UnionScalar t1)
+  Union         :: exp (UnionScalar t1)
                 -> PreSmartExp acc exp (UnionScalar t2)
 
   PrjUnion      :: exp (UnionScalar (t1, ()))

@@ -28,7 +28,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.POS
-import Data.Type.POSable.Representation
+import Generics.POSable.Representation
 
 import Language.Haskell.TH.Extra
 import Prelude                                                      hiding ( zip )
