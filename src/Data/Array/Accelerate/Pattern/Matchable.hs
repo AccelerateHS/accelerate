@@ -93,7 +93,7 @@ instance Matchable Bool where
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
       case e of
-        SmartExp (Match (0,1) _x) -> Just SOP.Nil
+        SmartExp (Match n _x) | n == 0 -> Just SOP.Nil
 
         SmartExp Match {} -> Nothing
 
@@ -102,7 +102,7 @@ instance Matchable Bool where
       case sameNat n (Proxy :: Proxy 1) of
         Just Refl ->
           case e of
-            SmartExp (Match (1,2) _x) -> Just SOP.Nil
+            SmartExp (Match n _x) | n == 1 -> Just SOP.Nil
 
             SmartExp Match {} -> Nothing
 
@@ -159,7 +159,8 @@ instance Matchable (Maybe Int) where
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
       case e of
-        SmartExp (Match (0,1) _x)
+        SmartExp (Match m _x)
+          | m == 0
           -> Just SOP.Nil
 
         SmartExp Match {} -> Nothing
@@ -169,9 +170,10 @@ instance Matchable (Maybe Int) where
       case sameNat n (Proxy :: Proxy 1) of
         Just Refl ->
           case e of
-            SmartExp (Match (1,2) x)
+            SmartExp (Match m x)
+              | m == 1
               -> Just (
-                  mkExp (PrjUnion $ SmartExp $ Union (SmartExp $ Prj PairIdxLeft (SmartExp $ Prj PairIdxRight x)))
+                  mkExp (PrjUnion $ SmartExp $ Union (prjLeft (prjRight x)))
                   :* SOP.Nil)
             SmartExp Match {} -> Nothing
 
@@ -188,8 +190,7 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
     Just Refl -> undefined
     -- a has at least 1 choice.
     -- this means that Maybe a always has a tag
-    Nothing
-      | Refl :: (EltR (Maybe a) :~: (TAG, FlattenProduct (Fields (Maybe a)))) <- unsafeCoerce Refl
+    Nothing | Refl :: (EltR (Maybe a) :~: (TAG, FlattenProduct (Fields (Maybe a)))) <- unsafeCoerce Refl
       -> case sameNat n (Proxy :: Proxy 0) of
         -- Produce a Nothing
         Just Refl -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (makeLeft @() @a (SmartExp Smart.Nil))))
@@ -201,27 +202,56 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
             Nothing -> error $ "Impossible situation requested: Maybe has 2 constructors, constructor " ++ show (natVal n) ++ "is out of bound"
         Nothing -> error "Impossible situation requested: Just a expects a single value, got 0 or more then 1"
 
-  match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
-    Just Refl ->
-      case e of
-        SmartExp (Match (0,1) _x)
-          -> Just SOP.Nil
+  match n (Exp e) = case sameNat (Proxy @(Choices a)) (Proxy @0) of
+    -- a has 0 valid choices (which means we cannot create a Just of this type)
+    -- we ignore the implementation for now, because this is not really useful
+    Just Refl -> undefined
+    -- a has at least 1 choice.
+    -- this means that Maybe a always has a tag
+    Nothing | Refl :: (EltR (Maybe a) :~: (TAG, FlattenProduct (Fields (Maybe a)))) <- unsafeCoerce Refl
+      -> case sameNat n (Proxy :: Proxy 0) of
+      Just Refl ->
+        case e of
+          SmartExp (Match m _x)
+            | m >= 0
+            , m < 1
+            -> Just SOP.Nil
 
-        SmartExp Match {} -> Nothing
+          SmartExp Match {} -> Nothing
 
-        _ -> error "Embedded pattern synonym used outside 'match' context."
-    Nothing -> -- matchJust
-      case sameNat n (Proxy :: Proxy 1) of
-        Just Refl ->
-          case e of
-            SmartExp (Match (1,2) x)
-              -> Just (undefined)
-            SmartExp Match {} -> Nothing
+          _ -> error "Embedded pattern synonym used outside 'match' context."
+      Nothing -> -- matchJust
+        case sameNat n (Proxy :: Proxy 1) of
+          Just Refl ->
+            case e of
+              SmartExp (Match m x)
+                | m >= 1
+                , m < fromInteger (natVal $ Proxy @(Choices a))
+                -- remove one from the tag as we are not in left anymore
+                -- the `tag` function will apply the new tag if necessary
+                -> Just (Exp (tag @a (unExp $ mkMin @TAG (constant 1) (Exp $ prjLeft x)) (splitRight @() @a $ prjRight x)) :* SOP.Nil)
+              SmartExp Match {} -> Nothing
 
-            _ -> error "Embedded pattern synonym used outside 'match' context."
+              _ -> error "Embedded pattern synonym used outside 'match' context."
 
-        Nothing ->
-          error "Impossible type encountered"
+          Nothing ->
+            error "Impossible type encountered"
+
+splitLeft :: forall a b . (POSable a, POSable b) => SmartExp (FlattenProduct (Merge (Fields a ++ '[]) (Fields b ++ '[]))) -> SmartExp (FlattenProduct (Fields a))
+splitLeft x = splitLeft' x (emptyFields @a) (emptyFields @b)
+
+splitLeft' :: forall a b . SmartExp (FlattenProduct (Merge (a ++ '[]) (b ++ '[]))) -> ProductType a -> ProductType b -> SmartExp (FlattenProduct a)
+splitLeft' _ PTNil _ = SmartExp Smart.Nil
+splitLeft' x (PTCons _ ls) PTNil = SmartExp $ Pair (SmartExp $ Union (prjLeft x)) (splitLeft' (prjRight x) ls PTNil)
+splitLeft' x (PTCons _ ls) (PTCons _ rs) = SmartExp $ Pair (SmartExp $ Union (prjLeft x)) (splitLeft' (prjRight x) ls rs)
+
+splitRight :: forall a b . (POSable a, POSable b) => SmartExp (FlattenProduct (Merge (Fields a ++ '[]) (Fields b ++ '[]))) -> SmartExp (FlattenProduct (Fields b))
+splitRight x = splitRight' x (emptyFields @a) (emptyFields @b)
+
+splitRight' :: forall a b . SmartExp (FlattenProduct (Merge (a ++ '[]) (b ++ '[]))) -> ProductType a -> ProductType b -> SmartExp (FlattenProduct b)
+splitRight' _ _ PTNil = SmartExp Smart.Nil
+splitRight' x PTNil (PTCons _ rs) = SmartExp $ Pair (SmartExp $ Union (prjLeft x)) (splitRight' (prjRight x) PTNil rs)
+splitRight' x (PTCons _ ls) (PTCons _ rs) = SmartExp $ Pair (SmartExp $ Union (prjLeft x)) (splitRight' (prjRight x) ls rs)
 
 makeLeft :: forall a b . (POSable a, POSable b) => SmartExp (FlattenProduct (Fields a)) -> SmartExp (FlattenProduct (Merge (Fields a ++ '[]) (Fields b ++ '[])))
 makeLeft x = makeLeft' x (emptyFields @a) (emptyFields @b)
@@ -229,23 +259,35 @@ makeLeft x = makeLeft' x (emptyFields @a) (emptyFields @b)
 makeLeft' :: forall a b . SmartExp (FlattenProduct a) -> ProductType a -> ProductType b -> SmartExp (FlattenProduct (Merge (a ++ '[]) (b ++ '[])))
 makeLeft' _ PTNil PTNil = SmartExp Smart.Nil
 makeLeft' x PTNil (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (SmartExp (LiftUnion (SmartExp (Const (SingleScalarType UndefSingleType) POS.Undef)))))) (makeLeft' x PTNil rs))
-makeLeft' x (PTCons _ ls) PTNil = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeLeft' (SmartExp $ Prj PairIdxRight x) ls PTNil))
-makeLeft' x (PTCons _ ls) (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeLeft' (SmartExp $ Prj PairIdxRight x) ls rs))
+makeLeft' x (PTCons _ ls) PTNil = SmartExp (Pair (SmartExp (Union (prjLeft x))) (makeLeft' (prjRight x) ls PTNil))
+makeLeft' x (PTCons _ ls) (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (prjLeft x))) (makeLeft' (prjRight x) ls rs))
+
+prjLeft :: SmartExp (x, xs) -> SmartExp x
+prjLeft = SmartExp . Prj PairIdxLeft
+
+prjRight :: SmartExp (x, xs) -> SmartExp xs
+prjRight = SmartExp . Prj PairIdxRight
 
 makeRight :: forall a b . (POSable a, POSable b) => SmartExp (FlattenProduct (Fields b)) -> SmartExp (FlattenProduct (Merge (Fields a ++ '[]) (Fields b ++ '[])))
 makeRight x = makeRight' x (emptyFields @a) (emptyFields @b)
 
 makeRight' :: forall a b . SmartExp (FlattenProduct b) -> ProductType a -> ProductType b -> SmartExp (FlattenProduct (Merge (a ++ '[]) (b ++ '[])))
 makeRight' _ PTNil PTNil = SmartExp Smart.Nil
-makeRight' x PTNil (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeRight' (SmartExp $ Prj PairIdxRight x) PTNil rs))
+makeRight' x PTNil (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (prjLeft x))) (makeRight' (prjRight x) PTNil rs))
 makeRight' x (PTCons _ ls) PTNil = SmartExp (Pair (SmartExp (Union (SmartExp (LiftUnion (SmartExp (Const (SingleScalarType UndefSingleType) POS.Undef)))))) (makeRight' x ls PTNil))
-makeRight' x (PTCons _ ls) (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeRight' (SmartExp $ Prj PairIdxRight x) ls rs))
+makeRight' x (PTCons _ ls) (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (prjLeft x))) (makeRight' (prjRight x) ls rs))
 
 unTag :: forall x . (POSable x) => SmartExp (EltR x) -> SmartExp (FlattenProduct (Fields x))
 unTag x = case eltRType @x of
   SingletonType -> SmartExp (Pair (SmartExp (LiftUnion x)) (SmartExp Smart.Nil))
   TaglessType -> x
-  TaggedType -> SmartExp $ Prj PairIdxRight x
+  TaggedType -> prjRight x
+
+tag :: forall x . (POSable x) => SmartExp TAG -> SmartExp (FlattenProduct (Fields x)) -> SmartExp (EltR x)
+tag t x = case eltRType @x of
+  SingletonType -> SmartExp $ PrjUnion $ prjLeft x
+  TaglessType -> x
+  TaggedType -> SmartExp $ Pair t x
 
 instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) where
   -- type Choices' (Either a b) = OuterChoices (Either a b)

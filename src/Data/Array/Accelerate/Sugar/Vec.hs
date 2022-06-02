@@ -46,9 +46,6 @@ instance VecElt a => POSable (Vec2 a) where
 
     emptyFields = PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) PTNil)
 
-    type OuterChoices (Vec2 a) = 1
-    outerChoice _ = 0
-
 -- Elt instance automatically derived from POSable instance
 instance VecElt a => Elt (Vec2 a)
 
@@ -66,10 +63,6 @@ instance VecElt a => POSable (Vec4 a) where
     fields (Vec4 a b c d) = Cons (Pick a) (Cons (Pick b) (Cons (Pick c) (Cons (Pick d) Nil)))
 
     emptyFields = PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) (PTCons (STSucc (mkGround @a) STZero) PTNil)))
-
-    type OuterChoices (Vec4 a) = 1
-    outerChoice _ = 0
-
 
 -- Elt instance automatically derived from POSable instance
 instance VecElt a => Elt (Vec4 a)

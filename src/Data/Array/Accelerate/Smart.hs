@@ -492,7 +492,7 @@ data PreSmartExp acc exp t where
                 -> PreSmartExp acc exp t
 
   -- Needed for embedded pattern matching
-  Match         :: (TAG, TAG) -- inclusive tag lower bound inclusive, exclusive tag upper bound
+  Match         :: TAG
                 -> exp t
                 -> PreSmartExp acc exp t
 
