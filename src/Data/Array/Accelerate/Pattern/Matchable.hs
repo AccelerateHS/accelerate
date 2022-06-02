@@ -199,7 +199,7 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
           -> case sameNat n (Proxy :: Proxy 1) of
             -- Add 1 to the tag because we have skipped 1 choice: Nothing
             Just Refl -> Exp (SmartExp (Pair (unExp $ mkAdd @TAG (constant 1) (buildTAG fs)) (makeRight @() @a (unTag @a x))))
-            Nothing -> error $ "Impossible situation requested: Maybe has 2 constructors, constructor " ++ show (natVal n) ++ "is out of bound"
+            Nothing -> error $ "Impossible situation requested: Maybe has 2 constructors, constructor " ++ show (natVal n) ++ "is out of bounds"
         Nothing -> error "Impossible situation requested: Just a expects a single value, got 0 or more then 1"
 
   match n (Exp e) = case sameNat (Proxy @(Choices a)) (Proxy @0) of
@@ -229,7 +229,7 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
                 , m < fromInteger (natVal $ Proxy @(Choices a))
                 -- remove one from the tag as we are not in left anymore
                 -- the `tag` function will apply the new tag if necessary
-                -> Just (Exp (tag @a (unExp $ mkMin @TAG (constant 1) (Exp $ prjLeft x)) (splitRight @() @a $ prjRight x)) :* SOP.Nil)
+                -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant 1)) (splitRight @() @a $ prjRight x)) :* SOP.Nil)
               SmartExp Match {} -> Nothing
 
               _ -> error "Embedded pattern synonym used outside 'match' context."
@@ -290,30 +290,69 @@ tag t x = case eltRType @x of
   TaggedType -> SmartExp $ Pair t x
 
 instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) where
-  -- type Choices' (Either a b) = OuterChoices (Either a b)
 
-  build n fs
-    -- this is only not true if either left or right has a tag of type Finite 0
-    -- types with tags of Finite 0 have no constructors, and are quite useless
-    | Refl :: (EltR (Either a b) :~: (TAG, FlattenProduct (Fields (Either a b)))) <- unsafeCoerce Refl
-    = case sameNat n (Proxy :: Proxy 0) of
-      -- we have chosen constructor 0 (Left)
-      Just Refl -> case emptyFields @a of
-        -- Left has no fields
-        PTNil ->  Exp (SmartExp (Pair (unExp $ buildTAG fs) (undefPairs @(Fields b) (emptyFields @b))))
-        -- Left has fields
-        PTCons st pt -> Exp (SmartExp (Pair (unExp $ buildTAG fs) undefined))
-      Nothing ->
-        case sameNat n (Proxy :: Proxy 1) of
-          -- we have chosen constructor 1 (Right)
-          Just Refl -> case emptyFields @a of
-            PTNil -> case fs of
-              x :* SOP.Nil -> case eltRType @b of  -- disambiguate between tagless and tagged b's
-                SingletonType -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (SmartExp (Pair (SmartExp (Union (SmartExp (LiftUnion (unExp x))))) (SmartExp Smart.Nil)))))
-                TaglessType -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (mergePairs @(Fields b) (emptyFields @b) (unExp x))))
-                TaggedType -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (mergePairs @(Fields b) (emptyFields @b) (SmartExp (Prj PairIdxRight (unExp x))))))
-            (PTCons x xs) -> Exp (SmartExp (Pair (unExp $ buildTAG fs) undefined))
-          Nothing -> error "Index out of bounds"
+  build n fs = case sameNat (Proxy @(Choices a)) (Proxy @0) of
+    -- a has 0 valid choices (which means we cannot create a Left of this type)
+    -- we ignore the implementation for now, because this is not really useful
+    Just Refl -> undefined
+    Nothing -> case sameNat (Proxy @(Choices b)) (Proxy @0) of
+      -- b has 0 valid choices (which means we cannot create a Right of this type)
+      -- we ignore the implementation too
+      Just Refl -> undefined
+      -- a and b have at least 1 choice.
+      -- this means that Either a b always has a tag
+      Nothing | Refl :: EltR (Either a b) :~: (TAG, FlattenProduct (Fields (Either a b))) <- unsafeCoerce Refl
+        -> case sameNat n (Proxy :: Proxy 0) of
+          -- Product a Left
+          Just Refl
+            | Exp x :* SOP.Nil <- fs
+            -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (makeLeft @a @b (unTag @a x))))
+          Nothing
+            | Exp x :* SOP.Nil <- fs
+            -> case sameNat n (Proxy :: Proxy 1) of
+              -- Add natVal @(Choices to the tag)
+              Just Refl -> Exp (SmartExp (Pair (unExp $ mkAdd @TAG (constant $ fromInteger $ natVal $ Proxy @(Choices a)) (buildTag fs)) (makeRight @a @b (unTag @b x))))
+              Nothing -> error $ "Impossible situation requested: Maybe has 2 constructors, constructor " ++ show (natVal n) ++ "is out of bounds"
+          Nothing -> error "Impossible situation requested: Just a expects a single value, got 0 or more then 1"
+
+  match n (Exp e) = case sameNat (Proxy @(Choices a)) (Proxy @0) of
+    -- a has 0 valid choices (which means we cannot create a Left of this type)
+    -- we ignore the implementation for now, because this is not really useful
+    Just Refl -> undefined
+    Nothing -> case sameNat (Proxy @(Choices b)) (Proxy @0) of
+      -- b has 0 valid choices (which means we cannot create a Right of this type)
+      -- we ignore the implementation too
+      Just Refl -> undefined
+      -- a and b have at least 1 choice.
+      -- this means that Either a b always has a tag
+      Nothing | Refl :: EltR (Either a b) :~: (TAG, FlattenProduct (Fields (Either a b))) <- unsafeCoerce Refl
+        -> case sameNat n (Proxy :: Proxy 0) of -- matchLeft
+        Just Refl ->
+          case e of
+            SmartExp (Match m x)
+              | m >= 0
+              , m < fromInteger (natVal $ Proxy @(Choices a))
+              -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ fromInteger $ natVal $ Proxy @(Choices a))) (splitLeft @a @b $ prjRight x)) :* SOP.Nil)
+
+            SmartExp Match {} -> Nothing
+
+            _ -> error "Embedded pattern synonym used outside 'match' context."
+        Nothing -> -- matchRight
+          case sameNat n (Proxy :: Proxy 1) of
+            Just Refl ->
+              case e of
+                SmartExp (Match m x)
+                  | m >= fromInteger (natVal $ Proxy @(Choices a))
+                  , m < fromInteger (natVal $ Proxy @(Choices b))
+                  -- remove one from the tag as we are not in left anymore
+                  -- the `tag` function will apply the new tag if necessary
+                  -> Just (Exp (tag @b (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ fromInteger $ natVal $ Proxy @(Choices a))) (splitRight @a @b $ prjRight x)) :* SOP.Nil)
+                SmartExp Match {} -> Nothing
+
+                _ -> error "Embedded pattern synonym used outside 'match' context."
+
+            Nothing ->
+              error "Impossible type encountered"
 
 undefPairs :: forall xs . ProductType xs -> SmartExp (FlattenProduct (Merge '[] (xs ++ '[])))
 undefPairs PTNil = SmartExp Smart.Nil
