@@ -196,14 +196,10 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
         Nothing
           | Exp x :* SOP.Nil <- fs
           -> case sameNat n (Proxy :: Proxy 1) of
-          Just Refl -> case eltRType @a of
-            -- TOOD: lift type
-            SingletonType -> undefined
-            -- TODO: add 1 to the tag
-            TaglessType -> Exp (SmartExp (Pair (unExp $ buildTAG fs) (makeRight @() @a x)))
-            -- TODO: remove tag
-            TaggedType -> undefined
-          Nothing -> error $ "Impossible situation requested: Maybe has 2 constructors, constructor " ++ show (natVal n) ++ "is out of bound"
+            -- Add 1 to the tag because we have skipped 1 choice: Nothing
+            Just Refl -> Exp (SmartExp (Pair (unExp $ mkAdd @TAG (constant 1) (buildTAG fs)) (makeRight @() @a (unTag @a x))))
+            Nothing -> error $ "Impossible situation requested: Maybe has 2 constructors, constructor " ++ show (natVal n) ++ "is out of bound"
+        Nothing -> error "Impossible situation requested: Just a expects a single value, got 0 or more then 1"
 
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
@@ -244,6 +240,12 @@ makeRight' _ PTNil PTNil = SmartExp Smart.Nil
 makeRight' x PTNil (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeRight' (SmartExp $ Prj PairIdxRight x) PTNil rs))
 makeRight' x (PTCons _ ls) PTNil = SmartExp (Pair (SmartExp (Union (SmartExp (LiftUnion (SmartExp (Const (SingleScalarType UndefSingleType) POS.Undef)))))) (makeRight' x ls PTNil))
 makeRight' x (PTCons _ ls) (PTCons _ rs) = SmartExp (Pair (SmartExp (Union (SmartExp $ Prj PairIdxLeft x))) (makeRight' (SmartExp $ Prj PairIdxRight x) ls rs))
+
+unTag :: forall x . (POSable x) => SmartExp (EltR x) -> SmartExp (FlattenProduct (Fields x))
+unTag x = case eltRType @x of
+  SingletonType -> SmartExp (Pair (SmartExp (LiftUnion x)) (SmartExp Smart.Nil))
+  TaglessType -> x
+  TaggedType -> SmartExp $ Prj PairIdxRight x
 
 instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) where
   -- type Choices' (Either a b) = OuterChoices (Either a b)
