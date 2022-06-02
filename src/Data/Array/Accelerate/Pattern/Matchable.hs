@@ -86,8 +86,6 @@ type family (!!) (xs :: [[Type]]) (y :: Nat) :: [Type] where
 infixl 9 !!
 
 instance Matchable Bool where
-  -- type Choices' Bool = 2
-
   build n _ = Exp (SmartExp (Pair (unExp $ constant @TAG (fromInteger $ natVal n)) (SmartExp Smart.Nil)))
 
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
@@ -226,7 +224,7 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
             case e of
               SmartExp (Match m x)
                 | m >= 1
-                , m < fromInteger (natVal $ Proxy @(Choices a))
+                , m < tagVal @(Choices a)
                 -- remove one from the tag as we are not in left anymore
                 -- the `tag` function will apply the new tag if necessary
                 -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant 1)) (splitRight @() @a $ prjRight x)) :* SOP.Nil)
@@ -311,7 +309,7 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
             | Exp x :* SOP.Nil <- fs
             -> case sameNat n (Proxy :: Proxy 1) of
               -- Add natVal @(Choices to the tag)
-              Just Refl -> Exp (SmartExp (Pair (unExp $ mkAdd @TAG (constant $ fromInteger $ natVal $ Proxy @(Choices a)) (buildTag fs)) (makeRight @a @b (unTag @b x))))
+              Just Refl -> Exp (SmartExp (Pair (unExp $ mkAdd @TAG (constant $ tagVal @(Choices a)) (buildTag fs)) (makeRight @a @b (unTag @b x))))
               Nothing -> error $ "Impossible situation requested: Maybe has 2 constructors, constructor " ++ show (natVal n) ++ "is out of bounds"
           Nothing -> error "Impossible situation requested: Just a expects a single value, got 0 or more then 1"
 
@@ -331,8 +329,8 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
           case e of
             SmartExp (Match m x)
               | m >= 0
-              , m < fromInteger (natVal $ Proxy @(Choices a))
-              -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ fromInteger $ natVal $ Proxy @(Choices a))) (splitLeft @a @b $ prjRight x)) :* SOP.Nil)
+              , m < tagVal @(Choices a)
+              -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitLeft @a @b $ prjRight x)) :* SOP.Nil)
 
             SmartExp Match {} -> Nothing
 
@@ -342,11 +340,11 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
             Just Refl ->
               case e of
                 SmartExp (Match m x)
-                  | m >= fromInteger (natVal $ Proxy @(Choices a))
-                  , m < fromInteger (natVal $ Proxy @(Choices b))
+                  | m >= tagVal @(Choices a)
+                  , m < tagVal @(Choices b)
                   -- remove one from the tag as we are not in left anymore
                   -- the `tag` function will apply the new tag if necessary
-                  -> Just (Exp (tag @b (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ fromInteger $ natVal $ Proxy @(Choices a))) (splitRight @a @b $ prjRight x)) :* SOP.Nil)
+                  -> Just (Exp (tag @b (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitRight @a @b $ prjRight x)) :* SOP.Nil)
                 SmartExp Match {} -> Nothing
 
                 _ -> error "Embedded pattern synonym used outside 'match' context."
@@ -376,4 +374,7 @@ combineProduct x y = case sameNat (emptyChoices @x) (Proxy :: Proxy 1) of
   -- tagged type
   Nothing
     | Refl :: (EltR x :~: (TAG, y)) <- unsafeCoerce Refl
-    -> mkAdd (mkExp $ Prj PairIdxLeft (unExp x)) (mkMul y (constant (fromInteger $ natVal (emptyChoices @x))))
+    -> mkAdd (mkExp $ Prj PairIdxLeft (unExp x)) (mkMul y (constant (tagVal @(Choices x))))
+
+tagVal :: forall a . (KnownNat a) => TAG
+tagVal = fromInteger $ natVal (Proxy @a)
