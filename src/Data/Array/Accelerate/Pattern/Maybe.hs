@@ -1,7 +1,6 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# LANGUAGE DataKinds #-}
@@ -27,7 +26,6 @@ import Data.Array.Accelerate.Pattern.Matchable
 import           Generics.SOP as SOP
 import Data.Array.Accelerate.Representation.POS as POS
 
--- mkPattern ''Maybe
 {-# COMPLETE Nothing_, Just_ #-}
 pattern Nothing_ ::
   forall a .
