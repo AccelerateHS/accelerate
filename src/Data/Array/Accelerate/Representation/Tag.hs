@@ -11,12 +11,10 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Representation.Tag (TAG, TagR(..), rnfTag, liftTag)
+module Data.Array.Accelerate.Representation.Tag (TAG, TagR(..))
   where
 
-import Data.Array.Accelerate.Type
-
-import Language.Haskell.TH.Extra
+import Data.Array.Accelerate.Type ( TAG )
 
 
 
@@ -34,31 +32,5 @@ import Language.Haskell.TH.Extra
 --   (((),(1#,())),(0#,()))     -- (True, False)
 --   (((),(1#,())),(1#,()))     -- (True, True)
 --
-data TagR a where
-  TagRunit   :: TagR ()
-  TagRsingle :: ScalarType a -> TagR a
-  TagRundef  :: ScalarType a -> TagR a
-  TagRtag    :: TAG -> TagR a -> TagR (TAG, a)
-  TagRpair   :: TagR a -> TagR b -> TagR (a, b)
-
-instance Show (TagR a) where
-  show TagRunit         = "()"
-  show TagRsingle{}     = "."
-  show TagRundef{}      = "undef"
-  show (TagRtag v t)    = "(" ++ show v ++ "#," ++ show t ++ ")"
-  show (TagRpair ta tb) = "(" ++ show ta ++ "," ++ show tb ++ ")"
-
-rnfTag :: TagR a -> ()
-rnfTag TagRunit         = ()
-rnfTag (TagRsingle t)   = rnfScalarType t
-rnfTag (TagRundef t)    = rnfScalarType t
-rnfTag (TagRtag v t)    = v `seq` rnfTag t
-rnfTag (TagRpair ta tb) = rnfTag ta `seq` rnfTag tb
-
-liftTag :: TagR a -> CodeQ (TagR a)
-liftTag TagRunit         = [|| TagRunit ||]
-liftTag (TagRsingle t)   = [|| TagRsingle $$(liftScalarType t) ||]
-liftTag (TagRundef t)    = [|| TagRundef $$(liftScalarType t) ||]
-liftTag (TagRtag v t)    = [|| TagRtag v $$(liftTag t) ||]
-liftTag (TagRpair ta tb) = [|| TagRpair $$(liftTag ta) $$(liftTag tb) ||]
-
+data TagR a = TagR TAG TAG
+  deriving Show

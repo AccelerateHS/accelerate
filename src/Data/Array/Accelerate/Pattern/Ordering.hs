@@ -16,11 +16,11 @@
 
 module Data.Array.Accelerate.Pattern.Ordering (
 
-  Ordering, pattern LT_, pattern EQ_, pattern GT_,
+  -- Ordering, pattern LT_, pattern EQ_, pattern GT_,
 
 ) where
 
 import Data.Array.Accelerate.Pattern.TH
 
-mkPattern ''Ordering
+-- mkPattern ''Ordering
 

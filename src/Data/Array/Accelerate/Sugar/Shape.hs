@@ -311,7 +311,7 @@ instance (Elt t, Elt h) => Elt (t :. h) where
   type EltR (t :. h) = (EltR t, EltR h)
   type EltChoices (t :. h) = 1
   eltR           = TupRpair (eltR @t) (eltR @h)
-  tagsR          = [TagRpair t h | t <- tagsR @t, h <- tagsR @h]
+  tagsR          = [TagR 0 1]
   fromElt (t:.h) = (fromElt t, fromElt h)
   toElt (t, h)   = toElt t :. toElt h
 
@@ -323,7 +323,7 @@ instance Shape sh => Elt (Any (sh :. Int)) where
   type EltR (Any (sh :. Int)) = (EltR (Any sh), ())
   type EltChoices (Any (sh :. Int)) = 1
   eltR      = TupRpair (eltR @(Any sh)) TupRunit
-  tagsR     = [TagRpair t TagRunit | t <- tagsR @(Any sh)]
+  tagsR     = [TagR 0 1]
   fromElt _ = (fromElt (Any :: Any sh), ())
   toElt _   = Any
 

@@ -163,7 +163,7 @@ mkEltR x = case sameNat cs (Proxy :: Proxy 1) of
 -- TODO: this might not be correct
 -- This might typecheck with cmpNat, but that requires a very new version of base
 fromEltR :: forall a . (POSable a) => POStoEltR (Choices a) (Fields a) -> a
-fromEltR x = case sameNat (emptyChoices @a) (Proxy :: Proxy 1) of
+fromEltR x = case sameNat (Proxy @(Choices a)) (Proxy :: Proxy 1) of
               Just Refl -> case emptyFields @a of
                 PTCons (STSucc _ STZero) PTNil -> unsafeCoerce x
                 _ -> fromPOSable 0 (unsafeCoerce x)

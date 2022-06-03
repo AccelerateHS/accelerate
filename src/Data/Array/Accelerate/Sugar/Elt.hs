@@ -32,6 +32,7 @@ import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.POS
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Sugar.POS ()
+import Data.Array.Accelerate.Representation.POS
 import Data.Array.Accelerate.Type
 
 import Data.Char
@@ -106,6 +107,15 @@ class (KnownNat (EltChoices a)) => Elt a where
 
   default toElt :: (POSable a,  POStoEltR (Choices a) (Fields a) ~ EltR a) => EltR a -> a
   toElt = fromEltR
+
+  default tagsR :: (POSable a) => [TagR (EltR a)]
+  tagsR = f 0 (map fromInteger (tags @a))
+    where
+      f :: TAG -> [TAG] -> [TagR (EltR a)]
+      f n l = case l of
+        [] -> []
+        x : xs -> (TagR n (n + x)) : f (n + x) xs
+
 
 -- function to bring the contraints in scope that are needed to work with EltR,
 -- without needing to inspect how POS2EltR works
@@ -233,21 +243,19 @@ mkSingleType _
 
 
 mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))
-mkEltRT = case sameNat cs (Proxy :: Proxy 1) of
+mkEltRT = case sameNat (Proxy @(Choices a)) (Proxy :: Proxy 1) of
             -- This distinction is hard to express in a type-correct way,
             -- hence the unsafeCoerce's
             Just Refl -> case emptyFields @a of
                   PTCons (STSucc x STZero) PTNil -> TupRsingle (mkScalarType x)
                   x -> unsafeCoerce $ flattenProductType x
             Nothing -> unsafeCoerce $ TupRpair (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))) (flattenProductType (emptyFields @a))
-  where
-    cs = emptyChoices @a
 
 
-untag :: TypeR t -> TagR t
-untag TupRunit         = TagRunit
-untag (TupRsingle t)   = TagRundef t
-untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
+-- untag :: TypeR t -> TagR t
+-- untag TupRunit         = TagRunit
+-- untag (TupRsingle t)   = TagRundef t
+-- untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 
 
 -- Note: [Deriving Elt]
@@ -288,7 +296,7 @@ instance Elt Char where
   type EltR Char = Word32
   type EltChoices Char = 1
   eltR    = TupRsingle scalarType
-  tagsR   = [TagRsingle scalarType]
+  tagsR   = [TagR 0 1]
   toElt   = chr . fromIntegral
   fromElt = fromIntegral . ord
 

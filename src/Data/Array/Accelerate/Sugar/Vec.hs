@@ -37,7 +37,7 @@ instance VecElt a => POSable (Vec2 a) where
 
     choices _ = 0
 
-    emptyChoices = 0
+    tags = [1] -- TODO: can a Vec contain non-singleton values?
 
     fromPOSable 0 (Cons (Pick a) (Cons (Pick b) Nil)) = Vec2 a b
 
@@ -55,7 +55,7 @@ instance VecElt a => POSable (Vec4 a) where
 
     choices _ = 0
 
-    emptyChoices = 0
+    tags = [1] -- TODO: can a Vec contain non-singleton values?
 
     fromPOSable 0 ( Cons (Pick a) (Cons (Pick b) (Cons (Pick c) (Cons (Pick d) Nil)))) = Vec4 a b c d
 

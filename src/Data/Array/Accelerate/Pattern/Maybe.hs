@@ -22,5 +22,7 @@ module Data.Array.Accelerate.Pattern.Maybe (
 
 import Data.Array.Accelerate.Pattern.TH
 
-mkPattern ''Maybe
+-- mkPattern ''Maybe
 
+pattern Nothing_ <- match (Proxy :: Proxy 0) SOP.Nil where
+  Nothing_{} = build (Proxy @0) SOP.Nil

@@ -210,7 +210,7 @@ instance POSable (ShapeR ()) where
   type Choices (ShapeR ()) = 1
   choices _ = 0
 
-  emptyChoices = 0
+  tags = [1]
 
   fromPOSable _ _ = ShapeRz
 
@@ -225,7 +225,7 @@ instance (POSable (ShapeR sh)) => POSable (ShapeR (sh, Int)) where
   type Choices (ShapeR (sh, Int)) = 1
   choices _ = 0
 
-  emptyChoices = 0
+  tags = [1]
 
   fromPOSable 0 (Cons _ xs) = ShapeRsnoc (fromPOSable 0 xs)
 

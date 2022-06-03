@@ -492,7 +492,7 @@ data PreSmartExp acc exp t where
                 -> PreSmartExp acc exp t
 
   -- Needed for embedded pattern matching
-  Match         :: TAG
+  Match         :: TagR t
                 -> exp t
                 -> PreSmartExp acc exp t
 
@@ -541,7 +541,7 @@ data PreSmartExp acc exp t where
                 -> PreSmartExp acc exp sh
 
   Case          :: exp a
-                -> [(TAG, TAG, exp b)]
+                -> [(TagR b, exp b)]
                 -> PreSmartExp acc exp b
 
   Cond          :: exp PrimBool
@@ -865,7 +865,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     VecUnpack vecR _                -> vecRtuple vecR
     ToIndex _ _ _                   -> TupRsingle scalarTypeInt
     FromIndex shr _ _               -> shapeType shr
-    Case _ ((_,_,c):_)                -> typeR c
+    Case _ ((_,c):_)                -> typeR c
     Case{}                          -> internalError "encountered empty case"
     Cond _ e _                      -> typeR e
     While t _ _ _                   -> t

@@ -67,7 +67,7 @@ class Matchable a where
 
 buildTag :: SOP.All POSable xs => NP Exp xs -> Exp TAG
 buildTag SOP.Nil = constant 0 -- exp of 0 :: Finite 1
-buildTag (((Exp x) :: (Exp x)) :* (xs :: xs)) = case sameNat (emptyChoices @x) (Proxy :: Proxy 1) of
+buildTag (((Exp x) :: (Exp x)) :* (xs :: xs)) = case sameNat (Proxy @(Choices x)) (Proxy :: Proxy 1) of
   -- x doesn't contain a tag, skip
   Just Refl
     -> buildTag xs
@@ -91,7 +91,10 @@ instance Matchable Bool where
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
       case e of
-        SmartExp (Match n _x) | n == 0 -> Just SOP.Nil
+        SmartExp (Match (TagR l u) _x)
+          | l == 0
+          , u == 1
+          -> Just SOP.Nil
 
         SmartExp Match {} -> Nothing
 
@@ -100,7 +103,10 @@ instance Matchable Bool where
       case sameNat n (Proxy :: Proxy 1) of
         Just Refl ->
           case e of
-            SmartExp (Match n _x) | n == 1 -> Just SOP.Nil
+            SmartExp (Match (TagR l u) _x)
+              | l == 1
+              , u == 2
+              -> Just SOP.Nil
 
             SmartExp Match {} -> Nothing
 
@@ -157,8 +163,9 @@ instance Matchable (Maybe Int) where
   match n (Exp e) = case sameNat n (Proxy :: Proxy 0) of
     Just Refl ->
       case e of
-        SmartExp (Match m _x)
-          | m == 0
+        SmartExp (Match (TagR l u) _x)
+          | l == 0
+          , u == 1
           -> Just SOP.Nil
 
         SmartExp Match {} -> Nothing
@@ -168,8 +175,9 @@ instance Matchable (Maybe Int) where
       case sameNat n (Proxy :: Proxy 1) of
         Just Refl ->
           case e of
-            SmartExp (Match m x)
-              | m == 1
+            SmartExp (Match (TagR l u) x)
+              | l == 1
+              , u == 2
               -> Just (
                   mkExp (PrjUnion $ SmartExp $ Union (prjLeft (prjRight x)))
                   :* SOP.Nil)
@@ -210,9 +218,9 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
       -> case sameNat n (Proxy :: Proxy 0) of
       Just Refl ->
         case e of
-          SmartExp (Match m _x)
-            | m >= 0
-            , m < 1
+          SmartExp (Match (TagR l u) _x)
+            | l == 0
+            , u == 1
             -> Just SOP.Nil
 
           SmartExp Match {} -> Nothing
@@ -222,9 +230,9 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
         case sameNat n (Proxy :: Proxy 1) of
           Just Refl ->
             case e of
-              SmartExp (Match m x)
-                | m >= 1
-                , m < tagVal @(Choices a)
+              SmartExp (Match (TagR l u) x)
+                | l == 1
+                , u == tagVal @(Choices a)
                 -- remove one from the tag as we are not in left anymore
                 -- the `tag` function will apply the new tag if necessary
                 -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant 1)) (splitRight @() @a $ prjRight x)) :* SOP.Nil)
@@ -327,9 +335,9 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
         -> case sameNat n (Proxy :: Proxy 0) of -- matchLeft
         Just Refl ->
           case e of
-            SmartExp (Match m x)
-              | m >= 0
-              , m < tagVal @(Choices a)
+            SmartExp (Match (TagR l u) x)
+              | l == 0
+              , u == tagVal @(Choices a)
               -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitLeft @a @b $ prjRight x)) :* SOP.Nil)
 
             SmartExp Match {} -> Nothing
@@ -339,9 +347,9 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
           case sameNat n (Proxy :: Proxy 1) of
             Just Refl ->
               case e of
-                SmartExp (Match m x)
-                  | m >= tagVal @(Choices a)
-                  , m < tagVal @(Choices b)
+                SmartExp (Match (TagR l u) x)
+                  | l == tagVal @(Choices a)
+                  , u == tagVal @(Choices b)
                   -- remove one from the tag as we are not in left anymore
                   -- the `tag` function will apply the new tag if necessary
                   -> Just (Exp (tag @b (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitRight @a @b $ prjRight x)) :* SOP.Nil)
@@ -368,7 +376,7 @@ buildTAG (x :* xs) = combineProduct x (buildTAG xs)
 -- like Finite.combineProduct, but lifted to the AST
 -- basically `tag x + tag y * natVal x`
 combineProduct :: forall x. (POSable x) => Exp x -> Exp TAG -> Exp TAG
-combineProduct x y = case sameNat (emptyChoices @x) (Proxy :: Proxy 1) of
+combineProduct x y = case sameNat (Proxy @(Choices x)) (Proxy :: Proxy 1) of
   -- untagged type: `tag x = 0`, `natVal x = 1`
   Just Refl -> y
   -- tagged type
