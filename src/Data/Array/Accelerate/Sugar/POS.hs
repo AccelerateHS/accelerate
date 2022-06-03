@@ -108,19 +108,21 @@ runQ $ do
           instanceD ctx [t| POSable $res |] []
   
         mkNewtype :: Name -> Q [Dec]
-        mkNewtype name = do
-          r    <- reify name
-          base <- case r of
-                    TyConI (NewtypeD _ _ _ _ (NormalC _ [(_, ConT b)]) _) -> return b
-                    _                                                     -> error "unexpected case generating newtype Elt instance"
-          --
-          mkPOSableGround name
+        mkNewtype name =
+          let t = conT name
+          in
+          [d|
+              instance Ground $t where
+                mkGround = 0
+            |]
+          
     --
     si <- mapM (mkSimple ''IntegralType 'IntegralNumType) integralTypes
     sf <- mapM (mkSimple ''FloatingType 'FloatingNumType) floatingTypes
     ns <- mapM mkPOSableGround (floatingTypes ++ integralTypes)
-    -- ns <- mapM mkNewtype newtypes
+    ts <- mapM mkNewtype newtypes
+    nts <- mapM mkPOSableGround newtypes
     -- ts <- mapM mkTuple [2..16]
     -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
-    return (concat si ++ concat sf ++ concat ns)
+    return (concat si ++ concat sf ++ concat ns ++ concat ts ++ concat nts)
   

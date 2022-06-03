@@ -377,21 +377,18 @@ runQ $ do
       -- TyConI (NewtypeD [] Foreign.C.Types.CFloat [] Nothing (NormalC Foreign.C.Types.CFloat [(Bang NoSourceUnpackedness NoSourceStrictness,ConT GHC.Types.Float)]) [])
       --
       mkNewtype :: Name -> Q [Dec]
-      mkNewtype name = do
-        r    <- reify name
-        base <- case r of
-                  TyConI (NewtypeD _ _ _ _ (NormalC _ [(_, ConT b)]) _) -> return b
-                  _                                                     -> error "unexpected case generating newtype Elt instance"
-        --
-        [d| instance Elt $(conT name)
+      mkNewtype name =
+        let t = conT name
+        in
+        [d| instance Elt $t
           |]
   --
   ss <- mapM mkSimple (integralTypes ++ floatingTypes)
   -- TODO:
-  -- ns <- mapM mkNewtype newtypes
+  ns <- mapM mkNewtype newtypes
   -- ts <- mapM mkTuple [2..8]
   -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
-  return (concat ss)
+  return (concat ss ++ concat ns)
 
 instance Elt Undef
 
