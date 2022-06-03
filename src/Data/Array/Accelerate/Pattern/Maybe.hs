@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE DataKinds #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pattern.Maybe
 -- Copyright   : [2018..2020] The Accelerate Team
@@ -20,9 +21,44 @@ module Data.Array.Accelerate.Pattern.Maybe (
 
 ) where
 
-import Data.Array.Accelerate.Pattern.TH
+import           Data.Array.Accelerate.Smart as Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Pattern.Matchable
+import           Generics.SOP as SOP
+import Data.Array.Accelerate.Representation.POS as POS
 
 -- mkPattern ''Maybe
+{-# COMPLETE Nothing_, Just_ #-}
+pattern Nothing_ ::
+  forall a .
+  ( Elt a
+  , POSable a
+  , Matchable a
+  ) => Exp (Maybe a)
+pattern Nothing_ <- (matchNothing -> Just ()) where
+  Nothing_ = buildNothing
 
-pattern Nothing_ <- match (Proxy :: Proxy 0) SOP.Nil where
-  Nothing_{} = build (Proxy @0) SOP.Nil
+matchNothing :: forall a . (POSable a, Elt a) => Exp (Maybe a) -> Maybe ()
+matchNothing x = case match (Proxy @0) x of
+  Just SOP.Nil -> Just ()
+  Nothing -> Nothing
+
+buildNothing :: forall a . (Elt a, POSable a) => Exp (Maybe a)
+buildNothing = build (Proxy @0) SOP.Nil
+
+pattern Just_ ::
+  forall a .
+  ( Elt a
+  , POSable a
+  , Matchable a
+  ) => Exp a -> Exp (Maybe a)
+pattern Just_ x <- (matchJust -> Just x) where
+  Just_ = buildJust
+
+matchJust :: forall a . (Elt a, POSable a) => Exp (Maybe a) -> Maybe (Exp a)
+matchJust x = case match (Proxy @1) x of
+  Just (x' :* SOP.Nil) -> Just x'
+  Nothing -> Nothing
+
+buildJust :: forall a . (Elt a, POSable a) => Exp a -> Exp (Maybe a)
+buildJust x = build (Proxy @1) (x :* SOP.Nil)
