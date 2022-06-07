@@ -204,6 +204,15 @@ custom-setup
     , directory         >= 1.0
     , filepath          >= 1.0
 
+flag float128
+  manual:               True
+  default:              False
+  description:
+    Enable support for 128-bit floating point numbers
+    .
+    This requires the library 'quadmath' to be installed. Note that not all
+    targets support 128-bit floating-point numbers.
+
 flag debug
   manual:               True
   default:              False
@@ -430,9 +439,10 @@ library
         Data.Array.Accelerate.Test.Similar
 
         -- Other
+        Crypto.Hash.XKCP
         Data.BitSet
         Data.Primitive.Vec
-        Crypto.Hash.XKCP
+        Data.Numeric.Float128
 
   other-modules:
         Data.Array.Accelerate.Analysis.Hash.TH
@@ -586,6 +596,16 @@ library
   ghc-prof-options:
         -caf-all
         -auto-all
+
+  if flag(float128)
+    cc-options:
+        -DFLOAT128_ENABLE
+
+    cpp-options:
+        -DFLOAT128_ENABLE
+
+    extra-libraries:
+        quadmath
 
   if flag(debug)
     cc-options:
