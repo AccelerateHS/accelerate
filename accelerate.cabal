@@ -441,6 +441,7 @@ library
         -- Other
         Crypto.Hash.XKCP
         Data.BitSet
+        Data.Primitive.Bit
         Data.Primitive.Vec
         Data.Numeric.Float128
 
