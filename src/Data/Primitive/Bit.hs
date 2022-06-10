@@ -21,7 +21,9 @@
 module Data.Primitive.Bit (
 
   Bit(..),
-  BitMask(..), extract, insert, zeros, ones,
+  BitMask(..),
+  toList, fromList,
+  extract, insert, zeros, ones,
 
 ) where
 
@@ -89,6 +91,8 @@ instance Integral Bit where
 --
 newtype BitMask n = BitMask { unMask :: Vec n Bit }
   deriving Eq
+  -- XXX: We should mask off the unused bits before testing for equality,
+  -- otherwise we are including junk in the test. TLM 2022-06-07
 
 instance KnownNat n => Show (BitMask n) where
   show = bin . toList
@@ -140,39 +144,44 @@ instance KnownNat n => Foreign.Storable (BitMask n) where
 
 {-# INLINE toList #-}
 toList :: forall n. KnownNat n => BitMask n -> [Bit]
-toList (BitMask (Vec ba#)) = go 0#
+toList (BitMask (Vec ba#)) = concat (unpack 0# [])
   where
     !(I# n#) = fromInteger (natVal' (proxy# :: Proxy# n))
 
-    go :: Int# -> [Bit]
-    go i#
+    unpack :: Int# -> [[Bit]] -> [[Bit]]
+    unpack i# acc
       | isTrue# (i# <# n#) =
-          let !(# q#, r# #) = quotRemInt# i# 8#
-              w#            = indexWord8Array# ba# q#
-              b#            = testBitWord8# w# r#
+          let q#    = quotInt# i# 8#
+              w#    = indexWord8Array# ba# q#
+              lim#  = minInt# 8# (n# -# i#)
+              w8 j# = if isTrue# (j# <# lim#)
+                         then let b# = testBitWord8# w# (7# -# j#)
+                               in Bit (isTrue# b#) : w8 (j# +# 1#)
+                         else []
           in
-          Bit (isTrue# b#) : go (i# +# 1#)
-      | otherwise          = []
+          unpack (i# +# 8#) (w8 0# : acc)
+      | otherwise = acc
 
 {-# INLINE fromList #-}
 fromList :: forall n. KnownNat n => [Bit] -> BitMask n
-fromList bits = case byteArrayFromListN bytes (pack bits) of
+fromList bits = case byteArrayFromListN bytes (pack bits') of
                   ByteArray ba# -> BitMask (Vec ba#)
   where
+    bits' = take (fromInteger (natVal' (proxy# :: Proxy# n))) bits
     bytes = Foreign.sizeOf (undefined :: BitMask n)
 
     pack :: [Bit] -> [Word8]
     pack xs =
       let (h,t) = splitAt 8 xs
-          w     = w8 0 0 h
+          w     = w8 7 0 h
       in if null t
            then [w]
            else w : pack t
 
     w8 :: Int -> Word8 -> [Bit] -> Word8
     w8 !_ !w []             = w
-    w8 !i !w (Bit True :bs) = w8 (i+1) (setBit w i) bs
-    w8 !i !w (Bit False:bs) = w8 (i+1) w            bs
+    w8 !i !w (Bit True :bs) = w8 (i-1) (setBit w i) bs
+    w8 !i !w (Bit False:bs) = w8 (i-1) w            bs
 
 {-# INLINE extract #-}
 extract :: forall n. KnownNat n => BitMask n -> Int -> Bit
@@ -226,6 +235,12 @@ ones =
   case byteArrayFromListN l (replicate l (0xff :: Word8)) of
     ByteArray ba# -> BitMask (Vec ba#)
 
+
+minInt# :: Int# -> Int# -> Int#
+minInt# a# b# =
+  case a# <# b# of
+    0# -> b#
+    _  -> a#
 
 #if __GLASGOW_HASKELL__ < 902
 testBitWord8# :: Word# -> Int# -> Int#
