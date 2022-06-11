@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs           #-}
+{-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE MagicHash       #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections   #-}
@@ -18,13 +19,15 @@ module Data.Array.Accelerate.Representation.Elt
 
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
+import Data.Primitive.Bit
 import Data.Primitive.Vec
 
 import Control.Monad.ST
-import Data.List                                                    ( intercalate )
 import Data.Primitive.ByteArray
-import Foreign.Storable
 import Language.Haskell.TH.Extra
+
+import GHC.TypeLits
+import GHC.Base
 
 
 undefElt :: TypeR t -> t
@@ -36,38 +39,66 @@ undefElt = tuple
     tuple (TupRsingle t)   = scalar t
 
     scalar :: ScalarType t -> t
-    scalar (SingleScalarType t) = single t
-    scalar (VectorScalarType t) = vector t
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
 
-    vector :: VectorType t -> t
-    vector (VectorType n t) = runST $ do
-      mba           <- newByteArray (n * bytesElt (TupRsingle (SingleScalarType t)))
-      ByteArray ba# <- unsafeFreezeByteArray mba
-      return (Vec ba#)
-
-    single :: SingleType t -> t
-    single (NumSingleType t) = num t
+    bit :: BitType t -> t
+    bit TypeBit      = Bit False
+    bit (TypeMask n) =
+      let (q, r) = quotRem (fromInteger (natVal' n)) 8
+          bytes  = if r == 0 then q else q + 1
+      in
+      runST $ do
+        mba           <- newByteArray bytes
+        ByteArray ba# <- unsafeFreezeByteArray mba
+        return $! Vec ba#
 
     num :: NumType t -> t
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
 
     integral :: IntegralType t -> t
-    integral TypeInt    = 0
-    integral TypeInt8   = 0
-    integral TypeInt16  = 0
-    integral TypeInt32  = 0
-    integral TypeInt64  = 0
-    integral TypeWord   = 0
-    integral TypeWord8  = 0
-    integral TypeWord16 = 0
-    integral TypeWord32 = 0
-    integral TypeWord64 = 0
+    integral = \case
+      SingleIntegralType t   -> single t
+      VectorIntegralType n t -> vector n t
+      where
+        single :: SingleIntegralType t -> t
+        single TypeInt8    = 0
+        single TypeInt16   = 0
+        single TypeInt32   = 0
+        single TypeInt64   = 0
+        single TypeInt128  = 0
+        single TypeWord8   = 0
+        single TypeWord16  = 0
+        single TypeWord32  = 0
+        single TypeWord64  = 0
+        single TypeWord128 = 0
+
+        vector :: KnownNat n => Proxy# n -> SingleIntegralType t -> Vec n t
+        vector n t = runST $ do
+          let bytes = bytesElt (TupRsingle (NumScalarType (IntegralNumType (VectorIntegralType n t))))
+          mba           <- newAlignedPinnedByteArray bytes 16
+          ByteArray ba# <- unsafeFreezeByteArray mba
+          return $! Vec ba#
 
     floating :: FloatingType t -> t
-    floating TypeHalf   = 0
-    floating TypeFloat  = 0
-    floating TypeDouble = 0
+    floating = \case
+      SingleFloatingType t   -> single t
+      VectorFloatingType n t -> vector n t
+      where
+        single :: SingleFloatingType t -> t
+        single TypeFloat16  = 0
+        single TypeFloat32  = 0
+        single TypeFloat64  = 0
+        single TypeFloat128 = 0
+
+        vector :: KnownNat n => Proxy# n -> SingleFloatingType t -> Vec n t
+        vector n t = runST $ do
+          let bytes = bytesElt (TupRsingle (NumScalarType (FloatingNumType (VectorFloatingType n t))))
+          mba           <- newAlignedPinnedByteArray bytes 16
+          ByteArray ba# <- unsafeFreezeByteArray mba
+          return $! Vec ba#
+
 
 bytesElt :: TypeR e -> Int
 bytesElt = tuple
@@ -78,35 +109,46 @@ bytesElt = tuple
     tuple (TupRsingle t)   = scalar t
 
     scalar :: ScalarType t -> Int
-    scalar (SingleScalarType t) = single t
-    scalar (VectorScalarType t) = vector t
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
 
-    vector :: VectorType t -> Int
-    vector (VectorType n t) = n * single t
-
-    single :: SingleType t -> Int
-    single (NumSingleType t) = num t
+    bit :: BitType t -> Int
+    bit TypeBit      = 1 -- stored as Word8
+    bit (TypeMask n) =
+      let (q,r) = quotRem (fromInteger (natVal' n)) 8
+       in if r == 0 then q else q+1
 
     num :: NumType t -> Int
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
 
     integral :: IntegralType t -> Int
-    integral TypeInt    = sizeOf (undefined::Int)
-    integral TypeInt8   = 1
-    integral TypeInt16  = 2
-    integral TypeInt32  = 4
-    integral TypeInt64  = 8
-    integral TypeWord   = sizeOf (undefined::Word)
-    integral TypeWord8  = 1
-    integral TypeWord16 = 2
-    integral TypeWord32 = 4
-    integral TypeWord64 = 8
+    integral = \case
+      SingleIntegralType t   -> single t
+      VectorIntegralType n t -> fromInteger (natVal' n) * single t
+      where
+        single :: SingleIntegralType t -> Int
+        single TypeInt8    = 1
+        single TypeInt16   = 2
+        single TypeInt32   = 4
+        single TypeInt64   = 8
+        single TypeInt128  = 16
+        single TypeWord8   = 1
+        single TypeWord16  = 2
+        single TypeWord32  = 4
+        single TypeWord64  = 8
+        single TypeWord128 = 16
 
     floating :: FloatingType t -> Int
-    floating TypeHalf   = 2
-    floating TypeFloat  = 4
-    floating TypeDouble = 8
+    floating = \case
+      SingleFloatingType t   -> single t
+      VectorFloatingType n t -> fromInteger (natVal' n) * single t
+      where
+        single :: SingleFloatingType t -> Int
+        single TypeFloat16  = 2
+        single TypeFloat32  = 4
+        single TypeFloat64  = 8
+        single TypeFloat128 = 16
 
 showElt :: TypeR e -> e -> String
 showElt t v = showsElt t v ""
@@ -120,38 +162,62 @@ showsElt = tuple
     tuple (TupRsingle tp)  val      = scalar tp val
 
     scalar :: ScalarType e -> e -> ShowS
-    scalar (SingleScalarType t) e = single t e
-    scalar (VectorScalarType t) e = vector t e
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
 
-    single :: SingleType e -> e -> ShowS
-    single (NumSingleType t) = num t
+    bit :: BitType e -> e -> ShowS
+    bit TypeBit    = shows
+    bit TypeMask{} = shows . BitMask
 
     num :: NumType e -> e -> ShowS
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
 
     integral :: IntegralType e -> e -> ShowS
-    integral TypeInt    = shows
-    integral TypeInt8   = shows
-    integral TypeInt16  = shows
-    integral TypeInt32  = shows
-    integral TypeInt64  = shows
-    integral TypeWord   = shows
-    integral TypeWord8  = shows
-    integral TypeWord16 = shows
-    integral TypeWord32 = shows
-    integral TypeWord64 = shows
+    integral = \case
+      SingleIntegralType t   -> single t
+      VectorIntegralType _ t -> vector t
+      where
+        single :: SingleIntegralType t -> t -> ShowS
+        single TypeInt8    = shows
+        single TypeInt16   = shows
+        single TypeInt32   = shows
+        single TypeInt64   = shows
+        single TypeInt128  = shows
+        single TypeWord8   = shows
+        single TypeWord16  = shows
+        single TypeWord32  = shows
+        single TypeWord64  = shows
+        single TypeWord128 = shows
+
+        vector :: KnownNat n => SingleIntegralType t -> Vec n t -> ShowS
+        vector TypeInt8    = shows
+        vector TypeInt16   = shows
+        vector TypeInt32   = shows
+        vector TypeInt64   = shows
+        vector TypeInt128  = shows
+        vector TypeWord8   = shows
+        vector TypeWord16  = shows
+        vector TypeWord32  = shows
+        vector TypeWord64  = shows
+        vector TypeWord128 = shows
 
     floating :: FloatingType e -> e -> ShowS
-    floating TypeHalf   = shows
-    floating TypeFloat  = shows
-    floating TypeDouble = shows
+    floating = \case
+      SingleFloatingType t   -> single t
+      VectorFloatingType _ t -> vector t
+      where
+        single :: SingleFloatingType t -> t -> ShowS
+        single TypeFloat16  = shows
+        single TypeFloat32  = shows
+        single TypeFloat64  = shows
+        single TypeFloat128 = shows
 
-    vector :: VectorType (Vec n a) -> Vec n a -> ShowS
-    vector (VectorType _ s) vec
-      | SingleDict <- singleDict s
-      = showString
-      $ "<" ++ intercalate ", " ((\v -> single s v "") <$> listOfVec vec) ++ ">"
+        vector :: KnownNat n => SingleFloatingType t -> Vec n t -> ShowS
+        vector TypeFloat16  = shows
+        vector TypeFloat32  = shows
+        vector TypeFloat64  = shows
+        vector TypeFloat128 = shows
 
 liftElt :: TypeR t -> t -> CodeQ t
 liftElt TupRunit         ()    = [|| () ||]

@@ -34,8 +34,8 @@ type Real a = (Num a, Ord a, P.Real (Exp a))
 -- Instances of 'Real' don't make sense in Accelerate at the moment. These are
 -- only provided to fulfil superclass constraints; e.g. Integral.
 --
--- We won't need `toRational' until we support rational numbers in AP
--- computations.
+-- We won't need `toRational' until we support rational numbers in scalar
+-- expressions.
 --
 instance (Num a, Ord a) => P.Real (Exp a) where
   toRational

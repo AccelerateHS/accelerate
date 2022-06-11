@@ -59,10 +59,10 @@ import Data.Array.Accelerate.AST                                    hiding ( Dir
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Stencil
-import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
@@ -412,13 +412,14 @@ prettyOpenExp ctx env aenv exp =
         op  = primOperator f
         op' = isInfix op ? (Operator (parens (opName op)) App L 10, op)
     --
-    PrimConst c           -> prettyPrimConst c
     Const tp c            -> prettyConst (TupRsingle tp) c
     Pair{}                -> prettyTuple ctx env aenv exp
     Nil                   -> "()"
-    VecPack   _ e         -> ppF1 "pack"   (ppE e)
-    VecUnpack _ e         -> ppF1 "unpack" (ppE e)
-    Case x xs d           -> prettyCase env aenv x xs d
+    Extract _ _ v i       -> ppF2 (Operator "#" Infix L 9) (ppE v) (ppE i)
+    Insert{}              -> prettyInsert ctx env aenv exp
+    Shuffle _ _ x y i     -> ppF3 "shuffle" (ppE x) (ppE y) (ppE i)
+    Select m x y          -> ppF3 "select" (ppE m) (ppE x) (ppE y)
+    Case tR x xs d        -> prettyCase env aenv tR x xs d
     Cond p t e            -> flatAlt multi single
       where
         p' = ppE p context0
@@ -558,24 +559,58 @@ prettyTuple ctx env aenv exp = case collect exp of
 prettyCase
     :: Val env
     -> Val aenv
+    -> ScalarType tag
     -> OpenExp env aenv a
-    -> [(TAG, OpenExp env aenv b)]
+    -> [(tag, OpenExp env aenv b)]
     -> Maybe (OpenExp env aenv b)
     -> Adoc
-prettyCase env aenv x xs def
+prettyCase env aenv tagR x xs def
   = hang shiftwidth
   $ vsep [ case_ <+> x' <+> of_
          , flatAlt (vcat xs') (encloseSep "{ " " }" "; " xs')
          ]
   where
     x'  = prettyOpenExp context0 env aenv x
-    xs' = map (\(t,e) -> pretty t <+> "->" <+> prettyOpenExp context0 env aenv e) xs
+    xs' = map (\(t,e) -> prettyConst (TupRsingle tagR) t <+> "->" <+> prettyOpenExp context0 env aenv e) xs
        ++ case def of
             Nothing -> []
             Just d  -> ["_" <+> "->" <+> prettyOpenExp context0 env aenv d]
 
-{-
+prettyInsert
+    :: forall env aenv t.
+       Context
+    -> Val env
+    -> Val aenv
+    -> OpenExp env aenv t
+    -> Adoc
+prettyInsert ctx env aenv exp =
+  case collect exp of
+    Just (c, xs) -> align $ parensIf (ctxPrecedence ctx > 0) ("V" <> pretty c <+> align (sep (reverse xs)))
+    Nothing      -> align $ ppInsert exp
+  where
+    ppInsert :: OpenExp env aenv t' -> Adoc
+    ppInsert (Insert _ _ v i x) =
+      let v' = prettyOpenExp ctx env aenv v
+          i' = prettyOpenExp ctx env aenv i
+          x' = prettyOpenExp ctx env aenv x
+      in
+      parensIf (ctxPrecedence ctx > 0)
+        $ hang 2
+        $ sep [ "insert", brackets i', x', v']
+    ppInsert e =
+      prettyOpenExp context0 env aenv e
 
+    collect :: OpenExp env aenv t' -> Maybe (Word8, [Adoc])
+    collect Undef{}
+      = Just (0, [])
+    collect (Insert _ _ v i x)
+      | Just (i', xs) <- collect v
+      , Just Refl     <- matchOpenExp i (Const scalarType i')
+      = Just (i'+1, prettyOpenExp app env aenv x : xs)
+    collect _
+      = Nothing
+
+{--
 prettyAtuple
     :: forall acc aenv arrs.
        PrettyAcc acc
@@ -597,17 +632,16 @@ prettyAtuple prettyAcc extractAcc aenv0 acc = case collect acc of
       | Just tup <- collect $ extractAcc a1
                           = Just $ tup ++ [prettyAcc app aenv0 a2]
     collect _             = Nothing
--}
+--}
 
 prettyConst :: TypeR e -> e -> Adoc
 prettyConst tp x =
-  let y = showElt tp x
-  in  parensIf (any isSpace y) (pretty y)
-
-prettyPrimConst :: PrimConst a -> Adoc
-prettyPrimConst PrimMinBound{} = "minBound"
-prettyPrimConst PrimMaxBound{} = "maxBound"
-prettyPrimConst PrimPi{}       = "pi"
+  let y        = showElt tp x
+      --
+      isVec [] = False
+      isVec xs = head xs == '<' && last xs == '>'
+  in
+  parensIf (any isSpace y && not (isVec y)) (pretty y)
 
 
 -- Primitive operators
@@ -722,11 +756,13 @@ primOperator PrimEq{}                 = Operator "=="                 Infix  N 4
 primOperator PrimNEq{}                = Operator "/="                 Infix  N 4
 primOperator PrimMax{}                = Operator "max"                App    L 10
 primOperator PrimMin{}                = Operator "min"                App    L 10
-primOperator PrimLAnd                 = Operator "&&"                 Infix  R 3
-primOperator PrimLOr                  = Operator "||"                 Infix  R 2
-primOperator PrimLNot                 = Operator "not"                App    L 10
+primOperator PrimLAnd{}               = Operator "&&"                 Infix  R 3
+primOperator PrimLOr{}                = Operator "||"                 Infix  R 2
+primOperator PrimLNot{}               = Operator "not"                App    L 10
 primOperator PrimFromIntegral{}       = Operator "fromIntegral"       App    L 10
 primOperator PrimToFloating{}         = Operator "toFloating"         App    L 10
+primOperator PrimToBool{}             = Operator "toBool"             App    L 10
+primOperator PrimFromBool{}           = Operator "fromBool"           App    L 10
 
 
 -- Environments

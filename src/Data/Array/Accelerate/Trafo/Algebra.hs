@@ -32,21 +32,19 @@ import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Pretty.Print                           ( primOperator, isInfix, opName )
 import Data.Array.Accelerate.Trafo.Environment
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Classes.Vector
 
 import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Stats
 
-import Data.Bits
+-- import Data.Bits
 import Data.Monoid
-import Data.Primitive.Vec
+-- import Data.Primitive.Vec
 import Data.Text                                                    ( Text )
 import Prettyprinter
 import Prettyprinter.Render.Text
 import Prelude                                                      hiding ( exp )
-import qualified Prelude                                            as P
+-- import qualified Prelude                                            as P
 
-import GHC.Float                                                    ( float2Double, double2Float )
+-- import GHC.Float                                                    ( float2Double, double2Float )
 
 
 -- Propagate constant expressions, which are either constant valued expressions
@@ -62,7 +60,6 @@ propagate env = cvtE
     cvtE :: OpenExp env aenv e -> Maybe e
     cvtE exp = case exp of
       Const _ c                                 -> Just c
-      PrimConst c                               -> Just (evalPrimConst c)
       Evar (Var _  ix)
         | e             <- prjExp ix env
         , Nothing       <- matchOpenExp exp e   -> cvtE e
@@ -88,6 +85,8 @@ evalPrimApp env f x
   | otherwise
   = maybe (Any False, PrimApp f x) (Any True,)
   $ case f of
+      _ -> Nothing
+      {--
       PrimAdd ty                -> evalAdd ty x env
       PrimSub ty                -> evalSub ty x env
       PrimMul ty                -> evalMul ty x env
@@ -150,6 +149,7 @@ evalPrimApp env f x
       PrimLNot                  -> evalLNot x env
       PrimFromIntegral ta tb    -> evalFromIntegral ta tb x env
       PrimToFloating ta tb      -> evalToFloating ta tb x env
+      --}
 
 
 -- Discriminate binary functions that commute, and if so return the operands in
@@ -251,6 +251,7 @@ associates fun exp = case fun of
 -- Helper functions
 -- ----------------
 
+{--
 type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Maybe (OpenExp env aenv b)
 
 eval1 :: SingleType b -> (a -> b) -> a :-> b
@@ -299,6 +300,7 @@ untup2 :: OpenExp env aenv (a, b) -> Maybe (OpenExp env aenv a, OpenExp env aenv
 untup2 exp
   | Pair a b <- exp = Just (a, b)
   | otherwise       = Nothing
+--}
 
 
 pprFun :: Text -> PrimFun f -> Text
@@ -312,7 +314,7 @@ pprFun rule f
            then parens (opName op)
            else opName op
 
-
+{--
 -- Methods of Num
 -- --------------
 
@@ -725,22 +727,5 @@ evalToFloating (FloatingNumType ta) tb x env
 
   | FloatingDict <- floatingDict ta
   , FloatingDict <- floatingDict tb = eval1 (NumSingleType $ FloatingNumType tb) realToFrac x env
-
-
--- Scalar primitives
--- -----------------
-
-evalPrimConst :: PrimConst a -> a
-evalPrimConst (PrimMinBound ty) = evalMinBound ty
-evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
-evalPrimConst (PrimPi       ty) = evalPi ty
-
-evalMinBound :: BoundedType a -> a
-evalMinBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = minBound
-
-evalMaxBound :: BoundedType a -> a
-evalMaxBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = maxBound
-
-evalPi :: FloatingType a -> a
-evalPi ty | FloatingDict <- floatingDict ty = pi
+--}
 

@@ -139,21 +139,21 @@ instance Radix Word64 where
   radix  = radixOfUnsigned
 
 radixOfSigned
-    :: forall e. (Radix e, A.Bounded e, A.Integral e, A.FromIntegral e Int)
+    :: forall e. (Radix e, A.Bounded e, A.Integral e, A.FromIntegral Int e, A.FromIntegral e Int)
     => Exp Int
     -> Exp e
     -> Exp Int
 radixOfSigned i e = i A.== (passes' - 1) ? (radix' (e `xor` minBound), radix' e)
    where
-     radix' x = A.fromIntegral $ (x `A.shiftR` i) .&. 1
+     radix' x = A.fromIntegral $ (x `A.shiftR` A.fromIntegral i) .&. 1
      passes'  = constant (passes (undefined :: e))
 
 radixOfUnsigned
-    :: (Radix e, A.Integral e, A.FromIntegral e Int)
+    :: (Radix e, A.Integral e, A.FromIntegral Int e, A.FromIntegral e Int)
     => Exp Int
     -> Exp e
     -> Exp Int
-radixOfUnsigned i e = A.fromIntegral $ (e `A.shiftR` i) .&. 1
+radixOfUnsigned i e = A.fromIntegral $ (e `A.shiftR` A.fromIntegral i) .&. 1
 
 
 -- A simple (parallel) radix sort implementation [1].

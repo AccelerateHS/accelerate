@@ -154,19 +154,18 @@ inlineVars lhsBound expr bound
       Foreign tp asm f e1   -> Foreign tp asm f <$> travE e1
       Pair e1 e2            -> Pair <$> travE e1 <*> travE e2
       Nil                   -> Just Nil
-      VecPack   vec e1      -> VecPack   vec <$> travE e1
-      VecUnpack vec e1      -> VecUnpack vec <$> travE e1
-      VecIndex vt it v i    -> VecIndex vt it <$> travE v <*> travE i
-      VecWrite vt it v i e  -> VecWrite vt it <$> travE v <*> travE i <*> travE e
+      Extract vR iR v i     -> Extract vR iR <$> travE v <*> travE i
+      Insert vR iR v i x    -> Insert vR iR <$> travE v <*> travE i <*> travE x
+      Shuffle vR iR x y m   -> Shuffle vR iR <$> travE x <*> travE y <*> travE m
+      Select m x y          -> Select <$> travE m <*> travE x <*> travE y
       IndexSlice si e1 e2   -> IndexSlice si <$> travE e1 <*> travE e2
       IndexFull  si e1 e2   -> IndexFull  si <$> travE e1 <*> travE e2
       ToIndex   shr e1 e2   -> ToIndex   shr <$> travE e1 <*> travE e2
       FromIndex shr e1 e2   -> FromIndex shr <$> travE e1 <*> travE e2
-      Case e1 rhs def       -> Case <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
+      Case eR e1 rhs def    -> Case eR <$> travE e1 <*> mapM (\(t,c) -> (t,) <$> travE c) rhs <*> travMaybeE def
       Cond e1 e2 e3         -> Cond <$> travE e1 <*> travE e2 <*> travE e3
       While f1 f2 e1        -> While <$> travF f1 <*> travF f2 <*> travE e1
       Const t c             -> Just $ Const t c
-      PrimConst c           -> Just $ PrimConst c
       PrimApp p e1          -> PrimApp p <$> travE e1
       Index a e1            -> Index a <$> travE e1
       LinearIndex a e1      -> LinearIndex a <$> travE e1
@@ -549,7 +548,6 @@ rebuildOpenExp
 rebuildOpenExp v av@(ReindexAvar reindex) exp =
   case exp of
     Const t c             -> pure $ Const t c
-    PrimConst c           -> pure $ PrimConst c
     Undef t               -> pure $ Undef t
     Evar var              -> expOut          <$> v var
     Let lhs a b
@@ -557,15 +555,15 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
                           -> Let lhs'        <$> rebuildOpenExp v av a  <*> rebuildOpenExp (shiftE' lhs lhs' v) av b
     Pair e1 e2            -> Pair            <$> rebuildOpenExp v av e1 <*> rebuildOpenExp v av e2
     Nil                   -> pure Nil
-    VecPack   vec e       -> VecPack   vec   <$> rebuildOpenExp v av e
-    VecUnpack vec e       -> VecUnpack vec   <$> rebuildOpenExp v av e
-    VecIndex vt it v' i   -> VecIndex vt it  <$> rebuildOpenExp v av v' <*> rebuildOpenExp v av i
-    VecWrite vt it v' i e -> VecWrite vt it  <$> rebuildOpenExp v av v' <*> rebuildOpenExp v av i <*> rebuildOpenExp v av e
+    Extract vR iR u i     -> Extract vR iR   <$> rebuildOpenExp v av u <*> rebuildOpenExp v av i
+    Insert vR iR u i x    -> Insert vR iR    <$> rebuildOpenExp v av u <*> rebuildOpenExp v av i <*> rebuildOpenExp v av x
+    Shuffle vR iR x y m   -> Shuffle vR iR   <$> rebuildOpenExp v av x <*> rebuildOpenExp v av y <*> rebuildOpenExp v av m
+    Select m x y          -> Select          <$> rebuildOpenExp v av m <*> rebuildOpenExp v av x <*> rebuildOpenExp v av y
     IndexSlice x ix sh    -> IndexSlice x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
     IndexFull x ix sl     -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
     ToIndex shr sh ix     -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
     FromIndex shr sh ix   -> FromIndex shr   <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix
-    Case e rhs def        -> Case            <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ] <*> rebuildMaybeExp v av def
+    Case eR e rhs def     -> Case eR         <$> rebuildOpenExp v av e  <*> sequenceA [ (t,) <$> rebuildOpenExp v av c | (t,c) <- rhs ] <*> rebuildMaybeExp v av def
     Cond p t e            -> Cond            <$> rebuildOpenExp v av p  <*> rebuildOpenExp v av t  <*> rebuildOpenExp v av e
     While p f x           -> While           <$> rebuildFun v av p      <*> rebuildFun v av f      <*> rebuildOpenExp v av x
     PrimApp f x           -> PrimApp f       <$> rebuildOpenExp v av x

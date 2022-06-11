@@ -1,25 +1,21 @@
-{-# LANGUAGE BangPatterns           #-}
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE KindSignatures         #-}
-{-# LANGUAGE MagicHash              #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE PatternSynonyms        #-}
-{-# LANGUAGE RoleAnnotations        #-} 
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE TemplateHaskell        #-}
-{-# LANGUAGE UnboxedTuples          #-}
-{-# LANGUAGE ViewPatterns           #-}
-{-# LANGUAGE TypeApplications       #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE TupleSections          #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE RoleAnnotations     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE UnboxedTuples       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Primitive.Vec
--- Copyright   : [2008..2020] The Accelerate Team
+-- Copyright   : [2008..2022] The Accelerate Team
 -- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <trevor.mcdonell@gmail.com>
@@ -30,34 +26,37 @@
 module Data.Primitive.Vec (
 
   -- * SIMD vector types
-  Vec(..),
+  Vec(..), KnownNat,
   Vec2, pattern Vec2,
   Vec3, pattern Vec3,
   Vec4, pattern Vec4,
   Vec8, pattern Vec8,
   Vec16, pattern Vec16,
 
-  listOfVec,
-  vecOfList,
+  toList, fromList,
+  extract, insert, splat,
   liftVec,
 
-  Vectoring(..)
 ) where
 
-import Data.Kind
-import Data.Proxy
+import Data.Array.Accelerate.Error
+
 import Control.Monad.ST
-import Control.Monad.Reader
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Language.Haskell.TH.Extra
 import Prettyprinter
+import Prelude
+
+import qualified Foreign.Storable                                   as Foreign
 
 import GHC.Base                                                     ( isTrue# )
 import GHC.Int
 import GHC.Prim
 import GHC.TypeLits
+import GHC.Types                                                    ( IO(..) )
 import GHC.Word
+import qualified GHC.Exts                                           as GHC
 
 
 -- Note: [Representing SIMD vector types]
@@ -94,65 +93,101 @@ import GHC.Word
 --
 data Vec (n :: Nat) a = Vec ByteArray#
 
-class Vectoring vector a | vector -> a where
-    type IndexType vector :: Data.Kind.Type
-    vecIndex :: vector -> IndexType vector -> a
-    vecWrite :: vector -> IndexType vector -> a -> vector
-    vecEmpty :: vector
-
-instance (KnownNat n, Prim a) => Vectoring (Vec n a) a where
-    type IndexType (Vec n a) = Int
-    vecIndex (Vec ba#) i@(I# iu#) = let
-        n :: Int
-        n = fromIntegral $ natVal $ Proxy @n
-        in if i >= 0 && i < n then indexByteArray# ba# iu# else error ("index " <> show i <> " out of range in Vec of size " <> show n)
-    vecWrite vec@(Vec ba#) i@(I# iu#) v = runST $ do
-        let n :: Int
-            n = fromIntegral $ natVal $ Proxy @n
-        mba <- unsafeThawByteArray (ByteArray ba#)
-        writeByteArray mba i v
-        ByteArray nba# <- unsafeFreezeByteArray mba
-        return $! Vec nba#
-    vecEmpty = mkVec
-
-
-mkVec :: forall n a. (KnownNat n, Prim a) => Vec n a
-mkVec = runST $ do
-  let n :: Int = fromIntegral $ natVal $ Proxy @n
-  mba <- newByteArray (n * sizeOf (undefined :: a))
-  ByteArray ba# <- unsafeFreezeByteArray mba
-  return $! Vec ba#
-
-
 type role Vec nominal representational
 
 instance (Show a, Prim a, KnownNat n) => Show (Vec n a) where
-  show = vec . listOfVec
+  show = vec . toList
     where
       vec :: [a] -> String
       vec = show
           . group . encloseSep (flatAlt "< " "<") (flatAlt " >" ">") ", "
           . map viaShow
 
-vecOfList :: forall n a. (KnownNat n, Prim a) => [a] -> Vec n a
-vecOfList vs = runST $ do
-  let n :: Int = fromIntegral $ natVal $ Proxy @n
-  mba <- newByteArray (n * sizeOf (undefined :: a))
-  zipWithM_ (writeByteArray mba) [0..n-1] vs
-  ByteArray ba# <- unsafeFreezeByteArray mba
-  return $! Vec ba#
+instance (Prim a, KnownNat n) => GHC.IsList (Vec n a) where
+  type Item (Vec n a) = a
+  {-# INLINE toList   #-}
+  {-# INLINE fromList #-}
+  toList   = toList
+  fromList = fromList
 
-listOfVec :: forall a n. (Prim a, KnownNat n) => Vec n a -> [a]
-listOfVec (Vec ba#) = go 0#
+instance (Foreign.Storable a, KnownNat n) => Foreign.Storable (Vec n a) where
+  {-# INLINE sizeOf    #-}
+  {-# INLINE alignment #-}
+  {-# INLINE peek      #-}
+  {-# INLINE poke      #-}
+
+  sizeOf _    = fromInteger (natVal' (proxy# @n)) * Foreign.sizeOf (undefined :: a)
+  alignment _ = Foreign.alignment (undefined :: a)
+
+  peek (Ptr addr#) =
+    IO $ \s0 ->
+      case Foreign.sizeOf (undefined :: Vec n a)        of { I# bytes#      ->
+      case newAlignedPinnedByteArray# bytes# 16# s0     of { (# s1, mba# #) ->
+      case copyAddrToByteArray# addr# mba# 0# bytes# s1 of { s2             ->
+      case unsafeFreezeByteArray# mba# s2               of { (# s3, ba# #)  ->
+        (# s3, Vec ba# #)
+      }}}}
+
+  poke (Ptr addr#) (Vec ba#) =
+    IO $ \s0 ->
+      case Foreign.sizeOf (undefined :: Vec n a)       of { I# bytes# ->
+      case copyByteArrayToAddr# ba# 0# addr# bytes# s0 of {
+        s1 -> (# s1, () #)
+    }}
+
+{-# INLINE toList #-}
+toList :: forall a n. (Prim a, KnownNat n) => Vec n a -> [a]
+toList (Vec ba#) = go 0#
   where
     go :: Int# -> [a]
     go i# | isTrue# (i# <# n#)  = indexByteArray# ba# i# : go (i# +# 1#)
           | otherwise           = []
+    --
+    !(I# n#)  = fromInteger (natVal' (proxy# :: Proxy# n))
 
-    !(I# n#)  = fromIntegral (natVal' (proxy# :: Proxy# n))
+{-# INLINE fromList #-}
+fromList :: forall a n. (Prim a, KnownNat n) => [a] -> Vec n a
+fromList xs =
+  case byteArrayFromListN (fromInteger (natVal' (proxy# :: Proxy# n))) xs of
+    ByteArray ba# -> Vec ba#
 
 instance Eq (Vec n a) where
   Vec ba1# == Vec ba2# = ByteArray ba1# == ByteArray ba2#
+
+-- | Extract an element from a vector at the given index
+--
+{-# INLINE extract #-}
+extract :: forall n a. (Prim a, KnownNat n) => Vec n a -> Int -> a
+extract (Vec ba#) i@(I# i#) =
+  let n = fromInteger (natVal' (proxy# :: Proxy# n))
+   in boundsCheck "out of range" (i >= 0 && i < n) $ indexByteArray# ba# i#
+
+-- | Returns a new vector where the element at the specified index has been
+-- replaced with the supplied value.
+--
+{-# INLINE insert #-}
+insert :: forall n a. (Prim a, KnownNat n) => Vec n a -> Int -> a -> Vec n a
+insert (Vec ba#) i a =
+  let n     = fromInteger (natVal' (proxy# :: Proxy# n))
+      bytes = n * sizeOf (undefined :: a)
+   in boundsCheck "out of range" (i >= 0 && i < n)
+    $ runST $ do
+        mba <- newByteArray bytes
+        copyByteArray mba 0 (ByteArray ba#) 0 bytes
+        writeByteArray mba i a
+        ByteArray ba'# <- unsafeFreezeByteArray mba
+        return $! Vec ba'#
+
+-- | Fill all lanes of a vector with the same value
+--
+{-# INLINE splat #-}
+splat :: forall n a. (Prim a, KnownNat n) => a -> Vec n a
+splat x = runST $ do
+  let n = fromInteger (natVal' (proxy# :: Proxy# n))
+  mba <- newByteArray (n * sizeOf (undefined :: a))
+  setByteArray mba 0 n x
+  ByteArray ba# <- unsafeFreezeByteArray mba
+  return $! Vec ba#
 
 -- Type synonyms for common SIMD vector types
 --

@@ -19,6 +19,7 @@ module Data.Array.Accelerate.Representation.Slice
   where
 
 import Data.Array.Accelerate.Representation.Shape
+import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH.Extra
 
@@ -38,15 +39,15 @@ instance Slice () where
   sliceIndex = SliceNil
 
 instance Slice sl => Slice (sl, ()) where
-  type SliceShape   (sl, ()) = (SliceShape  sl, Int)
+  type SliceShape   (sl, ()) = (SliceShape  sl, INT)
   type CoSliceShape (sl, ()) = CoSliceShape sl
-  type FullShape    (sl, ()) = (FullShape   sl, Int)
+  type FullShape    (sl, ()) = (FullShape   sl, INT)
   sliceIndex = SliceAll (sliceIndex @sl)
 
-instance Slice sl => Slice (sl, Int) where
-  type SliceShape   (sl, Int) = SliceShape sl
-  type CoSliceShape (sl, Int) = (CoSliceShape sl, Int)
-  type FullShape    (sl, Int) = (FullShape    sl, Int)
+instance Slice sl => Slice (sl, INT) where
+  type SliceShape   (sl, INT) = SliceShape sl
+  type CoSliceShape (sl, INT) = (CoSliceShape sl, INT)
+  type FullShape    (sl, INT) = (FullShape    sl, INT)
   sliceIndex = SliceFixed (sliceIndex @sl)
 
 -- |Generalised array index, which may index only in a subset of the dimensions
@@ -54,8 +55,8 @@ instance Slice sl => Slice (sl, Int) where
 --
 data SliceIndex ix slice coSlice sliceDim where
   SliceNil   :: SliceIndex () () () ()
-  SliceAll   :: SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co       (dim, Int)
-  SliceFixed :: SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice      (co, Int) (dim, Int)
+  SliceAll   :: SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, INT) co       (dim, INT)
+  SliceFixed :: SliceIndex ix slice co dim -> SliceIndex (ix, INT) slice      (co, INT) (dim, INT)
 
 instance Show (SliceIndex ix slice coSlice sliceDim) where
   show SliceNil          = "SliceNil"

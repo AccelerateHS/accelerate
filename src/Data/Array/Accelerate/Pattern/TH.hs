@@ -293,7 +293,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
               ++ map varE xs
               ++ map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat fs1)
 
-        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
+        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (NumScalarType (IntegralNumType (SingleIntegralType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
         body   = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
 
       r <- sequence [ sigD fun sig
@@ -314,7 +314,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
       fun     <- newName ("_match" ++ cn)
       e       <- newName "_e"
       x       <- newName "_x"
-      (ps,es) <- extract vs [| Prj PairIdxRight $(varE x) |] [] []
+      (ps,es) <- prj vs [| Prj PairIdxRight $(varE x) |] [] []
       unbind  <- isExtEnabled RebindableSyntax
       let
         eqE   = if unbind then letE [funD (mkName "==") [clause [] (normalB (varE '(==))) []]] else id
@@ -335,17 +335,17 @@ mkConS tn' tvs' prev' next' tag' con' = do
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 [t| Exp $(foldl' appT (conT tn) (map varT tvs)) -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
 
-        matchP us = [p| TagRtag $(litP (IntegerL (toInteger tag))) $pat |]
+        matchP us = [p| TagRtag _ $(litP (IntegerL (toInteger tag))) $pat |]
           where
             pat = [p| $(foldl (\ps p -> [p| TagRpair $ps $p |]) [p| TagRunit |] us) |]
 
-        extract []     _ ps es = return (ps, es)
-        extract (u:us) x ps es = do
+        prj []     _ ps es = return (ps, es)
+        prj (u:us) x ps es = do
           _u <- newName "_u"
           let x' = [| Prj PairIdxLeft (SmartExp $x) |]
           if not u
-             then extract us x' (wildP:ps)  es
-             else extract us x' (varP _u:ps) ([| Exp (SmartExp (Match $(varE _u) (SmartExp (Prj PairIdxRight (SmartExp $x))))) |] : es)
+             then prj us x' (wildP:ps)  es
+             else prj us x' (varP _u:ps) ([| Exp (SmartExp (Match $(varE _u) (SmartExp (Prj PairIdxRight (SmartExp $x))))) |] : es)
 
         vs = reverse
            $ [ False | _ <- concat fs0 ] ++ [ True | _ <- fs ] ++ [ False | _ <- concat fs1 ]

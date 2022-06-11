@@ -635,7 +635,7 @@ bound bnd sh0 ix0 =
     go TupRunit           ()      ()      = Right ()
     go (TupRpair tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
     go (TupRsingle t)     sh      i
-      | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
+      | Just Refl <- matchScalarType t (scalarType :: ScalarType INT)
       = if i P.< 0
           then case bnd of
                  Clamp      -> Right 0

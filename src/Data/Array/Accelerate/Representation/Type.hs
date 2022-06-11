@@ -24,6 +24,8 @@ import Data.Primitive.Vec
 import Formatting
 import Language.Haskell.TH.Extra
 
+import GHC.TypeLits
+
 
 -- | Both arrays (Acc) and expressions (Exp) are represented as nested
 -- pairs consisting of:
@@ -83,35 +85,45 @@ liftTypeQ = tuple
     tuple (TupRsingle t)   = scalar t
 
     scalar :: ScalarType t -> TypeQ
-    scalar (SingleScalarType t) = single t
-    scalar (VectorScalarType t) = vector t
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
 
-    vector :: VectorType (Vec n a) -> TypeQ
-    vector (VectorType n t) = [t| Vec $(litT (numTyLit (toInteger n))) $(single t) |]
-
-    single :: SingleType t -> TypeQ
-    single (NumSingleType t) = num t
+    bit :: BitType t -> TypeQ
+    bit TypeBit      = [t| Bit |]
+    bit (TypeMask n) = [t| Vec $(litT (numTyLit (natVal' n))) Bit |]
 
     num :: NumType t -> TypeQ
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
 
     integral :: IntegralType t -> TypeQ
-    integral TypeInt    = [t| Int |]
-    integral TypeInt8   = [t| Int8 |]
-    integral TypeInt16  = [t| Int16 |]
-    integral TypeInt32  = [t| Int32 |]
-    integral TypeInt64  = [t| Int64 |]
-    integral TypeWord   = [t| Word |]
-    integral TypeWord8  = [t| Word8 |]
-    integral TypeWord16 = [t| Word16 |]
-    integral TypeWord32 = [t| Word32 |]
-    integral TypeWord64 = [t| Word64 |]
+    integral = \case
+      SingleIntegralType t   -> [t| $(single t) |]
+      VectorIntegralType n t -> [t| Vec $(litT (numTyLit (natVal' n))) $(single t) |]
+      where
+        single :: SingleIntegralType t -> TypeQ
+        single TypeInt8    = [t| Int8 |]
+        single TypeInt16   = [t| Int16 |]
+        single TypeInt32   = [t| Int32 |]
+        single TypeInt64   = [t| Int64 |]
+        single TypeInt128  = [t| Int128 |]
+        single TypeWord8   = [t| Word8 |]
+        single TypeWord16  = [t| Word16 |]
+        single TypeWord32  = [t| Word32 |]
+        single TypeWord64  = [t| Word64 |]
+        single TypeWord128 = [t| Word128 |]
 
     floating :: FloatingType t -> TypeQ
-    floating TypeHalf   = [t| Half |]
-    floating TypeFloat  = [t| Float |]
-    floating TypeDouble = [t| Double |]
+    floating = \case
+      SingleFloatingType t   -> [t| $(single t) |]
+      VectorFloatingType n t -> [t| Vec $(litT (numTyLit (natVal' n))) $(single t) |]
+      where
+        single :: SingleFloatingType t -> TypeQ
+        single TypeFloat16  = [t| Half |]
+        single TypeFloat32  = [t| Float |]
+        single TypeFloat64  = [t| Double |]
+        single TypeFloat128 = [t| Float128 |]
+
 
 runQ $
   let

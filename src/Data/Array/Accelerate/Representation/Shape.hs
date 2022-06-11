@@ -23,14 +23,12 @@ import Data.Array.Accelerate.Representation.Type
 import Language.Haskell.TH.Extra
 import Prelude                                                      hiding ( zip )
 
-import GHC.Base                                                     ( quotInt, remInt )
-
 
 -- | Shape and index representations as nested pairs
 --
 data ShapeR sh where
   ShapeRz    :: ShapeR ()
-  ShapeRsnoc :: ShapeR sh -> ShapeR (sh, Int)
+  ShapeRsnoc :: ShapeR sh -> ShapeR (sh, INT)
 
 -- | Nicely format a shape as a string
 --
@@ -40,9 +38,9 @@ showShape shr = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList sh
 -- Synonyms for common shape types
 --
 type DIM0 = ()
-type DIM1 = ((), Int)
-type DIM2 = (((), Int), Int)
-type DIM3 = ((((), Int), Int), Int)
+type DIM1 = ((), INT)
+type DIM2 = (((), INT), INT)
+type DIM3 = ((((), INT), INT), INT)
 
 dim0 :: ShapeR DIM0
 dim0 = ShapeRz
@@ -58,13 +56,13 @@ dim3 = ShapeRsnoc dim2
 
 -- | Number of dimensions of a /shape/ or /index/ (>= 0)
 --
-rank :: ShapeR sh -> Int
+rank :: ShapeR sh -> INT
 rank ShapeRz          = 0
 rank (ShapeRsnoc shr) = rank shr + 1
 
 -- | Total number of elements in an array of the given shape
 --
-size :: ShapeR sh -> sh -> Int
+size :: ShapeR sh -> sh -> INT
 size ShapeRz () = 1
 size (ShapeRsnoc shr) (sh, sz)
   | sz <= 0   = 0
@@ -86,7 +84,7 @@ intersect = zip min
 union :: ShapeR sh -> sh -> sh -> sh
 union = zip max
 
-zip :: (Int -> Int -> Int) -> ShapeR sh -> sh -> sh -> sh
+zip :: (INT -> INT -> INT) -> ShapeR sh -> sh -> sh -> sh
 zip _ ShapeRz          ()      ()      = ()
 zip f (ShapeRsnoc shr) (as, a) (bs, b) = (zip f shr as bs, f a b)
 
@@ -99,25 +97,25 @@ eq (ShapeRsnoc shr) (sh, i) (sh', i') = i == i' && eq shr sh sh'
 -- representation of the array (first argument is the /shape/, second
 -- argument is the /index/).
 --
-toIndex :: HasCallStack => ShapeR sh -> sh -> sh -> Int
-toIndex ShapeRz () () = 0
+toIndex :: HasCallStack => ShapeR sh -> sh -> sh -> INT
+toIndex ShapeRz          ()       ()      = 0
 toIndex (ShapeRsnoc shr) (sh, sz) (ix, i)
   = indexCheck i sz
   $ toIndex shr sh ix * sz + i
 
 -- | Inverse of 'toIndex'
 --
-fromIndex :: HasCallStack => ShapeR sh -> sh -> Int -> sh
-fromIndex ShapeRz () _ = ()
+fromIndex :: HasCallStack => ShapeR sh -> sh -> INT -> sh
+fromIndex ShapeRz          ()       _ = ()
 fromIndex (ShapeRsnoc shr) (sh, sz) i
-  = (fromIndex shr sh (i `quotInt` sz), r)
+  = (fromIndex shr sh (i `quot` sz), r)
   -- If we assume that the index is in range, there is no point in computing
   -- the remainder for the highest dimension since i < sz must hold.
   --
   where
     r = case shr of -- Check if rank of shr is 0
       ShapeRz -> indexCheck i sz i
-      _       -> i `remInt` sz
+      _       -> i `rem` sz
 
 -- | Iterate through the entire shape, applying the function in the second
 -- argument; third argument combines results and fourth is an initial value
@@ -157,13 +155,13 @@ shapeToRange (ShapeRsnoc shr) (sh, sz) = let (low, high) = shapeToRange shr sh i
 
 -- | Convert a shape or index into its list of dimensions
 --
-shapeToList :: ShapeR sh -> sh -> [Int]
+shapeToList :: ShapeR sh -> sh -> [INT]
 shapeToList ShapeRz          ()      = []
 shapeToList (ShapeRsnoc shr) (sh,sz) = sz : shapeToList shr sh
 
 -- | Convert a list of dimensions into a shape
 --
-listToShape :: HasCallStack => ShapeR sh -> [Int] -> sh
+listToShape :: HasCallStack => ShapeR sh -> [INT] -> sh
 listToShape shr ds =
   case listToShape' shr ds of
     Just sh -> sh
@@ -171,17 +169,14 @@ listToShape shr ds =
 
 -- | Attempt to convert a list of dimensions into a shape
 --
-listToShape' :: ShapeR sh -> [Int] -> Maybe sh
+listToShape' :: ShapeR sh -> [INT] -> Maybe sh
 listToShape' ShapeRz          []     = Just ()
 listToShape' (ShapeRsnoc shr) (x:xs) = (, x) <$> listToShape' shr xs
 listToShape' _                _      = Nothing
 
 shapeType :: ShapeR sh -> TypeR sh
 shapeType ShapeRz          = TupRunit
-shapeType (ShapeRsnoc shr) =
-  shapeType shr
-  `TupRpair`
-  TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt)))
+shapeType (ShapeRsnoc shR) = shapeType shR `TupRpair` TupRsingle scalarType
 
 rnfShape :: ShapeR sh -> sh -> ()
 rnfShape ShapeRz          ()      = ()

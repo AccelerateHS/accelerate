@@ -370,6 +370,11 @@ library
         , unique
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
+        , wide-word                     >= 0.1
+
+  if impl(ghc < 9.0)
+    build-depends:
+          integer-gmp
 
   exposed-modules:
         -- The core language and reference implementation
@@ -398,14 +403,15 @@ library
         Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
         Data.Array.Accelerate.Array.Data
-        Data.Array.Accelerate.Array.Remote
-        Data.Array.Accelerate.Array.Remote.Class
-        Data.Array.Accelerate.Array.Remote.LRU
-        Data.Array.Accelerate.Array.Remote.Table
+        -- Data.Array.Accelerate.Array.Remote
+        -- Data.Array.Accelerate.Array.Remote.Class
+        -- Data.Array.Accelerate.Array.Remote.LRU
+        -- Data.Array.Accelerate.Array.Remote.Table
         Data.Array.Accelerate.Array.Unique
         Data.Array.Accelerate.Async
-        Data.Array.Accelerate.Error
         Data.Array.Accelerate.Debug.Internal
+        Data.Array.Accelerate.Error
+        Data.Array.Accelerate.Interpreter.Arithmetic
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Representation.Array
@@ -462,7 +468,8 @@ library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
-        Data.Array.Accelerate.Classes.Vector
+        Data.Array.Accelerate.Classes.VEq
+        Data.Array.Accelerate.Classes.VOrd
         Data.Array.Accelerate.Debug.Internal.Clock
         Data.Array.Accelerate.Debug.Internal.Flags
         Data.Array.Accelerate.Debug.Internal.Graph
@@ -498,6 +505,7 @@ library
         Data.Array.Accelerate.Test.NoFib.Config
 
         Language.Haskell.TH.Extra
+        GHC.TypeLits.Extra
 
   if flag(nofib)
     build-depends:

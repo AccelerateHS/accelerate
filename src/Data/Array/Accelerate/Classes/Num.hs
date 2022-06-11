@@ -1,7 +1,13 @@
-{-# LANGUAGE ConstraintKinds   #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Num
@@ -15,16 +21,19 @@
 
 module Data.Array.Accelerate.Classes.Num (
 
-  Num,
+  Num, Integer,
   (P.+), (P.-), (P.*), P.negate, P.abs, P.signum, P.fromInteger,
 
 ) where
 
-import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
-import Prelude                                                      ( (.) )
+import Language.Haskell.TH                                          hiding ( Exp )
+import Prelude                                                      hiding ( Num )
+import qualified Data.Primitive.Vec                                 as Prim
 import qualified Prelude                                            as P
 
 
@@ -50,7 +59,6 @@ import qualified Prelude                                            as P
 -- much, _much_ better.
 --
 
-
 -- | Conversion from an 'Integer'.
 --
 -- An integer literal represents the application of the function 'fromInteger'
@@ -61,215 +69,59 @@ import qualified Prelude                                            as P
 -- fromInteger :: Num a => Integer -> Exp a
 -- fromInteger = P.fromInteger
 
-
 -- | Basic numeric class
 --
 type Num a = (Elt a, P.Num (Exp a))
 
+runQ $
+  let
+      integralTypes :: [Name]
+      integralTypes =
+        [ ''Int
+        , ''Int8
+        , ''Int16
+        , ''Int32
+        , ''Int64
+        , ''Int128
+        , ''Word
+        , ''Word8
+        , ''Word16
+        , ''Word32
+        , ''Word64
+        , ''Word128
+        ]
 
-instance P.Num (Exp Int) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        , ''Float128
+        ]
 
-instance P.Num (Exp Int8) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+      numTypes :: [Name]
+      numTypes = integralTypes ++ floatingTypes
 
-instance P.Num (Exp Int16) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+      thNum :: Name -> Q [Dec]
+      thNum a =
+        [d| instance P.Num (Exp $(conT a)) where
+              (+)         = mkAdd
+              (-)         = mkSub
+              (*)         = mkMul
+              negate      = mkNeg
+              abs         = mkAbs
+              signum      = mkSig
+              fromInteger = constant . P.fromInteger
 
-instance P.Num (Exp Int32) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
+            instance KnownNat n => P.Num (Exp (Vec n $(conT a))) where
+              (+)         = mkAdd
+              (-)         = mkSub
+              (*)         = mkMul
+              negate      = mkNeg
+              abs         = mkAbs
+              signum      = mkSig
+              fromInteger = constant . Vec . Prim.splat . P.fromInteger
+          |]
+  in
+  concat <$> mapM thNum numTypes
 
-instance P.Num (Exp Int64) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Word) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Word8) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Word16) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Word32) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Word64) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CInt) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CUInt) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CULong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CLLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CULLong) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CShort) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CUShort) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Half) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Float) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp Double) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CFloat) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance P.Num (Exp CDouble) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger

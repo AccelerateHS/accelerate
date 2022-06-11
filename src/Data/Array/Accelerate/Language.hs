@@ -38,18 +38,6 @@ module Data.Array.Accelerate.Language (
   -- * Map-like functions
   map, zipWith,
 
-  -- -- * Sequence collection
-  -- collect,
-
-  -- -- * Sequence producers
-  -- streamIn, toSeq,
-
-  -- -- * Sequence transducers
-  -- mapSeq, zipWithSeq, scanSeq,
-
-  -- -- * Sequence consumers
-  -- foldSeq, foldSeqFlatten,
-
   -- * Reductions
   fold, fold1, foldSeg', fold1Seg',
 
@@ -197,7 +185,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 --
 -- ...or as columns:
 --
--- >>> run $ replicate (lift (Z :. All :. (4::Int))) (use vec)
+-- >>> run $ replicate (Z_ ::. All_ ::. (4 :: Exp Int)) (use vec)
 -- Matrix (Z :. 10 :. 4)
 --   [ 0, 0, 0, 0,
 --     1, 1, 1, 1,
@@ -222,7 +210,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 --
 -- >>> :{
 --   let rep0 :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
---       rep0 n a = replicate (lift (Any :. n)) a
+--       rep0 n a = replicate (Any_ ::. n) a
 -- :}
 --
 -- >>> let x = unit 42 :: Acc (Scalar Int)
@@ -246,7 +234,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 --
 -- >>> :{
 --   let rep1 :: (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
---       rep1 n a = replicate (lift (Any :. n :. All)) a
+--       rep1 n a = replicate (Any_ ::. n ::. All_) a
 -- :}
 --
 -- >>> run $ rep1 5 (use vec)
@@ -360,7 +348,7 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 -- >>> :{
 --   let
 --       sl0 :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
---       sl0 a n = slice a (lift (Any :. n))
+--       sl0 a n = slice a (Any_ ::. n)
 -- :}
 --
 -- >>> let vec = fromList (Z:.10) [0..] :: Vector Int
@@ -374,7 +362,7 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 --
 -- >>> :{
 --   let sl1 :: (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
---       sl1 a n = slice a (lift (Any :. n :. All))
+--       sl1 a n = slice a (Any_ ::. n ::. All_)
 -- :}
 --
 -- >>> run $ sl1 (use mat) 4
@@ -515,8 +503,7 @@ zipWith = Acc $$$ applyAcc (ZipWith (eltR @a) (eltR @b) (eltR @c))
 -- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
 -- compute multiple results from a single reduction.
 --
-fold :: forall sh a.
-        (Shape sh, Elt a)
+fold :: forall sh a. (Shape sh, Elt a)
      => (Exp a -> Exp a -> Exp a)
      -> Exp a
      -> Acc (Array (sh:.Int) a)
@@ -533,8 +520,7 @@ fold f (Exp x) = Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) (Just x)
 -- The first argument needs to be an /associative/ function to enable an
 -- efficient parallel implementation, but does not need to be commutative.
 --
-fold1 :: forall sh a.
-         (Shape sh, Elt a)
+fold1 :: forall sh a. (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array sh a)
@@ -554,14 +540,13 @@ fold1 f = Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) Nothing)
 -- @since 1.3.0.0
 --
 foldSeg'
-    :: forall sh a i.
-       (Shape sh, Elt a, Elt i, IsIntegral i, i ~ EltR i)
+    :: forall sh a i. (Shape sh, Elt a, Elt i, IsSingleIntegral (EltR i))
     => (Exp a -> Exp a -> Exp a)
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-foldSeg' f (Exp x) = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExpBinaryFunction f) (Just x))
+foldSeg' f (Exp x) = Acc $$ applyAcc (FoldSeg (singleIntegralType @(EltR i)) (eltR @a) (unExpBinaryFunction f) (Just x))
 
 -- | Variant of 'foldSeg'' that requires /all/ segments of the reduced
 -- array to be non-empty, and doesn't need a default value. The segment
@@ -571,13 +556,12 @@ foldSeg' f (Exp x) = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExp
 -- @since 1.3.0.0
 --
 fold1Seg'
-    :: forall sh a i.
-       (Shape sh, Elt a, Elt i, IsIntegral i, i ~ EltR i)
+    :: forall sh a i. (Shape sh, Elt a, Elt i, IsSingleIntegral (EltR i))
     => (Exp a -> Exp a -> Exp a)
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-fold1Seg' f = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExpBinaryFunction f) Nothing)
+fold1Seg' f = Acc $$ applyAcc (FoldSeg (singleIntegralType @(EltR i)) (eltR @a) (unExpBinaryFunction f) Nothing)
 
 -- Scan functions
 -- --------------
@@ -1262,11 +1246,7 @@ awhile :: forall a. Arrays a
        -> (Acc a -> Acc a)                -- ^ function to apply
        -> Acc a                           -- ^ initial value
        -> Acc a
-awhile f = Acc $$ applyAcc $ Awhile (arraysR @a) (unAccFunction g)
-  where
-    -- FIXME: This should be a no-op!
-    g :: Acc a -> Acc (Scalar PrimBool)
-    g = map mkCoerce . f
+awhile f = Acc $$ applyAcc $ Awhile (arraysR @a) (unAccFunction f)
 
 
 -- Shapes and indices
@@ -1297,7 +1277,7 @@ intersect (Exp shx) (Exp shy) = Exp $ intersect' (shapeR @sh) shx shy
     intersect' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ intersect' shR xs ys `Pair`
-        SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)
+        SmartExp (PrimApp (PrimMin scalarType) $ SmartExp $ Pair x y)
 
 
 -- | Union of two shapes
@@ -1310,7 +1290,7 @@ union (Exp shx) (Exp shy) = Exp $ union' (shapeR @sh) shx shy
     union' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ union' shR xs ys `Pair`
-        SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
+        SmartExp (PrimApp (PrimMax scalarType) $ SmartExp $ Pair x y)
 
 
 -- Flow-control
@@ -1339,7 +1319,8 @@ while :: forall e. Elt e
 while c f (Exp e) =
   mkExp $ While @(EltR e) (eltR @e)
             (mkCoerce' . unExp . c . Exp)
-            (unExp . f . Exp) e
+            (unExp . f . Exp)
+            e
 
 
 -- Array operations with a scalar result
@@ -1499,7 +1480,7 @@ chr = mkFromIntegral
 -- into '1'.
 --
 boolToInt :: Exp Bool -> Exp Int
-boolToInt = mkFromIntegral . mkCoerce @_ @Word8
+boolToInt = mkFromBool
 
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.

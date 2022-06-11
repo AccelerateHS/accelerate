@@ -2,8 +2,7 @@
 # For advanced use and comprehensive documentation of the format, please see:
 # https://docs.haskellstack.org/en/stable/yaml_configuration/
 
-compiler: ghc-9.2.2
-resolver: nightly-2022-03-10
+resolver: nightly-2022-06-10
 
 packages:
 - .
@@ -11,7 +10,11 @@ packages:
 # extra-deps: []
 
 # Override default flag values for local packages and extra-deps
-# flags: {}
+flags:
+  accelerate:
+    nofib: true
+    # debug: true
+    # float128: true
 
 # Extra package databases containing global packages
 # extra-package-dbs: []

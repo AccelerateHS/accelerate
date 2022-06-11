@@ -1,8 +1,13 @@
-{-# LANGUAGE ConstraintKinds   #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeApplications  #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Floating
@@ -31,10 +36,14 @@ module Data.Array.Accelerate.Classes.Floating (
 ) where
 
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
+import qualified Data.Primitive.Vec                                 as Prim
 
 import Data.Array.Accelerate.Classes.Fractional
 
+import Language.Haskell.TH                                          hiding ( Exp )
+import Prelude                                                      hiding ( Fractional, Floating )
 import qualified Prelude                                            as P
 
 
@@ -42,104 +51,58 @@ import qualified Prelude                                            as P
 --
 type Floating a = (Fractional a, P.Floating (Exp a))
 
+runQ $
+  let
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        , ''Float128
+        ]
 
-instance P.Floating (Exp Half) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
+      thFloating :: Name -> Q [Dec]
+      thFloating a =
+        [d| instance P.Floating (Exp $(conT a)) where
+              pi      = constant pi
+              sin     = mkSin
+              cos     = mkCos
+              tan     = mkTan
+              asin    = mkAsin
+              acos    = mkAcos
+              atan    = mkAtan
+              sinh    = mkSinh
+              cosh    = mkCosh
+              tanh    = mkTanh
+              asinh   = mkAsinh
+              acosh   = mkAcosh
+              atanh   = mkAtanh
+              exp     = mkExpFloating
+              sqrt    = mkSqrt
+              log     = mkLog
+              (**)    = mkFPow
+              logBase = mkLogBase
 
-instance P.Floating (Exp Float) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
-
-instance P.Floating (Exp Double) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
-
-instance P.Floating (Exp CFloat) where
-  pi      = mkBitcast (mkPi @Float)
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
-
-instance P.Floating (Exp CDouble) where
-  pi      = mkBitcast (mkPi @Double)
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
+            instance KnownNat n => P.Floating (Exp (Vec n $(conT a))) where
+              pi      = constant (Vec (Prim.splat pi))
+              sin     = mkSin
+              cos     = mkCos
+              tan     = mkTan
+              asin    = mkAsin
+              acos    = mkAcos
+              atan    = mkAtan
+              sinh    = mkSinh
+              cosh    = mkCosh
+              tanh    = mkTanh
+              asinh   = mkAsinh
+              acosh   = mkAcosh
+              atanh   = mkAtanh
+              exp     = mkExpFloating
+              sqrt    = mkSqrt
+              log     = mkLog
+              (**)    = mkFPow
+              logBase = mkLogBase
+          |]
+  in
+  concat <$> mapM thFloating floatingTypes
 

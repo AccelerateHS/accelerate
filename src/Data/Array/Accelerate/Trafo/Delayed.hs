@@ -30,6 +30,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Debug.Internal.Stats                   as Stats
 
@@ -56,7 +57,7 @@ data DelayedOpenAcc aenv a where
     { reprD             :: ArrayR (Array sh e)
     , extentD           :: Exp aenv sh
     , indexD            :: Fun aenv (sh  -> e)
-    , linearIndexD      :: Fun aenv (Int -> e)
+    , linearIndexD      :: Fun aenv (INT -> e)
     }                   -> DelayedOpenAcc aenv (Array sh e)
 
 instance HasArraysR DelayedOpenAcc where

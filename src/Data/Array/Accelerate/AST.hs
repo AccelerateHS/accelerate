@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE EmptyCase             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -88,15 +89,14 @@ module Data.Array.Accelerate.AST (
   Fun, OpenFun(..),
   Exp, OpenExp(..),
   Boundary(..),
-  PrimConst(..),
   PrimFun(..),
   PrimBool,
   PrimMaybe,
+  BitOrMask,
 
   -- ** Extracting type information
   HasArraysR(..), arrayR,
   expType,
-  primConstType,
   primFunType,
 
   -- ** Normal-form
@@ -111,7 +111,6 @@ module Data.Array.Accelerate.AST (
   rnfExpVar,
   rnfBoundary,
   rnfConst,
-  rnfPrimConst,
   rnfPrimFun,
 
   -- ** Template Haskell
@@ -125,7 +124,6 @@ module Data.Array.Accelerate.AST (
   liftELeftHandSide,
   liftExpVar,
   liftBoundary,
-  liftPrimConst,
   liftPrimFun,
   liftMessage,
 
@@ -146,7 +144,6 @@ import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
-import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
@@ -160,8 +157,6 @@ import Formatting
 import Language.Haskell.TH.Extra                                    ( CodeQ )
 import qualified Language.Haskell.TH.Extra                          as TH
 import qualified Language.Haskell.TH.Syntax                         as TH
-
-import GHC.TypeLits
 
 
 -- Array expressions
@@ -199,8 +194,8 @@ type ALeftHandSide  = LeftHandSide ArrayR
 type ArrayVar       = Var ArrayR
 type ArrayVars aenv = Vars ArrayR aenv
 
--- Bool is not a primitive type
-type PrimBool    = TAG
+type PrimBool    = Bit
+type PrimMask n  = Vec n Bit
 type PrimMaybe a = (TAG, ((), a))
 
 -- Trace messages
@@ -370,18 +365,18 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   --
   Fold        :: Fun            aenv (e -> e -> e)              -- combination function
               -> Maybe     (Exp aenv e)                         -- default value
-              -> acc            aenv (Array (sh, Int) e)        -- folded array
+              -> acc            aenv (Array (sh, INT) e)        -- folded array
               -> PreOpenAcc acc aenv (Array sh e)
 
   -- Segmented fold along the innermost dimension of an array with a given
   -- /associative/ function
   --
-  FoldSeg     :: IntegralType i
+  FoldSeg     :: SingleIntegralType i
               -> Fun            aenv (e -> e -> e)              -- combination function
               -> Maybe     (Exp aenv e)                         -- default value
-              -> acc            aenv (Array (sh, Int) e)        -- folded array
+              -> acc            aenv (Array (sh, INT) e)        -- folded array
               -> acc            aenv (Segments i)               -- segment descriptor
-              -> PreOpenAcc acc aenv (Array (sh, Int) e)
+              -> PreOpenAcc acc aenv (Array (sh, INT) e)
 
   -- Haskell-style scan of a linear array with a given
   -- /associative/ function and optionally an initial element
@@ -391,8 +386,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   Scan        :: Direction
               -> Fun            aenv (e -> e -> e)              -- combination function
               -> Maybe     (Exp aenv e)                         -- initial value
-              -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (Array (sh, Int) e)
+              -> acc            aenv (Array (sh, INT) e)
+              -> PreOpenAcc acc aenv (Array (sh, INT) e)
 
   -- Like 'Scan', but produces a rightmost (in case of a left-to-right scan)
   -- fold value and an array with the same length as the input array (the
@@ -401,8 +396,8 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
   Scan'       :: Direction
               -> Fun            aenv (e -> e -> e)              -- combination function
               -> Exp            aenv e                          -- initial value
-              -> acc            aenv (Array (sh, Int) e)
-              -> PreOpenAcc acc aenv (Array (sh, Int) e, Array sh e)
+              -> acc            aenv (Array (sh, INT) e)
+              -> PreOpenAcc acc aenv (Array (sh, INT) e, Array sh e)
 
   -- Generalised forward permutation is characterised by a permutation function
   -- that determines for each element of the source array where it should go in
@@ -551,30 +546,30 @@ data OpenExp env aenv t where
   Nil           :: OpenExp env aenv ()
 
   -- SIMD vectors
-  VecPack       :: KnownNat n
-                => VecR n s tup
-                -> OpenExp env aenv tup
-                -> OpenExp env aenv (Vec n s)
-
-  VecUnpack     :: KnownNat n
-                => VecR n s tup
-                -> OpenExp env aenv (Vec n s)
-                -> OpenExp env aenv tup
-
-  VecIndex      :: (KnownNat n, v ~ Vec n s)
-                => VectorType v
-                -> IntegralType i
-                -> OpenExp env aenv (Vec n s)
+  Extract       :: ScalarType (Vec n a)
+                -> SingleIntegralType i
+                -> OpenExp env aenv (Vec n a)
                 -> OpenExp env aenv i
-                -> OpenExp env aenv s
+                -> OpenExp env aenv a
 
-  VecWrite      :: (KnownNat n, v ~ Vec n s)
-                => VectorType v
-                -> IntegralType i
-                -> OpenExp env aenv (Vec n s)
+  Insert        :: ScalarType (Vec n a)
+                -> SingleIntegralType i
+                -> OpenExp env aenv (Vec n a)
                 -> OpenExp env aenv i
-                -> OpenExp env aenv s
-                -> OpenExp env aenv (Vec n s)
+                -> OpenExp env aenv a
+                -> OpenExp env aenv (Vec n a)
+
+  Shuffle       :: ScalarType (Vec m a)
+                -> SingleIntegralType i
+                -> OpenExp env aenv (Vec n a)
+                -> OpenExp env aenv (Vec n a)
+                -> OpenExp env aenv (Vec m i)
+                -> OpenExp env aenv (Vec m a)
+
+  Select        :: OpenExp env aenv (PrimMask n)
+                -> OpenExp env aenv (Vec n a)
+                -> OpenExp env aenv (Vec n a)
+                -> OpenExp env aenv (Vec n a)
 
   -- Array indices & shapes
   IndexSlice    :: SliceIndex slix sl co sh
@@ -591,15 +586,16 @@ data OpenExp env aenv t where
   ToIndex       :: ShapeR sh
                 -> OpenExp env aenv sh           -- shape of the array
                 -> OpenExp env aenv sh           -- index into the array
-                -> OpenExp env aenv Int
+                -> OpenExp env aenv INT
 
   FromIndex     :: ShapeR sh
                 -> OpenExp env aenv sh           -- shape of the array
-                -> OpenExp env aenv Int          -- index into linear representation
+                -> OpenExp env aenv INT          -- index into linear representation
                 -> OpenExp env aenv sh
 
   -- Case statement
-  Case          :: OpenExp env aenv TAG
+  Case          :: ScalarType TAG
+                -> OpenExp env aenv TAG
                 -> [(TAG, OpenExp env aenv b)]      -- list of equations
                 -> Maybe (OpenExp env aenv b)       -- default case
                 -> OpenExp env aenv b
@@ -621,9 +617,6 @@ data OpenExp env aenv t where
                 -> t
                 -> OpenExp env aenv t
 
-  PrimConst     :: PrimConst t
-                -> OpenExp env aenv t
-
   -- Primitive scalar operations
   PrimApp       :: PrimFun (a -> r)
                 -> OpenExp env aenv a
@@ -636,7 +629,7 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv t
 
   LinearIndex   :: ArrayVar    aenv (Array dim t)
-                -> OpenExp env aenv Int
+                -> OpenExp env aenv INT
                 -> OpenExp env aenv t
 
   -- Array shape.
@@ -647,7 +640,7 @@ data OpenExp env aenv t where
   -- Number of elements of an array given its shape
   ShapeSize     :: ShapeR dim
                 -> OpenExp env aenv dim
-                -> OpenExp env aenv Int
+                -> OpenExp env aenv INT
 
   -- Unsafe operations (may fail or result in undefined behaviour)
   -- An unspecified bit pattern
@@ -661,18 +654,14 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv a
                 -> OpenExp env aenv b
 
--- |Primitive constant values
+
+-- | A bit mask at the width of the corresponding type
 --
-data PrimConst ty where
+type family BitOrMask a where
+  BitOrMask (Vec n _) = PrimMask n
+  BitOrMask _         = PrimBool
 
-  -- constants from Bounded
-  PrimMinBound  :: BoundedType a -> PrimConst a
-  PrimMaxBound  :: BoundedType a -> PrimConst a
-
-  -- constant from Floating
-  PrimPi        :: FloatingType a -> PrimConst a
-
--- |Primitive scalar operations
+-- | Primitive scalar operations
 --
 data PrimFun sig where
 
@@ -693,17 +682,17 @@ data PrimFun sig where
   PrimDivMod   :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
 
   -- operators from Bits & FiniteBits
-  PrimBAnd               :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBOr                :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBXor               :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBNot               :: IntegralType a -> PrimFun (a        -> a)
-  PrimBShiftL            :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBShiftR            :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateL           :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotateR           :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimPopCount           :: IntegralType a -> PrimFun (a -> Int)
-  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> Int)
-  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> Int)
+  PrimBAnd               :: IntegralType a -> PrimFun ((a, a) -> a)
+  PrimBOr                :: IntegralType a -> PrimFun ((a, a) -> a)
+  PrimBXor               :: IntegralType a -> PrimFun ((a, a) -> a)
+  PrimBNot               :: IntegralType a -> PrimFun (a      -> a)
+  PrimBShiftL            :: IntegralType a -> PrimFun ((a, a) -> a)
+  PrimBShiftR            :: IntegralType a -> PrimFun ((a, a) -> a)
+  PrimBRotateL           :: IntegralType a -> PrimFun ((a, a) -> a)
+  PrimBRotateR           :: IntegralType a -> PrimFun ((a, a) -> a)
+  PrimPopCount           :: IntegralType a -> PrimFun (a -> a)
+  PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> a)
+  PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> a)
 
   -- operators from Fractional and Floating
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
@@ -726,8 +715,6 @@ data PrimFun sig where
   PrimFPow        :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimLogBase     :: FloatingType a -> PrimFun ((a, a) -> a)
 
-  -- FIXME: add missing operations from RealFrac & RealFloat
-
   -- operators from RealFrac
   PrimTruncate :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
   PrimRound    :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
@@ -737,18 +724,18 @@ data PrimFun sig where
 
   -- operators from RealFloat
   PrimAtan2      :: FloatingType a -> PrimFun ((a, a) -> a)
-  PrimIsNaN      :: FloatingType a -> PrimFun (a -> PrimBool)
-  PrimIsInfinite :: FloatingType a -> PrimFun (a -> PrimBool)
+  PrimIsNaN      :: FloatingType a -> PrimFun (a -> BitOrMask a)
+  PrimIsInfinite :: FloatingType a -> PrimFun (a -> BitOrMask a)
 
   -- relational and equality operators
-  PrimLt   :: SingleType a -> PrimFun ((a, a) -> PrimBool)
-  PrimGt   :: SingleType a -> PrimFun ((a, a) -> PrimBool)
-  PrimLtEq :: SingleType a -> PrimFun ((a, a) -> PrimBool)
-  PrimGtEq :: SingleType a -> PrimFun ((a, a) -> PrimBool)
-  PrimEq   :: SingleType a -> PrimFun ((a, a) -> PrimBool)
-  PrimNEq  :: SingleType a -> PrimFun ((a, a) -> PrimBool)
-  PrimMax  :: SingleType a -> PrimFun ((a, a) -> a)
-  PrimMin  :: SingleType a -> PrimFun ((a, a) -> a)
+  PrimLt   :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimGt   :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimLtEq :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimGtEq :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimEq   :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimNEq  :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimMax  :: ScalarType a -> PrimFun ((a, a) -> a)
+  PrimMin  :: ScalarType a -> PrimFun ((a, a) -> a)
 
   -- logical operators
   --
@@ -760,13 +747,15 @@ data PrimFun sig where
   -- short-circuiting, while (&&!) and (||!) are strict versions of these
   -- operators, which are defined using PrimLAnd and PrimLOr.
   --
-  PrimLAnd :: PrimFun ((PrimBool, PrimBool) -> PrimBool)
-  PrimLOr  :: PrimFun ((PrimBool, PrimBool) -> PrimBool)
-  PrimLNot :: PrimFun (PrimBool             -> PrimBool)
+  PrimLAnd :: BitType a -> PrimFun ((a, a) -> a)
+  PrimLOr  :: BitType a -> PrimFun ((a, a) -> a)
+  PrimLNot :: BitType a -> PrimFun (a      -> a)
 
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
   PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
+  PrimToBool       :: IntegralType a -> BitType b -> PrimFun (a -> b)
+  PrimFromBool     :: BitType a -> IntegralType b -> PrimFun (a -> b)
 
 
 -- Type utilities
@@ -828,41 +817,49 @@ expType = \case
   Foreign tR _ _ _             -> tR
   Pair e1 e2                   -> TupRpair (expType e1) (expType e2)
   Nil                          -> TupRunit
-  VecPack   vecR _             -> TupRsingle $ VectorScalarType $ vecRvector vecR
-  VecUnpack vecR _             -> vecRtuple vecR
-  VecIndex vecT _ _ _          -> let (VectorType _ s) = vecT in TupRsingle $ SingleScalarType s
-  VecWrite vecT _ _ _ _        -> TupRsingle $ VectorScalarType vecT
+  Extract tR _ _ _             -> TupRsingle (scalar tR)
+    where
+      scalar :: ScalarType (Vec n a) -> ScalarType a
+      scalar (NumScalarType t) = NumScalarType (num t)
+      scalar (BitScalarType t) = BitScalarType (bit t)
+
+      bit :: BitType (Vec n a) -> BitType a
+      bit TypeMask{} = TypeBit
+
+      num :: NumType (Vec n a) -> NumType a
+      num (IntegralNumType t) = IntegralNumType (integral t)
+      num (FloatingNumType t) = FloatingNumType (floating t)
+
+      integral :: IntegralType (Vec n a) -> IntegralType a
+      integral (SingleIntegralType   t) = case t of
+      integral (VectorIntegralType _ t) = SingleIntegralType t
+
+      floating :: FloatingType (Vec n a) -> FloatingType a
+      floating (SingleFloatingType   t) = case t of
+      floating (VectorFloatingType _ t) = SingleFloatingType t
+  --
+  Insert t _ _ _ _             -> TupRsingle t
+  Shuffle t _ _ _ _            -> TupRsingle t
+  Select _ x _                 -> expType x
   IndexSlice si _ _            -> shapeType $ sliceShapeR si
   IndexFull  si _ _            -> shapeType $ sliceDomainR si
-  ToIndex{}                    -> TupRsingle scalarTypeInt
-  FromIndex shr _ _            -> shapeType shr
-  Case _ ((_,e):_) _           -> expType e
-  Case _ [] (Just e)           -> expType e
+  ToIndex{}                    -> TupRsingle scalarType
+  FromIndex shR _ _            -> shapeType shR
+  Case _ _ ((_,e):_) _         -> expType e
+  Case _ _ [] (Just e)         -> expType e
   Case{}                       -> internalError "empty case encountered"
   Cond _ e _                   -> expType e
   While _ (Lam lhs _) _        -> lhsToTupR lhs
   While{}                      -> error "What's the matter, you're running in the shadows"
   Const tR _                   -> TupRsingle tR
-  PrimConst c                  -> TupRsingle $ primConstType c
   PrimApp f _                  -> snd $ primFunType f
   Index (Var repr _) _         -> arrayRtype repr
   LinearIndex (Var repr _) _   -> arrayRtype repr
   Shape (Var repr _)           -> shapeType $ arrayRshape repr
-  ShapeSize{}                  -> TupRsingle scalarTypeInt
+  ShapeSize{}                  -> TupRsingle (scalarType @INT)
   Undef tR                     -> TupRsingle tR
   Coerce _ tR _                -> TupRsingle tR
 
-primConstType :: PrimConst a -> ScalarType a
-primConstType = \case
-  PrimMinBound t -> bounded t
-  PrimMaxBound t -> bounded t
-  PrimPi       t -> floating t
-  where
-    bounded :: BoundedType a -> ScalarType a
-    bounded (IntegralBoundedType t) = SingleScalarType $ NumSingleType $ IntegralNumType t
-
-    floating :: FloatingType t -> ScalarType t
-    floating = SingleScalarType . NumSingleType . FloatingNumType
 
 primFunType :: PrimFun (a -> b) -> (TypeR a, TypeR b)
 primFunType = \case
@@ -887,13 +884,13 @@ primFunType = \case
   PrimBOr t                 -> binary' $ integral t
   PrimBXor t                -> binary' $ integral t
   PrimBNot t                -> unary' $ integral t
-  PrimBShiftL t             -> (integral t `TupRpair` tint, integral t)
-  PrimBShiftR t             -> (integral t `TupRpair` tint, integral t)
-  PrimBRotateL t            -> (integral t `TupRpair` tint, integral t)
-  PrimBRotateR t            -> (integral t `TupRpair` tint, integral t)
-  PrimPopCount t            -> unary (integral t) tint
-  PrimCountLeadingZeros t   -> unary (integral t) tint
-  PrimCountTrailingZeros t  -> unary (integral t) tint
+  PrimBShiftL t             -> (integral t `TupRpair` integral t, integral t)
+  PrimBShiftR t             -> (integral t `TupRpair` integral t, integral t)
+  PrimBRotateL t            -> (integral t `TupRpair` integral t, integral t)
+  PrimBRotateR t            -> (integral t `TupRpair` integral t, integral t)
+  PrimPopCount t            -> unary (integral t) (integral t)
+  PrimCountLeadingZeros t   -> unary (integral t) (integral t)
+  PrimCountTrailingZeros t  -> unary (integral t) (integral t)
 
   -- Fractional, Floating
   PrimFDiv t                -> binary' $ floating t
@@ -924,8 +921,8 @@ primFunType = \case
 
   -- RealFloat
   PrimAtan2 t               -> binary' $ floating t
-  PrimIsNaN t               -> unary (floating t) tbool
-  PrimIsInfinite t          -> unary (floating t) tbool
+  PrimIsNaN t               -> unary (floating t) (floating_mask t)
+  PrimIsInfinite t          -> unary (floating t) (floating_mask t)
 
   -- Relational and equality
   PrimLt t                  -> compare' t
@@ -938,28 +935,62 @@ primFunType = \case
   PrimMin t                 -> binary' $ single t
 
   -- Logical
-  PrimLAnd                  -> binary' tbool
-  PrimLOr                   -> binary' tbool
-  PrimLNot                  -> unary' tbool
+  PrimLAnd t                -> binary' (bit t)
+  PrimLOr t                 -> binary' (bit t)
+  PrimLNot t                -> unary' (bit t)
 
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
   PrimToFloating   a b      -> unary (num a) (floating b)
+  PrimToBool a b            -> unary (integral a) (bit b)
+  PrimFromBool a b          -> unary (bit a) (integral b)
 
   where
     unary a b  = (a, b)
     unary' a   = unary a a
     binary a b = (a `TupRpair` a, b)
     binary' a  = binary a a
-    compare' a = binary (single a) tbool
+    compare' a = binary (single a) (scalar_mask a)
 
-    single   = TupRsingle . SingleScalarType
-    num      = TupRsingle . SingleScalarType . NumSingleType
-    integral = num . IntegralNumType
-    floating = num . FloatingNumType
+    single     = TupRsingle
+    num        = single . NumScalarType
+    bit        = single . BitScalarType
+    integral   = num . IntegralNumType
+    floating   = num . FloatingNumType
 
-    tbool    = TupRsingle scalarTypeWord8
-    tint     = TupRsingle scalarTypeInt
+    scalar_mask :: ScalarType t -> TypeR (BitOrMask t)
+    scalar_mask (NumScalarType t) = num_mask t
+    scalar_mask (BitScalarType t) = bit_mask t
+
+    bit_mask :: BitType t -> TypeR (BitOrMask t)
+    bit_mask TypeBit      = bit TypeBit
+    bit_mask (TypeMask n) = bit (TypeMask n)
+
+    num_mask :: NumType t -> TypeR (BitOrMask t)
+    num_mask (IntegralNumType t) = integral_mask t
+    num_mask (FloatingNumType t) = floating_mask t
+
+    integral_mask :: IntegralType t -> TypeR (BitOrMask t)
+    integral_mask (VectorIntegralType n _) = single (BitScalarType (TypeMask n))
+    integral_mask (SingleIntegralType   t) = case t of
+      TypeInt8    -> single (scalarType @Bit)
+      TypeInt16   -> single (scalarType @Bit)
+      TypeInt32   -> single (scalarType @Bit)
+      TypeInt64   -> single (scalarType @Bit)
+      TypeInt128  -> single (scalarType @Bit)
+      TypeWord8   -> single (scalarType @Bit)
+      TypeWord16  -> single (scalarType @Bit)
+      TypeWord32  -> single (scalarType @Bit)
+      TypeWord64  -> single (scalarType @Bit)
+      TypeWord128 -> single (scalarType @Bit)
+
+    floating_mask :: FloatingType t -> TypeR (BitOrMask t)
+    floating_mask (VectorFloatingType n _) = single (BitScalarType (TypeMask n))
+    floating_mask (SingleFloatingType   t) = case t of
+      TypeFloat16  -> single (scalarType @Bit)
+      TypeFloat32  -> single (scalarType @Bit)
+      TypeFloat64  -> single (scalarType @Bit)
+      TypeFloat128 -> single (scalarType @Bit)
 
 
 -- Normal form data
@@ -1028,7 +1059,7 @@ rnfPreOpenAcc rnfA pacc =
     Map tp f a                -> rnfTypeR tp `seq` rnfF f `seq` rnfA a
     ZipWith tp f a1 a2        -> rnfTypeR tp `seq` rnfF f `seq` rnfA a1 `seq` rnfA a2
     Fold f z a                -> rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
-    FoldSeg i f z a s         -> rnfIntegralType i `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a `seq` rnfA s
+    FoldSeg i f z a s         -> rnfSingleIntegralType i `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a `seq` rnfA s
     Scan d f z a              -> d `seq` rnfF f `seq` rnfMaybe rnfE z `seq` rnfA a
     Scan' d f z a             -> d `seq` rnfF f `seq` rnfE z `seq` rnfA a
     Permute f d p a           -> rnfF f `seq` rnfA d `seq` rnfF p `seq` rnfA a
@@ -1089,18 +1120,17 @@ rnfOpenExp topExp =
     Undef tp                  -> rnfScalarType tp
     Pair a b                  -> rnfE a `seq` rnfE b
     Nil                       -> ()
-    VecPack   vecr e          -> rnfVecR vecr `seq` rnfE e
-    VecUnpack vecr e          -> rnfVecR vecr `seq` rnfE e
-    VecIndex vt it v i        -> rnfVectorType vt `seq` rnfIntegralType it `seq` rnfE v `seq` rnfE i
-    VecWrite vt it v i e      -> rnfVectorType vt `seq` rnfIntegralType it `seq` rnfE v `seq` rnfE i `seq` rnfE e
+    Extract vR iR v i         -> rnfScalarType vR `seq` rnfSingleIntegralType iR `seq` rnfE v `seq` rnfE i
+    Insert vR iR v i x        -> rnfScalarType vR `seq` rnfSingleIntegralType iR `seq` rnfE v `seq` rnfE i `seq` rnfE x
+    Shuffle eR iR x y i       -> rnfScalarType eR `seq` rnfSingleIntegralType iR `seq` rnfE x `seq` rnfE y `seq` rnfE i
+    Select m x y              -> rnfE m `seq` rnfE x `seq` rnfE y
     IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
     FromIndex shr sh ix       -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
-    Case e rhs def            -> rnfE e `seq` rnfList (\(t,c) -> t `seq` rnfE c) rhs `seq` rnfMaybe rnfE def
+    Case pR p rhs def         -> rnfScalarType pR `seq` rnfE p `seq` rnfList (\(t,c) -> t `seq` rnfE c) rhs `seq` rnfMaybe rnfE def
     Cond p e1 e2              -> rnfE p `seq` rnfE e1 `seq` rnfE e2
     While p f x               -> rnfF p `seq` rnfF f `seq` rnfE x
-    PrimConst c               -> rnfPrimConst c
     PrimApp f x               -> rnfPrimFun f `seq` rnfE x
     Index a ix                -> rnfArrayVar a `seq` rnfE ix
     LinearIndex a ix          -> rnfArrayVar a `seq` rnfE ix
@@ -1118,11 +1148,6 @@ rnfConst :: TypeR t -> t -> ()
 rnfConst TupRunit          ()    = ()
 rnfConst (TupRsingle t)    !_    = rnfScalarType t  -- scalars should have (nf == whnf)
 rnfConst (TupRpair ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
-
-rnfPrimConst :: PrimConst c -> ()
-rnfPrimConst (PrimMinBound t)     = rnfBoundedType t
-rnfPrimConst (PrimMaxBound t)     = rnfBoundedType t
-rnfPrimConst (PrimPi t)           = rnfFloatingType t
 
 rnfPrimFun :: PrimFun f -> ()
 rnfPrimFun (PrimAdd t)                = rnfNumType t
@@ -1174,19 +1199,21 @@ rnfPrimFun (PrimCeiling f i)          = rnfFloatingType f `seq` rnfIntegralType 
 rnfPrimFun (PrimIsNaN t)              = rnfFloatingType t
 rnfPrimFun (PrimIsInfinite t)         = rnfFloatingType t
 rnfPrimFun (PrimAtan2 t)              = rnfFloatingType t
-rnfPrimFun (PrimLt t)                 = rnfSingleType t
-rnfPrimFun (PrimGt t)                 = rnfSingleType t
-rnfPrimFun (PrimLtEq t)               = rnfSingleType t
-rnfPrimFun (PrimGtEq t)               = rnfSingleType t
-rnfPrimFun (PrimEq t)                 = rnfSingleType t
-rnfPrimFun (PrimNEq t)                = rnfSingleType t
-rnfPrimFun (PrimMax t)                = rnfSingleType t
-rnfPrimFun (PrimMin t)                = rnfSingleType t
-rnfPrimFun PrimLAnd                   = ()
-rnfPrimFun PrimLOr                    = ()
-rnfPrimFun PrimLNot                   = ()
+rnfPrimFun (PrimLt t)                 = rnfScalarType t
+rnfPrimFun (PrimGt t)                 = rnfScalarType t
+rnfPrimFun (PrimLtEq t)               = rnfScalarType t
+rnfPrimFun (PrimGtEq t)               = rnfScalarType t
+rnfPrimFun (PrimEq t)                 = rnfScalarType t
+rnfPrimFun (PrimNEq t)                = rnfScalarType t
+rnfPrimFun (PrimMax t)                = rnfScalarType t
+rnfPrimFun (PrimMin t)                = rnfScalarType t
+rnfPrimFun (PrimLAnd t)               = rnfBitType t
+rnfPrimFun (PrimLOr t)                = rnfBitType t
+rnfPrimFun (PrimLNot t)               = rnfBitType t
 rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
 rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
+rnfPrimFun (PrimToBool i b)           = rnfIntegralType i `seq` rnfBitType b
+rnfPrimFun (PrimFromBool b i)         = rnfBitType b `seq` rnfIntegralType i
 
 
 -- Template Haskell
@@ -1238,7 +1265,7 @@ liftPreOpenAcc liftA pacc =
     Map tp f a                -> [|| Map $$(liftTypeR tp) $$(liftF f) $$(liftA a) ||]
     ZipWith tp f a b          -> [|| ZipWith $$(liftTypeR tp) $$(liftF f) $$(liftA a) $$(liftA b) ||]
     Fold f z a                -> [|| Fold $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
-    FoldSeg i f z a s         -> [|| FoldSeg $$(liftIntegralType i) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) $$(liftA s) ||]
+    FoldSeg i f z a s         -> [|| FoldSeg $$(liftSingleIntegralType i) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) $$(liftA s) ||]
     Scan d f z a              -> [|| Scan  $$(liftDirection d) $$(liftF f) $$(liftMaybe liftE z) $$(liftA a) ||]
     Scan' d f z a             -> [|| Scan' $$(liftDirection d) $$(liftF f) $$(liftE z) $$(liftA a) ||]
     Permute f d p a           -> [|| Permute $$(liftF f) $$(liftA d) $$(liftF p) $$(liftA a) ||]
@@ -1311,18 +1338,17 @@ liftOpenExp pexp =
     Undef tp                  -> [|| Undef $$(liftScalarType tp) ||]
     Pair a b                  -> [|| Pair $$(liftE a) $$(liftE b) ||]
     Nil                       -> [|| Nil ||]
-    VecPack   vecr e          -> [|| VecPack   $$(liftVecR vecr) $$(liftE e) ||]
-    VecUnpack vecr e          -> [|| VecUnpack $$(liftVecR vecr) $$(liftE e) ||]
-    VecIndex vt it v i        -> [|| VecIndex $$(liftVectorType vt) $$(liftIntegralType it) $$(liftE v) $$(liftE i) ||]
-    VecWrite vt it v i e      -> [|| VecWrite $$(liftVectorType vt) $$(liftIntegralType it) $$(liftE v) $$(liftE i) $$(liftE e) ||] 
+    Extract vR iR v i         -> [|| Extract $$(liftScalarType vR) $$(liftSingleIntegralType iR) $$(liftE v) $$(liftE i) ||]
+    Insert vR iR v i x        -> [|| Insert $$(liftScalarType vR) $$(liftSingleIntegralType iR) $$(liftE v) $$(liftE i) $$(liftE x) ||]
+    Shuffle eR iR x y i       -> [|| Shuffle $$(liftScalarType eR) $$(liftSingleIntegralType iR) $$(liftE x) $$(liftE y) $$(liftE i) ||]
+    Select m x y              -> [|| Select $$(liftE m) $$(liftE x) $$(liftE y) ||]
     IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
     FromIndex shr sh ix       -> [|| FromIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
-    Case p rhs def            -> [|| Case $$(liftE p) $$(liftList (\(t,c) -> [|| (t, $$(liftE c)) ||]) rhs) $$(liftMaybe liftE def) ||]
+    Case pR p rhs def         -> [|| Case $$(liftScalarType pR) $$(liftE p) $$(liftList (\(t,c) -> [|| ($$(liftScalar pR t), $$(liftE c)) ||]) rhs) $$(liftMaybe liftE def) ||]
     Cond p t e                -> [|| Cond $$(liftE p) $$(liftE t) $$(liftE e) ||]
     While p f x               -> [|| While $$(liftF p) $$(liftF f) $$(liftE x) ||]
-    PrimConst t               -> [|| PrimConst $$(liftPrimConst t) ||]
     PrimApp f x               -> [|| PrimApp $$(liftPrimFun f) $$(liftE x) ||]
     Index a ix                -> [|| Index $$(liftArrayVar a) $$(liftE ix) ||]
     LinearIndex a ix          -> [|| LinearIndex $$(liftArrayVar a) $$(liftE ix) ||]
@@ -1346,11 +1372,6 @@ liftBoundary _             Mirror       = [|| Mirror ||]
 liftBoundary _             Wrap         = [|| Wrap ||]
 liftBoundary (ArrayR _ tp) (Constant v) = [|| Constant $$(liftElt tp v) ||]
 liftBoundary _             (Function f) = [|| Function $$(liftOpenFun f) ||]
-
-liftPrimConst :: PrimConst c -> CodeQ (PrimConst c)
-liftPrimConst (PrimMinBound t)          = [|| PrimMinBound $$(liftBoundedType t) ||]
-liftPrimConst (PrimMaxBound t)          = [|| PrimMaxBound $$(liftBoundedType t) ||]
-liftPrimConst (PrimPi t)                = [|| PrimPi $$(liftFloatingType t) ||]
 
 liftPrimFun :: PrimFun f -> CodeQ (PrimFun f)
 liftPrimFun (PrimAdd t)                = [|| PrimAdd $$(liftNumType t) ||]
@@ -1402,19 +1423,21 @@ liftPrimFun (PrimCeiling ta tb)        = [|| PrimCeiling $$(liftFloatingType ta)
 liftPrimFun (PrimIsNaN t)              = [|| PrimIsNaN $$(liftFloatingType t) ||]
 liftPrimFun (PrimIsInfinite t)         = [|| PrimIsInfinite $$(liftFloatingType t) ||]
 liftPrimFun (PrimAtan2 t)              = [|| PrimAtan2 $$(liftFloatingType t) ||]
-liftPrimFun (PrimLt t)                 = [|| PrimLt $$(liftSingleType t) ||]
-liftPrimFun (PrimGt t)                 = [|| PrimGt $$(liftSingleType t) ||]
-liftPrimFun (PrimLtEq t)               = [|| PrimLtEq $$(liftSingleType t) ||]
-liftPrimFun (PrimGtEq t)               = [|| PrimGtEq $$(liftSingleType t) ||]
-liftPrimFun (PrimEq t)                 = [|| PrimEq $$(liftSingleType t) ||]
-liftPrimFun (PrimNEq t)                = [|| PrimNEq $$(liftSingleType t) ||]
-liftPrimFun (PrimMax t)                = [|| PrimMax $$(liftSingleType t) ||]
-liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftSingleType t) ||]
-liftPrimFun PrimLAnd                   = [|| PrimLAnd ||]
-liftPrimFun PrimLOr                    = [|| PrimLOr ||]
-liftPrimFun PrimLNot                   = [|| PrimLNot ||]
+liftPrimFun (PrimLt t)                 = [|| PrimLt $$(liftScalarType t) ||]
+liftPrimFun (PrimGt t)                 = [|| PrimGt $$(liftScalarType t) ||]
+liftPrimFun (PrimLtEq t)               = [|| PrimLtEq $$(liftScalarType t) ||]
+liftPrimFun (PrimGtEq t)               = [|| PrimGtEq $$(liftScalarType t) ||]
+liftPrimFun (PrimEq t)                 = [|| PrimEq $$(liftScalarType t) ||]
+liftPrimFun (PrimNEq t)                = [|| PrimNEq $$(liftScalarType t) ||]
+liftPrimFun (PrimMax t)                = [|| PrimMax $$(liftScalarType t) ||]
+liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftScalarType t) ||]
+liftPrimFun (PrimLAnd t)               = [|| PrimLAnd $$(liftBitType t) ||]
+liftPrimFun (PrimLOr t)                = [|| PrimLOr $$(liftBitType t) ||]
+liftPrimFun (PrimLNot t)               = [|| PrimLNot $$(liftBitType t) ||]
 liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
 liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
+liftPrimFun (PrimToBool ta tb)         = [|| PrimToBool $$(liftIntegralType ta) $$(liftBitType tb) ||]
+liftPrimFun (PrimFromBool ta tb)       = [|| PrimFromBool $$(liftBitType ta) $$(liftIntegralType tb) ||]
 
 
 formatDirection :: Format r (Direction -> r)
@@ -1460,10 +1483,10 @@ formatExpOp = later $ \case
   Foreign{}       -> "Foreign"
   Pair{}          -> "Pair"
   Nil{}           -> "Nil"
-  VecPack{}       -> "VecPack"
-  VecUnpack{}     -> "VecUnpack"
-  VecIndex{}      -> "VecIndex"
-  VecWrite{}      -> "VecWrite"
+  Insert{}        -> "Insert"
+  Extract{}       -> "Extract"
+  Shuffle{}       -> "Shuffle"
+  Select{}        -> "Select"
   IndexSlice{}    -> "IndexSlice"
   IndexFull{}     -> "IndexFull"
   ToIndex{}       -> "ToIndex"
@@ -1471,7 +1494,6 @@ formatExpOp = later $ \case
   Case{}          -> "Case"
   Cond{}          -> "Cond"
   While{}         -> "While"
-  PrimConst{}     -> "PrimConst"
   PrimApp{}       -> "PrimApp"
   Index{}         -> "Index"
   LinearIndex{}   -> "LinearIndex"

@@ -43,6 +43,7 @@ import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
+import Foreign.C.Types
 
 
 -- | Lift a unary function into 'Exp'.
@@ -276,8 +277,9 @@ instance Lift Exp CDouble where
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
-  lift True  = Exp . SmartExp $ SmartExp (Const scalarType 1) `Pair` SmartExp Nil
-  lift False = Exp . SmartExp $ SmartExp (Const scalarType 0) `Pair` SmartExp Nil
+  lift = Exp . SmartExp . Const scalarType . Bit
+  -- lift True  = Exp . SmartExp $ SmartExp (Const scalarType 1) `Pair` SmartExp Nil
+  -- lift False = Exp . SmartExp $ SmartExp (Const scalarType 0) `Pair` SmartExp Nil
 
 instance Lift Exp Char where
   type Plain Char = Char

@@ -244,7 +244,6 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     cheap (Pair e1 e2)   = cheap e1 && cheap e2
     cheap Nil            = True
     cheap Const{}        = True
-    cheap PrimConst{}    = True
     cheap Undef{}        = True
     cheap (Coerce _ _ e) = cheap e
     cheap _              = False
@@ -291,18 +290,17 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Undef t                   -> pure (Undef t)
       Nil                       -> pure Nil
       Pair x y                  -> Pair <$> shrinkE x <*> shrinkE y
-      VecPack   vec e           -> VecPack   vec <$> shrinkE e
-      VecUnpack vec e           -> VecUnpack vec <$> shrinkE e
-      VecIndex vt it v i        -> VecIndex vt it <$> shrinkE v <*> shrinkE i
-      VecWrite vt it v i e      -> VecWrite vt it <$> shrinkE v <*> shrinkE i <*> shrinkE e
+      Extract vR iR v i         -> Extract vR iR <$> shrinkE v <*> shrinkE i
+      Insert vR iR v i x        -> Insert vR iR <$> shrinkE v <*> shrinkE i <*> shrinkE x
+      Shuffle eR iR x y i       -> Shuffle eR iR <$> shrinkE x <*> shrinkE y <*> shrinkE i
+      Select m x y              -> Select <$> shrinkE m <*> shrinkE x <*> shrinkE y
       IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       ToIndex shr sh ix         -> ToIndex shr <$> shrinkE sh <*> shrinkE ix
       FromIndex shr sh i        -> FromIndex shr <$> shrinkE sh <*> shrinkE i
-      Case e rhs def            -> Case <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ] <*> shrinkMaybeE def
+      Case eR e rhs def         -> Case eR <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ] <*> shrinkMaybeE def
       Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
       While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
-      PrimConst c               -> pure (PrimConst c)
       PrimApp f x               -> PrimApp f <$> shrinkE x
       Index a sh                -> Index a <$> shrinkE sh
       LinearIndex a i           -> LinearIndex a <$> shrinkE i
@@ -449,7 +447,6 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
       FromIndex sh i            -> FromIndex (shrinkE sh) (shrinkE i)
       Cond p t e                -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
       While p f x               -> While (shrinkF p) (shrinkF f) (shrinkE x)
-      PrimConst c               -> PrimConst c
       PrimApp f x               -> PrimApp f (shrinkE x)
       Index a sh                -> Index (shrinkAcc a) (shrinkE sh)
       LinearIndex a i           -> LinearIndex (shrinkAcc a) (shrinkE i)
@@ -494,18 +491,17 @@ usesOfExp range = countE
       Undef _                   -> Finite 0
       Nil                       -> Finite 0
       Pair e1 e2                -> countE e1 <> countE e2
-      VecPack   _ e             -> countE e
-      VecUnpack _ e             -> countE e
-      VecIndex _ _ v i          -> countE v <> countE i
-      VecWrite _ _ v i e        -> countE v <> countE i <> countE e
+      Extract _ _ v i           -> countE v <> countE i
+      Insert _ _ v i x          -> countE v <> countE i <> countE x
+      Shuffle _ _ x y i         -> countE x <> countE y <> countE i
+      Select m x y              -> countE m <> countE x <> countE y
       IndexSlice _ ix sh        -> countE ix <> countE sh
       IndexFull _ ix sl         -> countE ix <> countE sl
       FromIndex _ sh i          -> countE sh <> countE i
       ToIndex _ sh e            -> countE sh <> countE e
-      Case e rhs def            -> countE e  <> mconcat [ countE c | (_,c) <- rhs ] <> maybe (Finite 0) countE def
+      Case _ e rhs def          -> countE e  <> mconcat [ countE c | (_,c) <- rhs ] <> maybe (Finite 0) countE def
       Cond p t e                -> countE p  <> countE t <> countE e
       While p f x               -> countE x  <> loopCount (usesOfFun range p) <> loopCount (usesOfFun range f)
-      PrimConst _               -> Finite 0
       PrimApp _ x               -> countE x
       Index _ sh                -> countE sh
       LinearIndex _ i           -> countE i
@@ -583,18 +579,17 @@ usesOfPreAcc withShape countAcc idx = count
       Undef _                    -> 0
       Nil                        -> 0
       Pair x y                   -> countE x + countE y
-      VecPack   _ e              -> countE e
-      VecUnpack _ e              -> countE e
-      VecIndex _ _ v i           -> countE v + countE i
-      VecWrite _ _ v i e         -> countE v + countE i + countE e
+      Extract _ _ v i            -> countE v + countE i
+      Insert _ _ v i x           -> countE v + countE i + countE x
+      Shuffle _ _ x y i          -> countE x + countE y + countE i
+      Select m x y               -> countE m + countE x + countE y
       IndexSlice _ ix sh         -> countE ix + countE sh
       IndexFull _ ix sl          -> countE ix + countE sl
       ToIndex _ sh ix            -> countE sh + countE ix
       FromIndex _ sh i           -> countE sh + countE i
-      Case e rhs def             -> countE e  + sum [ countE c | (_,c) <- rhs ] + maybe 0 countE def
+      Case _ e rhs def           -> countE e  + sum [ countE c | (_,c) <- rhs ] + maybe 0 countE def
       Cond p t e                 -> countE p  + countE t + countE e
       While p f x                -> countF p  + countF f + countE x
-      PrimConst _                -> 0
       PrimApp _ x                -> countE x
       Index a sh                 -> countAvar a + countE sh
       LinearIndex a i            -> countAvar a + countE i

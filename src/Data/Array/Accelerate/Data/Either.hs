@@ -33,6 +33,7 @@ module Data.Array.Accelerate.Data.Either (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -64,7 +65,7 @@ isLeft = not . isRight
 -- | Return 'True' if the argument is a 'Right'-value
 --
 isRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp Nil
+isRight (Exp e) = mkExp $ PrimApp (PrimToBool integralType bitType) (SmartExp $ Prj PairIdxLeft e)
   -- TLM: This is a sneaky hack because we know that the tag bits for Right
   -- and True are identical.
 
@@ -73,14 +74,14 @@ isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartEx
 -- instead.
 --
 fromLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp a
-fromLeft (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
+fromLeft (Exp e) = mkExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'fromRight' function extracts the element out of the 'Right'
 -- constructor. If the argument was actually 'Left', you will get an undefined
 -- value instead.
 --
 fromRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp b
-fromRight (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
+fromRight (Exp e) = mkExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'either' function performs case analysis on the 'Either' type. If the
 -- value is @'Left' a@, apply the first function to @a@; if it is @'Right' b@,

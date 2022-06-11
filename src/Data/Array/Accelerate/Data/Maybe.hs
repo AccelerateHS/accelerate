@@ -33,6 +33,7 @@ module Data.Array.Accelerate.Data.Maybe (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -65,7 +66,7 @@ isNothing = not . isJust
 -- | Returns 'True' if the argument is of the form @Just _@
 --
 isJust :: Elt a => Exp (Maybe a) -> Exp Bool
-isJust (Exp x) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp Nil
+isJust (Exp x) = mkExp $ PrimApp (PrimToBool integralType bitType) (SmartExp $ Prj PairIdxLeft x)
   -- TLM: This is a sneaky hack because we know that the tag bits for Just
   -- and True are identical.
 
@@ -134,9 +135,11 @@ instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
   mempty = Nothing_
 
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
-  ma <> mb = cond (isNothing ma) mb
-           $ cond (isNothing mb) mb
-           $ lift (Just (fromJust ma <> fromJust mb))
+  (<>) = match go
+    where
+      go Nothing_  b         = b
+      go a         Nothing_  = a
+      go (Just_ a) (Just_ b) = Just_ (a <> b)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)

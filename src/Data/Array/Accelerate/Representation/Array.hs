@@ -98,7 +98,7 @@ arraysRpair a b = TupRunit `TupRpair` TupRsingle a `TupRpair` TupRsingle b
 --
 allocateArray :: ArrayR (Array sh e) -> sh -> IO (Array sh e)
 allocateArray (ArrayR shR eR) sh = do
-  adata  <- newArrayData eR (size shR sh)
+  adata  <- newArrayData eR (fromIntegral (size shR sh))
   return $! Array sh adata
 
 -- | Create an array from its representation function, applied at each
@@ -114,13 +114,13 @@ fromFunction repr sh f = unsafePerformIO $! fromFunctionM repr sh (return . f)
 fromFunctionM :: ArrayR (Array sh e) -> sh -> (sh -> IO e) -> IO (Array sh e)
 fromFunctionM (ArrayR shR eR) sh f = do
   let !n = size shR sh
-  arr <- newArrayData eR n
+  arr <- newArrayData eR (fromIntegral n)
   --
   let write !i
         | i >= n    = return ()
         | otherwise = do
             v <- f (fromIndex shR sh i)
-            writeArrayData eR arr i v
+            writeArrayData eR arr (fromIntegral i) v
             write (i+1)
   --
   write 0
@@ -135,7 +135,7 @@ fromList (ArrayR shR eR) sh xs = adata `seq` Array sh adata
     -- Assume the array is in dense row-major order. This is safe because
     -- otherwise backends would not be able to directly memcpy.
     --
-    !n    = size shR sh
+    !n    = fromIntegral (size shR sh)
     (adata, _) = runArrayData @e $ do
                   arr <- newArrayData eR n
                   let go !i _ | i >= n = return ()
@@ -154,21 +154,21 @@ toList (ArrayR shR eR) (Array sh adata) = go 0
     -- Assume underling array is in row-major order. This is safe because
     -- otherwise backends would not be able to directly memcpy.
     --
-    !n                  = size shR sh
+    !n                  = fromIntegral (size shR sh)
     go !i | i >= n      = []
           | otherwise   = indexArrayData eR adata i : go (i+1)
 
-concatVectors :: forall e. TypeR e -> [Vector e] -> Vector e
-concatVectors tR vs = adata `seq` Array ((), len) adata
-  where
-    offsets     = scanl (+) 0 (map (size dim1 . shape) vs)
-    len         = last offsets
-    (adata, _)  = runArrayData @e $ do
-      arr <- newArrayData tR len
-      sequence_ [ writeArrayData tR arr (i + k) (indexArrayData tR ad i)
-                | (Array ((), n) ad, k) <- vs `zip` offsets
-                , i <- [0 .. n - 1] ]
-      return (arr, undefined)
+-- concatVectors :: forall e. TypeR e -> [Vector e] -> Vector e
+-- concatVectors tR vs = adata `seq` Array ((), len) adata
+--   where
+--     offsets     = scanl (+) 0 (map (size dim1 . shape) vs)
+--     len         = last offsets
+--     (adata, _)  = runArrayData @e $ do
+--       arr <- newArrayData tR len
+--       sequence_ [ writeArrayData tR arr (i + k) (indexArrayData tR ad i)
+--                 | (Array ((), n) ad, k) <- vs `zip` offsets
+--                 , i <- [0 .. n - 1] ]
+--       return (arr, undefined)
 
 shape :: Array sh e -> sh
 shape (Array sh _) = sh
@@ -181,14 +181,14 @@ reshape shR sh shR' (Array sh' adata)
 (!) :: (ArrayR (Array sh e), Array sh e) -> sh -> e
 (!) = uncurry indexArray
 
-(!!) :: (TypeR e, Array sh e) -> Int -> e
+(!!) :: (TypeR e, Array sh e) -> INT -> e
 (!!) = uncurry linearIndexArray
 
 indexArray :: ArrayR (Array sh e) -> Array sh e -> sh -> e
-indexArray (ArrayR shR adR) (Array sh adata) ix = indexArrayData adR adata (toIndex shR sh ix)
+indexArray (ArrayR shR adR) (Array sh adata) ix = indexArrayData adR adata (fromIntegral (toIndex shR sh ix))
 
-linearIndexArray :: TypeR e -> Array sh e -> Int -> e
-linearIndexArray adR (Array _ adata) = indexArrayData adR adata
+linearIndexArray :: TypeR e -> Array sh e -> INT -> e
+linearIndexArray adR (Array _ adata) = indexArrayData adR adata . fromIntegral
 
 showArray :: (e -> ShowS) -> ArrayR (Array sh e) -> Array sh e -> String
 showArray f arrR@(ArrayR shR _) arr@(Array sh _) = case shR of
@@ -217,9 +217,11 @@ showMatrix f (ArrayR _ arrR) arr@(Array sh _)
   | rows * cols == 0 = "[]"
   | otherwise        = "\n  [" ++ ppMat 0 0
     where
-      (((), rows), cols) = sh
-      lengths            = U.generate (rows*cols) (\i -> length (f (linearIndexArray arrR arr i) ""))
-      widths             = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
+      (((), ri), ci) = sh
+      rows           = fromIntegral ri
+      cols           = fromIntegral ci
+      lengths        = U.generate (rows*cols) (\i -> length (f (linearIndexArray arrR arr (fromIntegral i)) ""))
+      widths         = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
       --
       ppMat :: Int -> Int -> String
       ppMat !r !c | c >= cols = ppMat (r+1) 0
@@ -229,7 +231,7 @@ showMatrix f (ArrayR _ arrR) arr@(Array sh _)
             !l    = lengths U.! i
             !w    = widths  U.! c
             !pad  = 1
-            cell  = replicate (w-l+pad) ' ' ++ f (linearIndexArray arrR arr i) ""
+            cell  = replicate (w-l+pad) ' ' ++ f (linearIndexArray arrR arr (fromIntegral i)) ""
             --
             before
               | r > 0 && c == 0 = "\n   "
@@ -294,7 +296,7 @@ showsArrays repr arrs = go 0 repr arrs
     needsParens repr'@(TupRpair _ _) as = isJust $ extractTuple repr' as
     needsParens _ _ = True
 
-reduceRank :: ArrayR (Array (sh, Int) e) -> ArrayR (Array sh e)
+reduceRank :: ArrayR (Array (sh, INT) e) -> ArrayR (Array sh e)
 reduceRank (ArrayR (ShapeRsnoc shR) aeR) = ArrayR shR aeR
 
 rnfArray :: ArrayR a -> a -> ()
@@ -320,8 +322,7 @@ liftArray :: forall sh e. ArrayR (Array sh e) -> Array sh e -> CodeQ (Array sh e
 liftArray (ArrayR shR adR) (Array sh adata) =
   [|| Array $$(liftElt (shapeType shR) sh) $$(liftArrayData sz adR adata) ||] `at` [t| Array $(liftTypeQ (shapeType shR)) $(liftTypeQ adR) |]
   where
-    sz :: Int
-    sz = size shR sh
+    sz = fromIntegral (size shR sh)
 
     at :: CodeQ t -> Q Type -> CodeQ t
     at e t = unsafeCodeCoerce $ sigE (unTypeCode e) t

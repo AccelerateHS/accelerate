@@ -705,7 +705,7 @@ fold1All f arr = fold1 f (flatten arr)
 --     40, 170, 0, 138]
 --
 foldSeg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Num i, IsSingleIntegral (EltR i))
     => (Exp e -> Exp e -> Exp e)
     -> Exp e
     -> Acc (Array (sh:.Int) e)
@@ -714,17 +714,17 @@ foldSeg
 foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
   where
     (plus, zero) =
-      case integralType @i of
-        TypeInt{}    -> ((+), 0)
-        TypeInt8{}   -> ((+), 0)
-        TypeInt16{}  -> ((+), 0)
-        TypeInt32{}  -> ((+), 0)
-        TypeInt64{}  -> ((+), 0)
-        TypeWord{}   -> ((+), 0)
-        TypeWord8{}  -> ((+), 0)
-        TypeWord16{} -> ((+), 0)
-        TypeWord32{} -> ((+), 0)
-        TypeWord64{} -> ((+), 0)
+      case singleIntegralType @(EltR i) of
+        TypeInt8{}    -> ((+), 0)
+        TypeInt16{}   -> ((+), 0)
+        TypeInt32{}   -> ((+), 0)
+        TypeInt64{}   -> ((+), 0)
+        TypeInt128{}  -> ((+), 0)
+        TypeWord8{}   -> ((+), 0)
+        TypeWord16{}  -> ((+), 0)
+        TypeWord32{}  -> ((+), 0)
+        TypeWord64{}  -> ((+), 0)
+        TypeWord128{} -> ((+), 0)
 
 
 -- | Variant of 'foldSeg' that requires /all/ segments of the reduced array
@@ -732,7 +732,7 @@ foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
 -- descriptor species the length of each of the logical sub-arrays.
 --
 fold1Seg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Num i, IsSingleIntegral (EltR i))
     => (Exp e -> Exp e -> Exp e)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
@@ -742,17 +742,17 @@ fold1Seg f arr seg = fold1Seg' f arr (scanl plus zero seg)
     plus :: Exp i -> Exp i -> Exp i
     zero :: Exp i
     (plus, zero) =
-      case integralType @(EltR i) of
-        TypeInt{}    -> ((+), 0)
-        TypeInt8{}   -> ((+), 0)
-        TypeInt16{}  -> ((+), 0)
-        TypeInt32{}  -> ((+), 0)
-        TypeInt64{}  -> ((+), 0)
-        TypeWord{}   -> ((+), 0)
-        TypeWord8{}  -> ((+), 0)
-        TypeWord16{} -> ((+), 0)
-        TypeWord32{} -> ((+), 0)
-        TypeWord64{} -> ((+), 0)
+      case singleIntegralType @(EltR i) of
+        TypeInt8{}    -> ((+), 0)
+        TypeInt16{}   -> ((+), 0)
+        TypeInt32{}   -> ((+), 0)
+        TypeInt64{}   -> ((+), 0)
+        TypeInt128{}  -> ((+), 0)
+        TypeWord8{}   -> ((+), 0)
+        TypeWord16{}  -> ((+), 0)
+        TypeWord32{}  -> ((+), 0)
+        TypeWord64{}  -> ((+), 0)
+        TypeWord128{} -> ((+), 0)
 
 
 -- Specialised reductions

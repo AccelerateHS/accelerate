@@ -25,6 +25,7 @@ module Data.Array.Accelerate.Representation.Stencil (
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH.Extra
 
@@ -40,14 +41,14 @@ data StencilR sh e pat where
   StencilRtup3  :: StencilR sh e pat1
                 -> StencilR sh e pat2
                 -> StencilR sh e pat3
-                -> StencilR (sh, Int) e (Tup3 pat1 pat2 pat3)
+                -> StencilR (sh, INT) e (Tup3 pat1 pat2 pat3)
 
   StencilRtup5  :: StencilR sh e pat1
                 -> StencilR sh e pat2
                 -> StencilR sh e pat3
                 -> StencilR sh e pat4
                 -> StencilR sh e pat5
-                -> StencilR (sh, Int) e (Tup5 pat1 pat2 pat3 pat4 pat5)
+                -> StencilR (sh, INT) e (Tup5 pat1 pat2 pat3 pat4 pat5)
 
   StencilRtup7  :: StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -56,7 +57,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat5
                 -> StencilR sh e pat6
                 -> StencilR sh e pat7
-                -> StencilR (sh, Int) e (Tup7 pat1 pat2 pat3 pat4 pat5 pat6 pat7)
+                -> StencilR (sh, INT) e (Tup7 pat1 pat2 pat3 pat4 pat5 pat6 pat7)
 
   StencilRtup9  :: StencilR sh e pat1
                 -> StencilR sh e pat2
@@ -67,7 +68,7 @@ data StencilR sh e pat where
                 -> StencilR sh e pat7
                 -> StencilR sh e pat8
                 -> StencilR sh e pat9
-                -> StencilR (sh, Int) e (Tup9 pat1 pat2 pat3 pat4 pat5 pat6 pat7 pat8 pat9)
+                -> StencilR (sh, INT) e (Tup9 pat1 pat2 pat3 pat4 pat5 pat6 pat7 pat8 pat9)
 
 stencilEltR :: StencilR sh e pat -> TypeR e
 stencilEltR (StencilRunit3 t) = t
@@ -123,7 +124,7 @@ stencilHalo = go'
     go :: StencilR sh e stencil -> sh
     go = snd . go'
 
-    cons :: ShapeR sh -> Int -> sh -> (sh, Int)
+    cons :: ShapeR sh -> INT -> sh -> (sh, INT)
     cons ShapeRz          ix ()       = ((), ix)
     cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
 

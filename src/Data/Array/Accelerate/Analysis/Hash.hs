@@ -49,6 +49,7 @@ import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 import Crypto.Hash.XKCP
 
+import Foreign.C.Types
 import Data.ByteString.Builder
 import Data.ByteString.Builder.Extra
 import Data.ByteString.Short.Internal                               ( ShortByteString(..) )
@@ -57,6 +58,8 @@ import System.IO.Unsafe                                             ( unsafePerf
 import System.Mem.StableName                                        ( hashStableName, makeStableName )
 import Prelude                                                      hiding ( exp )
 import qualified Data.Hashable                                      as Hashable
+
+import GHC.TypeLits
 
 
 -- Hashing
@@ -263,7 +266,7 @@ encodeArraysType :: ArraysR arrs -> Builder
 encodeArraysType = encodeTupR encodeArrayType
 
 encodeShapeR :: ShapeR sh -> Builder
-encodeShapeR = intHost . rank
+encodeShapeR = int64Host . rank
 
 encodePreOpenAfun
     :: forall acc aenv f.
@@ -288,13 +291,13 @@ encodeBoundary
 encodeBoundary _  Wrap          = intHost $(hashQ "Wrap")
 encodeBoundary _  Clamp         = intHost $(hashQ "Clamp")
 encodeBoundary _  Mirror        = intHost $(hashQ "Mirror")
-encodeBoundary tp (Constant c)  = intHost $(hashQ "Constant") <> encodeConst tp c
+encodeBoundary tR (Constant c)  = intHost $(hashQ "Constant") <> encodeConst tR c
 encodeBoundary _  (Function f)  = intHost $(hashQ "Function") <> encodeOpenFun f
 
 encodeSliceIndex :: SliceIndex slix sl co sh -> Builder
-encodeSliceIndex SliceNil         = intHost $(hashQ "SliceNil")
-encodeSliceIndex (SliceAll r)     = intHost $(hashQ "SliceAll")   <> encodeSliceIndex r
-encodeSliceIndex (SliceFixed r)   = intHost $(hashQ "sliceFixed") <> encodeSliceIndex r
+encodeSliceIndex SliceNil       = intHost $(hashQ "SliceNil")
+encodeSliceIndex (SliceAll r)   = intHost $(hashQ "SliceAll")   <> encodeSliceIndex r
+encodeSliceIndex (SliceFixed r) = intHost $(hashQ "sliceFixed") <> encodeSliceIndex r
 
 
 -- Scalar expressions
@@ -318,21 +321,20 @@ encodeOpenExp exp =
     Evar (Var tp ix)            -> intHost $(hashQ "Evar")        <> encodeScalarType tp <> encodeIdx ix
     Nil                         -> intHost $(hashQ "Nil")
     Pair e1 e2                  -> intHost $(hashQ "Pair")        <> travE e1 <> travE e2
-    VecPack   _ e               -> intHost $(hashQ "VecPack")     <> travE e
-    VecUnpack _ e               -> intHost $(hashQ "VecUnpack")   <> travE e
-    VecIndex _ _ v i            -> intHost $(hashQ "VecIndex")    <> travE v <> travE i
-    VecWrite _ _ v i e          -> intHost $(hashQ "VecWrite")    <> travE v <> travE i <> travE e
+    Extract vR iR v i           -> intHost $(hashQ "Extract")     <> encodeScalarType vR <> encodeSingleIntegralType iR <> travE v <> travE i
+    Insert vR iR v i x          -> intHost $(hashQ "Insert")      <> encodeScalarType vR <> encodeSingleIntegralType iR <> travE v <> travE i <> travE x
+    Shuffle eR iR x y i         -> intHost $(hashQ "Shuffle")     <> encodeScalarType eR <> encodeSingleIntegralType iR <> travE x <> travE y <> travE i
+    Select m x y                -> intHost $(hashQ "Select")      <> travE m <>travE x <> travE y
     Const tp c                  -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
     Undef tp                    -> intHost $(hashQ "Undef")       <> encodeScalarType tp
     IndexSlice spec ix sh       -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec
     IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
     ToIndex _ sh i              -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
     FromIndex _ sh i            -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
-    Case e rhs def              -> intHost $(hashQ "Case")        <> travE e  <> mconcat [ word8 t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
+    Case eR e rhs def           -> intHost $(hashQ "Case")        <> encodeScalarType eR <> travE e <> mconcat [ encodeScalarConst eR t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
     Cond c t e                  -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
     While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
     PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
-    PrimConst c                 -> intHost $(hashQ "PrimConst")   <> encodePrimConst c
     Index a ix                  -> intHost $(hashQ "Index")       <> encodeArrayVar a <> travE ix
     LinearIndex a ix            -> intHost $(hashQ "LinearIndex") <> encodeArrayVar a <> travE ix
     Shape a                     -> intHost $(hashQ "Shape")       <> encodeArrayVar a
@@ -357,40 +359,43 @@ encodeConst (TupRsingle t)   c     = encodeScalarConst t c
 encodeConst (TupRpair ta tb) (a,b) = intHost $(hashQ "pair") <> encodeConst ta a <> encodeConst tb b
 
 encodeScalarConst :: ScalarType t -> t -> Builder
-encodeScalarConst (SingleScalarType t) = encodeSingleConst t
-encodeScalarConst (VectorScalarType t) = encodeVectorConst t
+encodeScalarConst (NumScalarType t) = encodeNumConst t
+encodeScalarConst (BitScalarType t) = encodeBitConst t
 
-encodeSingleConst :: SingleType t -> t -> Builder
-encodeSingleConst (NumSingleType t) = encodeNumConst t
-
-encodeVectorConst :: VectorType (Vec n t) -> Vec n t -> Builder
-encodeVectorConst (VectorType n t) (Vec ba#) = intHost $(hashQ "Vec") <> intHost n <> encodeSingleType t <> shortByteString (SBS ba#)
+encodeBitConst :: BitType t -> t -> Builder
+encodeBitConst TypeBit      (Bit False) = intHost $(hashQ "Bit") <> int8 0
+encodeBitConst TypeBit      (Bit True)  = intHost $(hashQ "Bit") <> int8 1
+encodeBitConst (TypeMask n) (Vec ba#)   = intHost $(hashQ "BitMask") <> int8 (fromIntegral (natVal' n)) <> shortByteString (SBS ba#)
 
 encodeNumConst :: NumType t -> t -> Builder
 encodeNumConst (IntegralNumType t) = encodeIntegralConst t
 encodeNumConst (FloatingNumType t) = encodeFloatingConst t
 
 encodeIntegralConst :: IntegralType t -> t -> Builder
-encodeIntegralConst TypeInt{}    x = intHost $(hashQ "Int")    <> intHost x
-encodeIntegralConst TypeInt8{}   x = intHost $(hashQ "Int8")   <> int8 x
-encodeIntegralConst TypeInt16{}  x = intHost $(hashQ "Int16")  <> int16Host x
-encodeIntegralConst TypeInt32{}  x = intHost $(hashQ "Int32")  <> int32Host x
-encodeIntegralConst TypeInt64{}  x = intHost $(hashQ "Int64")  <> int64Host x
-encodeIntegralConst TypeWord{}   x = intHost $(hashQ "Word")   <> wordHost x
-encodeIntegralConst TypeWord8{}  x = intHost $(hashQ "Word8")  <> word8 x
-encodeIntegralConst TypeWord16{} x = intHost $(hashQ "Word16") <> word16Host x
-encodeIntegralConst TypeWord32{} x = intHost $(hashQ "Word32") <> word32Host x
-encodeIntegralConst TypeWord64{} x = intHost $(hashQ "Word64") <> word64Host x
+encodeIntegralConst (SingleIntegralType t)   x         = encodeSingleIntegralConst t x
+encodeIntegralConst (VectorIntegralType n t) (Vec ba#) = intHost $(hashQ "Vec") <> int8 (fromIntegral (natVal' n)) <> encodeSingleIntegralType t <> shortByteString (SBS ba#)
+
+encodeSingleIntegralConst :: SingleIntegralType t -> t -> Builder
+encodeSingleIntegralConst TypeInt8   x              = intHost $(hashQ "Int8")    <> int8 x
+encodeSingleIntegralConst TypeInt16  x              = intHost $(hashQ "Int16")   <> int16Host x
+encodeSingleIntegralConst TypeInt32  x              = intHost $(hashQ "Int32")   <> int32Host x
+encodeSingleIntegralConst TypeInt64  x              = intHost $(hashQ "Int64")   <> int64Host x
+encodeSingleIntegralConst TypeInt128 (Int128 x y)   = intHost $(hashQ "Int128")  <> word64Host x <> word64Host y
+encodeSingleIntegralConst TypeWord8  x              = intHost $(hashQ "Word8")   <> word8 x
+encodeSingleIntegralConst TypeWord16 x              = intHost $(hashQ "Word16")  <> word16Host x
+encodeSingleIntegralConst TypeWord32 x              = intHost $(hashQ "Word32")  <> word32Host x
+encodeSingleIntegralConst TypeWord64 x              = intHost $(hashQ "Word64")  <> word64Host x
+encodeSingleIntegralConst TypeWord128 (Word128 x y) = intHost $(hashQ "Word128") <> word64Host x <> word64Host y
 
 encodeFloatingConst :: FloatingType t -> t -> Builder
-encodeFloatingConst TypeHalf{}    (Half (CUShort x)) = intHost $(hashQ "Half")    <> word16Host x
-encodeFloatingConst TypeFloat{}   x                  = intHost $(hashQ "Float")   <> floatHost x
-encodeFloatingConst TypeDouble{}  x                  = intHost $(hashQ "Double")  <> doubleHost x
+encodeFloatingConst (SingleFloatingType t)   x         = encodeSingleFloatingConst t x
+encodeFloatingConst (VectorFloatingType n t) (Vec ba#) = intHost $(hashQ "Vec") <> int8 (fromIntegral (natVal' n)) <> encodeSingleFloatingType t <> shortByteString (SBS ba#)
 
-encodePrimConst :: PrimConst c -> Builder
-encodePrimConst (PrimMinBound t)  = intHost $(hashQ "PrimMinBound") <> encodeBoundedType t
-encodePrimConst (PrimMaxBound t)  = intHost $(hashQ "PrimMaxBound") <> encodeBoundedType t
-encodePrimConst (PrimPi t)        = intHost $(hashQ "PrimPi")       <> encodeFloatingType t
+encodeSingleFloatingConst :: SingleFloatingType t -> t -> Builder
+encodeSingleFloatingConst TypeFloat16  (Half (CUShort x)) = intHost $(hashQ "Half")     <> word16Host x
+encodeSingleFloatingConst TypeFloat32  x                  = intHost $(hashQ "Float")    <> floatHost x
+encodeSingleFloatingConst TypeFloat64  x                  = intHost $(hashQ "Double")   <> doubleHost x
+encodeSingleFloatingConst TypeFloat128 (Float128 x y)     = intHost $(hashQ "Float128") <> word64Host x <> word64Host y
 
 encodePrimFun :: PrimFun f -> Builder
 encodePrimFun (PrimAdd a)                = intHost $(hashQ "PrimAdd")                <> encodeNumType a
@@ -442,20 +447,21 @@ encodePrimFun (PrimFloor a b)            = intHost $(hashQ "PrimFloor")         
 encodePrimFun (PrimCeiling a b)          = intHost $(hashQ "PrimCeiling")            <> encodeFloatingType a <> encodeIntegralType b
 encodePrimFun (PrimIsNaN a)              = intHost $(hashQ "PrimIsNaN")              <> encodeFloatingType a
 encodePrimFun (PrimIsInfinite a)         = intHost $(hashQ "PrimIsInfinite")         <> encodeFloatingType a
-encodePrimFun (PrimLt a)                 = intHost $(hashQ "PrimLt")                 <> encodeSingleType a
-encodePrimFun (PrimGt a)                 = intHost $(hashQ "PrimGt")                 <> encodeSingleType a
-encodePrimFun (PrimLtEq a)               = intHost $(hashQ "PrimLtEq")               <> encodeSingleType a
-encodePrimFun (PrimGtEq a)               = intHost $(hashQ "PrimGtEq")               <> encodeSingleType a
-encodePrimFun (PrimEq a)                 = intHost $(hashQ "PrimEq")                 <> encodeSingleType a
-encodePrimFun (PrimNEq a)                = intHost $(hashQ "PrimNEq")                <> encodeSingleType a
-encodePrimFun (PrimMax a)                = intHost $(hashQ "PrimMax")                <> encodeSingleType a
-encodePrimFun (PrimMin a)                = intHost $(hashQ "PrimMin")                <> encodeSingleType a
+encodePrimFun (PrimLt a)                 = intHost $(hashQ "PrimLt")                 <> encodeScalarType a
+encodePrimFun (PrimGt a)                 = intHost $(hashQ "PrimGt")                 <> encodeScalarType a
+encodePrimFun (PrimLtEq a)               = intHost $(hashQ "PrimLtEq")               <> encodeScalarType a
+encodePrimFun (PrimGtEq a)               = intHost $(hashQ "PrimGtEq")               <> encodeScalarType a
+encodePrimFun (PrimEq a)                 = intHost $(hashQ "PrimEq")                 <> encodeScalarType a
+encodePrimFun (PrimNEq a)                = intHost $(hashQ "PrimNEq")                <> encodeScalarType a
+encodePrimFun (PrimMax a)                = intHost $(hashQ "PrimMax")                <> encodeScalarType a
+encodePrimFun (PrimMin a)                = intHost $(hashQ "PrimMin")                <> encodeScalarType a
+encodePrimFun (PrimLAnd a)               = intHost $(hashQ "PrimLAnd")               <> encodeBitType a
+encodePrimFun (PrimLOr a)                = intHost $(hashQ "PrimLOr")                <> encodeBitType a
+encodePrimFun (PrimLNot a)               = intHost $(hashQ "PrimLNot")               <> encodeBitType a
 encodePrimFun (PrimFromIntegral a b)     = intHost $(hashQ "PrimFromIntegral")       <> encodeIntegralType a <> encodeNumType b
 encodePrimFun (PrimToFloating a b)       = intHost $(hashQ "PrimToFloating")         <> encodeNumType a      <> encodeFloatingType b
-encodePrimFun PrimLAnd                   = intHost $(hashQ "PrimLAnd")
-encodePrimFun PrimLOr                    = intHost $(hashQ "PrimLOr")
-encodePrimFun PrimLNot                   = intHost $(hashQ "PrimLNot")
-
+encodePrimFun (PrimToBool a b)           = intHost $(hashQ "PrimToBool")             <> encodeIntegralType a <> encodeBitType b
+encodePrimFun (PrimFromBool a b)         = intHost $(hashQ "PrimFromBool")           <> encodeBitType a <> encodeIntegralType b
 
 encodeTypeR :: TypeR t -> Builder
 encodeTypeR TupRunit       = intHost $(hashQ "TupRunit")
@@ -469,38 +475,42 @@ depthTypeR TupRsingle{}   = 1
 depthTypeR (TupRpair a b) = depthTypeR a + depthTypeR b
 
 encodeScalarType :: ScalarType t -> Builder
-encodeScalarType (SingleScalarType t) = intHost $(hashQ "SingleScalarType") <> encodeSingleType t
-encodeScalarType (VectorScalarType t) = intHost $(hashQ "VectorScalarType") <> encodeVectorType t
+encodeScalarType (NumScalarType t) = encodeNumType t
+encodeScalarType (BitScalarType t) = encodeBitType t
 
-encodeSingleType :: SingleType t -> Builder
-encodeSingleType (NumSingleType t) = intHost $(hashQ "NumSingleType")    <> encodeNumType t
-
-encodeVectorType :: VectorType (Vec n t) -> Builder
-encodeVectorType (VectorType n t) = intHost $(hashQ "VectorType") <> intHost n <> encodeSingleType t
-
-encodeBoundedType :: BoundedType t -> Builder
-encodeBoundedType (IntegralBoundedType t) = intHost $(hashQ "IntegralBoundedType") <> encodeIntegralType t
+encodeBitType :: BitType t -> Builder
+encodeBitType TypeBit      = intHost $(hashQ "Bit")
+encodeBitType (TypeMask n) = intHost $(hashQ "BitMask") <> int8 (fromIntegral (natVal' n))
 
 encodeNumType :: NumType t -> Builder
 encodeNumType (IntegralNumType t) = intHost $(hashQ "IntegralNumType") <> encodeIntegralType t
 encodeNumType (FloatingNumType t) = intHost $(hashQ "FloatingNumType") <> encodeFloatingType t
 
 encodeIntegralType :: IntegralType t -> Builder
-encodeIntegralType TypeInt{}    = intHost $(hashQ "Int")
-encodeIntegralType TypeInt8{}   = intHost $(hashQ "Int8")
-encodeIntegralType TypeInt16{}  = intHost $(hashQ "Int16")
-encodeIntegralType TypeInt32{}  = intHost $(hashQ "Int32")
-encodeIntegralType TypeInt64{}  = intHost $(hashQ "Int64")
-encodeIntegralType TypeWord{}   = intHost $(hashQ "Word")
-encodeIntegralType TypeWord8{}  = intHost $(hashQ "Word8")
-encodeIntegralType TypeWord16{} = intHost $(hashQ "Word16")
-encodeIntegralType TypeWord32{} = intHost $(hashQ "Word32")
-encodeIntegralType TypeWord64{} = intHost $(hashQ "Word64")
+encodeIntegralType (SingleIntegralType t)   = encodeSingleIntegralType t
+encodeIntegralType (VectorIntegralType n t) = intHost $(hashQ "Vec") <> int8 (fromIntegral (natVal' n)) <> encodeSingleIntegralType t
+
+encodeSingleIntegralType :: SingleIntegralType t -> Builder
+encodeSingleIntegralType TypeInt8    = intHost $(hashQ "Int8")
+encodeSingleIntegralType TypeInt16   = intHost $(hashQ "Int16")
+encodeSingleIntegralType TypeInt32   = intHost $(hashQ "Int32")
+encodeSingleIntegralType TypeInt64   = intHost $(hashQ "Int64")
+encodeSingleIntegralType TypeInt128  = intHost $(hashQ "Int128")
+encodeSingleIntegralType TypeWord8   = intHost $(hashQ "Word8")
+encodeSingleIntegralType TypeWord16  = intHost $(hashQ "Word16")
+encodeSingleIntegralType TypeWord32  = intHost $(hashQ "Word32")
+encodeSingleIntegralType TypeWord64  = intHost $(hashQ "Word64")
+encodeSingleIntegralType TypeWord128 = intHost $(hashQ "Word128")
 
 encodeFloatingType :: FloatingType t -> Builder
-encodeFloatingType TypeHalf{}   = intHost $(hashQ "Half")
-encodeFloatingType TypeFloat{}  = intHost $(hashQ "Float")
-encodeFloatingType TypeDouble{} = intHost $(hashQ "Double")
+encodeFloatingType (SingleFloatingType t)   = encodeSingleFloatingType t
+encodeFloatingType (VectorFloatingType n t) = intHost $(hashQ "Vec") <> int8 (fromIntegral (natVal' n)) <> encodeSingleFloatingType t
+
+encodeSingleFloatingType :: SingleFloatingType t -> Builder
+encodeSingleFloatingType TypeFloat16  = intHost $(hashQ "Half")
+encodeSingleFloatingType TypeFloat32  = intHost $(hashQ "Float")
+encodeSingleFloatingType TypeFloat64  = intHost $(hashQ "Double")
+encodeSingleFloatingType TypeFloat128 = intHost $(hashQ "Float128")
 
 encodeMaybe :: (a -> Builder) -> Maybe a -> Builder
 encodeMaybe _ Nothing  = intHost $(hashQ "Nothing")

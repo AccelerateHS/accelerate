@@ -309,15 +309,12 @@ module Data.Array.Accelerate (
   Exp,
 
   -- ** SIMD vectors
-  Vec, VecElt,
-  Vectoring(..),
-  vecOfList,
-  listOfVec,
+  Vec, SIMD,
 
   -- ** Type classes
   -- *** Basic type classes
-  Eq(..),
-  Ord(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
+  Eq(..), VEq(..),
+  Ord(..), VOrd(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
 
@@ -356,11 +353,11 @@ module Data.Array.Accelerate (
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
-  pattern Vec2, pattern V2,
-  pattern Vec3, pattern V3,
-  pattern Vec4, pattern V4,
-  pattern Vec8, pattern V8,
-  pattern Vec16, pattern V16,
+  Vec2, pattern V2,
+  Vec3, pattern V3,
+  Vec4, pattern V4,
+  Vec8, pattern V8,
+  Vec16, pattern V16,
 
   mkPattern, mkPatterns,
 
@@ -430,10 +427,6 @@ module Data.Array.Accelerate (
   Either(..), pattern Left_,    pattern Right_,
   Char,
 
-  CFloat, CDouble,
-  CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
-  CChar, CSChar, CUChar,
-
 ) where
 
 import Data.Array.Accelerate.Classes.Bounded
@@ -449,7 +442,8 @@ import Data.Array.Accelerate.Classes.Rational
 import Data.Array.Accelerate.Classes.RealFloat
 import Data.Array.Accelerate.Classes.RealFrac
 import Data.Array.Accelerate.Classes.ToFloating
-import Data.Array.Accelerate.Classes.Vector
+import Data.Array.Accelerate.Classes.VEq
+import Data.Array.Accelerate.Classes.VOrd
 import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language
@@ -463,7 +457,6 @@ import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, toIndex, fromIndex, intersect )
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-import Data.Primitive.Vec
 import qualified Data.Array.Accelerate.Sugar.Array                  as S
 import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 

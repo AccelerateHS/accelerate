@@ -1,6 +1,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -30,8 +32,12 @@ module Data.Array.Accelerate.Analysis.Match (
 
   -- auxiliary
   matchIdx, matchVar, matchVars, matchArrayR, matchArraysR, matchTypeR, matchShapeR,
-  matchShapeType, matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
-  matchLeftHandSide, matchALeftHandSide, matchELeftHandSide, matchSingleType, matchTupR
+  matchShapeType,
+  matchIntegralType, matchSingleIntegralType,
+  matchFloatingType, matchSingleFloatingType,
+  matchNumType,
+  matchScalarType,
+  matchLeftHandSide, matchALeftHandSide, matchELeftHandSide, matchTupR,
 
 ) where
 
@@ -40,21 +46,23 @@ import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.AST.LeftHandSide
 import Data.Array.Accelerate.AST.Var
 import Data.Array.Accelerate.Analysis.Hash
-import Data.Array.Accelerate.Representation.Array
-import Data.Array.Accelerate.Representation.Shape
-import Data.Array.Accelerate.Representation.Slice
+import Data.Array.Accelerate.Interpreter.Arithmetic
+import Data.Array.Accelerate.Representation.Array                   ( Array(..), ArraysR, ArrayR(..) )
+import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..) )
+import Data.Array.Accelerate.Representation.Slice                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
-import Data.Primitive.Vec
-import qualified Data.Array.Accelerate.Sugar.Shape      as Sugar
+import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
 import Data.Maybe
 import Data.Typeable
-import Unsafe.Coerce                                    ( unsafeCoerce )
-import System.IO.Unsafe                                 ( unsafePerformIO )
+import Unsafe.Coerce                                                ( unsafeCoerce )
+import System.IO.Unsafe                                             ( unsafePerformIO )
 import System.Mem.StableName
-import Prelude                                          hiding ( exp )
+import Prelude                                                      hiding ( exp )
+
+import GHC.TypeLits.Extra
 
 
 -- The type of matching array computations
@@ -455,24 +463,41 @@ matchOpenExp (Foreign _ ff1 f1 e1) (Foreign _ ff2 f2 e2)
   , Just Refl <- matchOpenFun f1 f2
   = Just Refl
 
-matchOpenExp (Const t1 c1) (Const t2 c2)
-  | Just Refl <- matchScalarType t1 t2
-  , matchConst (TupRsingle t1) c1 c2
-  = Just Refl
-
-matchOpenExp (Undef t1) (Undef t2) = matchScalarType t1 t2
-
-matchOpenExp (Coerce _ t1 e1) (Coerce _ t2 e2)
-  | Just Refl <- matchScalarType t1 t2
-  , Just Refl <- matchOpenExp e1 e2
-  = Just Refl
-
 matchOpenExp (Pair a1 b1) (Pair a2 b2)
   | Just Refl <- matchOpenExp a1 a2
   , Just Refl <- matchOpenExp b1 b2
   = Just Refl
 
 matchOpenExp Nil Nil
+  = Just Refl
+
+matchOpenExp (Extract vR1 iR1 v1 i1) (Extract vR2 iR2 v2 i2)
+  | Just Refl <- matchScalarType vR1 vR2
+  , Just Refl <- matchSingleIntegralType iR1 iR2
+  , Just Refl <- matchOpenExp v1 v2
+  , Just Refl <- matchOpenExp i1 i2
+  = Just Refl
+
+matchOpenExp (Insert vR1 iR1 v1 i1 x1) (Insert vR2 iR2 v2 i2 x2)
+  | Just Refl <- matchScalarType vR1 vR2
+  , Just Refl <- matchSingleIntegralType iR1 iR2
+  , Just Refl <- matchOpenExp v1 v2
+  , Just Refl <- matchOpenExp i1 i2
+  , Just Refl <- matchOpenExp x1 x2
+  = Just Refl
+
+matchOpenExp (Shuffle eR1 iR1 x1 y1 i1) (Shuffle eR2 iR2 x2 y2 i2)
+  | Just Refl <- matchScalarType eR1 eR2
+  , Just Refl <- matchSingleIntegralType iR1 iR2
+  , Just Refl <- matchOpenExp x1 x2
+  , Just Refl <- matchOpenExp y1 y2
+  , Just Refl <- matchOpenExp i1 i2
+  = Just Refl
+
+matchOpenExp (Select p1 x1 y1) (Select p2 x2 y2)
+  | Just Refl <- matchOpenExp p1 p2
+  , Just Refl <- matchOpenExp x1 x2
+  , Just Refl <- matchOpenExp y1 y2
   = Just Refl
 
 matchOpenExp (IndexSlice sliceIndex1 ix1 sh1) (IndexSlice sliceIndex2 ix2 sh2)
@@ -497,6 +522,29 @@ matchOpenExp (FromIndex _ sh1 i1) (FromIndex _ sh2 i2)
   , Just Refl <- matchOpenExp sh1 sh2
   = Just Refl
 
+matchOpenExp (Case eR1 e1 rhs1 def1) (Case eR2 e2 rhs2 def2)
+  | Just Refl <- matchScalarType eR1 eR2
+  , Just Refl <- matchOpenExp e1 e2
+  , Just Refl <- matchCaseEqs eR1 rhs1 rhs2
+  , Just Refl <- matchCaseDef def1 def2
+  = Just Refl
+  where
+    matchCaseEqs :: ScalarType tag -> [(tag, OpenExp env aenv a)] -> [(tag, OpenExp env aenv b)] -> Maybe (a :~: b)
+    matchCaseEqs _ [] []
+      = unsafeCoerce Refl
+    matchCaseEqs tR ((s,x):xs) ((t,y):ys)
+      | evalEq tR (s,t)
+      , Just Refl <- matchOpenExp x y
+      , Just Refl <- matchCaseEqs tR xs ys
+      = Just Refl
+    matchCaseEqs _ _ _
+      = Nothing
+
+    matchCaseDef :: Maybe (OpenExp env aenv a) -> Maybe (OpenExp env aenv b) -> Maybe (a :~: b)
+    matchCaseDef Nothing  Nothing  = unsafeCoerce Refl
+    matchCaseDef (Just x) (Just y) = matchOpenExp x y
+    matchCaseDef _        _        = Nothing
+
 matchOpenExp (Cond p1 t1 e1) (Cond p2 t2 e2)
   | Just Refl <- matchOpenExp p1 p2
   , Just Refl <- matchOpenExp t1 t2
@@ -509,8 +557,10 @@ matchOpenExp (While p1 f1 x1) (While p2 f2 x2)
   , Just Refl <- matchOpenFun f1 f2
   = Just Refl
 
-matchOpenExp (PrimConst c1) (PrimConst c2)
-  = matchPrimConst c1 c2
+matchOpenExp (Const t1 c1) (Const t2 c2)
+  | Just Refl <- matchScalarType t1 t2
+  , matchConst (TupRsingle t1) c1 c2
+  = Just Refl
 
 matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   | Just x1'  <- commutes f1 x1
@@ -541,6 +591,13 @@ matchOpenExp (ShapeSize _ sh1) (ShapeSize _ sh2)
   | Just Refl <- matchOpenExp sh1 sh2
   = Just Refl
 
+matchOpenExp (Undef t1) (Undef t2) = matchScalarType t1 t2
+
+matchOpenExp (Coerce _ t1 e1) (Coerce _ t2 e2)
+  | Just Refl <- matchScalarType t1 t2
+  , Just Refl <- matchOpenExp e1 e2
+  = Just Refl
+
 matchOpenExp _ _
   = Nothing
 
@@ -568,18 +625,41 @@ matchConst (TupRsingle ty)  a       b       = evalEq ty (a,b)
 matchConst (TupRpair ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
 
 evalEq :: ScalarType a -> (a, a) -> Bool
-evalEq (SingleScalarType t) = evalEqSingle t
-evalEq (VectorScalarType t) = evalEqVector t
+evalEq t x = lall (scalar t) (eq t x)
+  where
+    scalar :: ScalarType s -> BitType (BitOrMask s)
+    scalar (NumScalarType s) = num s
+    scalar (BitScalarType s) = bit s
 
-evalEqSingle :: SingleType a -> (a, a) -> Bool
-evalEqSingle (NumSingleType t) = evalEqNum t
+    bit :: BitType s -> BitType (BitOrMask s)
+    bit TypeBit      = TypeBit
+    bit (TypeMask n) = TypeMask n
 
-evalEqVector :: VectorType a -> (a, a) -> Bool
-evalEqVector VectorType{} = uncurry (==)
+    num :: NumType s -> BitType (BitOrMask s)
+    num (IntegralNumType s) = integral s
+    num (FloatingNumType s) = floating s
 
-evalEqNum :: NumType a -> (a, a) -> Bool
-evalEqNum (IntegralNumType t) | IntegralDict <- integralDict t  = uncurry (==)
-evalEqNum (FloatingNumType t) | FloatingDict <- floatingDict t  = uncurry (==)
+    integral :: IntegralType s -> BitType (BitOrMask s)
+    integral (VectorIntegralType n _) = TypeMask n
+    integral (SingleIntegralType s)   = case s of
+      TypeInt8    -> TypeBit
+      TypeInt16   -> TypeBit
+      TypeInt32   -> TypeBit
+      TypeInt64   -> TypeBit
+      TypeInt128  -> TypeBit
+      TypeWord8   -> TypeBit
+      TypeWord16  -> TypeBit
+      TypeWord32  -> TypeBit
+      TypeWord64  -> TypeBit
+      TypeWord128 -> TypeBit
+
+    floating :: FloatingType s -> BitType (BitOrMask s)
+    floating (VectorFloatingType n _) = TypeMask n
+    floating (SingleFloatingType s)   = case s of
+      TypeFloat16  -> TypeBit
+      TypeFloat32  -> TypeBit
+      TypeFloat64  -> TypeBit
+      TypeFloat128 -> TypeBit
 
 
 -- Environment projection indices
@@ -622,14 +702,8 @@ matchSliceIndex (SliceFixed sl1) (SliceFixed sl2)
 matchSliceIndex _ _
   = Nothing
 
--- Primitive constants and functions
---
-matchPrimConst :: PrimConst s -> PrimConst t -> Maybe (s :~: t)
-matchPrimConst (PrimMinBound s) (PrimMinBound t) = matchBoundedType s t
-matchPrimConst (PrimMaxBound s) (PrimMaxBound t) = matchBoundedType s t
-matchPrimConst (PrimPi s)       (PrimPi t)       = matchFloatingType s t
-matchPrimConst _                _                = Nothing
-
+-- Primitive functions
+-- -------------------
 
 -- Covariant function matching
 --
@@ -692,11 +766,13 @@ matchPrimFun (PrimEq _)                 (PrimEq _)                 = Just Refl
 matchPrimFun (PrimNEq _)                (PrimNEq _)                = Just Refl
 matchPrimFun (PrimMax _)                (PrimMax _)                = Just Refl
 matchPrimFun (PrimMin _)                (PrimMin _)                = Just Refl
+matchPrimFun (PrimLAnd s)               (PrimLAnd t)               = matchBitType s t
+matchPrimFun (PrimLOr s)                (PrimLOr t)                = matchBitType s t
+matchPrimFun (PrimLNot s)               (PrimLNot t)               = matchBitType s t
 matchPrimFun (PrimFromIntegral _ s)     (PrimFromIntegral _ t)     = matchNumType s t
 matchPrimFun (PrimToFloating _ s)       (PrimToFloating _ t)       = matchFloatingType s t
-matchPrimFun PrimLAnd                   PrimLAnd                   = Just Refl
-matchPrimFun PrimLOr                    PrimLOr                    = Just Refl
-matchPrimFun PrimLNot                   PrimLNot                   = Just Refl
+matchPrimFun (PrimToBool _ s)           (PrimToBool _ t)           = matchBitType s t
+matchPrimFun (PrimFromBool _ s)         (PrimFromBool _ t)         = matchIntegralType s t
 
 matchPrimFun _ _
   = Nothing
@@ -757,34 +833,36 @@ matchPrimFun' (PrimIsNaN s)              (PrimIsNaN t)              = matchFloat
 matchPrimFun' (PrimIsInfinite s)         (PrimIsInfinite t)         = matchFloatingType s t
 matchPrimFun' (PrimMax _)                (PrimMax _)                = Just Refl
 matchPrimFun' (PrimMin _)                (PrimMin _)                = Just Refl
+matchPrimFun' (PrimLAnd _)               (PrimLAnd _)               = Just Refl
+matchPrimFun' (PrimLOr _)                (PrimLOr _)                = Just Refl
+matchPrimFun' (PrimLNot _)               (PrimLNot _)               = Just Refl
 matchPrimFun' (PrimFromIntegral s _)     (PrimFromIntegral t _)     = matchIntegralType s t
 matchPrimFun' (PrimToFloating s _)       (PrimToFloating t _)       = matchNumType s t
-matchPrimFun' PrimLAnd                   PrimLAnd                   = Just Refl
-matchPrimFun' PrimLOr                    PrimLOr                    = Just Refl
-matchPrimFun' PrimLNot                   PrimLNot                   = Just Refl
+matchPrimFun' (PrimToBool s _)           (PrimToBool t _)           = matchIntegralType s t
+matchPrimFun' (PrimFromBool s _)         (PrimFromBool t _)         = matchBitType s t
 
 matchPrimFun' (PrimLt s) (PrimLt t)
-  | Just Refl <- matchSingleType s t
+  | Just Refl <- matchScalarType s t
   = Just Refl
 
 matchPrimFun' (PrimGt s) (PrimGt t)
-  | Just Refl <- matchSingleType s t
+  | Just Refl <- matchScalarType s t
   = Just Refl
 
 matchPrimFun' (PrimLtEq s) (PrimLtEq t)
-  | Just Refl <- matchSingleType s t
+  | Just Refl <- matchScalarType s t
   = Just Refl
 
 matchPrimFun' (PrimGtEq s) (PrimGtEq t)
-  | Just Refl <- matchSingleType s t
+  | Just Refl <- matchScalarType s t
   = Just Refl
 
 matchPrimFun' (PrimEq s) (PrimEq t)
-  | Just Refl <- matchSingleType s t
+  | Just Refl <- matchScalarType s t
   = Just Refl
 
 matchPrimFun' (PrimNEq s) (PrimNEq t)
-  | Just Refl <- matchSingleType s t
+  | Just Refl <- matchScalarType s t
   = Just Refl
 
 matchPrimFun' _ _
@@ -831,24 +909,17 @@ matchShapeR _ _ = Nothing
 --
 {-# INLINEABLE matchScalarType #-}
 matchScalarType :: ScalarType s -> ScalarType t -> Maybe (s :~: t)
-matchScalarType (SingleScalarType s) (SingleScalarType t) = matchSingleType s t
-matchScalarType (VectorScalarType s) (VectorScalarType t) = matchVectorType s t
-matchScalarType _                    _                    = Nothing
+matchScalarType (NumScalarType s) (NumScalarType t) = matchNumType s t
+matchScalarType (BitScalarType s) (BitScalarType t) = matchBitType s t
+matchScalarType _                 _                 = Nothing
 
-{-# INLINEABLE matchSingleType #-}
-matchSingleType :: SingleType s -> SingleType t -> Maybe (s :~: t)
-matchSingleType (NumSingleType s) (NumSingleType t) = matchNumType s t
-
-{-# INLINEABLE matchVectorType #-}
-matchVectorType :: forall m n s t. VectorType (Vec n s) -> VectorType (Vec m t) -> Maybe (Vec n s :~: Vec m t)
-matchVectorType (VectorType n s) (VectorType m t)
-  | Just Refl <- if n == m
-                   then Just (unsafeCoerce Refl :: n :~: m) -- XXX: we don't have an embedded KnownNat constraint, but
-                   else Nothing                             -- this implementation is the same as 'GHC.TypeLits.sameNat'
-  , Just Refl <- matchSingleType s t
+{-# INLINEABLE matchBitType #-}
+matchBitType :: BitType s -> BitType t -> Maybe (s :~: t)
+matchBitType TypeBit      TypeBit      = Just Refl
+matchBitType (TypeMask n) (TypeMask m)
+  | Just Refl <- sameNat' n m
   = Just Refl
-matchVectorType _ _
-  = Nothing
+matchBitType _            _            = Nothing
 
 {-# INLINEABLE matchNumType #-}
 matchNumType :: NumType s -> NumType t -> Maybe (s :~: t)
@@ -856,30 +927,45 @@ matchNumType (IntegralNumType s) (IntegralNumType t) = matchIntegralType s t
 matchNumType (FloatingNumType s) (FloatingNumType t) = matchFloatingType s t
 matchNumType _                   _                   = Nothing
 
-{-# INLINEABLE matchBoundedType #-}
-matchBoundedType :: BoundedType s -> BoundedType t -> Maybe (s :~: t)
-matchBoundedType (IntegralBoundedType s) (IntegralBoundedType t) = matchIntegralType s t
-
 {-# INLINEABLE matchIntegralType #-}
 matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :~: t)
-matchIntegralType TypeInt    TypeInt    = Just Refl
-matchIntegralType TypeInt8   TypeInt8   = Just Refl
-matchIntegralType TypeInt16  TypeInt16  = Just Refl
-matchIntegralType TypeInt32  TypeInt32  = Just Refl
-matchIntegralType TypeInt64  TypeInt64  = Just Refl
-matchIntegralType TypeWord   TypeWord   = Just Refl
-matchIntegralType TypeWord8  TypeWord8  = Just Refl
-matchIntegralType TypeWord16 TypeWord16 = Just Refl
-matchIntegralType TypeWord32 TypeWord32 = Just Refl
-matchIntegralType TypeWord64 TypeWord64 = Just Refl
-matchIntegralType _            _            = Nothing
+matchIntegralType (SingleIntegralType s)   (SingleIntegralType t)   = matchSingleIntegralType s t
+matchIntegralType (VectorIntegralType n s) (VectorIntegralType m t)
+  | Just Refl <- sameNat' n m
+  , Just Refl <- matchSingleIntegralType s t
+  = Just Refl
+matchIntegralType _ _ = Nothing
+
+{-# INLINEABLE matchSingleIntegralType #-}
+matchSingleIntegralType :: SingleIntegralType s -> SingleIntegralType t -> Maybe (s :~: t)
+matchSingleIntegralType TypeInt8    TypeInt8    = Just Refl
+matchSingleIntegralType TypeInt64   TypeInt64   = Just Refl
+matchSingleIntegralType TypeInt32   TypeInt32   = Just Refl
+matchSingleIntegralType TypeInt16   TypeInt16   = Just Refl
+matchSingleIntegralType TypeInt128  TypeInt128  = Just Refl
+matchSingleIntegralType TypeWord8   TypeWord8   = Just Refl
+matchSingleIntegralType TypeWord64  TypeWord64  = Just Refl
+matchSingleIntegralType TypeWord32  TypeWord32  = Just Refl
+matchSingleIntegralType TypeWord16  TypeWord16  = Just Refl
+matchSingleIntegralType TypeWord128 TypeWord128 = Just Refl
+matchSingleIntegralType _           _           = Nothing
 
 {-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
-matchFloatingType TypeHalf   TypeHalf   = Just Refl
-matchFloatingType TypeFloat  TypeFloat  = Just Refl
-matchFloatingType TypeDouble TypeDouble = Just Refl
-matchFloatingType _            _            = Nothing
+matchFloatingType (SingleFloatingType s)   (SingleFloatingType t)   = matchSingleFloatingType s t
+matchFloatingType (VectorFloatingType n s) (VectorFloatingType m t)
+  | Just Refl <- sameNat' n m
+  , Just Refl <- matchSingleFloatingType s t
+  = Just Refl
+matchFloatingType _ _ = Nothing
+
+{-# INLINEABLE matchSingleFloatingType #-}
+matchSingleFloatingType :: SingleFloatingType s -> SingleFloatingType t -> Maybe (s :~: t)
+matchSingleFloatingType TypeFloat16  TypeFloat16  = Just Refl
+matchSingleFloatingType TypeFloat32  TypeFloat32  = Just Refl
+matchSingleFloatingType TypeFloat64  TypeFloat64  = Just Refl
+matchSingleFloatingType TypeFloat128 TypeFloat128 = Just Refl
+matchSingleFloatingType _            _            = Nothing
 
 
 -- Auxiliary
@@ -904,14 +990,14 @@ commutes f x = case f of
   PrimNEq{}     -> Just (swizzle x)
   PrimMax{}     -> Just (swizzle x)
   PrimMin{}     -> Just (swizzle x)
-  PrimLAnd      -> Just (swizzle x)
-  PrimLOr       -> Just (swizzle x)
+  PrimLAnd{}    -> Just (swizzle x)
+  PrimLOr{}     -> Just (swizzle x)
   _             -> Nothing
   where
     swizzle :: OpenExp env aenv (a',a') -> OpenExp env aenv (a',a')
-    swizzle exp
-      | (a `Pair` b)  <- exp
+    swizzle e
+      | (a `Pair` b)  <- e
       , hashOpenExp a > hashOpenExp b = b `Pair` a
       --
-      | otherwise                               = exp
+      | otherwise                     = e
 

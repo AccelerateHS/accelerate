@@ -1,6 +1,5 @@
-{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE MonoLocalBinds        #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell       #-}
 -- |
@@ -20,6 +19,7 @@ module Data.Array.Accelerate.Classes.FromIntegral (
 ) where
 
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Integral
@@ -40,7 +40,6 @@ class FromIntegral a b where
 -- instance {-# OVERLAPPABLE #-} (Elt a, Elt b, IsIntegral a, IsNum b) => FromIntegral a b where
 --   fromIntegral = mkFromIntegral
 
-
 -- Reify in ghci:
 --
 -- $( stringE . show =<< reify ''Thing )
@@ -49,37 +48,60 @@ class FromIntegral a b where
 -- messages when we don't have an instance available, rather than a "can not
 -- deduce IsNum..." style error (which the user can do nothing about).
 --
-$(runQ $ do
-    let
-        -- Get all the types that our dictionaries reify
-        digItOut :: Name -> Q [Name]
-        digItOut name = do
-          TyConI (DataD _ _ _ _ cons _) <- reify name
-          let
-            -- This is what a constructor such as IntegralNumType will be reified
-            -- as prior to GHC 8.4...
-            dig (NormalC _ [(_, AppT (ConT n) (VarT _))])               = digItOut n
-            -- ...but this is what IntegralNumType will be reified as on GHC 8.4
-            -- and later, after the changes described in
-            -- https://ghc.haskell.org/trac/ghc/wiki/Migration/8.4#TemplateHaskellreificationchangesforGADTs
-            dig (ForallC _ _ (GadtC _ [(_, AppT (ConT n) (VarT _))] _)) = digItOut n
-            dig (GadtC _ _ (AppT (ConT _) (ConT n)))                    = return [n]
-            dig _ = error "Unexpected case generating FromIntegral instances"
-            --
-          concat `fmap` mapM dig cons
+-- > -- Get all the types that our dictionaries reify
+-- > digItOut :: Name -> Q [Name]
+-- > digItOut name = do
+-- >   TyConI (DataD _ _ _ _ cons _) <- reify name
+-- >   let
+-- >     -- This is what a constructor such as IntegralNumType will be reified
+-- >     -- as prior to GHC 8.4...
+-- >     dig (NormalC _ [(_, AppT (ConT n) (VarT _))])               = digItOut n
+-- >     -- ...but this is what IntegralNumType will be reified as on GHC 8.4
+-- >     -- and later, after the changes described in
+-- >     -- https://ghc.haskell.org/trac/ghc/wiki/Migration/8.4#TemplateHaskellreificationchangesforGADTs
+-- >     dig (ForallC _ _ (GadtC _ [(_, AppT (ConT n) (VarT _))] _)) = digItOut n
+-- >     dig (GadtC _ _ (AppT (ConT _) (ConT n)))                    = return [n]
+-- >     dig _ = error "Unexpected case generating FromIntegral instances"
+-- >     --
+-- >   concat `fmap` mapM dig cons
+--
+runQ $
+  let
+      integralTypes :: [Name]
+      integralTypes =
+        [ ''Int
+        , ''Int8
+        , ''Int16
+        , ''Int32
+        , ''Int64
+        , ''Int128
+        , ''Word
+        , ''Word8
+        , ''Word16
+        , ''Word32
+        , ''Word64
+        , ''Word128
+        ]
 
-        thFromIntegral :: Name -> Name -> Q Dec
-        thFromIntegral a b =
-          let
-              ty  = AppT (AppT (ConT (mkName "FromIntegral")) (ConT a)) (ConT b)
-              dec = ValD (VarP (mkName "fromIntegral")) (NormalB (VarE (mkName f))) []
-              f | a == b    = "id"
-                | otherwise = "mkFromIntegral"
-          in
-          instanceD (return []) (return ty) [return dec]
-    --
-    as <- digItOut ''IntegralType
-    bs <- digItOut ''NumType
-    sequence [ thFromIntegral a b | a <- as, b <- bs ]
- )
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        , ''Float128
+        ]
+
+      numTypes :: [Name]
+      numTypes = integralTypes ++ floatingTypes
+
+      thFromIntegral :: Name -> Name -> Q [Dec]
+      thFromIntegral a b =
+        [d| instance FromIntegral $(conT a) $(conT b) where
+              fromIntegral = $(varE $ if a == b then 'id else 'mkFromIntegral )
+
+            instance KnownNat n => FromIntegral (Vec n $(conT a)) (Vec n $(conT b)) where
+              fromIntegral = $(varE $ if a == b then 'id else 'mkFromIntegral )
+          |]
+  in
+  concat <$> sequence [ thFromIntegral from to | from <- integralTypes, to <- numTypes ]
 

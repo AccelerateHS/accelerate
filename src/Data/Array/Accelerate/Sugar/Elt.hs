@@ -32,6 +32,7 @@ import Data.Array.Accelerate.Type
 import Data.Bits
 import Data.Char
 import Data.Kind
+import Foreign.C.Types
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 
 import GHC.Generics
@@ -45,8 +46,8 @@ import GHC.Generics
 -- tuples thereof, stored efficiently in memory as consecutive unpacked
 -- elements without pointers. It roughly consists of:
 --
---  * Signed and unsigned integers (8, 16, 32, and 64-bits wide)
---  * Floating point numbers (half, single, and double precision)
+--  * Signed and unsigned integers (8, 16, 32, 64, and 128-bits wide)
+--  * Floating point numbers (IEEE half, single, double, and (optionally) quadruple precision)
 --  * 'Char'
 --  * 'Bool'
 --  * ()
@@ -163,7 +164,7 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 instance (GElt a, GElt b, GSumElt (a :+: b)) => GElt (a :+: b) where
   type GEltR t (a :+: b) = (TAG, GSumEltR t (a :+: b))
   geltR t      = TupRpair (TupRsingle scalarType) (gsumEltR @(a :+: b) t)
-  gtagsR t     = uncurry TagRtag <$> gsumTagsR @(a :+: b) 0 t
+  gtagsR t     = uncurry (TagRtag singleIntegralType) <$> gsumTagsR @(a :+: b) 0 t
   gfromElt     = gsumFromElt 0
   gtoElt (k,x) = gsumToElt k x
   gundef t     = (0xff, gsumUndef @(a :+: b) t)
@@ -282,10 +283,30 @@ untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 --
 
 instance Elt ()
-instance Elt Bool
 instance Elt Ordering
 instance Elt a => Elt (Maybe a)
 instance (Elt a, Elt b) => Elt (Either a b)
+
+instance Elt Bool where
+  type EltR Bool = Bit
+  eltR    = TupRsingle scalarType
+  tagsR   = [TagRbit TypeBit 0, TagRbit TypeBit 1]
+  toElt   = unBit
+  fromElt = Bit
+
+instance Elt Int where
+  type EltR Int = INT
+  eltR    = TupRsingle scalarType
+  tagsR   = [TagRsingle scalarType]
+  toElt   = fromIntegral
+  fromElt = fromIntegral
+
+instance Elt Word where
+  type EltR Word = WORD
+  eltR    = TupRsingle scalarType
+  tagsR   = [TagRsingle scalarType]
+  toElt   = fromIntegral
+  fromElt = fromIntegral
 
 instance Elt Char where
   type EltR Char = Word32
@@ -300,16 +321,16 @@ runQ $ do
       --
       integralTypes :: [Name]
       integralTypes =
-        [ ''Int
-        , ''Int8
+        [ ''Int8
         , ''Int16
         , ''Int32
         , ''Int64
-        , ''Word
+        , ''Int128
         , ''Word8
         , ''Word16
         , ''Word32
         , ''Word64
+        , ''Word128
         ]
 
       floatingTypes :: [Name]
@@ -317,6 +338,7 @@ runQ $ do
         [ ''Half
         , ''Float
         , ''Double
+        , ''Float128
         ]
 
       newtypes :: [Name]
@@ -358,18 +380,6 @@ runQ $ do
         in
         instanceD ctx [t| Elt $res |] []
 
-      -- mkVecElt :: Name -> Integer -> Q [Dec]
-      -- mkVecElt name n =
-      --   let t = conT name
-      --       v = [t| Vec $(litT (numTyLit n)) $t |]
-      --    in
-      --    [d| instance Elt $v where
-      --          type EltR $v = $v
-      --          eltR    = TupRsingle scalarType
-      --          fromElt = id
-      --          toElt   = id
-      --      |]
-
       -- ghci> $( stringE . show =<< reify ''CFloat )
       -- TyConI (NewtypeD [] Foreign.C.Types.CFloat [] Nothing (NormalC Foreign.C.Types.CFloat [(Bang NoSourceUnpackedness NoSourceStrictness,ConT GHC.Types.Float)]) [])
       --
@@ -391,6 +401,5 @@ runQ $ do
   ss <- mapM mkSimple (integralTypes ++ floatingTypes)
   ns <- mapM mkNewtype newtypes
   ts <- mapM mkTuple [2..16]
-  -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
   return (concat ss ++ concat ns ++ ts)
 

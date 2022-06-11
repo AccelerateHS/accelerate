@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -14,20 +16,21 @@
 module Data.Array.Accelerate.Test.NoFib.Base
   where
 
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array
 import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Trafo.Sharing
-import Data.Array.Accelerate.Type
-import Data.Primitive.Vec
-
 import Control.Monad
 import Data.Primitive.Types
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
 import qualified Hedgehog.Range                                     as Range
+
+import qualified GHC.Exts                                           as GHC
 
 
 type Run  = forall a. Arrays a => Acc a -> a
@@ -94,21 +97,21 @@ f32 = Gen.float (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
 f64 :: Gen Double
 f64 = Gen.double (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
 
-v2 :: Prim a => Gen a -> Gen (Vec2 a)
-v2 a = Vec2 <$> a <*> a
+v2 :: (Elt a, SIMD 2 a) => Gen a -> Gen (Vec2 a)
+v2 a = GHC.fromList <$> replicateM 2 a
 
-v3 :: Prim a => Gen a -> Gen (Vec3 a)
-v3 a = Vec3 <$> a <*> a <*> a
+v3 :: (Elt a, SIMD 3 a) => Gen a -> Gen (Vec3 a)
+v3 a = GHC.fromList <$> replicateM 3 a
 
-v4 :: Prim a => Gen a -> Gen (Vec4 a)
-v4 a = Vec4 <$> a <*> a <*> a <*> a
+v4 :: (Elt a, SIMD 4 a) => Gen a -> Gen (Vec4 a)
+v4 a = GHC.fromList <$> replicateM 4 a
 
-v8 :: Prim a => Gen a -> Gen (Vec8 a)
-v8 a = Vec8 <$> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
+v8 :: (Elt a, SIMD 8 a) => Gen a -> Gen (Vec8 a)
+v8 a = GHC.fromList <$> replicateM 8 a
 
-v16 :: Prim a => Gen a -> Gen (Vec16 a)
-v16 a = Vec16 <$> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
-              <*> a <*> a <*> a <*> a <*> a <*> a <*> a <*> a
+v16 :: (Elt a, SIMD 16 a) => Gen a -> Gen (Vec16 a)
+v16 a = GHC.fromList <$> replicateM 16 a
+
 
 log_flt_max :: RealFloat a => a
 log_flt_max = log flt_max

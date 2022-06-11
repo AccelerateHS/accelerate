@@ -1,8 +1,11 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE EmptyCase           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ParallelListComp    #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -37,7 +40,7 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalCoerceScalar, atraceOp,
+  evalPrim, evalCoerceScalar, atraceOp,
 
 ) where
 
@@ -53,28 +56,28 @@ import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
-import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Trafo
 import Data.Array.Accelerate.Trafo.Delayed                          ( DelayedOpenAfun, DelayedOpenAcc )
 import Data.Array.Accelerate.Trafo.Sharing                          ( AfunctionR, AfunctionRepr(..), afunctionRepr )
 import Data.Array.Accelerate.Type
-import Data.Primitive.Vec
+import Data.Primitive.Bit                                           as Bit
+import Data.Primitive.Vec                                           as Vec
+import Data.Primitive.Vec                                           as Prim
 import qualified Data.Array.Accelerate.AST                          as AST
 import qualified Data.Array.Accelerate.Debug.Internal.Flags         as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Graph         as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Stats         as Debug
 import qualified Data.Array.Accelerate.Debug.Internal.Timed         as Debug
+import qualified Data.Array.Accelerate.Interpreter.Arithmetic       as A
 import qualified Data.Array.Accelerate.Smart                        as Smart
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Elt                    as Sugar
 import qualified Data.Array.Accelerate.Trafo.Delayed                as AST
 
-import GHC.TypeLits
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
 import Control.Monad.ST
-import Data.Bits
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Text.Lazy.Builder
@@ -82,8 +85,10 @@ import Formatting
 import System.IO
 import System.IO.Unsafe                                             ( unsafePerformIO )
 import Unsafe.Coerce
-import qualified Data.Text.IO                                       as T
 import Prelude                                                      hiding ( (!!), sum )
+import qualified Data.Text.IO                                       as T
+
+import GHC.TypeLits
 
 
 -- Program execution
@@ -126,13 +131,6 @@ runN f = go
     eval AfunctionReprBody        (Abody b)    aenv = unsafePerformIO $ phase "execute" Debug.elapsed (Sugar.toArr . snd <$> evaluate (evalOpenAcc b aenv))
     eval _                        _aenv        _    = error "Two men say they're Jesus; one of them must be wrong"
 
--- -- | Stream a lazily read list of input arrays through the given program,
--- -- collecting results as we go
--- --
--- streamOut :: Arrays a => Sugar.Seq [a] -> [a]
--- streamOut seq = let seq' = convertSeqWith config seq
---                 in evalDelayedSeq defaultSeqConfig seq'
-
 
 -- Debugging
 -- ---------
@@ -152,7 +150,7 @@ data Delayed a where
   Delayed :: ArrayR (Array sh e)
           -> sh
           -> (sh -> e)
-          -> (Int -> e)
+          -> (INT -> e)
           -> Delayed (Array sh e)
 
 
@@ -226,7 +224,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
         p               = evalOpenAfun cond aenv
         f               = evalOpenAfun body aenv
         go !x
-          | toBool (linearIndexArray (Sugar.eltR @Word8) (p x) 0) = go (f x)
+          | toBool (linearIndexArray (Sugar.eltR @Bool) (p x) 0) = go (f x)
           | otherwise                                             = x
 
     Use repr arr                  -> (TupRsingle repr, arr)
@@ -372,7 +370,7 @@ zipWithOp tp f (Delayed (ArrayR shr _) shx xs _) (Delayed _ shy ys _)
 foldOp
     :: (e -> e -> e)
     -> e
-    -> Delayed (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
     -> WithReprs (Array sh e)
 foldOp f z (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
   = fromFunction' (ArrayR shr tp) sh (\ix -> iter (ShapeRsnoc ShapeRz) ((), n) (\((), i) -> arr (ix, i)) f z)
@@ -381,7 +379,7 @@ foldOp f z (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
 fold1Op
     :: HasCallStack
     => (e -> e -> e)
-    -> Delayed (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
     -> WithReprs (Array sh e)
 fold1Op f (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
   = boundsCheck "empty array" (n > 0)
@@ -390,12 +388,12 @@ fold1Op f (Delayed (ArrayR (ShapeRsnoc shr) tp) (sh, n) arr _)
 
 foldSegOp
     :: HasCallStack
-    => IntegralType i
+    => SingleIntegralType i
     -> (e -> e -> e)
     -> e
-    -> Delayed (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
     -> Delayed (Segments i)
-    -> WithReprs (Array (sh, Int) e)
+    -> WithReprs (Array (sh, INT) e)
 foldSegOp itp f z (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
   | IntegralDict <- integralDict itp
   = boundsCheck "empty segment descriptor" (n > 0)
@@ -409,11 +407,11 @@ foldSegOp itp f z (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
 
 fold1SegOp
     :: HasCallStack
-    => IntegralType i
+    => SingleIntegralType i
     -> (e -> e -> e)
-    -> Delayed (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
     -> Delayed (Segments i)
-    -> WithReprs (Array (sh, Int) e)
+    -> WithReprs (Array (sh, INT) e)
 fold1SegOp itp f (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
   | IntegralDict <- integralDict itp
   = boundsCheck "empty segment descriptor" (n > 0)
@@ -428,8 +426,8 @@ fold1SegOp itp f (Delayed repr (sh, _) arr _) (Delayed _ ((), n) _ seg)
 scanl1Op
     :: forall sh e. HasCallStack
     => (e -> e -> e)
-    -> Delayed (Array (sh, Int) e)
-    -> WithReprs (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
+    -> WithReprs (Array (sh, INT) e)
 scanl1Op f (Delayed (ArrayR shr tp) sh ain _)
   = ( TupRsingle $ ArrayR shr tp
     , adata `seq` Array sh adata
@@ -437,13 +435,13 @@ scanl1Op f (Delayed (ArrayR shr tp) sh ain _)
   where
     --
     (adata, _)  = runArrayData @e $ do
-      aout <- newArrayData tp (size shr sh)
+      aout <- newArrayData tp (fromIntegral $ size shr sh)
 
-      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh (sz, 0)) (ain (sz, 0))
+      let write (sz, 0) = writeArrayData tp aout (fromIntegral $ toIndex shr sh (sz, 0)) (ain (sz, 0))
           write (sz, i) = do
-            x <- readArrayData tp aout (toIndex shr sh (sz, i-1))
+            x <- readArrayData tp aout (fromIntegral $ toIndex shr sh (sz, i-1))
             let y = ain (sz, i)
-            writeArrayData tp aout (toIndex shr sh (sz, i)) (f x y)
+            writeArrayData tp aout (fromIntegral $ toIndex shr sh (sz, i)) (f x y)
 
       iter shr sh write (>>) (return ())
       return (aout, undefined)
@@ -453,8 +451,8 @@ scanlOp
     :: forall sh e.
        (e -> e -> e)
     -> e
-    -> Delayed (Array (sh, Int) e)
-    -> WithReprs (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
+    -> WithReprs (Array (sh, INT) e)
 scanlOp f z (Delayed (ArrayR shr tp) (sh, n) ain _)
   = ( TupRsingle $ ArrayR shr tp
     , adata `seq` Array sh' adata
@@ -463,13 +461,13 @@ scanlOp f z (Delayed (ArrayR shr tp) (sh, n) ain _)
     sh'         = (sh, n+1)
     --
     (adata, _)  = runArrayData @e $ do
-      aout <- newArrayData tp (size shr sh')
+      aout <- newArrayData tp (fromIntegral $ size shr sh')
 
-      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh' (sz, 0)) z
+      let write (sz, 0) = writeArrayData tp aout (fromIntegral $ toIndex shr sh' (sz, 0)) z
           write (sz, i) = do
-            x <- readArrayData tp aout (toIndex shr sh' (sz, i-1))
+            x <- readArrayData tp aout (fromIntegral $ toIndex shr sh' (sz, i-1))
             let y = ain (sz, i-1)
-            writeArrayData tp aout (toIndex shr sh' (sz, i)) (f x y)
+            writeArrayData tp aout (fromIntegral $ toIndex shr sh' (sz, i)) (f x y)
 
       iter shr sh' write (>>) (return ())
       return (aout, undefined)
@@ -479,26 +477,26 @@ scanl'Op
     :: forall sh e.
        (e -> e -> e)
     -> e
-    -> Delayed (Array (sh, Int) e)
-    -> WithReprs (Array (sh, Int) e, Array sh e)
+    -> Delayed (Array (sh, INT) e)
+    -> WithReprs (Array (sh, INT) e, Array sh e)
 scanl'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
   = ( TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
     , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
     )
   where
     ((aout, asum), _) = runArrayData @(e, e) $ do
-      aout <- newArrayData tp (size shr  (sh, n))
-      asum <- newArrayData tp (size shr' sh)
+      aout <- newArrayData tp (fromIntegral $ size shr  (sh, n))
+      asum <- newArrayData tp (fromIntegral $ size shr' sh)
 
       let write (sz, 0)
-            | n == 0    = writeArrayData tp asum (toIndex shr' sh sz) z
-            | otherwise = writeArrayData tp aout (toIndex shr  (sh, n) (sz, 0)) z
+            | n == 0    = writeArrayData tp asum (fromIntegral $ toIndex shr' sh sz) z
+            | otherwise = writeArrayData tp aout (fromIntegral $ toIndex shr  (sh, n) (sz, 0)) z
           write (sz, i) = do
-            x <- readArrayData tp aout (toIndex shr (sh, n) (sz, i-1))
+            x <- readArrayData tp aout (fromIntegral $ toIndex shr (sh, n) (sz, i-1))
             let y = ain (sz, i-1)
             if i == n
-              then writeArrayData tp asum (toIndex shr' sh      sz)      (f x y)
-              else writeArrayData tp aout (toIndex shr  (sh, n) (sz, i)) (f x y)
+              then writeArrayData tp asum (fromIntegral $ toIndex shr' sh      sz)      (f x y)
+              else writeArrayData tp aout (fromIntegral $ toIndex shr  (sh, n) (sz, i)) (f x y)
 
       iter shr (sh, n+1) write (>>) (return ())
       return ((aout, asum), undefined)
@@ -508,8 +506,8 @@ scanrOp
     :: forall sh e.
        (e -> e -> e)
     -> e
-    -> Delayed (Array (sh, Int) e)
-    -> WithReprs (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
+    -> WithReprs (Array (sh, INT) e)
 scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
   = ( TupRsingle (ArrayR shr tp)
     , adata `seq` Array sh' adata
@@ -518,13 +516,13 @@ scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
     sh'         = (sz, n+1)
     --
     (adata, _)  = runArrayData @e $ do
-      aout <- newArrayData tp (size shr sh')
+      aout <- newArrayData tp (fromIntegral $ size shr sh')
 
-      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh' (sz, n)) z
+      let write (sz, 0) = writeArrayData tp aout (fromIntegral $ toIndex shr sh' (sz, n)) z
           write (sz, i) = do
             let x = ain (sz, n-i)
-            y <- readArrayData tp aout (toIndex shr sh' (sz, n-i+1))
-            writeArrayData tp aout (toIndex shr sh' (sz, n-i)) (f x y)
+            y <- readArrayData tp aout (fromIntegral $ toIndex shr sh' (sz, n-i+1))
+            writeArrayData tp aout (fromIntegral $ toIndex shr sh' (sz, n-i)) (f x y)
 
       iter shr sh' write (>>) (return ())
       return (aout, undefined)
@@ -533,21 +531,21 @@ scanrOp f z (Delayed (ArrayR shr tp) (sz, n) ain _)
 scanr1Op
     :: forall sh e. HasCallStack
     => (e -> e -> e)
-    -> Delayed (Array (sh, Int) e)
-    -> WithReprs (Array (sh, Int) e)
+    -> Delayed (Array (sh, INT) e)
+    -> WithReprs (Array (sh, INT) e)
 scanr1Op f (Delayed (ArrayR shr tp) sh@(_, n) ain _)
   = ( TupRsingle $ ArrayR shr tp
     , adata `seq` Array sh adata
     )
   where
     (adata, _)  = runArrayData @e $ do
-      aout <- newArrayData tp (size shr sh)
+      aout <- newArrayData tp (fromIntegral $ size shr sh)
 
-      let write (sz, 0) = writeArrayData tp aout (toIndex shr sh (sz, n-1)) (ain (sz, n-1))
+      let write (sz, 0) = writeArrayData tp aout (fromIntegral $ toIndex shr sh (sz, n-1)) (ain (sz, n-1))
           write (sz, i) = do
             let x = ain (sz, n-i-1)
-            y <- readArrayData tp aout (toIndex shr sh (sz, n-i))
-            writeArrayData tp aout (toIndex shr sh (sz, n-i-1)) (f x y)
+            y <- readArrayData tp aout (fromIntegral $ toIndex shr sh (sz, n-i))
+            writeArrayData tp aout (fromIntegral $ toIndex shr sh (sz, n-i-1)) (f x y)
 
       iter shr sh write (>>) (return ())
       return (aout, undefined)
@@ -557,27 +555,27 @@ scanr'Op
     :: forall sh e.
        (e -> e -> e)
     -> e
-    -> Delayed (Array (sh, Int) e)
-    -> WithReprs (Array (sh, Int) e, Array sh e)
+    -> Delayed (Array (sh, INT) e)
+    -> WithReprs (Array (sh, INT) e, Array sh e)
 scanr'Op f z (Delayed (ArrayR shr@(ShapeRsnoc shr') tp) (sh, n) ain _)
   = ( TupRsingle (ArrayR shr tp) `TupRpair` TupRsingle (ArrayR shr' tp)
     , aout `seq` asum `seq` ( Array (sh, n) aout, Array sh asum )
     )
   where
     ((aout, asum), _) = runArrayData @(e, e) $ do
-      aout <- newArrayData tp (size shr  (sh, n))
-      asum <- newArrayData tp (size shr' sh)
+      aout <- newArrayData tp (fromIntegral $ size shr  (sh, n))
+      asum <- newArrayData tp (fromIntegral $ size shr' sh)
 
       let write (sz, 0)
-            | n == 0    = writeArrayData tp asum (toIndex shr' sh sz) z
-            | otherwise = writeArrayData tp aout (toIndex shr  (sh, n) (sz, n-1)) z
+            | n == 0    = writeArrayData tp asum (fromIntegral $ toIndex shr' sh sz) z
+            | otherwise = writeArrayData tp aout (fromIntegral $ toIndex shr  (sh, n) (sz, n-1)) z
 
           write (sz, i) = do
             let x = ain (sz, n-i)
-            y <- readArrayData tp aout (toIndex shr (sh, n) (sz, n-i))
+            y <- readArrayData tp aout (fromIntegral $ toIndex shr (sh, n) (sz, n-i))
             if i == n
-              then writeArrayData tp asum (toIndex shr' sh      sz)          (f x y)
-              else writeArrayData tp aout (toIndex shr  (sh, n) (sz, n-i-1)) (f x y)
+              then writeArrayData tp asum (fromIntegral $ toIndex shr' sh      sz)          (f x y)
+              else writeArrayData tp aout (fromIntegral $ toIndex shr  (sh, n) (sz, n-i-1)) (f x y)
 
       iter shr (sh, n+1) write (>>) (return ())
       return ((aout, asum), undefined)
@@ -597,14 +595,14 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
     n'          = size shr' sh'
     --
     (adata, _)  = runArrayData @e $ do
-      aout <- newArrayData tp n'
+      aout <- newArrayData tp (fromIntegral n')
 
       let -- initialise array with default values
           init i
             | i >= n'   = return ()
             | otherwise = do
-                x <- readArrayData tp adef i
-                writeArrayData tp aout i x
+                x <- readArrayData tp adef (fromIntegral i)
+                writeArrayData tp aout (fromIntegral i) x
                 init (i+1)
 
           -- project each element onto the destination array and update
@@ -616,8 +614,8 @@ permuteOp f (TupRsingle (ArrayR shr' _), def@(Array _ adef)) p (Delayed (ArrayR 
                       j = toIndex shr' sh' dst
                       x = ain i
                   --
-                  y <- readArrayData tp aout j
-                  writeArrayData tp aout j (f x y)
+                  y <- readArrayData tp aout (fromIntegral j)
+                  writeArrayData tp aout (fromIntegral j) (f x y)
                 _            -> internalError "unexpected tag"
 
       init 0
@@ -783,13 +781,13 @@ stencilAccess stencil = goR (stencilShapeR stencil) stencil
 
     -- Add a left-most component to an index
     --
-    cons :: ShapeR sh -> Int -> sh -> (sh, Int)
+    cons :: ShapeR sh -> INT -> sh -> (sh, INT)
     cons ShapeRz          ix ()       = ((), ix)
     cons (ShapeRsnoc shr) ix (sh, sz) = (cons shr ix sh, sz)
 
     -- Remove the left-most index of an index, and return the remainder
     --
-    uncons :: ShapeR sh -> (sh, Int) -> (Int, sh)
+    uncons :: ShapeR sh -> (sh, INT) -> (INT, sh)
     uncons ShapeRz          ((), v)  = (v, ())
     uncons (ShapeRsnoc shr) (v1, v2) = let (i, v1') = uncons shr v1
                                        in  (i, (v1', v2))
@@ -838,17 +836,6 @@ bounded shr bnd (Delayed _ sh f _) ix =
                           Wrap   -> iz - sz
                           _      -> internalError "unexpected boundary condition"
           | otherwise = iz
-
--- toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
---         => SliceIndex (EltRepr slix)
---                       (EltRepr sl)
---                       co
---                       (EltRepr dim)
---         -> proxy slix
---         -> Array dim e
---         -> [Array sl e]
--- toSeqOp sliceIndex _ arr = map (sliceOp sliceIndex arr :: slix -> Array sl e)
---                                (enumSlices sliceIndex (shape arr))
 
 
 -- Stencil boundary conditions
@@ -934,16 +921,18 @@ evalOpenExp pexp env aenv =
     Evar (Var _ ix)             -> prj ix env
     Const _ c                   -> c
     Undef tp                    -> undefElt (TupRsingle tp)
-    PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
     Nil                         -> ()
     Pair e1 e2                  -> let !x1 = evalE e1
                                        !x2 = evalE e2
                                    in  (x1, x2)
-    VecPack   vecR e            -> pack   vecR $! evalE e
-    VecUnpack vecR e            -> unpack vecR $! evalE e
-    IndexSlice slice slix sh    -> restrict slice (evalE slix)
-                                                  (evalE sh)
+    Extract vR iR v i           -> evalExtract vR iR (evalE v) (evalE i)
+    Insert vR iR v i x          -> evalInsert vR iR (evalE v) (evalE i) (evalE x)
+    Shuffle rR iR x y i         -> let TupRsingle eR = expType x
+                                    in evalShuffle eR rR iR (evalE x) (evalE y) (evalE i)
+    Select m x y                -> let TupRsingle eR = expType x
+                                    in evalSelect eR (evalE m) (evalE x) (evalE y)
+    IndexSlice slice slix sh    -> restrict slice (evalE slix) (evalE sh)
       where
         restrict :: SliceIndex slix sl co sh -> slix -> sh -> sl
         restrict SliceNil              ()        ()         = ()
@@ -953,8 +942,7 @@ evalOpenExp pexp env aenv =
         restrict (SliceFixed sliceIdx) (slx, _i)  (sl, _sz) =
           restrict sliceIdx slx sl
 
-    IndexFull slice slix sh     -> extend slice (evalE slix)
-                                                (evalE sh)
+    IndexFull slice slix sh     -> extend slice (evalE slix) (evalE sh)
       where
         extend :: SliceIndex slix sl co sh -> slix -> sl -> sh
         extend SliceNil              ()        ()       = ()
@@ -967,7 +955,7 @@ evalOpenExp pexp env aenv =
 
     ToIndex shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
     FromIndex shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
-    Case e rhs def              -> evalE (caseof (evalE e) rhs)
+    Case _ e rhs def            -> evalE (caseof (evalE e) rhs)
       where
         caseof :: TAG -> [(TAG, OpenExp env aenv t)] -> OpenExp env aenv t
         caseof tag = go
@@ -1009,6 +997,185 @@ evalOpenExp pexp env aenv =
 -- destination values are equal (this is not checked at this point).
 --
 evalCoerceScalar :: ScalarType a -> ScalarType b -> a -> b
+evalCoerceScalar = scalar
+  where
+    scalar :: ScalarType a -> ScalarType b -> a -> b
+    scalar (NumScalarType a) = num a
+    scalar (BitScalarType a) = bit a
+
+    bit :: BitType a -> ScalarType b -> a -> b
+    bit TypeBit = \case
+      BitScalarType TypeBit -> id
+      _                     -> internalError "evalCoerceScalar @Bit"
+    bit (TypeMask _) = \case
+      NumScalarType b -> num' b
+      BitScalarType b -> bit' b
+      where
+        bit' :: BitType b -> Vec n Bit -> b
+        bit' TypeMask{} = unsafeCoerce
+        bit' TypeBit    = internalError "evalCoerceScalar @Bit"
+
+        num' :: NumType b -> Vec n Bit -> b
+        num' (IntegralNumType b) = integral' b
+        num' (FloatingNumType b) = floating' b
+
+        integral' :: IntegralType b -> Vec n Bit -> b
+        integral' (VectorIntegralType _ _) = unsafeCoerce
+        integral' (SingleIntegralType   b)
+          | IntegralDict <- integralDict b
+          = peek
+
+        floating' :: FloatingType b -> Vec n Bit -> b
+        floating' (VectorFloatingType _ _) = unsafeCoerce
+        floating' (SingleFloatingType   b)
+          | FloatingDict <- floatingDict b
+          = peek
+
+    num :: NumType a -> ScalarType b -> a -> b
+    num (IntegralNumType a) = integral a
+    num (FloatingNumType t) = floating t
+
+    integral :: IntegralType a -> ScalarType b -> a -> b
+    integral (SingleIntegralType a) = \case
+      NumScalarType b -> num' b a
+      BitScalarType b -> bit' b a
+      where
+        bit' :: BitType b -> SingleIntegralType a -> a -> b
+        bit' TypeBit    _ = unsafeCoerce
+        bit' TypeMask{} a
+          | IntegralDict <- integralDict a
+          = poke
+
+        num' :: NumType b -> SingleIntegralType a -> a -> b
+        num' (IntegralNumType b) = integral' b
+        num' (FloatingNumType b) = floating' b
+
+        integral' :: IntegralType b -> SingleIntegralType a -> a -> b
+        integral' (SingleIntegralType   _) _ = unsafeCoerce
+        integral' (VectorIntegralType _ b) a
+          | IntegralDict <- integralDict a
+          = case b of
+              TypeInt8    -> poke
+              TypeInt16   -> poke
+              TypeInt32   -> poke
+              TypeInt64   -> poke
+              TypeInt128  -> poke
+              TypeWord8   -> poke
+              TypeWord16  -> poke
+              TypeWord32  -> poke
+              TypeWord64  -> poke
+              TypeWord128 -> poke
+
+        floating' :: FloatingType b -> SingleIntegralType a -> a -> b
+        floating' (SingleFloatingType   _) _ = unsafeCoerce
+        floating' (VectorFloatingType _ b) a
+          | IntegralDict <- integralDict a
+          = case b of
+              TypeFloat16  -> poke
+              TypeFloat32  -> poke
+              TypeFloat64  -> poke
+              TypeFloat128 -> poke
+
+    integral (VectorIntegralType _ a) = \case
+      NumScalarType b -> num' b a
+      BitScalarType b -> bit' b a
+      where
+        bit' :: BitType b -> SingleIntegralType a -> Vec n a -> b
+        bit' TypeBit    _ = unsafeCoerce
+        bit' TypeMask{} _ = unsafeCoerce
+
+        num' :: NumType b -> SingleIntegralType a -> Vec n a -> b
+        num' (IntegralNumType b) = integral' b
+        num' (FloatingNumType b) = floating' b
+
+        integral' :: IntegralType b -> SingleIntegralType a -> Vec n a -> b
+        integral' (VectorIntegralType _ _) _ = unsafeCoerce
+        integral' (SingleIntegralType   b) _
+          | IntegralDict <- integralDict b
+          = peek
+
+        floating' :: FloatingType b -> SingleIntegralType a -> Vec n a -> b
+        floating' (VectorFloatingType _ _) _ = unsafeCoerce
+        floating' (SingleFloatingType   b) _
+          | FloatingDict <- floatingDict b
+          = peek
+
+    floating :: FloatingType a -> ScalarType b -> a -> b
+    floating (SingleFloatingType a) = \case
+      NumScalarType b -> num' b a
+      BitScalarType b -> bit' b a
+      where
+        bit' :: BitType b -> SingleFloatingType a -> a -> b
+        bit' TypeBit    _ = unsafeCoerce
+        bit' TypeMask{} _ = unsafeCoerce
+
+        num' :: NumType b -> SingleFloatingType a -> a -> b
+        num' (IntegralNumType b) = integral' b
+        num' (FloatingNumType b) = floating' b
+
+        integral' :: IntegralType b -> SingleFloatingType a -> a -> b
+        integral' (SingleIntegralType   _) _ = unsafeCoerce
+        integral' (VectorIntegralType _ b) a
+          | FloatingDict <- floatingDict a
+          = case b of
+              TypeInt8    -> poke
+              TypeInt16   -> poke
+              TypeInt32   -> poke
+              TypeInt64   -> poke
+              TypeInt128  -> poke
+              TypeWord8   -> poke
+              TypeWord16  -> poke
+              TypeWord32  -> poke
+              TypeWord64  -> poke
+              TypeWord128 -> poke
+
+        floating' :: FloatingType b -> SingleFloatingType a -> a -> b
+        floating' (SingleFloatingType   _) _ = unsafeCoerce
+        floating' (VectorFloatingType _ b) a
+          | FloatingDict <- floatingDict a
+          = case b of
+              TypeFloat16  -> poke
+              TypeFloat32  -> poke
+              TypeFloat64  -> poke
+              TypeFloat128 -> poke
+
+    floating (VectorFloatingType _ a) = \case
+      NumScalarType b -> num' b a
+      BitScalarType b -> bit' b a
+      where
+        bit' :: BitType b -> SingleFloatingType a -> Vec n a -> b
+        bit' TypeBit    _ = unsafeCoerce
+        bit' TypeMask{} _ = unsafeCoerce
+
+        num' :: NumType b -> SingleFloatingType a -> Vec n a -> b
+        num' (IntegralNumType b) = integral' b
+        num' (FloatingNumType b) = floating' b
+
+        integral' :: IntegralType b -> SingleFloatingType a -> Vec n a -> b
+        integral' (VectorIntegralType _ _) _ = unsafeCoerce
+        integral' (SingleIntegralType   b) _
+          | IntegralDict <- integralDict b
+          = peek
+
+        floating' :: FloatingType b -> SingleFloatingType a -> Vec n a -> b
+        floating' (VectorFloatingType _ _) _ = unsafeCoerce
+        floating' (SingleFloatingType   b) _
+          | FloatingDict <- floatingDict b
+          = peek
+
+    {-# INLINE poke #-}
+    poke :: forall a b n. Prim a => a -> Vec n b
+    poke x = runST $ do
+      mba <- newByteArray (sizeOf (undefined::a))
+      writeByteArray mba 0 x
+      ByteArray ba# <- unsafeFreezeByteArray mba
+      return $ Vec ba#
+
+    {-# INLINE peek #-}
+    peek :: Prim b => Vec n a -> b
+    peek (Vec ba#) = indexByteArray (ByteArray ba#) 0
+
+{--
 evalCoerceScalar SingleScalarType{}    SingleScalarType{} a = unsafeCoerce a
 evalCoerceScalar VectorScalarType{}    VectorScalarType{} a = unsafeCoerce a  -- XXX: or just unpack/repack the (Vec ba#)
 evalCoerceScalar (SingleScalarType ta) VectorScalarType{} a = vector ta a
@@ -1074,806 +1241,308 @@ evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
     {-# INLINE peek #-}
     peek :: Prim a => Vec n b -> a
     peek (Vec ba#) = indexByteArray (ByteArray ba#) 0
-
+--}
 
 -- Scalar primitives
 -- -----------------
 
-evalPrimConst :: PrimConst a -> a
-evalPrimConst (PrimMinBound ty) = evalMinBound ty
-evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
-evalPrimConst (PrimPi       ty) = evalPi ty
-
 evalPrim :: PrimFun (a -> r) -> (a -> r)
-evalPrim (PrimAdd                ty) = evalAdd ty
-evalPrim (PrimSub                ty) = evalSub ty
-evalPrim (PrimMul                ty) = evalMul ty
-evalPrim (PrimNeg                ty) = evalNeg ty
-evalPrim (PrimAbs                ty) = evalAbs ty
-evalPrim (PrimSig                ty) = evalSig ty
-evalPrim (PrimQuot               ty) = evalQuot ty
-evalPrim (PrimRem                ty) = evalRem ty
-evalPrim (PrimQuotRem            ty) = evalQuotRem ty
-evalPrim (PrimIDiv               ty) = evalIDiv ty
-evalPrim (PrimMod                ty) = evalMod ty
-evalPrim (PrimDivMod             ty) = evalDivMod ty
-evalPrim (PrimBAnd               ty) = evalBAnd ty
-evalPrim (PrimBOr                ty) = evalBOr ty
-evalPrim (PrimBXor               ty) = evalBXor ty
-evalPrim (PrimBNot               ty) = evalBNot ty
-evalPrim (PrimBShiftL            ty) = evalBShiftL ty
-evalPrim (PrimBShiftR            ty) = evalBShiftR ty
-evalPrim (PrimBRotateL           ty) = evalBRotateL ty
-evalPrim (PrimBRotateR           ty) = evalBRotateR ty
-evalPrim (PrimPopCount           ty) = evalPopCount ty
-evalPrim (PrimCountLeadingZeros  ty) = evalCountLeadingZeros ty
-evalPrim (PrimCountTrailingZeros ty) = evalCountTrailingZeros ty
-evalPrim (PrimFDiv               ty) = evalFDiv ty
-evalPrim (PrimRecip              ty) = evalRecip ty
-evalPrim (PrimSin                ty) = evalSin ty
-evalPrim (PrimCos                ty) = evalCos ty
-evalPrim (PrimTan                ty) = evalTan ty
-evalPrim (PrimAsin               ty) = evalAsin ty
-evalPrim (PrimAcos               ty) = evalAcos ty
-evalPrim (PrimAtan               ty) = evalAtan ty
-evalPrim (PrimSinh               ty) = evalSinh ty
-evalPrim (PrimCosh               ty) = evalCosh ty
-evalPrim (PrimTanh               ty) = evalTanh ty
-evalPrim (PrimAsinh              ty) = evalAsinh ty
-evalPrim (PrimAcosh              ty) = evalAcosh ty
-evalPrim (PrimAtanh              ty) = evalAtanh ty
-evalPrim (PrimExpFloating        ty) = evalExpFloating ty
-evalPrim (PrimSqrt               ty) = evalSqrt ty
-evalPrim (PrimLog                ty) = evalLog ty
-evalPrim (PrimFPow               ty) = evalFPow ty
-evalPrim (PrimLogBase            ty) = evalLogBase ty
-evalPrim (PrimTruncate        ta tb) = evalTruncate ta tb
-evalPrim (PrimRound           ta tb) = evalRound ta tb
-evalPrim (PrimFloor           ta tb) = evalFloor ta tb
-evalPrim (PrimCeiling         ta tb) = evalCeiling ta tb
-evalPrim (PrimAtan2              ty) = evalAtan2 ty
-evalPrim (PrimIsNaN              ty) = evalIsNaN ty
-evalPrim (PrimIsInfinite         ty) = evalIsInfinite ty
-evalPrim (PrimLt                 ty) = evalLt ty
-evalPrim (PrimGt                 ty) = evalGt ty
-evalPrim (PrimLtEq               ty) = evalLtEq ty
-evalPrim (PrimGtEq               ty) = evalGtEq ty
-evalPrim (PrimEq                 ty) = evalEq ty
-evalPrim (PrimNEq                ty) = evalNEq ty
-evalPrim (PrimMax                ty) = evalMax ty
-evalPrim (PrimMin                ty) = evalMin ty
-evalPrim PrimLAnd                    = evalLAnd
-evalPrim PrimLOr                     = evalLOr
-evalPrim PrimLNot                    = evalLNot
-evalPrim (PrimFromIntegral ta tb)    = evalFromIntegral ta tb
-evalPrim (PrimToFloating ta tb)      = evalToFloating ta tb
+evalPrim (PrimAdd t)                = A.add t
+evalPrim (PrimSub t)                = A.sub t
+evalPrim (PrimMul t)                = A.mul t
+evalPrim (PrimNeg t)                = A.negate t
+evalPrim (PrimAbs t)                = A.abs t
+evalPrim (PrimSig t)                = A.signum t
+evalPrim (PrimQuot t)               = A.quot t
+evalPrim (PrimRem t)                = A.rem t
+evalPrim (PrimQuotRem t)            = A.quotRem t
+evalPrim (PrimIDiv t)               = A.div t
+evalPrim (PrimMod t)                = A.mod t
+evalPrim (PrimDivMod t)             = A.divMod t
+evalPrim (PrimBAnd t)               = A.band t
+evalPrim (PrimBOr t)                = A.bor t
+evalPrim (PrimBXor t)               = A.xor t
+evalPrim (PrimBNot t)               = A.complement t
+evalPrim (PrimBShiftL t)            = A.shiftL t
+evalPrim (PrimBShiftR t)            = A.shiftR t
+evalPrim (PrimBRotateL t)           = A.rotateL t
+evalPrim (PrimBRotateR t)           = A.rotateR t
+evalPrim (PrimPopCount t)           = A.popCount t
+evalPrim (PrimCountLeadingZeros t)  = A.countLeadingZeros t
+evalPrim (PrimCountTrailingZeros t) = A.countTrailingZeros t
+evalPrim (PrimFDiv t)               = A.fdiv t
+evalPrim (PrimRecip t)              = A.recip t
+evalPrim (PrimSin t)                = A.sin t
+evalPrim (PrimCos t)                = A.cos t
+evalPrim (PrimTan t)                = A.tan t
+evalPrim (PrimAsin t)               = A.asin t
+evalPrim (PrimAcos t)               = A.acos t
+evalPrim (PrimAtan t)               = A.atan t
+evalPrim (PrimSinh t)               = A.sinh t
+evalPrim (PrimCosh t)               = A.cosh t
+evalPrim (PrimTanh t)               = A.tanh t
+evalPrim (PrimAsinh t)              = A.asinh t
+evalPrim (PrimAcosh t)              = A.acosh t
+evalPrim (PrimAtanh t)              = A.atanh t
+evalPrim (PrimExpFloating t)        = A.exp t
+evalPrim (PrimSqrt t)               = A.sqrt t
+evalPrim (PrimLog t)                = A.log t
+evalPrim (PrimFPow t)               = A.pow t
+evalPrim (PrimLogBase t)            = A.logBase t
+evalPrim (PrimTruncate ta tb)       = A.truncate ta tb
+evalPrim (PrimRound ta tb)          = A.round ta tb
+evalPrim (PrimFloor ta tb)          = A.floor ta tb
+evalPrim (PrimCeiling ta tb)        = A.ceiling ta tb
+evalPrim (PrimAtan2 t)              = A.atan2 t
+evalPrim (PrimIsNaN t)              = A.isNaN t
+evalPrim (PrimIsInfinite t)         = A.isInfinite t
+evalPrim (PrimLt t)                 = A.lt t
+evalPrim (PrimGt t)                 = A.gt t
+evalPrim (PrimLtEq t)               = A.lte t
+evalPrim (PrimGtEq t)               = A.gte t
+evalPrim (PrimEq t)                 = A.eq t
+evalPrim (PrimNEq t)                = A.neq t
+evalPrim (PrimMax t)                = A.max t
+evalPrim (PrimMin t)                = A.min t
+evalPrim (PrimLAnd t)               = A.land t
+evalPrim (PrimLOr t)                = A.lor t
+evalPrim (PrimLNot t)               = A.lnot t
+evalPrim (PrimFromIntegral ta tb)   = A.fromIntegral ta tb
+evalPrim (PrimToFloating ta tb)     = A.toFloating ta tb
+evalPrim (PrimToBool i b)           = A.toBool i b
+evalPrim (PrimFromBool b i)         = A.fromBool b i
 
 
--- Implementation of scalar primitives
--- -----------------------------------
+-- Vector primitives
+-- -----------------
+
+evalExtract :: ScalarType (Prim.Vec n a) -> SingleIntegralType i -> Prim.Vec n a -> i -> a
+evalExtract vR iR v i = scalar vR v
+  where
+    scalar :: ScalarType (Prim.Vec n t) -> Prim.Vec n t -> t
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
+
+    num :: NumType (Prim.Vec n t) -> Prim.Vec n t -> t
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
+
+    bit :: BitType (Prim.Vec n t) -> Prim.Vec n t -> t
+    bit TypeMask{} v
+      | IntegralDict <- integralDict iR
+      = Bit.extract (BitMask v) (fromIntegral i)
+
+    integral :: IntegralType (Prim.Vec n t) -> Prim.Vec n t -> t
+    integral (SingleIntegralType   tR) _ = case tR of
+    integral (VectorIntegralType _ tR) v
+      | IntegralDict <- integralDict tR
+      , IntegralDict <- integralDict iR
+      = Vec.extract v (fromIntegral i)
+
+    floating :: FloatingType (Prim.Vec n t) -> Prim.Vec n t -> t
+    floating (SingleFloatingType   tR) _ = case tR of
+    floating (VectorFloatingType _ tR) v
+      | FloatingDict <- floatingDict tR
+      , IntegralDict <- integralDict iR
+      = Vec.extract v (fromIntegral i)
+
+evalInsert
+    :: ScalarType (Prim.Vec n a)
+    -> SingleIntegralType i
+    -> Prim.Vec n a
+    -> i
+    -> a
+    -> Prim.Vec n a
+evalInsert vR iR v i x = scalar vR v x
+  where
+    scalar :: ScalarType (Prim.Vec n t) -> Prim.Vec n t -> t -> Prim.Vec n t
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
+
+    num :: NumType (Prim.Vec n t) -> Prim.Vec n t -> t -> Prim.Vec n t
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
+
+    bit :: BitType (Prim.Vec n t) -> Prim.Vec n t -> t -> Prim.Vec n t
+    bit TypeMask{} v x
+      | IntegralDict <- integralDict iR
+      = unMask $ Bit.insert (BitMask v) (fromIntegral i) x
+
+    integral :: IntegralType (Prim.Vec n t) -> Prim.Vec n t -> t -> Prim.Vec n t
+    integral (SingleIntegralType   tR) _ _ = case tR of
+    integral (VectorIntegralType _ tR) v x
+      | IntegralDict <- integralDict tR
+      , IntegralDict <- integralDict iR
+      = Vec.insert v (fromIntegral i) x
+
+    floating :: FloatingType (Prim.Vec n t) -> Prim.Vec n t -> t -> Prim.Vec n t
+    floating (SingleFloatingType   tR) _ _ = case tR of
+    floating (VectorFloatingType _ tR) v x
+      | FloatingDict <- floatingDict tR
+      , IntegralDict <- integralDict iR
+      = Vec.insert v (fromIntegral i) x
+
+evalShuffle
+    :: ScalarType (Prim.Vec n a)
+    -> ScalarType (Prim.Vec m a)
+    -> SingleIntegralType i
+    -> Prim.Vec n a
+    -> Prim.Vec n a
+    -> Prim.Vec m i
+    -> Prim.Vec m a
+evalShuffle = scalar
+  where
+    scalar :: ScalarType (Prim.Vec n t)
+           -> ScalarType (Prim.Vec m t)
+           -> SingleIntegralType i
+           -> Prim.Vec n t
+           -> Prim.Vec n t
+           -> Prim.Vec m i
+           -> Prim.Vec m t
+    scalar (NumScalarType s) (NumScalarType t) = num s t
+    scalar (BitScalarType s) (BitScalarType t) = bit s t
+    scalar _ _ = internalError "unexpected vector encoding"
+
+    num :: NumType (Prim.Vec n t)
+        -> NumType (Prim.Vec m t)
+        -> SingleIntegralType i
+        -> Prim.Vec n t
+        -> Prim.Vec n t
+        -> Prim.Vec m i
+        -> Prim.Vec m t
+    num (IntegralNumType s) (IntegralNumType t) = integral s t
+    num (FloatingNumType s) (FloatingNumType t) = floating s t
+    num _ _ = internalError "unexpected vector encoding"
+
+    bit :: BitType (Prim.Vec n t)
+        -> BitType (Prim.Vec m t)
+        -> SingleIntegralType i
+        -> Prim.Vec n t
+        -> Prim.Vec n t
+        -> Prim.Vec m i
+        -> Prim.Vec m t
+    bit (TypeMask n#) TypeMask{} iR x y i
+      | IntegralDict <- integralDict iR
+      = let n = fromInteger (natVal' n#)
+         in unMask
+          $ Bit.fromList [ boundsCheck "vector index" (j >= 0 && j < 2*n)
+                         $ if j < n then Bit.extract (BitMask x) j
+                                    else Bit.extract (BitMask y) (j - n)
+                         | j <- map fromIntegral (Vec.toList i) ]
+
+    integral :: IntegralType (Prim.Vec n t)
+             -> IntegralType (Prim.Vec m t)
+             -> SingleIntegralType i
+             -> Prim.Vec n t
+             -> Prim.Vec n t
+             -> Prim.Vec m i
+             -> Prim.Vec m t
+    integral (SingleIntegralType s) _ _ _ _ _ = case s of
+    integral _ (SingleIntegralType t) _ _ _ _ = case t of
+    integral (VectorIntegralType n# sR) (VectorIntegralType _ tR) iR x y i
+      | IntegralDict <- integralDict iR
+      , IntegralDict <- integralDict sR
+      , IntegralDict <- integralDict tR
+      = let n = fromInteger (natVal' n#)
+         in Vec.fromList [ boundsCheck "vector index" (j >= 0 && j < 2*n)
+                         $ if j < n then Vec.extract x j
+                                    else Vec.extract y (j - n)
+                         | j <- map fromIntegral (Vec.toList i) ]
+
+    floating :: FloatingType (Prim.Vec n t)
+             -> FloatingType (Prim.Vec m t)
+             -> SingleIntegralType i
+             -> Prim.Vec n t
+             -> Prim.Vec n t
+             -> Prim.Vec m i
+             -> Prim.Vec m t
+    floating (SingleFloatingType s) _ _ _ _ _ = case s of
+    floating _ (SingleFloatingType t) _ _ _ _ = case t of
+    floating (VectorFloatingType n# sR) (VectorFloatingType _ tR) iR x y i
+      | IntegralDict <- integralDict iR
+      , FloatingDict <- floatingDict sR
+      , FloatingDict <- floatingDict tR
+      = let n = fromInteger (natVal' n#)
+         in Vec.fromList [ boundsCheck "vector index" (j >= 0 && j < 2*n)
+                         $ if j < n then Vec.extract x j
+                                    else Vec.extract y (j - n)
+                         | j <- map fromIntegral (Vec.toList i) ]
+
+evalSelect
+    :: ScalarType (Prim.Vec n a)
+    -> Prim.Vec n Bit
+    -> Prim.Vec n a
+    -> Prim.Vec n a
+    -> Prim.Vec n a
+evalSelect = scalar
+  where
+    scalar :: ScalarType (Prim.Vec n t) -> Prim.Vec n Bit -> Prim.Vec n t -> Prim.Vec n t -> Prim.Vec n t
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
+
+    num :: NumType (Prim.Vec n t) -> Prim.Vec n Bit -> Prim.Vec n t -> Prim.Vec n t -> Prim.Vec n t
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
+
+    bit :: BitType (Prim.Vec n t) -> Prim.Vec n Bit -> Prim.Vec n t -> Prim.Vec n t -> Prim.Vec n t
+    bit TypeMask{} m x y
+      = unMask
+      $ Bit.fromList [ if unBit b then Bit.extract (BitMask x) i
+                                  else Bit.extract (BitMask y) i
+                     | b <- Bit.toList (BitMask m)
+                     | i <- [0..]
+                     ]
+
+    integral :: IntegralType (Prim.Vec n t) -> Prim.Vec n Bit -> Prim.Vec n t -> Prim.Vec n t -> Prim.Vec n t
+    integral (SingleIntegralType   tR) _ _ _ = case tR of
+    integral (VectorIntegralType _ tR) m x y
+      | IntegralDict <- integralDict tR
+      = Vec.fromList [ if unBit b then Vec.extract x i
+                                  else Vec.extract y i
+                     | b <- Bit.toList (BitMask m)
+                     | i <- [0..]
+                     ]
+
+    floating :: FloatingType (Prim.Vec n t) -> Prim.Vec n Bit -> Prim.Vec n t -> Prim.Vec n t -> Prim.Vec n t
+    floating (SingleFloatingType   tR) _ _ _ = case tR of
+    floating (VectorFloatingType _ tR) m x y
+      | FloatingDict <- floatingDict tR
+      = Vec.fromList [ if unBit b then Vec.extract x i
+                                  else Vec.extract y i
+                     | b <- Bit.toList (BitMask m)
+                     | i <- [0..]
+                     ]
+
+
+-- Utilities
+-- ---------
 
 toBool :: PrimBool -> Bool
-toBool 0 = False
-toBool _ = True
-
-fromBool :: Bool -> PrimBool
-fromBool False = 0
-fromBool True  = 1
-
-evalLAnd :: (PrimBool, PrimBool) -> PrimBool
-evalLAnd (x, y) = fromBool (toBool x && toBool y)
-
-evalLOr  :: (PrimBool, PrimBool) -> PrimBool
-evalLOr (x, y) = fromBool (toBool x || toBool y)
-
-evalLNot :: PrimBool -> PrimBool
-evalLNot = fromBool . not . toBool
-
-evalVectorIndex :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> (Vec n a, i) -> a
-evalVectorIndex (VectorType n _) ti (v, i) | IntegralDict <- integralDict ti = vecIndex v (fromIntegral i)
-
-evalVectorWrite :: (KnownNat n, Prim a) => VectorType (Vec n a) -> IntegralType i -> (Vec n a, (i, a)) -> Vec n a
-evalVectorWrite (VectorType n _) ti (v, (i, a)) | IntegralDict <- integralDict ti = vecWrite v (fromIntegral i) a
-
-evalFromIntegral :: IntegralType a -> NumType b -> a -> b
-evalFromIntegral ta (IntegralNumType tb)
-  | IntegralDict <- integralDict ta
-  , IntegralDict <- integralDict tb
-  = fromIntegral
-
-evalFromIntegral ta (FloatingNumType tb)
-  | IntegralDict <- integralDict ta
-  , FloatingDict <- floatingDict tb
-  = fromIntegral
-
-evalToFloating :: NumType a -> FloatingType b -> a -> b
-evalToFloating (IntegralNumType ta) tb
-  | IntegralDict <- integralDict ta
-  , FloatingDict <- floatingDict tb
-  = realToFrac
-
-evalToFloating (FloatingNumType ta) tb
-  | FloatingDict <- floatingDict ta
-  , FloatingDict <- floatingDict tb
-  = realToFrac
-
-
--- Extract methods from reified dictionaries
---
-
--- Constant methods of Bounded
---
-
-evalMinBound :: BoundedType a -> a
-evalMinBound (IntegralBoundedType ty)
-  | IntegralDict <- integralDict ty
-  = minBound
-
-evalMaxBound :: BoundedType a -> a
-evalMaxBound (IntegralBoundedType ty)
-  | IntegralDict <- integralDict ty
-  = maxBound
-
--- Constant method of floating
---
-
-evalPi :: FloatingType a -> a
-evalPi ty | FloatingDict <- floatingDict ty = pi
-
-evalVectorCreate :: (KnownNat n, Prim a) => VectorType (Vec n a) -> Vec n a
-evalVectorCreate (VectorType n _) = vecEmpty
-
-evalSin :: FloatingType a -> (a -> a)
-evalSin ty | FloatingDict <- floatingDict ty = sin
-
-evalCos :: FloatingType a -> (a -> a)
-evalCos ty | FloatingDict <- floatingDict ty = cos
-
-evalTan :: FloatingType a -> (a -> a)
-evalTan ty | FloatingDict <- floatingDict ty = tan
-
-evalAsin :: FloatingType a -> (a -> a)
-evalAsin ty | FloatingDict <- floatingDict ty = asin
-
-evalAcos :: FloatingType a -> (a -> a)
-evalAcos ty | FloatingDict <- floatingDict ty = acos
-
-evalAtan :: FloatingType a -> (a -> a)
-evalAtan ty | FloatingDict <- floatingDict ty = atan
-
-evalSinh :: FloatingType a -> (a -> a)
-evalSinh ty | FloatingDict <- floatingDict ty = sinh
-
-evalCosh :: FloatingType a -> (a -> a)
-evalCosh ty | FloatingDict <- floatingDict ty = cosh
-
-evalTanh :: FloatingType a -> (a -> a)
-evalTanh ty | FloatingDict <- floatingDict ty = tanh
-
-evalAsinh :: FloatingType a -> (a -> a)
-evalAsinh ty | FloatingDict <- floatingDict ty = asinh
-
-evalAcosh :: FloatingType a -> (a -> a)
-evalAcosh ty | FloatingDict <- floatingDict ty = acosh
-
-evalAtanh :: FloatingType a -> (a -> a)
-evalAtanh ty | FloatingDict <- floatingDict ty = atanh
-
-evalExpFloating :: FloatingType a -> (a -> a)
-evalExpFloating ty | FloatingDict <- floatingDict ty = exp
-
-evalSqrt :: FloatingType a -> (a -> a)
-evalSqrt ty | FloatingDict <- floatingDict ty = sqrt
-
-evalLog :: FloatingType a -> (a -> a)
-evalLog ty | FloatingDict <- floatingDict ty = log
-
-evalFPow :: FloatingType a -> ((a, a) -> a)
-evalFPow ty | FloatingDict <- floatingDict ty = uncurry (**)
-
-evalLogBase :: FloatingType a -> ((a, a) -> a)
-evalLogBase ty | FloatingDict <- floatingDict ty = uncurry logBase
-
-evalTruncate :: FloatingType a -> IntegralType b -> (a -> b)
-evalTruncate ta tb
-  | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb
-  = truncate
-
-evalRound :: FloatingType a -> IntegralType b -> (a -> b)
-evalRound ta tb
-  | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb
-  = round
-
-evalFloor :: FloatingType a -> IntegralType b -> (a -> b)
-evalFloor ta tb
-  | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb
-  = floor
-
-evalCeiling :: FloatingType a -> IntegralType b -> (a -> b)
-evalCeiling ta tb
-  | FloatingDict <- floatingDict ta
-  , IntegralDict <- integralDict tb
-  = ceiling
-
-evalAtan2 :: FloatingType a -> ((a, a) -> a)
-evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
-
-evalIsNaN :: FloatingType a -> (a -> PrimBool)
-evalIsNaN ty | FloatingDict <- floatingDict ty = fromBool . isNaN
-
-evalIsInfinite :: FloatingType a -> (a -> PrimBool)
-evalIsInfinite ty | FloatingDict <- floatingDict ty = fromBool . isInfinite
-
-
--- Methods of Num
---
-
-evalAdd :: NumType a -> ((a, a) -> a)
-evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (+)
-evalAdd (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (+)
-
-evalSub :: NumType a -> ((a, a) -> a)
-evalSub (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (-)
-evalSub (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (-)
-
-evalMul :: NumType a -> ((a, a) -> a)
-evalMul (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (*)
-evalMul (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (*)
-
-evalNeg :: NumType a -> (a -> a)
-evalNeg (IntegralNumType ty) | IntegralDict <- integralDict ty = negate
-evalNeg (FloatingNumType ty) | FloatingDict <- floatingDict ty = negate
-
-evalAbs :: NumType a -> (a -> a)
-evalAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = abs
-evalAbs (FloatingNumType ty) | FloatingDict <- floatingDict ty = abs
-
-evalSig :: NumType a -> (a -> a)
-evalSig (IntegralNumType ty) | IntegralDict <- integralDict ty = signum
-evalSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = signum
-
-evalQuot :: IntegralType a -> ((a, a) -> a)
-evalQuot ty | IntegralDict <- integralDict ty = uncurry quot
-
-evalRem :: IntegralType a -> ((a, a) -> a)
-evalRem ty | IntegralDict <- integralDict ty = uncurry rem
-
-evalQuotRem :: IntegralType a -> ((a, a) -> (a, a))
-evalQuotRem ty | IntegralDict <- integralDict ty = uncurry quotRem
-
-evalIDiv :: IntegralType a -> ((a, a) -> a)
-evalIDiv ty | IntegralDict <- integralDict ty = uncurry div
-
-evalMod :: IntegralType a -> ((a, a) -> a)
-evalMod ty | IntegralDict <- integralDict ty = uncurry mod
-
-evalDivMod :: IntegralType a -> ((a, a) -> (a, a))
-evalDivMod ty | IntegralDict <- integralDict ty = uncurry divMod
-
-evalBAnd :: IntegralType a -> ((a, a) -> a)
-evalBAnd ty | IntegralDict <- integralDict ty = uncurry (.&.)
-
-evalBOr :: IntegralType a -> ((a, a) -> a)
-evalBOr ty | IntegralDict <- integralDict ty = uncurry (.|.)
-
-evalBXor :: IntegralType a -> ((a, a) -> a)
-evalBXor ty | IntegralDict <- integralDict ty = uncurry xor
-
-evalBNot :: IntegralType a -> (a -> a)
-evalBNot ty | IntegralDict <- integralDict ty = complement
-
-evalBShiftL :: IntegralType a -> ((a, Int) -> a)
-evalBShiftL ty | IntegralDict <- integralDict ty = uncurry shiftL
-
-evalBShiftR :: IntegralType a -> ((a, Int) -> a)
-evalBShiftR ty | IntegralDict <- integralDict ty = uncurry shiftR
-
-evalBRotateL :: IntegralType a -> ((a, Int) -> a)
-evalBRotateL ty | IntegralDict <- integralDict ty = uncurry rotateL
-
-evalBRotateR :: IntegralType a -> ((a, Int) -> a)
-evalBRotateR ty | IntegralDict <- integralDict ty = uncurry rotateR
-
-evalPopCount :: IntegralType a -> (a -> Int)
-evalPopCount ty | IntegralDict <- integralDict ty = popCount
-
-evalCountLeadingZeros :: IntegralType a -> (a -> Int)
-evalCountLeadingZeros ty | IntegralDict <- integralDict ty = countLeadingZeros
-
-evalCountTrailingZeros :: IntegralType a -> (a -> Int)
-evalCountTrailingZeros ty | IntegralDict <- integralDict ty = countTrailingZeros
-
-evalFDiv :: FloatingType a -> ((a, a) -> a)
-evalFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)
-
-evalRecip :: FloatingType a -> (a -> a)
-evalRecip ty | FloatingDict <- floatingDict ty = recip
-
-
-evalLt :: SingleType a -> ((a, a) -> PrimBool)
-evalLt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (<)
-evalLt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (<)
-
-evalGt :: SingleType a -> ((a, a) -> PrimBool)
-evalGt (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (>)
-evalGt (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (>)
-
-evalLtEq :: SingleType a -> ((a, a) -> PrimBool)
-evalLtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (<=)
-evalLtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (<=)
-
-evalGtEq :: SingleType a -> ((a, a) -> PrimBool)
-evalGtEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (>=)
-evalGtEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (>=)
-
-evalEq :: SingleType a -> ((a, a) -> PrimBool)
-evalEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (==)
-evalEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (==)
-
-evalNEq :: SingleType a -> ((a, a) -> PrimBool)
-evalNEq (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = fromBool . uncurry (/=)
-evalNEq (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = fromBool . uncurry (/=)
-
-evalMax :: SingleType a -> ((a, a) -> a)
-evalMax (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry max
-evalMax (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry max
-
-evalMin :: SingleType a -> ((a, a) -> a)
-evalMin (NumSingleType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry min
-evalMin (NumSingleType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry min
-
-
-{--
--- Sequence evaluation
--- ---------------
-
--- Position in sequence.
---
-type SeqPos = Int
-
--- Configuration for sequence evaluation.
---
-data SeqConfig = SeqConfig
-  { chunkSize :: Int -- Allocation limit for a sequence in
-                     -- words. Actual runtime allocation should be the
-                     -- maximum of this size and the size of the
-                     -- largest element in the sequence.
-  }
-
--- Default sequence evaluation configuration for testing purposes.
---
-defaultSeqConfig :: SeqConfig
-defaultSeqConfig = SeqConfig { chunkSize = 2 }
-
-type Chunk a = Vector' a
-
--- The empty chunk. O(1).
-emptyChunk :: Arrays a => Chunk a
-emptyChunk = empty'
-
--- Number of arrays in chunk. O(1).
---
-clen :: Arrays a => Chunk a -> Int
-clen = length'
-
-elemsPerChunk :: SeqConfig -> Int -> Int
-elemsPerChunk conf n
-  | n < 1 = chunkSize conf
-  | otherwise =
-    let (a,b) = chunkSize conf `quotRem` n
-    in a + signum b
-
--- Drop a number of arrays from a chunk. O(1). Note: Require keeping a
--- scan of element sizes.
---
-cdrop :: Arrays a => Int -> Chunk a -> Chunk a
-cdrop = drop' dropOp (fst . offsetsOp)
-
--- Get all the shapes of a chunk of arrays. O(1).
---
-chunkShapes :: Chunk (Array sh a) -> Vector sh
-chunkShapes = shapes'
-
--- Get all the elements of a chunk of arrays. O(1).
---
-chunkElems :: Chunk (Array sh a) -> Vector a
-chunkElems = elements'
-
--- Convert a vector to a chunk of scalars.
---
-vec2Chunk :: Elt e => Vector e -> Chunk (Scalar e)
-vec2Chunk = vec2Vec'
-
--- Convert a list of arrays to a chunk.
---
-fromListChunk :: Arrays a => [a] -> Vector' a
-fromListChunk = fromList' concatOp
-
--- Convert a chunk to a list of arrays.
---
-toListChunk :: Arrays a => Vector' a -> [a]
-toListChunk = toList' fetchAllOp
-
--- fmap for Chunk. O(n).
---   TODO: Use vectorised function.
-mapChunk :: (Arrays a, Arrays b)
-         => (a -> b)
-         -> Chunk a -> Chunk b
-mapChunk f c = fromListChunk $ map f (toListChunk c)
-
--- zipWith for Chunk. O(n).
---  TODO: Use vectorised function.
-zipWithChunk :: (Arrays a, Arrays b, Arrays c)
-             => (a -> b -> c)
-             -> Chunk a -> Chunk b -> Chunk c
-zipWithChunk f c1 c2 = fromListChunk $ zipWith f (toListChunk c1) (toListChunk c2)
-
--- A window on a sequence.
---
-data Window a = Window
-  { chunk :: Chunk a   -- Current allocated chunk.
-  , wpos  :: SeqPos    -- Position of the window on the sequence, given
-                       -- in number of elements.
-  }
-
--- The initial empty window.
---
-window0 :: Arrays a => Window a
-window0 = Window { chunk = emptyChunk, wpos = 0 }
-
--- Index the given window by the given index on the sequence.
---
-(!#) :: Arrays a => Window a -> SeqPos -> Chunk a
-w !# i
-  | j <- i - wpos w
-  , j >= 0
-  = cdrop j (chunk w)
-  --
-  | otherwise
-  = error $ "Window indexed before position. wpos = " ++ show (wpos w) ++ " i = " ++ show i
-
--- Move the give window by supplying the next chunk.
---
-moveWin :: Arrays a => Window a -> Chunk a -> Window a
-moveWin w c = w { chunk = c
-                , wpos = wpos w + clen (chunk w)
-                }
-
--- A cursor on a sequence.
---
-data Cursor senv a = Cursor
-  { ref  :: Idx senv a -- Reference to the sequence.
-  , cpos :: SeqPos     -- Position of the cursor on the sequence,
-                       -- given in number of elements.
-  }
-
--- Initial cursor.
---
-cursor0 :: Idx senv a -> Cursor senv a
-cursor0 x = Cursor { ref = x, cpos = 0 }
-
--- Advance cursor by a relative amount.
---
-moveCursor :: Int -> Cursor senv a -> Cursor senv a
-moveCursor k c = c { cpos = cpos c + k }
-
--- Valuation for an environment of sequence windows.
---
-data Val' senv where
-  Empty' :: Val' ()
-  Push'  :: Val' senv -> Window t -> Val' (senv, t)
-
--- Projection of a window from a window valuation using a de Bruijn
--- index.
---
-prj' :: Idx senv t -> Val' senv -> Window t
-prj' ZeroIdx       (Push' _   v) = v
-prj' (SuccIdx idx) (Push' val _) = prj' idx val
-
--- Projection of a chunk from a window valuation using a sequence
--- cursor.
---
-prjChunk :: Arrays a => Cursor senv a -> Val' senv -> Chunk a
-prjChunk c senv = prj' (ref c) senv !# cpos c
-
--- An executable sequence.
---
-data ExecSeq senv arrs where
-  ExecP :: Arrays a => Window a -> ExecP senv a -> ExecSeq (senv, a) arrs -> ExecSeq senv  arrs
-  ExecC :: Arrays a =>             ExecC senv a ->                           ExecSeq senv  a
-  ExecR :: Arrays a =>             Cursor senv a ->                          ExecSeq senv  [a]
-
--- An executable producer.
---
-data ExecP senv a where
-  ExecStreamIn :: Int
-               -> [a]
-               -> ExecP senv a
-
-  ExecMap :: Arrays a
-          => (Chunk a -> Chunk b)
-          -> Cursor senv a
-          -> ExecP senv b
-
-  ExecZipWith :: (Arrays a, Arrays b)
-              => (Chunk a -> Chunk b -> Chunk c)
-              -> Cursor senv a
-              -> Cursor senv b
-              -> ExecP senv c
-
-  -- Stream scan skeleton.
-  ExecScan :: Arrays a
-           => (s -> Chunk a -> (Chunk r, s)) -- Chunk scanner.
-           -> s                              -- Accumulator (internal state).
-           -> Cursor senv a                  -- Input stream.
-           -> ExecP senv r
-
--- An executable consumer.
---
-data ExecC senv a where
-
-  -- Stream reduction skeleton.
-  ExecFold :: Arrays a
-           => (s -> Chunk a -> s) -- Chunk consumer function.
-           -> (s -> r)            -- Finalizer function.
-           -> s                   -- Accumulator (internal state).
-           -> Cursor senv a       -- Input stream.
-           -> ExecC senv r
-
-  ExecStuple :: IsAtuple a
-             => Atuple (ExecC senv) (TupleRepr a)
-             -> ExecC senv a
-
-minCursor :: ExecSeq senv a -> SeqPos
-minCursor s = travS s 0
-  where
-    travS :: ExecSeq senv a -> Int -> SeqPos
-    travS s i =
-      case s of
-        ExecP _ p s' -> travP p i `min` travS s' (i+1)
-        ExecC   c    -> travC c i
-        ExecR   _    -> maxBound
-
-    k :: Cursor senv a -> Int -> SeqPos
-    k c i
-      | i == idxToInt (ref c) = cpos c
-      | otherwise             = maxBound
-
-    travP :: ExecP senv a -> Int -> SeqPos
-    travP p i =
-      case p of
-        ExecStreamIn _ _ -> maxBound
-        ExecMap _ c -> k c i
-        ExecZipWith _ c1 c2 -> k c1 i `min` k c2 i
-        ExecScan _ _ c -> k c i
-
-    travT :: Atuple (ExecC senv) t -> Int -> SeqPos
-    travT NilAtup        _ = maxBound
-    travT (SnocAtup t c) i = travT t i `min` travC c i
-
-    travC :: ExecC senv a -> Int -> SeqPos
-    travC c i =
-      case c of
-        ExecFold _ _ _ cu -> k cu i
-        ExecStuple t      -> travT t i
-
-
-evalDelayedSeq
-    :: SeqConfig
-    -> DelayedSeq arrs
-    -> arrs
-evalDelayedSeq cfg (DelayedSeq aenv s) | aenv' <- evalExtend aenv Empty
-                                       = evalSeq cfg s aenv'
-
-evalSeq :: forall aenv arrs.
-            SeqConfig
-         -> PreOpenSeq DelayedOpenAcc aenv () arrs
-         -> Val aenv -> arrs
-evalSeq conf s aenv = evalSeq' s
-  where
-    evalSeq' :: PreOpenSeq DelayedOpenAcc aenv senv arrs -> arrs
-    evalSeq' (Producer _ s) = evalSeq' s
-    evalSeq' (Consumer _)   = loop (initSeq aenv s)
-    evalSeq' (Reify _)      = reify (initSeq aenv s)
-
-    -- Initialize the producers and the accumulators of the consumers
-    -- with the given array enviroment.
-    initSeq :: forall senv arrs'.
-                Val aenv
-             -> PreOpenSeq DelayedOpenAcc aenv senv arrs'
-             -> ExecSeq senv arrs'
-    initSeq aenv s =
-      case s of
-        Producer   p s' -> ExecP window0 (initProducer p) (initSeq aenv s')
-        Consumer   c    -> ExecC         (initConsumer c)
-        Reify      ix   -> ExecR (cursor0 ix)
-
-    -- Generate a list from the sequence.
-    reify :: forall arrs. ExecSeq () [arrs]
-          -> [arrs]
-    reify s = case step s Empty' of
-                (Just s', a) -> a ++ reify s'
-                (Nothing, a) -> a
-
-    -- Iterate the given sequence until it terminates.
-    -- A sequence only terminates when one of the producers are exhausted.
-    loop :: Arrays arrs
-         => ExecSeq () arrs
-         -> arrs
-    loop s =
-      case step' s of
-        (Nothing, arrs) -> arrs
-        (Just s', _)    -> loop s'
-
-      where
-        step' :: ExecSeq () arrs -> (Maybe (ExecSeq () arrs), arrs)
-        step' s = step s Empty'
-
-    -- One iteration of a sequence.
-    step :: forall senv arrs'.
-            ExecSeq senv arrs'
-         -> Val' senv
-         -> (Maybe (ExecSeq senv arrs'), arrs')
-    step s senv =
-      case s of
-        ExecP w p s' ->
-          let (c, mp')  = produce p senv
-              finished  = 0 == clen (w !# minCursor s')
-              w'        = if finished then moveWin w c else w
-              (ms'', a) = step s' (senv `Push'` w')
-          in case ms'' of
-            Nothing  -> (Nothing, a)
-            Just s'' | finished
-                     , Just p' <- mp'
-                     -> (Just (ExecP w' p' s''), a)
-                     | not finished
-                     -> (Just (ExecP w' p  s''), a)
-                     | otherwise
-                     -> (Nothing, a)
-        ExecC   c    -> let (c', acc) = consume c senv
-                        in (Just (ExecC c'), acc)
-        ExecR ix     -> let c = prjChunk ix senv in (Just (ExecR (moveCursor (clen c) ix)), toListChunk c)
-
-    evalA :: DelayedOpenAcc aenv a -> a
-    evalA acc = evalOpenAcc acc aenv
-
-    evalAF :: DelayedOpenAfun aenv f -> f
-    evalAF f = evalOpenAfun f aenv
-
-    evalE :: DelayedExp aenv t -> t
-    evalE exp = evalExp exp aenv
-
-    evalF :: DelayedFun aenv f -> f
-    evalF fun = evalFun fun aenv
-
-    initProducer :: forall a senv.
-                    Producer DelayedOpenAcc aenv senv a
-                 -> ExecP senv a
-    initProducer p =
-      case p of
-        StreamIn arrs -> ExecStreamIn 1 arrs
-        ToSeq sliceIndex slix (delayed -> Delayed sh ix _) ->
-          let n   = R.size (R.sliceShape sliceIndex (fromElt sh))
-              k   = elemsPerChunk conf n
-          in ExecStreamIn k (toSeqOp sliceIndex slix (fromFunction sh ix))
-        MapSeq     f x       -> ExecMap     (mapChunk (evalAF f)) (cursor0 x)
-        ChunkedMapSeq f x    -> ExecMap     (evalAF f) (cursor0 x)
-        ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalAF f)) (cursor0 x) (cursor0 y)
-        ScanSeq    f e x     -> ExecScan scanner (evalE e) (cursor0 x)
-          where
-            scanner a c =
-              let v0 = chunkElems c
-                  (v1, a') = scanl'Op (evalF f) a (delayArray v0)
-              in (vec2Chunk v1, fromScalar a')
-
-    initConsumer :: forall a senv.
-                    Consumer DelayedOpenAcc aenv senv a
-                 -> ExecC senv a
-    initConsumer c =
-      case c of
-        FoldSeq f e x ->
-          let f' = evalF f
-              a0 = fromFunction (Z :. chunkSize conf) (const (evalE e))
-              consumer v c = zipWith'Op f' (delayArray v) (delayArray (chunkElems c))
-              finalizer = fold1Op f' . delayArray
-          in ExecFold consumer finalizer a0 (cursor0 x)
-        FoldSeqFlatten f acc x ->
-          let f' = evalAF f
-              a0 = evalA acc
-              consumer a c = f' a (chunkShapes c) (chunkElems c)
-          in ExecFold consumer id a0 (cursor0 x)
-        Stuple t ->
-          let initTup :: Atuple (Consumer DelayedOpenAcc aenv senv) t -> Atuple (ExecC senv) t
-              initTup NilAtup        = NilAtup
-              initTup (SnocAtup t c) = SnocAtup (initTup t) (initConsumer c)
-          in ExecStuple (initTup t)
-
-    delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
-    delayed AST.Manifest{}  = $internalError "evalOpenAcc" "expected delayed array"
-    delayed AST.Delayed{..} = Delayed (evalExp extentD aenv)
-                                      (evalFun indexD aenv)
-                                      (evalFun linearIndexD aenv)
-
-produce :: Arrays a => ExecP senv a -> Val' senv -> (Chunk a, Maybe (ExecP senv a))
-produce p senv =
-  case p of
-    ExecStreamIn k xs ->
-      let (xs', xs'') = (take k xs, drop k xs)
-          c           = fromListChunk xs'
-          mp          = if null xs''
-                        then Nothing
-                        else Just (ExecStreamIn k xs'')
-      in (c, mp)
-    ExecMap f x ->
-      let c = prjChunk x senv
-      in (f c, Just $ ExecMap f (moveCursor (clen c) x))
-    ExecZipWith f x y ->
-      let c1 = prjChunk x senv
-          c2 = prjChunk y senv
-          k = clen c1 `min` clen c2
-      in (f c1 c2, Just $ ExecZipWith f (moveCursor k x) (moveCursor k y))
-    ExecScan scanner a x ->
-      let c = prjChunk x senv
-          (c', a') = scanner a c
-          k = clen c
-      in (c', Just $ ExecScan scanner a' (moveCursor k x))
-
-consume :: forall senv a. ExecC senv a -> Val' senv -> (ExecC senv a, a)
-consume c senv =
-  case c of
-    ExecFold f g acc x ->
-      let c    = prjChunk x senv
-          acc' = f acc c
-      -- Even though we call g here, lazy evaluation should guarantee it is
-      -- only ever called once.
-      in (ExecFold f g acc' (moveCursor (clen c) x), g acc')
-    ExecStuple t ->
-      let consT :: Atuple (ExecC senv) t -> (Atuple (ExecC senv) t, t)
-          consT NilAtup        = (NilAtup, ())
-          consT (SnocAtup t c) | (c', acc) <- consume c senv
-                               , (t', acc') <- consT t
-                               = (SnocAtup t' c', (acc', acc))
-          (t', acc) = consT t
-      in (ExecStuple t', toAtuple acc)
-
-evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
-evalExtend BaseEnv aenv = aenv
-evalExtend (PushEnv ext1 ext2) aenv | aenv' <- evalExtend ext1 aenv
-                                    = Push aenv' (evalOpenAcc ext2 aenv')
-
-delayArray :: Array sh e -> Delayed (Array sh e)
-delayArray arr@(Array _ adata) = Delayed (shape arr) (arr!) (toElt . unsafeIndexArrayData adata)
-
-fromScalar :: Scalar a -> a
-fromScalar = (!Z)
-
-concatOp :: forall e. Elt e => [Vector e] -> Vector e
-concatOp = concatVectors
-
-fetchAllOp :: (Shape sh, Elt e) => Segments sh -> Vector e -> [Array sh e]
-fetchAllOp segs elts
-  | (offsets, n) <- offsetsOp segs
-  , (n ! Z) <= size (shape elts)
-  = [fetch (segs ! (Z :. i)) (offsets ! (Z :. i)) | i <- [0 .. size (shape segs) - 1]]
-  | otherwise = error $ "illegal argument to fetchAllOp"
-  where
-    fetch sh offset = fromFunction sh (\ ix -> elts ! (Z :. ((toIndex sh ix) + offset)))
-
-dropOp :: Elt e => Int -> Vector e -> Vector e
-dropOp i v   -- TODO
-             --  * Implement using C-style pointer-plus.
-             --    ; dropOp is used often (from prjChunk),
-             --      so it ought to be efficient O(1).
-  | n <- size (shape v)
-  , i <= n
-  , i >= 0
-  = fromFunction (Z :. n - i) (\ (Z :. j) -> v ! (Z :. i + j))
-  | otherwise = error $ "illegal argument to drop"
-
-offsetsOp :: Shape sh => Segments sh -> (Vector Int, Scalar Int)
-offsetsOp segs = scanl'Op (+) 0 $ delayArray (mapOp size (delayArray segs))
---}
+toBool = unBit
+
+data IntegralDict t where
+  IntegralDict :: (Integral t, Prim t) => IntegralDict t
+
+data FloatingDict t where
+  FloatingDict :: (RealFloat t, Prim t) => FloatingDict t
+
+{-# INLINE integralDict #-}
+integralDict :: SingleIntegralType t -> IntegralDict t
+integralDict TypeInt8    = IntegralDict
+integralDict TypeInt16   = IntegralDict
+integralDict TypeInt32   = IntegralDict
+integralDict TypeInt64   = IntegralDict
+integralDict TypeInt128  = IntegralDict
+integralDict TypeWord8   = IntegralDict
+integralDict TypeWord16  = IntegralDict
+integralDict TypeWord32  = IntegralDict
+integralDict TypeWord64  = IntegralDict
+integralDict TypeWord128 = IntegralDict
+
+{-# INLINE floatingDict #-}
+floatingDict :: SingleFloatingType t -> FloatingDict t
+floatingDict TypeFloat16  = FloatingDict
+floatingDict TypeFloat32  = FloatingDict
+floatingDict TypeFloat64  = FloatingDict
+floatingDict TypeFloat128 = FloatingDict
 

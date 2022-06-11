@@ -758,16 +758,15 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Prj idx e             -> cvtPrj idx (cvt e)
           Nil                   -> AST.Nil
           Pair e1 e2            -> AST.Pair (cvt e1) (cvt e2)
-          VecPack   vec e       -> AST.VecPack   vec (cvt e)
-          VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
-          VecIndex vt it v i    -> AST.VecIndex vt it (cvt v) (cvt i)
-          VecWrite vt it v i e  -> AST.VecWrite vt it (cvt v) (cvt i) (cvt e)
+          Extract vR iR v i     -> AST.Extract vR iR (cvt v) (cvt i)
+          Insert vR iR v i x    -> AST.Insert vR iR (cvt v) (cvt i) (cvt x)
+          Shuffle eR iR x y i   -> AST.Shuffle eR iR (cvt x) (cvt y) (cvt i)
+          Select m x y          -> AST.Select (cvt m) (cvt x) (cvt y)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
           FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
           Case e rhs            -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
           Cond e1 e2 e3         -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           While tp p it i       -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
-          PrimConst c           -> AST.PrimConst c
           PrimApp f e           -> cvtPrimFun f (cvt e)
           Index _ a e           -> AST.Index (cvtAvar a) (cvt e)
           LinearIndex _ a i     -> AST.LinearIndex (cvtAvar a) (cvt i)
@@ -826,7 +825,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
               e      = prjT (fst (head rs)) s
               rhs    = map (nested s . map (over _1 ignore)) groups
           in
-          AST.Case e (zip tags rhs) Nothing
+          AST.Case scalarType e (zip tags rhs) Nothing
 
         -- Extract the variable representing this particular tag from the
         -- scrutinee. This is safe because we let-bind the argument first.
@@ -834,8 +833,9 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         prjT = fromJust $$ go
           where
             go :: TagR a -> AST.OpenExp env' aenv' a -> Maybe (AST.OpenExp env' aenv' TAG)
-            go TagRtag{}        (AST.Pair l _) = Just l
-            go (TagRpair ta tb) (AST.Pair l r) =
+            go TagRbit{}               _              = error "TODO: TagRbit"
+            go (TagRtag TypeWord8 _ _) (AST.Pair l _) = Just l
+            go (TagRpair ta tb)        (AST.Pair l r) =
               case go ta l of
                 Just t  -> Just t
                 Nothing -> go tb r
@@ -846,11 +846,12 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         eqT a b = snd $ go a b
           where
             go :: TagR a -> TagR a -> (Any, Bool)
-            go TagRunit          TagRunit          = no True
-            go TagRsingle{}      TagRsingle{}      = no True
-            go TagRundef{}       TagRundef{}       = no True
-            go (TagRtag v1 _)    (TagRtag v2 _)    = yes (v1 == v2)
-            go (TagRpair a1 b1)  (TagRpair a2 b2)  =
+            go TagRunit                 TagRunit                 = no True
+            go TagRsingle{}             TagRsingle{}             = no True
+            go TagRundef{}              TagRundef{}              = no True
+            go (TagRtag TypeWord8 v1 _) (TagRtag TypeWord8 v2 _) = yes (v1 == v2)
+            go (TagRbit TypeBit v1)     (TagRbit TypeBit v2)     = yes (v1 == v2)
+            go (TagRpair a1 b1)         (TagRpair a2 b2)         =
               let (Any r, s) = go a1 a2
                in case r of
                     True  -> yes s
@@ -861,7 +862,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         firstT = fromJust . go
           where
             go :: TagR a -> Maybe TAG
-            go (TagRtag v _)  = Just v
+            go TagRbit{}               = error "TODO: TagRbit"
+            go (TagRtag TypeWord8 v _) = Just v
             go (TagRpair a b) =
               case go a of
                 Just t  -> Just t
@@ -877,7 +879,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
             go TagRunit         = no  $ TagRunit
             go (TagRsingle t)   = no  $ TagRsingle t
             go (TagRundef t)    = no  $ TagRundef t
-            go (TagRtag _ a)    = yes $ TagRpair (TagRundef scalarType) a
+            go (TagRtag t _ a)  = yes $ TagRpair (TagRundef (NumScalarType (IntegralNumType (SingleIntegralType t)))) a
+            go TagRbit{}        = error "TODO: TagRbit"
             go (TagRpair a1 a2) =
               let (Any r, a1') = go a1
                in case r of
@@ -1845,10 +1848,10 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Nil                    -> return (Nil, 1)
             Pair e1 e2             -> travE2 Pair e1 e2
             Prj i e                -> travE1 (Prj i) e
-            VecPack   vec e        -> travE1 (VecPack   vec) e
-            VecUnpack vec e        -> travE1 (VecUnpack vec) e
-            VecIndex vt ti v i     -> travE2 (VecIndex vt ti) v i
-            VecWrite vt ti v i e   -> travE3 (VecWrite vt ti) v i e
+            Extract vR iR v i      -> travE2 (Extract vR iR) v i
+            Insert vR iR v i x     -> travE3 (Insert vR iR) v i x
+            Shuffle eR iR x y i    -> travE3 (Shuffle eR iR) x y i
+            Select m x y           -> travE3 Select m x y
             ToIndex shr sh ix      -> travE2 (ToIndex shr) sh ix
             FromIndex shr sh e     -> travE2 (FromIndex shr) sh e
             Match t e              -> travE1 (Match t) e
@@ -1862,7 +1865,6 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                                         (iter', h2) <- traverseFun1 lvl t iter
                                         (init', h3) <- travE lvl init
                                         return (While t p' iter' init', h1 `max` h2 `max` h3 + 1)
-            PrimConst c            -> return (PrimConst c, 1)
             PrimApp p e            -> travE1 (PrimApp p) e
             Index tp a e           -> travAE (Index tp) a e
             LinearIndex tp a i     -> travAE (LinearIndex tp) a i
@@ -2753,10 +2755,10 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Pair e1 e2            -> travE2 Pair e1 e2
           Nil                   -> reconstruct Nil noNodeCounts
           Prj i e               -> travE1 (Prj i) e
-          VecPack   vec e       -> travE1 (VecPack   vec) e
-          VecUnpack vec e       -> travE1 (VecUnpack vec) e
-          VecIndex vt it v i    -> travE2 (VecIndex vt it) v i
-          VecWrite vt it v i e  -> travE3 (VecWrite vt it) v i e
+          Extract vR iR v i     -> travE2 (Extract vR iR) v i
+          Insert vR iR v i x    -> travE3 (Insert vR iR) v i x
+          Shuffle eR iR x y i   -> travE3 (Shuffle eR iR) x y i
+          Select m x y          -> travE3 Select m x y
           ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
           FromIndex shr sh e    -> travE2 (FromIndex shr) sh e
           Match t e             -> travE1 (Match t) e
@@ -2768,7 +2770,6 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
                                        (it', accCount2) = scopesFun1 it
                                        (i' , accCount3) = scopesExp i
                                     in reconstruct (While tp p' it' i') (accCount1 +++ accCount2 +++ accCount3)
-          PrimConst c           -> reconstruct (PrimConst c) noNodeCounts
           PrimApp p e           -> travE1 (PrimApp p) e
           Index tp a e          -> travAE (Index tp) a e
           LinearIndex tp a e    -> travAE (LinearIndex tp) a e

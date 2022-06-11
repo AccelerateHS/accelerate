@@ -18,19 +18,18 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
-module Data.Array.Accelerate.Classes.Vector where
+
+module Data.Array.Accelerate.Classes.Vector
+  where
 
 import GHC.TypeLits
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Smart
 import Data.Primitive.Vec
 
-
-
 instance (VecElt a, KnownNat n) => Vectoring (Exp (Vec n a)) (Exp a) where
     type IndexType (Exp (Vec n a)) = Exp Int
     vecIndex = mkVectorIndex
     vecWrite = mkVectorWrite
     vecEmpty = undef
-    
 

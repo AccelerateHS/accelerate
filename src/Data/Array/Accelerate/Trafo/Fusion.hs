@@ -1472,15 +1472,16 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Undef tR                        -> Undef tR
         Nil                             -> Nil
         Pair e1 e2                      -> Pair (cvtE e1) (cvtE e2)
-        VecPack vR e                    -> VecPack vR (cvtE e)
-        VecUnpack vR e                  -> VecUnpack vR (cvtE e)
+        Extract vR iR v i               -> Extract vR iR (cvtE v) (cvtE i)
+        Insert vR iR v i x              -> Insert vR iR (cvtE v) (cvtE i) (cvtE x)
+        Shuffle vR iR x y i             -> Shuffle vR iR (cvtE x) (cvtE y) (cvtE i)
+        Select m x y                    -> Select (cvtE m) (cvtE x) (cvtE y)
         IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex shR' sh ix              -> ToIndex shR' (cvtE sh) (cvtE ix)
         FromIndex shR' sh i             -> FromIndex shR' (cvtE sh) (cvtE i)
-        Case e rhs def                  -> Case (cvtE e) (over (mapped . _2) cvtE rhs) (fmap cvtE def)
+        Case eR e rhs def               -> Case eR (cvtE e) (over (mapped . _2) cvtE rhs) (fmap cvtE def)
         Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
-        PrimConst c                     -> PrimConst c
         PrimApp g x                     -> PrimApp g (cvtE x)
         ShapeSize shR' sh               -> ShapeSize shR' (cvtE sh)
         While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
@@ -1500,10 +1501,10 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
           , Lam lhs (Body b) <- f'
                                         -> Stats.substitution "replaceE/!!" . cvtE
                                          $ Let lhs
-                                               (Let (LeftHandSideSingle scalarTypeInt) i
+                                               (Let (LeftHandSideSingle scalarType) i
                                                     $ FromIndex shR (weakenE (weakenSucc' weakenId) sh')
                                                     $ Evar
-                                                    $ Var scalarTypeInt ZeroIdx)
+                                                    $ Var scalarType ZeroIdx)
                                                b
           | otherwise                   -> LinearIndex a (cvtE i)
 
@@ -1673,23 +1674,23 @@ identity t
   | DeclareVars lhs _ value <- declareVars t
   = Lam lhs $ Body $ expVars $ value weakenId
 
-toIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
+toIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (sh -> INT)
 toIndex shR sh
   | DeclareVars lhs k value <- declareVars $ shapeType shR
   = Lam lhs $ Body $ ToIndex shR (weakenE k sh) $ expVars $ value weakenId
 
-fromIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
+fromIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (INT -> sh)
 fromIndex shR sh
-  = Lam (LeftHandSideSingle scalarTypeInt)
+  = Lam (LeftHandSideSingle scalarType)
   $ Body
   $ FromIndex shR (weakenE (weakenSucc' weakenId) sh)
   $ Evar
-  $ Var scalarTypeInt ZeroIdx
+  $ Var scalarType ZeroIdx
 
 intersect :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 intersect = mkShapeBinary f
   where
-    f a b = PrimApp (PrimMin singleType) $ Pair a b
+    f a b = PrimApp (PrimMin scalarType) $ Pair a b
 
 -- union :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 -- union = mkShapeBinary f
@@ -1697,7 +1698,7 @@ intersect = mkShapeBinary f
 --     f a b = PrimApp (PrimMax singleType) $ Pair a b
 
 mkShapeBinary
-    :: (forall env'. OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int)
+    :: (forall env'. OpenExp env' aenv INT -> OpenExp env' aenv INT -> OpenExp env' aenv INT)
     -> ShapeR sh
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
@@ -1744,8 +1745,13 @@ indexArray v@(Var (ArrayR shR _) _)
   | DeclareVars lhs _ value <- declareVars $ shapeType shR
   = Lam lhs $ Body $ Index v $ expVars $ value weakenId
 
-linearIndex :: ArrayVar aenv (Array sh e) -> Fun aenv (Int -> e)
-linearIndex v = Lam (LeftHandSideSingle scalarTypeInt) $ Body $ LinearIndex v $ Evar $ Var scalarTypeInt ZeroIdx
+linearIndex :: ArrayVar aenv (Array sh e) -> Fun aenv (INT -> e)
+linearIndex v
+  = Lam (LeftHandSideSingle scalarType)
+  $ Body
+  $ LinearIndex v
+  $ Evar
+  $ Var scalarType ZeroIdx
 
 
 extractOpenAcc :: ExtractAcc OpenAcc

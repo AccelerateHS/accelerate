@@ -1,11 +1,5 @@
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE MagicHash           #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeOperators       #-}
-{-# OPTIONS_HADDOCK hide #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      : Data.Array.Accelerate.Representation.Vec
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -19,81 +13,99 @@
 module Data.Array.Accelerate.Representation.Vec
   where
 
-import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Type
-import Data.Primitive.Vec
+import Data.Array.Accelerate.Type
 
-import Control.Monad.ST
-import Data.Primitive.ByteArray
-import Data.Primitive.Types
-import Language.Haskell.TH.Extra
+import Data.Primitive.Bit                                           as Prim
 
-import GHC.Base                                         ( Int(..), Int#, (-#) )
-import GHC.TypeNats
+import qualified GHC.Exts                                           as GHC
 
 
--- | Declares the size of a SIMD vector and the type of its elements. This
--- data type is used to denote the relation between a vector type (Vec
--- n single) with its tuple representation (tuple). Conversions between
--- those types are exposed through 'pack' and 'unpack'.
---
-data VecR (n :: Nat) single tuple where
-  VecRnil  :: SingleType s -> VecR 0       s ()
-  VecRsucc :: VecR n s t   -> VecR (n + 1) s (t, s)
-
-
-vecRvector :: KnownNat n => VecR n s tuple -> VectorType (Vec n s)
-vecRvector = uncurry VectorType . go
+toList :: TypeR v -> TypeR a -> v -> [a]
+toList = go
   where
-    go :: VecR n s tuple -> (Int, SingleType s)
-    go (VecRnil tp)                       = (0,     tp)
-    go (VecRsucc vec) | (n, tp) <- go vec = (n + 1, tp)
+    go :: TypeR v -> TypeR t -> v -> [t]
+    go TupRunit         TupRunit         _      = repeat ()
+    go (TupRpair va vb) (TupRpair ta tb) (a, b) = zip (go va ta a) (go vb tb b)
+    go (TupRsingle v)   (TupRsingle t)   xs     = scalar v t xs
+    go _                _                _      = internalError "unexpected vector encoding"
 
-vecRSingle :: KnownNat n => VecR n s tuple -> SingleType s
-vecRSingle vecr = let (VectorType _ s) = vecRvector vecr in s
+    scalar :: ScalarType v -> ScalarType t -> v -> [t]
+    scalar (NumScalarType v) (NumScalarType t) = num v t
+    scalar (BitScalarType v) (BitScalarType t) = bit v t
+    scalar _ _ = internalError "unexpected vector encoding"
 
-vecRtuple :: VecR n s tuple -> TypeR tuple
-vecRtuple = snd . go
+    bit :: BitType v -> BitType t -> v -> [t]
+    bit (TypeMask _) TypeBit = GHC.toList . Prim.BitMask
+    bit _ _ = internalError "unexpected vector encoding"
+
+    num :: NumType v -> NumType t -> v -> [t]
+    num (IntegralNumType v) (IntegralNumType t) = integral v t
+    num (FloatingNumType v) (FloatingNumType t) = floating v t
+    num _ _ = internalError "unexpected vector encoding"
+
+    integral :: IntegralType v -> IntegralType t -> v -> [t]
+    integral (VectorIntegralType _ TypeInt8)    (SingleIntegralType TypeInt8)    = GHC.toList
+    integral (VectorIntegralType _ TypeInt16)   (SingleIntegralType TypeInt16)   = GHC.toList
+    integral (VectorIntegralType _ TypeInt32)   (SingleIntegralType TypeInt32)   = GHC.toList
+    integral (VectorIntegralType _ TypeInt64)   (SingleIntegralType TypeInt64)   = GHC.toList
+    integral (VectorIntegralType _ TypeInt128)  (SingleIntegralType TypeInt128)  = GHC.toList
+    integral (VectorIntegralType _ TypeWord8)   (SingleIntegralType TypeWord8)   = GHC.toList
+    integral (VectorIntegralType _ TypeWord16)  (SingleIntegralType TypeWord16)  = GHC.toList
+    integral (VectorIntegralType _ TypeWord32)  (SingleIntegralType TypeWord32)  = GHC.toList
+    integral (VectorIntegralType _ TypeWord64)  (SingleIntegralType TypeWord64)  = GHC.toList
+    integral (VectorIntegralType _ TypeWord128) (SingleIntegralType TypeWord128) = GHC.toList
+    integral _ _ = internalError "unexpected vector encoding"
+
+    floating :: FloatingType v -> FloatingType t -> v -> [t]
+    floating (VectorFloatingType _ TypeFloat16)  (SingleFloatingType TypeFloat16)  = GHC.toList
+    floating (VectorFloatingType _ TypeFloat32)  (SingleFloatingType TypeFloat32)  = GHC.toList
+    floating (VectorFloatingType _ TypeFloat64)  (SingleFloatingType TypeFloat64)  = GHC.toList
+    floating (VectorFloatingType _ TypeFloat128) (SingleFloatingType TypeFloat128) = GHC.toList
+    floating _ _ = internalError "unexpected vector encoding"
+
+
+fromList :: TypeR v -> TypeR a -> [a] -> v
+fromList = go
   where
-    go :: VecR n s tuple -> (SingleType s, TypeR tuple)
-    go (VecRnil tp)                           = (tp, TupRunit)
-    go (VecRsucc vec) | (tp, tuple) <- go vec = (tp, TupRpair tuple (TupRsingle (SingleScalarType tp)))
+    go :: TypeR v -> TypeR t -> [t] -> v
+    go TupRunit         TupRunit         _  = ()
+    go (TupRpair va vb) (TupRpair ta tb) xs = let (as, bs) = unzip xs in (go va ta as, go vb tb bs)
+    go (TupRsingle v)   (TupRsingle t)   xs = scalar v t xs
+    go _                _                _  = error "unexpected vector encoding"
 
-pack :: forall n single tuple. KnownNat n => VecR n single tuple -> tuple -> Vec n single
-pack vecR tuple
-  | VectorType n single <- vecRvector vecR
-  , SingleDict          <- singleDict single
-  = runST $ do
-      mba <- newByteArray (n * sizeOf (undefined :: single))
-      go (n - 1) vecR tuple mba
-      ByteArray ba# <- unsafeFreezeByteArray mba
-      return $! Vec ba#
-  where
-    go :: Prim single => Int -> VecR n' single tuple' -> tuple' -> MutableByteArray s -> ST s ()
-    go _ (VecRnil _)  ()      _   = return ()
-    go i (VecRsucc r) (xs, x) mba = do
-      writeByteArray mba i x
-      go (i - 1) r xs mba
+    scalar :: ScalarType v -> ScalarType t -> [t] -> v
+    scalar (NumScalarType v) (NumScalarType t) = num v t
+    scalar (BitScalarType v) (BitScalarType t) = bit v t
+    scalar _ _ = internalError "unexpected vector encoding"
 
-unpack :: forall n single tuple. KnownNat n => VecR n single tuple -> Vec n single -> tuple
-unpack vecR (Vec ba#)
-  | VectorType n single <- vecRvector vecR
-  , (I# n#)             <- n
-  , SingleDict          <- singleDict single
-  = go (n# -# 1#) vecR
-  where
-    go :: Prim single => Int# -> VecR n' single tuple' -> tuple'
-    go _  (VecRnil _)  = ()
-    go i# (VecRsucc r) = x `seq` xs `seq` (xs, x)
-      where
-        xs = go (i# -# 1#) r
-        x  = indexByteArray# ba# i#
+    bit :: BitType v -> BitType t -> [t] -> v
+    bit (TypeMask _) TypeBit = Prim.unMask . GHC.fromList
+    bit _ _ = internalError "unexpected vector encoding"
 
-rnfVecR :: VecR n single tuple -> ()
-rnfVecR (VecRnil tp)   = rnfSingleType tp
-rnfVecR (VecRsucc vec) = rnfVecR vec
+    num :: NumType v -> NumType t -> [t] -> v
+    num (IntegralNumType v) (IntegralNumType t) = integral v t
+    num (FloatingNumType v) (FloatingNumType t) = floating v t
+    num _ _ = internalError "unexpected vector encoding"
 
-liftVecR :: VecR n single tuple -> CodeQ (VecR n single tuple)
-liftVecR (VecRnil tp)   = [|| VecRnil $$(liftSingleType tp) ||]
-liftVecR (VecRsucc vec) = [|| VecRsucc $$(liftVecR vec) ||]
+    integral :: IntegralType v -> IntegralType t -> [t] -> v
+    integral (VectorIntegralType _ TypeInt8)    (SingleIntegralType TypeInt8)    = GHC.fromList
+    integral (VectorIntegralType _ TypeInt16)   (SingleIntegralType TypeInt16)   = GHC.fromList
+    integral (VectorIntegralType _ TypeInt32)   (SingleIntegralType TypeInt32)   = GHC.fromList
+    integral (VectorIntegralType _ TypeInt64)   (SingleIntegralType TypeInt64)   = GHC.fromList
+    integral (VectorIntegralType _ TypeInt128)  (SingleIntegralType TypeInt128)  = GHC.fromList
+    integral (VectorIntegralType _ TypeWord8)   (SingleIntegralType TypeWord8)   = GHC.fromList
+    integral (VectorIntegralType _ TypeWord16)  (SingleIntegralType TypeWord16)  = GHC.fromList
+    integral (VectorIntegralType _ TypeWord32)  (SingleIntegralType TypeWord32)  = GHC.fromList
+    integral (VectorIntegralType _ TypeWord64)  (SingleIntegralType TypeWord64)  = GHC.fromList
+    integral (VectorIntegralType _ TypeWord128) (SingleIntegralType TypeWord128) = GHC.fromList
+    integral _ _ = internalError "unexpected vector encoding"
+
+    floating :: FloatingType v -> FloatingType t -> [t] -> v
+    floating (VectorFloatingType _ TypeFloat16)  (SingleFloatingType TypeFloat16)  = GHC.fromList
+    floating (VectorFloatingType _ TypeFloat32)  (SingleFloatingType TypeFloat32)  = GHC.fromList
+    floating (VectorFloatingType _ TypeFloat64)  (SingleFloatingType TypeFloat64)  = GHC.fromList
+    floating (VectorFloatingType _ TypeFloat128) (SingleFloatingType TypeFloat128) = GHC.fromList
+    floating _ _ = internalError "unexpected vector encoding"
 

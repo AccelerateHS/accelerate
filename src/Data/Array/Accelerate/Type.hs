@@ -27,54 +27,49 @@
 --  Primitive scalar types supported by Accelerate
 --
 --  Integral types:
---    * Int
 --    * Int8
 --    * Int16
 --    * Int32
 --    * Int64
---    * Word
+--    * Int128
 --    * Word8
 --    * Word16
 --    * Word32
 --    * Word64
+--    * Word128
 --
---  Floating types:
+--  Floating types (IEEE):
 --    * Half
 --    * Float
 --    * Double
+--    * Float128
 --
---  SIMD vector types of the above:
---    * Vec2
---    * Vec3
---    * Vec4
---    * Vec8
---    * Vec16
+--  A single bit
 --
--- Note that 'Int' has the same bit width as in plain Haskell computations.
--- 'Float' and 'Double' represent IEEE single and double precision floating
--- point numbers, respectively.
+--  and SIMD vector types of all of the above
 --
 
 module Data.Array.Accelerate.Type (
 
-  Half(..), Float, Double,
-  module Data.Int,
-  module Data.Word,
-  module Foreign.C.Types,
+  Bit(..), Half(..), Float, Double, Float128(..),
+  module Data.Int, Int128(..),
+  module Data.Word, Word128(..),
   module Data.Array.Accelerate.Type,
 
 ) where
 
 import Data.Array.Accelerate.Orphans () -- Prim Half
+
+import Data.Primitive.Bit
 import Data.Primitive.Vec
+import Data.Numeric.Float128
 
 import Data.Bits
 import Data.Int
-import Data.Primitive.Types
 import Data.Type.Equality
+import Data.WideWord.Int128
+import Data.WideWord.Word128
 import Data.Word
-import Foreign.C.Types
-import Foreign.Storable                                             ( Storable )
 import Formatting
 import Language.Haskell.TH.Extra
 import Numeric.Half
@@ -83,342 +78,281 @@ import Text.Printf
 import GHC.Prim
 import GHC.TypeLits
 
+type Float16 = Half
+type Float32 = Float
+type Float64 = Double
 
 -- Scalar types
 -- ------------
 
--- Reified dictionaries
+-- | Scalar element types are values that can be stored in machine
+-- registers: ground types (int32, float64, etc.) and SIMD vectors of these
 --
-data SingleDict a where
-  SingleDict :: ( Eq a, Ord a, Show a, Storable a, Prim a )
-             => SingleDict a
+data ScalarType a where
+  NumScalarType :: NumType a -> ScalarType a
+  BitScalarType :: BitType a -> ScalarType a
+  -- Void?
 
-data IntegralDict a where
-  IntegralDict :: ( Eq a, Ord a, Show a
-                  , Bounded a, Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
-               => IntegralDict a
+data BitType a where
+  TypeBit  ::                           BitType Bit
+  TypeMask :: KnownNat n => Proxy# n -> BitType (Vec n Bit)
 
-data FloatingDict a where
-  FloatingDict :: ( Eq a, Ord a, Show a
-                  , Floating a, Fractional a, Num a, Real a, RealFrac a, RealFloat a, Storable a )
-               => FloatingDict a
-
-
--- Scalar type representation
---
-
--- | Integral types supported in array computations.
---
-data IntegralType a where
-  TypeInt     :: IntegralType Int
-  TypeInt8    :: IntegralType Int8
-  TypeInt16   :: IntegralType Int16
-  TypeInt32   :: IntegralType Int32
-  TypeInt64   :: IntegralType Int64
-  TypeWord    :: IntegralType Word
-  TypeWord8   :: IntegralType Word8
-  TypeWord16  :: IntegralType Word16
-  TypeWord32  :: IntegralType Word32
-  TypeWord64  :: IntegralType Word64
-
--- | Floating-point types supported in array computations.
---
-data FloatingType a where
-  TypeHalf    :: FloatingType Half
-  TypeFloat   :: FloatingType Float
-  TypeDouble  :: FloatingType Double
-
--- | Numeric element types implement Num & Real
---
 data NumType a where
   IntegralNumType :: IntegralType a -> NumType a
   FloatingNumType :: FloatingType a -> NumType a
 
--- | Bounded element types implement Bounded
---
-data BoundedType a where
-  IntegralBoundedType :: IntegralType a -> BoundedType a
+data IntegralType a where
+  SingleIntegralType ::                           SingleIntegralType a -> IntegralType a
+  VectorIntegralType :: KnownNat n => Proxy# n -> SingleIntegralType a -> IntegralType (Vec n a)
 
--- | All scalar element types implement Eq & Ord
---
-data ScalarType a where
-  SingleScalarType :: SingleType a         -> ScalarType a
-  VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
+data SingleIntegralType a where
+  TypeInt8    :: SingleIntegralType Int8
+  TypeInt16   :: SingleIntegralType Int16
+  TypeInt32   :: SingleIntegralType Int32
+  TypeInt64   :: SingleIntegralType Int64
+  TypeInt128  :: SingleIntegralType Int128
+  TypeWord8   :: SingleIntegralType Word8
+  TypeWord16  :: SingleIntegralType Word16
+  TypeWord32  :: SingleIntegralType Word32
+  TypeWord64  :: SingleIntegralType Word64
+  TypeWord128 :: SingleIntegralType Word128
 
-data SingleType a where
-  NumSingleType :: NumType a -> SingleType a
+data FloatingType a where
+  SingleFloatingType ::                           SingleFloatingType a -> FloatingType a
+  VectorFloatingType :: KnownNat n => Proxy# n -> SingleFloatingType a -> FloatingType (Vec n a)
 
-data VectorType a where
-  VectorType :: KnownNat n => {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
+data SingleFloatingType a where
+  -- TypeFloat8   :: SingleFloatingType Float8
+  -- TypeBFloat16 :: SingleFloatingType BFloat16
+  TypeFloat16  :: SingleFloatingType Float16
+  TypeFloat32  :: SingleFloatingType Float32
+  TypeFloat64  :: SingleFloatingType Float64
+  TypeFloat128 :: SingleFloatingType Float128
 
 instance Show (IntegralType a) where
-  show TypeInt    = "Int"
-  show TypeInt8   = "Int8"
-  show TypeInt16  = "Int16"
-  show TypeInt32  = "Int32"
-  show TypeInt64  = "Int64"
-  show TypeWord   = "Word"
-  show TypeWord8  = "Word8"
-  show TypeWord16 = "Word16"
-  show TypeWord32 = "Word32"
-  show TypeWord64 = "Word64"
+  show (SingleIntegralType t)   = show t
+  show (VectorIntegralType n t) = printf "<%d x %s>" (natVal' n) (show t)
 
 instance Show (FloatingType a) where
-  show TypeHalf   = "Half"
-  show TypeFloat  = "Float"
-  show TypeDouble = "Double"
+  show (SingleFloatingType t)   = show t
+  show (VectorFloatingType n t) = printf "<%d x %s>" (natVal' n) (show t)
+
+instance Show (SingleIntegralType a) where
+  show TypeInt8    = "Int8"
+  show TypeInt16   = "Int16"
+  show TypeInt32   = "Int32"
+  show TypeInt64   = "Int64"
+  show TypeInt128  = "Int128"
+  show TypeWord8   = "Word8"
+  show TypeWord16  = "Word16"
+  show TypeWord32  = "Word32"
+  show TypeWord64  = "Word64"
+  show TypeWord128 = "Word128"
+
+instance Show (SingleFloatingType a) where
+  show TypeFloat16  = "Float16"
+  show TypeFloat32  = "Float32"
+  show TypeFloat64  = "Float64"
+  show TypeFloat128 = "Float128"
 
 instance Show (NumType a) where
-  show (IntegralNumType ty) = show ty
-  show (FloatingNumType ty) = show ty
+  show (IntegralNumType t) = show t
+  show (FloatingNumType t) = show t
 
-instance Show (BoundedType a) where
-  show (IntegralBoundedType ty) = show ty
-
-instance Show (SingleType a) where
-  show (NumSingleType ty) = show ty
-
-instance Show (VectorType a) where
-  show (VectorType n ty) = printf "<%d x %s>" n (show ty)
+instance Show (BitType t) where
+  show (TypeBit)    = "Bit"
+  show (TypeMask n) = printf "<%d x Bit>" (natVal' n)
 
 instance Show (ScalarType a) where
-  show (SingleScalarType ty) = show ty
-  show (VectorScalarType ty) = show ty
+  show (NumScalarType t) = show t
+  show (BitScalarType t) = show t
 
 formatIntegralType :: Format r (IntegralType a -> r)
 formatIntegralType = later $ \case
-  TypeInt    -> "Int"
-  TypeInt8   -> "Int8"
-  TypeInt16  -> "Int16"
-  TypeInt32  -> "Int32"
-  TypeInt64  -> "Int64"
-  TypeWord   -> "Word"
-  TypeWord8  -> "Word8"
-  TypeWord16 -> "Word16"
-  TypeWord32 -> "Word32"
-  TypeWord64 -> "Word64"
+  SingleIntegralType t   -> bformat formatSingleIntegralType t
+  VectorIntegralType n t -> bformat (angled (int % " x " % formatSingleIntegralType)) (natVal' n) t
+
+formatSingleIntegralType :: Format r (SingleIntegralType a -> r)
+formatSingleIntegralType = later $ \case
+  TypeInt8    -> "Int8"
+  TypeInt16   -> "Int16"
+  TypeInt32   -> "Int32"
+  TypeInt64   -> "Int64"
+  TypeInt128  -> "Int128"
+  TypeWord8   -> "Word8"
+  TypeWord16  -> "Word16"
+  TypeWord32  -> "Word32"
+  TypeWord64  -> "Word64"
+  TypeWord128 -> "Word128"
 
 formatFloatingType :: Format r (FloatingType a -> r)
 formatFloatingType = later $ \case
-  TypeHalf   -> "Half"
-  TypeFloat  -> "Float"
-  TypeDouble -> "Double"
+  SingleFloatingType t   -> bformat formatSingleFloatingType t
+  VectorFloatingType n t -> bformat (angled (int % " x " % formatSingleFloatingType)) (natVal' n) t
+
+formatSingleFloatingType :: Format r (SingleFloatingType a -> r)
+formatSingleFloatingType = later $ \case
+  TypeFloat16  -> "Float16"
+  TypeFloat32  -> "Float32"
+  TypeFloat64  -> "Float64"
+  TypeFloat128 -> "Float128"
 
 formatNumType :: Format r (NumType a -> r)
 formatNumType = later $ \case
-  IntegralNumType ty -> bformat formatIntegralType ty
-  FloatingNumType ty -> bformat formatFloatingType ty
+  IntegralNumType t -> bformat formatIntegralType t
+  FloatingNumType t -> bformat formatFloatingType t
 
-formatBoundedType :: Format r (BoundedType a -> r)
-formatBoundedType = later $ \case
-  IntegralBoundedType ty -> bformat formatIntegralType ty
-
-formatSingleType :: Format r (SingleType a -> r)
-formatSingleType = later $ \case
-  NumSingleType ty -> bformat formatNumType ty
-
-formatVectorType :: Format r (VectorType a -> r)
-formatVectorType = later $ \case
-  VectorType n ty -> bformat (angled (int % " x " % formatSingleType)) n ty
+formatBitType :: Format r (BitType t -> r)
+formatBitType = later $ \case
+  TypeBit    -> "Bit"
+  TypeMask n -> bformat (angled (int % " x Bit")) (natVal' n)
 
 formatScalarType :: Format r (ScalarType a -> r)
 formatScalarType = later $ \case
-  SingleScalarType ty -> bformat formatSingleType ty
-  VectorScalarType ty -> bformat formatVectorType ty
+  NumScalarType t -> bformat formatNumType t
+  BitScalarType t -> bformat formatBitType t
 
-
--- | Querying Integral types
---
-class (IsSingle a, IsNum a, IsBounded a) => IsIntegral a where
-  integralType :: IntegralType a
-
--- | Querying Floating types
---
-class (Floating a, IsSingle a, IsNum a) => IsFloating a where
-  floatingType :: FloatingType a
-
--- | Querying Numeric types
---
-class (Num a, IsSingle a) => IsNum a where
-  numType :: NumType a
-
--- | Querying Bounded types
---
-class IsBounded a where
-  boundedType :: BoundedType a
-
--- | Querying single value types
---
-class IsScalar a => IsSingle a where
-  singleType :: SingleType a
-
--- | Querying all scalar types
---
-class IsScalar a where
-  scalarType :: ScalarType a
-
-
-integralDict :: IntegralType a -> IntegralDict a
-integralDict TypeInt    = IntegralDict
-integralDict TypeInt8   = IntegralDict
-integralDict TypeInt16  = IntegralDict
-integralDict TypeInt32  = IntegralDict
-integralDict TypeInt64  = IntegralDict
-integralDict TypeWord   = IntegralDict
-integralDict TypeWord8  = IntegralDict
-integralDict TypeWord16 = IntegralDict
-integralDict TypeWord32 = IntegralDict
-integralDict TypeWord64 = IntegralDict
-
-floatingDict :: FloatingType a -> FloatingDict a
-floatingDict TypeHalf   = FloatingDict
-floatingDict TypeFloat  = FloatingDict
-floatingDict TypeDouble = FloatingDict
-
-singleDict :: SingleType a -> SingleDict a
-singleDict = single
-  where
-    single :: SingleType a -> SingleDict a
-    single (NumSingleType t) = num t
-
-    num :: NumType a -> SingleDict a
-    num (IntegralNumType t) = integral t
-    num (FloatingNumType t) = floating t
-
-    integral :: IntegralType a -> SingleDict a
-    integral TypeInt    = SingleDict
-    integral TypeInt8   = SingleDict
-    integral TypeInt16  = SingleDict
-    integral TypeInt32  = SingleDict
-    integral TypeInt64  = SingleDict
-    integral TypeWord   = SingleDict
-    integral TypeWord8  = SingleDict
-    integral TypeWord16 = SingleDict
-    integral TypeWord32 = SingleDict
-    integral TypeWord64 = SingleDict
-
-    floating :: FloatingType a -> SingleDict a
-    floating TypeHalf   = SingleDict
-    floating TypeFloat  = SingleDict
-    floating TypeDouble = SingleDict
-
-
-scalarTypeInt :: ScalarType Int
-scalarTypeInt = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt
-
-scalarTypeWord :: ScalarType Word
-scalarTypeWord = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord
-
-scalarTypeInt32 :: ScalarType Int32
-scalarTypeInt32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeInt32
-
-scalarTypeWord8 :: ScalarType Word8
-scalarTypeWord8 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord8
-
-scalarTypeWord32 :: ScalarType Word32
-scalarTypeWord32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord32
 
 rnfScalarType :: ScalarType t -> ()
-rnfScalarType (SingleScalarType t) = rnfSingleType t
-rnfScalarType (VectorScalarType t) = rnfVectorType t
+rnfScalarType (NumScalarType t) = rnfNumType t
+rnfScalarType (BitScalarType t) = rnfBitType t
 
-rnfSingleType :: SingleType t -> ()
-rnfSingleType (NumSingleType t) = rnfNumType t
-
-rnfVectorType :: VectorType t -> ()
-rnfVectorType (VectorType !_ t) = rnfSingleType t
-
-rnfBoundedType :: BoundedType t -> ()
-rnfBoundedType (IntegralBoundedType t) = rnfIntegralType t
+rnfBitType :: BitType t -> ()
+rnfBitType TypeBit       = ()
+rnfBitType (TypeMask !_) = ()
 
 rnfNumType :: NumType t -> ()
 rnfNumType (IntegralNumType t) = rnfIntegralType t
 rnfNumType (FloatingNumType t) = rnfFloatingType t
 
 rnfIntegralType :: IntegralType t -> ()
-rnfIntegralType TypeInt    = ()
-rnfIntegralType TypeInt8   = ()
-rnfIntegralType TypeInt16  = ()
-rnfIntegralType TypeInt32  = ()
-rnfIntegralType TypeInt64  = ()
-rnfIntegralType TypeWord   = ()
-rnfIntegralType TypeWord8  = ()
-rnfIntegralType TypeWord16 = ()
-rnfIntegralType TypeWord32 = ()
-rnfIntegralType TypeWord64 = ()
+rnfIntegralType (SingleIntegralType t)    = rnfSingleIntegralType t
+rnfIntegralType (VectorIntegralType !_ t) = rnfSingleIntegralType t
+
+rnfSingleIntegralType :: SingleIntegralType t -> ()
+rnfSingleIntegralType TypeInt8    = ()
+rnfSingleIntegralType TypeInt16   = ()
+rnfSingleIntegralType TypeInt32   = ()
+rnfSingleIntegralType TypeInt64   = ()
+rnfSingleIntegralType TypeInt128  = ()
+rnfSingleIntegralType TypeWord8   = ()
+rnfSingleIntegralType TypeWord16  = ()
+rnfSingleIntegralType TypeWord32  = ()
+rnfSingleIntegralType TypeWord64  = ()
+rnfSingleIntegralType TypeWord128 = ()
 
 rnfFloatingType :: FloatingType t -> ()
-rnfFloatingType TypeHalf   = ()
-rnfFloatingType TypeFloat  = ()
-rnfFloatingType TypeDouble = ()
+rnfFloatingType (SingleFloatingType t)    = rnfSingleFloatingType t
+rnfFloatingType (VectorFloatingType !_ t) = rnfSingleFloatingType t
+
+rnfSingleFloatingType :: SingleFloatingType t -> ()
+rnfSingleFloatingType TypeFloat16  = ()
+rnfSingleFloatingType TypeFloat32  = ()
+rnfSingleFloatingType TypeFloat64  = ()
+rnfSingleFloatingType TypeFloat128 = ()
 
 
 liftScalar :: ScalarType t -> t -> CodeQ t
-liftScalar (SingleScalarType t) = liftSingle t
-liftScalar (VectorScalarType t) = liftVector t
+liftScalar (NumScalarType t) = liftNum t
+liftScalar (BitScalarType t) = liftBit t
 
-liftSingle :: SingleType t -> t -> CodeQ t
-liftSingle (NumSingleType t) = liftNum t
-
-liftVector :: VectorType t -> t -> CodeQ t
-liftVector VectorType{} = liftVec
+liftBit :: BitType t -> t -> CodeQ t
+liftBit TypeBit    (Bit x) = [|| Bit x ||]
+liftBit TypeMask{} x       = liftVec x
 
 liftNum :: NumType t -> t -> CodeQ t
 liftNum (IntegralNumType t) = liftIntegral t
 liftNum (FloatingNumType t) = liftFloating t
 
 liftIntegral :: IntegralType t -> t -> CodeQ t
-liftIntegral TypeInt    x = [|| x ||]
-liftIntegral TypeInt8   x = [|| x ||]
-liftIntegral TypeInt16  x = [|| x ||]
-liftIntegral TypeInt32  x = [|| x ||]
-liftIntegral TypeInt64  x = [|| x ||]
-liftIntegral TypeWord   x = [|| x ||]
-liftIntegral TypeWord8  x = [|| x ||]
-liftIntegral TypeWord16 x = [|| x ||]
-liftIntegral TypeWord32 x = [|| x ||]
-liftIntegral TypeWord64 x = [|| x ||]
+liftIntegral (SingleIntegralType t)   = liftSingleIntegral t
+liftIntegral (VectorIntegralType _ _) = liftVec
+
+liftSingleIntegral :: SingleIntegralType t -> t -> CodeQ t
+liftSingleIntegral TypeInt8    x = [|| x ||]
+liftSingleIntegral TypeInt16   x = [|| x ||]
+liftSingleIntegral TypeInt32   x = [|| x ||]
+liftSingleIntegral TypeInt64   x = [|| x ||]
+liftSingleIntegral TypeWord8   x = [|| x ||]
+liftSingleIntegral TypeWord16  x = [|| x ||]
+liftSingleIntegral TypeWord32  x = [|| x ||]
+liftSingleIntegral TypeWord64  x = [|| x ||]
+liftSingleIntegral TypeInt128  (Int128 x y)  = [|| Int128 x y ||]
+liftSingleIntegral TypeWord128 (Word128 x y) = [|| Word128 x y ||]
 
 liftFloating :: FloatingType t -> t -> CodeQ t
-liftFloating TypeHalf   x = [|| x ||]
-liftFloating TypeFloat  x = [|| x ||]
-liftFloating TypeDouble x = [|| x ||]
+liftFloating (SingleFloatingType t)   = liftSingleFloating t
+liftFloating (VectorFloatingType _ _) = liftVec
+
+liftSingleFloating :: SingleFloatingType t -> t -> CodeQ t
+liftSingleFloating TypeFloat16  x = [|| x ||]
+liftSingleFloating TypeFloat32  x = [|| x ||]
+liftSingleFloating TypeFloat64  x = [|| x ||]
+liftSingleFloating TypeFloat128 (Float128 x y) = [|| Float128 x y ||]
 
 
 liftScalarType :: ScalarType t -> CodeQ (ScalarType t)
-liftScalarType (SingleScalarType t) = [|| SingleScalarType $$(liftSingleType t) ||]
-liftScalarType (VectorScalarType t) = [|| VectorScalarType $$(liftVectorType t) ||]
+liftScalarType (NumScalarType t) = [|| NumScalarType $$(liftNumType t) ||]
+liftScalarType (BitScalarType t) = [|| BitScalarType $$(liftBitType t) ||]
 
-liftSingleType :: SingleType t -> CodeQ (SingleType t)
-liftSingleType (NumSingleType t) = [|| NumSingleType $$(liftNumType t) ||]
-
-liftVectorType :: VectorType t -> CodeQ (VectorType t)
-liftVectorType (VectorType n t) = [|| VectorType n $$(liftSingleType t) ||]
+liftBitType :: BitType t -> CodeQ (BitType t)
+liftBitType TypeBit    = [|| TypeBit ||]
+liftBitType TypeMask{} = [|| TypeMask proxy# ||]
 
 liftNumType :: NumType t -> CodeQ (NumType t)
 liftNumType (IntegralNumType t) = [|| IntegralNumType $$(liftIntegralType t) ||]
 liftNumType (FloatingNumType t) = [|| FloatingNumType $$(liftFloatingType t) ||]
 
-liftBoundedType :: BoundedType t -> CodeQ (BoundedType t)
-liftBoundedType (IntegralBoundedType t) = [|| IntegralBoundedType $$(liftIntegralType t) ||]
-
 liftIntegralType :: IntegralType t -> CodeQ (IntegralType t)
-liftIntegralType TypeInt    = [|| TypeInt ||]
-liftIntegralType TypeInt8   = [|| TypeInt8 ||]
-liftIntegralType TypeInt16  = [|| TypeInt16 ||]
-liftIntegralType TypeInt32  = [|| TypeInt32 ||]
-liftIntegralType TypeInt64  = [|| TypeInt64 ||]
-liftIntegralType TypeWord   = [|| TypeWord ||]
-liftIntegralType TypeWord8  = [|| TypeWord8 ||]
-liftIntegralType TypeWord16 = [|| TypeWord16 ||]
-liftIntegralType TypeWord32 = [|| TypeWord32 ||]
-liftIntegralType TypeWord64 = [|| TypeWord64 ||]
+liftIntegralType (SingleIntegralType t)   = [|| SingleIntegralType $$(liftSingleIntegralType t) ||]
+liftIntegralType (VectorIntegralType _ t) = [|| VectorIntegralType proxy# $$(liftSingleIntegralType t) ||]
+
+liftSingleIntegralType :: SingleIntegralType t -> CodeQ (SingleIntegralType t)
+liftSingleIntegralType TypeInt8    = [|| TypeInt8 ||]
+liftSingleIntegralType TypeInt16   = [|| TypeInt16 ||]
+liftSingleIntegralType TypeInt32   = [|| TypeInt32 ||]
+liftSingleIntegralType TypeInt64   = [|| TypeInt64 ||]
+liftSingleIntegralType TypeInt128  = [|| TypeInt128 ||]
+liftSingleIntegralType TypeWord8   = [|| TypeWord8 ||]
+liftSingleIntegralType TypeWord16  = [|| TypeWord16 ||]
+liftSingleIntegralType TypeWord32  = [|| TypeWord32 ||]
+liftSingleIntegralType TypeWord64  = [|| TypeWord64 ||]
+liftSingleIntegralType TypeWord128 = [|| TypeWord128 ||]
 
 liftFloatingType :: FloatingType t -> CodeQ (FloatingType t)
-liftFloatingType TypeHalf   = [|| TypeHalf ||]
-liftFloatingType TypeFloat  = [|| TypeFloat ||]
-liftFloatingType TypeDouble = [|| TypeDouble ||]
+liftFloatingType (SingleFloatingType t)   = [|| SingleFloatingType $$(liftSingleFloatingType t) ||]
+liftFloatingType (VectorFloatingType _ t) = [|| VectorFloatingType proxy# $$(liftSingleFloatingType t) ||]
 
+liftSingleFloatingType :: SingleFloatingType t -> CodeQ (SingleFloatingType t)
+liftSingleFloatingType TypeFloat16  = [|| TypeFloat16 ||]
+liftSingleFloatingType TypeFloat32  = [|| TypeFloat32 ||]
+liftSingleFloatingType TypeFloat64  = [|| TypeFloat64 ||]
+liftSingleFloatingType TypeFloat128 = [|| TypeFloat128 ||]
+
+
+-- Querying types
+-- --------------
+
+class IsScalar a where
+  scalarType :: ScalarType a
+
+class IsBit a where
+  bitType :: BitType a
+
+class IsNum a where
+  numType :: NumType a
+
+class IsIntegral a where
+  integralType :: IntegralType a
+
+class IsFloating a where
+  floatingType :: FloatingType a
+
+class IsSingleIntegral a where
+  singleIntegralType :: SingleIntegralType a
+
+class IsSingleFloating a where
+  singleFloatingType :: SingleFloatingType a
 
 -- Type-level bit sizes
 -- --------------------
@@ -440,81 +374,114 @@ type family BitSize a :: Nat
 
 runQ $ do
   let
-      bits :: FiniteBits b => b -> Integer
-      bits = toInteger . finiteBitSize
-
-      integralTypes :: [(Name, Integer)]
-      integralTypes =
-        [ (''Int,    bits (undefined::Int))
-        , (''Int8,   8)
-        , (''Int16,  16)
-        , (''Int32,  32)
-        , (''Int64,  64)
-        , (''Word,   bits (undefined::Word))
-        , (''Word8,  8)
-        , (''Word16, 16)
-        , (''Word32, 32)
-        , (''Word64, 64)
-        ]
+      integralTypes :: [Integer]
+      integralTypes = [8,16,32,64,128]
 
       floatingTypes :: [(Name, Integer)]
       floatingTypes =
-        [ (''Half,   16)
-        , (''Float,  32)
-        , (''Double, 64)
+        [ (''Half,     16)
+        , (''Float,    32)
+        , (''Double,   64)
+        , (''Float128, 128)
         ]
 
-      vectorTypes :: [(Name, Integer)]
-      vectorTypes = integralTypes ++ floatingTypes
+      mkIntegral :: String -> Integer -> Q [Dec]
+      mkIntegral name bits =
+        let t = conT $ mkName $ printf "%s%d" name bits
+            c = conE $ mkName $ printf "Type%s%d" name bits
+        in
+        [d| instance IsScalar $t where
+              scalarType = NumScalarType numType
 
-      mkIntegral :: Name -> Integer -> Q [Dec]
-      mkIntegral t n =
-        [d| instance IsIntegral $(conT t) where
-              integralType = $(conE (mkName ("Type" ++ nameBase t)))
-
-            instance IsNum $(conT t) where
+            instance IsNum $t where
               numType = IntegralNumType integralType
 
-            instance IsBounded $(conT t) where
-              boundedType = IntegralBoundedType integralType
+            instance IsIntegral $t where
+              integralType = SingleIntegralType singleIntegralType
 
-            instance IsSingle $(conT t) where
-              singleType = NumSingleType numType
+            instance IsSingleIntegral $t where
+              singleIntegralType = $c
 
-            instance IsScalar $(conT t) where
-              scalarType = SingleScalarType singleType
+            instance KnownNat n => IsIntegral (Vec n $t) where
+              integralType = VectorIntegralType proxy# $c
 
-            type instance BitSize $(conT t) = $(litT (numTyLit n))
+            instance KnownNat n => IsNum (Vec n $t) where
+              numType = IntegralNumType integralType
+
+            instance KnownNat n => IsScalar (Vec n $t) where
+              scalarType = NumScalarType numType
+
+            type instance BitSize $t = $(litT (numTyLit bits))
+            type instance BitSize (Vec n $t) = n GHC.TypeLits.* $(litT (numTyLit bits))
           |]
 
       mkFloating :: Name -> Integer -> Q [Dec]
-      mkFloating t n =
-        [d| instance IsFloating $(conT t) where
-              floatingType = $(conE (mkName ("Type" ++ nameBase t)))
+      mkFloating name bits =
+        let t = conT name
+            c = conE $ mkName $ printf "TypeFloat%d" bits
+        in
+        [d| instance IsScalar $t where
+              scalarType = NumScalarType numType
 
-            instance IsNum $(conT t) where
+            instance IsNum $t where
               numType = FloatingNumType floatingType
 
-            instance IsSingle $(conT t) where
-              singleType = NumSingleType numType
+            instance IsFloating $t where
+              floatingType = SingleFloatingType singleFloatingType
 
-            instance IsScalar $(conT t) where
-              scalarType = SingleScalarType singleType
+            instance IsSingleFloating $t where
+              singleFloatingType = $c
 
-            type instance BitSize $(conT t) = $(litT (numTyLit n))
+            instance KnownNat n => IsFloating (Vec n $t) where
+              floatingType = VectorFloatingType proxy# $c
+
+            instance KnownNat n => IsNum (Vec n $t) where
+              numType = FloatingNumType floatingType
+
+            instance KnownNat n => IsScalar (Vec n $t) where
+              scalarType = NumScalarType numType
+
+            type instance BitSize $t = $(litT (numTyLit bits))
+            type instance BitSize (Vec n $t) = n GHC.TypeLits.* $(litT (numTyLit bits))
           |]
 
-      mkVector :: Name -> Integer -> Q [Dec]
-      mkVector t n =
-        [d| instance KnownNat n => IsScalar (Vec n $(conT t)) where
-              scalarType = VectorScalarType (VectorType (fromIntegral (natVal' (proxy# :: Proxy# n))) singleType)
-
-            type instance BitSize (Vec w $(conT t)) = w GHC.TypeLits.* $(litT (numTyLit n))
-          |]
-      --
-  is <- mapM (uncurry mkIntegral) integralTypes
+  ss <- mapM (mkIntegral "Int") integralTypes
+  us <- mapM (mkIntegral "Word") integralTypes
   fs <- mapM (uncurry mkFloating) floatingTypes
-  vs <- mapM (uncurry mkVector)   vectorTypes
   --
-  return (concat is ++ concat fs ++ concat vs)
+  return (concat ss ++ concat us ++ concat fs)
+
+type instance BitSize Bit = 1
+type instance BitSize (Vec n Bit) = n
+
+instance IsScalar Bit where
+  scalarType = BitScalarType bitType
+
+instance KnownNat n => IsScalar (Vec n Bit) where
+  scalarType = BitScalarType bitType
+
+instance IsBit Bit where
+  bitType = TypeBit
+
+instance KnownNat n => IsBit (Vec n Bit) where
+  bitType = TypeMask proxy#
+
+
+-- Determine the underlying type of a Haskell Int and Word
+--
+runQ [d| type INT = $(
+              case finiteBitSize (undefined::Int) of
+                8  -> [t| Int8  |]
+                16 -> [t| Int16 |]
+                32 -> [t| Int32 |]
+                64 -> [t| Int64 |]
+                _  -> error "I don't know what architecture I am" ) |]
+
+runQ [d| type WORD = $(
+              case finiteBitSize (undefined::Word) of
+                8  -> [t| Word8  |]
+                16 -> [t| Word16 |]
+                32 -> [t| Word32 |]
+                64 -> [t| Word64 |]
+                _  -> error "I don't know what architecture I am" ) |]
 
