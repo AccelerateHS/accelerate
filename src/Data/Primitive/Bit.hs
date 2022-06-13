@@ -36,13 +36,13 @@ import Control.Exception
 import qualified Foreign.Storable                                   as Foreign
 
 import Data.Primitive.ByteArray
-import Data.Primitive.Types
 import Data.Primitive.Vec                                           ( Vec(..) )
 
 import GHC.Base                                                     ( isTrue# )
 import GHC.Generics
 import GHC.Int
 import GHC.Prim
+import GHC.Ptr
 import GHC.TypeLits
 import GHC.Types                                                    ( IO(..) )
 import GHC.Word

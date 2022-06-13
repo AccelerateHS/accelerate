@@ -24,7 +24,6 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Trafo.Sharing
 import Control.Monad
-import Data.Primitive.Types
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen

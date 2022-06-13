@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -58,6 +59,10 @@ import GHC.Types                                                    ( IO(..) )
 import GHC.Word
 import qualified GHC.Exts                                           as GHC
 
+#if __GLASGOW_HASKELL__ < 808
+import GHC.Ptr
+#endif
+
 
 -- Note: [Representing SIMD vector types]
 --
@@ -116,7 +121,7 @@ instance (Foreign.Storable a, KnownNat n) => Foreign.Storable (Vec n a) where
   {-# INLINE peek      #-}
   {-# INLINE poke      #-}
 
-  sizeOf _    = fromInteger (natVal' (proxy# @n)) * Foreign.sizeOf (undefined :: a)
+  sizeOf _    = fromInteger (natVal' (proxy# :: Proxy# n)) * Foreign.sizeOf (undefined :: a)
   alignment _ = Foreign.alignment (undefined :: a)
 
   peek (Ptr addr#) =

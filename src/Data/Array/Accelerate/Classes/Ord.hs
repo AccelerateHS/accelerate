@@ -249,7 +249,8 @@ vcmp :: forall n a. KnownNat n
      => (Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool))
      -> (Exp (Vec n a) -> Exp (Vec n a) -> Exp Bool)
 vcmp op x y =
-  let n = fromInteger $ natVal' (proxy# :: Proxy# n)
+  let n :: Int
+      n = fromInteger $ natVal' (proxy# :: Proxy# n)
       v = op x y
       --
       cmp :: forall t. (Elt t, Num t, Bits t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit)

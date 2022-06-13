@@ -45,6 +45,7 @@ module Data.Array.Accelerate.Data.Complex (
 ) where
 
 import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.Fractional
@@ -216,10 +217,15 @@ constructComplex r@(Exp r') i@(Exp i') =
             (SmartExp (Const scalarType 1)) y)
 
 deconstructComplex :: forall a. Elt a => Exp (Complex a) -> (Exp a, Exp a)
-deconstructComplex c@(Exp c') =
+deconstructComplex (Exp c) =
   case complexR (eltR @a) of
-    ComplexTup   -> let Pattern (r,i) = c in (r, i)
-    ComplexVec t -> let (r', i') = num t c' in (Exp r', Exp i')
+    ComplexTup   ->
+      let i = SmartExp (Prj PairIdxRight c)
+          r = SmartExp (Prj PairIdxRight (SmartExp (Prj PairIdxLeft c)))
+       in (Exp r, Exp i)
+    ComplexVec t ->
+      let (r, i) = num t c
+       in (Exp r, Exp i)
     where
       num :: NumType (Prim.Vec2 t) -> SmartExp (ComplexR t) -> (SmartExp t, SmartExp t)
       num (IntegralNumType t) = integral t
