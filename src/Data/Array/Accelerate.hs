@@ -179,9 +179,9 @@ module Data.Array.Accelerate (
   -- *** Array shapes & indices
   -- $shapes_and_indices
   --
-  Z(..), (:.)(..),
+  Z, (:.),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
-  Shape, Slice(..), All(..), Any(..),
+  Shape, Slice(..), All, Any,
   -- Split(..), Divide(..), Division(..),
 
   -- ** Array access
@@ -349,7 +349,7 @@ module Data.Array.Accelerate (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
-  pattern Z_, pattern Ix, pattern (::.), pattern All_, pattern Any_,
+  pattern Z, pattern (:.), pattern All, pattern Any,
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
@@ -448,13 +448,14 @@ import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Shape
 import Data.Array.Accelerate.Pattern.TH
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Pretty                                 () -- show instances
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Array, Arrays, Scalar, Vector, Matrix, Segments, fromFunction, fromFunctionM, toList, fromList )
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, toIndex, fromIndex, intersect )
+import Data.Array.Accelerate.Sugar.Shape                            hiding ( Z(..), (:.)(..), Any(..), All(..), size, toIndex, fromIndex, intersect )
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Sugar.Array                  as S

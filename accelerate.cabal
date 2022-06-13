@@ -486,6 +486,7 @@ library
         Data.Array.Accelerate.Pattern.Either
         Data.Array.Accelerate.Pattern.Maybe
         Data.Array.Accelerate.Pattern.Ordering
+        Data.Array.Accelerate.Pattern.Shape
         Data.Array.Accelerate.Pattern.TH
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz

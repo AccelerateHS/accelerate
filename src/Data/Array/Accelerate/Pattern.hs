@@ -30,7 +30,6 @@ module Data.Array.Accelerate.Pattern (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
-  pattern Z_, pattern Ix, pattern (::.), pattern All_, pattern Any_,
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
@@ -40,11 +39,12 @@ module Data.Array.Accelerate.Pattern (
 ) where
 
 import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.Pattern.Shape
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape
+-- import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
@@ -72,44 +72,6 @@ pattern SIMD vars <- (vmatcher @context -> vars)
 class IsSIMD context a b where
   vbuilder :: b -> context a
   vmatcher :: context a -> b
-
--- | Pattern synonyms for indices, which may be more convenient to use than
--- 'Data.Array.Accelerate.Lift.lift' and
--- 'Data.Array.Accelerate.Lift.unlift'.
---
-pattern Z_ :: Exp DIM0
-pattern Z_ = Pattern Z
-{-# COMPLETE Z_ #-}
-
-infixl 3 ::.
-pattern (::.) :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
-pattern a ::. b = Pattern (a :. b)
-{-# COMPLETE (::.) #-}
-
-infixl 3 `Ix`
-pattern Ix :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a :. b)
-pattern a `Ix` b = a ::. b
-{-# COMPLETE Ix #-}
-
-pattern All_ :: Exp All
-pattern All_ <- (const True -> True)
-  where All_ = constant All
-{-# COMPLETE All_ #-}
-
-pattern Any_ :: (Shape sh, Elt (Any sh)) => Exp (Any sh)
-pattern Any_ <- (const True -> True)
-  where Any_ = constant Any
-{-# COMPLETE Any_ #-}
-
--- IsPattern instances for Shape nil and cons
---
-instance IsPattern Exp Z Z where
-  builder _ = constant Z
-  matcher _ = Z
-
-instance (Elt a, Elt b) => IsPattern Exp (a :. b) (Exp a :. Exp b) where
-  builder (Exp a :. Exp b) = Exp $ SmartExp $ Pair a b
-  matcher (Exp t)          = Exp (SmartExp $ Prj PairIdxLeft t) :. Exp (SmartExp $ Prj PairIdxRight t)
 
 
 -- IsPattern instances for up to 16-tuples (Acc and Exp). TH takes care of
@@ -345,14 +307,14 @@ runQ $ do
           let xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
               ts      = map varT xs
               name    = mkName ('I':show n)
-              ix      = mkName "Ix"
+              ix      = mkName ":."
               cst     = tupT (map (\t -> [t| Elt $t |]) ts)
               dim     = foldl (\h t -> [t| $h :. $t |]) [t| Z |] ts
               sig     = foldr (\t r -> [t| Exp $t -> $r |]) [t| Exp $dim |] ts
           in
           sequence
             [ patSynSigD name [t| $cst => $sig |]
-            , patSynD    name (prefixPatSyn xs) implBidir (foldl (\ps p -> infixP ps ix (varP p)) [p| Z_ |] xs)
+            , patSynD    name (prefixPatSyn xs) implBidir (foldl (\ps p -> infixP ps ix (varP p)) [p| Z |] xs)
             , pragCompleteD [name] Nothing
             ]
 

@@ -35,11 +35,11 @@ module Data.Array.Accelerate.Lift (
 ) where
 
 import Data.Array.Accelerate.AST.Idx
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Shape
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, DIM1 )
 import Data.Array.Accelerate.Type
 
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
@@ -76,17 +76,17 @@ lift3 f x y z = lift $ f (unlift x) (unlift y) (unlift z)
 -- | Lift a unary function to a computation over rank-1 indices.
 --
 ilift1 :: (Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1
-ilift1 f = lift1 (\(Z:.i) -> Z :. f i)
+ilift1 f (Z:.i) = Z :. f i
 
 -- | Lift a binary function to a computation over rank-1 indices.
 --
 ilift2 :: (Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
-ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
+ilift2 f (Z:.i) (Z:.j) = Z :. f i j
 
 -- | Lift a ternary function to a computation over rank-1 indices.
 --
 ilift3 :: (Exp Int -> Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
-ilift3 f = lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
+ilift3 f (Z :. i) (Z :. j) (Z :. k) = Z :. f i j k
 
 
 -- | The class of types @e@ which can be lifted into @c@.
@@ -149,28 +149,28 @@ instance Unlift Acc (Acc a) where
 
 instance Lift Exp Z where
   type Plain Z = Z
-  lift _ = Z_
+  lift _ = Z
 
 instance Unlift Exp Z where
   unlift _ = Z
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
-  lift (ix :. i) = lift ix ::. lift i
+  lift (ix :. i) = lift ix :. lift i
 
 instance (Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
-  lift (ix :. i) = lift ix ::. constant i
+  lift (ix :. i) = lift ix :. constant i
 
 instance (Elt e, Elt (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
-  lift (ix :. i) = lift ix ::. i
+  lift (ix :. i) = lift ix :. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
-  unlift (ix ::. i) = unlift ix :. i
+  unlift (ix :. i) = unlift ix :. i
 
 instance {-# OVERLAPPABLE #-} (Elt e, Elt ix) => Unlift Exp (Exp ix :. Exp e) where
-  unlift (ix ::. i) = ix :. i
+  unlift (ix :. i) = ix :. i
 
 instance (Shape sh, Elt (Any sh)) => Lift Exp (Any sh) where
   type Plain (Any sh) = Any sh
