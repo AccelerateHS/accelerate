@@ -38,6 +38,7 @@ import GHC.Generics
 import qualified GHC.Exts                                           as GHC
 
 -- $setup
+-- >>> import Prelude
 -- >>> :seti -XOverloadedLists
 
 

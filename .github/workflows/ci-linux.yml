@@ -72,7 +72,7 @@ jobs:
 
       - name: Test doctest
         run: stack test accelerate:doctest $STACK_FLAGS
-        if: ${{ matrix.ghc != '9.2' }}
+        if: ${{ matrix.ghc != '8.6' && matrix.ghc != '8.8' }}
 
       - name: Test nofib
         run: stack test accelerate:nofib-interpreter $STACK_FLAGS
