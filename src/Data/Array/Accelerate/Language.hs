@@ -176,7 +176,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- ...we can replicate these elements to form a two-dimensional array either by
 -- replicating those elements as new rows:
 --
--- >>> run $ replicate (constant (Z :. (4::Int) :. All)) (use vec)
+-- >>> run $ replicate @(Z :. Int :. All) (Z :. 4 :. All) (use vec)
 -- Matrix (Z :. 4 :. 10)
 --   [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 --     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
@@ -185,7 +185,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 --
 -- ...or as columns:
 --
--- >>> run $ replicate (Z_ ::. All_ ::. (4 :: Exp Int)) (use vec)
+-- >>> run $ replicate @(Z :. All :. Int) (Z :. All :. 4) (use vec)
 -- Matrix (Z :. 10 :. 4)
 --   [ 0, 0, 0, 0,
 --     1, 1, 1, 1,
@@ -201,7 +201,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- Replication along more than one dimension is also possible. Here we replicate
 -- twice across the first dimension and three times across the third dimension:
 --
--- >>> run $ replicate (constant (Z :. (2::Int) :. All :. (3::Int))) (use vec)
+-- >>> run $ replicate @(Z :. Int :. All :. Int) (Z :. 2 :. All :. 3) (use vec)
 -- Array (Z :. 2 :. 10 :. 3) [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9,0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9]
 --
 -- The marker 'Any' can be used in the slice specification to match against some
@@ -209,8 +209,8 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- type variable @sh@ takes.
 --
 -- >>> :{
---   let rep0 :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
---       rep0 n a = replicate (Any_ ::. n) a
+--   let rep0 :: forall sh e. (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
+--       rep0 n a = replicate @(Any sh :. Int) (Any :. n) a
 -- :}
 --
 -- >>> let x = unit 42 :: Acc (Scalar Int)
@@ -233,8 +233,8 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- Of course, 'Any' and 'All' can be used together.
 --
 -- >>> :{
---   let rep1 :: (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
---       rep1 n a = replicate (Any_ ::. n ::. All_) a
+--   let rep1 :: forall sh e. (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
+--       rep1 n a = replicate @(Any sh :. Int :. All) (Any :. n :. All) a
 -- :}
 --
 -- >>> run $ rep1 5 (use vec)
@@ -332,13 +332,13 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 -- ...will can select a specific row to yield a one dimensional result by fixing
 -- the row index (2) while allowing the column index to vary (via 'All'):
 --
--- >>> run $ slice (use mat) (constant (Z :. (2::Int) :. All))
+-- >>> run $ slice @(Z :. Int :. All) (use mat) (Z :. 2 :. All)
 -- Vector (Z :. 10) [20,21,22,23,24,25,26,27,28,29]
 --
 -- A fully specified index (with no 'All's) returns a single element (zero
 -- dimensional array).
 --
--- >>> run $ slice (use mat) (constant (Z :. 4 :. 2 :: DIM2))
+-- >>> run $ slice @DIM2 (use mat) (Z :. 4 :. 2)
 -- Scalar Z [42]
 --
 -- The marker 'Any' can be used in the slice specification to match against some
@@ -347,8 +347,8 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 --
 -- >>> :{
 --   let
---       sl0 :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
---       sl0 a n = slice a (Any_ ::. n)
+--       sl0 :: forall sh e. (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
+--       sl0 a n = slice @(Any sh :. Int) a (Any :. n)
 -- :}
 --
 -- >>> let vec = fromList (Z:.10) [0..] :: Vector Int
@@ -361,8 +361,8 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 -- Of course, 'Any' and 'All' can be used together.
 --
 -- >>> :{
---   let sl1 :: (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
---       sl1 a n = slice a (Any_ ::. n ::. All_)
+--   let sl1 :: forall sh e. (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
+--       sl1 a n = slice @(Any sh :. Int :. All) a (Any :. n :. All)
 -- :}
 --
 -- >>> run $ sl1 (use mat) 4

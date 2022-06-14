@@ -26,12 +26,12 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Filter (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Sugar.Array                            as S
-import Data.Array.Accelerate.Sugar.Elt                              as S
-import Data.Array.Accelerate.Sugar.Shape                            as S
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import qualified Data.Array.Accelerate.Sugar.Array                  as S
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Hedgehog
 
@@ -71,7 +71,7 @@ test_filter runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
+          testGroup ("DIM" P.++ show (S.rank @(sh:.Int)))
             [ testProperty "even"     $ test_even runN sh e
             ]
 
@@ -91,7 +91,7 @@ test_filter runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
+          testGroup ("DIM" P.++ show (S.rank @(sh:.Int)))
             [ testProperty "positive" $ test_positive runN sh e
             ]
 

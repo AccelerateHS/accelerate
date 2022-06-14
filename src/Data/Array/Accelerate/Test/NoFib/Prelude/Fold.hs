@@ -25,11 +25,11 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Fold (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Sugar.Elt                              as S
-import Data.Array.Accelerate.Sugar.Shape                            as S
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -72,7 +72,7 @@ test_fold runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
+          testGroup ("DIM" P.++ show (S.rank @(sh:.Int)))
             [
               testProperty "sum"              $ test_sum runN sh (pure 0) e
             , testProperty "non-neutral sum"  $ test_sum runN sh e e
@@ -112,7 +112,7 @@ test_foldSeg runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
+          testGroup ("DIM" P.++ show (S.rank @(sh:.Int)))
             [
               testProperty "sum"              $ test_segmented_sum runN sh (pure 0) e
             , testProperty "non-neutral sum"  $ test_segmented_sum runN sh e e
@@ -187,7 +187,7 @@ test_segmented_sum runN dim z e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- pure   (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (rank @sh)))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 0 (128 `quot` 2 P.^ (S.rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
 
@@ -202,7 +202,7 @@ test_segmented_minimum runN dim e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- pure   (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (S.rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
 
@@ -217,7 +217,7 @@ test_segmented_maximum runN dim e =
     sh:.n1  <- forAll dim
     n2      <- forAll (Gen.int (Range.linear 0 64))
     n       <- pure   (P.min n1 n2) -- don't generate too many segments
-    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (rank @sh)))))
+    seg     <- forAll (array (Z:.n) (Gen.int (Range.linear 1 (128 `quot` 2 P.^ (S.rank @sh)))))
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.max) in go xs seg ~~~ fold1SegRef P.max xs seg
 

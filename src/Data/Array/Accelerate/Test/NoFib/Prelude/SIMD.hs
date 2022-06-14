@@ -32,8 +32,6 @@ import Data.Array.Accelerate.Sugar.Elt                              as S
 import Data.Array.Accelerate.Sugar.Shape                            as S
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
-import Data.Primitive.Types
-import qualified Data.Primitive.Vec                                 as Prim
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen

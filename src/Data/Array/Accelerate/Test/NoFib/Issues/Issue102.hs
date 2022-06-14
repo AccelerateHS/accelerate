@@ -1,5 +1,6 @@
-{-# LANGUAGE RankNTypes    #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE RankNTypes       #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators    #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.NoFib.Issues.Issue102
 -- Copyright   : [2009..2020] The Accelerate Team
@@ -40,29 +41,29 @@ test1 =
       rts       = 1
       rustride  = 1
 
-      v         = fill (constant (Z:.(p-1))) (constant 2)
-      ru'       = fill (constant (Z:.(p-1))) (constant 1)
+      v         = fill (I1 (p-1)) 2
+      ru'       = fill (I1 (p-1)) 1
 
       -- generate a vector with phi(p)=p-1 elements
-      x'        = reshape (constant (Z :. lts :. (p-1) :. rts)) v
+      x'        = reshape (I3 lts (p-1) rts) v
 
       --embed into a vector of length p
-      y         = generate (constant (Z :. lts :. p :. rts))
-                           (\ix -> let (Z :. l :. i :. r) = unlift ix :: Z :. Exp Int :. Exp Int :. Exp Int
-                                   in  i A.== 0 ? (0, x' ! (lift $ Z :. l :. i-1 :. r)))
+      y         = generate (I3 lts p rts)
+                           (\ix -> let I3 l i r = ix
+                                   in  i A.== 0 ? (0, x' ! (I3 l (i-1) r)))
 
       -- do a DFT_p
-      y'        = reshape (constant (Z :. lts :. p :. rts)) (flatten y)
-      dftrus    = generate (constant (Z :. p :. p))
-                           (\ix -> let (Z :. i :. j) = unlift ix :: Z :. Exp Int :. Exp Int
-                                   in ru' ! (lift (Z :. (i*j*rustride `mod` (constant p)))))
+      y'        = reshape (I3 lts p rts) (flatten y)
+      dftrus    = generate (I2 p p)
+                           (\ix -> let I2 i j = ix
+                                   in ru' ! (I1 (i*j*rustride `mod` p)))
 
-      tensorDFTCoeffs   = A.replicate (lift (Z:.lts:.All:.rts:.All)) dftrus
+      tensorDFTCoeffs   = A.replicate @(Z :. Int :. All :. Int :. All) (I4 lts All rts All) dftrus
       tensorInputCoeffs = generate (shape tensorDFTCoeffs)
-                                   (\ix -> let (Z:.l:._:.r:.col) = unlift ix :: Z :. Exp Int :. Exp Int :. Exp Int :. Exp Int
-                                           in  y' ! (lift $ Z:.l:.col:.r))
+                                   (\ix -> let I4 l _ r col = ix
+                                           in  y' ! (I3 l col r))
 
-      dftans    = flatten $ fold (+) (constant 0) $ A.zipWith (*) tensorDFTCoeffs tensorInputCoeffs
+      dftans    = flatten $ fold (+) 0 $ A.zipWith (*) tensorDFTCoeffs tensorInputCoeffs
 
       --continue the alternate transform, but this line breaks
       dfty      = reshape (shape y) $ dftans

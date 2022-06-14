@@ -26,12 +26,12 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue264 (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Sugar.Array                            as S
-import Data.Array.Accelerate.Sugar.Elt                              as S
-import Data.Array.Accelerate.Sugar.Shape                            as S
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import qualified Data.Array.Accelerate.Sugar.Array                  as S
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -80,7 +80,7 @@ test_not_not
     -> Property
 test_not_not runN =
   property $ do
-    xs <- forAll (array Z Gen.bool)
+    xs <- forAll (array @Z Z Gen.bool)
     let !go = runN (A.map A.not . A.map A.not) in go xs === mapRef (P.not . P.not) xs
 
 test_not_and
@@ -88,8 +88,8 @@ test_not_and
     -> Property
 test_not_and runN =
   property $ do
-    xs <- forAll (array Z Gen.bool)
-    ys <- forAll (array Z Gen.bool)
+    xs <- forAll (array @Z Z Gen.bool)
+    ys <- forAll (array @Z Z Gen.bool)
     let !go = runN (A.zipWith (\u v -> A.not (u A.&& v))) in go xs ys === zipWithRef (\u v -> P.not (u P.&& v)) xs ys
 
 test_not_or
@@ -97,8 +97,8 @@ test_not_or
     -> Property
 test_not_or runN =
   property $ do
-    xs <- forAll (array Z Gen.bool)
-    ys <- forAll (array Z Gen.bool)
+    xs <- forAll (array @Z Z Gen.bool)
+    ys <- forAll (array @Z Z Gen.bool)
     let !go = runN (A.zipWith (\u v -> A.not (u A.|| v))) in go xs ys === zipWithRef (\u v -> P.not (u P.|| v)) xs ys
 
 test_not_not_and
@@ -106,8 +106,8 @@ test_not_not_and
     -> Property
 test_not_not_and runN =
   property $ do
-    xs <- forAll (array Z Gen.bool)
-    ys <- forAll (array Z Gen.bool)
+    xs <- forAll (array @Z Z Gen.bool)
+    ys <- forAll (array @Z Z Gen.bool)
     let !go = runN (A.zipWith (\u v -> A.not (A.not (u A.&& v)))) in go xs ys === zipWithRef (\u v -> P.not (P.not (u P.&& v))) xs ys
 
 test_not_not_or
@@ -115,8 +115,8 @@ test_not_not_or
     -> Property
 test_not_not_or runN =
   property $ do
-    xs <- forAll (array Z Gen.bool)
-    ys <- forAll (array Z Gen.bool)
+    xs <- forAll (array @Z Z Gen.bool)
+    ys <- forAll (array @Z Z Gen.bool)
     let !go = runN (A.zipWith (\u v -> A.not (A.not (u A.|| v)))) in go xs ys === zipWithRef (\u v -> P.not (P.not (u P.|| v))) xs ys
 
 test_neg_neg
@@ -133,7 +133,7 @@ test_neg_neg runN e =
 
 
 mapRef :: (Shape sh, Elt a, Elt b) => (a -> b) -> Array sh a -> Array sh b
-mapRef f xs = fromFunction (S.shape xs) (\ix -> f (xs S.! ix))
+mapRef f xs = fromFunction (arrayShape xs) (\ix -> f (xs S.! ix))
 
 zipWithRef
     :: (Shape sh, Elt a, Elt b, Elt c)
@@ -143,6 +143,6 @@ zipWithRef
     -> Array sh c
 zipWithRef f xs ys =
   fromFunction
-    (S.shape xs `S.intersect` S.shape ys)
+    (arrayShape xs `S.intersect` arrayShape ys)
     (\ix -> f (xs S.! ix) (ys S.! ix))
 

@@ -33,5 +33,5 @@ e1 :: Scalar Float
 e1 = fromList Z [2]
 
 t1 :: Acc (Scalar Float)
-t1 = compute . A.map (* 2) . compute $ fill Z_ 1
+t1 = compute . A.map (* 2) . compute $ fill Z 1
 
