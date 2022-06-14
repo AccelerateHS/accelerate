@@ -34,23 +34,27 @@ import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 pattern Z :: IsShapeZ z => z
 pattern Z <- (z_matcher -> True)
   where Z = z_builder
-{-# COMPLETE Z #-}
+{-# COMPLETE Z :: Z   #-}
+{-# COMPLETE Z :: Exp #-}
 
 pattern All :: IsShapeAll all => all
 pattern All <- (all_matcher -> True)
   where All = all_builder
-{-# COMPLETE All #-}
+{-# COMPLETE All :: All #-}
+{-# COMPLETE All :: Exp #-}
 
 pattern Any :: IsShapeAny any => any
 pattern Any <- (any_matcher -> True)
   where Any = any_builder
-{-# COMPLETE Any #-}
+{-# COMPLETE Any :: Any #-}
+{-# COMPLETE Any :: Exp #-}
 
 infixl 3 :.
 pattern (:.) :: IsShapeSnoc t h s => t -> h -> s
 pattern t :. h <- (snoc_matcher -> (t Sugar.:. h))
   where t :. h = snoc_builder t h
-{-# COMPLETE (:.) #-}
+{-# COMPLETE (:.) :: (:.) #-}
+{-# COMPLETE (:.) :: Exp  #-}
 
 
 class IsShapeZ z where
