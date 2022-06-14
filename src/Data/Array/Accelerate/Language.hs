@@ -112,6 +112,7 @@ import Prelude                                                      ( ($), (.), 
 -- $setup
 -- >>> :seti -XFlexibleContexts
 -- >>> :seti -XScopedTypeVariables
+-- >>> :seti -XTypeApplications
 -- >>> :seti -XTypeOperators
 -- >>> :seti -XViewPatterns
 -- >>> import Data.Array.Accelerate
