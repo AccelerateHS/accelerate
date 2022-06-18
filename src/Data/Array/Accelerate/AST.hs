@@ -594,9 +594,9 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv sh
 
   -- Case statement
-  Case          :: ScalarType TAG
-                -> OpenExp env aenv TAG
-                -> [(TAG, OpenExp env aenv b)]      -- list of equations
+  Case          :: TagType tag
+                -> OpenExp env aenv tag
+                -> [(tag, OpenExp env aenv b)]      -- list of equations
                 -> Maybe (OpenExp env aenv b)       -- default case
                 -> OpenExp env aenv b
 
@@ -1128,7 +1128,7 @@ rnfOpenExp topExp =
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
     FromIndex shr sh ix       -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
-    Case pR p rhs def         -> rnfScalarType pR `seq` rnfE p `seq` rnfList (\(t,c) -> t `seq` rnfE c) rhs `seq` rnfMaybe rnfE def
+    Case pR p rhs def         -> rnfTagType pR `seq` rnfE p `seq` rnfList (\(t,c) -> t `seq` rnfE c) rhs `seq` rnfMaybe rnfE def
     Cond p e1 e2              -> rnfE p `seq` rnfE e1 `seq` rnfE e2
     While p f x               -> rnfF p `seq` rnfF f `seq` rnfE x
     PrimApp f x               -> rnfPrimFun f `seq` rnfE x
@@ -1346,7 +1346,7 @@ liftOpenExp pexp =
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
     FromIndex shr sh ix       -> [|| FromIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]
-    Case pR p rhs def         -> [|| Case $$(liftScalarType pR) $$(liftE p) $$(liftList (\(t,c) -> [|| ($$(liftScalar pR t), $$(liftE c)) ||]) rhs) $$(liftMaybe liftE def) ||]
+    Case pR p rhs def         -> [|| Case $$(liftTagType pR) $$(liftE p) $$(liftList (\(t,c) -> [|| ($$(liftTag pR t), $$(liftE c)) ||]) rhs) $$(liftMaybe liftE def) ||]
     Cond p t e                -> [|| Cond $$(liftE p) $$(liftE t) $$(liftE e) ||]
     While p f x               -> [|| While $$(liftF p) $$(liftF f) $$(liftE x) ||]
     PrimApp f x               -> [|| PrimApp $$(liftPrimFun f) $$(liftE x) ||]

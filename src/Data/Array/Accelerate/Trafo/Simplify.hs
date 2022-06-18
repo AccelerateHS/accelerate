@@ -334,13 +334,14 @@ simplifyOpenExp env = first getAny . cvtE
       | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                       = Cond <$> p <*> t <*> e
 
-    caseof :: ScalarType TAG
-           -> (Any, OpenExp env aenv TAG)
-           -> (Any, [(TAG, OpenExp env aenv b)])
+    caseof :: TagType tag
+           -> (Any, OpenExp env aenv tag)
+           -> (Any, [(tag, OpenExp env aenv b)])
            -> (Any, Maybe (OpenExp env aenv b))
            -> (Any, OpenExp env aenv b)
     caseof tagR x@(_,x') xs@(_,xs') md@(_,md')
       | Const _ t   <- x'
+      , TagDict     <- tagDict tagR
       = Stats.caseElim "known" (yes (fromJust $ lookup t xs'))
       | Just d      <- md'
       , []          <- xs'
@@ -361,13 +362,14 @@ simplifyOpenExp env = first getAny . cvtE
       where
         (us,vs) = partition (\(n,_) -> n > 1)
                 $ Map.elems
-                . Map.fromListWith merge
+                . Map.fromListWith (merge tagR)
                 $ [ (hashOpenExp e, (1,(t, e))) | (t,e) <- xs' ]
 
-        merge :: (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b))
-        merge (n,(_,a)) (m,(_,b))
+        merge :: TagType tag -> (Int, (tag, OpenExp env aenv b)) -> (Int, (tag, OpenExp env aenv b)) -> (Int, (tag, OpenExp env aenv b))
+        merge t (n,(_,a)) (m,(_,b))
+          | TagDict <- tagDict t
           = internalCheck "hashOpenExp/collision" (maybe False (const True) (matchOpenExp a b))
-          $ (n+m, (0xff, a))
+          $ (n+m, (maxBound, a))
 
     -- Shape manipulations
     --
@@ -405,6 +407,7 @@ simplifyOpenExp env = first getAny . cvtE
 
     yes :: x -> (Any, x)
     yes x = (Any True, x)
+
 
 extractConstTuple :: OpenExp env aenv t -> Maybe t
 extractConstTuple Nil          = Just ()
@@ -673,4 +676,16 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimToFloating n f       -> travNumType n +++ travFloatingType f
             PrimToBool i b           -> travIntegralType i +++ travBitType b
             PrimFromBool b i         -> travBitType b +++ travIntegralType i
+
+
+-- Utilities
+-- ---------
+
+data TagDict t where
+  TagDict :: (Eq t, Bounded t) => TagDict t
+
+tagDict :: TagType t -> TagDict t
+tagDict TagBit    = TagDict
+tagDict TagWord8  = TagDict
+tagDict TagWord16 = TagDict
 

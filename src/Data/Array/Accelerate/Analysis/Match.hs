@@ -36,6 +36,8 @@ module Data.Array.Accelerate.Analysis.Match (
   matchIntegralType, matchSingleIntegralType,
   matchFloatingType, matchSingleFloatingType,
   matchNumType,
+  matchBitType,
+  matchTagType,
   matchScalarType,
   matchLeftHandSide, matchALeftHandSide, matchELeftHandSide, matchTupR,
 
@@ -51,6 +53,7 @@ import Data.Array.Accelerate.Representation.Array                   ( Array(..),
 import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..) )
 import Data.Array.Accelerate.Representation.Slice                   ( SliceIndex(..) )
 import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
@@ -523,17 +526,18 @@ matchOpenExp (FromIndex _ sh1 i1) (FromIndex _ sh2 i2)
   = Just Refl
 
 matchOpenExp (Case eR1 e1 rhs1 def1) (Case eR2 e2 rhs2 def2)
-  | Just Refl <- matchScalarType eR1 eR2
+  | Just Refl <- matchTagType eR1 eR2
   , Just Refl <- matchOpenExp e1 e2
   , Just Refl <- matchCaseEqs eR1 rhs1 rhs2
   , Just Refl <- matchCaseDef def1 def2
   = Just Refl
   where
-    matchCaseEqs :: ScalarType tag -> [(tag, OpenExp env aenv a)] -> [(tag, OpenExp env aenv b)] -> Maybe (a :~: b)
+    matchCaseEqs :: TagType tag -> [(tag, OpenExp env aenv a)] -> [(tag, OpenExp env aenv b)] -> Maybe (a :~: b)
     matchCaseEqs _ [] []
       = unsafeCoerce Refl
     matchCaseEqs tR ((s,x):xs) ((t,y):ys)
-      | evalEq tR (s,t)
+      | TagDict <- tagDict tR
+      , s == t
       , Just Refl <- matchOpenExp x y
       , Just Refl <- matchCaseEqs tR xs ys
       = Just Refl
@@ -967,6 +971,13 @@ matchSingleFloatingType TypeFloat64  TypeFloat64  = Just Refl
 matchSingleFloatingType TypeFloat128 TypeFloat128 = Just Refl
 matchSingleFloatingType _            _            = Nothing
 
+{-# INLINEABLE matchTagType #-}
+matchTagType :: TagType s -> TagType t -> Maybe (s :~: t)
+matchTagType TagBit    TagBit    = Just Refl
+matchTagType TagWord8  TagWord8  = Just Refl
+matchTagType TagWord16 TagWord16 = Just Refl
+matchTagType _         _         = Nothing
+
 
 -- Auxiliary
 -- ---------
@@ -1000,4 +1011,12 @@ commutes f x = case f of
       , hashOpenExp a > hashOpenExp b = b `Pair` a
       --
       | otherwise                     = e
+
+data TagDict t where
+  TagDict :: Eq t => TagDict t
+
+tagDict :: TagType t -> TagDict t
+tagDict TagBit    = TagDict
+tagDict TagWord8  = TagDict
+tagDict TagWord16 = TagDict
 

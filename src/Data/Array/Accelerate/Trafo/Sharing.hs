@@ -807,7 +807,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       AST.Let lhs bnd body -> AST.Let lhs bnd (cvtPrimFun f body)
       x                    -> AST.PrimApp f x
 
-    -- Convert the flat list of equations into nested case statement
+    -- Convert the flat list of equations into nested case statements
     -- directly on the tag variables.
     --
     cvtCase :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
@@ -818,27 +818,43 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       = AST.Let lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
       where
         nested :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
+        nested _ []      = internalError "empty case"
         nested _ [(_,r)] = r
-        nested s rs      =
-          let groups = groupBy (eqT `on` fst) rs
-              tags   = map (firstT . fst . head) groups
-              e      = prjT (fst (head rs)) s
-              rhs    = map (nested s . map (over _1 ignore)) groups
-          in
-          AST.Case scalarType e (zip tags rhs) Nothing
+        nested s rs@(r:_)
+          | Exists tag <- tagT (fst r)
+          = let groups = groupBy (eqT `on` fst) rs
+                rhs    = map (nested s . map (over _1 ignore)) groups
+                e      = prjT tag (fst r) s
+                tags   = map (firstT tag . fst . head) groups
+            in
+            AST.Case tag e (zip tags rhs) Nothing
+
+        tagT :: TagR a -> Exists TagType
+        tagT = fromJust . go
+          where
+            go ::TagR a -> Maybe (Exists TagType)
+            go (TagRtag t _ _) = Just (Exists t)
+            go (TagRbit _)     = Just (Exists TagBit)
+            go (TagRpair a b)
+              | Just t <- go a = Just t
+              | otherwise      = go b
+            go _ = Nothing
 
         -- Extract the variable representing this particular tag from the
         -- scrutinee. This is safe because we let-bind the argument first.
-        prjT :: TagR a -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' TAG
-        prjT = fromJust $$ go
+        prjT :: forall a t env' aenv'. TagType t -> TagR a -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' t
+        prjT t = fromJust $$ go
           where
-            go :: TagR a -> AST.OpenExp env' aenv' a -> Maybe (AST.OpenExp env' aenv' TAG)
-            go TagRbit{}               _              = error "TODO: TagRbit"
-            go (TagRtag TypeWord8 _ _) (AST.Pair l _) = Just l
-            go (TagRpair ta tb)        (AST.Pair l r) =
-              case go ta l of
-                Just t  -> Just t
-                Nothing -> go tb r
+            go :: TagR s -> AST.OpenExp env' aenv' s -> Maybe (AST.OpenExp env' aenv' t)
+            go (TagRtag s _ _)  (AST.Pair l _)
+              | Just Refl <- matchTagType s t
+              = Just l
+            go (TagRbit _) x
+              | Just Refl <- matchTagType t TagBit
+              = Just x
+            go (TagRpair ta tb) (AST.Pair l r)
+              | Just x <- go ta l = Just x
+              | otherwise         = go tb r
             go _ _ = Nothing
 
         -- Equality up to the first constructor tag encountered
@@ -846,28 +862,33 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         eqT a b = snd $ go a b
           where
             go :: TagR a -> TagR a -> (Any, Bool)
-            go TagRunit                 TagRunit                 = no True
-            go TagRsingle{}             TagRsingle{}             = no True
-            go TagRundef{}              TagRundef{}              = no True
-            go (TagRtag TypeWord8 v1 _) (TagRtag TypeWord8 v2 _) = yes (v1 == v2)
-            go (TagRbit TypeBit v1)     (TagRbit TypeBit v2)     = yes (v1 == v2)
-            go (TagRpair a1 b1)         (TagRpair a2 b2)         =
+            go TagRunit             TagRunit             = no True
+            go TagRsingle{}         TagRsingle{}         = no True
+            go TagRundef{}          TagRundef{}          = no True
+            go (TagRtag t1 v1 _)    (TagRtag t2 v2 _)
+              | Just Refl <- matchTagType t1 t2
+              , TagDict   <- tagDict t1
+              = yes (v1 == v2)
+            go (TagRpair a1 b1) (TagRpair a2 b2) =
               let (Any r, s) = go a1 a2
                in case r of
                     True  -> yes s
                     False -> go b1 b2
             go _ _ = no False
 
-        firstT :: TagR a -> TAG
-        firstT = fromJust . go
+        firstT :: forall a t. TagType t -> TagR a -> t
+        firstT t = fromJust . go
           where
-            go :: TagR a -> Maybe TAG
-            go TagRbit{}               = error "TODO: TagRbit"
-            go (TagRtag TypeWord8 v _) = Just v
-            go (TagRpair a b) =
-              case go a of
-                Just t  -> Just t
-                Nothing -> go b
+            go :: TagR s -> Maybe t
+            go (TagRtag s v _)
+              | Just Refl <- matchTagType s t
+              = Just v
+            go (TagRbit v)
+              | Just Refl <- matchTagType t TagBit
+              = Just v
+            go (TagRpair a b)
+              | Just v <- go a = Just v
+              | otherwise      = go b
             go _ = Nothing
 
         -- Replace the first constructor tag encountered with a regular
@@ -879,8 +900,12 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
             go TagRunit         = no  $ TagRunit
             go (TagRsingle t)   = no  $ TagRsingle t
             go (TagRundef t)    = no  $ TagRundef t
-            go (TagRtag t _ a)  = yes $ TagRpair (TagRundef (NumScalarType (IntegralNumType (SingleIntegralType t)))) a
-            go TagRbit{}        = error "TODO: TagRbit"
+            go (TagRbit _)      = yes $ TagRsingle scalarType
+            go (TagRtag t _ a)  =
+              case t of
+                TagBit    -> yes $ TagRpair (TagRundef scalarType) a
+                TagWord8  -> yes $ TagRpair (TagRundef scalarType) a
+                TagWord16 -> yes $ TagRpair (TagRundef scalarType) a
             go (TagRpair a1 a2) =
               let (Any r, a1') = go a1
                in case r of
@@ -3151,6 +3176,18 @@ recoverSharingSeq config seq
     in
     (ScopedSeq sharingSeq, [a | SeqNodeCount a _ <- ns])
 --}
+
+
+-- Utilities
+-- ---------
+
+data TagDict t where
+  TagDict :: Eq t => TagDict t
+
+tagDict :: TagType t -> TagDict t
+tagDict TagBit    = TagDict
+tagDict TagWord8  = TagDict
+tagDict TagWord16 = TagDict
 
 
 -- Debugging

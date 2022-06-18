@@ -63,6 +63,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
@@ -559,7 +560,7 @@ prettyTuple ctx env aenv exp = case collect exp of
 prettyCase
     :: Val env
     -> Val aenv
-    -> ScalarType tag
+    -> TagType tag
     -> OpenExp env aenv a
     -> [(tag, OpenExp env aenv b)]
     -> Maybe (OpenExp env aenv b)
@@ -571,7 +572,11 @@ prettyCase env aenv tagR x xs def
          ]
   where
     x'  = prettyOpenExp context0 env aenv x
-    xs' = map (\(t,e) -> prettyConst (TupRsingle tagR) t <+> "->" <+> prettyOpenExp context0 env aenv e) xs
+    tR  = case tagR of
+            TagBit    -> scalarType
+            TagWord8  -> scalarType
+            TagWord16 -> scalarType
+    xs' = map (\(t,e) -> prettyConst (TupRsingle tR) t <+> "->" <+> prettyOpenExp context0 env aenv e) xs
        ++ case def of
             Nothing -> []
             Just d  -> ["_" <+> "->" <+> prettyOpenExp context0 env aenv d]

@@ -16,7 +16,6 @@ module Data.Array.Accelerate.Representation.Tag
   where
 
 import Data.Array.Accelerate.Type
-import Data.Primitive.Bit
 
 import Language.Haskell.TH.Extra
 
@@ -25,6 +24,11 @@ import Language.Haskell.TH.Extra
 -- alternatives in a sum type.
 --
 type TAG = Word8
+
+data TagType t where
+  TagBit    :: TagType Bit
+  TagWord8  :: TagType Word8
+  TagWord16 :: TagType Word16
 
 -- | This structure both witnesses the layout of our representation types
 -- (as TupR does) and represents a complete path of pattern matching
@@ -44,47 +48,51 @@ data TagR a where
   TagRunit   :: TagR ()
   TagRsingle :: ScalarType a -> TagR a
   TagRundef  :: ScalarType a -> TagR a
+  TagRtag    :: TagType t -> t -> TagR a -> TagR (t, a)
+  TagRbit    :: Bit -> TagR Bit -- redundant with TagRtag but simplifies abstract syntax for Bool
   TagRpair   :: TagR a -> TagR b -> TagR (a, b)
-  TagRtag    :: SingleIntegralType t -> t -> TagR a -> TagR (t, a)
-  TagRbit    :: BitType t -> t -> TagR t
 
 instance Show (TagR a) where
   show TagRunit         = "()"
   show TagRsingle{}     = "."
   show TagRundef{}      = "undef"
   show (TagRpair ta tb) = "(" ++ show ta ++ "," ++ show tb ++ ")"
-  show (TagRtag tR t e) = "(" ++ integral tR t ++ "#," ++ show e ++ ")"
+  show (TagRbit b)      = shows b "#"
+  show (TagRtag tR t e) = "(" ++ tag tR t ++ "#," ++ show e ++ ")"
     where
-      integral :: SingleIntegralType t -> t -> String
-      integral TypeInt8    = show
-      integral TypeInt16   = show
-      integral TypeInt32   = show
-      integral TypeInt64   = show
-      integral TypeInt128  = show
-      integral TypeWord8   = show
-      integral TypeWord16  = show
-      integral TypeWord32  = show
-      integral TypeWord64  = show
-      integral TypeWord128 = show
-  show (TagRbit tR t)   = bit tR t
-    where
-      bit :: BitType t -> t -> String
-      bit TypeBit    x = shows x "#"
-      bit TypeMask{} x = shows (BitMask x) "#"
+      tag :: TagType t -> t -> String
+      tag TagBit    = show
+      tag TagWord8  = show
+      tag TagWord16 = show
 
 rnfTag :: TagR a -> ()
-rnfTag TagRunit         = ()
-rnfTag (TagRsingle e)   = rnfScalarType e
-rnfTag (TagRundef e)    = rnfScalarType e
-rnfTag (TagRpair ta tb) = rnfTag ta `seq` rnfTag tb
-rnfTag (TagRtag tR t e) = rnfSingleIntegralType tR `seq` t `seq` rnfTag e
-rnfTag (TagRbit tR t)   = rnfBitType tR `seq` t `seq` ()
+rnfTag TagRunit          = ()
+rnfTag (TagRsingle e)    = rnfScalarType e
+rnfTag (TagRundef e)     = rnfScalarType e
+rnfTag (TagRpair ta tb)  = rnfTag ta `seq` rnfTag tb
+rnfTag (TagRbit (Bit b)) = b `seq` ()
+rnfTag (TagRtag tR t e)  = rnfTagType tR `seq` t `seq` rnfTag e
 
-liftTag :: TagR a -> CodeQ (TagR a)
-liftTag TagRunit         = [|| TagRunit ||]
-liftTag (TagRsingle e)   = [|| TagRsingle $$(liftScalarType e) ||]
-liftTag (TagRundef e)    = [|| TagRundef $$(liftScalarType e) ||]
-liftTag (TagRpair ta tb) = [|| TagRpair $$(liftTag ta) $$(liftTag tb) ||]
-liftTag (TagRtag tR t e) = [|| TagRtag $$(liftSingleIntegralType tR) $$(liftSingleIntegral tR t) $$(liftTag e) ||]
-liftTag (TagRbit tR t)   = [|| TagRbit $$(liftBitType tR) $$(liftBit tR t) ||]
+rnfTagType :: TagType t -> ()
+rnfTagType TagBit    = ()
+rnfTagType TagWord8  = ()
+rnfTagType TagWord16 = ()
+
+liftTagR :: TagR a -> CodeQ (TagR a)
+liftTagR TagRunit          = [|| TagRunit ||]
+liftTagR (TagRsingle e)    = [|| TagRsingle $$(liftScalarType e) ||]
+liftTagR (TagRundef e)     = [|| TagRundef $$(liftScalarType e) ||]
+liftTagR (TagRpair ta tb)  = [|| TagRpair $$(liftTagR ta) $$(liftTagR tb) ||]
+liftTagR (TagRtag tR t e)  = [|| TagRtag $$(liftTagType tR) $$(liftTag tR t) $$(liftTagR e) ||]
+liftTagR (TagRbit (Bit b)) = [|| TagRbit (Bit b) ||]
+
+liftTag :: TagType t -> t -> CodeQ t
+liftTag TagBit    (Bit x) = [|| Bit x ||]
+liftTag TagWord8  x       = [|| x ||]
+liftTag TagWord16 x       = [|| x ||]
+
+liftTagType :: TagType t -> CodeQ (TagType t)
+liftTagType TagBit    = [|| TagBit    ||]
+liftTagType TagWord8  = [|| TagWord8  ||]
+liftTagType TagWord16 = [|| TagWord16 ||]
 

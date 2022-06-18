@@ -164,7 +164,7 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 instance (GElt a, GElt b, GSumElt (a :+: b)) => GElt (a :+: b) where
   type GEltR t (a :+: b) = (TAG, GSumEltR t (a :+: b))
   geltR t      = TupRpair (TupRsingle scalarType) (gsumEltR @(a :+: b) t)
-  gtagsR t     = uncurry (TagRtag singleIntegralType) <$> gsumTagsR @(a :+: b) 0 t
+  gtagsR t     = uncurry (TagRtag TagWord8) <$> gsumTagsR @(a :+: b) 0 t
   gfromElt     = gsumFromElt 0
   gtoElt (k,x) = gsumToElt k x
   gundef t     = (0xff, gsumUndef @(a :+: b) t)
@@ -290,7 +290,7 @@ instance (Elt a, Elt b) => Elt (Either a b)
 instance Elt Bool where
   type EltR Bool = Bit
   eltR    = TupRsingle scalarType
-  tagsR   = [TagRbit TypeBit 0, TagRbit TypeBit 1]
+  tagsR   = [TagRbit 0, TagRbit 1]
   toElt   = unBit
   fromElt = Bit
 

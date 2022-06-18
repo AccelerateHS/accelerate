@@ -71,7 +71,6 @@ import qualified Data.Array.Accelerate.Debug.Internal.Timed         as Debug
 import qualified Data.Array.Accelerate.Interpreter.Arithmetic       as A
 import qualified Data.Array.Accelerate.Smart                        as Smart
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
-import qualified Data.Array.Accelerate.Sugar.Elt                    as Sugar
 import qualified Data.Array.Accelerate.Trafo.Delayed                as AST
 
 import Control.DeepSeq
@@ -224,8 +223,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
         p               = evalOpenAfun cond aenv
         f               = evalOpenAfun body aenv
         go !x
-          | toBool (linearIndexArray (Sugar.eltR @Bool) (p x) 0) = go (f x)
-          | otherwise                                             = x
+          | toBool (linearIndexArray (TupRsingle (BitScalarType TypeBit)) (p x) 0) = go (f x)
+          | otherwise                                                              = x
 
     Use repr arr                  -> (TupRsingle repr, arr)
     Unit tp e                     -> unitOp tp (evalE e)
@@ -955,11 +954,12 @@ evalOpenExp pexp env aenv =
 
     ToIndex shr sh ix           -> toIndex shr (evalE sh) (evalE ix)
     FromIndex shr sh ix         -> fromIndex shr (evalE sh) (evalE ix)
-    Case _ e rhs def            -> evalE (caseof (evalE e) rhs)
+    Case tagR e rhs def         -> evalE (caseof tagR (evalE e) rhs)
       where
-        caseof :: TAG -> [(TAG, OpenExp env aenv t)] -> OpenExp env aenv t
-        caseof tag = go
+        caseof :: forall tag. TagType tag -> tag -> [(tag, OpenExp env aenv t)] -> OpenExp env aenv t
+        caseof tagR tag | TagDict <- tagDict tagR = go
           where
+            go :: Eq tag => [(tag, OpenExp env aenv t)] -> OpenExp env aenv t
             go ((t,c):cs)
               | tag == t  = c
               | otherwise = go cs
@@ -1526,6 +1526,9 @@ data IntegralDict t where
 data FloatingDict t where
   FloatingDict :: (RealFloat t, Prim t) => FloatingDict t
 
+data TagDict t where
+  TagDict :: Eq t => TagDict t
+
 {-# INLINE integralDict #-}
 integralDict :: SingleIntegralType t -> IntegralDict t
 integralDict TypeInt8    = IntegralDict
@@ -1545,4 +1548,10 @@ floatingDict TypeFloat16  = FloatingDict
 floatingDict TypeFloat32  = FloatingDict
 floatingDict TypeFloat64  = FloatingDict
 floatingDict TypeFloat128 = FloatingDict
+
+{-# INLINE tagDict #-}
+tagDict :: TagType t -> TagDict t
+tagDict TagBit    = TagDict
+tagDict TagWord8  = TagDict
+tagDict TagWord16 = TagDict
 

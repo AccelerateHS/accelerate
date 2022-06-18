@@ -44,6 +44,7 @@ import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Shape
 import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil
+import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
@@ -331,7 +332,7 @@ encodeOpenExp exp =
     IndexFull  spec ix sl       -> intHost $(hashQ "IndexFull")   <> travE ix <> travE sl <> encodeSliceIndex spec
     ToIndex _ sh i              -> intHost $(hashQ "ToIndex")     <> travE sh <> travE i
     FromIndex _ sh i            -> intHost $(hashQ "FromIndex")   <> travE sh <> travE i
-    Case eR e rhs def           -> intHost $(hashQ "Case")        <> encodeScalarType eR <> travE e <> mconcat [ encodeScalarConst eR t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
+    Case eR e rhs def           -> intHost $(hashQ "Case")        <> encodeTagType eR <> travE e <> mconcat [ encodeTagConst eR t <> travE c | (t,c) <- rhs ] <> encodeMaybe travE def
     Cond c t e                  -> intHost $(hashQ "Cond")        <> travE c  <> travE t  <> travE e
     While p f x                 -> intHost $(hashQ "While")       <> travF p  <> travF f  <> travE x
     PrimApp f x                 -> intHost $(hashQ "PrimApp")     <> encodePrimFun f <> travE x
@@ -396,6 +397,12 @@ encodeSingleFloatingConst TypeFloat16  (Half (CUShort x)) = intHost $(hashQ "Hal
 encodeSingleFloatingConst TypeFloat32  x                  = intHost $(hashQ "Float")    <> floatHost x
 encodeSingleFloatingConst TypeFloat64  x                  = intHost $(hashQ "Double")   <> doubleHost x
 encodeSingleFloatingConst TypeFloat128 (Float128 x y)     = intHost $(hashQ "Float128") <> word64Host x <> word64Host y
+
+encodeTagConst :: TagType t -> t -> Builder
+encodeTagConst TagBit    (Bit False) = intHost $(hashQ "Bit")   <> int8 0
+encodeTagConst TagBit    (Bit True)  = intHost $(hashQ "Bit")   <> int8 1
+encodeTagConst TagWord8  x           = intHost $(hashQ "Tag8")  <> word8 x
+encodeTagConst TagWord16 x           = intHost $(hashQ "Tag16") <> word16Host x
 
 encodePrimFun :: PrimFun f -> Builder
 encodePrimFun (PrimAdd a)                = intHost $(hashQ "PrimAdd")                <> encodeNumType a
@@ -511,6 +518,11 @@ encodeSingleFloatingType TypeFloat16  = intHost $(hashQ "Half")
 encodeSingleFloatingType TypeFloat32  = intHost $(hashQ "Float")
 encodeSingleFloatingType TypeFloat64  = intHost $(hashQ "Double")
 encodeSingleFloatingType TypeFloat128 = intHost $(hashQ "Float128")
+
+encodeTagType :: TagType t -> Builder
+encodeTagType TagBit    = intHost $(hashQ "TagBit")
+encodeTagType TagWord8  = intHost $(hashQ "TagWord8")
+encodeTagType TagWord16 = intHost $(hashQ "TagWord16")
 
 encodeMaybe :: (a -> Builder) -> Maybe a -> Builder
 encodeMaybe _ Nothing  = intHost $(hashQ "Nothing")

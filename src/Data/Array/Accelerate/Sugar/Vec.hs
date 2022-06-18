@@ -160,17 +160,18 @@ class KnownNat n => SIMD n a where
   type VecR n a = GVecR () n (Rep a)
 
   vecR    :: TypeR (VecR n a)
-  vtagsR  :: [TagR (VecR n a)]  -- this will quickly get out of hand!
+  vtagsR  :: [TagR (VecR n a)]
 
   default vecR
       :: (GVec n (Rep a), VecR n a ~ GVecR () n (Rep a))
       => TypeR (VecR n a)
   vecR = gvecR @n @(Rep a) TupRunit
 
-  default vtagsR
-      :: (GVec n (Rep a), VecR n a ~ GVecR () n (Rep a))
-      => [TagR (VecR n a)]
-  vtagsR = gvtagsR @n @(Rep a) TagRunit
+  -- default vtagsR
+  --     :: (GVec n (Rep a), VecR n a ~ GVecR () n (Rep a))
+  --     => [TagR (VecR n a)]
+  -- vtagsR = gvtagsR @n @(Rep a) TagRunit
+  vtagsR = [tagOfType (vecR @n @a)]
 
 class KnownNat n => GVec n (f :: Type -> Type) where
   type GVecR t n f
@@ -229,6 +230,10 @@ instance (GSumVec n a, GSumVec n b) => GSumVec n (a :+: b) where
   type GSumVecR t n (a :+: b) = GSumVecR (GSumVecR t n a) n b
   gsumvecR = gsumvecR @n @b . gsumvecR @n @a
 
+tagOfType :: TypeR a -> TagR a
+tagOfType TupRunit       = TagRunit
+tagOfType (TupRpair s t) = TagRpair (tagOfType s) (tagOfType t)
+tagOfType (TupRsingle t) = TagRsingle t
 
 instance KnownNat n => SIMD n Z
 instance KnownNat n => SIMD n ()
