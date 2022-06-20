@@ -335,7 +335,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
                 (cxt ([t| HasCallStack |] : map (\t -> [t| Elt $(varT t) |]) tvs))
                 [t| Exp $(foldl' appT (conT tn) (map varT tvs)) -> Maybe $(tupT (map (\t -> [t| Exp $(return t) |]) fs)) |]
 
-        matchP us = [p| TagRtag _ $(litP (IntegerL (toInteger tag))) $pat |]
+        matchP us = [p| TagRcon _ $(litP (IntegerL (toInteger tag))) $pat |]
           where
             pat = [p| $(foldl (\ps p -> [p| TagRpair $ps $p |]) [p| TagRunit |] us) |]
 

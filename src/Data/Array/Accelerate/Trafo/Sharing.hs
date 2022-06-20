@@ -833,8 +833,8 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         tagT = fromJust . go
           where
             go ::TagR a -> Maybe (Exists TagType)
-            go (TagRtag t _ _) = Just (Exists t)
-            go (TagRbit _)     = Just (Exists TagBit)
+            go (TagRcon t _ _) = Just (Exists t)
+            go (TagRenum t _)  = Just (Exists t)
             go (TagRpair a b)
               | Just t <- go a = Just t
               | otherwise      = go b
@@ -846,11 +846,11 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         prjT t = fromJust $$ go
           where
             go :: TagR s -> AST.OpenExp env' aenv' s -> Maybe (AST.OpenExp env' aenv' t)
-            go (TagRtag s _ _)  (AST.Pair l _)
+            go (TagRcon s _ _) (AST.Pair l _)
               | Just Refl <- matchTagType s t
               = Just l
-            go (TagRbit _) x
-              | Just Refl <- matchTagType t TagBit
+            go (TagRenum s _) x
+              | Just Refl <- matchTagType s t
               = Just x
             go (TagRpair ta tb) (AST.Pair l r)
               | Just x <- go ta l = Just x
@@ -865,7 +865,11 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
             go TagRunit             TagRunit             = no True
             go TagRsingle{}         TagRsingle{}         = no True
             go TagRundef{}          TagRundef{}          = no True
-            go (TagRtag t1 v1 _)    (TagRtag t2 v2 _)
+            go (TagRenum t1 v1)     (TagRenum t2 v2)
+              | Just Refl <- matchTagType t1 t2
+              , TagDict   <- tagDict t1
+              = yes (v1 == v2)
+            go (TagRcon t1 v1 _)    (TagRcon t2 v2 _)
               | Just Refl <- matchTagType t1 t2
               , TagDict   <- tagDict t1
               = yes (v1 == v2)
@@ -880,11 +884,11 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         firstT t = fromJust . go
           where
             go :: TagR s -> Maybe t
-            go (TagRtag s v _)
+            go (TagRcon s v _)
               | Just Refl <- matchTagType s t
               = Just v
-            go (TagRbit v)
-              | Just Refl <- matchTagType t TagBit
+            go (TagRenum s v)
+              | Just Refl <- matchTagType s t
               = Just v
             go (TagRpair a b)
               | Just v <- go a = Just v
@@ -900,12 +904,16 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
             go TagRunit         = no  $ TagRunit
             go (TagRsingle t)   = no  $ TagRsingle t
             go (TagRundef t)    = no  $ TagRundef t
-            go (TagRbit _)      = yes $ TagRsingle scalarType
-            go (TagRtag t _ a)  =
+            go (TagRenum t _)   = yes $
               case t of
-                TagBit    -> yes $ TagRpair (TagRundef scalarType) a
-                TagWord8  -> yes $ TagRpair (TagRundef scalarType) a
-                TagWord16 -> yes $ TagRpair (TagRundef scalarType) a
+                TagBit    -> TagRundef scalarType
+                TagWord8  -> TagRundef scalarType
+                TagWord16 -> TagRundef scalarType
+            go (TagRcon t _ a)  = yes $
+              case t of
+                TagBit    -> TagRpair (TagRundef scalarType) a
+                TagWord8  -> TagRpair (TagRundef scalarType) a
+                TagWord16 -> TagRpair (TagRundef scalarType) a
             go (TagRpair a1 a2) =
               let (Any r, a1') = go a1
                in case r of

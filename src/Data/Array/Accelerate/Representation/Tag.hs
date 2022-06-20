@@ -33,45 +33,45 @@ data TagType t where
 -- | This structure both witnesses the layout of our representation types
 -- (as TupR does) and represents a complete path of pattern matching
 -- through this type. It indicates which fields of the structure represent
--- the union tags (TagRtag) or store undefined values (TagRundef).
+-- the union tags (TagRcon or TagRenum) or store undefined values (TagRundef).
 --
--- The function 'eltTags' produces all valid paths through the type. For
+-- The function 'tagsR' produces all valid paths through the type. For
 -- example the type '(Bool,Bool)' produces the following:
 --
 --   ghci> putStrLn . unlines . map show $ tagsR @(Bool,Bool)
---   (((),(0#,())),(0#,()))     -- (False, False)
---   (((),(0#,())),(1#,()))     -- (False, True)
---   (((),(1#,())),(0#,()))     -- (True, False)
---   (((),(1#,())),(1#,()))     -- (True, True)
+--   (((),0#),0#)      -- (False, False)
+--   (((),0#),1#)      -- (False, True)
+--   (((),1#),0#)      -- (True, False)
+--   (((),1#),1#)      -- (True, True)
 --
 data TagR a where
   TagRunit   :: TagR ()
   TagRsingle :: ScalarType a -> TagR a
   TagRundef  :: ScalarType a -> TagR a
-  TagRtag    :: TagType t -> t -> TagR a -> TagR (t, a)
-  TagRbit    :: Bit -> TagR Bit -- redundant with TagRtag but simplifies abstract syntax for Bool
   TagRpair   :: TagR a -> TagR b -> TagR (a, b)
+  TagRcon    :: TagType t -> t -> TagR a -> TagR (t, a)   -- data constructors
+  TagRenum   :: TagType t -> t -> TagR t                  -- enumerations
 
 instance Show (TagR a) where
   show TagRunit         = "()"
   show TagRsingle{}     = "."
   show TagRundef{}      = "undef"
-  show (TagRpair ta tb) = "(" ++ show ta ++ "," ++ show tb ++ ")"
-  show (TagRbit b)      = shows b "#"
-  show (TagRtag tR t e) = "(" ++ tag tR t ++ "#," ++ show e ++ ")"
-    where
-      tag :: TagType t -> t -> String
-      tag TagBit    = show
-      tag TagWord8  = show
-      tag TagWord16 = show
+  show (TagRpair a b)   = "(" ++ show a ++ "," ++ show b ++ ")"
+  show (TagRcon tR t e) = "(" ++ showTag tR t ++ "#," ++ show e ++ ")"
+  show (TagRenum tR t)  = showTag tR t ++ "#"
+
+showTag :: TagType t -> t -> String
+showTag TagBit    = show
+showTag TagWord8  = show
+showTag TagWord16 = show
 
 rnfTag :: TagR a -> ()
 rnfTag TagRunit          = ()
 rnfTag (TagRsingle e)    = rnfScalarType e
 rnfTag (TagRundef e)     = rnfScalarType e
-rnfTag (TagRpair ta tb)  = rnfTag ta `seq` rnfTag tb
-rnfTag (TagRbit (Bit b)) = b `seq` ()
-rnfTag (TagRtag tR t e)  = rnfTagType tR `seq` t `seq` rnfTag e
+rnfTag (TagRpair a b)    = rnfTag a `seq` rnfTag b
+rnfTag (TagRenum tR t)   = rnfTagType tR `seq` t `seq` ()
+rnfTag (TagRcon tR t e)  = rnfTagType tR `seq` t `seq` rnfTag e
 
 rnfTagType :: TagType t -> ()
 rnfTagType TagBit    = ()
@@ -79,12 +79,12 @@ rnfTagType TagWord8  = ()
 rnfTagType TagWord16 = ()
 
 liftTagR :: TagR a -> CodeQ (TagR a)
-liftTagR TagRunit          = [|| TagRunit ||]
-liftTagR (TagRsingle e)    = [|| TagRsingle $$(liftScalarType e) ||]
-liftTagR (TagRundef e)     = [|| TagRundef $$(liftScalarType e) ||]
-liftTagR (TagRpair ta tb)  = [|| TagRpair $$(liftTagR ta) $$(liftTagR tb) ||]
-liftTagR (TagRtag tR t e)  = [|| TagRtag $$(liftTagType tR) $$(liftTag tR t) $$(liftTagR e) ||]
-liftTagR (TagRbit (Bit b)) = [|| TagRbit (Bit b) ||]
+liftTagR TagRunit         = [|| TagRunit ||]
+liftTagR (TagRsingle e)   = [|| TagRsingle $$(liftScalarType e) ||]
+liftTagR (TagRundef e)    = [|| TagRundef $$(liftScalarType e) ||]
+liftTagR (TagRpair a b)   = [|| TagRpair $$(liftTagR a) $$(liftTagR b) ||]
+liftTagR (TagRcon tR t e) = [|| TagRcon $$(liftTagType tR) $$(liftTag tR t) $$(liftTagR e) ||]
+liftTagR (TagRenum tR t)  = [|| TagRenum $$(liftTagType tR) $$(liftTag tR t) ||]
 
 liftTag :: TagType t -> t -> CodeQ t
 liftTag TagBit    (Bit x) = [|| Bit x ||]

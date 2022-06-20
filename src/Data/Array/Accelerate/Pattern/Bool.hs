@@ -43,8 +43,8 @@ buildFalse = mkExp $ Const scalarType 0
 matchFalse :: HasCallStack => Exp Bool -> Maybe ()
 matchFalse (Exp e) =
   case e of
-    SmartExp (Match (TagRbit 0) _) -> Just ()
-    SmartExp Match{}               -> Nothing
+    SmartExp (Match (TagRenum TagBit 0) _) -> Just ()
+    SmartExp Match{}                       -> Nothing
     _ -> error $ unlines
            [ "Embedded pattern synonym used outside 'match' context."
            , ""
@@ -64,8 +64,8 @@ buildTrue = mkExp $ Const scalarType 1
 matchTrue :: HasCallStack => Exp Bool -> Maybe ()
 matchTrue (Exp e) =
   case e of
-    SmartExp (Match (TagRbit 1) _) -> Just ()
-    SmartExp Match{}               -> Nothing
+    SmartExp (Match (TagRenum TagBit 1) _) -> Just ()
+    SmartExp Match{}                       -> Nothing
     _ -> error $ unlines
            [ "Embedded pattern synonym used outside 'match' context."
            , ""
