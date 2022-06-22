@@ -364,6 +364,7 @@ library
         , posable                       >= 0.9.0.0
         , ghc-typelits-knownnat         >= 0.7.6
         , generics-sop                  >= 0.5.1.1
+        , finite-typelits               >= 0.1.4.2
 
   exposed-modules:
         -- The core language and reference implementation

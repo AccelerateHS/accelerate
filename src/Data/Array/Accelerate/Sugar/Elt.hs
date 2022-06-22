@@ -44,6 +44,7 @@ import Unsafe.Coerce
 import Data.Type.Equality
 import Data.Proxy
 import Data.Typeable
+import Data.Finite.Internal (Finite(..))
 
 -- | The 'Elt' class characterises the allowable array element types, and
 -- hence the types which can appear in scalar Accelerate expressions of
@@ -120,9 +121,9 @@ class (KnownNat (EltChoices a)) => Elt a where
 -- function to bring the contraints in scope that are needed to work with EltR,
 -- without needing to inspect how POS2EltR works
 data EltRType x where
-  SingletonType :: (EltR x ~ x, Fields x ~ '[ '[x]]) => EltRType x
-  TaglessType   :: (EltR x ~ FlattenProduct (Fields x)) => EltRType x
-  TaggedType    :: (EltR x ~ (TAG, FlattenProduct (Fields x))) => EltRType x
+  SingletonType :: (EltR x ~ POStoEltR (Choices x) (Fields x), EltR x ~ x, Fields x ~ '[ '[x]]) => EltRType x
+  TaglessType   :: (EltR x ~ POStoEltR (Choices x) (Fields x), EltR x ~ FlattenProduct (Fields x)) => EltRType x
+  TaggedType    :: (EltR x ~ POStoEltR (Choices x) (Fields x), EltR x ~ (TAG, FlattenProduct (Fields x))) => EltRType x
 
 eltRType :: forall x . POSable x => EltRType x
 eltRType = case sameNat (Proxy :: Proxy (Choices x)) (Proxy :: Proxy 1) of
@@ -133,9 +134,11 @@ eltRType = case sameNat (Proxy :: Proxy (Choices x)) (Proxy :: Proxy 1) of
       -> SingletonType
     _
       | Refl :: (EltR x :~: FlattenProduct (Fields x)) <- unsafeCoerce Refl
+      , Refl :: (POStoEltR 1 (Fields x) :~: EltR x) <- unsafeCoerce Refl
       -> TaglessType
   Nothing
     | Refl :: (EltR x :~: (TAG, FlattenProduct (Fields x))) <- unsafeCoerce Refl
+    , Refl :: (POStoEltR (Choices x) (Fields x) :~: (TAG, FlattenProduct (Fields x))) <- unsafeCoerce Refl
     -> TaggedType
 
 
@@ -252,6 +255,38 @@ mkEltRT = case sameNat (Proxy @(Choices a)) (Proxy :: Proxy 1) of
             Nothing -> unsafeCoerce $ TupRpair (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))) (flattenProductType (emptyFields @a))
 
 
+mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)
+mkEltR x = case eltRType @a of
+  SingletonType | Cons (Pick f) Nil <- fields x -> f
+  TaglessType   -> fs
+  TaggedType    -> (cs, fs)
+  where
+    cs = fromInteger @TAG $ toInteger $ choices x
+    fs = flattenProduct (fields x)
+
+fromEltR :: forall a . (POSable a) => POStoEltR (Choices a) (Fields a) -> a
+fromEltR x = case eltRType @a of
+  SingletonType -> x
+  TaglessType   -> fromPOSable 0 (unFlattenProduct (emptyFields @a) x)
+  TaggedType    | (t, fs) <- x -> fromPOSable (Finite $ toInteger t) (unFlattenProduct (emptyFields @a) fs)
+
+unFlattenProduct :: ProductType a -> FlattenProduct a -> Product a
+unFlattenProduct PTNil () = Nil
+unFlattenProduct (PTCons x xs) (y, ys) = Cons (unFlattenSum x y) (unFlattenProduct xs ys)
+
+unFlattenSum :: SumType a -> UnionScalar (FlattenSum a) -> Sum a
+unFlattenSum (STSucc x xs) (PickScalar y) = Pick y
+unFlattenSum (STSucc x xs) (SkipScalar ys) = Skip $ unFlattenSum xs ys
+
+
+flattenProduct :: Product a -> FlattenProduct a
+flattenProduct Nil = ()
+flattenProduct (Cons x xs) = (flattenSum x, flattenProduct xs)
+
+flattenSum :: Sum a -> UnionScalar (FlattenSum a)
+flattenSum (Pick x) = PickScalar x
+flattenSum (Skip xs) = SkipScalar (flattenSum xs)
+              
 -- untag :: TypeR t -> TagR t
 -- untag TupRunit         = TagRunit
 -- untag (TupRsingle t)   = TagRundef t
