@@ -249,7 +249,7 @@ mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))
 mkEltRT = case eltRType @a of
   SingletonType | PTCons (STSucc x STZero) PTNil <- emptyFields @a -> TupRsingle (mkScalarType x)
   TaglessType   -> flattenProductType (emptyFields @a)
-  TaggedType    -> TupRpair (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))) (flattenProductType (emptyFields @a))
+  TaggedType    -> TupRpair (TupRsingle scalarTypeTAG) (flattenProductType (emptyFields @a))
 
 
 mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)

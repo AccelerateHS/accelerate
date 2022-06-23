@@ -381,6 +381,9 @@ scalarTypeWord8 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord8
 scalarTypeWord32 :: ScalarType Word32
 scalarTypeWord32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord32
 
+scalarTypeTAG :: ScalarType TAG
+scalarTypeTAG = SingleScalarType $ NumSingleType $ IntegralNumType TypeTAG
+
 rnfScalarType :: ScalarType t -> ()
 rnfScalarType (SingleScalarType t) = rnfSingleType t
 rnfScalarType (VectorScalarType t) = rnfVectorType t
