@@ -246,13 +246,10 @@ mkSingleType _
 
 
 mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))
-mkEltRT = case sameNat (Proxy @(Choices a)) (Proxy :: Proxy 1) of
-            -- This distinction is hard to express in a type-correct way,
-            -- hence the unsafeCoerce's
-            Just Refl -> case emptyFields @a of
-                  PTCons (STSucc x STZero) PTNil -> TupRsingle (mkScalarType x)
-                  x -> unsafeCoerce $ flattenProductType x
-            Nothing -> unsafeCoerce $ TupRpair (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))) (flattenProductType (emptyFields @a))
+mkEltRT = case eltRType @a of
+  SingletonType | PTCons (STSucc x STZero) PTNil <- emptyFields @a -> TupRsingle (mkScalarType x)
+  TaglessType   -> flattenProductType (emptyFields @a)
+  TaggedType    -> TupRpair (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))) (flattenProductType (emptyFields @a))
 
 
 mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)
