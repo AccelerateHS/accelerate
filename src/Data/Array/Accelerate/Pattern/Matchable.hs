@@ -167,7 +167,7 @@ instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
                 , u == tagVal @(Choices a)
                 -- remove one from the tag as we are not in left anymore
                 -- the `tag` function will apply the new tag if necessary
-                -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant 1)) (splitRight @() @a $ prjRight x)) :* SOP.Nil)
+                -> Just (Exp (tag @a (unExp $ mkSub @TAG (Exp $ prjLeft x) (constant 1)) (splitRight @() @a $ prjRight x)) :* SOP.Nil)
               SmartExp Match {} -> Nothing
 
               _ -> error "Embedded pattern synonym used outside 'match' context."
@@ -270,7 +270,7 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
             SmartExp (Match (TagR l u) x)
               | l == 0
               , u == tagVal @(Choices a)
-              -> Just (Exp (tag @a (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitLeft @a @b $ prjRight x)) :* SOP.Nil)
+              -> Just (Exp (tag @a (unExp $ mkSub @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitLeft @a @b $ prjRight x)) :* SOP.Nil)
 
             SmartExp Match {} -> Nothing
 
@@ -284,7 +284,7 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
                   , u == tagVal @(Choices b)
                   -- remove one from the tag as we are not in left anymore
                   -- the `tag` function will apply the new tag if necessary
-                  -> Just (Exp (tag @b (unExp $ mkMin @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitRight @a @b $ prjRight x)) :* SOP.Nil)
+                  -> Just (Exp (tag @b (unExp $ mkSub @TAG (Exp $ prjLeft x) (constant $ tagVal @(Choices a))) (splitRight @a @b $ prjRight x)) :* SOP.Nil)
                 SmartExp Match {} -> Nothing
 
                 _ -> error "Embedded pattern synonym used outside 'match' context."
