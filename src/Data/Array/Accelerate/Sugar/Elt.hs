@@ -146,7 +146,7 @@ flattenProductType :: ProductType a -> TypeR (FlattenProduct a)
 flattenProductType PTNil = TupRunit
 flattenProductType (PTCons x xs) = TupRpair (TupRsingle (flattenSumType x)) (flattenProductType xs)
 
-flattenSumType :: SumType a -> ScalarType (UnionScalar (FlattenSum a))
+flattenSumType :: SumType a -> ScalarType (UnionScalar a)
 flattenSumType STZero = UnionScalarType ZeroScalarType
 flattenSumType (STSucc x xs) = case flattenSumType xs of
   UnionScalarType xs' -> UnionScalarType (SuccScalarType (mkSingleType x) xs')
@@ -271,7 +271,7 @@ unFlattenProduct :: ProductType a -> FlattenProduct a -> Product a
 unFlattenProduct PTNil () = Nil
 unFlattenProduct (PTCons x xs) (y, ys) = Cons (unFlattenSum x y) (unFlattenProduct xs ys)
 
-unFlattenSum :: SumType a -> UnionScalar (FlattenSum a) -> Sum a
+unFlattenSum :: SumType a -> UnionScalar a -> Sum a
 unFlattenSum (STSucc x xs) (PickScalar y) = Pick y
 unFlattenSum (STSucc x xs) (SkipScalar ys) = Skip $ unFlattenSum xs ys
 
@@ -280,7 +280,7 @@ flattenProduct :: Product a -> FlattenProduct a
 flattenProduct Nil = ()
 flattenProduct (Cons x xs) = (flattenSum x, flattenProduct xs)
 
-flattenSum :: Sum a -> UnionScalar (FlattenSum a)
+flattenSum :: Sum a -> UnionScalar a
 flattenSum (Pick x) = PickScalar x
 flattenSum (Skip xs) = SkipScalar (flattenSum xs)
               

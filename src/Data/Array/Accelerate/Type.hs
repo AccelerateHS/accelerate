@@ -108,20 +108,11 @@ type family POStoEltR (cs :: Nat) fs :: Type where
 
 type family FlattenProduct (xss :: f [a]) = (r :: Type) | r -> f where
   FlattenProduct '[] = ()
-  FlattenProduct (x ': xs) = (UnionScalar (FlattenSum x), FlattenProduct xs)
-
-type family FlattenSum (xs :: [a]) :: Type where
-  FlattenSum '[] = ()
-  FlattenSum (x ': xs) = (x, FlattenSum xs)
+  FlattenProduct (x ': xs) = (UnionScalar x, FlattenProduct xs)
 
 type family FlattenProductType (xss :: [[a]]) :: Type where
   FlattenProductType '[] = ()
-  FlattenProductType (x ': xs) = (UnionScalarType (FlattenSumType x), FlattenProductType xs)
-
-type family FlattenSumType (xs :: [a]) :: Type where
-  FlattenSumType '[] = ()
-  FlattenSumType (x ': xs) = (x, FlattenSumType xs)
-
+  FlattenProductType (x ': xs) = (UnionScalarType x, FlattenProductType xs)
 
 -- Scalar types
 -- ------------
@@ -190,12 +181,12 @@ class IsUnionScalar a where
   unionScalarType :: UnionScalarType a
 
 data UnionScalar x where
-  PickScalar  :: a -> UnionScalar (a, b)
-  SkipScalar  :: UnionScalar b -> UnionScalar (a, b)
+  PickScalar  :: x -> UnionScalar (x ': xs)
+  SkipScalar  :: UnionScalar xs -> UnionScalar (x ': xs)
 
 data UnionScalarType a where
-  SuccScalarType  :: SingleType a -> UnionScalarType b -> UnionScalarType (a, b)
-  ZeroScalarType  :: UnionScalarType ()
+  SuccScalarType  :: SingleType x -> UnionScalarType xs -> UnionScalarType (x ': xs)
+  ZeroScalarType  :: UnionScalarType '[]
 
 data SingleType a where
   NumSingleType :: NumType a -> SingleType a
@@ -594,8 +585,8 @@ instance IsScalar Undef where
 instance (IsUnionScalar a) => IsScalar (UnionScalar a) where
   scalarType = UnionScalarType (unionScalarType @a)
 
-instance IsUnionScalar () where
+instance IsUnionScalar '[] where
   unionScalarType = ZeroScalarType
 
-instance (IsSingle a, IsUnionScalar b) => IsUnionScalar (a, b) where
-  unionScalarType = SuccScalarType (singleType @a) (unionScalarType @b)
+instance (IsSingle x, IsUnionScalar xs) => IsUnionScalar (x ': xs) where
+  unionScalarType = SuccScalarType (singleType @x) (unionScalarType @xs)
