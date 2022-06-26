@@ -26,12 +26,17 @@ class VEq n a => VOrd n a where
   (>*)     :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool)
   (<=*)    :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool)
   (>=*)    :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool)
+  vmin     :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n a)
+  vmax     :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n a)
   vcompare :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Ordering)
 
-  x <*  y = select (vcompare x y ==* vlt) vtrue vfalse
-  x <=* y = select (vcompare x y ==* vgt) vfalse vtrue
-  x >*  y = select (vcompare x y ==* vgt) vtrue vfalse
-  x >=* y = select (vcompare x y ==* vlt) vfalse vtrue
+  x <*  y  = select (vcompare x y ==* vlt) vtrue vfalse
+  x <=* y  = select (vcompare x y ==* vgt) vfalse vtrue
+  x >*  y  = select (vcompare x y ==* vgt) vtrue vfalse
+  x >=* y  = select (vcompare x y ==* vlt) vfalse vtrue
+
+  vmin x y = select (x <=* y) x y
+  vmax x y = select (x <=* y) y x
 
   vcompare x y
     = select (x ==* y) veq
