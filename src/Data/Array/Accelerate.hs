@@ -353,11 +353,12 @@ module Data.Array.Accelerate (
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
-  Vec2, pattern V2,
-  Vec3, pattern V3,
-  Vec4, pattern V4,
-  Vec8, pattern V8,
-  Vec16, pattern V16,
+  pattern SIMD,
+  V2, pattern V2,
+  V3, pattern V3,
+  V4, pattern V4,
+  V8, pattern V8,
+  V16, pattern V16,
 
   mkPattern, mkPatterns,
 
@@ -449,6 +450,7 @@ import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.Shape
+import Data.Array.Accelerate.Pattern.SIMD
 import Data.Array.Accelerate.Pattern.TH
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Pretty                                 () -- show instances

@@ -29,11 +29,7 @@
 module Data.Array.Accelerate.Sugar.Vec (
 
   Vec(..), KnownNat,
-  Vec2,
-  Vec3,
-  Vec4,
-  Vec8,
-  Vec16,
+  V2, V3, V4, V8, V16,
   SIMD(..),
 
 ) where
@@ -61,11 +57,11 @@ data Vec n a = Vec (VecR n a)
 
 -- Synonyms for common vector sizes
 --
-type Vec2  = Vec 2
-type Vec3  = Vec 3
-type Vec4  = Vec 4
-type Vec8  = Vec 8
-type Vec16 = Vec 16
+type V2  = Vec 2
+type V3  = Vec 3
+type V4  = Vec 4
+type V8  = Vec 8
+type V16 = Vec 16
 
 instance (Show a, Elt a, SIMD n a) => Show (Vec n a) where
   show = vec . toList

@@ -28,11 +28,11 @@ module Data.Primitive.Vec (
 
   -- * SIMD vector types
   Vec(..), KnownNat,
-  Vec2, pattern Vec2,
-  Vec3, pattern Vec3,
-  Vec4, pattern Vec4,
-  Vec8, pattern Vec8,
-  Vec16, pattern Vec16,
+  V2, pattern V2,
+  V3, pattern V3,
+  V4, pattern V4,
+  V8, pattern V8,
+  V16, pattern V16,
 
   toList, fromList,
   extract, insert, splat,
@@ -68,25 +68,25 @@ import GHC.Ptr
 --
 -- A simple polymorphic representation of SIMD types such as the following:
 --
--- > data Vec2 a = Vec2 !a !a
+-- > data V2 a = V2 !a !a
 --
 -- is not able to unpack the values into the constructor, meaning that
--- 'Vec2' is storing pointers to (strict) values on the heap, which is
+-- 'V2' is storing pointers to (strict) values on the heap, which is
 -- a very inefficient representation.
 --
 -- We might try defining a data family instead so that we can get efficient
 -- unboxed representations, and even make use of the unlifted SIMD types GHC
 -- knows about:
 --
--- > data family Vec2 a :: *
--- > data instance Vec2 Float    = Vec2_Float Float# Float#   -- reasonable
--- > data instance Vec2 Double   = Vec2_Double DoubleX2#      -- built in!
+-- > data family V2 a :: *
+-- > data instance V2 Float    = V2_Float Float# Float#   -- reasonable
+-- > data instance V2 Double   = V2_Double DoubleX2#      -- built in!
 --
 -- However, this runs into the problem that GHC stores all values as word sized
 -- entities:
 --
--- > data instance Vec2 Int      = Vec2_Int Int# Int#
--- > data instance Vec2 Int8     = Vec2_Int8 Int8# Int8#      -- Int8# does not exist; requires a full Int#
+-- > data instance V2 Int      = V2_Int Int# Int#
+-- > data instance V2 Int8     = V2_Int8 Int8# Int8#      -- Int8# does not exist; requires a full Int#
 --
 -- which, again, is very memory inefficient.
 --
@@ -198,54 +198,54 @@ splat x = runST $ do
 --
 -- Note that non-power-of-two sized SIMD vectors are a bit dubious, and
 -- special care must be taken in the code generator. For example, LLVM will
--- treat a Vec3 with alignment of _4_, meaning that reads and writes will
+-- treat a V3 with alignment of _4_, meaning that reads and writes will
 -- be (without further action) incorrect.
 --
-type Vec2 a  = Vec 2 a
-type Vec3 a  = Vec 3 a
-type Vec4 a  = Vec 4 a
-type Vec8 a  = Vec 8 a
-type Vec16 a = Vec 16 a
+type V2 a  = Vec 2 a
+type V3 a  = Vec 3 a
+type V4 a  = Vec 4 a
+type V8 a  = Vec 8 a
+type V16 a = Vec 16 a
 
-pattern Vec2 :: Prim a => a -> a -> Vec2 a
-pattern Vec2 a b <- (unpackVec2 -> (a,b))
-  where Vec2 = packVec2
-{-# COMPLETE Vec2 #-}
+pattern V2 :: Prim a => a -> a -> V2 a
+pattern V2 a b <- (unpackVec2 -> (a,b))
+  where V2 = packVec2
+{-# COMPLETE V2 #-}
 
-pattern Vec3 :: Prim a => a -> a -> a -> Vec3 a
-pattern Vec3 a b c <- (unpackVec3 -> (a,b,c))
-  where Vec3 = packVec3
-{-# COMPLETE Vec3 #-}
+pattern V3 :: Prim a => a -> a -> a -> V3 a
+pattern V3 a b c <- (unpackVec3 -> (a,b,c))
+  where V3 = packVec3
+{-# COMPLETE V3 #-}
 
-pattern Vec4 :: Prim a => a -> a -> a -> a -> Vec4 a
-pattern Vec4 a b c d <- (unpackVec4 -> (a,b,c,d))
-  where Vec4 = packVec4
-{-# COMPLETE Vec4 #-}
+pattern V4 :: Prim a => a -> a -> a -> a -> V4 a
+pattern V4 a b c d <- (unpackVec4 -> (a,b,c,d))
+  where V4 = packVec4
+{-# COMPLETE V4 #-}
 
-pattern Vec8 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> Vec8 a
-pattern Vec8 a b c d e f g h <- (unpackVec8 -> (a,b,c,d,e,f,g,h))
-  where Vec8 = packVec8
-{-# COMPLETE Vec8 #-}
+pattern V8 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> V8 a
+pattern V8 a b c d e f g h <- (unpackVec8 -> (a,b,c,d,e,f,g,h))
+  where V8 = packVec8
+{-# COMPLETE V8 #-}
 
-pattern Vec16 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> Vec16 a
-pattern Vec16 a b c d e f g h i j k l m n o p <- (unpackVec16 -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p))
-  where Vec16 = packVec16
-{-# COMPLETE Vec16 #-}
+pattern V16 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> V16 a
+pattern V16 a b c d e f g h i j k l m n o p <- (unpackVec16 -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p))
+  where V16 = packVec16
+{-# COMPLETE V16 #-}
 
-unpackVec2 :: Prim a => Vec2 a -> (a,a)
+unpackVec2 :: Prim a => V2 a -> (a,a)
 unpackVec2 (Vec ba#) =
   ( indexByteArray# ba# 0#
   , indexByteArray# ba# 1#
   )
 
-unpackVec3 :: Prim a => Vec3 a -> (a,a,a)
+unpackVec3 :: Prim a => V3 a -> (a,a,a)
 unpackVec3 (Vec ba#) =
   ( indexByteArray# ba# 0#
   , indexByteArray# ba# 1#
   , indexByteArray# ba# 2#
   )
 
-unpackVec4 :: Prim a => Vec4 a -> (a,a,a,a)
+unpackVec4 :: Prim a => V4 a -> (a,a,a,a)
 unpackVec4 (Vec ba#) =
   ( indexByteArray# ba# 0#
   , indexByteArray# ba# 1#
@@ -253,7 +253,7 @@ unpackVec4 (Vec ba#) =
   , indexByteArray# ba# 3#
   )
 
-unpackVec8 :: Prim a => Vec8 a -> (a,a,a,a,a,a,a,a)
+unpackVec8 :: Prim a => V8 a -> (a,a,a,a,a,a,a,a)
 unpackVec8 (Vec ba#) =
   ( indexByteArray# ba# 0#
   , indexByteArray# ba# 1#
@@ -265,7 +265,7 @@ unpackVec8 (Vec ba#) =
   , indexByteArray# ba# 7#
   )
 
-unpackVec16 :: Prim a => Vec16 a -> (a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a)
+unpackVec16 :: Prim a => V16 a -> (a,a,a,a,a,a,a,a,a,a,a,a,a,a,a,a)
 unpackVec16 (Vec ba#) =
   ( indexByteArray# ba# 0#
   , indexByteArray# ba# 1#
@@ -285,7 +285,7 @@ unpackVec16 (Vec ba#) =
   , indexByteArray# ba# 15#
   )
 
-packVec2 :: Prim a => a -> a -> Vec2 a
+packVec2 :: Prim a => a -> a -> V2 a
 packVec2 a b = runST $ do
   mba <- newByteArray (2 * sizeOf a)
   writeByteArray mba 0 a
@@ -293,7 +293,7 @@ packVec2 a b = runST $ do
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
 
-packVec3 :: Prim a => a -> a -> a -> Vec3 a
+packVec3 :: Prim a => a -> a -> a -> V3 a
 packVec3 a b c = runST $ do
   mba <- newByteArray (3 * sizeOf a)
   writeByteArray mba 0 a
@@ -302,7 +302,7 @@ packVec3 a b c = runST $ do
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
 
-packVec4 :: Prim a => a -> a -> a -> a -> Vec4 a
+packVec4 :: Prim a => a -> a -> a -> a -> V4 a
 packVec4 a b c d = runST $ do
   mba <- newByteArray (4 * sizeOf a)
   writeByteArray mba 0 a
@@ -312,7 +312,7 @@ packVec4 a b c d = runST $ do
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
 
-packVec8 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> Vec8 a
+packVec8 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> V8 a
 packVec8 a b c d e f g h = runST $ do
   mba <- newByteArray (8 * sizeOf a)
   writeByteArray mba 0 a
@@ -326,7 +326,7 @@ packVec8 a b c d e f g h = runST $ do
   ByteArray ba# <- unsafeFreezeByteArray mba
   return $! Vec ba#
 
-packVec16 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> Vec16 a
+packVec16 :: Prim a => a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> a -> V16 a
 packVec16 a b c d e f g h i j k l m n o p = runST $ do
   mba <- newByteArray (16 * sizeOf a)
   writeByteArray mba 0 a

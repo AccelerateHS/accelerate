@@ -96,19 +96,19 @@ f32 = Gen.float (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
 f64 :: Gen Double
 f64 = Gen.double (Range.linearFracFrom 0 (-log_flt_max) log_flt_max)
 
-v2 :: (Elt a, SIMD 2 a) => Gen a -> Gen (Vec2 a)
+v2 :: (Elt a, SIMD 2 a) => Gen a -> Gen (V2 a)
 v2 a = GHC.fromList <$> replicateM 2 a
 
-v3 :: (Elt a, SIMD 3 a) => Gen a -> Gen (Vec3 a)
+v3 :: (Elt a, SIMD 3 a) => Gen a -> Gen (V3 a)
 v3 a = GHC.fromList <$> replicateM 3 a
 
-v4 :: (Elt a, SIMD 4 a) => Gen a -> Gen (Vec4 a)
+v4 :: (Elt a, SIMD 4 a) => Gen a -> Gen (V4 a)
 v4 a = GHC.fromList <$> replicateM 4 a
 
-v8 :: (Elt a, SIMD 8 a) => Gen a -> Gen (Vec8 a)
+v8 :: (Elt a, SIMD 8 a) => Gen a -> Gen (V8 a)
 v8 a = GHC.fromList <$> replicateM 8 a
 
-v16 :: (Elt a, SIMD 16 a) => Gen a -> Gen (Vec16 a)
+v16 :: (Elt a, SIMD 16 a) => Gen a -> Gen (V16 a)
 v16 a = GHC.fromList <$> replicateM 16 a
 
 

@@ -102,33 +102,33 @@ instance Elt a => Elt (Complex a) where
                                 [ TagRunit `TagRpair` ta `TagRpair` tb | ta <- go tR, tb <- go tR ]
 
   toElt = case complexR $ eltR @a of
-    ComplexVec _ -> \(Prim.Vec2 r i) -> toElt r :+ toElt i
-    ComplexTup   -> \(((), r), i)    -> toElt r :+ toElt i
+    ComplexVec _ -> \(Prim.V2 r i) -> toElt r :+ toElt i
+    ComplexTup   -> \(((), r), i)  -> toElt r :+ toElt i
 
   fromElt (r :+ i) = case complexR $ eltR @a of
-    ComplexVec _ -> Prim.Vec2 (fromElt r) (fromElt i)
+    ComplexVec _ -> Prim.V2 (fromElt r) (fromElt i)
     ComplexTup   -> (((), fromElt r), fromElt i)
 
 type family ComplexR a where
-  ComplexR Half     = Prim.Vec2 Float16
-  ComplexR Float    = Prim.Vec2 Float32
-  ComplexR Double   = Prim.Vec2 Float64
-  ComplexR Float128 = Prim.Vec2 Float128
-  ComplexR Int8     = Prim.Vec2 Int8
-  ComplexR Int16    = Prim.Vec2 Int16
-  ComplexR Int32    = Prim.Vec2 Int32
-  ComplexR Int64    = Prim.Vec2 Int64
-  ComplexR Int128   = Prim.Vec2 Int128
-  ComplexR Word8    = Prim.Vec2 Word8
-  ComplexR Word16   = Prim.Vec2 Word16
-  ComplexR Word32   = Prim.Vec2 Word32
-  ComplexR Word64   = Prim.Vec2 Word64
-  ComplexR Word128  = Prim.Vec2 Word128
+  ComplexR Half     = Prim.V2 Float16
+  ComplexR Float    = Prim.V2 Float32
+  ComplexR Double   = Prim.V2 Float64
+  ComplexR Float128 = Prim.V2 Float128
+  ComplexR Int8     = Prim.V2 Int8
+  ComplexR Int16    = Prim.V2 Int16
+  ComplexR Int32    = Prim.V2 Int32
+  ComplexR Int64    = Prim.V2 Int64
+  ComplexR Int128   = Prim.V2 Int128
+  ComplexR Word8    = Prim.V2 Word8
+  ComplexR Word16   = Prim.V2 Word16
+  ComplexR Word32   = Prim.V2 Word32
+  ComplexR Word64   = Prim.V2 Word64
+  ComplexR Word128  = Prim.V2 Word128
   ComplexR a        = (((), a), a)
 
 data ComplexType a c where
-  ComplexVec :: Prim a => NumType (Prim.Vec2 a) -> ComplexType a (Prim.Vec2 a)
-  ComplexTup ::                                    ComplexType a (((), a), a)
+  ComplexVec :: Prim a => NumType (Prim.V2 a) -> ComplexType a (Prim.V2 a)
+  ComplexTup ::                                  ComplexType a (((), a), a)
 
 complexR :: TypeR a -> ComplexType a (ComplexR a)
 complexR = tuple
@@ -180,11 +180,11 @@ constructComplex r@(Exp r') i@(Exp i') =
     ComplexTup   -> Pattern (r,i)
     ComplexVec t -> Exp $ num t r' i'
     where
-      num :: NumType (Prim.Vec2 t) -> SmartExp t -> SmartExp t -> SmartExp (ComplexR t)
+      num :: NumType (Prim.V2 t) -> SmartExp t -> SmartExp t -> SmartExp (ComplexR t)
       num (IntegralNumType t) = integral t
       num (FloatingNumType t) = floating t
 
-      integral :: IntegralType (Prim.Vec2 t) -> SmartExp t -> SmartExp t -> SmartExp (ComplexR t)
+      integral :: IntegralType (Prim.V2 t) -> SmartExp t -> SmartExp t -> SmartExp (ComplexR t)
       integral (SingleIntegralType   t) = case t of
       integral (VectorIntegralType n t) =
         let v = NumScalarType (IntegralNumType (VectorIntegralType n t))
@@ -200,7 +200,7 @@ constructComplex r@(Exp r') i@(Exp i') =
               TypeWord64  -> pack v
               TypeWord128 -> pack v
 
-      floating :: FloatingType (Prim.Vec2 t) -> SmartExp t -> SmartExp t -> SmartExp (ComplexR t)
+      floating :: FloatingType (Prim.V2 t) -> SmartExp t -> SmartExp t -> SmartExp (ComplexR t)
       floating (SingleFloatingType   t) = case t of
       floating (VectorFloatingType n t) =
         let v = NumScalarType (FloatingNumType (VectorFloatingType n t))
@@ -227,11 +227,11 @@ deconstructComplex (Exp c) =
       let (r, i) = num t c
        in (Exp r, Exp i)
     where
-      num :: NumType (Prim.Vec2 t) -> SmartExp (ComplexR t) -> (SmartExp t, SmartExp t)
+      num :: NumType (Prim.V2 t) -> SmartExp (ComplexR t) -> (SmartExp t, SmartExp t)
       num (IntegralNumType t) = integral t
       num (FloatingNumType t) = floating t
 
-      integral :: IntegralType (Prim.Vec2 t) -> SmartExp (ComplexR t) -> (SmartExp t, SmartExp t)
+      integral :: IntegralType (Prim.V2 t) -> SmartExp (ComplexR t) -> (SmartExp t, SmartExp t)
       integral (SingleIntegralType   t) = case t of
       integral (VectorIntegralType n t) =
         let v = NumScalarType (IntegralNumType (VectorIntegralType n t))
@@ -247,7 +247,7 @@ deconstructComplex (Exp c) =
               TypeWord64  -> unpack v
               TypeWord128 -> unpack v
 
-      floating :: FloatingType (Prim.Vec2 t) -> SmartExp (ComplexR t) -> (SmartExp t, SmartExp t)
+      floating :: FloatingType (Prim.V2 t) -> SmartExp (ComplexR t) -> (SmartExp t, SmartExp t)
       floating (SingleFloatingType   t) = case t of
       floating (VectorFloatingType n t) =
         let v = NumScalarType (FloatingNumType (VectorFloatingType n t))
