@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Classes.RealFrac (
 ) where
 
 import Data.Array.Accelerate.Language                               ( cond, even )
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt

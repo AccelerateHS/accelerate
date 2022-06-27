@@ -11,7 +11,7 @@
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE ViewPatterns           #-}
 -- |
--- Module      : Data.Array.Accelerate.Pattern
+-- Module      : Data.Array.Accelerate.Pattern.SIMD
 -- Copyright   : [2018..2020] The Accelerate Team
 -- License     : BSD3
 --
@@ -50,8 +50,8 @@ runQ $
   let
       -- Generate instance declarations for IsSIMD of the form:
       -- instance (Elt a, Elt v, EltR v ~ VecR n a) => IsSIMD Exp v (Exp a, Exp a)
-      mkVecPattern :: Int -> Q [Dec]
-      mkVecPattern n = do
+      mkV :: Int -> Q [Dec]
+      mkV n = do
         a  <- newName "a"
         v  <- newName "v"
         _x <- newName "_x"
@@ -112,40 +112,7 @@ runQ $
                               | i <- [0 .. n-1] ])
           |]
   in
-  concat <$> mapM mkVecPattern [2,3,4,8,16]
-
-        -- mkV :: Int -> Q [Dec]
-        -- mkV n =
-        --   let xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-        --       a     = varT (mkName "a")
-        --       ts    = replicate n a
-        --       name  = mkName ('V':show n)
-        --       tup   = tupT (map (\t -> [t| Exp $t |]) ts)
-        --       vec   = [t| Vec $(litT (numTyLit (toInteger n))) $a |]
-        --       cst   = [t| (Elt $a, SIMD $(litT (numTyLit (toInteger n))) $a, IsSIMD Exp $vec $tup) |]
-        --       sig   = foldr (\t r -> [t| Exp $t -> $r |]) [t| Exp $vec |] ts
-        --   in
-        --   sequence
-        --     [ patSynSigD name [t| $cst => $sig |]
-        --     , patSynD    name (prefixPatSyn xs) implBidir [p| SIMD $(tupP (map varP xs)) |]
-        --     , pragCompleteD [name] Nothing
-        --     ]
-
-        -- mkV :: Int -> Q [Dec]
-        -- mkV n =
-        --   let xs    = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
-        --       ts    = map varT xs
-        --       name  = mkName ('V':show n)
-        --       con   = varT (mkName "con")
-        --       ty1   = varT (mkName "vec")
-        --       ty2   = tupT (map (con `appT`) ts)
-        --       sig   = foldr (\t r -> [t| $con $t -> $r |]) (appT con ty1) ts
-        --   in
-        --   sequence
-        --     [ patSynSigD name [t| IsVector $con $ty1 $ty2 => $sig |]
-        --     , patSynD    name (prefixPatSyn xs) implBidir [p| Vector $(tupP (map varP xs)) |]
-        --     , pragCompleteD [name] (Just ''Exp)
-        --     ]
+  concat <$> mapM mkV [2,3,4,8,16]
 
 -- Generate polymorphic pattern synonyms which operate on both Haskell values
 -- as well as embedded expressions
@@ -161,7 +128,7 @@ runQ $
             xs      = [ mkName ('x' : show i) | i <- [0 .. n-1] ]
             xsP     = map varP xs
             xsE     = map varE xs
-            vn      = mkName ("V" ++ show n)
+            name    = mkName ("V" ++ show n)
             isV     = mkName ("IsV" ++ show n)
             builder = mkName ("buildV" ++ show n)
             matcher = mkName ("matchV" ++ show n)
@@ -170,9 +137,9 @@ runQ $
                              ]
         --
         sequence
-          [ patSynSigD vn [t| $(conT isV) $(varT a) $(varT v) => $(foldr (\t r -> [t| $t -> $r |]) (varT v) as) |]
-          , patSynD    vn (prefixPatSyn xs) (explBidir [clause [] (normalB (varE builder)) []]) (parensP $ viewP (varE matcher) (tupP xsP))
-          , pragCompleteD [vn] Nothing
+          [ patSynSigD name [t| $(conT isV) $(varT a) $(varT v) => $(foldr (\t r -> [t| $t -> $r |]) (varT v) as) |]
+          , patSynD    name (prefixPatSyn xs) (explBidir [clause [] (normalB (varE builder)) []]) (parensP $ viewP (varE matcher) (tupP xsP))
+          , pragCompleteD [name] Nothing
           --
           , classD (return []) isV [PlainTV a (), PlainTV v ()] [funDep [v] [a]]
             [ sigD builder (foldr (\t r -> [t| $t -> $r |]) (varT v) as)
@@ -180,11 +147,11 @@ runQ $
             ]
           -- This instance which goes via toList is horrible and I feel bad for using it
           --   TLM 2022-06-27
-          , instanceD ctx [t| $(conT isV) $(varT a) ($(conT vn) $(varT a)) |]
+          , instanceD ctx [t| $(conT isV) $(varT a) ($(conT name) $(varT a)) |]
             [ funD builder [ clause xsP (normalB [| fromList $(listE xsE) |]) []]
             , funD matcher [ clause [viewP (varE 'toList) (listP xsP)] (normalB (tupE xsE)) [] ]
             ]
-          , instanceD ctx [t| $(conT isV) (Exp $(varT a)) (Exp ($(conT vn) $(varT a))) |]
+          , instanceD ctx [t| $(conT isV) (Exp $(varT a)) (Exp ($(conT name) $(varT a))) |]
             [ funD builder [ clause xsP (normalB [| SIMD $(tupE xsE) |]) []]
             , funD matcher [ clause [conP (mkName "SIMD") [tupP xsP]] (normalB (tupE xsE)) [] ]
             ]

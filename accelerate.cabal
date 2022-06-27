@@ -489,6 +489,7 @@ library
         Data.Array.Accelerate.Pattern.SIMD
         Data.Array.Accelerate.Pattern.Shape
         Data.Array.Accelerate.Pattern.TH
+        Data.Array.Accelerate.Pattern.Tuple
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz
         Data.Array.Accelerate.Pretty.Graphviz.Monad

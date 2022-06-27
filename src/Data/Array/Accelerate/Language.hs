@@ -88,7 +88,7 @@ module Data.Array.Accelerate.Language (
 ) where
 
 import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Array                   ( ArrayR(..) )
 import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..) )
 import Data.Array.Accelerate.Representation.Type
@@ -1414,11 +1414,11 @@ odd n = n `rem` 2 /= 0
 gcd :: Integral a => Exp a -> Exp a -> Exp a
 gcd x y = gcd' (abs x) (abs y)
   where
-    gcd' :: Integral a => Exp a -> Exp a -> Exp a
+    gcd' :: forall a. Integral a => Exp a -> Exp a -> Exp a
     gcd' u v =
       let T2 r _ = while (\(T2 _ b) -> b /= 0)
                          (\(T2 a b) -> T2 b (a `rem` b))
-                         (T2 u v)
+                         (T2 u v) :: Exp (a,a)
       in r
 
 
@@ -1440,7 +1440,7 @@ x0 ^ y0 = cond (y0 <= 0) 1 (f x0 y0)
     f x y =
       let T2 x' y' = while (\(T2 _ v) -> even v)
                            (\(T2 u v) -> T2 (u * u) (v `quot` 2))
-                           (T2 x y)
+                           (T2 x y) :: Exp (a,b)
       in
       cond (y' == 1) x' (g (x'*x') ((y'-1) `quot` 2) x')
 
@@ -1450,7 +1450,7 @@ x0 ^ y0 = cond (y0 <= 0) 1 (f x0 y0)
                              (\(T3 u v w) ->
                                cond (even v) (T3 (u*u) (v     `quot` 2) w)
                                              (T3 (u*u) ((v-1) `quot` 2) (w*u)))
-                             (T3 x y z)
+                             (T3 x y z) :: Exp (a,b,a)
       in
       x' * z'
 

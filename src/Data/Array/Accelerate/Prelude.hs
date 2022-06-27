@@ -121,9 +121,9 @@ module Data.Array.Accelerate.Prelude (
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
-import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.Maybe
 import Data.Array.Accelerate.Pattern.Shape
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays, Array, Scalar, Vector, Segments,  fromList )
 import Data.Array.Accelerate.Sugar.Elt

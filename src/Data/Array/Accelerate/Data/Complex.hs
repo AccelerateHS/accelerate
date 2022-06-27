@@ -55,6 +55,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.RealFloat
 import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
@@ -318,7 +319,7 @@ instance RealFloat a => P.Floating (Exp (Complex a)) where
       then 0
       else u ::+ (y < 0 ? (-v, v))
     where
-      T2 u v = x < 0 ? (T2 v' u', T2 u' v')
+      T2 u v = x < 0 ? (T2 v' u', T2 u' v') :: Exp (a,a)
       v'     = abs y / (u'*2)
       u'     = sqrt ((magnitude z + abs x) / 2)
 

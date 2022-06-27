@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Classes.RealFloat (
 
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Language                               ( (^), cond, while )
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -377,9 +377,9 @@ ieee754_f16_decode i =
       T2 high3 exp3
             = cond (exp1 /= _HMINEXP)
                    -- don't add hidden bit to denorms
-                   (T2 (high2 .|. _HHIGHBIT) exp1)
+                   (T2 (high2 .|. _HHIGHBIT) exp1 :: Exp (Int16, Int))
                    -- a denorm, normalise the mantissa
-                   (while (\(T2 h _) -> (h .&. _HHIGHBIT) /= 0 )
+                   (while (\(T2 h _) -> (h .&. _HHIGHBIT) /= 0)
                           (\(T2 h e) -> T2 (h `unsafeShiftL` 1) (e-1))
                           (T2 high2 exp2))
 
@@ -411,9 +411,9 @@ ieee754_f32_decode i =
       T2 high3 exp3
             = cond (exp1 /= _FMINEXP)
                    -- don't add hidden bit to denorms
-                   (T2 (high2 .|. _FHIGHBIT) exp1)
+                   (T2 (high2 .|. _FHIGHBIT) exp1 :: Exp (Int32, Int))
                    -- a denorm, normalise the mantissa
-                   (while (\(T2 h _) -> (h .&. _FHIGHBIT) /= 0 )
+                   (while (\(T2 h _) -> (h .&. _FHIGHBIT) /= 0)
                           (\(T2 h e) -> T2 (h `unsafeShiftL` 1) (e-1))
                           (T2 high2 exp2))
 
@@ -450,7 +450,7 @@ ieee754_f64_decode2 i =
       T3 hi lo ie
             = cond (iexp2 /= _DMINEXP)
                    -- don't add hidden bit to denorms
-                   (T3 (high2 .|. _DHIGHBIT) low iexp)
+                   (T3 (high2 .|. _DHIGHBIT) low iexp :: Exp (Word32, Word32, Int))
                    -- a denorm, nermalise the mantissa
                    (while (\(T3 h _ _) -> (h .&. _DHIGHBIT) /= 0)
                           (\(T3 h l e) ->

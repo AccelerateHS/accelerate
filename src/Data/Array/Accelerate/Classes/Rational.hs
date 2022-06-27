@@ -21,7 +21,7 @@ import Data.Array.Accelerate.Data.Ratio
 import Data.Array.Accelerate.Data.Bits
 
 import Data.Array.Accelerate.Language
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 

@@ -43,6 +43,7 @@ import Data.Array.Accelerate.Data.Semigroup                         ()
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type

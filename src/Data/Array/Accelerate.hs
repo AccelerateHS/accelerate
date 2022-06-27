@@ -449,8 +449,9 @@ import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
-import Data.Array.Accelerate.Pattern.Shape
 import Data.Array.Accelerate.Pattern.SIMD
+import Data.Array.Accelerate.Pattern.Shape
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Pattern.TH
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Pretty                                 () -- show instances

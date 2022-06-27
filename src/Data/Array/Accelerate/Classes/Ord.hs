@@ -34,8 +34,8 @@ import Data.Array.Accelerate.AST                                    ( PrimFun(..
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.Ordering
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
