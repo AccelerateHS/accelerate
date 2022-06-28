@@ -319,7 +319,7 @@ instance RealFloat a => P.Floating (Exp (Complex a)) where
       then 0
       else u ::+ (y < 0 ? (-v, v))
     where
-      T2 u v = x < 0 ? (T2 v' u', T2 u' v') :: Exp (a,a)
+      T2 u v = x < 0 ? (T2 v' u', T2 u' v')
       v'     = abs y / (u'*2)
       u'     = sqrt ((magnitude z + abs x) / 2)
 

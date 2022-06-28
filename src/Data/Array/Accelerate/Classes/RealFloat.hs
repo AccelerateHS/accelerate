@@ -377,7 +377,7 @@ ieee754_f16_decode i =
       T2 high3 exp3
             = cond (exp1 /= _HMINEXP)
                    -- don't add hidden bit to denorms
-                   (T2 (high2 .|. _HHIGHBIT) exp1 :: Exp (Int16, Int))
+                   (T2 (high2 .|. _HHIGHBIT) exp1)
                    -- a denorm, normalise the mantissa
                    (while (\(T2 h _) -> (h .&. _HHIGHBIT) /= 0)
                           (\(T2 h e) -> T2 (h `unsafeShiftL` 1) (e-1))
@@ -411,7 +411,7 @@ ieee754_f32_decode i =
       T2 high3 exp3
             = cond (exp1 /= _FMINEXP)
                    -- don't add hidden bit to denorms
-                   (T2 (high2 .|. _FHIGHBIT) exp1 :: Exp (Int32, Int))
+                   (T2 (high2 .|. _FHIGHBIT) exp1)
                    -- a denorm, normalise the mantissa
                    (while (\(T2 h _) -> (h .&. _FHIGHBIT) /= 0)
                           (\(T2 h e) -> T2 (h `unsafeShiftL` 1) (e-1))
@@ -450,7 +450,7 @@ ieee754_f64_decode2 i =
       T3 hi lo ie
             = cond (iexp2 /= _DMINEXP)
                    -- don't add hidden bit to denorms
-                   (T3 (high2 .|. _DHIGHBIT) low iexp :: Exp (Word32, Word32, Int))
+                   (T3 (high2 .|. _DHIGHBIT) low iexp)
                    -- a denorm, nermalise the mantissa
                    (while (\(T3 h _ _) -> (h .&. _DHIGHBIT) /= 0)
                           (\(T3 h l e) ->

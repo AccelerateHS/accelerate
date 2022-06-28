@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE ViewPatterns           #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pattern.Tuple
@@ -72,11 +73,11 @@ runQ $
             [ funD builder [ clause xsP (normalB (tupE xsE)) [] ]
             , funD matcher [ clause []  (normalB [| id |])   [] ]
             ]
-          , instanceD (mapM (\x -> [t| Elt $x |]) xsT) [t| $(hdr (map (\x -> [t| Exp $x |]) xsT) [t| Exp $(tupT xsT) |]) |]
+          , instanceD (sequence ( [t| $(varT res) ~ $(tupT xsT) |] : map (\x -> [t| Elt $x |]) xsT )) [t| $(hdr (map (\x -> [t| Exp $x |]) xsT) [t| Exp $(varT res) |]) |]
             [ funD builder [ clause xsP (normalB [| Pattern $(tupE xsE) |]) [] ]
             , funD matcher [ clause [conP (mkName "Pattern") [tupP xsP]] (normalB (tupE xsE)) []]
             ]
-          , instanceD (mapM (\x -> [t| Arrays $x |]) xsT) [t| $(hdr (map (\x -> [t| Acc $x |]) xsT) [t| Acc $(tupT xsT) |]) |]
+          , instanceD (sequence ( [t| $(varT res) ~ $(tupT xsT) |] : map (\x -> [t| Arrays $x |]) xsT)) [t| $(hdr (map (\x -> [t| Acc $x |]) xsT) [t| Acc $(varT res) |]) |]
             [ funD builder [ clause xsP (normalB [| Pattern $(tupE xsE) |]) [] ]
             , funD matcher [ clause [conP (mkName "Pattern") [tupP xsP]] (normalB (tupE xsE)) []]
             ]
