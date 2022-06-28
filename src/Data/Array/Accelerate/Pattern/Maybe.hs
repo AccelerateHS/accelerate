@@ -50,7 +50,8 @@ runQ $ do
           _                                        -> find pat ds
 
   decs <- filter it <$> mkPattern ''Maybe
-  rest <- [d| {-# COMPLETE Nothing, Just #-}
+  rest <- [d| {-# COMPLETE Nothing, Just :: Exp   #-}
+              {-# COMPLETE Nothing, Just :: Maybe #-}
               pattern Nothing :: (HasCallStack, IsNothing r) => r
               pattern Nothing <- (matchNothing -> P.Just ())
                 where Nothing = buildNothing

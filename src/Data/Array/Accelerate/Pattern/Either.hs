@@ -45,7 +45,8 @@ runQ $ do
           _                                        -> find pat ds
 
   decs <- filter it <$> mkPattern ''Either
-  rest <- [d| {-# COMPLETE Left, Right #-}
+  rest <- [d| {-# COMPLETE Left, Right :: Exp    #-}
+              {-# COMPLETE Left, Right :: Either #-}
               pattern Left :: IsLeft a b r => a -> r
               pattern Left x <- (matchLeft -> P.Just x)
                 where Left = buildLeft

@@ -40,7 +40,7 @@ import GHC.Exts                                                     ( IsList(..)
 pattern SIMD :: forall b a context. IsSIMD context a b => b -> context a
 pattern SIMD vars <- (vmatcher @context -> vars)
   where SIMD = vbuilder @context
-{-# COMPLETE SIMD #-}
+{-# COMPLETE SIMD :: Exp #-}
 
 class IsSIMD context a b where
   vbuilder :: b -> context a
@@ -144,7 +144,8 @@ runQ $
         sequence
           [ patSynSigD name [t| $(conT isV) $(varT a) $(varT v) => $(foldr (\t r -> [t| $t -> $r |]) (varT v) as) |]
           , patSynD    name (prefixPatSyn xs) (explBidir [clause [] (normalB (varE builder)) []]) (parensP $ viewP (varE matcher) (tupP xsP))
-          , pragCompleteD [name] Nothing
+          , pragCompleteD [name] (Just ''Vec)
+          , pragCompleteD [name] (Just ''Exp)
           --
           , classD (return []) isV [PlainTV a (), PlainTV v ()] [funDep [v] [a]]
             [ sigD builder (foldr (\t r -> [t| $t -> $r |]) (varT v) as)

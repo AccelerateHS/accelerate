@@ -43,7 +43,8 @@ runQ $ do
           _                                        -> find pat ds
 
   decs <- filter it <$> mkPattern ''Ordering
-  rest <- [d| {-# COMPLETE LT, EQ, GT #-}
+  rest <- [d| {-# COMPLETE LT, EQ, GT :: Exp      #-}
+              {-# COMPLETE LT, EQ, GT :: Ordering #-}
               pattern LT :: IsLT a => a
               pattern LT <- (matchLT -> Just ())
                 where LT = buildLT

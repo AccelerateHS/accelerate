@@ -29,7 +29,8 @@ import qualified Prelude                                            as P
 import GHC.Stack
 
 
-{-# COMPLETE False, True #-}
+{-# COMPLETE False, True :: Exp  #-}
+{-# COMPLETE False, True :: Bool #-}
 pattern False :: (HasCallStack, IsFalse r) => r
 pattern False <- (matchFalse -> Just ())
   where False = buildFalse
