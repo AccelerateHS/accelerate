@@ -88,6 +88,7 @@ module Data.Array.Accelerate.Language (
 ) where
 
 import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
+import Data.Array.Accelerate.Pattern.Maybe
 import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Array                   ( ArrayR(..) )
 import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..) )
@@ -106,7 +107,7 @@ import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
-import Prelude                                                      ( ($), (.), Maybe(..), Char )
+import Prelude                                                      ( ($), (.), Char )
 
 
 -- $setup
@@ -700,7 +701,7 @@ scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunct
 --         let zeros = fill (constant (Z:.10)) 0
 --             ones  = fill (shape xs)         1
 --         in
---         permute (+) zeros (\ix -> Just_ (I1 (xs!ix))) ones
+--         permute (+) zeros (\ix -> Just (I1 (xs!ix))) ones
 -- :}
 --
 -- >>> let xs = fromList (Z :. 20) [0,0,1,2,1,1,2,4,8,3,4,9,8,3,2,5,5,3,1,2] :: Vector Int
@@ -717,7 +718,7 @@ scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunct
 --         let zeros = fill (I2 n n) 0
 --             ones  = fill (I1 n)   1
 --         in
---         permute const zeros (\(I1 i) -> Just_ (I2 i i)) ones
+--         permute const zeros (\(I1 i) -> Just (I2 i i)) ones
 -- :}
 --
 -- >>> run $ identity 5 :: Matrix Int
