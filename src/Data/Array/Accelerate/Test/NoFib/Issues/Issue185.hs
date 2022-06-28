@@ -28,7 +28,7 @@ import Data.Array.Accelerate.Test.NoFib.Base
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Maybe(..) )
 
 
 test_issue185 :: RunN -> TestTree
@@ -144,6 +144,6 @@ scatterIf
     -> Acc (Vector e')
 scatterIf to maskV p def input = permute const def pf input'
   where
-    pf ix       = p (maskV ! ix) ? ( Just_ (index1 (to ! ix)), Nothing_ )
+    pf ix       = p (maskV ! ix) ? ( Just (index1 (to ! ix)), Nothing )
     input'      = backpermute (shape to `intersect` shape input) id input
 

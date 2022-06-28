@@ -22,6 +22,7 @@ import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Prelude                                                      hiding ( Maybe(..) )
 
 
 test_issue93 :: RunN -> TestTree
@@ -32,7 +33,7 @@ xs :: Array DIM2 Int
 xs = fromList (Z :. 1 :. 1) [5]
 
 test1 :: Acc (Array DIM2 Int)
-test1 = permute (\c _ -> c) (fill (shape xs') (constant 0)) Just_ xs'
+test1 = permute (\c _ -> c) (fill (shape xs') (constant 0)) Just xs'
   where
     xs' = use xs
 

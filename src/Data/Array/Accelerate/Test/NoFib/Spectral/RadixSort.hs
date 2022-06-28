@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort (
 
 import Data.Function
 import Data.List                                                    ( sortBy )
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Maybe(..) )
 import qualified Data.Bits                                          as P
 
 import Data.Array.Accelerate                                        as A
@@ -176,7 +176,7 @@ radixsortBy rdx arr = foldr1 (>->) (P.map radixPass [0..p-1]) arr
                         iup     = A.map (size v - 1 -) . prescanr (+) 0 $ flags
                         index   = A.zipWith deal flags (A.zip idown iup)
                     in
-                    permute const v (\ix -> Just_ (index1 (index!ix))) v
+                    permute const v (\ix -> Just (index1 (index!ix))) v
 
 
 -- This is rather slow. Speeding up the reference implementation by using, say,

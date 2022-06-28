@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue407 (
 
 ) where
 
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Bool(..) )
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Sugar.Elt                              as S

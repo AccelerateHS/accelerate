@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TemplateHaskell  #-}
 {-# LANGUAGE TypeApplications #-}
 -- |
@@ -12,8 +13,9 @@
 
 module Data.Array.Accelerate.Pattern.TH (
 
-  mkPattern,
-  mkPatterns,
+  Options(..), defaultOptions,
+  mkPattern,  mkPatternWith,
+  mkPatterns, mkPatternsWith,
 
 ) where
 
@@ -36,10 +38,24 @@ import qualified Language.Haskell.TH.Extra                          as TH
 import GHC.Stack
 
 
+-- | Options to control what is generated
+--
+data Options = Options
+  { renameNormalC :: Name -> Name
+  , renameInfixC  :: Name -> Name
+  }
+
+defaultOptions :: Options
+defaultOptions = Options defaultRenameNormalC defaultRenameInfixC
+
+
 -- | As 'mkPattern', but for a list of types
 --
 mkPatterns :: [Name] -> DecsQ
-mkPatterns nms = concat <$> mapM mkPattern nms
+mkPatterns = mkPatternsWith defaultOptions
+
+mkPatternsWith :: Options -> [Name] -> DecsQ
+mkPatternsWith opts nms = concat <$> mapM (mkPatternWith opts) nms
 
 -- | Generate pattern synonyms for the given simple (Haskell'98) sum or
 -- product data type.
@@ -61,24 +77,27 @@ mkPatterns nms = concat <$> mapM mkPattern nms
 -- > ycoord :: Exp Point -> Exp Float
 --
 mkPattern :: Name -> DecsQ
-mkPattern nm = do
+mkPattern = mkPatternWith defaultOptions
+
+mkPatternWith :: Options -> Name -> DecsQ
+mkPatternWith opt nm = do
   info <- reify nm
   case info of
-    TyConI dec -> mkDec dec
+    TyConI dec -> mkDec opt dec
     _          -> fail "mkPatterns: expected the name of a newtype or datatype"
 
-mkDec :: Dec -> DecsQ
-mkDec dec =
+mkDec :: Options -> Dec -> DecsQ
+mkDec opt dec =
   case dec of
-    DataD    _ nm tv _ cs _ -> mkDataD nm tv cs
-    NewtypeD _ nm tv _ c  _ -> mkNewtypeD nm tv c
+    DataD    _ nm tv _ cs _ -> mkDataD opt nm tv cs
+    NewtypeD _ nm tv _ c  _ -> mkNewtypeD opt nm tv c
     _                       -> fail "mkPatterns: expected the name of a newtype or datatype"
 
-mkNewtypeD :: Name -> [TyVarBndr ()] -> Con -> DecsQ
-mkNewtypeD tn tvs c = mkDataD tn tvs [c]
+mkNewtypeD :: Options -> Name -> [TyVarBndr ()] -> Con -> DecsQ
+mkNewtypeD opt tn tvs c = mkDataD opt tn tvs [c]
 
-mkDataD :: Name -> [TyVarBndr ()] -> [Con] -> DecsQ
-mkDataD tn tvs cs = do
+mkDataD :: Options -> Name -> [TyVarBndr ()] -> [Con] -> DecsQ
+mkDataD opt tn tvs cs = do
   (pats, decs) <- unzip <$> go cs
   comp         <- pragCompleteD pats Nothing
   return $ comp : concat decs
@@ -86,14 +105,14 @@ mkDataD tn tvs cs = do
     -- For single-constructor types we create the pattern synonym for the
     -- type directly in terms of Pattern
     go []  = fail "mkPatterns: empty data declarations not supported"
-    go [c] = return <$> mkConP tn tvs c
+    go [c] = return <$> mkConP opt tn tvs c
     go _   = go' [] (map fieldTys cs) ctags cs
 
     -- For sum-types, when creating the pattern for an individual
     -- constructor we need to know about the types of the fields all other
     -- constructors as well
     go' prev (this:next) (tag:tags) (con:cons) = do
-      r  <- mkConS tn tvs prev next tag con
+      r  <- mkConS opt tn tvs prev next tag con
       rs <- go' (this:prev) next tags cons
       return (r : rs)
     go' _ [] [] [] = return []
@@ -122,12 +141,12 @@ mkDataD tn tvs cs = do
       map bitsToTag (l ++ r)
 
 
-mkConP :: Name -> [TyVarBndr ()] -> Con -> Q (Name, [Dec])
-mkConP tn' tvs' con' = do
+mkConP :: Options -> Name -> [TyVarBndr ()] -> Con -> Q (Name, [Dec])
+mkConP Options{..} tn' tvs' con' = do
   checkExts [ PatternSynonyms ]
   case con' of
     NormalC cn fs -> mkNormalC tn' cn (map tyVarBndrName tvs') (map snd fs)
-    RecC cn fs    -> mkRecC tn' cn (map tyVarBndrName tvs') (map (rename . fst3) fs) (map thd3 fs)
+    RecC cn fs    -> mkRecC tn' cn (map tyVarBndrName tvs') (map (renameNormalC . fst3) fs) (map thd3 fs)
     InfixC a cn b -> mkInfixC tn' cn (map tyVarBndrName tvs') [snd a, snd b]
     _             -> fail "mkPatterns: only constructors for \"vanilla\" syntax are supported"
   where
@@ -142,7 +161,7 @@ mkConP tn' tvs' con' = do
                      ]
       return (pat, r)
       where
-        pat = rename cn
+        pat = renameNormalC cn
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
@@ -160,7 +179,7 @@ mkConP tn' tvs' con' = do
                      ]
       return (pat, r)
       where
-        pat = rename cn
+        pat = renameNormalC cn
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
@@ -184,7 +203,7 @@ mkConP tn' tvs' con' = do
               Just f  -> return (InfixD f pat : r)
       return (pat, r')
       where
-        pat = mkName (':' : nameBase cn)
+        pat = renameInfixC cn
         sig = forallT
                 (map (`plainInvisTV` specifiedSpec) tvs)
                 (cxt (map (\t -> [t| Elt $(varT t) |]) tvs))
@@ -192,18 +211,18 @@ mkConP tn' tvs' con' = do
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
 
-mkConS :: Name -> [TyVarBndr ()] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
-mkConS tn' tvs' prev' next' tag' con' = do
+mkConS :: Options -> Name -> [TyVarBndr ()] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
+mkConS Options{..} tn' tvs' prev' next' tag' con' = do
   checkExts [GADTs, PatternSynonyms, ScopedTypeVariables, TypeApplications, ViewPatterns]
   case con' of
     NormalC cn fs -> mkNormalC tn' cn tag' (map tyVarBndrName tvs') prev' (map snd fs) next'
-    RecC cn fs    -> mkRecC tn' cn tag' (map tyVarBndrName tvs') (map (rename . fst3) fs) prev' (map thd3 fs) next'
+    RecC cn fs    -> mkRecC tn' cn tag' (map tyVarBndrName tvs') (map (renameNormalC . fst3) fs) prev' (map thd3 fs) next'
     InfixC a cn b -> mkInfixC tn' cn tag' (map tyVarBndrName tvs') prev' [snd a, snd b] next'
     _             -> fail "mkPatterns: only constructors for \"vanilla\" syntax are supported"
   where
     mkNormalC :: Name -> Name -> Word8 -> [Name] -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
     mkNormalC tn cn tag tvs ps fs ns = do
-      let pat = rename cn
+      let pat = renameNormalC cn
       (fun_build, dec_build) <- mkBuild tn (nameBase cn) tvs tag ps fs ns
       (fun_match, dec_match) <- mkMatch tn (nameBase pat) (nameBase cn) tvs tag ps fs ns
       dec_pat                <- mkNormalC_pattern tn pat tvs fs fun_build fun_match
@@ -211,7 +230,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
 
     mkRecC :: Name -> Name -> Word8 -> [Name] -> [Name] -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
     mkRecC tn cn tag tvs xs ps fs ns = do
-      let pat = rename cn
+      let pat = renameNormalC cn
       (fun_build, dec_build) <- mkBuild tn (nameBase cn) tvs tag ps fs ns
       (fun_match, dec_match) <- mkMatch tn (nameBase pat) (nameBase cn) tvs tag ps fs ns
       dec_pat                <- mkRecC_pattern tn pat tvs xs fs fun_build fun_match
@@ -219,9 +238,10 @@ mkConS tn' tvs' prev' next' tag' con' = do
 
     mkInfixC :: Name -> Name -> Word8 -> [Name] -> [[Type]] -> [Type] -> [[Type]] -> Q (Name, [Dec])
     mkInfixC tn cn tag tvs ps fs ns = do
-      let pat = mkName (':' : nameBase cn)
-      (fun_build, dec_build) <- mkBuild tn (zencode (nameBase cn)) tvs tag ps fs ns
-      (fun_match, dec_match) <- mkMatch tn ("(" ++ nameBase pat ++ ")") (zencode (nameBase cn)) tvs tag ps fs ns
+      let pat = renameInfixC cn
+          zcn = zencode (nameBase cn)
+      (fun_build, dec_build) <- mkBuild tn zcn tvs tag ps fs ns
+      (fun_match, dec_match) <- mkMatch tn ("(" ++ nameBase pat ++ ")") zcn tvs tag ps fs ns
       dec_pat                <- mkInfixC_pattern tn cn pat tvs fs fun_build fun_match
       return $ (pat, concat [dec_pat, dec_build, dec_match])
 
@@ -293,7 +313,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
               ++ map varE xs
               ++ map (\t -> [| unExp $(varE 'undef `appTypeE` return t) |] ) (concat fs1)
 
-        tagged = [| Exp $ SmartExp $ Pair (SmartExp (Const (NumScalarType (IntegralNumType (SingleIntegralType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs |]
+        tagged = [| Exp (SmartExp (Pair (SmartExp (Const (NumScalarType (IntegralNumType (SingleIntegralType TypeWord8))) $(litE (IntegerL (toInteger tag))))) $vs)) |]
         body   = clause (map (\x -> [p| (Exp $(varP x)) |]) xs) (normalB tagged) []
 
       r <- sequence [ sigD fun sig
@@ -374,8 +394,8 @@ fst3 (a,_,_) = a
 thd3 :: (a,b,c) -> c
 thd3 (_,_,c) = c
 
-rename :: Name -> Name
-rename nm =
+defaultRenameNormalC :: Name -> Name
+defaultRenameNormalC nm =
   let
       split acc []     = (reverse acc, '\0')  -- shouldn't happen
       split acc [l]    = (reverse acc, l)
@@ -387,6 +407,9 @@ rename nm =
    case suffix of
      '_' -> mkName base
      _   -> mkName (nm' ++ "_")
+
+defaultRenameInfixC :: Name -> Name
+defaultRenameInfixC nm = mkName (':' : nameBase nm)
 
 checkExts :: [Extension] -> Q ()
 checkExts req = do

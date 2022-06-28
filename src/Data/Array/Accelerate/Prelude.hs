@@ -139,7 +139,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Data.Bits
 
 import Lens.Micro                                                   ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
+import Prelude                                                      ( (.), ($), const, id, flip )
 
 
 -- $setup
@@ -805,14 +805,14 @@ any f = or . map f
 and :: Shape sh
     => Acc (Array (sh:.Int) Bool)
     -> Acc (Array sh Bool)
-and = fold (&&) True_
+and = fold (&&) True
 
 -- | Check if any element along the innermost dimension is 'True'.
 --
 or :: Shape sh
    => Acc (Array (sh:.Int) Bool)
    -> Acc (Array sh Bool)
-or = fold (||) False_
+or = fold (||) False
 
 -- | Compute the sum of elements along the innermost dimension of the array. To
 -- find the sum of the entire array, 'flatten' it first.
@@ -998,7 +998,7 @@ scanlSeg f z arr seg =
     seg'      = map (+1) seg
     arr'      = permute const
                         (fill (sh :. sz + length seg) z)
-                        (\(sx :. i) -> Just_ (sx :. i + fromIntegral (inc ! I1 i)))
+                        (\(sx :. i) -> Just (sx :. i + fromIntegral (inc ! I1 i)))
                         (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
@@ -1091,7 +1091,7 @@ scanl'Seg f z arr seg =
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
                 $ permute (+) (fill (I1 $ size arr + 1) 0)
-                              (\ix -> Just_ (index1' (offset ! ix)))
+                              (\ix -> Just (index1' (offset ! ix)))
                               (fill (shape seg) (1 :: Exp i))
 
     len         = offset ! I1 (length offset - 1)
@@ -1219,7 +1219,7 @@ scanrSeg f z arr seg =
     seg'        = map (+1) seg
     arr'        = permute const
                           (fill (sh :. sz + length seg) z)
-                          (\(sx :. i) -> Just_ (sx :. i + fromIntegral (inc !! i) - 1))
+                          (\(sx :. i) -> Just (sx :. i + fromIntegral (inc !! i) - 1))
                           (drop (sz - length flags) arr)
 
 
@@ -1365,7 +1365,7 @@ mkHeadFlags
     -> Acc (Segments i)
 mkHeadFlags seg
   = init
-  $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
+  $ permute (+) zeros (\ix -> Just (index1' (offset ! ix))) ones
   where
     T2 offset len = scanl' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1380,7 +1380,7 @@ mkTailFlags
     -> Acc (Segments i)
 mkTailFlags seg
   = init
-  $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
+  $ permute (+) zeros (\ix -> Just (index1' (the len - 1 - offset ! ix))) ones
   where
     T2 offset len = scanr' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1658,8 +1658,8 @@ compact keep arr
   = let
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
         prj ix          = if keep!ix
-                             then Just_ (I1 (target!ix))
-                             else Nothing_
+                             then Just (I1 (target!ix))
+                             else Nothing
         dummy           = fill (I1 (the len)) undef
         result          = permute const dummy prj arr
     in
@@ -1676,8 +1676,8 @@ compact keep arr
         T2 target len   = scanl' (+) 0 (map boolToInt keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
-                             then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
-                             else Nothing_
+                             then Just (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
+                             else Nothing
         dummy           = fill (I1 (the valid)) undef
         result          = permute const dummy prj arr
     in
@@ -1758,7 +1758,7 @@ scatter
     -> Acc (Vector e)
 scatter to defaults input = permute const defaults pf input'
   where
-    pf ix   = Just_ (I1 (to ! ix))
+    pf ix   = Just (I1 (to ! ix))
     input'  = backpermute (shape to `intersect` shape input) id input
 
 
@@ -1787,8 +1787,8 @@ scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
     input'  = backpermute (shape to `intersect` shape input) id input
     pf ix   = if pred (maskV ! ix)
-                 then Just_ (I1 (to ! ix))
-                 else Nothing_
+                 then Just (I1 (to ! ix))
+                 else Nothing
 
 
 -- Permutations
@@ -2224,9 +2224,9 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 -- argument. For example, given the function:
 --
 -- > example1 :: Exp (Maybe Bool) -> Exp Int
--- > example1 Nothing_ = 0
--- > example1 (Just_ False_) = 1
--- > example1 (Just_ True_) = 2
+-- > example1 Nothing = 0
+-- > example1 (Just False) = 1
+-- > example1 (Just True) = 2
 --
 -- In order to use this function it must be applied to the 'match'
 -- operator:
@@ -2237,14 +2237,14 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 -- case statements inline. For example, instead of this:
 --
 -- > example2 x = case f x of
--- >   Nothing_ -> ...      -- error: embedded pattern synonym...
--- >   Just_ y  -> ...      -- ...used outside of 'match' context
+-- >   Nothing -> ...      -- error: embedded pattern synonym...
+-- >   Just y  -> ...      -- ...used outside of 'match' context
 --
 -- This can be written instead as:
 --
 -- > example3 x = f x & match \case
--- >   Nothing_ -> ...
--- >   Just_ y  -> ...
+-- >   Nothing -> ...
+-- >   Just y  -> ...
 --
 -- And utilising the @LambdaCase@ and @BlockArguments@ syntactic extensions.
 --
@@ -2261,8 +2261,8 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 --
 -- > isNone :: Elt a => Exp (Option a) -> Exp Bool
 -- > isNone = match \case
--- >   None_   -> True_
--- >   Some_{} -> False_
+-- >   None_   -> True
+-- >   Some_{} -> False
 --
 -- @since 1.3.0.0
 --
@@ -2495,7 +2495,7 @@ length = unindex1 . shape
 --                       new =
 --                         let m     = c2-c1
 --                             put i = let s = sieves ! i
---                                      in s >= 0 && s < m ? (Just_ (I1 s), Nothing_)
+--                                      in s >= 0 && s < m ? (Just (I1 s), Nothing)
 --                         in
 --                         afst
 --                           $ filter (> 0)
@@ -2530,7 +2530,7 @@ expand f g xs =
      else
       let
           n          = m + 1
-          put ix     = Just_ (I1 (offset ! ix))
+          put ix     = Just (I1 (offset ! ix))
 
           head_flags :: Acc (Vector Int)
           head_flags = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
@@ -2552,7 +2552,7 @@ expand f g xs =
                                -- also the same, which is undefined behaviour
                                (\ix -> if szs ! ix > 0
                                          then put ix
-                                         else Nothing_)
+                                         else Nothing)
                      $ enumFromN (shape xs) 0
       in
       zipWith g (gather iotas xs) idxs

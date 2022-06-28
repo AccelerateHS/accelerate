@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Stencil (
 ) where
 
 import Data.Typeable
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Maybe(..), Either(..) )
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Sugar.Elt                              as S

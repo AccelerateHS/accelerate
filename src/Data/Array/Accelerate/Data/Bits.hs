@@ -170,12 +170,12 @@ instance Bits Bool where
   (.|.)        = (||)
   xor          = (/=)
   complement   = not
-  zeroBits     = False_
+  zeroBits     = False
   testBit      = (&&)
   bit x        = x
   isSigned     = isSignedDefault
-  shiftL x i   = cond i False_ x
-  shiftR x i   = cond i False_ x
+  shiftL x i   = cond i False x
+  shiftR x i   = cond i False x
   rotateL x _  = x
   rotateR x _  = x
   popCount x   = x

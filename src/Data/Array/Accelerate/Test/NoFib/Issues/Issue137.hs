@@ -24,6 +24,7 @@ import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Prelude                                                      hiding ( Maybe(..) )
 
 
 test_issue137 :: RunN -> TestTree
@@ -51,6 +52,6 @@ test1 =
                             , T2 b1 (A.min b2 a1)
                             ))
             infsA
-            (\ix -> Just_ (index1 (msA A.! ix)))
+            (\ix -> Just (index1 (msA A.! ix)))
             inpA
 

@@ -25,7 +25,7 @@
 
 module Data.Array.Accelerate.Classes.Eq (
 
-  Bool(..), pattern True_, pattern False_,
+  Bool, pattern True, pattern False,
   Eq(..),
   (&&), (&&!),
   (||), (||!),
@@ -45,7 +45,6 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.VEq
 
-import Data.Bool                                                    ( Bool(..) )
 import Data.Bits
 import Text.Printf
 import Prelude                                                      ( ($), String, Num(..), Ordering(..), show, error, return, concat, map, zipWith, foldr1, mapM )
@@ -117,12 +116,12 @@ class Elt a => Eq a where
 
 
 instance Eq () where
-  _ == _ = True_
-  _ /= _ = False_
+  _ == _ = True
+  _ /= _ = False
 
 instance Eq Z where
-  _ == _ = True_
-  _ /= _ = False_
+  _ == _ = True
+  _ /= _ = False
 
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide

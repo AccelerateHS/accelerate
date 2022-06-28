@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE ViewPatterns           #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pattern.SIMD
@@ -135,6 +136,10 @@ runQ $
             ctx     = return [ ConT ''Elt `AppT` VarT a
                              , ConT ''SIMD `AppT` LitT (NumTyLit (toInteger n)) `AppT` VarT a
                              ]
+            ctx'    = return [ ConT ''Elt `AppT` VarT a
+                             , ConT ''SIMD `AppT` LitT (NumTyLit (toInteger n)) `AppT` VarT a
+                             , EqualityT `AppT` VarT v `AppT` (ConT name `AppT` VarT a)
+                             ]
         --
         sequence
           [ patSynSigD name [t| $(conT isV) $(varT a) $(varT v) => $(foldr (\t r -> [t| $t -> $r |]) (varT v) as) |]
@@ -151,7 +156,7 @@ runQ $
             [ funD builder [ clause xsP (normalB [| fromList $(listE xsE) |]) []]
             , funD matcher [ clause [viewP (varE 'toList) (listP xsP)] (normalB (tupE xsE)) [] ]
             ]
-          , instanceD ctx [t| $(conT isV) (Exp $(varT a)) (Exp ($(conT name) $(varT a))) |]
+          , instanceD ctx' [t| $(conT isV) (Exp $(varT a)) (Exp $(varT v)) |]
             [ funD builder [ clause xsP (normalB [| SIMD $(tupE xsE) |]) []]
             , funD matcher [ clause [conP (mkName "SIMD") [tupP xsP]] (normalB (tupE xsE)) [] ]
             ]

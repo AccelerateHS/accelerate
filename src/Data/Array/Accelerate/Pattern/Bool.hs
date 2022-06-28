@@ -1,9 +1,7 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE ViewPatterns      #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pattern.Bool
 -- Copyright   : [2018..2020] The Accelerate Team
@@ -16,7 +14,7 @@
 
 module Data.Array.Accelerate.Pattern.Bool (
 
-  Bool, pattern True_, pattern False_,
+  Bool, pattern True, pattern False,
 
 ) where
 
@@ -24,24 +22,55 @@ import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
+import Data.Bool                                                    ( Bool )
+import Prelude                                                      hiding ( Bool(..) )
+import qualified Prelude                                            as P
+
 import GHC.Stack
 
 
-{-# COMPLETE False_, True_ #-}
-pattern False_ :: HasCallStack => Exp Bool
-pattern False_ <- (matchFalse -> Just ())
-  where False_ = buildFalse
+{-# COMPLETE False, True #-}
+pattern False :: (HasCallStack, IsFalse r) => r
+pattern False <- (matchFalse -> Just ())
+  where False = buildFalse
 
-pattern True_ :: HasCallStack => Exp Bool
-pattern True_ <- (matchTrue -> Just ())
-  where True_ = buildTrue
+pattern True :: (HasCallStack, IsTrue r) => r
+pattern True <- (matchTrue -> Just ())
+  where True = buildTrue
+
+class IsFalse r where
+  buildFalse :: r
+  matchFalse :: r -> Maybe ()
+
+instance IsFalse Bool where
+  buildFalse         = P.False
+  matchFalse P.False = Just ()
+  matchFalse _       = Nothing
+
+instance IsFalse (Exp Bool) where
+  buildFalse = _buildFalse
+  matchFalse = _matchFalse
+
+class IsTrue r where
+  buildTrue :: r
+  matchTrue :: r -> Maybe ()
+
+instance IsTrue Bool where
+  buildTrue        = P.True
+  matchTrue P.True = Just ()
+  matchTrue _      = Nothing
+
+instance IsTrue (Exp Bool) where
+  buildTrue = _buildTrue
+  matchTrue = _matchTrue
 
 
-buildFalse :: Exp Bool
-buildFalse = mkExp $ Const scalarType 0
 
-matchFalse :: HasCallStack => Exp Bool -> Maybe ()
-matchFalse (Exp e) =
+_buildFalse :: Exp Bool
+_buildFalse = mkExp $ Const scalarType 0
+
+_matchFalse :: HasCallStack => Exp Bool -> Maybe ()
+_matchFalse (Exp e) =
   case e of
     SmartExp (Match (TagRenum TagBit 0) _) -> Just ()
     SmartExp Match{}                       -> Nothing
@@ -58,11 +87,11 @@ matchFalse (Exp e) =
            , ">   _      -> ..."
            ]
 
-buildTrue :: Exp Bool
-buildTrue = mkExp $ Const scalarType 1
+_buildTrue :: Exp Bool
+_buildTrue = mkExp $ Const scalarType 1
 
-matchTrue :: HasCallStack => Exp Bool -> Maybe ()
-matchTrue (Exp e) =
+_matchTrue :: HasCallStack => Exp Bool -> Maybe ()
+_matchTrue (Exp e) =
   case e of
     SmartExp (Match (TagRenum TagBit 1) _) -> Just ()
     SmartExp Match{}                       -> Nothing

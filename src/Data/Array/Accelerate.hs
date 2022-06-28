@@ -314,7 +314,7 @@ module Data.Array.Accelerate (
   -- ** Type classes
   -- *** Basic type classes
   Eq(..), VEq(..),
-  Ord(..), VOrd(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
+  Ord(..), VOrd(..), Ordering, pattern LT, pattern EQ, pattern GT,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
 
@@ -423,9 +423,9 @@ module Data.Array.Accelerate (
   Int, Int8, Int16, Int32, Int64,
   Word, Word8, Word16, Word32, Word64,
   Half(..), Float, Double,
-  Bool(..),   pattern True_,    pattern False_,
-  Maybe(..),  pattern Nothing_, pattern Just_,
-  Either(..), pattern Left_,    pattern Right_,
+  Bool,   pattern True,    pattern False,
+  Maybe,  pattern Nothing, pattern Just,
+  Either, pattern Left,    pattern Right,
   Char,
 
 ) where

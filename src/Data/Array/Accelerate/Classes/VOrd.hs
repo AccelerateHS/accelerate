@@ -34,7 +34,8 @@ import qualified Data.Primitive.Bit                                 as Prim
 
 import Language.Haskell.TH.Extra                                    hiding ( Type, Exp )
 
-import Prelude                                                      hiding ( Ord(..), (<*) )
+import Prelude                                                      hiding ( Ord(..), Ordering(..), (<*) )
+import qualified Prelude                                            as P
 
 
 infix 4 <*
@@ -68,9 +69,9 @@ class VEq n a => VOrd n a where
     $ select (x <=* y) vlt vgt
 
 vlt, veq, vgt :: KnownNat n => Exp (Vec n Ordering)
-vlt = constant (Vec (let (tag,()) = fromElt LT in Prim.splat tag, ()))
-veq = constant (Vec (let (tag,()) = fromElt EQ in Prim.splat tag, ()))
-vgt = constant (Vec (let (tag,()) = fromElt EQ in Prim.splat tag, ()))
+vlt = constant (Vec (let (tag,()) = fromElt P.LT in Prim.splat tag, ()))
+veq = constant (Vec (let (tag,()) = fromElt P.EQ in Prim.splat tag, ()))
+vgt = constant (Vec (let (tag,()) = fromElt P.GT in Prim.splat tag, ()))
 
 vtrue, vfalse :: KnownNat n => Exp (Vec n Bool)
 vtrue  = constant (Vec (Prim.unMask Prim.ones))

@@ -39,8 +39,6 @@ import qualified Hedgehog.Gen                                       as Gen
 import Test.Tasty
 import Test.Tasty.Hedgehog
 
-import GHC.Exts                                                     as GHC
-
 
 test_simd :: RunN -> TestTree
 test_simd runN =
@@ -139,7 +137,7 @@ test_inject_v2 runN dim e =
     sh2 <- forAll dim
     xs  <- forAll (array sh1 e)
     ys  <- forAll (array sh2 e)
-    let !go = runN (A.zipWith A.V2) in go xs ys === zipWithRef (\x y -> GHC.fromList [x,y]) xs ys
+    let !go = runN (A.zipWith V2) in go xs ys === zipWithRef V2 xs ys
 
 test_inject_v3
     :: (Shape sh, Show sh, Show e, Elt e, SIMD 3 e, P.Eq e, P.Eq sh)
@@ -155,7 +153,7 @@ test_inject_v3 runN dim e =
     xs  <- forAll (array sh1 e)
     ys  <- forAll (array sh2 e)
     zs  <- forAll (array sh3 e)
-    let !go = runN (A.zipWith3 A.V3) in go xs ys zs === zipWith3Ref (\x y z -> GHC.fromList [x,y,z]) xs ys zs
+    let !go = runN (A.zipWith3 V3) in go xs ys zs === zipWith3Ref V3 xs ys zs
 
 test_inject_v4
     :: (Shape sh, Show sh, Show e, Elt e, SIMD 4 e, P.Eq e, P.Eq sh)
@@ -173,35 +171,26 @@ test_inject_v4 runN dim e =
     ys  <- forAll (array sh2 e)
     zs  <- forAll (array sh3 e)
     ws  <- forAll (array sh4 e)
-    let !go = runN (A.zipWith4 A.V4) in go xs ys zs ws === zipWith4Ref (\x y z w -> GHC.fromList [x,y,z,w]) xs ys zs ws
+    let !go = runN (A.zipWith4 V4) in go xs ys zs ws === zipWith4Ref V4 xs ys zs ws
 
 
-unpackVec2 :: (Elt e, SIMD 2 e) => Vec2 e -> (e, e)
-unpackVec2 v =
-  case GHC.toList v of
-    [a,b] -> (a, b)
-    _     -> undefined
+unpackVec2 :: (Elt e, SIMD 2 e) => V2 e -> (e, e)
+unpackVec2 (V2 a b) = (a, b)
 
-unpackVec3 :: (Elt e, SIMD 3 e) => Vec3 e -> (e, e, e)
-unpackVec3 v =
-  case GHC.toList v of
-    [a,b,c] -> (a, b, c)
-    _       -> undefined
+unpackVec3 :: (Elt e, SIMD 3 e) => V3 e -> (e, e, e)
+unpackVec3 (V3 a b c) = (a, b, c)
 
-unpackVec4 :: (Elt e, SIMD 4 e) => Vec4 e -> (e, e, e, e)
-unpackVec4 v =
-  case GHC.toList v of
-    [a,b,c,d] -> (a, b, c, d)
-    _         -> undefined
+unpackVec4 :: (Elt e, SIMD 4 e) => V4 e -> (e, e, e, e)
+unpackVec4 (V4 a b c d) = (a, b, c, d)
 
-unpackVec2' :: (Elt e, SIMD 2 e) => Exp (Vec2 e) -> (Exp e, Exp e)
-unpackVec2' (A.V2 a b) = (a, b)
+unpackVec2' :: (Elt e, SIMD 2 e) => Exp (V2 e) -> (Exp e, Exp e)
+unpackVec2' (V2 a b) = (a, b)
 
-unpackVec3' :: (Elt e, SIMD 3 e) => Exp (Vec3 e) -> (Exp e, Exp e, Exp e)
-unpackVec3' (A.V3 a b c) = (a, b, c)
+unpackVec3' :: (Elt e, SIMD 3 e) => Exp (V3 e) -> (Exp e, Exp e, Exp e)
+unpackVec3' (V3 a b c) = (a, b, c)
 
-unpackVec4' :: (Elt e, SIMD 4 e) => Exp (Vec4 e) -> (Exp e, Exp e, Exp e, Exp e)
-unpackVec4' (A.V4 a b c d) = (a, b, c, d)
+unpackVec4' :: (Elt e, SIMD 4 e) => Exp (V4 e) -> (Exp e, Exp e, Exp e, Exp e)
+unpackVec4' (V4 a b c d) = (a, b, c, d)
 
 
 -- Reference Implementation

@@ -26,7 +26,7 @@
 module Data.Array.Accelerate.Classes.Ord (
 
   Ord(..),
-  Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
+  Ordering, pattern LT, pattern EQ, pattern GT,
 
 ) where
 
@@ -47,7 +47,7 @@ import {-# SOURCE #-} Data.Array.Accelerate.Classes.VOrd
 import Data.Bits
 import Data.Char
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
-import Prelude                                                      ( ($), Num(..), Ordering(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
+import Prelude                                                      ( ($), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
 import Text.Printf
 import qualified Prelude                                            as P
 
@@ -72,18 +72,18 @@ class Eq a => Ord a where
   max     :: Exp a -> Exp a -> Exp a
   compare :: Exp a -> Exp a -> Exp Ordering
 
-  x <  y = cond (compare x y == LT_) True_  False_
-  x <= y = cond (compare x y == GT_) False_ True_
-  x >  y = cond (compare x y == GT_) True_  False_
-  x >= y = cond (compare x y == LT_) False_ True_
+  x <  y = cond (compare x y == LT) True  False
+  x <= y = cond (compare x y == GT) False True
+  x >  y = cond (compare x y == GT) True  False
+  x >= y = cond (compare x y == LT) False True
 
   min x y = cond (x <= y) x y
   max x y = cond (x <= y) y x
 
   compare x y
-    = cond (x == y) EQ_
-    $ cond (x <= y) LT_
-         {- else -} GT_
+    = cond (x == y) EQ
+    $ cond (x <= y) LT
+         {- else -} GT
 
 -- Local redefinition to prevent cyclic imports
 --
