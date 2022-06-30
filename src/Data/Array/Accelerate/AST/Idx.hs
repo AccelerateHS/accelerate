@@ -32,7 +32,6 @@ module Data.Array.Accelerate.AST.Idx (
 ) where
 
 import Language.Haskell.TH.Extra
-import Data.Array.Accelerate.Type
 
 #ifndef ACCELERATE_INTERNAL_CHECKS
 import Data.Type.Equality ((:~:)(Refl))
@@ -112,3 +111,4 @@ pattern VoidIdx a <- (\case{} -> a)
 data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a
   PairIdxRight :: PairIdx (a, b) b
+
