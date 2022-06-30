@@ -125,6 +125,7 @@ instance Eq a => Eq (Maybe a) where
 instance Ord a => Ord (Maybe a) where
   compare = match go
     where
+      go :: Exp (Maybe a) -> Exp (Maybe a) -> Exp Ordering
       go (Just x) (Just y)  = compare x y
       go Nothing  Nothing   = EQ
       go Nothing  Just{}    = LT
@@ -136,6 +137,7 @@ instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
   (<>) = match go
     where
+      go :: Exp (Maybe a) -> Exp (Maybe a) -> Exp (Maybe a)
       go Nothing  b        = b
       go a        Nothing  = a
       go (Just a) (Just b) = Just (a <> b)

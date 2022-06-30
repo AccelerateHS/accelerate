@@ -127,6 +127,7 @@ instance (Eq a, Eq b) => Eq (Either a b) where
 instance (Ord a, Ord b) => Ord (Either a b) where
   compare = match go
     where
+      go :: Exp (Either a b) -> Exp (Either a b) -> Exp Ordering
       go (Left x)  (Left y)  = compare x y
       go (Right x) (Right y) = compare x y
       go Left{}    Right{}   = LT
