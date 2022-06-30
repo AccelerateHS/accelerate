@@ -32,7 +32,6 @@ import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.POS
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Sugar.POS ()
-import Data.Array.Accelerate.Representation.POS
 import Data.Array.Accelerate.Type
 
 import Data.Char
@@ -283,12 +282,6 @@ flattenProduct (Cons x xs) = (flattenSum x, flattenProduct xs)
 flattenSum :: Sum a -> UnionScalar a
 flattenSum (Pick x) = PickScalar x
 flattenSum (Skip xs) = SkipScalar (flattenSum xs)
-              
--- untag :: TypeR t -> TagR t
--- untag TupRunit         = TagRunit
--- untag (TupRsingle t)   = TagRundef t
--- untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
-
 
 -- Note: [Deriving Elt]
 --
@@ -418,7 +411,7 @@ runQ $ do
   ss <- mapM mkSimple (integralTypes ++ floatingTypes)
   -- TODO:
   ns <- mapM mkNewtype newtypes
-  -- ts <- mapM mkTuple [2..8]
+  -- ts <- mapM mkTuple [2..16]
   -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
   return (concat ss ++ concat ns)
 

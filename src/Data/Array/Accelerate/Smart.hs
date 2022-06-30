@@ -541,7 +541,7 @@ data PreSmartExp acc exp t where
                 -> PreSmartExp acc exp sh
 
   Case          :: exp a
-                -> [(TagR b, exp b)]
+                -> [(TagR a, exp b)]
                 -> PreSmartExp acc exp b
 
   Cond          :: exp PrimBool

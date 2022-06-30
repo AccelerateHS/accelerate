@@ -125,4 +125,3 @@ runQ $ do
     -- ts <- mapM mkTuple [2..16]
     -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
     return (concat si ++ concat sf ++ concat ns ++ concat ts ++ concat nts)
-  

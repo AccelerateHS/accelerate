@@ -16,7 +16,7 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
 
-module Data.Array.Accelerate.Pattern.Matchable where
+module Data.Array.Accelerate.Pattern.Matchable (Matchable(..)) where
 
 import           Data.Array.Accelerate.Smart as Smart
 import GHC.TypeLits
@@ -117,9 +117,6 @@ instance Matchable Bool where
 
 makeTag :: TAG -> SmartExp TAG
 makeTag x = SmartExp (Const (SingleScalarType (NumSingleType (IntegralNumType TypeTAG))) x)
-
-tagType :: TupR ScalarType TAG
-tagType = TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeTAG)))
 
 instance (POSable (Maybe a), POSable a) => Matchable (Maybe a) where
   build n fs = case sameNat (Proxy @(Choices a)) (Proxy @0) of
@@ -291,14 +288,6 @@ instance (POSable (Either a b), POSable a, POSable b) => Matchable (Either a b) 
 
             Nothing ->
               error "Impossible type encountered"
-
-undefPairs :: forall xs . ProductType xs -> SmartExp (FlattenProduct (Merge '[] (xs ++ '[])))
-undefPairs PTNil = SmartExp Smart.Nil
-undefPairs (PTCons x xs) = SmartExp (Pair (SmartExp (Union (SmartExp (LiftUnion (unExp $ constant POS.Undef))))) (undefPairs xs))
-
-mergePairs :: forall xs . ProductType xs -> SmartExp (FlattenProduct xs) -> SmartExp (FlattenProduct (Merge '[] (xs ++ '[])))
-mergePairs PTNil _ = SmartExp Smart.Nil
-mergePairs (PTCons x xs) y = SmartExp (Pair (SmartExp (Union (SmartExp (Prj PairIdxLeft y)))) (mergePairs xs (SmartExp (Prj PairIdxRight y))))
 
 -- like combineProducts, but lifted to the AST
 buildTAG :: (All POSable xs) => NP Exp xs -> Exp TAG
