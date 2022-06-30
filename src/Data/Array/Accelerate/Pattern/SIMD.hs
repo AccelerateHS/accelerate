@@ -147,7 +147,7 @@ runQ $
           , pragCompleteD [name] (Just ''Vec)
           , pragCompleteD [name] (Just ''Exp)
           --
-          , classD (return []) isV [PlainTV a (), PlainTV v ()] [funDep [v] [a]]
+          , classD (return []) isV [plainTV a, plainTV v] [funDep [v] [a]]
             [ sigD builder (foldr (\t r -> [t| $t -> $r |]) (varT v) as)
             , sigD matcher [t| $(varT v) -> $(tupT as) |]
             ]
