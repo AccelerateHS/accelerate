@@ -10,7 +10,6 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE DataKinds             #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
@@ -147,7 +146,6 @@ import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
-import Data.Array.Accelerate.Representation.POS (Finite)
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
@@ -165,7 +163,6 @@ import qualified Language.Haskell.TH.Syntax                         as TH
 
 import GHC.TypeLits
 
-import Data.Proxy
 
 -- Array expressions
 -- -----------------
@@ -672,9 +669,6 @@ data PrimFun sig where
   PrimAbs  :: NumType a -> PrimFun (a      -> a)
   PrimSig  :: NumType a -> PrimFun (a      -> a)
 
-  -- operator on Finite
-  PrimShiftFinite :: Proxy a -> PrimFun (Finite b -> Finite (a + b))
-
   -- operators from Integral
   PrimQuot     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimRem      :: IntegralType a -> PrimFun ((a, a)   -> a)
@@ -948,9 +942,9 @@ primFunType = \case
     floating = num . FloatingNumType
 
     tbool :: TypeR PrimBool
-    tbool    = TupRpair (TupRsingle (SingleScalarType (NumSingleType (IntegralNumType (TypeTAG))))) TupRunit
+    tbool    = TupRpair (TupRsingle (scalarType @TAG)) TupRunit
     tint :: TypeR Int
-    tint     = TupRsingle (SingleScalarType (NumSingleType (IntegralNumType TypeInt)))
+    tint     = TupRsingle (scalarType @Int)
 
 
 -- Normal form data
