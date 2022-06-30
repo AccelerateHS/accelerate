@@ -361,7 +361,7 @@ library
         , unique
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
-        , posable                       >= 0.9.0.0
+        , posable                       >= 1.0.0.1
         , ghc-typelits-knownnat         >= 0.7.6
         , generics-sop                  >= 0.5.1.1
         , finite-typelits               >= 0.1.4.2
