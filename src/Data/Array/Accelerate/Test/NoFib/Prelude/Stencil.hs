@@ -655,6 +655,7 @@ bound bnd sh0 ix0 =
       | otherwise
       = error "bound: expected shape with Int dimensions"
 
+    addDim :: Either e ds -> Either e d -> Either e (ds, d)
     Right ds `addDim` Right d = Right (ds, d)
     _        `addDim` Left e  = Left e
     Left e   `addDim` _       = Left e
