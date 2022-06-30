@@ -362,9 +362,9 @@ library
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
         , posable                       >= 1.0.0.1
-        , ghc-typelits-knownnat         >= 0.7.6
-        , generics-sop                  >= 0.5.1.1
-        , finite-typelits               >= 0.1.4.2
+        , ghc-typelits-knownnat         >= 0.6
+        , generics-sop                  >= 0.4.0
+        , finite-typelits               >= 0.1.4
 
   exposed-modules:
         -- The core language and reference implementation
