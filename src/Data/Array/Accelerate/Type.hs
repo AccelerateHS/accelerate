@@ -76,7 +76,6 @@ import Data.Array.Accelerate.Representation.POS
 import Data.Primitive.Vec
 
 import Data.Bits
-import Data.Proxy
 import Data.Int
 import Data.Primitive.Types
 import Data.Type.Equality
@@ -92,7 +91,6 @@ import Text.Printf
 import GHC.Prim
 import GHC.TypeLits
 
-import Unsafe.Coerce
 
 
 -- | The type of the runtime value used to distinguish constructor
