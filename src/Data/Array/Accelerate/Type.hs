@@ -1,19 +1,25 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE RoleAnnotations     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE AllowAmbiguousTypes  #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DefaultSignatures    #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE TypeApplications     #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Type
@@ -66,6 +72,7 @@ module Data.Array.Accelerate.Type (
 ) where
 
 import Data.Array.Accelerate.Orphans () -- Prim Half
+import Data.Array.Accelerate.Representation.POS
 import Data.Primitive.Vec
 
 import Data.Bits
@@ -73,16 +80,37 @@ import Data.Int
 import Data.Primitive.Types
 import Data.Type.Equality
 import Data.Word
+import Data.Kind
 import Foreign.C.Types
 import Foreign.Storable                                             ( Storable )
 import Formatting
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra hiding (Type)
 import Numeric.Half
 import Text.Printf
 
 import GHC.Prim
 import GHC.TypeLits
 
+
+
+-- | The type of the runtime value used to distinguish constructor
+-- alternatives in a sum type.
+--
+type TAG = Word8
+
+
+type family POStoEltR (cs :: Nat) fs :: Type where
+  POStoEltR 1 '[ '[x]] = x -- singletontypes
+  POStoEltR 1 x = FlattenProduct x -- tagless types
+  POStoEltR n x = (TAG, FlattenProduct x) -- all other types
+
+type family FlattenProduct (xss :: f [a]) = (r :: Type) | r -> f where
+  FlattenProduct '[] = ()
+  FlattenProduct (x ': xs) = (UnionScalar x, FlattenProduct xs)
+
+type family FlattenProductType (xss :: [[a]]) :: Type where
+  FlattenProductType '[] = ()
+  FlattenProductType (x ': xs) = (UnionScalarType x, FlattenProductType xs)
 
 -- Scalar types
 -- ------------
@@ -120,6 +148,7 @@ data IntegralType a where
   TypeWord16  :: IntegralType Word16
   TypeWord32  :: IntegralType Word32
   TypeWord64  :: IntegralType Word64
+  TypeTAG     :: IntegralType TAG
 
 -- | Floating-point types supported in array computations.
 --
@@ -144,9 +173,22 @@ data BoundedType a where
 data ScalarType a where
   SingleScalarType :: SingleType a         -> ScalarType a
   VectorScalarType :: VectorType (Vec n a) -> ScalarType (Vec n a)
+  UnionScalarType :: UnionScalarType a -> ScalarType (UnionScalar a)
+
+class IsUnionScalar a where
+  unionScalarType :: UnionScalarType a
+
+data UnionScalar x where
+  PickScalar  :: x -> UnionScalar (x ': xs)
+  SkipScalar  :: UnionScalar xs -> UnionScalar (x ': xs)
+
+data UnionScalarType a where
+  SuccScalarType  :: SingleType x -> UnionScalarType xs -> UnionScalarType (x ': xs)
+  ZeroScalarType  :: UnionScalarType '[]
 
 data SingleType a where
   NumSingleType :: NumType a -> SingleType a
+  UndefSingleType :: SingleType Undef
 
 data VectorType a where
   VectorType :: KnownNat n => {-# UNPACK #-} !Int -> SingleType a -> VectorType (Vec n a)
@@ -162,6 +204,7 @@ instance Show (IntegralType a) where
   show TypeWord16 = "Word16"
   show TypeWord32 = "Word32"
   show TypeWord64 = "Word64"
+  show TypeTAG    = "TAG"
 
 instance Show (FloatingType a) where
   show TypeHalf   = "Half"
@@ -177,6 +220,7 @@ instance Show (BoundedType a) where
 
 instance Show (SingleType a) where
   show (NumSingleType ty) = show ty
+  show UndefSingleType  = "Undef"
 
 instance Show (VectorType a) where
   show (VectorType n ty) = printf "<%d x %s>" n (show ty)
@@ -184,6 +228,12 @@ instance Show (VectorType a) where
 instance Show (ScalarType a) where
   show (SingleScalarType ty) = show ty
   show (VectorScalarType ty) = show ty
+  show (UnionScalarType    ty) = show ty
+
+instance Show (UnionScalarType a) where
+  show ZeroScalarType = ""
+  show (SuccScalarType x (ZeroScalarType)) = show x
+  show (SuccScalarType x xs) = show x ++ " ＋ " ++ show xs
 
 formatIntegralType :: Format r (IntegralType a -> r)
 formatIntegralType = later $ \case
@@ -197,6 +247,7 @@ formatIntegralType = later $ \case
   TypeWord16 -> "Word16"
   TypeWord32 -> "Word32"
   TypeWord64 -> "Word64"
+  TypeTAG    -> "TAG"
 
 formatFloatingType :: Format r (FloatingType a -> r)
 formatFloatingType = later $ \case
@@ -269,6 +320,7 @@ integralDict TypeWord8  = IntegralDict
 integralDict TypeWord16 = IntegralDict
 integralDict TypeWord32 = IntegralDict
 integralDict TypeWord64 = IntegralDict
+integralDict TypeTAG    = IntegralDict
 
 floatingDict :: FloatingType a -> FloatingDict a
 floatingDict TypeHalf   = FloatingDict
@@ -317,6 +369,9 @@ scalarTypeWord8 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord8
 
 scalarTypeWord32 :: ScalarType Word32
 scalarTypeWord32 = SingleScalarType $ NumSingleType $ IntegralNumType TypeWord32
+
+scalarTypeTAG :: ScalarType TAG
+scalarTypeTAG = SingleScalarType $ NumSingleType $ IntegralNumType TypeTAG
 
 rnfScalarType :: ScalarType t -> ()
 rnfScalarType (SingleScalarType t) = rnfSingleType t
@@ -518,3 +573,18 @@ runQ $ do
   --
   return (concat is ++ concat fs ++ concat vs)
 
+
+instance IsSingle Undef where
+  singleType = UndefSingleType
+
+instance IsScalar Undef where
+  scalarType = SingleScalarType singleType
+
+instance (IsUnionScalar a) => IsScalar (UnionScalar a) where
+  scalarType = UnionScalarType (unionScalarType @a)
+
+instance IsUnionScalar '[] where
+  unionScalarType = ZeroScalarType
+
+instance (IsSingle x, IsUnionScalar xs) => IsUnionScalar (x ': xs) where
+  unionScalarType = SuccScalarType (singleType @x) (unionScalarType @xs)

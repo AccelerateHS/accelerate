@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
@@ -146,6 +147,7 @@ import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Foreign
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
@@ -198,9 +200,8 @@ type ArrayVar       = Var ArrayR
 type ArrayVars aenv = Vars ArrayR aenv
 
 -- Bool is not a primitive type
-type PrimBool    = TAG
-type PrimMaybe a = (TAG, ((), a))
-
+type PrimBool    = EltR Bool
+type PrimMaybe a = EltR (Maybe a)
 -- Trace messages
 data Message a where
   Message :: (a -> String)                    -- embedded show
@@ -940,8 +941,10 @@ primFunType = \case
     integral = num . IntegralNumType
     floating = num . FloatingNumType
 
-    tbool    = TupRsingle scalarTypeWord8
-    tint     = TupRsingle scalarTypeInt
+    tbool :: TypeR PrimBool
+    tbool    = TupRpair (TupRsingle (scalarType @TAG)) TupRunit
+    tint :: TypeR Int
+    tint     = TupRsingle (scalarType @Int)
 
 
 -- Normal form data

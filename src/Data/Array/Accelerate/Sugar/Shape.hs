@@ -8,6 +8,8 @@
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Sugar.Shape
@@ -33,11 +35,13 @@ module Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.POS                     as POS
 import qualified Data.Array.Accelerate.Representation.Shape         as R
 import qualified Data.Array.Accelerate.Representation.Slice         as R
 
 import Data.Kind
-import GHC.Generics
+import GHC.Generics as GHC
+import GHC.TypeLits (type (+))
 
 
 -- Shorthand for common shape types
@@ -56,14 +60,14 @@ type DIM9 = DIM8 :. Int
 -- | Rank-0 index
 --
 data Z = Z
-  deriving (Show, Eq, Generic, Elt)
+  deriving (Show, Eq, GHC.Generic, POS.Generic, POSable, Elt)
 
 -- | Increase an index rank by one dimension. The ':.' operator is used to
 -- construct both values and types.
 --
 infixl 3 :.
 data tail :. head = !tail :. !head
-  deriving (Eq, Generic)  -- Not deriving Elt or Show
+  deriving (Eq, GHC.Generic)  -- Not deriving Elt or Show
 
 -- We don't we use a derived Show instance for (:.) because this will insert
 -- parenthesis to demonstrate which order the operator is applied, i.e.:
@@ -97,7 +101,7 @@ instance (Show sh, Show sz) => Show (sh :. sz) where
 -- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data All = All
-  deriving (Show, Eq, Generic, Elt)
+  deriving (Show, Eq, GHC.Generic, POS.Generic, POSable, Elt)
 
 -- | Marker for arbitrary dimensions in 'Data.Array.Accelerate.Language.slice'
 -- and 'Data.Array.Accelerate.Language.replicate' descriptors.
@@ -109,7 +113,7 @@ data All = All
 -- 'Data.Array.Accelerate.Language.replicate' for examples.
 --
 data Any sh = Any
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, GHC.Generic)
 
 -- | Marker for splitting along an entire dimension in division descriptors.
 --
@@ -305,16 +309,21 @@ class (Slice (DivisionSlice sl)) => Division sl where
 
 instance (Elt t, Elt h) => Elt (t :. h) where
   type EltR (t :. h) = (EltR t, EltR h)
+  type EltChoices (t :. h) = 1
   eltR           = TupRpair (eltR @t) (eltR @h)
-  tagsR          = [TagRpair t h | t <- tagsR @t, h <- tagsR @h]
+  tagsR          = [TagR 0 1]
   fromElt (t:.h) = (fromElt t, fromElt h)
   toElt (t, h)   = toElt t :. toElt h
 
+instance POS.Generic (Any Z)
+instance POSable (Any Z)
 instance Elt (Any Z)
+
 instance Shape sh => Elt (Any (sh :. Int)) where
   type EltR (Any (sh :. Int)) = (EltR (Any sh), ())
+  type EltChoices (Any (sh :. Int)) = 1
   eltR      = TupRpair (eltR @(Any sh)) TupRunit
-  tagsR     = [TagRpair t TagRunit | t <- tagsR @(Any sh)]
+  tagsR     = [TagR 0 1]
   fromElt _ = (fromElt (Any :: Any sh), ())
   toElt _   = Any
 

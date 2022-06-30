@@ -1,9 +1,9 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE DataKinds #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pattern.Bool
 -- Copyright   : [2018..2020] The Accelerate Team
@@ -20,7 +20,33 @@ module Data.Array.Accelerate.Pattern.Bool (
 
 ) where
 
-import Data.Array.Accelerate.Pattern.TH
+import           Data.Array.Accelerate.Smart as Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Pattern.Matchable
+import           Generics.SOP as SOP
+import Data.Array.Accelerate.Representation.POS as POS
 
-mkPattern ''Bool
+{-# COMPLETE False_, True_ #-}
+pattern False_ :: Exp Bool
+pattern False_ <- (matchFalse -> Just ()) where
+  False_ = buildFalse
 
+matchFalse :: Exp Bool -> Maybe ()
+matchFalse x = case match (Proxy @0) x of
+  Just SOP.Nil -> Just ()
+  Nothing -> Nothing
+
+buildFalse :: Exp Bool
+buildFalse = build (Proxy @0) SOP.Nil
+
+pattern True_ :: Exp Bool
+pattern True_ <- (matchTrue -> Just x) where
+  True_ = buildTrue
+
+matchTrue :: Exp Bool -> Maybe ()
+matchTrue x = case match (Proxy @1) x of
+  Just SOP.Nil -> Just ()
+  Nothing -> Nothing
+
+buildTrue :: Exp Bool
+buildTrue = build (Proxy @1) SOP.Nil

@@ -26,6 +26,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Representation.Elt
 import Data.Array.Accelerate.Representation.Shape                   hiding ( zip )
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Sugar.Elt
 
 import Data.List                                                    ( intersperse )
 import Data.Maybe                                                   ( isJust )
@@ -98,7 +99,7 @@ arraysRpair a b = TupRunit `TupRpair` TupRsingle a `TupRpair` TupRsingle b
 --
 allocateArray :: ArrayR (Array sh e) -> sh -> IO (Array sh e)
 allocateArray (ArrayR shR eR) sh = do
-  adata  <- newArrayData eR (size shR sh)
+  adata  <- newArrayData eR (toElt $ size shR sh)
   return $! Array sh adata
 
 -- | Create an array from its representation function, applied at each
@@ -114,13 +115,13 @@ fromFunction repr sh f = unsafePerformIO $! fromFunctionM repr sh (return . f)
 fromFunctionM :: ArrayR (Array sh e) -> sh -> (sh -> IO e) -> IO (Array sh e)
 fromFunctionM (ArrayR shR eR) sh f = do
   let !n = size shR sh
-  arr <- newArrayData eR n
+  arr <- newArrayData eR (toElt n)
   --
   let write !i
         | i >= n    = return ()
         | otherwise = do
             v <- f (fromIndex shR sh i)
-            writeArrayData eR arr i v
+            writeArrayData eR arr (toElt i) v
             write (i+1)
   --
   write 0
@@ -137,9 +138,9 @@ fromList (ArrayR shR eR) sh xs = adata `seq` Array sh adata
     --
     !n    = size shR sh
     (adata, _) = runArrayData @e $ do
-                  arr <- newArrayData eR n
+                  arr <- newArrayData eR (toElt n)
                   let go !i _ | i >= n = return ()
-                      go !i (v:vs)     = writeArrayData eR arr i v >> go (i+1) vs
+                      go !i (v:vs)     = writeArrayData eR arr (toElt i) v >> go (i+1) vs
                       go _  []         = error "Data.Array.Accelerate.fromList: not enough input data"
                   --
                   go 0 xs
@@ -156,16 +157,16 @@ toList (ArrayR shR eR) (Array sh adata) = go 0
     --
     !n                  = size shR sh
     go !i | i >= n      = []
-          | otherwise   = indexArrayData eR adata i : go (i+1)
+          | otherwise   = indexArrayData eR adata (toElt i) : go (i+1)
 
 concatVectors :: forall e. TypeR e -> [Vector e] -> Vector e
-concatVectors tR vs = adata `seq` Array ((), len) adata
+concatVectors tR vs = adata `seq` Array ((), fromElt len) adata
   where
     offsets     = scanl (+) 0 (map (size dim1 . shape) vs)
-    len         = last offsets
+    len         = toElt $ last offsets
     (adata, _)  = runArrayData @e $ do
       arr <- newArrayData tR len
-      sequence_ [ writeArrayData tR arr (i + k) (indexArrayData tR ad i)
+      sequence_ [ writeArrayData tR arr (toElt (i + k)) (indexArrayData tR ad (toElt i))
                 | (Array ((), n) ad, k) <- vs `zip` offsets
                 , i <- [0 .. n - 1] ]
       return (arr, undefined)
@@ -217,7 +218,9 @@ showMatrix f (ArrayR _ arrR) arr@(Array sh _)
   | rows * cols == 0 = "[]"
   | otherwise        = "\n  [" ++ ppMat 0 0
     where
-      (((), rows), cols) = sh
+      rows = toElt rows'
+      cols = toElt cols'
+      (((), rows'), cols') = sh
       lengths            = U.generate (rows*cols) (\i -> length (f (linearIndexArray arrR arr i) ""))
       widths             = U.generate cols (\c -> U.maximum (U.generate rows (\r -> lengths U.! (r*cols+c))))
       --
@@ -321,7 +324,7 @@ liftArray (ArrayR shR adR) (Array sh adata) =
   [|| Array $$(liftElt (shapeType shR) sh) $$(liftArrayData sz adR adata) ||] `at` [t| Array $(liftTypeQ (shapeType shR)) $(liftTypeQ adR) |]
   where
     sz :: Int
-    sz = size shR sh
+    sz = toElt (size shR sh)
 
     at :: CodeQ t -> Q Type -> CodeQ t
     at e t = unsafeCodeCoerce $ sigE (unTypeCode e) t

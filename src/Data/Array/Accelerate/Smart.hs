@@ -93,6 +93,7 @@ import Data.Array.Accelerate.Representation.Stencil                 hiding ( Ste
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Representation.Vec
+import Data.Array.Accelerate.Representation.POS hiding (Nil, Undef)
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Foreign
@@ -510,6 +511,15 @@ data PreSmartExp acc exp t where
                 -> exp (t1, t2)
                 -> PreSmartExp acc exp t
 
+  LiftUnion     :: exp t1
+                -> PreSmartExp acc exp (UnionScalar '[t2])
+
+  Union         :: exp (UnionScalar t1)
+                -> PreSmartExp acc exp (UnionScalar t2)
+
+  PrjUnion      :: exp (UnionScalar '[t1])
+                -> PreSmartExp acc exp t1
+
   VecPack       :: KnownNat n
                 => VecR n s tup
                 -> exp tup
@@ -627,7 +637,7 @@ class Stencil sh e stencil where
 -- DIM1
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e)
-    = EltR (e, e, e)
+    = ((((), EltR e), EltR e), EltR e)
   stencilR = StencilRunit3 @(EltR e) $ eltR @e
   stencilPrj s = (Exp $ prj2 s,
                   Exp $ prj1 s,
@@ -635,7 +645,7 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e)
+    = ((((((), EltR e), EltR e), EltR e), EltR e), EltR e)
   stencilR = StencilRunit5 $ eltR @e
   stencilPrj s = (Exp $ prj4 s,
                   Exp $ prj3 s,
@@ -645,7 +655,7 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
 
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e, e, e)
+    = ((((((((), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e)
   stencilR = StencilRunit7 $ eltR @e
   stencilPrj s = (Exp $ prj6 s,
                   Exp $ prj5 s,
@@ -658,7 +668,7 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e
 instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
   where
   type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e, e, e, e, e)
+    = ((((((((((), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e), EltR e)
   stencilR = StencilRunit9 $ eltR @e
   stencilPrj s = (Exp $ prj8 s,
                   Exp $ prj7 s,
@@ -1156,21 +1166,13 @@ mkMin = mkPrimBinary $ PrimMin singleType
 -- Logical operators
 
 mkLAnd :: Exp Bool -> Exp Bool -> Exp Bool
-mkLAnd (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLAnd (SmartExp $ Pair x y)) `Pair` SmartExp Nil
-  where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+mkLAnd (Exp a) (Exp b) = mkExp $ PrimApp PrimLAnd (SmartExp $ Pair a b)
 
 mkLOr :: Exp Bool -> Exp Bool -> Exp Bool
-mkLOr (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLOr (SmartExp $ Pair x y)) `Pair` SmartExp Nil
-  where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+mkLOr (Exp a) (Exp b) = mkExp $ PrimApp PrimLOr (SmartExp $ Pair a b)
 
 mkLNot :: Exp Bool -> Exp Bool
-mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
-  where
-    x = SmartExp $ Prj PairIdxLeft a
+mkLNot (Exp a) = mkExp $ PrimApp PrimLNot a
 
 -- Numeric conversions
 
@@ -1260,10 +1262,10 @@ mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) ->
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
 
 mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
-mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary
+mkPrimUnaryBool = mkPrimUnary
 
 mkPrimBinaryBool :: (Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
-mkPrimBinaryBool = mkCoerce @PrimBool $$$ mkPrimBinary
+mkPrimBinaryBool = mkPrimBinary
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)

@@ -10,7 +10,11 @@
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE GADTs                #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_HADDOCK hide #-}
+{-# OPTIONS_GHC -ddump-splices #-}
 -- |
 -- Module      : Data.Array.Accelerate.Sugar.Elt
 -- Copyright   : [2008..2020] The Accelerate Team
@@ -21,21 +25,25 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Sugar.Elt ( Elt(..) )
+module Data.Array.Accelerate.Sugar.Elt ( Elt(..), eltRType, EltRType(..) )
   where
 
-import Data.Array.Accelerate.Representation.Elt
-import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
+import Data.Array.Accelerate.Representation.POS
+import Data.Array.Accelerate.Representation.Tag
+import Data.Array.Accelerate.Sugar.POS ()
 import Data.Array.Accelerate.Type
 
-import Data.Bits
 import Data.Char
 import Data.Kind
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 
-import GHC.Generics
-
+import GHC.TypeLits
+import Unsafe.Coerce
+import Data.Type.Equality
+import Data.Proxy
+import Data.Typeable
+import Data.Finite.Internal (Finite(..))
 
 -- | The 'Elt' class characterises the allowable array element types, and
 -- hence the types which can appear in scalar Accelerate expressions of
@@ -74,184 +82,206 @@ import GHC.Generics
 -- See the function 'Data.Array.Accelerate.match' for details on how to use
 -- sum types in embedded code.
 --
-class Elt a where
+class (KnownNat (EltChoices a)) => Elt a where
   -- | Type representation mapping, which explains how to convert a type
   -- from the surface type into the internal representation type consisting
   -- only of simple primitive types, unit '()', and pair '(,)'.
   --
   type EltR a :: Type
-  type EltR a = GEltR () (Rep a)
+  type EltR a = POStoEltR (Choices a) (Fields a)
+
+  type EltChoices a :: Nat
+  type EltChoices a = Choices a
+
   --
   eltR    :: TypeR (EltR a)
   tagsR   :: [TagR (EltR a)]
   fromElt :: a -> EltR a
   toElt   :: EltR a -> a
 
-  default eltR
-      :: (GElt (Rep a), EltR a ~ GEltR () (Rep a))
-      => TypeR (EltR a)
-  eltR = geltR @(Rep a) TupRunit
+  default eltR :: (POSable a, POStoEltR (Choices a) (Fields a) ~ EltR a) => TypeR (EltR a)
+  eltR = mkEltRT @a
 
-  default tagsR
-      :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
-      => [TagR (EltR a)]
-  tagsR = gtagsR @(Rep a) TagRunit
+  default fromElt :: (POSable a, POStoEltR (Choices a) (Fields a) ~ EltR a) => a -> EltR a
+  fromElt = mkEltR
 
-  default fromElt
-      :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
-      => a
-      -> EltR a
-  fromElt = gfromElt () . from
+  default toElt :: (POSable a,  POStoEltR (Choices a) (Fields a) ~ EltR a) => EltR a -> a
+  toElt = fromEltR
 
-  default toElt
-      :: (Generic a, GElt (Rep a), EltR a ~ GEltR () (Rep a))
-      => EltR a
-      -> a
-  toElt = to . snd . gtoElt @(Rep a) @()
+  default tagsR :: (POSable a) => [TagR (EltR a)]
+  tagsR = f 0 (map fromInteger (tags @a))
+    where
+      f :: TAG -> [TAG] -> [TagR (EltR a)]
+      f n l = case l of
+        [] -> []
+        x : xs -> (TagR n (n + x)) : f (n + x) xs
 
 
-class GElt f where
-  type GEltR t f
-  geltR    :: TypeR t -> TypeR (GEltR t f)
-  gtagsR   :: TagR t -> [TagR (GEltR t f)]
-  gfromElt :: t -> f a -> GEltR t f
-  gtoElt   :: GEltR t f -> (t, f a)
-  --
-  gundef   :: t -> GEltR t f
-  guntag   :: TagR t -> TagR (GEltR t f)
+-- function to bring the contraints in scope that are needed to work with EltR,
+-- without needing to inspect how POS2EltR works
+data EltRType x where
+  SingletonType :: (EltR x ~ POStoEltR (Choices x) (Fields x), EltR x ~ x, Fields x ~ '[ '[x]]) => EltRType x
+  TaglessType   :: (EltR x ~ POStoEltR (Choices x) (Fields x), EltR x ~ FlattenProduct (Fields x)) => EltRType x
+  TaggedType    :: (EltR x ~ POStoEltR (Choices x) (Fields x), EltR x ~ (TAG, FlattenProduct (Fields x))) => EltRType x
 
-instance GElt U1 where
-  type GEltR t U1 = t
-  geltR t       = t
-  gtagsR t      = [t]
-  gfromElt t U1 = t
-  gtoElt t      = (t, U1)
-  gundef t      = t
-  guntag t      = t
-
-instance GElt a => GElt (M1 i c a) where
-  type GEltR t (M1 i c a) = GEltR t a
-  geltR             = geltR @a
-  gtagsR            = gtagsR @a
-  gfromElt t (M1 x) = gfromElt t x
-  gtoElt         x  = let (t, x1) = gtoElt x in (t, M1 x1)
-  gundef            = gundef @a
-  guntag            = guntag @a
-
-instance Elt a => GElt (K1 i a) where
-  type GEltR t (K1 i a) = (t, EltR a)
-  geltR t           = TupRpair t (eltR @a)
-  gtagsR t          = TagRpair t <$> tagsR @a
-  gfromElt t (K1 x) = (t, fromElt x)
-  gtoElt     (t, x) = (t, K1 (toElt x))
-  gundef t          = (t, undefElt (eltR @a))
-  guntag t          = TagRpair t (untag (eltR @a))
-
-instance (GElt a, GElt b) => GElt (a :*: b) where
-  type GEltR t (a :*: b) = GEltR (GEltR t a) b
-  geltR  = geltR @b . geltR @a
-  gtagsR = concatMap (gtagsR @b) . gtagsR @a
-  gfromElt t (a :*: b) = gfromElt (gfromElt t a) b
-  gtoElt t =
-    let (t1, b) = gtoElt t
-        (t2, a) = gtoElt t1
-    in
-    (t2, a :*: b)
-  gundef t = gundef @b (gundef @a t)
-  guntag t = guntag @b (guntag @a t)
-
-instance (GElt a, GElt b, GSumElt (a :+: b)) => GElt (a :+: b) where
-  type GEltR t (a :+: b) = (TAG, GSumEltR t (a :+: b))
-  geltR t      = TupRpair (TupRsingle scalarType) (gsumEltR @(a :+: b) t)
-  gtagsR t     = uncurry TagRtag <$> gsumTagsR @(a :+: b) 0 t
-  gfromElt     = gsumFromElt 0
-  gtoElt (k,x) = gsumToElt k x
-  gundef t     = (0xff, gsumUndef @(a :+: b) t)
-  guntag t     = TagRpair (TagRundef scalarType) (gsumUntag @(a :+: b) t)
+eltRType :: forall x . POSable x => EltRType x
+eltRType = case sameNat (Proxy :: Proxy (Choices x)) (Proxy :: Proxy 1) of
+  Just Refl -> case emptyFields @x of
+    PTCons (STSucc _ STZero) PTNil
+      | Refl :: (EltR x :~: x) <- unsafeCoerce Refl
+      , Refl :: (Fields x :~: '[ '[x]]) <- unsafeCoerce Refl
+      -> SingletonType
+    _
+      | Refl :: (EltR x :~: FlattenProduct (Fields x)) <- unsafeCoerce Refl
+      , Refl :: (POStoEltR 1 (Fields x) :~: EltR x) <- unsafeCoerce Refl
+      -> TaglessType
+  Nothing
+    | Refl :: (EltR x :~: (TAG, FlattenProduct (Fields x))) <- unsafeCoerce Refl
+    , Refl :: (POStoEltR (Choices x) (Fields x) :~: (TAG, FlattenProduct (Fields x))) <- unsafeCoerce Refl
+    -> TaggedType
 
 
-class GSumElt f where
-  type GSumEltR t f
-  gsumEltR     :: TypeR t -> TypeR (GSumEltR t f)
-  gsumTagsR    :: TAG -> TagR t -> [(TAG, TagR (GSumEltR t f))]
-  gsumFromElt  :: TAG -> t -> f a -> (TAG, GSumEltR t f)
-  gsumToElt    :: TAG -> GSumEltR t f -> (t, f a)
-  gsumUndef    :: t -> GSumEltR t f
-  gsumUntag    :: TagR t -> TagR (GSumEltR t f)
+flattenProductType :: ProductType a -> TypeR (FlattenProduct a)
+flattenProductType PTNil = TupRunit
+flattenProductType (PTCons x xs) = TupRpair (TupRsingle (flattenSumType x)) (flattenProductType xs)
 
-instance GSumElt U1 where
-  type GSumEltR t U1 = t
-  gsumEltR t         = t
-  gsumTagsR n t      = [(n, t)]
-  gsumFromElt n t U1 = (n, t)
-  gsumToElt _ t      = (t, U1)
-  gsumUndef t        = t
-  gsumUntag t        = t
+flattenSumType :: SumType a -> ScalarType (UnionScalar a)
+flattenSumType STZero = UnionScalarType ZeroScalarType
+flattenSumType (STSucc x xs) = case flattenSumType xs of
+  UnionScalarType xs' -> UnionScalarType (SuccScalarType (mkSingleType x) xs')
 
-instance GSumElt a => GSumElt (M1 i c a) where
-  type GSumEltR t (M1 i c a) = GSumEltR t a
-  gsumEltR               = gsumEltR @a
-  gsumTagsR              = gsumTagsR @a
-  gsumFromElt n t (M1 x) = gsumFromElt n t x
-  gsumToElt k x          = let (t, x') = gsumToElt k x in (t, M1 x')
-  gsumUntag              = gsumUntag @a
-  gsumUndef              = gsumUndef @a
-
-instance Elt a => GSumElt (K1 i a) where
-  type GSumEltR t (K1 i a) = (t, EltR a)
-  gsumEltR t             = TupRpair t (eltR @a)
-  gsumTagsR n t          = (n,) . TagRpair t <$> tagsR @a
-  gsumFromElt n t (K1 x) = (n, (t, fromElt x))
-  gsumToElt _ (t, x)     = (t, K1 (toElt x))
-  gsumUntag t            = TagRpair t (untag (eltR @a))
-  gsumUndef t            = (t, undefElt (eltR @a))
-
-instance (GElt a, GElt b) => GSumElt (a :*: b) where
-  type GSumEltR t (a :*: b) = GEltR t (a :*: b)
-  gsumEltR                  = geltR @(a :*: b)
-  gsumTagsR n t             = (n,) <$> gtagsR @(a :*: b) t
-  gsumFromElt n t (a :*: b) = (n, gfromElt (gfromElt t a) b)
-  gsumToElt _ t0 =
-    let (t1, b) = gtoElt t0
-        (t2, a) = gtoElt t1
-     in
-     (t2, a :*: b)
-  gsumUndef       = gundef @(a :*: b)
-  gsumUntag       = guntag @(a :*: b)
-
-instance (GSumElt a, GSumElt b) => GSumElt (a :+: b) where
-  type GSumEltR t (a :+: b) = GSumEltR (GSumEltR t a) b
-  gsumEltR = gsumEltR @b . gsumEltR @a
-
-  gsumFromElt n t (L1 a) = let (m,r) = gsumFromElt n t a
-                            in (shiftL m 1, gsumUndef @b r)
-  gsumFromElt n t (R1 b) = let (m,r) = gsumFromElt n (gsumUndef @a t) b
-                            in (setBit (m `shiftL` 1) 0, r)
-
-  gsumToElt k t0 =
-    let (t1, b) = gsumToElt (shiftR k 1) t0
-        (t2, a) = gsumToElt (shiftR k 1) t1
-     in
-     if testBit k 0
-        then (t2, R1 b)
-        else (t2, L1 a)
-
-  gsumTagsR k t =
-    let a = gsumTagsR @a k t
-        b = gsumTagsR @b k (gsumUntag @a t)
-     in
-     map (\(x,y) ->         (x `shiftL` 1, gsumUntag @b y)) a ++
-     map (\(x,y) -> (setBit (x `shiftL` 1) 0, y)) b
-
-  gsumUndef t = gsumUndef @b (gsumUndef @a t)
-  gsumUntag t = gsumUntag @b (gsumUntag @a t)
+-- This is an unsafe conversion, and should be kept strictly in sync with the
+-- set of types that implement Ground
+mkScalarType :: forall a . (Typeable a, Ground a) => a -> ScalarType a
+mkScalarType _
+  | Just Refl <- eqT @a @Int
+   = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int8
+   = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int16
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int32
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Int64
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word
+    = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word8
+    = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word16
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word32
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Word64
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Half
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Float
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Double
+  = scalarType @a
+mkScalarType _
+  | Just Refl <- eqT @a @Undef
+  = scalarType @a
 
 
-untag :: TypeR t -> TagR t
-untag TupRunit         = TagRunit
-untag (TupRsingle t)   = TagRundef t
-untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
+-- This is an unsafe conversion, and should be kept strictly in sync with the
+-- set of types that implement Ground
+mkSingleType :: forall a . (Typeable a, Ground a) => a -> SingleType a
+mkSingleType _
+  | Just Refl <- eqT @a @Int
+   = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int8
+   = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int16
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int32
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Int64
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word
+    = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word8
+    = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word16
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word32
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Word64
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Half
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Float
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Double
+  = singleType @a
+mkSingleType _
+  | Just Refl <- eqT @a @Undef
+  = singleType @a
 
+
+mkEltRT :: forall a . (POSable a) => TypeR (POStoEltR (Choices a) (Fields a))
+mkEltRT = case eltRType @a of
+  SingletonType | PTCons (STSucc x STZero) PTNil <- emptyFields @a -> TupRsingle (mkScalarType x)
+  TaglessType   -> flattenProductType (emptyFields @a)
+  TaggedType    -> TupRpair (TupRsingle scalarTypeTAG) (flattenProductType (emptyFields @a))
+
+
+mkEltR :: forall a . (POSable a) => a -> POStoEltR (Choices a) (Fields a)
+mkEltR x = case eltRType @a of
+  SingletonType | Cons (Pick f) Nil <- fields x -> f
+  TaglessType   -> fs
+  TaggedType    -> (cs, fs)
+  where
+    cs = fromInteger @TAG $ toInteger $ choices x
+    fs = flattenProduct (fields x)
+
+fromEltR :: forall a . (POSable a) => POStoEltR (Choices a) (Fields a) -> a
+fromEltR x = case eltRType @a of
+  SingletonType -> x
+  TaglessType   -> fromPOSable 0 (unFlattenProduct (emptyFields @a) x)
+  TaggedType    | (t, fs) <- x -> fromPOSable (Finite $ toInteger t) (unFlattenProduct (emptyFields @a) fs)
+
+unFlattenProduct :: ProductType a -> FlattenProduct a -> Product a
+unFlattenProduct PTNil () = Nil
+unFlattenProduct (PTCons x xs) (y, ys) = Cons (unFlattenSum x y) (unFlattenProduct xs ys)
+
+unFlattenSum :: SumType a -> UnionScalar a -> Sum a
+unFlattenSum (STSucc x xs) (PickScalar y) = Pick y
+unFlattenSum (STSucc x xs) (SkipScalar ys) = Skip $ unFlattenSum xs ys
+
+
+flattenProduct :: Product a -> FlattenProduct a
+flattenProduct Nil = ()
+flattenProduct (Cons x xs) = (flattenSum x, flattenProduct xs)
+
+flattenSum :: Sum a -> UnionScalar a
+flattenSum (Pick x) = PickScalar x
+flattenSum (Skip xs) = SkipScalar (flattenSum xs)
 
 -- Note: [Deriving Elt]
 --
@@ -284,16 +314,19 @@ untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 instance Elt ()
 instance Elt Bool
 instance Elt Ordering
-instance Elt a => Elt (Maybe a)
-instance (Elt a, Elt b) => Elt (Either a b)
+instance (POSable (Maybe a), Elt a) => Elt (Maybe a)
+instance (POSable (Either a b), Elt a, Elt b) => Elt (Either a b)
 
 instance Elt Char where
   type EltR Char = Word32
+  type EltChoices Char = 1
   eltR    = TupRsingle scalarType
-  tagsR   = [TagRsingle scalarType]
+  tagsR   = [TagR 0 1]
   toElt   = chr . fromIntegral
   fromElt = fromIntegral . ord
 
+-- Anything that has a POS instance has a default Elt instance
+-- TODO: build instances for the sections of newtypes
 runQ $ do
   let
       -- XXX: we might want to do the digItOut trick used by FromIntegral?
@@ -340,12 +373,7 @@ runQ $ do
       mkSimple name =
         let t = conT name
         in
-        [d| instance Elt $t where
-              type EltR $t = $t
-              eltR    = TupRsingle scalarType
-              tagsR   = [TagRsingle scalarType]
-              fromElt = id
-              toElt   = id
+        [d| instance Elt $t
           |]
 
       mkTuple :: Int -> Q Dec
@@ -374,23 +402,23 @@ runQ $ do
       -- TyConI (NewtypeD [] Foreign.C.Types.CFloat [] Nothing (NormalC Foreign.C.Types.CFloat [(Bang NoSourceUnpackedness NoSourceStrictness,ConT GHC.Types.Float)]) [])
       --
       mkNewtype :: Name -> Q [Dec]
-      mkNewtype name = do
-        r    <- reify name
-        base <- case r of
-                  TyConI (NewtypeD _ _ _ _ (NormalC _ [(_, ConT b)]) _) -> return b
-                  _                                                     -> error "unexpected case generating newtype Elt instance"
-        --
-        [d| instance Elt $(conT name) where
-              type EltR $(conT name) = $(conT base)
-              eltR = TupRsingle scalarType
-              tagsR = [TagRsingle scalarType]
-              fromElt $(conP (mkName (nameBase name)) [varP (mkName "x")]) = x
-              toElt = $(conE (mkName (nameBase name)))
+      mkNewtype name =
+        let t = conT name
+        in
+        [d| instance Elt $t
           |]
   --
   ss <- mapM mkSimple (integralTypes ++ floatingTypes)
+  -- TODO:
   ns <- mapM mkNewtype newtypes
-  ts <- mapM mkTuple [2..16]
+  -- ts <- mapM mkTuple [2..16]
   -- vs <- sequence [ mkVecElt t n | t <- integralTypes ++ floatingTypes, n <- [2,3,4,8,16] ]
-  return (concat ss ++ concat ns ++ ts)
+  return (concat ss ++ concat ns)
 
+instance Elt Undef
+
+-- TODO: bring this back into TH
+instance (POSable a, POSable b) => Elt (a, b)
+instance (POSable a, POSable b, POSable c) => Elt (a, b, c)
+instance (POSable a, POSable b, POSable c, POSable d) => Elt (a, b, c, d)
+instance (POSable a, POSable b, POSable c, POSable d, POSable e) => Elt (a, b, c, d, e)

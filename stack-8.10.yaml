@@ -7,7 +7,8 @@ resolver: lts-18.25
 packages:
 - .
 
-# extra-deps:
+extra-deps:
+- posable-1.0.0.1
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
