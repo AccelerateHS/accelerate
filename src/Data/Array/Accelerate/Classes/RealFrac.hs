@@ -154,7 +154,7 @@ defaultFloor :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a
 defaultFloor x
   | Just FloatingDict <- floatingDict @a
   , Just IntegralDict <- integralDict @b
-  = mkCeiling x
+  = mkFloor x
   --
   | otherwise
   = let T2 n r = properFraction x in cond (r < 0) (n-1) n
@@ -163,7 +163,7 @@ defaultRound :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a
 defaultRound x
   | Just FloatingDict <- floatingDict @a
   , Just IntegralDict <- integralDict @b
-  = mkCeiling x
+  = mkRound x
   --
   | otherwise
   = let T2 n r    = properFraction x
