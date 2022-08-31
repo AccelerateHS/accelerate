@@ -28,6 +28,7 @@ module Data.Array.Accelerate.Classes.Integral (
 ) where
 
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Enum
@@ -66,6 +67,15 @@ runQ $
       mkIntegral :: Name -> Q [Dec]
       mkIntegral a =
         [d| instance P.Integral (Exp $(conT a)) where
+              quot      = mkQuot
+              rem       = mkRem
+              div       = mkIDiv
+              mod       = mkMod
+              quotRem   = mkQuotRem
+              divMod    = mkDivMod
+              toInteger = P.error "Prelude.toInteger not supported for Accelerate types"
+
+            instance KnownNat n => P.Integral (Exp (Vec n $(conT a))) where
               quot      = mkQuot
               rem       = mkRem
               div       = mkIDiv
